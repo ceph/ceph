@@ -2977,10 +2977,38 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
-  // check cap if security is on, otherwise ignore it
+  if (g_conf.secure_io) {
+    // FIXME only verfiy writes from a client
+    // i know, i know...not secure but they should all have caps
+    if (op->get_source().is_client()) {      
+      ExtCap *op_capability = op->get_capability();
+      assert(op_capability);
+      // if using groups...do we know group?
+      if (op_capability->get_type() == UNIX_GROUP) {
+	// check if user is in group
+	hash_t my_hash = op_capability->get_user_hash();
+	
+	// do we have group cached? if not, update group
+	// we will lose execution control here! re-gain on reply
+	if (user_groups.count(my_hash) == 0) {
+	  update_group(op->get_client_inst(), my_hash, op);
+	  return;
+	}	
+      }   
+      // check accesses are right
+      if (check_request(op, op_capability)) {
+	dout(3) << "Access permissions are correct" << endl;
+      }
+      else
+	dout(3) << "Access permissions are incorrect" << endl;
+      
+      assert(verify_cap(op_capability));
+    }
+  }
+
+  /*
   if (g_conf.secure_io) {
     // FIXME only verfiy reads from a client
-    // i know, i know...not secure but they should all have caps
     if (op->get_source().is_client()) {
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
@@ -2993,6 +3021,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       assert(verify_cap(op_capability));
     }
   }
+  */
 
   long r = 0;
   bufferlist bl;
@@ -3358,10 +3387,10 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       
       // check accesses are right
       if (check_request(op, op_capability)) {
-	cout << "Access permissions are correct" << endl;
+	dout(3) << "Access permissions are correct" << endl;
       }
       else
-	cout << "Access permissions are incorrect" << endl;
+	dout(3) << "Access permissions are incorrect" << endl;
       
       assert(verify_cap(op_capability));
     }

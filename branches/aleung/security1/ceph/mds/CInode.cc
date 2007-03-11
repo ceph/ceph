@@ -91,6 +91,12 @@ CInode::CInode(MDCache *c, bool auth) {
   
   dir = NULL;     // CDir opened separately
 
+  if (g_conf.mds_group == 1) {
+    user_cap = NULL;
+    group_cap = NULL;
+    world_cap = NULL;
+  }
+
   auth_pins = 0;
   nested_auth_pins = 0;
   num_request_pins = 0;

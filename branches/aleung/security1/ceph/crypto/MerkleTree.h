@@ -17,7 +17,7 @@
 #include<list>
 using namespace std;
 
-#include "crypto/CryptoLib.h"
+#include "CryptoLib.h"
 using namespace CryptoLib;
 
 struct hash_t{
