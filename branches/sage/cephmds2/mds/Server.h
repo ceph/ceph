@@ -106,8 +106,8 @@ public:
                               vector<CDentry*>& trace,
                               int r);
   void handle_client_rename_local(MClientRequest *req, CInode *ref,
-                                  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-                                  string& destpath, CDir *destdir, CDentry *destdn, string& name);
+                                  const string& srcpath, CInode *srcdiri, CDentry *srcdn, 
+                                  const string& destpath, CDir *destdir, CDentry *destdn, const string& name);
 
   void handle_client_mkdir(MClientRequest *req, CInode *ref);
   void handle_client_rmdir(MClientRequest *req, CInode *ref);

@@ -374,7 +374,7 @@ void Server::handle_client_request(MClientRequest *req)
       // <HACK>
       // is this a special debug command?
       if (refpath.depth() - 1 == trace.size() &&
-	  refpath.last_bit().find(".ceph.") == 0) {
+	  refpath.last_dentry().find(".ceph.") == 0) {
 	/*
 FIXME dirfrag
 	CDir *dir = 0;
@@ -383,14 +383,14 @@ FIXME dirfrag
 	else
 	  dir = trace[trace.size()-1]->get_inode()->dir;
 
-	dout(1) << "** POSSIBLE CEPH DEBUG COMMAND '" << refpath.last_bit() << "' in " << *dir << endl;
+	dout(1) << "** POSSIBLE CEPH DEBUG COMMAND '" << refpath.last_dentry() << "' in " << *dir << endl;
 
-	if (refpath.last_bit() == ".ceph.hash" &&
+	if (refpath.last_dentry() == ".ceph.hash" &&
 	    refpath.depth() > 1) {
 	  dout(1) << "got explicit hash command " << refpath << endl;
 	  /// ....
 	}
-	else if (refpath.last_bit() == ".ceph.commit") {
+	else if (refpath.last_dentry() == ".ceph.commit") {
 	  dout(1) << "got explicit commit command on  " << *dir << endl;
 	  dir->commit(0, 0);
 	}
@@ -1040,7 +1040,7 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   
   // get containing directory (without last bit)
   filepath dirpath = req->get_filepath().prefixpath(req->get_filepath().depth() - 1);
-  string name = req->get_filepath().last_bit();
+  string name = req->get_filepath().last_dentry();
   
   CDir *dir = *pdir = validate_new_dentry_dir(req, diri, name);
   if (!dir) return 0;
@@ -1218,7 +1218,7 @@ public:
 void Server::handle_client_link(MClientRequest *req, CInode *ref)
 {
   // figure out name
-  string dname = req->get_filepath().last_bit();
+  string dname = req->get_filepath().last_dentry();
   dout(7) << "handle_client_link dname is " << dname << endl;
   
   // validate dir
@@ -1305,7 +1305,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
   }
   
   // what was the new dentry again?
-  string dname = req->get_filepath().last_bit();
+  string dname = req->get_filepath().last_dentry();
   frag_t fg = diri->pick_dirfrag(dname);
   CDir *dir = diri->get_dirfrag(fg);
   assert(dir);
@@ -1383,7 +1383,7 @@ void Server::handle_client_unlink(MClientRequest *req,
     reply_request(req, -EINVAL);
     return;
   }
-  string name = req->get_filepath().last_bit();
+  string name = req->get_filepath().last_dentry();
   
   // make sure parent is a dir?
   if (!diri->is_dir()) {
@@ -1627,7 +1627,7 @@ void Server::handle_client_rename(MClientRequest *req,
  -> so, re-traverse path.  and make sure we request_finish in the case of a forward!
    */
   filepath refpath = req->get_filepath();
-  string srcname = refpath.last_bit();
+  string srcname = refpath.last_dentry();
   refpath = refpath.prefixpath(refpath.depth()-1);
 
   dout(7) << "handle_client_rename src traversing to srcdir " << refpath << endl;
@@ -1779,12 +1779,12 @@ void Server::handle_client_rename_2(MClientRequest *req,
       // mv /some/thing /to/some/dir 
       destdir = try_open_dir(d, dfg, req);        // /to/some/dir
       if (!destdir) return;
-      destname = req->get_filepath().last_bit();  // thing
-      destpath.add_dentry(destname);
+      destname = req->get_filepath().last_dentry();  // thing
+      destpath.push_dentry(destname);
     } else {
       // mv /some/thing /to/some/existing_filename
       destdir = trace[trace.size()-1]->dir;       // /to/some
-      destname = destpath.last_bit();             // existing_filename
+      destname = destpath.last_dentry();             // existing_filename
     }
   }
   else if (trace.size() == destpath.depth()-1) {
@@ -1792,7 +1792,7 @@ void Server::handle_client_rename_2(MClientRequest *req,
       // mv /some/thing /to/some/place_that_maybe_dne     (we might be replica)
       destdir = try_open_dir(d, dfg, req); // /to/some
       if (!destdir) return;
-      destname = destpath.last_bit();    // place_that_MAYBE_dne
+      destname = destpath.last_dentry();    // place_that_MAYBE_dne
     } else {
       dout(7) << "dest dne" << endl;
       reply_request(req, -EINVAL);
@@ -1892,14 +1892,14 @@ void Server::handle_client_rename_2(MClientRequest *req,
 
 
 void Server::handle_client_rename_local(MClientRequest *req,
-                                     CInode *ref,
-                                     string& srcpath,
-                                     CInode *srcdiri,
-                                     CDentry *srcdn,
-                                     string& destpath,
-                                     CDir *destdir,
-                                     CDentry *destdn,
-                                     string& destname)
+					CInode *ref,
+					const string& srcpath,
+					CInode *srcdiri,
+					CDentry *srcdn,
+					const string& destpath,
+					CDir *destdir,
+					CDentry *destdn,
+					const string& destname)
 {
   //bool everybody = false;
   //if (true || srcdn->inode->is_dir()) {

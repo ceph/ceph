@@ -87,7 +87,7 @@ class MLock : public Message {
     otype = LOCK_OTYPE_DIR;
     this->ino = ino;
   }
-  void set_dn(inodeno_t dirino, string& dn) {
+  void set_dn(inodeno_t dirino, const string& dn) {
     otype = LOCK_OTYPE_DN;
     this->ino = dirino;
     this->dn = dn;

@@ -239,7 +239,7 @@ int MDCache::open_root(Context *c)
 
       filepath want;
       MDiscover *req = new MDiscover(whoami,
-                                     0,
+                                     1,
                                      want,
                                      false);  // there _is_ no base dir for the root inode
       mds->send_message_mds(req, 0, MDS_PORT_CACHE);
@@ -2719,7 +2719,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   // construct path
   filepath path;
   for (unsigned i=0; i<anchortrace.size(); i++) 
-    path.add_dentry(anchortrace[i]->ref_dn);
+    path.push_dentry(anchortrace[i]->ref_dn);
 
   dout(7) << " path is " << path << endl;
 
@@ -3110,30 +3110,20 @@ void MDCache::handle_discover(MDiscover *dis)
 {
   int whoami = mds->get_nodeid();
 
-  // from me to me?
-  if (dis->get_asker() == whoami) {
-    dout(7) << "discover for " << dis->get_want().get_path() << " bounced back to me, dropping." << endl;
-    delete dis;
-    return;
-  }
+  assert(dis->get_asker() != whoami);
 
   CInode *cur = 0;
-  MDiscoverReply *reply = 0;
-  //filepath fullpath;
+  MDiscoverReply *reply = new MDiscoverReply(dis->get_base_ino());
 
   // get started.
-  if (dis->get_base_ino() == 0) {
+  if (dis->get_base_ino() == 1) {
     // wants root
-    dout(7) << "discover from mds" << dis->get_asker() << " wants root + " << dis->get_want().get_path() << endl;
+    dout(7) << "handle_discover from mds" << dis->get_asker() << " wants root + " << dis->get_want().get_path() << endl;
 
     assert(mds->get_nodeid() == 0);
     assert(root->is_auth());
 
-    //fullpath = dis->get_want();
-
-
     // add root
-    reply = new MDiscoverReply(0);
     reply->add_inode( root->replicate_to( dis->get_asker() ) );
     dout(10) << "added root " << *root << endl;
 
@@ -3142,114 +3132,99 @@ void MDCache::handle_discover(MDiscover *dis)
   } else {
     // there's a base inode
     cur = get_inode(dis->get_base_ino());
-    assert(cur);
+    
+    if (!cur) {
+      dout(7) << "handle_discover mds" << dis->get_asker() 
+	      << " don't have base ino " << dis->get_base_ino() 
+	      << ", dropping" << endl;
+      delete reply;
+      return;
+    }
 
     if (dis->wants_base_dir()) {
-      dout(7) << "discover from mds" << dis->get_asker() << " has " << *cur << " wants dir+" << dis->get_want().get_path() << endl;
+      dout(7) << "handle_discover mds" << dis->get_asker() 
+	      << " has " << *cur 
+	      << " wants basedir+" << dis->get_want().get_path() 
+	      << endl;
     } else {
-      dout(7) << "discover from mds" << dis->get_asker() << " has " << *cur->dir << " wants " << dis->get_want().get_path() << endl;
+      dout(7) << "handle_discover mds" << dis->get_asker() 
+	      << " has " << *cur
+	      << " wants " << dis->get_want().get_path()
+	      << endl;
     }
-    
-    assert(cur->is_dir());
-    
-    // crazyness?
-    if (!cur->dir && !cur->is_auth()) {
-      int iauth = cur->authority().first;
-      dout(7) << "no dir and not inode auth; fwd to auth " << iauth << endl;
-      mds->send_message_mds( dis, iauth, MDS_PORT_CACHE);
-      return;
-    }
-
-    // frozen_dir?
-    if (!cur->dir && cur->is_frozen_dir()) {
-      dout(7) << "is frozen_dir, waiting" << endl;
-      cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, 
-                                        new C_MDS_RetryMessage(mds, dis));
-      return;
-    }
-
-    if (!cur->dir) 
-      cur->get_or_open_dir(this);
-    assert(cur->dir);
-
-    dout(10) << "dir is " << *cur->dir << endl;
-    
-    // create reply
-    reply = new MDiscoverReply(cur->ino());
   }
 
   assert(reply);
   assert(cur);
   
-  /*
-  // first traverse and make sure we won't have to do any waiting
-  dout(10) << "traversing full discover path = " << fullpath << endl;
-  vector<CInode*> trav;
-  int r = path_traverse(fullpath, trav, dis, MDS_TRAVERSE_FAIL);
-  if (r > 0) 
-    return;  // fw or delay
-  dout(10) << "traverse finish w/o blocking, continuing" << endl;
-  // ok, now we know we won't block on dentry locks or readdir.
-  */
-
-
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
   for (unsigned i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
+    
+    // -- figure out the dir
+
+    // is *cur even a dir at all?
+    if (!cur->is_dir()) {
+      dout(7) << *cur << " not a dir" << endl;
+      reply->set_flag_error_dir();
+      break;
+    }
+
+    // pick frag
+    frag_t fg = cur->pick_dirfrag(dis->get_dentry(i));
+    CDir *curdir = cur->get_dirfrag(fg);
+
+    // am i dir auth (or if no dir, at least the inode auth)
+    if ((!curdir && !cur->is_auth()) ||
+	(curdir && !curdir->is_auth())) {
+      if (curdir) {
+	dout(7) << *curdir << " not dirfrag auth, setting dir_auth_hint" << endl;
+      } else {
+	dout(7) << *cur << " dirfrag not open, not inode auth, setting dir_auth_hint" << endl;
+      }
+      
+      // set hint (+ dentry, if there is one)
+      reply->set_dir_auth_hint(curdir->authority().first);
+      if (dis->get_want().depth() > i)
+	reply->set_error_dentry(dis->get_dentry(i));
+      break;
+    }
+
+    // open dir?
+    if (!curdir) {
+      assert(cur->is_auth());
+      curdir = cur->get_or_open_dirfrag(this, fg);
+    }
+    assert(curdir);
+    assert(curdir->is_auth());
+    
+    // is dir frozen?
+    if (curdir->is_frozen()) {
+      if (reply->is_empty()) {
+	dout(7) << *curdir << " is frozen, empty reply, waiting" << endl;
+	curdir->add_waiter(CDir::WAIT_UNFREEZE,
+			   new C_MDS_RetryMessage(mds, dis));
+	return;
+      } else {
+	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << endl;
+	break;
+      }
+    }
+    
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "they don't want the base dir" << endl;
     } else {
-      // is it actaully a dir at all?
-      if (!cur->is_dir()) {
-        dout(7) << "not a dir " << *cur << endl;
-        reply->set_flag_error_dir();
-        break;
-      }
-
-      // add dir
-      if (!cur->dir_is_auth()) {
-        dout(7) << *cur << " dir auth is someone else, i'm done" << endl;
-        break;
-      }
-      
-      // did we hit a frozen_dir?
-      if (!cur->dir && cur->is_frozen_dir()) {
-        dout(7) << *cur << " is frozen_dir, stopping" << endl;
-        break;
-      }
-      
-      if (!cur->dir) cur->get_or_open_dir(this);
-      assert(cur->dir);
-
-      // is dir frozen?
-      if (cur->dir->is_frozen()) {
-	dout(7) << *cur->dir << " is frozen, stopping" << endl;
-	break;
-      }
-
       // add the dir.
-      reply->add_dir( new CDirDiscover( cur->dir, 
-                                        cur->dir->add_replica( dis->get_asker() ) ) );
-      dout(7) << "added dir " << *cur->dir << endl;
+      assert(!curdir->auth_is_ambiguous());
+      reply->add_dir( new CDirDiscover( curdir, 
+                                        curdir->add_replica( dis->get_asker() ) ) );
+      dout(7) << "added dir " << *curdir << endl;
     }
     if (dis->get_want().depth() == 0) break;
-
-    // is dir frozen?
-    if (cur->dir->is_frozen()) {
-      dout(7) << *cur->dir << " is frozen, stopping" << endl;
-      break;
-    }
     
     // lookup dentry
-    int dentry_auth = cur->dir->dentry_authority( dis->get_dentry(i) ).first;
-    if (dentry_auth != mds->get_nodeid()) {
-      dout(7) << *cur->dir << " dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
-      break;      // that's it for us!
-    }
-
-    // get inode
-    CDentry *dn = cur->dir->lookup( dis->get_dentry(i) );
+    CDentry *dn = curdir->lookup( dis->get_dentry(i) );
     
     /*
     if (dn && !dn->can_read()) { // xlocked?
@@ -3263,7 +3238,7 @@ void MDCache::handle_discover(MDiscover *dis)
     
     if (dn) {
       if (!dn->inode && dn->is_sync()) {
-        dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " null in " << *cur->dir << ", returning error" << endl;
+        dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " null in " << *curdir << ", returning error" << endl;
         reply->set_flag_error_dn( dis->get_dentry(i) );
         break;   // don't replicate null but non-locked dentries.
       }
@@ -3274,6 +3249,7 @@ void MDCache::handle_discover(MDiscover *dis)
       if (!dn->inode) break;  // we're done.
     }
 
+    // FIXME: hard links
     if (dn && dn->inode) {
         CInode *next = dn->inode;
         assert(next->is_auth());
@@ -3287,37 +3263,36 @@ void MDCache::handle_discover(MDiscover *dis)
         cur = next;
     } else {
       // don't have inode?
-      if (cur->dir->is_complete()) {
+      if (curdir->is_complete()) {
         // set error flag in reply
-        dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " not found in " << *cur->dir << ", returning error" << endl;
+        dout(7) << "dname " << dis->get_dentry(i) << " dne in " << *curdir << ", returning error" << endl;
         reply->set_flag_error_dn( dis->get_dentry(i) );
         break;
       } else {
         // readdir
-        dout(7) << "mds" << whoami << " incomplete dir contents for " << *cur->dir << ", fetching" << endl;
+        dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
 
-        //mds->mdstore->fetch_dir(cur->dir, NULL); //new C_MDS_RetryMessage(mds, dis));
-        //break; // send what we have so far
-
-        cur->dir->fetch(new C_MDS_RetryMessage(mds, dis));
-        return;
+	if (reply->is_empty()) {
+	  // fetch and wait
+	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	  return;
+	} else {
+	  // fetch, but send what we have so far
+	  curdir->fetch(0);
+	  break;
+	}
       }
     }
   }
 
-  // set dir_auth hint?
-  if (cur->is_dir() && cur->dir && 
-      !cur->dir->is_auth()) {
-    dout(7) << "setting dir_auth_hint for " << *cur->dir << endl;
-    reply->set_dir_auth_hint(cur->dir->authority().first);
-  }
-       
   // how did we do.
   if (reply->is_empty()) {
 
     // discard empty reply
     delete reply;
 
+    dout(7) << "dropping this empty reply)." << endl;
+    
     /*
     if (cur->is_auth() && !cur->dir->is_auth()) {
       // set hint
@@ -3334,6 +3309,7 @@ void MDCache::handle_discover(MDiscover *dis)
       return;
       }*/
     
+    /*
     // wait for frozen dir?
     if (cur->dir->is_frozen()) {
       dout(7) << "waiting for frozen " << *cur->dir << endl;
@@ -3342,6 +3318,7 @@ void MDCache::handle_discover(MDiscover *dis)
     } else {
       dout(7) << "i'm not auth, dropping request (+this empty reply)." << endl;
     }
+    */
     //assert(0);
     
   } else {
@@ -3406,47 +3383,55 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   for (int i=m->has_root(); i<m->get_depth(); i++) {
     dout(10) << "discover_reply i=" << i << " cur " << *cur << endl;
 
+    frag_t fg;
+    CDir *curdir = 0;
+
     // dir
     if ((i >  0) ||
         (i == 0 && m->has_base_dir())) {
-      if (cur->dir) {
+      assert(m->get_dir(i).get_dirfrag().ino == cur->ino());
+      fg = m->get_dir(i).get_dirfrag().frag;
+      curdir = cur->get_dirfrag(fg);
+
+      if (curdir) {
         // had it
         /* this is strange, but it happens when:
            we discover multiple dentries under a dir.
            bc, no flag to indicate a dir discover is underway, (as there is w/ a dentry one).
            this is actually good, since (dir aside) they're asking for different information.
         */
-        dout(7) << "had " << *cur->dir << endl;
-        m->get_dir(i).update_dir(cur->dir);
-        dout2(7) << "now " << *cur->dir << endl;
+        dout(7) << "had " << *curdir << endl;
+        m->get_dir(i).update_dir(curdir);
+        dout2(7) << "now " << *curdir << endl;
       } else {
         // add it (_replica_)
-	CDir *ndir = cur->add_dirfrag( new CDir(cur, frag_t(), this, false) );  // FIXME dirfrag_t
-        m->get_dir(i).update_dir(ndir);
+	curdir = cur->add_dirfrag( new CDir(cur, fg, this, false) );
+        m->get_dir(i).update_dir(curdir);
 
 	// is this a dir_auth delegation boundary?
 	if (m->get_source().num() != cur->authority().first ||
+	    cur->auth_is_ambiguous() ||
 	    cur->ino() == 1)
-	  adjust_subtree_auth(ndir, m->get_source().num());
+	  adjust_subtree_auth(curdir, m->get_source().num());
 	
-        dout(7) << "added " << *ndir << " nonce " << ndir->replica_nonce << endl;
-
+        dout(7) << "added " << *curdir << " nonce " << curdir->replica_nonce << endl;
+	
         // get waiters
         cur->take_waiting(CInode::WAIT_DIR, finished);
 	dir_discovers.erase(cur->ino());
       }
     }    
-
+    
     // dentry error?
     if (i == m->get_depth()-1 && 
         m->is_flag_error_dn()) {
       // error!
       assert(cur->is_dir());
-      if (cur->dir) {
+      if (curdir) {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
-        cur->dir->take_waiting(CDir::WAIT_DENTRY,
-                               m->get_error_dentry(),
-                               error);
+        curdir->take_waiting(CDir::WAIT_DENTRY,
+			     m->get_error_dentry(),
+			     error);
       } else {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
         cur->take_waiting(CInode::WAIT_DIR, error);
@@ -3460,23 +3445,29 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // dentry
     dout(7) << "i = " << i << " dentry is " << m->get_dentry(i).get_dname() << endl;
 
+    if (!curdir) {
+      fg = cur->pick_dirfrag(m->get_dentry(i).get_dname());
+      curdir = cur->get_dirfrag(fg);
+    }
+    assert(curdir);
+
     CDentry *dn = 0;
     if (i > 0 || 
         m->has_base_dentry()) {
-      dn = cur->dir->lookup( m->get_dentry(i).get_dname() );
+      dn = curdir->lookup( m->get_dentry(i).get_dname() );
       
       if (dn) {
         dout(7) << "had " << *dn << endl;
 	dn->replica_nonce = m->get_dentry(i).get_nonce();  // fix nonce.
       } else {
-        dn = cur->dir->add_dentry( m->get_dentry(i).get_dname(), 0, false );
+        dn = curdir->add_dentry( m->get_dentry(i).get_dname(), 0, false );
 	m->get_dentry(i).update_dentry(dn);
         dout(7) << "added " << *dn << endl;
       }
 
-      cur->dir->take_waiting(CDir::WAIT_DENTRY,
-                             m->get_dentry(i).get_dname(),
-                             finished);
+      curdir->take_waiting(CDir::WAIT_DENTRY,
+			   m->get_dentry(i).get_dname(),
+			   finished);
     }
     
     if (i >= m->get_num_inodes()) break;
@@ -3523,15 +3514,21 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
 
   // dir_auth hint?
-  if (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN) {
+  if (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN &&
+      m->get_dir_auth_hint() != mds->get_nodeid()) {
     dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << endl;
-    // let's just open it.
+    // let's try again.
     int hint = m->get_dir_auth_hint();
-    filepath want;  // no dentries, i just want the dir open
+
+    // include any path fragment we were looking for at the time
+    filepath want;
+    if (m->get_error_dentry().length() > 0)
+      want.push_dentry(m->get_error_dentry());
+    
     mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					cur->ino(),
 					want,
-					true),  // need the dir open
+					true),  // being conservative here.
 			  hint, MDS_PORT_CACHE);
     
     // note the dangling discover

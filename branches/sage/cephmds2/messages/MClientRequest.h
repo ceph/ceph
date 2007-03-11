@@ -111,7 +111,7 @@ class MClientRequest : public Message {
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
   inodeno_t get_ino() { return st.ino; }
-  string& get_path() { return path.get_path(); }
+  const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
   int get_iarg() { return st.iarg; }
   int get_iarg2() { return st.iarg2; }

@@ -113,10 +113,10 @@ private:
                           Message *m, CInode *ref);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);
-  void dentry_xlock_request(CDir *dir, string& dname, bool create,
+  void dentry_xlock_request(CDir *dir, const string& dname, bool create,
                             Message *req, Context *onfinish);
   void dentry_xlock_request_finish(int r,
-				   CDir *dir, string& dname, 
+				   CDir *dir, const string& dname, 
 				   Message *req,
 				   Context *finisher);
 

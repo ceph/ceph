@@ -432,7 +432,8 @@ void MDBalancer::do_rebalance(int beat)
 
     double pop = im->popularity[MDS_POP_CURDOM].meta_load();
     if (pop < g_conf.mds_bal_idle_threshold &&
-        im->inode != mds->mdcache->get_root()) {
+        im->inode != mds->mdcache->get_root() &&
+	im->inode->authority().first != mds->get_nodeid()) {
       dout(-5) << " exporting idle import " << *im
                << " back to mds" << im->inode->authority().first
                << endl;

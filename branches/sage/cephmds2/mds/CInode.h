@@ -407,6 +407,7 @@ protected:
 
   // -- authority --
   pair<int,int> authority();
+  bool auth_is_ambiguous();
 
 
   // -- auth pins --

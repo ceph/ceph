@@ -1872,7 +1872,7 @@ class C_MDC_XlockRequest : public Context {
   Context *finisher;
 public:
   C_MDC_XlockRequest(Locker *mdc, 
-                     CDir *dir, string& dname, 
+                     CDir *dir, const string& dname, 
                      Message *req,
                      Context *finisher) {
     this->mdc = mdc;
@@ -1888,7 +1888,7 @@ public:
 };
 
 void Locker::dentry_xlock_request_finish(int r, 
-					  CDir *dir, string& dname, 
+					  CDir *dir, const string& dname, 
 					  Message *req,
 					  Context *finisher) 
 {
@@ -1910,7 +1910,7 @@ void Locker::dentry_xlock_request_finish(int r,
   delete finisher;
 }
 
-void Locker::dentry_xlock_request(CDir *dir, string& dname, bool create,
+void Locker::dentry_xlock_request(CDir *dir, const string& dname, bool create,
                                    Message *req, Context *onfinish)
 {
   dout(10) << "dentry_xlock_request on dn " << dname << " create=" << create << " in " << *dir << endl; 

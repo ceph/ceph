@@ -34,6 +34,11 @@ mds
 - dir version/committed/etc versus migration, log expires.  
   - DOCUMENT.
 
+- discover
+  - dir_discovers should be dirfrag_t's?
+  - hard link dentries
+  - base_dir thing is broken, i think, bc of dirfrags.
+
 - mds failure vs clients
   - clean up client op redirection
   - idempotent ops

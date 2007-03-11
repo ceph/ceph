@@ -173,6 +173,9 @@ class MDiscoverReply : public Message {
   void set_dir_auth_hint(int a) {
     dir_auth_hint = a;
   }
+  void set_error_dentry(const string& dn) {
+    error_dentry = dn;
+  }
 
 
   // ...

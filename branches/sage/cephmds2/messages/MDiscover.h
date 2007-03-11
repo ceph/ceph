@@ -26,7 +26,7 @@ using namespace std;
 
 class MDiscover : public Message {
   int             asker;
-  inodeno_t       base_ino;          // 0 -> none, want root
+  inodeno_t       base_ino;          // 1 -> root
   bool            want_base_dir;
   bool            want_root_inode;
   
