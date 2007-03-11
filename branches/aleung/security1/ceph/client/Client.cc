@@ -128,7 +128,7 @@ Client::Client(Messenger *m, MonMap *mm)
   objecter = new Objecter(messenger, monmap, osdmap);
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
-  capcache = new ClientCapCache(client_lock);
+  capcache = new ClientCapCache(messenger, mdsmap, client_lock);
 }
 
 

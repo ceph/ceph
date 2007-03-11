@@ -31,6 +31,8 @@
 #include "messages/MOSDUpdateReply.h"
 #include "messages/MClientUpdate.h"
 #include "messages/MClientUpdateReply.h"
+#include "messages/MClientRenewal.h"
+#include "messages/MClientRenewalReply.h"
 
 //#include "msgthread.h"
 

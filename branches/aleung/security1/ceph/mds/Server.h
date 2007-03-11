@@ -17,6 +17,8 @@
 #include "MDS.h"
 #include "messages/MClientUpdate.h"
 #include "messages/MClientUpdateReply.h"
+#include "messages/MClientRenewal.h"
+#include "messages/MClientRenewalReply.h"
 
 class LogEvent;
 
@@ -67,6 +69,9 @@ public:
 
   // group updates
   void handle_client_update(MClientUpdate *m);
+  
+  // renewal requests
+  void handle_client_renewal(MClientRenewal *m);
   
   // fs ops
   void handle_client_fstat(MClientRequest *req);

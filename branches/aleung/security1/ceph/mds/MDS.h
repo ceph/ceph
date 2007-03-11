@@ -161,6 +161,8 @@ public:
   map<gid_t, hash_t> unix_groups_map;
   // hash to group map
   map<hash_t, CapGroup> unix_groups_byhash;
+  // recent capabilities to renew
+  set<cap_id_t> recent_caps;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

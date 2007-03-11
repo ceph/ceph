@@ -81,6 +81,9 @@ void Server::dispatch(Message *m)
   case MSG_CLIENT_UPDATE:
     handle_client_update((MClientUpdate*)m);
     return;
+  case MSG_CLIENT_RENEWAL:
+    handle_client_renewal((MClientRenewal*)m);
+    return;
 
   case MSG_MDS_HASHREADDIR:
     handle_hash_readdir((MHashReaddir*)m);
@@ -265,6 +268,32 @@ void Server::handle_client_update(MClientUpdate *m)
   reply->set_sig(mds->unix_groups_byhash[my_hash].get_sig());
 
   messenger->send_message(reply, m->get_source_inst());
+}
+
+// capability renewal request
+void Server::handle_client_renewal(MClientRenewal *m)
+{
+  bool new_caps = false;
+  set<cap_id_t> requested_caps = m->get_cap_set();  
+
+  // any new caps requested?
+  for (set<cap_id_t>::iterator si = requested_caps.begin();
+       si != requested_caps.end();
+       si++) {
+    // new cap renewal request
+    if (mds->recent_caps.count(*si) == 0) {
+      new_caps = true;
+      mds->recent_caps.insert(*si);
+    }
+  }
+
+  // if no new caps && cached extension, return cached extension
+  if (!new_caps) {
+  }
+    
+  // create extension for entire recent_cap set
+  // cache the extension
+  //
 }
 
 /***
