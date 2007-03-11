@@ -515,7 +515,7 @@ protected:
   map<uid_t,esignPriv*> user_priv_key;
 
   map<hash_t, CapGroup> groups;
-  map<hash_t, set<int> > update_waiter_osd;
+  map<hash_t, set<entity_inst_t> > update_waiter_osd;
   //map<hash_t, list<Cond*> > update_waiter_cond;
   
 
