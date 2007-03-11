@@ -49,6 +49,7 @@ using namespace std;
 #include "osdc/Filer.h"
 #include "osdc/Objecter.h"
 #include "osdc/ObjectCacher.h"
+#include "ClientCapCache.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -127,6 +128,7 @@ Client::Client(Messenger *m, MonMap *mm)
   objecter = new Objecter(messenger, monmap, osdmap);
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
+  capcache = new ClientCapCache(client_lock);
 }
 
 
@@ -137,6 +139,7 @@ Client::~Client()
   if (objectcacher) { delete objectcacher; objectcacher = 0; }
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (capcache) { delete capcache; capcache = 0; }
 
   tear_down_cache();
 }
@@ -2563,11 +2566,12 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     dout(3) << "Received a " << ext_cap.mode() << " capability for uid: "
 	 << ext_cap.get_uid() << " for inode: " << ext_cap.get_ino() << endl;
 
-    // FIXME the client should not actually verif the cap
-    //assert(ext_cap.verif_extcap(monmap->get_key()));
-
     // cache it
     f->inode->set_ext_cap(uid, &ext_cap);
+    capcache->cache_cap(f->inode->ino(), uid, ext_cap);
+    // presumably i want to renew it later
+    //caps_in_use[uid].insert(ext_cap.get_id());
+    capcache->open_cap(uid, ext_cap.get_id());
 
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
@@ -2686,6 +2690,10 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
   if (before != after && after)
     update_caps_wanted(in);
 
+  // stop using capability
+  //caps_in_use[uid].erase(in->get_ext_cap(uid)->get_id());
+  capcache->close_cap(uid, capcache->get_cache_cap(in->ino(), uid)->get_id());
+
   // hose fh
   fh_map.erase(fh);
   delete f;
@@ -2776,7 +2784,8 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
 
   // grab security cap for file (mode should always be correct)
   // add that assertion
-  ExtCap *read_ext_cap = in->get_ext_cap(uid);
+  //ExtCap *read_ext_cap = in->get_ext_cap(uid);
+  ExtCap *read_ext_cap = capcache->get_cache_cap(in->ino(), uid);
   assert(read_ext_cap);
   
   // do we have read file cap?
@@ -2924,7 +2933,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
-  ExtCap *write_ext_cap = in->get_ext_cap(uid);
+  //ExtCap *write_ext_cap = in->get_ext_cap(uid);
+  ExtCap *write_ext_cap = capcache->get_cache_cap(in->ino(), uid);
   assert(write_ext_cap);
 
   // do we have write file cap?

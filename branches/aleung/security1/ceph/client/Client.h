@@ -49,6 +49,7 @@ using namespace CryptoLib;
 #include "crypto/Ticket.h"
 #include "crypto/CapGroup.h"
 #include "crypto/MerkleTree.h"
+//#include "ClientCapCache.h"
 
 // stl
 #include <set>
@@ -68,6 +69,7 @@ class Filer;
 class Objecter;
 class ObjectCacher;
 class Ticket;
+class ClientCapCache;
 
 extern class LogType client_logtype;
 extern class Logger  *client_logger;
@@ -363,6 +365,9 @@ protected:
   Filer                 *filer;     
   ObjectCacher          *objectcacher;
   Objecter              *objecter;     // (non-blocking) osd interface
+
+  // capability cache
+  ClientCapCache *capcache;
   
   // cache
   hash_map<inodeno_t, Inode*> inode_map;
@@ -515,12 +520,12 @@ protected:
   map<uid_t,esignPriv*> user_priv_key;
 
   map<hash_t, CapGroup> groups;
-  map<hash_t, set<entity_inst_t> > update_waiter_osd;
+  //map<hash_t, set<entity_inst_t> > update_waiter_osd;
+  map<hash_t, set<int> > update_waiter_osd;
   //map<hash_t, list<Cond*> > update_waiter_cond;
-  
-
-  // user map
-  //map<uid_t, User*> user_identity;
+  map<uid_t, set<cap_id_t> > caps_in_use;
+  // renew caps that are in use (leaves a re-use grace period)
+  // expunge caps that are not open, are expired and have no extension
 
   Ticket *get_user_ticket(uid_t uid, gid_t gid);
   void put_user_ticket(Ticket *tk);
