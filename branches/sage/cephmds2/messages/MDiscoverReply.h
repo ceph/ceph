@@ -138,6 +138,10 @@ class MDiscoverReply : public Message {
          it != dirs.end();
          it++) 
       delete *it;
+    for (vector<CDentryDiscover*>::iterator it = dentries.begin();
+         it != dentries.end();
+         it++) 
+      delete *it;
     for (vector<CInodeDiscover*>::iterator it = inodes.begin();
          it != inodes.end();
          it++) 

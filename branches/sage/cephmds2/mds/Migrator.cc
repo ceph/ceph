@@ -1287,22 +1287,17 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   list<Context*> finished;
 
   // assimilate root dir.
-  CDir *dir = cache->get_dirfrag(m->get_dirfrag());
-  if (dir) {
-    dout(7) << "handle_export_prep on " << *dir << " (had dir)" << endl;
+  CDir *dir;
 
-    if (!m->did_assim())
-      m->get_dirfrag(m->get_dirfrag())->update_dir(dir);
+  if (!m->did_assim()) {
+    dir = cache->add_replica_dir(diri, 
+				 m->get_dirfrag().frag, *m->get_dirfrag_discover(m->get_dirfrag()), 
+				 oldauth, finished);
+    dout(7) << "handle_export_prep on " << *dir << " (first pass)" << endl;
   } else {
-    assert(!m->did_assim());
-
-    // open dir i'm importing.
-    dir = diri->add_dirfrag( new CDir(diri, m->get_dirfrag().frag, mds->mdcache, false) ); // FIXME
-    m->get_dirfrag(m->get_dirfrag())->update_dir(dir);
-    
-    dout(7) << "handle_export_prep on " << *dir << " (opening dir)" << endl;
-
-    diri->take_waiting(CInode::WAIT_DIR, finished);
+    dir = cache->get_dirfrag(m->get_dirfrag());
+    assert(dir);
+    dout(7) << "handle_export_prep on " << *dir << " (subsequent pass)" << endl;
   }
   assert(dir->is_auth() == false);
   
@@ -1353,16 +1348,9 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       for (list<frag_t>::iterator pf = m->get_inode_dirfrags(in->ino()).begin();
 	   pf != m->get_inode_dirfrags(in->ino()).end();
 	   ++pf) {
-	CDir *dir = in->get_dirfrag(*pf);
-	if (dir) {
-          m->get_dirfrag(dirfrag_t(in->ino(),*pf))->update_dir(dir);
-          dout(7) << " updated " << *dir << endl;
-	} else {
-	  dir = in->add_dirfrag( new CDir(in, *pf, mds->mdcache, false) ); 
-          m->get_dirfrag(dirfrag_t(in->ino(), *pf))->update_dir(dir);
-          dout(7) << "   added " << *dir << endl;
-          in->take_waiting(CInode::WAIT_DIR, finished);
-	}
+	// add/update
+	cache->add_replica_dir(in, *pf, *m->get_dirfrag_discover(dirfrag_t(in->ino(), *pf)),
+			       oldauth, finished);
       }
     }
 

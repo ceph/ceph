@@ -414,7 +414,7 @@ void MDS::beacon_kill(utime_t lab)
 void MDS::handle_mds_map(MMDSMap *m)
 {
   version_t epoch = m->get_epoch();
-  dout(1) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
+  dout(5) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
 
   // note source's map version
   if (m->get_source().is_mds() && 
@@ -427,7 +427,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // is it new?
   if (epoch <= mdsmap->get_epoch()) {
-    dout(1) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
+    dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
 	    << ", discarding" << endl;
     delete m;
     return;

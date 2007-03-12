@@ -358,6 +358,10 @@ public:
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
 
+  CDir* add_replica_dir(CInode *diri, 
+			frag_t fg, CDirDiscover& dis, 
+			int from,
+			list<Context*>& finished);
 
   // -- namespace --
   // these handle logging, cache sync themselves.

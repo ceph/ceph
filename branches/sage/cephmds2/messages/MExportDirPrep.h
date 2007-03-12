@@ -56,7 +56,7 @@ class MExportDirPrep : public Message {
   bool have_dir(dirfrag_t df) {
     return dirs.count(df);
   }
-  CDirDiscover* get_dirfrag(dirfrag_t df) {
+  CDirDiscover* get_dirfrag_discover(dirfrag_t df) {
     return dirs[df];
   }
   set<int> &get_bystanders() { return bystanders; }

@@ -129,7 +129,6 @@ class EMetaBlob {
   /* dirlump - contains metadata for any dir we have contents for.
    */
   struct dirlump {
-    //static const int STATE_IMPORT =   (1<<0);
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
@@ -148,8 +147,6 @@ class EMetaBlob {
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
-    //bool is_import() { return state & STATE_IMPORT; }
-    //void mark_import() { state |= STATE_IMPORT; }
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
     bool is_dirty() { return state & STATE_DIRTY; }
@@ -267,13 +264,13 @@ class EMetaBlob {
   }
   
   dirlump& add_dir(CDir *dir, bool dirty) {
-    if (lump_map.count(dir->dirfrag()) == 0) {
-      lump_order.push_back(dir->dirfrag());
-      lump_map[dir->dirfrag()].dirv = dir->get_projected_version();
+    dirfrag_t df = dir->dirfrag();
+    if (lump_map.count(df) == 0) {
+      lump_order.push_back(df);
+      lump_map[df].dirv = dir->get_projected_version();
     }
-    dirlump& l = lump_map[dir->dirfrag()];
+    dirlump& l = lump_map[df];
     if (dir->is_complete()) l.mark_complete();
-    //if (dir->is_import()) l.mark_import();
     if (dirty) l.mark_dirty();
     return l;
   }
@@ -285,7 +282,7 @@ class EMetaBlob {
 
     CInode *diri = dir->get_inode();
     if (!toroot && dir->is_subtree_root() && dir->is_auth())
-      return;  // stop at import point
+      return;  // stop at subtree root
     if (!dir->get_inode()->get_parent_dn())
       return;
 

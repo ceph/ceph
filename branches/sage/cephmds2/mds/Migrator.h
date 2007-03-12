@@ -150,6 +150,20 @@ public:
     return import_peer[df];
   }
 
+  int get_export_state(CDir *dir) {
+    assert(export_state.count(dir));
+    return export_state[dir];
+  }
+  // this returns true if we are export @dir,
+  // and are not waiting for @who to be
+  // be warned of ambiguous auth.
+  // only returns meaningful results during EXPORT_WARNING state.
+  bool export_has_warned(CDir *dir, int who) {
+    assert(is_exporting(dir));
+    assert(export_state[dir] == EXPORT_WARNING); 
+    return (export_warning_ack_waiting[dir].count(who) == 0);
+  }
+
 
   // -- misc --
   void handle_mds_failure(int who);

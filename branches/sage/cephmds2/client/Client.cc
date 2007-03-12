@@ -1864,6 +1864,15 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
 
+    // add . and ..?
+    string dot(".");
+    contents[dot] = diri->inode;
+    if (diri != root) {
+      string dotdot("..");
+      contents[dotdot] = diri->dn->dir->parent_inode->inode;
+    }
+
+    // the rest?
     if (!reply->get_dir_in().empty()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
@@ -1895,11 +1904,6 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       if (dir->is_empty())
 	close_dir(dir);
     }
-
-    // add .. too?
-    contents["."] = diri->inode;
-    if (diri != root) 
-      contents[".."] = diri->dn->dir->parent_inode->inode;
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***

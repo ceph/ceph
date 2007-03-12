@@ -400,7 +400,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
       !dir->state_test(CDir::STATE_EXPORTBOUND)) {  // not an exportbound,
     // merge with parent.
-    dout(10) << "  subtree merge at " << *parent << endl;
+    dout(10) << "  subtree merge at " << *dir << endl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
     
     // move our bounds under the parent
@@ -1855,9 +1855,12 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     CDir *con = get_dirfrag(p->first);
     assert(con);  // we had better have this.
 
-    if (!con->is_auth()) {
+    if (!con->is_auth() ||
+	(con->is_auth() && con->is_exporting() &&
+	 migrator->get_export_state(con) == Migrator::EXPORT_WARNING &&
+	 migrator->export_has_warned(con,from))) {
       // not auth.
-      dout(7) << "delaying nonauth expires for " << *con << endl;
+      dout(7) << "delaying nonauth|warned expires for " << *con << endl;
       assert(con->is_frozen_tree_root());
 
       // make a message container
@@ -3209,6 +3212,7 @@ void MDCache::handle_discover(MDiscover *dis)
 	dout(7) << *curdir << " is frozen, empty reply, waiting" << endl;
 	curdir->add_waiter(CDir::WAIT_UNFREEZE,
 			   new C_MDS_RetryMessage(mds, dis));
+	delete reply;
 	return;
       } else {
 	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << endl;
@@ -3400,35 +3404,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         (i == 0 && m->has_base_dir())) {
       assert(m->get_dir(i).get_dirfrag().ino == cur->ino());
       fg = m->get_dir(i).get_dirfrag().frag;
-      curdir = cur->get_dirfrag(fg);
 
-      if (curdir) {
-        // had it
-        /* this is strange, but it happens when:
-           we discover multiple dentries under a dir.
-           bc, no flag to indicate a dir discover is underway, (as there is w/ a dentry one).
-           this is actually good, since (dir aside) they're asking for different information.
-        */
-        dout(7) << "had " << *curdir << endl;
-        m->get_dir(i).update_dir(curdir);
-        dout2(7) << "now " << *curdir << endl;
-      } else {
-        // add it (_replica_)
-	curdir = cur->add_dirfrag( new CDir(cur, fg, this, false) );
-        m->get_dir(i).update_dir(curdir);
-
-	// is this a dir_auth delegation boundary?
-	if (m->get_source().num() != cur->authority().first ||
-	    cur->auth_is_ambiguous() ||
-	    cur->ino() == 1)
-	  adjust_subtree_auth(curdir, m->get_source().num());
-	
-        dout(7) << "added " << *curdir << " nonce " << curdir->replica_nonce << endl;
-	
-        // get waiters
-        cur->take_waiting(CInode::WAIT_DIR, finished);
-	dir_discovers.erase(cur->ino());
-      }
+      // add/update the dir replica
+      curdir = add_replica_dir(cur, fg, m->get_dir(i), 
+			       m->get_source().num(),
+			       finished);
     }    
     
     // dentry error?
@@ -3562,9 +3542,37 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 }
 
 
+CDir *MDCache::add_replica_dir(CInode *diri, 
+			       frag_t fg, CDirDiscover &dis, int from,
+			       list<Context*>& finished)
+{
+  // add it (_replica_)
+  CDir *dir = diri->get_dirfrag(fg);
 
+  if (dir) {
+    // had replica. update w/ new nonce.
+    dis.update_dir(dir);
+    dout(7) << "add_replica_dir had " << *dir << " nonce " << dir->replica_nonce << endl;
+  } else {
+    // add replica.
+    dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
+    dis.update_dir(dir);
 
+    // is this a dir_auth delegation boundary?
+    if (from != diri->authority().first ||
+	diri->auth_is_ambiguous() ||
+	diri->ino() == 1)
+      adjust_subtree_auth(dir, from);
+    
+    dout(7) << "add_replica_dir added " << *dir << " nonce " << dir->replica_nonce << endl;
+    
+    // get waiters
+    diri->take_waiting(CInode::WAIT_DIR, finished);
+    dir_discovers.erase(diri->ino());
+  }
 
+  return dir;
+}
 
 
 

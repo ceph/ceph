@@ -187,7 +187,7 @@ struct FileLayout {
 
 struct inodeno_t {
   __uint64_t val;
-  inodeno_t() : val() {}
+  inodeno_t() : val(0) {}
   inodeno_t(__uint64_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator __uint64_t() const { return val; }
