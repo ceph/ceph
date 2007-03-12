@@ -581,19 +581,19 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 MClientReply* Client::sendrecv(MClientRequest *req, int mds)
 {
-  MetaRequest request;
-
   // assign a unique tid
   tid_t tid = ++last_tid;
   req->set_tid(tid);
 
+  // make note
+  MetaRequest request(req, tid);
   mds_requests[tid] = &request;
 
-  // encode payload
+  // encode payload now, in case we have to resend (in case of mds failure)
   req->encode_payload();
   request.request_payload = req->get_payload();
   
-  // make initial request
+  // send initial request.
   send_request(&request, mds);
 
   // wait for reply
@@ -622,6 +622,7 @@ void Client::send_request(MetaRequest *request, int mds)
   MClientRequest *r = request->request;
   if (!r) {
     // make a new one
+    dout(10) << "send_request rebuilding request " << request->tid << " for mds" << mds << endl;
     r = new MClientRequest;
     r->copy_payload(request->request_payload);
     r->decode_payload();

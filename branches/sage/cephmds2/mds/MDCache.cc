@@ -175,6 +175,7 @@ void MDCache::add_inode(CInode *in)
 void MDCache::remove_inode(CInode *o) 
 { 
   dout(14) << "remove_inode " << *o << endl;
+
   if (o->get_parent_dn()) {
     // FIXME: multiple parents?
     CDentry *dn = o->get_parent_dn();
@@ -184,7 +185,12 @@ void MDCache::remove_inode(CInode *o)
     else
       dn->dir->unlink_inode(dn);   // leave dentry
   }
-  inode_map.erase(o->ino());    // remove from map
+
+  // remove from inode map
+  inode_map.erase(o->ino());    
+
+  // delete it
+  delete o; 
 }
 
 
@@ -1705,6 +1711,7 @@ void MDCache::trim_dirfrag(CDir *dir, dirfrag_t condf, map<int, MCacheExpire*>& 
 
 void MDCache::trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, map<int, MCacheExpire*>& expiremap)
 {
+  dout(15) << "trim_inode " << *in << endl;
   assert(in->get_num_ref() == 0);
     
   // DIR
@@ -1729,9 +1736,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, map<int, MCac
       expiremap[a]->add_inode(condf, in->ino(), in->get_replica_nonce());
     }
   }
-  
-  dout(15) << "  trim removing " << *in << endl;
-  
+    
   // unlink
   if (dn)
     dn->get_dir()->unlink_inode(dn);

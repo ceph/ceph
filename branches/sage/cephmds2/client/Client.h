@@ -329,7 +329,11 @@ class Client : public Dispatcher {
     Cond  *caller_cond;          // who to take up
     Cond  *dispatch_cond;        // who to kick back
 
-    MetaRequest() : request(0), num_fwd(0), reply(0), caller_cond(0), dispatch_cond(0) {}
+    MetaRequest(MClientRequest *req, tid_t t) : 
+      tid(t), request(req), 
+      num_fwd(0), 
+      reply(0), 
+      caller_cond(0), dispatch_cond(0) { }
   };
   tid_t last_tid;
   map<tid_t, MetaRequest*> mds_requests;
