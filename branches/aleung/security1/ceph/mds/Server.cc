@@ -273,6 +273,7 @@ void Server::handle_client_update(MClientUpdate *m)
 // capability renewal request
 void Server::handle_client_renewal(MClientRenewal *m)
 {
+  cout << "Got a renewal request" << endl;
   bool new_caps = false;
   set<cap_id_t> requested_caps = m->get_cap_set();  
 
@@ -288,12 +289,8 @@ void Server::handle_client_renewal(MClientRenewal *m)
   }
 
   // if no new caps && cached extension, return cached extension
-  if (!new_caps) {
-  }
-    
   // create extension for entire recent_cap set
   // cache the extension
-  //
 }
 
 /***

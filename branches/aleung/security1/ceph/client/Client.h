@@ -32,7 +32,7 @@
 #include "messages/MClientUpdate.h"
 #include "messages/MClientUpdateReply.h"
 #include "messages/MClientRenewal.h"
-#include "messages/MClientRenewalReply.h"
+//#include "messages/MClientRenewalReply.h"
 
 //#include "msgthread.h"
 
@@ -537,6 +537,7 @@ protected:
 
   // friends
   friend class SyntheticClient;
+  friend class ClientCapCache;
 
  public:
   Client(Messenger *m, MonMap *mm);

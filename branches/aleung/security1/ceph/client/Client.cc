@@ -128,7 +128,7 @@ Client::Client(Messenger *m, MonMap *mm)
   objecter = new Objecter(messenger, monmap, osdmap);
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
-  capcache = new ClientCapCache(messenger, mdsmap, client_lock);
+  capcache = new ClientCapCache(messenger, this, client_lock);
 }
 
 
@@ -1286,6 +1286,10 @@ int Client::unmount()
 
   while (mounted)
     mount_cond.Wait(client_lock);
+
+  // stop cleaner/renewal thread
+  capcache->kill_cleaner();
+  capcache->kill_renewer();
 
   dout(2) << "unmounted" << endl;
 

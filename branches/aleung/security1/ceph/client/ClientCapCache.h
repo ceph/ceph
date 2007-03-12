@@ -45,9 +45,19 @@ class ClientCapCache {
       return 0;
     return &(inode_user_cap_cache[ino][user]);
   }
+  void kill_cleaner() {
+    cleaner_stop = true;
+    //cleaner_cond.Signal();
+    //cleaner_thread.join();
+  }
+  void kill_renewer() {
+    renewer_stop = true;
+    //renewer_cond.Signal();
+    //renewer_thread.join();
+  }
 
-  ClientCapCache (Messenger *m, MDSMap *mmap, Mutex& l) : messenger(m),
-							 mdsmap(mmap), lock(l),
+  ClientCapCache (Messenger *m, Client *cli, Mutex& l) : messenger(m),
+							 client(cli), lock(l),
 							 cleaner_stop(false),
 							 cleaner_thread(this),
 							 renewer_stop(false),
@@ -68,7 +78,8 @@ class ClientCapCache {
 
  private:
   Messenger *messenger;
-  MDSMap *mdsmap;
+  //MDSMap *mdsmap;
+  Client *client;
   Mutex& lock;
   map<inodeno_t, map<uid_t, ExtCap> > inode_user_cap_cache;
   map<uid_t, set<cap_id_t> > caps_in_use;
@@ -78,7 +89,7 @@ class ClientCapCache {
   // expunge caps that are not in use, are expired and have no extension
   void cleaner_entry() {
     cout << "Cleaner start" << endl;
-    lock.Lock();
+    //lock.Lock();
     /*
     while (!cleaner_stop) {
       cout << "Cleaner running" << endl;
@@ -111,7 +122,7 @@ class ClientCapCache {
       cleaner_cond.WaitInterval(lock, utime_t(480,0));
     }
     */
-    lock.Unlock();
+    //lock.Unlock();
     cout << "Cleaner finish" << endl;
   }
 
@@ -145,8 +156,10 @@ class ClientCapCache {
       
       // make asynchronous renewal request
       // FIXME always send to mds 0
-      if (mdsmap)
-	messenger->send_message(renewal, mdsmap->get_inst(0), MDS_PORT_SERVER);
+      if (client->mdsmap && !caps_in_use.empty()) {
+	cout << "Sending renewal request" << endl;
+	messenger->send_message(renewal, client->mdsmap->get_inst(0), MDS_PORT_SERVER);
+      }
       
       if (renewer_stop) break;
       // clean every 4 minutes

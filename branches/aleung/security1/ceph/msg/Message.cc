@@ -56,6 +56,7 @@ using namespace std;
 #include "messages/MClientFileCaps.h"
 #include "messages/MClientUpdate.h"
 #include "messages/MClientUpdateReply.h"
+#include "messages/MClientRenewal.h"
 
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
@@ -271,6 +272,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_CLIENT_UPDATE_REPLY:
     m = new MClientUpdateReply();
+    break;
+  case MSG_CLIENT_RENEWAL:
+    m = new MClientRenewal();
     break;
 
     // mds
