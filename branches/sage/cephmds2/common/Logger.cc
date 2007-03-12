@@ -34,6 +34,14 @@ Logger::Logger(string fn, LogType *type)
 {
   logger_lock.Lock();
   {
+    filename = "";
+    if (g_conf.use_abspaths) {
+      char *cwd = get_current_dir_name(); 
+      filename = cwd;
+      delete cwd;
+      filename += "/";
+    }
+
     filename = "log/";
     if (g_conf.log_name) {
       filename += g_conf.log_name;

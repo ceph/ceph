@@ -216,13 +216,14 @@ int main (int argc, char **argv)
             cerr << "write " << oids[o] << " failed: "
                  << strerror (-ret) << endl;
         }
+      os->sync();
+
       utime_t end = g_clock.now() - begin;
 
       cerr << "Write finished in " << end << endl;
       total_write += end;
       writes[i] = end;
 
-      os->sync();
       os->umount();
       sync();
 

@@ -239,7 +239,7 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
     int p = inode.layout.stripe_size;
-    if (write_pos / p != (write_pos + bl.length() + sizeof(s)) / p) {
+    if (write_pos / p != (write_pos + (off_t)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
       off_t owp = write_pos;
@@ -498,7 +498,7 @@ bool Journaler::is_readable()
   // start reading some more?
   if (!_is_reading()) {
     if (s)
-      fetch_len = MAX(fetch_len, sizeof(s)+s-read_buf.length()); 
+      fetch_len = MAX(fetch_len, (off_t)(sizeof(s)+s-read_buf.length())); 
     _issue_read(fetch_len);
   }
 
