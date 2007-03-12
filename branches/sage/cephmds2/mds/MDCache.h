@@ -161,7 +161,6 @@ protected:
 
   // shutdown crap
   int shutdown_commits;
-  bool did_shutdown_exports;
   bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
 
@@ -242,9 +241,9 @@ public:
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
-  void trim_dirfrag(CDir *dir, dirfrag_t condf, 
+  void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
-  void trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, 
+  void trim_inode(CDentry *dn, CInode *in, CDir *con,
 		  map<int,class MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 

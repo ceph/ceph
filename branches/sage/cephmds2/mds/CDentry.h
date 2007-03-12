@@ -227,6 +227,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     add_replica(from, EXPORT_NONCE);
     if (is_replica(to))
       remove_replica(to);
+    state_set(CDentry::STATE_AUTH);
   }
 
   // -- locking

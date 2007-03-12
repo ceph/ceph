@@ -827,11 +827,6 @@ int Server::encode_dir_contents(CDir *dir,
        it++) {
     CDentry *dn = it->second;
     
-    // hashed?
-    if (dir->is_hashed() &&
-        mds->get_nodeid() != mds->mdcache->hash_dentry( dir->ino(), it->first ))
-      continue;
-
     if (dn->is_null()) continue;
 
     CInode *in = dn->inode;

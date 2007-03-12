@@ -188,12 +188,14 @@ void Migrator::handle_mds_failure(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	dir->auth_unpin();     // remove the auth_pin (that was holding up the freeze)
 	export_state.erase(dir); // clean up
+	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
 
       case EXPORT_FREEZING:
 	dout(10) << "export state=freezing : canceling freeze" << endl;
 	dir->unfreeze_tree();  // cancel the freeze
 	export_state.erase(dir); // clean up
+	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
 
 	// NOTE: state order reversal, warning comes after loggingstart+prepping
@@ -219,12 +221,14 @@ void Migrator::handle_mds_failure(int who)
 	cache->adjust_subtree_auth(dir, mds->get_nodeid());
 	cache->try_subtree_merge(dir);
 	export_state.erase(dir); // clean up
+	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
 	
       case EXPORT_EXPORTING:
 	dout(10) << "export state=exporting : reversing, and unfreezing" << endl;
 	export_reverse(dir);
 	export_state.erase(dir); // clean up
+	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
 
       case EXPORT_LOGGINGFINISH:
@@ -361,6 +365,47 @@ void Migrator::handle_mds_failure(int who)
 
 
 
+void Migrator::audit()
+{
+  if (g_conf.debug_mds < 5) return;  // hrm.
+
+  // import_state
+  for (map<dirfrag_t,int>::iterator p = import_state.begin();
+       p != import_state.end();
+       p++) {
+    if (p->second == IMPORT_DISCOVERED) {
+      CInode *in = cache->get_inode(p->first.ino);
+      assert(in);
+      continue;
+    }
+    CDir *dir = cache->get_dirfrag(p->first);
+    assert(dir);
+    if (p->second == IMPORT_PREPPING) continue;
+    assert(dir->auth_is_ambiguous());
+    assert(dir->authority().first  == mds->get_nodeid() ||
+	   dir->authority().second == mds->get_nodeid());
+  }
+
+  // export_state
+  for (map<CDir*,int>::iterator p = export_state.begin();
+       p != export_state.end();
+       p++) {
+    CDir *dir = p->first;
+    if (p->second == EXPORT_DISCOVERING ||
+	p->second == EXPORT_FREEZING) continue;
+    assert(dir->auth_is_ambiguous());
+    assert(dir->authority().first  == mds->get_nodeid() ||
+	   dir->authority().second == mds->get_nodeid());
+  }
+
+  // ambiguous+me subtrees should be importing|exporting
+
+  // write me
+}
+
+
+
+
 
 // ==========================================================
 // EXPORT
@@ -428,6 +473,9 @@ void Migrator::export_dir(CDir *dir,
   assert(export_state.count(dir) == 0);
   export_state[dir] = EXPORT_DISCOVERING;
   export_peer[dir] = dest;
+
+  assert(!dir->state_test(CDir::STATE_EXPORTING));
+  dir->state_set(CDir::STATE_EXPORTING);
 
   // send ExportDirDiscover (ask target)
   mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
@@ -1132,11 +1180,12 @@ void Migrator::export_finish(CDir *dir)
   cache->discard_delayed_expire(dir);
 
   // remove from exporting list, clean up state
+  dir->state_clear(CDir::STATE_EXPORTING);
   export_state.erase(dir);
   export_peer.erase(dir);
   export_bounds.erase(dir);
   export_notify_ack_waiting.erase(dir);
-    
+
   // queue finishers
   mds->queue_finished(export_finish_waiters[dir]);
   export_finish_waiters.erase(dir);
@@ -1145,6 +1194,7 @@ void Migrator::export_finish(CDir *dir)
   //if (mds->logger) mds->logger->set("nex", cache->exports.size());
 
   cache->show_subtrees();
+  audit();
 
   // send pending import_maps?
   mds->mdcache->send_pending_import_maps();
@@ -1266,6 +1316,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     // move pin to dir
     diri->put(CInode::PIN_IMPORTING);
     dir->get(CDir::PIN_IMPORTING);  
+    dir->state_set(CDir::STATE_IMPORTING);
 
     // change import state
     import_state[dir->dirfrag()] = IMPORT_PREPPING;
@@ -1586,6 +1637,7 @@ void Migrator::import_reverse_unpin(CDir *dir)
 
   // remove importing pin
   dir->put(CDir::PIN_IMPORTING);
+  dir->state_clear(CDir::STATE_IMPORTING);
 
   // remove bound pins
   for (set<CDir*>::iterator it = import_bounds[dir].begin();
@@ -1604,7 +1656,7 @@ void Migrator::import_reverse_unpin(CDir *dir)
   import_bystanders.erase(dir);
 
   cache->show_subtrees();
-  cache->show_cache();
+  audit();
 }
 
 
@@ -1642,6 +1694,7 @@ void Migrator::import_finish(CDir *dir, bool now)
 
   // remove pins
   dir->put(CDir::PIN_IMPORTING);
+  dir->state_clear(CDir::STATE_IMPORTING);
 
   for (set<CDir*>::iterator it = import_bounds[dir].begin();
        it != import_bounds[dir].end();
@@ -1681,6 +1734,7 @@ void Migrator::import_finish(CDir *dir, bool now)
     //mds->logger->set("nim", cache->imports.size());
   }
   cache->show_subtrees();
+  audit();
 
   // is it empty?
   if (dir->get_size() == 0 &&

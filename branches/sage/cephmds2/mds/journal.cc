@@ -97,9 +97,17 @@ bool EMetaBlob::has_expired(MDS *mds)
     }
     
     if (dir->auth_is_ambiguous()) {
-      dout(10) << "EMetaBlob.has_expired ambiguous auth on " 
-	       << *dir << endl;
-      return false;  // not committed.
+      CDir *ex = mds->mdcache->get_subtree_root(dir);
+      if (ex->is_exporting()) {
+	// wait until export is acked (logged on remote) and committed (logged locally)
+	dout(10) << "EMetaBlob.has_expired ambiguous auth for " << *dir
+		 << ", exporting (not yet safe) on " << *ex << endl;
+	return false;
+      } else {
+	dout(10) << "EMetaBlob.has_expired ambiguous auth for " << *dir
+		 << ", _importing_ (safe) on " << *ex << endl;
+	return true;
+      }
     }
 
     if (dir->get_committed_version() < lp->second.dirv) {
@@ -144,12 +152,18 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     }
     
     if (dir->auth_is_ambiguous()) {
-      // wait until export is acked (logged on remote) and committed (logged locally)
       CDir *ex = mds->mdcache->get_subtree_root(dir);
-      dout(10) << "EMetaBlob.expire ambiguous auth for " << *dir
-	       << ", waiting for export finish on " << *ex << endl;
-      waitfor_export.push_back(ex);
-      continue;
+      if (ex->is_exporting()) {
+	// wait until export is acked (logged on remote) and committed (logged locally)
+	dout(10) << "EMetaBlob.expire ambiguous auth for " << *dir
+		 << ", waiting for export finish on " << *ex << endl;
+	waitfor_export.push_back(ex);
+	continue;
+      } else {
+	dout(10) << "EMetaBlob.expire ambiguous auth for " << *dir
+		 << ", but _importing_, we're safe on " << *ex << endl;
+	continue;
+      }
     }
     if (dir->get_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv

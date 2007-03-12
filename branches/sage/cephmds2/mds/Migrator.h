@@ -154,6 +154,7 @@ public:
   // -- misc --
   void handle_mds_failure(int who);
 
+  void audit();
 
   // -- import/export --
   // exporter

@@ -96,7 +96,6 @@ MDCache::MDCache(MDS *m)
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
-  did_shutdown_exports = false;
   did_shutdown_log_cap = false;
   shutdown_commits = 0;
 }
@@ -343,16 +342,15 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
  * but the inode is auth.
  *
  * import points don't need to be pinned the same way simply because the
- * exporter is pinned and thus always open.
+ * exporting mds is pinning the exprot (as above) thus the dir is
+ * always open on the importer.
  */
 void MDCache::adjust_export_state(CDir *dir)
 {
-  //if (!dir->is_auth() && dir->inode->is_auth()) {
-  
   // be auth bit agnostic, so that we work during recovery
   //  (before recalc_auth_bits)
-  if (!dir->authority().first == mds->get_nodeid() &&
-      dir->inode->authority().first != mds->get_nodeid()) {
+  if (dir->authority().first        != mds->get_nodeid() &&
+      dir->inode->authority().first == mds->get_nodeid()) {
     // export.
     if (!dir->state_test(CDir::STATE_EXPORT)) {
       dout(10) << "adjust_export_state pinning new export " << *dir << endl;
@@ -1610,9 +1608,14 @@ bool MDCache::trim(int max)
     if (!dn->is_auth()) {
       pair<int,int> auth = dn->authority();
 
-      for (int a=auth.first; 
-	   a != auth.second && auth.second >= 0 && auth.second != mds->get_nodeid(); 
-	   a=auth.second) {
+      for (int p=0; p<2; p++) {
+	int a = auth.first;
+	if (p) a = auth.second;
+	if (a < 0 || (p == 1 && auth.second == auth.first)) break;
+	if (mds->get_nodeid() == auth.second &&
+	    con->is_importing()) break;                // don't send any expire while importing.
+	if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
+
 	dout(12) << "  sending expire to mds" << a << " on " << *dn << endl;
 	assert(a != mds->get_nodeid());
 	if (expiremap.count(a) == 0) 
@@ -1630,7 +1633,7 @@ bool MDCache::trim(int max)
       // expire the inode, too.
       CInode *in = dn->get_inode();
       assert(in);
-      trim_inode(dn, in, con->dirfrag(), expiremap);
+      trim_inode(dn, in, con, expiremap);
     } 
     else {
       assert(dn->is_null());
@@ -1658,11 +1661,11 @@ bool MDCache::trim(int max)
 	 p != ls.end();
 	 ++p) 
       if ((*p)->get_num_ref() == 0) 
-	trim_dirfrag(*p, (*p)->dirfrag(), expiremap);
+	trim_dirfrag(*p, *p, expiremap);
     
     // root inode?
     if (root->get_num_ref() == 0)
-      trim_inode(0, root, dirfrag_t(1,frag_t()), expiremap);    // hrm, FIXME
+      trim_inode(0, root, 0, expiremap);    // hrm, FIXME
   }
 
   // send expires
@@ -1676,31 +1679,38 @@ bool MDCache::trim(int max)
   return true;
 }
 
-void MDCache::trim_dirfrag(CDir *dir, dirfrag_t condf, map<int, MCacheExpire*>& expiremap)
+void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expiremap)
 {
   assert(dir->get_num_ref() == 0);
 
   CInode *in = dir->get_inode();
 
   if (!dir->is_auth()) {
-    pair<int,int> dirauth = dir->authority();
-    assert(dirauth.second < 100);   // hack die bug die
+    pair<int,int> auth = dir->authority();
     
     // was this an auth delegation?  (if so, slightly modified container)
-    dirfrag_t dcondf = condf;
+    dirfrag_t condf;
     if (dir->is_subtree_root()) {
-      dout(12) << "  this is a subtree, removing from map, container is " << *dir << endl;
-      dcondf = dir->dirfrag();
+      dout(12) << " subtree root, container is " << *dir << endl;
+      con = dir;
+      condf = dir->dirfrag();
+    } else {
+      condf = con->dirfrag();
     }
       
-    for (int a=dirauth.first; 
-	 a != dirauth.second && dirauth.second >= 0 && dirauth.second != mds->get_nodeid(); 
-	 a=dirauth.second) {
+    for (int p=0; p<2; p++) {
+      int a = auth.first;
+      if (p) a = auth.second;
+      if (a < 0 || (p == 1 && auth.second == auth.first)) break;
+      if (mds->get_nodeid() == auth.second &&
+	  con->is_importing()) break;                // don't send any expire while importing.
+      if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
+
       dout(12) << "  sending expire to mds" << a << " on   " << *in->dir << endl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_dir(dcondf, dir->dirfrag(), dir->replica_nonce);
+      expiremap[a]->add_dir(condf, dir->dirfrag(), dir->replica_nonce);
     }
   }
   
@@ -1709,7 +1719,7 @@ void MDCache::trim_dirfrag(CDir *dir, dirfrag_t condf, map<int, MCacheExpire*>& 
   in->close_dirfrag(dir->dirfrag().frag);
 }
 
-void MDCache::trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, map<int, MCacheExpire*>& expiremap)
+void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpire*>& expiremap)
 {
   dout(15) << "trim_inode " << *in << endl;
   assert(in->get_num_ref() == 0);
@@ -1720,20 +1730,31 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, map<int, MCac
   for (list<CDir*>::iterator p = dfls.begin();
        p != dfls.end();
        ++p) 
-    trim_dirfrag(*p, condf, expiremap);
+    trim_dirfrag(*p, con ? con:*p, expiremap);  // if no container (e.g. root dirfrag), use *p
   
   // INODE
   if (!in->is_auth()) {
     pair<int,int> auth = in->authority();
     
-    for (int a=auth.first; 
-	 a != auth.second && auth.second >= 0 && auth.second != mds->get_nodeid(); 
-	 a=auth.second) {
+    dirfrag_t df;
+    if (con)
+      df = con->dirfrag();
+    else
+      df = dirfrag_t(1,frag_t());
+
+    for (int p=0; p<2; p++) {
+      int a = auth.first;
+      if (p) a = auth.second;
+      if (a < 0 || (p == 1 && auth.second == auth.first)) break;
+      if (con && mds->get_nodeid() == auth.second &&
+	  con->is_importing()) break;                // don't send any expire while importing.
+      if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
+
       dout(12) << "  sending expire to mds" << a << " on " << *in << endl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_inode(condf, in->ino(), in->get_replica_nonce());
+      expiremap[a]->add_inode(df, in->ino(), in->get_replica_nonce());
     }
   }
     
@@ -2051,31 +2072,13 @@ void MDCache::shutdown_start()
 bool MDCache::shutdown_pass()
 {
   dout(7) << "shutdown_pass" << endl;
-  //assert(mds->is_shutting_down());
+
   if (mds->is_out()) {
     dout(7) << " already shut down" << endl;
     show_cache();
     show_subtrees();
     return true;
   }
-
-  // unhash dirs?
-  /*
-  if (!hashdirs.empty()) {
-    // unhash any of my dirs?
-    for (set<CDir*>::iterator it = hashdirs.begin();
-         it != hashdirs.end();
-         it++) {
-      CDir *dir = *it;
-      if (!dir->is_auth()) continue;
-      if (dir->is_unhashing()) continue;
-      //migrator->unhash_dir(dir);
-    }
-
-    dout(7) << "waiting for dirs to unhash" << endl;
-    return false;
-  }
-  */
 
   // commit dirs?
   if (g_conf.mds_commit_on_shutdown) {
@@ -2108,6 +2111,44 @@ bool MDCache::shutdown_pass()
   trim(0);
   dout(5) << "lru size now " << lru.lru_get_size() << endl;
 
+
+  // SUBTREES
+  // send all imports back to 0.
+  if (!subtrees.empty() &&
+      mds->get_nodeid() != 0 && 
+      !migrator->is_exporting() &&
+      !migrator->is_importing()) {
+    // export to root
+    dout(7) << "looking for subtrees to export to mds0" << endl;
+    list<CDir*> ls;
+    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
+         it != subtrees.end();
+         it++) {
+      CDir *dir = it->first;
+      if (dir->is_frozen() || dir->is_freezing()) continue;
+      if (!dir->is_fullauth()) continue;
+      ls.push_back(dir);
+    }
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      CDir *dir = *p;
+      dout(7) << "sending " << *dir << " back to mds0" << endl;
+      migrator->export_dir(dir, 0);
+    }
+  }
+
+  // subtrees map not empty yet?
+  if (!subtrees.empty()) {
+    dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
+    show_subtrees();
+    //show_cache();
+    return false;
+  }
+  assert(subtrees.empty());
+  assert(!migrator->is_exporting());
+  assert(!migrator->is_importing());
+
+
+  // LOG
   mds->mdlog->trim(0);
 
   // (wait for) flush log?
@@ -2119,47 +2160,6 @@ bool MDCache::shutdown_pass()
     } 
   }
 
-
-  // send all imports back to 0.
-  if (mds->get_nodeid() != 0 && 
-      !migrator->is_exporting() &&
-      !migrator->is_importing()) {
-    // flush what i can from the cache first..
-    trim(0);
-    
-    // export to root
-    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
-         it != subtrees.end();
-         it++) {
-      CDir *dir = it->first;
-      if (dir->inode->is_root()) continue;
-      if (dir->is_frozen() || dir->is_freezing()) continue;
-      if (!dir->is_fullauth()) continue;
-      
-      dout(7) << "sending " << *dir << " back to mds0" << endl;
-      migrator->export_dir(dir, 0);
-    }
-    did_shutdown_exports = true;
-  } 
-  
-  // close root?
-  if (lru.lru_get_size() == 0 &&
-      root &&
-      root->is_pinned_by(CInode::PIN_DIRTY)) {
-    dout(7) << "clearing root inode dirty flag" << endl;
-    root->put(CInode::PIN_DIRTY);
-  }
-  
-  // subtrees map not empty yet?
-  if (!subtrees.empty()) {
-    dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
-    show_cache();
-    return false;
-  }
-  assert(subtrees.empty());
-  assert(!migrator->is_exporting());
-  assert(!migrator->is_importing());
-  
   // cap log?
   if (g_conf.mds_log_flush_on_shutdown) {
 
@@ -3340,46 +3340,50 @@ void MDCache::handle_discover(MDiscover *dis)
 void MDCache::handle_discover_reply(MDiscoverReply *m) 
 {
   // starting point
-  CInode *cur;
   list<Context*> finished, error;
   
-  if (m->has_root()) {
-    // nowhere!
-    dout(7) << "discover_reply root + " << m->get_path() << " " << m->get_num_inodes() << " inodes" << endl;
-    assert(!root);
-    assert(m->get_base_ino() == 0);
-    assert(!m->has_base_dentry());
-    assert(!m->has_base_dir());
+  // grab base inode
+  CInode *cur = get_inode(m->get_base_ino());
     
-    // add in root
-    cur = new CInode(this, false);
-      
-    m->get_inode(0).update_inode(cur);
-    
-    // root
-    set_root( cur );
-    add_inode( cur );
-    dout(7) << " got root: " << *cur << endl;
-
-    // take waiters
-    finished.swap(waiting_for_root);
+  if (cur) {
+    dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
   } else {
-    // grab inode
-    cur = get_inode(m->get_base_ino());
-    
-    if (!cur) {
+    if (!m->has_root()) {
       dout(7) << "discover_reply don't have base ino " << m->get_base_ino() << ", dropping" << endl;
       delete m;
       return;
     }
+
+    // it's the root inode.
+    assert(!root);
+    assert(m->get_base_ino() == 1);
+    assert(!m->has_base_dentry());
+    assert(!m->has_base_dir());
     
-    dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
+    dout(7) << "discover_reply root + " << m->get_path() << " " << m->get_num_inodes() << " inodes" << endl;
+    
+    // add in root
+    cur = new CInode(this, false);
+    m->get_inode(0).update_inode(cur);  // that thar 0 is an array index (the 0th inode in the reply).
+    
+    // root
+    set_root( cur );
+    add_inode( cur );
+    dout(7) << "discover_reply got root " << *cur << endl;
+    
+    // take root waiters
+    finished.swap(waiting_for_root);
   }
 
   // fyi
   if (m->is_flag_error_dir()) dout(7) << " flag error, dir" << endl;
   if (m->is_flag_error_dn()) dout(7) << " flag error, dentry = " << m->get_error_dentry() << endl;
-  dout(10) << "depth is " << m->get_depth() << ", has_root = " << m->has_root() << endl;
+  dout(10) << "depth = " << m->get_depth()
+	   << ", has base_dir/base_dn/root = " 
+	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_root()
+	   << ", num dirs/dentries/inodes = " 
+	   << m->get_num_dirs() << " / " << m->get_num_dentries() << " / " << m->get_num_inodes()
+	   << endl;
   
   // loop over discover results.
   // indexese follow each ([[dir] dentry] inode) 
@@ -3445,7 +3449,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       break;
     }
 
-    if (i >= m->get_num_dentries()) break;
+    if (i >= m->get_last_dentry()) break;
     
     // dentry
     dout(7) << "i = " << i << " dentry is " << m->get_dentry(i).get_dname() << endl;
@@ -3475,7 +3479,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 			   finished);
     }
     
-    if (i >= m->get_num_inodes()) break;
+    if (i >= m->get_last_inode()) break;
 
     // inode
     dout(7) << "i = " << i << " ino is " << m->get_ino(i) << endl;
@@ -3969,32 +3973,61 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
 void MDCache::show_subtrees(int dbl)
 {
   //dout(10) << "show_subtrees" << endl;
-  
+
+  if (dbl > g_conf.debug && dbl > g_conf.debug_mds) 
+    return;  // i won't print anything.
+
   list<pair<CDir*,int> > q;
   string indent;
 
+  set<CDir*> seen;
+
+  // calc depth
   if (root && root->dir) 
     q.push_back(pair<CDir*,int>(root->dir, 0));
 
-  set<CDir*> seen;
-
+  int depth = 0;
   while (!q.empty()) {
     CDir *dir = q.front().first;
     int d = q.front().second;
     q.pop_front();
+
+    if (d > depth) depth = d;
 
     // sanity check
     if (seen.count(dir)) dout(0) << "aah, already seen " << *dir << endl;
     assert(seen.count(dir) == 0);
     seen.insert(dir);
 
+    // nested items?
+    if (!subtrees[dir].empty()) {
+      for (set<CDir*>::iterator p = subtrees[dir].begin();
+	   p != subtrees[dir].end();
+	   ++p) 
+	q.push_front(pair<CDir*,int>(*p, d+1));
+    }
+  }
+
+
+  // print tree
+  if (root && root->dir) 
+    q.push_back(pair<CDir*,int>(root->dir, 0));
+
+  while (!q.empty()) {
+    CDir *dir = q.front().first;
+    int d = q.front().second;
+    q.pop_front();
+
     // adjust indenter
     while ((unsigned)d < indent.size()) 
       indent.resize(d);
     
     // pad
-    string pad = "__________________________________";
-    pad.resize(12-indent.size());
+    string pad = "______________________________________";
+    pad.resize(depth*2+1-indent.size());
+    if (!subtrees[dir].empty()) 
+      pad[0] = '.'; // parent
+
 
     string auth;
     if (dir->is_auth())

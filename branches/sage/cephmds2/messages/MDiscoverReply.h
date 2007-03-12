@@ -50,18 +50,20 @@ using namespace std;
  *
  * see MDCache::handle_discover, handle_discover_reply.
  *
-  
- old crap, maybe not accurate:
-
-  // dir [ + ... ]                 : discover want_base_dir=true
-  
-  // dentry [ + inode [ + ... ] ]  : discover want_base_dir=false
-  //                                 no_base_dir=true
-  //  -> we only exclude inode if dentry is null+xlock
-
-  // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino,
-  //                                 no_base_dir=no_base_dentry=true
-  
+ *
+ * so basically, we get
+ *
+ *   dir den ino   i
+ *            x    0
+ *    x   x   x    1
+ * or
+ *        x   x    0
+ *    x   x   x    1
+ * or
+ *    x   x   x    0
+ *    x   x   x    1
+ * ...and trail off however we want.    
+ * 
  * 
  */
 
@@ -87,6 +89,10 @@ class MDiscoverReply : public Message {
   int       get_num_dentries() { return dentries.size(); }
   int       get_num_dirs() { return dirs.size(); }
 
+  int       get_last_inode() { return inodes.size(); }
+  int       get_last_dentry() { return dentries.size() + no_base_dentry; }
+  int       get_last_dir() { return dirs.size() + no_base_dir; }
+
   int       get_depth() {   // return depth of deepest object (in dir/dentry/inode units)
     return max( inodes.size(),                                 // at least this many
            max( no_base_dentry + dentries.size() + flag_error_dn, // inode start + path + possible error
@@ -96,7 +102,7 @@ class MDiscoverReply : public Message {
   bool      has_base_dir() { return !no_base_dir && dirs.size(); }
   bool      has_base_dentry() { return !no_base_dentry && dentries.size(); }
   bool has_root() {
-    if (base_ino == 0) {
+    if (base_ino == 1) {
       assert(no_base_dir && no_base_dentry);
       return true;
     }
@@ -112,9 +118,9 @@ class MDiscoverReply : public Message {
   int get_dir_auth_hint() { return dir_auth_hint; }
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
-  CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
-  CDentryDiscover& get_dentry(int n) { return *(dentries[n - no_base_dentry]); }
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
+  CDentryDiscover& get_dentry(int n) { return *(dentries[n - no_base_dentry]); }
+  CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
   inodeno_t get_ino(int n) { return inodes[n]->get_ino(); }
 
   // cons

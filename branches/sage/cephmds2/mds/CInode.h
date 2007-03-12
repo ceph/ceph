@@ -177,8 +177,6 @@ class CInode : public MDSCacheObject {
   // distributed caching (old)
   pair<int,int> dangling_auth;    // explicit auth, when dangling.
 
-  //int           num_request_pins;
-
   // waiters
   multimap<int, Context*>  waiting;
 
@@ -432,15 +430,10 @@ protected:
      linked to an active_request, so they're automatically cleaned
      up when a request is finished.  pin at will! */
   void request_pin_get() {
-    //if (num_request_pins == 0) 
     get(PIN_REQUEST);
-    //num_request_pins++;
   }
   void request_pin_put() {
-    //num_request_pins--;
-    //if (num_request_pins == 0) 
     put(PIN_REQUEST);
-    //assert(num_request_pins >= 0);
   }
 
   void bad_put(int by) {

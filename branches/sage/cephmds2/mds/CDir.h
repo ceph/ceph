@@ -79,8 +79,6 @@ class CDir : public MDSCacheObject {
   static const int PIN_EXPORTING = 10;
   static const int PIN_IMPORTBOUND = 11;
   static const int PIN_EXPORTBOUND = 12;
-  static const int PIN_HASHED =   13;
-  static const int PIN_HASHING =  14;
   static const int PIN_DIRTY =    15;
   static const int PIN_REQUEST =  16;
   static const int PIN_LOGGINGEXPORTFINISH = 17;
@@ -99,8 +97,6 @@ class CDir : public MDSCacheObject {
       //    case PIN_FREEZELEAF: return "freezeleaf";
     case PIN_PROXY: return "proxy";
     case PIN_AUTHPIN: return "authpin";
-    case PIN_HASHED: return "hashed";
-    case PIN_HASHING: return "hashing";
     case PIN_DIRTY: return "dirty";
     case PIN_REQUEST: return "request";
     case PIN_LOGGINGEXPORTFINISH: return "loggingexportfinish";
@@ -121,12 +117,11 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
   static const unsigned STATE_DELETED =       (1<<10);
   //static const unsigned STATE_IMPORT =        (1<<11);   // flag set if this is an import.
-  static const unsigned STATE_EXPORT =        (1<<12);
+  static const unsigned STATE_EXPORT    =     (1<<12);
   static const unsigned STATE_IMPORTBOUND =   (1<<13);
   static const unsigned STATE_EXPORTBOUND =   (1<<14);
-  static const unsigned STATE_HASHED =        (1<<15);   // if hashed
-  static const unsigned STATE_HASHING =       (1<<16);
-  static const unsigned STATE_UNHASHING =     (1<<17);
+  static const unsigned STATE_EXPORTING =     (1<<15);
+  static const unsigned STATE_IMPORTING =     (1<<16);
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -139,10 +134,11 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   //STATE_IMPORT|
   STATE_EXPORT
+  |STATE_IMPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
   |STATE_FROZENTREE|STATE_PROXY;
   static const unsigned MASK_STATE_EXPORT_KEPT = 
-  STATE_HASHED 
+  STATE_EXPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
   |STATE_FROZENTREE
   |STATE_FROZENDIR
@@ -338,10 +334,11 @@ class CDir : public MDSCacheObject {
   bool is_proxy() { return state & STATE_PROXY; }
   //bool is_import() { return state & STATE_IMPORT; }
   //bool is_export() { return state & STATE_EXPORT; }
+  bool is_exporting() { return state & STATE_EXPORTING; }
+  bool is_importing() { return state & STATE_IMPORTING; }
 
-  bool is_hashed() { return state & STATE_HASHED; }
-  bool is_hashing() { return state & STATE_HASHING; }
-  bool is_unhashing() { return state & STATE_UNHASHING; }
+  bool is_hashed() { return false; }
+  bool is_hashing() { return false; }
 
   bool is_rep() { 
     if (dir_rep == REP_NONE) return false;
@@ -589,11 +586,8 @@ class CDirExport {
     dir->projected_version = dir->version = st.version;
 
     // twiddle state
-    if (dir->state & CDir::STATE_HASHED) 
-      dir->state_set( CDir::STATE_AUTH );         // just inherit auth flag when hashed
-    else
-      dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-        (st.state & CDir::MASK_STATE_EXPORTED);
+    dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
+      (st.state & CDir::MASK_STATE_EXPORTED);
     dir->dir_rep = st.dir_rep;
 
     dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
