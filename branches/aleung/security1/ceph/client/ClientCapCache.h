@@ -164,7 +164,7 @@ class ClientCapCache {
       if (renewer_stop) break;
       // clean every 4 minutes
       cout << "Renewer sleeping" << endl;
-      renewer_cond.WaitInterval(lock, utime_t(240,0));
+      renewer_cond.WaitInterval(lock, utime_t(g_conf.renewal_period,0));
     }
 
     lock.Unlock();

@@ -201,36 +201,25 @@ public:
   }
 
   void sign_extcap(esignPriv privKey) {
-    byte capArray[sizeof(data)];
-    memcpy(capArray, &data, sizeof(data));
+    //byte capArray[sizeof(data)];
+    //memcpy(capArray, &data, sizeof(data));
     SigBuf signature;
-    signature = esignSig(capArray, sizeof(data), privKey);
+    //signature = esignSig(capArray, sizeof(data), privKey);
+    signature = esignSig((byte*)&data, sizeof(data), privKey);
     // store the signature into permanent buffer
     memcpy(sigArray, signature.data(), signature.size());
     
-    //byte hexArray[sizeof(capArray)];
-    //memset(hexArray, 0x00, sizeof(hexArray));
-    //toHex(capArray, hexArray, sizeof(capArray), sizeof(capArray));
-    //cout << "Signed content capArray hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
-
-    //byte hexTest[sizeof(sigArray)];
-    //memset(hexTest, 0x00, sizeof(sigArray));
-    //toHex(sigArray, hexTest, sizeof(sigArray), sizeof(sigArray));
-    //cout << "COPIED DATA BUFFER HEX: " << endl << string((const char*)hexTest,sizeof(hexTest)) << endl;
   }
 
   bool verif_extcap (esignPub pubKey) {
-    byte capArray[sizeof(data)];
-    memcpy(capArray, &data, sizeof(data));
+    //byte capArray[sizeof(data)];
+    //memcpy(capArray, &data, sizeof(data));
 
-    //byte hexArray[sizeof(sigArray)];
-    //memset(hexArray, 0x00, sizeof(hexArray));
-    //toHex(sigArray, hexArray, sizeof(sigArray), sizeof(sigArray));
-    //cout << "Verified signature hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
     SigBuf signature;
     signature.Assign(sigArray, sizeof(sigArray));
     
-    return esignVer(capArray, sizeof(data), signature, pubKey);
+    //return esignVer(capArray, sizeof(data), signature, pubKey);
+    return esignVer((byte*)&data, sizeof(data), signature, pubKey);
   }
 
   void _encode(bufferlist& bl) {

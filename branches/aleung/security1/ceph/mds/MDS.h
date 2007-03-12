@@ -49,6 +49,7 @@ using namespace CryptoLib;
 #include "crypto/ExtCap.h"
 #include "crypto/CapGroup.h"
 #include "crypto/MerkleTree.h"
+#include "crypto/Renewal.h"
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -163,6 +164,7 @@ public:
   map<hash_t, CapGroup> unix_groups_byhash;
   // recent capabilities to renew
   set<cap_id_t> recent_caps;
+  Renewal token;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

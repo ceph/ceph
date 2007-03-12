@@ -297,6 +297,7 @@ struct md_config_t {
   int mds_collection;
   char *unix_group_file;
   int fix_client_id;
+  int renewal_period;
   int client_aux;
   int sign_scheme;
   int hash_scheme;

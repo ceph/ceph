@@ -271,6 +271,8 @@ void Server::handle_client_update(MClientUpdate *m)
 }
 
 // capability renewal request
+// automatically renews all recently requested caps
+// plus all open caps
 void Server::handle_client_renewal(MClientRenewal *m)
 {
   cout << "Got a renewal request" << endl;
@@ -287,7 +289,15 @@ void Server::handle_client_renewal(MClientRenewal *m)
       mds->recent_caps.insert(*si);
     }
   }
-
+  if (new_caps) {
+    // re-make extension
+    mds->token = Renewal(mds->recent_caps);
+    // re-sign
+    mds->token.sign_renewal(mds->getPrvKey());
+    cout << "Made a new token" << endl;
+  }
+  else
+    cout << "Cached token was good" << endl;
   // if no new caps && cached extension, return cached extension
   // create extension for entire recent_cap set
   // cache the extension
@@ -2322,8 +2332,12 @@ void Server::handle_client_open(MClientRequest *req,
   // create signed security capability
   // no security, just include a blank cap
   ExtCap *ext_cap;
-  if (g_conf.secure_io)
+  if (g_conf.secure_io) {
+    utime_t sec_time_start = g_clock.now();
     ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
+    utime_t sec_time_end = g_clock.now();
+    cout << "Get security cap time " << sec_time_end - sec_time_start << endl;
+  }
 
   if (!cap) return; // can't issue (yet), so wait!
 
