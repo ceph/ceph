@@ -110,7 +110,7 @@ OSBDB_OBJS = \
 OSBDB_OBJ = osbdb.o
 endif
 
-TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn mkmonmap cmonctl
+TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cmonctl cfuse fakefuse
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 

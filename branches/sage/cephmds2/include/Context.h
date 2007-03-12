@@ -88,15 +88,36 @@ public:
  */
 class C_Gather : public Context {
 public:
+  bool sub_finish(int r) {
+    //cout << "C_Gather sub_finish " << this << endl;
+    assert(waitfor.count(r));
+    waitfor.erase(r);
+    if (!waitfor.empty()) 
+      return false;  // more subs left
+
+    // last one
+    onfinish->finish(0);
+    delete onfinish;
+    onfinish = 0;
+    return true;
+  }
+
   class C_GatherSub : public Context {
     C_Gather *gather;
     int num;
   public:
     C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
     void finish(int r) {
-      gather->finish(num);
+      if (gather->sub_finish(num))
+	delete gather;   // last one!
     }
   };
+
+  Context *new_sub() {
+    num++;
+    waitfor.insert(num);
+    return new C_GatherSub(this, num);
+  }
 
 private:
   Context *onfinish;
@@ -104,22 +125,18 @@ private:
   int num;
 
 public:
-  C_Gather(Context *f) : onfinish(f), num(0) {}
-
+  C_Gather(Context *f) : onfinish(f), num(0) {
+    //cout << "C_Gather new " << this << endl;
+  }
+  ~C_Gather() {
+    //cout << "C_Gather delete " << this << endl;
+    assert(!onfinish);
+  }
   void finish(int r) {
-    assert(waitfor.count(r));
-    waitfor.erase(r);
-    if (waitfor.empty()) {
-      onfinish->finish(0);
-      delete onfinish;
-    }
+    // nobody should ever call me.
+    assert(0);
   }
 
-  Context *new_sub() {
-    num++;
-    waitfor.insert(num);
-    return new C_GatherSub(this, num);
-  }
 };
 
 #endif

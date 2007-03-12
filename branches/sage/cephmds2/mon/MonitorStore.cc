@@ -36,10 +36,12 @@ void MonitorStore::mount()
   }
   ::closedir(d);
 
-  if (g_conf.mon_store_abspath) {
+  if (g_conf.use_abspaths) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
-    dir = get_current_dir_name();
+    char *cwd = get_current_dir_name();
+    dir = cwd;
+    delete cwd;
     dir += "/";
     dir += old;
   }
@@ -107,7 +109,6 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   sprintf(tfn, "%s.new", fn);
 
   int fd = ::open(tfn, O_WRONLY|O_CREAT);
-  dout(0) << " fd " << fd << " tfn " << tfn << " " << errno << " " << strerror(errno) << " " << get_current_dir_name() << endl;
   assert(fd > 0);
   ::fchmod(fd, 0644);
   ::write(fd, vs, strlen(vs));
