@@ -666,9 +666,8 @@ class Table {
           assert(cursor.open[cursor.level].size() == 0);
           assert(depth == 1);
           root = -1;
-	  depth = 0;
-	  if (cursor.open[0].node)
-	    pool.release(cursor.open[0].node);
+          depth = 0;
+          pool.release(cursor.open[0].node);
         }
         verify("remove 1");
         return 0;

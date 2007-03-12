@@ -81,9 +81,6 @@ struct md_config_t {
 
   int debug_after;
 
-  // misc
-  bool use_abspaths;
-
   // clock
   bool clock_lock;
 
@@ -111,6 +108,7 @@ struct md_config_t {
   int mon_osd_down_out_interval;
   float mon_lease;
   bool mon_stop_with_last_mds;
+  bool mon_store_abspath;
 
   // client
   int      client_cache_size;

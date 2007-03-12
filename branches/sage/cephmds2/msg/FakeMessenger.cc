@@ -143,6 +143,7 @@ int fakemessenger_do_loop_2()
 
       dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has " << mgr->num_incoming() << " queued" << endl;
 
+
       if (!mgr->is_ready()) {
         dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has no dispatcher, skipping" << endl;
         it++;
@@ -247,11 +248,7 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
 
 FakeMessenger::~FakeMessenger()
 {
-  // hose any undelivered messages
-  for (list<Message*>::iterator p = incoming.begin();
-       p != incoming.end();
-       ++p)
-    delete *p;
+
 }
 
 
@@ -262,6 +259,15 @@ int FakeMessenger::shutdown()
   assert(directory.count(_myinst.addr) == 1);
   shutdown_set.insert(_myinst.addr);
   
+  /*
+  directory.erase(myaddr);
+  if (directory.empty()) {
+    dout(1) << "fakemessenger: last shutdown" << endl;
+    ::fm_shutdown = true;
+    cond.Signal();  // why not
+  } 
+  */
+
   /*
   if (loggers[myaddr]) {
     delete loggers[myaddr];
@@ -297,36 +303,44 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
 
   lock.Lock();
 
+  // deliver
+  try {
 #ifdef LOG_MESSAGES
-  // stats
-  loggers[get_myaddr()]->inc("+send",1);
-  loggers[dest]->inc("-recv",1);
-  
-  char s[20];
-  sprintf(s,"+%s", m->get_type_name());
-  loggers[get_myaddr()]->inc(s);
-  sprintf(s,"-%s", m->get_type_name());
-  loggers[dest]->inc(s);
+    // stats
+    loggers[get_myaddr()]->inc("+send",1);
+    loggers[dest]->inc("-recv",1);
+
+    char s[20];
+    sprintf(s,"+%s", m->get_type_name());
+    loggers[get_myaddr()]->inc(s);
+    sprintf(s,"-%s", m->get_type_name());
+    loggers[dest]->inc(s);
 #endif
 
-  // queue
-  if (directory.count(inst.addr)) {
+    // queue
+    FakeMessenger *dm = directory[inst.addr];
+    if (!dm) {
+      dout(1) << "** destination " << inst << " dne" << endl;
+      for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
+	   p != directory.end();
+	   ++p) {
+	dout(1) << "** have " << p->first << " to " << p->second << endl;
+      }
+      //assert(dm);
+    }
+    dm->queue_incoming(m);
+
     dout(1) << "--> " << get_myname() << " -> " << inst.name 
 	    << " " << *m 
 	    << " (" << m << ")"
 	    << endl;
-    directory[inst.addr]->queue_incoming(m);
-  } else {
-    dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m
-	    << " *** destination DNE ***" << endl;
-    for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
-	 p != directory.end();
-	 ++p) {
-      dout(0) << "** have " << p->first << " to " << p->second << endl;
-    }
-    //assert(dm);
-    delete m;
+    
   }
+  catch (...) {
+    cout << "no destination " << dest << endl;
+    assert(0);
+  }
+
 
   // wake up loop?
   if (!awake) {

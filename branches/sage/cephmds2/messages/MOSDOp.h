@@ -93,9 +93,7 @@ private:
     eversion_t pg_trim_to;   // primary->replica: trim to here
     
     int op;
-    size_t length;
-    off_t offset;
-
+    size_t length, offset;
     eversion_t version;
     eversion_t old_version;
     
@@ -138,7 +136,7 @@ private:
   void set_op(int o) { st.op = o; }
 
   const size_t get_length() { return st.length; }
-  const off_t get_offset() { return st.offset; }
+  const size_t get_offset() { return st.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
@@ -185,7 +183,7 @@ private:
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_length(size_t l) { st.length = l; }
-  void set_offset(off_t o) { st.offset = o; }
+  void set_offset(size_t o) { st.offset = o; }
   void set_version(eversion_t v) { st.version = v; }
   void set_old_version(eversion_t ov) { st.old_version = ov; }
   

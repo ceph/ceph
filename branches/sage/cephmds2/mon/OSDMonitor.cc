@@ -399,8 +399,6 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
               << (osdmap.osds.size() - osdmap.osd_inst.size())
               << " osds to boot" << endl;
     }
-
-    delete m;
     return;
   }
   

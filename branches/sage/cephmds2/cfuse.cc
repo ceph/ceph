@@ -43,9 +43,6 @@ int main(int argc, char **argv, char *envp[]) {
   // args for fuse
   vec_to_argv(args, argc, argv);
 
-  // FUSE will chdir("/"); be ready.
-  g_conf.use_abspaths = true;
-
   // load monmap
   MonMap monmap;
   int r = monmap.read(".ceph_monmap");

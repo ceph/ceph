@@ -103,9 +103,6 @@ md_config_t g_conf = {
   
   debug_after: 0,
   
-  // -- misc --
-  use_abspaths: false,      // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
-
   // --- clock ---
   clock_lock: false,
   
@@ -133,6 +130,7 @@ md_config_t g_conf = {
   mon_osd_down_out_interval: 5,  // seconds
   mon_lease: 2.000,  // seconds
   mon_stop_with_last_mds: true,
+  mon_store_abspath: false,      // make monitorstore use absolute path (to workaround fakefuse idiocy)
 
   // --- client ---
   client_cache_size: 300,

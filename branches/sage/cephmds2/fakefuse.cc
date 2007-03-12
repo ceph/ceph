@@ -75,8 +75,8 @@ int main(int argc, char **argv) {
   args = nargs;
   vec_to_argv(args, argc, argv);
 
-  // FUSE will chdir("/"); be ready.
-  g_conf.use_abspaths = true;
+  // make monitorstore use abspath, since fuse seems to screw with the cwd
+  g_conf.mon_store_abspath = true;
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   

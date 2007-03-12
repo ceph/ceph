@@ -14,7 +14,7 @@ main (int argc, char **argv)
   argv_to_vec (argc, argv, args);
   parse_config_options (args);
 
-  g_conf.debug_bdbstore = 10;
+  g_conf.debug_bdbstore = 3;
   //g_conf.bdbstore_btree = true;
   char dbfile[256];
   strncpy (dbfile, "/tmp/testosbdb/db.XXXXXX", 256);
@@ -123,73 +123,6 @@ main (int argc, char **argv)
         }
     }
 
-  char attrvalue[256];
-  memset(attrvalue, 0, sizeof (attrvalue));
-  if (os->getattr (oid, "alpha", attrvalue, sizeof(attrvalue)) < 0)
-    {
-      cout << "FAIL: getattr alpha" << endl;
-    }
-  else if (strncmp ("value", attrvalue, strlen("value")) != 0)
-    {
-      cout << "FAIL: read attribute value differs" << endl;
-    }
-  memset(attrvalue, 0, sizeof (attrvalue));
-  if (os->getattr (oid, "fred", attrvalue, sizeof(attrvalue)) < 0)
-    {
-      cout << "FAIL: getattr fred" << endl;
-    }
-  else if (strncmp ("value", attrvalue, strlen("value")) != 0)
-    {
-      cout << "FAIL: read attribute value differs" << endl;
-    }
-  memset(attrvalue, 0, sizeof (attrvalue));
-  if (os->getattr (oid, "beta", attrvalue, sizeof(attrvalue)) < 0)
-    {
-      cout << "FAIL: getattr beta" << endl;
-    }
-  else if (strncmp ("value", attrvalue, strlen("value")) != 0)
-    {
-      cout << "FAIL: read attribute value differs" << endl;
-    }
-  memset(attrvalue, 0, sizeof (attrvalue));
-  if (os->getattr (oid, "gamma", attrvalue, sizeof(attrvalue)) < 0)
-    {
-      cout << "FAIL: getattr gamma" << endl;
-    }
-  else if (strncmp ("value", attrvalue, strlen("value")) != 0)
-    {
-      cout << "FAIL: read attribute value differs" << endl;
-    }
-
-  if (os->setattr (oid, "alpha", "different", strlen("different")) != 0)
-    cout << "FAIL: setattr overwrite" << endl;
-  memset(attrvalue, 0, sizeof (attrvalue));
-  if (os->getattr (oid, "alpha", attrvalue, sizeof(attrvalue)) < 0)
-    {
-      cout << "FAIL: getattr alpha" << endl;
-    }
-  else if (strncmp ("different", attrvalue, strlen("different")) != 0)
-    {
-      cout << "FAIL: read attribute value differs" << endl;
-    }
-
-  if (os->rmattr (oid, "alpha") != 0)
-    {
-      cout << "FAIL: rmattr alpha" << endl;
-    }
-  if (os->rmattr (oid, "fred") != 0)
-    {
-      cout << "FAIL: rmattr fred" << endl;
-    }
-  if (os->rmattr (oid, "beta") != 0)
-    {
-      cout << "FAIL: rmattr beta" << endl;
-    }
-  if (os->rmattr (oid, "gamma") != 0)
-    {
-      cout << "FAIL: rmattr gamma" << endl;
-    }
-
   coll_t cid = 0xCAFEBABE;
   if (os->create_collection (cid) != 0)
     {
@@ -252,71 +185,6 @@ main (int argc, char **argv)
         }
       oid2.rev--;
     }
-
-  if (os->collection_setattr (cid, "alpha", "value", 5) != 0)
-    cout << "FAIL: collection_setattr" << endl;
-  if (os->collection_setattr (cid, "beta", "value", 5) != 0)
-    cout << "FAIL: collection_setattr" << endl;
-  if (os->collection_setattr (cid, "gamma", "value", 5) != 0)
-    cout << "FAIL: collection_setattr" << endl;
-  if (os->collection_setattr (cid, "fred", "value", 5) != 0)
-    cout << "FAIL: collection_setattr" << endl;
-
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "alpha", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "beta", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "gamma", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "fred", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-
-  if (os->collection_setattr (cid, "alpha", "eulavvalue", 10) != 0)
-    cout << "FAIL: collection setattr overwrite" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "alpha", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "eulavvalue", 10) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "beta", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "gamma", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-  memset (attrvalue, 0, sizeof (attrvalue));
-  if (os->collection_getattr (cid, "fred", attrvalue, sizeof (attrvalue)) < 0)
-    cout << "FAIL: collection_getattr" << endl;
-  else if (strncmp (attrvalue, "value", 5) != 0)
-    cout << "FAIL: collection attribute value different" << endl;
-
-  if (os->collection_rmattr (cid, "alpha") != 0)
-    cout << "FAIL: collection_rmattr" << endl;
-  if (os->collection_rmattr (cid, "fred") != 0)
-    cout << "FAIL: collection_rmattr" << endl;
-  if (os->collection_rmattr (cid, "beta") != 0)
-    cout << "FAIL: collection_rmattr" << endl;
-  if (os->collection_rmattr (cid, "gamma") != 0)
-    cout << "FAIL: collection_rmattr" << endl;
-
-  if (os->collection_rmattr (cid, "alpha") == 0)
-    cout << "FAIL: collection_rmattr (nonexistent)" << endl;
 
   // Truncate the object.
   if (os->truncate (oid, 512, NULL) != 0)
