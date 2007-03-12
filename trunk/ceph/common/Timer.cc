@@ -234,6 +234,10 @@ bool Timer::cancel_event(Context *callback)
     scheduled.erase(tp);
   
   lock.Unlock();
+
+  // delete the canceled event.
+  delete callback;
+
   return true;
 }
 
@@ -290,7 +294,7 @@ void SafeTimer::cancel_event(Context *c)
 
   if (g_timer.cancel_event(scheduled[c])) {
     // hosed wrapper.  hose original event too.
-    delete scheduled[c];
+    delete c;
   } else {
     // clean up later.
     canceled[c] = scheduled[c];

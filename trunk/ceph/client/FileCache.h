@@ -34,6 +34,9 @@ class FileCache {
     latest_caps(0),
     num_reading(0), num_writing(0),// num_unsafe(0),
     waitfor_release(false) {}
+  ~FileCache() {
+	tear_down();
+  }
 
   // waiters/waiting
   bool can_read() { return latest_caps & CAP_FILE_RD; }
@@ -51,6 +54,8 @@ class FileCache {
   bool is_empty() { return !(is_cached() || is_dirty()); }
   bool is_cached();
   bool is_dirty();  
+
+  void tear_down();
 
   int get_caps() { return latest_caps; }
   void set_caps(int caps, Context *onimplement=0);

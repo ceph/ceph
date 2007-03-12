@@ -50,6 +50,15 @@ void FileCache::empty(Context *onempty)
 }
 
 
+void FileCache::tear_down()
+{
+  off_t unclean = release_clean();
+  if (unclean) {
+	dout(0) << "tear_down " << unclean << " unclean bytes, purging" << endl;
+	oc->purge_set(inode.ino);
+  }
+}
+
 // caps
 
 void FileCache::set_caps(int caps, Context *onimplement) 

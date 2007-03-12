@@ -39,7 +39,9 @@ void MonitorStore::mount()
   if (g_conf.use_abspaths) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
-    dir = get_current_dir_name();
+    char *cwd = get_current_dir_name();
+    dir = cwd;
+    delete cwd;
     dir += "/";
     dir += old;
   }

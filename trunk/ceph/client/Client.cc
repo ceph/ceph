@@ -127,13 +127,19 @@ Client::Client(Messenger *m, MonMap *mm)
 
 Client::~Client() 
 {
-  if (messenger) { delete messenger; messenger = 0; }
+  tear_down_cache();
+
+  if (objectcacher) { 
+    delete objectcacher; 
+    objectcacher = 0; 
+  }
+
   if (filer) { delete filer; filer = 0; }
-  if (objectcacher) { delete objectcacher; objectcacher = 0; }
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
-  tear_down_cache();
+  if (messenger) { delete messenger; messenger = 0; }
 }
 
 
@@ -792,6 +798,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       if (cap_reap_queue[in->ino()].empty())
         cap_reap_queue.erase(in->ino());
     }
+    delete m;
     return;
   }
 
@@ -819,7 +826,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     } else {
       //dout(0) << "didn't put_inode" << endl;
     }
-    
+    delete m;
     return;
   }
 
@@ -879,7 +886,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
       }
     }
     in->fc.set_caps(new_caps, onimplement);
-
   } else {
     // caching off.
 

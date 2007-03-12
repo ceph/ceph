@@ -36,7 +36,9 @@ Logger::Logger(string fn, LogType *type)
   {
     filename = "";
     if (g_conf.use_abspaths) {
-      filename = get_current_dir_name();
+      char *cwd = get_current_dir_name(); 
+      filename = cwd;
+      delete cwd;
       filename += "/";
     }
 

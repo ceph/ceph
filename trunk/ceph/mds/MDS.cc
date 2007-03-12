@@ -120,6 +120,10 @@ MDS::~MDS() {
   if (anchormgr) { delete anchormgr; anchormgr = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (mdsmap) { delete mdsmap; mdsmap = 0; }
+
+  if (server) { delete server; server = 0; }
+  if (locker) { delete locker; locker = 0; }
 
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }

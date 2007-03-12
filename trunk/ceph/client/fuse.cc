@@ -276,8 +276,6 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // go fuse go
   cout << "ok, calling fuse_main" << endl;
-  cout << "cwd was " << get_current_dir_name() << endl;
   int r = fuse_main(newargc, newargv, &ceph_oper);
-  cout << "cwd now " << get_current_dir_name() << endl;
   return r;
 }
