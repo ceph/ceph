@@ -213,6 +213,91 @@ int ObjectCache::find_tx(block_t start, block_t len,
 }
 
 
+int ObjectCache::try_map_read(block_t start, block_t len)
+{
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+
+  block_t cur = start;
+  block_t left = len;
+  
+  if (p != data.begin() && 
+      (p == data.end() || p->first > cur)) {
+    p--;     // might overlap!
+    if (p->first + p->second->length() <= cur) 
+      p++;   // doesn't overlap.
+  }
+
+  int num_missing = 0;
+
+  while (left > 0) {
+    // at end?
+    if (p == data.end()) {
+      // rest is a miss.
+      vector<Extent> exv;
+      on->map_extents(cur, 
+                      left,   // no prefetch here!
+                      exv);
+
+      num_missing += exv.size();
+      left = 0;
+      cur = start+len;
+      break;
+    }
+    
+    if (p->first <= cur) {
+      // have it (or part of it)
+      BufferHead *e = p->second;
+      
+      if (e->is_clean() ||
+          e->is_dirty() ||
+          e->is_tx()) {
+        dout(20) << "try_map_read hit " << *e << endl;
+      } 
+      else if (e->is_rx()) {
+        dout(20) << "try_map_read rx " << *e << endl;
+	num_missing++;
+      }
+      else if (e->is_partial()) {
+        dout(-20) << "try_map_read partial " << *e << endl;
+	num_missing++;
+      }
+      else {
+	dout(0) << "try_map_read got unexpected " << *e << endl;
+	assert(0);
+      }
+      
+      block_t lenfromcur = MIN(e->end() - cur, left);
+      cur += lenfromcur;
+      left -= lenfromcur;
+      p++;
+      continue;  // more?
+    } else if (p->first > cur) {
+      // gap.. miss
+      block_t next = p->first;
+      vector<Extent> exv;
+      on->map_extents(cur, 
+                      MIN(next-cur, left),   // no prefetch
+                      exv);
+
+      dout(-20) << "try_map_read gap of " << p->first-cur << " blocks, " 
+		<< exv.size() << " extents" << endl;
+      num_missing += exv.size();
+      left -= (p->first - cur);
+      cur = p->first;
+      continue;    // more?
+    }
+    else 
+      assert(0);
+  }
+
+  assert(left == 0);
+  assert(cur == start+len);
+  return num_missing;
+}
+
+
+
+
 
 /*
  * map a range of blocks into buffer_heads.
@@ -283,7 +368,7 @@ int ObjectCache::map_read(block_t start, block_t len,
         dout(20) << "map_read partial " << *e << endl;
       }
       else {
-	dout(0) << "map_read ??? " << *e << endl;
+	dout(0) << "map_read ??? got unexpected " << *e << endl;
 	assert(0);
       }
       
@@ -725,7 +810,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
 {
   dout(10) << "bh_read " << *on << " on " << *bh << endl;
 
-  if (bh->is_missing())    {
+  if (bh->is_missing()) {
     mark_rx(bh);
   } else {
     assert(bh->is_partial());
