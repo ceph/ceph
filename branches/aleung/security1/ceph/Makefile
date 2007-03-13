@@ -22,8 +22,8 @@ CFLAGS = -ggdb3 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REEN
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -ggdb3 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-#CFLAGS = -O3 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+#CFLAGS = -ggdb3 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -ggdb3 -O3 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -163,7 +163,7 @@ fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/F
 
 # mpi startup
 newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o crypto.o
-	${MPICC} -pg ${MPICFLAGS} $^ -o $@ ${MPILIBS} ${OSBDB_LIBS}
+	${MPICC} ${MPICFLAGS} $^ -o $@ ${MPILIBS} ${OSBDB_LIBS}
 
 newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o crypto.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@

@@ -150,7 +150,6 @@ Client::~Client()
   if (messenger) { delete messenger; messenger = 0; }
 }
 
-
 void Client::tear_down_cache()
 {
   // fh's
@@ -722,7 +721,7 @@ void Client::put_user_ticket(Ticket *tk)
 }
 
 void Client::handle_osd_update(MOSDUpdate *m) {
-
+  
   hash_t my_hash = m->get_hash();
   cout << "Client::handle_osd_request Received a request to resolve group " << my_hash << endl;
 

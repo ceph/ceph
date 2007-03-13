@@ -2,14 +2,14 @@
 # hi there
 {
 # startup
-    'n' => 30,         # number of mpi nodes
+    'n' => 6,         # number of mpi nodes
     'sleep' => 3,      # seconds to sleep between runs (so you have time to control-c out)
     'nummds' => 1,   
-    'numosd' => 6,
-    'numclient' => 100,
+    'numosd' => 4,
+    'numclient' => 5,
     
     'until' => 100,     # --syn until $n  ... synthetic client will stop itself after this many seconds.
-    'kill_after' => 300, # seconds before everything commits suicide (in case something hangs)
+    #'kill_after' => 300, # seconds before everything commits suicide (in case something hangs)
     
     # stuff i want to vary
     # here's a simple example:
@@ -18,7 +18,8 @@
     'writefile' => 1,    
     # and very the write size
     'writefile_size' => [ # vary 
-			  #2048*1024,
+			  4096*1024,
+			  2048*1024,
 			  1024*1024,
 			  512*1024,
 			  256*1024,
@@ -36,13 +37,22 @@
 			  #16,
 			  #1
 			  ],
-    	'writefile_mb' => 1000,    # each client shoudl write 1GB (or more likely, keep going until time runs out)
+    	'writefile_mb' => 100,    # each client shoudl write 1GB (or more likely, keep going until time runs out)
     	
-    	'file_layout_num_rep'=> [1,2],  # also vary the replication level
+    	#'file_layout_num_rep'=> [1,2],  # also vary the replication level
     
     	# pass some other random things to newsyn
-    	'custom' => '--',
+    	#'custom' => '--',
+
+	# varies security off and security on
+	'secure_io' => [0, 1],
+
+	'mds_group' => [0, 1],
+	'unix_group_file' => '.groups',
+	'fix_client_id' => 1,
+	'client_oc' => 0,
 	
+	'fs' => 'ebofs',
     	# for final summation (script/sum.pl)
     	# specify time period to look at the results
     	'start' => 30,    # skip first 30 seconds, so that caches are full etc.

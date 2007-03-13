@@ -233,6 +233,11 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // issue most generic cap (RW)
   my_want |= FILE_MODE_RW;
 
+  utime_t clock_time_start = g_clock.now();
+  utime_t test_time = g_clock.now();
+  utime_t clock_time_end = g_clock.now();
+  cout << "Clock time " << clock_time_end - clock_time_start << endl;
+
   // check cache
   ExtCap *ext_cap;
   utime_t setup_time_end = g_clock.now();
