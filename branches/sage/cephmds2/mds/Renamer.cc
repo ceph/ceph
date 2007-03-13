@@ -651,8 +651,8 @@ void Renamer::handle_rename_prep(MRenamePrep *m)
   if (srcin->is_dir()) {
     if (!srcin->dir) {
       dout(7) << "handle_rename_prep need to open dir" << endl;
-      cache->open_remote_dir(srcin,
-							 new C_MDS_RetryMessage(mds,m));
+      cache->open_remote_dir(srcin, frag_t(), // FIXME dirfrag
+			     new C_MDS_RetryMessage(mds,m));
       return;
     }
 
@@ -859,8 +859,8 @@ void Renamer::handle_rename_notify(MRenameNotify *m)
 
     if (destdiri) {
       dout(7) << "have destdiri, opening dir " << *destdiri << endl;
-      cache->open_remote_dir(destdiri,
-							 new C_MDS_RetryMessage(mds,m));
+      cache->open_remote_dir(destdiri, frag_t(), // FIXME dirfrag
+			     new C_MDS_RetryMessage(mds,m));
     } else {
       filepath destdirpath = m->get_destdirpath();
       dout(7) << "don't have destdiri even, doing traverse+discover on " << destdirpath << endl;

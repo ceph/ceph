@@ -14,11 +14,9 @@ doc
 mds
 - bystanders should avoid contacting auth when it is ambiguous?
   - CDIR_WAIT_UNAMBIGUOUS?
-- during export prep phase,
-  - if importer is trying to open dirs on a node that fails, what happens?
-    1- could detect dependency and fail.
-    2- could force a CDir replica, since it'll get rejoined into cache later.
-  - is this related to solving the larger problem of discover vs mds failure?
+- more testing of failures + thrashing.
+  - is export prep dir open deadlock properly fixed by forge_replica_dir()?
+
 - locker vs node failure
 - does inode need it's own replica list?  no?
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
@@ -35,9 +33,7 @@ mds
   - DOCUMENT.
 
 - discover
-  - dir_discovers should be dirfrag_t's?
   - hard link dentries
-  - base_dir thing is broken, i think, bc of dirfrags.
 
 - mds failure vs clients
   - clean up client op redirection
@@ -48,15 +44,13 @@ mds
   - file capabilities i/o
   - link
   - rename
-- dirslices.
-- dirslice vs readdir
+- dirfrags vs readdir
 - redo hard links
 - anchortable
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - implement truncate
 - statfs?
-? btree directories (for efficient large directories)
 - consistency points/snapshots
 
 - fix MExportAck and others to use dir+dentry, not inode

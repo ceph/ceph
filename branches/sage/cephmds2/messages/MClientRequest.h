@@ -15,13 +15,6 @@
 #ifndef __MCLIENTREQUEST_H
 #define __MCLIENTREQUEST_H
 
-#include <vector>
-
-#include "msg/Message.h"
-#include "include/filepath.h"
-#include "mds/mdstypes.h"
-#include "mds/MDS.h"
-
 /**
  *
  * MClientRequest - container for a client METADATA request.  created/sent by clients.  
@@ -34,51 +27,109 @@
  *   int op - the metadata op code.  MDS_OP_RENAME, etc.
  *   int caller_uid, _gid - guess
  * 
- * arguments:  one or more of these are defined, depending on the metadata op:
- *   inodeno  ino  - used by close(), along with fh.  not strictly necessary except MDS is currently coded lame.
- *   filepath path - main file argument (almost everything)
- *   string   sarg - string argument (if a second arg is needed, e.g. rename, symlink)
- *   int  iarg     - int arg... file mode for open, fh for close, mode for mkdir, etc.
- *   int  iarg2    - second int arg... gid for chown (iarg is uid)
- *   time_t targ, targ2  - time args, used by utime
- *
- * That's basically it!
+ * fixed size arguments are in a union.
+ * there's also a string argument, for e.g. symlink().
  *  
  */
 
+#include "msg/Message.h"
+#include "include/filepath.h"
+#include "mds/mdstypes.h"
+
+#include <sys/types.h>
+#include <utime.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+
+// md ops
+#define MDS_OP_STATFS   1
+
+#define MDS_OP_STAT     100
+#define MDS_OP_LSTAT    101
+#define MDS_OP_UTIME    102
+#define MDS_OP_CHMOD    103
+#define MDS_OP_CHOWN    104  
+
+
+#define MDS_OP_READDIR  200
+#define MDS_OP_MKNOD    201
+#define MDS_OP_LINK     202
+#define MDS_OP_UNLINK   203
+#define MDS_OP_RENAME   204
+
+#define MDS_OP_MKDIR    220
+#define MDS_OP_RMDIR    221
+#define MDS_OP_SYMLINK  222
+
+#define MDS_OP_OPEN     301
+#define MDS_OP_TRUNCATE 306
+#define MDS_OP_FSYNC    307
+#define MDS_OP_RELEASE  308
 
 
 class MClientRequest : public Message {
   struct {
     long tid;
     int num_fwd;
-    int client;
-    int op;
-    
-    entity_inst_t client_inst;
-    
-    int caller_uid, caller_gid;
-    inodeno_t ino;
-    
-    int    iarg, iarg2;
-    time_t targ, targ2;
-    
     inodeno_t  mds_wants_replica_in_dirino;
-    
-    size_t sizearg;
+
+    entity_inst_t client_inst;
+
+    int op;
+    int caller_uid, caller_gid;
   } st;
+
+  // path arguments
   filepath path;
   string sarg;
-  string sarg2;
-
 
  public:
+  // fixed size arguments.  in a union.
+  // note: nothing with a constructor can go here; use underlying base 
+  // types for _inodeno_t, _frag_t.
+  union {
+    struct {
+      int mask;
+    } stat;
+    struct {
+      _frag_t frag;
+    } readdir;
+    struct utimbuf utime;
+    struct timeval utimes;
+    struct {
+      mode_t mode;
+    } chmod; 
+    struct {
+      uid_t uid;
+      gid_t gid;
+    } chown;
+    struct {
+      mode_t mode;
+    } mknod; 
+    struct {
+      mode_t mode;
+    } mkdir; 
+    struct {
+      int flags;
+      mode_t mode;
+    } open;
+    struct {
+      _inodeno_t ino;
+      off_t length;
+    } truncate;
+    struct {
+      _inodeno_t ino;
+    } fsync;
+  } args;
+
+  // cons
   MClientRequest() : Message(MSG_CLIENT_REQUEST) {}
-  MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
+  MClientRequest(int op, entity_inst_t ci) : Message(MSG_CLIENT_REQUEST) {
     memset(&st, 0, sizeof(st));
+    memset(&args, 0, sizeof(args));
     this->st.op = op;
-    this->st.client = client;
-    this->st.iarg = 0;
+    this->st.client_inst = ci;
   }
 
   // normal fields
@@ -89,37 +140,24 @@ class MClientRequest : public Message {
   void set_path(const filepath& fp) { path = fp; }
   void set_caller_uid(int u) { st.caller_uid = u; }
   void set_caller_gid(int g) { st.caller_gid = g; }
-  void set_ino(inodeno_t ino) { st.ino = ino; }
-  void set_iarg(int i) { st.iarg = i; }
-  void set_iarg2(int i) { st.iarg2 = i; }
-  void set_targ(time_t& t) { st.targ = t; }
-  void set_targ2(time_t& t) { st.targ2 = t; }
   void set_sarg(string& arg) { this->sarg = arg; }
   void set_sarg(const char *arg) { this->sarg = arg; }
-  void set_sarg2(string& arg) { this->sarg2 = arg; }
-  void set_sizearg(size_t s) { st.sizearg = s; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     st.mds_wants_replica_in_dirino = dirino; }
   
   void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
   const entity_inst_t& get_client_inst() { return st.client_inst; }
 
-  int get_client() { return st.client; }
+  int get_client() { return st.client_inst.name.num(); }
   long get_tid() { return st.tid; }
   int get_num_fwd() { return st.num_fwd; }
   int get_op() { return st.op; }
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
-  inodeno_t get_ino() { return st.ino; }
+  //inodeno_t get_ino() { return st.ino; }
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
-  int get_iarg() { return st.iarg; }
-  int get_iarg2() { return st.iarg2; }
-  time_t get_targ() { return st.targ; }
-  time_t get_targ2() { return st.targ2; }
   string& get_sarg() { return sarg; }
-  string& get_sarg2() { return sarg2; }
-  size_t get_sizearg() { return st.sizearg; }
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return st.mds_wants_replica_in_dirino; }
 
@@ -127,16 +165,17 @@ class MClientRequest : public Message {
     int off = 0;
     payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
+    payload.copy(off, sizeof(args), (char*)&args);
+    off += sizeof(args);
     path._decode(payload, off);
     ::_decode(sarg, payload, off);
-    ::_decode(sarg2, payload, off);
   }
 
   void encode_payload() {
     payload.append((char*)&st, sizeof(st));
+    payload.append((char*)&args, sizeof(args));
     path._encode(payload);
     ::_encode(sarg, payload);
-    ::_encode(sarg2, payload);
   }
 
   char *get_type_name() { return "creq"; }

@@ -323,7 +323,7 @@ public:
                     int onfail,
                     Context *onfinish=0,
                     bool is_client_req = false);
-  void open_remote_dir(CInode *diri, Context *fin);
+  void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
   void open_remote_ino_2(inodeno_t ino, Message *req,
                          vector<Anchor*>& anchortrace,
@@ -362,7 +362,8 @@ public:
 			frag_t fg, CDirDiscover& dis, 
 			int from,
 			list<Context*>& finished);
-
+  CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+    
   // -- namespace --
   // these handle logging, cache sync themselves.
   // UNLINK

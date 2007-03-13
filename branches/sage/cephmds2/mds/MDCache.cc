@@ -2661,8 +2661,7 @@ int MDCache::path_traverse(filepath& origpath,
 
 
 
-void MDCache::open_remote_dir(CInode *diri,
-                              Context *fin) 
+void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin) 
 {
   dout(10) << "open_remote_dir on " << *diri << endl;
   
@@ -2671,14 +2670,23 @@ void MDCache::open_remote_dir(CInode *diri,
   assert(!diri->is_auth());
   assert(diri->dir == 0);
 
-  filepath want;  // no dentries, i just want the dir open
-  mds->send_message_mds(new MDiscover(mds->get_nodeid(),
-				      diri->ino(),
-				      want,
-				      true),  // need the dir open
-			diri->authority().first, MDS_PORT_CACHE);
-  dir_discovers[diri->ino()].insert(diri->authority().first);
-  diri->add_waiter(CInode::WAIT_DIR, fin);
+  int auth = diri->authority().first;
+
+  if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
+    // discover it
+    filepath want;  // no dentries, i just want the dir open
+    MDiscover *dis = new MDiscover(mds->get_nodeid(),
+				   diri->ino(),
+				   want,
+				   true);  // need the base dir open
+    dis->set_base_dir_frag(fg);
+    mds->send_message_mds(dis, auth, MDS_PORT_CACHE);
+    dir_discovers[diri->ino()].insert(auth);
+    diri->add_waiter(CInode::WAIT_DIR, fin);
+  } else {
+    // mds is down or recovering.  forge a replica!
+    forge_replica_dir(diri, fg, auth);
+  }
 }
 
 
@@ -3006,7 +3014,6 @@ void MDCache::request_forward(Message *req, int who, int port)
 }
 
 
-
 // ANCHORS
 
 class C_MDC_AnchorInode : public Context {
@@ -3061,7 +3068,7 @@ void MDCache::anchor_inode(CInode *in, Context *onfinish)
     
     // do it
     mds->anchorclient->create(in->ino(), trace, 
-                           new C_MDC_AnchorInode( in ));
+			      new C_MDC_AnchorInode( in ));
   }
 }
 
@@ -3179,7 +3186,15 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // pick frag
-    frag_t fg = cur->pick_dirfrag(dis->get_dentry(i));
+    frag_t fg;
+    if (dis->get_want().depth()) {
+      // dentry specifies
+      fg = cur->pick_dirfrag(dis->get_dentry(i));
+    } else {
+      // requester explicity specified the frag
+      fg = dis->get_base_dir_frag();
+      assert(dis->wants_base_dir() || dis->get_base_ino() == 1);
+    }
     CDir *curdir = cur->get_dirfrag(fg);
 
     // am i dir auth (or if no dir, at least the inode auth)
@@ -3187,12 +3202,13 @@ void MDCache::handle_discover(MDiscover *dis)
 	(curdir && !curdir->is_auth())) {
       if (curdir) {
 	dout(7) << *curdir << " not dirfrag auth, setting dir_auth_hint" << endl;
+	reply->set_dir_auth_hint(curdir->authority().first);
       } else {
 	dout(7) << *cur << " dirfrag not open, not inode auth, setting dir_auth_hint" << endl;
+	reply->set_dir_auth_hint(cur->authority().first);
       }
       
       // set hint (+ dentry, if there is one)
-      reply->set_dir_auth_hint(curdir->authority().first);
       if (dis->get_want().depth() > i)
 	reply->set_error_dentry(dis->get_dentry(i));
       break;
@@ -3574,6 +3590,23 @@ CDir *MDCache::add_replica_dir(CInode *diri,
   return dir;
 }
 
+CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
+{
+  assert(mds->mdsmap->get_state(from) < MDSMap::STATE_REJOIN);
+  
+  // forge a replica.
+  CDir *dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
+  
+  // i'm assuming this is a subtree root. 
+  adjust_subtree_auth(dir, from);
+
+  dout(7) << "forge_replica_dir added " << *dir << " while mds" << from << " is down" << endl;
+
+  return dir;
+}
+				 
+
+
 
 
 /*
@@ -3653,7 +3686,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
     //if (*it == except) continue;
     dout(7) << "sending dir_update on " << *dir << " to " << *it << endl;
 
-    mds->send_message_mds(new MDirUpdate(dir->ino(),
+    mds->send_message_mds(new MDirUpdate(dir->dirfrag(),
 					 dir->dir_rep,
 					 dir->dir_rep_by,
 					 path,
@@ -3667,9 +3700,9 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 
 void MDCache::handle_dir_update(MDirUpdate *m)
 {
-  CInode *in = get_inode(m->get_ino());
-  if (!in || !in->dir) {
-    dout(5) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
+  CDir *dir = get_dirfrag(m->get_dirfrag());
+  if (!dir) {
+    dout(5) << "dir_update on " << m->get_dirfrag() << ", don't have it" << endl;
 
     // discover it?
     if (m->should_discover()) {
@@ -3684,24 +3717,25 @@ void MDCache::handle_dir_update(MDirUpdate *m)
                             MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
-      if (r == 0) {
-        assert(in);
-        open_remote_dir(in, new C_MDS_RetryMessage(mds, m));
-        return;
-      }
-      assert(0);
+      assert(r == 0);
+
+      CInode *in = get_inode(m->get_dirfrag().ino);
+      assert(in);
+      open_remote_dir(in, m->get_dirfrag().frag, 
+		      new C_MDS_RetryMessage(mds, m));
+      return;
     }
 
-    goto out;
+    delete m;
+    return;
   }
 
   // update
-  dout(5) << "dir_update on " << *in->dir << endl;
-  in->dir->dir_rep = m->get_dir_rep();
-  in->dir->dir_rep_by = m->get_dir_rep_by();
+  dout(5) << "dir_update on " << *dir << endl;
+  dir->dir_rep = m->get_dir_rep();
+  dir->dir_rep_by = m->get_dir_rep_by();
   
   // done
- out:
   delete m;
 }
 

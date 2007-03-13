@@ -50,17 +50,20 @@
  * 0/0 (bits==0) corresponds to the entire namespace.  if we bisect that,
  * we get 0/1 and 1/1.  quartering gives us 0/2, 1/2, 2/2, 3/2.  and so on.
  */
+
+typedef __uint32_t _frag_t;
+
 class frag_t {
   /* encoded value.
    *  8 upper bits = "bits"
    * 24 lower bits = "value"
    */
-  __uint32_t _enc;  
+  _frag_t _enc;  
   
  public:
   frag_t() : _enc(0) { }
   frag_t(unsigned v, unsigned b) : _enc((b << 24) + v) { }
-  frag_t(unsigned e) : _enc(e) { }
+  frag_t(_frag_t e) : _enc(e) { }
 
   // constructors
   void from_unsigned(unsigned e) { _enc = e; }
@@ -69,7 +72,7 @@ class frag_t {
   unsigned value() const { return _enc & 0xffffff; }
   unsigned bits() const { return _enc >> 24; }
   unsigned mask() const { return 0xffffffff >> (32-bits()); }
-  operator unsigned() const { return _enc; }
+  operator _frag_t() const { return _enc; }
 
   // tests
   bool contains(unsigned v) const {

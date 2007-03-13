@@ -43,18 +43,6 @@ using namespace __gnu_cxx;
 #include "ClientMap.h"
 
 
-#define MDS_PORT_MAIN     0
-#define MDS_PORT_SERVER   1
-#define MDS_PORT_CACHE    2
-#define MDS_PORT_LOCKER   3
-#define MDS_PORT_STORE    4
-#define MDS_PORT_BALANCER 5
-#define MDS_PORT_MIGRATOR 6
-#define MDS_PORT_RENAMER  7
-
-#define MDS_PORT_ANCHORCLIENT 10
-#define MDS_PORT_ANCHORMGR    11
-
 
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2

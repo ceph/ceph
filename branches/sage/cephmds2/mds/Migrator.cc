@@ -1370,7 +1370,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       CDir *dir = cache->get_dirfrag(*it);
       if (!dir) {
         dout(7) << "  opening nested export on " << *in << endl;
-        cache->open_remote_dir(in,
+        cache->open_remote_dir(in, it->frag,
 			       new C_MDS_RetryMessage(mds, m));
       }
     }

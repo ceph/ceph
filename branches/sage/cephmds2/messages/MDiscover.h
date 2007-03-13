@@ -29,7 +29,8 @@ class MDiscover : public Message {
   inodeno_t       base_ino;          // 1 -> root
   bool            want_base_dir;
   bool            want_root_inode;
-  
+  frag_t          base_dir_frag;
+
   filepath        want;   // ... [/]need/this/stuff
 
  public:
@@ -38,6 +39,9 @@ class MDiscover : public Message {
   filepath& get_want() { return want; }
   const string&   get_dentry(int n) { return want[n]; }
   bool      wants_base_dir() { return want_base_dir; }
+  frag_t    get_base_dir_frag() { return base_dir_frag; }
+
+  void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
   MDiscover() { }
   MDiscover(int asker, 
@@ -60,14 +64,17 @@ class MDiscover : public Message {
     off += sizeof(asker);
     payload.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
-    payload.copy(off, sizeof(bool), (char*)&want_base_dir);
-    off += sizeof(bool);
+    payload.copy(off, sizeof(want_base_dir), (char*)&want_base_dir);
+    off += sizeof(want_base_dir);
+    payload.copy(off, sizeof(base_dir_frag), (char*)&base_dir_frag);
+    off += sizeof(base_dir_frag);
     want._decode(payload, off);
   }
   virtual void encode_payload() {
     payload.append((char*)&asker, sizeof(asker));
     payload.append((char*)&base_ino, sizeof(base_ino));
     payload.append((char*)&want_base_dir, sizeof(want_base_dir));
+    payload.append((char*)&base_dir_frag, sizeof(base_dir_frag));
     want._encode(payload);
   }
 

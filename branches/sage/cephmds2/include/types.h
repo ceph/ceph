@@ -185,12 +185,13 @@ struct FileLayout {
 
 // -- inode --
 
+typedef __uint64_t _inodeno_t;
 struct inodeno_t {
-  __uint64_t val;
+  _inodeno_t val;
   inodeno_t() : val(0) {}
-  inodeno_t(__uint64_t v) : val(v) {}
+  inodeno_t(_inodeno_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
-  operator __uint64_t() const { return val; }
+  operator _inodeno_t() const { return val; }
 };
 
 inline ostream& operator<<(ostream& out, inodeno_t ino) {

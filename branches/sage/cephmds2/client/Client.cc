@@ -1254,7 +1254,7 @@ int Client::link(const char *existing, const char *newname)
   // sarg is target (existing file)
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_LINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_LINK, messenger->get_myinst());
   req->set_path(newname);
   req->set_sarg(existing);
   
@@ -1288,7 +1288,7 @@ int Client::unlink(const char *relpath)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1334,7 +1334,7 @@ int Client::rename(const char *relfrom, const char *relto)
   tout << to << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, messenger->get_myinst());
   req->set_path(from);
   req->set_sarg(to);
  
@@ -1371,9 +1371,9 @@ int Client::mkdir(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, messenger->get_myinst());
   req->set_path(path);
-  req->set_iarg( (int)mode );
+  req->args.mkdir.mode = mode;
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1405,7 +1405,7 @@ int Client::rmdir(const char *relpath)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1454,7 +1454,7 @@ int Client::symlink(const char *reltarget, const char *rellink)
   tout << link << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, messenger->get_myinst());
   req->set_path(link);
   req->set_sarg(target);
  
@@ -1540,8 +1540,8 @@ int Client::_lstat(const char *path, int mask, Inode **in)
     //req->set_caller_uid(fc->uid);
     //req->set_caller_gid(fc->gid);
     
-    req = new MClientRequest(MDS_OP_LSTAT, whoami);
-    req->set_iarg(mask);
+    req = new MClientRequest(MDS_OP_LSTAT, messenger->get_myinst());
+    req->args.stat.mask = mask;
     req->set_path(fpath);
 
     MClientReply *reply = make_request(req);
@@ -1687,9 +1687,9 @@ int Client::chmod(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( (int)mode );
+  req->args.chmod.mode = mode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1721,10 +1721,10 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << gid << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( (int)uid );
-  req->set_iarg2( (int)gid );
+  req->args.chown.uid = uid;
+  req->args.chown.gid = gid;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1759,10 +1759,9 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   tout << buf->modtime << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->set_targ( buf->modtime );
-  req->set_targ2( buf->actime );
+  req->args.utime = *buf;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1797,9 +1796,9 @@ int Client::mknod(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( mode );
+  req->args.mknod.mode = mode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1843,7 +1842,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
@@ -2136,10 +2135,10 @@ int Client::open(const char *relpath, int flags)
     cmode = FILE_MODE_R;
 
   // go
-  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg(flags);
-  req->set_iarg2(cmode);
+  req->args.open.flags = flags;
+  req->args.open.mode = cmode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2599,18 +2598,18 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 }
 
 
-int Client::truncate(const char *file, off_t size) 
+int Client::truncate(const char *file, off_t length) 
 {
   client_lock.Lock();
-  dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
+  dout(3) << "op: client->truncate(\"" << file << "\", " << length << ");" << endl;
   tout << "truncate" << endl;
   tout << file << endl;
-  tout << size << endl;
+  tout << length << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
   req->set_path(file); 
-  req->set_sizearg( size );
+  req->args.truncate.length = length;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());

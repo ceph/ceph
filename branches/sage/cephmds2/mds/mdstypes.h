@@ -16,31 +16,17 @@ using namespace std;
 #include "include/frag.h"
 
 
-// md ops
-#define MDS_OP_STATFS   1
+#define MDS_PORT_MAIN     0
+#define MDS_PORT_SERVER   1
+#define MDS_PORT_CACHE    2
+#define MDS_PORT_LOCKER   3
+#define MDS_PORT_STORE    4
+#define MDS_PORT_BALANCER 5
+#define MDS_PORT_MIGRATOR 6
+#define MDS_PORT_RENAMER  7
 
-#define MDS_OP_STAT     100
-#define MDS_OP_LSTAT    101
-#define MDS_OP_UTIME    102
-#define MDS_OP_CHMOD    103
-#define MDS_OP_CHOWN    104  
-
-
-#define MDS_OP_READDIR  200
-#define MDS_OP_MKNOD    201
-#define MDS_OP_LINK     202
-#define MDS_OP_UNLINK   203
-#define MDS_OP_RENAME   204
-
-#define MDS_OP_MKDIR    220
-#define MDS_OP_RMDIR    221
-#define MDS_OP_SYMLINK  222
-
-#define MDS_OP_OPEN     301
-#define MDS_OP_TRUNCATE 306
-#define MDS_OP_FSYNC    307
-//#define MDS_OP_CLOSE    310
-#define MDS_OP_RELEASE  308
+#define MDS_PORT_ANCHORCLIENT 10
+#define MDS_PORT_ANCHORMGR    11
 
 
 

@@ -277,12 +277,6 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "req " << *req << endl;
 
-  // note original client addr
-  if (req->get_source().is_client()) {
-    req->set_client_inst( req->get_source_inst() );
-    req->clear_payload();
-  }
-
   if (!mds->is_active()) {
     dout(5) << " not active, discarding client request." << endl;
     delete req;
@@ -310,11 +304,11 @@ void Server::handle_client_request(MClientRequest *req)
     */
     
   case MDS_OP_TRUNCATE:
-    if (!req->get_ino()) break;   // can be called w/ either fh OR path
+    if (!req->args.truncate.ino) break;   // can be called w/ either fh OR path
     
   case MDS_OP_RELEASE:
   case MDS_OP_FSYNC:
-    ref = mdcache->get_inode(req->get_ino());   // fixme someday no ino needed?
+    ref = mdcache->get_inode(req->args.fsync.ino);   // fixme someday no ino needed?
 
     if (!ref) {
       int next = mds->get_nodeid() + 1;
@@ -332,7 +326,7 @@ void Server::handle_client_request(MClientRequest *req)
     // ops on non-existing files --> directory paths
     switch (req->get_op()) {
     case MDS_OP_OPEN:
-      if (!(req->get_iarg() & O_CREAT)) break;
+      if (!(req->args.open.flags & O_CREAT)) break;
       
     case MDS_OP_MKNOD:
     case MDS_OP_MKDIR:
@@ -452,7 +446,7 @@ void Server::dispatch_request(Message *m, CInode *ref)
     
     // files
   case MDS_OP_OPEN:
-    if (req->get_iarg() & O_CREAT) 
+    if (req->args.open.flags & O_CREAT) 
       handle_client_openc(req, ref);
     else 
       handle_client_open(req, ref);
@@ -593,7 +587,7 @@ void Server::handle_client_stat(MClientRequest *req,
   // FIXME: this is really not the way to handle the statlite mask.
 
   // do I need file info?
-  int mask = req->get_iarg();
+  int mask = req->args.stat.mask;
   if (mask & (INODE_MASK_SIZE|INODE_MASK_MTIME)) {
     // yes.  do a full stat.
     if (!mds->locker->inode_file_read_start(ref, req))
@@ -664,8 +658,8 @@ void Server::handle_client_utime(MClientRequest *req,
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  time_t mtime = req->get_targ();
-  time_t atime = req->get_targ2();
+  time_t mtime = req->args.utime.modtime;
+  time_t atime = req->args.utime.actime;
   C_MDS_utime_finish *fin = new C_MDS_utime_finish(mds, req, cur, pdv, 
 						   mtime, atime);
 
@@ -729,7 +723,7 @@ void Server::handle_client_chmod(MClientRequest *req,
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  int mode = req->get_iarg();
+  int mode = req->args.chmod.mode;
   C_MDS_chmod_finish *fin = new C_MDS_chmod_finish(mds, req, cur, pdv,
 						   mode);
 
@@ -787,8 +781,8 @@ void Server::handle_client_chown(MClientRequest *req,
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  int uid = req->get_iarg();
-  int gid = req->get_iarg2();
+  int uid = req->args.chown.uid;
+  int gid = req->args.chown.gid;
   C_MDS_chown_finish *fin = new C_MDS_chown_finish(mds, req, cur, pdv,
 						   uid, gid);
 
@@ -857,7 +851,7 @@ void Server::handle_client_readdir(MClientRequest *req,
   }
 
   // which frag?
-  frag_t fg = req->get_iarg();
+  frag_t fg = req->args.readdir.frag;
 
   // does it exist?
   if (diri->dirfragtree[fg] != fg) {
@@ -959,7 +953,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
   assert(dn);
 
   // it's a file.
-  newi->inode.mode = req->get_iarg();
+  newi->inode.mode = req->args.mknod.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   
@@ -1116,7 +1110,7 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
   assert(dn);
 
   // it's a directory.
-  newi->inode.mode = req->get_iarg();
+  newi->inode.mode = req->args.mkdir.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_DIR;
   newi->inode.layout = g_OSD_MDDirLayout;
@@ -1763,7 +1757,7 @@ void Server::handle_client_rename_2(MClientRequest *req,
   // make sure i can open the dir?
   if (d->is_dir() && !d->dir_is_auth() && !d->dir) {
     // discover it
-    mdcache->open_remote_dir(d,
+    mdcache->open_remote_dir(d, frag_t(),  // FIXME
                              new C_MDS_RetryRequest(mds, req, ref));
     return;
   }
@@ -2063,7 +2057,7 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
   // check permissions
   
   // do update
-  cur->inode.size = req->get_sizearg();
+  cur->inode.size = req->args.truncate.length;
   cur->_mark_dirty(); // fixme
 
   mds->locker->inode_file_write_finish(cur);
@@ -2086,8 +2080,8 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 void Server::handle_client_open(MClientRequest *req,
 				CInode *cur)
 {
-  int flags = req->get_iarg();
-  int mode = req->get_iarg2();
+  int flags = req->args.open.flags;
+  int mode = req->args.open.mode;
 
   dout(7) << "open " << flags << " on " << *cur << endl;
   dout(10) << "open flags = " << flags << "  mode = " << mode << endl;
@@ -2202,6 +2196,15 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     */
   } else {
     // exists!
+    
+    // O_EXCL?
+    if (req->args.open.flags & O_EXCL) {
+      // fail.
+      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << endl;
+      reply_request(req, -EEXIST, in);
+      return;
+    } 
+    
     // FIXME: do i need to repin path based existant inode? hmm.
     handle_client_open(req, in);
   }
