@@ -12,38 +12,43 @@
  */
 
 
-#ifndef __MANCHORREPLY_H
-#define __MANCHORREPLY_H
+#ifndef __MANCHORREQUEST_H
+#define __MANCHORREQUEST_H
 
 #include <vector>
 
 #include "msg/Message.h"
 #include "mds/AnchorTable.h"
 
-#include "MAnchorRequest.h"
 
-
-class MAnchorReply : public Message {
+class MAnchor : public Message {
   int op;
   inodeno_t ino;
-  vector<Anchor*> trace;
+  vector<Anchor> trace;
 
  public:
-  MAnchorReply() {}
-  MAnchorReply(MAnchorRequest *req) : Message(MSG_MDS_ANCHORREPLY) {
-    this->op = req->get_op();
-    this->ino = req->get_ino();
-  }
-  ~MAnchorReply() {
-    for (unsigned i=0; i<trace.size(); i++) delete trace[i];
-  }
-  virtual char *get_type_name() { return "arep"; }
+  MAnchor() {}
+  MAnchor(int o, inodeno_t i) : 
+	Message(MSG_MDS_ANCHOR),
+	op(o), ino(i) { }
 
-  void set_trace(vector<Anchor*>& trace) { this->trace = trace; }
+  
+  virtual char *get_type_name() { return "anchor"; }
+  void print(ostream& o) {
+    o << "anchor(" << get_anchor_opname(op) << " " << ino;
+    for (unsigned i=0; i<trace.size(); i++) {
+      o << ' ' << trace[i];
+    }
+    o << ")";
+  }
+
+  void set_trace(vector<Anchor>& trace) { 
+    this->trace = trace; 
+  }
 
   int get_op() { return op; }
   inodeno_t get_ino() { return ino; }
-  vector<Anchor*>& get_trace() { return trace; }
+  vector<Anchor>& get_trace() { return trace; }
 
   virtual void decode_payload() {
     int off = 0;
@@ -51,23 +56,19 @@ class MAnchorReply : public Message {
     off += sizeof(op);
     payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    int n;
-    payload.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      Anchor *a = new Anchor;
-      a->_decode(payload, off);
-      trace.push_back(a);
-    }
+    ::_decode(trace, payload, off);
   }
 
   virtual void encode_payload() {
     payload.append((char*)&op, sizeof(op));
     payload.append((char*)&ino, sizeof(ino));
+    ::_encode(trace, payload);
+    /*
     int n = trace.size();
     payload.append((char*)&n, sizeof(int));
     for (int i=0; i<n; i++) 
       trace[i]->_encode(payload);
+    */
   }
 };
 

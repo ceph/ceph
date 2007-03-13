@@ -546,8 +546,8 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
   srcdn->_mark_dirty(); // fixme
 
   // proxy!
-  in->state_set(CInode::STATE_PROXY);
-  in->get(CInode::PIN_PROXY);
+  //in->state_set(CInode::STATE_PROXY);
+  //in->get(CInode::PIN_PROXY);
   
   // generate notify list (everybody but src|dst) and send warnings
   set<int> notify;
@@ -603,11 +603,11 @@ void Renamer::file_rename_ack(CInode *in, int initiator)
   // we got all our MNotifyAck's.
 
   // was i proxy (if not, it's cuz this was a local rename)
-  if (in->state_test(CInode::STATE_PROXY)) {
+  /*if (in->state_test(CInode::STATE_PROXY)) {
     dout(10) << "file_rename_ack clearing proxy bit on " << *in << endl;
     in->state_clear(CInode::STATE_PROXY);
     in->put(CInode::PIN_PROXY);
-  }
+    }*/
 
   // done!
   if (initiator == mds->get_nodeid()) {

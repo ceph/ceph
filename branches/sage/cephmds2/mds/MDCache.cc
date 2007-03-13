@@ -38,6 +38,7 @@
 #include "osdc/Filer.h"
 
 #include "events/EImportMap.h"
+#include "events/EUpdate.h"
 #include "events/EString.h"
 #include "events/EUnlink.h"
 #include "events/EPurgeFinish.h"
@@ -2697,7 +2698,7 @@ class C_MDC_OpenRemoteInoLookup : public Context {
   Message *req;
   Context *onfinish;
 public:
-  vector<Anchor*> anchortrace;
+  vector<Anchor> anchortrace;
   C_MDC_OpenRemoteInoLookup(MDCache *mdc, inodeno_t ino, Message *req, Context *onfinish) {
     this->mdc = mdc;
     this->ino = ino;
@@ -2727,15 +2728,18 @@ void MDCache::open_remote_ino(inodeno_t ino,
 
 void MDCache::open_remote_ino_2(inodeno_t ino,
                                 Message *req,
-                                vector<Anchor*>& anchortrace,
+                                vector<Anchor>& anchortrace,
                                 Context *onfinish)
 {
   dout(7) << "open_remote_ino_2 on " << ino << ", trace depth is " << anchortrace.size() << endl;
   
+  // REWRITE ME: we're not going to use ref_dn.
+
+  /*
   // construct path
   filepath path;
   for (unsigned i=0; i<anchortrace.size(); i++) 
-    path.push_dentry(anchortrace[i]->ref_dn);
+    path.push_dentry(anchortrace[i].ref_dn);
 
   dout(7) << " path is " << path << endl;
 
@@ -2748,6 +2752,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   
   onfinish->finish(r);
   delete onfinish;
+  */
 }
 
 
@@ -3014,63 +3019,197 @@ void MDCache::request_forward(Message *req, int who, int port)
 }
 
 
+// --------------------------------------------------------------------
 // ANCHORS
 
-class C_MDC_AnchorInode : public Context {
+// CREATE
+
+class C_MDC_AnchorCreatePrepared : public Context {
+  MDCache *cache;
   CInode *in;
-  
 public:
-  C_MDC_AnchorInode(CInode *in) {
-    this->in = in;
-  }
+  C_MDC_AnchorCreatePrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
   void finish(int r) {
-    if (r == 0) {
-      assert(in->inode.anchored == false);
-      in->inode.anchored = true;
-
-      in->state_clear(CInode::STATE_ANCHORING);
-      in->put(CInode::PIN_ANCHORING);
-      
-      in->_mark_dirty(); // fixme
-    }
-
-    // trigger
-    in->finish_waiting(CInode::WAIT_ANCHORED, r);
+    cache->_anchor_create_prepared(in);
   }
 };
 
-void MDCache::anchor_inode(CInode *in, Context *onfinish)
+void MDCache::anchor_create(CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
 
+  // wait
+  in->add_waiter(CInode::WAIT_ANCHORED, onfinish);
+
   // already anchoring?
   if (in->state_test(CInode::STATE_ANCHORING)) {
-    dout(7) << "anchor_inode already anchoring " << *in << endl;
-
-    // wait
-    in->add_waiter(CInode::WAIT_ANCHORED,
-                   onfinish);
-
-  } else {
-    dout(7) << "anchor_inode anchoring " << *in << endl;
-
-    // auth: do it
-    in->state_set(CInode::STATE_ANCHORING);
-    in->get(CInode::PIN_ANCHORING);
-    
-    // wait
-    in->add_waiter(CInode::WAIT_ANCHORED,
-                   onfinish);
-    
-    // make trace
-    vector<Anchor*> trace;
-    in->make_anchor_trace(trace);
-    
-    // do it
-    mds->anchorclient->create(in->ino(), trace, 
-			      new C_MDC_AnchorInode( in ));
+    dout(7) << "anchor_create already anchoring " << *in << endl;
+    return;
   }
+
+  dout(7) << "anchor_create " << *in << endl;
+
+  // auth: do it
+  in->state_set(CInode::STATE_ANCHORING);
+  in->get(CInode::PIN_ANCHORING);
+  
+  // make trace
+  vector<Anchor> trace;
+  in->make_anchor_trace(trace);
+  
+  // do it
+  mds->anchorclient->prepare_create(in->ino(), trace, 
+				    new C_MDC_AnchorCreatePrepared(this, in));
 }
+
+class C_MDC_AnchorCreateLogged : public Context {
+  MDCache *cache;
+  CInode *in;
+  version_t pdv;
+public:
+  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t v) : cache(c), in(i), pdv(v) {}
+  void finish(int r) {
+    cache->_anchor_create_logged(in, pdv);
+  }
+};
+
+void MDCache::_anchor_create_prepared(CInode *in)
+{
+  dout(10) << "_anchor_create_prepared " << *in << endl;
+
+  assert(in->inode.anchored == false);
+
+  // predirty, prepare log entry
+  version_t pdv = in->pre_dirty();
+
+  EUpdate *le = new EUpdate("anchor_create");
+  le->metablob.add_dir_context(in->get_parent_dir());
+
+  // update the logged inode copy
+  inode_t *pi = le->metablob.add_dentry(in->parent, true);
+  pi->anchored = true;
+  pi->version = pdv;
+
+  // log + wait
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, pdv));
+}
+
+
+void MDCache::_anchor_create_logged(CInode *in, version_t pdv)
+{
+  dout(10) << "_anchor_create_logged pdv " << pdv << " on " << *in << endl;
+
+  // unpin
+  assert(in->state_test(CInode::STATE_ANCHORING));
+  in->state_clear(CInode::STATE_ANCHORING);
+  in->put(CInode::PIN_ANCHORING);
+  
+  // apply update to cache
+  in->inode.anchored = true;
+  in->inode.version = pdv;
+  
+  // tell the anchortable we've committed
+  mds->anchorclient->commit_create(in->ino());
+
+  // trigger waiters
+  in->finish_waiting(CInode::WAIT_ANCHORED, 0);
+}
+
+
+// DESTROY
+
+class C_MDC_AnchorDestroyPrepared : public Context {
+  MDCache *cache;
+  CInode *in;
+public:
+  C_MDC_AnchorDestroyPrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
+  void finish(int r) {
+    cache->_anchor_destroy_prepared(in);
+  }
+};
+
+void MDCache::anchor_destroy(CInode *in, Context *onfinish)
+{
+  assert(in->is_auth());
+
+  // wait
+  if (onfinish)
+    in->add_waiter(CInode::WAIT_UNANCHORED, onfinish);
+
+  // already anchoring?
+  if (in->state_test(CInode::STATE_UNANCHORING)) {
+    dout(7) << "anchor_destroy already unanchoring " << *in << endl;
+    return;
+  }
+
+  dout(7) << "anchor_destroy " << *in << endl;
+
+  // auth: do it
+  in->state_set(CInode::STATE_UNANCHORING);
+  in->get(CInode::PIN_UNANCHORING);
+  
+  // do it
+  mds->anchorclient->prepare_destroy(in->ino(), new C_MDC_AnchorDestroyPrepared(this, in));
+}
+
+class C_MDC_AnchorDestroyLogged : public Context {
+  MDCache *cache;
+  CInode *in;
+  version_t pdv;
+public:
+  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t v) : cache(c), in(i), pdv(v) {}
+  void finish(int r) {
+    cache->_anchor_destroy_logged(in, pdv);
+  }
+};
+
+void MDCache::_anchor_destroy_prepared(CInode *in)
+{
+  dout(10) << "_anchor_destroy_prepared " << *in << endl;
+
+  assert(in->inode.anchored == true);
+
+  // predirty, prepare log entry
+  version_t pdv = in->pre_dirty();
+
+  EUpdate *le = new EUpdate("anchor_destroy");
+  le->metablob.add_dir_context(in->get_parent_dir());
+
+  // update the logged inode copy
+  inode_t *pi = le->metablob.add_dentry(in->parent, true);
+  pi->anchored = true;
+  pi->version = pdv;
+
+  // log + wait
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, pdv));
+}
+
+
+void MDCache::_anchor_destroy_logged(CInode *in, version_t pdv)
+{
+  dout(10) << "_anchor_destroy_logged pdv " << pdv << " on " << *in << endl;
+  
+  // unpin
+  assert(in->state_test(CInode::STATE_UNANCHORING));
+  in->state_clear(CInode::STATE_UNANCHORING);
+  in->put(CInode::PIN_UNANCHORING);
+  
+  // apply update to cache
+  in->inode.anchored = false;
+  in->inode.version = pdv;
+  
+  // tell the anchortable we've committed
+  mds->anchorclient->commit_destroy(in->ino());
+
+  // trigger waiters
+  in->finish_waiting(CInode::WAIT_UNANCHORED, 0);
+}
+
+
+
+
+// -------------------------------------------------------------------------------
+// HARD LINKS
 
 
 void MDCache::handle_inode_link(MInodeLink *m)
@@ -3090,8 +3229,7 @@ void MDCache::handle_inode_link(MInodeLink *m)
     assert(in->inode.nlink == 1);
     dout(7) << "needs anchor, nlink=" << in->inode.nlink << ", creating anchor" << endl;
     
-    anchor_inode(in,
-                 new C_MDS_RetryMessage(mds, m));
+    anchor_create(in, new C_MDS_RetryMessage(mds, m));
     return;
   }
 
@@ -3831,11 +3969,12 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
       in->_mark_dirty(); // fixme
 
       // update anchor to point to inode file+mds
-      vector<Anchor*> atrace;
+      vector<Anchor> atrace;
       in->make_anchor_trace(atrace);
       assert(atrace.size() == 1);   // it's dangling
-      mds->anchorclient->update(in->ino(), atrace, 
-                             new C_MDC_DentryUnlink(this, dn, dir, c));
+      assert(0); // rewrite me w/ new anchor interface
+      //mds->anchorclient->prepare_update(in->ino(), atrace, 
+      //				new C_MDC_DentryUnlink(this, dn, dir, c));
       return;
     }
   }
@@ -3852,7 +3991,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
         dout(7) << "nlink=1+primary or 0+dangling, removing anchor" << endl;
 
         // remove anchor (async)
-        mds->anchorclient->destroy(dn->inode->ino(), NULL);
+	anchor_destroy(dn->inode, NULL);
       }
     } else {
       int auth = dn->inode->authority().first;
@@ -3946,13 +4085,6 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
 {
   CInode *in = get_inode(m->get_ino());
   assert(in);
-
-  // proxy?
-  if (in->is_proxy()) {
-    dout(7) << "handle_inode_unlink proxy on " << *in << endl;
-    mds->send_message_mds(m, in->authority().first, MDS_PORT_CACHE);
-    return;
-  }
   assert(in->is_auth());
 
   // do it.
@@ -3969,7 +4101,7 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
       in->mark_clean();       // mark it clean.
       
       // remove anchor (async)
-      mds->anchorclient->destroy(in->ino(), NULL);
+      anchor_destroy(in, NULL);
     }
     else {
       in->_mark_dirty(); // fixme
@@ -3983,7 +4115,7 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
       dout(7) << "nlink=1, removing anchor" << endl;
       
       // remove anchor (async)
-      mds->anchorclient->destroy(in->ino(), NULL);
+      anchor_destroy(in, NULL);
     }
   }
 

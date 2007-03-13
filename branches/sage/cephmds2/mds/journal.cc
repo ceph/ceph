@@ -15,6 +15,7 @@
 
 #include "events/EMetaBlob.h"
 #include "events/EAlloc.h"
+#include "events/EAnchor.h"
 #include "events/EUpdate.h"
 #include "events/EImportMap.h"
 
@@ -31,6 +32,7 @@
 #include "MDLog.h"
 #include "MDCache.h"
 #include "Migrator.h"
+#include "AnchorTable.h"
 
 #include "config.h"
 #undef dout
@@ -427,6 +429,67 @@ void EAlloc::replay(MDS *mds)
       assert(0);
     
     assert(table_version == mds->idalloc->get_version());
+  }
+}
+
+
+// -----------------------
+// EAnchor
+
+bool EAnchor::has_expired(MDS *mds) 
+{
+  version_t cv = mds->anchortable->get_version();
+  if (cv < version) {
+    dout(10) << "EAnchor.has_expired v " << version << " > " << cv
+	     << ", still dirty" << endl;
+    return false;   // still dirty
+  } else {
+    dout(10) << "EAnchor.has_expired v " << version << " <= " << cv
+	     << ", already flushed" << endl;
+    return true;    // already flushed
+  }
+}
+
+void EAnchor::expire(MDS *mds, Context *c)
+{
+  dout(10) << "EAnchor.expire saving anchor table" << endl;
+  mds->anchortable->save(c);
+}
+
+void EAnchor::replay(MDS *mds)
+{
+  if (mds->anchortable->get_version() >= version) {
+    dout(10) << "EAnchor.replay event " << version
+	     << " <= table " << mds->anchortable->get_version() << endl;
+  } else {
+    dout(10) << " EAnchor.replay event " << version
+	     << " - 1 == table " << mds->anchortable->get_version() << endl;
+    assert(version-1 == mds->anchortable->get_version());
+    
+    switch (op) {
+    case ANCHOR_OP_CREATE_PREPARE:
+      mds->anchortable->create_prepare(ino, trace);
+      break;
+    case ANCHOR_OP_CREATE_COMMIT:
+      mds->anchortable->create_commit(ino);
+      break;
+    case ANCHOR_OP_DESTROY_PREPARE:
+      mds->anchortable->destroy_prepare(ino);
+      break;
+    case ANCHOR_OP_DESTROY_COMMIT:
+      mds->anchortable->destroy_commit(ino);
+      break;
+    case ANCHOR_OP_UPDATE_PREPARE:
+      mds->anchortable->update_prepare(ino, trace);
+      break;
+    case ANCHOR_OP_UPDATE_COMMIT:
+      mds->anchortable->update_commit(ino);
+      break;
+    default:
+      assert(0);
+    }
+    
+    assert(version == mds->anchortable->get_version());
   }
 }
 

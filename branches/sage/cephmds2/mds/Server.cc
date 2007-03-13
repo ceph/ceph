@@ -1317,8 +1317,8 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
       assert(targeti->inode.nlink == 1);
       dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
       
-      mdcache->anchor_inode(targeti,
-                            new C_MDS_RetryRequest(mds, req, diri));
+      mdcache->anchor_create(targeti,
+			     new C_MDS_RetryRequest(mds, req, diri));
       return;
     }
 

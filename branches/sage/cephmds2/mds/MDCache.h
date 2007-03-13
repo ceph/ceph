@@ -326,7 +326,7 @@ public:
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
   void open_remote_ino_2(inodeno_t ino, Message *req,
-                         vector<Anchor*>& anchortrace,
+                         vector<Anchor>& anchortrace,
                          Context *onfinish);
 
   bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
@@ -342,10 +342,23 @@ public:
   void request_pin_inode(Message *req, CInode *in);
   void request_pin_dir(Message *req, CDir *dir);
 
-  // anchors
-  void anchor_inode(CInode *in, Context *onfinish);
-  //void unanchor_inode(CInode *in, Context *c);
+  // -- anchors --
+public:
+  void anchor_create(CInode *in, Context *onfinish);
+  void anchor_destroy(CInode *in, Context *onfinish);
+protected:
+  void _anchor_create_prepared(CInode *in);
+  void _anchor_create_logged(CInode *in, version_t pdv);
+  void _anchor_destroy_prepared(CInode *in);
+  void _anchor_destroy_logged(CInode *in, version_t pdv);
 
+  friend class C_MDC_AnchorCreatePrepared;
+  friend class C_MDC_AnchorCreateLogged;
+  friend class C_MDC_AnchorDestroyPrepared;
+  friend class C_MDC_AnchorDestroyLogged;
+
+
+  // -- hard links --
   void handle_inode_link(class MInodeLink *m);
   void handle_inode_link_ack(class MInodeLinkAck *m);
 

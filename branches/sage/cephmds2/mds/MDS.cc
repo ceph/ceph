@@ -86,7 +86,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   anchorclient = new AnchorClient(messenger, mdsmap);
   idalloc = new IdAllocator(this);
 
-  anchormgr = new AnchorTable(this);
+  anchortable = new AnchorTable(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -118,7 +118,7 @@ MDS::~MDS() {
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
-  if (anchormgr) { delete anchormgr; anchormgr = NULL; }
+  if (anchortable) { delete anchortable; anchortable = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
@@ -530,7 +530,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       
       // save anchor table
       if (mdsmap->get_anchortable() == whoami) 
-	anchormgr->save(0);  // FIXME?  or detect completion via filer?
+	anchortable->save(0);  // FIXME?  or detect completion via filer?
       
       if (idalloc) 
 	idalloc->save(0);    // FIXME?  or detect completion via filer?
@@ -715,8 +715,8 @@ void MDS::boot_create()
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << endl;
-    anchormgr->reset();
-    anchormgr->save(fin->new_sub());
+    anchortable->create_fresh();
+    anchortable->save(fin->new_sub());
   }
 }
 
@@ -731,7 +731,7 @@ void MDS::boot_start()
   
   if (mdsmap->get_anchortable() == whoami) {
     dout(2) << "boot_start opening anchor table" << endl;
-    anchormgr->load(fin->new_sub());
+    anchortable->load(fin->new_sub());
   } else {
     dout(2) << "boot_start i have no anchor table" << endl;
   }
@@ -780,7 +780,7 @@ void MDS::boot_replay(int step)
   case 2:
     if (mdsmap->get_anchortable() == whoami) {
       dout(2) << "boot_replay " << step << ": opening anchor table" << endl;
-      anchormgr->load(new C_MDS_BootRecover(this, 3));
+      anchortable->load(new C_MDS_BootRecover(this, 3));
       break;
     }
     dout(2) << "boot_replay " << step << ": i have no anchor table" << endl;
@@ -937,8 +937,8 @@ void MDS::my_dispatch(Message *m)
 
   switch (m->get_dest_port()) {
     
-  case MDS_PORT_ANCHORMGR:
-    anchormgr->dispatch(m);
+  case MDS_PORT_ANCHORTABLE:
+    anchortable->dispatch(m);
     break;
   case MDS_PORT_ANCHORCLIENT:
     anchorclient->dispatch(m);

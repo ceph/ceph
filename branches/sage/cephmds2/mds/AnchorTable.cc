@@ -17,107 +17,85 @@
 #include "osdc/Filer.h"
 
 #include "msg/Messenger.h"
-#include "messages/MAnchorRequest.h"
-#include "messages/MAnchorReply.h"
+#include "messages/MAnchor.h"
 
 #include "common/Clock.h"
+
+#include "MDLog.h"
+#include "events/EAnchor.h"
 
 #include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchortable "
 #define derr(x)  if (x <= g_conf.debug_mds) cerr << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchortable "
 
-AnchorTable::AnchorTable(MDS *mds)
-{
-  this->mds = mds;
-  opening = false;
-  opened = false;
-}
 
-void AnchorTable::init_inode()
-{
-  memset(&table_inode, 0, sizeof(table_inode));
-  table_inode.ino = MDS_INO_ANCHORTABLE+mds->get_nodeid();
-  table_inode.layout = g_OSD_FileLayout;
-}
-
-void AnchorTable::reset()
-{  
-  init_inode();
-  opened = true;
-  anchor_map.clear();
-}
 
 /*
  * basic updates
  */
 
-bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, string& ref_dn) 
+bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag) 
 {
-  dout(7) << "add " << std::hex << ino << " dirino " << dirino << std::dec << " ref_dn " << ref_dn << endl;
+  dout(7) << "add " << ino << " dirfrag " << dirfrag << endl;
   
   // parent should be there
-  assert(dirino < 1000 ||             // system dirino
-         anchor_map.count(dirino));   // have
+  assert(dirfrag.ino < MDS_INO_BASE ||             // system dirino
+         anchor_map.count(dirfrag.ino));   // have
   
   if (anchor_map.count(ino) == 0) {
     // new item
-    anchor_map[ ino ] = new Anchor(ino, dirino, ref_dn);
-    dout(10) << "  add: added " << std::hex << ino << std::dec << endl;
+    anchor_map[ino] = Anchor(ino, dirfrag);
+    dout(10) << "  add: added " << anchor_map[ino] << endl;
     return true;
   } else {
-    dout(10) << "  add: had " << std::hex << ino << std::dec << endl;
+    dout(10) << "  add: had " << anchor_map[ino] << endl;
     return false;
   }
 }
 
 void AnchorTable::inc(inodeno_t ino)
 {
-  dout(7) << "inc " << std::hex << ino << std::dec << endl;
+  dout(7) << "inc " << ino << endl;
 
-  assert(anchor_map.count(ino) != 0);
-  Anchor *anchor = anchor_map[ino];
-  assert(anchor);
+  assert(anchor_map.count(ino));
+  Anchor &anchor = anchor_map[ino];
 
   while (1) {
-    anchor->nref++;
+    anchor.nref++;
       
-    dout(10) << "  inc: record " << std::hex << ino << std::dec << " now " << anchor->nref << endl;
-    ino = anchor->dirino;
+    dout(10) << "  inc: record now " << anchor << endl;
+    ino = anchor.dirfrag.ino;
     
     if (ino == 0) break;
     if (anchor_map.count(ino) == 0) break;
     anchor = anchor_map[ino];      
-    assert(anchor);
   }
 }
 
 void AnchorTable::dec(inodeno_t ino) 
 {
-  dout(7) << "dec " << std::hex << ino << std::dec << endl;
+  dout(7) << "dec " << ino << endl;
 
-  assert(anchor_map.count(ino) != 0);
-  Anchor *anchor = anchor_map[ino];
-  assert(anchor);
+  assert(anchor_map.count(ino));
+  Anchor &anchor = anchor_map[ino];
 
   while (true) {
-    anchor->nref--;
+    anchor.nref--;
       
-    if (anchor->nref == 0) {
-      dout(10) << "  dec: record " << std::hex << ino << std::dec << " now 0, removing" << endl;
-      inodeno_t dirino = anchor->dirino;
+    if (anchor.nref == 0) {
+      dout(10) << "  dec: record " << anchor << " now 0, removing" << endl;
+      dirfrag_t dirfrag = anchor.dirfrag;
       anchor_map.erase(ino);
-      delete anchor;
-      ino = dirino;
+      ino = dirfrag.ino;
     } else {
-      dout(10) << "  dec: record " << std::hex << ino << std::dec << " now " << anchor->nref << endl;
-      ino = anchor->dirino;
+      dout(10) << "  dec: record now " << anchor << endl;
+      ino = anchor.dirfrag.ino;
     }
     
     if (ino == 0) break;
     if (anchor_map.count(ino) == 0) break;
     anchor = anchor_map[ino];      
-    assert(anchor);
   }
 }
 
@@ -126,42 +104,242 @@ void AnchorTable::dec(inodeno_t ino)
  * high level 
  */
 
-void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace)
+
+// LOOKUP
+
+void AnchorTable::handle_lookup(MAnchor *req)
 {
-  dout(7) << "lookup " << std::hex << ino << std::dec << endl;
+  inodeno_t ino = req->get_ino();
+  dout(7) << "handle_lookup " << ino << endl;
 
   assert(anchor_map.count(ino) == 1);
-  Anchor *anchor = anchor_map[ino];
-  assert(anchor);
+  Anchor &anchor = anchor_map[ino];
 
+  vector<Anchor> trace;
   while (true) {
-    dout(10) << "  record " << std::hex << anchor->ino << " dirino " << anchor->dirino << std::dec << " ref_dn " << anchor->ref_dn << endl;
+    dout(10) << "handle_lookup  adding " << anchor << endl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
 
-    if (anchor->dirino < MDS_INO_BASE) break;
+    if (anchor.dirfrag.ino < MDS_INO_BASE) break;
 
-    assert(anchor_map.count(anchor->dirino) == 1);
-    anchor = anchor_map[anchor->dirino];
-    assert(anchor);
+    assert(anchor_map.count(anchor.dirfrag.ino) == 1);
+    anchor = anchor_map[anchor.dirfrag.ino];
   }
+
+  // reply
+  MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, ino);
+  reply->set_trace(trace);
+  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+
+  delete req;
 }
 
-void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace)
+
+// MIDLEVEL
+
+void AnchorTable::create_prepare(inodeno_t ino, vector<Anchor>& trace)
 {
-  dout(7) << "create " << std::hex << ino << std::dec << endl;
-  
   // make sure trace is in table
   for (unsigned i=0; i<trace.size(); i++) 
-    add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn);
-
-  inc(ino);  // ok!
+    add(trace[i].ino, trace[i].dirfrag);
+  inc(ino);
+  pending_create.insert(ino);  // so we can undo
+  version++;
 }
 
-void AnchorTable::destroy(inodeno_t ino)
+void AnchorTable::create_commit(inodeno_t ino)
 {
-  dec(ino);
+  pending_create.erase(ino);
+  version++;
 }
 
+void AnchorTable::destroy_prepare(inodeno_t ino)
+{
+  pending_destroy.insert(ino);
+  version++;
+}
+
+void AnchorTable::destroy_commit(inodeno_t ino)
+{
+  // apply
+  dec(ino);  
+  pending_destroy.erase(ino);
+  version++;
+}
+
+void AnchorTable::update_prepare(inodeno_t ino, vector<Anchor>& trace)
+{
+  pending_update[ino] = trace;
+  version++;
+}
+
+void AnchorTable::update_commit(inodeno_t ino) 
+{
+  // remove old
+  dec(ino);
+
+  // add new
+  // make sure new trace is in table
+  vector<Anchor> &trace = pending_update[ino];
+  for (unsigned i=0; i<trace.size(); i++) 
+    add(trace[i].ino, trace[i].dirfrag);
+  inc(ino);
+
+  pending_update.erase(ino);
+  version++;
+}
+
+
+// CREATE
+
+class C_AT_CreatePrepare : public Context {
+  AnchorTable *at;
+  MAnchor *req;
+public:
+  C_AT_CreatePrepare(AnchorTable *a, MAnchor *r) :
+    at(a), req(r) { }
+  void finish(int r) {
+    at->_create_prepare_logged(req);
+  }
+};
+
+void AnchorTable::handle_create_prepare(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  vector<Anchor>& trace = req->get_trace();
+
+  dout(7) << "handle_create_prepare " << ino << endl;
+  
+  create_prepare(ino, trace);
+
+  // log it
+  EAnchor *le = new EAnchor(ANCHOR_OP_CREATE_PREPARE, ino, version);
+  le->set_trace(trace);
+  mds->mdlog->submit_entry(le, 
+			   new C_AT_CreatePrepare(this, req));
+}
+  
+void AnchorTable::_create_prepare_logged(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "_create_prepare_logged " << ino << endl;
+
+  // reply
+  MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_ACK, ino);
+  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+
+  delete req;
+}
+
+void AnchorTable::handle_create_commit(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "handle_create_commit " << ino << endl;
+  
+  create_commit(ino);
+
+  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_CREATE_COMMIT, ino, version));
+}
+
+
+// DESTROY
+
+class C_AT_DestroyPrepare : public Context {
+  AnchorTable *at;
+  MAnchor *req;
+public:
+  C_AT_DestroyPrepare(AnchorTable *a, MAnchor *r) :
+    at(a), req(r) { }
+  void finish(int r) {
+    at->_destroy_prepare_logged(req);
+  }
+};
+
+void AnchorTable::handle_destroy_prepare(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "handle_destroy_prepare " << ino << endl;
+
+  destroy_prepare(ino);
+
+  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_DESTROY_PREPARE, ino, version),
+			   new C_AT_DestroyPrepare(this, req));
+}
+
+void AnchorTable::_destroy_prepare_logged(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "_destroy_prepare_logged " << ino << endl;
+
+  // reply
+  MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_ACK, ino);
+  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+
+  delete req;
+}
+
+void AnchorTable::handle_destroy_commit(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "handle_destroy_commit " << ino << endl;
+  
+  destroy_commit(ino);
+
+  // log
+  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_DESTROY_COMMIT, ino, version));
+}
+
+
+// UPDATE
+
+class C_AT_UpdatePrepare : public Context {
+  AnchorTable *at;
+  MAnchor *req;
+public:
+  C_AT_UpdatePrepare(AnchorTable *a, MAnchor *r) :
+    at(a), req(r) { }
+  void finish(int r) {
+    at->_update_prepare_logged(req);
+  }
+};
+
+void AnchorTable::handle_update_prepare(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  vector<Anchor>& trace = req->get_trace();
+
+  dout(7) << "handle_update_prepare " << ino << endl;
+  
+  update_prepare(ino, trace);
+
+  // log it
+  EAnchor *le = new EAnchor(ANCHOR_OP_UPDATE_PREPARE, ino, version);
+  le->set_trace(trace);
+  mds->mdlog->submit_entry(le, 
+			   new C_AT_UpdatePrepare(this, req));
+}
+  
+void AnchorTable::_update_prepare_logged(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "_update_prepare_logged " << ino << endl;
+
+  // reply
+  MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_ACK, ino);
+  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+
+  delete req;
+}
+
+void AnchorTable::handle_update_commit(MAnchor *req)
+{
+  inodeno_t ino = req->get_ino();
+  dout(7) << "handle_update_commit " << ino << endl;
+  
+  update_commit(ino);
+
+  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_UPDATE_COMMIT, ino, version));
+}
 
 
 /*
@@ -171,8 +349,8 @@ void AnchorTable::destroy(inodeno_t ino)
 void AnchorTable::dispatch(Message *m)
 {
   switch (m->get_type()) {
-  case MSG_MDS_ANCHORREQUEST:
-    handle_anchor_request((MAnchorRequest*)m);
+  case MSG_MDS_ANCHOR:
+    handle_anchor_request((MAnchor*)m);
     break;
     
   default:
@@ -181,14 +359,13 @@ void AnchorTable::dispatch(Message *m)
 }
 
 
-
-void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
+void AnchorTable::handle_anchor_request(class MAnchor *req)
 {
   // make sure i'm open!
   if (!opened) {
     dout(7) << "not open yet" << endl;
     
-    waiting_for_open.push_back(new C_MDS_RetryMessage(mds,m));
+    waiting_for_open.push_back(new C_MDS_RetryMessage(mds, req));
     
     if (!opening) {
       opening = true;
@@ -198,34 +375,38 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
   }
 
   // go
-  MAnchorReply *reply = new MAnchorReply(m);
-  
-  switch (m->get_op()) {
+  switch (req->get_op()) {
 
   case ANCHOR_OP_LOOKUP:
-    lookup( m->get_ino(), reply->get_trace() );
+    handle_lookup(req);
     break;
 
-  case ANCHOR_OP_UPDATE:
-    destroy( m->get_ino() );
-    create( m->get_ino(), m->get_trace() );
+  case ANCHOR_OP_CREATE_PREPARE:
+    handle_create_prepare(req);
+    break;
+  case ANCHOR_OP_CREATE_COMMIT:
+    handle_create_commit(req);
     break;
 
-  case ANCHOR_OP_CREATE:
-    create( m->get_ino(), m->get_trace() );
+  case ANCHOR_OP_DESTROY_PREPARE:
+    handle_destroy_prepare(req);
+    break;
+  case ANCHOR_OP_DESTROY_COMMIT:
+    handle_destroy_commit(req);
     break;
 
-  case ANCHOR_OP_DESTROY:
-    destroy( m->get_ino() );
+
+  case ANCHOR_OP_UPDATE_PREPARE:
+    handle_update_prepare(req);
+    break;
+  case ANCHOR_OP_UPDATE_COMMIT:
+    handle_update_commit(req);
     break;
 
   default:
     assert(0);
   }
 
-  // send reply
-  mds->messenger->send_message(reply, m->get_source_inst(), m->get_source_port());
-  delete m;
 }
 
 
@@ -237,36 +418,45 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
 
 void AnchorTable::save(Context *onfinish)
 {
-  dout(7) << "save" << endl;
+  dout(7) << "save v " << version << endl;
   if (!opened) return;
   
   // build up write
-  bufferlist tabbl;
+  bufferlist bl;
 
-  int num = anchor_map.size();
-  tabbl.append((char*)&num, sizeof(int));
+  // version
+  bl.append((char*)&version, sizeof(version));
 
-  for (hash_map<inodeno_t, Anchor*>::iterator it = anchor_map.begin();
+  // # anchors
+  size_t size = anchor_map.size();
+  bl.append((char*)&size, sizeof(size));
+
+  // anchors
+  for (hash_map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
        it != anchor_map.end();
        it++) {
-    dout(14) << " saving anchor for " << std::hex << it->first << std::dec << endl;
-    Anchor *a = it->second;
-    assert(a);
-    a->_encode(tabbl);
+    it->second._encode(bl);
+    dout(15) << "save encoded " << it->second << endl;
   }
 
-  bufferlist bl;
-  size_t size = tabbl.length();
-  bl.append((char*)&size, sizeof(size));
-  bl.claim_append(tabbl);
-
-  dout(7) << " " << num << " anchors, " << size << " bytes" << endl;
+  // pending
+  ::_encode(pending_create, bl);
+  ::_encode(pending_destroy, bl);
   
+  size_t s = pending_update.size();
+  bl.append((char*)&s, sizeof(s));
+  for (map<inodeno_t, vector<Anchor> >::iterator p = pending_update.begin();
+       p != pending_update.end();
+       ++p) {
+    bl.append((char*)&p->first, sizeof(p->first));
+    ::_encode(p->second, bl);
+  }
+
   // write!
-  mds->filer->write(table_inode,
-                    0, bl.length(),
-                    bl, 0, 
-                    NULL, onfinish);
+  mds->objecter->write(object_t(MDS_INO_ANCHORTABLE+mds->get_nodeid(), 0),
+		       0, bl.length(),
+		       bl, 
+		       NULL, onfinish);
 }
 
 
@@ -274,85 +464,64 @@ void AnchorTable::save(Context *onfinish)
 class C_AT_Load : public Context {
   AnchorTable *at;
 public:
-  size_t size;
   bufferlist bl;
-  C_AT_Load(size_t size, AnchorTable *at) {
-    this->size = size;
-    this->at = at;
-  }
+  C_AT_Load(AnchorTable *a) : at(a) {}
   void finish(int result) {
     assert(result > 0);
-
-    at->load_2(size, bl);
-  }
-};
-
-class C_AT_LoadSize : public Context {
-  AnchorTable *at;
-  MDS *mds;
-public:
-  bufferlist bl;
-  C_AT_LoadSize(AnchorTable *at, MDS *mds) {
-    this->at = at;
-    this->mds = mds;
-  }
-  void finish(int r) {
-    size_t size = 0;
-    assert(bl.length() >= sizeof(size));
-    bl.copy(0, sizeof(size), (char*)&size);
-    cout << "r is " << r << " size is " << size << endl;
-    if (r > 0 && size > 0) {
-      C_AT_Load *c = new C_AT_Load(size, at);
-      mds->filer->read(at->table_inode,
-                       sizeof(size), size,
-                       &c->bl,
-                       c);
-    } else {
-      // fail
-      bufferlist empty;
-      at->load_2(0, empty);
-    }
+    at->_loaded(bl);
   }
 };
 
 void AnchorTable::load(Context *onfinish)
 {
   dout(7) << "load" << endl;
-  init_inode();
-
   assert(!opened);
 
   waiting_for_open.push_back(onfinish);
-  
-  C_AT_LoadSize *c = new C_AT_LoadSize(this, mds);
-  mds->filer->read(table_inode,
-                   0, sizeof(size_t),
-                   &c->bl,
-                   c);
+
+  C_AT_Load *fin = new C_AT_Load(this);
+  mds->objecter->read(object_t(MDS_INO_ANCHORTABLE+mds->get_nodeid(), 0),
+		      0, 0, &fin->bl, fin);
 }
 
-void AnchorTable::load_2(size_t size, bufferlist& bl)
+void AnchorTable::_loaded(bufferlist& bl)
 {
-  // num
+  dout(10) << "_loaded got " << bl.length() << " bytes" << endl;
+
   int off = 0;
-  int num;
-  bl.copy(0, sizeof(num), (char*)&num);
-  off += sizeof(num);
-  
-  // parse anchors
-  for (int i=0; i<num; i++) {
-    Anchor *a = new Anchor;
-    a->_decode(bl, off);
-    dout(10) << "load_2 decoded " << std::hex << a->ino << " dirino " << a->dirino << std::dec << " ref_dn " << a->ref_dn << endl;
-    anchor_map[a->ino] = a;
+  bl.copy(off, sizeof(version), (char*)&version);
+  off += sizeof(version);
+
+  size_t size;
+  bl.copy(off, sizeof(size), (char*)&size);
+  off += sizeof(size);
+
+  for (size_t n=0; n<size; n++) {
+    Anchor a;
+    a._decode(bl, off);
+    anchor_map[a.ino] = a;   
+    dout(15) << "load_2 decoded " << a << endl;
   }
 
-  dout(7) << "load_2 got " << num << " anchors" << endl;
+  ::_decode(pending_create, bl, off);
+  ::_decode(pending_destroy, bl, off);
 
+  size_t s;
+  bl.copy(off, sizeof(s), (char*)&s);
+  off += sizeof(s);
+  for (size_t i=0; i<s; i++) {
+    inodeno_t ino;
+    bl.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    ::_decode(pending_update[ino], bl, off);
+  }
+
+  assert(off == (int)bl.length());
+
+  // done.
   opened = true;
   opening = false;
-
-  // finish
+  
   finish_contexts(waiting_for_open);
 }
 

@@ -325,22 +325,18 @@ void CInode::make_path(string& s)
   }
 }
 
-void CInode::make_anchor_trace(vector<Anchor*>& trace)
+void CInode::make_anchor_trace(vector<Anchor>& trace)
 {
   if (parent) {
     parent->dir->inode->make_anchor_trace(trace);
-    
-    dout(7) << "make_anchor_trace adding " << ino() << " dirino " << parent->dir->inode->ino() << " dn " << parent->name << endl;
-    trace.push_back( new Anchor(ino(), 
-                                parent->dir->inode->ino(),
-                                parent->name) );
+    trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
+    dout(7) << "make_anchor_trace added " << trace.back() << endl;
   }
   else if (state_test(STATE_DANGLING)) {
     dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
-    string ref_dn;
-    trace.push_back( new Anchor(ino(),
-                                MDS_INO_INODEFILE_OFFSET+dangling_auth.first,
-                                ref_dn) );
+    assert(0);
+    //trace.push_back( Anchor(ino(),
+    //MDS_INO_INODEFILE_OFFSET+dangling_auth.first) );
   }
   else 
     assert(is_root());

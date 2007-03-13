@@ -114,7 +114,7 @@ class MDS : public Dispatcher {
 
   IdAllocator  *idalloc;
 
-  AnchorTable  *anchormgr;
+  AnchorTable  *anchortable;
   AnchorClient *anchorclient;
 
   Logger       *logger, *logger2;

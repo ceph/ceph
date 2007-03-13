@@ -32,24 +32,34 @@ class AnchorClient : public Dispatcher {
   Messenger *messenger;
   MDSMap *mdsmap;
 
-  // remote state
-  hash_map<inodeno_t, Context*>  pending_op;
-  hash_map<inodeno_t, Context*>  pending_lookup_context;
-  hash_map<inodeno_t, vector<Anchor*>*>  pending_lookup_trace;
+  // lookups
+  hash_map<inodeno_t, Context*>         pending_lookup;
+  hash_map<inodeno_t, vector<Anchor>*>  pending_lookup_trace;
 
-  void handle_anchor_reply(class MAnchorReply *m);  
+  // updates
+  hash_map<inodeno_t, Context*>  pending_op;
+
+  void handle_anchor_reply(class MAnchor *m);  
 
 
 public:
   AnchorClient(Messenger *ms, MDSMap *mm) : messenger(ms), mdsmap(mm) {}
   
-  // async user interface
-  void lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
-  void create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
-  void update(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
-  void destroy(inodeno_t ino, Context *onfinish);
-
   void dispatch(Message *m);
+
+  // async user interface
+  void lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinish);
+
+  void prepare_create(inodeno_t ino, vector<Anchor>& trace, Context *onfinish);
+  void commit_create(inodeno_t ino);
+
+  void prepare_destroy(inodeno_t ino, Context *onfinish);
+  void commit_destroy(inodeno_t ino);
+
+  void prepare_update(inodeno_t ino, vector<Anchor>& trace, Context *onfinish);
+  void commit_update(inodeno_t ino);
+
+
 };
 
 #endif

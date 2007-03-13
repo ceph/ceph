@@ -26,7 +26,7 @@ using namespace std;
 #define MDS_PORT_RENAMER  7
 
 #define MDS_PORT_ANCHORCLIENT 10
-#define MDS_PORT_ANCHORMGR    11
+#define MDS_PORT_ANCHORTABLE  11
 
 
 
@@ -38,7 +38,6 @@ struct dirfrag_t {
   frag_t    frag;
 
   dirfrag_t() { }
-  //dirfrag_t(inodeno_t i) : ino(i) { }
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 };
 

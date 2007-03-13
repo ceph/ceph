@@ -63,9 +63,10 @@ class CInode : public MDSCacheObject {
   static const int PIN_REQUEST =   -10;  // request is logging, finishing
   static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
   static const int PIN_ANCHORING = 12;
-  static const int PIN_OPENINGDIR = 13;
-  static const int PIN_REMOTEPARENT = 14;
-  static const int PIN_DENTRYLOCK = 15;
+  static const int PIN_UNANCHORING = 13;
+  static const int PIN_OPENINGDIR = 14;
+  static const int PIN_REMOTEPARENT = 15;
+  static const int PIN_DENTRYLOCK = 16;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -80,6 +81,7 @@ class CInode : public MDSCacheObject {
     case PIN_REQUEST: return "request";
     case PIN_RENAMESRC: return "renamesrc";
     case PIN_ANCHORING: return "anchoring";
+    case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_DENTRYLOCK: return "dentrylock";
@@ -94,9 +96,9 @@ class CInode : public MDSCacheObject {
   static const int STATE_UNSAFE =     (1<<3);   // not logged yet
   static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
   static const int STATE_UNLINKING =  (1<<5);
-  static const int STATE_PROXY =      (1<<6);   // can't expire yet
-  static const int STATE_EXPORTING =  (1<<7);   // on nonauth bystander.
-  static const int STATE_ANCHORING =  (1<<8);
+  static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
+  static const int STATE_ANCHORING =  (1<<7);
+  static const int STATE_UNANCHORING = (1<<8);
   static const int STATE_OPENINGDIR = (1<<9);
   //static const int STATE_RENAMING =   (1<<8);  // moving me
   //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
@@ -111,23 +113,24 @@ class CInode : public MDSCacheObject {
     // triggers: handle_disocver_reply
   static const int WAIT_LINK        = (1<<14);  // as in remotely nlink++
   static const int WAIT_ANCHORED    = (1<<15);
-  static const int WAIT_UNLINK      = (1<<16);  // as in remotely nlink--
-  static const int WAIT_HARDR       = (1<<17);  // 131072
-  static const int WAIT_HARDW       = (1<<18);  // 262...
-  static const int WAIT_HARDB       = (1<<19);
+  static const int WAIT_UNANCHORED  = (1<<16);
+  static const int WAIT_UNLINK      = (1<<17);  // as in remotely nlink--
+  static const int WAIT_HARDR       = (1<<18);  // 131072
+  static const int WAIT_HARDW       = (1<<19);  // 262...
+  static const int WAIT_HARDB       = (1<<20);
   static const int WAIT_HARDRWB     = (WAIT_HARDR|WAIT_HARDW|WAIT_HARDB);
-  static const int WAIT_HARDSTABLE  = (1<<20);
-  static const int WAIT_HARDNORD    = (1<<21);
-  static const int WAIT_FILER       = (1<<22);
-  static const int WAIT_FILEW       = (1<<23);
-  static const int WAIT_FILEB       = (1<<24);
+  static const int WAIT_HARDSTABLE  = (1<<21);
+  static const int WAIT_HARDNORD    = (1<<22);
+  static const int WAIT_FILER       = (1<<23);
+  static const int WAIT_FILEW       = (1<<24);
+  static const int WAIT_FILEB       = (1<<25);
   static const int WAIT_FILERWB     = (WAIT_FILER|WAIT_FILEW|WAIT_FILEB);
-  static const int WAIT_FILESTABLE  = (1<<25);
-  static const int WAIT_FILENORD    = (1<<26);
-  static const int WAIT_FILENOWR    = (1<<27);
-  static const int WAIT_RENAMEACK       =(1<<28);
-  static const int WAIT_RENAMENOTIFYACK =(1<<29);
-  static const int WAIT_CAPS            =(1<<30);
+  static const int WAIT_FILESTABLE  = (1<<26);
+  static const int WAIT_FILENORD    = (1<<27);
+  static const int WAIT_FILENOWR    = (1<<28);
+  static const int WAIT_RENAMEACK       =(1<<29);
+  static const int WAIT_RENAMENOTIFYACK =(1<<30);
+  static const int WAIT_CAPS            =(1<<31);
   static const int WAIT_ANY           = 0xffffffff;
 
   // misc
@@ -225,7 +228,6 @@ protected:
   bool is_anchored() { return inode.anchored; }
 
   bool is_root() { return state & STATE_ROOT; }
-  bool is_proxy() { return state & STATE_PROXY; }
 
   bool is_auth() { return state & STATE_AUTH; }
   void set_auth(bool auth);
@@ -247,7 +249,7 @@ protected:
 
   // -- misc -- 
   void make_path(string& s);
-  void make_anchor_trace(vector<class Anchor*>& trace);
+  void make_anchor_trace(vector<class Anchor>& trace);
 
 
 

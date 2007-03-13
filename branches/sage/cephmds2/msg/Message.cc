@@ -106,8 +106,7 @@ using namespace std;
 
 #include "messages/MHeartbeat.h"
 
-#include "messages/MAnchorRequest.h"
-#include "messages/MAnchorReply.h"
+#include "messages/MAnchor.h"
 #include "messages/MInodeLink.h"
 #include "messages/MInodeLinkAck.h"
 
@@ -415,11 +414,8 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     m = new MCacheExpire();
     break;
 
-  case MSG_MDS_ANCHORREQUEST:
-    m = new MAnchorRequest();
-    break;
-  case MSG_MDS_ANCHORREPLY:
-    m = new MAnchorReply();
+  case MSG_MDS_ANCHOR:
+    m = new MAnchor();
     break;
 
   case MSG_MDS_INODELINK:

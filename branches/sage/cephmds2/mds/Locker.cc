@@ -304,15 +304,16 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
   CInode *in = mdcache->get_inode(m->get_ino());
   assert(in);
-  assert(in->is_auth() || in->is_proxy());
+  assert(in->is_auth());// || in->is_proxy());
   
   dout(7) << "handle_inode_file_caps replica mds" << m->get_from() << " wants caps " << cap_string(m->get_caps()) << " on " << *in << endl;
 
-  if (in->is_proxy()) {
+  /*if (in->is_proxy()) {
     dout(7) << "proxy, fw" << endl;
     mds->send_message_mds(m, in->authority().first, MDS_PORT_LOCKER);
     return;
   }
+  */
 
   if (m->get_caps())
     in->mds_caps_wanted[m->get_from()] = m->get_caps();
@@ -753,10 +754,10 @@ void Locker::handle_lock_inode_hard(MLock *m)
   if (LOCK_AC_FOR_AUTH(m->get_action())) {
     // auth
     assert(in);
-    assert(in->is_auth() || in->is_proxy());
+    assert(in->is_auth());// || in->is_proxy());
     dout(7) << "handle_lock_inode_hard " << *in << " hardlock=" << in->hardlock << endl;  
 
-    if (in->is_proxy()) {
+    /*if (in->is_proxy()) {
       // fw
       int newauth = in->authority().first;
       assert(newauth >= 0);
@@ -769,6 +770,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
       }
       return;
     }
+    */
   } else {
     // replica
     if (!in) {
@@ -1500,10 +1502,10 @@ void Locker::handle_lock_inode_file(MLock *m)
   if (LOCK_AC_FOR_AUTH(m->get_action())) {
     // auth
     assert(in);
-    assert(in->is_auth() || in->is_proxy());
+    assert(in->is_auth());// || in->is_proxy());
     dout(7) << "handle_lock_inode_file " << *in << " hardlock=" << in->hardlock << endl;  
         
-    if (in->is_proxy()) {
+    /*if (in->is_proxy()) {
       // fw
       int newauth = in->authority().first;
       assert(newauth >= 0);
@@ -1516,6 +1518,7 @@ void Locker::handle_lock_inode_file(MLock *m)
       }
       return;
     }
+    */
   } else {
     // replica
     if (!in) {

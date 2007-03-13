@@ -23,6 +23,7 @@
 #include "events/EUnlink.h"
 #include "events/EMount.h"
 #include "events/EClientMap.h"
+#include "events/EAnchor.h"
 #include "events/EAlloc.h"
 #include "events/EPurgeFinish.h"
 #include "events/EExport.h"
@@ -52,6 +53,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_PURGEFINISH: le = new EPurgeFinish(); break;
   case EVENT_MOUNT: le = new EMount(); break;
   case EVENT_CLIENTMAP: le = new EClientMap(); break;
+  case EVENT_ANCHOR: le = new EAnchor(); break;
   case EVENT_ALLOC: le = new EAlloc(); break;
   case EVENT_EXPORT: le = new EExport; break;
   case EVENT_IMPORTSTART: le = new EImportStart; break;
