@@ -16,23 +16,23 @@
 #ifndef __CRYPTOLIB_H
 #define __CRYPTOLIB_H
 
-#include<crypto++/cryptlib.h>
+#include<cryptopp/cryptlib.h>
 //one-way functions
-#include<crypto++/sha.h>
-#include<crypto++/md5.h>
-#include<crypto++/iterhash.h>
-#include<crypto++/hex.h>
+#include<cryptopp/sha.h>
+#include<cryptopp/md5.h>
+#include<cryptopp/iterhash.h>
+#include<cryptopp/hex.h>
 //PK signatures
-#include<crypto++/rsa.h>
-#include<crypto++/files.h>
-#include<crypto++/rng.h>
-#include<crypto++/randpool.h>
-#include<crypto++/esign.h>
+#include<cryptopp/rsa.h>
+#include<cryptopp/files.h>
+#include<cryptopp/rng.h>
+#include<cryptopp/randpool.h>
+#include<cryptopp/esign.h>
 //encryption/decryption
-#include<crypto++/modes.h>
-#include<crypto++/rc5.h>
-#include<crypto++/aes.h>
-#include<crypto++/rijndael.h>
+#include<cryptopp/modes.h>
+#include<cryptopp/rc5.h>
+#include<cryptopp/aes.h>
+#include<cryptopp/rijndael.h>
 
 #include<iostream>
 
