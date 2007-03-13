@@ -831,7 +831,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   // this should be empty!!
   assert(bh->rx_ioh == 0);
   
-  dout(20) << "bh_read  " << *bh << " from " << ex << endl;
+  dout(20) << "bh_read  " << *on << " " << *bh << " from " << ex << endl;
   
   C_OC_RxFinish *fin = new C_OC_RxFinish(ebofs_lock, on->oc, 
                                          bh->start(), bh->length(),
@@ -877,7 +877,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   if (shouldbe)
     assert(ex.length == 1 && ex.start == shouldbe);
 
-  dout(20) << "bh_write  " << *bh << " to " << ex << endl;
+  dout(20) << "bh_write  " << *on << " " << *bh << " to " << ex << endl;
 
   //assert(bh->tx_ioh == 0);
 

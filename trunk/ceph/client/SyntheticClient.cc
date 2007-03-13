@@ -1017,7 +1017,11 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
     dout(2) << "reading block " << i << "/" << chunks << endl;
-    client->read(fd, buf, rdsize, i*rdsize);
+    int r = client->read(fd, buf, rdsize, i*rdsize);
+    if (r < rdsize) {
+      dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
+      break;
+    }
 
     // verify fingerprint
     int bad = 0;

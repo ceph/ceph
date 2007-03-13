@@ -2081,7 +2081,8 @@ int Client::open(const char *relpath, int flags)
       dout(7) << "open got caps " << cap_string(new_caps)
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
-              << " from mds" << mds << endl;
+              << " from mds" << mds 
+	      << endl;
 
       int old_caps = f->inode->caps[mds].caps;
       f->inode->caps[mds].caps = new_caps;
@@ -2098,7 +2099,8 @@ int Client::open(const char *relpath, int flags)
       dout(7) << "open got SAME caps " << cap_string(new_caps) 
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
-              << " from mds" << mds << endl;
+              << " from mds" << mds 
+	      << endl;
     }
     
     // put in map
@@ -2294,15 +2296,16 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(10) << "file size: " << in->inode.size << endl;
+    dout(-10) << "file size: " << in->inode.size << endl;
     if (offset > 0 && offset >= in->inode.size) {
       client_lock.Unlock();
       return 0;
     }
-    if (offset + size > (unsigned)in->inode.size) size = (unsigned)in->inode.size - offset;
+    if (offset + size > (off_t)in->inode.size) 
+      size = (off_t)in->inode.size - offset;
     
     if (size == 0) {
-      dout(10) << "read is size=0, returning 0" << endl;
+      dout(-10) << "read is size=0, returning 0" << endl;
       client_lock.Unlock();
       return 0;
     }
@@ -2313,8 +2316,8 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   }
   
   bufferlist blist;   // data will go here
-  int rvalue = 0;
   int r = 0;
+  int rvalue = 0;
 
   if (g_conf.client_oc) {
     // object cache ON
