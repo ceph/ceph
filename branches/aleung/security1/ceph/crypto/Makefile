@@ -1,7 +1,7 @@
 # Makefile for Ceph crypto library
 
 CC = g++
-CFLAGS = -g -Wall -I.
+CFLAGS = -g -O3 -Wall -I.
 LIBS = -lpthread -lcryptopp
 #CRYPTOLIBS = /usr/lib/libcrypto++5.2.so
 #CRYPTOLIBS = /usr/lib/libcryptopp.a
