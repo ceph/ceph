@@ -30,6 +30,7 @@
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << dev.get_device_name() << ")."
 #define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << dev.get_device_name() << ")."
 
+
 char *nice_blocks(block_t b) 
 {
   static char s[20];
@@ -1848,6 +1849,7 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   
   if (!on->have_oc()) {  
     // nothing is cached.  return # of extents in file.
+    dout(10) << "_is_cached have onode but no object cache, returning extent count" << endl;
     return on->extent_map.size();
   }
   
@@ -1860,8 +1862,10 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  on->get_oc(&bc)->map_read(bstart, blen, hits, missing, rx, partials);
-  return missing.size() + rx.size() + partials.size();
+  
+  int num_missing = on->get_oc(&bc)->try_map_read(bstart, blen);
+  dout(7) << "_is_cached try_map_read reports " << num_missing << " missing extents" << endl;
+  return num_missing;
 
   // FIXME: actually, we should calculate if these extents are contiguous.
   // and not using map_read, probably...

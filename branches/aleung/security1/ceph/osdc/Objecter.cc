@@ -17,8 +17,8 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << messenger->get_myaddr() << ".objecter "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << messenger->get_myaddr() << ".objecter "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << messenger->get_myname() << ".objecter "
 
 
 // messages ------------------------------
@@ -269,27 +269,31 @@ tid_t Objecter::stat_submit(OSDStat *st)
   ObjectExtent &ex = st->extents.front();
   PG &pg = get_pg( ex.pgid );
 
-  // send
+  // pick tid
   last_tid++;
   assert(client_inc >= 0);
-  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-                         ex.oid, ex.pgid, osdmap->get_epoch(), 
-                         OSD_OP_STAT);
-  dout(10) << "stat_submit " << st << " tid " << last_tid
-           << " oid " << ex.oid
-           << " pg " << ex.pgid
-           << " osd" << pg.acker() 
-           << endl;
 
-  if (pg.acker() >= 0) 
-    messenger->send_message(m, osdmap->get_inst(pg.acker()));
-  
   // add to gather set
   st->tid = last_tid;
   op_stat[last_tid] = st;    
 
   pg.active_tids.insert(last_tid);
 
+  // send?
+  dout(10) << "stat_submit " << st << " tid " << last_tid
+           << " oid " << ex.oid
+           << " pg " << ex.pgid
+           << " osd" << pg.acker() 
+           << endl;
+
+  if (pg.acker() >= 0) {
+	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+						   ex.oid, ex.pgid, osdmap->get_epoch(), 
+						   OSD_OP_STAT);
+
+    messenger->send_message(m, osdmap->get_inst(pg.acker()));
+  }
+  
   return last_tid;
 }
 
@@ -382,21 +386,17 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
   // find OSD
   PG &pg = get_pg( ex.pgid );
 
-  // send
+  // pick tid
   last_tid++;
   assert(client_inc >= 0);
-  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-                         ex.oid, ex.pgid, osdmap->get_epoch(), 
-                         OSD_OP_READ);
-  m->set_length(ex.length);
-  m->set_offset(ex.start);
-  // set ext cap
-  // FIXME mds currently is writing without caps...so we let it
-  // all other (client) writes should have cap
-  if (m->get_client().is_client()) {
-    m->set_user(rd->ext_cap->get_uid());
-    m->set_capability(rd->ext_cap);
-  }
+
+  // add to gather set
+  rd->ops[last_tid] = ex;
+  op_read[last_tid] = rd;    
+
+  pg.active_tids.insert(last_tid);
+
+  // send?
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
@@ -404,15 +404,24 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
            << " osd" << pg.acker() 
            << endl;
 
-  if (pg.acker() >= 0) 
+  if (pg.acker() >= 0) {
+	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+						   ex.oid, ex.pgid, osdmap->get_epoch(), 
+						   OSD_OP_READ);
+	m->set_length(ex.length);
+	m->set_offset(ex.start);
+
+	// set ext cap
+	// FIXME mds currently is writing without caps...so we let it
+	// all other (client) writes should have cap
+	if (m->get_client().is_client()) {
+	  m->set_user(rd->ext_cap->get_uid());
+	  m->set_capability(rd->ext_cap);
+	}
+	
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
+  }
     
-  // add to gather set
-  rd->ops[last_tid] = ex;
-  op_read[last_tid] = rd;    
-
-  pg.active_tids.insert(last_tid);
-
   return last_tid;
 }
 
@@ -650,49 +659,12 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   // find
   PG &pg = get_pg( ex.pgid );
     
-  // send
+  // pick tid
   tid_t tid;
   if (usetid > 0) 
     tid = usetid;
   else
     tid = ++last_tid;
-
-  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
-                         ex.oid, ex.pgid, osdmap->get_epoch(),
-                         wr->op);
-  m->set_length(ex.length);
-  m->set_offset(ex.start);
-  m->set_rev(ex.rev);
-  // only cap for a write, fix later
-  // FIXME mds does writes through this interface without a cap
-  // we let it for now
-  if (wr->op == OSD_OP_WRITE && m->get_client().is_client()) {
-    m->set_user(wr->modify_cap->get_uid());
-    m->set_capability(wr->modify_cap);   
-  }
-
-  if (wr->tid_version.count(tid)) 
-    m->set_version(wr->tid_version[tid]);  // we're replaying this op!
-    
-  // what type of op?
-  switch (wr->op) {
-  case OSD_OP_WRITE:
-    {
-      // map buffer segments into this extent
-      // (may be fragmented bc of striping)
-      bufferlist cur;
-      for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
-           bit != ex.buffer_extents.end();
-           bit++) {
-        bufferlist thisbit;
-        thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
-        cur.claim_append(thisbit);
-      }
-      assert(cur.length() == ex.length);
-      m->set_data(cur);//.claim(cur);
-    }
-    break;
-  }
 
   // add to gather set
   wr->waitfor_ack[tid] = ex;
@@ -703,15 +675,54 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   ++num_unacked;
   ++num_uncommitted;
 
-  // send
+  // send?
   dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
            << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
            << " pg " << ex.pgid 
            << " osd" << pg.primary()
            << endl;
-  if (pg.primary() >= 0)
+  if (pg.primary() >= 0) {
+	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
+						   ex.oid, ex.pgid, osdmap->get_epoch(),
+						   wr->op);
+	m->set_length(ex.length);
+	m->set_offset(ex.start);
+	m->set_rev(ex.rev);
+	
+	// only cap for a write, fix later
+	// FIXME mds does writes through this interface without a cap
+	// we let it for now
+	if (wr->op == OSD_OP_WRITE && m->get_client().is_client()) {
+	  m->set_user(wr->modify_cap->get_uid());
+	  m->set_capability(wr->modify_cap);   
+	}
+
+	if (wr->tid_version.count(tid)) 
+	  m->set_version(wr->tid_version[tid]);  // we're replaying this op!
+    
+	// what type of op?
+	switch (wr->op) {
+	case OSD_OP_WRITE:
+	  {
+		// map buffer segments into this extent
+		// (may be fragmented bc of striping)
+		bufferlist cur;
+		for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
+			 bit != ex.buffer_extents.end();
+			 bit++) {
+		  bufferlist thisbit;
+		  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
+		  cur.claim_append(thisbit);
+      }
+		assert(cur.length() == ex.length);
+		m->set_data(cur);//.claim(cur);
+	  }
+	  break;
+	}
+	
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
+  }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << endl;
   

@@ -645,6 +645,7 @@ protected:
 	   __int64_t uid = -1, __int64_t gid = -1);
   int close(fh_t fh,
 	    __int64_t uid = -1, __int64_t gid = -1);
+  off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1,
 	   __int64_t uid = -1, __int64_t gid = -1);
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1,
@@ -655,14 +656,22 @@ protected:
   int fsync(fh_t fh, bool syncdataonly,
 	    __int64_t uid = -1, __int64_t gid = -1);
 
+
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count,
 		       __int64_t uid = -1, __int64_t gid = -1);
   int lazyio_synchronize(int fd, off_t offset, size_t count,
 			 __int64_t uid = -1, __int64_t gid = -1);
 
-  int describe_layout(char *fn, list<ObjectExtent>& result);
+  // expose file layout
+  int describe_layout(int fd, FileLayout* layout);
+  int get_stripe_unit(int fd);
+  int get_stripe_width(int fd);
+  int get_stripe_period(int fd);
+  int enumerate_layout(int fd, list<ObjectExtent>& result,
+		       off_t length, off_t offset);
 
+  // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);
 
 };

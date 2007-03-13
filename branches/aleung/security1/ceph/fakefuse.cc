@@ -75,6 +75,9 @@ int main(int argc, char **argv) {
   args = nargs;
   vec_to_argv(args, argc, argv);
 
+  // FUSE will chdir("/"); be ready.
+  g_conf.use_abspaths = true;
+
   MonMap *monmap = new MonMap(g_conf.num_mon);
   
   Monitor *mon[g_conf.num_mon];

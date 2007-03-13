@@ -82,12 +82,14 @@ namespace __gnu_cxx {
     }
   };
 
+#ifndef __LP64__
   template<> struct hash<__int64_t> {
     size_t operator()(__int64_t __x) const { 
       static hash<__int32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
+#endif
 
 }
 

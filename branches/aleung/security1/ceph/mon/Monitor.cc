@@ -64,7 +64,8 @@ void Monitor::init()
 
   if (g_conf.mkfs) {
     store->mkfs();
-
+    store->mount();
+    
     // i should have already been provided a key via set_new_private_key().
     // save it.
     // FIXME.

@@ -103,6 +103,9 @@ md_config_t g_conf = {
   
   debug_after: 0,
   
+  // -- misc --
+  use_abspaths: false,      // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
+
   // --- clock ---
   clock_lock: false,
   
@@ -322,7 +325,8 @@ md_config_t g_conf = {
   bdbstore_ffactor: 0,
   bdbstore_nelem: 0,
   bdbstore_pagesize: 0,
-  bdbstore_cachesize: 0
+  bdbstore_cachesize: 0,
+  bdbstore_transactional: false
 #endif // USE_OSBDB
 };
 
@@ -843,6 +847,12 @@ void parse_config_options(std::vector<char*>& args)
     }
     else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
       g_conf.bdbstore_cachesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-transactional") == 0) {
+      g_conf.bdbstore_transactional = true;
+    }
+    else if (strcmp(args[i], "--debug-bdbstore") == 0) {
+      g_conf.debug_bdbstore = atoi(args[++i]);
     }
 #endif // USE_OSBDB
 

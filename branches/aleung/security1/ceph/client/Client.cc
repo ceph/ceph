@@ -134,14 +134,20 @@ Client::Client(Messenger *m, MonMap *mm)
 
 Client::~Client() 
 {
-  if (messenger) { delete messenger; messenger = 0; }
+  tear_down_cache();
+
+  if (objectcacher) { 
+    delete objectcacher; 
+    objectcacher = 0; 
+  }
+
   if (filer) { delete filer; filer = 0; }
-  if (objectcacher) { delete objectcacher; objectcacher = 0; }
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (mdsmap) { delete mdsmap; mdsmap = 0; }
   if (capcache) { delete capcache; capcache = 0; }
 
-  tear_down_cache();
+  if (messenger) { delete messenger; messenger = 0; }
 }
 
 
@@ -957,6 +963,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       if (cap_reap_queue[in->ino()].empty())
         cap_reap_queue.erase(in->ino());
     }
+    delete m;
     return;
   }
 
@@ -984,7 +991,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     } else {
       //dout(0) << "didn't put_inode" << endl;
     }
-    
+    delete m;
     return;
   }
 
@@ -1044,7 +1051,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
       }
     }
     in->fc.set_caps(new_caps, onimplement);
-
   } else {
     // caching off.
 
@@ -2582,7 +2588,8 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
       dout(7) << "open got caps " << cap_string(new_caps)
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
-              << " from mds" << mds << endl;
+              << " from mds" << mds 
+	      << endl;
 
 
       int old_caps = f->inode->caps[mds].caps;
@@ -2600,7 +2607,8 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
       dout(7) << "open got SAME caps " << cap_string(new_caps) 
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
-              << " from mds" << mds << endl;
+              << " from mds" << mds 
+	      << endl;
     }
 
     // put in map
@@ -2745,6 +2753,40 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
 // ------------
 // read, write
 
+
+off_t Client::lseek(fh_t fh, off_t offset, int whence)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lseek(" << fh << ", " << offset << ", " << whence << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  switch (whence) {
+  case SEEK_SET: 
+    f->pos = offset;
+    break;
+
+  case SEEK_CUR:
+    f->pos += offset;
+    break;
+
+  case SEEK_END:
+    f->pos = in->inode.size + offset;
+    break;
+
+  default:
+    assert(0);
+  }
+  
+  off_t pos = f->pos;
+  client_lock.Unlock();
+
+  return pos;
+}
+
+
 // blocking osd interface
 
 int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
@@ -2812,15 +2854,16 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(10) << "file size: " << in->inode.size << endl;
+    dout(-10) << "file size: " << in->inode.size << endl;
     if (offset > 0 && offset >= in->inode.size) {
       client_lock.Unlock();
       return 0;
     }
-    if (offset + size > (unsigned)in->inode.size) size = (unsigned)in->inode.size - offset;
+    if (offset + size > (off_t)in->inode.size) 
+      size = (off_t)in->inode.size - offset;
     
     if (size == 0) {
-      dout(10) << "read is size=0, returning 0" << endl;
+      dout(-10) << "read is size=0, returning 0" << endl;
       client_lock.Unlock();
       return 0;
     }
@@ -2831,8 +2874,8 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   }
   
   bufferlist blist;   // data will go here
-  int rvalue = 0;
   int r = 0;
+  int rvalue = 0;
 
   if (g_conf.client_oc) {
     // object cache ON
@@ -3281,6 +3324,65 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
   client_lock.Unlock();
   return 0;
 }
+
+
+// =========================================
+// layout
+
+
+int Client::describe_layout(int fh, FileLayout *lp)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->describe_layout(" << fh << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  *lp = in->inode.layout;
+
+  client_lock.Unlock();
+  return 0;
+}
+
+int Client::get_stripe_unit(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size;
+}
+
+int Client::get_stripe_width(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size*layout.stripe_count;
+}
+
+int Client::get_stripe_period(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.period();
+}
+
+int Client::enumerate_layout(int fh, list<ObjectExtent>& result,
+			     off_t length, off_t offset)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->enumerate_layout(" << fh << ", " << length << ", " << offset << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  // map to a list of extents
+  filer->file_to_extents(in->inode, offset, length, result);
+
+  client_lock.Unlock();
+  return 0;
+}
+
 
 
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)

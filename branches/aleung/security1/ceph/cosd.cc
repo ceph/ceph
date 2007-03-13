@@ -27,7 +27,7 @@ using namespace std;
 #include "osd/OSD.h"
 #include "ebofs/Ebofs.h"
 
-#include "msg/NewMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
 

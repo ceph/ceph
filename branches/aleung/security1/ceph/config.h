@@ -81,6 +81,9 @@ struct md_config_t {
 
   int debug_after;
 
+  // misc
+  bool use_abspaths;
+
   // clock
   bool clock_lock;
 
@@ -311,6 +314,7 @@ struct md_config_t {
   int bdbstore_nelem;
   int bdbstore_pagesize;
   int bdbstore_cachesize;
+  bool bdbstore_transactional;
 #endif // USE_OSBDB
 };
 

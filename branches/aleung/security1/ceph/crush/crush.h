@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __crush_CRUSH_H
 #define __crush_CRUSH_H
 
@@ -93,7 +106,7 @@ namespace crush {
     int bucketno;
     Hash h;
 
-	hash_map<int, int> parent_map;  // what bucket each leaf/bucket lives in
+    hash_map<int, int> parent_map;  // what bucket each leaf/bucket lives in
 
   public:
     map<int, Rule>     rules;
@@ -163,28 +176,28 @@ namespace crush {
         off += sizeof(r);
         rules[r]._decode(bl,off);
       }
-
-	  // index
-	  build_parent_map();
+      
+      // index
+      build_parent_map();
     }
 
-	void build_parent_map() {
-	  parent_map.clear();
-
-	  // index every bucket
-	  for (map<int, Bucket*>::iterator bp = buckets.begin();
-		   bp != buckets.end();
-		   ++bp) {
-		// index bucket items
-		vector<int> items;
-		bp->second->get_items(items);
-		for (vector<int>::iterator ip = items.begin();
-			 ip != items.end();
-			 ++ip)
-		  parent_map[*ip] = bp->first;
-	  }
-	}
-	 
+    void build_parent_map() {
+      parent_map.clear();
+      
+      // index every bucket
+      for (map<int, Bucket*>::iterator bp = buckets.begin();
+	   bp != buckets.end();
+	   ++bp) {
+	// index bucket items
+	vector<int> items;
+	bp->second->get_items(items);
+	for (vector<int>::iterator ip = items.begin();
+	     ip != items.end();
+	     ++ip)
+	  parent_map[*ip] = bp->first;
+      }
+    }
+    
 
 
   public:
@@ -280,25 +293,25 @@ namespace crush {
                 vector<int>& outvec,
                 bool firstn,
                 set<int>& outset, map<int,float>& overloadmap,
-				bool forcefeed=false,
-				int forcefeedval=-1) {
+		bool forcefeed=false,
+		int forcefeedval=-1) {
       int off = outvec.size();
 
       // for each replica
       for (int rep=0; rep<numrep; rep++) {
         int outv = -1;                   // my result
         
-		// forcefeed?
-		if (forcefeed) {
-		  forcefeed = false;
-		  outvec.push_back(forcefeedval);
-		  continue;
-		}
-
+	// forcefeed?
+	if (forcefeed) {
+	  forcefeed = false;
+	  outvec.push_back(forcefeedval);
+	  continue;
+	}
+	
         // keep trying until we get a non-out, non-colliding item
         int ftotal = 0;
         bool skip_rep = false;
-
+	
         while (1) {
           // start with the input bucket
           Bucket *in = inbucket;
@@ -415,21 +428,21 @@ namespace crush {
       //int numresult = 0;
       result.clear();
 
-	  // determine hierarchical context for first.
-	  list<int> force_stack;
-	  if (forcefeed >= 0) {
-		int t = forcefeed;
-		while (1) {
-		  force_stack.push_front(t);
-		  if (parent_map.count(t) == 0) break;  // reached root, presumably.
-		  //cout << " " << t << " parent is " << parent_map[t] << endl;
-		  t = parent_map[t];
-		}
-	  }
-
+      // determine hierarchical context for first.
+      list<int> force_stack;
+      if (forcefeed >= 0) {
+	int t = forcefeed;
+	while (1) {
+	  force_stack.push_front(t);
+	  if (parent_map.count(t) == 0) break;  // reached root, presumably.
+	  //cout << " " << t << " parent is " << parent_map[t] << endl;
+	  t = parent_map[t];
+	}
+      }
+      
       // working vector
       vector<int> w;   // working variable
-
+      
       // go through each statement
       for (vector<RuleStep>::iterator pc = rule.steps.begin();
            pc != rule.steps.end();
@@ -442,13 +455,13 @@ namespace crush {
           {
             const int arg = pc->args[0];
             //cout << "take " << arg << endl;
-
-			if (!force_stack.empty()) {
-			  int forceval = force_stack.front();
-			  force_stack.pop_front();
-			  assert(arg == forceval);
-			}
-
+	    
+	    if (!force_stack.empty()) {
+	      int forceval = force_stack.front();
+	      force_stack.pop_front();
+	      assert(arg == forceval);
+	    }
+	    
             w.clear();
             w.push_back(arg);
           }
@@ -469,26 +482,26 @@ namespace crush {
             vector<int> out;
 
             // forcefeeding?
-			bool forcing = false;
-			int forceval;
-			if (!force_stack.empty()) {
-			  forceval = force_stack.front();
-			  force_stack.pop_front();
-			  //cout << "priming out with " << forceval << endl;
-			  forcing = true;
-			}
-
+	    bool forcing = false;
+	    int forceval;
+	    if (!force_stack.empty()) {
+	      forceval = force_stack.front();
+	      force_stack.pop_front();
+	      //cout << "priming out with " << forceval << endl;
+	      forcing = true;
+	    }
+	    
             // do each row independently
             for (vector<int>::iterator i = w.begin();
                  i != w.end();
                  i++) {
               assert(buckets.count(*i));
               Bucket *b = buckets[*i];
-			  choose(x, numrep, type, b, out, firstn,
-					 outset, overloadmap,
-					 forcing,
-					 forceval);
-			  forcing = false;  // only once
+	      choose(x, numrep, type, b, out, firstn,
+		     outset, overloadmap,
+		     forcing,
+		     forceval);
+	      forcing = false;  // only once
             } // for inrow
             
             // put back into w

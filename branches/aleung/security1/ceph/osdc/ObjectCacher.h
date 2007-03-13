@@ -150,6 +150,9 @@ class ObjectCacher {
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0)
       {}
+	~Object() {
+	  assert(data.empty());
+	}
 
     object_t get_oid() { return oid; }
     inodeno_t get_ino() { return ino; }
@@ -244,16 +247,7 @@ class ObjectCacher {
     objects_by_ino[ino].insert(o);
     return o;
   }
-  void close_object(Object *ob) {
-    assert(ob->can_close());
-
-    // ok!
-    objects.erase(ob->get_oid());
-    objects_by_ino[ob->get_ino()].erase(ob);
-    if (objects_by_ino[ob->get_ino()].empty())
-      objects_by_ino.erase(ob->get_ino());
-    delete ob;
-  }
+  void close_object(Object *ob);
 
   // bh stats
   Cond  stat_cond;
@@ -332,18 +326,22 @@ class ObjectCacher {
 
   void bh_add(Object *ob, BufferHead *bh) {
     ob->add_bh(bh);
-    if (bh->is_dirty())
+    if (bh->is_dirty()) {
       lru_dirty.lru_insert_top(bh);
-    else
+	  dirty_bh.insert(bh);
+	} else {
       lru_rest.lru_insert_top(bh);
+	}
     bh_stat_add(bh);
   }
   void bh_remove(Object *ob, BufferHead *bh) {
     ob->remove_bh(bh);
-    if (bh->is_dirty())
+    if (bh->is_dirty()) {
       lru_dirty.lru_remove(bh);
-    else
+	  dirty_bh.erase(bh);
+	} else {
       lru_rest.lru_remove(bh);
+	}
     bh_stat_sub(bh);
   }
 
@@ -357,6 +355,7 @@ class ObjectCacher {
 
   bool flush(Object *o);
   off_t release(Object *o);
+  void purge(Object *o);
 
   void rdlock(Object *o);
   void rdunlock(Object *o);
@@ -431,10 +430,17 @@ class ObjectCacher {
     flusher_thread.create();
   }
   ~ObjectCacher() {
-    //lock.Lock();  // hmm.. watch out for deadlock!
+	// we should be empty.
+	assert(objects.empty());
+	assert(lru_rest.lru_get_size() == 0);
+	assert(lru_dirty.lru_get_size() == 0);
+	assert(dirty_bh.empty());
+
+	assert(flusher_thread.is_started());
+    lock.Lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.Signal();
-    //lock.Unlock();
+    lock.Unlock();
     flusher_thread.join();
   }
 
@@ -474,6 +480,8 @@ class ObjectCacher {
 
   bool commit_set(inodeno_t ino, Context *oncommit);
   void commit_all(Context *oncommit=0);
+
+  void purge_set(inodeno_t ino);
 
   off_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
 

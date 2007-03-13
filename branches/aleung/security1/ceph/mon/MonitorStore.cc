@@ -23,7 +23,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
+#include <errno.h>
 
 void MonitorStore::mount()
 {
@@ -35,6 +35,16 @@ void MonitorStore::mount()
     assert(0);
   }
   ::closedir(d);
+
+  if (g_conf.use_abspaths) {
+    // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
+    string old = dir;
+    char *cwd = get_current_dir_name();
+    dir = cwd;
+    delete cwd;
+    dir += "/";
+    dir += old;
+  }
 }
 
 
@@ -89,7 +99,11 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   }
   
   char vs[30];
+#ifdef __LP64__
+  sprintf(vs, "%ld\n", val);
+#else
   sprintf(vs, "%lld\n", val);
+#endif
 
   char tfn[200];
   sprintf(tfn, "%s.new", fn);

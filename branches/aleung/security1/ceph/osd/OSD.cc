@@ -148,7 +148,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
     gethostname(hostname,100);
     
     sprintf(dev_path, "%s/osd%d", ebofs_base_path, whoami);
-    
+
     struct stat sta;
     if (::lstat(dev_path, &sta) != 0)
       sprintf(dev_path, "%s/osd.%s", ebofs_base_path, hostname);    
@@ -870,8 +870,9 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   if (dest.is_osd()) {
     // failed osd.  drop message, report to mon.
     int mon = monmap->pick_mon();
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+    dout(0) << "ms_handle_failure " << inst 
             << ", dropping and reporting to mon" << mon 
+	    << " " << *m
             << endl;
     messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()),
                             monmap->get_inst(mon));
@@ -879,15 +880,16 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   } else if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+    dout(0) << "ms_handle_failure " << inst 
             << ", resending to mon" << mon 
+	    << " " << *m
             << endl;
     messenger->send_message(m, monmap->get_inst(mon));
   }
   else {
     // client?
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping" << endl;
+    dout(0) << "ms_handle_failure " << inst 
+            << ", dropping " << *m << endl;
     delete m;
   }
 }
@@ -3654,7 +3656,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
       struct stat st;
       int r = store->stat(oid, &st);
       if (r >= 0) {
-	if (op->get_offset() + op->get_length() >= st.st_size) {
+	if (op->get_offset() + (off_t)op->get_length() >= (off_t)st.st_size) {
 	  if (op->get_offset()) 
 	    t.truncate(oid, op->get_length() + op->get_offset());
 	  else
