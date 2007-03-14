@@ -1898,7 +1898,11 @@ int Migrator::decode_import_dir(bufferlist& bl,
         inodeno_t ino;
         bl.copy(off, sizeof(ino), (char*)&ino);
         off += sizeof(ino);
-        dir->link_inode(dn, ino);
+	if (dn->is_remote()) {
+	  assert(dn->get_remote_ino() == ino);
+	} else {
+	  dir->link_inode(dn, ino);
+	}
       }
       else if (icode == 'I') {
         // inode

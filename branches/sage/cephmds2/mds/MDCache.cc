@@ -3039,6 +3039,13 @@ void MDCache::anchor_create(CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
 
+  // auth pin
+  if (!in->can_auth_pin()) {
+    dout(7) << "anchor_create not authpinnable, waiting on " << *in << endl;
+    in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
+    return;
+  }
+
   // wait
   in->add_waiter(CInode::WAIT_ANCHORED, onfinish);
 
@@ -3053,6 +3060,7 @@ void MDCache::anchor_create(CInode *in, Context *onfinish)
   // auth: do it
   in->state_set(CInode::STATE_ANCHORING);
   in->get(CInode::PIN_ANCHORING);
+  in->auth_pin();
   
   // make trace
   vector<Anchor> trace;
@@ -3109,6 +3117,7 @@ void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv)
   assert(in->state_test(CInode::STATE_ANCHORING));
   in->state_clear(CInode::STATE_ANCHORING);
   in->put(CInode::PIN_ANCHORING);
+  in->auth_unpin();
   
   // apply update to cache
   in->inode.anchored = true;
@@ -3139,6 +3148,13 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
 
+  // auth pin
+  if (!in->can_auth_pin()) {
+    dout(7) << "anchor_destroy not authpinnable, waiting on " << *in << endl;
+    in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
+    return;
+  }
+
   // wait
   if (onfinish)
     in->add_waiter(CInode::WAIT_UNANCHORED, onfinish);
@@ -3154,6 +3170,7 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   // auth: do it
   in->state_set(CInode::STATE_UNANCHORING);
   in->get(CInode::PIN_UNANCHORING);
+  in->auth_pin();
   
   // do it
   C_MDC_AnchorDestroyPrepared *fin = new C_MDC_AnchorDestroyPrepared(this, in);
@@ -3206,6 +3223,7 @@ void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
   assert(in->state_test(CInode::STATE_UNANCHORING));
   in->state_clear(CInode::STATE_UNANCHORING);
   in->put(CInode::PIN_UNANCHORING);
+  in->auth_unpin();
   
   // apply update to cache
   in->inode.anchored = false;

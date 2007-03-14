@@ -196,6 +196,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export_state(bufferlist& bl) {
+    bl.append((char*)&state, sizeof(state));
     bl.append((char*)&version, sizeof(version));
     bl.append((char*)&projected_version, sizeof(projected_version));
     bl.append((char*)&lockstate, sizeof(lockstate));
@@ -210,6 +211,8 @@ class CDentry : public MDSCacheObject, public LRUObject {
       mark_clean();
   }
   void decode_import_state(bufferlist& bl, int& off, int from, int to) {
+    bl.copy(off, sizeof(state), (char*)&state);
+    off += sizeof(state);
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
     bl.copy(off, sizeof(projected_version), (char*)&projected_version);
