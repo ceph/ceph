@@ -134,7 +134,8 @@ protected:
   {
   }
 
-  void set_new_private_key(string& pk);
+  //void set_new_private_key(string& pk);
+  void set_new_private_key(char *pk);
 
   void init();
   void shutdown();

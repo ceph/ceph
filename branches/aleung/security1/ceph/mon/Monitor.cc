@@ -41,10 +41,11 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
-void Monitor::set_new_private_key(string& pk)
+//void Monitor::set_new_private_key(string& pk)
+void Monitor::set_new_private_key(char *pk)
 {
   dout(10) << "set_new_private_key" << endl;
-  myPrivKey = _fromStr_esignPrivKey(pk);
+  myPrivKey = _fromStr_esignPrivKey(string(pk, ESIGNPRIVSIZE));
   myPubKey = esignPubKey(myPrivKey);
   
   // FIXME.

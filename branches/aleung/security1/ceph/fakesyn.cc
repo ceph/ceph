@@ -105,7 +105,8 @@ int main(int argc, char **argv)
   entity_addr_t a;
   monmap->mon_inst[0] = entity_inst_t(MSG_ADDR_MON(0), a);  // hack ; see FakeMessenger.cc
 
-  string mon_private_key;
+  //string mon_private_key;
+  char mon_private_key[ESIGNPRIVSIZE];
   monmap->generate_key_pair(mon_private_key);
 
   char hostname[100];

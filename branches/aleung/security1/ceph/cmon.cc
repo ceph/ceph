@@ -28,6 +28,8 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
 
 
 class C_Die : public Context {
@@ -76,7 +78,8 @@ int main(int argc, char **argv)
   
   MonMap monmap;
 
-  string new_private_key;
+  //string new_private_key;
+  char new_private_key[ESIGNPRIVSIZE];
 
   if (whoami < 0) {
     // let's assume a standalone monitor
@@ -119,8 +122,8 @@ int main(int argc, char **argv)
   Messenger *m = rank.register_entity(MSG_ADDR_MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);
 
-  if (new_private_key.length())
-    mon->set_new_private_key(new_private_key);
+  //if (new_private_key.length())
+  mon->set_new_private_key(new_private_key);
 
   mon->init();
 

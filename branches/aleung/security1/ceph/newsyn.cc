@@ -199,7 +199,9 @@ int main(int argc, char **argv)
   MonMap *monmap = new MonMap(g_conf.num_mon);
   
   // need a key pair
-  string mon_private_key;
+  //string mon_private_key;
+  //monmap->generate_key_pair(mon_private_key);
+  char mon_private_key[ESIGNPRIVSIZE];
   monmap->generate_key_pair(mon_private_key);
 
   pair<int,int> mpiwho = mpi_bootstrap_new(argc, argv, monmap);

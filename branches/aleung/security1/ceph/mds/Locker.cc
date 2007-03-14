@@ -224,6 +224,9 @@ Capability* Locker::issue_new_caps(CInode *in,
 ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   dout(3) << "issue_new_extcaps for mode " << mode << " on " << *in << endl;
 
+  if (g_conf.secure_io == 0)
+    return 0;
+
   utime_t setup_time_start = g_clock.now();
   // get the uid
   uid_t my_user = req->get_caller_uid();

@@ -58,22 +58,26 @@ class ClientCapCache {
 
   ClientCapCache (Messenger *m, Client *cli, Mutex& l) : messenger(m),
 							 client(cli), lock(l),
-							 cleaner_stop(false),
+							 cleaner_stop(true),
 							 cleaner_thread(this),
 							 renewer_stop(false),
 							 renewer_thread(this)
   {
-    cleaner_thread.create();
-    renewer_thread.create();
+    if (g_conf.renewal) {
+      cleaner_thread.create();
+      renewer_thread.create();
+    }
   }
   ~ClientCapCache () {
     cleaner_stop = true;
-    cleaner_cond.Signal();
-    cleaner_thread.join();
-
     renewer_stop = true;
-    renewer_cond.Signal();
-    renewer_thread.join();
+
+    if (g_conf.renewal) {
+      cleaner_cond.Signal();
+      cleaner_thread.join();
+      renewer_cond.Signal();
+      renewer_thread.join();
+    }
   }
 
  private:

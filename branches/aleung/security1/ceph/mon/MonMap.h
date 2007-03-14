@@ -29,20 +29,24 @@ class MonMap {
   int       num_mon;
   vector<entity_inst_t> mon_inst;
   int       last_mon;    // last mon i talked to
-  string pub_str_key;
+  //string pub_str_key;
+  char pub_str_key[ESIGNKEYSIZE];
   esignPub pub_key;
   bool keyConvert;
 
   MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {}
   
-  void generate_key_pair(string& private_key) {
+  //void generate_key_pair(string& private_key) {
+  // private_key is assumed to already be allocated to right size
+  void generate_key_pair(char *private_key) {
     esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
-    private_key = privToString(tempKey);
+    //private_key = privToString(tempKey);
+    memcpy(private_key, privToString(tempKey).c_str(), ESIGNPRIVSIZE);
     pub_key = esignPubKey(tempKey);
-    pub_str_key = pubToString(pub_key);
+    //pub_str_key = pubToString(pub_key);
+    memcpy(pub_str_key, pubToString(pub_key).c_str(), sizeof(pub_str_key));
     // now throw away the private key
     keyConvert = false;
-    //assert(0); // FIXME
   }
 
 
@@ -66,17 +70,23 @@ class MonMap {
   }
 
   // key mutator
-  void set_str_key(string key) {
-    pub_str_key = key;
+  void set_str_key(char *key) {
+    memcpy(pub_str_key, key, sizeof(pub_str_key));
   }
+  //void set_str_key(string key) {
+  //pub_str_key = key;
+  //}
   
   // key access
-  const string get_str_key() {
+  const char* get_str_key() {
     return pub_str_key;
   }
+  //const string get_str_key() {
+  //return pub_str_key;
+  //}
   const esignPub get_key() {
     if (!keyConvert)
-      pub_key = _fromStr_esignPubKey(pub_str_key);
+      pub_key = _fromStr_esignPubKey(string(pub_str_key, sizeof(pub_str_key)));
     return pub_key;
   }
 
@@ -85,7 +95,8 @@ class MonMap {
     blist.append((char*)&num_mon, sizeof(num_mon));
     
     _encode(mon_inst, blist);
-    _encode(pub_str_key, blist);
+    //_encode(pub_str_key, blist);
+    blist.append(pub_str_key, sizeof(pub_str_key));
   }
   
   void decode(bufferlist& blist) {
@@ -96,7 +107,9 @@ class MonMap {
     off += sizeof(num_mon);
 
     _decode(mon_inst, blist, off);
-    _decode(pub_str_key, blist, off);
+    //_decode(pub_str_key, blist, off);
+    blist.copy(off, sizeof(pub_str_key), pub_str_key);
+    off += sizeof(pub_str_key);
   }
 
   int write(char *fn) {
