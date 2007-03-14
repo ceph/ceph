@@ -39,10 +39,11 @@ mds
   - clean up client op redirection
   - idempotent ops
 - journal+recovery
+  - anchortable, anchorclient
+  - link
   - unlink
   - open(wr cap), open+create
   - file capabilities i/o
-  - link
   - rename
 - dirfrags vs readdir
 - redo hard links

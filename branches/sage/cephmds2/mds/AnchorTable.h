@@ -31,17 +31,20 @@ class AnchorTable {
   hash_map<inodeno_t, Anchor>  anchor_map;
 
   // uncommitted operations
-  set<inodeno_t> pending_create;
-  set<inodeno_t> pending_destroy;
-  map<inodeno_t, vector<Anchor> > pending_update;
+  map<version_t, inodeno_t> pending_create;
+  map<version_t, inodeno_t> pending_destroy;
+  map<version_t, pair<inodeno_t, vector<Anchor> > > pending_update;
 
   version_t version;  // this includes anchor_map AND pending_* state.
+  version_t committing_version;
+  version_t committed_version;
 
   // load/save state
   bool opening, opened;
 
   // waiters
   list<Context*> waiting_for_open;
+  map<version_t, list<Context*> > waiting_for_save;
 
 protected:
 
@@ -52,46 +55,52 @@ protected:
 
   // mid-level
   void create_prepare(inodeno_t ino, vector<Anchor>& trace);
-  void create_commit(inodeno_t ino);
   void destroy_prepare(inodeno_t ino);
-  void destroy_commit(inodeno_t ino);
   void update_prepare(inodeno_t ino, vector<Anchor>& trace);
-  void update_commit(inodeno_t ino);
+  void commit(version_t atid);
+  void rollback(version_t atid);
   friend class EAnchor;  // used for journal replay.
 
   // high level interface
   void handle_lookup(MAnchor *req);
 
   void handle_create_prepare(MAnchor *req);
-  void _create_prepare_logged(MAnchor *req);
-  void handle_create_commit(MAnchor *req);
+  void _create_prepare_logged(MAnchor *req, version_t atid);
   friend class C_AT_CreatePrepare;
 
   void handle_destroy_prepare(MAnchor *req);
-  void _destroy_prepare_logged(MAnchor *req);
-  void handle_destroy_commit(MAnchor *req);
+  void _destroy_prepare_logged(MAnchor *req, version_t atid);
   friend class C_AT_DestroyPrepare;
 
   void handle_update_prepare(MAnchor *req);
-  void _update_prepare_logged(MAnchor *req);
-  void handle_update_commit(MAnchor *req);
+  void _update_prepare_logged(MAnchor *req, version_t atid);
   friend class C_AT_UpdatePrepare;
+
+  void handle_commit(MAnchor *req);
+  void _commit_logged(MAnchor *req);
+  friend class C_AT_Commit;
+
+  void handle_rollback(MAnchor *req);
 
   // messages
   void handle_anchor_request(MAnchor *m);  
 
+  void dump();
+
 public:
   AnchorTable(MDS *m) :
     mds(m),
-    version(0), 
+    version(0), committing_version(0), committed_version(0), 
     opening(false), opened(false) { }
 
   void dispatch(class Message *m);
 
   version_t get_version() { return version; }
+  version_t get_committed_version() { return committed_version; }
 
-  void create_fresh() {   // reset on mkfs() to empty, loaded table.
-    version = 0;
+  void create_fresh() {   
+    // reset (i.e. on mkfs) to empty, but unsaved table.
+    version = 1;
     opened = true;
     opening = false;
     anchor_map.clear();
@@ -102,6 +111,7 @@ public:
 
   // load/save entire table for now!
   void save(Context *onfinish);
+  void _saved(version_t v);
   void load(Context *onfinish);
   void _loaded(bufferlist& bl);
 

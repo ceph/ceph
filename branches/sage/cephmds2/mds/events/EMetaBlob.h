@@ -209,7 +209,14 @@ class EMetaBlob {
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
 
+  // anchor transactions included in this update.
+  list<version_t>         atids;
+
  public:
+
+  void add_anchor_transaction(version_t atid) {
+    atids.push_back(atid);
+  }  
   
   // remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
   inode_t *add_dentry(CDentry *dn, bool dirty, CInode *in=0) {
@@ -303,6 +310,7 @@ class EMetaBlob {
       bl.append((char*)&(*i), sizeof(*i));
       lump_map[*i]._encode(bl);
     }
+    ::_encode(atids, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
     int n;
@@ -315,14 +323,16 @@ class EMetaBlob {
       lump_order.push_back(dirfrag);
       lump_map[dirfrag]._decode(bl, off);
     }
+    ::_decode(atids, bl, off);
   }
   
   void print(ostream& out) const {
-    if (lump_order.empty())
-      out << "[metablob empty]";
-    else
-      out << "[metablob " << lump_order.front()
-	  << ", " << lump_map.size() << " dirs]";
+    out << "[metablob";
+    if (!lump_order.empty()) 
+      out << lump_order.front() << ", " << lump_map.size() << " dirs";
+    if (!atids.empty())
+      out << " atids " << atids;
+    out << "]";
   }
 
   bool has_expired(MDS *mds);

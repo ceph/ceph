@@ -18,24 +18,25 @@
 #include <vector>
 
 #include "msg/Message.h"
-#include "mds/AnchorTable.h"
+#include "mds/Anchor.h"
 
 
 class MAnchor : public Message {
   int op;
   inodeno_t ino;
   vector<Anchor> trace;
+  version_t atid;  // anchor table version.
 
  public:
   MAnchor() {}
-  MAnchor(int o, inodeno_t i) : 
-	Message(MSG_MDS_ANCHOR),
-	op(o), ino(i) { }
-
+  MAnchor(int o, inodeno_t i, version_t v=0) : 
+    Message(MSG_MDS_ANCHOR),
+    op(o), ino(i), atid(v) { }
   
   virtual char *get_type_name() { return "anchor"; }
   void print(ostream& o) {
     o << "anchor(" << get_anchor_opname(op) << " " << ino;
+    if (atid) o << " atid " << atid;
     for (unsigned i=0; i<trace.size(); i++) {
       o << ' ' << trace[i];
     }
@@ -49,6 +50,7 @@ class MAnchor : public Message {
   int get_op() { return op; }
   inodeno_t get_ino() { return ino; }
   vector<Anchor>& get_trace() { return trace; }
+  version_t get_atid() { return atid; }
 
   virtual void decode_payload() {
     int off = 0;
@@ -56,19 +58,16 @@ class MAnchor : public Message {
     off += sizeof(op);
     payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
+    payload.copy(off, sizeof(atid), (char*)&atid);
+    off += sizeof(atid);
     ::_decode(trace, payload, off);
   }
 
   virtual void encode_payload() {
     payload.append((char*)&op, sizeof(op));
     payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&atid, sizeof(atid));
     ::_encode(trace, payload);
-    /*
-    int n = trace.size();
-    payload.append((char*)&n, sizeof(int));
-    for (int i=0; i<n; i++) 
-      trace[i]->_encode(payload);
-    */
   }
 };
 

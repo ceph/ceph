@@ -33,6 +33,7 @@
 #include "MDCache.h"
 #include "Migrator.h"
 #include "AnchorTable.h"
+#include "AnchorClient.h"
 
 #include "config.h"
 #undef dout
@@ -121,6 +122,17 @@ bool EMetaBlob::has_expired(MDS *mds)
     assert(0);  // i goofed the logic
   }
 
+  // have my anchortable ops committed?
+  for (list<version_t>::iterator p = atids.begin();
+       p != atids.end();
+       ++p) {
+    if (!mds->anchorclient->has_committed(*p)) {
+      dout(10) << "EMetaBlob.has_expired anchor transaction " << *p 
+	       << " not yet acked" << endl;
+      return false;
+    }
+  }
+  
   return true;  // all dirlumps expired.
 }
 
@@ -178,12 +190,10 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     assert(0);  // hrm
   }
 
-  // commit or wait for export
-  // FIXME: what if export aborts?  need to retry!
-  assert(!commit.empty() || !waitfor_export.empty());
-
-  //C_Gather *gather = new C_Gather(new C_journal_RetryExpire(mds, this, c));
+  // set up gather context
   C_Gather *gather = new C_Gather(c);
+
+  // do or wait for exports and commits
   for (map<CDir*,version_t>::iterator p = commit.begin();
        p != commit.end();
        ++p) {
@@ -198,6 +208,18 @@ void EMetaBlob::expire(MDS *mds, Context *c)
        p != waitfor_export.end();
        ++p) 
     mds->mdcache->migrator->add_export_finish_waiter(*p, gather->new_sub());
+
+
+  // have my anchortable ops committed?
+  for (list<version_t>::iterator p = atids.begin();
+       p != atids.end();
+       ++p) {
+    if (!mds->anchorclient->has_committed(*p)) {
+      dout(10) << "EMetaBlob.expire anchor transaction " << *p 
+	       << " not yet acked, waiting" << endl;
+      mds->anchorclient->wait_for_ack(*p, gather->new_sub());
+    }
+  }
 }
 
 void EMetaBlob::replay(MDS *mds)
@@ -300,6 +322,14 @@ void EMetaBlob::replay(MDS *mds)
       }
     }
   }
+
+  for (list<version_t>::iterator p = atids.begin();
+       p != atids.end();
+       ++p) {
+    dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << endl;
+    mds->anchorclient->got_journaled_agree(*p);
+  }
+  
 }
 
 // -----------------------
@@ -438,7 +468,7 @@ void EAlloc::replay(MDS *mds)
 
 bool EAnchor::has_expired(MDS *mds) 
 {
-  version_t cv = mds->anchortable->get_version();
+  version_t cv = mds->anchortable->get_committed_version();
   if (cv < version) {
     dout(10) << "EAnchor.has_expired v " << version << " > " << cv
 	     << ", still dirty" << endl;
@@ -467,24 +497,25 @@ void EAnchor::replay(MDS *mds)
     assert(version-1 == mds->anchortable->get_version());
     
     switch (op) {
+      // anchortable
     case ANCHOR_OP_CREATE_PREPARE:
       mds->anchortable->create_prepare(ino, trace);
-      break;
-    case ANCHOR_OP_CREATE_COMMIT:
-      mds->anchortable->create_commit(ino);
       break;
     case ANCHOR_OP_DESTROY_PREPARE:
       mds->anchortable->destroy_prepare(ino);
       break;
-    case ANCHOR_OP_DESTROY_COMMIT:
-      mds->anchortable->destroy_commit(ino);
-      break;
     case ANCHOR_OP_UPDATE_PREPARE:
       mds->anchortable->update_prepare(ino, trace);
       break;
-    case ANCHOR_OP_UPDATE_COMMIT:
-      mds->anchortable->update_commit(ino);
+    case ANCHOR_OP_COMMIT:
+      mds->anchortable->commit(atid);
       break;
+
+      // anchorclient
+    case ANCHOR_OP_ACK:
+      mds->anchorclient->got_journaled_ack(atid);
+      break;
+
     default:
       assert(0);
     }

@@ -121,6 +121,16 @@ void parse_syn_options(vector<char*>& args)
         syn_sargs.push_back( args[++i] );
         syn_iargs.push_back( atoi(args[++i]) );
 
+      } else if (strcmp(args[i],"thrashlinks") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_THRASHLINKS );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+
+
+      } else if (strcmp(args[i],"foo") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_FOO );
+
       } else if (strcmp(args[i],"until") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -216,6 +226,11 @@ int SyntheticClient::run()
     dout(3) << "mode " << mode << endl;
 
     switch (mode) {
+    case SYNCLIENT_MODE_FOO:
+      if (run_me()) 
+	foo();
+      break;
+
     case SYNCLIENT_MODE_RANDOMSLEEP:
       {
         int iarg1 = iargs.front();
@@ -332,6 +347,21 @@ int SyntheticClient::run()
         }
       }
       break;
+
+
+    case SYNCLIENT_MODE_THRASHLINKS:
+      {
+        string sarg1 = get_sarg(0);
+        int iarg1 = iargs.front();  iargs.pop_front();
+        int iarg2 = iargs.front();  iargs.pop_front();
+        int iarg3 = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "thrashlinks " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+          thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3);
+        }
+      }
+      break;
+
 
 
     case SYNCLIENT_MODE_MAKEFILES:
@@ -1288,4 +1318,64 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
     
   
 }
+
+
+
+void SyntheticClient::foo()
+{
+  client->mknod("one", 0755);
+  client->mknod("two", 0755);
+  client->link("one", "three");
+  client->mkdir("dir", 0755);
+  client->link("two", "/dir/twolink");
+  client->link("dir/twolink", "four");
+}
+
+int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth)
+{
+  dout(1) << "thrash_links " << basedir << " " << dirs << " " << files << " " << depth << endl;
+
+  if (time_to_stop()) return 0;
+ 
+  // first make dir/file tree
+  make_dirs(basedir,dirs,files,depth);
+
+  // now link shit up
+  int n = files*dirs;
+  for (int i=0; i<n; i++) {
+    if (time_to_stop()) return 0;
+
+    char f[20];
+
+    // pick a file
+    string file = basedir;
+
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	file += f;
+      }
+    }
+    sprintf(f, "/file.%d", rand() % files);
+    file += f;
+
+    // pick a dir for our link
+    string ln = basedir;
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	ln += f;
+      }
+    }
+    sprintf(f, "/ln.%d", i);
+    ln += f;
+
+    client->link(file.c_str(), ln.c_str());  
+  }
+
+  return 0;
+}
+
 

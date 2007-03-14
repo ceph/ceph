@@ -83,7 +83,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  anchorclient = new AnchorClient(messenger, mdsmap);
+  anchorclient = new AnchorClient(this);
   idalloc = new IdAllocator(this);
 
   anchortable = new AnchorTable(this);
@@ -508,6 +508,16 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     // now active?
     if (is_active()) {
+      // did i just recover?
+      if (oldstate == MDSMap::STATE_REJOIN) {
+	dout(1) << "successful recovery!" << endl;
+	
+	// kick anchorclient (resent COMMITs)
+	anchorclient->finish_recovery();
+
+	// ... 
+      }
+
       dout(1) << "now active" << endl;
       finish_contexts(waitfor_active);  // kick waiters
     }
@@ -527,13 +537,6 @@ void MDS::handle_mds_map(MMDSMap *m)
       dout(1) << "now stopping" << endl;
       
       mdcache->shutdown_start();
-      
-      // save anchor table
-      if (mdsmap->get_anchortable() == whoami) 
-	anchortable->save(0);  // FIXME?  or detect completion via filer?
-      
-      if (idalloc) 
-	idalloc->save(0);    // FIXME?  or detect completion via filer?
       
       // flush log
       mdlog->set_max_events(0);

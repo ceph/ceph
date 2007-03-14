@@ -90,12 +90,20 @@ public:
 
   // namespace changes
   void handle_client_mknod(MClientRequest *req, CInode *ref);
+
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
-  void handle_client_link_finish(MClientRequest *req, CInode *ref,
-                                 CDentry *dn, CInode *targeti);
+  void link_local(MClientRequest *req, CInode *diri,
+		  CDentry *dn, CInode *targeti);
+  void _link_local_finish(MClientRequest *req, 
+			  CDentry *dn, CInode *targeti,
+			  version_t, time_t, version_t);
+  void link_remote(MClientRequest *req, CInode *diri,
+		   CDentry *dn, CInode *targeti);
 
   void handle_client_unlink(MClientRequest *req, CInode *ref);
+
+
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,
                               CInode *ref,

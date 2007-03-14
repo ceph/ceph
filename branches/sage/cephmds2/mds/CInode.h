@@ -226,7 +226,9 @@ protected:
   bool is_dir()     { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR)     ? true:false; }
 
   bool is_anchored() { return inode.anchored; }
-
+  bool is_anchoring() { return state_test(STATE_ANCHORING); }
+  bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
+  
   bool is_root() { return state & STATE_ROOT; }
 
   bool is_auth() { return state & STATE_AUTH; }

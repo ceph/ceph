@@ -284,7 +284,11 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
 
 void CDir::unlink_inode( CDentry *dn )
 {
-  dout(12) << "unlink_inode " << *dn << " " << *dn->inode << endl;
+  if (dn->is_remote()) {
+    dout(12) << "unlink_inode " << *dn << endl;
+  } else {
+    dout(12) << "unlink_inode " << *dn << " " << *dn->inode << endl;
+  }
 
   unlink_inode_work(dn);
 

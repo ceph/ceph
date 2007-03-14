@@ -24,13 +24,15 @@ using std::endl;
 #include "msg/Messenger.h"
 
 #include "MDS.h"
+#include "MDLog.h"
 
+#include "events/EAnchor.h"
 #include "messages/MAnchor.h"
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << g_clock.now() << " " << messenger->get_myaddr() << ".anchorclient "
-#define derr(x)  if (x <= g_conf.debug) cout << g_clock.now() << " " << messenger->get_myaddr() << ".anchorclient "
+#define dout(x)  if (x <= g_conf.debug) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchorclient "
+#define derr(x)  if (x <= g_conf.debug) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchorclient "
 
 
 void AnchorClient::dispatch(Message *m)
@@ -47,17 +49,18 @@ void AnchorClient::dispatch(Message *m)
 
 void AnchorClient::handle_anchor_reply(class MAnchor *m)
 {
+  inodeno_t ino = m->get_ino();
+  version_t atid = m->get_atid();
+
   switch (m->get_op()) {
 
+    // lookup
   case ANCHOR_OP_LOOKUP_REPLY:
+    assert(pending_lookup.count(ino));
     {
-      assert(pending_lookup_trace.count(m->get_ino()) == 1);
-
-      *(pending_lookup_trace[ m->get_ino() ]) = m->get_trace();
-      Context *onfinish = pending_lookup[ m->get_ino() ];
-
-      pending_lookup_trace.erase(m->get_ino());
-      pending_lookup.erase(m->get_ino());
+      *pending_lookup[ino].trace = m->get_trace();
+      Context *onfinish = pending_lookup[ino].onfinish;
+      pending_lookup.erase(ino);
       
       if (onfinish) {
         onfinish->finish(0);
@@ -66,18 +69,99 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
     }
     break;
 
-  case ANCHOR_OP_UPDATE_ACK:
-  case ANCHOR_OP_CREATE_ACK:
-  case ANCHOR_OP_DESTROY_ACK:
-    {
-      assert(pending_op.count(m->get_ino()) == 1);
+    // prepare -> agree
+  case ANCHOR_OP_CREATE_AGREE:
+    if (pending_create_prepare.count(ino)) {
+      dout(10) << "got create_agree on " << ino << " atid " << atid << endl;
+      Context *onfinish = pending_create_prepare[ino].onfinish;
+      *pending_create_prepare[ino].patid = atid;
+      pending_create_prepare.erase(ino);
 
-      Context *onfinish = pending_op[m->get_ino()];
-      pending_op.erase(m->get_ino());
+      pending_commit.insert(atid);
+      
+      if (onfinish) {
+        onfinish->finish(0);
+        delete onfinish;
+      }
+    } else {
+      dout(10) << "stray create_agree on " << ino
+	       << " atid " << atid
+	       << ", sending ROLLBACK"
+	       << endl;      
+      MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
+      mds->messenger->send_message(req, 
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
+				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+    }
+    break;
+
+  case ANCHOR_OP_DESTROY_AGREE:
+    if (pending_destroy_prepare.count(ino)) {
+      dout(10) << "got destroy_agree on " << ino << " atid " << atid << endl;
+      Context *onfinish = pending_destroy_prepare[ino].onfinish;
+      *pending_destroy_prepare[ino].patid = atid;
+      pending_destroy_prepare.erase(ino);
+
+      pending_commit.insert(atid);
 
       if (onfinish) {
         onfinish->finish(0);
         delete onfinish;
+      }
+    } else {
+      dout(10) << "stray destroy_agree on " << ino
+	       << " atid " << atid
+	       << ", sending ROLLBACK"
+	       << endl;      
+      MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
+      mds->messenger->send_message(req, 
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
+				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+    }
+    break;
+
+  case ANCHOR_OP_UPDATE_AGREE:
+    if (pending_update_prepare.count(ino)) {
+      dout(10) << "got update_agree on " << ino << " atid " << atid << endl;
+      Context *onfinish = pending_update_prepare[ino].onfinish;
+      *pending_update_prepare[ino].patid = atid;
+      pending_update_prepare.erase(ino);
+
+      pending_commit.insert(atid);
+
+      if (onfinish) {
+        onfinish->finish(0);
+        delete onfinish;
+      }
+    } else {
+      dout(10) << "stray update_agree on " << ino
+	       << " atid " << atid
+	       << ", sending ROLLBACK"
+	       << endl;      
+      MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
+      mds->messenger->send_message(req, 
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
+				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+    }
+    break;
+
+    // commit -> ack
+  case ANCHOR_OP_ACK:
+    {
+      dout(10) << "got ack on atid " << atid << ", logging" << endl;
+
+      // remove from committing list
+      assert(pending_commit.count(atid));
+      pending_commit.erase(atid);
+
+      // log ACK.
+      mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_ACK, 0, atid));  // ino doesn't matter.
+
+      // kick any waiters
+      if (ack_waiters.count(atid)) {
+	dout(15) << "kicking waiters on atid " << atid << endl;
+	mds->queue_finished(ack_waiters[atid]);
+	ack_waiters.erase(atid);
       }
     }
     break;
@@ -86,6 +170,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
     assert(0);
   }
 
+  delete m;
 }
 
 
@@ -105,77 +190,96 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinis
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_LOOKUP, ino);
 
-  pending_lookup_trace[ino] = &trace;
-  pending_lookup[ino] = onfinish;
+  assert(pending_lookup.count(ino) == 0);
+  pending_lookup[ino].onfinish = onfinish;
+  pending_lookup[ino].trace = &trace;
 
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
+  mds->messenger->send_message(req, 
+			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
 }
 
-void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace, Context *onfinish)
+
+// PREPARE
+
+void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace, 
+				  version_t *patid, Context *onfinish)
 {
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_CREATE_PREPARE, ino);
   req->set_trace(trace);
 
-  pending_op[ino] = onfinish;
+  pending_create_prepare[ino].trace = trace;
+  pending_create_prepare[ino].patid = patid;
+  pending_create_prepare[ino].onfinish = onfinish;
 
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
+  mds->messenger->send_message(req, 
+			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
 }
 
-void AnchorClient::commit_create(inodeno_t ino)
-{
-  // send message
-  MAnchor *req = new MAnchor(ANCHOR_OP_CREATE_COMMIT, ino);
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
-}
-
-
-void AnchorClient::prepare_destroy(inodeno_t ino, Context *onfinish)
+void AnchorClient::prepare_destroy(inodeno_t ino, 
+				  version_t *patid, Context *onfinish)
 {
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_DESTROY_PREPARE, ino);
-  pending_op[ino] = onfinish;
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
-}
-void AnchorClient::commit_destroy(inodeno_t ino)
-{
-  // send message
-  MAnchor *req = new MAnchor(ANCHOR_OP_DESTROY_COMMIT, ino);
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
+  pending_destroy_prepare[ino].onfinish = onfinish;
+  pending_destroy_prepare[ino].patid = patid;
+  mds->messenger->send_message(req, 
+			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
 }
 
 
-
-void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace, Context *onfinish)
+void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace, 
+				  version_t *patid, Context *onfinish)
 {
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_UPDATE_PREPARE, ino);
   req->set_trace(trace);
   
-  pending_op[ino] = onfinish;
+  pending_update_prepare[ino].trace = trace;
+  pending_update_prepare[ino].patid = patid;
+  pending_update_prepare[ino].onfinish = onfinish;
   
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
+  mds->messenger->send_message(req, 
+			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
 }
 
-void AnchorClient::commit_update(inodeno_t ino)
+
+// COMMIT
+
+void AnchorClient::commit(version_t atid)
 {
+  dout(10) << "commit " << atid << endl;
+
+  assert(pending_commit.count(atid));
+  pending_commit.insert(atid);
+
   // send message
-  MAnchor *req = new MAnchor(ANCHOR_OP_UPDATE_COMMIT, ino);
-  messenger->send_message(req, 
-			  mdsmap->get_inst(mdsmap->get_anchortable()),
+  MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
+  mds->messenger->send_message(req, 
+			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
 }
 
+
+
+// RECOVERY
+
+void AnchorClient::finish_recovery()
+{
+  dout(7) << "finish_recovery - sending COMMIT on un-ACKed atids" << endl;
+
+  for (set<version_t>::iterator p = pending_commit.begin();
+       p != pending_commit.end();
+       ++p) {
+    dout(10) << " sending COMMIT on " << *p << endl;
+    MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, *p);
+    mds->messenger->send_message(req, 
+				 mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
+				 MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+  }
+}
 

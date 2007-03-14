@@ -3028,9 +3028,10 @@ class C_MDC_AnchorCreatePrepared : public Context {
   MDCache *cache;
   CInode *in;
 public:
+  version_t atid;
   C_MDC_AnchorCreatePrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
   void finish(int r) {
-    cache->_anchor_create_prepared(in);
+    cache->_anchor_create_prepared(in, atid);
   }
 };
 
@@ -3058,24 +3059,26 @@ void MDCache::anchor_create(CInode *in, Context *onfinish)
   in->make_anchor_trace(trace);
   
   // do it
-  mds->anchorclient->prepare_create(in->ino(), trace, 
-				    new C_MDC_AnchorCreatePrepared(this, in));
+  C_MDC_AnchorCreatePrepared *fin = new C_MDC_AnchorCreatePrepared(this, in);
+  mds->anchorclient->prepare_create(in->ino(), trace, &fin->atid, fin);
 }
 
 class C_MDC_AnchorCreateLogged : public Context {
   MDCache *cache;
   CInode *in;
+  version_t atid;
   version_t pdv;
 public:
-  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t v) : cache(c), in(i), pdv(v) {}
+  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, version_t v) : 
+    cache(c), in(i), atid(t), pdv(v) {}
   void finish(int r) {
-    cache->_anchor_create_logged(in, pdv);
+    cache->_anchor_create_logged(in, atid, pdv);
   }
 };
 
-void MDCache::_anchor_create_prepared(CInode *in)
+void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
 {
-  dout(10) << "_anchor_create_prepared " << *in << endl;
+  dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << endl;
 
   assert(in->inode.anchored == false);
 
@@ -3090,12 +3093,15 @@ void MDCache::_anchor_create_prepared(CInode *in)
   pi->anchored = true;
   pi->version = pdv;
 
+  // note anchor transaction
+  le->metablob.add_anchor_transaction(atid);
+
   // log + wait
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, pdv));
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid, pdv));
 }
 
 
-void MDCache::_anchor_create_logged(CInode *in, version_t pdv)
+void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv)
 {
   dout(10) << "_anchor_create_logged pdv " << pdv << " on " << *in << endl;
 
@@ -3106,10 +3112,10 @@ void MDCache::_anchor_create_logged(CInode *in, version_t pdv)
   
   // apply update to cache
   in->inode.anchored = true;
-  in->inode.version = pdv;
+  in->mark_dirty(pdv);
   
   // tell the anchortable we've committed
-  mds->anchorclient->commit_create(in->ino());
+  mds->anchorclient->commit(atid);
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
@@ -3122,9 +3128,10 @@ class C_MDC_AnchorDestroyPrepared : public Context {
   MDCache *cache;
   CInode *in;
 public:
+  version_t atid;
   C_MDC_AnchorDestroyPrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
   void finish(int r) {
-    cache->_anchor_destroy_prepared(in);
+    cache->_anchor_destroy_prepared(in, atid);
   }
 };
 
@@ -3149,23 +3156,26 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   in->get(CInode::PIN_UNANCHORING);
   
   // do it
-  mds->anchorclient->prepare_destroy(in->ino(), new C_MDC_AnchorDestroyPrepared(this, in));
+  C_MDC_AnchorDestroyPrepared *fin = new C_MDC_AnchorDestroyPrepared(this, in);
+  mds->anchorclient->prepare_destroy(in->ino(), &fin->atid, fin);
 }
 
 class C_MDC_AnchorDestroyLogged : public Context {
   MDCache *cache;
   CInode *in;
+  version_t atid;
   version_t pdv;
 public:
-  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t v) : cache(c), in(i), pdv(v) {}
+  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t t, version_t v) :
+    cache(c), in(i), atid(t), pdv(v) {}
   void finish(int r) {
-    cache->_anchor_destroy_logged(in, pdv);
+    cache->_anchor_destroy_logged(in, atid, pdv);
   }
 };
 
-void MDCache::_anchor_destroy_prepared(CInode *in)
+void MDCache::_anchor_destroy_prepared(CInode *in, version_t atid)
 {
-  dout(10) << "_anchor_destroy_prepared " << *in << endl;
+  dout(10) << "_anchor_destroy_prepared " << *in << " atid " << atid << endl;
 
   assert(in->inode.anchored == true);
 
@@ -3180,12 +3190,15 @@ void MDCache::_anchor_destroy_prepared(CInode *in)
   pi->anchored = true;
   pi->version = pdv;
 
+  // note anchor transaction
+  le->metablob.add_anchor_transaction(atid);
+
   // log + wait
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, pdv));
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, atid, pdv));
 }
 
 
-void MDCache::_anchor_destroy_logged(CInode *in, version_t pdv)
+void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
 {
   dout(10) << "_anchor_destroy_logged pdv " << pdv << " on " << *in << endl;
   
@@ -3199,7 +3212,7 @@ void MDCache::_anchor_destroy_logged(CInode *in, version_t pdv)
   in->inode.version = pdv;
   
   // tell the anchortable we've committed
-  mds->anchorclient->commit_destroy(in->ino());
+  mds->anchorclient->commit(atid);
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_UNANCHORED, 0);

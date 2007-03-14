@@ -953,6 +953,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
   assert(dn);
 
   // it's a file.
+  dn->pre_dirty();
   newi->inode.mode = req->args.mknod.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
@@ -1038,7 +1039,7 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   *pdn = dir->lookup(name);
   if (*pdn) {
     if (!(*pdn)->can_read(req)) {
-      dout(10) << "waiting on (existing!) dentry " << **pdn << endl;
+      dout(10) << "waiting on (existing!) unreadable dentry " << **pdn << endl;
       dir->add_waiter(CDir::WAIT_DNREAD, name, new C_MDS_RetryRequest(mds, req, diri));
       return 0;
     }
@@ -1064,26 +1065,26 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
     return 0;
   }
 
-  // make sure dir is pinnable
-  
-
-  // create inode
-  *pin = mdcache->create_inode();
-  (*pin)->inode.uid = req->get_caller_uid();
-  (*pin)->inode.gid = req->get_caller_gid();
-  (*pin)->inode.ctime = (*pin)->inode.mtime = (*pin)->inode.atime = g_clock.gettime();   // now
-  // note: inode.version will get set by finisher's mark_dirty.
-
-  // create dentry
+  // create null dentry
   if (!*pdn) 
     *pdn = dir->add_dentry(name, 0);
 
-  (*pdn)->pre_dirty();
-
   // xlock dentry
   bool res = mds->locker->dentry_xlock_start(*pdn, req, diri);
-  assert(res == true);
+  if (!res) 
+    return 0;
   
+  // yay!
+
+  // create inode?
+  if (pin) {
+    *pin = mdcache->create_inode();
+    (*pin)->inode.uid = req->get_caller_uid();
+    (*pin)->inode.gid = req->get_caller_gid();
+    (*pin)->inode.ctime = (*pin)->inode.mtime = (*pin)->inode.atime = g_clock.gettime();   // now
+    // note: inode.version will get set by finisher's mark_dirty.
+  }
+
   // bump modify pop
   mds->balancer->hit_dir(dir, META_POP_DWR);
 
@@ -1110,6 +1111,7 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
   assert(dn);
 
   // it's a directory.
+  dn->pre_dirty();
   newi->inode.mode = req->args.mkdir.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_DIR;
@@ -1166,6 +1168,7 @@ void Server::handle_client_symlink(MClientRequest *req, CInode *diri)
   assert(dn);
 
   // it's a symlink
+  dn->pre_dirty();
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_SYMLINK;
   newi->symlink = req->get_sarg();
@@ -1214,20 +1217,6 @@ void Server::handle_client_link(MClientRequest *req, CInode *ref)
   CDir *dir = validate_new_dentry_dir(req, ref, dname);
   if (!dir) return;
 
-  // dentry exists?
-  CDentry *dn = dir->lookup(dname);
-  if (dn && (!dn->is_null() || dn->is_xlockedbyother(req))) {
-    dout(7) << "handle_client_link dn exists " << *dn << endl;
-    reply_request(req, -EEXIST);
-    return;
-  }
-
-  // xlock dentry
-  if (!dn->is_xlockedbyme(req)) {
-    if (!mds->locker->dentry_xlock_start(dn, req, ref)) 
-      return;
-  }
-
   // discover link target
   filepath target = req->get_sarg();
   dout(7) << "handle_client_link discovering target " << target << endl;
@@ -1241,6 +1230,192 @@ void Server::handle_client_link(MClientRequest *req, CInode *ref)
 }
 
 
+void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vector<CDentry*>& trace)
+{
+  // target dne?
+  if (r < 0) {
+    dout(7) << "target " << req->get_sarg() << " dne" << endl;
+    reply_request(req, r);
+    return;
+  }
+  assert(r == 0);
+
+  // identify target inode
+  CInode *targeti = mdcache->get_root();
+  if (trace.size()) targeti = trace[trace.size()-1]->inode;
+  assert(targeti);
+
+  // dir?
+  dout(7) << "target is " << *targeti << endl;
+  if (targeti->is_dir()) {
+    dout(7) << "target is a dir, failing" << endl;
+    reply_request(req, -EINVAL);
+    return;
+  }
+
+  // can we create the dentry?
+  CDir *dir = 0;
+  CDentry *dn = 0;
+  
+  // make dentry and inode, xlock dentry.
+  r = prepare_mknod(req, diri, &dir, 0, &dn);
+  if (!r) 
+    return; // wait on something
+  assert(dir);
+  assert(dn);
+
+  // ok!
+  assert(dn->is_xlockedbyme(req));
+
+  // local or remote?
+  if (targeti->is_auth()) 
+    link_local(req, diri, dn, targeti);
+  else 
+    link_remote(req, diri, dn, targeti);
+}
+
+
+class C_MDS_link_local_finish : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CDentry *dn;
+  CInode *targeti;
+  version_t dpv;
+  time_t tctime;
+  time_t tpv;
+public:
+  C_MDS_link_local_finish(MDS *m, MClientRequest *r, CDentry *d, CInode *ti, time_t ct) :
+    mds(m), req(r), dn(d), targeti(ti),
+    dpv(d->get_projected_version()),
+    tctime(ct), 
+    tpv(targeti->get_parent_dn()->get_projected_version()) {}
+  void finish(int r) {
+    assert(r == 0);
+    mds->server->_link_local_finish(req, dn, targeti, dpv, tctime, tpv);
+  }
+};
+
+
+void Server::link_local(MClientRequest *req, CInode *diri,
+			CDentry *dn, CInode *targeti)
+{
+  dout(10) << "link_local " << *dn << " to " << *targeti << endl;
+
+  // anchor target?
+  if (targeti->get_parent_dir() == dn->get_dir()) {
+    dout(7) << "target is in the same dir, sweet" << endl;
+  } 
+  else if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+    dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+  } else {
+    dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+    
+    mdcache->anchor_create(targeti,
+			   new C_MDS_RetryRequest(mds, req, diri));
+    return;
+  }
+
+  // wrlock the target inode
+  if (!mds->locker->inode_hard_write_start(targeti, req))
+    return;  // fw or (wait for) lock
+
+  // ok, let's do it.
+  // prepare log entry
+  EUpdate *le = new EUpdate("link_local");
+
+  // predirty
+  dn->pre_dirty();
+  version_t tpdv = targeti->pre_dirty();
+  
+  // add to event
+  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_dentry(dn, true);
+  le->metablob.add_dir_context(targeti->get_parent_dir());
+  inode_t *pi = le->metablob.add_dentry(targeti->parent, true, targeti);
+
+  // update journaled target inode
+  pi->nlink++;
+  pi->ctime = g_clock.gettime();
+  pi->version = tpdv;
+
+  // finisher
+  C_MDS_link_local_finish *fin = new C_MDS_link_local_finish(mds, req, dn, targeti, pi->ctime);
+  
+  // log + wait
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
+}
+
+void Server::_link_local_finish(MClientRequest *req, CDentry *dn, CInode *targeti,
+				version_t dpv, time_t tctime, version_t tpv)
+{
+  dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
+
+  // link and unlock the new dentry
+  dn->set_remote_ino(targeti->ino());
+  dn->set_version(dpv);
+  dn->mark_dirty(dpv);
+
+  // update the target
+  targeti->inode.nlink++;
+  targeti->inode.ctime = tctime;
+  targeti->mark_dirty(tpv);
+
+  // unlock the new dentry and target inode
+  mds->locker->dentry_xlock_finish(dn);
+  mds->locker->inode_hard_write_finish(targeti);
+
+  // bump target popularity
+  mds->balancer->hit_inode(targeti, META_POP_IWR);
+
+  // reply
+  MClientReply *reply = new MClientReply(req, 0);
+  reply_request(req, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+}
+
+
+
+void Server::link_remote(MClientRequest *req, CInode *ref,
+			 CDentry *dn, CInode *targeti)
+{
+  dout(10) << "link_remote " << *dn << " to " << *targeti << endl;
+
+  // pin the target replica in our cache
+  assert(!targeti->is_auth());
+  mdcache->request_pin_inode(req, targeti);
+
+  // 1. send LinkPrepare to dest (lock target on dest, journal target update)
+
+
+
+
+  // 2. create+journal new dentry, as with link_local.
+  // 3. send LinkCommit to dest (unlocks target on dest, journals commit)  
+
+  // IMPLEMENT ME
+  MClientReply *reply = new MClientReply(req, -EAGAIN);
+  reply_request(req, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+}
+
+
+/*
+void Server::handle_client_link_finish(MClientRequest *req, CInode *ref,
+				       CDentry *dn, CInode *targeti)
+{
+  // create remote link
+  dn->dir->link_inode(dn, targeti->ino());
+  dn->link_remote( targeti );   // since we have it
+  dn->_mark_dirty(); // fixme
+  
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
+
+  // done!
+  commit_request(req, new MClientReply(req, 0), ref,
+                 0);          // FIXME i should log something
+}
+*/
+
+/*
 class C_MDS_RemoteLink : public Context {
   Server *server;
   MClientRequest *req;
@@ -1271,62 +1446,7 @@ public:
   }
 };
 
-void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vector<CDentry*>& trace)
-{
-  // target dne?
-  if (r < 0) {
-    dout(7) << "target " << req->get_sarg() << " dne" << endl;
-    reply_request(req, r);
-    return;
-  }
-  assert(r == 0);
 
-  CInode *targeti = mdcache->get_root();
-  if (trace.size()) targeti = trace[trace.size()-1]->inode;
-  assert(targeti);
-
-  // dir?
-  dout(7) << "target is " << *targeti << endl;
-  if (targeti->is_dir()) {
-    dout(7) << "target is a dir, failing" << endl;
-    reply_request(req, -EINVAL);
-    return;
-  }
-  
-  // what was the new dentry again?
-  string dname = req->get_filepath().last_dentry();
-  frag_t fg = diri->pick_dirfrag(dname);
-  CDir *dir = diri->get_dirfrag(fg);
-  assert(dir);
-  CDentry *dn = dir->lookup(dname);
-  assert(dn);
-  assert(dn->is_xlockedbyme(req));
-
-
-  // ok!
-  if (targeti->is_auth()) {
-    // mine
-
-    // same dir?
-    if (targeti->get_parent_dir() == dn->get_dir()) {
-      dout(7) << "target is in the same dir, sweet" << endl;
-    } 
-    else if (targeti->is_anchored()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
-    } else {
-      assert(targeti->inode.nlink == 1);
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
-      
-      mdcache->anchor_create(targeti,
-			     new C_MDS_RetryRequest(mds, req, diri));
-      return;
-    }
-
-    // ok, inc link!
-    targeti->inode.nlink++;
-    dout(7) << "nlink++, now " << targeti->inode.nlink << " on " << *targeti << endl;
-    targeti->_mark_dirty(); // fixme
-    
   } else {
     // remote: send nlink++ request, wait
     dout(7) << "target is remote, sending InodeLink" << endl;
@@ -1338,23 +1458,10 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
     return;
   }
 
-  handle_client_link_finish(req, diri, dn, targeti);
-}
+*/
 
-void Server::handle_client_link_finish(MClientRequest *req, CInode *ref,
-				       CDentry *dn, CInode *targeti)
-{
-  // create remote link
-  dn->dir->link_inode(dn, targeti->ino());
-  dn->link_remote( targeti );   // since we have it
-  dn->_mark_dirty(); // fixme
-  
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
-  // done!
-  commit_request(req, new MClientReply(req, 0), ref,
-                 0);          // FIXME i should log something
-}
+
 
 
 // UNLINK
@@ -1403,8 +1510,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   // have it.  locked?
   if (!dn->can_read(req)) {
     dout(10) << " waiting on " << *dn << endl;
-    dir->add_waiter(CDir::WAIT_DNREAD,
-                    name,
+    dir->add_waiter(CDir::WAIT_DNREAD, name,
                     new C_MDS_RetryRequest(mds, req, diri));
     return;
   }
@@ -1415,14 +1521,29 @@ void Server::handle_client_unlink(MClientRequest *req,
     reply_request(req, -ENOENT);
     return;
   }
+  
+  // remote?  if so, open up the inode.
+  if (!dn->inode) {
+    assert(dn->is_remote());
+    CInode *in = mdcache->get_inode(dn->get_remote_ino());
+    if (in) {
+      dout(7) << "linking in remote in " << *in << endl;
+      dn->link_remote(in);
+    } else {
+      dout(10) << "remote dn, opening inode for " << *dn << endl;
+      mdcache->open_remote_ino(dn->get_remote_ino(), req, 
+			       new C_MDS_RetryRequest(mds, req, diri));
+      return;
+    }
+  }
 
   // ok!
   CInode *in = dn->inode;
   assert(in);
   if (rmdir) {
-    dout(7) << "handle_client_rmdir on dir " << *in << endl;
+    dout(7) << "handle_client_rmdir on " << *in << endl;
   } else {
-    dout(7) << "handle_client_unlink on non-dir " << *in << endl;
+    dout(7) << "handle_client_unlink on " << *in << endl;
   }
 
   int inauth = in->authority().first;
@@ -1495,10 +1616,9 @@ void Server::handle_client_unlink(MClientRequest *req,
   }
 
   // am i dentry auth?
-  if (inauth != mds->get_nodeid()) {
-    // not auth; forward!
-    dout(7) << "handle_client_unlink not auth for " << *dir << " dn " << dn->name << ", fwd to " << inauth << endl;
-    mdcache->request_forward(req, inauth);
+  if (!dn->is_auth()) {
+    dout(7) << "handle_client_unlink/rmdir not auth for " << *dn << endl;
+    mdcache->request_forward(req, dn->authority().first);
     return;
   }
     
@@ -1508,21 +1628,6 @@ void Server::handle_client_unlink(MClientRequest *req,
   if (!mds->locker->dentry_xlock_start(dn, req, diri))
     return;
 
-  // is this a remote link?
-  if (dn->is_remote() && !dn->inode) {
-    CInode *in = mdcache->get_inode(dn->get_remote_ino());
-    if (in) {
-      dn->link_remote(in);
-    } else {
-      // open inode
-      dout(7) << "opening target inode first, ino is " << dn->get_remote_ino() << endl;
-      mdcache->open_remote_ino(dn->get_remote_ino(), req, 
-                               new C_MDS_RetryRequest(mds, req, diri));
-      return;
-    }
-  }
-
-    
   mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // it's locked, unlink!
@@ -2167,7 +2272,7 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   
   // make dentry and inode, xlock dentry.
   int r = prepare_mknod(req, diri, &dir, &in, &dn);
-  if (!r) 
+  if (r < 0) 
     return; // wait on something
   assert(dir);
   assert(in);
@@ -2176,6 +2281,7 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   if (r == 1) {
     // created.
     // it's a file.
+    dn->pre_dirty();
     in->inode.mode = 0644;              // FIXME req should have a umask
     in->inode.mode |= INODE_MODE_FILE;
 

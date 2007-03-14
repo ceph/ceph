@@ -347,10 +347,10 @@ public:
   void anchor_create(CInode *in, Context *onfinish);
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
-  void _anchor_create_prepared(CInode *in);
-  void _anchor_create_logged(CInode *in, version_t pdv);
-  void _anchor_destroy_prepared(CInode *in);
-  void _anchor_destroy_logged(CInode *in, version_t pdv);
+  void _anchor_create_prepared(CInode *in, version_t atid);
+  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_destroy_prepared(CInode *in, version_t atid);
+  void _anchor_destroy_logged(CInode *in, version_t atid, version_t pdv);
 
   friend class C_MDC_AnchorCreatePrepared;
   friend class C_MDC_AnchorCreateLogged;

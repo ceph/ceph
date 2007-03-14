@@ -21,6 +21,9 @@ typedef struct {
 } MInodeLink_st;
 
 class MInodeLink : public Message {
+  inodeno_t ino;
+  filepath  link_name;
+  bool prepare;
   MInodeLink_st st;
 
  public:
