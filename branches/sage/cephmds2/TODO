@@ -40,14 +40,15 @@ mds
   - idempotent ops
 - journal+recovery
   - anchortable, anchorclient
-  - link
-  - unlink
+  - local link
+  - local unlink
+  - local rename
+  - remote rename
+  - remote link
+  - remote unlink
   - open(wr cap), open+create
   - file capabilities i/o
-  - rename
 - dirfrags vs readdir
-- redo hard links
-- anchortable
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - implement truncate

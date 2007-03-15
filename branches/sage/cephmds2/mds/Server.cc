@@ -442,7 +442,7 @@ void Server::dispatch_request(Message *m, CInode *ref)
 
   // MClientRequest.
 
-  switch(req->get_op()) {
+  switch (req->get_op()) {
     
     // files
   case MDS_OP_OPEN:
@@ -976,11 +976,11 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
  * verify that the dir exists and would own the dname.
  * do not check if the dentry exists.
  */
-CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& name)
+CDir *Server::validate_dentry_dir(MClientRequest *req, CInode *diri, string& name)
 {
   // make sure parent is a dir?
   if (!diri->is_dir()) {
-    dout(7) << "validate_new_dentry_dir: not a dir" << endl;
+    dout(7) << "validate_dentry_dir: not a dir" << endl;
     reply_request(req, -ENOTDIR);
     return false;
   }
@@ -994,7 +994,7 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
 
   // dir auth pinnable?
   if (!dir->can_auth_pin()) {
-    dout(7) << "validate_new_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
+    dout(7) << "validate_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
     dir->add_waiter(CDir::WAIT_AUTHPINNABLE,
 		    new C_MDS_RetryRequest(mds, req, diri));
     return false;
@@ -1032,7 +1032,7 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   filepath dirpath = req->get_filepath().prefixpath(req->get_filepath().depth() - 1);
   string name = req->get_filepath().last_dentry();
   
-  CDir *dir = *pdir = validate_new_dentry_dir(req, diri, name);
+  CDir *dir = *pdir = validate_dentry_dir(req, diri, name);
   if (!dir) return 0;
 
   // make sure name doesn't already exist
@@ -1214,7 +1214,7 @@ void Server::handle_client_link(MClientRequest *req, CInode *ref)
   dout(7) << "handle_client_link dname is " << dname << endl;
   
   // validate dir
-  CDir *dir = validate_new_dentry_dir(req, ref, dname);
+  CDir *dir = validate_dentry_dir(req, ref, dname);
   if (!dir) return;
 
   // discover link target
@@ -1472,7 +1472,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   // rmdir or unlink?
   bool rmdir = false;
   if (req->get_op() == MDS_OP_RMDIR) rmdir = true;
-  
+ 
   // find it
   if (req->get_filepath().depth() == 0) {
     dout(7) << "can't rmdir root" << endl;
@@ -1480,16 +1480,16 @@ void Server::handle_client_unlink(MClientRequest *req,
     return;
   }
   string name = req->get_filepath().last_dentry();
-  
+
   // make sure parent is a dir?
   if (!diri->is_dir()) {
-    dout(7) << "not a dir" << endl;
+    dout(7) << "parent not a dir " << *diri << endl;
     reply_request(req, -ENOTDIR);
     return;
   }
 
   // get the dir, if it's not frozen etc.
-  CDir *dir = validate_new_dentry_dir(req, diri, name);
+  CDir *dir = validate_dentry_dir(req, diri, name);
   if (!dir) return;
   // ok, it's auth, and authpinnable.
 
@@ -1507,6 +1507,12 @@ void Server::handle_client_unlink(MClientRequest *req,
     return;
   }
 
+  if (rmdir) {
+    dout(7) << "handle_client_rmdir on " << *dn << endl;
+  } else {
+    dout(7) << "handle_client_unlink on " << *dn << endl;
+  }
+
   // have it.  locked?
   if (!dn->can_read(req)) {
     dout(10) << " waiting on " << *dn << endl;
@@ -1521,7 +1527,8 @@ void Server::handle_client_unlink(MClientRequest *req,
     reply_request(req, -ENOENT);
     return;
   }
-  
+  // dn looks ok.
+
   // remote?  if so, open up the inode.
   if (!dn->inode) {
     assert(dn->is_remote());
@@ -1536,72 +1543,18 @@ void Server::handle_client_unlink(MClientRequest *req,
       return;
     }
   }
+  assert(dn->inode);
 
   // ok!
   CInode *in = dn->inode;
-  assert(in);
-  if (rmdir) {
-    dout(7) << "handle_client_rmdir on " << *in << endl;
-  } else {
-    dout(7) << "handle_client_unlink on " << *in << endl;
-  }
 
-  int inauth = in->authority().first;
-
-  // dir stuff 
+  // rmdir vs is_dir 
   if (in->is_dir()) {
     if (rmdir) {
-      // rmdir
-      
-      // open dir?
-      if (in->is_auth() && !in->dir) {
-        if (!try_open_dir(in, frag_t(), req)) return;  // FIXME
-      }
-
-      // not dir auth?  (or not open, which implies the same!)
-      if (!in->dir) {
-        dout(7) << "handle_client_rmdir dir not open for " << *in << ", sending to auth " << inauth << endl;
-        mdcache->request_forward(req, inauth);
-        return;
-      }
-      if (!in->dir->is_auth()) {
-        int dirauth = in->dir->authority().first;
-        dout(7) << "handle_client_rmdir not auth for dir " << *in->dir << ", sending to dir auth " << dirauth << endl;
-        mdcache->request_forward(req, dirauth);
-        return;
-      }
-
-      assert(in->dir);
-      assert(in->dir->is_auth());
-
-      // dir size check on dir auth (but not necessarily dentry auth)?
-
-      // should be empty
-      if (in->dir->get_size() == 0 && !in->dir->is_complete()) {
-        dout(7) << "handle_client_rmdir on dir " << *in->dir << ", empty but not complete, fetching" << endl;
-        in->dir->fetch(new C_MDS_RetryRequest(mds, req, diri));
-        return;
-      }
-      if (in->dir->get_size() > 0) {
-        dout(7) << "handle_client_rmdir on dir " << *in->dir << ", not empty" << endl;
-        reply_request(req, -ENOTEMPTY);
-        return;
-      }
-        
-      dout(7) << "handle_client_rmdir dir is empty!" << endl;
-
-      // export sanity check
-      if (!in->is_auth()) {
-        // i should be exporting this now/soon, since the dir is empty.
-        dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
-	mdcache->migrator->export_empty_import(in->dir);          
-        in->dir->add_waiter(CDir::WAIT_UNFREEZE,
-                            new C_MDS_RetryRequest(mds, req, diri));
-        return;
-      }
-
+      // do empty directory checks
+      if (!_verify_rmdir(req, diri, in))
+	return;
     } else {
-      // unlink
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << endl;
       reply_request(req, -EISDIR);
       return;
@@ -1615,13 +1568,6 @@ void Server::handle_client_unlink(MClientRequest *req,
     }
   }
 
-  // am i dentry auth?
-  if (!dn->is_auth()) {
-    dout(7) << "handle_client_unlink/rmdir not auth for " << *dn << endl;
-    mdcache->request_forward(req, dn->authority().first);
-    return;
-  }
-    
   dout(7) << "handle_client_unlink/rmdir on " << *in << endl;
   
   // xlock dentry
@@ -1630,14 +1576,105 @@ void Server::handle_client_unlink(MClientRequest *req,
 
   mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
+  // ok!
+  if (dn->is_remote() && !dn->inode->is_auth()) 
+    _unlink_remote(req, dn);
+  else
+    _unlink_local(req, dn);
+}
+
+
+void Server::_unlink_local(MClientRequest *req, CDentry *dn)
+{
+
+  /*
   // it's locked, unlink!
   MClientReply *reply = new MClientReply(req,0);
   mdcache->dentry_unlink(dn,
                          new C_MDS_CommitRequest(this, req, reply, diri,
                                                  new EString("unlink fixme")));
-  return;
+  */
 }
 
+void Server::_unlink_local_finish(MClientRequest *req, 
+				  CDentry *dn, CInode *targeti,
+				  version_t, time_t, version_t) 
+{
+
+
+}
+
+
+
+void Server::_unlink_remote(MClientRequest *req, CDentry *dn) 
+{
+
+}
+
+
+
+
+/** _verify_rmdir
+ *
+ * verify that a directory is empty (i.e. we can rmdir it),
+ * and make sure it is part of the same subtree (i.e. local)
+ * so that rmdir will occur locally.
+ *
+ * @param in is the inode being rmdir'd.
+ */
+bool Server::_verify_rmdir(MClientRequest *req, CInode *ref, CInode *in)
+{
+  dout(10) << "_verify_rmdir " << *in << endl;
+  assert(in->is_auth());
+
+  list<frag_t> frags;
+  in->dirfragtree.get_leaves(frags);
+
+  for (list<frag_t>::iterator p = frags.begin();
+       p != frags.end();
+       ++p) {
+    CDir *dir = in->get_dirfrag(*p);
+    if (!dir) 
+      dir = in->get_or_open_dirfrag(mdcache, *p);
+    assert(dir);
+
+    // dir looks empty but incomplete?
+    if (dir->is_auth() &&
+	dir->get_size() == 0 && 
+	!dir->is_complete()) {
+      dout(7) << "_verify_rmdir fetching incomplete dir " << *dir << endl;
+      dir->fetch(new C_MDS_RetryRequest(mds, req, ref));
+      return false;
+    }
+    
+    // does the frag _look_ empty?
+    if (dir->get_size()) {
+      dout(10) << "_verify_rmdir nonauth bit has " << dir->get_size() << " items, not empty " << *dir << endl;
+      reply_request(req, -ENOTEMPTY);
+      return false;
+    }
+    
+    // not dir auth?
+    if (!dir->is_auth()) {
+      // hmm. we need it to import.  how to make that happen?
+      // and wait on it?
+      assert(0);  // IMPLEMENT ME
+    }
+  }
+
+  return true;
+}
+/*
+      // export sanity check
+      if (!in->is_auth()) {
+        // i should be exporting this now/soon, since the dir is empty.
+        dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
+	mdcache->migrator->export_empty_import(in->dir);          
+        in->dir->add_waiter(CDir::WAIT_UNFREEZE,
+                            new C_MDS_RetryRequest(mds, req, diri));
+        return;
+      }
+*/
 
 
 

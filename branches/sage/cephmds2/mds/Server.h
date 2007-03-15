@@ -90,7 +90,10 @@ public:
 
   // namespace changes
   void handle_client_mknod(MClientRequest *req, CInode *ref);
+  void handle_client_mkdir(MClientRequest *req, CInode *ref);
+  void handle_client_symlink(MClientRequest *req, CInode *ref);
 
+  // link
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
   void link_local(MClientRequest *req, CInode *diri,
@@ -101,9 +104,16 @@ public:
   void link_remote(MClientRequest *req, CInode *diri,
 		   CDentry *dn, CInode *targeti);
 
+  // unlink
   void handle_client_unlink(MClientRequest *req, CInode *ref);
+  bool _verify_rmdir(MClientRequest *req, CInode *ref, CInode *rmdiri);
+  void _unlink_local(MClientRequest *req, CDentry *dn);
+  void _unlink_local_finish(MClientRequest *req, 
+			    CDentry *dn, CInode *targeti,
+			    version_t, time_t, version_t);    
+  void _unlink_remote(MClientRequest *req, CDentry *dn);
 
-
+  // rename
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,
                               CInode *ref,
@@ -117,9 +127,6 @@ public:
                                   const string& srcpath, CInode *srcdiri, CDentry *srcdn, 
                                   const string& destpath, CDir *destdir, CDentry *destdn, const string& name);
 
-  void handle_client_mkdir(MClientRequest *req, CInode *ref);
-  void handle_client_rmdir(MClientRequest *req, CInode *ref);
-  void handle_client_symlink(MClientRequest *req, CInode *ref);
 
   // file
   void handle_client_open(MClientRequest *req, CInode *ref);
@@ -132,7 +139,7 @@ public:
   // some helpers
   CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
 
-  CDir *validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
+  CDir *validate_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
   int prepare_mknod(MClientRequest *req, CInode *diri, 
 		    CDir **pdir, CInode **pin, CDentry **pdn, 
 		    bool okexist=false);
