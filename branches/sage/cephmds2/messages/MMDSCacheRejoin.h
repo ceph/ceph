@@ -23,18 +23,18 @@
 class MMDSCacheRejoin : public Message {
  public:
   map<inodeno_t,int> inodes; // ino -> caps_wanted
-  set<inodeno_t> dirs;
-  map<inodeno_t, set<string> > dentries;   // dir -> (dentries...)
+  set<dirfrag_t> dirfrags;
+  map<dirfrag_t, set<string> > dentries;   // dir -> (dentries...)
 
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
 
   char *get_type_name() { return "cache_rejoin"; }
 
-  void add_dir(inodeno_t dirino) {
-    dirs.insert(dirino);
+  void add_dirfrag(dirfrag_t dirfrag) {
+    dirfrags.insert(dirfrag);
   }
-  void add_dentry(inodeno_t dirino, const string& dn) {
-    dentries[dirino].insert(dn);
+  void add_dentry(dirfrag_t dirfrag, const string& dn) {
+    dentries[dirfrag].insert(dn);
   }
   void add_inode(inodeno_t ino, int cw) {
     inodes[ino] = cw;
@@ -42,15 +42,15 @@ class MMDSCacheRejoin : public Message {
   
   void encode_payload() {
     ::_encode(inodes, payload);
-    ::_encode(dirs, payload);
-    for (set<inodeno_t>::iterator p = dirs.begin(); p != dirs.end(); ++p)
+    ::_encode(dirfrags, payload);
+    for (set<dirfrag_t>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p)
       ::_encode(dentries[*p], payload);
   }
   void decode_payload() {
     int off = 0;
     ::_decode(inodes, payload, off);
-    ::_decode(dirs, payload, off);
-    for (set<inodeno_t>::iterator p = dirs.begin(); p != dirs.end(); ++p)
+    ::_decode(dirfrags, payload, off);
+    for (set<dirfrag_t>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p)
       ::_decode(dentries[*p], payload, off);
   }
 };

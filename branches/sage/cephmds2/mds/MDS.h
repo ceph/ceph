@@ -193,6 +193,8 @@ class MDS : public Dispatcher {
   OSDMap *get_osd_map() { return osdmap; }
 
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
+  void forward_message_mds(Message *req, int mds, int port=0);
+
 
   // start up, shutdown
   int init(bool standby=false);

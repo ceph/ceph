@@ -67,7 +67,6 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
-#include "messages/MClientRequestForward.h"
 #include "messages/MClientFileCaps.h"
 
 #include "IdAllocator.h"
@@ -1271,7 +1270,7 @@ void MDCache::send_cache_rejoins()
 void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 {
   dout(10) << "cache_rejoin_walk " << *dir << endl;
-  rejoin->add_dir(dir->ino());
+  rejoin->add_dirfrag(dir->dirfrag());
 
   list<CDir*> nested;  // finish this dir, then do nested items
   
@@ -1280,7 +1279,7 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
        p != dir->items.end();
        ++p) {
     // dentry
-    rejoin->add_dentry(dir->ino(), p->first);
+    rejoin->add_dentry(dir->dirfrag(), p->first);
     
     // inode?
     if (p->second->is_primary() && p->second->get_inode()) {
@@ -1288,9 +1287,14 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       rejoin->add_inode(in->ino(), 
 			in->get_caps_wanted());
       
-      // dir (in this subtree)?
-      if (in->dir && !in->dir->is_subtree_root()) 
-	nested.push_back(in->dir);
+      // dirfrags in this subtree?
+      list<CDir*> dfs;
+      in->get_dirfrags(dfs);
+      for (list<CDir*>::iterator p = dfs.begin();
+	   p != dfs.end();
+	   ++p) 
+	if (!(*p)->is_subtree_root())
+	  nested.push_back(*p);
     }
   }
 
@@ -1334,17 +1338,21 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
       if (in->parent) {
 	CDentry *dn = in->parent;
 	if (dn->is_replica(from) &&
-	    (m->dentries.count(dn->get_dir()->ino()) == 0 ||
-	     m->dentries[dn->get_dir()->ino()].count(dn->get_name()) == 0)) {
+	    (m->dentries.count(dn->get_dir()->dirfrag()) == 0 ||
+	     m->dentries[dn->get_dir()->dirfrag()].count(dn->get_name()) == 0)) {
 	  dn->remove_replica(from);
 	  dout(10) << " rem " << *dn << endl;
 	}
       }
 
       // dir
-      if (in->dir) {
-	CDir *dir = in->dir;
-	if (dir->is_replica(from) && m->dirs.count(p->first) == 0) {
+      list<CDir*> dfs;
+      in->get_dirfrags(dfs);
+      for (list<CDir*>::iterator p = dfs.begin();
+	   p != dfs.end();
+	   ++p) {
+	CDir *dir = *p;
+	if (dir->is_replica(from) && m->dirfrags.count(dir->dirfrag()) == 0) {
 	  dir->remove_replica(from);
 	  dout(10) << " rem " << *dir << endl;
 	}
@@ -1355,14 +1363,14 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
   }
 
   // dirs
-  for (set<inodeno_t>::iterator p = m->dirs.begin();
-       p != m->dirs.end();
+  for (set<dirfrag_t>::iterator p = m->dirfrags.begin();
+       p != m->dirfrags.end();
        ++p) {
-    CDir *dir = get_dir(*p);
+    CDir *dir = get_dirfrag(*p);
     assert(dir);
     int nonce = dir->add_replica(from);
     dout(10) << " has " << *dir << endl;
-    ack->add_dir(*p, nonce);
+    ack->add_dirfrag(*p, nonce);
     
     // dentries
     for (set<string>::iterator q = m->dentries[*p].begin();
@@ -1408,18 +1416,18 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
   int from = m->get_source().num();
   
   // dirs
-  for (list<MMDSCacheRejoinAck::dirinfo>::iterator p = m->dirs.begin();
-       p != m->dirs.end();
+  for (list<MMDSCacheRejoinAck::dirinfo>::iterator p = m->dirfrags.begin();
+       p != m->dirfrags.end();
        ++p) {
-    CDir *dir = get_dir(p->dirino);
+    CDir *dir = get_dirfrag(p->dirfrag);
     assert(dir);
 
     dir->set_replica_nonce(p->nonce);
     dout(10) << " got " << *dir << endl;
 
     // dentries
-    for (map<string,MMDSCacheRejoinAck::dninfo>::iterator q = m->dentries[p->dirino].begin();
-	 q != m->dentries[p->dirino].end();
+    for (map<string,MMDSCacheRejoinAck::dninfo>::iterator q = m->dentries[p->dirfrag].begin();
+	 q != m->dentries[p->dirfrag].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
       assert(dn);
@@ -1714,7 +1722,7 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expire
 	  con->is_importing()) break;                // don't send any expire while importing.
       if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
 
-      dout(12) << "  sending expire to mds" << a << " on   " << *in->dir << endl;
+      dout(12) << "  sending expire to mds" << a << " on   " << *dir << endl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
@@ -2102,12 +2110,18 @@ bool MDCache::shutdown_pass()
            it != inode_map.end();
            it++) {
         CInode *in = it->second;
+	if (!in->is_dir()) continue;
         
-        // commit any dirty dir that's ours
-        if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty()) {
-          in->dir->commit(0, new C_MDC_ShutdownCommit(this));
-          shutdown_commits++;
-        }
+        // commit any dirty dirfrag that's ours
+	list<CDir*> dfs;
+	in->get_dirfrags(dfs);
+	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+	  CDir *dir = *p;
+	  if (dir->is_auth() && dir->is_dirty()) {
+	    dir->commit(0, new C_MDC_ShutdownCommit(this));
+	    shutdown_commits++;
+	  }
+	}
       }
     }
 
@@ -2332,7 +2346,6 @@ int MDCache::path_traverse(filepath& origpath,
                            Context *onfinish,
                            bool is_client_req)  // true if req is MClientRequest .. gross, FIXME
 {
-  int whoami = mds->get_nodeid();
   set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
 
   bool noperm = false;
@@ -2370,8 +2383,10 @@ int MDCache::path_traverse(filepath& origpath,
     }
 
     // open dir
-    if (!cur->dir) {
-      if (cur->dir_is_auth()) {
+    frag_t fg = cur->pick_dirfrag(path[depth]);
+    CDir *curdir = cur->get_dirfrag(fg);
+    if (!curdir) {
+      if (cur->is_auth()) {
         // parent dir frozen_dir?
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << endl;
@@ -2380,9 +2395,7 @@ int MDCache::path_traverse(filepath& origpath,
           return 1;
         }
 
-	frag_t fg = cur->pick_dirfrag(path[depth]);
-        cur->get_or_open_dirfrag(this, fg);
-        assert(cur->dir);
+        curdir = cur->get_or_open_dirfrag(this, fg);
       } else {
         // discover dir from/via inode auth
         assert(!cur->is_auth());
@@ -2403,14 +2416,15 @@ int MDCache::path_traverse(filepath& origpath,
         return 1;
       }
     }
-    
+    assert(curdir);
+
     // frozen?
     /*
-    if (cur->dir->is_frozen()) {
+    if (curdir->is_frozen()) {
       // doh!
       // FIXME: traverse is allowed?
-      dout(7) << "traverse: " << *cur->dir << " is frozen, waiting" << endl;
-      cur->dir->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
+      dout(7) << "traverse: " << *curdir << " is frozen, waiting" << endl;
+      curdir->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
       if (onfinish) delete onfinish;
       return 1;
     }
@@ -2436,7 +2450,7 @@ int MDCache::path_traverse(filepath& origpath,
 
 
     // dentry
-    CDentry *dn = cur->dir->lookup(path[depth]);
+    CDentry *dn = curdir->lookup(path[depth]);
 
     // null and last_bit and xlocked by me?
     if (dn && dn->is_null() && 
@@ -2451,9 +2465,9 @@ int MDCache::path_traverse(filepath& origpath,
       // dentry exists.  xlocked?
       if (!noperm && dn->is_xlockedbyother(req)) {
         dout(10) << "traverse: xlocked dentry at " << *dn << endl;
-        cur->dir->add_waiter(CDir::WAIT_DNREAD,
-                             path[depth],
-                             ondelay);
+        curdir->add_waiter(CDir::WAIT_DNREAD,
+			   path[depth],
+			   ondelay);
         if (onfinish) delete onfinish;
         return 1;
       }
@@ -2514,12 +2528,12 @@ int MDCache::path_traverse(filepath& origpath,
 
         // forwarder wants replicas?
         if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
-          dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << cur->dir->ino() << endl;
+          dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << curdir->dirfrag() << endl;
           
-          if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == cur->dir->ino() &&
-              cur->dir->is_auth() && 
-              cur->dir->is_rep() &&
-              cur->dir->is_replica(req->get_source().num()) &&
+          if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == curdir->ino() &&
+              curdir->is_auth() && 
+              curdir->is_rep() &&
+              curdir->is_replica(req->get_source().num()) &&
               dn->get_inode()->is_auth()
               ) {
             assert(req->get_source().is_mds());
@@ -2530,7 +2544,7 @@ int MDCache::path_traverse(filepath& origpath,
                        << req->get_source() << " dn " << *dn << endl; 
             } else {
               dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << endl;
-              MDiscoverReply *reply = new MDiscoverReply(cur->dir->ino());
+              MDiscoverReply *reply = new MDiscoverReply(curdir->ino());
               reply->add_dentry( dn->replicate_to( from ) );
               reply->add_inode( dn->inode->replicate_to( from ) );
               mds->send_message_mds(reply, req->get_source().num(), MDS_PORT_CACHE);
@@ -2547,14 +2561,11 @@ int MDCache::path_traverse(filepath& origpath,
     }
     
     // MISS.  don't have it.
-
-    pair<int,int> dauth = cur->dir->dentry_authority( path[depth] );
-    dout(12) << "traverse: miss on dentry " << path[depth] << " dauth " << dauth << " in " << *cur->dir << endl;
+    dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << endl;
     
-
-    if (dauth.first == whoami) {
+    if (curdir->is_auth()) {
       // dentry is mine.
-      if (cur->dir->is_complete()) {
+      if (curdir->is_complete()) {
         // file not found
         delete ondelay;
         if (onfinish) {
@@ -2571,7 +2582,7 @@ int MDCache::path_traverse(filepath& origpath,
         // directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << endl;
         touch_inode(cur);
-        cur->dir->fetch(ondelay);
+        curdir->fetch(ondelay);
         
         if (mds->logger) mds->logger->inc("cmiss");
 
@@ -2579,8 +2590,9 @@ int MDCache::path_traverse(filepath& origpath,
         return 1;
       }
     } else {
-      // dentry is not mine.
-      
+      // dirfrag/dentry is not mine.
+      pair<int,int> dauth = curdir->authority();
+
       /* no, let's let auth handle the discovery/replication ..
       if (onfail == MDS_TRAVERSE_FORWARD && 
           onfinish == 0 &&   // no funnyness
@@ -2595,10 +2607,10 @@ int MDCache::path_traverse(filepath& origpath,
         // discover
 
         filepath want = path.postfixpath(depth);
-        if (cur->dir->waiting_for(CDir::WAIT_DENTRY, path[depth])) {
-          dout(7) << "traverse: already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+        if (curdir->waiting_for(CDir::WAIT_DENTRY, path[depth])) {
+          dout(7) << "traverse: already waiting for discover on " << *curdir << " for " << want.get_path() << endl;
         } else {
-          dout(7) << "traverse: discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+          dout(7) << "traverse: discover on " << *curdir << " for " << want.get_path() << endl;
           
           touch_inode(cur);
         
@@ -2620,24 +2632,24 @@ int MDCache::path_traverse(filepath& origpath,
         // delay processing of current request.
         //  delay finish vs ondelay until result of traverse, so that ENOENT can be 
         //  passed to onfinish if necessary
-        cur->dir->add_waiter(CDir::WAIT_DENTRY, 
-                             path[depth], 
-                             new C_MDC_TraverseDiscover(onfinish, ondelay));
+        curdir->add_waiter(CDir::WAIT_DENTRY, 
+			   path[depth], 
+			   new C_MDC_TraverseDiscover(onfinish, ondelay));
         
         if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       } 
       if (onfail == MDS_TRAVERSE_FORWARD) {
         // forward
-        dout(7) << "traverse: not auth for " << path << " at " << path[depth] << ", fwd to mds" << dauth << endl;
+        dout(7) << "traverse: not auth for " << path << " in " << *curdir << endl;
 
-        if (is_client_req && cur->dir->is_rep()) {
-          dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << " req " << *(MClientRequest*)req << endl;
-          ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(cur->dir->ino());
+        if (is_client_req && curdir->is_rep()) {
+          dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *curdir << " req " << *(MClientRequest*)req << endl;
+          ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(curdir->ino());
           req->clear_payload();  // reencode!
         }
 
-        mds->send_message_mds(req, dauth.first, req->get_dest_port());
+        mds->forward_message_mds(req, dauth.first, req->get_dest_port());
         //show_subtrees();
         
         if (mds->logger) mds->logger->inc("cfw");
@@ -2676,7 +2688,7 @@ void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin)
   assert(diri->is_dir());
   assert(!diri->dir_is_auth());
   assert(!diri->is_auth());
-  assert(diri->dir == 0);
+  assert(diri->get_dirfrag(fg) == 0);
 
   int auth = diri->authority().first;
 
@@ -2924,7 +2936,7 @@ void MDCache::request_cleanup(Message *req)
       assert(dn->is_xlocked());
       int dauth = dn->dir->dentry_authority(dn->name).first;
       MLock *m = new MLock(LOCK_AC_UNXLOCK, mds->get_nodeid());
-      m->set_dn(dn->dir->ino(), dn->name);
+      m->set_dn(dn->dir->dirfrag(), dn->name);
       mds->send_message_mds(m, dauth, MDS_PORT_CACHE);
     }
   }
@@ -3007,20 +3019,7 @@ void MDCache::request_forward(Message *req, int who, int port)
   // clean up my state
   request_cleanup(req);
 
-  // client request?
-  if (req->get_type() == MSG_CLIENT_REQUEST) {
-    MClientRequest *creq = (MClientRequest*)req;
-
-    // inc forward counter
-    creq->inc_num_fwd();
-    
-    // tell the client
-    mds->messenger->send_message(new MClientRequestForward(creq->get_tid(), who, creq->get_num_fwd()),
-				 creq->get_client_inst());
-  }
-
-  // forward
-  mds->send_message_mds(req, who, port);
+  mds->forward_message_mds(req, who, port);  
 
   if (mds->logger) mds->logger->inc("fw");
 }
@@ -4206,8 +4205,10 @@ void MDCache::show_subtrees(int dbl)
   set<CDir*> seen;
 
   // calc depth
-  if (root && root->dir) 
-    q.push_back(pair<CDir*,int>(root->dir, 0));
+  list<CDir*> rootfrags;
+  root->get_dirfrags(rootfrags);
+  for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
+    q.push_back(pair<CDir*,int>(*p, 0));
 
   int depth = 0;
   while (!q.empty()) {
@@ -4233,8 +4234,8 @@ void MDCache::show_subtrees(int dbl)
 
 
   // print tree
-  if (root && root->dir) 
-    q.push_back(pair<CDir*,int>(root->dir, 0));
+  for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
+    q.push_back(pair<CDir*,int>(*p, 0));
 
   while (!q.empty()) {
     CDir *dir = q.front().first;
@@ -4291,13 +4292,26 @@ void MDCache::show_cache()
   for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
-    dout(7) << *((*it).second) << endl;
+    // unlinked?
+    if (!it->second->parent)
+      dout(7) << " unlinked " << *it->second << endl;
     
-    CDentry *dn = (*it).second->get_parent_dn();
-    if (dn) 
-      dout(7) << "       dn " << *dn << endl;
-    if ((*it).second->dir) 
-      dout(7) << "   subdir " << *(*it).second->dir << endl;
+    // dirfrags?
+    list<CDir*> dfs;
+    it->second->get_dirfrags(dfs);
+    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+      CDir *dir = *p;
+      dout(7) << "  dirfrag " << *dir << endl;
+	    
+      for (CDir_map_t::iterator p = dir->items.begin();
+	   p != dir->items.end();
+	   ++p) {
+	CDentry *dn = p->second;
+	dout(7) << "  dentry " << *dn << endl;
+	if (dn->is_primary() && dn->inode) 
+	  dout(7) << "   inode " << *dn->inode << endl;
+      }
+    }
   }
 }
 
@@ -4315,15 +4329,10 @@ void MDCache::dump_cache()
   for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
-    /*
-    myfile << *((*it).second) << endl;
-    CDentry *dn = (*it).second->get_parent_dn();
-    if (dn) 
-      myfile << *dn << endl;
-    */
-    
-    if ((*it).second->dir) {
-      CDir *dir = (*it).second->dir;
+    list<CDir*> dfs;
+    it->second->get_dirfrags(dfs);
+    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+      CDir *dir = *p;
       myfile << *dir->inode << endl;
       myfile << *dir << endl;
       

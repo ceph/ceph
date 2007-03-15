@@ -117,7 +117,7 @@ void Locker::send_lock_message(CDentry *dn, int msg)
        it != dn->replicas_end();
        it++) {
     MLock *m = new MLock(msg, mds->get_nodeid());
-    m->set_dn(dn->dir->ino(), dn->name);
+    m->set_dn(dn->dir->dirfrag(), dn->name);
     mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
   }
 }
@@ -1809,7 +1809,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
          it != who.end();
          it++) {
       MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-      m->set_dn(dn->dir->ino(), dn->name);
+      m->set_dn(dn->dir->dirfrag(), dn->name);
       m->set_path(path);
       mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
     }
@@ -1920,7 +1920,7 @@ void Locker::dentry_xlock_request(CDir *dir, const string& dname, bool create,
   // send request
   int dauth = dir->dentry_authority(dname).first;
   MLock *m = new MLock(create ? LOCK_AC_REQXLOCKC:LOCK_AC_REQXLOCK, mds->get_nodeid());
-  m->set_dn(dir->ino(), dname);
+  m->set_dn(dir->dirfrag(), dname);
   mds->send_message_mds(m, dauth, MDS_PORT_LOCKER);
   
   // add waiter
@@ -1937,9 +1937,7 @@ void Locker::handle_lock_dn(MLock *m)
 {
   assert(m->get_otype() == LOCK_OTYPE_DN);
   
-  CInode *diri = mdcache->get_inode(m->get_ino());  // may be null 
-  CDir *dir = 0;
-  if (diri) dir = diri->dir;           // may be null
+  CDir *dir = mdcache->get_dirfrag(m->get_dirfrag());  // may be null 
   string dname = m->get_dn();
   int from = m->get_asker();
   CDentry *dn = 0;
@@ -1948,7 +1946,7 @@ void Locker::handle_lock_dn(MLock *m)
     // auth
 
     // normally we have it always
-    if (diri && dir) {
+    if (dir) {
       int dauth = dir->dentry_authority(dname).first;
       assert(dauth == mds->get_nodeid() || dir->is_proxy() ||  // mine or proxy,
              m->get_action() == LOCK_AC_REQXLOCKACK ||         // or we did a REQXLOCK and this is our ack/nak
@@ -2008,7 +2006,7 @@ void Locker::handle_lock_dn(MLock *m)
         }
         {
           MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
-          reply->set_dn(dir->ino(), dname);
+          reply->set_dn(dir->dirfrag(), dname);
           reply->set_path(m->get_path());
           mds->send_message_mds(reply, m->get_asker(), MDS_PORT_LOCKER);
         }
@@ -2062,7 +2060,7 @@ void Locker::handle_lock_dn(MLock *m)
         if (1) {
           // NAK
           MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
-          reply->set_dn(m->get_ino(), dname);
+          reply->set_dn(m->get_dirfrag(), dname);
           mds->send_message_mds(reply, m->get_asker(), MDS_PORT_LOCKER);
         }
       } else {
@@ -2103,7 +2101,7 @@ void Locker::handle_lock_dn(MLock *m)
 
       // ack now
       MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
-      reply->set_dn(diri->ino(), dname);
+      reply->set_dn(dir->dirfrag(), dname);
       mds->send_message_mds(reply, from, MDS_PORT_LOCKER);
     }
 
@@ -2162,7 +2160,7 @@ void Locker::handle_lock_dn(MLock *m)
       dn->make_path(path);
 
       MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
-      reply->set_dn(dir->ino(), dname);
+      reply->set_dn(dir->dirfrag(), dname);
       reply->set_path(path);
       mds->send_message_mds(reply, m->get_asker(), MDS_PORT_LOCKER);
       
@@ -2210,7 +2208,7 @@ void Locker::handle_lock_dn(MLock *m)
       
       // ACK xlock request
       MLock *reply = new MLock(LOCK_AC_REQXLOCKACK, mds->get_nodeid());
-      reply->set_dn(dir->ino(), dname);
+      reply->set_dn(dir->dirfrag(), dname);
       reply->set_path(path);
       mds->send_message_mds(reply, m->get_asker(), MDS_PORT_LOCKER);
 

@@ -54,6 +54,9 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
+
 
 LogType mds_logtype, mds_cache_logtype;
 
@@ -213,6 +216,21 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
   if (port && !fromport) 
     fromport = port;
   messenger->send_message(m, mdsmap->get_inst(mds), port, fromport);
+}
+
+void MDS::forward_message_mds(Message *req, int mds, int port)
+{
+  // client request?
+  if (req->get_type() == MSG_CLIENT_REQUEST) {
+    // tell the client
+    MClientRequest *creq = (MClientRequest*)req;
+    creq->inc_num_fwd();    // inc forward counter
+    messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd()),
+			    creq->get_client_inst());
+  }
+  
+  // forward
+  send_message_mds(req, mds, port);
 }
 
 

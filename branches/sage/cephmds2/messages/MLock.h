@@ -57,12 +57,14 @@ class MLock : public Message {
 
   char      otype;  // lock object type
   inodeno_t ino;    // ino ref, or possibly
+  dirfrag_t dirfrag;
   string    dn;     // dentry name
   bufferlist data;   // and possibly some data
   string    path;   // possibly a path too (for dentry lock discovers)
 
  public:
   inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   string& get_dn() { return dn; }
   bufferlist& get_data() { return data; }
   int get_asker() { return asker; }
@@ -82,13 +84,13 @@ class MLock : public Message {
     otype = ot;
     this->ino = ino;
   }
-  void set_dirino(inodeno_t dirino) {
+  void set_dirfrag(dirfrag_t df) {
     otype = LOCK_OTYPE_DIR;
-    this->ino = ino;
+    this->dirfrag = df;
   }
-  void set_dn(inodeno_t dirino, const string& dn) {
+  void set_dn(dirfrag_t df, const string& dn) {
     otype = LOCK_OTYPE_DN;
-    this->ino = dirino;
+    this->dirfrag = df;
     this->dn = dn;
   }
   void set_data(bufferlist& data) {
@@ -108,6 +110,8 @@ class MLock : public Message {
     off += sizeof(otype);
     payload.copy(off,sizeof(ino), (char*)&ino);
     off += sizeof(ino);
+    payload.copy(off,sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     ::_decode(dn, payload, off);
     ::_decode(path, payload, off);
     ::_decode(data, payload, off);
@@ -116,7 +120,8 @@ class MLock : public Message {
     payload.append((char*)&action, sizeof(action));
     payload.append((char*)&asker, sizeof(asker));
     payload.append((char*)&otype, sizeof(otype));
-    payload.append((char*)&ino, sizeof(inodeno_t));
+    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
     ::_encode(dn, payload);
     ::_encode(path, payload);
     ::_encode(data, payload);

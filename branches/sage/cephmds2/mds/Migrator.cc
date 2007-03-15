@@ -880,18 +880,16 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
       encode_export_inode(in, enc_dir, newauth);  // encode, and (update state for) export
       
       // directory?
-      if (in->is_dir() && 
-	  in->dir &&
-	  !in->dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	// include nested subdir
-	assert(in->dir->get_dir_auth().first == CDIR_AUTH_PARENT);
-	subdirs.push_back(in->dir);  // it's ours, recurse (later)
+      list<CDir*> dfs;
+      in->get_dirfrags(dfs);
+      for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+	CDir *dir = *p;
+	if (!dir->state_test(CDir::STATE_EXPORTBOUND)) {
+	  // include nested dirfrag
+	  assert(dir->get_dir_auth().first == CDIR_AUTH_PARENT);
+	  subdirs.push_back(dir);  // it's ours, recurse (later)
+	}
       }
-      
-      // add to proxy
-      //export_proxy_inos[basedir].push_back(in->ino());
-      //in->state_set(CInode::STATE_PROXY);
-      //in->get(CInode::PIN_PROXY);
       
       // waiters
       list<Context*> waiters;
@@ -1566,9 +1564,11 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
 	in->filelock.clear_gather();
 
 	// non-bounding dir?
-	if (in->dir && 
-	    !in->dir->state_test(CDir::STATE_IMPORTBOUND))
-	  q.push_back(in->dir);
+	list<CDir*> dfs;
+	in->get_dirfrags(dfs);
+	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p)
+	  if (!(*p)->state_test(CDir::STATE_IMPORTBOUND))
+	    q.push_back(*p);
       }
     }
   }
