@@ -158,12 +158,6 @@ CInode *MDCache::create_inode()
   return in;
 }
 
-void MDCache::destroy_inode(CInode *in)
-{
-  mds->idalloc->reclaim_id(in->ino());
-  remove_inode(in);
-}
-
 
 void MDCache::add_inode(CInode *in) 
 {
@@ -1523,17 +1517,17 @@ public:
  * will be called by on unlink or rmdir
  * caller responsible for journaling an appropriate EUnlink or ERmdir
  */
-void MDCache::purge_inode(inode_t &inode)
+void MDCache::purge_inode(inode_t *inode)
 {
-  dout(10) << "purge_inode " << inode.ino << " size " << inode.size << endl;
+  dout(10) << "purge_inode " << inode->ino << " size " << inode->size << endl;
 
   // take note
-  assert(purging.count(inode.ino) == 0);
-  purging[inode.ino] = inode;
+  assert(purging.count(inode->ino) == 0);
+  purging[inode->ino] = *inode;
 
   // remove
-  mds->filer->remove(inode, 0, inode.size,
-		     0, new C_MDC_PurgeFinish(this, inode.ino));
+  mds->filer->remove(*inode, 0, inode->size,
+		     0, new C_MDC_PurgeFinish(this, inode->ino));
 }
 
 void MDCache::purge_inode_finish(inodeno_t ino)
@@ -1559,11 +1553,24 @@ void MDCache::purge_inode_finish_2(inodeno_t ino)
   finish_contexts(ls, 0);
 
   // reclaim ino?
-  
+  // hrm.
+}
+
+void MDCache::add_recovered_purge(const inode_t& inode)
+{
+  assert(purging.count(inode.ino) == 0);
+  purging[inode.ino] = inode;
+}
+
+void MDCache::remove_recovered_purge(inodeno_t ino)
+{
+  purging.erase(ino);
 }
 
 void MDCache::start_recovered_purges()
 {
+  dout(10) << "start_recovered_purges (" << purging.size() << " purges)" << endl;
+
   for (map<inodeno_t,inode_t>::iterator p = purging.begin();
        p != purging.end();
        ++p) {
@@ -3912,6 +3919,37 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 
+
+// UNLINK
+
+void MDCache::handle_dentry_unlink(MDentryUnlink *m)
+{
+  CDir *dir = get_dirfrag(m->get_dirfrag());
+
+  if (!dir) {
+    dout(7) << "handle_dentry_unlink don't have dirfrag " << m->get_dirfrag() << endl;
+  }
+  else {
+    CDentry *dn = dir->lookup(m->get_dn());
+    if (!dn) {
+      dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << endl;
+    } else {
+      dout(7) << "handle_dentry_unlink on " << *dn << endl;
+      
+      // unlink
+      dn->dir->unlink_inode(dn);
+      assert(dn->is_null());
+    }
+  }
+
+  delete m;
+  return;
+}
+
+
+
+// OLD CRAP TO FOLLOW, will be trimmed as it's reimplemented in Server.cc
+
 class C_MDC_DentryUnlink : public Context {
 public:
   MDCache *mdc;
@@ -3931,7 +3969,6 @@ public:
 };
 
 
-// NAMESPACE FUN
 
 void MDCache::dentry_unlink(CDentry *dn, Context *c)
 {
@@ -3955,7 +3992,8 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
          it++) {
       dout(7) << "inode_unlink sending DentryUnlink to mds" << it->first << endl;
       
-      mds->send_message_mds(new MDentryUnlink(dir->ino(), dn->name), it->first, MDS_PORT_CACHE);
+      mds->send_message_mds(new MDentryUnlink(dir->dirfrag(), dn->name), 
+			    it->first, MDS_PORT_CACHE);
     }
 
     // don't need ack.
@@ -4074,42 +4112,6 @@ void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
 
 
 
-void MDCache::handle_dentry_unlink(MDentryUnlink *m)
-{
-  CDir *dir = get_dir(m->get_dirino());
-
-  if (!dir) {
-    dout(7) << "handle_dentry_unlink don't have dir " << m->get_dirino() << endl;
-  }
-  else {
-    CDentry *dn = dir->lookup(m->get_dn());
-    if (!dn) {
-      dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << endl;
-    } else {
-      dout(7) << "handle_dentry_unlink on " << *dn << endl;
-      
-      // dir?
-      if (dn->inode) {
-        if (dn->inode->dir) {
-          dn->inode->dir->state_set(CDir::STATE_DELETED);
-          dn->inode->dir->remove_null_dentries();
-        }
-      }
-      
-      string dname = dn->name;
-      
-      // unlink
-      dn->dir->remove_dentry(dn);
-      
-      // wake up
-      //dir->finish_waiting(CDir::WAIT_DNREAD, dname);
-      dir->take_waiting(CDir::WAIT_DNREAD, dname, mds->finished_queue);
-    }
-  }
-
-  delete m;
-  return;
-}
 
 
 void MDCache::handle_inode_unlink(MInodeUnlink *m)

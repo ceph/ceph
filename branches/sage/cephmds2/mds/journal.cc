@@ -132,8 +132,18 @@ bool EMetaBlob::has_expired(MDS *mds)
       return false;
     }
   }
+
+  // destroyed inodes
+  for (list<inode_t>::iterator p = destroyed_inodes.begin();
+       p != destroyed_inodes.end();
+       ++p) {
+    if (mds->mdcache->is_purging(p->ino)) {
+      dout(10) << "EMetaBlob.has_expired still purging destroyed inode " << p->ino << endl;
+      return false;
+    }
+  }  
   
-  return true;  // all dirlumps expired.
+  return true;  // all dirlumps expired, etc.
 }
 
 
@@ -220,6 +230,17 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       mds->anchorclient->wait_for_ack(*p, gather->new_sub());
     }
   }
+
+  // destroyed inodes
+  for (list<inode_t>::iterator p = destroyed_inodes.begin();
+       p != destroyed_inodes.end();
+       ++p) {
+    if (mds->mdcache->is_purging(p->ino)) {
+      dout(10) << "EMetaBlob.expire waiting for purge of destroyed inode " << p->ino << endl;
+      mds->mdcache->wait_for_purge(p->ino, gather->new_sub());
+    }
+  }
+
 }
 
 void EMetaBlob::replay(MDS *mds)
@@ -323,13 +344,21 @@ void EMetaBlob::replay(MDS *mds)
     }
   }
 
+  // anchor transactions
   for (list<version_t>::iterator p = atids.begin();
        p != atids.end();
        ++p) {
     dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << endl;
     mds->anchorclient->got_journaled_agree(*p);
   }
-  
+
+  // destroyed inodes
+  for (list<inode_t>::iterator p = destroyed_inodes.begin();
+       p != destroyed_inodes.end();
+       ++p) {
+    dout(10) << "EMetaBlob.replay will purge destroyed inode " << p->ino << endl;
+    mds->mdcache->add_recovered_purge(*p);  
+  }
 }
 
 // -----------------------
@@ -662,10 +691,13 @@ bool EPurgeFinish::has_expired(MDS *mds)
 
 void EPurgeFinish::expire(MDS *mds, Context *c)
 {
+  assert(0);
 }
 
 void EPurgeFinish::replay(MDS *mds)
 {
+  dout(10) << "EPurgeFinish.replay " << ino << endl;
+  mds->mdcache->remove_recovered_purge(ino);
 }
 
 

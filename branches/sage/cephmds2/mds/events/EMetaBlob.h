@@ -212,13 +212,34 @@ class EMetaBlob {
   // anchor transactions included in this update.
   list<version_t>         atids;
 
+  // inodes i've destroyed.
+  list<inode_t>           destroyed_inodes;
+
  public:
 
   void add_anchor_transaction(version_t atid) {
     atids.push_back(atid);
   }  
+
+  void add_destroyed_inode(const inode_t& inode) {
+    destroyed_inodes.push_back(inode);
+  }
   
-  // remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
+  void add_null_dentry(CDentry *dn, bool dirty) {
+    dirlump& lump = add_dir(dn->get_dir(), false);
+
+    lump.nnull++;
+    if (dirty)
+      lump.get_dnull().push_front(nullbit(dn->get_name(), 
+					  dn->get_projected_version(), 
+					  dirty));
+    else
+      lump.get_dnull().push_back(nullbit(dn->get_name(), 
+					 dn->get_projected_version(), 
+					 dirty));
+  }
+
+  // return remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
   inode_t *add_dentry(CDentry *dn, bool dirty, CInode *in=0) {
     CDir *dir = dn->get_dir();
     if (!in) in = dn->get_inode();
@@ -241,15 +262,7 @@ class EMetaBlob {
 					       dirty));
     } 
     else if (!in) {
-      lump.nnull++;
-      if (dirty)
-	lump.get_dnull().push_front(nullbit(dn->get_name(), 
-					    dn->get_projected_version(), 
-					    dirty));
-      else
-	lump.get_dnull().push_back(nullbit(dn->get_name(), 
-					   dn->get_projected_version(), 
-					   dirty));
+      add_null_dentry(dn, dirty);
     }
     else {
       lump.nfull++;
@@ -311,6 +324,7 @@ class EMetaBlob {
       lump_map[*i]._encode(bl);
     }
     ::_encode(atids, bl);
+    ::_encode(destroyed_inodes, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
     int n;
@@ -324,6 +338,7 @@ class EMetaBlob {
       lump_map[dirfrag]._decode(bl, off);
     }
     ::_decode(atids, bl, off);
+    ::_decode(destroyed_inodes, bl, off);
   }
   
   void print(ostream& out) const {

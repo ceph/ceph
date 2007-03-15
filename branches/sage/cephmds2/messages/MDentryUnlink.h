@@ -16,29 +16,32 @@
 #define __MDENTRYUNLINK_H
 
 class MDentryUnlink : public Message {
-  inodeno_t dirino;
+  dirfrag_t dirfrag;
   string dn;
 
  public:
-  inodeno_t get_dirino() { return dirino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   string& get_dn() { return dn; }
 
   MDentryUnlink() {}
-  MDentryUnlink(inodeno_t dirino, string& dn) :
-    Message(MSG_MDS_DENTRYUNLINK) {
-    this->dirino = dirino;
-    this->dn = dn;
+  MDentryUnlink(dirfrag_t df, string& n) :
+    Message(MSG_MDS_DENTRYUNLINK),
+    dirfrag(df),
+    dn(n) { }
+
+  char *get_type_name() { return "dentry_unlink";}
+  void print(ostream& o) {
+    o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }
-  virtual char *get_type_name() { return "Dun";}
   
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(dirino), (char*)&dirino);
-    off += sizeof(dirino);
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     ::_decode(dn, payload, off);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&dirino,sizeof(dirino));
+  void encode_payload() {
+    payload.append((char*)&dirfrag,sizeof(dirfrag));
     ::_encode(dn, payload);
   }
 };

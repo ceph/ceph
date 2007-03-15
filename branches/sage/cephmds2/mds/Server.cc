@@ -29,6 +29,7 @@
 
 #include "messages/MLock.h"
 
+#include "messages/MDentryUnlink.h"
 #include "messages/MInodeLink.h"
 
 #include "events/EString.h"
@@ -1393,8 +1394,8 @@ void Server::link_remote(MClientRequest *req, CInode *ref,
   // 3. send LinkCommit to dest (unlocks target on dest, journals commit)  
 
   // IMPLEMENT ME
-  MClientReply *reply = new MClientReply(req, -EAGAIN);
-  reply_request(req, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+  MClientReply *reply = new MClientReply(req, -EXDEV);
+  reply_request(req, reply, dn->get_dir()->get_inode());
 }
 
 
@@ -1569,6 +1570,18 @@ void Server::handle_client_unlink(MClientRequest *req,
   }
 
   dout(7) << "handle_client_unlink/rmdir on " << *in << endl;
+
+  // treat this like a rename?
+  if (dn->is_primary() &&        // primary link, and
+      (in->inode.nlink > 1 ||    // there are other hard links, or
+       in->get_caps_wanted())) { // file is open (FIXME need better condition here)
+    // treat as a rename into the dangledir.
+
+    // IMPLEMENT ME **** FIXME ****
+    MClientReply *reply = new MClientReply(req, -EXDEV);
+    reply_request(req, reply, dn->get_dir()->get_inode());
+    return;
+  }
   
   // xlock dentry
   if (!mds->locker->dentry_xlock_start(dn, req, diri))
@@ -1578,37 +1591,140 @@ void Server::handle_client_unlink(MClientRequest *req,
 
   // ok!
   if (dn->is_remote() && !dn->inode->is_auth()) 
-    _unlink_remote(req, dn);
+    _unlink_remote(req, dn, in);
   else
-    _unlink_local(req, dn);
+    _unlink_local(req, dn, in);
 }
 
 
-void Server::_unlink_local(MClientRequest *req, CDentry *dn)
-{
 
-  /*
-  // it's locked, unlink!
-  MClientReply *reply = new MClientReply(req,0);
-  mdcache->dentry_unlink(dn,
-                         new C_MDS_CommitRequest(this, req, reply, diri,
-                                                 new EString("unlink fixme")));
-  */
+class C_MDS_unlink_local_finish : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CDentry *dn;
+  CInode *in;
+  version_t ipv;
+  time_t ictime;
+  version_t dpv;
+public:
+  C_MDS_unlink_local_finish(MDS *m, MClientRequest *r, CDentry *d, CInode *i,
+			    version_t v, time_t ct) :
+    mds(m), req(r), dn(d), in(i),
+    ipv(v), ictime(ct),
+    dpv(d->get_projected_version()) { }
+  void finish(int r) {
+    assert(r == 0);
+    mds->server->_unlink_local_finish(req, dn, in, ipv, ictime, dpv);
+  }
+};
+
+
+void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
+{
+  dout(10) << "_unlink_local " << *dn << endl;
+  
+  // if we're not the only link, wrlock the target (we need to nlink--)
+  if (in->inode.nlink > 1) {
+    assert(dn->is_remote());  // unlinking primary is handled like a rename.. not here
+
+    dout(10) << "_unlink_local nlink>1, wrlocking " << *in << endl;
+    if (!mds->locker->inode_hard_write_start(in, req))
+      return;  // fw or (wait for) lock
+  }
+  
+  // ok, let's do it.
+  // prepare log entry
+  EUpdate *le = new EUpdate("unlink_local");
+
+  // predirty
+  version_t ipv = in->pre_dirty();
+  if (dn->is_remote()) 
+    dn->pre_dirty();  // predirty dentry too
+  
+  // the unlinked dentry
+  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_null_dentry(dn, true);
+
+  // remote inode nlink--?
+  inode_t *pi = 0;
+  if (dn->is_remote()) {
+    le->metablob.add_dir_context(in->get_parent_dir());
+    pi = le->metablob.add_dentry(in->parent, true, in);
+    
+    // update journaled target inode
+    pi->nlink--;
+    pi->ctime = g_clock.gettime();
+    pi->version = ipv;
+  } else {
+    le->metablob.add_destroyed_inode(in->inode);
+  }
+
+  // finisher
+  C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, req, dn, in, 
+								 ipv, pi ? pi->ctime:0);
+  
+  // log + wait
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
 }
 
 void Server::_unlink_local_finish(MClientRequest *req, 
-				  CDentry *dn, CInode *targeti,
-				  version_t, time_t, version_t) 
+				  CDentry *dn, CInode *in,
+				  version_t ipv, time_t ictime, version_t dpv) 
 {
+  dout(10) << "_unlink_local " << *dn << endl;
 
+  // update remote inode?
+  if (dn->is_remote()) {
+    assert(ipv);
+    assert(ictime);
+    in->inode.ctime = ictime;
+    in->inode.nlink--;
+    in->mark_dirty(ipv);
 
+    // unlock inode (and share nlink news w/ replicas)
+    mds->locker->inode_hard_write_finish(in);
+  }
+
+  // unlink inode (dn now null)
+  CDir *dir = dn->dir;
+  dn->mark_dirty(dpv);
+  dir->unlink_inode(dn);
+  
+  // share unlink news with replicas
+  for (map<int,int>::iterator it = dn->replicas_begin();
+       it != dn->replicas_end();
+       it++) {
+    dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << endl;
+    mds->send_message_mds(new MDentryUnlink(dir->dirfrag(), dn->name), it->first, MDS_PORT_CACHE);
+  }
+
+  // unlock (now null) dn
+  mds->locker->dentry_xlock_finish(dn);
+  
+  // purge+remove inode?
+  if (in->inode.nlink == 0) {
+    mdcache->purge_inode(&in->inode);
+    mdcache->remove_inode(in);
+  }
+  
+  // bump target popularity
+  mds->balancer->hit_dir(dir, META_POP_DWR);
+
+  // reply
+  MClientReply *reply = new MClientReply(req, 0);
+  reply_request(req, reply, dir->get_inode());  // FIXME: imprecise ref
 }
 
 
 
-void Server::_unlink_remote(MClientRequest *req, CDentry *dn) 
+void Server::_unlink_remote(MClientRequest *req, CDentry *dn, CInode *in) 
 {
 
+
+  // IMPLEMENT ME
+  MClientReply *reply = new MClientReply(req, -EXDEV);
+  reply_request(req, reply, dn->get_dir()->get_inode());
 }
 
 

@@ -31,7 +31,6 @@
 #define LOCK_AC_REQXLOCKNAK  10  // req dentry xlock
 #define LOCK_AC_LOCKNAK      12  // for dentry xlock
 
-
 #define LOCK_AC_FOR_REPLICA(a)  ((a) <= 10)
 #define LOCK_AC_FOR_AUTH(a)     ((a) >= 11)
 

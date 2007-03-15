@@ -1323,12 +1323,25 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
+  // link fun
+  /*
   client->mknod("one", 0755);
   client->mknod("two", 0755);
   client->link("one", "three");
   client->mkdir("dir", 0755);
   client->link("two", "/dir/twolink");
   client->link("dir/twolink", "four");
+  */
+  
+  // unlink fun
+  client->mknod("a", 0644);
+  client->unlink("a");
+  client->mknod("b", 0644);
+  client->link("b", "c");
+  client->unlink("c");
+  client->mkdir("d", 0755);
+  client->unlink("d");
+  client->rmdir("d");
 }
 
 int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth)

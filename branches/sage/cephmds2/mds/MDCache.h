@@ -277,9 +277,8 @@ public:
   CInode *create_inode();
   void add_inode(CInode *in);
 
- protected:
   void remove_inode(CInode *in);
-  void destroy_inode(CInode *in);
+ protected:
   void touch_inode(CInode *in) {
     if (in->get_parent_dn())
       touch_dentry(in->get_parent_dn());
@@ -302,10 +301,18 @@ public:
 
  public:
   // inode purging
-  void purge_inode(inode_t& inode);
+  void purge_inode(inode_t *inode);
   void purge_inode_finish(inodeno_t ino);
   void purge_inode_finish_2(inodeno_t ino);
-  void waitfor_purge(inodeno_t ino, Context *c);
+  bool is_purging(inodeno_t ino) {
+    return purging.count(ino);
+  }
+  void wait_for_purge(inodeno_t ino, Context *c) {
+    waiting_for_purge[ino].push_back(c);
+  }
+
+  void add_recovered_purge(const inode_t& inode);
+  void remove_recovered_purge(inodeno_t ino);
   void start_recovered_purges();
 
 

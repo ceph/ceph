@@ -393,9 +393,6 @@ void CInode::mark_clean()
   }
 }    
 
-// state 
-
-
 
 
 
@@ -425,6 +422,7 @@ void CInode::encode_hard_state(bufferlist& r)
   r.append((char*)&inode.uid, sizeof(inode.uid));
   r.append((char*)&inode.gid, sizeof(inode.gid));
   r.append((char*)&inode.ctime, sizeof(inode.ctime));
+  r.append((char*)&inode.nlink, sizeof(inode.nlink));
 }
 
 void CInode::decode_hard_state(bufferlist& r, int& off)
@@ -437,6 +435,8 @@ void CInode::decode_hard_state(bufferlist& r, int& off)
   off += sizeof(inode.gid);
   r.copy(off, sizeof(inode.ctime), (char*)&inode.ctime);
   off += sizeof(inode.ctime);
+  r.copy(off, sizeof(inode.nlink), (char*)&inode.nlink);
+  off += sizeof(inode.nlink);
 }
 
 

@@ -107,11 +107,11 @@ public:
   // unlink
   void handle_client_unlink(MClientRequest *req, CInode *ref);
   bool _verify_rmdir(MClientRequest *req, CInode *ref, CInode *rmdiri);
-  void _unlink_local(MClientRequest *req, CDentry *dn);
+  void _unlink_local(MClientRequest *req, CDentry *dn, CInode *in);
   void _unlink_local_finish(MClientRequest *req, 
-			    CDentry *dn, CInode *targeti,
+			    CDentry *dn, CInode *in,
 			    version_t, time_t, version_t);    
-  void _unlink_remote(MClientRequest *req, CDentry *dn);
+  void _unlink_remote(MClientRequest *req, CDentry *dn, CInode *in);
 
   // rename
   void handle_client_rename(MClientRequest *req, CInode *ref);

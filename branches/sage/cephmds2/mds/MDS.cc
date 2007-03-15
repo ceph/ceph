@@ -515,7 +515,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	// kick anchorclient (resent COMMITs)
 	anchorclient->finish_recovery();
 
-	// ... 
+	mdcache->start_recovered_purges();
       }
 
       dout(1) << "now active" << endl;
@@ -800,12 +800,6 @@ void MDS::boot_replay(int step)
     break;
 
   case 5:
-    dout(2) << "boot_replay " << step << ": restarting any recovered purges" << endl;
-    mdcache->start_recovered_purges();
-    
-    step++;    // fall-thru
-    
-  case 6:
     // done with replay!
     if (mdsmap->get_num_mds(MDSMap::STATE_ACTIVE) == 0 &&
 	mdsmap->get_num_mds(MDSMap::STATE_STOPPING) == 0 &&
