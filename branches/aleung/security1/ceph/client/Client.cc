@@ -843,6 +843,10 @@ void Client::dispatch(Message *m)
     dout(10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
              << "+" << inode_map.size() << endl;
     trim_cache();
+
+    // hack  
+    //mount_cond.Signal();  // don't hold up unmount 
+
     if (lru.lru_get_size() == 0 && inode_map.empty()) {
       dout(10) << "unmounting: trim pass, cache now empty, waking unmount()" << endl;
       mount_cond.Signal();
@@ -1263,18 +1267,21 @@ int Client::unmount()
       }
     }
   }
-
+  
+  // FIXME hack dont wait
+  //if (0) {
   while (lru.lru_get_size() > 0 || 
-         !inode_map.empty()) {
+	 !inode_map.empty()) {
     dout(2) << "cache still has " << lru.lru_get_size() 
-            << "+" << inode_map.size() << " items" 
-            << ", waiting (presumably for safe or for caps to be released?)"
-            << endl;
+	    << "+" << inode_map.size() << " items" 
+	    << ", waiting (presumably for safe or for caps to be released?)"
+	    << endl;
     dump_cache();
     mount_cond.Wait(client_lock);
   }
   assert(lru.lru_get_size() == 0);
   assert(inode_map.empty());
+  //}
   
   // unsafe writes
   if (!g_conf.client_oc) {
@@ -2240,6 +2247,14 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
 
+    // add . and ..? 
+    string dot("."); 
+    contents[dot] = diri->inode; 
+    if (diri != root) { 
+      string dotdot(".."); 
+      contents[dotdot] = diri->dn->dir->parent_inode->inode; 
+    } 
+
     if (!reply->get_dir_in().empty()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
@@ -2250,6 +2265,10 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
            pin != reply->get_dir_in().end(); 
            ++pin, ++pdn) {
+	
+	if (*pdn == ".")  
+	  continue; 
+	
         // count entries
         res++;
 
@@ -2264,13 +2283,15 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
         // contents to caller too!
         contents[*pdn] = in->inode;
       }
+      if (dir->is_empty()) 
+	close_dir(dir); 
     }
     
     // add .. too?
-    if (diri != root && diri->dn && diri->dn->dir) {
-      Inode *parent = diri->dn->dir->parent_inode;
-      contents[".."] = parent->inode;
-    }    
+    //if (diri != root && diri->dn && diri->dn->dir) {
+    //Inode *parent = diri->dn->dir->parent_inode;
+    //contents[".."] = parent->inode;
+    //}    
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
