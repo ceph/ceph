@@ -2326,7 +2326,8 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   CDentry *dn = 0;
   
   // make dentry and inode, xlock dentry.
-  int r = prepare_mknod(req, diri, &in, &dn);
+  bool excl = req->get_iarg() & O_EXCL;
+  int r = prepare_mknod(req, diri, &in, &dn, !excl);
   if (!r) 
     return; // wait on something
   assert(in);
