@@ -39,19 +39,21 @@ mds
   - clean up client op redirection
   - idempotent ops
 - journal+recovery
-  - anchortable, anchorclient
-  - local link
-  - local unlink
+  - test anchortable, anchorclient
+/  - local link
+/  - local unlink
   - local rename
   - remote rename
   - remote link
   - remote unlink
   - open(wr cap), open+create
   - file capabilities i/o
-- dirfrags vs readdir
+- client readdir for dirfrags
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - implement truncate
+- real chdir (directory "open")
+  - relative metadata ops
 - statfs?
 - consistency points/snapshots
 

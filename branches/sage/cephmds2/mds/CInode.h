@@ -170,6 +170,7 @@ class CInode : public MDSCacheObject {
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
+  void close_dirfrags();
 
  protected:
   // parent dentries in cache

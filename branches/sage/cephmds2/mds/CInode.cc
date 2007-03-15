@@ -276,28 +276,20 @@ void CInode::close_dirfrag(frag_t fg)
     dir = 0;
   } else { // new
     assert(dirfrags.count(fg));
+
+    dirfrags[fg]->remove_null_dentries();
+
     assert(dirfrags[fg]->get_num_ref() == 0);
     delete dirfrags[fg];
     dirfrags.erase(fg);
   }
 }
 
-/*
-CDir *CInode::set_dir(CDir *newdir)
+void CInode::close_dirfrags()
 {
-  assert(dir == 0);
-  dir = newdir;
-  return dir;
+  while (!dirfrags.empty()) 
+    close_dirfrag(dirfrags.begin()->first);
 }
-
-void CInode::close_dir()
-{
-  assert(dir);
-  assert(dir->get_num_ref() == 0);
-  delete dir;
-  dir = 0;
-}
-*/
 
 
 void CInode::set_auth(bool a) 

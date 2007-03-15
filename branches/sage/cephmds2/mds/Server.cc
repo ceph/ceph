@@ -963,7 +963,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mknod");
   le->metablob.add_dir_context(dir);
-  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
+  inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait
@@ -1127,7 +1127,7 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mkdir");
   le->metablob.add_dir_context(dir);
-  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
+  inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   le->metablob.add_dir(newdir, true);
   
@@ -1178,7 +1178,7 @@ void Server::handle_client_symlink(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("symlink");
   le->metablob.add_dir_context(dir);
-  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
+  inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait
@@ -1330,9 +1330,9 @@ void Server::link_local(MClientRequest *req, CInode *diri,
   
   // add to event
   le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_dentry(dn, true);
+  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
-  inode_t *pi = le->metablob.add_dentry(targeti->parent, true, targeti);
+  inode_t *pi = le->metablob.add_primary_dentry(targeti->parent, true, targeti);  // update old primary
 
   // update journaled target inode
   pi->nlink++;
@@ -1649,7 +1649,7 @@ void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
   inode_t *pi = 0;
   if (dn->is_remote()) {
     le->metablob.add_dir_context(in->get_parent_dir());
-    pi = le->metablob.add_dentry(in->parent, true, in);
+    pi = le->metablob.add_primary_dentry(in->parent, true, in);  // update primary
     
     // update journaled target inode
     pi->nlink--;
@@ -2442,7 +2442,7 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, req, dn, in);
     EUpdate *le = new EUpdate("openc");
     le->metablob.add_dir_context(dir);
-    inode_t *pi = le->metablob.add_dentry(dn, true, in);
+    inode_t *pi = le->metablob.add_primary_dentry(dn, true, in);
     pi->version = dn->get_projected_version();
     
     // log + wait

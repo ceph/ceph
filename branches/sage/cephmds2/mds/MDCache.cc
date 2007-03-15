@@ -3936,8 +3936,24 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << endl;
       
-      // unlink
-      dn->dir->unlink_inode(dn);
+      // open inode?
+      if (dn->is_primary() && dn->inode) {
+	CInode *in = dn->inode;
+	
+	// unlink
+	dn->dir->unlink_inode(dn);
+
+	// dir?
+	if (in->is_dir())
+	  in->close_dirfrags();
+
+	// remove inode from cache.
+	remove_inode(in);
+      } else {
+	// just unlink
+	dn->dir->unlink_inode(dn);
+      }
+      
       assert(dn->is_null());
     }
   }

@@ -226,6 +226,7 @@ class EMetaBlob {
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {
+    // add the dir
     dirlump& lump = add_dir(dn->get_dir(), false);
 
     lump.nnull++;
@@ -239,49 +240,59 @@ class EMetaBlob {
 					 dirty));
   }
 
-  // return remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
-  inode_t *add_dentry(CDentry *dn, bool dirty, CInode *in=0) {
-    CDir *dir = dn->get_dir();
+  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino=0) {
+    if (!rino) 
+      rino = dn->get_remote_ino();
+
+    dirlump& lump = add_dir(dn->get_dir(), false);
+
+    lump.nremote++;
+    if (dirty)
+      lump.get_dremote().push_front(remotebit(dn->get_name(), 
+					      dn->get_projected_version(), 
+					      rino,
+					      dirty));
+    else
+      lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					     dn->get_projected_version(), 
+					     rino,
+					     dirty));
+  }
+
+  // return remote pointer to to-be-journaled inode
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
     if (!in) in = dn->get_inode();
 
-    // add the dir
-    dirlump& lump = add_dir(dir, false);
+    dirlump& lump = add_dir(dn->get_dir(), false);
 
-    // add the dirbit
-    if (dn->is_remote()) {
-      lump.nremote++;
-      if (dirty)
-	lump.get_dremote().push_front(remotebit(dn->get_name(), 
-						dn->get_projected_version(), 
-						dn->get_remote_ino(), 
-						dirty));
-      else
-	lump.get_dremote().push_back(remotebit(dn->get_name(), 
-					       dn->get_projected_version(), 
-					       dn->get_remote_ino(), 
-					       dirty));
-    } 
-    else if (!in) {
-      add_null_dentry(dn, dirty);
+    lump.nfull++;
+    if (dirty) {
+      lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					  dn->get_projected_version(), 
+					  in->inode, in->symlink, 
+					  dirty));
+      return &lump.get_dfull().front().inode;
+    } else {
+      lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					 dn->get_projected_version(),
+					 in->inode, in->symlink, 
+					 dirty));
+      return &lump.get_dfull().back().inode;
     }
-    else {
-      lump.nfull++;
-      if (dirty) {
-	lump.get_dfull().push_front(fullbit(dn->get_name(), 
-					    dn->get_projected_version(), 
-					    in->inode, in->symlink, 
-					    dirty));
-	return &lump.get_dfull().front().inode;
-      } else {
-	lump.get_dfull().push_back(fullbit(dn->get_name(), 
-					   dn->get_projected_version(),
-					   in->inode, in->symlink, 
-					   dirty));
-	return &lump.get_dfull().back().inode;
-      }
-    }
-    return 0;
   }
+
+  // convenience: primary or remote?  figure it out.
+  inode_t *add_dentry(CDentry *dn, bool dirty) {
+    // primary or remote
+    if (dn->is_remote()) {
+      add_remote_dentry(dn, dirty);
+      return 0;
+    } else {
+      assert(dn->is_primary());
+      return add_primary_dentry(dn, dirty);
+    }
+  }
+
   
   dirlump& add_dir(CDir *dir, bool dirty) {
     dirfrag_t df = dir->dirfrag();
