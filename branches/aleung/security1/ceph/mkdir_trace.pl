@@ -51,10 +51,12 @@ for $file_handle(@files) {
 		    else {
 			$dirpath = "$subdir";
 		    }
-		    
-		    if (! $seen_paths{$dirpath}) {
-			$seen_paths{$dirpath} = 1;
-			print OUT "mkdir\n\/$dirpath\n493\n";
+		    #print OUT "dirpath=$dirpath\n";
+		    if ($dirpath) {
+			if (! $seen_paths{$dirpath}) {
+			    $seen_paths{$dirpath} = 1;
+			    print OUT "mkdir\n\/$dirpath\n493\n";
+			}
 		    }
 		}
 
