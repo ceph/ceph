@@ -69,6 +69,8 @@ for $file_handle(@files) {
 		if (! $read_size) {
 		    print "$file_handle $line read_size=$read_size\n";
 		}
+		# FIXME hack to reads aren't empty
+		print OUT "write\n$ret_val\n$read_size\n0\n";
 		print OUT "read\n$ret_val\n$read_size\n0\n";
 	    }
 	    elsif ($op =~ /write/) {

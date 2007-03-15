@@ -455,8 +455,8 @@ int SyntheticClient::run()
             
             if (time_to_stop()) break;
             play_trace(t, prefix);
-            if (time_to_stop()) break;
-            clean_dir(prefix);
+            //if (time_to_stop()) break;
+            //clean_dir(prefix);
             
             utime_t lat = g_clock.now();
             lat -= start;
