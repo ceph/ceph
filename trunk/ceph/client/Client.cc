@@ -1769,6 +1769,14 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
 
+    // add . and ..?
+    string dot(".");
+    contents[dot] = diri->inode;
+    if (diri != root) {
+      string dotdot("..");
+      contents[dotdot] = diri->dn->dir->parent_inode->inode;
+    }
+
     if (!reply->get_dir_in().empty()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
@@ -1779,7 +1787,10 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
            pin != reply->get_dir_in().end(); 
            ++pin, ++pdn) {
-        // count entries
+	if (*pdn == ".") 
+	  continue;
+
+	// count entries
         res++;
 
         // put in cache
@@ -1793,13 +1804,10 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
         // contents to caller too!
         contents[*pdn] = in->inode;
       }
+      if (dir->is_empty())
+	close_dir(dir);
     }
     
-    // add .. too?
-    if (diri != root && diri->dn && diri->dn->dir) {
-      Inode *parent = diri->dn->dir->parent_inode;
-      contents[".."] = parent->inode;
-    }    
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
