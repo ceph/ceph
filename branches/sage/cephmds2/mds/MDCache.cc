@@ -2534,19 +2534,20 @@ int MDCache::path_traverse(filepath& origpath,
               curdir->is_auth() && 
               curdir->is_rep() &&
               curdir->is_replica(req->get_source().num()) &&
-              dn->get_inode()->is_auth()
+              dn->is_auth()
               ) {
             assert(req->get_source().is_mds());
             int from = req->get_source().num();
             
-            if (dn->get_inode()->is_replica(from)) {
+            if (dn->is_replica(from)) {
               dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
                        << req->get_source() << " dn " << *dn << endl; 
             } else {
               dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << endl;
               MDiscoverReply *reply = new MDiscoverReply(curdir->ino());
               reply->add_dentry( dn->replicate_to( from ) );
-              reply->add_inode( dn->inode->replicate_to( from ) );
+	      if (dn->is_primary())
+		reply->add_inode( dn->inode->replicate_to( from ) );
               mds->send_message_mds(reply, req->get_source().num(), MDS_PORT_CACHE);
             }
           }
@@ -3390,10 +3391,8 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // open dir?
-    if (!curdir) {
-      assert(cur->is_auth());
+    if (!curdir) 
       curdir = cur->get_or_open_dirfrag(this, fg);
-    }
     assert(curdir);
     assert(curdir->is_auth());
     
@@ -3413,10 +3412,9 @@ void MDCache::handle_discover(MDiscover *dis)
     
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
-      dout(7) << "they don't want the base dir" << endl;
+      dout(7) << "not adding unwanted base dir " << *curdir << endl;
     } else {
-      // add the dir.
-      assert(!curdir->auth_is_ambiguous());
+      assert(!curdir->auth_is_ambiguous()); // would be frozen.
       reply->add_dir( new CDirDiscover( curdir, 
                                         curdir->add_replica( dis->get_asker() ) ) );
       dout(7) << "added dir " << *curdir << endl;
@@ -3426,103 +3424,52 @@ void MDCache::handle_discover(MDiscover *dis)
     // lookup dentry
     CDentry *dn = curdir->lookup( dis->get_dentry(i) );
     
-    /*
-    if (dn && !dn->can_read()) { // xlocked?
-      dout(7) << "waiting on " << *dn << endl;
-      cur->dir->add_waiter(CDir::WAIT_DNREAD,
-                           dn->name,
-                           new C_MDS_RetryMessage(mds, dis));
-      return;
-    }
-    */
-    
     if (dn) {
-      if (!dn->inode && dn->is_sync()) {
-        dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " null in " << *curdir << ", returning error" << endl;
-        reply->set_flag_error_dn( dis->get_dentry(i) );
-        break;   // don't replicate null but non-locked dentries.
-      }
-      
+      // add dentry
       reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
       dout(7) << "added dentry " << *dn << endl;
       
-      if (!dn->inode) break;  // we're done.
-    }
+      if (!dn->is_primary()) break;  // stop on null or remote link.
 
-    // FIXME: hard links
-    if (dn && dn->inode) {
-        CInode *next = dn->inode;
-        assert(next->is_auth());
+      // add inode
+      CInode *next = dn->inode;
+      assert(next->is_auth());
+	
+      reply->add_inode( next->replicate_to( dis->get_asker() ) );
+      dout(7) << "added inode " << *next << endl;
+      
+      // descend, keep going.
+      cur = next;
+      continue;
+    } 
 
-        // add inode
-        //int nonce = next->cached_by_add(dis->get_asker());
-        reply->add_inode( next->replicate_to( dis->get_asker() ) );
-        dout(7) << "added inode " << *next << endl;// " nonce=" << nonce<< endl;
-
-        // descend
-        cur = next;
+    // don't have dentry.
+    if (curdir->is_complete()) {
+      // set error flag in reply
+      dout(7) << "dname " << dis->get_dentry(i) << " dne in " << *curdir
+	      << ", flagging error" << endl;
+      reply->set_flag_error_dn( dis->get_dentry(i) );
     } else {
-      // don't have inode?
-      if (curdir->is_complete()) {
-        // set error flag in reply
-        dout(7) << "dname " << dis->get_dentry(i) << " dne in " << *curdir << ", returning error" << endl;
-        reply->set_flag_error_dn( dis->get_dentry(i) );
-        break;
+      // readdir
+      dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
+      
+      if (reply->is_empty()) {
+	// fetch and wait
+	curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	return;
       } else {
-        // readdir
-        dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
-
-	if (reply->is_empty()) {
-	  // fetch and wait
-	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
-	  return;
-	} else {
-	  // fetch, but send what we have so far
-	  curdir->fetch(0);
-	  break;
-	}
+	// fetch, but send what we have so far
+	curdir->fetch(0);
       }
     }
+    break;
   }
 
-  // how did we do.
+  // how did we do?
   if (reply->is_empty()) {
-
-    // discard empty reply
-    delete reply;
-
     dout(7) << "dropping this empty reply)." << endl;
-    
-    /*
-    if (cur->is_auth() && !cur->dir->is_auth()) {
-      // set hint
-      // fwd to dir auth
-      int dirauth = cur->dir->authority().first;
-      if (dirauth == dis->get_asker()) {
-        dout(7) << "from (new?) dir auth, dropping (obsolete) discover on floor." << endl;  // XXX FIXME is this right?
-        //assert(dis->get_asker() == dis->get_source());  //might be a weird other loop.  either way, asker has it.
-        delete dis;
-      } else {
-        dout(7) << "fwd to dir auth " << dirauth << endl;
-        mds->send_message_mds( dis, dirauth, MDS_PORT_CACHE );
-      }
-      return;
-      }*/
-    
-    /*
-    // wait for frozen dir?
-    if (cur->dir->is_frozen()) {
-      dout(7) << "waiting for frozen " << *cur->dir << endl;
-      cur->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-      return;
-    } else {
-      dout(7) << "i'm not auth, dropping request (+this empty reply)." << endl;
-    }
-    */
-    //assert(0);
-    
+    delete reply;
   } else {
-    // send back to asker
     dout(7) << "sending result back to asker mds" << dis->get_asker() << endl;
     mds->send_message_mds(reply, dis->get_asker(), MDS_PORT_CACHE);
   }
@@ -3658,32 +3605,19 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     assert(dn);
     
     if (in) {
-      dout(7) << "had " << *in << endl;
-      
-      // fix nonce
-      dout(7) << " my nonce is " << in->replica_nonce << ", taking from discover, which  has " << m->get_inode(i).get_replica_nonce() << endl;
+      dout(7) << "had " << *in << ", new nonce " << m->get_inode(i).get_replica_nonce() << endl;
       in->replica_nonce = m->get_inode(i).get_replica_nonce();
       
-      if (dn && in != dn->inode) {
-        dout(7) << " but it's not linked via dentry " << *dn << endl;
-        // link
-        if (dn->inode) {
-          dout(7) << "dentry WAS linked to " << *dn->inode << endl;
-          assert(0);  // WTF.
-        }
-        dn->dir->link_inode(dn, in);
-      }
+      assert(in == dn->inode);  // if we have it, it should be already linked to *dn.
     }
     else {
-      assert(dn->inode == 0);  // better not be something else linked to this dentry...
-
       // didn't have it.
       in = new CInode(this, false);
-      
       m->get_inode(i).update_inode(in);
+      add_inode( in );
         
       // link in
-      add_inode( in );
+      assert(dn->inode == 0);   // better not be something else linked to this dentry.
       dn->dir->link_inode(dn, in);
       
       dout(7) << "added " << *in << " nonce " << in->replica_nonce << endl;

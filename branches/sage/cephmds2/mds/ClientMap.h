@@ -108,11 +108,11 @@ public:
   
   void add_open(int client, const entity_inst_t& inst) {
     inc_ref(client, inst);
-    version++;
+    //version++;
   }
   void dec_open(int client) {
     dec_ref(client);
-    version++;
+    //version++;
   }
 
   void encode(bufferlist& bl) {

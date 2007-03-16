@@ -211,8 +211,9 @@ class CDentry : public MDSCacheObject, public LRUObject {
       mark_clean();
   }
   void decode_import_state(bufferlist& bl, int& off, int from, int to) {
-    bl.copy(off, sizeof(state), (char*)&state);
-    off += sizeof(state);
+    int nstate;
+    bl.copy(off, sizeof(nstate), (char*)&nstate);
+    off += sizeof(nstate);
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
     bl.copy(off, sizeof(projected_version), (char*)&projected_version);
@@ -223,14 +224,15 @@ class CDentry : public MDSCacheObject, public LRUObject {
     ::_decode(replicas, bl, off);
 
     // twiddle
-    if (state_test(STATE_DIRTY))
+    state = 0;
+    state_set(CDentry::STATE_AUTH);
+    if (nstate & STATE_DIRTY)
       _mark_dirty();
     if (!replicas.empty())
       get(PIN_REPLICATED);
     add_replica(from, EXPORT_NONCE);
     if (is_replica(to))
       remove_replica(to);
-    state_set(CDentry::STATE_AUTH);
   }
 
   // -- locking

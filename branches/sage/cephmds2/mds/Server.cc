@@ -128,7 +128,7 @@ public:
 
 void Server::handle_client_mount(MClientMount *m)
 {
-  dout(3) << "mount by " << m->get_source() << endl;
+  dout(3) << "mount by " << m->get_source() << " oldv " << mds->clientmap.get_version() << endl;
 
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
@@ -138,7 +138,7 @@ void Server::handle_client_mount(MClientMount *m)
 
 void Server::handle_client_unmount(Message *m)
 {
-  dout(3) << "unmount by " << m->get_source() << endl;
+  dout(3) << "unmount by " << m->get_source() << " oldv " << mds->clientmap.get_version() << endl;
 
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
@@ -2424,8 +2424,9 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   CDentry *dn = 0;
   
   // make dentry and inode, xlock dentry.
-  int r = prepare_mknod(req, diri, &dir, &in, &dn);
-  if (r < 0) 
+  bool excl = (req->args.open.flags & O_EXCL);
+  int r = prepare_mknod(req, diri, &dir, &in, &dn, !excl);  // okexist = !excl
+  if (r <= 0) 
     return; // wait on something
   assert(dir);
   assert(in);

@@ -35,6 +35,8 @@ mds
 - discover
   - hard link dentries
 
+- rejoin and replicas that are not in recovered node's cache...  fetch storm?
+
 - mds failure vs clients
   - clean up client op redirection
   - idempotent ops

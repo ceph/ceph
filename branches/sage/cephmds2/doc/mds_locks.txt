@@ -1,0 +1,22 @@
+
+
+
+path_pin = read lock on /some/random/path
+  - prevents a dnxlock
+
+dnxlock = exclusive lock on /some/random/path
+  - prevents dn read
+  - on auth
+  - does auth_pin
+
+auth_pin = pin to authority, on *dir, *in
+  - prevents freeze
+    - can hang up export
+      - thus blocking other auth_pins
+
+hard/file_wrlock = exlusive lock on inode content
+  - prevents inode read
+  - on auth
+  - does auth_pin
+
+

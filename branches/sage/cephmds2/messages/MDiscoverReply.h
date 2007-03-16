@@ -102,11 +102,7 @@ class MDiscoverReply : public Message {
   bool      has_base_dir() { return !no_base_dir && dirs.size(); }
   bool      has_base_dentry() { return !no_base_dentry && dentries.size(); }
   bool has_root() {
-    if (base_ino == 1) {
-      assert(no_base_dir && no_base_dentry);
-      return true;
-    }
-    return false;
+    return (base_ino == 1 && no_base_dir && no_base_dentry);
   }
 
   const string& get_path() { return path; }
