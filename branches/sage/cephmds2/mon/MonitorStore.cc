@@ -156,14 +156,23 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
     return 0;
   }
 
-  // read size
-  __int32_t len = 0;
-  ::read(fd, &len, sizeof(len));
-  
+  // get size
+  struct stat st;
+  int rc = ::fstat(fd, &st);
+  assert(rc == 0);
+  __int32_t len = st.st_size;
+ 
   // read buffer
   bl.clear();
   bufferptr bp(len);
-  ::read(fd, bp.c_str(), len);
+  int off = 0;
+  while (off < len) {
+    dout(20) << "reading at off " << off << " of " << len << endl;
+    int r = ::read(fd, bp.c_str()+off, len-off);
+    if (r < 0) derr(0) << "errno on read " << strerror(errno) << endl;
+    assert(r>0);
+    off += r;
+  }
   bl.append(bp);
   ::close(fd);
 
@@ -193,17 +202,20 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
   int fd = ::open(tfn, O_WRONLY|O_CREAT);
   assert(fd);
   
-  // write size
-  __int32_t len = bl.length();
-  ::write(fd, &len, sizeof(len));
+  // chmod
+  ::fchmod(fd, 0644);
 
   // write data
   for (list<bufferptr>::const_iterator it = bl.buffers().begin();
        it != bl.buffers().end();
-       it++) 
-    ::write(fd, it->c_str(), it->length());
+       it++)  {
+    int r = ::write(fd, it->c_str(), it->length());
+    if (r != (int)it->length())
+      derr(0) << "put_bl_ss ::write() returned " << r << " not " << it->length() << endl;
+    if (r < 0) 
+      derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror(errno) << endl;
+  }
 
-  ::fchmod(fd, 0644);
   ::fsync(fd);
   ::close(fd);
   ::rename(tfn, fn);

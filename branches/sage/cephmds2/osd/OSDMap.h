@@ -306,6 +306,9 @@ private:
         type = PG_TYPE_STARTOSD;
       }
       break;
+      
+    default:
+      assert(0);
     }
 
     // construct final PG

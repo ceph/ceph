@@ -737,6 +737,8 @@ int SyntheticClient::clean_dir(string& basedir)
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    if (it->first == ".") continue;
+    if (it->first == "..") continue;
     string file = basedir + "/" + it->first;
 
     if (time_to_stop()) break;
@@ -1003,16 +1005,15 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     }
     dout(2) << "writing block " << i << "/" << chunks << endl;
     
-    // fill buf with a fingerprint
-    int *p = (int*)buf;
+    // fill buf with a 16 byte fingerprint
+    // 64 bits : file offset
+    // 64 bits : client id
+    // = 128 bits (16 bytes)
+    __uint64_t *p = (__uint64_t*)buf;
     while ((char*)p < buf + wrsize) {
-      *p = (char*)p - buf;      
-      p++;
-      *p = i;
+      *p = i*wrsize + (char*)p - buf;      
       p++;
       *p = client->get_nodeid();
-      p++;
-      *p = 0;
       p++;
     }
 
@@ -1048,42 +1049,33 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
     dout(2) << "reading block " << i << "/" << chunks << endl;
-    client->read(fd, buf, rdsize, i*rdsize);
+    int r = client->read(fd, buf, rdsize, i*rdsize);
+    if (r < rdsize) {
+      dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
+      break;
+    }
 
     // verify fingerprint
-    int *p = (int*)buf;
     int bad = 0;
-    int boff, bgoff, bchunk, bclient, bzero;
+    __int64_t *p = (__int64_t*)buf;
+    __int64_t readoff, readclient;
     while ((char*)p + 32 < buf + rdsize) {
-      boff = *p;
-      bgoff = (int)((char*)p - buf);
+      readoff = *p;
+      __int64_t wantoff = i*rdsize + (__int64_t)((char*)p - buf);
       p++;
-      bchunk = *p;
+      readclient = *p;
       p++;
-      bclient = *p;
-      p++;
-      bzero = *p;
-      p++;
-      if (boff != bgoff ||
-          bchunk != (int)i ||
-          bclient != client->get_nodeid() ||
-          bzero != 0) {
+      if (readoff != wantoff ||
+	  readclient != client->get_nodeid()) {
         if (!bad)
-          dout(0) << "WARNING: wrong data from OSD, it should be " 
-                  << "(block=" << i 
-                  << " offset=" << bgoff
-                  << " client=" << client->get_nodeid() << ")"
-                  << " .. but i read back .. " 
-                  << "(block=" << bchunk
-                  << " offset=" << boff
-                  << " client=" << bclient << " zero=" << bzero << ")" << endl;
-
+          dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		  << endl;
         bad++;
       }
     }
     if (bad) 
       dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
-
   }
   
   client->close(fd);
