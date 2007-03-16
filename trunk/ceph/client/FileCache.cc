@@ -126,9 +126,6 @@ void FileCache::check_caps()
   if ((latest_caps & CAP_FILE_WRBUFFER) == 0 &&
       (used & CAP_FILE_WRBUFFER))
     flush_dirty(new C_FC_CheckCaps(this));
-  if (latest_caps == 0 &&
-      used != 0)
-    empty(new C_FC_CheckCaps(this));
   
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
