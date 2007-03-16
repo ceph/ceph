@@ -306,7 +306,7 @@ md_config_t g_conf = {
 
   //security (all principals)
   secure_io:              1, /* 0=off, 1=on */
-  mds_group:              0, /* 0=none, 1=unix, 2=batch, 3=def, 4=predict */
+  mds_group:              0, /* 0=none, 1=unix, 2=batch, 3=define, 4=predict */
   mds_collection:         0, /* 0=none, 1=unix, 3=def */
   unix_group_file:        0, /* 0=no file, non-zero = filename ptr */
   fix_client_id:          0, /* 0=off, 1=on */

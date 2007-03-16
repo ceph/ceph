@@ -491,8 +491,35 @@ void Server::dispatch_request(Message *m, CInode *ref)
   case MDS_OP_OPEN:
     if (req->get_iarg() & O_CREAT) 
       handle_client_openc(req, ref);
-    else 
-      handle_client_open(req, ref);
+    else {
+      if (g_conf.mds_group == 2) {
+	utime_t open_req_time = g_clock.now();
+	// if this request is within 10ms of the last 2, flash crowd!
+	cout << "Buffering time check" << open_req_time - ref->two_req_ago
+	     << endl;
+	if (open_req_time - ref->two_req_ago < utime_t(0, 10000)) {
+	  cout << "Buffering the request" << endl;
+	  ref->buffer_lock.Lock();
+	  ref->buffered_reqs.insert(req);
+	  if (ref->buffer_stop) {
+	    ref->batch_id.cid = mds->cap_id_count;
+	    ref->batch_id.mds_id = mds->get_nodeid();
+	    ref->batch_id_set = true;
+	    ref->buffer_stop = false;
+	  }
+	  ref->buffer_lock.Unlock();
+	  return;
+	}
+	else {
+	  cout << "Not buffering the request" << endl;
+	  ref->two_req_ago = ref->one_req_ago;
+	  ref->one_req_ago = open_req_time;
+	  handle_client_open(req, ref);
+	}
+      }
+      else
+	handle_client_open(req, ref);
+    }
     break;
   case MDS_OP_TRUNCATE:
     handle_client_truncate(req, ref);
@@ -2431,7 +2458,61 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   } else {
     // exists!
     // FIXME: do i need to repin path based existant inode? hmm.
-    handle_client_open(req, in);
+    if (g_conf.mds_group == 2) {
+      utime_t open_req_time = g_clock.now();
+      // if this request is within 10ms of the last 2, flash crowd!
+      cout << "Buffering time check" << open_req_time - in->two_req_ago
+	   << " against " << utime_t(1, 0) << endl;
+      //if (open_req_time - in->two_req_ago < utime_t(1, 0)) {
+      if (open_req_time > utime_t()) {
+	cout << "Buffering the request" << endl;
+	in->two_req_ago = in->one_req_ago;
+	in->one_req_ago = open_req_time;
+
+	// if buffer waiting thread is off, turn it on
+	if (!in->batching) {
+	  // grab lock and insert
+	  in->buffer_lock.Lock();
+	  in->buffered_reqs.insert(req);
+
+	  // prepare capid for future capability
+	  in->batch_id.cid = mds->cap_id_count;
+	  in->batch_id.mds_id = mds->get_nodeid();
+	  mds->cap_id_count++;
+	  // turn on batching flags
+	  in->batching = true;
+	  in->batch_id_set = true;
+	  in->buffer_stop = false;
+
+	  // set function pointer to open handler
+	  //in->open_fun_ptr = (void (*)(MClientRequest*, CInode*))&handle_client_open;
+	  in->server = this;
+	  
+	  //singal the thread
+	  cout << "Going to singal" << endl;
+	  in->buffer_cond.Signal();
+	  cout << "Done signaling" << endl;
+	  
+	  // release the lock
+	  in->buffer_lock.Unlock();
+	}
+	else {
+	  // grab lock and insert
+	  in->buffer_lock.Lock();
+	  in->buffered_reqs.insert(req);
+	  in->buffer_lock.Unlock();
+	}
+	return;
+      }
+      else {
+	cout << "Not buffering the request" << endl;
+	in->two_req_ago = in->one_req_ago;
+	in->one_req_ago = open_req_time;
+	handle_client_open(req, in);
+      }
+    }
+    else
+      handle_client_open(req, in);
   }
 }
 

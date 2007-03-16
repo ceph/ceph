@@ -25,7 +25,9 @@
 #include "CDentry.h"
 #include "Lock.h"
 #include "Capability.h"
+#include "Server.h"
 
+#include "messages/MClientRequest.h"
 
 #include <cassert>
 #include <list>
@@ -172,7 +174,33 @@ class CInode : public MDSCacheObject {
 
   // waiters
   multimap<int, Context*>  waiting;
+  
 
+  // batching information
+  bool batching;
+  utime_t two_req_ago;
+  utime_t one_req_ago;
+  set<MClientRequest *> buffered_reqs;
+  bool batch_id_set;
+  cap_id_t batch_id;
+
+  Mutex buffer_lock;
+  Cond buffer_cond;
+  bool buffer_stop;
+  void buffer_entry();
+  // FIXME total hack to have escape point back to server
+  Server *server;
+  //void (Server::*open_fun_ptr) (MClientRequest*, CInode *);
+  class BufferThread : public Thread {
+    CInode *inode;
+  public:
+    BufferThread () {}
+    BufferThread (CInode *in): inode(in) {}
+    void *entry() {
+      inode->buffer_entry();
+      return 0;
+    }
+  } buffer_thread;
 
   // -- distributed state --
 public:
@@ -392,7 +420,7 @@ protected:
   void add_user_extcap(uid_t user, ExtCap* extcap) {
     //if (ext_caps.empty())
     //  get(CINODE_PIN_CAPS);
-    assert(ext_caps.count(user) == 0);
+    //assert(ext_caps.count(user) == 0);
     ext_caps[user] = (*extcap);
   }
   void remove_user_extcap(uid_t user) {

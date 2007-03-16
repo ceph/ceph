@@ -236,17 +236,17 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // issue most generic cap (RW)
   my_want |= FILE_MODE_RW;
 
-  utime_t clock_time_start = g_clock.now();
+  //utime_t clock_time_start = g_clock.now();
   utime_t test_time = g_clock.now();
-  utime_t clock_time_end = g_clock.now();
-  cout << "Clock time " << clock_time_end - clock_time_start << endl;
+  //utime_t clock_time_end = g_clock.now();
+  //cout << "Clock time " << clock_time_end - clock_time_start << endl;
 
   // check cache
   ExtCap *ext_cap;
-  utime_t setup_time_end = g_clock.now();
-  cout << "Setup time " << setup_time_end - setup_time_start << endl;
+  //utime_t setup_time_end = g_clock.now();
+  //cout << "Setup time " << setup_time_end - setup_time_start << endl;
 
-  utime_t checkcache_time_start = g_clock.now();
+  //utime_t checkcache_time_start = g_clock.now();
   // unix groups
   if (g_conf.mds_group == 1) {
     if (my_user == in->get_uid())
@@ -259,8 +259,8 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // no grouping
   else 
     ext_cap = in->get_user_extcap(my_user);
-  utime_t checkcache_time_end = g_clock.now();
-  cout << "Check cache time " << checkcache_time_end - checkcache_time_start << endl;
+  //utime_t checkcache_time_end = g_clock.now();
+  //cout << "Check cache time " << checkcache_time_end - checkcache_time_start << endl;
 
   if (!ext_cap) {
     // make new cap
@@ -320,15 +320,15 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     }
     // default no grouping
     else {
-      utime_t make_time_start = g_clock.now();
+      //utime_t make_time_start = g_clock.now();
       ext_cap = new ExtCap(my_want, my_user, in->ino());
-      utime_t make_time_end = g_clock.now();
-      cout << "Capability make time " << make_time_end - make_time_start << endl;
+      //utime_t make_time_end = g_clock.now();
+      //cout << "Capability make time " << make_time_end - make_time_start << endl;
     }
     
     // set capability id
-    ext_cap->set_id(cap_id_count, mds->get_nodeid());
-    cap_id_count++;
+    ext_cap->set_id(mds->cap_id_count, mds->get_nodeid());
+    mds->cap_id_count++;
 
     dout(3) << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
@@ -339,7 +339,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     cout << "Signature time " << sign_time_end - sign_time_start << endl;
 
     // caches this capability in the inode
-    utime_t cache_time_start = g_clock.now();
+    //utime_t cache_time_start = g_clock.now();
     if (g_conf.mds_group == 1) {
       if (my_user == in->get_uid())
 	in->set_unix_user_cap(ext_cap);
@@ -351,8 +351,8 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else
       in->add_user_extcap(my_user,ext_cap);
 
-    utime_t cache_time_end = g_clock.now();
-    cout << "Caching time " << cache_time_end - cache_time_start << endl;
+    //utime_t cache_time_end = g_clock.now();
+    //cout << "Caching time " << cache_time_end - cache_time_start << endl;
 
   }
   // we want to index based on mode, so we can cache more caps
@@ -366,10 +366,10 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     }
   }
   // add capability as recently used
-  utime_t recentcap_time_start = g_clock.now();
+  //utime_t recentcap_time_start = g_clock.now();
   mds->recent_caps.insert(ext_cap->get_id());
-  utime_t recentcap_time_end = g_clock.now();
-  cout << "Recent cap cache time " << recentcap_time_end - recentcap_time_start << endl;
+  //utime_t recentcap_time_end = g_clock.now();
+  //cout << "Recent cap cache time " << recentcap_time_end - recentcap_time_start << endl;
 
   return ext_cap;
 }

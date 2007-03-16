@@ -184,6 +184,10 @@ public:
     data.id.cid = new_id;
     data.id.mds_id = new_mds_id;
   }
+  void set_id(cap_id_t capid) {
+    data.id.cid = capid.cid;
+    data.id.mds_id = capid.mds_id;
+  }
   void set_type(__int8_t new_type) { data.type = new_type;}
 
   void set_user_hash(hash_t nhash) { data.user_group = nhash; }

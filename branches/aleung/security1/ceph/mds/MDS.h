@@ -165,6 +165,8 @@ public:
   // recent capabilities to renew
   set<cap_id_t> recent_caps;
   Renewal token;
+  // count of capability ids used
+  int cap_id_count;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

@@ -49,10 +49,11 @@ private:
   MDS *mds;
   MDCache *mdcache;
   // count of capability id's used
-  int cap_id_count;
+  //int cap_id_count;
  
  public:
-  Locker(MDS *m, MDCache *c) : mds(m), mdcache(c), cap_id_count(0) {}  
+  //Locker(MDS *m, MDCache *c) : mds(m), mdcache(c), cap_id_count(0) {}  
+  Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}
 
   void dispatch(Message *m);
 

@@ -95,7 +95,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   myPrivKey = esignPrivKey("crypto/esig1536.dat");
   myPubKey = esignPubKey(myPrivKey);
 
-  // create unix_groups?
+  // create unix_groups from file?
   if (g_conf.unix_group_file) {
     ifstream from(g_conf.unix_group_file);
 
@@ -146,6 +146,9 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
       assert(0);
     }
   }
+
+  // cap identifiers
+  cap_id_count = 0;
  
   // beacon
   beacon_last_seq = 0;
