@@ -2838,7 +2838,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   tout << size << endl;
   tout << offset << endl;
 
-  assert(offset >= 0);
+  //assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -2988,7 +2988,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
   tout << size << endl;
   tout << offset << endl;
 
-  assert(offset >= 0);
+  //assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;

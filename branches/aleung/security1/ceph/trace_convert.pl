@@ -66,12 +66,10 @@ for $file_handle(@files) {
 		($before, $after) = split(/\) *=/, $line);
 		@replies = split(/\s/, $after);
 		$read_size = $replies[1];
-		if (! $read_size) {
-		    print "$file_handle $line read_size=$read_size\n";
-		}
-		# FIXME hack to reads aren't empty
-		print OUT "write\n$ret_val\n$read_size\n0\n";
-		print OUT "read\n$ret_val\n$read_size\n0\n";
+
+		# FIXME hack so reads aren't empty
+		print OUT "write\n$ret_val\n$read_size\n-1\n";
+		print OUT "read\n$ret_val\n$read_size\n-1\n";
 	    }
 	    elsif ($op =~ /write/) {
 		my $before;
@@ -84,10 +82,8 @@ for $file_handle(@files) {
 		($before, $after) = split(/\) *=/, $line);
 		@replies = split(/\s/, $after);
 		$write_size = $replies[1];
-		if (! $write_size) {
-		    print "$file_handle $line write_size=$write_size\n";
-		}
-		print OUT "write\n$ret_val\n$write_size\n0\n";
+
+		print OUT "write\n$ret_val\n$write_size\n-1\n";
 	    }
 	}
 	close(FILE);
