@@ -1043,6 +1043,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (in->file_wr_mtime > in->inode.mtime)
     m->get_inode().mtime = in->inode.mtime = in->file_wr_mtime;
 
+
+
   if (g_conf.client_oc) {
     // caching on, use FileCache.
     Context *onimplement = 0;
@@ -2247,13 +2249,13 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
 
-    // add . and ..? 
-    string dot("."); 
-    contents[dot] = diri->inode; 
-    if (diri != root) { 
-      string dotdot(".."); 
-      contents[dotdot] = diri->dn->dir->parent_inode->inode; 
-    } 
+    // add . and ..?
+    string dot(".");
+    contents[dot] = diri->inode;
+    if (diri != root) {
+      string dotdot("..");
+      contents[dotdot] = diri->dn->dir->parent_inode->inode;
+    }
 
     if (!reply->get_dir_in().empty()) {
       // only open dir if we're actually adding stuff to it!
@@ -2265,11 +2267,11 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
            pin != reply->get_dir_in().end(); 
            ++pin, ++pdn) {
-	
-	if (*pdn == ".")  
-	  continue; 
-	
-        // count entries
+
+	if (*pdn == ".") 
+	  continue;
+
+	// count entries
         res++;
 
         // put in cache
@@ -2283,15 +2285,11 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
         // contents to caller too!
         contents[*pdn] = in->inode;
       }
-      if (dir->is_empty()) 
-	close_dir(dir); 
+
+      if (dir->is_empty())
+	close_dir(dir);
     }
     
-    // add .. too?
-    //if (diri != root && diri->dn && diri->dn->dir) {
-    //Inode *parent = diri->dn->dir->parent_inode;
-    //contents[".."] = parent->inode;
-    //}    
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
@@ -2838,7 +2836,6 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   tout << size << endl;
   tout << offset << endl;
 
-  //assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -2854,21 +2851,6 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   ExtCap *read_ext_cap = capcache->get_cache_cap(in->ino(), uid);
   assert(read_ext_cap);
   
-  // do we have read file cap?
-  while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
-    dout(7) << " don't have read cap, waiting" << endl;
-    Cond cond;
-    in->waitfor_read.push_back(&cond);
-    cond.Wait(client_lock);
-  }  
-  // lazy cap?
-  while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-     dout(7) << " don't have lazy cap, waiting" << endl;
-    Cond cond;
-    in->waitfor_lazy.push_back(&cond);
-    cond.Wait(client_lock);
-  }
- 
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
@@ -2902,6 +2884,23 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
     rvalue = r = in->fc.read(offset, size, blist, client_lock, read_ext_cap);  // may block.
   } else {
     // object cache OFF -- legacy inconsistent way.
+
+    // do we have read file cap?
+    while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
+      dout(7) << " don't have read cap, waiting" << endl;
+      Cond cond;
+      in->waitfor_read.push_back(&cond);
+      cond.Wait(client_lock);
+    }  
+    // lazy cap?
+    while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+      dout(7) << " don't have lazy cap, waiting" << endl;
+      Cond cond;
+      in->waitfor_lazy.push_back(&cond);
+      cond.Wait(client_lock);
+    }
+    
+    // do sync read
     Cond cond;
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
@@ -2988,7 +2987,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
   tout << size << endl;
   tout << offset << endl;
 
-  //assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -3000,26 +2998,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
-  //ExtCap *write_ext_cap = in->get_ext_cap(uid);
-  ExtCap *write_ext_cap = capcache->get_cache_cap(in->ino(), uid);
-  assert(write_ext_cap);
-
-  // do we have write file cap?
-  while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
-    dout(7) << " don't have write cap, waiting" << endl;
-    Cond cond;
-    in->waitfor_write.push_back(&cond);
-    cond.Wait(client_lock);
-  }
-  while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-    dout(7) << " don't have lazy cap, waiting" << endl;
-    Cond cond;
-    in->waitfor_lazy.push_back(&cond);
-    cond.Wait(client_lock);
-  }
-
-  // adjust fd pos
-  f->pos = offset+size;
+    ExtCap *write_ext_cap = capcache->get_cache_cap(in->ino(), uid);
+    assert(write_ext_cap);
 
   // time it.
   utime_t start = g_clock.now();
@@ -3034,10 +3014,27 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
     // write (this may block!)
     in->fc.write(offset, size, blist, client_lock, write_ext_cap);
+    
+    // adjust fd pos
+    f->pos = offset+size;
 
   } else {
     // legacy, inconsistent synchronous write.
     dout(7) << "synchronous write" << endl;
+
+    // do we have write file cap?
+    while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
+      dout(7) << " don't have write cap, waiting" << endl;
+      Cond cond;
+      in->waitfor_write.push_back(&cond);
+      cond.Wait(client_lock);
+    }
+    while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+      dout(7) << " don't have lazy cap, waiting" << endl;
+      Cond cond;
+      in->waitfor_lazy.push_back(&cond);
+      cond.Wait(client_lock);
+    }
 
     // prepare write
     Cond cond;
@@ -3054,6 +3051,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 		 //, 1+((int)g_clock.now()) / 10 //f->pos // hack hack test osd revision snapshots
 		 ); 
     
+    // adjust fd pos
+    f->pos = offset+size;
+
     while (!done) {
       cond.Wait(client_lock);
       dout(20) << " sync write bump " << onfinish << endl;

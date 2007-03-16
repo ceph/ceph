@@ -707,6 +707,8 @@ int SyntheticClient::clean_dir(string& basedir)
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    if (it->first == ".") continue;
+    if (it->first == "..") continue;
     string file = basedir + "/" + it->first;
 
     if (time_to_stop()) break;

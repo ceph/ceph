@@ -53,31 +53,44 @@ int main(int argc, char **argv, char *envp[]) {
   // start up network
   rank.start_rank();
 
-  // start client
-  Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
-  client->init();
+  list<Client*> clients;
+  list<SyntheticClient*> synclients;
+
+  cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << endl;
+  for (int i=0; i<g_conf.num_client; i++) {
+    // start client
+    Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
+    client->init();
     
-  // start syntheticclient
-  SyntheticClient *syn = new SyntheticClient(client);
+    // start syntheticclient
+    SyntheticClient *syn = new SyntheticClient(client);
 
-  // start up fuse
-  // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting" << endl;
-  client->mount();
-  
-  cout << "starting syn client" << endl;
-  syn->start_thread();
+    client->mount();
+    
+    syn->start_thread();
 
-  // wait
-  syn->join_thread();
+    clients.push_back(client);
+    synclients.push_back(syn);
+  }
 
-  // unmount
-  client->unmount();
-  cout << "unmounted" << endl;
-  client->shutdown();
-  
-  delete client;
-  
+  cout << "waiting for client(s) to finish" << endl;
+  while (!clients.empty()) {
+    Client *client = clients.front();
+    SyntheticClient *syn = synclients.front();
+    clients.pop_front();
+    synclients.pop_front();
+    
+    // wait
+    syn->join_thread();
+
+    // unmount
+    client->unmount();
+    client->shutdown();
+
+    delete syn;
+    delete client;
+  }
+    
   // wait for messenger to finish
   rank.wait();
   
