@@ -937,6 +937,8 @@ void Locker::inode_file_read_finish(CInode *in)
 
 bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
 {
+  dout(7) << "inode_file_write_start on " << *in << endl;
+
   // can't write?
   if (!in->filelock.can_write(in->is_auth())) {
   
@@ -990,7 +992,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
 void Locker::inode_file_write_finish(CInode *in)
 {
   // drop ref
-  assert(in->filelock.can_write(in->is_auth()));
+  //assert(in->filelock.can_write(in->is_auth()));
   in->filelock.put_write();
   dout(7) << "inode_file_write_finish on " << *in << ", filelock=" << in->filelock << endl;
   
