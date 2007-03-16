@@ -1850,7 +1850,13 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
   
   // unpin dir
   dn->dir->auth_unpin();
+
+  // kick waiters
+  list<Context*> finished;
+  dn->dir->take_waiting(CDIR_WAIT_DNREAD, finished);
+  mds->queue_finished(finished);
 }
+
 
 /*
  * onfinish->finish() will be called with 
