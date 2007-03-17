@@ -1296,10 +1296,12 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   
 
   // create inode
+  cout << "creating inode....should i maybe be creating the thread here?" << endl;
   *pin = mdcache->create_inode();
   (*pin)->inode.uid = req->get_caller_uid();
   (*pin)->inode.gid = req->get_caller_gid();
   (*pin)->inode.ctime = (*pin)->inode.mtime = (*pin)->inode.atime = g_clock.gettime();   // now
+  cout << "Done setting up inode" << endl;
   // note: inode.version will get set by finisher's mark_dirty.
 
   // create dentry
@@ -2435,6 +2437,9 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   assert(dn);
 
   if (r == 1) {
+    cout << "openc for " << req->get_filepath() << " from uid:" <<
+      req->get_caller_uid() << " on client:" << req->get_client() << 
+      " with client inst " << req->get_client_inst() << endl;
     // created.
     // it's a file.
     in->inode.mode = 0644;              // FIXME req should have a umask
@@ -2465,43 +2470,56 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 	   << " against " << utime_t(1, 0) << endl;
       //if (open_req_time - in->two_req_ago < utime_t(1, 0)) {
       if (open_req_time > utime_t()) {
-	cout << "Buffering the request" << endl;
+	cout << "Buffering the request for uid:" <<
+	  req->get_caller_uid() << " on client:" <<
+	  req->get_client() << " for file:" <<
+	  in->ino() << " with client inst:" << req->get_client_inst() << endl;
 	in->two_req_ago = in->one_req_ago;
 	in->one_req_ago = open_req_time;
 
+	cout << "HCO: Grabbing lock" << endl;
+	in->buffer_lock.Lock();
+	cout << "HCO: Grabbed lock" << endl;
+
+	// wait for thread if it hasn't init'd
+	if (! in->thread_init)
+	  in->buffer_cond.Wait(in->buffer_lock);
+
 	// if buffer waiting thread is off, turn it on
 	if (!in->batching) {
+	  cout << "HCO: Batching is now turned on" << endl;
 	  // grab lock and insert
-	  in->buffer_lock.Lock();
 	  in->buffered_reqs.insert(req);
+	  cout << "HCO: Inserted request" << endl;
 
 	  // prepare capid for future capability
 	  in->batch_id.cid = mds->cap_id_count;
 	  in->batch_id.mds_id = mds->get_nodeid();
 	  mds->cap_id_count++;
 	  // turn on batching flags
+	  cout << "HCO: Turning batching on" << endl;
 	  in->batching = true;
 	  in->batch_id_set = true;
-	  in->buffer_stop = false;
+	  //in->buffer_stop = false;
 
-	  // set function pointer to open handler
-	  //in->open_fun_ptr = (void (*)(MClientRequest*, CInode*))&handle_client_open;
+	  // set server exit point
 	  in->server = this;
-	  
+	   
 	  //singal the thread
 	  cout << "Going to singal" << endl;
 	  in->buffer_cond.Signal();
 	  cout << "Done signaling" << endl;
 	  
-	  // release the lock
-	  in->buffer_lock.Unlock();
 	}
 	else {
-	  // grab lock and insert
-	  in->buffer_lock.Lock();
+	  cout << "HCO: Inserting into buffer" << endl;
 	  in->buffered_reqs.insert(req);
-	  in->buffer_lock.Unlock();
 	}
+	
+	// release the lock
+	cout << "HCO: releasing lock" << endl;
+	in->buffer_lock.Unlock();
+	cout << "HCO: released lock" << endl;
 	return;
       }
       else {

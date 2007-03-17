@@ -28,6 +28,7 @@ using namespace CryptoLib;
 
 #define NO_GROUP 0
 #define UNIX_GROUP 1
+#define BATCH 2
 
 struct cap_id_t {
   int cid;

@@ -96,10 +96,13 @@ CInode::CInode(MDCache *c, bool auth) {
   group_cap_set = false;
   world_cap_set = false;
 
+  thread_init = false;
   batching = false;
   buffer_stop = false;
   buffer_thread = BufferThread(this);
+  cout << "Starting buffer_thread.create()" << endl;
   buffer_thread.create();
+  cout << "Buffer_thread created!" << endl;
   
   auth_pins = 0;
   nested_auth_pins = 0;
@@ -120,20 +123,30 @@ CInode::~CInode() {
 }
 void CInode::buffer_entry()
 {
-  cout << "buffer start" << endl;
+  cout << "buffer thread start------> for " << inode.ino << endl;
   buffer_lock.Lock();
+
+  // init myself and signal anyone waiting for me to init
+  thread_init = true;
+  buffer_cond.Signal();
+
   while(!buffer_stop) {
 
+    // ifwe're not buffering, then,
     // were gonna get signaled when we start buffering
-    cout << "Buffer waiting" << endl;
-    buffer_cond.Wait(buffer_lock);
-    cout << "Buffer signaled" << endl;
+    // plus i need to release the lock for anyone
+    // waiting for me to init
+    cout << "Buffer thread waiting on cond" << endl;
+    if (!batching)
+      buffer_cond.Wait(buffer_lock);
+    cout << "Buffer thread signaled" << endl;
     
     // the sleep releases the lock and allows the dispatch
     // to insert requests into the buffer
     // sleep first, then serve cap
-    cout << "buffer sleeping to buffer" << endl;
+    cout << "buffer thread sleeping to buffer" << endl;
     buffer_cond.WaitInterval(buffer_lock, utime_t(5,0));
+    cout << "buffer thread awoke from interval sleep" << endl;
     
     /*
     // now i've slept, make cap for users
@@ -166,10 +179,14 @@ void CInode::buffer_entry()
       cout << "ABOUT TO PASS OFF THE REQUEST" << endl;
       //open_fun_ptr(*ri, this);
       server->handle_client_open(*ri, this);
-    }   
+    }
+
+    //turn batching off
+    batching = false;
   }
+  cout << "Buffer thread about to unlock" << endl;
   buffer_lock.Unlock();
-  cout << "buffer finish" << endl;
+  cout << "<------buffer finish" << endl;
 }
 
 

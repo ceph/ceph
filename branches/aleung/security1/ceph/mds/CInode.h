@@ -178,12 +178,14 @@ class CInode : public MDSCacheObject {
 
   // batching information
   bool batching;
+
   utime_t two_req_ago;
   utime_t one_req_ago;
   set<MClientRequest *> buffered_reqs;
   bool batch_id_set;
   cap_id_t batch_id;
 
+  bool thread_init;
   Mutex buffer_lock;
   Cond buffer_cond;
   bool buffer_stop;
