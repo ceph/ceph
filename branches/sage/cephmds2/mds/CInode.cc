@@ -461,23 +461,23 @@ bool CInode::waiting_for(int tag)
   return waiting.count(tag) > 0;
 }
 
-void CInode::add_waiter(int tag, Context *c) {
-  // waiting on hierarchy?
+void CInode::add_waiter(int tag, Context *c) 
+{
+  // wait on the directory?
   if (tag & WAIT_AUTHPINNABLE) {
-    assert(tag == WAIT_AUTHPINNABLE);
-    assert(is_freezing() || is_frozen());
-
-    // wait on the directory
     parent->dir->add_waiter(CDir::WAIT_AUTHPINNABLE, c);
     return;
   }
-  
+  if (tag & WAIT_SINGLEAUTH) {
+    parent->dir->add_waiter(CDir::WAIT_SINGLEAUTH, c);
+    return;
+  }
+
   // this inode.
-  if (waiting.size() == 0)
+  if (waiting.empty())
     get(PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
-  
 }
 
 void CInode::take_waiting(int mask, list<Context*>& ls)

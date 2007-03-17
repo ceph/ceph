@@ -200,7 +200,7 @@ class SyntheticClient {
 
   void foo();
 
-  int thrash_links(const char *basedir, int dirs, int files, int depth);
+  int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
 
 };
 

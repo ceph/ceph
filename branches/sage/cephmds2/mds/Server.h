@@ -96,13 +96,13 @@ public:
   // link
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
-  void link_local(MClientRequest *req, CInode *diri,
-		  CDentry *dn, CInode *targeti);
+  void _link_local(MClientRequest *req, CInode *diri,
+		   CDentry *dn, CInode *targeti);
   void _link_local_finish(MClientRequest *req, 
 			  CDentry *dn, CInode *targeti,
 			  version_t, time_t, version_t);
-  void link_remote(MClientRequest *req, CInode *diri,
-		   CDentry *dn, CInode *targeti);
+  void _link_remote(MClientRequest *req, CInode *diri,
+		    CDentry *dn, CInode *targeti);
 
   // unlink
   void handle_client_unlink(MClientRequest *req, CInode *ref);
@@ -129,21 +129,19 @@ public:
 
 
   // file
-  void handle_client_open(MClientRequest *req, CInode *ref);
-  void handle_client_openc(MClientRequest *req, CInode *ref);
+  void handle_client_open(MClientRequest *req, CInode *in);
+  void handle_client_openc(MClientRequest *req, CInode *diri);
   void handle_client_release(MClientRequest *req, CInode *in);  
   void handle_client_truncate(MClientRequest *req, CInode *in);
   void handle_client_fsync(MClientRequest *req, CInode *in);
 
 
   // some helpers
-  CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
-
   CDir *validate_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
-  int prepare_mknod(MClientRequest *req, CInode *diri, 
-		    CDir **pdir, CInode **pin, CDentry **pdn, 
-		    bool okexist=false);
-
+  int prepare_null_dentry(MClientRequest *req, CInode *diri, 
+			  CDir **pdir, CDentry **pdn, 
+			  bool okexist=false);
+  CInode *prepare_new_inode(MClientRequest *req, CDir *dir);
 
 
 };

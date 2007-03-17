@@ -443,6 +443,8 @@ void Server::dispatch_request(Message *m, CInode *ref)
 
   // MClientRequest.
 
+  dout(7) << "handle_client " << *m << " ref " << *ref << endl;
+
   switch (req->get_op()) {
     
     // files
@@ -651,6 +653,14 @@ public:
 void Server::handle_client_utime(MClientRequest *req,
 				 CInode *cur)
 {
+  // auth pin
+  if (!cur->can_auth_pin()) {
+    dout(7) << "waiting for authpinnable on " << *cur << endl;
+    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+    return;
+  }
+  mdcache->request_auth_pin(req, cur);
+
   // write
   if (!mds->locker->inode_file_write_start(cur, req))
     return;  // fw or (wait for) sync
@@ -716,6 +726,14 @@ public:
 void Server::handle_client_chmod(MClientRequest *req,
 				 CInode *cur)
 {
+  // auth pin
+  if (!cur->can_auth_pin()) {
+    dout(7) << "waiting for authpinnable on " << *cur << endl;
+    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+    return;
+  }
+  mdcache->request_auth_pin(req, cur);
+
   // write
   if (!mds->locker->inode_hard_write_start(cur, req))
     return;  // fw or (wait for) lock
@@ -774,6 +792,14 @@ public:
 void Server::handle_client_chown(MClientRequest *req,
 				 CInode *cur)
 {
+  // auth pin
+  if (!cur->can_auth_pin()) {
+    dout(7) << "waiting for authpinnable on " << *cur << endl;
+    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+    return;
+  }
+  mdcache->request_auth_pin(req, cur);
+
   // write
   if (!mds->locker->inode_hard_write_start(cur, req))
     return;  // fw or (wait for) lock
@@ -943,15 +969,20 @@ public:
 void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
 {
   CDir *dir = 0;
-  CInode *newi = 0;
   CDentry *dn = 0;
-  
-  // make dentry and inode, xlock dentry.
-  if (!prepare_mknod(req, diri, &dir, &newi, &dn)) 
+
+  // create null dentry
+  if (!prepare_null_dentry(req, diri, &dir, &dn)) 
     return;
   assert(dir);
-  assert(newi);
   assert(dn);
+
+  // xlock dentry
+  if (!mds->locker->dentry_xlock_start(dn, req, diri))
+    return;
+
+  CInode *newi = prepare_new_inode(req, dir);
+  assert(newi);
 
   // it's a file.
   dn->pre_dirty();
@@ -973,7 +1004,8 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
 
 
 
-/*
+/** validate_dentry_dir
+ *
  * verify that the dir exists and would own the dname.
  * do not check if the dentry exists.
  */
@@ -993,6 +1025,7 @@ CDir *Server::validate_dentry_dir(MClientRequest *req, CInode *diri, string& nam
   if (!dir)
     return 0;
 
+  /*
   // dir auth pinnable?
   if (!dir->can_auth_pin()) {
     dout(7) << "validate_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
@@ -1000,6 +1033,7 @@ CDir *Server::validate_dentry_dir(MClientRequest *req, CInode *diri, string& nam
 		    new C_MDS_RetryRequest(mds, req, diri));
     return false;
   }
+  */
 
   // frozen?
   if (dir->is_frozen()) {
@@ -1012,7 +1046,8 @@ CDir *Server::validate_dentry_dir(MClientRequest *req, CInode *diri, string& nam
   return dir;
 }
 
-/*
+/** prepare_null_dentry
+ *
  * prepare a mknod-type operation (mknod, mkdir, symlink, open+create).
  * create the inode and dentry, but do not link them.
  * pre_dirty the dentry+dir.
@@ -1023,11 +1058,11 @@ CDir *Server::validate_dentry_dir(MClientRequest *req, CInode *diri, string& nam
  *  1 - created
  *  2 - already exists (only if okexist=true)
  */
-int Server::prepare_mknod(MClientRequest *req, CInode *diri, 
-			  CDir **pdir, CInode **pin, CDentry **pdn, 
-			  bool okexist) 
+int Server::prepare_null_dentry(MClientRequest *req, CInode *diri, 
+			       CDir **pdir, CDentry **pdn, 
+			       bool okexist) 
 {
-  dout(10) << "prepare_mknod " << req->get_filepath() << " in " << *diri << endl;
+  dout(10) << "prepare_null_dentry " << req->get_filepath() << " in " << *diri << endl;
   
   // get containing directory (without last bit)
   filepath dirpath = req->get_filepath().prefixpath(req->get_filepath().depth() - 1);
@@ -1049,7 +1084,6 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
       // name already exists
       if (okexist) {
         dout(10) << "dentry " << name << " exists in " << *dir << endl;
-	*pin = (*pdn)->inode;
         return 2;
       } else {
         dout(10) << "dentry " << name << " exists in " << *dir << endl;
@@ -1067,29 +1101,34 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   }
 
   // create null dentry
-  if (!*pdn) 
+  if (!*pdn) {
     *pdn = dir->add_dentry(name, 0);
-
-  // xlock dentry
-  bool res = mds->locker->dentry_xlock_start(*pdn, req, diri);
-  if (!res) 
-    return 0;
-  
-  // yay!
-
-  // create inode?
-  if (pin) {
-    *pin = mdcache->create_inode();
-    (*pin)->inode.uid = req->get_caller_uid();
-    (*pin)->inode.gid = req->get_caller_gid();
-    (*pin)->inode.ctime = (*pin)->inode.mtime = (*pin)->inode.atime = g_clock.gettime();   // now
-    // note: inode.version will get set by finisher's mark_dirty.
+    dout(10) << "prepare_null_dentry added " << **pdn << endl;
+  } else {
+    dout(10) << "prepare_null_dentry had " << **pdn << endl;
   }
+
+
+  return 1;
+}
+
+
+/** prepare_new_inode
+ *
+ * create a new inode.  set c/m/atime.  hit dir pop.
+ */
+CInode* Server::prepare_new_inode(MClientRequest *req, CDir *dir) 
+{
+  CInode *in = mdcache->create_inode();
+  in->inode.uid = req->get_caller_uid();
+  in->inode.gid = req->get_caller_gid();
+  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.gettime();   // now
+  dout(10) << "prepare_new_inode " << *in << endl;
 
   // bump modify pop
   mds->balancer->hit_dir(dir, META_POP_DWR);
 
-  return 1;
+  return in;
 }
 
 
@@ -1101,15 +1140,21 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
 void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
 {
   CDir *dir = 0;
-  CInode *newi = 0;
   CDentry *dn = 0;
   
-  // make dentry and inode, xlock dentry.
-  if (!prepare_mknod(req, diri, &dir, &newi, &dn)) 
+  // make dentry 
+  if (!prepare_null_dentry(req, diri, &dir, &dn)) 
     return;
   assert(dir);
-  assert(newi);
   assert(dn);
+
+  // xlock
+  if (!mds->locker->dentry_xlock_start(dn, req, diri))
+    return;
+
+  // new inode
+  CInode *newi = prepare_new_inode(req, dir);  
+  assert(newi);
 
   // it's a directory.
   dn->pre_dirty();
@@ -1158,15 +1203,20 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
 void Server::handle_client_symlink(MClientRequest *req, CInode *diri)
 {
   CDir *dir = 0;
-  CInode *newi = 0;
   CDentry *dn = 0;
 
-  // make dentry and inode, xlock dentry.
-  if (!prepare_mknod(req, diri, &dir, &newi, &dn)) 
+  // make null dentry 
+  if (!prepare_null_dentry(req, diri, &dir, &dn)) 
     return;
   assert(dir);
-  assert(newi);
   assert(dn);
+
+  // xlock
+  if (!mds->locker->dentry_xlock_start(dn, req, diri))
+    return;
+
+  CInode *newi = prepare_new_inode(req, dir);
+  assert(newi);
 
   // it's a symlink
   dn->pre_dirty();
@@ -1210,11 +1260,12 @@ public:
 
 void Server::handle_client_link(MClientRequest *req, CInode *ref)
 {
-  // figure out name
   string dname = req->get_filepath().last_dentry();
-  dout(7) << "handle_client_link dname is " << dname << endl;
-  
-  // validate dir
+  dout(7) << "handle_client_link " << dname << " in " << *ref
+	  << " to " << req->get_sarg()
+	  << endl;
+
+  // make sure we own the dname
   CDir *dir = validate_dentry_dir(req, ref, dname);
   if (!dir) return;
 
@@ -1246,7 +1297,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
   if (trace.size()) targeti = trace[trace.size()-1]->inode;
   assert(targeti);
 
-  // dir?
+  // not a dir?
   dout(7) << "target is " << *targeti << endl;
   if (targeti->is_dir()) {
     dout(7) << "target is a dir, failing" << endl;
@@ -1254,25 +1305,38 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
     return;
   }
 
+  // does the target need an anchor?
+  if (targeti->is_auth()) {
+    if (targeti->get_parent_dir()->get_inode() == diri) {
+      dout(7) << "target is in the same dir, sweet" << endl;
+    } 
+    else if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+    } else {
+      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+      
+      mdcache->anchor_create(targeti,
+			     new C_MDS_RetryRequest(mds, req, diri));
+      return;
+    }
+  }
+
   // can we create the dentry?
   CDir *dir = 0;
   CDentry *dn = 0;
   
   // make dentry and inode, xlock dentry.
-  r = prepare_mknod(req, diri, &dir, 0, &dn);
+  r = prepare_null_dentry(req, diri, &dir, &dn);
   if (!r) 
     return; // wait on something
   assert(dir);
   assert(dn);
 
-  // ok!
-  assert(dn->is_xlockedbyme(req));
-
   // local or remote?
   if (targeti->is_auth()) 
-    link_local(req, diri, dn, targeti);
+    _link_local(req, diri, dn, targeti);
   else 
-    link_remote(req, diri, dn, targeti);
+    _link_remote(req, diri, dn, targeti);
 }
 
 
@@ -1297,28 +1361,37 @@ public:
 };
 
 
-void Server::link_local(MClientRequest *req, CInode *diri,
+void Server::_link_local(MClientRequest *req, CInode *diri,
 			CDentry *dn, CInode *targeti)
 {
-  dout(10) << "link_local " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_local " << *dn << " to " << *targeti << endl;
 
-  // anchor target?
-  if (targeti->get_parent_dir() == dn->get_dir()) {
-    dout(7) << "target is in the same dir, sweet" << endl;
-  } 
-  else if (targeti->is_anchored() && !targeti->is_unanchoring()) {
-    dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
-  } else {
-    dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
-    
-    mdcache->anchor_create(targeti,
-			   new C_MDS_RetryRequest(mds, req, diri));
+  // first, auth pin the dentry dir and targeti.
+  if (!mdcache->request_auth_pinned(req, dn->get_dir()) &&
+      !dn->get_dir()->can_auth_pin()) {
+    dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
+			      new C_MDS_RetryRequest(mds, req, diri));
+    mdcache->request_drop_auth_pins(req);
     return;
   }
+  if (!mdcache->request_auth_pinned(req, targeti) &&
+      !targeti->can_auth_pin()) {
+    targeti->add_waiter(CDir::WAIT_AUTHPINNABLE,
+			new C_MDS_RetryRequest(mds, req, diri));
+    mdcache->request_drop_auth_pins(req);
+    return;
+  }
+  mdcache->request_auth_pin(req, dn->get_dir());
+  mdcache->request_auth_pin(req, targeti);
+  
+  // sweet.  let's get our locks.
+  // lock dentry
+  if (!mds->locker->dentry_xlock_start(dn, req, diri))
+    return;
 
-  // wrlock the target inode
+  // lock target inode
   if (!mds->locker->inode_hard_write_start(targeti, req))
-    return;  // fw or (wait for) lock
+    return;
 
   // ok, let's do it.
   // prepare log entry
@@ -1376,10 +1449,10 @@ void Server::_link_local_finish(MClientRequest *req, CDentry *dn, CInode *target
 
 
 
-void Server::link_remote(MClientRequest *req, CInode *ref,
+void Server::_link_remote(MClientRequest *req, CInode *ref,
 			 CDentry *dn, CInode *targeti)
 {
-  dout(10) << "link_remote " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_remote " << *dn << " to " << *targeti << endl;
 
   // pin the target replica in our cache
   assert(!targeti->is_auth());
@@ -1467,8 +1540,7 @@ public:
 
 // UNLINK
 
-void Server::handle_client_unlink(MClientRequest *req, 
-				  CInode *diri)
+void Server::handle_client_unlink(MClientRequest *req, CInode *diri)
 {
   // rmdir or unlink?
   bool rmdir = false;
@@ -1583,10 +1655,6 @@ void Server::handle_client_unlink(MClientRequest *req,
     return;
   }
   
-  // xlock dentry
-  if (!mds->locker->dentry_xlock_start(dn, req, diri))
-    return;
-
   mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // ok!
@@ -1622,14 +1690,40 @@ public:
 void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
 {
   dout(10) << "_unlink_local " << *dn << endl;
-  
+
   // if we're not the only link, wrlock the target (we need to nlink--)
   if (in->inode.nlink > 1) {
     assert(dn->is_remote());  // unlinking primary is handled like a rename.. not here
+    dout(10) << "_unlink_local nlink>1, will wrlock " << *in << endl;
 
-    dout(10) << "_unlink_local nlink>1, wrlocking " << *in << endl;
+    // auth pin
+    if (!dn->get_dir()->can_auth_pin()) {
+      dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
+				new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
+      mdcache->request_drop_auth_pins(req);
+      return;
+    }
+    if (!in->can_auth_pin()) {
+      in->add_waiter(CInode::WAIT_AUTHPINNABLE,
+		     new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
+      mdcache->request_drop_auth_pins(req);
+      return;
+    }
+    mdcache->request_auth_pin(req, dn->get_dir());
+    mdcache->request_auth_pin(req, in);
+
+    // lock
+    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
+      return;
     if (!mds->locker->inode_hard_write_start(in, req))
-      return;  // fw or (wait for) lock
+      return;
+  } else {
+    // the inode will go away.
+    dout(10) << "_unlink_local nlink==1, will destroy " << *in << endl;
+
+    // just xlock dentry.
+    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
+      return;
   }
   
   // ok, let's do it.
@@ -2308,6 +2402,14 @@ void Server::handle_client_rename_local(MClientRequest *req,
 
 void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 {
+  // auth pin
+  if (!cur->can_auth_pin()) {
+    dout(7) << "waiting for authpinnable on " << *cur << endl;
+    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+    return;
+  }
+  mdcache->request_auth_pin(req, cur);
+
   // write
   if (!mds->locker->inode_file_write_start(cur, req))
     return;  // fw or (wait for) lock
@@ -2335,8 +2437,7 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 // ===========================
 // open, openc, close
 
-void Server::handle_client_open(MClientRequest *req,
-				CInode *cur)
+void Server::handle_client_open(MClientRequest *req, CInode *cur)
 {
   int flags = req->args.open.flags;
   int mode = req->args.open.mode;
@@ -2364,12 +2465,20 @@ void Server::handle_client_open(MClientRequest *req,
 
   // O_TRUNC
   if (flags & O_TRUNC) {
+    // auth pin
+    if (!cur->can_auth_pin()) {
+      dout(7) << "waiting for authpinnable on " << *cur << endl;
+      cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+      return;
+    }
+    mdcache->request_auth_pin(req, cur);
+
     // write
     if (!mds->locker->inode_file_write_start(cur, req))
       return;  // fw or (wait for) lock
     
     // do update
-    cur->inode.size = req->get_sizearg();
+    cur->inode.size = 0;
     cur->_mark_dirty(); // fixme
     
     mds->locker->inode_file_write_finish(cur);
@@ -2433,20 +2542,27 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << endl;
 
   CDir *dir = 0;
-  CInode *in = 0;
   CDentry *dn = 0;
   
   // make dentry and inode, xlock dentry.
   bool excl = (req->args.open.flags & O_EXCL);
-  int r = prepare_mknod(req, diri, &dir, &in, &dn, !excl);  // okexist = !excl
-  if (r <= 0) 
-    return; // wait on something
+  int r = prepare_null_dentry(req, diri, &dir, &dn, !excl);  // okexist = !excl
+  if (r == 0) return; // wait on something
   assert(dir);
-  assert(in);
   assert(dn);
 
+
   if (r == 1) {
-    // created.
+    // created null dn.
+    
+    // xlock
+    if (!mds->locker->dentry_xlock_start(dn, req, diri))
+      return;
+
+    // create inode.
+    CInode *in = prepare_new_inode(req, dir);
+    assert(in);
+
     // it's a file.
     dn->pre_dirty();
     in->inode.mode = 0644;              // FIXME req should have a umask
@@ -2469,16 +2585,33 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     */
   } else {
     // exists!
-    
+
     // O_EXCL?
     if (req->args.open.flags & O_EXCL) {
       // fail.
       dout(10) << "O_EXCL, target exists, failing with -EEXIST" << endl;
-      reply_request(req, -EEXIST, in);
+      reply_request(req, -EEXIST, diri);
       return;
     } 
-    
-    // FIXME: do i need to repin path based existant inode? hmm.
+
+    // get inode
+    CInode *in = dn->inode;
+    if (!in) {
+      assert(dn->is_remote());
+      in = mdcache->get_inode(dn->get_remote_ino());
+      if (in) {
+	dout(7) << "linking in remote in " << *in << endl;
+	dn->link_remote(in);
+      } else {
+	dout(10) << "remote dn, opening inode for " << *dn << endl;
+	mdcache->open_remote_ino(dn->get_remote_ino(), req, 
+				 new C_MDS_RetryRequest(mds, req, diri));
+	return;
+      }
+    }
+    assert(in);
+        
+    // FIXME: do i need to repin path based existent inode? hmm.
     handle_client_open(req, in);
   }
 }

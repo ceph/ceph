@@ -1654,13 +1654,18 @@ bool MDCache::trim(int max)
     else {
       assert(dn->is_null());
     }
-    dir->remove_dentry(dn);
 
     // adjust the dir state
-    dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
+    // NOTE: we can safely remove a clean, null dentry without effecting
+    //       directory completeness.
+    if (!(dn->is_null() && dn->is_clean())) 
+      dir->state_clear(CDir::STATE_COMPLETE); 
+
+    // remove dentry
+    dir->remove_dentry(dn);
 
     // reexport?
-    if (dir->get_size() == 0)
+    if (dir->get_size() == 0 && dir->is_subtree_root())
       migrator->export_empty_import(dir);
     
     if (mds->logger) mds->logger->inc("cex");
@@ -1698,6 +1703,8 @@ bool MDCache::trim(int max)
 void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expiremap)
 {
   assert(dir->get_num_ref() == 0);
+
+  dout(15) << "trim_dirfrag " << *dir << endl;
 
   CInode *in = dir->get_inode();
 
@@ -2397,21 +2404,28 @@ int MDCache::path_traverse(filepath& origpath,
 
         curdir = cur->get_or_open_dirfrag(this, fg);
       } else {
-        // discover dir from/via inode auth
+        // discover?
         assert(!cur->is_auth());
         if (cur->waiting_for(CInode::WAIT_DIR)) {
-          dout(10) << "traverse: need dir for " << *cur << ", already doing discover" << endl;
-        } else {
-          filepath want = path.postfixpath(depth);
-          dout(10) << "traverse: need dir for " << *cur << ", doing discover, want " << want.get_path() << endl;
-          mds->send_message_mds(new MDiscover(mds->get_nodeid(),
+          dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
+        } 
+	else if (cur->auth_is_ambiguous()) {
+	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
+	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, ondelay);
+	  if (onfinish) delete onfinish;
+	  return 1;
+	} else {
+	  filepath want = path.postfixpath(depth);
+	  dout(10) << "traverse: need dir, doing discover, want " << want.get_path() 
+		   << " from " << *cur << endl;
+	  mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					      cur->ino(),
 					      want,
 					      true),  // need this dir too
 				cur->authority().first, MDS_PORT_CACHE);
 	  dir_discovers[cur->ino()].insert(cur->authority().first);
-        }
-        cur->add_waiter(CInode::WAIT_DIR, ondelay);
+	}
+	cur->add_waiter(CInode::WAIT_DIR, ondelay);
         if (onfinish) delete onfinish;
         return 1;
       }
@@ -2594,39 +2608,29 @@ int MDCache::path_traverse(filepath& origpath,
       // dirfrag/dentry is not mine.
       pair<int,int> dauth = curdir->authority();
 
-      /* no, let's let auth handle the discovery/replication ..
-      if (onfail == MDS_TRAVERSE_FORWARD && 
-          onfinish == 0 &&   // no funnyness
-          cur->dir->is_rep()) {
-        dout(5) << "trying to discover in popular dir " << *cur->dir << endl;
-        onfail = MDS_TRAVERSE_DISCOVER;
-      }
-      */
-
       if ((onfail == MDS_TRAVERSE_DISCOVER ||
            onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
-        // discover
-
+        // discover?
         filepath want = path.postfixpath(depth);
+
         if (curdir->waiting_for(CDir::WAIT_DENTRY, path[depth])) {
-          dout(7) << "traverse: already waiting for discover on " << *curdir << " for " << want.get_path() << endl;
-        } else {
-          dout(7) << "traverse: discover on " << *curdir << " for " << want.get_path() << endl;
-          
+          dout(7) << "traverse: already waiting for discover " << want.get_path()
+		  << " from " << *curdir << endl;
+        } 
+	else if (curdir->auth_is_ambiguous()) {
+	  dout(7) << "traverse: waiting for single auth on " << *curdir << endl;
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, 
+			     new C_MDC_TraverseDiscover(onfinish, ondelay));
+	  return 1;
+	} else {
+          dout(7) << "traverse: discover " << want << " from " << *curdir << endl;
           touch_inode(cur);
-        
+          
           mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					      cur->ino(),
 					      want,
 					      false),
 				dauth.first, MDS_PORT_CACHE);
-	  if (dauth.second >= 0) 
-	    mds->send_message_mds(new MDiscover(mds->get_nodeid(),
-						cur->ino(),
-						want,
-						false),
-				  dauth.second, MDS_PORT_CACHE);
-
           if (mds->logger) mds->logger->inc("dis");
         }
         
@@ -2643,20 +2647,31 @@ int MDCache::path_traverse(filepath& origpath,
       if (onfail == MDS_TRAVERSE_FORWARD) {
         // forward
         dout(7) << "traverse: not auth for " << path << " in " << *curdir << endl;
+	
+	if (curdir->auth_is_ambiguous()) {
+	  // wait
+	  dout(7) << "traverse: waiting for single auth in " << *curdir << endl;
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
+	  if (onfinish) delete onfinish;
+	  return 1;
+	} else {
+	  dout(7) << "traverse: forwarding, not auth for " << *curdir << endl;
 
-        if (is_client_req && curdir->is_rep()) {
-          dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *curdir << " req " << *(MClientRequest*)req << endl;
-          ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(curdir->ino());
-          req->clear_payload();  // reencode!
-        }
-
-        mds->forward_message_mds(req, dauth.first, req->get_dest_port());
-        //show_subtrees();
-        
-        if (mds->logger) mds->logger->inc("cfw");
-        if (onfinish) delete onfinish;
-        delete ondelay;
-        return 2;
+	  // request replication?
+	  if (is_client_req && curdir->is_rep()) {
+	    dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under "
+		     << *curdir << " req " << *(MClientRequest*)req << endl;
+	    ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(curdir->ino());
+	    req->clear_payload();  // reencode!
+	  }
+	  
+	  mds->forward_message_mds(req, dauth.first, req->get_dest_port());
+	  
+	  if (mds->logger) mds->logger->inc("cfw");
+	  if (onfinish) delete onfinish;
+	  delete ondelay;
+	  return 2;
+	}
       }    
       if (onfail == MDS_TRAVERSE_FAIL) {
         delete ondelay;
@@ -2893,6 +2908,51 @@ void MDCache::request_pin_dir(Message *req, CDir *dir)
   }
 }
 
+void MDCache::request_auth_pin(Message *req, CDir *dir)
+{
+  if (active_requests[req].dir_auth_pins.count(dir) == 0) {
+    dir->auth_pin();
+    active_requests[req].dir_auth_pins.insert(dir);
+  }
+}
+
+void MDCache::request_auth_pin(Message *req, CInode *in)
+{
+  if (active_requests[req].inode_auth_pins.count(in) == 0) {
+    in->auth_pin();
+    active_requests[req].inode_auth_pins.insert(in);
+  }
+}
+
+bool MDCache::request_auth_pinned(Message *req, CDir *dir)
+{
+  return active_requests[req].dir_auth_pins.count(dir);
+}
+
+bool MDCache::request_auth_pinned(Message *req, CInode *in)
+{
+  return active_requests[req].inode_auth_pins.count(in);
+}
+
+void MDCache::request_drop_auth_pins(Message *req)
+{
+  // dirs
+  for (set<CDir*>::iterator p = active_requests[req].dir_auth_pins.begin();
+       p != active_requests[req].dir_auth_pins.end();
+       ++p) 
+    (*p)->auth_unpin();
+  active_requests[req].dir_auth_pins.clear();
+
+  // inodes
+  for (set<CInode*>::iterator p = active_requests[req].inode_auth_pins.begin();
+       p != active_requests[req].inode_auth_pins.end();
+       ++p) 
+    (*p)->auth_unpin();
+  active_requests[req].inode_auth_pins.clear();
+}
+
+
+
 
 void MDCache::request_cleanup(Message *req)
 {
@@ -2960,6 +3020,10 @@ void MDCache::request_cleanup(Message *req)
        it++) {
     (*it)->request_pin_put();
   }
+
+  // auth pins
+  request_drop_auth_pins(req);
+
 
   // remove from map
   active_requests.erase(req);

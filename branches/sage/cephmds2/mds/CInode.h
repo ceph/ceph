@@ -108,6 +108,8 @@ class CInode : public MDSCacheObject {
     // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
     //          handle_client_chmod, handle_client_touch             (mds)
     // trigger: (see CDIR_WAIT_UNFREEZE)
+  static const int WAIT_SINGLEAUTH  = (1<<11);
+
   static const int WAIT_DIR          = (1<<13);
     // waiters: traverse_path
     // triggers: handle_disocver_reply

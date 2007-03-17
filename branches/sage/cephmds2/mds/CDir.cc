@@ -390,17 +390,28 @@ void CDir::add_waiter(int tag,
 
 void CDir::add_waiter(int tag, Context *c) {
   // hierarchical?
-  if (tag & WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
-    if (is_freezing_tree_root() || is_frozen_tree_root() ||
-        is_freezing_dir() || is_frozen_dir()) {
-      // it's us, pin here.  (fall thru)
-    } else {
-      // pin parent!
+
+  // at free root?
+  if (tag & WAIT_ATFREEZEROOT) {
+    if (!(is_freezing_tree_root() || is_frozen_tree_root() ||
+	  is_freezing_dir() || is_frozen_dir())) {
+      // try parent
       dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << endl;
       inode->parent->dir->add_waiter(tag, c);
       return;
     }
   }
+  
+  // at subtree root?
+  if (tag & WAIT_ATSUBTREEROOT) {
+    if (!is_subtree_root()) {
+      // try parent
+      dout(10) << "add_waiter " << tag << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << endl;
+      inode->parent->dir->add_waiter(tag, c);
+      return;
+    }
+  }
+
 
   // this dir.
   if (waiting.empty() && waiting_on_dentry.size() == 0)
@@ -571,9 +582,12 @@ void CDir::fetch(Context *c)
 {
   dout(10) << "fetch on " << *this << endl;
   
+  assert(is_auth());
+  assert(!is_complete());
+
   if (c) add_waiter(WAIT_COMPLETE, c);
   
-  // alrady fetching?
+  // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
     dout(7) << "already fetching; waiting" << endl;
     return;
@@ -604,6 +618,7 @@ void CDir::_fetched(bufferlist &bl)
     //ondisk_size = 0;
     
     // kick waiters?
+    state_clear(CDir::STATE_FETCHING);
     finish_waiting(WAIT_COMPLETE, -1);
     return;
   }
@@ -780,7 +795,7 @@ void CDir::commit(version_t want, Context *c)
   if (want == 0) want = version;
 
   // preconditions
-  assert(want <= version);          // can't commit the future
+  assert(want <= version || version == 0);    // can't commit the future
   assert(committed_version < want); // the caller is stupid
   assert(is_auth());
   assert(can_auth_pin());
@@ -827,7 +842,7 @@ void CDir::_commit(version_t want)
 
   // we can't commit things in the future.
   // (even the projected future.)
-  assert(want <= version);
+  assert(want <= version || version == 0);
 
   // check pre+postconditions.
   assert(is_auth());
@@ -1080,6 +1095,7 @@ void CDir::set_dir_auth(pair<int,int> a, bool iamauth)
 	   << " on " << *this << endl;
   
   bool was_subtree = is_subtree_root();
+  bool was_ambiguous = dir_auth.second >= 0;
 
   // set it.
   dir_auth = a;
@@ -1104,6 +1120,13 @@ void CDir::set_dir_auth(pair<int,int> a, bool iamauth)
     // pin parent of frozen dir/tree?
     if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
       inode->auth_pin();
+  }
+
+  // newly single auth?
+  if (was_ambiguous && dir_auth.second == CDIR_AUTH_UNKNOWN) {
+    list<Context*> ls;
+    take_waiting(WAIT_SINGLEAUTH, ls);
+    cache->mds->queue_finished(ls);
   }
 }
 

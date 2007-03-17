@@ -1910,7 +1910,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
       }
 
       // add dentry to journal entry
-      if (le) 
+      if (le)
 	le->metablob.add_dentry(dn, true);  // Hmm: might we do dn->is_dirty() here instead?  
     }
 

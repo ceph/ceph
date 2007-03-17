@@ -287,10 +287,12 @@ class EMetaBlob {
     if (dn->is_remote()) {
       add_remote_dentry(dn, dirty);
       return 0;
-    } else {
-      assert(dn->is_primary());
-      return add_primary_dentry(dn, dirty);
+    } else if (dn->is_null()) {
+      add_null_dentry(dn, dirty);
+      return 0;
     }
+    assert(dn->is_primary());
+    return add_primary_dentry(dn, dirty);
   }
 
   

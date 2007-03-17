@@ -156,21 +156,13 @@ class CDir : public MDSCacheObject {
 
   // -- wait masks --
   static const int WAIT_DENTRY        = (1<<0);  // wait for item to be in cache
-     // waiters: path_traverse
-     // trigger: handle_discover, fetch_dir_2
   static const int WAIT_COMPLETE      = (1<<1);  // wait for complete dir contents
-     // waiters: fetch_dir, commit_dir
-     // trigger: fetch_dir_2
   static const int WAIT_FREEZEABLE    = (1<<2);  // hard_pins removed
-     // waiters: freeze, freeze_finish
-     // trigger: auth_unpin, adjust_nested_auth_pins
   static const int WAIT_UNFREEZE      = (1<<3);  // unfreeze
-     // waiters: path_traverse, handle_discover, handle_inode_update,
-     //           export_dir_frozen                                   (mdcache)
-     //          handle_client_readdir                                (mds)
-     // trigger: unfreeze
   static const int WAIT_AUTHPINNABLE = WAIT_UNFREEZE;
   static const int WAIT_IMPORTED     = (1<<4);  // import finish
+  static const int WAIT_SINGLEAUTH   = (1<<5); 
+
   static const int WAIT_DNREAD       = (1<<20);
   static const int WAIT_DNLOCK       = (1<<21);
   static const int WAIT_DNUNPINNED   = (1<<22);
@@ -178,8 +170,8 @@ class CDir : public MDSCacheObject {
   static const int WAIT_DNREQXLOCK   = (1<<23);
   
   static const int WAIT_ANY  = (0xffffffff);
-  static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|\
-					WAIT_UNFREEZE);      // hmm, same same
+  static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
+  static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
 

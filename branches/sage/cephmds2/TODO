@@ -37,6 +37,12 @@ mds
 
 - rejoin and replicas that are not in recovered node's cache...  fetch storm?
 
+- locking madness
+/  - request_auth_pin, request_drop_auth_pins, and _link/_unlink_local should pre-pin dn dir and targeti.
+  - move auth_pinning _out_ of locking _start and _finish methods
+  - clean up multi-auth_pin code paths (e.g. link_local)
+
+
 - mds failure vs clients
   - clean up client op redirection
   - idempotent ops

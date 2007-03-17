@@ -126,7 +126,7 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
-
+        syn_iargs.push_back( atoi(args[++i]) );
 
       } else if (strcmp(args[i],"foo") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_FOO );
@@ -355,9 +355,10 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
         int iarg3 = iargs.front();  iargs.pop_front();
+        int iarg4 = iargs.front();  iargs.pop_front();
         if (run_me()) {
           dout(2) << "thrashlinks " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
-          thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3);
+          thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3, iarg4);
         }
       }
       break;
@@ -1336,17 +1337,15 @@ void SyntheticClient::foo()
   client->rmdir("d");
 }
 
-int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth)
+int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)
 {
-  dout(1) << "thrash_links " << basedir << " " << dirs << " " << files << " " << depth << endl;
+  dout(1) << "thrash_links " << basedir << " " << dirs << " " << files << " " << depth
+	  << " links " << n
+	  << endl;
 
   if (time_to_stop()) return 0;
  
-  // first make dir/file tree
-  make_dirs(basedir,dirs,files,depth);
-
   // now link shit up
-  int n = files*dirs;
   for (int i=0; i<n; i++) {
     if (time_to_stop()) return 0;
 

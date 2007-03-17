@@ -71,6 +71,8 @@ typedef struct {
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
   set< CDentry* >           xlocks;           // xlocks (local)
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
+  set< CDir* >              dir_auth_pins;
+  set< CInode* >            inode_auth_pins;
 } active_request_t;
 
 namespace __gnu_cxx {
@@ -348,6 +350,11 @@ public:
   void request_forward(Message *req, int mds, int port=0);
   void request_pin_inode(Message *req, CInode *in);
   void request_pin_dir(Message *req, CDir *dir);
+  void request_auth_pin(Message *req, CDir *dir);
+  void request_auth_pin(Message *req, CInode *in);
+  bool request_auth_pinned(Message *req, CDir *dir);
+  bool request_auth_pinned(Message *req, CInode *in);
+  void request_drop_auth_pins(Message *req);
 
   // -- anchors --
 public:

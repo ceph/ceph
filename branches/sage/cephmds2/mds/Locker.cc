@@ -589,13 +589,6 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
   // can write?  grab ref.
   if (in->hardlock.can_write(in->is_auth())) {
     assert(in->is_auth());
-    if (!in->can_auth_pin()) {
-      dout(7) << "inode_hard_write_start waiting for authpinnable on " << *in << endl;
-      in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
-      return false;
-    }
-
-    in->auth_pin();  // ugh, can't condition this on nwrite==0 bc we twiddle that in handle_lock_*
     in->hardlock.get_write(m);
     return true;
   }
@@ -631,7 +624,6 @@ void Locker::inode_hard_write_finish(CInode *in)
   // drop ref
   //assert(in->hardlock.can_write(in->is_auth()));
   in->hardlock.put_write();
-  in->auth_unpin();
   dout(7) << "inode_hard_write_finish on " << *in << endl;
 
   // others waiting?
@@ -974,13 +966,6 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
   if (in->filelock.can_write(in->is_auth())) {
     // can i auth pin?
     assert(in->is_auth());
-    if (!in->can_auth_pin()) {
-      dout(7) << "inode_file_write_start waiting for authpinnable on " << *in << endl;
-      in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
-      return false;
-    }
-    
-    in->auth_pin();
     in->filelock.get_write(m);
     return true;
   } else {
@@ -1747,14 +1732,6 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   assert(dn->lockstate == DN_LOCK_SYNC ||
          dn->lockstate == DN_LOCK_UNPINNING);
   
-  // dir auth pinnable?
-  if (!dn->dir->can_auth_pin()) {
-    dout(7) << "dentry " << *dn << " dir not pinnable, waiting" << endl;
-    dn->dir->add_waiter(CDir::WAIT_AUTHPINNABLE,
-                        new C_MDS_RetryRequest(mds,m,ref));
-    return false;
-  }
-
   // is dentry path pinned?
   if (dn->is_pinned()) {
     dout(7) << "dentry " << *dn << " pinned, waiting" << endl;
@@ -1781,9 +1758,6 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
       mdcache->active_requests[m].traces[trace[trace.size()-1]] = trace;
     }
   }
-
-  // pin dir!
-  dn->dir->auth_pin();
   
   // mine!
   dn->xlockedby = m;
@@ -1859,9 +1833,6 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
     }
   }
   
-  // unpin dir
-  dn->dir->auth_unpin();
-
   // kick waiters
   list<Context*> finished;
   dn->dir->take_waiting(CDir::WAIT_DNREAD, finished);
