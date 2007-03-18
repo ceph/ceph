@@ -2356,7 +2356,7 @@ void Server::handle_client_open(MClientRequest *req,
 
   // can we issue the caps they want?
   version_t fdv = mds->locker->issue_file_data_version(cur);
-  Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
+  //Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
 
   // create signed security capability
   // no security, just include a blank cap
@@ -2367,7 +2367,7 @@ void Server::handle_client_open(MClientRequest *req,
   utime_t sec_time_end = g_clock.now();
   cout << "Get security cap time " << sec_time_end - sec_time_start << endl;
 
-
+  Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
   if (!cap) return; // can't issue (yet), so wait!
 
   dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
