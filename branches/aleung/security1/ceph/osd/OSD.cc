@@ -475,9 +475,16 @@ bool OSD::verify_cap(ExtCap *cap) {
   if (!cap_cache->prev_verified(cap->get_id())) {
     //cout << "Verifying an unseen capability" << endl;
     // actually verify
+    utime_t justver_time_start = g_clock.now();
     if (cap->verif_extcap(monmap->get_key())) {
+      utime_t justver_time_end = g_clock.now();
+      cout << "Just verification time " << justver_time_end - justver_time_start << endl;
+      utime_t cachecap_time_start = g_clock.now();
       // cache the verification
       cap_cache->insert(cap);
+      utime_t cachecap_time_end = g_clock.now();
+      cout << "Caching cap time " << cachecap_time_end - cachecap_time_start << endl;
+      
     }
     else
       return false;
@@ -2981,12 +2988,16 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
            << endl;
 
   utime_t read_time_start = g_clock.now();
+
+  utime_t sec_time_start = g_clock.now();
   if (g_conf.secure_io) {
     // FIXME only verfiy writes from a client
     // i know, i know...not secure but they should all have caps
-    if (op->get_source().is_client()) {      
+    if (op->get_source().is_client()) { 
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
+      
+      utime_t hash_time_start = g_clock.now();
       // if using groups...do we know group?
       if (op_capability->get_type() == UNIX_GROUP ||
 	  op_capability->get_type() == BATCH) {
@@ -2999,7 +3010,10 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 	  update_group(op->get_client_inst(), my_hash, op);
 	  return;
 	}	
-      }   
+      }
+      utime_t hash_time_end = g_clock.now();
+      cout << "re Hash update time " << hash_time_end - hash_time_start << endl;
+
       // check accesses are right
       if (check_request(op, op_capability)) {
 	dout(3) << "Access permissions are correct" << endl;
@@ -3007,9 +3021,14 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       else
 	dout(3) << "Access permissions are incorrect" << endl;
       
+      utime_t verifcap_time_start = g_clock.now();
       assert(verify_cap(op_capability));
+      utime_t verifcap_time_end = g_clock.now();
+      cout << "re Capability verif time " << verifcap_time_end - verifcap_time_start << endl;
     }
   }
+  utime_t sec_time_end = g_clock.now();
+  cout << "re Security time " << sec_time_end - sec_time_start << endl;
 
   long r = 0;
   bufferlist bl;
@@ -3382,7 +3401,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	
       }
       utime_t hash_time_end = g_clock.now();
-      cout << "Hash check time " << hash_time_end - hash_time_start << endl;
+      cout << "wr Hash check time " << hash_time_end - hash_time_start << endl;
 
       utime_t perm_time_start = g_clock.now();
       // check accesses are right
@@ -3392,12 +3411,12 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       else
 	dout(3) << "Access permissions are incorrect" << endl;
       utime_t perm_time_end = g_clock.now();
-      cout << "Check permissions time " << perm_time_end - perm_time_start << endl;
+      cout << "wr Check permissions time " << perm_time_end - perm_time_start << endl;
       
       utime_t verif_time_start = g_clock.now();
       assert(verify_cap(op_capability));
       utime_t verif_time_end = g_clock.now();
-      cout << "Verif capability time " << verif_time_end - verif_time_start << endl;
+      cout << "wr Verif capability time " << verif_time_end - verif_time_start << endl;
     }
 
   }
