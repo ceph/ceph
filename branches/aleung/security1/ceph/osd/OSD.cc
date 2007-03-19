@@ -374,7 +374,8 @@ int OSD::read_superblock()
 // checks that the access rights in the cap are correct
 bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
   
-  if (op_capability->get_type() == UNIX_GROUP) {
+  if (op_capability->get_type() == UNIX_GROUP ||
+      op_capability->get_type() == BATCH) {
     // check if user is in group
     hash_t my_hash = op_capability->get_user_hash();
 
@@ -2979,6 +2980,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
+  utime_t read_time_start = g_clock.now();
   if (g_conf.secure_io) {
     // FIXME only verfiy writes from a client
     // i know, i know...not secure but they should all have caps
@@ -2986,7 +2988,8 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       // if using groups...do we know group?
-      if (op_capability->get_type() == UNIX_GROUP) {
+      if (op_capability->get_type() == UNIX_GROUP ||
+	  op_capability->get_type() == BATCH) {
 	// check if user is in group
 	hash_t my_hash = op_capability->get_user_hash();
 	
@@ -3008,23 +3011,6 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     }
   }
 
-  /*
-  if (g_conf.secure_io) {
-    // FIXME only verfiy reads from a client
-    if (op->get_source().is_client()) {
-      ExtCap *op_capability = op->get_capability();
-      assert(op_capability);
-      // check accesses are right
-      if (check_request(op, op_capability)) {
-	cout << "Access permissions are correct" << endl;
-      }
-      else
-	cout << "Access permissions are incorrect" << endl;
-      assert(verify_cap(op_capability));
-    }
-  }
-  */
-
   long r = 0;
   bufferlist bl;
   
@@ -3037,7 +3023,11 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 		    op->get_offset(), op->get_length(),
 		    bl);
   }
+  utime_t read_time_end = g_clock.now();
   
+  if (op->get_source().is_client())
+    cout << "Read time " << read_time_end - read_time_start << endl;
+
   // set up reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
   if (r >= 0) {
@@ -3345,6 +3335,8 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 
   const char *opname = MOSDOp::get_opname(op->get_op());
 
+  utime_t write_time_start = g_clock.now();
+
   // are any peers missing this?
   for (unsigned i=1; i<pg->acting.size(); i++) {
     int peer = pg->acting[i];
@@ -3365,6 +3357,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     opname = MOSDOp::get_opname(op->get_op());
   }
 
+  utime_t sec_time_start = g_clock.now();
   if (g_conf.secure_io) {
     // FIXME only verfiy writes from a client
     // i know, i know...not secure but they should all have caps
@@ -3374,7 +3367,9 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       // if using groups...do we know group?
-      if (op_capability->get_type() == UNIX_GROUP) {
+      utime_t hash_time_start = g_clock.now();
+      if (op_capability->get_type() == UNIX_GROUP ||
+	  op_capability->get_type() == BATCH) {
 	// check if user is in group
 	hash_t my_hash = op_capability->get_user_hash();
 	
@@ -3386,18 +3381,28 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	}
 	
       }
-      
+      utime_t hash_time_end = g_clock.now();
+      cout << "Hash check time " << hash_time_end - hash_time_start << endl;
+
+      utime_t perm_time_start = g_clock.now();
       // check accesses are right
       if (check_request(op, op_capability)) {
 	dout(3) << "Access permissions are correct" << endl;
       }
       else
 	dout(3) << "Access permissions are incorrect" << endl;
+      utime_t perm_time_end = g_clock.now();
+      cout << "Check permissions time " << perm_time_end - perm_time_start << endl;
       
+      utime_t verif_time_start = g_clock.now();
       assert(verify_cap(op_capability));
+      utime_t verif_time_end = g_clock.now();
+      cout << "Verif capability time " << verif_time_end - verif_time_start << endl;
     }
 
   }
+  utime_t sec_time_end = g_clock.now();
+  cout << "Security time spent " << sec_time_end - sec_time_start << endl;
   
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!
@@ -3528,6 +3533,10 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 
     oncommit->ack();
   }
+  utime_t write_time_end = g_clock.now();
+  if (op->get_op() == OSD_OP_WRITE &&
+      op->get_source().is_client())
+    cout << "Write time " << write_time_end - write_time_start << endl;
 }
 
 

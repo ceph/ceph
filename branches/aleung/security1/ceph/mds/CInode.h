@@ -192,6 +192,7 @@ class CInode : public MDSCacheObject {
   void buffer_entry();
   // FIXME total hack to have escape point back to server
   Server *server;
+  MDS *mds;
   //void (Server::*open_fun_ptr) (MClientRequest*, CInode *);
   class BufferThread : public Thread {
     CInode *inode;

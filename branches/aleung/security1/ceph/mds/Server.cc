@@ -491,7 +491,7 @@ void Server::dispatch_request(Message *m, CInode *ref)
   case MDS_OP_OPEN:
     if (req->get_iarg() & O_CREAT) 
       handle_client_openc(req, ref);
-    else {
+    else {/*
       if (g_conf.mds_group == 2) {
 	utime_t open_req_time = g_clock.now();
 	// if this request is within 10ms of the last 2, flash crowd!
@@ -517,8 +517,8 @@ void Server::dispatch_request(Message *m, CInode *ref)
 	  handle_client_open(req, ref);
 	}
       }
-      else
-	handle_client_open(req, ref);
+      else*/
+      handle_client_open(req, ref);
     }
     break;
   case MDS_OP_TRUNCATE:
@@ -2504,6 +2504,7 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 
 	  // set server exit point
 	  in->server = this;
+	  in->mds = mds;
 	   
 	  //singal the thread
 	  cout << "Going to singal" << endl;

@@ -96,14 +96,16 @@ CInode::CInode(MDCache *c, bool auth) {
   group_cap_set = false;
   world_cap_set = false;
 
-  thread_init = false;
-  batching = false;
-  buffer_stop = false;
-  buffer_thread = BufferThread(this);
-  cout << "Starting buffer_thread.create()" << endl;
-  buffer_thread.create();
-  cout << "Buffer_thread created!" << endl;
-  
+  if (g_conf.mds_group == 2) {
+    thread_init = false;
+    batching = false;
+    buffer_stop = false;
+    buffer_thread = BufferThread(this);
+    cout << "Starting buffer_thread.create()" << endl;
+    buffer_thread.create();
+    cout << "Buffer_thread created!" << endl;
+  }
+
   auth_pins = 0;
   nested_auth_pins = 0;
   num_request_pins = 0;
@@ -115,11 +117,13 @@ CInode::CInode(MDCache *c, bool auth) {
 
 CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }
-  buffer_lock.Lock();
-  buffer_stop = true;
-  buffer_cond.Signal();
-  buffer_lock.Unlock();
-  buffer_thread.join();  
+  if (g_conf.mds_group == 2) {
+    buffer_lock.Lock();
+    buffer_stop = true;
+    buffer_cond.Signal();
+    buffer_lock.Unlock();
+    buffer_thread.join();
+  }
 }
 void CInode::buffer_entry()
 {
@@ -147,37 +151,41 @@ void CInode::buffer_entry()
     cout << "buffer thread sleeping to buffer" << endl;
     buffer_cond.WaitInterval(buffer_lock, utime_t(5,0));
     cout << "buffer thread awoke from interval sleep" << endl;
-    
-    /*
+
     // now i've slept, make cap for users
-    set<uid_t> user_set;
+    list<uid_t> user_set;
+    CapGroup users_hash;
     for (set<MClientRequest *>::iterator si = buffered_reqs.begin();
 	 si != buffered_reqs.end();
 	 si++) {
-      user_set.insert((*si)->get_uid());
+      //user_set.insert((*si)->get_caller_uid());
+      user_set.push_back((*si)->get_caller_uid());
+      users_hash.add_user((*si)->get_caller_uid());
     }
-    MerkleTree users_hash(user_set);
+    users_hash.sign_list(mds->getPrvKey());
+    mds->unix_groups_byhash[users_hash.get_root_hash()]= users_hash;
+      
     ExtCap *ext_cap = new ExtCap(FILE_MODE_RW,
 				 inode.uid,
 				 inode.gid,
 				 users_hash.get_root_hash(),
 				 inode.ino);
+    ext_cap->set_type(BATCH);
     ext_cap->set_id(batch_id);
+    ext_cap->sign_extcap(mds->getPrvKey());
 
     // put the cap in everyones cache
-    for (set<uid_t>::iterator usi = user_set.begin();
+    for (list<uid_t>::iterator usi = user_set.begin();
 	 usi != user_set.end();
 	 usi++) {
       ext_caps[(*usi)] = (*ext_cap);
     }
-    */
-
+    
     // let requests loose
     for (set<MClientRequest *>::iterator ri = buffered_reqs.begin();
 	 ri != buffered_reqs.end();
 	 ri++) {
       cout << "ABOUT TO PASS OFF THE REQUEST" << endl;
-      //open_fun_ptr(*ri, this);
       server->handle_client_open(*ri, this);
     }
 

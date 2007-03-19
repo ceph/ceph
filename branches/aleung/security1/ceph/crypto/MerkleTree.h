@@ -74,6 +74,24 @@ class MerkleTree {
     sha1((byte*)uidArray, (byte*)&root_hash, sizeof(uidArray));
   }
 
+  // constructor from an initial set of users
+  MerkleTree (set< uid_t >& input) {
+    memset(&root_hash, 0x00, sizeof(root_hash));
+    uid_t uidArray[input.size()];
+    int counter = 0;
+    
+    // FIXME just do a linear hash first for root hash
+    // copy list into buffer
+    for (set<uid_t>::iterator si = input.begin();
+	 si != input.end();
+	 si++) {
+      uidArray[counter] = *si;
+      counter++;
+    }
+    // zero the array
+    sha1((byte*)uidArray, (byte*)&root_hash, sizeof(uidArray));
+  }
+
   void add_user(uid_t user) {
     // hash the user
     hash_t user_hash;
