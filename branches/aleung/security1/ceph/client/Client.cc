@@ -725,7 +725,6 @@ void Client::put_user_ticket(Ticket *tk)
 void Client::handle_osd_update(MOSDUpdate *m) {
   
   hash_t my_hash = m->get_hash();
-  cout << "Client::handle_osd_request Received a request to resolve group " << my_hash << endl;
 
   // if we dont have it cached, ask mds
   // this will lose execution control
@@ -734,13 +733,11 @@ void Client::handle_osd_update(MOSDUpdate *m) {
 
     // is anyone else already waiting for this hash?
     if (update_waiter_osd.count(my_hash) == 0) {
-      cout << "mds_group_update for " << my_hash << endl;
       dout(10) << "mds_group_update for " << my_hash << endl;
       // FIXME choose mds (always choose 0)
       messenger->send_message(update, mdsmap->get_inst(0), MDS_PORT_SERVER);
     }
     else {
-      cout << "mds_group_update for " << my_hash << endl;
       dout(10) << "mds_group_update for " << my_hash << endl;
     }
 
@@ -764,7 +761,6 @@ void Client::handle_osd_update(MOSDUpdate *m) {
 void Client::handle_client_update_reply(MClientUpdateReply *m) {
   
   hash_t my_hash = m->get_user_hash();
-  cout << "Client::handle_client_update_reply for " << my_hash << endl;
 
   // cache the list
   groups[my_hash].set_list(m->get_user_list());

@@ -374,7 +374,7 @@ int OSD::read_superblock()
 // security operations
 
 // checks that the access rights in the cap are correct
-bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
+inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
   
   if (op_capability->get_type() == UNIX_GROUP ||
       op_capability->get_type() == BATCH) {
@@ -446,7 +446,6 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   // store the new list into group
   hash_t my_hash = m->get_user_hash();
 
-  cout << "hande_osd_update_reply for " << my_hash << endl;
   dout(10) << "hande_osd_update_reply for " << my_hash << endl;
   
   // verify
@@ -471,7 +470,7 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
 }
 
 // assumes the request and cap contents has already been checked
-bool OSD::verify_cap(ExtCap *cap) {
+inline bool OSD::verify_cap(ExtCap *cap) {
 
   // have i already verified this cap?
   if (!cap_cache->prev_verified(cap->get_id())) {
@@ -481,12 +480,9 @@ bool OSD::verify_cap(ExtCap *cap) {
     if (cap->verif_extcap(monmap->get_key())) {
       utime_t justver_time_end = g_clock.now();
       cout << "Just verification time " << justver_time_end - justver_time_start << endl;
-      utime_t cachecap_time_start = g_clock.now();
+
       // cache the verification
       cap_cache->insert(cap);
-      utime_t cachecap_time_end = g_clock.now();
-      cout << "Caching cap time " << cachecap_time_end - cachecap_time_start << endl;
-      
     }
     else
       return false;
@@ -3420,6 +3416,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       }
       utime_t hash_time_end = g_clock.now();
       cout << "wr Hash check time " << hash_time_end - hash_time_start << endl;
+      cout << "Hash time SO FAR " << hash_time_end - sec_time_start << endl;
 
       utime_t perm_time_start = g_clock.now();
       // check accesses are right
@@ -3430,11 +3427,13 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	dout(3) << "Access permissions are incorrect" << endl;
       utime_t perm_time_end = g_clock.now();
       cout << "wr Check permissions time " << perm_time_end - perm_time_start << endl;
+      cout << "Check permissions time SO FAR " << perm_time_end - sec_time_start << endl;
       
       utime_t verif_time_start = g_clock.now();
       assert(verify_cap(op_capability));
       utime_t verif_time_end = g_clock.now();
       cout << "wr Verif capability time " << verif_time_end - verif_time_start << endl;
+      cout << "Verification time SO FAR " << verif_time_end - sec_time_start << endl;
     }
 
   }
