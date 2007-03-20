@@ -97,12 +97,13 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
-
 CLIENT_OBJS= \
 	client/FileCache.o\
 	client/Client.o\
 	client/SyntheticClient.o\
-	client/Trace.o
+	client/Trace.o\
+	client/hadoop/CephFSInterface.o\
+
 
 ifeq ($(want_bdb),yes)
 OSBDB_OBJS = \
@@ -112,10 +113,14 @@ OSBDB_OBJ = osbdb.o
 endif
 
 TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cfuse fakefuse
+NO_FUSE = cmon cosd cmds csyn newsyn fakesyn
+
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 all: depend ${TARGETS}
+
+nofuse: depend ${NO_FUSE}
 
 test: depend ${TEST_TARGETS}
 

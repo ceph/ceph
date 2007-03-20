@@ -529,6 +529,7 @@ protected:
 
   // crap
   int chdir(const char *s);
+  const string getcwd() { return cwd; }
 
   // namespace ops
   int getdir(const char *path, list<string>& contents);
