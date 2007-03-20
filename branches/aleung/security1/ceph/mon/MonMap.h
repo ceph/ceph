@@ -84,10 +84,17 @@ class MonMap {
   //const string get_str_key() {
   //return pub_str_key;
   //}
-  const esignPub get_key() {
-    if (!keyConvert)
+  const esignPub& get_key() {
+    if (!keyConvert) {
       pub_key = _fromStr_esignPubKey(string(pub_str_key, sizeof(pub_str_key)));
+      keyConvert = true;
+    }
     return pub_key;
+  }
+
+  void prepare_mon_key() {
+    pub_key = _fromStr_esignPubKey(string(pub_str_key, sizeof(pub_str_key)));
+    keyConvert = true;
   }
 
   void encode(bufferlist& blist) {

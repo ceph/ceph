@@ -110,6 +110,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
   whoami = id;
   messenger = m;
   monmap = mm;
+  monmap->prepare_mon_key();
 
   osdmap = 0;
   boot_epoch = 0;
@@ -473,7 +474,7 @@ bool OSD::verify_cap(ExtCap *cap) {
 
   // have i already verified this cap?
   if (!cap_cache->prev_verified(cap->get_id())) {
-    //cout << "Verifying an unseen capability" << endl;
+
     // actually verify
     utime_t justver_time_start = g_clock.now();
     if (cap->verif_extcap(monmap->get_key())) {
@@ -2987,7 +2988,12 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
-  utime_t read_time_start = g_clock.now();
+  //utime_t read_time_start = g_clock.now();
+  utime_t read_time_start;
+  if (outstanding_updates.count(op->get_reqid()) != 0)
+    read_time_start = outstanding_updates[op->get_reqid()];
+  else
+    read_time_start = g_clock.now();
 
   utime_t sec_time_start = g_clock.now();
   if (g_conf.secure_io) {
@@ -3007,6 +3013,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 	// do we have group cached? if not, update group
 	// we will lose execution control here! re-gain on reply
 	if (user_groups.count(my_hash) == 0) {
+	  	  outstanding_updates[op->get_reqid()] = read_time_start;
 	  update_group(op->get_client_inst(), my_hash, op);
 	  return;
 	}	
@@ -3354,7 +3361,14 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 
   const char *opname = MOSDOp::get_opname(op->get_op());
 
-  utime_t write_time_start = g_clock.now();
+  utime_t write_time_start;
+  if (outstanding_updates.count(op->get_reqid()) != 0) {
+    write_time_start = outstanding_updates[op->get_reqid()];
+    cout << "Using stored time " <<  write_time_start << " for request " << 
+	 op->get_reqid() << endl;
+  }
+  else
+    write_time_start = g_clock.now();
 
   // are any peers missing this?
   for (unsigned i=1; i<pg->acting.size(); i++) {
@@ -3395,6 +3409,9 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	// do we have group cached? if not, update group
 	// we will lose execution control here! re-gain on reply
 	if (user_groups.count(my_hash) == 0) {
+	  cout << "Setting the time " << write_time_start << 
+	    " for request " << op->get_reqid() << endl;
+	  outstanding_updates[op->get_reqid()] = write_time_start;
 	  update_group(op->get_client_inst(), my_hash, op);
 	  return;
 	}
@@ -3555,7 +3572,8 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   utime_t write_time_end = g_clock.now();
   if (op->get_op() == OSD_OP_WRITE &&
       op->get_source().is_client())
-    cout << "Write time " << write_time_end - write_time_start << endl;
+    cout << "Write time " << write_time_end - write_time_start << endl <<
+      "with write_time_end " << write_time_end << endl;
 }
 
 

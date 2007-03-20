@@ -205,7 +205,7 @@ public:
     return sizeof(data);
   }
 
-  void sign_extcap(esignPriv privKey) {
+  void sign_extcap(const esignPriv& privKey) {
     //byte capArray[sizeof(data)];
     //memcpy(capArray, &data, sizeof(data));
     SigBuf signature;
@@ -216,7 +216,7 @@ public:
     
   }
 
-  bool verif_extcap (esignPub pubKey) {
+  bool verif_extcap (const esignPub& pubKey) {
     //byte capArray[sizeof(data)];
     //memcpy(capArray, &data, sizeof(data));
 

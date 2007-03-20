@@ -118,6 +118,8 @@ public:
   map<hash_t, CapGroup> user_groups;
   map<hash_t, list<Message*> >update_waiter_op;
   void handle_osd_update_reply(MOSDUpdateReply *m);
+  // requests that are had their hashs updated
+  map<reqid_t, utime_t> outstanding_updates;
   
   // per-pg locking (serializing)
   hash_set<pg_t>               pg_lock;

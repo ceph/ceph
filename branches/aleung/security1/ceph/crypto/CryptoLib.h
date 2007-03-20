@@ -78,9 +78,8 @@ namespace CryptoLib {
   
   
   // asymmetric signature functions
-  SigBuf esignSig(byte*, const unsigned int,
-		  esignPriv);
-  bool esignVer(byte*, const unsigned int, SigBuf, esignPub);
+  SigBuf esignSig(byte*, const unsigned int, const esignPriv&);
+  bool esignVer(byte*, const unsigned int, SigBuf, const esignPub&);
   SigBuf rsaSig(byte*, const unsigned int, rsaPriv);
   bool rsaVer(byte*, const unsigned int, SigBuf, rsaPub);
 

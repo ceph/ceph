@@ -208,7 +208,7 @@ ESIGN<SHA>::Verifier CryptoLib::_fromStr_esignPubKey(string seedString) {
  **********/
 CryptoLib::SigBuf CryptoLib::esignSig(byte* dataBuf,
 				      const unsigned int dataLen,
-				      CryptoLib::esignPriv privKey) {
+				      const CryptoLib::esignPriv& privKey) {
   // a linear congruential random num gen
   LC_RNG rng(time(NULL));
   SecByteBlock signature(privKey.SignatureLength());
@@ -224,7 +224,7 @@ CryptoLib::SigBuf CryptoLib::esignSig(byte* dataBuf,
  * and the public key
  **********/
 bool CryptoLib::esignVer(byte* dataBuf, const unsigned int dataLen,
-			 SigBuf signature, CryptoLib::esignPub pubKey) {
+			 SigBuf signature, const CryptoLib::esignPub& pubKey) {
   if (pubKey.VerifyMessage(dataBuf, dataLen, signature, signature.size())) {
     return true;
   }

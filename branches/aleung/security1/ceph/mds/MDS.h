@@ -245,8 +245,8 @@ public:
   int shutdown_start();
   int shutdown_final();
 
-  esignPub getPubKey() { return myPubKey; }
-  esignPriv getPrvKey() { return myPrivKey; }
+  esignPub& getPubKey() { return myPubKey; }
+  esignPriv& getPrvKey() { return myPrivKey; }
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme
