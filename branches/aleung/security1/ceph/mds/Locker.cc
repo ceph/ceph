@@ -227,26 +227,19 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   if (g_conf.secure_io == 0)
     return 0;
 
-  utime_t setup_time_start = g_clock.now();
   // get the uid
   uid_t my_user = req->get_caller_uid();
   gid_t my_group = req->get_caller_gid();
 
-  int my_want = 0;
   // issue most generic cap (RW)
+  int my_want = 0;
   my_want |= FILE_MODE_RW;
 
-  //utime_t clock_time_start = g_clock.now();
   utime_t test_time = g_clock.now();
-  //utime_t clock_time_end = g_clock.now();
-  //cout << "Clock time " << clock_time_end - clock_time_start << endl;
 
   // check cache
   ExtCap *ext_cap;
-  //utime_t setup_time_end = g_clock.now();
-  //cout << "Setup time " << setup_time_end - setup_time_start << endl;
 
-  //utime_t checkcache_time_start = g_clock.now();
   // unix groups
   if (g_conf.mds_group == 1) {
     if (my_user == in->get_uid())
@@ -259,32 +252,31 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // no grouping
   else 
     ext_cap = in->get_user_extcap(my_user);
-  //utime_t checkcache_time_end = g_clock.now();
-  //cout << "Check cache time " << checkcache_time_end - checkcache_time_start << endl;
 
+  // make new capability
   if (!ext_cap) {
-    // make new cap
+
     // unix grouping
+    // are using mds groups?
     if (g_conf.mds_group == 1) {
 
-      // checking who is in groups
-      // is this a new group?
+      // is this a new group? if so, create it
       if (mds->unix_groups_map.count(my_group) == 0) {
-	// make a group & add user
-	CapGroup group(my_user);
-	//group.add_user(my_user);
 
-	// sign the hash
+	CapGroup group(my_user);
+
 	group.sign_list(mds->getPrvKey());
 
-	// put it into hash
+	// make hash group and unix pointer to it
 	mds->unix_groups_byhash[group.get_root_hash()] = group;
-	// put pointer into map
 	mds->unix_groups_map[my_group] = group.get_root_hash();
-	cout << "New group " << my_group << " from user " << my_user << endl;
+
+	cout << "New group " << my_group
+	     << " created from user " << my_user << endl;
       }
-      // add user to group if not in group
+
       hash_t my_hash = mds->unix_groups_map[my_group];
+      // is user in the group? if not, add them
       if (!(mds->unix_groups_byhash[my_hash].contains(my_user))) {
 
 	// make a new group, equal to old group (keep old group around)
@@ -308,30 +300,27 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 
       //get hash for gid
       hash_t gid_hash = mds->unix_groups_map[my_group];
-
+      
       ext_cap  = new ExtCap(my_want, my_user, my_group, gid_hash, in->ino());
-
+      
       ext_cap->set_type(1);
       
-      dout(3) << "Made new " << my_want << " capability for uid: "
-	      << ext_cap->get_uid() << ", group: " << ext_cap->get_gid()
-	      << ", for hash: " << ext_cap->get_user_hash()
-	      << " for inode: " << ext_cap->get_ino()<< endl;
+      cout << "Made new " << my_want << " capability for uid: "
+	   << ext_cap->get_uid() << ", group: " << ext_cap->get_gid()
+	   << ", for hash: " << ext_cap->get_user_hash()
+	   << " for inode: " << ext_cap->get_ino()<< endl;
     }
     // default no grouping
     else {
-      //utime_t make_time_start = g_clock.now();
       ext_cap = new ExtCap(my_want, my_user, in->ino());
       ext_cap->set_type(0);
-      //utime_t make_time_end = g_clock.now();
-      //cout << "Capability make time " << make_time_end - make_time_start << endl;
     }
     
     // set capability id
     ext_cap->set_id(mds->cap_id_count, mds->get_nodeid());
     mds->cap_id_count++;
 
-    dout(3) << "Made new " << my_want << " capability for uid: "
+    cout << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
     
     utime_t sign_time_start = g_clock.now();
@@ -340,7 +329,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     cout << "Signature time " << sign_time_end - sign_time_start << endl;
 
     // caches this capability in the inode
-    //utime_t cache_time_start = g_clock.now();
     if (g_conf.mds_group == 1) {
       if (my_user == in->get_uid())
 	in->set_unix_user_cap(ext_cap);
@@ -352,25 +340,19 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else
       in->add_user_extcap(my_user,ext_cap);
 
-    //utime_t cache_time_end = g_clock.now();
-    //cout << "Caching time " << cache_time_end - cache_time_start << endl;
-
   }
   // we want to index based on mode, so we can cache more caps
   // does the cached cap have the write mode?
   else {
-    dout(3) << "Got cached " << my_want << " capability for uid: "
+    cout << "Got cached " << my_want << " capability for uid: "
 	 << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino() << endl;
     if (ext_cap->mode() < mode) {
       ext_cap->set_mode(mode);
       ext_cap->sign_extcap(mds->getPrvKey());
     }
   }
-  // add capability as recently used
-  //utime_t recentcap_time_start = g_clock.now();
+  // add capability as recently used for renewal
   mds->recent_caps.insert(ext_cap->get_id());
-  //utime_t recentcap_time_end = g_clock.now();
-  //cout << "Recent cap cache time " << recentcap_time_end - recentcap_time_start << endl;
 
   return ext_cap;
 }
