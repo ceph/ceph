@@ -102,6 +102,7 @@ Client::Client(Messenger *m, MonMap *mm)
   // which client am i?
   whoami = m->get_myname().num();
   monmap = mm;
+  monmap->prepare_mon_key();
 
   mounted = false;
   unmounting = false;
@@ -649,7 +650,7 @@ void Client::handle_auth_user_ack(MClientAuthUserAck *m)
   user_ticket[uid] = m->getTicket();
 
   // verify the ticket
-  assert(user_ticket[uid]->verif_ticket(monmap->get_key()));
+  //assert(user_ticket[uid]->verif_ticket(monmap->get_key()));
 
   // wait up the waiter(s)
   // this signals all ticket waiters
@@ -676,7 +677,8 @@ Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
     // this should be a function with some
     // security stuff (password) to gen key
     if (user_pub_key.count(uid) == 0) {
-      esignPriv privKey = esignPrivKey("crypto/esig1536.dat");
+      //esignPriv privKey = esignPrivKey("crypto/esig1536.dat");
+      esignPriv privKey = esignPrivKey("crypto/esig1023.dat");
       esignPub pubKey = esignPubKey(privKey);
       user_priv_key[uid] = &privKey;
       user_pub_key[uid] = &pubKey;

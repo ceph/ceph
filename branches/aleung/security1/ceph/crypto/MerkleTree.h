@@ -15,6 +15,7 @@
 
 #include<iostream>
 #include<list>
+#include<set>
 using namespace std;
 
 #include "CryptoLib.h"

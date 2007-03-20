@@ -322,6 +322,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else {
       //utime_t make_time_start = g_clock.now();
       ext_cap = new ExtCap(my_want, my_user, in->ino());
+      ext_cap->set_type(0);
       //utime_t make_time_end = g_clock.now();
       //cout << "Capability make time " << make_time_end - make_time_start << endl;
     }

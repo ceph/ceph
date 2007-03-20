@@ -205,6 +205,19 @@ class CInode : public MDSCacheObject {
     }
   } buffer_thread;
 
+  bool is_batching() { return batching; }
+  bool should_batch(utime_t new_request_time) {
+    //if (new_request_time - two_req_ago < utime_t(0, 5000) ) {
+    if (new_request_time > utime_t())
+      return true;
+    return false;
+  }
+  void update_buffer_time(utime_t new_request_time) {
+    two_req_ago = one_req_ago;
+    one_req_ago = new_request_time;
+  }
+  void add_to_buffer(MClientRequest *req, Server *serve, MDS *metads);
+
   // -- distributed state --
 public:
   // inode metadata locks

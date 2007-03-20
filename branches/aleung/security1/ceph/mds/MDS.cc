@@ -92,7 +92,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   locker = new Locker(this, mdcache);
 
   // init keys
-  myPrivKey = esignPrivKey("crypto/esig1536.dat");
+  //myPrivKey = esignPrivKey("crypto/esig1536.dat");
+  myPrivKey = esignPrivKey("crypto/esig1023.dat");
   myPubKey = esignPubKey(myPrivKey);
 
   // create unix_groups from file?

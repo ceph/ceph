@@ -79,7 +79,7 @@ private:
     utime_t t_s; // creation time
     utime_t t_e; // expiration time
     int mode; // I/O mode
-    __uint8_t type; // specify mds policy
+    int type; // specify mds policy
 
     // single user ident
     uid_t uid; // user id
@@ -176,7 +176,7 @@ public:
   gid_t get_gid() const { return data.gid; }
   inodeno_t get_ino() const { return data.ino; }
   int mode() const { return data.mode; }
-  __int8_t get_type() const { return data.type; }
+  int get_type() const { return data.type; }
 
   // in case the mode needs to be changed
   // FYI, you should resign the cap after this
@@ -189,7 +189,7 @@ public:
     data.id.cid = capid.cid;
     data.id.mds_id = capid.mds_id;
   }
-  void set_type(__int8_t new_type) { data.type = new_type;}
+  void set_type(int new_type) { data.type = new_type;}
 
   void set_user_hash(hash_t nhash) { data.user_group = nhash; }
   void set_file_hash(hash_t nhash) { data.file_group = nhash; }

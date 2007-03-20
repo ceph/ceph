@@ -73,14 +73,16 @@ int main(int argc, char* argv[]) {
   cout << "MD5 of " << msg << " is " << string((const char*)hexmd5,2*MD5DIGESTSIZE) << endl;
 
   // esign signature
-  byte* signMsg = (byte *)"Message to sign";
-  char* keyInput = "esig1536.dat";
+  byte* signMsg = (byte *)"Message to sign is getting bigger by the minutefdsfdfdsffdfsfsdfdsfdfdsfsdfdsfsdfdsfsdsfdssdfsdfdsfdsffds";
+  //char* keyInput = "esig1536.dat";
+  char* keyInput = "esig1023.dat";
   esignPriv privKey = esignPrivKey(keyInput);
   esignPub pubKey = esignPubKey(privKey);
   SigBuf mySignature = esignSig(signMsg, strlen((const char*)signMsg), privKey);
   // testing --> remove me!
   byte testBuf[mySignature.size()];
   memcpy((void*)testBuf,(void*)mySignature, mySignature.size());
+  cout << "ESIGN signature size " << mySignature.size() << endl;
   //SigBuf testSecBuf = new SigBuf(testBuf, mySignature.size());
   SigBuf testSecBuf(testBuf, mySignature.size());
   FixedSigBuf testFixedBuf;

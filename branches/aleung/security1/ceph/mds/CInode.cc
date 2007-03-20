@@ -141,7 +141,7 @@ void CInode::buffer_entry()
     // plus i need to release the lock for anyone
     // waiting for me to init
     cout << "Buffer thread waiting on cond" << endl;
-    if (!batching)
+    while (!batching)
       buffer_cond.Wait(buffer_lock);
     cout << "Buffer thread signaled" << endl;
     
@@ -158,7 +158,6 @@ void CInode::buffer_entry()
     for (set<MClientRequest *>::iterator si = buffered_reqs.begin();
 	 si != buffered_reqs.end();
 	 si++) {
-      //user_set.insert((*si)->get_caller_uid());
       user_set.push_back((*si)->get_caller_uid());
       users_hash.add_user((*si)->get_caller_uid());
     }
@@ -189,6 +188,8 @@ void CInode::buffer_entry()
       server->handle_client_open(*ri, this);
     }
 
+    buffered_reqs.clear();
+    
     //turn batching off
     batching = false;
   }
@@ -197,6 +198,46 @@ void CInode::buffer_entry()
   cout << "<------buffer finish" << endl;
 }
 
+void CInode::add_to_buffer(MClientRequest *req, Server *serve, MDS *metads) {
+  cout << "Buffering the request for uid:" <<
+    req->get_caller_uid() << " on client:" <<
+    req->get_client() << " for file:" <<
+    inode.ino << " with client inst:" << req->get_client_inst() << endl;
+
+  buffer_lock.Lock();
+
+  // wait until the thread has initialized
+  while (! thread_init)
+    buffer_cond.Wait(buffer_lock);
+
+  // was batching thread already on?
+  if (batching) {
+    cout << "Buffering request into existing buffer" << endl;
+    buffered_reqs.insert(req);
+  }
+  else {
+    cout << "Buffering request into new buffer" << endl;
+    
+    // set external helper classes
+    server = serve;
+    mds = metads;
+    
+    batch_id.cid = mds->cap_id_count;
+    batch_id.mds_id = mds->get_nodeid();
+    mds->cap_id_count++;
+
+    batching = true;
+    batch_id_set = true;
+
+    buffered_reqs.insert(req);
+
+    // start the buffering now
+    buffer_cond.Signal();
+  }
+
+  buffer_lock.Unlock();
+  return;
+}
 
 
 // pins

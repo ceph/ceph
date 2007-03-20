@@ -39,7 +39,8 @@ class MonMap {
   //void generate_key_pair(string& private_key) {
   // private_key is assumed to already be allocated to right size
   void generate_key_pair(char *private_key) {
-    esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
+    //esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
+    esignPriv tempKey = esignPrivKey("crypto/esig1023.dat");
     //private_key = privToString(tempKey);
     memcpy(private_key, privToString(tempKey).c_str(), ESIGNPRIVSIZE);
     pub_key = esignPubKey(tempKey);

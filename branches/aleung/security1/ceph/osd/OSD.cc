@@ -116,7 +116,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
   boot_epoch = 0;
 
   // create public/private keys
-  myPrivKey = esignPrivKey("crypto/esig1536.dat");
+  //myPrivKey = esignPrivKey("crypto/esig1536.dat");
+  myPrivKey = esignPrivKey("crypto/esig1023.dat");
   myPubKey = esignPubKey(myPrivKey);
   // write these out to disk
 
