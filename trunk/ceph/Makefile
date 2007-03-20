@@ -187,8 +187,8 @@ osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.
 
 
 # hadoop
-libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} -shared -Wl,-soname,libhadoopcephfs.so.1 ${CFLAGS} ${LIBS} $^ -o $@
+libhadoopcephfs.so: client/hadoop/CephFSInterface.o client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} -shared -Wl,-soname,$@.1 ${CFLAGS} ${LIBS} $^ -o $@
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
