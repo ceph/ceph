@@ -18,6 +18,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
 
 #include "config.h"
 
@@ -413,6 +415,14 @@ void Rank::Pipe::writer()
     }
   }
 
+  // disable Nagle algorithm
+  if (g_conf.ms_tcp_nodelay) {
+    int flag = 1;
+    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    if (r < 0) 
+      dout(0) << "pipe(" << peer_addr << ' ' << this << ").writer couldn't set TCP_NODELAY: " << strerror(errno) << endl;
+  }
+
   // loop.
   lock.Lock();
   while (!q.empty() || !done) {
@@ -621,7 +631,7 @@ int Rank::Pipe::write_message(Message *m)
   }
 
 #else
-  if (0) {
+  if (1) {
     // one big chunk
     env->nchunks = -blist.length();
     

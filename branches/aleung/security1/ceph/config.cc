@@ -118,6 +118,7 @@ md_config_t g_conf = {
   ms_overlay_clients: false,
 
   ms_die_on_failure: false,
+  ms_tcp_nodelay: true,
 
   /*tcp_skip_rank0: false,
   tcp_overlay_clients: false,  // over osds!

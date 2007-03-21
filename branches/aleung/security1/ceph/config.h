@@ -105,6 +105,7 @@ struct md_config_t {
   bool ms_skip_rank0;
   bool ms_overlay_clients;
   bool ms_die_on_failure;
+  bool ms_tcp_nodelay;
 
   // mon
   int mon_tick_interval;
