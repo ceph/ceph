@@ -271,8 +271,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 	mds->unix_groups_byhash[group.get_root_hash()] = group;
 	mds->unix_groups_map[my_group] = group.get_root_hash();
 
-	cout << "New group " << my_group
-	     << " created from user " << my_user << endl;
       }
 
       hash_t my_hash = mds->unix_groups_map[my_group];
@@ -295,7 +293,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 	mds->unix_groups_byhash[new_hash] = group;
 	mds->unix_groups_map[my_group] = new_hash;
 
-	cout << "User " << my_user << " added to group " << my_group << endl;
       }
 
       //get hash for gid
@@ -305,10 +302,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
       
       ext_cap->set_type(1);
       
-      cout << "Made new " << my_want << " capability for uid: "
-	   << ext_cap->get_uid() << ", group: " << ext_cap->get_gid()
-	   << ", for hash: " << ext_cap->get_user_hash()
-	   << " for inode: " << ext_cap->get_ino()<< endl;
     }
     // default no grouping
     else {
@@ -320,7 +313,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     ext_cap->set_id(mds->cap_id_count, mds->get_nodeid());
     mds->cap_id_count++;
 
-    cout << "Made new " << my_want << " capability for uid: "
+    dout(3) << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
     
     utime_t sign_time_start = g_clock.now();
@@ -344,7 +337,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // we want to index based on mode, so we can cache more caps
   // does the cached cap have the write mode?
   else {
-    cout << "Got cached " << my_want << " capability for uid: "
+    dout(3) << "Got cached " << my_want << " capability for uid: "
 	 << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino() << endl;
     if (ext_cap->mode() < mode) {
       ext_cap->set_mode(mode);

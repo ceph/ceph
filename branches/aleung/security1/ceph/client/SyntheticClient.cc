@@ -428,7 +428,8 @@ int SyntheticClient::run()
 
     case SYNCLIENT_MODE_READFILE:
       {
-        string sarg1 = get_sarg(0);
+        //string sarg1 = get_sarg(0);
+	string sarg1 = "shared";
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
         if (run_me())

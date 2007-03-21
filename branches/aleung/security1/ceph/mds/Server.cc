@@ -261,7 +261,6 @@ void Server::commit_request(MClientRequest *req,
 void Server::handle_client_update(MClientUpdate *m)
 {
   hash_t my_hash = m->get_user_hash();
-  cout << "handle_client_update for " << my_hash << endl;
   dout(3) << "handle_client_update for " << my_hash << endl;
 
   MClientUpdateReply *reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_list());
@@ -2411,9 +2410,6 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   assert(dn);
 
   if (r == 1) {
-    cout << "openc for " << req->get_filepath() << " from uid:" <<
-      req->get_caller_uid() << " on client:" << req->get_client() << 
-      " with client inst " << req->get_client_inst() << endl;
     // created.
     // it's a file.
     in->inode.mode = 0644;              // FIXME req should have a umask
@@ -2499,7 +2495,6 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 	*/
       }
       else {
-	cout << "Not buffering the request" << endl;
 	//in->two_req_ago = in->one_req_ago;
 	//in->one_req_ago = open_req_time;
 	in->update_buffer_time(open_req_time);

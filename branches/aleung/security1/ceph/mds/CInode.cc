@@ -140,17 +140,13 @@ void CInode::buffer_entry()
     // were gonna get signaled when we start buffering
     // plus i need to release the lock for anyone
     // waiting for me to init
-    cout << "Buffer thread waiting on cond" << endl;
     while (!batching)
       buffer_cond.Wait(buffer_lock);
-    cout << "Buffer thread signaled" << endl;
     
     // the sleep releases the lock and allows the dispatch
     // to insert requests into the buffer
     // sleep first, then serve cap
-    cout << "buffer thread sleeping to buffer" << endl;
     buffer_cond.WaitInterval(buffer_lock, utime_t(5,0));
-    cout << "buffer thread awoke from interval sleep" << endl;
 
     // now i've slept, make cap for users
     list<uid_t> user_set;
@@ -184,7 +180,6 @@ void CInode::buffer_entry()
     for (set<MClientRequest *>::iterator ri = buffered_reqs.begin();
 	 ri != buffered_reqs.end();
 	 ri++) {
-      cout << "ABOUT TO PASS OFF THE REQUEST" << endl;
       server->handle_client_open(*ri, this);
     }
 
@@ -193,7 +188,7 @@ void CInode::buffer_entry()
     //turn batching off
     batching = false;
   }
-  cout << "Buffer thread about to unlock" << endl;
+
   buffer_lock.Unlock();
   cout << "<------buffer finish" << endl;
 }

@@ -476,11 +476,7 @@ inline bool OSD::verify_cap(ExtCap *cap) {
   if (!cap_cache->prev_verified(cap->get_id())) {
 
     // actually verify
-    utime_t justver_time_start = g_clock.now();
     if (cap->verif_extcap(monmap->get_key())) {
-      utime_t justver_time_end = g_clock.now();
-      cout << "Just verification time " << justver_time_end - justver_time_start << endl;
-
       // cache the verification
       cap_cache->insert(cap);
     }
@@ -2985,7 +2981,6 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
-  //utime_t read_time_start = g_clock.now();
   utime_t read_time_start;
   if (outstanding_updates.count(op->get_reqid()) != 0)
     read_time_start = outstanding_updates[op->get_reqid()];
@@ -3000,7 +2995,6 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       
-      utime_t hash_time_start = g_clock.now();
       // if using groups...do we know group?
       if (op_capability->get_type() == UNIX_GROUP ||
 	  op_capability->get_type() == BATCH) {
@@ -3015,8 +3009,6 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 	  return;
 	}	
       }
-      utime_t hash_time_end = g_clock.now();
-      cout << "re Hash update time " << hash_time_end - hash_time_start << endl;
 
       // check accesses are right
       if (check_request(op, op_capability)) {
@@ -3025,14 +3017,11 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       else
 	dout(3) << "Access permissions are incorrect" << endl;
       
-      utime_t verifcap_time_start = g_clock.now();
       assert(verify_cap(op_capability));
-      utime_t verifcap_time_end = g_clock.now();
-      cout << "re Capability verif time " << verifcap_time_end - verifcap_time_start << endl;
     }
   }
   utime_t sec_time_end = g_clock.now();
-  cout << "re Security time " << sec_time_end - sec_time_start << endl;
+  cout << "Read Security time " << sec_time_end - sec_time_start << endl;
 
   long r = 0;
   bufferlist bl;
@@ -3361,8 +3350,6 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   utime_t write_time_start;
   if (outstanding_updates.count(op->get_reqid()) != 0) {
     write_time_start = outstanding_updates[op->get_reqid()];
-    cout << "Using stored time " <<  write_time_start << " for request " << 
-	 op->get_reqid() << endl;
   }
   else
     write_time_start = g_clock.now();
@@ -3397,7 +3384,6 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       // if using groups...do we know group?
-      utime_t hash_time_start = g_clock.now();
       if (op_capability->get_type() == UNIX_GROUP ||
 	  op_capability->get_type() == BATCH) {
 	// check if user is in group
@@ -3406,39 +3392,26 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	// do we have group cached? if not, update group
 	// we will lose execution control here! re-gain on reply
 	if (user_groups.count(my_hash) == 0) {
-	  cout << "Setting the time " << write_time_start << 
-	    " for request " << op->get_reqid() << endl;
 	  outstanding_updates[op->get_reqid()] = write_time_start;
 	  update_group(op->get_client_inst(), my_hash, op);
 	  return;
 	}
 	
       }
-      utime_t hash_time_end = g_clock.now();
-      cout << "wr Hash check time " << hash_time_end - hash_time_start << endl;
-      cout << "Hash time SO FAR " << hash_time_end - sec_time_start << endl;
 
-      utime_t perm_time_start = g_clock.now();
       // check accesses are right
       if (check_request(op, op_capability)) {
 	dout(3) << "Access permissions are correct" << endl;
       }
       else
 	dout(3) << "Access permissions are incorrect" << endl;
-      utime_t perm_time_end = g_clock.now();
-      cout << "wr Check permissions time " << perm_time_end - perm_time_start << endl;
-      cout << "Check permissions time SO FAR " << perm_time_end - sec_time_start << endl;
       
-      utime_t verif_time_start = g_clock.now();
       assert(verify_cap(op_capability));
-      utime_t verif_time_end = g_clock.now();
-      cout << "wr Verif capability time " << verif_time_end - verif_time_start << endl;
-      cout << "Verification time SO FAR " << verif_time_end - sec_time_start << endl;
     }
 
   }
   utime_t sec_time_end = g_clock.now();
-  cout << "Security time spent " << sec_time_end - sec_time_start << endl;
+  //cout << "Security write time spent " << sec_time_end - sec_time_start << endl;
   
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!
@@ -3572,8 +3545,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   utime_t write_time_end = g_clock.now();
   if (op->get_op() == OSD_OP_WRITE &&
       op->get_source().is_client())
-    cout << "Write time " << write_time_end - write_time_start << endl <<
-      "with write_time_end " << write_time_end << endl;
+    cout << "Write time " << write_time_end - write_time_start << endl;
 }
 
 
