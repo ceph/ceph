@@ -441,6 +441,7 @@ void EMount::replay(MDS *mds)
     mds->clientmap.add_mount(client_inst);
   else
     mds->clientmap.rem_mount(client_inst.name.num());
+  mds->clientmap.reset_projected(); // make it follow version.
 }
 
 

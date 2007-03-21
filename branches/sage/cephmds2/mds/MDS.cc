@@ -633,6 +633,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (*p == whoami) continue;         // not me
       if (oldactive.count(*p)) continue;  // newly so?
       mdcache->handle_mds_recovery(*p);
+      if (anchortable)
+	anchortable->handle_mds_recovery(*p);
       anchorclient->handle_mds_recovery(*p);
     }
   }

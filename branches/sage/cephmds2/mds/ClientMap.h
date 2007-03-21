@@ -73,6 +73,7 @@ public:
   version_t get_committed() { return committed; }
 
   version_t inc_projected() { return ++projected; }
+  void reset_projected() { projected = version; }
   void set_committing(version_t v) { committing = v; }
   void set_committed(version_t v) { committed = v; }
 

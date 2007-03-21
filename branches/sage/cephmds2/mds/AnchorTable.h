@@ -117,7 +117,9 @@ public:
   void _loaded(bufferlist& bl);
 
   // recovery
+  void handle_mds_recovery(int who);
   void finish_recovery();
+  void resend_agree(version_t v, int who);
 
 };
 

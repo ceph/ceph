@@ -220,7 +220,7 @@ void AnchorTable::commit(version_t atid)
 void AnchorTable::rollback(version_t atid) 
 {
   if (pending_create.count(atid)) {
-    inodeno_t ino = pending_destroy[atid];
+    inodeno_t ino = pending_create[atid];
     dout(7) << "rollback " << atid << " create " << ino << endl;
     dec(ino);
     pending_create.erase(atid);
@@ -497,6 +497,10 @@ void AnchorTable::handle_anchor_request(class MAnchor *req)
     handle_commit(req);
     break;
 
+  case ANCHOR_OP_ROLLBACK:
+    handle_rollback(req);
+    break;
+
   default:
     assert(0);
   }
@@ -668,24 +672,40 @@ void AnchorTable::finish_recovery()
 {
   dout(7) << "finish_recovery" << endl;
   
-  for (map<version_t, inodeno_t>::iterator p = pending_create.begin();
-       p != pending_create.end();
-       ++p) {
-    MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, p->second, p->first);
-    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
-  }
-  for (map<version_t, inodeno_t>::iterator p = pending_destroy.begin();
-       p != pending_destroy.end();
-       ++p) {
-    MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, p->second, p->first);
-    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
-  }
-  for (map<version_t, pair<inodeno_t, vector<Anchor> > >::iterator p = pending_update.begin();
-       p != pending_update.end();
-       ++p) {
-    MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, p->second.first, p->first);
-    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
-  }
+  // resend agrees for everyone.
+  for (map<version_t,int>::iterator p = pending_reqmds.begin();
+       p != pending_reqmds.end();
+       p++) 
+    resend_agree(p->first, p->second);
 }
 
 
+void AnchorTable::resend_agree(version_t v, int who)
+{
+  if (pending_create.count(v)) {
+    MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, pending_create[v], v);
+    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+  }
+  else if (pending_destroy.count(v)) {
+    MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, pending_destroy[v], v);
+    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+  }
+  else {
+    assert(pending_update.count(v));
+    MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, pending_update[v].first, v);
+    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+  }
+}
+
+void AnchorTable::handle_mds_recovery(int who)
+{
+  dout(7) << "handle_mds_recovery mds" << who << endl;
+  
+  // resend agrees for recovered mds
+  for (map<version_t,int>::iterator p = pending_reqmds.begin();
+       p != pending_reqmds.end();
+       p++) {
+    if (p->second != who) continue;
+    resend_agree(p->first, p->second);
+  }
+}
