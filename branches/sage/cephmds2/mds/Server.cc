@@ -307,7 +307,6 @@ void Server::handle_client_request(MClientRequest *req)
   case MDS_OP_TRUNCATE:
     if (!req->args.truncate.ino) break;   // can be called w/ either fh OR path
     
-  case MDS_OP_RELEASE:
   case MDS_OP_FSYNC:
     ref = mdcache->get_inode(req->args.fsync.ino);   // fixme someday no ino needed?
 
@@ -593,7 +592,7 @@ void Server::handle_client_stat(MClientRequest *req,
   int mask = req->args.stat.mask;
   if (mask & (INODE_MASK_SIZE|INODE_MASK_MTIME)) {
     // yes.  do a full stat.
-    if (!mds->locker->inode_file_read_start(ref, req))
+    if (!mds->locker->inode_file_read_start(ref, req, ref))
       return;  // syncing
     mds->locker->inode_file_read_finish(ref);
   } else {
@@ -662,7 +661,7 @@ void Server::handle_client_utime(MClientRequest *req,
   mdcache->request_auth_pin(req, cur);
 
   // write
-  if (!mds->locker->inode_file_write_start(cur, req))
+  if (!mds->locker->inode_file_write_start(cur, req, cur))
     return;  // fw or (wait for) sync
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -676,6 +675,7 @@ void Server::handle_client_utime(MClientRequest *req,
 
   // log + wait
   EUpdate *le = new EUpdate("utime");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = mtime;
@@ -735,7 +735,7 @@ void Server::handle_client_chmod(MClientRequest *req,
   mdcache->request_auth_pin(req, cur);
 
   // write
-  if (!mds->locker->inode_hard_write_start(cur, req))
+  if (!mds->locker->inode_hard_write_start(cur, req, cur))
     return;  // fw or (wait for) lock
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -748,6 +748,7 @@ void Server::handle_client_chmod(MClientRequest *req,
 
   // log + wait
   EUpdate *le = new EUpdate("chmod");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mode = mode;
@@ -801,7 +802,7 @@ void Server::handle_client_chown(MClientRequest *req,
   mdcache->request_auth_pin(req, cur);
 
   // write
-  if (!mds->locker->inode_hard_write_start(cur, req))
+  if (!mds->locker->inode_hard_write_start(cur, req, cur))
     return;  // fw or (wait for) lock
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -815,6 +816,7 @@ void Server::handle_client_chown(MClientRequest *req,
 
   // log + wait
   EUpdate *le = new EUpdate("chown");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   if (uid >= 0) pi->uid = uid;
@@ -894,7 +896,7 @@ void Server::handle_client_readdir(MClientRequest *req,
   assert(dir->is_auth());
 
   // check perm
-  if (!mds->locker->inode_hard_read_start(diri,req))
+  if (!mds->locker->inode_hard_read_start(diri, req, diri))
     return;
   mds->locker->inode_hard_read_finish(diri);
 
@@ -993,6 +995,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
   // prepare finisher
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mknod");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
@@ -1171,6 +1174,7 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
   // prepare finisher
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mkdir");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
@@ -1227,6 +1231,7 @@ void Server::handle_client_symlink(MClientRequest *req, CInode *diri)
   // prepare finisher
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("symlink");
+  le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
@@ -1385,17 +1390,15 @@ void Server::_link_local(MClientRequest *req, CInode *diri,
   mdcache->request_auth_pin(req, targeti);
   
   // sweet.  let's get our locks.
-  // lock dentry
-  if (!mds->locker->dentry_xlock_start(dn, req, diri))
-    return;
-
-  // lock target inode
-  if (!mds->locker->inode_hard_write_start(targeti, req))
+  // lock dentry, target inode
+  if (!mds->locker->dentry_xlock_start(dn, req, diri) ||
+      !mds->locker->inode_hard_write_start(targeti, req, diri))
     return;
 
   // ok, let's do it.
   // prepare log entry
   EUpdate *le = new EUpdate("link_local");
+  le->metablob.add_client_req(req->get_reqid());
 
   // predirty
   dn->pre_dirty();
@@ -1426,7 +1429,7 @@ void Server::_link_local_finish(MClientRequest *req, CDentry *dn, CInode *target
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
   // link and unlock the new dentry
-  dn->set_remote_ino(targeti->ino());
+  dn->dir->link_inode(dn, targeti->ino());
   dn->set_version(dpv);
   dn->mark_dirty(dpv);
 
@@ -1713,9 +1716,8 @@ void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
     mdcache->request_auth_pin(req, in);
 
     // lock
-    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
-      return;
-    if (!mds->locker->inode_hard_write_start(in, req))
+    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()) ||
+	!mds->locker->inode_hard_write_start(in, req, dn->get_dir()->get_inode()))
       return;
   } else {
     // the inode will go away.
@@ -1729,6 +1731,7 @@ void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
   // ok, let's do it.
   // prepare log entry
   EUpdate *le = new EUpdate("unlink_local");
+  le->metablob.add_client_req(req->get_reqid());
 
   // predirty
   version_t ipv = in->pre_dirty();
@@ -2411,7 +2414,7 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
   mdcache->request_auth_pin(req, cur);
 
   // write
-  if (!mds->locker->inode_file_write_start(cur, req))
+  if (!mds->locker->inode_file_write_start(cur, req, cur))
     return;  // fw or (wait for) lock
 
   // check permissions
@@ -2440,20 +2443,20 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 void Server::handle_client_open(MClientRequest *req, CInode *cur)
 {
   int flags = req->args.open.flags;
-  int mode = req->args.open.mode;
+  int cmode = req->get_open_file_mode();
 
   dout(7) << "open " << flags << " on " << *cur << endl;
-  dout(10) << "open flags = " << flags << "  mode = " << mode << endl;
+  dout(10) << "open flags = " << flags << "  filemode = " << cmode << endl;
 
   // is it a file?
-  if (!(cur->inode.mode & INODE_MODE_FILE)) {
+  if (!(cmode & INODE_MODE_FILE)) {
     dout(7) << "not a regular file" << endl;
     reply_request(req, -EINVAL);                 // FIXME what error do we want?
     return;
   }
 
   // auth for write access
-  if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&
+  if (cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY &&
       !cur->is_auth()) {
     int auth = cur->authority().first;
     assert(auth != mds->get_nodeid());
@@ -2474,7 +2477,7 @@ void Server::handle_client_open(MClientRequest *req, CInode *cur)
     mdcache->request_auth_pin(req, cur);
 
     // write
-    if (!mds->locker->inode_file_write_start(cur, req))
+    if (!mds->locker->inode_file_write_start(cur, req, cur))
       return;  // fw or (wait for) lock
     
     // do update
@@ -2490,7 +2493,7 @@ void Server::handle_client_open(MClientRequest *req, CInode *cur)
 
   // can we issue the caps they want?
   version_t fdv = mds->locker->issue_file_data_version(cur);
-  Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
+  Capability *cap = mds->locker->issue_new_caps(cur, cmode, req);
   if (!cap) return; // can't issue (yet), so wait!
 
   dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
@@ -2571,6 +2574,7 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     // prepare finisher
     C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, req, dn, in);
     EUpdate *le = new EUpdate("openc");
+    le->metablob.add_client_req(req->get_reqid());
     le->metablob.add_dir_context(dir);
     inode_t *pi = le->metablob.add_primary_dentry(dn, true, in);
     pi->version = dn->get_projected_version();

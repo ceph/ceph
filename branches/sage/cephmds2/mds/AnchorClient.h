@@ -70,6 +70,9 @@ public:
   // for recovery (by other nodes)
   void handle_mds_recovery(int mds); // called when someone else recovers
 
+  void resend_commits();
+  void resend_prepares(hash_map<inodeno_t, _pending_prepare>& prepares, int op);
+
   // for recovery (by me)
   void got_journaled_agree(version_t atid) {
     pending_commit.insert(atid);

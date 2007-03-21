@@ -26,6 +26,7 @@
 #define EVENT_CLIENTMAP    7
 
 #define EVENT_ANCHOR       8
+#define EVENT_ANCHORCLIENT 9
 
 #define EVENT_ALLOC        10
 #define EVENT_MKNOD        11

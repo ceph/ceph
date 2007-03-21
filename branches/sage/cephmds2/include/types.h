@@ -129,6 +129,8 @@ typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 
 
 
 
+#define O_LAZY 01000000
+
 
 
 /** object layout

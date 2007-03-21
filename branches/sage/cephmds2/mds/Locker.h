@@ -62,13 +62,13 @@ private:
   // high level interface
  public:
   bool inode_hard_read_try(CInode *in, Context *con);
-  bool inode_hard_read_start(CInode *in, MClientRequest *m);
+  bool inode_hard_read_start(CInode *in, MClientRequest *m, CInode *ref);
   void inode_hard_read_finish(CInode *in);
-  bool inode_hard_write_start(CInode *in, MClientRequest *m);
+  bool inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref);
   void inode_hard_write_finish(CInode *in);
-  bool inode_file_read_start(CInode *in, MClientRequest *m);
+  bool inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref);
   void inode_file_read_finish(CInode *in);
-  bool inode_file_write_start(CInode *in, MClientRequest *m);
+  bool inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref);
   void inode_file_write_finish(CInode *in);
 
   void inode_hard_eval(CInode *in);

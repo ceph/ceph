@@ -1846,7 +1846,7 @@ void MDCache::trim_non_auth()
     }
   }
 
-  if (lru.lru_get_size() == 0) {
+  if (lru.lru_get_size() == 0 && root) {
     list<CDir*> ls;
     root->get_dirfrags(ls);
     for (list<CDir*>::iterator p = ls.begin();
@@ -2537,45 +2537,44 @@ int MDCache::path_traverse(filepath& origpath,
           dout(10) << "traverse: relative symlink, path now " << path << " depth " << depth << endl;
         }
         continue;        
-      } else {
-        // keep going.
-
-        // forwarder wants replicas?
-        if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
-          dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << curdir->dirfrag() << endl;
-          
-          if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == curdir->ino() &&
-              curdir->is_auth() && 
-              curdir->is_rep() &&
-              curdir->is_replica(req->get_source().num()) &&
-              dn->is_auth()
-              ) {
-            assert(req->get_source().is_mds());
-            int from = req->get_source().num();
-            
-            if (dn->is_replica(from)) {
-              dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
-                       << req->get_source() << " dn " << *dn << endl; 
-            } else {
-              dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << endl;
-              MDiscoverReply *reply = new MDiscoverReply(curdir->ino());
-              reply->add_dentry( dn->replicate_to( from ) );
-	      if (dn->is_primary())
-		reply->add_inode( dn->inode->replicate_to( from ) );
-              mds->send_message_mds(reply, req->get_source().num(), MDS_PORT_CACHE);
-            }
-          }
-        }
-            
-        trace.push_back(dn);
-        cur = dn->inode;
-        touch_inode(cur);
-        depth++;
-        continue;
       }
+
+      // forwarder wants replicas?
+      if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
+	dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << curdir->dirfrag() << endl;
+	
+	if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == curdir->ino() &&
+	    curdir->is_auth() && 
+	    curdir->is_rep() &&
+	    curdir->is_replica(req->get_source().num()) &&
+	    dn->is_auth()
+	    ) {
+	  assert(req->get_source().is_mds());
+	  int from = req->get_source().num();
+	  
+	  if (dn->is_replica(from)) {
+	    dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
+		     << req->get_source() << " dn " << *dn << endl; 
+	  } else {
+	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << endl;
+	    MDiscoverReply *reply = new MDiscoverReply(curdir->ino());
+	    reply->add_dentry( dn->replicate_to( from ) );
+	    if (dn->is_primary())
+	      reply->add_inode( dn->inode->replicate_to( from ) );
+	    mds->send_message_mds(reply, req->get_source().num(), MDS_PORT_CACHE);
+	  }
+	}
+      }
+      
+      // add to trace, continue.
+      trace.push_back(dn);
+      cur = dn->inode;
+      touch_inode(cur);
+      depth++;
+      continue;
     }
     
-    // MISS.  don't have it.
+    // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << endl;
     
     if (curdir->is_auth()) {
@@ -3649,10 +3648,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       
       if (dn) {
         dout(7) << "had " << *dn << endl;
-	dn->replica_nonce = m->get_dentry(i).get_nonce();  // fix nonce.
+	m->get_dentry(i).update_dentry(dn);
       } else {
         dn = curdir->add_dentry( m->get_dentry(i).get_dname(), 0, false );
-	m->get_dentry(i).update_dentry(dn);
+	m->get_dentry(i).update_new_dentry(dn);
         dout(7) << "added " << *dn << endl;
       }
 
@@ -4196,6 +4195,11 @@ void MDCache::show_subtrees(int dbl)
 
   if (dbl > g_conf.debug && dbl > g_conf.debug_mds) 
     return;  // i won't print anything.
+
+  if (!root) {
+    dout(dbl) << "no subtrees" << endl;
+    return;
+  }
 
   list<pair<CDir*,int> > q;
   string indent;

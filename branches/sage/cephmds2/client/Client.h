@@ -44,8 +44,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-#define O_LAZY 01000000
-
 
 class MClientRequest;
 class MClientRequestForward;
@@ -321,6 +319,7 @@ class Client : public Dispatcher {
     MClientRequest *request;    
     bufferlist request_payload;  // in case i have to retry
 
+    bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
     int      num_fwd;            // # of times i've been forwarded
 
@@ -331,7 +330,7 @@ class Client : public Dispatcher {
 
     MetaRequest(MClientRequest *req, tid_t t) : 
       tid(t), request(req), 
-      num_fwd(0), 
+      idempotent(false), num_fwd(0), 
       reply(0), 
       caller_cond(0), dispatch_cond(0) { }
   };
@@ -593,7 +592,7 @@ protected:
   
   // file ops
   int mknod(const char *path, mode_t mode);
-  int open(const char *path, int mode);
+  int open(const char *path, int flags, mode_t mode=0);
   int close(fh_t fh);
   off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);

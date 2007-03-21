@@ -145,7 +145,7 @@ void AnchorTable::handle_lookup(MAnchor *req)
 
 // MIDLEVEL
 
-void AnchorTable::create_prepare(inodeno_t ino, vector<Anchor>& trace)
+void AnchorTable::create_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds)
 {
   // make sure trace is in table
   for (unsigned i=0; i<trace.size(); i++) 
@@ -154,21 +154,24 @@ void AnchorTable::create_prepare(inodeno_t ino, vector<Anchor>& trace)
 
   version++;
   pending_create[version] = ino;  // so we can undo
+  pending_reqmds[version] = reqmds;
   //dump();
 }
 
-void AnchorTable::destroy_prepare(inodeno_t ino)
+void AnchorTable::destroy_prepare(inodeno_t ino, int reqmds)
 {
   version++;
   pending_destroy[version] = ino;
+  pending_reqmds[version] = reqmds;
   //dump();
 }
 
-void AnchorTable::update_prepare(inodeno_t ino, vector<Anchor>& trace)
+void AnchorTable::update_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds)
 {
   version++;
   pending_update[version].first = ino;
   pending_update[version].second = trace;
+  pending_reqmds[version] = reqmds;
   //dump();
 }
 
@@ -207,6 +210,8 @@ void AnchorTable::commit(version_t atid)
   else
     assert(0);
 
+  pending_reqmds.erase(atid);
+
   // bump version.
   version++;
   //dump();
@@ -234,6 +239,8 @@ void AnchorTable::rollback(version_t atid)
   }
   else
     assert(0);
+
+  pending_reqmds.erase(atid);
 
   // bump version.
   version++;
@@ -264,10 +271,10 @@ void AnchorTable::handle_create_prepare(MAnchor *req)
 
   dout(7) << "handle_create_prepare " << ino << endl;
   
-  create_prepare(ino, trace);
+  create_prepare(ino, trace, req->get_source().num());
 
   // log it
-  EAnchor *le = new EAnchor(ANCHOR_OP_CREATE_PREPARE, ino, version);
+  EAnchor *le = new EAnchor(ANCHOR_OP_CREATE_PREPARE, ino, version, req->get_source().num());
   le->set_trace(trace);
   mds->mdlog->submit_entry(le, 
 			   new C_AT_CreatePrepare(this, req, version));
@@ -307,9 +314,9 @@ void AnchorTable::handle_destroy_prepare(MAnchor *req)
   inodeno_t ino = req->get_ino();
   dout(7) << "handle_destroy_prepare " << ino << endl;
 
-  destroy_prepare(ino);
+  destroy_prepare(ino, req->get_source().num());
 
-  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_DESTROY_PREPARE, ino, version),
+  mds->mdlog->submit_entry(new EAnchor(ANCHOR_OP_DESTROY_PREPARE, ino, version, req->get_source().num()),
 			   new C_AT_DestroyPrepare(this, req, version));
 }
 
@@ -347,10 +354,10 @@ void AnchorTable::handle_update_prepare(MAnchor *req)
 
   dout(7) << "handle_update_prepare " << ino << endl;
   
-  update_prepare(ino, trace);
+  update_prepare(ino, trace, req->get_source().num());
 
   // log it
-  EAnchor *le = new EAnchor(ANCHOR_OP_UPDATE_PREPARE, ino, version);
+  EAnchor *le = new EAnchor(ANCHOR_OP_UPDATE_PREPARE, ino, version, req->get_source().num());
   le->set_trace(trace);
   mds->mdlog->submit_entry(le, 
 			   new C_AT_UpdatePrepare(this, req, version));
@@ -467,6 +474,8 @@ void AnchorTable::handle_anchor_request(class MAnchor *req)
     return;
   }
 
+  dout(10) << "handle_anchor_request " << *req << endl;
+
   // go
   switch (req->get_op()) {
 
@@ -514,7 +523,10 @@ public:
 void AnchorTable::save(Context *onfinish)
 {
   dout(7) << "save v " << version << endl;
-  if (!opened) return;
+  if (!opened) {
+    assert(!onfinish);
+    return;
+  }
   
   if (onfinish)
     waiting_for_save[version].push_back(onfinish);
@@ -544,6 +556,7 @@ void AnchorTable::save(Context *onfinish)
   }
 
   // pending
+  ::_encode(pending_reqmds, bl);
   ::_encode(pending_create, bl);
   ::_encode(pending_destroy, bl);
   
@@ -620,6 +633,7 @@ void AnchorTable::_loaded(bufferlist& bl)
     dout(15) << "load_2 decoded " << a << endl;
   }
 
+  ::_decode(pending_reqmds, bl, off);
   ::_decode(pending_create, bl, off);
   ::_decode(pending_destroy, bl, off);
 
@@ -646,4 +660,32 @@ void AnchorTable::_loaded(bufferlist& bl)
   
   finish_contexts(waiting_for_open);
 }
+
+
+//////
+
+void AnchorTable::finish_recovery()
+{
+  dout(7) << "finish_recovery" << endl;
+  
+  for (map<version_t, inodeno_t>::iterator p = pending_create.begin();
+       p != pending_create.end();
+       ++p) {
+    MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, p->second, p->first);
+    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
+  }
+  for (map<version_t, inodeno_t>::iterator p = pending_destroy.begin();
+       p != pending_destroy.end();
+       ++p) {
+    MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, p->second, p->first);
+    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
+  }
+  for (map<version_t, pair<inodeno_t, vector<Anchor> > >::iterator p = pending_update.begin();
+       p != pending_update.end();
+       ++p) {
+    MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, p->second.first, p->first);
+    mds->messenger->send_message(reply, mds->mdsmap->get_inst(pending_reqmds[p->first]), MDS_PORT_ANCHORCLIENT);
+  }
+}
+
 

@@ -40,6 +40,7 @@
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <fcntl.h>
 
 
 // md ops
@@ -47,25 +48,26 @@
 
 #define MDS_OP_STAT     100
 #define MDS_OP_LSTAT    101
-#define MDS_OP_UTIME    102
-#define MDS_OP_CHMOD    103
-#define MDS_OP_CHOWN    104  
+#define MDS_OP_UTIME    1102
+#define MDS_OP_CHMOD    1103
+#define MDS_OP_CHOWN    1104  
 
 
 #define MDS_OP_READDIR  200
-#define MDS_OP_MKNOD    201
-#define MDS_OP_LINK     202
-#define MDS_OP_UNLINK   203
-#define MDS_OP_RENAME   204
+#define MDS_OP_MKNOD    1201
+#define MDS_OP_LINK     1202
+#define MDS_OP_UNLINK   1203
+#define MDS_OP_RENAME   1204
 
-#define MDS_OP_MKDIR    220
-#define MDS_OP_RMDIR    221
-#define MDS_OP_SYMLINK  222
+#define MDS_OP_MKDIR    1220
+#define MDS_OP_RMDIR    1221
+#define MDS_OP_SYMLINK  1222
 
 #define MDS_OP_OPEN     301
-#define MDS_OP_TRUNCATE 306
+#define MDS_OP_TRUNCATE 1306
 #define MDS_OP_FSYNC    307
-#define MDS_OP_RELEASE  308
+
+#define MDS_OP_RELEASE  308  // used only by SyntheticClient op_dist thinger
 
 
 class MClientRequest : public Message {
@@ -130,6 +132,31 @@ class MClientRequest : public Message {
     memset(&args, 0, sizeof(args));
     this->st.op = op;
     this->st.client_inst = ci;
+  }
+
+  reqid_t get_reqid() {
+    // FIXME: for now, assume clients always have 1 incarnation
+    return reqid_t(st.client_inst.name, 1, st.tid); 
+  }
+
+  int get_open_file_mode() {
+    if (args.open.flags & O_LAZY) 
+      return FILE_MODE_LAZY;
+    if (args.open.flags & O_WRONLY) 
+      return FILE_MODE_W;
+    if (args.open.flags & O_RDWR) 
+      return FILE_MODE_RW;
+    if (args.open.flags & O_APPEND) 
+      return FILE_MODE_W;
+    return FILE_MODE_R;
+  }
+  bool open_file_mode_is_readonly() {
+    return get_open_file_mode() == FILE_MODE_R;
+  }
+  bool is_idempotent() {
+    if (st.op == MDS_OP_OPEN) 
+      return open_file_mode_is_readonly();
+    return (st.op < 1000);
   }
 
   // normal fields
@@ -219,8 +246,8 @@ class MClientRequest : public Message {
       out << "truncate"; break;
     case MDS_OP_FSYNC: 
       out << "fsync"; break;
-    case MDS_OP_RELEASE: 
-      out << "release"; break;
+      //    case MDS_OP_RELEASE: 
+      //out << "release"; break;
     default: 
       out << "unknown=" << get_op();
     }

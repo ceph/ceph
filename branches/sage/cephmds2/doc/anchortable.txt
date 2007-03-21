@@ -36,7 +36,8 @@ INITIATING MDS FAILURE
 If the MDS fails before the metadata update has been journaled, no
 action is taken, since nothing is known about the previously proposed
 transaction.  If an AGREE message is received and there is no
-corresponding PREPARE state, and ROLLBACK is sent to the anchor table.
+corresponding PREPARE or pending-commit state, and ROLLBACK is sent to
+the anchor table.
 
 If the MDS fails after journaling the metadata update but before
 journaling the ACK, it resends COMMIT to the anchor table.  If it

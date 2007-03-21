@@ -222,11 +222,15 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
 {
   // client request?
   if (req->get_type() == MSG_CLIENT_REQUEST) {
-    // tell the client
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
+
+    // tell the client
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd()),
 			    creq->get_client_inst());
+    
+    if (!creq->is_idempotent()) 
+      return;  // don't forward if non-idempotent
   }
   
   // forward
@@ -529,7 +533,11 @@ void MDS::handle_mds_map(MMDSMap *m)
       // did i just recover?
       if (oldstate == MDSMap::STATE_REJOIN) {
 	dout(1) << "successful recovery!" << endl;
-	
+
+	// kick anchortable (resent AGREEs)
+	if (mdsmap->get_anchortable() == whoami) 
+	  anchortable->finish_recovery();
+
 	// kick anchorclient (resent COMMITs)
 	anchorclient->finish_recovery();
 
@@ -625,6 +633,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (*p == whoami) continue;         // not me
       if (oldactive.count(*p)) continue;  // newly so?
       mdcache->handle_mds_recovery(*p);
+      anchorclient->handle_mds_recovery(*p);
     }
   }
 

@@ -16,6 +16,7 @@
 #include "events/EMetaBlob.h"
 #include "events/EAlloc.h"
 #include "events/EAnchor.h"
+#include "events/EAnchorClient.h"
 #include "events/EUpdate.h"
 #include "events/EImportMap.h"
 
@@ -528,21 +529,16 @@ void EAnchor::replay(MDS *mds)
     switch (op) {
       // anchortable
     case ANCHOR_OP_CREATE_PREPARE:
-      mds->anchortable->create_prepare(ino, trace);
+      mds->anchortable->create_prepare(ino, trace, reqmds);
       break;
     case ANCHOR_OP_DESTROY_PREPARE:
-      mds->anchortable->destroy_prepare(ino);
+      mds->anchortable->destroy_prepare(ino, reqmds);
       break;
     case ANCHOR_OP_UPDATE_PREPARE:
-      mds->anchortable->update_prepare(ino, trace);
+      mds->anchortable->update_prepare(ino, trace, reqmds);
       break;
     case ANCHOR_OP_COMMIT:
       mds->anchortable->commit(atid);
-      break;
-
-      // anchorclient
-    case ANCHOR_OP_ACK:
-      mds->anchorclient->got_journaled_ack(atid);
       break;
 
     default:
@@ -550,6 +546,34 @@ void EAnchor::replay(MDS *mds)
     }
     
     assert(version == mds->anchortable->get_version());
+  }
+}
+
+
+// EAnchorClient
+
+bool EAnchorClient::has_expired(MDS *mds) 
+{
+  return true;
+}
+
+void EAnchorClient::expire(MDS *mds, Context *c)
+{
+  assert(0);
+}
+
+void EAnchorClient::replay(MDS *mds)
+{
+  dout(10) << " EAnchorClient.replay op " << op << " atid " << atid << endl;
+    
+  switch (op) {
+    // anchorclient
+  case ANCHOR_OP_ACK:
+    mds->anchorclient->got_journaled_ack(atid);
+    break;
+    
+  default:
+    assert(0);
   }
 }
 

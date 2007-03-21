@@ -242,6 +242,7 @@ void CDir::link_inode( CDentry *dn, inodeno_t ino)
   //assert(null_items.count(dn->name) == 1);
   //null_items.erase(dn->name);
   nnull--;
+  assert(nnull + nitems == items.size());
 }
 
 void CDir::link_inode( CDentry *dn, CInode *in )

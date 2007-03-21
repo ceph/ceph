@@ -529,7 +529,6 @@ class CDirDiscover {
 class CDirExport {
   struct {
     dirfrag_t   dirfrag;
-    long        nitems; // actual real entries
     long        nden;   // num dentries (including null ones)
     version_t   version;
     version_t   committed_version;
@@ -549,7 +548,6 @@ class CDirExport {
     assert(dir->get_version() == dir->get_projected_version());
 
     st.dirfrag = dir->dirfrag();
-    st.nitems = dir->nitems;
     st.nden = dir->items.size();
     st.version = dir->version;
     st.committed_version = dir->committed_version;
@@ -570,8 +568,6 @@ class CDirExport {
 
   void update_dir(CDir *dir) {
     assert(dir->dirfrag() == st.dirfrag);
-
-    //dir->nitems = st.nitems;
 
     // set committed_version at old version
     dir->committing_version = dir->committed_version = st.committed_version;

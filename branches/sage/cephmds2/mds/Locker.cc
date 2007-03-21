@@ -544,7 +544,7 @@ bool Locker::inode_hard_read_try(CInode *in, Context *con)
   return false;
 }
 
-bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m)
+bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m, CInode *ref)
 {
   dout(7) << "inode_hard_read_start  on " << *in << endl;  
 
@@ -559,7 +559,7 @@ bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m)
 
   // wait!
   dout(7) << "inode_hard_read_start waiting on " << *in << endl;
-  in->add_waiter(CInode::WAIT_HARDR, new C_MDS_RetryRequest(mds, m, in));
+  in->add_waiter(CInode::WAIT_HARDR, new C_MDS_RetryRequest(mds, m, ref));
   return false;
 }
 
@@ -576,7 +576,7 @@ void Locker::inode_hard_read_finish(CInode *in)
 }
 
 
-bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
+bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref)
 {
   dout(7) << "inode_hard_write_start  on " << *in << endl;
 
@@ -604,7 +604,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
     }
     
     dout(7) << "inode_hard_write_start waiting on " << *in << endl;
-    in->add_waiter(CInode::WAIT_HARDW, new C_MDS_RetryRequest(mds, m, in));
+    in->add_waiter(CInode::WAIT_HARDW, new C_MDS_RetryRequest(mds, m, ref));
 
     return false;
   } else {
@@ -850,7 +850,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
 // soft inode metadata
 
 
-bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
+bool Locker::inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref)
 {
   dout(7) << "inode_file_read_start " << *in << " filelock=" << in->filelock << endl;  
 
@@ -883,7 +883,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
         }
       } else {
         dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
         return false;
       }
     } else {
@@ -900,7 +900,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
       } else {
         // wait until stable
         dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
         return false;
       }
     }
@@ -908,7 +908,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
 
   // wait
   dout(7) << "inode_file_read_start waiting on " << *in << ", filelock=" << in->filelock << endl;
-  in->add_waiter(CInode::WAIT_FILER, new C_MDS_RetryRequest(mds, m, in));
+  in->add_waiter(CInode::WAIT_FILER, new C_MDS_RetryRequest(mds, m, ref));
         
   return false;
 }
@@ -929,7 +929,7 @@ void Locker::inode_file_read_finish(CInode *in)
 }
 
 
-bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
+bool Locker::inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref)
 {
   dout(7) << "inode_file_write_start on " << *in << endl;
 
@@ -942,7 +942,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
       if (!in->filelock.can_write_soon(in->is_auth())) {
 	if (!in->filelock.is_stable()) {
 	  dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
-	  in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+	  in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
 	  return false;
 	}
 	
@@ -970,7 +970,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
     return true;
   } else {
     dout(7) << "inode_file_write_start on auth, waiting for write on " << *in << endl;
-    in->add_waiter(CInode::WAIT_FILEW, new C_MDS_RetryRequest(mds, m, in));
+    in->add_waiter(CInode::WAIT_FILEW, new C_MDS_RetryRequest(mds, m, ref));
     return false;
   }
 }

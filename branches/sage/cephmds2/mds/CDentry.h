@@ -309,9 +309,16 @@ public:
 
   string& get_dname() { return dname; }
   int get_nonce() { return replica_nonce; }
+  bool is_remote() { return remote_ino ? true:false; }
+  inodeno_t get_remote_ino() { return remote_ino; }
 
   void update_dentry(CDentry *dn) {
     dn->set_replica_nonce( replica_nonce );
+    if (remote_ino)
+      dn->set_remote_ino(remote_ino);
+  }
+  void update_new_dentry(CDentry *dn) {
+    update_dentry(dn);
     dn->set_lockstate( lockstate );
   }
 

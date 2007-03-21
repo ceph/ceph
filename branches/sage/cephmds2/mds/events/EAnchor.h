@@ -28,15 +28,16 @@ protected:
   version_t atid; 
   vector<Anchor> trace;
   version_t version;    // anchor table version
+  int reqmds;
 
  public:
   EAnchor() : LogEvent(EVENT_ANCHOR) { }
-  EAnchor(int o, inodeno_t i, version_t v) :
+  EAnchor(int o, inodeno_t i, version_t v, int rm) :
     LogEvent(EVENT_ANCHOR),
-    op(o), ino(i), atid(0), version(v) { }
-  EAnchor(int o, version_t a, version_t v=0) :
+    op(o), ino(i), atid(0), version(v), reqmds(rm) { }
+  EAnchor(int o, version_t a, version_t v) :
     LogEvent(EVENT_ANCHOR),
-    op(o), atid(a), version(v) { }
+    op(o), atid(a), version(v), reqmds(-1) { }
 
   void set_trace(vector<Anchor>& t) { trace = t; }
   vector<Anchor>& get_trace() { return trace; }
@@ -47,6 +48,7 @@ protected:
     bl.append((char*)&atid, sizeof(atid));
     ::_encode(trace, bl);
     bl.append((char*)&version, sizeof(version));
+    bl.append((char*)&reqmds, sizeof(reqmds));
   }
   void decode_payload(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(op), (char*)&op);
@@ -58,6 +60,8 @@ protected:
     ::_decode(trace, bl, off);
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
+    bl.copy(off, sizeof(reqmds), (char*)&reqmds);
+    off += sizeof(reqmds);
   }
 
   void print(ostream& out) {
@@ -65,6 +69,7 @@ protected:
     if (ino) out << " " << ino;
     if (atid) out << " atid " << atid;
     if (version) out << " v " << version;
+    if (reqmds >= 0) out << " by mds" << reqmds;
   }  
 
   bool has_expired(MDS *mds);

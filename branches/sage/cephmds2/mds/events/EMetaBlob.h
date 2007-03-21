@@ -21,7 +21,7 @@ using namespace std;
 #include "../CInode.h"
 #include "../CDir.h"
 #include "../CDentry.h"
-
+#include "include/reqid.h"
 
 class MDS;
 
@@ -215,7 +215,14 @@ class EMetaBlob {
   // inodes i've destroyed.
   list<inode_t>           destroyed_inodes;
 
+  // idempotent op(s)
+  list<reqid_t> client_reqs;
+
  public:
+
+  void add_client_req(reqid_t r) {
+    client_reqs.push_back(r);
+  }
 
   void add_anchor_transaction(version_t atid) {
     atids.push_back(atid);
@@ -338,6 +345,7 @@ class EMetaBlob {
     }
     ::_encode(atids, bl);
     ::_encode(destroyed_inodes, bl);
+    ::_encode(client_reqs, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
     int n;
@@ -352,6 +360,7 @@ class EMetaBlob {
     }
     ::_decode(atids, bl, off);
     ::_decode(destroyed_inodes, bl, off);
+    ::_decode(client_reqs, bl, off);
   }
   
   void print(ostream& out) const {

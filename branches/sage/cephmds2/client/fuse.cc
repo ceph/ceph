@@ -157,7 +157,7 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
 {
   int res;
   
-  res = client->open(path, fi->flags);
+  res = client->open(path, fi->flags, 0);
   if (res < 0) return res;
   fi->fh = res;
   return 0;  // fuse wants 0 onsucess

@@ -543,8 +543,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (op == MDS_OP_STAT ||
       op == MDS_OP_LSTAT ||
       op == MDS_OP_READDIR ||
-      op == MDS_OP_OPEN ||
-      op == MDS_OP_RELEASE)
+      op == MDS_OP_OPEN)
     nojournal = true;
 
   MClientReply *reply = sendrecv(req, mds);
@@ -592,6 +591,9 @@ MClientReply* Client::sendrecv(MClientRequest *req, int mds)
   // encode payload now, in case we have to resend (in case of mds failure)
   req->encode_payload();
   request.request_payload = req->get_payload();
+
+  // note idempotency
+  request.idempotent = req->is_idempotent();
   
   // send initial request.
   send_request(&request, mds);
@@ -648,24 +650,38 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   MetaRequest *request = mds_requests[tid];
   assert(request);
 
-  // note new mds set.
-  // there are now exactly two mds's whose failure should trigger a resend
-  // of this request.
-  if (request->num_fwd < fwd->get_num_fwd()) {
+  if (request->idempotent) {
+    // note new mds set.
+    // there are now exactly two mds's whose failure should trigger a resend
+    // of this request.
+    if (request->num_fwd < fwd->get_num_fwd()) {
+      request->mds.clear();
+      request->mds.insert(fwd->get_source().num());
+      request->mds.insert(fwd->get_dest_mds());
+      request->num_fwd = fwd->get_num_fwd();
+      dout(10) << "handle_client_request tid " << tid
+	       << " fwd " << fwd->get_num_fwd() 
+	       << " to mds" << fwd->get_dest_mds() 
+	       << ", mds set now " << request->mds
+	       << endl;
+    } else {
+      dout(10) << "handle_client_request tid " << tid
+	       << " previously forwarded to mds" << fwd->get_dest_mds() 
+	       << ", mds still " << request->mds
+	       << endl;
+    }
+  } else {
     request->mds.clear();
-    request->mds.insert(fwd->get_source().num());
     request->mds.insert(fwd->get_dest_mds());
     request->num_fwd = fwd->get_num_fwd();
+    
     dout(10) << "handle_client_request tid " << tid
 	     << " fwd " << fwd->get_num_fwd() 
 	     << " to mds" << fwd->get_dest_mds() 
-	     << ", mds set now " << request->mds
+	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
 	     << endl;
-  } else {
-    dout(10) << "handle_client_request tid " << tid
-	     << " previously forwarded to mds" << fwd->get_dest_mds() 
-	     << ", mds still " << request->mds
-	     << endl;
+    
+    send_request(request, fwd->get_dest_mds());
   }
 
   delete fwd;
@@ -2107,7 +2123,7 @@ struct dirent_lite *Client::readdirlite(DIR *dirp)
 
 /****** file i/o **********/
 
-int Client::open(const char *relpath, int flags) 
+int Client::open(const char *relpath, int flags, mode_t mode) 
 {
   client_lock.Lock();
 
@@ -2120,27 +2136,14 @@ int Client::open(const char *relpath, int flags)
   tout << path << endl;
   tout << flags << endl;
 
-  int cmode = 0;
-  bool tryauth = false;
-  if (flags & O_LAZY) 
-    cmode = FILE_MODE_LAZY;
-  else if (flags & O_WRONLY) {
-    cmode = FILE_MODE_W;
-    tryauth = true;
-  } else if (flags & O_RDWR) {
-    cmode = FILE_MODE_RW;
-    tryauth = true;
-  } else if (flags & O_APPEND) {
-    cmode = FILE_MODE_W;
-    tryauth = true;
-  } else
-    cmode = FILE_MODE_R;
-
   // go
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, messenger->get_myinst());
   req->set_path(path); 
   req->args.open.flags = flags;
-  req->args.open.mode = cmode;
+  req->args.open.mode = mode;
+
+  int cmode = req->get_open_file_mode();
+  bool tryauth = !req->open_file_mode_is_readonly();
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());

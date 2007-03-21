@@ -31,6 +31,7 @@ class AnchorTable {
   hash_map<inodeno_t, Anchor>  anchor_map;
 
   // uncommitted operations
+  map<version_t, int> pending_reqmds;
   map<version_t, inodeno_t> pending_create;
   map<version_t, inodeno_t> pending_destroy;
   map<version_t, pair<inodeno_t, vector<Anchor> > > pending_update;
@@ -54,9 +55,9 @@ protected:
   void dec(inodeno_t ino);
 
   // mid-level
-  void create_prepare(inodeno_t ino, vector<Anchor>& trace);
-  void destroy_prepare(inodeno_t ino);
-  void update_prepare(inodeno_t ino, vector<Anchor>& trace);
+  void create_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds);
+  void destroy_prepare(inodeno_t ino, int reqmds);
+  void update_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds);
   void commit(version_t atid);
   void rollback(version_t atid);
   friend class EAnchor;  // used for journal replay.
@@ -115,6 +116,8 @@ public:
   void load(Context *onfinish);
   void _loaded(bufferlist& bl);
 
+  // recovery
+  void finish_recovery();
 
 };
 

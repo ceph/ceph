@@ -34,7 +34,8 @@ class MClientRequestForward : public Message {
   void print(ostream& o) {
     o << "client_request_forward(" << tid
       << " to " << dest_mds
-      << " num_fwd=" << num_fwd << ")";
+      << " num_fwd=" << num_fwd
+      << ")";
   }
 
   void encode_payload() {
