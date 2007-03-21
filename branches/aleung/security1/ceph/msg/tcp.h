@@ -23,7 +23,7 @@ inline ostream& operator<<(ostream& out, const tcpaddr_t &a)
 }
 
 extern bool tcp_read(int sd, char *buf, int len);
-extern int tcp_write(int sd, char *buf, int len);
+extern int tcp_write(int sd, char *buf, int len, bool more=false);
 extern int tcp_hostlookup(char *str, tcpaddr_t& ta);
 
 inline bool operator==(const tcpaddr_t& a, const tcpaddr_t& b) {

@@ -7,6 +7,7 @@
 
 bool tcp_read(int sd, char *buf, int len)
 {
+  //dout(-20) << "tcp_read wants " << len << endl;
   while (len > 0) {
     int got = ::recv( sd, buf, len, 0 );
     if (got == 0) {
@@ -20,17 +21,17 @@ bool tcp_read(int sd, char *buf, int len)
     assert(got >= 0);
     len -= got;
     buf += got;
-    //dout(DBL) << "tcp_read got " << got << ", " << len << " left" << endl;
+    //dout(-20) << "tcp_read got " << got << ", " << len << " left" << endl;
   }
   return true;
 }
 
-int tcp_write(int sd, char *buf, int len)
+int tcp_write(int sd, char *buf, int len, bool more)
 {
   //dout(DBL) << "tcp_write writing " << len << endl;
   assert(len > 0);
   while (len > 0) {
-    int did = ::send( sd, buf, len, 0 );
+    int did = ::send( sd, buf, len, more ? MSG_MORE:0 );
     if (did < 0) {
       dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
       //cerr << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
@@ -39,7 +40,7 @@ int tcp_write(int sd, char *buf, int len)
     if (did < 0) return did;
     len -= did;
     buf += did;
-    //dout(DBL) << "tcp_write did " << did << ", " << len << " left" << endl;
+    //dout(-20) << "tcp_write did " << did << ", " << len << " left" << endl;
   }
   return 0;
 }

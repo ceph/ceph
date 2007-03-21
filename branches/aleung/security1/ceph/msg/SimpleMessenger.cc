@@ -511,26 +511,41 @@ Message *Rank::Pipe::read_message()
   
   // payload
   bufferlist blist;
-  for (int i=0; i<env.nchunks; i++) {
-    int size;
-    if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
-      need_to_send_close = false;
-      return 0;
-    }
-    
-    if (size == 0) continue;
 
+  if (env.nchunks > 0) {
+    // read chunk-wise.
+    for (int i=0; i<env.nchunks; i++) {
+      int size;
+      if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
+	need_to_send_close = false;
+	return 0;
+      }
+      
+      if (size == 0) continue;
+      
+      bufferptr bp(size);
+      
+      if (!tcp_read( sd, bp.c_str(), size )) {
+	need_to_send_close = false;
+	return 0;
+      }
+      
+      blist.push_back(bp);
+      
+      dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got frag " << i << " of " << env.nchunks 
+	       << " len " << bp.length() << endl;
+    }
+  } else {
+    // read in one go
+    int size = -env.nchunks;
     bufferptr bp(size);
-    
     if (!tcp_read( sd, bp.c_str(), size )) {
       need_to_send_close = false;
       return 0;
     }
-    
     blist.push_back(bp);
-    
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got frag " << i << " of " << env.nchunks 
-             << " len " << bp.length() << endl;
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got full payload len " 
+	     << bp.length() << endl;
   }
   
   // unmarshall message
@@ -552,18 +567,16 @@ int Rank::Pipe::write_message(Message *m)
   bufferlist blist;
   blist.claim( m->get_payload() );
   
-#ifdef TCP_KEEP_CHUNKS
-  env->nchunks = blist.buffers().size();
-#else
-  env->nchunks = 1;
-#endif
-
   dout(20)  << "pipe(" << peer_addr << ' ' << this << ").writer sending " << m << " " << *m 
             << " to " << m->get_dest()
             << endl;
   
+#ifdef TCP_KEEP_CHUNKS
+  // send chunk-wise
+  env->nchunks = blist.buffers().size();
+
   // send envelope
-  int r = tcp_write( sd, (char*)env, sizeof(*env) );
+  int r = tcp_write( sd, (char*)env, sizeof(*env), true );
   if (r < 0) { 
     derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending envelope for " << *m
              << " to " << m->get_dest() << endl; 
@@ -572,8 +585,6 @@ int Rank::Pipe::write_message(Message *m)
   }
 
   // payload
-#ifdef TCP_KEEP_CHUNKS
-  // send chunk-wise
   int i = 0;
   for (list<bufferptr>::const_iterator it = blist.buffers().begin();
        it != blist.buffers().end();
@@ -595,25 +606,68 @@ int Rank::Pipe::write_message(Message *m)
     i++;
   }
 #else
-  // one big chunk
-  int size = blist.length();
-  r = tcp_write( sd, (char*)&size, sizeof(size) );
-  if (r < 0) { 
-    derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data len for " << *m << " to " << m->get_dest() << endl; 
-    need_to_send_close = false;
-    return -1;
-  }
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << endl;
 
-  for (list<bufferptr>::const_iterator it = blist.buffers().begin();
-       it != blist.buffers().end();
-       it++) {
-    if ((*it).length() == 0) continue;  // blank buffer.
-    r = tcp_write( sd, (char*)(*it).c_str(), (*it).length() );
+  if (1) {
+    // NEW way, using sendmsg()
+
+    // one big chunk
+    int size = blist.length();
+    env->nchunks = -size;
+    
+    // set up msghdr and iovecs
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+    struct iovec msgvec[1+blist.buffers().size()];
+    msg.msg_iov = msgvec;
+    
+    // envelope
+    msgvec[0].iov_base = (char*)env;
+    msgvec[0].iov_len = sizeof(*env);
+    msg.msg_iovlen++;
+    
+    // buffers
+    for (list<bufferptr>::const_iterator it = blist.buffers().begin();
+	 it != blist.buffers().end();
+	 it++) {
+      if ((*it).length() == 0) continue;  // blank buffer.
+      msgvec[msg.msg_iovlen].iov_base = (char*)(*it).c_str();
+      msgvec[msg.msg_iovlen].iov_len = (*it).length();
+      msg.msg_iovlen++;
+    }
+    
+    // send 
+    int r = sendmsg(sd, &msg, 0);
     if (r < 0) { 
-      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
+      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending msg for " << *m
+	      << " to " << m->get_dest() << endl; 
       need_to_send_close = false;
       return -1;
+    }
+  } else {
+    // OLD way.
+    int size = blist.length();
+
+    // send envelope
+    int r = tcp_write( sd, (char*)env, sizeof(*env), true );
+    if (r < 0) { 
+      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending envelope for " << *m
+	      << " to " << m->get_dest() << endl; 
+      need_to_send_close = false;
+      return -1;
+    }
+    
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << endl;
+    
+    for (list<bufferptr>::const_iterator it = blist.buffers().begin();
+	 it != blist.buffers().end();
+	 it++) {
+      if ((*it).length() == 0) continue;  // blank buffer.
+      r = tcp_write( sd, (char*)(*it).c_str(), (*it).length() );
+      if (r < 0) { 
+	derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
+	need_to_send_close = false;
+	return -1;
+      }
     }
   }
 #endif
