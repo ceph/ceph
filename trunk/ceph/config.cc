@@ -31,6 +31,7 @@
 long buffer_total_alloc = 0;
 Mutex bufferlock;
 
+Mutex _dout_lock;
 
 
 FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
