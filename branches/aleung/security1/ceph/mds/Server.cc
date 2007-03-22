@@ -2299,8 +2299,6 @@ void Server::handle_client_open(MClientRequest *req,
   utime_t end_time;
   int flags = req->get_iarg();
   int mode = req->get_iarg2();
-  //uid_t uid = req->get_caller_uid();
-  //gid_t gid = req->get_caller_gid();
 
   dout(7) << "open " << flags << " on " << *cur << endl;
   dout(10) << "open flags = " << flags << "  mode = " << mode << endl;

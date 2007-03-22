@@ -101,9 +101,7 @@ CInode::CInode(MDCache *c, bool auth) {
     batching = false;
     buffer_stop = false;
     buffer_thread = BufferThread(this);
-    cout << "Starting buffer_thread.create()" << endl;
     buffer_thread.create();
-    cout << "Buffer_thread created!" << endl;
   }
 
   auth_pins = 0;
@@ -154,6 +152,7 @@ void CInode::buffer_entry()
     for (set<MClientRequest *>::iterator si = buffered_reqs.begin();
 	 si != buffered_reqs.end();
 	 si++) {
+      cout << "Pushing " << (*si)->get_caller_uid() << " on to capability" << endl;
       user_set.push_back((*si)->get_caller_uid());
       users_hash.add_user((*si)->get_caller_uid());
     }

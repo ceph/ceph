@@ -382,9 +382,10 @@ inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
     hash_t my_hash = op_capability->get_user_hash();
 
     // now we should have the group, is the client in it?
-    if (!(user_groups[my_hash].contains(op_capability->get_uid()))) {
+    //if (!(user_groups[my_hash].contains(op_capability->get_uid()))) {
+    if (!(user_groups[my_hash].contains(op->get_user()))) {
       // do update to get new unix groups
-      cout << "User " << op_capability->get_uid() << " not in group "
+      cout << "User " << op->get_user() << " not in group "
 	   << my_hash << endl;
       return false;
     }
@@ -458,12 +459,6 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   user_groups[my_hash].set_list(m->get_list());
 
   // wait up the waiter(s)
-  // this signals all update waiters
-  //for (list<Cond*>::iterator p = update_waiter_cond[my_hash].begin();
-  //   p != update_waiter_cond[my_hash].end();
-  //   ++p) {
-  //(*p)->Signal();
-  //}
   take_waiters(update_waiter_op[my_hash]);
 
   update_waiter_op.erase(my_hash);
@@ -3350,6 +3345,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   utime_t write_time_start;
   if (outstanding_updates.count(op->get_reqid()) != 0) {
     write_time_start = outstanding_updates[op->get_reqid()];
+    outstanding_updates.erase(op->get_reqid());
   }
   else
     write_time_start = g_clock.now();
@@ -3380,7 +3376,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     // i know, i know...not secure but they should all have caps
     if (op->get_op() == OSD_OP_WRITE
 	&& op->get_source().is_client()) {
-      
+
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       // if using groups...do we know group?

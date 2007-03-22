@@ -724,11 +724,14 @@ void Client::put_user_ticket(Ticket *tk)
 
 void Client::handle_osd_update(MOSDUpdate *m) {
   
+  utime_t update_time_start = g_clock.now();
+
   hash_t my_hash = m->get_hash();
 
   // if we dont have it cached, ask mds
   // this will lose execution control
   if (groups.count(my_hash) == 0) {
+
     MClientUpdate *update = new MClientUpdate(my_hash);
 
     // is anyone else already waiting for this hash?
@@ -766,8 +769,6 @@ void Client::handle_client_update_reply(MClientUpdateReply *m) {
   groups[my_hash].set_list(m->get_user_list());
   groups[my_hash].set_root_hash(my_hash);
   groups[my_hash].set_sig(m->get_sig());
-
-  //MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list(), m->get_sig());
 
   // wake the waiters and send them all a reply
   for (set<int>::iterator oi = update_waiter_osd[my_hash].begin();
@@ -2995,10 +2996,10 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
   bool lazy = f->mode == FILE_MODE_LAZY;
 
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
-
-    ExtCap *write_ext_cap = capcache->get_cache_cap(in->ino(), uid);
-    assert(write_ext_cap);
-
+  
+  ExtCap *write_ext_cap = capcache->get_cache_cap(in->ino(), uid);
+  assert(write_ext_cap);
+  
   // time it.
   utime_t start = g_clock.now();
     
