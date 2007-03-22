@@ -2295,6 +2295,7 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 void Server::handle_client_open(MClientRequest *req,
 				CInode *cur)
 {
+
   utime_t start_time = g_clock.now();
   utime_t end_time;
   int flags = req->get_iarg();
@@ -2345,6 +2346,13 @@ void Server::handle_client_open(MClientRequest *req,
 
   mds->balancer->hit_inode(cur, META_POP_IRD);
 
+  end_time = g_clock.now();
+  dout(1) << "Open() request latency " << end_time - start_time << endl;
+  if (mds->logger) {
+    mds->logger->finc("lsum", (double) end_time - start_time);
+    mds->logger->inc("lnum");
+  }
+
   // reply
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_file_caps(cap->pending());
@@ -2354,8 +2362,6 @@ void Server::handle_client_open(MClientRequest *req,
   if (g_conf.secure_io)
     reply->set_ext_cap(ext_cap);
   
-  end_time = g_clock.now();
-  dout(1) << "Open() request latency " << end_time - start_time << endl;
   reply_request(req, reply, cur);
 }
 

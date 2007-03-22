@@ -251,6 +251,8 @@ void MDS::reopen_logger()
   mds_logtype.add_inc("imex");  
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
+  mds_logtype.add_set("lsum");
+  mds_logtype.add_set("lnum");
 
   
   char n[80];
