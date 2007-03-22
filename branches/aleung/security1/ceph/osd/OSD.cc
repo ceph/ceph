@@ -385,7 +385,7 @@ inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
     //if (!(user_groups[my_hash].contains(op_capability->get_uid()))) {
     if (!(user_groups[my_hash].contains(op->get_user()))) {
       // do update to get new unix groups
-      cout << "User " << op->get_user() << " not in group "
+      dout(1) << "User " << op->get_user() << " not in group "
 	   << my_hash << endl;
       return false;
     }
@@ -393,23 +393,23 @@ inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
   }
   // check users match
   else if (op->get_user() != op_capability->get_uid()) {
-    cout << "User did in cap did not match request" << endl;
+    dout(1) << "User did in cap did not match request" << endl;
     return false;
   }
   // check mode matches
   if (op->get_op() == OSD_OP_WRITE &&
       op_capability->mode() & FILE_MODE_W == 0) {
-    cout << "Write mode in cap did not match request" << endl;
+    dout(1) << "Write mode in cap did not match request" << endl;
     return false;
   }
   if (op->get_op() == OSD_OP_READ &&
       op_capability->mode() & FILE_MODE_R == 0) {
-    cout << "Read mode in cap did not match request" << endl;
+    dout(1) << "Read mode in cap did not match request" << endl;
     return false;
   }
   // check object matches
   if (op->get_oid().ino != op_capability->get_ino()) {
-    cout << "File in cap did not match request" << endl;
+    dout(1) << "File in cap did not match request" << endl;
     return false;
   }
   return true;
@@ -451,9 +451,9 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   
   // verify
   if (m->verify_list(monmap->get_key()))
-    cout << "List verification succeeded" << endl;
+    dout(1) << "List verification succeeded" << endl;
   else
-    cout << "List verification failed" << endl;
+    dout(1) << "List verification failed" << endl;
 
   // add the new list to our cache
   user_groups[my_hash].set_list(m->get_list());
@@ -3016,7 +3016,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     }
   }
   utime_t sec_time_end = g_clock.now();
-  cout << "Read Security time " << sec_time_end - sec_time_start << endl;
+  dout(1) << "Read Security time " << sec_time_end - sec_time_start << endl;
 
   long r = 0;
   bufferlist bl;
@@ -3033,7 +3033,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
   utime_t read_time_end = g_clock.now();
   
   if (op->get_source().is_client())
-    cout << "Read time " << read_time_end - read_time_start << endl;
+    dout(1) << "Read time " << read_time_end - read_time_start << endl;
 
   // set up reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
@@ -3541,7 +3541,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   utime_t write_time_end = g_clock.now();
   if (op->get_op() == OSD_OP_WRITE &&
       op->get_source().is_client())
-    cout << "Write time " << write_time_end - write_time_start << endl;
+    dout(1) << "Write time " << write_time_end - write_time_start << endl;
 }
 
 

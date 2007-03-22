@@ -152,7 +152,6 @@ void CInode::buffer_entry()
     for (set<MClientRequest *>::iterator si = buffered_reqs.begin();
 	 si != buffered_reqs.end();
 	 si++) {
-      cout << "Pushing " << (*si)->get_caller_uid() << " on to capability" << endl;
       user_set.push_back((*si)->get_caller_uid());
       users_hash.add_user((*si)->get_caller_uid());
     }
@@ -193,10 +192,10 @@ void CInode::buffer_entry()
 }
 
 void CInode::add_to_buffer(MClientRequest *req, Server *serve, MDS *metads) {
-  cout << "Buffering the request for uid:" <<
-    req->get_caller_uid() << " on client:" <<
-    req->get_client() << " for file:" <<
-    inode.ino << " with client inst:" << req->get_client_inst() << endl;
+  dout(1) << "Buffering the request for uid:"
+       << req->get_caller_uid() << " on client:"
+       << req->get_client() << " for file:"
+       << inode.ino << " with client inst:" << req->get_client_inst() << endl;
 
   buffer_lock.Lock();
 
@@ -206,11 +205,9 @@ void CInode::add_to_buffer(MClientRequest *req, Server *serve, MDS *metads) {
 
   // was batching thread already on?
   if (batching) {
-    cout << "Buffering request into existing buffer" << endl;
     buffered_reqs.insert(req);
   }
   else {
-    cout << "Buffering request into new buffer" << endl;
     
     // set external helper classes
     server = serve;

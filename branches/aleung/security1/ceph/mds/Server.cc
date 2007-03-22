@@ -2336,7 +2336,7 @@ void Server::handle_client_open(MClientRequest *req,
   utime_t sec_time_start = g_clock.now();
   ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
   utime_t sec_time_end = g_clock.now();
-  cout << "Get security cap time " << sec_time_end - sec_time_start << endl;
+  dout(1) << "Get security cap time " << sec_time_end - sec_time_start << endl;
 
   Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
   if (!cap) return; // can't issue (yet), so wait!
@@ -2355,7 +2355,7 @@ void Server::handle_client_open(MClientRequest *req,
     reply->set_ext_cap(ext_cap);
   
   end_time = g_clock.now();
-  cout << "Open() request latency " << end_time - start_time << endl;
+  dout(1) << "Open() request latency " << end_time - start_time << endl;
   reply_request(req, reply, cur);
 }
 
@@ -2442,59 +2442,8 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 	in->add_to_buffer(req, this, mds);
 
 	return;
-
-	/*
-	//in->two_req_ago = in->one_req_ago;
-	//in->one_req_ago = open_req_time;
-	//cout << "HCO: Grabbing lock" << endl;
-	in->buffer_lock.Lock();
-	//cout << "HCO: Grabbed lock" << endl;
-
-	// wait for thread if it hasn't init'd
-	if (! in->thread_init)
-	  in->buffer_cond.Wait(in->buffer_lock);
-
-	// if buffer waiting thread is off, turn it on
-	if (!in->batching) {
-	  cout << "HCO: Batching is now turned on" << endl;
-	  // grab lock and insert
-	  in->buffered_reqs.insert(req);
-	  cout << "HCO: Inserted request" << endl;
-
-	  // prepare capid for future capability
-	  in->batch_id.cid = mds->cap_id_count;
-	  in->batch_id.mds_id = mds->get_nodeid();
-	  mds->cap_id_count++;
-	  // turn on batching flags
-	  cout << "HCO: Turning batching on" << endl;
-	  in->batching = true;
-	  in->batch_id_set = true;
-	  //in->buffer_stop = false;
-
-	  // set server exit point
-	  in->server = this;
-	  in->mds = mds;
-	   
-	  //singal the thread
-	  cout << "Going to singal" << endl;
-	  in->buffer_cond.Signal();
-	  cout << "Done signaling" << endl;
-	  
-	}
-	else {
-	  cout << "HCO: Inserting into buffer" << endl;
-	  in->buffered_reqs.insert(req);
-	}
-	
-	// release the lock
-	cout << "HCO: releasing lock" << endl;
-	in->buffer_lock.Unlock();
-	cout << "HCO: released lock" << endl;
-	*/
       }
       else {
-	//in->two_req_ago = in->one_req_ago;
-	//in->one_req_ago = open_req_time;
 	in->update_buffer_time(open_req_time);
 	handle_client_open(req, in);
       }

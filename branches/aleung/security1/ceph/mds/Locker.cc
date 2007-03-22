@@ -316,10 +316,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     dout(3) << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
     
-    utime_t sign_time_start = g_clock.now();
     ext_cap->sign_extcap(mds->getPrvKey());
-    utime_t sign_time_end = g_clock.now();
-    cout << "Signature time " << sign_time_end - sign_time_start << endl;
 
     // caches this capability in the inode
     if (g_conf.mds_group == 1) {
