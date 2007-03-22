@@ -697,7 +697,8 @@ void Rank::Pipe::fail(list<Message*>& out)
  */
 
 Rank::Rank() : 
-  single_dispatcher(this) {
+  single_dispatcher(this),
+  started(false) {
   // default to any listen_addr
   memset((char*)&listen_addr, 0, sizeof(listen_addr));
   listen_addr.sin_family = AF_INET;
@@ -787,7 +788,14 @@ void Rank::reaper()
 
 int Rank::start_rank()
 {
+  lock.Lock();
+  if (started) {
+    dout(10) << "start_rank already started" << endl;
+    lock.Unlock();
+    return 0;
+  }
   dout(10) << "start_rank" << endl;
+  lock.Unlock();
 
   // bind to a socket
   if (accepter.start() < 0) 
@@ -802,7 +810,7 @@ int Rank::start_rank()
   lock.Lock();
 
   dout(1) << "start_rank at " << listen_addr << endl;
-
+  started = true;
   lock.Unlock();
   return 0;
 }
