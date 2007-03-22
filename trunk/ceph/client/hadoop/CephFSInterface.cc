@@ -18,6 +18,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   vector<char*> args; 
   env_to_vec(args);
   parse_config_options(args);
+  g_clock.tare();
 
   // crap for getting args from the command line
   //vector<char*> args;
@@ -157,7 +158,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
 
   cout << " Opened Ceph file! Opening local destination file: " << endl;
   cout.flush();
-  int fh_local = ::open(c_local_path, O_WRONLY|O_CREAT|O_TRUNC);
+  int fh_local = ::open(c_local_path, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   assert (fh_local > -1);
 
   // copy the file a chunk at a time
@@ -271,15 +272,41 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1m
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1unlink
   (JNIEnv * env, jobject, jlong clientp, jstring j_path)
 {
-  cout << "In unlink" << endl;
   cout.flush();
 
   Client* client;
   client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  return (0 == client->unlink(c_path)) ? JNI_TRUE : JNI_FALSE; 
+  cout << "In unlink for path " << c_path <<  ":" << endl;
+
+  // is it a file or a directory?
+  struct stat stbuf;
+  int stat_result = client->lstat(c_path, &stbuf);
+  if (stat_result < 0) {// then the path doesn't even exist
+    cout << "ceph_unlink: path " << c_path << " does not exist" << endl;
+    return false;
+  }  
+  int result;
+  if (0 != S_ISDIR(stbuf.st_mode)) { // it's a directory
+    cout << "ceph_unlink: path " << c_path << " is a directory. Calling client->rmdir()" << endl;
+    result = client->rmdir(c_path);
+  }
+  else if (0 != S_ISREG(stbuf.st_mode)) { // it's a file
+    cout << "ceph_unlink: path " << c_path << " is a file. Calling client->unlink()" << endl;
+    result = client->unlink(c_path);
+  }
+  else {
+    cout << "ceph_unlink: path " << c_path << " is not a file or a directory. Failing:" << endl;
+    result = -1;
+  }
+    
+  cout << "In ceph_unlink for path " << c_path << 
+    ": got result " 
+       << result << ". Returning..."<< endl;
+
   env->ReleaseStringUTFChars(j_path, c_path);
+  return (0 == result) ? JNI_TRUE : JNI_FALSE; 
 }
 
 /*
