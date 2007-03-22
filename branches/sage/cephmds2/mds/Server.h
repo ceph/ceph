@@ -51,8 +51,9 @@ public:
                       LogEvent *event,
                       LogEvent *event2 = 0);
   
-  CDir *try_open_dir(CInode *in, frag_t fg, MClientRequest *req);
   CDir* try_open_auth_dir(CInode *diri, frag_t, MClientRequest *req);
+  CDir* try_open_dir(CInode *diri, frag_t fg, 
+		     MClientRequest *req, CInode *ref);
 
 
   // clients
@@ -123,10 +124,12 @@ public:
                               filepath& destpath,
                               vector<CDentry*>& trace,
                               int r);
-  void handle_client_rename_local(MClientRequest *req, CInode *ref,
-                                  const string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-                                  const string& destpath, CDir *destdir, CDentry *destdn, const string& name);
-
+  void _rename_local(MClientRequest *req, CInode *ref,
+		     const string& srcpath, CInode *srcdiri, CDentry *srcdn, 
+		     const string& destpath, CDir *destdir, CDentry *destdn, const string& name);
+  void _rename_local_finish(MClientRequest *req, 
+			    CDentry *dn, CInode *in,
+			    version_t, time_t, version_t);    
 
   // file
   void handle_client_open(MClientRequest *req, CInode *in);

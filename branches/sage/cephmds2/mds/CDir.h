@@ -305,7 +305,8 @@ class CDir : public MDSCacheObject {
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > g_conf.mds_bal_replicate_threshold)) {
+    if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > 
+	  g_conf.mds_bal_replicate_threshold)) {
       //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
@@ -339,13 +340,7 @@ class CDir : public MDSCacheObject {
  
   
   // -- fetch --
-  //bufferlist ondisk_bl;
-  //size_t     ondisk_size;
-
-  object_t get_ondisk_object() {
-    return object_t(ino(), frag);
-  }  
-
+  object_t get_ondisk_object() { return object_t(ino(), frag); }
   void fetch(Context *c);
   void _fetched(bufferlist &bl);
 
@@ -466,9 +461,6 @@ class CDir : public MDSCacheObject {
 
   CDir *get_frozen_tree_root();
 
-
-  // debuggin bs
-  void dump(int d = 0);
 };
 
 

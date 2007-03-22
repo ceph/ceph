@@ -32,6 +32,8 @@ mds
 - dir version/committed/etc versus migration, log expires.  
   - DOCUMENT.
 
+- fix rmdir empty exported dirfrag race
+
 - discover
 /  - hard link dentries
 
@@ -45,15 +47,17 @@ mds
 
 - mds failure vs clients
 /  - clean up client op redirection
-  - idempotent ops
+  - idempotent client ops
     - how to track in memory?
     - how to trim?
     - EMetablob replay, expire logic
 - journal+recovery
-  - test anchortable, anchorclient
+/  - test anchortable, anchorclient
 /  - local link
 /  - local unlink
   - local rename
+    - will need dangle dir discover, etc.
+    - hook unlink cases into rename
   - remote rename
   - remote link
   - remote unlink
@@ -67,9 +71,6 @@ mds
   - relative metadata ops
 - statfs?
 - consistency points/snapshots
-
-- fix MExportAck and others to use dir+dentry, not inode
-  (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
 
 
 

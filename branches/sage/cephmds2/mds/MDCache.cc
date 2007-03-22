@@ -21,7 +21,7 @@
 #include "MDBalancer.h"
 #include "AnchorClient.h"
 #include "Migrator.h"
-#include "Renamer.h"
+//#include "Renamer.h"
 
 #include "MDSMap.h"
 
@@ -91,7 +91,7 @@ MDCache::MDCache(MDS *m)
 {
   mds = m;
   migrator = new Migrator(mds, this);
-  renamer = new Renamer(mds, this);
+  //  renamer = new Renamer(mds, this);
   root = NULL;
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
@@ -103,7 +103,7 @@ MDCache::MDCache(MDS *m)
 MDCache::~MDCache() 
 {
   delete migrator;
-  delete renamer;
+  //delete renamer;
 }
 
 
@@ -184,6 +184,9 @@ void MDCache::remove_inode(CInode *o)
 
   // delete it
   delete o; 
+
+  if (o == root) root = 0;
+  if (o == stray) stray = 0;
 }
 
 
@@ -192,8 +195,7 @@ CInode *MDCache::create_root_inode()
 {
   CInode *root = new CInode(this);
   memset(&root->inode, 0, sizeof(inode_t));
-  root->inode.ino = 1;
-  root->inode.hash_seed = 0;   // not hashed!
+  root->inode.ino = MDS_INO_ROOT;
   
   // make it up (FIXME)
   root->inode.mode = 0755 | INODE_MODE_DIR;
@@ -211,7 +213,7 @@ CInode *MDCache::create_root_inode()
 }
 
 
-int MDCache::open_root(Context *c)
+void MDCache::open_root(Context *c)
 {
   int whoami = mds->get_nodeid();
 
@@ -238,7 +240,7 @@ int MDCache::open_root(Context *c)
 
       filepath want;
       MDiscover *req = new MDiscover(whoami,
-                                     1,
+                                     MDS_INO_ROOT,
                                      want,
                                      false);  // there _is_ no base dir for the root inode
       mds->send_message_mds(req, 0, MDS_PORT_CACHE);
@@ -250,8 +252,51 @@ int MDCache::open_root(Context *c)
     waiting_for_root.push_back(c);
 
   }
+}
 
-  return 0;
+CInode *MDCache::create_stray_inode()
+{
+  stray = new CInode(this);
+  memset(&stray->inode, 0, sizeof(inode_t));
+  stray->inode.ino = MDS_INO_STRAY(mds->get_nodeid());
+  
+  // make it up (FIXME)
+  stray->inode.mode = 0755 | INODE_MODE_DIR;
+  stray->inode.size = 0;
+  stray->inode.ctime = 
+    stray->inode.mtime = g_clock.gettime();
+  
+  stray->inode.nlink = 1;
+  stray->inode.layout = g_OSD_MDDirLayout;
+  
+  add_inode( stray );
+
+  return stray;
+}
+
+void MDCache::open_local_stray()
+{
+  create_stray_inode();
+  CDir *dir = stray->get_or_open_dirfrag(this, frag_t());
+  adjust_subtree_auth(dir, mds->get_nodeid());   
+}
+
+void MDCache::open_foreign_stray(int who, Context *c)
+{
+  inodeno_t ino = MDS_INO_STRAY(who);
+  dout(10) << "open_foreign_stray mds" << who << " " << ino << endl;
+  assert(!have_inode(ino));
+
+  // discover
+  filepath want;
+  MDiscover *req = new MDiscover(who,
+				 ino,
+				 want,
+				 false);
+  mds->send_message_mds(req, 0, MDS_PORT_CACHE);
+
+  // wait
+  waiting_for_stray[ino].push_back(c);
 }
 
 
@@ -275,7 +320,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
   show_subtrees();
 
   CDir *root;
-  if (dir->ino() == 1) {
+  if (dir->ino() < MDS_INO_BASE) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0)
       subtrees[root].clear();
@@ -386,7 +431,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
 
   // merge with parent?
   CDir *parent = dir;  
-  if (dir->ino() != 1)
+  if (dir->ino() >= MDS_INO_BASE)
     parent = get_subtree_root(dir->get_parent_dir());
   
   if (parent != dir &&                              // we have a parent,
@@ -422,7 +467,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
   show_subtrees();
 
   CDir *root;
-  if (dir->ino() == 1) {
+  if (dir->ino() < MDS_INO_BASE) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) 
       subtrees[root].clear();
@@ -1671,22 +1716,30 @@ bool MDCache::trim(int max)
     if (mds->logger) mds->logger->inc("cex");
   }
 
-  // troot inode+dir?
+  // trim root inode+dir?
   if (max == 0 &&  // only if we're trimming everything!
-      lru.lru_get_size() == 0 && 
-      root) {
-    // root dirfrags?
-    list<CDir*> ls;
-    root->get_dirfrags(ls);
-    for (list<CDir*>::iterator p = ls.begin();
-	 p != ls.end();
-	 ++p) 
-      if ((*p)->get_num_ref() == 0) 
-	trim_dirfrag(*p, *p, expiremap);
-    
-    // root inode?
-    if (root->get_num_ref() == 0)
-      trim_inode(0, root, 0, expiremap);    // hrm, FIXME
+      lru.lru_get_size() == 0) {
+    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    while (p != inode_map.end()) {
+      hash_map<inodeno_t,CInode*>::iterator n = p;
+      n++;
+      
+      CInode *in = p->second;
+
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator q = ls.begin();
+	   q != ls.end();
+	   ++q) 
+	if ((*q)->get_num_ref() == 0) 
+	  trim_dirfrag(*q, *q, expiremap);
+      
+      // root inode?
+      if (in->get_num_ref() == 0)
+	trim_inode(0, in, 0, expiremap);    // hrm, FIXME
+      
+      p = n;
+    } 
   }
 
   // send expires
@@ -1785,7 +1838,6 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
   if (dn)
     dn->get_dir()->unlink_inode(dn);
   remove_inode(in);
-  if (in == root) root = 0;
 }
 
 
@@ -1834,7 +1886,6 @@ void MDCache::trim_non_auth()
 	}
 	dir->unlink_inode(dn);
 	remove_inode(in);
-	if (in == root) root = 0;
       } 
       else {
 	assert(dn->is_null());
@@ -1846,19 +1897,25 @@ void MDCache::trim_non_auth()
     }
   }
 
-  if (lru.lru_get_size() == 0 && root) {
-    list<CDir*> ls;
-    root->get_dirfrags(ls);
-    for (list<CDir*>::iterator p = ls.begin();
-	 p != ls.end();
+  if (lru.lru_get_size() == 0) {
+    // root, stray, etc.
+    for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+	 p != inode_map.end();
 	 ++p) {
-      assert((*p)->get_num_ref() == 0);
-      remove_subtree((*p));
-      root->close_dirfrag((*p)->dirfrag().frag);
+      CInode *in = p->second;
+
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator p = ls.begin();
+	   p != ls.end();
+	   ++p) {
+	assert((*p)->get_num_ref() == 0);
+	remove_subtree((*p));
+	in->close_dirfrag((*p)->dirfrag().frag);
+      }
+      assert(in->get_num_ref() == 0);
+      remove_inode(in);
     }
-    assert(root->get_num_ref() == 0);
-    remove_inode(root);
-    root = 0;
   }
 
   show_subtrees();
@@ -2701,7 +2758,6 @@ void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin)
   dout(10) << "open_remote_dir on " << *diri << endl;
   
   assert(diri->is_dir());
-  assert(!diri->dir_is_auth());
   assert(!diri->is_auth());
   assert(diri->get_dirfrag(fg) == 0);
 
@@ -2724,6 +2780,30 @@ void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin)
   }
 }
 
+
+/** get_dentry_inode
+ * will return inode for primary, or link up/open up remote link's inode as necessary.
+ */
+CInode *MDCache::get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref)
+{
+  assert(!dn->is_null());
+  
+  if (dn->is_primary()) 
+    return dn->inode;
+
+  assert(dn->is_remote());
+  CInode *in = get_inode(dn->get_remote_ino());
+  if (in) {
+    dout(7) << "get_dentry_inode linking in remote in " << *in << endl;
+    dn->link_remote(in);
+    return in;
+  } else {
+    dout(10) << "get_dentry_ninode on remote dn, opening inode for " << *dn << endl;
+    open_remote_ino(dn->get_remote_ino(), req, 
+		    new C_MDS_RetryRequest(mds, req, ref));
+    return 0;
+  }
+}
 
 
 class C_MDC_OpenRemoteInoLookup : public Context {
@@ -2893,9 +2973,17 @@ bool MDCache::request_start(Message *req,
 
 void MDCache::request_pin_inode(Message *req, CInode *in) 
 {
-  if (active_requests[req].request_pins.count(in) == 0) {
+  if (active_requests[req].request_inode_pins.count(in) == 0) {
     in->request_pin_get();
-    active_requests[req].request_pins.insert(in);
+    active_requests[req].request_inode_pins.insert(in);
+  }
+}
+
+void MDCache::request_pin_dn(Message *req, CDentry *dn)
+{  
+  if (active_requests[req].request_dn_pins.count(dn) == 0) {
+    dn->get(CDentry::PIN_REQUEST);
+    active_requests[req].request_dn_pins.insert(dn);
   }
 }
 
@@ -3009,10 +3097,15 @@ void MDCache::request_cleanup(Message *req)
   }
   
   // request pins
-  for (set<CInode*>::iterator it = active_requests[req].request_pins.begin();
-       it != active_requests[req].request_pins.end();
+  for (set<CInode*>::iterator it = active_requests[req].request_inode_pins.begin();
+       it != active_requests[req].request_inode_pins.end();
        it++) {
     (*it)->request_pin_put();
+  }
+  for (set<CDentry*>::iterator it = active_requests[req].request_dn_pins.begin();
+       it != active_requests[req].request_dn_pins.end();
+       it++) {
+    (*it)->put(CDentry::PIN_REQUEST);
   }
   for (set<CDir*>::iterator it = active_requests[req].request_dir_pins.begin();
        it != active_requests[req].request_dir_pins.end();
@@ -3372,7 +3465,7 @@ void MDCache::handle_discover(MDiscover *dis)
   MDiscoverReply *reply = new MDiscoverReply(dis->get_base_ino());
 
   // get started.
-  if (dis->get_base_ino() == 1) {
+  if (dis->get_base_ino() == MDS_INO_ROOT) {
     // wants root
     dout(7) << "handle_discover from mds" << dis->get_asker() << " wants root + " << dis->get_want().get_path() << endl;
 
@@ -3434,7 +3527,7 @@ void MDCache::handle_discover(MDiscover *dis)
     } else {
       // requester explicity specified the frag
       fg = dis->get_base_dir_frag();
-      assert(dis->wants_base_dir() || dis->get_base_ino() == 1);
+      assert(dis->wants_base_dir() || dis->get_base_ino() == MDS_INO_ROOT);
     }
     CDir *curdir = cur->get_dirfrag(fg);
 
@@ -3563,7 +3656,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
     // it's the root inode.
     assert(!root);
-    assert(m->get_base_ino() == 1);
+    assert(m->get_base_ino() == MDS_INO_ROOT);
     assert(!m->has_base_dentry());
     assert(!m->has_base_dir());
     
@@ -3751,7 +3844,7 @@ CDir *MDCache::add_replica_dir(CInode *diri,
     // is this a dir_auth delegation boundary?
     if (from != diri->authority().first ||
 	diri->auth_is_ambiguous() ||
-	diri->ino() == 1)
+	diri->ino() == MDS_INO_ROOT)
       adjust_subtree_auth(dir, from);
     
     dout(7) << "add_replica_dir added " << *dir << " nonce " << dir->replica_nonce << endl;
@@ -3963,7 +4056,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
 
 // OLD CRAP TO FOLLOW, will be trimmed as it's reimplemented in Server.cc
-
+/*
 class C_MDC_DentryUnlink : public Context {
 public:
   MDCache *mdc;
@@ -4178,7 +4271,7 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
   dout(7) << "handle_inode_unlink_ack on " << *in << endl;
   in->finish_waiting(CInode::WAIT_UNLINK, 0);
 }
-
+*/
 
 
 
@@ -4198,19 +4291,22 @@ void MDCache::show_subtrees(int dbl)
   if (dbl > g_conf.debug && dbl > g_conf.debug_mds) 
     return;  // i won't print anything.
 
-  if (!root) {
+  if (subtrees.empty()) {
     dout(dbl) << "no subtrees" << endl;
     return;
   }
 
+  // root frags
+  list<CDir*> rootfrags;
+  if (root) root->get_dirfrags(rootfrags);
+  if (stray) stray->get_dirfrags(rootfrags);
+
+  // queue stuff
   list<pair<CDir*,int> > q;
   string indent;
-
   set<CDir*> seen;
 
   // calc depth
-  list<CDir*> rootfrags;
-  root->get_dirfrags(rootfrags);
   for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
     q.push_back(pair<CDir*,int>(*p, 0));
 

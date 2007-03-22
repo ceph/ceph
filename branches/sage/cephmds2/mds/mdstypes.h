@@ -24,10 +24,26 @@ using namespace std;
 #define MDS_PORT_BALANCER 5
 #define MDS_PORT_MIGRATOR 6
 #define MDS_PORT_RENAMER  7
-
 #define MDS_PORT_ANCHORCLIENT 10
 #define MDS_PORT_ANCHORTABLE  11
 
+#define MAX_MDS                   0x100
+
+#define MDS_INO_ROOT              1
+#define MDS_INO_PGTABLE           2
+#define MDS_INO_ANCHORTABLE       3
+#define MDS_INO_LOG_OFFSET        0x100
+#define MDS_INO_IDS_OFFSET        0x200
+#define MDS_INO_STRAY_OFFSET      0x300
+#define MDS_INO_BASE              0x1000
+
+#define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+(x))
+#define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)
+
+#define MDS_TRAVERSE_FORWARD       1
+#define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
+#define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
+#define MDS_TRAVERSE_FAIL          4
 
 
 // ================================================================

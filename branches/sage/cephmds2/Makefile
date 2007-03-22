@@ -57,7 +57,6 @@ MDS_OBJS= \
 	mds/MDCache.o\
 	mds/Locker.o\
 	mds/Migrator.o\
-	mds/Renamer.o\
 	mds/MDBalancer.o\
 	mds/CDentry.o\
 	mds/CDir.o\

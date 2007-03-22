@@ -151,20 +151,13 @@ class CInode : public MDSCacheObject {
   frag_t pick_dirfrag(const string &dn);
 
   // -- cache infrastructure --
-  // old way, deprecate me!
-  CDir            *dir;       // directory, if we have it opened.
-  // new way
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
   CDir* get_dirfrag(frag_t fg) {
-    if (1) // old
-      return dir;
-    else { // new
-      if (dirfrags.count(fg)) 
-	return dirfrags[fg];
-      else
-	return 0;
-    }
+    if (dirfrags.count(fg)) 
+      return dirfrags[fg];
+    else
+      return 0;
   }
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
@@ -233,6 +226,7 @@ protected:
   bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
   
   bool is_root() { return state & STATE_ROOT; }
+  bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
 
   bool is_auth() { return state & STATE_AUTH; }
   void set_auth(bool auth);
@@ -243,14 +237,6 @@ protected:
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
-  CDir *get_or_open_dir(MDCache *mdcache);  // deprecated
-  //CDir *set_dir(CDir *newdir);              // deprecated
-  //void close_dir();                         // deprecated
-
-  
-  bool dir_is_auth();   // FIXME deprecate me
- 
-
 
   // -- misc -- 
   void make_path(string& s);
@@ -488,8 +474,6 @@ public:
   }
   */
 
-  // dbg
-  void dump(int d = 0);
 };
 
 

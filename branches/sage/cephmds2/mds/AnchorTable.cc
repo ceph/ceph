@@ -49,7 +49,7 @@ bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag)
   dout(17) << "add " << ino << " dirfrag " << dirfrag << endl;
   
   // parent should be there
-  assert(dirfrag.ino < MDS_INO_BASE ||             // system dirino
+  assert(dirfrag.ino < MDS_INO_BASE ||     // system dirino
          anchor_map.count(dirfrag.ino));   // have
   
   if (anchor_map.count(ino) == 0) {

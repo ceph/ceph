@@ -85,8 +85,6 @@ CInode::CInode(MDCache *c, bool auth)
   //num_parents = 0;
   parent = NULL;
   
-  dir = NULL;   // deprecated
-
   auth_pins = 0;
   nested_auth_pins = 0;
   //num_request_pins = 0;
@@ -97,9 +95,6 @@ CInode::CInode(MDCache *c, bool auth)
 }
 
 CInode::~CInode() {
-  if (dir) 
-    delete dir;
-
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
        ++p)
@@ -118,24 +113,6 @@ frag_t CInode::pick_dirfrag(const string& dn)
   return dirfragtree[H(dn)];
 }
 
-// new interface for old way
-void CInode::get_dirfrags(list<CDir*>& ls) 
-{
-  if (dir) 
-    ls.push_back(dir);
-}
-void CInode::get_nested_dirfrags(list<CDir*>& ls) 
-{
-  if (dir && !dir->is_subtree_root())
-    ls.push_back(dir);
-}
-void CInode::get_subtree_dirfrags(list<CDir*>& ls) 
-{
-  if (dir && dir->is_subtree_root())
-    ls.push_back(dir);
-}
-
-/* new way
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -159,7 +136,6 @@ void CInode::get_subtree_dirfrags(list<CDir*>& ls)
     if (p->second->is_subtree_root())
       ls.push_back(p->second);
 }
-*/
 
 // pins
 
@@ -222,67 +198,36 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-bool CInode::dir_is_auth() {
-  if (dir)
-    return dir->is_auth();
-  else
-    return is_auth();
-}
-
-CDir *CInode::get_or_open_dir(MDCache *mdcache)
-{
-  return get_or_open_dirfrag(mdcache, frag_t());
-}
-
 CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 {
   assert(is_dir());
-  if (1) { // old
-    if (!dir) {
-      assert(is_auth());
-      dir = new CDir(this, fg, mdcache, true);
-    }
-    return dir;
-  } else { // new
-    // have it?
-    CDir *dir = get_dirfrag(fg);
-    if (dir) return dir;
-    
-    // create it.
-    assert(is_auth());
-    dirfrags[fg] = new CDir(this, fg, mdcache, true);
-    return dir;
-  }
+
+  // have it?
+  CDir *dir = get_dirfrag(fg);
+  if (dir) return dir;
+  
+  // create it.
+  assert(is_auth());
+  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
+  return dir;
 }
 
 CDir *CInode::add_dirfrag(CDir *dir)
 {
-  if (1) { // old
-    assert(!this->dir);
-    this->dir = dir;
-  } else {
-    assert(dirfrags.count(dir->dirfrag().frag) == 0);
-    dirfrags[dir->dirfrag().frag] = dir;
-  }
+  assert(dirfrags.count(dir->dirfrag().frag) == 0);
+  dirfrags[dir->dirfrag().frag] = dir;
   return dir;
 }
 
 void CInode::close_dirfrag(frag_t fg)
 {
-  if (1) { // old
-    assert(dir);
-    assert(dir->get_num_ref() == 0);
-    delete dir;
-    dir = 0;
-  } else { // new
-    assert(dirfrags.count(fg));
-
-    dirfrags[fg]->remove_null_dentries();
-
-    assert(dirfrags[fg]->get_num_ref() == 0);
-    delete dirfrags[fg];
-    dirfrags.erase(fg);
-  }
+  assert(dirfrags.count(fg));
+  
+  dirfrags[fg]->remove_null_dentries();
+  
+  assert(dirfrags[fg]->get_num_ref() == 0);
+  delete dirfrags[fg];
+  dirfrags.erase(fg);
 }
 
 void CInode::close_dirfrags()
@@ -312,6 +257,9 @@ void CInode::make_path(string& s)
   else if (is_root()) {
     s = "";  // root
   } 
+  else if (is_stray()) {
+    s = "~";
+  }
   else {
     s = "(dangling)";  // dangling
   }
@@ -589,14 +537,4 @@ CInodeDiscover* CInode::replicate_to( int rep )
 }
 
 
-// debug crap -----------------------------
-
-void CInode::dump(int dep)
-{
-  string ind(dep, '\t');
-  //cout << ind << "[inode " << this << "]" << endl;
-  
-  if (dir)
-    dir->dump(dep);
-}
 

@@ -641,7 +641,7 @@ void EImportMap::expire(MDS *mds, Context *c)
 
 void EImportMap::replay(MDS *mds) 
 {
-  if (!mds->mdcache->subtrees.empty()) {
+  if (mds->mdcache->is_subtrees()) {
     dout(10) << "EImportMap.replay -- ignoring, already have import map" << endl;
   } else {
     dout(10) << "EImportMap.replay -- reconstructing (auth) subtree spanning tree" << endl;

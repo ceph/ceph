@@ -18,7 +18,7 @@
 #include "MDLog.h"
 #include "Migrator.h"
 #include "MDBalancer.h"
-#include "Renamer.h"
+//#include "Renamer.h"
 
 #include "msg/Messenger.h"
 
@@ -521,23 +521,6 @@ void Server::dispatch_request(Message *m, CInode *ref)
 
 // FIXME: this probably should go somewhere else.
 
-CDir* Server::try_open_dir(CInode *in, frag_t fg, MClientRequest *req)
-{
-  CDir *dir = in->get_dirfrag(fg);
-  if (dir) 
-    return dir; 
-
-  if (in->is_frozen_dir()) {
-    dout(10) << "try_open_dir: dir inode is frozen, waiting " << *in << endl;
-    assert(in->get_parent_dir());
-    in->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
-                                     new C_MDS_RetryRequest(mds, req, in));
-    return 0;
-  }
-
-  return in->get_or_open_dirfrag(mds->mdcache, fg);
-}
-
 CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MClientRequest *req)
 {
   CDir *dir = diri->get_dirfrag(fg);
@@ -578,6 +561,38 @@ CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MClientRequest *req)
   return dir;
 }
 
+CDir* Server::try_open_dir(CInode *diri, frag_t fg, 
+			   MClientRequest *req, CInode *ref)
+{
+  CDir *dir = diri->get_dirfrag(fg);
+  if (dir) 
+    return dir;
+
+  if (diri->is_auth()) {
+    // auth
+    // not open and inode frozen?
+    if (!dir && diri->is_frozen_dir()) {
+      dout(10) << "try_open_dir: dir inode is auth+frozen, waiting " << *diri << endl;
+      assert(diri->get_parent_dir());
+      diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
+					 new C_MDS_RetryRequest(mds, req, diri));
+      return 0;
+    }
+    
+    // invent?
+    if (!dir) {
+      assert(diri->is_auth());
+      dir = diri->get_or_open_dirfrag(mds->mdcache, fg);
+    }
+    assert(dir);
+    return dir;
+  } else {
+    // not auth
+    mdcache->open_remote_dir(diri, fg,
+			     new C_MDS_RetryRequest(mds, req, ref));
+    return 0;
+  }
+}
 
 
 // ===============================================================================
@@ -1605,24 +1620,9 @@ void Server::handle_client_unlink(MClientRequest *req, CInode *diri)
   }
   // dn looks ok.
 
-  // remote?  if so, open up the inode.
-  if (!dn->inode) {
-    assert(dn->is_remote());
-    CInode *in = mdcache->get_inode(dn->get_remote_ino());
-    if (in) {
-      dout(7) << "linking in remote in " << *in << endl;
-      dn->link_remote(in);
-    } else {
-      dout(10) << "remote dn, opening inode for " << *dn << endl;
-      mdcache->open_remote_ino(dn->get_remote_ino(), req, 
-			       new C_MDS_RetryRequest(mds, req, diri));
-      return;
-    }
-  }
-  assert(dn->inode);
-
-  // ok!
-  CInode *in = dn->inode;
+  // get/open inode.
+  CInode *in = mdcache->get_dentry_inode(dn, req, diri);
+  if (!in) return;
 
   // rmdir vs is_dir 
   if (in->is_dir()) {
@@ -1929,16 +1929,18 @@ public:
 };
 
 
-/*
-  
+/** handle_client_rename
+ *
+ * NOTE: caller did not path_pin the ref (srcdir) inode, as it normally does.
+ *  
+
   weirdness iwith rename:
-    - ref inode is what was originally srcdiri, but that may change by the tiem
+    - ref inode is what was originally srcdiri, but that may change by the time
       the rename actually happens.  for all practical purpose, ref is useless except
       for C_MDS_RetryRequest
 
  */
-void Server::handle_client_rename(MClientRequest *req,
-                               CInode *ref)
+void Server::handle_client_rename(MClientRequest *req, CInode *ref)
 {
   dout(7) << "handle_client_rename on " << *req << endl;
 
@@ -1956,10 +1958,10 @@ void Server::handle_client_rename(MClientRequest *req,
     return;
   }
 
-  // mv blah blah  -- also meaningless
+  // mv blah blah  -- noop
   if (req->get_sarg() == req->get_path()) {
-    dout(7) << "can't rename something to itself (or into itself)" << endl;
-    reply_request(req, -EINVAL);
+    dout(7) << "renamed something to itself" << endl;
+    reply_request(req, 0);
     return;
   }
   
@@ -1979,12 +1981,6 @@ void Server::handle_client_rename(MClientRequest *req,
   int r = mdcache->path_traverse(refpath, trace, true,
                                  req, new C_MDS_RetryRequest(mds, req, ref),
                                  MDS_TRAVERSE_FORWARD);
-  if (r == 2) {
-    dout(7) << "path traverse forwarded, ending request, doing manual request_cleanup" << endl;
-    dout(7) << "(pseudo) request_forward to 9999 req " << *req << endl;
-    mdcache->request_cleanup(req);  // not _finish (deletes) or _forward (path_traverse did that)
-    return;
-  }
   if (r > 0) return;
   if (r < 0) {   // dne or something.  got renamed out from under us, probably!
     dout(7) << "traverse r=" << r << endl;
@@ -2011,20 +2007,13 @@ void Server::handle_client_rename(MClientRequest *req,
 
   frag_t srcfg = srcdiri->pick_dirfrag(srcname);
 
-  // am i not open, not auth?
-  if (!srcdiri->get_dirfrag(srcfg) && !srcdiri->is_auth()) {
-    int dirauth = srcdiri->authority().first;
-    dout(7) << "don't know dir auth, not open, srcdir auth is probably " << dirauth << endl;
-    mdcache->request_forward(req, dirauth);
-    return;
-  }
-
+  // open dirfrag?  is it mine?
   CDir *srcdir = try_open_auth_dir(srcdiri, srcfg, req);
   if (!srcdir) return;
   dout(7) << "handle_client_rename srcdir is " << *srcdir << endl;
   
   // ok, done passing buck.
-
+  
   // src dentry
   CDentry *srcdn = srcdir->lookup(srcname);
 
@@ -2037,7 +2026,7 @@ void Server::handle_client_rename(MClientRequest *req,
     return;
   }
   
-  if ((srcdn && !srcdn->inode) ||
+  if ((srcdn && srcdn->is_null()) ||
       (!srcdn && srcdir->is_complete())) {
     dout(10) << "handle_client_rename src dne " << endl;
     reply_request(req, -EEXIST);
@@ -2049,14 +2038,14 @@ void Server::handle_client_rename(MClientRequest *req,
     srcdir->fetch(new C_MDS_RetryRequest(mds, req, srcdiri));
     return;
   }
-  assert(srcdn && srcdn->inode);
-
-
+  assert(srcdn && !srcdn->is_null());
+  
+  
   dout(10) << "handle_client_rename srcdn is " << *srcdn << endl;
   dout(10) << "handle_client_rename srci is " << *srcdn->inode << endl;
 
-  // pin src in cache (so it won't expire)
-  mdcache->request_pin_inode(req, srcdn->inode);
+  // pin src dentry in cache (so it won't expire)
+  mdcache->request_pin_dn(req, srcdn);
   
   // find the destination, normalize
   // discover, etc. on the way... just get it on the local node.
@@ -2065,86 +2054,83 @@ void Server::handle_client_rename(MClientRequest *req,
   C_MDS_RenameTraverseDst *onfinish = new C_MDS_RenameTraverseDst(this, req, ref, srcdiri, srcdir, srcdn, destpath);
   Context *ondelay = new C_MDS_RetryRequest(mds, req, ref);
   
-  /*
-   * use DISCOVERXLOCK mode:
-   *   the dest may not exist, and may be xlocked from a remote host
-   *   we want to succeed if we find the xlocked dentry
-   * ??
-   */
   mdcache->path_traverse(destpath, onfinish->trace, false,
                          req, ondelay,
-                         MDS_TRAVERSE_DISCOVER,  //XLOCK, 
+                         MDS_TRAVERSE_DISCOVER, 
                          onfinish);
 }
 
 void Server::handle_client_rename_2(MClientRequest *req,
-                                 CInode *ref,
-                                 CInode *srcdiri,
-                                 CDir *srcdir,
-                                 CDentry *srcdn,
-                                 filepath& destpath,
-                                 vector<CDentry*>& trace,
-                                 int r)
+				    CInode *ref,
+				    CInode *srcdiri,
+				    CDir *srcdir,
+				    CDentry *srcdn,
+				    filepath& destpath,
+				    vector<CDentry*>& trace,
+				    int r)
 {
   dout(7) << "handle_client_rename_2 on " << *req << endl;
-  dout(12) << " r = " << r << " trace depth " << trace.size() << "  destpath depth " << destpath.depth() << endl;
+  dout(12) << " r = " << r << " trace depth " << trace.size()
+	   << "  destpath depth " << destpath.depth() << endl;
 
-  CInode *srci = srcdn->inode;
-  assert(srci);
-  CDir*  destdir = 0;
-  string destname;
-  
   // what is the dest?  (dir or file or complete filename)
   // note: trace includes root, destpath doesn't (include leading /)
-  if (trace.size() && trace[trace.size()-1]->inode == 0) {
+  if (trace.size() && trace[trace.size()-1]->is_null()) {
     dout(10) << "dropping null dentry from tail of trace" << endl;
     trace.pop_back();    // drop it!
   }
   
-  CInode *d;
-  if (trace.size()) 
-    d = trace[trace.size()-1]->inode;
-  else
-    d = mdcache->get_root();
-  assert(d);
-  dout(10) << "handle_client_rename_2 traced to " << *d << ", trace size = " << trace.size() << ", destpath = " << destpath.depth() << endl;
+  CDentry* lastdn = 0;
+  CInode* lastin = 0;
+  if (trace.size()) {
+    lastdn = trace[trace.size()-1];
+    dout(10) << "handle_client_rename_2 traced to " << *lastdn 
+	     << ", trace size = " << trace.size()
+	     << ", destpath = " << destpath.depth() << endl;
+    lastin = mdcache->get_dentry_inode(lastdn, req, ref);
+    if (!lastin) return;
+  } else {
+    dout(10) << "handle_client_rename_2 traced to root" << endl;
+    lastin = mdcache->get_root();
+  }
+  assert(lastin);
   
   // make sure i can open the dir?
-  if (d->is_dir() && !d->dir_is_auth() && !d->dir) {
-    // discover it
-    mdcache->open_remote_dir(d, frag_t(),  // FIXME
-                             new C_MDS_RetryRequest(mds, req, ref));
-    return;
-  }
+  frag_t dfg;
+  CDir* destdir = 0;
+  string destname;
 
-  frag_t dfg = d->pick_dirfrag(destname);
   if (trace.size() == destpath.depth()) {
-    if (d->is_dir()) {
+    if (lastin->is_dir()) {
       // mv /some/thing /to/some/dir 
-      destdir = try_open_dir(d, dfg, req);        // /to/some/dir
+      destname = req->get_filepath().last_dentry();  // "thing"
+      dfg = lastin->pick_dirfrag(destname);
+      destdir = try_open_dir(lastin, dfg, req, ref); // /to/some/dir
       if (!destdir) return;
-      destname = req->get_filepath().last_dentry();  // thing
       destpath.push_dentry(destname);
     } else {
       // mv /some/thing /to/some/existing_filename
-      destdir = trace[trace.size()-1]->dir;       // /to/some
-      destname = destpath.last_dentry();             // existing_filename
+      destdir = lastdn->dir;                         // /to/some
+      destname = destpath.last_dentry();             // "existing_filename"
     }
   }
   else if (trace.size() == destpath.depth()-1) {
-    if (d->is_dir()) {
+    if (lastin->is_dir()) {
       // mv /some/thing /to/some/place_that_maybe_dne     (we might be replica)
-      destdir = try_open_dir(d, dfg, req); // /to/some
+      destname = destpath.last_dentry();             // "place_that_MAYBE_dne"
+      dfg = lastin->pick_dirfrag(destname);
+      destdir = try_open_dir(lastin, dfg, req, ref); // /to/some
       if (!destdir) return;
-      destname = destpath.last_dentry();    // place_that_MAYBE_dne
     } else {
-      dout(7) << "dest dne" << endl;
-      reply_request(req, -EINVAL);
+      // mv /some/thing /to/existing_filename/blah
+      dout(7) << "dest is not a dir " << *lastin << endl;
+      reply_request(req, -ENOTDIR);
       return;
     }
   }
   else {
     assert(trace.size() < destpath.depth()-1);
+
     // check traverse return value
     if (r > 0) {
       return;  // discover, readdir, etc.
@@ -2152,7 +2138,7 @@ void Server::handle_client_rename_2(MClientRequest *req,
 
     // ??
     assert(r < 0 || trace.size() == 0);  // musta been an error
-
+    
     // error out
     dout(7) << " rename dest " << destpath << " dne" << endl;
     reply_request(req, -EINVAL);
@@ -2165,8 +2151,8 @@ void Server::handle_client_rename_2(MClientRequest *req,
 
   // src == dest?
   if (srcdn->get_dir() == destdir && srcdn->name == destname) {
-    dout(7) << "rename src=dest, same file " << endl;
-    reply_request(req, -EINVAL);
+    dout(7) << "rename src=dest, noop" << endl;
+    reply_request(req, 0);
     return;
   }
 
@@ -2174,9 +2160,10 @@ void Server::handle_client_rename_2(MClientRequest *req,
   CDentry *destdn = destdir->lookup(destname);
   CInode  *oldin = 0;
   if (destdn) {
-    oldin = destdn->get_inode();
-    
-    if (oldin) {
+    if (!destdn->is_null()) {
+      oldin = mdcache->get_dentry_inode(destdn, req, ref);
+      if (!oldin) return;
+      
       // make sure it's also a file!
       // this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
       if (oldin->is_dir()) {
@@ -2185,20 +2172,17 @@ void Server::handle_client_rename_2(MClientRequest *req,
         reply_request(req, -EISDIR);
         return;
       }
-
+      
       if (srcdn->inode->is_dir() &&
           !oldin->is_dir()) {
         dout(7) << "cannot overwrite non-directory with directory" << endl;
         reply_request(req, -EISDIR);
         return;
       }
-    }
 
-    dout(7) << "dest exists " << *destdn << endl;
-    if (destdn->get_inode()) {
-      dout(7) << "destino is " << *destdn->get_inode() << endl;
+      dout(7) << "dest dn exists " << *destdn << " " << *oldin << endl;
     } else {
-      dout(7) << "dest dn is a NULL stub" << endl;
+      dout(7) << "dest dn exists " << *destdn << endl;
     }
   } else {
     dout(7) << "dest dn dne (yet)" << endl;
@@ -2206,35 +2190,43 @@ void Server::handle_client_rename_2(MClientRequest *req,
   
 
   // local or remote?
-  int srcauth = srcdir->dentry_authority(srcdn->name).first;
-  int destauth = destdir->dentry_authority(destname).first;
-  dout(7) << "handle_client_rename_2 destname " << destname << " destdir " << *destdir << " auth " << destauth << endl;
+  int srcauth = srcdir->authority().first;
+  int destauth = destdir->authority().first;
+  dout(7) << "handle_client_rename_2 destname " << destname
+	  << " destdir " << *destdir
+	  << " auth " << destauth << endl;
   
   // 
-  if (srcauth != mds->get_nodeid() || 
-      destauth != mds->get_nodeid()) {
+  if (srcauth != mds->get_nodeid() || destauth != mds->get_nodeid()) {
     dout(7) << "rename has remote dest " << destauth << endl;
     dout(7) << "FOREIGN RENAME" << endl;
     
-    // punt?
-    if (false && srcdn->inode->is_dir()) {
-      reply_request(req, -EINVAL);  
-      return; 
-    }
+    reply_request(req, -EINVAL);   // for now!
 
   } else {
     dout(7) << "rename is local" << endl;
-  }
 
-  handle_client_rename_local(req, ref,
-                             srcpath, srcdiri, srcdn, 
-                             destpath.get_path(), destdir, destdn, destname);
-  return;
+    _rename_local(req, ref,
+		  srcpath, srcdiri, srcdn, 
+		  destpath.get_path(), destdir, destdn, destname);
+  }
 }
 
 
+void Server::_rename_local(MClientRequest *req,
+			   CInode *ref,
+			   const string& srcpath,
+			   CInode *srcdiri,
+			   CDentry *srcdn,
+			   const string& destpath,
+			   CDir *destdir,
+			   CDentry *destdn,
+			   const string& destname)
+{
 
+}
 
+/*
 void Server::handle_client_rename_local(MClientRequest *req,
 					CInode *ref,
 					const string& srcpath,
@@ -2245,6 +2237,7 @@ void Server::handle_client_rename_local(MClientRequest *req,
 					CDentry *destdn,
 					const string& destname)
 {
+*/
   //bool everybody = false;
   //if (true || srcdn->inode->is_dir()) {
     /* overkill warning: lock w/ everyone for simplicity.  FIXME someday!  along with the foreign rename crap!
@@ -2287,7 +2280,7 @@ void Server::handle_client_rename_local(MClientRequest *req,
   //dout(7) << "handle_client_rename_local: overkill?  doing xlocks with _all_ nodes" << endl;
   //everybody = true;
   //}
-
+/*
   bool srclocal = srcdn->dir->dentry_authority(srcdn->name).first == mds->get_nodeid();
   bool destlocal = destdir->dentry_authority(destname).first == mds->get_nodeid();
 
@@ -2298,8 +2291,7 @@ void Server::handle_client_rename_local(MClientRequest *req,
     dout(7) << "handle_client_rename_local: dest local=" << destlocal << " dn dne yet" << endl;
   }
 
-  /* lock source and dest dentries, in lexicographic order.
-   */
+  // lock source and dest dentries, in lexicographic order.
   bool dosrc = srcpath < destpath;
   for (int i=0; i<2; i++) {
     if (dosrc) {
@@ -2329,9 +2321,8 @@ void Server::handle_client_rename_local(MClientRequest *req,
         }
       } else {
         if (!destdn || destdn->xlockedby != req) {
-          /* NOTE: require that my xlocked item be a leaf/file, NOT a dir.  in case
-           * my traverse and determination of dest vs dest/srcfilename was out of date.
-           */
+          // NOTE: require that my xlocked item be a leaf/file, NOT a dir.  in case
+          // my traverse and determination of dest vs dest/srcfilename was out of date.
           mds->locker->dentry_xlock_request(destdir, destname, true, req, new C_MDS_RetryRequest(mds, req, ref));
           return;
         }
@@ -2388,7 +2379,7 @@ void Server::handle_client_rename_local(MClientRequest *req,
 
 
 
-
+*/
 
 
 
@@ -2599,21 +2590,8 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     } 
 
     // get inode
-    CInode *in = dn->inode;
-    if (!in) {
-      assert(dn->is_remote());
-      in = mdcache->get_inode(dn->get_remote_ino());
-      if (in) {
-	dout(7) << "linking in remote in " << *in << endl;
-	dn->link_remote(in);
-      } else {
-	dout(10) << "remote dn, opening inode for " << *dn << endl;
-	mdcache->open_remote_ino(dn->get_remote_ino(), req, 
-				 new C_MDS_RetryRequest(mds, req, diri));
-	return;
-      }
-    }
-    assert(in);
+    CInode *in = mdcache->get_dentry_inode(dn, req, diri);
+    if (!in) return;
         
     // FIXME: do i need to repin path based existent inode? hmm.
     handle_client_open(req, in);

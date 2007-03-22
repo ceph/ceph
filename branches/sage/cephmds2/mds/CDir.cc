@@ -56,8 +56,12 @@ ostream& operator<<(ostream& out, CDir& dir)
       out << "." << dir.get_replica_nonce();
   }
 
-  if (dir.get_dir_auth() != CDIR_AUTH_DEFAULT) 
-    out << " dir_auth=" << dir.get_dir_auth();
+  if (dir.get_dir_auth() != CDIR_AUTH_DEFAULT) {
+    if (dir.get_dir_auth().second == CDIR_AUTH_UNKNOWN)
+      out << " dir_auth=" << dir.get_dir_auth().first;
+    else
+      out << " dir_auth=" << dir.get_dir_auth();
+  }
   
   if (dir.get_cum_auth_pins())
     out << " ap=" << dir.get_auth_pins() << "+" << dir.get_nested_auth_pins();
@@ -1446,35 +1450,4 @@ void CDir::unfreeze_dir()
 
 
 
-
-
-// -----------------------------------------------------------------
-// debug shite
-
-
-void CDir::dump(int depth) {
-  string ind(depth, '\t');
-
-  dout(10) << "dump:" << ind << *this << endl;
-
-  map<string,CDentry*>::iterator iter = items.begin();
-  while (iter != items.end()) {
-    CDentry* d = iter->second;
-    if (d->inode) {
-      char isdir = ' ';
-      if (d->inode->dir != NULL) isdir = '/';
-      dout(10) << "dump: " << ind << *d << " = " << *d->inode << endl;
-      d->inode->dump(depth+1);
-    } else {
-      dout(10) << "dump: " << ind << *d << " = [null]" << endl;
-    }
-    iter++;
-  }
-
-  if (!(state_test(STATE_COMPLETE)))
-    dout(10) << ind << "..." << endl;
-  if (state_test(STATE_DIRTY))
-    dout(10) << ind << "[dirty]" << endl;
-
-}
 

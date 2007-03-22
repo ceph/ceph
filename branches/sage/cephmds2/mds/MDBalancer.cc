@@ -263,12 +263,14 @@ void MDBalancer::do_hashing()
     inodeno_t dirino = *i;
     CInode *in = mds->mdcache->get_inode(dirino);
     if (!in) continue;
+    /*
     CDir *dir = in->dir;
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_hashing hashing " << *dir << endl;
-    //mds->mdcache->migrator->hash_dir(dir);
+    mds->mdcache->migrator->hash_dir(dir);
+    */
   }
   hash_queue.clear();
 }
@@ -604,33 +606,39 @@ void MDBalancer::find_exports(CDir *dir,
     CInode *in = it->second->get_inode();
     if (!in) continue;
     if (!in->is_dir()) continue;
-    if (!in->dir) continue;       // clearly not popular
     
-    if (!in->dir->is_auth()) continue;
-    if (in->dir->is_hashed()) continue;
-    if (already_exporting.count(in->dir)) continue;
+    list<CDir*> dfls;
+    in->get_dirfrags(dfls);
+    for (list<CDir*>::iterator p = dfls.begin();
+	 p != dfls.end();
+	 ++p) {
+      CDir *dir = *p;
+      if (!dir->is_auth()) continue;
+      if (dir->is_hashed()) continue;
+      if (already_exporting.count(dir)) continue;
 
-    if (in->dir->is_frozen()) continue;  // can't export this right now!
-    //if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
-    
-    // how popular?
-    double pop = in->dir->popularity[MDS_POP_CURDOM].meta_load();
-    dir_sum += pop;
-    dout(20) << "   pop " << pop << " " << *in->dir << endl;
+      if (dir->is_frozen()) continue;  // can't export this right now!
+      //if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
+      
+      // how popular?
+      double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
+      dir_sum += pop;
+      dout(20) << "   pop " << pop << " " << *dir << endl;
 
-    if (pop < minchunk) continue;
-
-    // lucky find?
-    if (pop > needmin && pop < needmax) {
-      exports.push_back(in->dir);
-      have += pop;
-      return;
+      if (pop < minchunk) continue;
+      
+      // lucky find?
+      if (pop > needmin && pop < needmax) {
+	exports.push_back(dir);
+	have += pop;
+	return;
+      }
+      
+      if (pop > need)
+	bigger.push_back(dir);
+      else
+	smaller.insert(pair<double,CDir*>(pop, dir));
     }
-    
-    if (pop > need)
-      bigger.push_back(in->dir);
-    else
-      smaller.insert(pair<double,CDir*>(pop, in->dir));
   }
   dout(7) << " .. sum " << dir_sum << " / " << dir_pop << endl;
 

@@ -32,7 +32,7 @@
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "Migrator.h"
-#include "Renamer.h"
+//#include "Renamer.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -731,6 +731,17 @@ void MDS::boot_create()
     dir->commit(0, fin->new_sub());
   }
 
+  // create my stray dir
+  {
+    dout(10) << "boot_create creating local stray dir" << endl;
+    mdcache->open_local_stray();
+    CInode *stray = mdcache->get_stray();
+    CDir *dir = stray->get_dirfrag(frag_t());
+    dir->mark_complete();
+    dir->mark_dirty(dir->pre_dirty());
+    dir->commit(0, fin->new_sub());
+  }
+
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << endl;
   mdlog->reset();
@@ -775,6 +786,9 @@ void MDS::boot_start()
     dout(2) << "boot_start opening root directory" << endl;
     mdcache->open_root(fin->new_sub());
   }
+
+  dout(2) << "boot_start opening local stray directory" << endl;
+  mdcache->open_local_stray();
 }
 
 void MDS::boot_finish()
@@ -981,7 +995,7 @@ void MDS::my_dispatch(Message *m)
     mdcache->migrator->dispatch(m);
     break;
   case MDS_PORT_RENAMER:
-    mdcache->renamer->dispatch(m);
+    //mdcache->renamer->dispatch(m);
     break;
 
   case MDS_PORT_BALANCER:
@@ -1031,12 +1045,10 @@ void MDS::my_dispatch(Message *m)
     dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf.mds_thrash_exports << endl;
     
     // pick a random dir inode
-    int n = rand() % mdcache->inode_map.size();
-    hash_map<inodeno_t,CInode*>::iterator p = mdcache->inode_map.begin();
-    while (n--) p++;
+    CInode *in = mdcache->hack_pick_random_inode();
 
     list<CDir*> ls;
-    p->second->get_dirfrags(ls);
+    in->get_dirfrags(ls);
     if (ls.empty()) continue;                // must be an open dir.
     CDir *dir = ls.front();
     if (!dir->get_parent_dir()) continue;    // must be linked.

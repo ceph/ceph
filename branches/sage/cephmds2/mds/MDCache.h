@@ -66,7 +66,8 @@ class MClientRequest;
  */
 typedef struct {
   CInode *ref;                                // reference inode
-  set< CInode* >            request_pins;
+  set< CInode* >            request_inode_pins;
+  set< CDentry* >           request_dn_pins;
   set< CDir* >              request_dir_pins;
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
   set< CDentry* >           xlocks;           // xlocks (local)
@@ -94,12 +95,12 @@ class MDCache {
  protected:
   // the cache
   CInode                       *root;        // root inode
-  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
-
-  friend class MDS;  // for thrash_exports hack.
+  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino
+  CInode                       *stray;       // my stray dir
 
   // root
-  list<Context*>     waiting_for_root;
+  list<Context*> waiting_for_root;
+  map<inodeno_t,list<Context*> > waiting_for_stray;
 
 public:
   int get_num_inodes() { return inode_map.size(); }
@@ -115,6 +116,7 @@ protected:
   //  imports/exports/nested_exports
   //  join/split subtrees as appropriate
 public:
+  bool is_subtrees() { return !subtrees.empty(); }
   void adjust_subtree_auth(CDir *root, pair<int,int> auth);
   void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, pair<int,int>(a,b)); 
@@ -166,7 +168,7 @@ protected:
   bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
 
-  // recovery
+  // -- recovery --
 protected:
   // from EImportStart w/o EImportFinish during journal replay
   map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
@@ -178,21 +180,24 @@ protected:
   set<int> got_import_map;     // nodes i got import_maps from
   set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
-  void set_recovery_set(set<int>& s);
-  void handle_mds_failure(int who);
-  void handle_mds_recovery(int who);
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
   void disambiguate_imports();
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void send_cache_rejoin_acks();
+  void recalc_auth_bits();
+
 public:
+  void set_recovery_set(set<int>& s);
+  void handle_mds_failure(int who);
+  void handle_mds_recovery(int who);
   void send_import_map(int who);
   void send_import_map_now(int who);
   void send_import_map_later(int who);
   void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
+  void log_import_map(Context *onsync=0);
 
 
   // ambiguous imports
@@ -203,15 +208,10 @@ public:
 
 
 
-
-  
-
-  friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
-  friend class EImportMap;
 
 
  public:
@@ -230,15 +230,8 @@ public:
   // root inode
   CInode *get_root() { return root; }
   void set_root(CInode *r);
+  CInode *get_stray() { return stray; }
 
-  //int get_num_imports() { return imports.size(); }
-  //void add_import(CDir *dir);
-  //void remove_import(CDir *dir);
-  void recalc_auth_bits();
-
-  void log_import_map(Context *onsync=0);
-
- 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
@@ -326,13 +319,17 @@ public:
 
  public:
   CInode *create_root_inode();
-  int open_root(Context *c);
+  void open_root(Context *c);
+  CInode *create_stray_inode();
+  void open_local_stray();
+  void open_foreign_stray(int who, Context *c);
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,
                     int onfail,
                     Context *onfinish=0,
                     bool is_client_req = false);
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
+  CInode *get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref);
   void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
   void open_remote_ino_2(inodeno_t ino, Message *req,
                          vector<Anchor>& anchortrace,
@@ -349,6 +346,7 @@ public:
   void request_finish(Message *req);
   void request_forward(Message *req, int mds, int port=0);
   void request_pin_inode(Message *req, CInode *in);
+  void request_pin_dn(Message *req, CDentry *dn);
   void request_pin_dir(Message *req, CDir *dir);
   void request_auth_pin(Message *req, CDir *dir);
   void request_auth_pin(Message *req, CInode *in);
@@ -420,13 +418,17 @@ protected:
 
   // == crap fns ==
  public:
-  void dump() {
-    if (root) root->dump();
-  }
-
   void show_cache();
   void dump_cache();
   void show_subtrees(int dbl=10);
+
+  CInode *hack_pick_random_inode() {
+    assert(!inode_map.empty());
+    int n = rand() % inode_map.size();
+    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    while (n--) p++;
+    return p->second;
+  }
 
 };
 
