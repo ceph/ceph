@@ -12,8 +12,8 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   (JNIEnv *, jobject)
 {
 
-  cout << "initializing client:" << endl;
-  cout.flush();
+  cout << "Initializing Ceph client:" << endl;
+  //cout.flush();
   // parse args from CEPH_ARGS 
   vector<char*> args; 
   env_to_vec(args);
@@ -34,7 +34,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   MonMap monmap;
   int r = monmap.read(".ceph_monmap");
   if (r < 0) {
-    cout << "could not find .ceph_monmap"; 
+    cout << "could not find .ceph_monmap" << endl; 
     return 0;
   }
   //assert(r >= 0);
@@ -44,12 +44,12 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
 
   // start client
   Client *client;
-   client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
+  client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
   client->init();
     
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting" << endl;
+  cout << "mounting client to filesystem..." << endl;
   client->mount();
   
   //cerr << "starting fuse on pid " << getpid() << endl;
@@ -65,7 +65,9 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   // wait for messenger to finish
   //rank.wait();
   
-  return (jlong)client;
+  jlong clientp = *(jlong*)&client;
+  return clientp;
+  //return (jlong)client;
 
 }
 
@@ -81,10 +83,13 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   cout << "In copyFromLocalFile" << endl;
   cout.flush();
   Client* client;
-  client = (Client*) clientp;
+  //client = (Client*) clientp;
+   client = *(Client**)&clientp;
+
   const char* c_local_path = env->GetStringUTFChars(j_local_path, 0);
   const char* c_ceph_path = env->GetStringUTFChars(j_ceph_path, 0);
 
+  cout << "Local source file is "<< c_local_path << " and Ceph destination file is " << c_ceph_path << endl;
   struct stat st;
   int r = ::stat(c_local_path, &st);
   assert (r == 0);
@@ -94,10 +99,10 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   int fh_ceph = client->open(c_ceph_path, O_WRONLY|O_CREAT|O_TRUNC);  
   assert (fh_local > -1);
   assert (fh_ceph > -1);
+  cout << "local fd is " << fh_local << " and Ceph fd is " << fh_ceph << endl;
 
   // get the source file size
   off_t remaining = st.st_size;
-
    
   // copy the file a MB at a time
   const int chunk = 1048576;
@@ -132,7 +137,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   const char* c_ceph_path = env->GetStringUTFChars(j_ceph_path, 0);
   const char* c_local_path = env->GetStringUTFChars(j_local_path, 0);
 
@@ -181,7 +186,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   return (env->NewStringUTF(client->getcwd().c_str()));
 }
@@ -200,7 +205,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   return (0 <= client->chdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
@@ -220,7 +225,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   return (0 == client->rmdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
@@ -237,12 +242,12 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
   (JNIEnv * env, jobject, jlong clientp, jstring j_path)
 {
-  cout << "In mkdir" << endl;
-  cout.flush();
+  //cout << "In mkdir" << endl;
+  //cout.flush();
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   return (0 == client->mkdir(c_path, 0xFF)) ? JNI_TRUE : JNI_FALSE; 
@@ -262,7 +267,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   return (0 == client->unlink(c_path)) ? JNI_TRUE : JNI_FALSE; 
@@ -283,7 +288,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   const char* c_from = env->GetStringUTFChars(j_from, 0);
   const char* c_to   = env->GetStringUTFChars(j_to,   0);
@@ -303,35 +308,34 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
 (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
 
-  cout << "In exists" << endl;
-  cout.flush();
+  //cout << "In exists" << endl;
+  //cout.flush();
 
   Client* client;
-  struct stat *stbuf;
-  client = (Client*) clientp;
+  struct stat stbuf;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  cout << "Attempting lstat with file " << c_path << ":" << endl;
-  int i = (int) (*c_path);
-  cout << "First character value is " << i;
-  cout.flush();
-  int result = client->lstat(c_path, stbuf);
-  cout << "Got through lstat without crashing: result is " << result << endl;
-  cout << "Attempting to release string \"" << c_path << "\"" << endl;
-  cout.flush();
+  cout << "Attempting lstat with file " << c_path << ":" ;
+  //int i = (int) (*c_path);
+  //cout << "First character value is " << i;
+  // cout.flush();
+  int result = client->lstat(c_path, &stbuf);
+  cout << "result is " << result << endl;
+  //  cout << "Attempting to release string \"" << c_path << "\"" << endl;
+  //cout.flush();
   env->ReleaseStringUTFChars(j_path, c_path);
-  cout << "String released!" << endl;
+  //cout << "String released!" << endl;
   if (result < 0) {
-    cout << "Returning false (file does not exist)" << endl;
-    cout.flush();
+    //cout << "Returning false (file does not exist)" << endl;
+    //cout.flush();
     return JNI_FALSE;
   }
   else {
-    cout << "Returning true (file exists)" << endl;
-    cout.flush();
+    //cout << "Returning true (file exists)" << endl;
+    //cout.flush();
     return JNI_TRUE;
   }
-  //return (0 > result) ? JNI_FALSE : JNI_TRUE; 
 
 }
 
@@ -351,16 +355,16 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 
 
   Client* client;
-  struct stat *stbuf;
-  client = (Client*) clientp;
+  struct stat stbuf;
+  client = *(Client**)&clientp;
   
   jint result;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  if (0 > client->lstat(c_path, stbuf))
+  if (0 > client->lstat(c_path, &stbuf))
     result =  -1;
   else
-    result = stbuf->st_blksize;
+    result = stbuf.st_blksize;
 
   env->ReleaseStringUTFChars(j_path, c_path);
   return result;
@@ -379,14 +383,14 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getf
   cout.flush();
 
   Client* client;
-  struct stat *stbuf;
-  client = (Client*) clientp;
+  struct stat stbuf;
+  client = *(Client**)&clientp;
 
   jlong result;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  if (0 > client->lstat(c_path, stbuf)) result =  -1; 
-  else result = stbuf->st_size;
+  if (0 > client->lstat(c_path, &stbuf)) result =  -1; 
+  else result = stbuf.st_size;
   env->ReleaseStringUTFChars(j_path, c_path);
 
   return result;
@@ -400,20 +404,20 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getf
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isfile
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  cout << "In isfile" << endl;
-  cout.flush();
+  //cout << "In isfile" << endl;
+  //cout.flush();
 
   Client* client;
-  struct stat *stbuf;
-  client = (Client*) clientp;
+  struct stat stbuf;
+  client = *(Client**)&clientp;
 
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  cout << "Attempting lstat with file " << c_path << ":" << endl;
-  cout.flush();
-  int result = client->lstat(c_path, stbuf);
-  cout << "Got through lstat without crashing: result is " << result << endl;
-  cout.flush();
+  //cout << "Attempting lstat with file " << c_path << ":" << endl;
+  //cout.flush();
+  int result = client->lstat(c_path, &stbuf);
+  //cout << "Got through lstat without crashing: result is " << result << endl;
+  //cout.flush();
 
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -421,8 +425,8 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
   if (0 > result) return JNI_FALSE; 
 
   // check the stat result
-  cout << "Stat call succeeded: attempting to look inside stbuf for result" << endl;
-  return (0 == S_ISREG(stbuf->st_mode)) ? JNI_FALSE : JNI_TRUE;
+  //cout << "Stat call succeeded: attempting to look inside stbuf for result" << endl;
+  return (0 == S_ISREG(stbuf.st_mode)) ? JNI_FALSE : JNI_TRUE;
 }
 
 
@@ -435,23 +439,24 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isdirectory
   (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
-  cout << "In isdirectory" << endl;
-  cout.flush();
-
+  //cout << "In isdirectory" << endl;
+  //cout.flush();
 
   Client* client;
-  struct stat *stbuf;
-  client = (Client*) clientp;
+  struct stat stbuf;
+  client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  int result = client->lstat(c_path, stbuf);
+  int result = client->lstat(c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
+  //cout << "String released!" << endl;
+  //cout.flush();
 
   // if the stat call failed, it's definitely not a directory...
   if (0 > result) return JNI_FALSE; 
 
   // check the stat result
-  return (0 == S_ISDIR(stbuf->st_mode)) ? JNI_FALSE : JNI_TRUE;
+  return (0 == S_ISDIR(stbuf.st_mode)) ? JNI_FALSE : JNI_TRUE;
 }
 
 /*
@@ -462,37 +467,50 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getdir
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_path) {
 
-  cout << "In getdir" << endl;
-  cout.flush();
+  //cout << "In getdir" << endl;
+  //cout.flush();
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   // get the directory listing
   map<string, inode_t> contents;
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   int result = client->getdir(c_path, contents);
+  //cout << "Releasing string" << endl;
   env->ReleaseStringUTFChars(j_path, c_path);
   
   if (result < 0) return NULL;
 
+  //cout << "checking for empty dir" << endl;
   jint dir_size = contents.size();
-  if (dir_size < 1) return NULL;
+  if (dir_size < 1) 
+    {
+      //    cout << "dir was empty" << endl;
+      //return NULL;
+    }
+  //out << "dir was not empty" << endl;
 
   // Create a Java String array of the size of the directory listing
-  //jstring blankString = env->NewStringUTF("");
-  jclass stringClass = env->FindClass("java/lang/string");
+  // jstring blankString = env->NewStringUTF("");
+  jclass stringClass = env->FindClass("java/lang/String");
+  if (NULL == stringClass) {
+    cout << "ERROR: java String class not found; dying a horrible, painful death" << endl;
+    assert(0);
+  }
   jobjectArray dirListingStringArray = (jobjectArray) env->NewObjectArray(dir_size, stringClass, NULL);
-
   
   // populate the array with the elements of the directory list
   int i = 0;
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    if (0 == dir_size)
+      cout << "WARNING: adding stuff to an empty array" << endl;
     env->SetObjectArrayElement(dirListingStringArray, i, 
 			       env->NewStringUTF(it->first.c_str()));
+    ++i;
   }
 			     
   return dirListingStringArray;
@@ -509,12 +527,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 
 {
-  cout << "In open_for_read" << endl;
-  cout.flush();
+  //cout << "In open_for_read" << endl;
+  //cout.flush();
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   jint result; 
 
@@ -538,11 +556,11 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1overwrite
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  cout << "In open_for_overwrite" << endl;
-  cout.flush();
+  //cout << "In open_for_overwrite" << endl;
+  //cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
 
   jint result; 
 
@@ -565,8 +583,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
 {
-  cout << "In read" << endl;
-  cout.flush();
+  //cout << "In read" << endl;
+  //cout.flush();
 
 
   // IMPORTANT NOTE: Hadoop read arguments are a bit different from POSIX so we
@@ -575,7 +593,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   // Step 1: get a pointer to the buffer.
@@ -604,12 +622,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1seek_1from_1start
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jlong pos)
 {
-  cout << "In CephInputStream::seek_from_start" << endl;
-  cout.flush();
+  //cout << "In CephInputStream::seek_from_start" << endl;
+  //cout.flush();
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   result = client->lseek(fh, pos, SEEK_SET);
@@ -626,7 +644,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1get
 
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   // seek a distance of 0 to get current offset
@@ -649,7 +667,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1clos
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   result = client->close(fh);
@@ -669,7 +687,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1se
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   result = client->lseek(fh, pos, SEEK_SET);
@@ -690,7 +708,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1ge
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   // seek a distance of 0 to get current offset
@@ -711,7 +729,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1clo
   cout.flush();
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   result = client->close(fh);
@@ -738,7 +756,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1wri
   // and buffer_offset is the location in the *buffer* where we start writing.
 
   Client* client;
-  client = (Client*) clientp;
+  client = *(Client**)&clientp;
   jint result; 
 
   // Step 1: get a pointer to the buffer.
