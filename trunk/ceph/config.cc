@@ -109,6 +109,7 @@ md_config_t g_conf = {
 
   // --- clock ---
   clock_lock: false,
+  clock_tare: true,
   
   // --- messenger ---
   ms_single_dispatch: false,
@@ -560,6 +561,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--clock_lock") == 0) 
       g_conf.clock_lock = atoi(args[++i]);
+    else if (strcmp(args[i], "--clock_tare") == 0) 
+      g_conf.clock_tare = atoi(args[++i]);
 
     else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);

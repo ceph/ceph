@@ -62,6 +62,8 @@ int main(int argc, char **argv)
   if (g_conf.debug_after) 
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
+  if (g_conf.clock_tare) g_clock.tare();
+
   // osd specific args
   char *dev;
   int whoami = -1;

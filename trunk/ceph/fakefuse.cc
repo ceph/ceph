@@ -78,6 +78,8 @@ int main(int argc, char **argv) {
   // FUSE will chdir("/"); be ready.
   g_conf.use_abspaths = true;
 
+  if (g_conf.clock_tare) g_clock.tare();
+
   MonMap *monmap = new MonMap(g_conf.num_mon);
   
   Monitor *mon[g_conf.num_mon];

@@ -88,6 +88,7 @@ struct md_config_t {
 
   // clock
   bool clock_lock;
+  bool clock_tare;
 
   // messenger
 

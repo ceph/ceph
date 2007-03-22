@@ -46,6 +46,8 @@ int main(int argc, char **argv, char *envp[]) {
   // FUSE will chdir("/"); be ready.
   g_conf.use_abspaths = true;
 
+  if (g_conf.clock_tare) g_clock.tare();
+
   // load monmap
   MonMap monmap;
   int r = monmap.read(".ceph_monmap");
