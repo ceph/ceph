@@ -71,6 +71,18 @@ void FileCache::tear_down()
   }
 }
 
+// truncate
+
+void FileCache::truncate(off_t olds, off_t news)
+{
+  dout(5) << "truncate " << olds << " -> " << news << endl;
+
+  // map range to objects
+  list<ObjectExtent> ls;
+  oc->filer.file_to_extents(inode, news, olds-news, ls);
+  oc->truncate_set(inode.ino, ls);
+}
+
 // caps
 
 class C_FC_CheckCaps : public Context {
@@ -107,16 +119,21 @@ void FileCache::set_caps(int caps, Context *onimplement)
   
 }
 
-
-void FileCache::check_caps()
+int FileCache::get_used_caps()
 {
-  // calc used
   int used = 0;
   if (num_reading) used |= CAP_FILE_RD;
   if (oc->set_is_cached(inode.ino)) used |= CAP_FILE_RDCACHE;
   if (num_writing) used |= CAP_FILE_WR;
   if (oc->set_is_dirty_or_committing(inode.ino)) used |= CAP_FILE_WRBUFFER;
-  dout(10) << "check_caps used " << cap_string(used) << endl;
+  return used;
+}
+
+void FileCache::check_caps()
+{
+  // calc used
+  int used = get_used_caps();
+  dout(10) << "check_caps used was " << cap_string(used) << endl;
 
   // try to implement caps?
   // BUG? latest_caps, not least caps i've seen?
@@ -127,6 +144,9 @@ void FileCache::check_caps()
       (used & CAP_FILE_WRBUFFER))
     flush_dirty(new C_FC_CheckCaps(this));
   
+  used = get_used_caps();
+  dout(10) << "check_caps used now " << cap_string(used) << endl;
+
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
   while (p != caps_callbacks.end()) {

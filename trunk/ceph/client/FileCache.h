@@ -57,6 +57,8 @@ class FileCache {
   bool all_safe();// { return num_unsafe == 0; }
 
   void add_safe_waiter(Context *c);
+  
+  void truncate(off_t olds, off_t news);
 
   // ...
   void flush_dirty(Context *onflush=0);
@@ -69,6 +71,7 @@ class FileCache {
   void tear_down();
 
   int get_caps() { return latest_caps; }
+  int get_used_caps();
   void set_caps(int caps, Context *onimplement=0);
   void check_caps();
   

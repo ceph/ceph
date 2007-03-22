@@ -1027,7 +1027,7 @@ void Locker::inode_file_eval(CInode *in)
     case LOCK_GLOCKR:
     case LOCK_GLOCKM:
     case LOCK_GLOCKL:
-      if (issued == 0) {
+      if ((issued & ~CAP_FILE_RDCACHE) == 0) {
         in->filelock.set_state(LOCK_LOCK);
         
         // waiters

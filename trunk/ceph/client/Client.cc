@@ -856,14 +856,16 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " was " << cap_string(old_caps) << endl;
   
   // did file size decrease?
-  if ((old_caps & new_caps & CAP_FILE_RDCACHE) &&
+  if ((old_caps & (CAP_FILE_RD|CAP_FILE_WR)) == 0 &&
+      (new_caps & (CAP_FILE_RD|CAP_FILE_WR)) != 0 &&
       in->inode.size > m->get_inode().size) {
-    dout(10) << "**** file size decreased from " << in->inode.size << " to " << m->get_inode().size << " FIXME" << endl;
-    // must have been a truncate() by someone.
-    // trim the buffer cache
-    // ***** fixme write me ****
+    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << endl;
+    
+    // trim filecache?
+    if (g_conf.client_oc)
+      in->fc.truncate(in->inode.size, m->get_inode().size);
 
-    in->file_wr_size = m->get_inode().size; //??
+    in->inode.size = in->file_wr_size = m->get_inode().size; 
   }
 
   // update inode

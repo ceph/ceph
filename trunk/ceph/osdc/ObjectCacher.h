@@ -187,6 +187,7 @@ class ObjectCacher {
                  map<off_t, BufferHead*>& rx);
     BufferHead *map_write(Objecter::OSDWrite *wr);
     
+	void truncate(off_t s);
   };
   
   // ******* ObjectCacher *********
@@ -466,6 +467,8 @@ class ObjectCacher {
   void purge_set(inodeno_t ino);
 
   off_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
+
+  void truncate_set(inodeno_t ino, list<ObjectExtent>& ex);
 
   void kick_sync_writers(inodeno_t ino);
   void kick_sync_readers(inodeno_t ino);

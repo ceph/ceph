@@ -324,6 +324,28 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 }
 
 
+void ObjectCacher::Object::truncate(off_t s)
+{
+  dout(10) << "truncate to " << s << endl;
+  
+  while (!data.empty()) {
+	BufferHead *bh = data.rbegin()->second;
+	if (bh->end() <= s) 
+	  break;
+	
+	// split bh at truncation point?
+	if (bh->start() < s) {
+	  split(bh, s);
+	  continue;
+	}
+
+	// remove bh entirely
+	assert(bh->start() >= s);
+	oc->bh_remove(this, bh);
+	delete bh;
+  }
+}
+
 
 /*** ObjectCacher ***/
 
@@ -1244,7 +1266,8 @@ void ObjectCacher::purge(Object *ob)
        p != ob->data.end();
        p++) {
     BufferHead *bh = p->second;
-	dout(0) << "purge forcibly removing " << *bh << endl;
+	if (!bh->is_clean())
+	  dout(0) << "purge forcibly removing " << *ob << " " << *bh << endl;
 	bh_remove(ob, bh);
 	delete bh;
   }
@@ -1446,6 +1469,39 @@ off_t ObjectCacher::release_set(inodeno_t ino)
   }
 
   return unclean;
+}
+
+void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
+{
+  if (objects_by_ino.count(ino) == 0) {
+    dout(10) << "truncate_set on " << ino << " dne" << endl;
+    return;
+  }
+  
+  dout(10) << "truncate_set " << ino << endl;
+
+  for (list<ObjectExtent>::iterator p = exls.begin();
+	   p != exls.end();
+	   ++p) {
+	ObjectExtent &ex = *p;
+	if (objects.count(ex.oid) == 0) continue;
+	Object *ob = objects[ex.oid];
+
+	// purge or truncate?
+	if (ex.start == 0) {
+	  dout(10) << "truncate_set purging " << *ob << endl;
+	  purge(ob);
+	} else {
+	  // hrm, truncate object
+	  dout(10) << "truncate_set truncating " << *ob << " at " << ex.start << endl;
+	  ob->truncate(ex.start);
+
+	  if (ob->can_close()) {
+		dout(10) << "truncate_set trimming " << *ob << endl;
+		close_object(ob);
+	  }
+	}
+  }
 }
 
 
