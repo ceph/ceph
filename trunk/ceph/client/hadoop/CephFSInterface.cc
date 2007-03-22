@@ -132,8 +132,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1copyToLocalFile
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_ceph_path, jstring j_local_path) 
 {
-  cout << "In copyToLocalFile" << endl;
-  cout.flush();
 
 
   Client* client;
@@ -141,19 +139,29 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   const char* c_ceph_path = env->GetStringUTFChars(j_ceph_path, 0);
   const char* c_local_path = env->GetStringUTFChars(j_local_path, 0);
 
+  cout << "In copyToLocalFile, copying from Ceph file " << c_ceph_path << 
+    " to local file " << c_local_path << endl;
+  cout.flush();
+
+
   // get source file size
   struct stat st;
+  cout << "Attempting lstat with file " << c_ceph_path << ":" << endl;
   int r = client->lstat(c_ceph_path, &st);
   assert (r == 0);
 
-  int fh_ceph = client->open(c_ceph_path, O_WRONLY|O_CREAT|O_TRUNC);  
-  int fh_local = ::open(c_local_path, O_RDONLY);
+  cout << "Opening Ceph source file for read: " << endl;
+  cout.flush();
+  int fh_ceph = client->open(c_ceph_path, O_RDONLY);  
   assert (fh_ceph > -1);
+
+  cout << " Opened Ceph file! Opening local destination file: " << endl;
+  cout.flush();
+  int fh_local = ::open(c_local_path, O_WRONLY|O_CREAT|O_TRUNC);
   assert (fh_local > -1);
 
   // copy the file a chunk at a time
   const int chunk = 1048576;
-
   bufferptr bp(chunk);
 
   off_t remaining = st.st_size;
@@ -182,8 +190,8 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
 JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getcwd
   (JNIEnv *env, jobject obj, jlong clientp)
 {
-  cout << "In getcwd" << endl;
-  cout.flush();
+  //cout << "In getcwd" << endl;
+  //cout.flush();
 
   Client* client;
   client = *(Client**)&clientp;
@@ -201,8 +209,8 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setcwd
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  cout << "In setcwd" << endl;
-  cout.flush();
+  //cout << "In setcwd" << endl;
+  //cout.flush();
 
   Client* client;
   client = *(Client**)&clientp;
