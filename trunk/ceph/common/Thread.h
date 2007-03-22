@@ -45,7 +45,7 @@ class Thread {
   }
 
   int join(void **prval = 0) {
-    assert(thread_id);
+    //assert(thread_id);  // for now
     //if (thread_id == 0) return -1;   // never started.
 
     int status = pthread_join(thread_id, prval);
