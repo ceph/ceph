@@ -13,22 +13,15 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
 {
 
   cout << "Initializing Ceph client:" << endl;
-  //cout.flush();
+
   // parse args from CEPH_ARGS 
   vector<char*> args; 
   env_to_vec(args);
   parse_config_options(args);
-  g_clock.tare();
 
-  // crap for getting args from the command line
-  //vector<char*> args;
-  //argv_to_vec(argc, argv, args);
-  //parse_config_options(args);
+  if (g_conf.clock_tare) g_clock.tare();
 
-  // args for fuse
-  // vec_to_argv(args, argc, argv);
-
-  // FUSE will chdir("/"); be ready.
+  // be safe
   g_conf.use_abspaths = true;
 
   // load monmap
@@ -38,7 +31,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
     cout << "could not find .ceph_monmap" << endl; 
     return 0;
   }
-  //assert(r >= 0);
+  assert(r >= 0);
 
   // start up network
   rank.start_rank();
@@ -48,29 +41,23 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
   client->init();
     
-  // start up fuse
-  // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting client to filesystem..." << endl;
+  // mount
   client->mount();
-  
-  //cerr << "starting fuse on pid " << getpid() << endl;
-  //ceph_fuse_main(client, argc, argv);
-  //cerr << "fuse finished on pid " << getpid() << endl;
-  
-  //client->unmount();
-  //cout << "unmounted" << endl;
-  //client->shutdown();
-  
-  //delete client;
-  
-  // wait for messenger to finish
-  //rank.wait();
-  
+   
   jlong clientp = *(jlong*)&client;
   return clientp;
-  //return (jlong)client;
-
 }
+
+/* on shutdown,
+
+client->unmount();
+client->shutdown();
+delete client;
+  
+// wait for messenger to finish
+rank.wait();
+
+*/
 
 
 /*
