@@ -994,6 +994,7 @@ void Locker::inode_file_write_finish(CInode *in)
   // drop ref
   //assert(in->filelock.can_write(in->is_auth()));
   in->filelock.put_write();
+  in->auth_unpin();
   dout(7) << "inode_file_write_finish on " << *in << ", filelock=" << in->filelock << endl;
   
   // drop lock?
