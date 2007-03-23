@@ -1662,25 +1662,12 @@ void Server::handle_client_unlink(MClientRequest *req, CInode *diri)
 
   dout(7) << "handle_client_unlink/rmdir on " << *in << endl;
 
-  // treat this like a rename?
-  if (dn->is_primary() &&        // primary link, and
-      (in->inode.nlink > 1 ||    // there are other hard links, or
-       in->get_caps_wanted())) { // file is open (FIXME need better condition here)
-    // treat as a rename into the dangledir.
-
-    // IMPLEMENT ME **** FIXME ****
-    MClientReply *reply = new MClientReply(req, -EXDEV);
-    reply_request(req, reply, dn->get_dir()->get_inode());
-    return;
-  }
-  
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // ok!
   if (dn->is_remote() && !dn->inode->is_auth()) 
-    _unlink_remote(req, dn, in);
+    _unlink_remote(req, dn);
   else
-    _unlink_local(req, dn, in);
+    _unlink_local(req, dn);
 }
 
 
@@ -1689,150 +1676,152 @@ class C_MDS_unlink_local_finish : public Context {
   MDS *mds;
   MClientRequest *req;
   CDentry *dn;
-  CInode *in;
-  version_t ipv;
+  CDentry *straydn;
+  version_t ipv;  // referred inode
   time_t ictime;
-  version_t dpv;
+  version_t dpv;  // deleted dentry
 public:
-  C_MDS_unlink_local_finish(MDS *m, MClientRequest *r, CDentry *d, CInode *i,
+  C_MDS_unlink_local_finish(MDS *m, MClientRequest *r, CDentry *d, CDentry *sd,
 			    version_t v, time_t ct) :
-    mds(m), req(r), dn(d), in(i),
+    mds(m), req(r), dn(d), straydn(sd),
     ipv(v), ictime(ct),
     dpv(d->get_projected_version()) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_local_finish(req, dn, in, ipv, ictime, dpv);
+    mds->server->_unlink_local_finish(req, dn, straydn, ipv, ictime, dpv);
   }
 };
 
 
-void Server::_unlink_local(MClientRequest *req, CDentry *dn, CInode *in)
+void Server::_unlink_local(MClientRequest *req, CDentry *dn)
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
-  // if we're not the only link, wrlock the target (we need to nlink--)
-  if (in->inode.nlink > 1) {
-    assert(dn->is_remote());  // unlinking primary is handled like a rename.. not here
-    dout(10) << "_unlink_local nlink>1, will wrlock " << *in << endl;
-
-    // auth pin
-    if (!dn->get_dir()->can_auth_pin()) {
-      dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
-				new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
-      mdcache->request_drop_auth_pins(req);
-      return;
-    }
-    if (!in->can_auth_pin()) {
-      in->add_waiter(CInode::WAIT_AUTHPINNABLE,
-		     new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
-      mdcache->request_drop_auth_pins(req);
-      return;
-    }
-    mdcache->request_auth_pin(req, dn->get_dir());
-    mdcache->request_auth_pin(req, in);
-
-    // lock
-    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
-      return;
-    if (!mds->locker->inode_hard_write_start(in, req, dn->get_dir()->get_inode()))
-      return;
-  } else {
-    // the inode will go away.
-    dout(10) << "_unlink_local nlink==1, will destroy " << *in << endl;
-
-    // just xlock dentry.
-    if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
-      return;
+  // auth pin
+  if (!dn->get_dir()->can_auth_pin()) {
+    dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
+			      new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
+    mdcache->request_drop_auth_pins(req);
+    return;
   }
+  if (!dn->inode->can_auth_pin()) {
+    dn->inode->add_waiter(CInode::WAIT_AUTHPINNABLE,
+			  new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
+    mdcache->request_drop_auth_pins(req);
+    return;
+  }
+  mdcache->request_auth_pin(req, dn->get_dir());
+  mdcache->request_auth_pin(req, dn->inode);
+
+  // lock
+  if (!mds->locker->dentry_xlock_start(dn, req, dn->get_dir()->get_inode()))
+    return;
+  if (!mds->locker->inode_hard_write_start(dn->inode, req, dn->get_dir()->get_inode()))
+    return;
+
+
+  // get stray dn ready?
+  CDentry *straydn = 0;
+  if (dn->is_primary()) {
+    string straydname;
+    dn->inode->name_stray_dentry(straydname);
+    frag_t fg = mdcache->get_stray()->pick_dirfrag(straydname);
+    CDir *straydir = mdcache->get_stray()->get_or_open_dirfrag(mdcache, fg);
+    straydn = straydir->add_dentry(straydname, 0);
+    dout(10) << "_unlink_local straydn is " << *straydn << endl;
+  }
+
   
   // ok, let's do it.
   // prepare log entry
   EUpdate *le = new EUpdate("unlink_local");
   le->metablob.add_client_req(req->get_reqid());
 
-  // predirty
-  version_t ipv = in->pre_dirty();
-  if (dn->is_remote()) 
-    dn->pre_dirty();  // predirty dentry too
+  version_t ipv = 0;  // dirty inode version
+  inode_t *pi = 0;    // the inode
+
+  if (dn->is_primary()) {
+    // primary link.  add stray dentry.
+    assert(straydn);
+    ipv = straydn->pre_dirty(dn->inode->inode.version);
+    le->metablob.add_dir_context(straydn->dir);
+    pi = le->metablob.add_primary_dentry(straydn, true, dn->inode);
+  } else {
+    // remote link.  update remote inode.
+    ipv = dn->inode->pre_dirty();
+    le->metablob.add_dir_context(dn->inode->get_parent_dir());
+    pi = le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);  // update primary
+  }
   
   // the unlinked dentry
+  dn->pre_dirty();
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
-  // remote inode nlink--?
-  inode_t *pi = 0;
-  if (dn->is_remote()) {
-    le->metablob.add_dir_context(in->get_parent_dir());
-    pi = le->metablob.add_primary_dentry(in->parent, true, in);  // update primary
-    
-    // update journaled target inode
-    pi->nlink--;
-    pi->ctime = g_clock.gettime();
-    pi->version = ipv;
-  } else {
-    le->metablob.add_destroyed_inode(in->inode);
-  }
-
+  // update journaled target inode
+  pi->nlink--;
+  pi->ctime = g_clock.gettime();
+  pi->version = ipv;
+  
   // finisher
-  C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, req, dn, in, 
-								 ipv, pi ? pi->ctime:0);
+  C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, req, dn, straydn, 
+								 ipv, pi->ctime);
   
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
+  
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 }
 
 void Server::_unlink_local_finish(MClientRequest *req, 
-				  CDentry *dn, CInode *in,
+				  CDentry *dn, CDentry *straydn,
 				  version_t ipv, time_t ictime, version_t dpv) 
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
-  // update remote inode?
-  if (dn->is_remote()) {
-    assert(ipv);
-    assert(ictime);
-    in->inode.ctime = ictime;
-    in->inode.nlink--;
-    in->mark_dirty(ipv);
+  // unlink main dentry
+  CInode *in = dn->inode;
+  dn->dir->unlink_inode(dn);
 
-    // unlock inode (and share nlink news w/ replicas)
-    mds->locker->inode_hard_write_finish(in);
-  }
+  // relink as stray?  (i.e. was primary link?)
+  if (straydn) straydn->dir->link_inode(straydn, in);  
 
-  // unlink inode (dn now null)
-  CDir *dir = dn->dir;
-  dn->mark_dirty(dpv);
-  dir->unlink_inode(dn);
-  
+  // nlink--
+  in->inode.ctime = ictime;
+  in->inode.nlink--;
+  in->mark_dirty(ipv);  // dirty inode
+  dn->mark_dirty(dpv);  // dirty old dentry
+
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
        it++) {
     dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << endl;
-    mds->send_message_mds(new MDentryUnlink(dir->dirfrag(), dn->name), it->first, MDS_PORT_CACHE);
+    mds->send_message_mds(new MDentryUnlink(dn->dir->dirfrag(), dn->name), it->first, MDS_PORT_CACHE);
   }
 
-  // unlock (now null) dn
+  // unlock
   mds->locker->dentry_xlock_finish(dn);
-  
-  // purge+remove inode?
-  if (in->inode.nlink == 0) {
-    mdcache->purge_inode(&in->inode);
-    mdcache->remove_inode(in);
-  }
+  mds->locker->inode_hard_write_finish(in);
   
   // bump target popularity
-  mds->balancer->hit_dir(dir, META_POP_DWR);
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);
-  reply_request(req, reply, dir->get_inode());  // FIXME: imprecise ref
+  reply_request(req, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+
+  // purge+remove inode?
+  if (in->inode.nlink == 0) {   // FIXME what other conditions?
+    mdcache->purge_inode(&in->inode);
+    mdcache->remove_inode(in);
+  }
 }
 
 
 
-void Server::_unlink_remote(MClientRequest *req, CDentry *dn, CInode *in) 
+void Server::_unlink_remote(MClientRequest *req, CDentry *dn) 
 {
 
 
@@ -2282,6 +2271,7 @@ void Server::_rename_local(MClientRequest *req,
 {
   dout(10) << "_rename_local " << *srcdn << " to " << destname << " in " << *destdir << endl;
 
+  // make sure target (possibly null) dentry exists
   int r = prepare_null_dentry(req, ref, 
 			      destdir->inode, destname, 
 			      &destdir, &destdn, true);
@@ -2368,10 +2358,10 @@ void Server::_rename_local(MClientRequest *req,
     }
 
   } else {
-    // make sure stray dir is open
-    if (destdn->is_primary() && 
-	destdn->inode->inode.nlink > 1) { // FIXME: .. or open file
-      // make it stray
+    // move to stray?
+    if (destdn->is_primary()) {
+      // primary.
+      // move inode to stray dir.
       string straydname;
       destdn->inode->name_stray_dentry(straydname);
       frag_t fg = mdcache->get_stray()->pick_dirfrag(straydname);
@@ -2389,34 +2379,31 @@ void Server::_rename_local(MClientRequest *req,
 	mds->anchorclient->prepare_update(destdn->inode->ino(), trace, &anchorfin->atid1, 
 					  anchorgather->new_sub());
       }
-    }
-    
-    // first, let's deal with the dest inode (if any).
-    if (destdn->is_remote()) {
+
+      // link-- inode, move to stray dir.
+      le->metablob.add_dir_context(straydn->dir);
+      ipv = straydn->pre_dirty(destdn->inode->inode.version);
+      pi = le->metablob.add_primary_dentry(straydn, true, destdn->inode);
+    } 
+    else if (destdn->is_remote()) {
+      // remote.
       // nlink-- targeti
       le->metablob.add_dir_context(destdn->inode->get_parent_dir());
       ipv = destdn->inode->pre_dirty();
       pi = le->metablob.add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
       dout(10) << "remote targeti (nlink--) is " << *destdn->inode << endl;
     }
-    else if (destdn->is_primary()) {
-      if (straydn) {
-	// move to stray dir
-	le->metablob.add_dir_context(straydn->dir);
-	ipv = straydn->pre_dirty(destdn->inode->inode.version);
-	pi = le->metablob.add_primary_dentry(straydn, true, destdn->inode);
-      } else {
-	le->metablob.add_destroyed_inode(destdn->inode->inode);
-	dout(10) << "will destroy inode " << *destdn->inode << endl;
-      }
+    else {
+      assert(destdn->is_null());
     }
 
-    // do dest dentry
+    // add dest dentry
     le->metablob.add_dir_context(destdn->dir);
-    destdn->pre_dirty(srcdn->inode->inode.version);
     if (srcdn->is_primary()) {
-      le->metablob.add_primary_dentry(destdn, true, srcdn->inode); 
       dout(10) << "src is a primary dentry" << endl;
+      destdn->pre_dirty(srcdn->inode->inode.version);
+      le->metablob.add_primary_dentry(destdn, true, srcdn->inode); 
+
       if (srcdn->inode->is_anchored()) {
 	dout(10) << "reanchoring src->dst " << *srcdn->inode << endl;
 	vector<Anchor> trace;
@@ -2425,15 +2412,16 @@ void Server::_rename_local(MClientRequest *req,
 	if (!anchorgather) anchorgather = new C_Gather(anchorfin);
 	mds->anchorclient->prepare_update(srcdn->inode->ino(), trace, &anchorfin->atid2, 
 					  anchorgather->new_sub());
-
+	
       }
     } else {
       assert(srcdn->is_remote());
-      le->metablob.add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
       dout(10) << "src is a remote dentry" << endl;
+      destdn->pre_dirty();
+      le->metablob.add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
     }
     
-    // do src dentry
+    // remote src dentry
     le->metablob.add_dir_context(srcdn->dir);
     srcdn->pre_dirty();
     le->metablob.add_null_dentry(srcdn, true);
@@ -2445,7 +2433,7 @@ void Server::_rename_local(MClientRequest *req,
     pi->ctime = g_clock.gettime();
     pi->version = ipv;
   }
-  
+
   C_MDS_rename_local_finish *fin = new C_MDS_rename_local_finish(mds, req, 
 								 srcdn, destdn, straydn,
 								 ipv, pi ? pi->ctime:0);
@@ -2534,7 +2522,7 @@ void Server::_rename_local_finish(MClientRequest *req,
       assert(straypv == ipv);
     }
     
-    if (ipv) {
+    if (oldin) {
       // nlink--
       oldin->inode.nlink--;
       oldin->inode.ctime = ictime;
@@ -2562,16 +2550,10 @@ void Server::_rename_local_finish(MClientRequest *req,
   // ***
 
   // unlock
-  if (oldin)
-    mds->locker->inode_hard_write_finish(oldin);
   mds->locker->dentry_xlock_finish(srcdn);
   mds->locker->dentry_xlock_finish(destdn);
-
-  // purge overwritten inode?
-  if (oldin && oldin->inode.nlink == 0 && !straydn) {
-    mdcache->purge_inode(&oldin->inode);
-    mdcache->remove_inode(oldin);
-  }
+  if (oldin)
+    mds->locker->inode_hard_write_finish(oldin);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -2579,7 +2561,11 @@ void Server::_rename_local_finish(MClientRequest *req,
 
   // clean up?
   if (straydn) {
-    // FIXME async remerge stray inode back into main hierarchy
+    if (straydn->inode->inode.nlink == 0) {  // FIXME and whatever else
+      // FIXME purge?
+    } else {
+      // FIXME async remerge stray inode back into main hierarchy
+    }
   }
   
 }
