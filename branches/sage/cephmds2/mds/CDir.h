@@ -366,7 +366,7 @@ class CDir : public MDSCacheObject {
   //void set_committing_version() { committing_version = version; }
   void set_committed_version(version_t v) { committed_version = v; }
 
-  version_t pre_dirty();
+  version_t pre_dirty(version_t min=0);
   void _mark_dirty();
   void mark_dirty(version_t pv);
   void mark_clean();

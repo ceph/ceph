@@ -46,7 +46,7 @@ void AnchorTable::dump()
 
 bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag) 
 {
-  dout(17) << "add " << ino << " dirfrag " << dirfrag << endl;
+  //dout(17) << "add " << ino << " dirfrag " << dirfrag << endl;
   
   // parent should be there
   assert(dirfrag.ino < MDS_INO_BASE ||     // system dirino
@@ -55,10 +55,10 @@ bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag)
   if (anchor_map.count(ino) == 0) {
     // new item
     anchor_map[ino] = Anchor(ino, dirfrag);
-    dout(10) << "add added " << anchor_map[ino] << endl;
+    dout(7) << "add added " << anchor_map[ino] << endl;
     return true;
   } else {
-    dout(10) << "add had " << anchor_map[ino] << endl;
+    dout(7) << "add had " << anchor_map[ino] << endl;
     return false;
   }
 }
@@ -73,7 +73,7 @@ void AnchorTable::inc(inodeno_t ino)
     Anchor &anchor = anchor_map[ino];
     anchor.nref++;
       
-    dout(10) << "  inc: record now " << anchor << endl;
+    dout(10) << "inc now " << anchor << endl;
     ino = anchor.dirfrag.ino;
     
     if (ino == 0) break;
@@ -92,12 +92,12 @@ void AnchorTable::dec(inodeno_t ino)
     anchor.nref--;
       
     if (anchor.nref == 0) {
-      dout(10) << "  dec: record " << anchor << " now 0, removing" << endl;
+      dout(10) << "dec removing " << anchor << endl;
       dirfrag_t dirfrag = anchor.dirfrag;
       anchor_map.erase(ino);
       ino = dirfrag.ino;
     } else {
-      dout(10) << "  dec: record now " << anchor << endl;
+      dout(10) << "dec now " << anchor << endl;
       ino = anchor.dirfrag.ino;
     }
     

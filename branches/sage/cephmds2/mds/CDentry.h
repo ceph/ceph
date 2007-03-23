@@ -38,6 +38,7 @@ class CDir;
 
 class Message;
 class CDentryDiscover;
+class Anchor;
 
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject {
@@ -171,6 +172,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
   // misc
   void make_path(string& p);
+  void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
 
   // -- state
   version_t get_version() { return version; }
@@ -184,7 +186,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   bool is_dirty() { return state & STATE_DIRTY; }
   bool is_clean() { return !is_dirty(); }
 
-  version_t pre_dirty();
+  version_t pre_dirty(version_t min=0);
   void _mark_dirty();
   void mark_dirty(version_t projected_dirv);
   void mark_clean();
@@ -291,6 +293,9 @@ class CDentry : public MDSCacheObject, public LRUObject {
 };
 
 ostream& operator<<(ostream& out, CDentry& dn);
+
+// define an ordering
+bool operator<(CDentry& l, CDentry& r);
 
 
 class CDentryDiscover {

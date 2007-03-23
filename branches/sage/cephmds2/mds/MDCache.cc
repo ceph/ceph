@@ -3404,6 +3404,8 @@ void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
 
 
 
+
+
 // -------------------------------------------------------------------------------
 // HARD LINKS
 

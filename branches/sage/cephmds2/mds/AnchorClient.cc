@@ -31,8 +31,8 @@ using std::endl;
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchorclient "
-#define derr(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchorclient "
+#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myname() << ".anchorclient "
+#define derr(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myname() << ".anchorclient "
 
 
 void AnchorClient::dispatch(Message *m)
@@ -240,6 +240,8 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinis
 void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace, 
 				  version_t *patid, Context *onfinish)
 {
+  dout(10) << "prepare_create " << ino << " " << trace << endl;
+
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_CREATE_PREPARE, ino);
   req->set_trace(trace);
@@ -256,6 +258,8 @@ void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace,
 void AnchorClient::prepare_destroy(inodeno_t ino, 
 				  version_t *patid, Context *onfinish)
 {
+  dout(10) << "prepare_destroy " << ino << endl;
+
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_DESTROY_PREPARE, ino);
   pending_destroy_prepare[ino].onfinish = onfinish;
@@ -269,6 +273,8 @@ void AnchorClient::prepare_destroy(inodeno_t ino,
 void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace, 
 				  version_t *patid, Context *onfinish)
 {
+  dout(10) << "prepare_update " << ino << " " << trace << endl;
+
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_UPDATE_PREPARE, ino);
   req->set_trace(trace);

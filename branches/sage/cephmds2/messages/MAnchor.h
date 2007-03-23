@@ -35,11 +35,10 @@ class MAnchor : public Message {
   
   virtual char *get_type_name() { return "anchor"; }
   void print(ostream& o) {
-    o << "anchor(" << get_anchor_opname(op) << " " << ino;
+    o << "anchor(" << get_anchor_opname(op);
+    if (ino) o << " " << ino;
     if (atid) o << " atid " << atid;
-    for (unsigned i=0; i<trace.size(); i++) {
-      o << ' ' << trace[i];
-    }
+    if (!trace.empty()) o << ' ' << trace;
     o << ")";
   }
 

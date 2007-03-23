@@ -515,8 +515,10 @@ void CDir::finish_waiting(int mask, const string& dn, int result)
 
 // dirty/clean
 
-version_t CDir::pre_dirty()
+version_t CDir::pre_dirty(version_t min)
 {
+  if (min > projected_version) 
+    projected_version = min;
   ++projected_version;
   dout(10) << "pre_dirty " << projected_version << endl;
   return projected_version;
@@ -535,8 +537,8 @@ void CDir::_mark_dirty()
 
 void CDir::mark_dirty(version_t pv)
 {
-  ++version;
-  assert(pv == version);
+  assert(version < pv);
+  version = pv;
   _mark_dirty();
 }
 

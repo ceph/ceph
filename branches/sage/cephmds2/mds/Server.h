@@ -17,6 +17,7 @@
 #include "MDS.h"
 
 class LogEvent;
+class C_MDS_rename_local_finish;
 
 class Server {
   MDS *mds;
@@ -115,21 +116,24 @@ public:
   void _unlink_remote(MClientRequest *req, CDentry *dn, CInode *in);
 
   // rename
+  bool _rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MClientRequest *req, CInode *ref);
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,
                               CInode *ref,
-                              CInode *srcdiri,
-                              CDir *srcdir,
                               CDentry *srcdn,
                               filepath& destpath,
                               vector<CDentry*>& trace,
                               int r);
   void _rename_local(MClientRequest *req, CInode *ref,
-		     const string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-		     const string& destpath, CDir *destdir, CDentry *destdn, const string& name);
+		     CDentry *srcdn, 
+		     CDir *destdir, CDentry *destdn, const string& destname);
+  void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
+				version_t atid1, version_t atid2);
   void _rename_local_finish(MClientRequest *req, 
-			    CDentry *dn, CInode *in,
-			    version_t, time_t, version_t);    
+			    CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
+			    time_t ictime,
+			    version_t atid1, version_t atid2);
 
   // file
   void handle_client_open(MClientRequest *req, CInode *in);
@@ -140,11 +144,16 @@ public:
 
 
   // some helpers
-  CDir *validate_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
-  int prepare_null_dentry(MClientRequest *req, CInode *diri, 
+  CDir *validate_dentry_dir(MClientRequest *req, CInode *ref,
+			    CInode *diri, const string& dname);
+  int prepare_null_dentry(MClientRequest *req,
+			  CInode *diri, CDir **pdir, CDentry **pdn, 
+			  bool okexist=false);
+  int prepare_null_dentry(MClientRequest *req, CInode *ref, 
+			  CInode *diri, const string& name, 
 			  CDir **pdir, CDentry **pdn, 
 			  bool okexist=false);
-  CInode *prepare_new_inode(MClientRequest *req, CDir *dir);
+ CInode *prepare_new_inode(MClientRequest *req, CDir *dir);
 
 
 };

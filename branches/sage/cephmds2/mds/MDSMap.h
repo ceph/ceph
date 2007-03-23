@@ -80,7 +80,7 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), same_inst_since(0), anchortable(1), root(0) {}
+  MDSMap() : epoch(0), same_inst_since(0), anchortable(0), root(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }

@@ -34,6 +34,8 @@ mds
 
 - fix rmdir empty exported dirfrag race
 
+- fix auth_pin/export vs mds recovery deadlock: unfrozen exports should abort.  maybe delay discover until after frozen?
+
 - discover
 /  - hard link dentries
 
@@ -55,9 +57,10 @@ mds
 /  - test anchortable, anchorclient
 /  - local link
 /  - local unlink
+    - moves to stray.
   - local rename
-    - will need dangle dir discover, etc.
-    - hook unlink cases into rename
+    - fix dir renames vs subtrees
+    - notify replicas
   - remote rename
   - remote link
   - remote unlink

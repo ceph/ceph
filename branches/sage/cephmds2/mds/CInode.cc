@@ -24,6 +24,7 @@
 #include "common/Clock.h"
 
 #include <string>
+#include <sstream>
 
 #include "config.h"
 #undef dout
@@ -270,10 +271,10 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
   if (parent) {
     parent->dir->inode->make_anchor_trace(trace);
     trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
-    dout(7) << "make_anchor_trace added " << trace.back() << endl;
+    dout(10) << "make_anchor_trace added " << trace.back() << endl;
   }
   else if (state_test(STATE_DANGLING)) {
-    dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
+    dout(10) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
     assert(0);
     //trace.push_back( Anchor(ino(),
     //MDS_INO_INODEFILE_OFFSET+dangling_auth.first) );
@@ -282,6 +283,12 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
     assert(is_root());
 }
 
+void CInode::name_stray_dentry(string& dname)
+{
+  stringstream ss;
+  ss << inode.ino;
+  ss >> dname;
+}
 
 
 

@@ -139,7 +139,6 @@ class CInode : public MDSCacheObject {
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
 
 
-
  public:
   MDCache *mdcache;
 
@@ -241,6 +240,7 @@ protected:
   // -- misc -- 
   void make_path(string& s);
   void make_anchor_trace(vector<class Anchor>& trace);
+  void name_stray_dentry(string& dname);
 
 
 

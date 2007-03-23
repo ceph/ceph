@@ -16,6 +16,7 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "Anchor.h"
 
 #include "MDS.h"
 #include "MDCache.h"
@@ -68,6 +69,17 @@ ostream& operator<<(ostream& out, CDentry& dn)
   return out;
 }
 
+
+bool operator<(CDentry& l, CDentry& r)
+{
+  if (l.get_dir()->ino() < r.get_dir()->ino()) return true;
+  if (l.get_dir()->ino() == r.get_dir()->ino() &&
+      l.get_name() < r.get_name()) return true;
+  return false;
+}
+
+
+
 CDentry::CDentry(const CDentry& m) {
   assert(0); //std::cerr << "copy cons called, implement me" << endl;
 }
@@ -87,10 +99,9 @@ pair<int,int> CDentry::authority()
 }
 
 
-version_t CDentry::pre_dirty()
+version_t CDentry::pre_dirty(version_t min)
 {
-  // NOTE: in the future, this will dirty a particular slice/subset of the dir.
-  projected_version = dir->pre_dirty();
+  projected_version = dir->pre_dirty(min);
   dout(10) << " pre_dirty " << *this << endl;
   return projected_version;
 }
@@ -135,14 +146,28 @@ void CDentry::mark_clean() {
 void CDentry::make_path(string& s)
 {
   if (dir) {
-    if (dir->inode->get_parent_dn()) 
-      dir->inode->get_parent_dn()->make_path(s);
+    dir->inode->make_path(s);
   } else {
     s = "???";
   }
   s += "/";
   s += name;
 }
+
+/** make_anchor_trace
+ * construct an anchor trace for this dentry, as if it were linked to *in.
+ */
+void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
+{
+  // start with parent dir inode
+  if (dir)
+    dir->inode->make_anchor_trace(trace);
+
+  // add this inode (in my dirfrag) to the end
+  trace.push_back(Anchor(in->ino(), dir->dirfrag()));
+  dout(10) << "make_anchor_trace added " << trace.back() << endl;
+}
+
 
 
 void CDentry::link_remote(CInode *in)
