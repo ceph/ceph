@@ -261,9 +261,16 @@ void EMetaBlob::replay(MDS *mds)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
-	assert((*lp).ino == 1);
-	diri = mds->mdcache->create_root_inode();
-	dout(10) << "EMetaBlob.replay created root " << *diri << endl;
+	if ((*lp).ino == MDS_INO_ROOT) {
+	  diri = mds->mdcache->create_root_inode();
+	  dout(10) << "EMetaBlob.replay created root " << *diri << endl;
+	} else if (MDS_INO_IS_STRAY((*lp).ino)) {
+	  int whose = (*lp).ino - MDS_INO_STRAY_OFFSET;
+	  diri = mds->mdcache->create_stray_inode(whose);
+	  dout(10) << "EMetaBlob.replay created stray " << *diri << endl;
+	} else {
+	  assert(0);
+	}
       }
       // create the dirfrag
       dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
@@ -284,27 +291,37 @@ void EMetaBlob::replay(MDS *mds)
     for (list<fullbit>::iterator p = lump.get_dfull().begin();
 	 p != lump.get_dfull().end();
 	 p++) {
+      CDentry *dn = dir->lookup(p->dn);
+      if (!dn) {
+	dn = dir->add_dentry( p->dn );
+	dn->set_version(p->dnv);
+	if (p->dirty) dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay added " << *dn << endl;
+      } else {
+	dn->set_version(p->dnv);
+	if (p->dirty) dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay had " << *dn << endl;
+      }
+
       CInode *in = mds->mdcache->get_inode(p->inode.ino);
       if (!in) {
-	// inode
 	in = new CInode(mds->mdcache);
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
-	// dentry
-	CDentry *dn = dir->add_dentry( p->dn, in );
-	dn->set_version(p->dnv);
-	dn->_mark_dirty();
-	dout(10) << "EMetaBlob.replay added " << *dn << " " << *in << endl;
+	dir->link_inode(dn, in);
+	if (p->dirty) in->_mark_dirty();
+	dout(10) << "EMetaBlob.replay added " << *in << endl;
       } else {
-	// inode
+	if (in->get_parent_dn()) {
+	  dout(10) << "EMetaBlob.replay unlinking " << *in << endl;
+	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
+	}
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
-	// dentry
-	CDentry *dn = in->get_parent_dn();
-	dn->set_version(p->dnv);
-	dn->_mark_dirty();
-	dout(10) << "EMetaBlob.replay had " << *in->get_parent_dn() << " " << *in << endl;
+	dir->link_inode(dn, in);
+	if (p->dirty) in->_mark_dirty();
+	dout(10) << "EMetaBlob.replay linked " << *in << endl;
       }
     }
 
@@ -317,12 +334,16 @@ void EMetaBlob::replay(MDS *mds)
 	dn = dir->add_dentry(p->dn, p->ino);
 	dn->set_remote_ino(p->ino);
 	dn->set_version(p->dnv);
-	dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
       } else {
+	if (!dn->is_null()) {
+	  dout(10) << "EMetaBlob.replay unlinking " << *dn << endl;
+	  dir->unlink_inode(dn);
+	}
 	dn->set_remote_ino(p->ino);
 	dn->set_version(p->dnv);
-	dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
       }
     }
@@ -335,11 +356,15 @@ void EMetaBlob::replay(MDS *mds)
       if (!dn) {
 	dn = dir->add_dentry(p->dn);
 	dn->set_version(p->dnv);
-	dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
       } else {
+	if (!dn->is_null()) {
+	  dout(10) << "EMetaBlob.replay unlinking " << *dn << endl;
+	  dir->unlink_inode(dn);
+	}
 	dn->set_version(p->dnv);
-	dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
       }
     }

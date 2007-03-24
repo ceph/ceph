@@ -139,6 +139,8 @@ public:
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir);
+
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);
 
@@ -320,7 +322,7 @@ public:
  public:
   CInode *create_root_inode();
   void open_root(Context *c);
-  CInode *create_stray_inode();
+  CInode *create_stray_inode(int whose=-1);
   void open_local_stray();
   void open_foreign_stray(int who, Context *c);
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
@@ -369,6 +371,15 @@ protected:
   friend class C_MDC_AnchorDestroyPrepared;
   friend class C_MDC_AnchorDestroyLogged;
 
+  // -- stray --
+public:
+  void eval_stray(CDentry *dn);
+protected:
+  void _purge_stray(CDentry *dn);
+  void _purge_stray_logged(CDentry *dn, version_t pdv);
+  friend class C_MDC_PurgeStray;
+  void reintegrate_stray(CDentry *dn, CDentry *rlink);
+  void migrate_stray(CDentry *dn, int dest);
 
   // -- hard links --
   void handle_inode_link(class MInodeLink *m);

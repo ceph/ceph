@@ -254,11 +254,12 @@ void MDCache::open_root(Context *c)
   }
 }
 
-CInode *MDCache::create_stray_inode()
+CInode *MDCache::create_stray_inode(int whose)
 {
-  stray = new CInode(this);
+  if (whose < 0) whose = mds->get_nodeid();
+  stray = new CInode(this, whose == mds->get_nodeid());
   memset(&stray->inode, 0, sizeof(inode_t));
-  stray->inode.ino = MDS_INO_STRAY(mds->get_nodeid());
+  stray->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
   stray->inode.mode = 0755 | INODE_MODE_DIR;
@@ -685,6 +686,55 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
     }
   }
   assert(failed == 0);
+}
+
+void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
+{
+  dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << endl;
+
+  list<CDir*> dfls;
+  diri->get_dirfrags(dfls);
+  for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
+    CDir *dir = *p;
+    
+    CDir *oldparent = get_subtree_root(olddir);
+    CDir *newparent = get_subtree_root(diri->get_parent_dir());
+
+    if (oldparent == newparent) {
+      dout(10) << "parent unchanged for " << *dir << " at " << *oldparent << endl;
+      continue;
+    }
+
+    if (dir->is_subtree_root()) {
+      // children are fine.  change parent.
+      dout(10) << "moving " << *dir << " from " << *oldparent << " to " << *newparent << endl;
+      assert(subtrees[oldparent].count(dir));
+      subtrees[oldparent].erase(dir);
+      assert(subtrees.count(newparent));
+      subtrees[newparent].insert(dir);
+    } else {
+      // mid-subtree.
+
+      // see if any old bounds move to the new parent.
+      for (set<CDir*>::iterator p = subtrees[oldparent].begin();
+	   p != subtrees[oldparent].end();
+	   ++p) {
+	CDir *bound = *p;
+	CDir *broot = get_subtree_root(bound->get_parent_dir());
+	if (broot != oldparent) {
+	  assert(broot == newparent);
+	  dout(10) << "moving bound " << *bound << " from " << *oldparent << " to " << *newparent << endl;
+	  subtrees[oldparent].erase(broot);
+	  subtrees[newparent].insert(broot);
+	}
+      }	   
+
+      // did auth change?
+      if (oldparent->authority() != newparent->authority()) 
+	adjust_subtree_auth(dir, oldparent->authority());  // caller is responsible for *diri.
+    }
+  }
+
 }
 
 
@@ -1578,9 +1628,14 @@ void MDCache::purge_inode(inode_t *inode)
   assert(purging.count(inode->ino) == 0);
   purging[inode->ino] = *inode;
 
-  // remove
-  mds->filer->remove(*inode, 0, inode->size,
-		     0, new C_MDC_PurgeFinish(this, inode->ino));
+  if (inode->size > 0) {
+    // remove
+    mds->filer->remove(*inode, 0, inode->size,
+		       0, new C_MDC_PurgeFinish(this, inode->ino));
+  } else {
+    // no need, empty file, just log it
+    purge_inode_finish(inode->ino);
+  }
 }
 
 void MDCache::purge_inode_finish(inodeno_t ino)
@@ -1606,7 +1661,7 @@ void MDCache::purge_inode_finish_2(inodeno_t ino)
   finish_contexts(ls, 0);
 
   // reclaim ino?
-  // hrm.
+  // eh, let's not, until we consider race conditions with log trimming.
 }
 
 void MDCache::add_recovered_purge(const inode_t& inode)
@@ -3402,8 +3457,95 @@ void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
 }
 
 
+// -------------------------------------------------------------------------------
+// STRAYS
+
+void MDCache::eval_stray(CDentry *dn)
+{
+  dout(10) << "eval_stray " << *dn << endl;
+  assert(dn->is_primary());
+  CInode *in = dn->inode;
+  assert(in);
+
+  // purge?
+  if (in->inode.nlink == 0) {
+    if (!dn->is_replicated() && !in->is_any_caps()) 
+      _purge_stray(dn);
+    return;
+  }
+  else if (in->inode.nlink == 1) {
+    // trivial reintegrate?
+    if (!in->remote_parents.empty()) {
+      CDentry *rlink = *in->remote_parents.begin();
+      if (rlink->is_auth() &&
+	  rlink->dir->can_auth_pin())
+	reintegrate_stray(dn, rlink);
+      
+      if (!rlink->is_auth() &&
+	  !in->auth_is_ambiguous()) 
+	migrate_stray(dn, rlink->authority().first);
+    }
+  } else {
+    // wait for next use.
+  }
+}
 
 
+class C_MDC_PurgeStray : public Context {
+  MDCache *cache;
+  CDentry *dn;
+  version_t pdv;
+public:
+  C_MDC_PurgeStray(MDCache *c, CDentry *d, version_t v) : cache(c), dn(d), pdv(v) { }
+  void finish(int r) {
+    cache->_purge_stray_logged(dn, pdv);
+  }
+};
+
+void MDCache::_purge_stray(CDentry *dn)
+{
+  dout(10) << "_purge_stray " << *dn << " " << *dn->inode << endl;
+  assert(!dn->is_replicated());
+
+  // log removal
+  version_t pdv = dn->pre_dirty();
+
+  EUpdate *le = new EUpdate;
+  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_null_dentry(dn, true);
+  le->metablob.add_destroyed_inode(dn->inode->inode);
+  mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv));
+}
+
+void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv)
+{
+  dout(10) << "_purge_stray_logged " << *dn << " " << *dn->inode << endl;
+  CInode *in = dn->inode;
+  
+  // dirty+unlink dentry
+  dn->dir->mark_dirty(pdv);
+  dn->dir->unlink_inode(dn);
+  dn->dir->remove_dentry(dn);
+
+  // purge+remove inode
+  purge_inode(&in->inode);
+  remove_inode(in);
+}
+
+
+
+void MDCache::reintegrate_stray(CDentry *dn, CDentry *rlink)
+{
+  dout(10) << "reintegrate_stray " << *dn << " into " << *rlink << endl;
+  
+}
+ 
+
+void MDCache::migrate_stray(CDentry *dn, int dest)
+{
+  dout(10) << "migrate_stray to mds" << dest << " " << *dn << endl;
+
+}
 
 
 // -------------------------------------------------------------------------------
@@ -3575,8 +3717,7 @@ void MDCache::handle_discover(MDiscover *dis)
       dout(7) << "not adding unwanted base dir " << *curdir << endl;
     } else {
       assert(!curdir->auth_is_ambiguous()); // would be frozen.
-      reply->add_dir( new CDirDiscover( curdir, 
-                                        curdir->add_replica( dis->get_asker() ) ) );
+      reply->add_dir( curdir->replicate_to(dis->get_asker()) );
       dout(7) << "added dir " << *curdir << endl;
     }
     if (dis->get_want().depth() == 0) break;
@@ -4029,25 +4170,44 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << endl;
       
-      // open inode?
-      if (dn->is_primary() && dn->inode) {
-	CInode *in = dn->inode;
+      // move to stray?
+      CDentry *straydn = 0;
+      if (m->strayin) {
+	// inode
+	CInode *in = get_inode(MDS_INO_STRAY(m->get_source().num()));
+	if (!in) {
+	  in = new CInode(this, false);
+	  m->strayin->update_inode(in);
+	  add_inode(in);
+	} else {
+	  m->strayin->update_inode(in);
+	}
 	
-	// unlink
+	// dirfrag
+	list<Context*> finished;
+	CDir *dir = add_replica_dir(in, m->straydir->get_dirfrag().frag, *m->straydir,
+				    m->get_source().num(), finished);
+	if (!finished.empty()) mds->queue_finished(finished);
+	
+	// dentry
+	straydn = dir->add_dentry( m->straydn->get_dname(), 0, false );
+	m->straydn->update_new_dentry(straydn);
+      }
+
+      // open inode?
+      if (dn->is_primary()) {
+	CInode *in = dn->inode;
 	dn->dir->unlink_inode(dn);
-
-	// dir?
-	if (in->is_dir())
-	  in->close_dirfrags();
-
-	// remove inode from cache.
-	remove_inode(in);
+	assert(straydn);
+	straydn->dir->link_inode(straydn, in);
       } else {
-	// just unlink
+	assert(dn->is_remote());
 	dn->dir->unlink_inode(dn);
       }
-      
       assert(dn->is_null());
+      
+      // move to bottom of lru
+      lru.lru_bottouch(dn);
     }
   }
 

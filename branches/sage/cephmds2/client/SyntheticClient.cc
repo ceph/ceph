@@ -1316,7 +1316,6 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
-  /*
   // link fun
   client->mknod("one", 0755);
   client->mknod("two", 0755);
@@ -1334,7 +1333,7 @@ void SyntheticClient::foo()
   client->mkdir("d", 0755);
   client->unlink("d");
   client->rmdir("d");
-*/
+
   // rename fun
   client->mkdir("dir1", 0755);
   client->mkdir("dir2", 0755);
@@ -1365,6 +1364,15 @@ void SyntheticClient::foo()
   client->rename("dir2/a","da2");
   client->rename("da1","da2");
   client->rename("da2","da3");
+
+  // check directory renames
+  client->mkdir("dir3", 0755);
+  client->mknod("dir3/asdf", 0644);
+  client->mkdir("dir4", 0755);
+  client->mkdir("dir5", 0755);
+  client->mknod("dir5/asdf", 0644);
+  client->rename("dir3","dir4"); // ok
+  client->rename("dir4","dir5"); // fail
 }
 
 int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)

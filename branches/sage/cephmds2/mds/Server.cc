@@ -1406,14 +1406,12 @@ void Server::_link_local(MClientRequest *req, CInode *diri,
       !dn->get_dir()->can_auth_pin()) {
     dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
 			      new C_MDS_RetryRequest(mds, req, diri));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
   if (!mdcache->request_auth_pinned(req, targeti) &&
       !targeti->can_auth_pin()) {
     targeti->add_waiter(CDir::WAIT_AUTHPINNABLE,
 			new C_MDS_RetryRequest(mds, req, diri));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
   mdcache->request_auth_pin(req, dn->get_dir());
@@ -1698,16 +1696,16 @@ void Server::_unlink_local(MClientRequest *req, CDentry *dn)
   dout(10) << "_unlink_local " << *dn << endl;
 
   // auth pin
-  if (!dn->get_dir()->can_auth_pin()) {
+  if (!mdcache->request_auth_pinned(req, dn->get_dir()) &&
+      !dn->get_dir()->can_auth_pin()) {
     dn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
 			      new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
-  if (!dn->inode->can_auth_pin()) {
+  if (!mdcache->request_auth_pinned(req, dn->inode) &&
+      !dn->inode->can_auth_pin()) {
     dn->inode->add_waiter(CInode::WAIT_AUTHPINNABLE,
 			  new C_MDS_RetryRequest(mds, req, dn->get_dir()->get_inode()));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
   mdcache->request_auth_pin(req, dn->get_dir());
@@ -1798,7 +1796,13 @@ void Server::_unlink_local_finish(MClientRequest *req,
        it != dn->replicas_end();
        it++) {
     dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << endl;
-    mds->send_message_mds(new MDentryUnlink(dn->dir->dirfrag(), dn->name), it->first, MDS_PORT_CACHE);
+    MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
+    if (straydn) {
+      unlink->strayin = straydn->dir->inode->replicate_to(it->first);
+      unlink->straydir = straydn->dir->replicate_to(it->first);
+      unlink->straydn = straydn->replicate_to(it->first);
+    }
+    mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
 
   // unlock
@@ -1812,11 +1816,8 @@ void Server::_unlink_local_finish(MClientRequest *req,
   MClientReply *reply = new MClientReply(req, 0);
   reply_request(req, reply, dn->dir->get_inode());  // FIXME: imprecise ref
 
-  // purge+remove inode?
-  if (in->inode.nlink == 0) {   // FIXME what other conditions?
-    mdcache->purge_inode(&in->inode);
-    mdcache->remove_inode(in);
-  }
+  if (straydn)
+    mdcache->eval_stray(straydn);
 }
 
 
@@ -1868,7 +1869,7 @@ bool Server::_verify_rmdir(MClientRequest *req, CInode *ref, CInode *in)
     
     // does the frag _look_ empty?
     if (dir->get_size()) {
-      dout(10) << "_verify_rmdir nonauth bit has " << dir->get_size() << " items, not empty " << *dir << endl;
+      dout(10) << "_verify_rmdir still " << dir->get_size() << " items in frag " << *dir << endl;
       reply_request(req, -ENOTEMPTY);
       return false;
     }
@@ -2109,6 +2110,12 @@ void Server::handle_client_rename_2(MClientRequest *req,
     destdn = lastdn;
     destname = destdn->name;
     destdir = destdn->dir;
+
+    if (lastin->is_dir()) {
+      // is it empty?
+      if (!_verify_rmdir(req, ref, lastin))
+	return;
+    }
   }
   else if (trace.size() == destpath.depth()-1) {
     if (!lastin->is_dir()) {
@@ -2165,23 +2172,6 @@ void Server::handle_client_rename_2(MClientRequest *req,
     if (!destdn->is_null()) {
       oldin = mdcache->get_dentry_inode(destdn, req, ref);
       if (!oldin) return;
-      
-      // make sure it's also a file!
-      // this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
-      if (oldin->is_dir()) {
-        // fail!
-        dout(7) << "dest exists and is dir" << endl;
-        reply_request(req, -EISDIR);
-        return;
-      }
-      
-      if (srcdn->inode->is_dir() &&
-          !oldin->is_dir()) {
-        dout(7) << "cannot overwrite non-directory with directory" << endl;
-        reply_request(req, -EISDIR);
-        return;
-      }
-
       dout(7) << "dest dn exists " << *destdn << " " << *oldin << endl;
     } else {
       dout(7) << "dest dn exists " << *destdn << endl;
@@ -2279,23 +2269,23 @@ void Server::_rename_local(MClientRequest *req,
   dout(10) << "destdn " << *destdn << endl;
 
   // auth pins
-  if (!srcdn->get_dir()->can_auth_pin()) {
+  if (!mdcache->request_auth_pinned(req, srcdn->get_dir()) &&
+      !srcdn->get_dir()->can_auth_pin()) {
     srcdn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
 				 new C_MDS_RetryRequest(mds, req, ref));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
-  if (!destdn->get_dir()->can_auth_pin()) {
+  if (!mdcache->request_auth_pinned(req, destdn->get_dir()) &&
+      !destdn->get_dir()->can_auth_pin()) {
     destdn->get_dir()->add_waiter(CDir::WAIT_AUTHPINNABLE,
 				  new C_MDS_RetryRequest(mds, req, ref));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
   if (destdn->inode &&
+      !mdcache->request_auth_pinned(req, destdn->inode) &&
       !destdn->inode->can_auth_pin()) {
     destdn->inode->add_waiter(CInode::WAIT_AUTHPINNABLE,
 			      new C_MDS_RetryRequest(mds, req, ref));
-    mdcache->request_drop_auth_pins(req);
     return;
   }
   mdcache->request_auth_pin(req, srcdn->dir);
@@ -2319,6 +2309,11 @@ void Server::_rename_local(MClientRequest *req,
       !mds->locker->inode_hard_write_start(destdn->inode, req, ref))
     return;
   
+
+  // verify rmdir?
+  if (destdn->inode && destdn->inode->is_dir() &&
+      !_verify_rmdir(req, ref, destdn->inode))
+    return;
 
   // let's go.
   EUpdate *le = new EUpdate("rename_local");
@@ -2421,7 +2416,7 @@ void Server::_rename_local(MClientRequest *req,
       le->metablob.add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
     }
     
-    // remote src dentry
+    // remove src dentry
     le->metablob.add_dir_context(srcdn->dir);
     srcdn->pre_dirty();
     le->metablob.add_null_dentry(srcdn, true);
@@ -2546,6 +2541,10 @@ void Server::_rename_local_finish(MClientRequest *req,
   if (atid1) mds->anchorclient->commit(atid1);
   if (atid2) mds->anchorclient->commit(atid2);
 
+  // update subtree map?
+  if (destdn->inode->is_dir()) 
+    mdcache->adjust_subtree_after_rename(destdn->inode, srcdn->dir);
+
   // share news with replicas
   // ***
 
@@ -2560,14 +2559,8 @@ void Server::_rename_local_finish(MClientRequest *req,
   reply_request(req, reply, destdn->dir->get_inode());  // FIXME: imprecise ref
 
   // clean up?
-  if (straydn) {
-    if (straydn->inode->inode.nlink == 0) {  // FIXME and whatever else
-      // FIXME purge?
-    } else {
-      // FIXME async remerge stray inode back into main hierarchy
-    }
-  }
-  
+  if (straydn) 
+    mdcache->eval_stray(straydn);
 }
 
 

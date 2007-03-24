@@ -33,8 +33,14 @@ mds
   - DOCUMENT.
 
 - fix rmdir empty exported dirfrag race
+  - export all frags <= 1 item?  then we ensure freezing before empty, avoiding any last unlink + export vs rmdir race.
+  - how to know full dir size (when trimming)?
+    - put frag size/mtime in fragmap in inode?  we will need that anyway for stat on dirs
+      - will need to make inode discover/import_decode smart about dirfrag auth
+    - or, only put frag size/mtime in inode when frag is closed.  otherwise, soft (journaled) state, possibly on another mds.
+  - 
 
-- fix auth_pin/export vs mds recovery deadlock: unfrozen exports should abort.  maybe delay discover until after frozen?
+- fix auth_pin/export vs mds recovery deadlock: unfrozen exports should abort.  maybe delay exportdiscover until after frozen?
 
 - discover
 /  - hard link dentries
@@ -46,6 +52,9 @@ mds
 /  - move auth_pinning _out_ of locking _start and _finish methods
 /  - clean up multi-auth_pin code paths (e.g. link_local)
 
+- FIXME how to journal root and stray inode content? 
+  - in particular, i care about dirfragtree!
+  - and dir sizes, if i add that...
 
 - mds failure vs clients
 /  - clean up client op redirection
@@ -57,23 +66,26 @@ mds
 /  - test anchortable, anchorclient
 /  - local link
 /  - local unlink
-    - moves to stray.
   - local rename
-    - fix dir renames vs subtrees
-    - notify replicas
-  - remote rename
+/    - fix dir renames vs subtrees
+    - how notify replicas...
+  - stray purge
+  - stray reintegration
   - remote link
   - remote unlink
+  - remote rename
   - open(wr cap), open+create
   - file capabilities i/o
-- client readdir for dirfrags
+- dirfrag split/merge
+  - client readdir for dirfrags
+- consistency points/snapshots
+  - dentry versions vs dirfrags...
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - implement truncate
 - real chdir (directory "open")
   - relative metadata ops
 - statfs?
-- consistency points/snapshots
 
 
 

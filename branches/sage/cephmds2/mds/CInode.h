@@ -297,6 +297,7 @@ protected:
 
   // -- caps -- (new)
   // client caps
+  bool is_any_caps() { return !client_caps.empty(); }
   map<int,Capability>& get_client_caps() { return client_caps; }
   void add_client_cap(int client, Capability& cap) {
     if (client_caps.empty())

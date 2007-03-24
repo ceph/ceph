@@ -41,6 +41,7 @@ class CDentry;
 class MDCache;
 class MDCluster;
 class Context;
+class CDirDiscover;
 
 
 // -- authority delegation --
@@ -316,6 +317,8 @@ class CDir : public MDSCacheObject {
 	ls.insert(auth);
     }
   }
+
+  CDirDiscover *replicate_to(int mds);
 
 
   // -- state --

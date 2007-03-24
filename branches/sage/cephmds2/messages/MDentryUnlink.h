@@ -23,11 +23,21 @@ class MDentryUnlink : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   string& get_dn() { return dn; }
 
+  CInodeDiscover *strayin;
+  CDirDiscover *straydir;
+  CDentryDiscover *straydn;
+
   MDentryUnlink() {}
   MDentryUnlink(dirfrag_t df, string& n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
-    dn(n) { }
+    dn(n),
+    strayin(0), straydir(0), straydn(0) { }
+  ~MDentryUnlink() {
+    delete strayin;
+    delete straydir;
+    delete straydn;
+  }
 
   char *get_type_name() { return "dentry_unlink";}
   void print(ostream& o) {
@@ -39,10 +49,30 @@ class MDentryUnlink : public Message {
     payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
     ::_decode(dn, payload, off);
+
+    bool isstray;
+    payload.copy(off, sizeof(isstray), (char*)&isstray);
+    off += sizeof(isstray);
+    if (isstray) {
+      strayin = new CInodeDiscover;
+      strayin->_decode(payload, off);
+      straydir = new CDirDiscover;
+      straydir->_decode(payload, off);
+      straydn = new CDentryDiscover;
+      straydn->_decode(payload, off);
+    }
   }
   void encode_payload() {
     payload.append((char*)&dirfrag,sizeof(dirfrag));
     ::_encode(dn, payload);
+
+    bool isstray = strayin ? true:false;
+    payload.append((char*)&isstray, sizeof(isstray));
+    if (isstray) {
+      strayin->_encode(payload);
+      straydir->_encode(payload);
+      straydn->_encode(payload);
+    }
   }
 };
 

@@ -368,6 +368,17 @@ void CDir::remove_null_dentries() {
 
 
 
+
+CDirDiscover *CDir::replicate_to(int mds)
+{
+  assert(is_auth());
+  return new CDirDiscover( this, add_replica(mds) );
+}
+
+
+
+
+
 /****************************************
  * WAITING
  */
