@@ -22,8 +22,13 @@ class CapGroup {
  private:
   //gid_t group_id;
   hash_t root_hash;
+
   MerkleTree mtree;
   list<uid_t> users;
+
+  MerkleTree file_tree;
+  list<inodeno_t> inodes;
+
   byte signature[ESIGNSIGSIZE];
 
  public:
@@ -37,6 +42,13 @@ class CapGroup {
     users.push_back(user);
     mtree.add_user(user);
     root_hash = mtree.get_root_hash();
+  }
+  CapGroup (hash_t rhash, list<inodeno_t>& inodelist) :
+    root_hash(rhash), inodes(inodelist) { }
+  CapGroup (inodeno_t ino) {
+    inodes.push_back(ino);
+    file_tree.add_inode(ino);
+    root_hash = file_tree.get_root_hash();
   }
   //CapGroup (gid_t id, list<uid_t>& ulist) : group_id(id), users(ulist) {
     // add users to MerkleTree
@@ -75,6 +87,17 @@ class CapGroup {
     //FIXME need to re-compute hash
   }
 
+  void add_inode(inodeno_t ino) {
+    inodes.push_back(ino);
+    // re-compute root-hash
+    file_tree.add_inode(ino);
+    root_hash = file_tree.get_root_hash();
+  }
+  void remove_user(inodeno_t ino) {
+    inodes.remove(ino);
+    //FIXME need to re-compute hash
+  }
+
   bool contains(uid_t user) {
     for (list<uid_t>::iterator ui = users.begin();
 	 ui != users.end();
@@ -85,8 +108,21 @@ class CapGroup {
     return false;
   }
 
+  bool contains_inode(inodeno_t ino) {
+    for (list<inodeno_t>::iterator ii = inodes.begin();
+	 ii != inodes.end();
+	 ii++) {
+      if (*ii == ino)
+	return true;
+    }
+    return false;
+  }
+
   void set_list(list<uid_t>& nlist) { users = nlist; }
   list<uid_t>& get_list() { return users; }
+
+  void set_inode_list(list<inodeno_t>& ilist) { inodes = ilist; }
+  list<inodeno_t>& get_inode_list() { return inodes; }
 };
 
 #endif

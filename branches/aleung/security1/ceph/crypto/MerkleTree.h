@@ -74,6 +74,24 @@ class MerkleTree {
     // zero the array
     sha1((byte*)uidArray, (byte*)&root_hash, sizeof(uidArray));
   }
+  
+  // constructor from an initial list of files
+  MerkleTree (list< inodeno_t >& input) {
+    memset(&root_hash, 0x00, sizeof(root_hash));
+    inodeno_t inoArray[input.size()];
+    int counter = 0;
+    
+    // FIXME just do a linear hash first for root hash
+    // copy list into buffer
+    for (list<inodeno_t>::iterator li = input.begin();
+	 li != input.end();
+	 li++) {
+      inoArray[counter] = *li;
+      counter++;
+    }
+    // zero the array
+    sha1((byte*)inoArray, (byte*)&root_hash, sizeof(inoArray));
+  }
 
   // constructor from an initial set of users
   MerkleTree (set< uid_t >& input) {
@@ -101,6 +119,18 @@ class MerkleTree {
     hash_t conjunction[2];
     conjunction[0] = root_hash;
     conjunction[1] = user_hash;
+    // hash em both
+    sha1((byte*)&conjunction, (byte*)&root_hash, sizeof(conjunction));
+  }
+
+  void add_inode(inodeno_t ino) {
+    // hash the user
+    hash_t ino_hash;
+    sha1((byte*)&ino, (byte*)&ino_hash, sizeof(ino));
+    // join the user and root_hash
+    hash_t conjunction[2];
+    conjunction[0] = root_hash;
+    conjunction[1] = ino_hash;
     // hash em both
     sha1((byte*)&conjunction, (byte*)&root_hash, sizeof(conjunction));
   }

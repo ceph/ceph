@@ -748,15 +748,21 @@ void Client::handle_osd_update(MOSDUpdate *m) {
   }
   // we have the group, hand it back
   else {
-    MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash,
-						 groups[my_hash].get_list(),
-						 groups[my_hash].get_sig());
+    MOSDUpdateReply *reply;
+    // its a file group
+    if (g_conf.mds_group == 3)
+      reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_inode_list(),
+				  groups[my_hash].get_sig());
+    // its a user group
+    else
+      reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list(),
+				  groups[my_hash].get_sig());
     
     messenger->send_message(reply, m->get_source_inst());
   }
 
   // default test option (only for debug)
-  //reply = new MOSDUpdateReply(my_hash);
+  //MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash);
   //messenger->send_message(reply, m->get_source_inst());
 
 }
@@ -766,7 +772,11 @@ void Client::handle_client_update_reply(MClientUpdateReply *m) {
   hash_t my_hash = m->get_user_hash();
 
   // cache the list
-  groups[my_hash].set_list(m->get_user_list());
+  if (g_conf.mds_group == 3)
+    groups[my_hash].set_inode_list(m->get_file_list());
+  else
+    groups[my_hash].set_list(m->get_user_list());
+
   groups[my_hash].set_root_hash(my_hash);
   groups[my_hash].set_sig(m->get_sig());
 
@@ -774,7 +784,13 @@ void Client::handle_client_update_reply(MClientUpdateReply *m) {
   for (set<int>::iterator oi = update_waiter_osd[my_hash].begin();
        oi != update_waiter_osd[my_hash].end();
        ++oi) {
-    MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list(), m->get_sig());
+    MOSDUpdateReply *reply;
+    if (g_conf.mds_group == 3)
+      reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_inode_list(),
+				  m->get_sig()); 
+    else
+      reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list(),
+				  m->get_sig());
     messenger->send_message(reply, osdmap->get_inst(*oi));
   }
   

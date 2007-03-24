@@ -19,29 +19,29 @@
 
 class MOSDUpdateReply : public Message {
 private:
-  //gid_t group;
   hash_t user_hash;
   byte signature[ESIGNSIGSIZE];
   list<uid_t> updated_users;
+  list<inodeno_t> updated_files;
 
 public:
   MOSDUpdateReply () : Message(MSG_OSD_UPDATE_REPLY) { }
-  //MOSDUpdateReply(gid_t gid) : Message(MSG_OSD_UPDATE_REPLY),
-  //			       group(gid) { }
   MOSDUpdateReply(hash_t uhash) : Message(MSG_OSD_UPDATE_REPLY),
 				  user_hash(uhash) { }
-  //MOSDUpdateReply (gid_t gid, list<uid_t> users) :
-  //  Message(MSG_OSD_UPDATE_REPLY), group(gid), updated_users(users) { }
   MOSDUpdateReply(hash_t uhash, list<uid_t>& users) :
     Message(MSG_OSD_UPDATE_REPLY), user_hash(uhash), updated_users(users) { }
   MOSDUpdateReply(hash_t uhash, list<uid_t>& users, byte *sig) :
     Message(MSG_OSD_UPDATE_REPLY), user_hash(uhash), updated_users(users) {
     memcpy(signature, sig, ESIGNSIGSIZE);
   }
+  MOSDUpdateReply(hash_t fhash, list<inodeno_t>& files, byte *sig) :
+    Message(MSG_OSD_UPDATE_REPLY), user_hash(fhash), updated_files(files) {
+    memcpy(signature, sig, ESIGNSIGSIZE);
+  }
 
-  //gid_t get_group() { return group; }
   hash_t get_user_hash() { return user_hash; }
   list<uid_t>& get_list() { return updated_users; }
+  list<inodeno_t>& get_file_list() { return updated_files; }
 
   void set_sig(byte *sig) { memcpy(signature, sig, ESIGNSIGSIZE); }
   byte *get_sig() { return signature; }
@@ -59,20 +59,20 @@ public:
   }
 
   virtual void encode_payload() {
-    //payload.append((char*)&group, sizeof(group));
+
     payload.append((char*)signature, sizeof(signature));
     payload.append((char*)&user_hash, sizeof(user_hash));
     _encode(updated_users, payload);
+    _encode(updated_files, payload);
   }
   virtual void decode_payload() {
     int off = 0;
-    //payload.copy(off, sizeof(group), (char*)&group);
-    //off += sizeof(group);
     payload.copy(off, sizeof(signature), (char*)signature);
     off += sizeof(signature);
     payload.copy(off, sizeof(user_hash), (char*)&user_hash);
     off += sizeof(user_hash);
     _decode(updated_users, payload, off);
+    _decode(updated_files, payload, off);
   }
   virtual char *get_type_name() { return "oop_update_reply"; }
   void print(ostream& out) {

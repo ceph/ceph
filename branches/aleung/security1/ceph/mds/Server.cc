@@ -21,6 +21,8 @@
 #include "Renamer.h"
 #include "MDStore.h"
 
+#include "UserBatch.h"
+
 #include "msg/Messenger.h"
 
 #include "messages/MClientMount.h"
@@ -263,8 +265,18 @@ void Server::handle_client_update(MClientUpdate *m)
   hash_t my_hash = m->get_user_hash();
   dout(3) << "handle_client_update for " << my_hash << endl;
 
-  MClientUpdateReply *reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_list());
-  reply->set_sig(mds->unix_groups_byhash[my_hash].get_sig());
+  MClientUpdateReply *reply;
+  // its a file group
+  if (g_conf.mds_group == 3) {
+    reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_inode_list());
+    reply->set_sig(mds->unix_groups_byhash[my_hash].get_sig());
+  }
+  // its a user group
+  else {
+    reply = new MClientUpdateReply(my_hash,
+				   mds->unix_groups_byhash[my_hash].get_list(),
+				   mds->unix_groups_byhash[my_hash].get_sig());
+  }
 
   messenger->send_message(reply, m->get_source_inst());
 }
@@ -1268,13 +1280,11 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   // make sure dir is pinnable
   
 
-  // create inode
-  cout << "creating inode....should i maybe be creating the thread here?" << endl;
   *pin = mdcache->create_inode();
   (*pin)->inode.uid = req->get_caller_uid();
   (*pin)->inode.gid = req->get_caller_gid();
   (*pin)->inode.ctime = (*pin)->inode.mtime = (*pin)->inode.atime = g_clock.gettime();   // now
-  cout << "Done setting up inode" << endl;
+
   // note: inode.version will get set by finisher's mark_dirty.
 
   // create dentry
@@ -2392,7 +2402,26 @@ public:
     mds->balancer->hit_inode(newi, META_POP_IWR);
 
     // ok, do the open.
-    mds->server->handle_client_open(req, newi);
+    if (g_conf.mds_group == 3) {
+      uid_t user_id = req->get_caller_uid();
+      utime_t open_req_time = g_clock.now();
+      
+      if (mds->user_batch[user_id]->should_batch(open_req_time)) {
+	
+	mds->user_batch[user_id]->update_batch_time(open_req_time);
+	
+	cout << "Passing inode " << newi->ino() << " to add_to_batch" << endl;
+	mds->user_batch[user_id]->add_to_batch(req, newi);
+	
+	return;
+      }
+      else {
+	mds->user_batch[user_id]->update_batch_time(open_req_time);
+	mds->server->handle_client_open(req, newi);
+      }
+    }
+    else
+      mds->server->handle_client_open(req, newi);
   }
 };
 
@@ -2418,6 +2447,15 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
     // it's a file.
     in->inode.mode = 0644;              // FIXME req should have a umask
     in->inode.mode |= INODE_MODE_FILE;
+
+    if (g_conf.mds_group == 3) {
+      uid_t my_user = req->get_caller_uid();
+      // create and start user batching thread
+      if (! mds->user_batch[my_user]) {
+	mds->user_batch[my_user] = new UserBatch(this, mds, my_user);
+	mds->user_batch[my_user]->update_batch_time(g_clock.now());
+      }
+    }
 
     // prepare finisher
     C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, req, dn, in);
@@ -2453,6 +2491,24 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 	in->update_buffer_time(open_req_time);
 	handle_client_open(req, in);
       }
+    }
+    else if (g_conf.mds_group == 3) {
+      uid_t user_id = req->get_caller_uid();
+      utime_t open_req_time = g_clock.now();
+      
+      if (mds->user_batch[user_id]->should_batch(open_req_time)) {
+
+	mds->user_batch[user_id]->update_batch_time(open_req_time);
+	
+	mds->user_batch[user_id]->add_to_batch(req, in);
+
+	return;
+      }
+      else {
+	mds->user_batch[user_id]->update_batch_time(open_req_time);
+	handle_client_open(req, in);
+      }
+
     }
     else
       handle_client_open(req, in);

@@ -29,6 +29,7 @@ using namespace CryptoLib;
 #define NO_GROUP 0
 #define UNIX_GROUP 1
 #define BATCH 2
+#define USER_BATCH 3
 
 struct cap_id_t {
   int cid;
@@ -149,6 +150,7 @@ public:
     data.ino = n;
   }
 
+  // for single file, many users
   ExtCap(int m, uid_t u, gid_t g, hash_t h, inodeno_t n)
   {
     data.id.cid = 0;
@@ -161,6 +163,20 @@ public:
     data.gid = g;
     data.user_group = h;
     data.ino = n;
+  }
+
+  // for file group, single user
+  ExtCap(int m, uid_t u, gid_t g, hash_t h)
+  {
+    data.id.cid = 0;
+    data.id.mds_id = 0;
+    data.t_s = g_clock.now();
+    data.t_e = data.t_s;
+    data.t_e += 3600;
+    data.mode = m;
+    data.uid = u;
+    data.gid = g;
+    data.file_group = h;
   }
 
   // capability for too many user, many named files

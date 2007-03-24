@@ -386,7 +386,7 @@ inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
     if (!(user_groups[my_hash].contains(op->get_user()))) {
       // do update to get new unix groups
       dout(1) << "User " << op->get_user() << " not in group "
-	   << my_hash << endl;
+	      << my_hash << endl;
       return false;
     }
 
@@ -408,7 +408,16 @@ inline bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
     return false;
   }
   // check object matches
-  if (op->get_oid().ino != op_capability->get_ino()) {
+  if (op_capability->get_type() == USER_BATCH) {
+    hash_t my_hash = op_capability->get_file_hash();
+    if (! user_groups[my_hash].contains_inode(op->get_oid().ino)) {
+      dout(1) << "File in request " << op->get_oid().ino
+	      << " not in group " << my_hash << " file in cap is "
+	      << op_capability->get_ino() << endl;
+      return false;
+    }
+  }
+  else if (op->get_oid().ino != op_capability->get_ino()) {
     dout(1) << "File in cap did not match request" << endl;
     return false;
   }
@@ -423,12 +432,12 @@ void OSD::update_group(entity_inst_t client, hash_t my_hash, MOSDOp *op) {
   
   // if no one has already requested the ticket
   if (update_waiter_op.count(my_hash) == 0) {
-    dout(10) << "update_group requesting update for hash " << my_hash << endl;
+    dout(1) << "update_group requesting update for hash " << my_hash << endl;
       // send it
     messenger->send_message(update, client);
   } else {
     // don't request, someone else already did.  just wait!
-    dout(10) << "update_group waiting for update for hash " << my_hash << endl;
+    dout(1) << "update_group waiting for update for hash " << my_hash << endl;
   }
   
   // wait for reply
@@ -447,7 +456,7 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   // store the new list into group
   hash_t my_hash = m->get_user_hash();
 
-  dout(10) << "hande_osd_update_reply for " << my_hash << endl;
+  dout(10) << "handle_osd_update_reply for " << my_hash << endl;
   
   // verify
   if (m->verify_list(monmap->get_key()))
@@ -456,7 +465,18 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
     dout(1) << "List verification failed" << endl;
 
   // add the new list to our cache
-  user_groups[my_hash].set_list(m->get_list());
+  if (g_conf.mds_group == 3) {
+    user_groups[my_hash].set_inode_list(m->get_file_list());
+
+    cout << "Received a group update for " << my_hash << endl;
+    for (list<inodeno_t>::iterator ii = m->get_file_list().begin();
+	 ii != m->get_file_list().end();
+	 ii++) {
+      cout << my_hash << " contains " << (*ii) << endl;
+    }
+  }
+  else
+    user_groups[my_hash].set_list(m->get_list());
 
   // wait up the waiter(s)
   take_waiters(update_waiter_op[my_hash]);
@@ -3392,7 +3412,17 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	  update_group(op->get_client_inst(), my_hash, op);
 	  return;
 	}
+      }
+      else if (op_capability->get_type() == USER_BATCH) {
+	hash_t my_hash = op_capability->get_file_hash();
 	
+	// do we have group cached? if not, update group
+	// we will lose execution control here! re-gain on reply
+	if (user_groups.count(my_hash) == 0) {
+	  outstanding_updates[op->get_reqid()] = write_time_start;
+	  update_group(op->get_client_inst(), my_hash, op);
+	  return;
+	}
       }
 
       // check accesses are right

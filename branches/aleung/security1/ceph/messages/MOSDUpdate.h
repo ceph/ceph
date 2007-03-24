@@ -18,17 +18,23 @@
 #include "osd/osd_types.h"
 #include "crypto/MerkleTree.h"
 
+#define USER_HASH 0
+#define FILE_HASH 1
+
 class MOSDUpdate : public Message {
 private:
   struct {
     gid_t group;
     hash_t uhash;
+
     entity_inst_t client;
     entity_inst_t asker;
   } update_st;
 public:
+
   gid_t get_group() { return update_st.group; }
   hash_t get_hash() { return update_st.uhash; }
+
   entity_inst_t get_client_inst() { return update_st.client; }
   entity_inst_t get_asker() { return update_st.asker; }
 

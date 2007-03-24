@@ -123,6 +123,7 @@ class MDCache {
   bool did_shutdown_exports;
   bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
+  friend class UserBatch;
 
   // recovery
 protected:

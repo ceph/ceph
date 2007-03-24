@@ -53,6 +53,8 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
+#include "UserBatch.h"
+
 
 LogType mds_logtype, mds_cache_logtype;
 

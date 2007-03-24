@@ -108,6 +108,8 @@ class MHashReaddirReply;
 
 class MMDSBeacon;
 
+class UserBatch;
+
 
 class MDS : public Dispatcher {
  public:
@@ -162,11 +164,16 @@ public:
   map<gid_t, hash_t> unix_groups_map;
   // hash to group map
   map<hash_t, CapGroup> unix_groups_byhash;
+
   // recent capabilities to renew
   set<cap_id_t> recent_caps;
   Renewal token;
+
   // count of capability ids used
   int cap_id_count;
+
+  // batched file groups by user
+  map<uid_t, UserBatch*> user_batch;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
