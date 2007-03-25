@@ -51,6 +51,7 @@ using namespace CryptoLib;
 #include "crypto/Ticket.h"
 #include "crypto/CapGroup.h"
 #include "crypto/MerkleTree.h"
+#include "crypto/RecentPopularity.h"
 //#include "ClientCapCache.h"
 
 // stl
@@ -528,6 +529,10 @@ protected:
   map<uid_t, set<cap_id_t> > caps_in_use;
   // renew caps that are in use (leaves a re-use grace period)
   // expunge caps that are not open, are expired and have no extension
+
+  // prediction
+  map<uid_t, string > successor;
+  map<uid_t, RecentPopularity> predicter;
 
   Ticket *get_user_ticket(uid_t uid, gid_t gid);
   void put_user_ticket(Ticket *tk);

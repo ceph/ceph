@@ -2533,9 +2533,19 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     return -EPERM;
   }
 
+
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
+  
+  // note the successor relationship
+  predicter[uid].add_observation(abspath, successor[uid]);
+  string prediction = predicter[uid].predict_successor(abspath);
+  successor[uid] = abspath;
+  if (prediction.size() == 0)
+    cout << "Could not make confident prediction" << endl;
+  else
+    cout << "Predicted access of " << prediction << endl;
 
   dout(3) << "op: fh = client->open(\"" << path << "\", " << flags << ");" << endl;
   tout << "open" << endl;
