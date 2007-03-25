@@ -1362,8 +1362,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
   
   // make dentry and inode, xlock dentry.
   r = prepare_null_dentry(req, diri, &dir, &dn);
-  if (!r) 
-    return; // wait on something
+  if (!r) return; // wait or forward or something
   assert(dir);
   assert(dn);
 
@@ -1397,7 +1396,7 @@ public:
 
 
 void Server::_link_local(MClientRequest *req, CInode *diri,
-			CDentry *dn, CInode *targeti)
+			 CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_local " << *dn << " to " << *targeti << endl;
 

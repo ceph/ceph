@@ -3007,9 +3007,8 @@ bool MDCache::request_start(Message *req,
   assert(active_requests.count(req) == 0);
 
   // pin path
-  if (trace.size()) {
+  if (!trace.empty()) 
     if (!path_pin(trace, req, new C_MDS_RetryMessage(mds,req))) return false;
-  }
 
   dout(7) << "request_start " << *req << endl;
 

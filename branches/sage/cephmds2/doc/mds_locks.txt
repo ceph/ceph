@@ -2,21 +2,35 @@
 
 
 path_pin = read lock on /some/random/path
-  - prevents a dnxlock
+  - blocks a dentry xlock
 
 dnxlock = exclusive lock on /some/random/path
-  - prevents dn read
+  - locking: prevents subsequent path pins.
+  - locked: prevents dn read
   - on auth
-  - does auth_pin
+  - requires auth_pin
+
+-> grab _all_ path pins at onces; hold none while waiting.
+-> grab xlocks in order.
 
 auth_pin = pin to authority, on *dir, *in
-  - prevents freeze
-    - can hang up export
-      - thus blocking other auth_pins
+  - prevents freezing -> frozen.
+    - freezing blocks new auth pins, thus blocking other local auth_pins.  (hangs up local export.)
+    - does not block remote auth_pins, because remote side is not auth (or frozen!) until after local subtree is frozen.
+
+-> grab _all_ auth pins at once; hold none while waiting.
 
 hard/file_wrlock = exlusive lock on inode content
   - prevents inode read
   - on auth
-  - does auth_pin
+  - requires auth_pin
+
+-> grab locks in order.
+
+ORDERING
+- path pins < dn xlocks < inode read locks < inode write locks.
+- order dentries on (dirino, dname)
+- order inodes on (ino);
+
 
 

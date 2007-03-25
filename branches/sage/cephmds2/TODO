@@ -53,8 +53,8 @@ mds
 /  - clean up multi-auth_pin code paths (e.g. link_local)
 
 - FIXME how to journal root and stray inode content? 
-  - in particular, i care about dirfragtree!
-  - and dir sizes, if i add that...
+  - in particular, i care about dirfragtree.. get it on rejoin?
+  - and dir sizes, if i add that... also on rejoin?
 
 - mds failure vs clients
 /  - clean up client op redirection
@@ -68,8 +68,8 @@ mds
 /  - local unlink
   - local rename
 /    - fix dir renames vs subtrees
-    - how notify replicas...
-  - stray purge
+    - how to notify replicas...
+/  - stray purge
   - stray reintegration
   - remote link
   - remote unlink
@@ -88,6 +88,41 @@ mds
 - statfs?
 
 
+foreign link
+- 
+
+foreign rename
+- question: can we generalize foreign and local rename?
+- initiated by dest.
+  - if we get into race with lock acquisition, drop locks and forward to new dest.
+- how to do pre-auth pinning?
+  - is it sufficient to wait on, then grab, all local auth pins, _then_ do foreign locks?
+    - local auth pins can hold subtrees in freezing state, preventing exports, and additional auth_pins.
+    - so, wait, then grab all local auth_pins,
+    - then work on locks in proper order (*),
+      - if we detect we are missing a local auth_pin (i.e. migration race), drop all auth_pins and wait/restart
+  - need to more carefully look at lock dependencies to avoid deadlock...
+    - establish a complete full ordering on locks, based on any lock dependencies?
+  - is it possible to "leak" locks, e.g. get inode_hard lock, work on something else, but inode moves and we dont notice?
+    - pin paths for those locks?
+    - can we pin when we choose order, so that locks are sure to proceed?
+- we can change active_requests to key of reqid (also unique), and use the same key for foreign locks
+  - clean up dentry_xlock_request.. just merge it into destroy_xlock_start, if !is_auth().  
+- renamer will
+  - check preconditions (i.e. i am dest)
+  - grab all locks (avoiding deadlock)
+  - verify preconditions are still true, else forward/retry (actually, this already happens w/ the way we structure the lock acquisition code...)
+  - prepare foreign bits (using foreign request_auth_pins, locks, etc.)
+    - source unlink,
+    - anchortable update (if source is anchored),
+    - dest nlink-- (if dest is remote link on foreign host)
+  - make sure replicas have either both source+dest pinned in cache (or neither...)
+    - use foreign request_pins?
+  - log update
+  - do update locally
+  - async commit + unlock
+- rejoin will need to explicitly resolve uncommitted items.
+  - fully implement link/unlink first, and use that as a model?
 
 monitor
 - finish generic paxos
