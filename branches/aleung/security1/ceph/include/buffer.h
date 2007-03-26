@@ -799,6 +799,7 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 
 
 #include <set>
+#include <deque>
 #include <map>
 #include <vector>
 #include <string>
@@ -885,6 +886,37 @@ inline void _decode(std::set<T>& s, bufferlist& bl, int& off)
     bl.copy(off, sizeof(v), (char*)&v);
     off += sizeof(v);
     s.insert(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// deque<T>
+template<class T>
+inline void _encode(const std::deque<T>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::deque<T>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T v = *it;
+    bl.append((char*)&v, sizeof(v));
+    n--;
+  }
+  assert(n==0);
+}
+template<class T>
+inline void _decode(std::deque<T>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T v;
+    bl.copy(off, sizeof(v), (char*)&v);
+    off += sizeof(v);
+    s.push_back(v);
   }
   assert(s.size() == (unsigned)n);
 }
@@ -1127,6 +1159,38 @@ inline void _encode(const std::map<T, std::set<U> >& s, bufferlist& bl)
 }
 template<class T, class U>
 inline void _decode(std::map<T, std::set<U> >& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T k;
+    bl.copy(off, sizeof(k), (char*)&k);
+    off += sizeof(k);
+    ::_decode(s[k], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// map<T,deque<U>>
+template<class T, class U>
+inline void _encode(const std::map<T, std::deque<U> >& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::map<T, std::deque<U> >::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T k = it->first;
+    bl.append((char*)&k, sizeof(k));
+    ::_encode(it->second, bl);
+    n--;
+  }
+  assert(n==0);
+}
+template<class T, class U>
+inline void _decode(std::map<T, std::deque<U> >& s, bufferlist& bl, int& off) 
 {
   s.clear();
   int n;
