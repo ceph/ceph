@@ -315,6 +315,7 @@ md_config_t g_conf = {
   renewal_period:         240, /* renew every 4 minutes */
   config_predict:         0, /* 0=off, non-zero = filename ptr */
   collect_predictions:    0, /* 0=off, 1=on */
+  preload_unix_groups:    0, /* 0=off, 1=on */
   client_aux:             0, /* 0=off, 1=on */
   sign_scheme:            0, /* 0=esign, 1=RSA */
   hash_scheme:            0, /* 0=sha-1, 1=sha-256,
@@ -809,6 +810,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.config_predict = args[++i];
     else if (strcmp(args[i], "--collect_predictions") == 0)
       g_conf.collect_predictions = atoi(args[++i]);
+    else if (strcmp(args[i], "--preload_unix_groups") == 0)
+      g_conf.preload_unix_groups = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_ssize") == 0) 
       g_OSD_FileLayout.stripe_size = atoi(args[++i]);

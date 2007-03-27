@@ -305,6 +305,7 @@ struct md_config_t {
   int renewal_period;
   char* config_predict;
   int collect_predictions;
+  int preload_unix_groups;
   int client_aux;
   int sign_scheme;
   int hash_scheme;

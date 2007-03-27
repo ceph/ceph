@@ -98,6 +98,22 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   myPrivKey = esignPrivKey("crypto/esig1023.dat");
   myPubKey = esignPubKey(myPrivKey);
 
+  // hard code the unix groups?
+  if (g_conf.preload_unix_groups) {
+    gid_t group_gid = 1020;
+    list<uid_t> uid_list;
+    for (int start_uid = 340; start_uid <= 520; start_uid++) {
+      uid_list.push_back(start_uid);
+      cout << start_uid << ", ";
+    }
+    CapGroup cgroup;
+    cgroup.set_list(uid_list);
+    cgroup.sign_list(myPrivKey);
+    unix_groups_byhash[cgroup.get_root_hash()] = cgroup;
+    unix_groups_map[group_gid] = cgroup.get_root_hash();
+    cout << endl << "hash " << cgroup.get_root_hash() << endl;
+  }
+
 
   // create unix_groups from file?
   if (g_conf.unix_group_file) {

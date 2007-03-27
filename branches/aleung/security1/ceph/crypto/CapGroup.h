@@ -120,10 +120,16 @@ class CapGroup {
     return false;
   }
 
-  void set_list(list<uid_t>& nlist) { users = nlist; }
+  void set_list(list<uid_t>& nlist) {
+    users = nlist;
+    mtree = MerkleTree(users);
+  }
   list<uid_t>& get_list() { return users; }
 
-  void set_inode_list(list<inodeno_t>& ilist) { inodes = ilist; }
+  void set_inode_list(list<inodeno_t>& ilist) {
+    inodes = ilist;
+    file_tree = MerkleTree(inodes);
+  }
   list<inodeno_t>& get_inode_list() { return inodes; }
 };
 
