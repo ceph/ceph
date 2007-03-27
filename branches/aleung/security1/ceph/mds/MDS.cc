@@ -98,6 +98,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   myPrivKey = esignPrivKey("crypto/esig1023.dat");
   myPubKey = esignPubKey(myPrivKey);
 
+
   // create unix_groups from file?
   if (g_conf.unix_group_file) {
     ifstream from(g_conf.unix_group_file);
@@ -147,6 +148,40 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
     else {
       cout << "Failed to open the unix_group_file" << endl;
       assert(0);
+    }
+  }
+
+  // do prediction read-in
+  if (g_conf.mds_group == 4) {
+    map<inodeno_t, deque<inodeno_t> > sequence;
+    int off = 0;
+    bufferlist bl;
+    server->get_bl_ss(bl);
+    ::_decode(sequence, bl, off);
+    rp_predicter = RecentPopularity(sequence);
+
+    for (map<inodeno_t, deque<inodeno_t> >::iterator mi = sequence.begin();
+	 mi != sequence.end();
+	 mi++) {
+      CapGroup inode_list;
+      inodeno_t prediction;
+      prediction = rp_predicter.predict_successor(mi->first);
+      
+      cout << "Predictions for " << mi->first << ": ";
+      while(prediction != inodeno_t()) {
+	cout << prediction << ", ";
+	inode_list.add_inode(prediction);
+	prediction = rp_predicter.predict_successor(prediction);
+
+      }
+      cout << "Cannot make any further predictions" << endl;
+
+      // cache the list
+      if (inode_list.num_inodes() != 0) {
+	inode_list.sign_list(myPrivKey);
+	unix_groups_byhash[inode_list.get_root_hash()] = inode_list;
+	precompute_succ[mi->first] = inode_list.get_root_hash();
+      }
     }
   }
 

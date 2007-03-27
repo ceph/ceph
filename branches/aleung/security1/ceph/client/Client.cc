@@ -1358,19 +1358,12 @@ int Client::link(const char *existing, const char *newname,
     gid = getgid();
   }
   
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  // This is for FUSE support of passing the userid
-  //Ticket *tk;
-  //if (uid == -1 || gid == -1)
-  //  tk = get_user_ticket(getuid(), getgid());
-  //else
-  //  tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(uid, gid);
 
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
 
   // main path arg is new link name
@@ -1392,7 +1385,7 @@ int Client::link(const char *existing, const char *newname,
   delete reply;
   dout(10) << "link result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1414,13 +1407,12 @@ int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
+  //Ticket *tk = get_user_ticket(uid, gid);
 
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1455,7 +1447,7 @@ int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
   delete reply;
   dout(10) << "unlink result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1477,13 +1469,12 @@ int Client::rename(const char *relfrom, const char *relto,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(uid, gid);
 
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string absfrom;
   mkabspath(relfrom, absfrom);
@@ -1514,7 +1505,7 @@ int Client::rename(const char *relfrom, const char *relto,
   delete reply;
   dout(10) << "rename result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1537,12 +1528,12 @@ int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(uid, gid);
   //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1570,7 +1561,7 @@ int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid
   delete reply;
   dout(10) << "mkdir result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1591,13 +1582,12 @@ int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(uid, gid);
 
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1633,7 +1623,7 @@ int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
   delete reply;
   dout(10) << "rmdir result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1657,12 +1647,12 @@ int Client::symlink(const char *reltarget, const char *rellink,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abstarget;
   mkabspath(reltarget, abstarget);
@@ -1693,7 +1683,7 @@ int Client::symlink(const char *reltarget, const char *rellink,
   delete reply;
   dout(10) << "symlink result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1715,12 +1705,12 @@ int Client::readlink(const char *relpath, char *buf, off_t size,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1747,7 +1737,7 @@ int Client::readlink(const char *relpath, char *buf, off_t size,
   if (res > size) res = size;
   memcpy(buf, in->symlink->c_str(), res);
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;  // return length in bytes (to mimic the system call)
@@ -1887,12 +1877,12 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1911,7 +1901,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
     dout(10) << "stat sez size = " << in->inode.size << " ino = " << stbuf->st_ino << endl;
   }
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1934,12 +1924,12 @@ int Client::lstatlite(const char *relpath, struct statlite *stl,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1964,7 +1954,7 @@ int Client::lstatlite(const char *relpath, struct statlite *stl,
     dout(10) << "stat sez size = " << in->inode.size << " ino = " << in->inode.ino << endl;
   }
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -1988,12 +1978,12 @@ int Client::chmod(const char *relpath, mode_t mode,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2019,7 +2009,7 @@ int Client::chmod(const char *relpath, mode_t mode,
   delete reply;
   dout(10) << "chmod result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -2042,12 +2032,12 @@ int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2077,7 +2067,7 @@ int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
   delete reply;
   dout(10) << "chown result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -2099,12 +2089,12 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2135,7 +2125,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
   delete reply;
   dout(10) << "utime result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -2160,12 +2150,12 @@ int Client::mknod(const char *relpath, mode_t mode,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2195,7 +2185,7 @@ int Client::mknod(const char *relpath, mode_t mode,
 
   delete reply;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
   return res;
@@ -2227,12 +2217,12 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2312,7 +2302,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
 
   delete reply;     //fix thing above first
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return res;
 }
@@ -2525,27 +2515,36 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     uid = getuid();
     gid = getgid();
   }
+  
+  //Ticket *tk = get_user_ticket(uid, gid);
 
-  Ticket *tk = get_user_ticket(uid, gid);
-
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
 
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
+
+  // client access prediction stuff
+  /*
+  inodeno_t this_inode = path_map[abspath];
+  cout << "This inode is " << this_inode << endl;
+
+  if (this_inode != inodeno_t() && successor_inode[uid] != inodeno_t())
+    predicter[uid].add_observation(this_inode, successor_inode[uid]);
   
-  // note the successor relationship
-  predicter[uid].add_observation(abspath, successor[uid]);
-  string prediction = predicter[uid].predict_successor(abspath);
-  successor[uid] = abspath;
-  if (prediction.size() == 0)
+  inodeno_t prediction = predicter[uid].predict_successor(this_inode);
+  
+  if (prediction == inodeno_t()) {
     cout << "Could not make confident prediction" << endl;
-  else
+  }
+  else {
     cout << "Predicted access of " << prediction << endl;
+  }
+  */
 
   dout(3) << "op: fh = client->open(\"" << path << "\", " << flags << ");" << endl;
   tout << "open" << endl;
@@ -2577,9 +2576,17 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(uid);
   req->set_caller_gid(gid);
-  
+
+  // add prediction info
+  //string pred_string;
+  //if (prediction != inodeno_t()) {
+  //char convertInode[sizeof(prediction)];
+  //memcpy(convertInode, &prediction, sizeof(convertInode));
+  //pred_string = string(convertInode, 8);
+  //}
+
   MClientReply *reply = make_request(req, tryauth); // try auth if writer
-  
+
   assert(reply);
   dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
   tout << reply->get_result() << endl;
@@ -2598,6 +2605,14 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     f->inode = inode_map[reply->get_ino()];
     assert(f->inode);
     f->inode->get();
+
+    // note successor relationships
+    //if (this_inode == inodeno_t() && successor_inode[uid] != inodeno_t())
+    //predicter[uid].add_observation(reply->get_ino(), successor_inode[uid]);
+    
+    // update successor
+    //path_map[abspath] = reply->get_ino();
+    //successor_inode[uid] = reply->get_ino();
 
     if (cmode & FILE_MODE_R) f->inode->num_open_rd++;
     if (cmode & FILE_MODE_W) f->inode->num_open_wr++;
@@ -2666,7 +2681,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 
   delete reply;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   trim_cache();
   client_lock.Unlock();
 
@@ -2716,12 +2731,12 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->close(open_files[ " << fh << " ]);" << endl;
   dout(3) << "op: open_files.erase( " << fh << " );" << endl;
@@ -2786,7 +2801,7 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
   put_inode( in );
   int result = 0;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return result;
 }
@@ -2848,12 +2863,12 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->read(" << fh << ", buf, " << size << ", " << offset << ");   // that's " << offset << "~" << size << endl;
   tout << "read" << endl;
@@ -2949,7 +2964,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   dout(10) << "read rvalue " << rvalue << ", r " << r << endl;
 
   // done!
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return rvalue;
 }
@@ -2998,12 +3013,12 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
   dout(3) << "op: client->write(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
@@ -3120,7 +3135,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
   in->file_wr_mtime = in->inode.mtime = g_clock.gettime();
 
   // ok!
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return totalwritten;  
 }
@@ -3141,12 +3156,12 @@ int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
   tout << "truncate" << endl;
@@ -3169,7 +3184,7 @@ int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid)
 
   dout(10) << " truncate result is " << res << endl;
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return res;
 }
@@ -3190,12 +3205,12 @@ int Client::fsync(fh_t fh, bool syncdataonly, __int64_t uid, __int64_t gid)
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->fsync(open_files[ " << fh << " ], " << syncdataonly << ");" << endl;
   tout << "fsync" << endl;
@@ -3224,7 +3239,7 @@ int Client::fsync(fh_t fh, bool syncdataonly, __int64_t uid, __int64_t gid)
     while (!done) cond.Wait(client_lock);
   }
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return r;
 }
@@ -3277,12 +3292,12 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->lazyio_propogate(" << fd
           << ", " << offset << ", " << count << ")" << endl;
@@ -3313,7 +3328,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count,
     }
   }
 
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return 0;
 }
@@ -3334,12 +3349,12 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
     gid = getgid();
   }
 
-  Ticket *tk = get_user_ticket(uid, gid);
-  //Ticket *tk = get_user_ticket(getuid(), getgid());
-  if (!tk) {
-    client_lock.Unlock();
-    return -EPERM;
-  }
+  //Ticket *tk = get_user_ticket(uid, gid);
+
+  //if (!tk) {
+  //  client_lock.Unlock();
+  //  return -EPERM;
+  //}
 
   dout(3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << endl;
@@ -3365,7 +3380,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
     }
   }
   
-  put_user_ticket(tk);
+  //put_user_ticket(tk);
   client_lock.Unlock();
   return 0;
 }

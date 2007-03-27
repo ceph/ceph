@@ -50,6 +50,7 @@ using namespace CryptoLib;
 #include "crypto/CapGroup.h"
 #include "crypto/MerkleTree.h"
 #include "crypto/Renewal.h"
+#include "crypto/RecentPopularity.h"
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -174,6 +175,12 @@ public:
 
   // batched file groups by user
   map<uid_t, UserBatch*> user_batch;
+
+  // successors
+  RecentPopularity rp_predicter;
+  inodeno_t last_access;
+  map<inodeno_t, hash_t> precompute_succ;
+  map<inodeno_t , map<uid_t, ExtCap> > predict_cap_cache;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

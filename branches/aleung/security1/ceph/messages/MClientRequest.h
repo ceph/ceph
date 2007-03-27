@@ -75,8 +75,21 @@ class MClientRequest : public Message {
   string sarg;
   string sarg2;
 
-
  public:
+
+  // prediction hints (totally hacky)
+  //int predictions;
+  //string hint1;
+  //string hint2;
+  //string hint3;
+  //string hint4;
+  //string hint5;
+  //string hint6;
+  //string hint7;
+  //string hint8;
+  //string hint9;
+  //string hint10;
+
   MClientRequest() {}
   MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
     memset(&st, 0, sizeof(st));
@@ -111,7 +124,7 @@ class MClientRequest : public Message {
   void set_iarg2(int i) { st.iarg2 = i; }
   void set_targ(time_t& t) { st.targ = t; }
   void set_targ2(time_t& t) { st.targ2 = t; }
-  void set_sarg(string& arg) { this->sarg = arg; }
+  void set_sarg(string& arg) { this->sarg = arg; } 
   void set_sarg(const char *arg) { this->sarg = arg; }
   void set_sarg2(string& arg) { this->sarg2 = arg; }
   void set_sizearg(size_t s) { st.sizearg = s; }
@@ -120,6 +133,9 @@ class MClientRequest : public Message {
   
   void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
   const entity_inst_t& get_client_inst() { return st.client_inst; }
+
+  //void set_num_hints(int hints) { st.num_hints = hints; }
+  //int get_num_hints() { return st.num_hints; }
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
@@ -146,6 +162,21 @@ class MClientRequest : public Message {
     path._decode(payload, off);
     _decode(sarg, payload, off);
     _decode(sarg2, payload, off);
+
+    //payload.copy(off, sizeof(sarg2), (char*)&sarg2);
+    //off += sizeof(sarg2); 
+    //payload.copy(off, sizeof(int), (char*)&predictions);
+    //off += sizeof(int); 
+    //_decode(hint1, payload, off);
+    //_decode(hint2, payload, off);
+    //_decode(hint3, payload, off);
+    //_decode(hint4, payload, off);
+    //_decode(hint5, payload, off);
+    //_decode(hint6, payload, off);
+    //_decode(hint7, payload, off);
+    //_decode(hint8, payload, off);
+    //_decode(hint9, payload, off);
+    //_decode(hint10, payload, off);
   }
 
   virtual void encode_payload() {
@@ -153,6 +184,22 @@ class MClientRequest : public Message {
     path._encode(payload);
     _encode(sarg, payload);
     _encode(sarg2, payload);
+    //bufferlist helper;
+    //helper.append(sarg2.c_str(), sarg2.size());
+    //payload.append(helper);
+
+    //payload.append((char*)&sarg2, sizeof(sarg2));
+    //payload.append((char*)&predictions, sizeof(int));
+    //_encode(hint1, payload);
+    //_encode(hint2, payload);
+    //_encode(hint3, payload);
+    //_encode(hint4, payload);
+    //_encode(hint5, payload);
+    //_encode(hint6, payload);
+    //_encode(hint7, payload);
+    //_encode(hint8, payload);
+    //_encode(hint9, payload);
+    //_encode(hint10, payload);
   }
 
   void print(ostream& out) {

@@ -78,8 +78,8 @@ public:
     list<int> new_out;
     map<int,float> new_overload;  // updated overload value
     list<int>      old_overload;  // no longer overload
-    map<int,string> added_osd_keys; // new public keys
-    list<int> removed_osd_keys; // public keys to remove
+    //map<int,string> added_osd_keys; // new public keys
+    //list<int> removed_osd_keys; // public keys to remove
     
     void encode(bufferlist& bl) {
       bl.append((char*)&epoch, sizeof(epoch));
@@ -90,8 +90,8 @@ public:
       ::_encode(new_in, bl);
       ::_encode(new_out, bl);
       ::_encode(new_overload, bl);
-      ::_encode(added_osd_keys, bl);
-      ::_encode(removed_osd_keys, bl);
+      //::_encode(added_osd_keys, bl);
+      //::_encode(removed_osd_keys, bl);
     }
     void decode(bufferlist& bl, int& off) {
       bl.copy(off, sizeof(epoch), (char*)&epoch);
@@ -105,8 +105,8 @@ public:
       ::_decode(new_in, bl, off);
       ::_decode(new_out, bl, off);
       ::_decode(new_overload, bl, off);
-      ::_decode(added_osd_keys, bl, off);
-      ::_decode(removed_osd_keys, bl, off);
+      //::_decode(added_osd_keys, bl, off);
+      //::_decode(removed_osd_keys, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
@@ -124,8 +124,8 @@ private:
   set<int>  out_osds;    // list of unmapped disks
   map<int,float> overload_osds; 
   map<int,entity_inst_t> osd_inst;
-  map<int,string> osd_str_keys; //all public keys in str form
-  map<int,esignPub> osd_keys; // all public key objects (cache)
+  //map<int,string> osd_str_keys; //all public keys in str form
+  //map<int,esignPub> osd_keys; // all public key objects (cache)
 
  public:
   Crush     crush;       // hierarchical map
@@ -156,6 +156,7 @@ private:
   const set<int>& get_down_osds() { return down_osds; }
   const set<int>& get_out_osds() { return out_osds; }
   const map<int,float>& get_overload_osds() { return overload_osds; }
+  /*
   const map<int,string>& get_key_str_map() { return osd_str_keys; }
   const map<int,esignPub>& get_key_map() { return osd_keys; }
   const esignPub get_key(int client) { 
@@ -170,6 +171,7 @@ private:
     return tempPub;
   }
   const string& get_str_keys(int client) { return osd_str_keys[client]; }
+  */
   
   bool is_down(int osd) { return down_osds.count(osd); }
   bool is_up(int osd) { return !is_down(osd); }
@@ -245,6 +247,7 @@ private:
       overload_osds.erase(*i);
     }
     // add the incremental keys to osd_keys
+    /*
     for (map<int,string>::iterator i = inc.added_osd_keys.begin();
          i != inc.added_osd_keys.end();
          i++) {
@@ -256,6 +259,7 @@ private:
       assert(osd_str_keys.count(*i)); // sanity check
       osd_str_keys.erase(*i);
     }
+    */
   }
 
   // serialize, unserialize
@@ -270,7 +274,7 @@ private:
     _encode(out_osds, blist);
     _encode(overload_osds, blist);
     _encode(osd_inst, blist);
-    _encode(osd_keys, blist);
+    //_encode(osd_keys, blist);
     
     crush._encode(blist);
   }
@@ -291,7 +295,7 @@ private:
     _decode(out_osds, blist, off);
     _decode(overload_osds, blist, off);
     _decode(osd_inst, blist, off);
-    _decode(osd_keys, blist, off);
+    //_decode(osd_keys, blist, off);
     
     crush._decode(blist, off);
   }

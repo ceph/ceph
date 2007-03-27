@@ -532,6 +532,8 @@ protected:
 
   // prediction
   map<uid_t, string > successor;
+  map<uid_t, inodeno_t> successor_inode;
+  map<string, inodeno_t> path_map;
   map<uid_t, RecentPopularity> predicter;
 
   Ticket *get_user_ticket(uid_t uid, gid_t gid);

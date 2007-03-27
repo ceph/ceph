@@ -98,6 +98,8 @@ class CapGroup {
     //FIXME need to re-compute hash
   }
 
+  int num_inodes() { return inodes.size(); }
+
   bool contains(uid_t user) {
     for (list<uid_t>::iterator ui = users.begin();
 	 ui != users.end();

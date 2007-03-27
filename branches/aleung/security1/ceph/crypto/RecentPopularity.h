@@ -19,28 +19,39 @@ class RecentPopularity {
   int J;
   // sequence size parameter (6 is a happy default)
   int K;
-  map < string, deque<string> > inode_sequences;
+  map < inodeno_t, deque<inodeno_t> > inode_sequences;
 public:
   RecentPopularity() : J(4), K(6) {}
   RecentPopularity(int jay, int kay) : J(jay), K(kay) {}
+  RecentPopularity(map<inodeno_t, deque<inodeno_t> > sequence) : J(4), K(6),
+								 inode_sequences(sequence) {}
   
-  void add_observation(string X, string successor) {
+
+  map<inodeno_t, deque<inodeno_t> >& get_sequence() { return inode_sequences; }
+  void add_observation(inodeno_t X, inodeno_t successor) {
     inode_sequences[X].push_back(successor);
     
     if (inode_sequences[X].size() > (unsigned)K)
       inode_sequences[X].pop_front();
   }
 
-  string predict_successor(string X) {
+  inodeno_t predict_successor(inodeno_t X) {
+
+    //debug -- remove this at some point
+    //for (deque<inodeno_t>::reverse_iterator test_it = inode_sequences[X].rbegin();
+    //test_it != inode_sequences[X].rend();
+    //test_it++) {
+    //cout << *test_it << endl;
+    //}
 
     // is our known sequence big enough?
     if (inode_sequences[X].size() < (unsigned)K)
-      return string();
+      return inodeno_t();
 
     // can we make a prediction with confidence?
-    set<string> checked_inodes;
+    set<inodeno_t> checked_inodes;
     unsigned int index = 0;
-    for (deque<string>::reverse_iterator iri = inode_sequences[X].rbegin();
+    for (deque<inodeno_t>::reverse_iterator iri = inode_sequences[X].rbegin();
 	 iri != inode_sequences[X].rend();
 	 iri++) {
       
@@ -50,7 +61,7 @@ public:
 	// are there enough unchecked inodes to even keep going?
 	if (inode_sequences[X].size() - index >= (unsigned)J) {
 	  int occurance = 0;
-	  for (deque<string>::reverse_iterator ini = iri;
+	  for (deque<inodeno_t>::reverse_iterator ini = iri;
 	       ini != inode_sequences[X].rend();
 	       ini++) {
 	    

@@ -22,11 +22,16 @@ class MClientAuthUser : public Message {
   uid_t uid;
   gid_t gid;
   string pubKey;
+  //char userPublicKey[ESIGNKEYSIZE];
   
  public:
   MClientAuthUser() : Message(MSG_CLIENT_AUTH_USER) {}
   MClientAuthUser(string un, uid_t u, gid_t g, string k) : 
     Message(MSG_CLIENT_AUTH_USER), username(un), uid(u), gid(g), pubKey(k) { }
+  //MClientAuthUser(string un, uid_t u, gid_t g, byte* k) : 
+  //  Message(MSG_CLIENT_AUTH_USER), username(un), uid(u), gid(g) {
+  //  memset(userPublicKey, k, ESIGNKEYSIZE);
+  //}
 
   char *get_type_name() { return "client_auth_user"; }
   const string& get_str_key() { return pubKey; }

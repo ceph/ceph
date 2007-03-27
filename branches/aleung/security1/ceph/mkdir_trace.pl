@@ -60,11 +60,6 @@ for $file_handle(@files) {
 		    }
 		}
 
-		#if (! $seen_paths{$dirpath}) {
-		#    $seen_paths{$dirpath} = 1;
-		#    print "mkdir\n\/$dirpath\n493\n";
-		#}
-		
 	    }
 	}
 	

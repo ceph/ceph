@@ -46,6 +46,7 @@ class MonMap {
     pub_key = esignPubKey(tempKey);
     //pub_str_key = pubToString(pub_key);
     memcpy(pub_str_key, pubToString(pub_key).c_str(), sizeof(pub_str_key));
+    
     // now throw away the private key
     keyConvert = false;
   }

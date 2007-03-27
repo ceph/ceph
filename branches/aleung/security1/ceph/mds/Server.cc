@@ -2297,7 +2297,138 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
                  new EString("truncate fixme"));
 }
 
+set<inodeno_t> Server::parse_predictions(string pred_string) {
+  // get number of predictions
+  int first_index = pred_string.find_first_of(",");
+  int num_preds = atoi(pred_string.substr(0, first_index).c_str());
+  cout << "Number of predictions to make " << num_preds << endl;
+  
+  string str_to_parse = pred_string.substr(first_index+1, pred_string.size()-1);
+  cout << "Remaining string " << str_to_parse << ":" << endl;
+  
+  set<inodeno_t> successors;
+  string pred;
+  inodeno_t place_holder_inode;
+  int comma_index;
+  for (int parser = 0; parser < num_preds; parser++) {
 
+    comma_index = str_to_parse.find_first_of(",");
+    pred = str_to_parse.substr(0, comma_index);
+    cout << "Got token " << pred << ":" << endl;
+    if (pred == ";")
+      break;
+
+    memset((byte*)&place_holder_inode, 0x00, sizeof(place_holder_inode));
+    memcpy((byte*)&place_holder_inode, pred.c_str(), pred.size());
+    successors.insert(place_holder_inode);
+    cout << "Just inserted place_holder_inode " << place_holder_inode << endl;
+    str_to_parse = str_to_parse.substr(comma_index+1, str_to_parse.size()-1);
+  }
+
+  return successors;
+}
+
+int Server::get_bl_ss(bufferlist& bl)
+{
+  string dir = "/home/aleung/ssrc/ceph/branches/aleung/security1/ceph";
+  /*
+  char fn[200];
+  if (b) {
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    sprintf(fn, "%s/%s", dir.c_str(), a);
+  }
+  */
+  char fn[200];
+  sprintf(fn, "predictions");
+  
+  int fd = ::open(fn, O_RDONLY);
+  if (!fd) {
+    /*
+    if (b) {
+      dout(15) << "get_bl " << a << "/" << b << " DNE" << endl;
+    } else {
+      dout(15) << "get_bl " << a << " DNE" << endl;
+    }
+    */
+    dout(15) << "get_bl predictions DNE" << endl;
+    return 0;
+  }
+
+  // get size
+  struct stat st;
+  int rc = ::fstat(fd, &st);
+  assert(rc == 0);
+  __int32_t len = st.st_size;
+ 
+  // read buffer
+  bl.clear();
+  bufferptr bp(len);
+  int off = 0;
+  while (off < len) {
+    dout(20) << "reading at off " << off << " of " << len << endl;
+    int r = ::read(fd, bp.c_str()+off, len-off);
+    if (r < 0) derr(0) << "errno on read " << strerror(errno) << endl;
+    assert(r>0);
+    off += r;
+  }
+  bl.append(bp);
+  ::close(fd);
+
+  /*
+  if (b) {
+    dout(15) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+  } else {
+    dout(15) << "get_bl " << a << " = " << bl.length() << " bytes" << endl;
+  }
+  */
+  dout(15) << "get_bl predictions = " << bl.length() << " bytes" << endl;
+
+  return len;
+}
+
+int Server::put_bl_ss(bufferlist& bl)
+{
+  string dir = "/home/aleung/ssrc/ceph/branches/aleung/security1/ceph";
+  /*
+  char fn[200];
+  sprintf(fn, "%s/%s", dir.c_str(), a);
+  if (b) {
+    ::mkdir(fn, 0755);
+    dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    dout(15) << "put_bl " << a << " = " << bl.length() << " bytes" << endl;
+  }
+  
+  char tfn[200];
+  sprintf(tfn, "%s.new", fn);  
+  */
+  char tfn[200];
+  sprintf(tfn, "predictions");
+  int fd = ::open(tfn, O_WRONLY|O_CREAT);
+  assert(fd);
+  
+  // chmod
+  ::fchmod(fd, 0644);
+
+  // write data
+  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
+       it != bl.buffers().end();
+       it++)  {
+    int r = ::write(fd, it->c_str(), it->length());
+    if (r != (int)it->length())
+      derr(0) << "put_bl_ss ::write() returned " << r << " not " << it->length() << endl;
+    if (r < 0) 
+      derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror(errno) << endl;
+  }
+
+  ::fsync(fd);
+  ::close(fd);
+  //::rename(tfn, fn);
+
+  return 0;
+}
 
 // ===========================
 // open, openc, close
@@ -2321,6 +2452,23 @@ void Server::handle_client_open(MClientRequest *req,
     return;
   }
 
+
+  // check file prediction stuff
+  if (g_conf.collect_predictions != 0) {
+    // if this isnt the first access
+    if (mds->last_access != inodeno_t() && mds->last_access != cur->ino()) {
+      cout << "Observed " << cur->ino() << " followed "
+	   << mds->last_access << endl;
+
+      mds->rp_predicter.add_observation(mds->last_access, cur->ino());
+      bufferlist bl;
+      ::_encode(mds->rp_predicter.get_sequence(), bl);
+      put_bl_ss(bl);
+    }
+
+    mds->last_access = cur->ino();
+  }
+  
   // auth for write access
   // redirect the write open to the auth?
   if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&

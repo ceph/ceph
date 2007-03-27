@@ -13,7 +13,7 @@
  * Author: Andrew Leung Nov., 2006
  ******************************/
 #include"CryptoLib.h"
-#include "MerkleTree.h"
+//#include "MerkleTree.h"
 #include<iostream>
 
 using namespace std;
@@ -23,6 +23,7 @@ int main(int argc, char* argv[]) {
   // message to hash
   const byte* msg = (const byte*)"hash me";
 
+  /*
   // test merkle trees
   MerkleTree mtree;
   uid_t user1 = 1000;
@@ -36,6 +37,7 @@ int main(int argc, char* argv[]) {
     cout << "mtree2 is bigger" << endl;
   else
     cout << "mtree is bigger" << endl;
+  */
 
   // sha-1
   byte digest[SHA1DIGESTSIZE];
@@ -72,6 +74,7 @@ int main(int argc, char* argv[]) {
   toHex(digestmd5, hexmd5, MD5DIGESTSIZE, 2*MD5DIGESTSIZE);
   cout << "MD5 of " << msg << " is " << string((const char*)hexmd5,2*MD5DIGESTSIZE) << endl;
 
+  
   // esign signature
   byte* signMsg = (byte *)"Message to sign is getting bigger by the minutefdsfdfdsffdfsfsdfdsfdfdsfsdfdsfsdfdsfsdsfdssdfsdfdsfdsffds";
   //char* keyInput = "esig1536.dat";
@@ -79,6 +82,7 @@ int main(int argc, char* argv[]) {
   esignPriv privKey = esignPrivKey(keyInput);
   esignPub pubKey = esignPubKey(privKey);
   SigBuf mySignature = esignSig(signMsg, strlen((const char*)signMsg), privKey);
+
   // testing --> remove me!
   byte testBuf[mySignature.size()];
   memcpy((void*)testBuf,(void*)mySignature, mySignature.size());
@@ -135,6 +139,8 @@ int main(int argc, char* argv[]) {
     cout << "ARRAY copy KEY verified" << endl;
   else
     cout << "Array copy Key failed" << endl;
+
+  /*
 
   // RSA signature
   byte* rsaMsg = (byte *)"Message to sign";
@@ -216,6 +222,8 @@ int main(int argc, char* argv[]) {
   //decrypt
   decryptRC5(cipherRC5, plainRC5len, recoverRC5, decRC5);
   cout << "My recovered message is " << recoverRC5 << endl;
+
+  */
 
   return 0;
 }

@@ -48,8 +48,6 @@ void Monitor::set_new_private_key(char *pk)
   myPrivKey = _fromStr_esignPrivKey(string(pk, ESIGNPRIVSIZE));
   myPubKey = esignPubKey(myPrivKey);
   
-  // FIXME.
-  //assert(0);
 }
 
 void Monitor::init()
@@ -97,8 +95,7 @@ void Monitor::init()
     // der?
     //myPrivKey = esignPrivKey("crypto/esig1536.dat");
     //myPubKey = esignPubKey(myPrivKey);
-
-    // assert(0);
+    
   }
 
   // create 

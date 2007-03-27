@@ -303,6 +303,8 @@ struct md_config_t {
   int fix_client_id;
   int renewal;
   int renewal_period;
+  char* config_predict;
+  int collect_predictions;
   int client_aux;
   int sign_scheme;
   int hash_scheme;

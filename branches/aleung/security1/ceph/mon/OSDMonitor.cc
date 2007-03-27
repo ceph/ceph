@@ -388,8 +388,9 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
     // waiting for boot!
     // add the OSD instance to the map?
     osdmap.osd_inst[from] = m->get_source_inst();
+
     // adds the key to the map
-    osdmap.osd_str_keys[from] = m->get_public_key();
+    //osdmap.osd_str_keys[from] = m->get_public_key();
 
     if (osdmap.osd_inst.size() == osdmap.osds.size()) {
       dout(7) << "osd_boot all osds booted." << endl;

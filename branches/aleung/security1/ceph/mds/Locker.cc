@@ -249,6 +249,12 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else
       ext_cap = in->get_unix_world_cap();
   }
+  if (g_conf.mds_group == 4) {
+    if (mds->predict_cap_cache[in->ino()].count(my_user) == 0)
+      ext_cap = 0;
+    else
+      ext_cap = &(mds->predict_cap_cache[in->ino()][my_user]);
+  }
   // no grouping
   else 
     ext_cap = in->get_user_extcap(my_user);
@@ -303,6 +309,23 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
       ext_cap->set_type(1);
       
     }
+    // do prediction
+    else if (g_conf.mds_group == 4) {
+      // can we make any predictions?
+      if (mds->precompute_succ.count(in->ino()) != 0) {
+	cout << "Making a prediction in capability for " << in->ino() << endl;
+	// add the hash
+	hash_t inode_hash = mds->precompute_succ[in->ino()];
+	ext_cap = new ExtCap(FILE_MODE_RW, my_user, my_group, inode_hash);
+	ext_cap->set_type(USER_BATCH);
+      }
+      else {
+	cout << "Can't make predictions for this cap for " << in->ino() << endl;
+	ext_cap = new ExtCap(my_want, my_user, in->ino());
+	ext_cap->set_type(0);
+      }
+
+    }
     // default no grouping
     else {
       ext_cap = new ExtCap(my_want, my_user, in->ino());
@@ -326,6 +349,20 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 	in->set_unix_group_cap(ext_cap);
       else
 	in->set_unix_world_cap(ext_cap);
+    }
+    else if (g_conf.mds_group == 4) {
+      // did we use a hash for the inodes?
+      if (ext_cap->get_type() == USER_BATCH) {
+	hash_t inode_hash = ext_cap->get_file_hash();
+	list<inodeno_t> inode_list = mds->unix_groups_byhash[inode_hash].get_inode_list();
+	// cache in every inode included in the cap
+	for (list<inodeno_t>::iterator lii = inode_list.begin();
+	     lii != inode_list.end();
+	     lii++) {
+	  mds->predict_cap_cache[*lii][my_user] = (*ext_cap);
+	}
+      }
+      mds->predict_cap_cache[in->ino()][my_user] = (*ext_cap);
     }
     else
       in->add_user_extcap(my_user,ext_cap);

@@ -141,6 +141,11 @@ public:
 		    CInode **pin, CDentry **pdn, 
 		    bool okexist=false);
 
+  // prediction stuff
+  set<inodeno_t> parse_predictions(string pred_string);
+  int put_bl_ss(bufferlist& bl);
+  int get_bl_ss(bufferlist& bl);
+
 
 
 };
