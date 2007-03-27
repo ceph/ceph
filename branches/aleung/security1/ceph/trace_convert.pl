@@ -21,6 +21,7 @@ for $file_handle(@files) {
 	@file_data = <FILE>;
 	my $line;
 	my @args;
+	my @unclosed_fds;
 	foreach $line (@file_data) {
 
 	    my $timestamp;
@@ -46,6 +47,7 @@ for $file_handle(@files) {
 		    ($op, $path, $rest) = split(/\"/, $op);
 		    print OUT "open\n$path\n102\n$ret_val\n";
 		}
+		push @unclosed_fds;
 	    }
 	    elsif ($op =~ /close\(/) {
 		my $nothing;

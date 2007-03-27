@@ -167,14 +167,14 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
       inodeno_t prediction;
       prediction = rp_predicter.predict_successor(mi->first);
       
-      cout << "Predictions for " << mi->first << ": ";
+      //cout << "Predictions for " << mi->first << ": ";
       while(prediction != inodeno_t()) {
-	cout << prediction << ", ";
+	//cout << prediction << ", ";
 	inode_list.add_inode(prediction);
 	prediction = rp_predicter.predict_successor(prediction);
 
       }
-      cout << "Cannot make any further predictions" << endl;
+      //cout << "Cannot make any further predictions" << endl;
 
       // cache the list
       if (inode_list.num_inodes() != 0) {

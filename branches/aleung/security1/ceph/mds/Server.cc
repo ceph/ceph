@@ -2495,7 +2495,7 @@ void Server::handle_client_open(MClientRequest *req,
   utime_t sec_time_start = g_clock.now();
   ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
   utime_t sec_time_end = g_clock.now();
-  dout(1) << "Get security cap time " << sec_time_end - sec_time_start << endl;
+  dout(2) << "Get security cap time " << sec_time_end - sec_time_start << endl;
 
   Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
   if (!cap) return; // can't issue (yet), so wait!
@@ -2505,7 +2505,7 @@ void Server::handle_client_open(MClientRequest *req,
   mds->balancer->hit_inode(cur, META_POP_IRD);
 
   end_time = g_clock.now();
-  dout(1) << "Open() request latency " << end_time - start_time << endl;
+  dout(2) << "Open() request latency " << end_time - start_time << endl;
   if (mds->logger) {
     mds->logger->finc("lsum", (double) end_time - start_time);
     mds->logger->inc("lnum");

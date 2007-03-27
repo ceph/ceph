@@ -249,7 +249,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else
       ext_cap = in->get_unix_world_cap();
   }
-  if (g_conf.mds_group == 4) {
+  else if (g_conf.mds_group == 4) {
     if (mds->predict_cap_cache[in->ino()].count(my_user) == 0)
       ext_cap = 0;
     else
@@ -313,14 +313,14 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else if (g_conf.mds_group == 4) {
       // can we make any predictions?
       if (mds->precompute_succ.count(in->ino()) != 0) {
-	cout << "Making a prediction in capability for " << in->ino() << endl;
+	//cout << "Making a prediction in capability for " << in->ino() << endl;
 	// add the hash
 	hash_t inode_hash = mds->precompute_succ[in->ino()];
 	ext_cap = new ExtCap(FILE_MODE_RW, my_user, my_group, inode_hash);
 	ext_cap->set_type(USER_BATCH);
       }
       else {
-	cout << "Can't make predictions for this cap for " << in->ino() << endl;
+	//cout << "Can't make predictions for this cap for " << in->ino() << endl;
 	ext_cap = new ExtCap(my_want, my_user, in->ino());
 	ext_cap->set_type(0);
       }
@@ -343,9 +343,11 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 
     // caches this capability in the inode
     if (g_conf.mds_group == 1) {
-      if (my_user == in->get_uid())
+      if (my_user == in->get_uid()) {
 	in->set_unix_user_cap(ext_cap);
-      else if(my_user == in->get_gid())
+	in->set_unix_group_cap(ext_cap);
+      }
+      else if(my_group == in->get_gid())
 	in->set_unix_group_cap(ext_cap);
       else
 	in->set_unix_world_cap(ext_cap);
