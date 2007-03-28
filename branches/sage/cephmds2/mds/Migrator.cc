@@ -250,7 +250,7 @@ void Migrator::handle_mds_failure(int who)
 	// unpin the path
 	vector<CDentry*> trace;
 	cache->make_trace(trace, dir->inode);
-	cache->path_unpin(trace, 0);
+	mds->locker->dentry_anon_rdlock_trace_finish(trace);
 	
 	// wake up any waiters
 	mds->queue_finished(export_finish_waiters[dir]);
@@ -464,10 +464,11 @@ void Migrator::export_dir(CDir *dir,
   // pin path?
   vector<CDentry*> trace;
   cache->make_trace(trace, dir->inode);
-  if (!cache->path_pin(trace, 0, 0)) {
+  if (!mds->locker->dentry_can_rdlock_trace(trace, 0)) {
     dout(7) << "export_dir couldn't pin path, failing." << endl;
     return;
   }
+  mds->locker->dentry_anon_rdlock_trace_start(trace);
 
   // ok, let's go.
   assert(export_state.count(dir) == 0);
@@ -1172,7 +1173,7 @@ void Migrator::export_finish(CDir *dir)
   dout(7) << "export_finish unpinning path" << endl;
   vector<CDentry*> trace;
   cache->make_trace(trace, dir->inode);
-  cache->path_unpin(trace, 0);
+  mds->locker->dentry_anon_rdlock_trace_finish(trace);
 
   // discard delayed expires
   cache->discard_delayed_expire(dir);
@@ -1208,21 +1209,6 @@ void Migrator::export_finish(CDir *dir)
 // ==========================================================
 // IMPORT
 
-
-class C_MDC_ExportDirDiscover : public Context {
-  Migrator *mig;
-  MExportDirDiscover *m;
-public:
-  vector<CDentry*> trace;
-  C_MDC_ExportDirDiscover(Migrator *mig_, MExportDirDiscover *m_) :
-	mig(mig_), m(m_) {}
-  void finish(int r) {
-    CInode *in = 0;
-    if (r >= 0) in = trace[trace.size()-1]->get_inode();
-    mig->handle_export_discover_2(m, in, r);
-  }
-};  
-
 void Migrator::handle_export_discover(MExportDirDiscover *m)
 {
   assert(m->get_source().num() != mds->get_nodeid());
@@ -1230,34 +1216,31 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   dout(7) << "handle_export_discover on " << m->get_path() << endl;
 
   // must discover it!
-  C_MDC_ExportDirDiscover *onfinish = new C_MDC_ExportDirDiscover(this, m);
   filepath fpath(m->get_path());
-  cache->path_traverse(fpath, onfinish->trace, true,
-		       m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
-		       MDS_TRAVERSE_DISCOVER,
-		       onfinish);  // on completion|error
-}
-
-void Migrator::handle_export_discover_2(MExportDirDiscover *m, CInode *in, int r)
-{
-  // yay!
-  if (in) {
-    dout(7) << "handle_export_discover_2 has " << *in << endl;
-  }
-
-  if (r < 0 || !in->is_dir()) {
+  vector<CDentry*> trace;
+  int r = cache->path_traverse(0, 
+			       0,
+			       fpath, trace, true,
+			       m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
+			       MDS_TRAVERSE_DISCOVER);
+  if (r > 0) return; // wait
+  if (r < 0) {
     dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << endl;
-
     assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
-
-    mds->send_message_mds(new MExportDirDiscoverAck(m->get_dirfrag(), false),
-			  m->get_source().num(), MDS_PORT_MIGRATOR);    
-    delete m;
-    return;
   }
   
+  CInode *in;
+  if (trace.empty()) {
+    in = cache->get_root();
+    if (!in) {
+      cache->open_root(new C_MDS_RetryMessage(mds, m));
+      return;
+    }
+  } else {
+    in = trace[trace.size()-1]->inode;
+  }
   assert(in->is_dir());
-
+  
   // pin inode in the cache (for now)
   in->get(CInode::PIN_IMPORTING);
 

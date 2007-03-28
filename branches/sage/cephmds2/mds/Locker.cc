@@ -124,6 +124,213 @@ void Locker::send_lock_message(CDentry *dn, int msg)
 
 
 
+
+
+
+
+
+
+
+
+bool Locker::acquire_locks(MDRequest *mdr,
+			   set<CDentry*> &dentry_rdlocks,
+			   set<CDentry*> &dentry_xlocks,
+			   set<CInode*> &inode_hard_rdlocks,
+			   set<CInode*> &inode_hard_xlocks)
+{
+  dout(10) << "acquire_locks " << *mdr << endl;
+
+  // (local) AUTH PINS
+
+  // can i auth_pin everything?
+  for (set<CDentry*>::iterator p = dentry_xlocks.begin();
+       p != dentry_xlocks.end();
+       ++p) {
+    CDir *dir = (*p)->dir;
+    if (!dir->is_auth()) continue;
+    if (!mdr->is_auth_pinned(dir) &&
+	!dir->can_auth_pin()) {
+      // wait
+      dir->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      mdcache->request_drop_locks(mdr);
+      mdr->drop_auth_pins();
+      return false;
+    }
+  }
+  for (set<CInode*>::iterator p = inode_hard_xlocks.begin();
+       p != inode_hard_xlocks.end();
+       ++p) {
+    CInode *in = *p;
+    if (!in->is_auth()) continue;
+    if (!mdr->is_auth_pinned(in) &&
+	!in->can_auth_pin()) {
+      in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      mdcache->request_drop_locks(mdr);
+      mdr->drop_auth_pins();
+      return false;
+    }
+  }
+
+  // ok, grab the auth pins
+  for (set<CDentry*>::iterator p = dentry_xlocks.begin();
+       p != dentry_xlocks.end();
+       ++p) {
+    CDir *dir = (*p)->dir;
+    if (!dir->is_auth()) continue;
+    mdr->auth_pin(dir);
+  }
+  for (set<CInode*>::iterator p = inode_hard_xlocks.begin();
+       p != inode_hard_xlocks.end();
+       ++p) {
+    CInode *in = *p;
+    if (!in->is_auth()) continue;
+    mdr->auth_pin(in);
+  }
+
+
+  // DENTRY LOCKS
+  {
+    // sort all the dentries we will lock
+    set<CDentry*, CDentry::ptr_lt> sorted;
+    for (set<CDentry*>::iterator p = dentry_xlocks.begin();
+	 p != dentry_xlocks.end();
+	 ++p) {
+      dout(10) << "will xlock " << **p << endl;
+      sorted.insert(*p);
+    }
+    for (set<CDentry*>::iterator p = dentry_rdlocks.begin();
+	 p != dentry_rdlocks.end();
+	 ++p) {
+      dout(10) << "will rdlock " << **p << endl;
+      sorted.insert(*p);
+    }
+    
+    // acquire dentry locks.  make sure they match currently acquired locks.
+    set<CDentry*, CDentry::ptr_lt>::iterator existing = mdr->dentry_locks.begin();
+    for (set<CDentry*, CDentry::ptr_lt>::iterator p = sorted.begin();
+	 p != sorted.end();
+	 ++p) {
+
+      // already locked?
+      if (existing != mdr->dentry_locks.end() && *existing == *p) {
+	// right kind?
+	CDentry *had = *existing;
+	if (dentry_xlocks.count(*p) == had->is_xlockedbyme(mdr)) {
+	  dout(10) << "acquire_locks already locked " << *had << endl;
+	  existing++;
+	  continue;
+	}
+      }
+
+      // hose any stray locks
+      while (existing != mdr->dentry_locks.end()) {
+	CDentry *had = *existing;
+	existing++;
+	dout(10) << "acquire_locks had " << *had << " locked before " << **p 
+		 << ", unlocking" << endl;
+	if (had->is_xlockedbyme(mdr))
+	  dentry_xlock_finish(had, mdr);
+	else
+	  dentry_rdlock_finish(had, mdr);
+      }
+      
+      // lock
+      if (dentry_xlocks.count(*p)) {
+	if (!dentry_xlock_start(*p, mdr))
+	  return false;
+	dout(10) << "acquire_locks got xlock on " << **p << endl;
+      } else {
+	if (!dentry_rdlock_start(*p, mdr))
+	  return false;
+	dout(10) << "acquire_locks got rdlock on " << **p << endl;
+      }
+    }
+    
+    // any extra unneeded locks?
+    while (existing != mdr->dentry_locks.end()) {
+      dout(10) << "acquire_locks had " << *existing << " locked, unlocking" << endl;
+      if ((*existing)->is_xlockedbyme(mdr))
+	dentry_xlock_finish(*existing, mdr);
+      else
+	dentry_rdlock_finish(*existing, mdr);
+    }
+  }
+
+  // INODES
+  {
+    // sort all the dentries we will lock
+    set<CInode*, CInode::ptr_lt> sorted;
+    for (set<CInode*>::iterator p = inode_hard_xlocks.begin();
+	 p != inode_hard_xlocks.end();
+	 ++p) 
+      sorted.insert(*p);
+    for (set<CInode*>::iterator p = inode_hard_rdlocks.begin();
+	 p != inode_hard_rdlocks.end();
+	 ++p) 
+      sorted.insert(*p);
+    
+    // acquire inode locks.  make sure they match currently acquired locks.
+    set<CInode*, CInode::ptr_lt>::iterator existing = mdr->inode_hard_locks.begin();
+    for (set<CInode*, CInode::ptr_lt>::iterator p = sorted.begin();
+	 p != sorted.end();
+	 ++p) {
+      // already locked?
+      if (existing != mdr->inode_hard_locks.end() && *existing == *p) {
+	// right kind?
+	CInode *had = *existing;
+	if (inode_hard_xlocks.count(*p) == (had->hardlock.get_wrlocked_by() == mdr)) {
+	  dout(10) << "acquire_locks already locked " << *had << endl;
+	  existing++;
+	  continue;
+	}
+      }
+
+      // hose any stray locks
+      while (existing != mdr->inode_hard_locks.end()) {
+	CInode *had = *existing;
+	existing++;
+	dout(10) << "acquire_locks had " << *had << " locked before " << **p 
+		 << ", unlocking" << endl;
+	if (had->hardlock.get_wrlocked_by() == mdr)
+	  inode_hard_xlock_finish(had, mdr);
+	else
+	  inode_hard_rdlock_finish(had, mdr);
+      }
+      
+      // lock
+      if (inode_hard_xlocks.count(*p)) {
+	if (!inode_hard_xlock_start(*p, mdr))
+	  return false;
+	dout(10) << "acquire_locks got xlock on " << **p << endl;
+      } else {
+	if (!inode_hard_rdlock_start(*p, mdr))
+	  return false;
+	dout(10) << "acquire_locks got rdlock on " << **p << endl;
+      }
+    }
+    
+    // any extra unneeded locks?
+    while (existing != mdr->inode_hard_locks.end()) {
+      dout(10) << "acquire_locks had " << **existing << " locked, unlocking" << endl;
+      if ((*existing)->hardlock.get_wrlocked_by() == mdr)
+	inode_hard_xlock_finish(*existing, mdr);
+      else
+	inode_hard_rdlock_finish(*existing, mdr);
+    }
+  }
+
+  return true;
+}
+
+
+
+
+
+
+
+
+
+
 // file i/o -----------------------------------------
 
 __uint64_t Locker::issue_file_data_version(CInode *in)
@@ -528,9 +735,9 @@ void Locker::handle_lock(MLock *m)
 // ===============================
 // hard inode metadata
 
-bool Locker::inode_hard_read_try(CInode *in, Context *con)
+bool Locker::inode_hard_rdlock_try(CInode *in, Context *con)
 {
-  dout(7) << "inode_hard_read_try on " << *in << endl;  
+  dout(7) << "inode_hard_rdlock_try on " << *in << endl;  
 
   // can read?  grab ref.
   if (in->hardlock.can_read(in->is_auth())) 
@@ -539,18 +746,20 @@ bool Locker::inode_hard_read_try(CInode *in, Context *con)
   assert(!in->is_auth());
 
   // wait!
-  dout(7) << "inode_hard_read_try waiting on " << *in << endl;
+  dout(7) << "inode_hard_rdlock_try waiting on " << *in << endl;
   in->add_waiter(CInode::WAIT_HARDR, con);
   return false;
 }
 
-bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m, CInode *ref)
+bool Locker::inode_hard_rdlock_start(CInode *in, MDRequest *mdr)
 {
-  dout(7) << "inode_hard_read_start  on " << *in << endl;  
+  dout(7) << "inode_hard_rdlock_start  on " << *in << endl;  
 
   // can read?  grab ref.
   if (in->hardlock.can_read(in->is_auth())) {
     in->hardlock.get_read();
+    mdr->inode_hard_rdlocks.insert(in);
+    mdr->inode_hard_locks.insert(in);
     return true;
   }
   
@@ -558,27 +767,29 @@ bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m, CInode *ref)
   assert(!in->is_auth());
 
   // wait!
-  dout(7) << "inode_hard_read_start waiting on " << *in << endl;
-  in->add_waiter(CInode::WAIT_HARDR, new C_MDS_RetryRequest(mds, m, ref));
+  dout(7) << "inode_hard_rdlock_start waiting on " << *in << endl;
+  in->add_waiter(CInode::WAIT_HARDR, new C_MDS_RetryRequest(mdcache, mdr));
   return false;
 }
 
 
-void Locker::inode_hard_read_finish(CInode *in)
+void Locker::inode_hard_rdlock_finish(CInode *in, MDRequest *mdr)
 {
   // drop ref
   assert(in->hardlock.can_read(in->is_auth()));
   in->hardlock.put_read();
+  mdr->inode_hard_rdlocks.erase(in);
+  mdr->inode_hard_locks.erase(in);
 
-  dout(7) << "inode_hard_read_finish on " << *in << endl;
+  dout(7) << "inode_hard_rdlock_finish on " << *in << endl;
   
   //if (in->hardlock.get_nread() == 0) in->finish_waiting(CInode::WAIT_HARDNORD);
 }
 
 
-bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref)
+bool Locker::inode_hard_xlock_start(CInode *in, MDRequest *mdr)
 {
-  dout(7) << "inode_hard_write_start  on " << *in << endl;
+  dout(7) << "inode_hard_xlock_start  on " << *in << endl;
 
   // if not replicated, i can twiddle lock at will
   if (in->is_auth() &&
@@ -589,7 +800,9 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref)
   // can write?  grab ref.
   if (in->hardlock.can_write(in->is_auth())) {
     assert(in->is_auth());
-    in->hardlock.get_write(m);
+    in->hardlock.get_write(mdr);
+    mdr->inode_hard_xlocks.insert(in);
+    mdr->inode_hard_locks.insert(in);
     return true;
   }
   
@@ -603,28 +816,30 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref)
       inode_hard_lock(in);
     }
     
-    dout(7) << "inode_hard_write_start waiting on " << *in << endl;
-    in->add_waiter(CInode::WAIT_HARDW, new C_MDS_RetryRequest(mds, m, ref));
+    dout(7) << "inode_hard_xlock_start waiting on " << *in << endl;
+    in->add_waiter(CInode::WAIT_HARDW, new C_MDS_RetryRequest(mdcache, mdr));
 
     return false;
   } else {
     // replica
     // fw to auth
     int auth = in->authority().first;
-    dout(7) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
+    dout(7) << "inode_hard_xlock_start " << *in << " on replica, fw to auth " << auth << endl;
     assert(auth != mds->get_nodeid());
-    mdcache->request_forward(m, auth);
+    mdcache->request_forward(mdr, auth);
     return false;
   }
 }
 
 
-void Locker::inode_hard_write_finish(CInode *in)
+void Locker::inode_hard_xlock_finish(CInode *in, MDRequest *mdr)
 {
   // drop ref
   //assert(in->hardlock.can_write(in->is_auth()));
   in->hardlock.put_write();
-  dout(7) << "inode_hard_write_finish on " << *in << endl;
+  mdr->inode_hard_xlocks.erase(in);
+  mdr->inode_hard_locks.erase(in);
+  dout(7) << "inode_hard_xlock_finish on " << *in << endl;
 
   // others waiting?
   if (in->is_hardlock_write_wanted()) {
@@ -810,8 +1025,8 @@ void Locker::handle_lock_inode_hard(MLock *m)
       dout(7) << "handle_lock_inode_hard readers, waiting before ack on " << *in << endl;
       lock->set_state(LOCK_GLOCKR);
       in->add_waiter(CInode::WAIT_HARDNORD,
-                     new C_MDS_RetryMessage(mds,m));
-      assert(0);  // does this ever happen?  (if so, fix hard_read_finish, and CInodeExport.update_inode!)
+                     new C_MDS_RetryMessage(mds, m));
+      assert(0);  // does this ever happen?  (if so, fix hard_rdlock_finish, and CInodeExport.update_inode!)
       return;
      } else {
 
@@ -850,9 +1065,9 @@ void Locker::handle_lock_inode_hard(MLock *m)
 // soft inode metadata
 
 
-bool Locker::inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref)
+bool Locker::inode_file_rdlock_start(CInode *in, MDRequest *mdr)
 {
-  dout(7) << "inode_file_read_start " << *in << " filelock=" << in->filelock << endl;  
+  dout(7) << "inode_file_rdlock_start " << *in << " filelock=" << in->filelock << endl;  
 
   // can read?  grab ref.
   if (in->filelock.can_read(in->is_auth())) {
@@ -863,7 +1078,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref)
   // can't read, and replicated.
   if (in->filelock.can_read_soon(in->is_auth())) {
     // wait
-    dout(7) << "inode_file_read_start can_read_soon " << *in << endl;
+    dout(7) << "inode_file_rdlock_start can_read_soon " << *in << endl;
   } else {    
     if (in->is_auth()) {
       // auth
@@ -879,11 +1094,14 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref)
           //in->filelock.get_write();
           in->finish_waiting(CInode::WAIT_FILERWB|CInode::WAIT_FILESTABLE);
           //in->filelock.put_write();
+
+	  mdr->inode_file_rdlocks.insert(in);
+	  mdr->inode_file_locks.insert(in);
           return true;
         }
       } else {
-        dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
+        dout(7) << "inode_file_rdlock_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mdcache, mdr));
         return false;
       }
     } else {
@@ -892,35 +1110,37 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref)
 
         // fw to auth
         int auth = in->authority().first;
-        dout(7) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
+        dout(7) << "inode_file_rdlock_start " << *in << " on replica and async, fw to auth " << auth << endl;
         assert(auth != mds->get_nodeid());
-        mdcache->request_forward(m, auth);
+        mdcache->request_forward(mdr, auth);
         return false;
         
       } else {
         // wait until stable
-        dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
+        dout(7) << "inode_file_rdlock_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mdcache, mdr));
         return false;
       }
     }
   }
 
   // wait
-  dout(7) << "inode_file_read_start waiting on " << *in << ", filelock=" << in->filelock << endl;
-  in->add_waiter(CInode::WAIT_FILER, new C_MDS_RetryRequest(mds, m, ref));
+  dout(7) << "inode_file_rdlock_start waiting on " << *in << ", filelock=" << in->filelock << endl;
+  in->add_waiter(CInode::WAIT_FILER, new C_MDS_RetryRequest(mdcache, mdr));
         
   return false;
 }
 
 
-void Locker::inode_file_read_finish(CInode *in)
+void Locker::inode_file_rdlock_finish(CInode *in, MDRequest *mdr)
 {
   // drop ref
   assert(in->filelock.can_read(in->is_auth()));
   in->filelock.put_read();
+  mdr->inode_file_rdlocks.erase(in);
+  mdr->inode_file_locks.erase(in);
 
-  dout(7) << "inode_file_read_finish on " << *in << ", filelock=" << in->filelock << endl;
+  dout(7) << "inode_file_rdlock_finish on " << *in << ", filelock=" << in->filelock << endl;
 
   if (in->filelock.get_nread() == 0) {
     in->finish_waiting(CInode::WAIT_FILENORD);
@@ -929,9 +1149,9 @@ void Locker::inode_file_read_finish(CInode *in)
 }
 
 
-bool Locker::inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref)
+bool Locker::inode_file_xlock_start(CInode *in, MDRequest *mdr)
 {
-  dout(7) << "inode_file_write_start on " << *in << endl;
+  dout(7) << "inode_file_xlock_start on " << *in << endl;
 
   // can't write?
   if (!in->filelock.can_write(in->is_auth())) {
@@ -941,8 +1161,8 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref)
       // auth
       if (!in->filelock.can_write_soon(in->is_auth())) {
 	if (!in->filelock.is_stable()) {
-	  dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
-	  in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, ref));
+	  dout(7) << "inode_file_xlock_start on auth, waiting for stable on " << *in << endl;
+	  in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mdcache, mdr));
 	  return false;
 	}
 	
@@ -955,9 +1175,9 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref)
       // replica
       // fw to auth
       int auth = in->authority().first;
-      dout(7) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
+      dout(7) << "inode_file_xlock_start " << *in << " on replica, fw to auth " << auth << endl;
       assert(auth != mds->get_nodeid());
-      mdcache->request_forward(m, auth);
+      mdcache->request_forward(mdr, auth);
       return false;
     }
   } 
@@ -966,22 +1186,26 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref)
   if (in->filelock.can_write(in->is_auth())) {
     // can i auth pin?
     assert(in->is_auth());
-    in->filelock.get_write(m);
+    in->filelock.get_write(mdr);
+    mdr->inode_file_locks.insert(in);
+    mdr->inode_file_xlocks.insert(in);
     return true;
   } else {
-    dout(7) << "inode_file_write_start on auth, waiting for write on " << *in << endl;
-    in->add_waiter(CInode::WAIT_FILEW, new C_MDS_RetryRequest(mds, m, ref));
+    dout(7) << "inode_file_xlock_start on auth, waiting for write on " << *in << endl;
+    in->add_waiter(CInode::WAIT_FILEW, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
 }
 
 
-void Locker::inode_file_write_finish(CInode *in)
+void Locker::inode_file_xlock_finish(CInode *in, MDRequest *mdr)
 {
   // drop ref
   //assert(in->filelock.can_write(in->is_auth()));
   in->filelock.put_write();
-  dout(7) << "inode_file_write_finish on " << *in << ", filelock=" << in->filelock << endl;
+  mdr->inode_file_locks.erase(in);
+  mdr->inode_file_xlocks.erase(in);
+  dout(7) << "inode_file_xlock_finish on " << *in << ", filelock=" << in->filelock << endl;
   
   // drop lock?
   if (!in->is_filelock_write_wanted()) {
@@ -1691,38 +1915,133 @@ void Locker::handle_lock_inode_file(MLock *m)
 
 void Locker::handle_lock_dir(MLock *m) 
 {
-
 }
 
 
 
 // DENTRY
 
-bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
+
+// trace helpers
+
+/** dentry_can_rdlock_trace
+ * see if we can _anonymously_ rdlock an entire trace.  
+ * if not, and req is specified, wait and retry that message.
+ */
+bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req) 
+{
+  // verify dentries are rdlockable.
+  // we do this because
+  // - we're being less aggressive about locks acquisition, and
+  // - we're not acquiring the locks in order!
+  for (vector<CDentry*>::iterator it = trace.begin();
+       it != trace.end();
+       it++) {
+    CDentry *dn = *it;
+    if (!dn->is_pinnable(0)) {
+      if (req) {
+	dout(10) << "can_rdlock_trace can't rdlock " << *dn << ", waiting" << endl;
+	dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
+			    dn->name,
+			    new C_MDS_RetryMessage(mds, req));
+      } else {
+	dout(10) << "can_rdlock_trace can't rdlock " << *dn << endl;
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+void Locker::dentry_anon_rdlock_trace_start(vector<CDentry*>& trace)
+{
+  // grab dentry rdlocks
+  for (vector<CDentry*>::iterator it = trace.begin();
+       it != trace.end();
+       it++)
+    (*it)->pin(0);
+}
+
+
+
+bool Locker::dentry_rdlock_start(CDentry *dn, MDRequest *mdr)
+{
+  // verify lockable
+  if (!dn->is_pinnable(mdr)) {
+    // wait
+    dout(10) << "dentry_rdlock_start waiting on " << *dn << endl;
+    dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
+			dn->name,
+			new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+  }
+
+  // rdlock
+  dout(10) << "dentry_rdlock_start " << *dn << endl;
+  dn->pin(mdr);
+
+  mdr->dentry_rdlocks.insert(dn);
+  mdr->dentry_locks.insert(dn);
+
+  return true;
+}
+
+
+void Locker::_dentry_rdlock_finish(CDentry *dn, MDRequest *mdr)
+{
+  dn->unpin(mdr);
+
+  // did we completely unpin a waiter?
+  if (dn->lockstate == DN_LOCK_UNPINNING && !dn->get_num_ref()) {
+    // return state to sync, in case the unpinner flails
+    dn->lockstate = DN_LOCK_SYNC;
+    
+    // run finisher right now to give them a fair shot.
+    dn->dir->finish_waiting(CDir::WAIT_DNUNPINNED, dn->name);
+  }
+}
+
+void Locker::dentry_rdlock_finish(CDentry *dn, MDRequest *mdr)
+{
+  dout(10) << "dentry_rdlock_finish " << *dn << endl;
+  _dentry_rdlock_finish(dn, mdr);
+  mdr->dentry_rdlocks.erase(dn);
+  mdr->dentry_locks.erase(dn);
+}
+
+void Locker::dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace)
+{
+  for (vector<CDentry*>::iterator it = trace.begin();
+       it != trace.end();
+       it++) 
+    _dentry_rdlock_finish(*it, 0);
+}
+
+bool Locker::dentry_xlock_start(CDentry *dn, MDRequest *mdr)
 {
   dout(7) << "dentry_xlock_start on " << *dn << endl;
 
   // locked?
   if (dn->lockstate == DN_LOCK_XLOCK) {
-    if (dn->xlockedby == m) return true;  // locked by me!
+    if (dn->xlockedby == mdr) return true;  // locked by me!
 
     // not by me, wait
     dout(7) << "dentry " << *dn << " xlock by someone else" << endl;
     dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name,
-                        new C_MDS_RetryRequest(mds,m,ref));
+                        new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
 
   // prelock?
   if (dn->lockstate == DN_LOCK_PREXLOCK) {
-    if (dn->xlockedby == m) {
+    if (dn->xlockedby == mdr) {
       dout(7) << "dentry " << *dn << " prexlock by me" << endl;
       dn->dir->add_waiter(CDir::WAIT_DNLOCK, dn->name,
-                          new C_MDS_RetryRequest(mds,m,ref));
+                          new C_MDS_RetryRequest(mdcache, mdr));
     } else {
       dout(7) << "dentry " << *dn << " prexlock by someone else" << endl;
       dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name,
-                          new C_MDS_RetryRequest(mds,m,ref));
+                          new C_MDS_RetryRequest(mdcache, mdr));
     }
     return false;
   }
@@ -1738,29 +2057,12 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
     dn->lockstate = DN_LOCK_UNPINNING;
     dn->dir->add_waiter(CDir::WAIT_DNUNPINNED,
                         dn->name,
-                        new C_MDS_RetryRequest(mds,m,ref));
+                        new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
 
-  // pin path up to dentry!            (if success, point of no return)
-  CDentry *pdn = dn->dir->inode->get_parent_dn();
-  if (pdn) {
-    if (mdcache->active_requests[m].traces.count(pdn)) {
-      dout(7) << "already path pinned parent dentry " << *pdn << endl;
-    } else {
-      dout(7) << "pinning parent dentry " << *pdn << endl;
-      vector<CDentry*> trace;
-      mdcache->make_trace(trace, pdn->inode);
-      assert(trace.size());
-
-      if (!mdcache->path_pin(trace, m, new C_MDS_RetryRequest(mds, m, ref))) return false;
-      
-      mdcache->active_requests[m].traces[trace[trace.size()-1]] = trace;
-    }
-  }
-  
   // mine!
-  dn->xlockedby = m;
+  dn->xlockedby = mdr;
   
   // pin me!
   dn->get(CDentry::PIN_XLOCK);
@@ -1793,16 +2095,17 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
     // wait
     dout(7) << "dentry_xlock_start locking, waiting for replicas " << endl;
     dn->dir->add_waiter(CDir::WAIT_DNLOCK, dn->name,
-                        new C_MDS_RetryRequest(mds, m, ref));
+                        new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   } else {
     dn->lockstate = DN_LOCK_XLOCK;
-    mdcache->active_requests[dn->xlockedby].xlocks.insert(dn);
+    mdr->dentry_xlocks.insert(dn);
+    mdr->dentry_locks.insert(dn);
     return true;
   }
 }
 
-void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
+void Locker::dentry_xlock_finish(CDentry *dn, MDRequest *mdr, bool quiet)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
   
@@ -1811,8 +2114,8 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
     dout(7) << "this was a foreign xlock" << endl;
   } else {
     // remove from request record
-    assert(mdcache->active_requests[dn->xlockedby].xlocks.count(dn) == 1);
-    mdcache->active_requests[dn->xlockedby].xlocks.erase(dn);
+    mdr->dentry_xlocks.erase(dn);
+    mdr->dentry_locks.erase(dn);
   }
 
   dn->xlockedby = 0;
@@ -1821,10 +2124,6 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
   // unpin
   dn->put(CDentry::PIN_XLOCK);
 
-  // unpin parent dir?
-  // -> no?  because we might have xlocked 2 things in this dir.
-  //         instead, we let request_finish clean up the mess.
-    
   // tell replicas?
   if (!quiet) {
     // tell even if dn is null.
@@ -1840,12 +2139,44 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
 }
 
 
+void Locker::dentry_xlock_downgrade_to_rdlock(CDentry *dn, MDRequest *mdr)
+{
+  dout(7) << "dentry_xlock_downgrade_to_rdlock on " << *dn << endl;
+  
+  assert(dn->xlockedby);
+  if (dn->xlockedby == DN_XLOCK_FOREIGN) {
+    dout(7) << "this was a foreign xlock" << endl;
+    assert(0); // rewrite me
+  }
+
+  // un-xlock
+  dn->xlockedby = 0;
+  dn->lockstate = DN_LOCK_SYNC;
+  mdr->dentry_xlocks.erase(dn);
+  dn->put(CDentry::PIN_XLOCK);
+
+  // rdlock
+  mdr->dentry_rdlocks.insert(dn);
+  dn->pin(mdr);
+
+  // tell replicas?
+  if (dn->is_replicated()) {
+    send_lock_message(dn, LOCK_AC_SYNC);
+  }
+  
+  // kick waiters
+  list<Context*> finished;
+  dn->dir->take_waiting(CDir::WAIT_DNREAD, finished);
+  mds->queue_finished(finished);
+}
+
+
 /*
  * onfinish->finish() will be called with 
  * 0 on successful xlock,
  * -1 on failure
  */
-
+/*
 class C_MDC_XlockRequest : public Context {
   Locker *mdc;
   CDir *dir;
@@ -1908,7 +2239,7 @@ void Locker::dentry_xlock_request(CDir *dir, const string& dname, bool create,
                                          dir, dname, req,
                                          onfinish));
 }
-
+*/
 
 
 
@@ -1939,15 +2270,18 @@ void Locker::handle_lock_dn(MLock *m)
             (m->get_action() == LOCK_AC_REQXLOCK ||
              m->get_action() == LOCK_AC_REQXLOCKC)) {
           dout(7) << "handle_lock_dn got reqxlock from " << dauth << " and they are auth.. dropping on floor (their import will have woken them up)" << endl;
-          if (mdcache->active_requests.count(m)) 
+          /*if (mdcache->active_requests.count(m)) 
             mdcache->request_finish(m);
           else
             delete m;
+	  */
+	  assert(0); // FIXME REWRITE ME >>>>>>>
           return;
         }
 
         dout(7) << "handle_lock_dn " << m << " " << m->get_ino() << " dname " << dname << " from " << from << ": proxy, fw to " << dauth << endl;
 
+	/* ******* REWRITE ME SDFKJDSFDSFJK:SDFJKDFSJKFDSHJKDFSHJKDFS>>>>>>>
         // forward
         if (mdcache->active_requests.count(m)) {
           // xlock requests are requests, use request_* functions!
@@ -1960,6 +2294,7 @@ void Locker::handle_lock_dn(MLock *m)
           // forward normally
           mds->send_message_mds(m, dauth, MDS_PORT_LOCKER);
         }
+	*/
         return;
       }
       
@@ -1991,8 +2326,10 @@ void Locker::handle_lock_dn(MLock *m)
         }
          
         // finish request (if we got that far)
+	/* FIXME F>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         if (mdcache->active_requests.count(m)) 
 	  mdcache->request_finish(m);
+	*/
 
         delete m;
         return;
@@ -2018,8 +2355,9 @@ void Locker::handle_lock_dn(MLock *m)
         
         vector<CDentry*> trace;
         filepath path = m->get_path();
-        int r = mdcache->path_traverse(path, trace, true,
-				       m, new C_MDS_RetryMessage(mds,m), 
+        int r = mdcache->path_traverse(0, 0, // FIXME FIXME >>>>>>>>>>>>>>>>>>>>>>>>
+				       path, trace, true,
+				       m, new C_MDS_RetryMessage(mds, m), 
 				       MDS_TRAVERSE_DISCOVER);
         assert(r>0);
         return;
@@ -2031,7 +2369,8 @@ void Locker::handle_lock_dn(MLock *m)
           
           vector<CDentry*> trace;
           filepath path = m->get_path();
-          int r = mdcache->path_traverse(path, trace, true,
+          int r = mdcache->path_traverse(0, 0, // FIXME >>>>>>>>>>>>>>>>>>>>>>>>
+					 path, trace, true,
 					 m, new C_MDS_RetryMessage(mds,m), 
 					 MDS_TRAVERSE_DISCOVER);
           assert(r>0);
@@ -2123,7 +2462,8 @@ void Locker::handle_lock_dn(MLock *m)
     if (dn->gather_set.size() == 0) {
       dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
       dn->lockstate = DN_LOCK_XLOCK;
-      mdcache->active_requests[dn->xlockedby].xlocks.insert(dn);
+      mdcache->active_requests[dn->xlockedby->reqid].dentry_xlocks.insert(dn);
+      mdcache->active_requests[dn->xlockedby->reqid].dentry_locks.insert(dn);
       dir->finish_waiting(CDir::WAIT_DNLOCK, dname);
     }
     break;
@@ -2143,14 +2483,18 @@ void Locker::handle_lock_dn(MLock *m)
       reply->set_path(path);
       mds->send_message_mds(reply, m->get_asker(), MDS_PORT_LOCKER);
       
+      assert(0); // FIXME
+      /*
       // done
       if (mdcache->active_requests.count(m)) 
         mdcache->request_finish(m);
       else
         delete m;
+      */
       return;
     }
 
+    /* REWRITE ME HELP
   case LOCK_AC_REQXLOCK:
     if (dn) {
       dout(7) << "handle_lock_dn reqxlock on " << *dn << endl;
@@ -2195,14 +2539,15 @@ void Locker::handle_lock_dn(MLock *m)
       return;
     }
     break;
+*/
 
   case LOCK_AC_UNXLOCK:
     dout(7) << "handle_lock_dn unxlock on " << *dn << endl;
     {
-      Message *m = dn->xlockedby;
+      MDRequest *mdr = dn->xlockedby;
 
       // finish request
-      mdcache->request_finish(m);  // this will drop the locks (and unpin paths!)
+      mdcache->request_finish(mdr);  // this will drop the locks (and unpin paths!)
       return;
     }
     break;

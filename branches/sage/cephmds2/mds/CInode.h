@@ -35,7 +35,6 @@
 #include <iostream>
 using namespace std;
 
-
 class Context;
 class CDentry;
 class CDir;
@@ -138,7 +137,6 @@ class CInode : public MDSCacheObject {
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
 
-
  public:
   MDCache *mdcache;
 
@@ -230,12 +228,19 @@ protected:
   bool is_auth() { return state & STATE_AUTH; }
   void set_auth(bool auth);
 
-  inodeno_t ino() { return inode.ino; }
+  inodeno_t ino() const { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
+  struct ptr_lt {
+    bool operator()(const CInode* l, const CInode* r) const {
+      return l->ino() < r->ino();
+    }
+  };
+
+
 
   // -- misc -- 
   void make_path(string& s);

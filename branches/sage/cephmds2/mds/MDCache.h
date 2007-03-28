@@ -29,7 +29,8 @@
 #include "CDentry.h"
 #include "CDir.h"
 #include "Lock.h"
-
+#include "include/reqid.h"
+#include "include/Context.h"
 
 class MDS;
 class Migrator;
@@ -49,7 +50,7 @@ class MDirUpdate;
 class MDentryUnlink;
 class MLock;
 
-
+class Message;
 class MClientRequest;
 
 
@@ -64,25 +65,102 @@ class MClientRequest;
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
-typedef struct {
-  CInode *ref;                                // reference inode
-  set< CInode* >            request_inode_pins;
-  set< CDentry* >           request_dn_pins;
-  set< CDir* >              request_dir_pins;
-  map< CDentry*, vector<CDentry*> > traces;   // path pins held
-  set< CDentry* >           xlocks;           // xlocks (local)
-  set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
+struct MDRequest {
+  reqid_t reqid;
+  Message *request;  // MClientRequest, or MLock
+  
+  vector<CDentry*> trace;  // original path traversal.
+  CInode *ref;       // reference inode.  if there is only one, and its path is pinned.
+  
+  // cache pins (so things don't expire)
+  set< CInode* >            inode_pins;
+  set< CDentry* >           dentry_pins;
+  set< CDir* >              dir_pins;
+  
+  // auth pins
   set< CDir* >              dir_auth_pins;
   set< CInode* >            inode_auth_pins;
-} active_request_t;
+  
+  // held locks
+  set< CDentry*, CDentry::ptr_lt > dentry_locks; // sorted list of dentry locks we hold
+  set< CDentry* > dentry_rdlocks;
+  set< CDentry* > dentry_xlocks;
 
-namespace __gnu_cxx {
-  template<> struct hash<Message*> {
-    size_t operator()(const Message *p) const { 
-      static hash<unsigned long> H;
-      return H((unsigned long)p); 
+  set< CInode*, CInode::ptr_lt > inode_hard_locks; // sorted list of inode locks we hold
+  set< CInode* >  inode_hard_rdlocks;
+  set< CInode* >  inode_hard_xlocks;
+
+  set< CInode*, CInode::ptr_lt > inode_file_locks; // sorted list of inode locks we hold
+  set< CInode* >  inode_file_rdlocks;
+  set< CInode* >  inode_file_xlocks;
+  
+  // old
+  set< CDentry* >           xlocks;           // xlocks (local)
+  set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
+
+  MDRequest() : request(0), ref(0) {}
+  MDRequest(reqid_t ri) : reqid(ri), request(0), ref(0) {}
+  
+  // requeest
+  MClientRequest *client_request() {
+    return (MClientRequest*)request;
+  }
+
+  // pin items in cache
+  void pin(CInode *in) {
+    if (inode_pins.count(in) == 0) {
+      in->get(CInode::PIN_REQUEST);
+      inode_pins.insert(in);
+    }      
+  }
+  void pin(CDir *dir) {
+    if (dir_pins.count(dir) == 0) {
+      dir->get(CDir::PIN_REQUEST);
+      dir_pins.insert(dir);
+    }      
+  }
+  void pin(CDentry *dn) {
+    if (dentry_pins.count(dn) == 0) {
+      dn->get(CDentry::PIN_REQUEST);
+      dentry_pins.insert(dn);
+    }      
+  }
+
+  // auth pins
+  void auth_pin(CInode *in) {
+    if (inode_auth_pins.count(in)) {
+      in->auth_pin();
+      inode_auth_pins.insert(in);
     }
-  };
+  }
+  void auth_pin(CDir *dir) {
+    if (dir_auth_pins.count(dir)) {
+      dir->auth_pin();
+      dir_auth_pins.insert(dir);
+    }
+  }
+  bool is_auth_pinned(CInode *in) { return inode_auth_pins.count(in); }
+  bool is_auth_pinned(CDir *dir) { return dir_auth_pins.count(dir); }
+  void drop_auth_pins() {
+    for (set<CInode*>::iterator it = inode_auth_pins.begin();
+	 it != inode_auth_pins.end();
+	 it++) 
+      (*it)->auth_unpin();
+    inode_auth_pins.clear();
+    for (set<CDir*>::iterator it = dir_auth_pins.begin();
+	 it != dir_auth_pins.end();
+	 it++) 
+      (*it)->auth_unpin();
+    dir_auth_pins.clear();
+  }
+};
+
+inline ostream& operator<<(ostream& out, MDRequest &mdr)
+{
+  out << "request(" << mdr.reqid;
+  //if (mdr.request) out << " " << *mdr.request;
+  out << ")";
+  return out;
 }
 
 class MDCache {
@@ -158,9 +236,24 @@ protected:
 
 
   // -- requests --
-  // active MDS requests
-  hash_map<Message*, active_request_t>   active_requests;
+public:
+
   
+protected:
+  hash_map<reqid_t, MDRequest> active_requests; 
+  
+public:
+  MDRequest* request_start(reqid_t rid);
+  MDRequest* request_start(MClientRequest *req);
+  void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
+  void request_finish(MDRequest *mdr);
+  void request_forward(MDRequest *mdr, int mds, int port=0);
+  void dispatch_request(MDRequest *mdr);
+  void request_drop_locks(MDRequest *mdr);
+  void request_cleanup(MDRequest *r);
+
+
+
   // inode purging
   map<inodeno_t, inode_t>         purging;
   map<inodeno_t, list<Context*> > waiting_for_purge;
@@ -325,37 +418,21 @@ public:
   CInode *create_stray_inode(int whose=-1);
   void open_local_stray();
   void open_foreign_stray(int who, Context *c);
-  int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
+  int path_traverse(MDRequest *mdr,
+		    CInode *base,
+		    filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,
                     int onfail,
-                    Context *onfinish=0,
                     bool is_client_req = false);
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
-  CInode *get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref);
-  void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
-  void open_remote_ino_2(inodeno_t ino, Message *req,
+  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
+  void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);
+  void open_remote_ino_2(inodeno_t ino, MDRequest *mdr,
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
-  void path_unpin(vector<CDentry*>& trace, Message *m);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
-  bool request_start(Message *req,
-                     CInode *ref,
-                     vector<CDentry*>& trace);
-  void request_cleanup(Message *req);
-  void request_finish(Message *req);
-  void request_forward(Message *req, int mds, int port=0);
-  void request_pin_inode(Message *req, CInode *in);
-  void request_pin_dn(Message *req, CDentry *dn);
-  void request_pin_dir(Message *req, CDir *dir);
-  void request_auth_pin(Message *req, CDir *dir);
-  void request_auth_pin(Message *req, CInode *in);
-  bool request_auth_pinned(Message *req, CDir *dir);
-  bool request_auth_pinned(Message *req, CInode *in);
-  void request_drop_auth_pins(Message *req);
-
   // -- anchors --
 public:
   void anchor_create(CInode *in, Context *onfinish);
@@ -443,5 +520,14 @@ protected:
 
 };
 
+class C_MDS_RetryRequest : public Context {
+  MDCache *cache;
+  MDRequest *mdr;
+ public:
+  C_MDS_RetryRequest(MDCache *c, MDRequest *r) : cache(c), mdr(r) {}
+  virtual void finish(int r) {
+    cache->dispatch_request(mdr);
+  }
+};
 
 #endif

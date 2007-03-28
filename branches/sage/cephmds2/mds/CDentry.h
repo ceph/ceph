@@ -28,17 +28,23 @@ using namespace std;
 
 class CInode;
 class CDir;
+class MDRequest;
 
 #define DN_LOCK_SYNC      0
 #define DN_LOCK_PREXLOCK  1
 #define DN_LOCK_XLOCK     2
 #define DN_LOCK_UNPINNING 3  // waiting for pins to go away .. FIXME REVIEW THIS CODE ..
 
-#define DN_XLOCK_FOREIGN  ((Message*)0x1)  // not 0, not a valid pointer.
+#define DN_XLOCK_FOREIGN  ((MDRequest*)0x1)  // not 0, not a valid pointer.  FIXME FIXME
 
 class Message;
 class CDentryDiscover;
 class Anchor;
+
+class CDentry;
+
+// define an ordering
+bool operator<(CDentry& l, CDentry& r);
 
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject {
@@ -68,6 +74,11 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
   static const int EXPORT_NONCE = 1;
 
+  struct ptr_lt {
+    bool operator()(const CDentry* l, const CDentry* r) const {
+      return *l < *r;
+    }
+  };
 
  protected:
   string          name;
@@ -79,14 +90,14 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t       version;  // dir version when last touched.
   version_t       projected_version;  // what it will be when i unlock/commit.
 
-  // locking
+  // xlocks
   int            lockstate;
-  Message        *xlockedby;
+  MDRequest     *xlockedby;
   set<int>       gather_set;
   
-  // path pins
+  // rdlocks
   int            npins;
-  multiset<Message*> pinset;
+  multiset<MDRequest*> pinset;
 
   friend class Migrator;
   friend class Locker;
@@ -245,12 +256,12 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
   bool is_sync() { return lockstate == DN_LOCK_SYNC; }
   bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
-  bool can_read(Message *m) { return is_xlockedbyme(m) || can_read(); }
+  bool can_read(MDRequest *m) { return is_xlockedbyme(m) || can_read(); }
   bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
-  Message* get_xlockedby() { return xlockedby; } 
-  bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
-  bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
-  bool is_prexlockbyother(Message *m) {
+  MDRequest* get_xlockedby() { return xlockedby; } 
+  bool is_xlockedbyother(MDRequest *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
+  bool is_xlockedbyme(MDRequest *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
+  bool is_prexlockbyother(MDRequest *m) {
     return (lockstate == DN_LOCK_PREXLOCK) && m != xlockedby;
   }
 
@@ -270,21 +281,21 @@ class CDentry : public MDSCacheObject, public LRUObject {
   void set_lockstate(int s) { lockstate = s; }
   
   // path pins
-  void pin(Message *m) { 
+  void pin(MDRequest *m) { 
     npins++; 
     pinset.insert(m);
     assert(pinset.size() == (unsigned)npins);
   }
-  void unpin(Message *m) { 
+  void unpin(MDRequest *m) { 
     npins--; 
     assert(npins >= 0); 
     assert(pinset.count(m) > 0);
     pinset.erase(pinset.find(m));
     assert(pinset.size() == (unsigned)npins);
   }
-  bool is_pinnable(Message *m) { 
+  bool is_pinnable(MDRequest *m) { 
     return (lockstate == DN_LOCK_SYNC) ||
-      (lockstate == DN_LOCK_UNPINNING && pinset.count(m)); 
+      (lockstate == DN_LOCK_UNPINNING && m && pinset.count(m)); 
   }
   bool is_pinned() { return npins>0; }
   int num_pins() { return npins; }
@@ -294,8 +305,6 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
 ostream& operator<<(ostream& out, CDentry& dn);
 
-// define an ordering
-bool operator<(CDentry& l, CDentry& r);
 
 
 class CDentryDiscover {

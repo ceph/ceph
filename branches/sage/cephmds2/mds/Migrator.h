@@ -206,7 +206,6 @@ public:
   friend class C_MDS_ExportFinishLogged;
   // importer
   void handle_export_discover(MExportDirDiscover *m);
-  void handle_export_discover_2(MExportDirDiscover *m, CInode *in, int r);
   void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   int decode_import_dir(bufferlist& bl,
@@ -225,7 +224,6 @@ public:
   void import_finish(CDir *dir, bool now=false);
 protected:
 
-  friend class C_MDC_ExportDirDiscover;
   friend class C_MDS_ImportDirLoggedStart;
   friend class C_MDS_ImportDirLoggedFinish;
 

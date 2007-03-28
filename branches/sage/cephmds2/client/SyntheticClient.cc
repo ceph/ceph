@@ -1334,6 +1334,8 @@ void SyntheticClient::foo()
   client->unlink("d");
   client->rmdir("d");
 
+  /*
+
   // rename fun
   client->mkdir("dir1", 0755);
   client->mkdir("dir2", 0755);
@@ -1373,6 +1375,7 @@ void SyntheticClient::foo()
   client->mknod("dir5/asdf", 0644);
   client->rename("dir3","dir4"); // ok
   client->rename("dir4","dir5"); // fail
+  */
 }
 
 int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)

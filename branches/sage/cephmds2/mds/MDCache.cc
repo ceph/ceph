@@ -2437,6 +2437,7 @@ void MDCache::dispatch(Message *m)
  *   the context is needed to pass a (failure) result code.
  */
 
+/*
 class C_MDC_TraverseDiscover : public Context {
   Context *onfinish, *ondelay;
  public:
@@ -2455,14 +2456,16 @@ class C_MDC_TraverseDiscover : public Context {
     delete ondelay;
   }
 };
+*/
 
-int MDCache::path_traverse(filepath& origpath, 
+int MDCache::path_traverse(MDRequest *mdr,
+			   CInode *base,             // traverse starting from here.
+			   filepath& origpath, 
                            vector<CDentry*>& trace, 
                            bool follow_trailing_symlink,
                            Message *req,
                            Context *ondelay,
                            int onfail,
-                           Context *onfinish,
                            bool is_client_req)  // true if req is MClientRequest .. gross, FIXME
 {
   set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
@@ -2472,11 +2475,11 @@ int MDCache::path_traverse(filepath& origpath,
       onfail == MDS_TRAVERSE_DISCOVERXLOCK) noperm = true;
 
   // root
-  CInode *cur = get_root();
+  CInode *cur = base;
+  if (!cur) cur = get_root();
   if (cur == NULL) {
     dout(7) << "traverse: i don't have root" << endl;
     open_root(ondelay);
-    if (onfinish) delete onfinish;
     return 1;
   }
 
@@ -2494,10 +2497,6 @@ int MDCache::path_traverse(filepath& origpath,
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << endl;
       delete ondelay;
-      if (onfinish) {
-        onfinish->finish(-ENOTDIR);
-        delete onfinish;
-      }
       return -ENOTDIR;
     }
 
@@ -2510,7 +2509,6 @@ int MDCache::path_traverse(filepath& origpath,
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << endl;
           cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
-          if (onfinish) delete onfinish;
           return 1;
         }
 
@@ -2524,7 +2522,6 @@ int MDCache::path_traverse(filepath& origpath,
 	else if (cur->auth_is_ambiguous()) {
 	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
 	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, ondelay);
-	  if (onfinish) delete onfinish;
 	  return 1;
 	} else {
 	  filepath want = path.postfixpath(depth);
@@ -2538,7 +2535,6 @@ int MDCache::path_traverse(filepath& origpath,
 	  dir_discovers[cur->ino()].insert(cur->authority().first);
 	}
 	cur->add_waiter(CInode::WAIT_DIR, ondelay);
-        if (onfinish) delete onfinish;
         return 1;
       }
     }
@@ -2557,8 +2553,7 @@ int MDCache::path_traverse(filepath& origpath,
     */
 
     // must read directory hard data (permissions, x bit) to traverse
-    if (!noperm && !mds->locker->inode_hard_read_try(cur, ondelay)) {
-      if (onfinish) delete onfinish;
+    if (!noperm && !mds->locker->inode_hard_rdlock_try(cur, ondelay)) {
       return 1;
     }
     
@@ -2580,7 +2575,7 @@ int MDCache::path_traverse(filepath& origpath,
 
     // null and last_bit and xlocked by me?
     if (dn && dn->is_null() && 
-        dn->is_xlockedbyme(req) &&
+        dn->is_xlockedbyme(mdr) &&
         depth == path.depth()-1) {
       dout(10) << "traverse: hit (my) xlocked dentry at tail of traverse, succeeding" << endl;
       trace.push_back(dn);
@@ -2589,12 +2584,11 @@ int MDCache::path_traverse(filepath& origpath,
 
     if (dn && !dn->is_null()) {
       // dentry exists.  xlocked?
-      if (!noperm && dn->is_xlockedbyother(req)) {
+      if (!noperm && dn->is_xlockedbyother(mdr)) {
         dout(10) << "traverse: xlocked dentry at " << *dn << endl;
         curdir->add_waiter(CDir::WAIT_DNREAD,
 			   path[depth],
 			   ondelay);
-        if (onfinish) delete onfinish;
         return 1;
       }
 
@@ -2608,8 +2602,8 @@ int MDCache::path_traverse(filepath& origpath,
           dn->link_remote(in);
         } else {
           dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
-          open_remote_ino(dn->get_remote_ino(), req,
-                          ondelay);
+	  assert(0); // REWRITE ME
+          //open_remote_ino(dn->get_remote_ino(), req, ondelay);
           return 1;
         }        
       }
@@ -2694,10 +2688,6 @@ int MDCache::path_traverse(filepath& origpath,
       if (curdir->is_complete()) {
         // file not found
         delete ondelay;
-        if (onfinish) {
-          onfinish->finish(-ENOENT);
-          delete onfinish;
-        }
         return -ENOENT;
       } else {
         
@@ -2712,7 +2702,6 @@ int MDCache::path_traverse(filepath& origpath,
         
         if (mds->logger) mds->logger->inc("cmiss");
 
-        if (onfinish) delete onfinish;
         return 1;
       }
     } else {
@@ -2730,8 +2719,7 @@ int MDCache::path_traverse(filepath& origpath,
         } 
 	else if (curdir->auth_is_ambiguous()) {
 	  dout(7) << "traverse: waiting for single auth on " << *curdir << endl;
-	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, 
-			     new C_MDC_TraverseDiscover(onfinish, ondelay));
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
 	  return 1;
 	} else {
           dout(7) << "traverse: discover " << want << " from " << *curdir << endl;
@@ -2746,12 +2734,7 @@ int MDCache::path_traverse(filepath& origpath,
         }
         
         // delay processing of current request.
-        //  delay finish vs ondelay until result of traverse, so that ENOENT can be 
-        //  passed to onfinish if necessary
-        curdir->add_waiter(CDir::WAIT_DENTRY, 
-			   path[depth], 
-			   new C_MDC_TraverseDiscover(onfinish, ondelay));
-        
+        curdir->add_waiter(CDir::WAIT_DENTRY, path[depth], ondelay);
         if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       } 
@@ -2763,7 +2746,6 @@ int MDCache::path_traverse(filepath& origpath,
 	  // wait
 	  dout(7) << "traverse: waiting for single auth in " << *curdir << endl;
 	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
-	  if (onfinish) delete onfinish;
 	  return 1;
 	} else {
 	  dout(7) << "traverse: forwarding, not auth for " << *curdir << endl;
@@ -2779,17 +2761,12 @@ int MDCache::path_traverse(filepath& origpath,
 	  mds->forward_message_mds(req, dauth.first, req->get_dest_port());
 	  
 	  if (mds->logger) mds->logger->inc("cfw");
-	  if (onfinish) delete onfinish;
 	  delete ondelay;
 	  return 2;
 	}
       }    
       if (onfail == MDS_TRAVERSE_FAIL) {
         delete ondelay;
-        if (onfinish) {
-          onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority!
-          delete onfinish;
-        }
         return -ENOENT;  // not necessarily exactly true....
       }
     }
@@ -2799,10 +2776,6 @@ int MDCache::path_traverse(filepath& origpath,
   
   // success.
   delete ondelay;
-  if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
-  }
   return 0;
 }
 
@@ -2839,7 +2812,7 @@ void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin)
 /** get_dentry_inode
  * will return inode for primary, or link up/open up remote link's inode as necessary.
  */
-CInode *MDCache::get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref)
+CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
 {
   assert(!dn->is_null());
   
@@ -2854,8 +2827,7 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref)
     return in;
   } else {
     dout(10) << "get_dentry_ninode on remote dn, opening inode for " << *dn << endl;
-    open_remote_ino(dn->get_remote_ino(), req, 
-		    new C_MDS_RetryRequest(mds, req, ref));
+    open_remote_ino(dn->get_remote_ino(), mdr, new C_MDS_RetryRequest(this, mdr));
     return 0;
   }
 }
@@ -2864,20 +2836,20 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MClientRequest *req, CInode *ref)
 class C_MDC_OpenRemoteInoLookup : public Context {
   MDCache *mdc;
   inodeno_t ino;
-  Message *req;
+  MDRequest *mdr;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
-  C_MDC_OpenRemoteInoLookup(MDCache *mdc, inodeno_t ino, Message *req, Context *onfinish) {
+  C_MDC_OpenRemoteInoLookup(MDCache *mdc, inodeno_t ino, MDRequest *r, Context *onfinish) {
     this->mdc = mdc;
     this->ino = ino;
-    this->req = req;
+    this->mdr = r;
     this->onfinish = onfinish;
   }
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdc->open_remote_ino_2(ino, req, anchortrace, onfinish);
+      mdc->open_remote_ino_2(ino, mdr, anchortrace, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -2886,17 +2858,17 @@ public:
 };
 
 void MDCache::open_remote_ino(inodeno_t ino,
-                              Message *req,
+                              MDRequest *mdr,
                               Context *onfinish)
 {
   dout(7) << "open_remote_ino on " << ino << endl;
   
-  C_MDC_OpenRemoteInoLookup *c = new C_MDC_OpenRemoteInoLookup(this, ino, req, onfinish);
+  C_MDC_OpenRemoteInoLookup *c = new C_MDC_OpenRemoteInoLookup(this, ino, mdr, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
 void MDCache::open_remote_ino_2(inodeno_t ino,
-                                Message *req,
+                                MDRequest *mdr,
                                 vector<Anchor>& anchortrace,
                                 Context *onfinish)
 {
@@ -2927,66 +2899,6 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
 
 
-// path pins
-
-bool MDCache::path_pin(vector<CDentry*>& trace,
-                       Message *m,
-                       Context *c)
-{
-  // verify everything is pinnable
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) {
-    CDentry *dn = *it;
-    if (!dn->is_pinnable(m)) {
-      // wait
-      if (c) {
-        dout(10) << "path_pin can't pin " << *dn << ", waiting" << endl;
-        dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
-                            dn->name,
-                            c);
-      } else {
-        dout(10) << "path_pin can't pin, no waiter, failing." << endl;
-      }
-      return false;
-    }
-  }
-
-  // pin!
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) {
-    (*it)->pin(m);
-    dout(11) << "path_pinned " << *(*it) << endl;
-  }
-
-  delete c;
-  return true;
-}
-
-
-void MDCache::path_unpin(vector<CDentry*>& trace,
-                         Message *m)
-{
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) {
-    CDentry *dn = *it;
-    dn->unpin(m);
-    dout(11) << "path_unpinned " << *dn << endl;
-
-    // did we completely unpin a waiter?
-    if (dn->lockstate == DN_LOCK_UNPINNING && !dn->get_num_ref()) {
-      // return state to sync, in case the unpinner flails
-      dn->lockstate = DN_LOCK_SYNC;
-
-      // run finisher right now to give them a fair shot.
-      dn->dir->finish_waiting(CDir::WAIT_DNUNPINNED, dn->name);
-    }
-  }
-}
-
-
 void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 {
   CInode *parent = in->get_parent_inode();
@@ -3000,130 +2912,89 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 }
 
 
-bool MDCache::request_start(Message *req,
-                            CInode *ref,
-                            vector<CDentry*>& trace)
+MDRequest *MDCache::request_start(reqid_t ri)
 {
-  assert(active_requests.count(req) == 0);
+  assert(active_requests.count(ri) == 0);
+  active_requests[ri].reqid = ri;
+  MDRequest *mdr = &active_requests[ri];
+  dout(7) << "request_start " << *mdr << endl;
+  return mdr;
+}
 
-  // pin path
-  if (!trace.empty()) 
-    if (!path_pin(trace, req, new C_MDS_RetryMessage(mds,req))) return false;
+MDRequest *MDCache::request_start(MClientRequest *req)
+{
+  reqid_t ri = req->get_reqid();
+  MDRequest *mdr = request_start(ri);
+  mdr->request = req;
+  return mdr;
+}
 
-  dout(7) << "request_start " << *req << endl;
+void MDCache::request_finish(MDRequest *mdr)
+{
+  dout(7) << "request_finish " << *mdr << endl;
 
-  // add to map
-  active_requests[req].ref = ref;
-  if (trace.size()) active_requests[req].traces[trace[trace.size()-1]] = trace;
-
-  // request pins
-  request_pin_inode(req, ref);
+  delete mdr->request;
+  request_cleanup(mdr);
   
-  if (mds->logger) mds->logger->inc("req");
-
-  return true;
+  if (mds->logger) mds->logger->inc("reply");
 }
 
 
-void MDCache::request_pin_inode(Message *req, CInode *in) 
+void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
-  if (active_requests[req].request_inode_pins.count(in) == 0) {
-    in->request_pin_get();
-    active_requests[req].request_inode_pins.insert(in);
+  if (!port) port = MDS_PORT_SERVER;
+
+  dout(7) << "request_forward to " << who << " req " << *mdr << endl;
+
+  mds->forward_message_mds(mdr->request, who, port);  
+  request_cleanup(mdr);
+
+  if (mds->logger) mds->logger->inc("fw");
+}
+
+
+void MDCache::dispatch_request(MDRequest *mdr)
+{
+  assert(mdr->request);
+
+  switch (mdr->request->get_type()) {
+  case MSG_CLIENT_REQUEST:
+    mds->server->dispatch_request(mdr);
+    break;
+
+  case MSG_MDS_LOCK:
+    mds->locker->handle_lock_dn((MLock*)mdr->request);
+    break;
+
+  default:
+    assert(0);  // shouldn't get here
   }
 }
 
-void MDCache::request_pin_dn(Message *req, CDentry *dn)
-{  
-  if (active_requests[req].request_dn_pins.count(dn) == 0) {
-    dn->get(CDentry::PIN_REQUEST);
-    active_requests[req].request_dn_pins.insert(dn);
-  }
-}
 
-void MDCache::request_pin_dir(Message *req, CDir *dir) 
+
+
+void MDCache::request_drop_locks(MDRequest *mdr)
 {
-  if (active_requests[req].request_dir_pins.count(dir) == 0) {
-    dir->request_pin_get();
-    active_requests[req].request_dir_pins.insert(dir);
-  }
-}
+  // leftover dentry locks
+  while (!mdr->dentry_xlocks.empty()) 
+    mds->locker->dentry_xlock_finish(*mdr->dentry_xlocks.begin(), mdr);
+  while (!mdr->dentry_rdlocks.empty()) 
+    mds->locker->dentry_rdlock_finish(*mdr->dentry_rdlocks.begin(), mdr);
 
-void MDCache::request_auth_pin(Message *req, CDir *dir)
-{
-  if (active_requests[req].dir_auth_pins.count(dir) == 0) {
-    dir->auth_pin();
-    active_requests[req].dir_auth_pins.insert(dir);
-  }
-}
+  // inode locks
+  while (!mdr->inode_hard_xlocks.empty()) 
+    mds->locker->inode_hard_xlock_finish(*mdr->inode_hard_xlocks.begin(), mdr);
+  while (!mdr->inode_hard_rdlocks.empty()) 
+    mds->locker->inode_hard_rdlock_finish(*mdr->inode_hard_rdlocks.begin(), mdr);
 
-void MDCache::request_auth_pin(Message *req, CInode *in)
-{
-  if (active_requests[req].inode_auth_pins.count(in) == 0) {
-    in->auth_pin();
-    active_requests[req].inode_auth_pins.insert(in);
-  }
-}
+  while (!mdr->inode_file_xlocks.empty()) 
+    mds->locker->inode_file_xlock_finish(*mdr->inode_file_xlocks.begin(), mdr);
+  while (!mdr->inode_file_rdlocks.empty()) 
+    mds->locker->inode_file_rdlock_finish(*mdr->inode_file_rdlocks.begin(), mdr);
+  
 
-bool MDCache::request_auth_pinned(Message *req, CDir *dir)
-{
-  return active_requests[req].dir_auth_pins.count(dir);
-}
-
-bool MDCache::request_auth_pinned(Message *req, CInode *in)
-{
-  return active_requests[req].inode_auth_pins.count(in);
-}
-
-void MDCache::request_drop_auth_pins(Message *req)
-{
-  // dirs
-  for (set<CDir*>::iterator p = active_requests[req].dir_auth_pins.begin();
-       p != active_requests[req].dir_auth_pins.end();
-       ++p) 
-    (*p)->auth_unpin();
-  active_requests[req].dir_auth_pins.clear();
-
-  // inodes
-  for (set<CInode*>::iterator p = active_requests[req].inode_auth_pins.begin();
-       p != active_requests[req].inode_auth_pins.end();
-       ++p) 
-    (*p)->auth_unpin();
-  active_requests[req].inode_auth_pins.clear();
-}
-
-
-
-
-void MDCache::request_cleanup(Message *req)
-{
-  assert(active_requests.count(req) == 1);
-
-  // leftover xlocks?
-  if (active_requests[req].xlocks.size()) {
-    set<CDentry*> dns = active_requests[req].xlocks;
-
-    for (set<CDentry*>::iterator it = dns.begin();
-         it != dns.end();
-         it++) {
-      CDentry *dn = *it;
-      
-      dout(7) << "request_cleanup leftover xlock " << *dn << endl;
-      
-      mds->locker->dentry_xlock_finish(dn);
-      
-      // queue finishers
-      dn->dir->take_waiting(CDir::WAIT_ANY, dn->name, mds->finished_queue);
-
-      // remove clean, null dentry?  (from a failed rename or whatever)
-      if (dn->is_null() && dn->is_sync() && !dn->is_dirty()) {
-        dn->dir->remove_dentry(dn);
-      }
-    }
-    
-    assert(active_requests[req].xlocks.empty());  // we just finished finished them
-  }
-
+  /*
   // foreign xlocks?
   if (active_requests[req].foreign_xlocks.size()) {
     set<CDentry*> dns = active_requests[req].foreign_xlocks;
@@ -3142,38 +3013,49 @@ void MDCache::request_cleanup(Message *req)
       mds->send_message_mds(m, dauth, MDS_PORT_CACHE);
     }
   }
+  */
 
-  // unpin paths
-  for (map< CDentry*, vector<CDentry*> >::iterator it = active_requests[req].traces.begin();
-       it != active_requests[req].traces.end();
-       it++) {
-    path_unpin(it->second, req);
-  }
-  
-  // request pins
-  for (set<CInode*>::iterator it = active_requests[req].request_inode_pins.begin();
-       it != active_requests[req].request_inode_pins.end();
-       it++) {
-    (*it)->request_pin_put();
-  }
-  for (set<CDentry*>::iterator it = active_requests[req].request_dn_pins.begin();
-       it != active_requests[req].request_dn_pins.end();
-       it++) {
-    (*it)->put(CDentry::PIN_REQUEST);
-  }
-  for (set<CDir*>::iterator it = active_requests[req].request_dir_pins.begin();
-       it != active_requests[req].request_dir_pins.end();
-       it++) {
-    (*it)->request_pin_put();
-  }
+  // make sure ref and trace are empty
+  //  if we are doing our own locking, we can't use them!
+  assert(mdr->ref == 0);
+  assert(mdr->trace.empty());
+}
+
+
+void MDCache::request_cleanup(MDRequest *mdr)
+{
+  reqid_t ri = mdr->reqid;
+  assert(active_requests.count(ri));
+
+  // clear ref, trace
+  mdr->ref = 0;
+  mdr->trace.clear();
+
+  // drop locks
+  request_drop_locks(mdr);
 
   // auth pins
-  request_drop_auth_pins(req);
+  mdr->drop_auth_pins();
 
+  // drop cache pins
+  for (set<CInode*>::iterator it = mdr->inode_pins.begin();
+       it != mdr->inode_pins.end();
+       it++) 
+    (*it)->put(CInode::PIN_REQUEST);
+  mdr->inode_pins.clear();
+  for (set<CDentry*>::iterator it = mdr->dentry_pins.begin();
+       it != mdr->dentry_pins.end();
+       it++) 
+    (*it)->put(CDentry::PIN_REQUEST);
+  mdr->dentry_pins.clear();
+  for (set<CDir*>::iterator it = mdr->dir_pins.begin();
+       it != mdr->dir_pins.end();
+       it++) 
+    (*it)->put(CDir::PIN_REQUEST);
+  mdr->dir_pins.clear();
 
   // remove from map
-  active_requests.erase(req);
-
+  active_requests.erase(ri);
 
   // log some stats *****
   if (mds->logger) {
@@ -3206,33 +3088,6 @@ for (int i=0; i<CInode::NUM_PINS; i++) {
     */
   }
 
-}
-
-void MDCache::request_finish(Message *req)
-{
-  dout(7) << "request_finish " << *req << endl;
-  request_cleanup(req);
-  delete req;  // delete req
-  
-  if (mds->logger) mds->logger->inc("reply");
-
-
-  //dump();
-}
-
-
-void MDCache::request_forward(Message *req, int who, int port)
-{
-  if (!port) port = MDS_PORT_SERVER;
-
-  dout(7) << "request_forward to " << who << " req " << *req << endl;
-
-  // clean up my state
-  request_cleanup(req);
-
-  mds->forward_message_mds(req, who, port);  
-
-  if (mds->logger) mds->logger->inc("fw");
 }
 
 
@@ -3724,45 +3579,53 @@ void MDCache::handle_discover(MDiscover *dis)
     // lookup dentry
     CDentry *dn = curdir->lookup( dis->get_dentry(i) );
     
-    if (dn) {
-      // add dentry
-      reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
-      dout(7) << "added dentry " << *dn << endl;
-      
-      if (!dn->is_primary()) break;  // stop on null or remote link.
+    if (!dn) {
+      // don't have it.
+      if (!curdir->is_complete()) {
+	// readdir
+	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
+	if (reply->is_empty()) {
+	  // fetch and wait
+	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	  return;
+	} else {
+	  // initiate fetch, but send what we have so far
+	  curdir->fetch(0);
+	  break;
+	}
+      }
 
-      // add inode
-      CInode *next = dn->inode;
-      assert(next->is_auth());
-	
-      reply->add_inode( next->replicate_to( dis->get_asker() ) );
-      dout(7) << "added inode " << *next << endl;
-      
-      // descend, keep going.
-      cur = next;
-      continue;
-    } 
-
-    // don't have dentry.
-    if (curdir->is_complete()) {
-      // set error flag in reply
-      dout(7) << "dname " << dis->get_dentry(i) << " dne in " << *curdir
-	      << ", flagging error" << endl;
-      reply->set_flag_error_dn( dis->get_dentry(i) );
-    } else {
-      // readdir
-      dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
-      
-      if (reply->is_empty()) {
-	// fetch and wait
-	curdir->fetch(new C_MDS_RetryMessage(mds, dis));
-	return;
+      if (1) {
+	// send null dentry
+	dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
+		<< *curdir << endl;
+	dn = curdir->add_dentry(dis->get_dentry(i), 0);
       } else {
-	// fetch, but send what we have so far
-	curdir->fetch(0);
+	// set error flag in reply
+	dout(7) << "dentry " << dis->get_dentry(i) << " dne, flagging error in "
+		<< *curdir << endl;
+	reply->set_flag_error_dn( dis->get_dentry(i) );
       }
     }
-    break;
+
+    assert(dn);
+
+    // add dentry
+    reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
+    dout(7) << "added dentry " << *dn << endl;
+    
+    if (!dn->is_primary()) break;  // stop on null or remote link.
+    
+    // add inode
+    CInode *next = dn->inode;
+    assert(next->is_auth());
+    
+    reply->add_inode( next->replicate_to( dis->get_asker() ) );
+    dout(7) << "added inode " << *next << endl;
+    
+    // descend, keep going.
+    cur = next;
+    continue;
   }
 
   // how did we do?
@@ -4121,7 +3984,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
       dout(5) << "trying discover on dir_update for " << path << endl;
 
-      int r = path_traverse(path, trace, true,
+      int r = path_traverse(0, 0,
+			    path, trace, true,
                             m, new C_MDS_RetryMessage(mds, m),
                             MDS_TRAVERSE_DISCOVER);
       if (r > 0)

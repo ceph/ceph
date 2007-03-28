@@ -59,17 +59,24 @@ private:
   void send_lock_message(CDentry *dn, int msg);
 
   // -- locks --
+  bool acquire_locks(MDRequest *mdr,
+		     set<CDentry*> &dentry_rdlocks,
+		     set<CDentry*> &dentry_xlocks,
+		     set<CInode*> &inode_hard_rdlocks,
+		     set<CInode*> &inode_hard_xlocks);
+
+
   // high level interface
  public:
-  bool inode_hard_read_try(CInode *in, Context *con);
-  bool inode_hard_read_start(CInode *in, MClientRequest *m, CInode *ref);
-  void inode_hard_read_finish(CInode *in);
-  bool inode_hard_write_start(CInode *in, MClientRequest *m, CInode *ref);
-  void inode_hard_write_finish(CInode *in);
-  bool inode_file_read_start(CInode *in, MClientRequest *m, CInode *ref);
-  void inode_file_read_finish(CInode *in);
-  bool inode_file_write_start(CInode *in, MClientRequest *m, CInode *ref);
-  void inode_file_write_finish(CInode *in);
+  bool inode_hard_rdlock_try(CInode *in, Context *con);
+  bool inode_hard_rdlock_start(CInode *in, MDRequest *mdr);
+  void inode_hard_rdlock_finish(CInode *in, MDRequest *mdr);
+  bool inode_hard_xlock_start(CInode *in, MDRequest *mdr);
+  void inode_hard_xlock_finish(CInode *in, MDRequest *mdr);
+  bool inode_file_rdlock_start(CInode *in, MDRequest *mdr);
+  void inode_file_rdlock_finish(CInode *in, MDRequest *mdr);
+  bool inode_file_xlock_start(CInode *in, MDRequest *mdr);
+  void inode_file_xlock_finish(CInode *in, MDRequest *mdr);
 
   void inode_hard_eval(CInode *in);
   void inode_file_eval(CInode *in);
@@ -108,10 +115,18 @@ private:
   void handle_lock_dir(MLock *m);
 
   // dentry locks
+  void _dentry_rdlock_finish(CDentry *dn, MDRequest *mdr);
  public:
-  bool dentry_xlock_start(CDentry *dn, 
-                          Message *m, CInode *ref);
-  void dentry_xlock_finish(CDentry *dn, bool quiet=false);
+  bool dentry_rdlock_start(CDentry *dn, MDRequest *mdr);
+  void dentry_rdlock_finish(CDentry *dn, MDRequest *mdr);
+  bool dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req);
+  void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
+  void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
+
+  bool dentry_xlock_start(CDentry *dn, MDRequest *mdr);
+  void dentry_xlock_finish(CDentry *dn, MDRequest *mdr, bool quiet=false);
+  //bool dentry_xlock_upgrade_from_rdlock(CDentry *dn, MDRequest *mdr);   // from rdlock
+  void dentry_xlock_downgrade_to_rdlock(CDentry *dn, MDRequest *mdr); // to rdlock
   void handle_lock_dn(MLock *m);
   void dentry_xlock_request(CDir *dir, const string& dname, bool create,
                             Message *req, Context *onfinish);

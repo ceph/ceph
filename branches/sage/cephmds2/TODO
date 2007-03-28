@@ -44,6 +44,7 @@ mds
 
 - discover
 /  - hard link dentries
+  - open_remote_ino needs major work...
 
 - rejoin and replicas that are not in recovered node's cache...  fetch storm?
 
@@ -55,6 +56,24 @@ mds
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
+
+
+- locking rewrites
+ - active_requests
+   - keyed off reqid_t
+   - allow separate remote/local locks
+   - facilitate ordered lock acquisition
+ - redo dispatch_request framework -- ref arg optional (it's in the table)
+   - or, use Request* directly
+ - rename Locker primitives
+ - fix path pinning
+
+- truncate
+- link
+- unlink
+- mdsreq_t
+- clientmap request history
+
 
 - mds failure vs clients
 /  - clean up client op redirection

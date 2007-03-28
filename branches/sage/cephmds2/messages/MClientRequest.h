@@ -48,6 +48,7 @@
 
 #define MDS_OP_STAT     100
 #define MDS_OP_LSTAT    101
+#define MDS_OP_FSTAT    102
 #define MDS_OP_UTIME    1102
 #define MDS_OP_CHMOD    1103
 #define MDS_OP_CHOWN    1104  
@@ -95,6 +96,10 @@ class MClientRequest : public Message {
       int mask;
     } stat;
     struct {
+      _inodeno_t ino;
+      int mask;
+    } fstat;
+    struct {
       _frag_t frag;
     } readdir;
     struct utimbuf utime;
@@ -117,7 +122,7 @@ class MClientRequest : public Message {
       mode_t mode;
     } open;
     struct {
-      _inodeno_t ino;
+      _inodeno_t ino;  // optional
       off_t length;
     } truncate;
     struct {
@@ -215,6 +220,8 @@ class MClientRequest : public Message {
       out << "stat"; break;
     case MDS_OP_LSTAT: 
       out << "lstat"; break;
+    case MDS_OP_FSTAT: 
+      out << "fstat"; break;
     case MDS_OP_UTIME: 
       out << "utime"; break;
     case MDS_OP_CHMOD: 

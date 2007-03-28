@@ -70,7 +70,7 @@ any + statlite(mtime)
 
 // -- lock... hard or file
 
-class Message;
+class MDRequest;
 
 class CLock {
  protected:
@@ -80,7 +80,7 @@ class CLock {
 
   // local state
   int      nread;
-  Message *wrlock_by;
+  MDRequest *wrlock_by;
 
   
  public:
@@ -166,7 +166,7 @@ class CLock {
   }
   int get_nread() { return nread; }
 
-  void get_write(Message *who) { 
+  void get_write(MDRequest *who) { 
     assert(wrlock_by == 0);
     wrlock_by = who; 
   }
@@ -175,7 +175,7 @@ class CLock {
     wrlock_by = 0;
   }
   bool is_wrlocked() { return wrlock_by ? true:false; }
-  Message *get_wrlocked_by() { return wrlock_by; }
+  MDRequest *get_wrlocked_by() { return wrlock_by; }
   bool is_used() {
     return (is_wrlocked() || (nread>0)) ? true:false;
   }
