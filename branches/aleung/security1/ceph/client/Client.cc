@@ -1303,7 +1303,7 @@ int Client::unmount()
   // unsafe writes
   if (!g_conf.client_oc) {
     while (unsafe_sync_write > 0) {
-      dout(0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
+      dout(2) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
               << endl;
       mount_cond.Wait(client_lock);
     }
@@ -2896,7 +2896,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(-10) << "file size: " << in->inode.size << endl;
+    //dout(-10) << "file size: " << in->inode.size << endl;
     if (offset > 0 && offset >= in->inode.size) {
       client_lock.Unlock();
       return 0;

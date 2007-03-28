@@ -104,14 +104,14 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
     list<uid_t> uid_list;
     for (int start_uid = 340; start_uid <= 520; start_uid++) {
       uid_list.push_back(start_uid);
-      cout << start_uid << ", ";
+      //cout << start_uid << ", ";
     }
     CapGroup cgroup;
     cgroup.set_list(uid_list);
     cgroup.sign_list(myPrivKey);
     unix_groups_byhash[cgroup.get_root_hash()] = cgroup;
     unix_groups_map[group_gid] = cgroup.get_root_hash();
-    cout << endl << "hash " << cgroup.get_root_hash() << endl;
+    //cout << endl << "hash " << cgroup.get_root_hash() << endl;
   }
 
 
@@ -133,7 +133,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 	  seen_gid = false;
 	  // copy hash into map
 	  unix_groups_map[my_gid] = my_group->get_root_hash();
-	  cout << " " << my_group->get_root_hash() << endl;
+	  //cout << " " << my_group->get_root_hash() << endl;
 	  delete my_group;
 	}
 	// first number on line is gid, rest are uids
@@ -143,7 +143,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 	  //unix_groups[my_gid].set_gid(my_gid);
 	  my_group = new CapGroup();	  
 	  seen_gid = true;
-	  cout << "Gid: " << my_gid;
+	  //cout << "Gid: " << my_gid;
 	}
 	else {
 	  my_uid = input;
@@ -156,7 +156,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 	  // update the map
 	  unix_groups_byhash[my_group->get_root_hash()] = (*my_group);
 	  
-	  cout << " uid: " << my_uid;
+	  //cout << " uid: " << my_uid;
 	}
       }
       from.close();
@@ -165,6 +165,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
       cout << "Failed to open the unix_group_file" << endl;
       assert(0);
     }
+    cout << "Done doing unix group crap" << endl;
   }
 
   // do prediction read-in
@@ -357,6 +358,8 @@ int MDS::init(bool standby)
   
   // schedule tick
   reset_tick();
+
+  reopen_logger();
 
   mds_lock.Unlock();
   return 0;
@@ -913,6 +916,9 @@ void MDS::handle_shutdown_start(Message *m)
 int MDS::shutdown_final()
 {
   dout(1) << "shutdown_final" << endl;
+
+  if (logger) logger->flush(true);
+  if (logger2) logger2->flush(true);
 
   // send final down:out beacon (it doesn't matter if this arrives)
   set_want_state(MDSMap::STATE_OUT);

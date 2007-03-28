@@ -6,7 +6,7 @@
 
 	'nummds' => 1,
 	'numosd' => 4,
-	'numclient' => [ 1, 5, 10, 15],#, 40, 80, 160 ],
+	'numclient' => [ 1, 5, 10, 15, 40, 80, 160],#, 40, 80, 160 ],
 	'n' => 6,
 
 	'fs' => 'ebofs',
@@ -19,10 +19,11 @@
 	#'makedirs' => 1,
 	'writefile' => 1,
 	#'makedirs_dirs' => 10,
-	'writefile_size' => [ 4096, 8*1024],
+	'writefile_size' => 4096,
 	#'makedirs_files' => 10,
 	'writefile_mb' => 1,
 	'fs' => 'ebofs',
+	'secure_io' => [ 0, 1],
 	#'makedirs_depth' => 5,
 
 	#'mds_local_osd' => [ 0, 1 ],

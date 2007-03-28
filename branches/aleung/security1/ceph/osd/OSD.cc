@@ -3024,7 +3024,17 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 	  return;
 	}	
       }
+      else if (op_capability->get_type() == USER_BATCH) {
+        hash_t my_hash = op_capability->get_file_hash();
 
+        // do we have group cached? if not, update group                                                                                                     
+        // we will lose execution control here! re-gain on reply                                                                                             
+        if (user_groups.count(my_hash) == 0) {
+          outstanding_updates[op->get_reqid()] = read_time_start;
+          update_group(op->get_client_inst(), my_hash, op);
+          return;
+        }
+      }
       // check accesses are right
       if (check_request(op, op_capability)) {
 	dout(3) << "Access permissions are correct" << endl;
@@ -3070,7 +3080,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     reply->set_length(0);
   }
   
-  dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << endl;
+  dout(3) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << endl;
   
   logger->inc("rd");
   if (r >= 0) logger->inc("rdb", r);

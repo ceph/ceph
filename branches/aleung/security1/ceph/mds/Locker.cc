@@ -230,6 +230,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // get the uid
   uid_t my_user = req->get_caller_uid();
   gid_t my_group = req->get_caller_gid();
+  //cout << "User " << my_user << " Group " << my_group << endl;
 
   // issue most generic cap (RW)
   int my_want = 0;
