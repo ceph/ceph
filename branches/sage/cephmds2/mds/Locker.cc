@@ -1938,7 +1938,7 @@ bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *re
        it != trace.end();
        it++) {
     CDentry *dn = *it;
-    if (!dn->is_pinnable(0)) {
+    if (!dn->can_rdlock(0)) {
       if (req) {
 	dout(10) << "can_rdlock_trace can't rdlock " << *dn << ", waiting" << endl;
 	dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
@@ -1959,7 +1959,7 @@ void Locker::dentry_anon_rdlock_trace_start(vector<CDentry*>& trace)
   for (vector<CDentry*>::iterator it = trace.begin();
        it != trace.end();
        it++)
-    (*it)->pin(0);
+    (*it)->get_rdlock(0);
 }
 
 
@@ -1967,7 +1967,7 @@ void Locker::dentry_anon_rdlock_trace_start(vector<CDentry*>& trace)
 bool Locker::dentry_rdlock_start(CDentry *dn, MDRequest *mdr)
 {
   // verify lockable
-  if (!dn->is_pinnable(mdr)) {
+  if (!dn->can_rdlock(mdr)) {
     // wait
     dout(10) << "dentry_rdlock_start waiting on " << *dn << endl;
     dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
@@ -1978,7 +1978,7 @@ bool Locker::dentry_rdlock_start(CDentry *dn, MDRequest *mdr)
 
   // rdlock
   dout(10) << "dentry_rdlock_start " << *dn << endl;
-  dn->pin(mdr);
+  dn->get_rdlock(mdr);
 
   mdr->dentry_rdlocks.insert(dn);
   mdr->dentry_locks.insert(dn);
@@ -1989,7 +1989,7 @@ bool Locker::dentry_rdlock_start(CDentry *dn, MDRequest *mdr)
 
 void Locker::_dentry_rdlock_finish(CDentry *dn, MDRequest *mdr)
 {
-  dn->unpin(mdr);
+  dn->put_rdlock(mdr);
 
   // did we completely unpin a waiter?
   if (dn->lockstate == DN_LOCK_UNPINNING && !dn->get_num_ref()) {
@@ -2052,7 +2052,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, MDRequest *mdr)
          dn->lockstate == DN_LOCK_UNPINNING);
   
   // is dentry path pinned?
-  if (dn->is_pinned()) {
+  if (dn->is_rdlocked()) {
     dout(7) << "dentry " << *dn << " pinned, waiting" << endl;
     dn->lockstate = DN_LOCK_UNPINNING;
     dn->dir->add_waiter(CDir::WAIT_DNUNPINNED,
@@ -2157,7 +2157,7 @@ void Locker::dentry_xlock_downgrade_to_rdlock(CDentry *dn, MDRequest *mdr)
 
   // rdlock
   mdr->dentry_rdlocks.insert(dn);
-  dn->pin(mdr);
+  dn->get_rdlock(mdr);
 
   // tell replicas?
   if (dn->is_replicated()) {
@@ -2404,7 +2404,7 @@ void Locker::handle_lock_dn(MLock *m)
            dn->lockstate == DN_LOCK_UNPINNING ||
            dn->lockstate == DN_LOCK_XLOCK);   // <-- bc the handle_lock_dn did the discover!
 
-    if (dn->is_pinned()) {
+    if (dn->is_rdlocked()) {
       dn->lockstate = DN_LOCK_UNPINNING;
 
       // wait

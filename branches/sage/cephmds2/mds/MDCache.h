@@ -29,7 +29,6 @@
 #include "CDentry.h"
 #include "CDir.h"
 #include "Lock.h"
-#include "include/reqid.h"
 #include "include/Context.h"
 
 class MDS;
@@ -66,7 +65,7 @@ class MClientRequest;
  * the request is finished or forwarded.  see request_*().
  */
 struct MDRequest {
-  reqid_t reqid;
+  metareqid_t reqid;
   Message *request;  // MClientRequest, or MLock
   
   vector<CDentry*> trace;  // original path traversal.
@@ -99,7 +98,7 @@ struct MDRequest {
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
 
   MDRequest() : request(0), ref(0) {}
-  MDRequest(reqid_t ri) : reqid(ri), request(0), ref(0) {}
+  MDRequest(metareqid_t ri) : reqid(ri), request(0), ref(0) {}
   
   // requeest
   MClientRequest *client_request() {
@@ -240,10 +239,10 @@ public:
 
   
 protected:
-  hash_map<reqid_t, MDRequest> active_requests; 
+  hash_map<metareqid_t, MDRequest> active_requests; 
   
 public:
-  MDRequest* request_start(reqid_t rid);
+  MDRequest* request_start(metareqid_t rid);
   MDRequest* request_start(MClientRequest *req);
   void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
   void request_finish(MDRequest *mdr);
@@ -255,9 +254,9 @@ public:
 
 
   // inode purging
-  map<inodeno_t, inode_t>         purging;
-  map<inodeno_t, list<Context*> > waiting_for_purge;
-
+  map<inodeno_t, map<off_t, inode_t> >         purging;
+  map<inodeno_t, map<off_t, list<Context*> > > waiting_for_purge;
+  
   // shutdown crap
   int shutdown_commits;
   bool did_shutdown_log_cap;
@@ -391,18 +390,18 @@ public:
 
  public:
   // inode purging
-  void purge_inode(inode_t *inode);
-  void purge_inode_finish(inodeno_t ino);
-  void purge_inode_finish_2(inodeno_t ino);
-  bool is_purging(inodeno_t ino) {
-    return purging.count(ino);
+  void purge_inode(inode_t *inode, off_t newsize);
+  void purge_inode_finish(inodeno_t ino, off_t newsize);
+  void purge_inode_finish_2(inodeno_t ino, off_t newsize);
+  bool is_purging(inodeno_t ino, off_t newsize) {
+    return purging.count(ino) && purging[ino].count(newsize);
   }
-  void wait_for_purge(inodeno_t ino, Context *c) {
-    waiting_for_purge[ino].push_back(c);
+  void wait_for_purge(inodeno_t ino, off_t newsize, Context *c) {
+    waiting_for_purge[ino][newsize].push_back(c);
   }
 
-  void add_recovered_purge(const inode_t& inode);
-  void remove_recovered_purge(inodeno_t ino);
+  void add_recovered_purge(const inode_t& inode, off_t newsize);
+  void remove_recovered_purge(inodeno_t ino, off_t newsize);
   void start_recovered_purges();
 
 

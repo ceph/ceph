@@ -134,12 +134,13 @@ bool EMetaBlob::has_expired(MDS *mds)
     }
   }
 
-  // destroyed inodes
-  for (list<inode_t>::iterator p = destroyed_inodes.begin();
-       p != destroyed_inodes.end();
+  // truncated inodes
+  for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
+       p != truncated_inodes.end();
        ++p) {
-    if (mds->mdcache->is_purging(p->ino)) {
-      dout(10) << "EMetaBlob.has_expired still purging destroyed inode " << p->ino << endl;
+    if (mds->mdcache->is_purging(p->first.ino, p->second)) {
+      dout(10) << "EMetaBlob.has_expired still purging inode " << p->first.ino 
+	       << " to " << p->second << endl;
       return false;
     }
   }  
@@ -232,13 +233,14 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     }
   }
 
-  // destroyed inodes
-  for (list<inode_t>::iterator p = destroyed_inodes.begin();
-       p != destroyed_inodes.end();
+  // truncated inodes
+  for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
+       p != truncated_inodes.end();
        ++p) {
-    if (mds->mdcache->is_purging(p->ino)) {
-      dout(10) << "EMetaBlob.expire waiting for purge of destroyed inode " << p->ino << endl;
-      mds->mdcache->wait_for_purge(p->ino, gather->new_sub());
+    if (mds->mdcache->is_purging(p->first.ino, p->second)) {
+      dout(10) << "EMetaBlob.expire waiting for purge of inode " << p->first.ino
+	       << " to " << p->second << endl;
+      mds->mdcache->wait_for_purge(p->first.ino, p->second, gather->new_sub());
     }
   }
 
@@ -378,12 +380,13 @@ void EMetaBlob::replay(MDS *mds)
     mds->anchorclient->got_journaled_agree(*p);
   }
 
-  // destroyed inodes
-  for (list<inode_t>::iterator p = destroyed_inodes.begin();
-       p != destroyed_inodes.end();
+  // truncated inodes
+  for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
+       p != truncated_inodes.end();
        ++p) {
-    dout(10) << "EMetaBlob.replay will purge destroyed inode " << p->ino << endl;
-    mds->mdcache->add_recovered_purge(*p);  
+    dout(10) << "EMetaBlob.replay will purge truncated inode " << p->first.ino
+	     << " to " << p->second << endl;
+    mds->mdcache->add_recovered_purge(p->first, p->second);  
   }
 }
 
@@ -746,8 +749,8 @@ void EPurgeFinish::expire(MDS *mds, Context *c)
 
 void EPurgeFinish::replay(MDS *mds)
 {
-  dout(10) << "EPurgeFinish.replay " << ino << endl;
-  mds->mdcache->remove_recovered_purge(ino);
+  dout(10) << "EPurgeFinish.replay " << ino << " to " << newsize << endl;
+  mds->mdcache->remove_recovered_purge(ino, newsize);
 }
 
 

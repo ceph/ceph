@@ -96,8 +96,8 @@ class CDentry : public MDSCacheObject, public LRUObject {
   set<int>       gather_set;
   
   // rdlocks
-  int            npins;
-  multiset<MDRequest*> pinset;
+  int            num_rdlocks;
+  multiset<MDRequest*> rdlock_set;
 
   friend class Migrator;
   friend class Locker;
@@ -118,7 +118,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     projected_version(0),
     lockstate(DN_LOCK_SYNC),
     xlockedby(0),
-    npins(0) { }
+    num_rdlocks(0) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
     name(n),
     inode(in),
@@ -128,7 +128,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     projected_version(0),
     lockstate(DN_LOCK_SYNC),
     xlockedby(0),
-    npins(0) { }
+    num_rdlocks(0) { }
   CDentry(const string& n, CInode *in) :
     name(n),
     inode(in),
@@ -138,7 +138,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     projected_version(0),
     lockstate(DN_LOCK_SYNC),
     xlockedby(0),
-    npins(0) { }
+    num_rdlocks(0) { }
 
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
@@ -281,24 +281,24 @@ class CDentry : public MDSCacheObject, public LRUObject {
   void set_lockstate(int s) { lockstate = s; }
   
   // path pins
-  void pin(MDRequest *m) { 
-    npins++; 
-    pinset.insert(m);
-    assert(pinset.size() == (unsigned)npins);
+  void get_rdlock(MDRequest *m) { 
+    num_rdlocks++; 
+    rdlock_set.insert(m);
+    assert(rdlock_set.size() == (unsigned)num_rdlocks);
   }
-  void unpin(MDRequest *m) { 
-    npins--; 
-    assert(npins >= 0); 
-    assert(pinset.count(m) > 0);
-    pinset.erase(pinset.find(m));
-    assert(pinset.size() == (unsigned)npins);
+  void put_rdlock(MDRequest *m) { 
+    num_rdlocks--; 
+    assert(num_rdlocks >= 0); 
+    assert(rdlock_set.count(m) > 0);
+    rdlock_set.erase(rdlock_set.find(m));
+    assert(rdlock_set.size() == (unsigned)num_rdlocks);
   }
-  bool is_pinnable(MDRequest *m) { 
+  bool can_rdlock(MDRequest *m) { 
     return (lockstate == DN_LOCK_SYNC) ||
-      (lockstate == DN_LOCK_UNPINNING && m && pinset.count(m)); 
+      (lockstate == DN_LOCK_UNPINNING && m && rdlock_set.count(m)); 
   }
-  bool is_pinned() { return npins>0; }
-  int num_pins() { return npins; }
+  bool is_rdlocked() { return num_rdlocks>0; }
+  int get_num_rdlocks() { return num_rdlocks; }
 
   friend class CDir;
 };

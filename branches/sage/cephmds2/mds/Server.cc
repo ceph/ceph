@@ -2641,45 +2641,103 @@ void Server::handle_client_rename_local(MClientRequest *req,
 // ===================================
 // TRUNCATE, FSYNC
 
-/*
- * FIXME: this truncate implemention is WRONG WRONG WRONG
- */
+class C_MDS_ReplyRequest : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+public:
+  C_MDS_ReplyRequest(MDS *m, MDRequest *r) : mds(m), mdr(r) {}
+  void finish(int r) {
+    // reply
+    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+    reply->set_result(0);
+    mds->server->reply_request(mdr, reply, mdr->ref);
+  }
+};
+
+class C_MDS_truncate_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+  version_t pv;
+  off_t size;
+  time_t ctime;
+public:
+  C_MDS_truncate_finish(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
+    mds(m), mdr(r), in(i), 
+    pv(pdv),
+    size(sz), ctime(ct) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply to cache
+    in->inode.size = size;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->mark_dirty(pv);
+
+    // hit pop
+    mds->balancer->hit_inode(in, META_POP_IWR);   
+
+    // purge
+    mds->mdcache->purge_inode(&in->inode, size);
+    mds->mdcache->wait_for_purge(in->inode.ino, size, new C_MDS_ReplyRequest(mds, mdr));
+  }
+};
 
 void Server::handle_client_truncate(MDRequest *mdr)
 {
-  /*
-  // auth pin
-  if (!cur->can_auth_pin()) {
-    dout(7) << "waiting for authpinnable on " << *cur << endl;
-    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+  MClientRequest *req = mdr->client_request();
+  CInode *cur = request_pin_ref(mdr);
+  if (!cur) return;
+
+  // not auth?
+  if (!cur->is_auth()) {
+    mdcache->request_forward(mdr, cur->authority().first);
     return;
   }
-  mdcache->request_auth_pin(req, cur);
 
-  // write
-  if (!mds->locker->inode_file_xlock_start(cur, req, cur))
+  // lock inode
+  if (!cur->can_auth_pin()) {
+    dout(7) << "waiting for authpinnable on " << *cur << endl;
+    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    mdcache->request_drop_locks(mdr);
+    mdr->drop_auth_pins();
+    return;
+  }
+  mdr->auth_pin(cur);
+
+  // check permissions?  
+
+  // xlock inode
+  if (!mds->locker->inode_file_xlock_start(cur, mdr))
     return;  // fw or (wait for) lock
-
-  // check permissions
   
-  // do update
-  cur->inode.size = req->args.truncate.length;
-  cur->_mark_dirty(); // fixme
+  // already small enough?
+  if (cur->inode.size >= req->args.truncate.length) {
+    reply_request(mdr, 0);
+    return;
+  }
 
-  mds->locker->inode_file_xlock_finish(cur);
-
-  mds->balancer->hit_inode(cur, META_POP_IWR);   
-
-  // start reply
-  MClientReply *reply = new MClientReply(req, 0);
-
-  // commit
-  assert(0); // rewrite me
-  //commit_request(req, reply, cur,
-  //new EString("truncate fixme"));
-  */
+  // prepare
+  version_t pdv = cur->pre_dirty();
+  time_t ctime = g_clock.gettime();
+  C_MDS_truncate_finish *fin = new C_MDS_truncate_finish(mds, mdr, cur, 
+							 pdv, req->args.truncate.length, ctime);
+  
+  // log + wait
+  EUpdate *le = new EUpdate("truncate");
+  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_inode_truncate(cur->inode, req->args.truncate.length);
+  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  pi->mtime = ctime;
+  pi->ctime = ctime;
+  pi->version = pdv;
+  pi->size = req->args.truncate.length;
+  
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
 }
-
 
 
 // ===========================

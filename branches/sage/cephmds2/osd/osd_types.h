@@ -14,15 +14,60 @@
 #ifndef __OSD_TYPES_H
 #define __OSD_TYPES_H
 
-#include "include/reqid.h"
 
-#define PG_INO 1
+#include "msg/msg_types.h"
+
+/* osdreqid_t - caller name + incarnation# + tid to unique identify this request
+ * use for metadata and osd ops.
+ */
+class osdreqid_t {
+public:
+  entity_name_t name; // who
+  int           inc;  // incarnation
+  tid_t         tid;
+  osdreqid_t() : inc(0), tid(0) {}
+  osdreqid_t(const entity_name_t& a, int i, tid_t t) : name(a), inc(i), tid(t) {}
+};
+
+inline ostream& operator<<(ostream& out, const osdreqid_t& r) {
+  return out << r.name << "." << r.inc << ":" << r.tid;
+}
+
+inline bool operator==(const osdreqid_t& l, const osdreqid_t& r) {
+  return (l.name == r.name) && (l.inc == r.inc) && (l.tid == r.tid);
+}
+inline bool operator!=(const osdreqid_t& l, const osdreqid_t& r) {
+  return (l.name != r.name) || (l.inc != r.inc) || (l.tid != r.tid);
+}
+inline bool operator<(const osdreqid_t& l, const osdreqid_t& r) {
+  return (l.name < r.name) || (l.inc < r.inc) || 
+    (l.name == r.name && l.inc == r.inc && l.tid < r.tid);
+}
+inline bool operator<=(const osdreqid_t& l, const osdreqid_t& r) {
+  return (l.name < r.name) || (l.inc < r.inc) ||
+    (l.name == r.name && l.inc == r.inc && l.tid <= r.tid);
+}
+inline bool operator>(const osdreqid_t& l, const osdreqid_t& r) { return !(l <= r); }
+inline bool operator>=(const osdreqid_t& l, const osdreqid_t& r) { return !(l < r); }
+
+namespace __gnu_cxx {
+  template<> struct hash<osdreqid_t> {
+    size_t operator()(const osdreqid_t &r) const { 
+      static blobhash H;
+      return H((const char*)&r, sizeof(r));
+    }
+  };
+}
+
 
 
 // osd types
 typedef __uint64_t coll_t;        // collection id
 
 // pg stuff
+
+#define PG_INO 1
+
 typedef __uint16_t ps_t;
 typedef __uint8_t pruleset_t;
 

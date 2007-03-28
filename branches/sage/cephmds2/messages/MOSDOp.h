@@ -79,7 +79,7 @@ private:
     
     // who's asking?
     entity_inst_t client;
-    reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+    osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
     
     // for replication
     tid_t rep_tid;
@@ -109,7 +109,7 @@ private:
   friend class MOSDOpReply;
 
  public:
-  const reqid_t&    get_reqid() { return st.reqid; }
+  const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
 

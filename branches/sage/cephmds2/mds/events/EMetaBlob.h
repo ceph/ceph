@@ -21,7 +21,6 @@ using namespace std;
 #include "../CInode.h"
 #include "../CDir.h"
 #include "../CDentry.h"
-#include "include/reqid.h"
 
 class MDS;
 
@@ -213,14 +212,14 @@ class EMetaBlob {
   list<version_t>         atids;
 
   // inodes i've destroyed.
-  list<inode_t>           destroyed_inodes;
+  list< pair<inode_t,off_t> > truncated_inodes;
 
   // idempotent op(s)
-  list<reqid_t> client_reqs;
+  list<metareqid_t> client_reqs;
 
  public:
 
-  void add_client_req(reqid_t r) {
+  void add_client_req(metareqid_t r) {
     client_reqs.push_back(r);
   }
 
@@ -228,8 +227,8 @@ class EMetaBlob {
     atids.push_back(atid);
   }  
 
-  void add_destroyed_inode(const inode_t& inode) {
-    destroyed_inodes.push_back(inode);
+  void add_inode_truncate(const inode_t& inode, off_t newsize) {
+    truncated_inodes.push_back(pair<inode_t,off_t>(inode, newsize));
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {
@@ -344,7 +343,7 @@ class EMetaBlob {
       lump_map[*i]._encode(bl);
     }
     ::_encode(atids, bl);
-    ::_encode(destroyed_inodes, bl);
+    ::_encode(truncated_inodes, bl);
     ::_encode(client_reqs, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
@@ -359,7 +358,7 @@ class EMetaBlob {
       lump_map[dirfrag]._decode(bl, off);
     }
     ::_decode(atids, bl, off);
-    ::_decode(destroyed_inodes, bl, off);
+    ::_decode(truncated_inodes, bl, off);
     ::_decode(client_reqs, bl, off);
   }
   

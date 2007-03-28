@@ -139,9 +139,9 @@ class MClientRequest : public Message {
     this->st.client_inst = ci;
   }
 
-  reqid_t get_reqid() {
+  metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return reqid_t(st.client_inst.name, 1, st.tid); 
+    return metareqid_t(st.client_inst.name.num(), st.tid); 
   }
 
   int get_open_file_mode() {

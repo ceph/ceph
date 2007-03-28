@@ -46,6 +46,46 @@ using namespace std;
 #define MDS_TRAVERSE_FAIL          4
 
 
+struct metareqid_t {
+  int client;
+  tid_t tid;
+  metareqid_t() : client(-1), tid(0) {}
+  metareqid_t(int c, tid_t t) : client(c), tid(t) {}
+};
+
+inline ostream& operator<<(ostream& out, const metareqid_t& r) {
+  return out << "client" << r.client << ":" << r.tid;
+}
+
+inline bool operator==(const metareqid_t& l, const metareqid_t& r) {
+  return (l.client == r.client) && (l.tid == r.tid);
+}
+inline bool operator!=(const metareqid_t& l, const metareqid_t& r) {
+  return (l.client != r.client) || (l.tid != r.tid);
+}
+inline bool operator<(const metareqid_t& l, const metareqid_t& r) {
+  return (l.client < r.client) || 
+    (l.client == r.client && l.tid < r.tid);
+}
+inline bool operator<=(const metareqid_t& l, const metareqid_t& r) {
+  return (l.client < r.client) ||
+    (l.client == r.client && l.tid <= r.tid);
+}
+inline bool operator>(const metareqid_t& l, const metareqid_t& r) { return !(l <= r); }
+inline bool operator>=(const metareqid_t& l, const metareqid_t& r) { return !(l < r); }
+
+namespace __gnu_cxx {
+  template<> struct hash<metareqid_t> {
+    size_t operator()(const metareqid_t &r) const { 
+      hash<__uint64_t> H;
+      return H(r.client) ^ H(r.tid);
+    }
+  };
+}
+
+
+
+
 // ================================================================
 // dir frag
 

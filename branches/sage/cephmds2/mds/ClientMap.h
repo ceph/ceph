@@ -44,6 +44,15 @@ class ClientMap {
   hash_map<int,entity_inst_t> client_inst;
   set<int>           client_mount;
   hash_map<int, int> client_ref;
+
+  /*
+    hrm, we need completion codes, too.
+  struct active_tid_set_t {
+    tid_t      max;     // max tid we've journaled
+    set<tid_t> active;  // still-active tids that are < max
+  };
+  hash_map<int, active_tid_set_t> client_committed;
+  */
   
   void inc_ref(int client, const entity_inst_t& inst) {
     if (client_inst.count(client)) {

@@ -31,7 +31,7 @@
 class MOSDOpReply : public Message {
   struct {
     // req
-    reqid_t reqid;
+    osdreqid_t reqid;
 
     tid_t rep_tid;
     
@@ -56,7 +56,7 @@ class MOSDOpReply : public Message {
   map<string,bufferptr> attrset;
 
  public:
-  const reqid_t& get_reqid() { return st.reqid; }
+  const osdreqid_t& get_reqid() { return st.reqid; }
   long     get_tid() { return st.reqid.tid; }
   long     get_rep_tid() { return st.rep_tid; }
   object_t get_oid() { return st.oid; }

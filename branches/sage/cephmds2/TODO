@@ -59,20 +59,19 @@ mds
 
 
 - locking rewrites
- - active_requests
-   - keyed off reqid_t
-   - allow separate remote/local locks
-   - facilitate ordered lock acquisition
- - redo dispatch_request framework -- ref arg optional (it's in the table)
-   - or, use Request* directly
- - rename Locker primitives
- - fix path pinning
+ - dentry, inode remote xlock..
 
-- truncate
-- link
-- unlink
-- mdsreq_t
 - clientmap request history
+  - hmm, we need completion codes.  only after recovery.
+  - maxtid
+  - list of active tids < max
+  - journaled bit in MDRequest
+  - journal 
+- retry count in MClientRequest AND MOSDOp
+- mdsreqid_t
+
+/untested- truncate
+- rename
 
 
 - mds failure vs clients

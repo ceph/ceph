@@ -48,7 +48,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_null()) out << " NULL";
   if (dn.is_remote()) out << " REMOTE";
 
-  if (dn.is_pinned()) out << " " << dn.num_pins() << " pathpins";
+  if (dn.is_rdlocked()) out << " " << dn.get_num_rdlocks() << " rdlocks";
 
   if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
   if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
