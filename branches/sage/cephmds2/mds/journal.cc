@@ -105,12 +105,12 @@ bool EMetaBlob::has_expired(MDS *mds)
       if (ex->is_exporting()) {
 	// wait until export is acked (logged on remote) and committed (logged locally)
 	dout(10) << "EMetaBlob.has_expired ambiguous auth for " << *dir
-		 << ", exporting (not yet safe) on " << *ex << endl;
+		 << ", exporting on " << *ex << endl;
 	return false;
       } else {
 	dout(10) << "EMetaBlob.has_expired ambiguous auth for " << *dir
-		 << ", _importing_ (safe) on " << *ex << endl;
-	return true;
+		 << ", importing on " << *ex << endl;
+	return false;
       }
     }
 
@@ -153,6 +153,7 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 {
   map<CDir*,version_t> commit;  // dir -> version needed
   list<CDir*> waitfor_export;
+  list<CDir*> waitfor_import;
   int ncommit = 0;
 
   // examine dirv's for my lumps
@@ -187,7 +188,8 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	continue;
       } else {
 	dout(10) << "EMetaBlob.expire ambiguous auth for " << *dir
-		 << ", but _importing_, we're safe on " << *ex << endl;
+		 << ", waiting for import finish on " << *ex << endl;
+	waitfor_import.push_back(ex);
 	continue;
       }
     }
@@ -220,7 +222,11 @@ void EMetaBlob::expire(MDS *mds, Context *c)
        p != waitfor_export.end();
        ++p) 
     mds->mdcache->migrator->add_export_finish_waiter(*p, gather->new_sub());
-
+  for (list<CDir*>::iterator p = waitfor_import.begin();
+       p != waitfor_import.end();
+       ++p) 
+    (*p)->add_waiter(CDir::WAIT_IMPORTED, gather->new_sub());
+  
 
   // have my anchortable ops committed?
   for (list<version_t>::iterator p = atids.begin();

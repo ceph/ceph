@@ -591,6 +591,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
   vector<CDentry*> trace;
   CDir *dir = traverse_to_auth_dir(mdr, trace, req->get_filepath());
+  if (!dir) return 0;
   dout(10) << "rdlock_path_xlock_dentry dir " << *dir << endl;
 
   // make sure we can auth_pin dir

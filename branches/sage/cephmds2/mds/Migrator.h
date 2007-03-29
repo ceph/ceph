@@ -31,6 +31,7 @@ class CDentry;
 
 class MExportDirDiscover;
 class MExportDirDiscoverAck;
+class MExportDirCancel;
 class MExportDirPrep;
 class MExportDirPrepAck;
 class MExportDir;
@@ -38,21 +39,6 @@ class MExportDirAck;
 class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
-
-class MHashDirDiscover;
-class MHashDirDiscoverAck;
-class MHashDirPrep;
-class MHashDirPrepAck;
-class MHashDir;
-class MHashDirAck;
-class MHashDirNotify;
-
-class MUnhashDirPrep;
-class MUnhashDirPrepAck;
-class MUnhashDir;
-class MUnhashDirAck;
-class MUnhashDirNotify;
-class MUnhashDirNotifyAck;
 
 class EImportStart;
 
@@ -88,13 +74,14 @@ protected:
 
   // -- imports --
 public:
-  const static int IMPORT_DISCOVERED    = 1; // waiting for prep
-  const static int IMPORT_PREPPING      = 2; // opening dirs on bounds
-  const static int IMPORT_PREPPED       = 3; // opened bounds, waiting for import
-  const static int IMPORT_LOGGINGSTART  = 4; // got import, logging EImportStart
-  const static int IMPORT_ACKING        = 5; // logged EImportStart, sent ack, waiting for finish
-  //const static int IMPORT_LOGGINGFINISH = 6; // logging EImportFinish
-  const static int IMPORT_ABORTING      = 7; // notifying bystanders of an abort before unfreezing
+  const static int IMPORT_DISCOVERING   = 1; // waiting for prep
+  const static int IMPORT_DISCOVERED    = 2; // waiting for prep
+  const static int IMPORT_PREPPING      = 3; // opening dirs on bounds
+  const static int IMPORT_PREPPED       = 4; // opened bounds, waiting for import
+  const static int IMPORT_LOGGINGSTART  = 5; // got import, logging EImportStart
+  const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
+  //const static int IMPORT_LOGGINGFINISH = 7; // logging EImportFinish
+  const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
 
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
@@ -102,7 +89,6 @@ protected:
   map<dirfrag_t,list<dirfrag_t> > import_bound_inos;
   map<CDir*,set<CDir*> >          import_bounds;
   map<CDir*,set<int> >            import_bystanders;
-
 
 
   /*
@@ -173,8 +159,7 @@ public:
   // -- import/export --
   // exporter
  public:
-  void export_dir(CDir *dir,
-                  int mds);
+  void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
@@ -187,7 +172,7 @@ public:
 
  protected:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
-  void export_frozen(CDir *dir, int dest);
+  void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
   int encode_export_dir(list<bufferlist>& dirstatelist,
@@ -196,7 +181,6 @@ public:
                       CDir *dir,
                       int newauth);
   void export_reverse(CDir *dir);
-  void export_notify_abort(CDir* dir);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
@@ -204,14 +188,20 @@ public:
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
+
+
   // importer
   void handle_export_discover(MExportDirDiscover *m);
+  void handle_export_cancel(MExportDirCancel *m);
+  void import_discovered(CInode *in, dirfrag_t df);
   void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le);
+
+
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
@@ -229,69 +219,6 @@ protected:
 
   // bystander
   void handle_export_notify(MExportDirNotify *m);
-
-
-  // -- hashed directories --
-
-  /*
-  // HASH
- public:
-  void hash_dir(CDir *dir);  // on auth
- protected:
-  map< CDir*, set<int> >             hash_gather;
-  map< CDir*, map< int, set<int> > > hash_notify_gather;
-  map< CDir*, list<CInode*> >        hash_proxy_inos;
-
-  // hash on auth
-  void handle_hash_dir_discover_ack(MHashDirDiscoverAck *m);
-  void hash_dir_complete(CDir *dir);
-  void hash_dir_frozen(CDir *dir);
-  void handle_hash_dir_prep_ack(MHashDirPrepAck *m);
-  void hash_dir_go(CDir *dir);
-  void handle_hash_dir_ack(MHashDirAck *m);
-  void hash_dir_finish(CDir *dir);
-  friend class C_MDC_HashFreeze;
-  friend class C_MDC_HashComplete;
-
-  // auth and non-auth
-  void handle_hash_dir_notify(MHashDirNotify *m);
-
-  // hash on non-auth
-  void handle_hash_dir_discover(MHashDirDiscover *m);
-  void handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r);
-  void handle_hash_dir_prep(MHashDirPrep *m);
-  void handle_hash_dir(MHashDir *m);
-  friend class C_MDC_HashDirDiscover;
-
-  // UNHASH
- public:
-  void unhash_dir(CDir *dir);   // on auth
- protected:
-  map< CDir*, list<MUnhashDirAck*> > unhash_content;
-  void import_hashed_content(CDir *dir, bufferlist& bl, int nden, int oldauth);
-
-  // unhash on auth
-  void unhash_dir_frozen(CDir *dir);
-  void unhash_dir_prep(CDir *dir);
-  void handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m);
-  void unhash_dir_go(CDir *dir);
-  void handle_unhash_dir_ack(MUnhashDirAck *m);
-  void handle_unhash_dir_notify_ack(MUnhashDirNotifyAck *m);
-  void unhash_dir_finish(CDir *dir);
-  friend class C_MDC_UnhashFreeze;
-  friend class C_MDC_UnhashComplete;
-
-  // unhash on all
-  void unhash_dir_complete(CDir *dir);
-
-  // unhash on non-auth
-  void handle_unhash_dir_prep(MUnhashDirPrep *m);
-  void unhash_dir_prep_frozen(CDir *dir);
-  void unhash_dir_prep_finish(CDir *dir);
-  void handle_unhash_dir(MUnhashDir *m);
-  void handle_unhash_dir_notify(MUnhashDirNotify *m);
-  friend class C_MDC_UnhashPrepFreeze;
-  */
 
 };
 

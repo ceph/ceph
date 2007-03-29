@@ -144,6 +144,7 @@ void MDBalancer::send_heartbeat()
     CDir *im = *it;
     int from = im->inode->authority().first;
     if (from == mds->get_nodeid()) continue;
+    if (im->get_inode()->is_stray()) continue;
     import_map[from] += im->popularity[MDS_POP_CURDOM].meta_load();
   }
   mds_import_map[ mds->get_nodeid() ] = import_map;
@@ -431,6 +432,7 @@ void MDBalancer::do_rebalance(int beat)
        it != fullauthsubs.end();
        it++) {
     CDir *im = *it;
+    if (im->get_inode()->is_stray()) continue;
 
     double pop = im->popularity[MDS_POP_CURDOM].meta_load();
     if (pop < g_conf.mds_bal_idle_threshold &&
@@ -552,6 +554,7 @@ void MDBalancer::do_rebalance(int beat)
     for (set<CDir*>::iterator pot = candidates.begin();
          pot != candidates.end();
          pot++) {
+      if ((*pot)->get_inode()->is_stray()) continue;
       find_exports(*pot, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD) {
         break;

@@ -126,20 +126,20 @@ struct MDRequest {
   }
 
   // auth pins
+  bool is_auth_pinned(CInode *in) { return inode_auth_pins.count(in); }
+  bool is_auth_pinned(CDir *dir) { return dir_auth_pins.count(dir); }
   void auth_pin(CInode *in) {
-    if (inode_auth_pins.count(in)) {
+    if (!is_auth_pinned(in)) {
       in->auth_pin();
       inode_auth_pins.insert(in);
     }
   }
   void auth_pin(CDir *dir) {
-    if (dir_auth_pins.count(dir)) {
+    if (!is_auth_pinned(dir)) {
       dir->auth_pin();
       dir_auth_pins.insert(dir);
     }
   }
-  bool is_auth_pinned(CInode *in) { return inode_auth_pins.count(in); }
-  bool is_auth_pinned(CDir *dir) { return dir_auth_pins.count(dir); }
   void drop_auth_pins() {
     for (set<CInode*>::iterator it = inode_auth_pins.begin();
 	 it != inode_auth_pins.end();

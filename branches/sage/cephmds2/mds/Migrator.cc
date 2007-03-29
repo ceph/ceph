@@ -37,6 +37,7 @@
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
+#include "messages/MExportDirCancel.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
 #include "messages/MExportDir.h"
@@ -177,32 +178,37 @@ void Migrator::handle_mds_failure(int who)
     next++;
     CDir *dir = p->first;
     
-    if (export_peer[dir] == who) {
-      // the guy i'm exporting to failed.  
-      // clean up.
+    // abort exports:
+    //  - that are going to the failed node
+    //  - that aren't frozen yet (to about auth_pin deadlock)
+    if (export_peer[dir] == who ||
+	p->second == EXPORT_DISCOVERING || p->second == EXPORT_FREEZING) { 
+      // the guy i'm exporting to failed, or we're just freezing.
       dout(10) << "cleaning up export state " << p->second << " of " << *dir << endl;
       
       switch (p->second) {
       case EXPORT_DISCOVERING:
 	dout(10) << "export state=discovering : canceling freeze and removing auth_pin" << endl;
 	dir->unfreeze_tree();  // cancel the freeze
-	dir->auth_unpin();     // remove the auth_pin (that was holding up the freeze)
+	dir->auth_unpin();
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	if (export_peer[dir] != who) // tell them.
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), who, MDS_PORT_MIGRATOR);
 	break;
-
+	
       case EXPORT_FREEZING:
 	dout(10) << "export state=freezing : canceling freeze" << endl;
 	dir->unfreeze_tree();  // cancel the freeze
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	if (export_peer[dir] != who) // tell them.
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), who, MDS_PORT_MIGRATOR);
 	break;
 
 	// NOTE: state order reversal, warning comes after loggingstart+prepping
       case EXPORT_WARNING:
 	dout(10) << "export state=warning : unpinning bounds, unfreezing, notifying" << endl;
-	//export_notify_abort(dir);   // tell peers about abort
-
 	// fall-thru
 
 	//case EXPORT_LOGGINGSTART:
@@ -304,6 +310,12 @@ void Migrator::handle_mds_failure(int who)
 
     if (import_peer[df] == who) {
       switch (import_state[df]) {
+      case IMPORT_DISCOVERING:
+	dout(10) << "import state=discovering : clearing state" << endl;
+	import_state.erase(df);
+	import_peer.erase(df);
+	break;
+
       case IMPORT_DISCOVERED:
 	dout(10) << "import state=discovered : unpinning inode " << *diri << endl;
 	assert(diri);
@@ -373,6 +385,8 @@ void Migrator::audit()
   for (map<dirfrag_t,int>::iterator p = import_state.begin();
        p != import_state.end();
        p++) {
+    if (p->second == IMPORT_DISCOVERING) 
+      continue;
     if (p->second == IMPORT_DISCOVERED) {
       CInode *in = cache->get_inode(p->first.ino);
       assert(in);
@@ -380,7 +394,8 @@ void Migrator::audit()
     }
     CDir *dir = cache->get_dirfrag(p->first);
     assert(dir);
-    if (p->second == IMPORT_PREPPING) continue;
+    if (p->second == IMPORT_PREPPING) 
+      continue;
     assert(dir->auth_is_ambiguous());
     assert(dir->authority().first  == mds->get_nodeid() ||
 	   dir->authority().second == mds->get_nodeid());
@@ -414,25 +429,22 @@ void Migrator::audit()
 class C_MDC_ExportFreeze : public Context {
   Migrator *mig;
   CDir *ex;   // dir i'm exporting
-  int dest;
 
 public:
-  C_MDC_ExportFreeze(Migrator *m, CDir *e, int d) :
-	mig(m), ex(e), dest(d) {}
+  C_MDC_ExportFreeze(Migrator *m, CDir *e) :
+	mig(m), ex(e) {}
   virtual void finish(int r) {
     if (r >= 0)
-      mig->export_frozen(ex, dest);
+      mig->export_frozen(ex);
   }
 };
-
 
 
 /** export_dir(dir, dest)
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
  */
-void Migrator::export_dir(CDir *dir,
-			  int dest)
+void Migrator::export_dir(CDir *dir, int dest)
 {
   dout(7) << "export_dir " << *dir << " to " << dest << endl;
   assert(dir->is_auth());
@@ -459,8 +471,11 @@ void Migrator::export_dir(CDir *dir,
     dout(7) << "can't export hashed dir right now.  implement me carefully later." << endl;
     return;
   }
+  if (dir->state_test(CDir::STATE_EXPORTING)) {
+    dout(7) << "already exporting" << endl;
+    return;
+  }
   
-
   // pin path?
   vector<CDentry*> trace;
   cache->make_trace(trace, dir->inode);
@@ -468,25 +483,21 @@ void Migrator::export_dir(CDir *dir,
     dout(7) << "export_dir couldn't pin path, failing." << endl;
     return;
   }
-  mds->locker->dentry_anon_rdlock_trace_start(trace);
 
-  // ok, let's go.
+  // ok.
+  mds->locker->dentry_anon_rdlock_trace_start(trace);
   assert(export_state.count(dir) == 0);
   export_state[dir] = EXPORT_DISCOVERING;
   export_peer[dir] = dest;
 
-  assert(!dir->state_test(CDir::STATE_EXPORTING));
   dir->state_set(CDir::STATE_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
-  dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on discover ack)
+  mds->send_message_mds(new MExportDirDiscover(dir), export_peer[dir], MDS_PORT_MIGRATOR);
 
-  // take away the popularity we're sending.   FIXME: do this later?
-  mds->balancer->subtract_export(dir);
-  
-  // freeze the subtree
-  dir->freeze_tree(new C_MDC_ExportFreeze(this, dir, dest));
+  // start the freeze, but hold it up with an auth_pin.
+  dir->auth_pin();
+  dir->freeze_tree(new C_MDC_ExportFreeze(this, dir));
 }
 
 
@@ -500,33 +511,28 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
   assert(dir);
   
   dout(7) << "export_discover_ack from " << m->get_source()
-	  << " on " << *dir << ", releasing auth_pin" << endl;
+	  << " on " << *dir << endl;
 
-  export_state[dir] = EXPORT_FREEZING;
-  
-  dir->auth_unpin();   // unpin to allow freeze to complete
+  if (export_state.count(dir) == 0 ||
+      export_state[dir] != EXPORT_DISCOVERING ||
+      export_peer[dir] != m->get_source().num()) {
+    dout(7) << "must have aborted" << endl;
+  } else {
+    // freeze the subtree
+    export_state[dir] = EXPORT_FREEZING;
+    dir->auth_unpin();
+  }
   
   delete m;  // done
 }
 
-
-void Migrator::export_frozen(CDir *dir,
-			     int dest)
+void Migrator::export_frozen(CDir *dir)
 {
-  // subtree is now frozen!
-  dout(7) << "export_frozen on " << *dir << " to " << dest << endl;
-
-  if (export_state.count(dir) == 0 ||
-      export_state[dir] != EXPORT_FREEZING) {
-    dout(7) << "dest must have failed, aborted" << endl;
-    return;
-  }
-
+  dout(7) << "export_frozen on " << *dir << endl;
   assert(dir->is_frozen());
+  int dest = export_peer[dir];
 
   // ok!
-  //export_state[dir] = EXPORT_LOGGINGSTART;
-
   cache->show_subtrees();
 
   // note the bounds.
@@ -707,6 +713,9 @@ void Migrator::export_go(CDir *dir)
 
   // queue up the finisher
   dir->add_waiter( CDir::WAIT_UNFREEZE, fin );
+
+  // take away the popularity we're sending.   FIXME: do this later?
+  mds->balancer->subtract_export(dir);
 
   // stats
   if (mds->logger) mds->logger->inc("ex");
@@ -1005,9 +1014,6 @@ void Migrator::export_reverse(CDir *dir)
   // process delayed expires
   cache->process_delayed_expire(dir);
   
-  // tell peers
-  //export_notify_abort(dir);
-  
   // unfreeze
   dir->unfreeze_tree();
 
@@ -1020,23 +1026,6 @@ void Migrator::export_reverse(CDir *dir)
   cache->show_cache();
 }
 
-/*
-void Migrator::export_notify_abort(CDir* dir)
-{
-  dout(10) << "export_notify_abort " << *dir << endl;
-
-  // send out notify(abort) to bystanders.  no ack necessary.
-  for (set<int>::iterator p = export_notify_ack_waiting[dir].begin();
-       p != export_notify_ack_waiting[dir].end();
-       ++p) {
-    MExportDirNotify *notify = new MExportDirNotify(dir->ino(), false,
-						    pair<int,int>(mds->get_nodeid(), export_peer[dir]),
-						    pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
-    notify->copy_bounds(export_bounds[dir]);
-    mds->send_message_mds(notify, *p, MDS_PORT_MIGRATOR);
-  }
-}
-*/
 
 /*
  * once i get the ack, and logged the EExportFinish(true),
@@ -1215,46 +1204,89 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
 
   dout(7) << "handle_export_discover on " << m->get_path() << endl;
 
-  // must discover it!
-  filepath fpath(m->get_path());
-  vector<CDentry*> trace;
-  int r = cache->path_traverse(0, 
-			       0,
-			       fpath, trace, true,
-			       m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
-			       MDS_TRAVERSE_DISCOVER);
-  if (r > 0) return; // wait
-  if (r < 0) {
-    dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << endl;
-    assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
-  }
-  
-  CInode *in;
-  if (trace.empty()) {
-    in = cache->get_root();
-    if (!in) {
-      cache->open_root(new C_MDS_RetryMessage(mds, m));
-      return;
-    }
-  } else {
-    in = trace[trace.size()-1]->inode;
-  }
-  assert(in->is_dir());
-  
-  // pin inode in the cache (for now)
-  in->get(CInode::PIN_IMPORTING);
-
   // note import state
-  import_state[m->get_dirfrag()] = IMPORT_DISCOVERED;
-  import_peer[m->get_dirfrag()] = m->get_source().num();
+  dirfrag_t df = m->get_dirfrag();
+  
+  // only start discovering on this message once.
+  if (!m->started) {
+    m->started = true;
+    import_state[df] = IMPORT_DISCOVERING;
+    import_peer[df] = m->get_source().num();
+  }
 
-  // reply
-  dout(7) << " sending export_discover_ack on " << *in << endl;
-  mds->send_message_mds(new MExportDirDiscoverAck(m->get_dirfrag()),
-			m->get_source().num(), MDS_PORT_MIGRATOR);
+  // am i retrying after ancient path_traverse results?
+  if (import_state.count(df) == 0 &&
+      import_state[df] != IMPORT_DISCOVERING) {
+    dout(7) << "hmm import_state is off, i must be obsolete lookup" << endl;
+    delete m;
+    return;
+  }
+
+  // do we have it?
+  CInode *in = cache->get_inode(m->get_dirfrag().ino);
+  if (!in) {
+    // must discover it!
+    filepath fpath(m->get_path());
+    vector<CDentry*> trace;
+    int r = cache->path_traverse(0, 
+				 0,
+				 fpath, trace, true,
+				 m, new C_MDS_RetryMessage(mds, m),       // on delay/retry
+				 MDS_TRAVERSE_DISCOVER);
+    if (r > 0) return; // wait
+    if (r < 0) {
+      dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << endl;
+      assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
+    }
+    
+    CInode *in;
+    if (trace.empty()) {
+      in = cache->get_root();
+      if (!in) {
+	cache->open_root(new C_MDS_RetryMessage(mds, m));
+	return;
+      }
+    } else {
+      in = trace[trace.size()-1]->inode;
+    }
+  }
+
+  // yay
+  import_discovered(in, df);
   delete m;
 }
 
+void Migrator::import_discovered(CInode *in, dirfrag_t df)
+{
+  dout(7) << "import_discovered " << df << " inode " << *in << endl;
+  
+  // pin inode in the cache (for now)
+  assert(in->is_dir());
+  in->get(CInode::PIN_IMPORTING);
+  
+  // reply
+  dout(7) << " sending export_discover_ack on " << *in << endl;
+  mds->send_message_mds(new MExportDirDiscoverAck(df),
+			import_peer[df], MDS_PORT_MIGRATOR);
+}
+
+void Migrator::handle_export_cancel(MExportDirCancel *m)
+{
+  dout(7) << "handle_export_cancel on " << m->get_dirfrag() << endl;
+
+  if (import_state[m->get_dirfrag()] == IMPORT_DISCOVERED) {
+    CInode *in = cache->get_inode(m->get_dirfrag().ino);
+    assert(in);
+    in->put(CInode::PIN_IMPORTING);
+  } else {
+    assert(import_state[m->get_dirfrag()] == IMPORT_DISCOVERING);
+  }
+
+  import_state.erase(m->get_dirfrag());
+  import_peer.erase(m->get_dirfrag());
+
+  delete m;
+}
 
 
 void Migrator::handle_export_prep(MExportDirPrep *m)

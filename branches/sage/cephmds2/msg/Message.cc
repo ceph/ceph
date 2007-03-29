@@ -67,6 +67,7 @@ using namespace std;
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
+#include "messages/MExportDirCancel.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
 #include "messages/MExportDirWarning.h"
@@ -76,24 +77,6 @@ using namespace std;
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
-
-#include "messages/MHashReaddir.h"
-#include "messages/MHashReaddirReply.h"
-
-#include "messages/MHashDirDiscover.h"
-#include "messages/MHashDirDiscoverAck.h"
-#include "messages/MHashDirPrep.h"
-#include "messages/MHashDirPrepAck.h"
-#include "messages/MHashDir.h"
-#include "messages/MHashDirAck.h"
-#include "messages/MHashDirNotify.h"
-
-#include "messages/MUnhashDirPrep.h"
-#include "messages/MUnhashDirPrepAck.h"
-#include "messages/MUnhashDir.h"
-#include "messages/MUnhashDirAck.h"
-#include "messages/MUnhashDirNotify.h"
-#include "messages/MUnhashDirNotifyAck.h"
 
 #include "messages/MRenameWarning.h"
 #include "messages/MRenameNotify.h"
@@ -297,6 +280,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_EXPORTDIRDISCOVERACK:
     m = new MExportDirDiscoverAck();
     break;
+  case MSG_MDS_EXPORTDIRCANCEL:
+    m = new MExportDirCancel();
+    break;
 
   case MSG_MDS_EXPORTDIR:
     m = new MExportDir;
@@ -331,54 +317,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     m = new MExportDirWarningAck;
     break;
 
-
-  case MSG_MDS_HASHREADDIR:
-    m = new MHashReaddir();
-    break;
-  case MSG_MDS_HASHREADDIRREPLY:
-    m = new MHashReaddirReply();
-    break;
-    
-  case MSG_MDS_HASHDIRDISCOVER:
-    m = new MHashDirDiscover();
-    break;
-  case MSG_MDS_HASHDIRDISCOVERACK:
-    m = new MHashDirDiscoverAck();
-    break;
-  case MSG_MDS_HASHDIRPREP:
-    m = new MHashDirPrep();
-    break;
-  case MSG_MDS_HASHDIRPREPACK:
-    m = new MHashDirPrepAck();
-    break;
-  case MSG_MDS_HASHDIR:
-    m = new MHashDir();
-    break;
-  case MSG_MDS_HASHDIRACK:
-    m = new MHashDirAck();
-    break;
-  case MSG_MDS_HASHDIRNOTIFY:
-    m = new MHashDirNotify();
-    break;
-
-  case MSG_MDS_UNHASHDIRPREP:
-    m = new MUnhashDirPrep();
-    break;
-  case MSG_MDS_UNHASHDIRPREPACK:
-    m = new MUnhashDirPrepAck();
-    break;
-  case MSG_MDS_UNHASHDIR:
-    m = new MUnhashDir();
-    break;
-  case MSG_MDS_UNHASHDIRACK:
-    m = new MUnhashDirAck();
-    break;
-  case MSG_MDS_UNHASHDIRNOTIFY:
-    m = new MUnhashDirNotify();
-    break;
-  case MSG_MDS_UNHASHDIRNOTIFYACK:
-    m = new MUnhashDirNotifyAck();
-    break;
 
   case MSG_MDS_RENAMEWARNING:
     m = new MRenameWarning();

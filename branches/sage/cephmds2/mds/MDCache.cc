@@ -2284,6 +2284,7 @@ bool MDCache::shutdown_pass()
          it != subtrees.end();
          it++) {
       CDir *dir = it->first;
+      if (dir->get_inode()->is_stray()) continue;
       if (dir->is_frozen() || dir->is_freezing()) continue;
       if (!dir->is_fullauth()) continue;
       ls.push_back(dir);
@@ -2306,6 +2307,10 @@ bool MDCache::shutdown_pass()
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
 
+
+  // empty out stray contents
+  // FIXME
+  dout(7) << "FIXME: i need to empty out stray dir contents..." << endl;
 
   // LOG
   mds->mdlog->trim(0);

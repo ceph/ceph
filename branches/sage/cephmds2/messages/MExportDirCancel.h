@@ -11,48 +11,37 @@
  * 
  */
 
-#ifndef __MEXPORTDIRDISCOVER_H
-#define __MEXPORTDIRDISCOVER_H
+#ifndef __MEXPORTDIRCANCEL_H
+#define __MEXPORTDIRCANCEL_H
 
 #include "msg/Message.h"
 #include "mds/CInode.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public Message {
+class MExportDirCancel : public Message {
   dirfrag_t dirfrag;
-  string path;
 
  public:
-  inodeno_t get_ino() { return dirfrag.ino; }
   dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_path() { return path; }
 
-  bool started;
+  MExportDirCancel() {}
+  MExportDirCancel(dirfrag_t df) : 
+    Message(MSG_MDS_EXPORTDIRCANCEL),
+	dirfrag(df) { }
 
-  MExportDirDiscover() :     
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
-    started(false) { }
-  MExportDirDiscover(CDir *dir) : 
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
-    started(false) {
-    dir->get_inode()->make_path(path);
-    dirfrag = dir->dirfrag();
-  }
-  virtual char *get_type_name() { return "ExDis"; }
+  virtual char *get_type_name() { return "ExCancel"; }
   void print(ostream& o) {
-    o << "export_discover(" << dirfrag << " " << path << ")";
+    o << "export_cancel(" << dirfrag << ")";
   }
 
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
-    ::_decode(path, payload, off);
   }
 
   virtual void encode_payload() {
     payload.append((char*)&dirfrag, sizeof(dirfrag));
-    ::_encode(path, payload);
   }
 };
 

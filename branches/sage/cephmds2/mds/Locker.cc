@@ -147,6 +147,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
        p != dentry_xlocks.end();
        ++p) {
     CDir *dir = (*p)->dir;
+    dout(10) << "might auth_pin " << *dir << endl;
+
     if (!dir->is_auth()) continue;
     if (!mdr->is_auth_pinned(dir) &&
 	!dir->can_auth_pin()) {
@@ -177,6 +179,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
        ++p) {
     CDir *dir = (*p)->dir;
     if (!dir->is_auth()) continue;
+    dout(10) << "auth_pinning " << *dir << endl;
     mdr->auth_pin(dir);
   }
   for (set<CInode*>::iterator p = inode_hard_xlocks.begin();
@@ -184,6 +187,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
        ++p) {
     CInode *in = *p;
     if (!in->is_auth()) continue;
+    dout(10) << "auth_pinning " << *in << endl;
     mdr->auth_pin(in);
   }
 
