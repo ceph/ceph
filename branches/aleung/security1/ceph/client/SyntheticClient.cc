@@ -412,12 +412,13 @@ int SyntheticClient::run()
 	cout << "Setup trace:" << setupfile << endl;
 
 	// choose random IOR2 file to open
-	int randf = rand() % 500;
+	//int randf = rand() % 500;
 	// cant be trace 0, its broken
-	randf++;
+	//randf++;
+	int filenum = client->whoami + 1;
 	
 	ostringstream ost;
-	ost << "IOR2/IOR_trace_fileperproc.p" << randf << "t.cephtrace";
+	ost << "IOR2/IOR_trace_fileperproc.p" << filenum << "t.cephtrace";
 	string tfile = ost.str();
 	cout << "My " << count <<  " trace file:" << tfile << endl;
       
