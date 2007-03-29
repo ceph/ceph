@@ -624,10 +624,12 @@ void Client::send_request(MetaRequest *request, int mds)
   MClientRequest *r = request->request;
   if (!r) {
     // make a new one
-    dout(10) << "send_request rebuilding request " << request->tid << " for mds" << mds << endl;
+    dout(10) << "send_request rebuilding request " << request->tid
+	     << " for mds" << mds << endl;
     r = new MClientRequest;
     r->copy_payload(request->request_payload);
     r->decode_payload();
+    r->set_retry_attempt(request->retry_attempt);
   }
   request->request = 0;
 
@@ -649,6 +651,9 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 
   MetaRequest *request = mds_requests[tid];
   assert(request);
+
+  // reset retry counter
+  request->retry_attempt = 0;
 
   if (request->idempotent) {
     // note new mds set.
@@ -822,8 +827,10 @@ void Client::kick_requests(int mds)
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) 
-    if (p->second->mds.count(mds))
+    if (p->second->mds.count(mds)) {
+      p->second->retry_attempt++;   // inc retry counter
       send_request(p->second, mds);
+    }
 }
 
 

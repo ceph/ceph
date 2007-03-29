@@ -322,6 +322,7 @@ class Client : public Dispatcher {
     bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
     int      num_fwd;            // # of times i've been forwarded
+    int      retry_attempt;
 
     MClientReply *reply;         // the reply
 
@@ -330,7 +331,7 @@ class Client : public Dispatcher {
 
     MetaRequest(MClientRequest *req, tid_t t) : 
       tid(t), request(req), 
-      idempotent(false), num_fwd(0), 
+      idempotent(false), num_fwd(0), retry_attempt(0),
       reply(0), 
       caller_cond(0), dispatch_cond(0) { }
   };

@@ -1433,23 +1433,14 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_remote " << *dn << " to " << *targeti << endl;
-  /*
-  // pin the target replica in our cache
-  assert(!targeti->is_auth());
-  mdcache->request_pin_inode(req, targeti);
-
+  
+  // ??
   // 1. send LinkPrepare to dest (lock target on dest, journal target update)
-
-
-
-
   // 2. create+journal new dentry, as with link_local.
   // 3. send LinkCommit to dest (unlocks target on dest, journals commit)  
 
   // IMPLEMENT ME
-  MClientReply *reply = new MClientReply(req, -EXDEV);
-  reply_request(req, reply, dn->get_dir()->get_inode());
-  */
+  reply_request(mdr, -EXDEV);
 }
 
 
@@ -1742,8 +1733,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 void Server::_unlink_remote(MDRequest *mdr, CDentry *dn) 
 {
   // IMPLEMENT ME
-  MClientReply *reply = new MClientReply(mdr->client_request(), -EXDEV);
-  reply_request(mdr, reply, dn->get_dir()->get_inode());
+  reply_request(mdr, -EXDEV);
 }
 
 

@@ -43,7 +43,8 @@
 #include <fcntl.h>
 
 
-// md ops
+// metadata ops.
+//  >=1000 --> an update, non-idempotent (i.e. an update)
 #define MDS_OP_STATFS   1
 
 #define MDS_OP_STAT     100
@@ -52,7 +53,6 @@
 #define MDS_OP_UTIME    1102
 #define MDS_OP_CHMOD    1103
 #define MDS_OP_CHOWN    1104  
-
 
 #define MDS_OP_READDIR  200
 #define MDS_OP_MKNOD    1201
@@ -75,6 +75,7 @@ class MClientRequest : public Message {
   struct {
     long tid;
     int num_fwd;
+    int retry_attempt;
     inodeno_t  mds_wants_replica_in_dirino;
 
     entity_inst_t client_inst;
@@ -167,6 +168,7 @@ class MClientRequest : public Message {
   // normal fields
   void set_tid(long t) { st.tid = t; }
   void inc_num_fwd() { st.num_fwd++; }
+  void set_retry_attempt(int a) { st.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_path(const filepath& fp) { path = fp; }
@@ -183,6 +185,7 @@ class MClientRequest : public Message {
   int get_client() { return st.client_inst.name.num(); }
   long get_tid() { return st.tid; }
   int get_num_fwd() { return st.num_fwd; }
+  int get_retry_attempt() { return st.retry_attempt; }
   int get_op() { return st.op; }
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
@@ -216,6 +219,9 @@ class MClientRequest : public Message {
 	<< "." << get_tid() 
 	<< ":";
     switch(get_op()) {
+    case MDS_OP_STATFS: 
+      out << "statfs"; break;
+
     case MDS_OP_STAT: 
       out << "stat"; break;
     case MDS_OP_LSTAT: 
@@ -257,11 +263,14 @@ class MClientRequest : public Message {
       //out << "release"; break;
     default: 
       out << "unknown=" << get_op();
+      assert(0);
     }
     if (get_path().length()) 
       out << "=" << get_path();
     if (get_sarg().length())
       out << " " << get_sarg();
+    if (st.retry_attempt)
+      out << " RETRY=" << st.retry_attempt;
     out << ")";
   }
 

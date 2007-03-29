@@ -478,17 +478,7 @@ protected:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
     
   // -- namespace --
-  // these handle logging, cache sync themselves.
-  // UNLINK
- public:
-  void dentry_unlink(CDentry *in, Context *c);
- protected:
-  void dentry_unlink_finish(CDentry *in, CDir *dir, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
-  void handle_inode_unlink(class MInodeUnlink *m);
-  void handle_inode_unlink_ack(class MInodeUnlinkAck *m);
-  friend class C_MDC_DentryUnlink;
-
 
 
 
