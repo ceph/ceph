@@ -16,6 +16,7 @@
 #define __SYNTHETICCLIENT_H
 
 #include <pthread.h>
+#include <sstream>
 
 #include "Client.h"
 #include "include/Distribution.h"
@@ -35,6 +36,7 @@
 #define SYNCLIENT_MODE_MAKEFILES2   12     // num count private
 #define SYNCLIENT_MODE_CREATESHARED 13     // num
 #define SYNCLIENT_MODE_OPENSHARED   14     // num count
+#define SYNCLIENT_MODE_IOR2         15
 
 #define SYNCLIENT_MODE_WRITEFILE   20
 #define SYNCLIENT_MODE_READFILE    21
@@ -186,6 +188,7 @@ class SyntheticClient {
   int create_shared(int num);
   int open_shared(int num, int count);
 
+  int ior2_bench(int num);
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);

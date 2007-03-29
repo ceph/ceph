@@ -54,6 +54,9 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"ior") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_IOR2 );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"wrshared") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_WRSHARED );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -396,7 +399,49 @@ int SyntheticClient::run()
         }
       }
       break;
+      
+    case SYNCLIENT_MODE_IOR2:
+      {
+	int count = iargs.front();  iargs.pop_front();
+	string prefix = get_sarg(0);
+	cout << "Prefix:" << prefix << endl;
 
+	ostringstream oss;
+	oss << "IOR2/tracepaths.cephtrace";
+	string setupfile = oss.str();
+	cout << "Setup trace:" << setupfile << endl;
+
+	// choose random IOR2 file to open
+	int randf = rand() % 500;
+	// cant be trace 0, its broken
+	randf++;
+	
+	ostringstream ost;
+	ost << "IOR2/IOR_trace_fileperproc.p" << randf << "t.cephtrace";
+	string tfile = ost.str();
+	cout << "My " << count <<  " trace file:" << tfile << endl;
+      
+	
+	// create trace object
+	Trace ts(setupfile.c_str());
+	Trace tr(tfile.c_str());
+	
+	client->mkdir(prefix.c_str(), 0755);
+       
+	if (run_me()) {
+	  play_trace(ts, prefix);
+	  
+          for (int i=0; i<count; i++) {
+
+	    if (time_to_stop()) break;
+            play_trace(tr, prefix);
+
+          }
+	  
+        }
+	
+      }
+      break;
     case SYNCLIENT_MODE_WRITEFILE:
       {
         string sarg1 = get_sarg(0);
