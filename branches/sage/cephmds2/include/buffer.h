@@ -906,14 +906,14 @@ inline void _encode(const std::string& s, bufferlist& bl)
 {
   __uint32_t len = s.length();
   _encoderaw(len, bl);
-  bl.append(s.data(), len);
+  bl.append(s.c_str(), len+1);
 }
 inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
   __uint32_t len;
   _decoderaw(len, bl, off);
   s = bl.c_str() + off;    // FIXME someday to avoid a huge buffer copy?
-  off += len;
+  off += len+1;
 }
 
 // bufferptr (encapsulated)

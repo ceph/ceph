@@ -421,8 +421,9 @@ public:
 		    CInode *base,
 		    filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,
-                    int onfail,
-                    bool is_client_req = false);
+                    int onfail, 
+                    bool is_client_req = false,
+		    bool null_okay = false);
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
   void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);

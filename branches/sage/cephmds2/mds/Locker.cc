@@ -2358,7 +2358,8 @@ void Locker::handle_lock_dn(MLock *m)
         int r = mdcache->path_traverse(0, 0, // FIXME FIXME >>>>>>>>>>>>>>>>>>>>>>>>
 				       path, trace, true,
 				       m, new C_MDS_RetryMessage(mds, m), 
-				       MDS_TRAVERSE_DISCOVER);
+				       MDS_TRAVERSE_DISCOVER,
+				       false, true);
         assert(r>0);
         return;
       } 
@@ -2372,7 +2373,8 @@ void Locker::handle_lock_dn(MLock *m)
           int r = mdcache->path_traverse(0, 0, // FIXME >>>>>>>>>>>>>>>>>>>>>>>>
 					 path, trace, true,
 					 m, new C_MDS_RetryMessage(mds,m), 
-					 MDS_TRAVERSE_DISCOVER);
+					 MDS_TRAVERSE_DISCOVER,
+					 false, true);
           assert(r>0);
         }
         if (1) {

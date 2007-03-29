@@ -1334,29 +1334,27 @@ void SyntheticClient::foo()
   client->unlink("d");
   client->rmdir("d");
 
-  /*
-
   // rename fun
-  client->mkdir("dir1", 0755);
-  client->mkdir("dir2", 0755);
-  client->mkdir("dir3", 0755);
   client->mknod("p1", 0644);
   client->mknod("p2", 0644);
+  client->rename("p1","p2");
   client->mknod("p3", 0644);
   client->rename("p3","p4");
-  client->rename("p1","p2");
 
   // check dest dir ambiguity thing
+  client->mkdir("dir1", 0755);
+  client->mkdir("dir2", 0755);
   client->rename("p2","dir1/p2");
   client->rename("dir1/p2","dir2/p2");
   client->rename("dir2/p2","/p2");
   
   // check primary+remote link merging
-  client->link("p2","r1");
-  client->link("p4","r3");
-  client->rename("r1","p2");
-  client->rename("p4","r3");
+  client->link("p2","p2.l");
+  client->link("p4","p4.l");
+  client->rename("p2.l","p2");
+  client->rename("p4","p4.l");
 
+  /*
   // check anchor updates
   client->mknod("dir1/a", 0644);
   client->link("dir1/a", "da1");

@@ -2481,7 +2481,8 @@ int MDCache::path_traverse(MDRequest *mdr,
                            Message *req,
                            Context *ondelay,
                            int onfail,
-                           bool is_client_req)  // true if req is MClientRequest .. gross, FIXME
+                           bool is_client_req,
+			   bool null_okay)  // true if req is MClientRequest .. gross, FIXME
 {
   set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
 
@@ -2589,10 +2590,8 @@ int MDCache::path_traverse(MDRequest *mdr,
     CDentry *dn = curdir->lookup(path[depth]);
 
     // null and last_bit and xlocked by me?
-    if (dn && dn->is_null() && 
-        dn->is_xlockedbyme(mdr) &&
-        depth == path.depth()-1) {
-      dout(10) << "traverse: hit (my) xlocked dentry at tail of traverse, succeeding" << endl;
+    if (dn && dn->is_null() && null_okay) {
+      dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << endl;
       trace.push_back(dn);
       break; // done!
     }

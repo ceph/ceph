@@ -100,9 +100,7 @@ public:
                               filepath& destpath,
                               vector<CDentry*>& trace,
                               int r);
-  void _rename_local(MDRequest *mdr,
-		     CDentry *srcdn, 
-		     CDir *destdir, CDentry *destdn, const string& destname);
+  void _rename_local(MDRequest *mdr, CDentry *srcdn, CDentry *destdn);
   void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
 				version_t atid1, version_t atid2);
   void _rename_local_finish(MDRequest *mdr,
