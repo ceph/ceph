@@ -382,13 +382,11 @@ void Server::dispatch_request(MDRequest *mdr)
     handle_client_link(mdr);
     break;
   case MDS_OP_UNLINK:
+  case MDS_OP_RMDIR:
     handle_client_unlink(mdr);
     break;
   case MDS_OP_RENAME:
     handle_client_rename(mdr);
-    break;
-  case MDS_OP_RMDIR:
-    handle_client_unlink(mdr);
     break;
   case MDS_OP_MKDIR:
     handle_client_mkdir(mdr);
@@ -1563,6 +1561,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // dn looks ok.
 
   // get/open inode.
+  mdr->trace.swap(trace);
   CInode *in = request_pin_ref(mdr);
   if (!in) return;
   dout(7) << "dn links to " << *in << endl;
@@ -1700,7 +1699,6 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
-  /*
   // unlink main dentry
   CInode *in = dn->inode;
   dn->dir->unlink_inode(dn);
@@ -1728,10 +1726,6 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
 
-  // unlock
-  mds->locker->dentry_xlock_finish(dn);
-  mds->locker->inode_hard_xlock_finish(in);
-  
   // bump target popularity
   mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
@@ -1741,7 +1735,6 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   if (straydn)
     mdcache->eval_stray(straydn);
-  */
 }
 
 

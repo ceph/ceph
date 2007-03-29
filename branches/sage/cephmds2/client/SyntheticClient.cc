@@ -1354,7 +1354,6 @@ void SyntheticClient::foo()
   client->rename("p2.l","p2");
   client->rename("p4","p4.l");
 
-  /*
   // check anchor updates
   client->mknod("dir1/a", 0644);
   client->link("dir1/a", "da1");
@@ -1373,7 +1372,6 @@ void SyntheticClient::foo()
   client->mknod("dir5/asdf", 0644);
   client->rename("dir3","dir4"); // ok
   client->rename("dir4","dir5"); // fail
-  */
 }
 
 int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)
