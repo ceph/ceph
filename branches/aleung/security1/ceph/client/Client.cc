@@ -2762,7 +2762,8 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
 
   // stop using capability
   //caps_in_use[uid].erase(in->get_ext_cap(uid)->get_id());
-  capcache->close_cap(uid, capcache->get_cache_cap(in->ino(), uid)->get_id());
+
+  //capcache->close_cap(uid, capcache->get_cache_cap(in->ino(), uid)->get_id());
 
   // hose fh
   fh_map.erase(fh);

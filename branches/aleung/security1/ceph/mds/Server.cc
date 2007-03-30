@@ -300,15 +300,18 @@ void Server::handle_client_renewal(MClientRenewal *m)
       mds->recent_caps.insert(*si);
     }
   }
-  if (new_caps) {
+  if (new_caps || mds->token.num_renewed_caps() == 0) {
     // re-make extension
     mds->token = Renewal(mds->recent_caps);
+    //mds->token.add_set(mds->recent_caps);
+
     // re-sign
     mds->token.sign_renewal(mds->getPrvKey());
     cout << "Made a new token" << endl;
   }
-  else
+  else 
     cout << "Cached token was good" << endl;
+
   // if no new caps && cached extension, return cached extension
   // create extension for entire recent_cap set
   // cache the extension

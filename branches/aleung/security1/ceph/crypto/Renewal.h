@@ -37,7 +37,15 @@ public:
   utime_t get_ts() { return t_s; }
   utime_t get_te() { return t_e; }
   set<cap_id_t>& get_renewed_caps() { return renewed_caps; }
+  int num_renewed_caps() { return renewed_caps.size(); }
   void add_cap(cap_id_t cid) { renewed_caps.insert(cid); }
+  void add_set(set<cap_id_t>& newcaps) {
+    for (set<cap_id_t>::iterator si = renewed_caps.begin();
+	 si != renewed_caps.end();
+	 si++) {
+      renewed_caps.insert(*si);;
+    }
+  }
 
   void sign_renewal(esignPriv privKey) {
     cap_id_t capids[renewed_caps.size()];
