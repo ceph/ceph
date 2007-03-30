@@ -46,15 +46,16 @@ public:
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
 
   // some helpers
-  CInode *request_pin_ref(MDRequest *mdr);
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
   CInode* prepare_new_inode(MClientRequest *req, CDir *dir);
+
+  CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
+
   CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
-  
-  CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
+  //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
@@ -69,6 +70,8 @@ public:
   // open
   void handle_client_open(MDRequest *mdr);
   void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
+  void handle_client_opent(MDRequest *mdr);  // O_TRUNC variant.
+  void _do_open(MDRequest *mdr, CInode *ref);
 
   // namespace changes
   void handle_client_mknod(MDRequest *mdr);

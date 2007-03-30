@@ -21,12 +21,10 @@
 
 #define EVENT_IMPORTMAP    4
 #define EVENT_UPDATE       5
+#define EVENT_SLAVEUPDATE  6
 
-#define EVENT_MOUNT        6
-#define EVENT_CLIENTMAP    7
-
-#define EVENT_ANCHOR       8
-#define EVENT_ANCHORCLIENT 9
+#define EVENT_MOUNT        7
+#define EVENT_CLIENTMAP    8
 
 #define EVENT_ALLOC        10
 #define EVENT_MKNOD        11
@@ -40,6 +38,10 @@
 #define EVENT_EXPORT  30
 #define EVENT_IMPORTSTART  31
 #define EVENT_IMPORTFINISH 32
+
+#define EVENT_ANCHOR       40
+#define EVENT_ANCHORCLIENT 41
+
 
 
 

@@ -237,94 +237,17 @@ void Server::handle_client_request(MClientRequest *req)
     break;
   }
 
+  // register + dispatch
+  MDRequest *mdr = mdcache->request_start(req);
+
   if (ref) {
-    MDRequest *mdr = mdcache->request_start(req);
     dout(10) << "inode op on ref " << *ref << endl;
     mdr->ref = ref;
     mdr->pin(ref);
-    dispatch_request(mdr);
-    return;
   }
 
-
-  // -----
-  // some ops are on existing inodes
-
-  bool follow_trailing_symlink = false;
-  
-  switch (req->get_op()) {
-  case MDS_OP_LSTAT:
-    follow_trailing_symlink = false;
-  case MDS_OP_OPEN:
-    if (req->args.open.flags & O_CREAT) break;  // handled below.
-  case MDS_OP_STAT:
-  case MDS_OP_UTIME:
-  case MDS_OP_CHMOD:
-  case MDS_OP_CHOWN:
-  case MDS_OP_READDIR:
-    {
-      filepath refpath = req->get_filepath();
-      Context *ondelay = new C_MDS_RetryMessage(mds, req);
-      vector<CDentry*> trace;
-      
-      int r = mdcache->path_traverse(0, 0,
-				     refpath, trace, follow_trailing_symlink,
-				     req, ondelay,
-				     MDS_TRAVERSE_FORWARD,
-				     true); // is MClientRequest
-      
-      if (r > 0) return; // delayed
-      if (r < 0) {
-	dout(10) << "traverse error " << r << " " << strerror(-r) << endl;
-	
-	// send error.  don't bother registering request.
-	messenger->send_message(new MClientReply(req, r),
-				req->get_client_inst());
-
-	// <HACK>
-	// is this a special debug command?
-	if (refpath.depth() - 1 == trace.size() &&
-	    refpath.last_dentry().find(".ceph.") == 0) {
-	  // ...
-	}
-	// </HACK>
-      }
-
-      // can we dnlock whole path?
-      if (!mds->locker->dentry_can_rdlock_trace(trace, req))
-	return;
-
-      // go
-      MDRequest *mdr = mdcache->request_start(req);
-      mds->locker->dentry_anon_rdlock_trace_start(trace);
-      dispatch_request(mdr);
-      return;
-    }
-  }
-
-  
-  // ----
-  // the rest handle things themselves.
-  
-  switch (req->get_op()) {
-  case MDS_OP_OPEN:
-    assert(req->args.open.flags & O_CREAT);
-  case MDS_OP_MKNOD:
-  case MDS_OP_MKDIR:
-  case MDS_OP_SYMLINK:
-  case MDS_OP_LINK:
-  case MDS_OP_UNLINK:
-  case MDS_OP_RMDIR:
-  case MDS_OP_RENAME:
-    {
-      // register request
-      MDRequest *mdr = mdcache->request_start(req);
-      dispatch_request(mdr);
-      return;
-    }
-  }
-
-  assert(0);  // we missed something!
+  dispatch_request(mdr);
+  return;
 }
 
 
@@ -406,33 +329,6 @@ void Server::dispatch_request(MDRequest *mdr)
 
 // ---------------------------------------
 // HELPERS
-
-
-/** request_pin_ref
- * return the ref inode, referred to by the last dentry in the trace.
- * open if it is remote.
- * pin.
- * return existing, if mdr->ref already set.
- */
-CInode *Server::request_pin_ref(MDRequest *mdr)
-{
-  // already did it?
-  if (mdr->ref)
-    return mdr->ref;
-
-  // open and pin ref inode in cache too
-  CInode *ref = 0;
-  if (mdr->trace.empty())
-    ref = mdcache->get_root();
-  else {
-    ref = mdcache->get_dentry_inode(mdr->trace[mdr->trace.size()-1], mdr);
-    if (!ref) return 0;
-  }
-  mdr->pin(ref);
-  mdr->ref = ref;
-  return ref;
-}
-
 
 
 /** validate_dentry_dir
@@ -579,6 +475,104 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 }
 
 
+
+CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
+{
+  // already got ref?
+  if (mdr->ref) 
+    return mdr->ref;
+
+  MClientRequest *req = mdr->client_request();
+
+  // traverse
+  filepath refpath = req->get_filepath();
+  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
+  vector<CDentry*> trace;
+  int r = mdcache->path_traverse(mdr, 0,
+				 refpath, trace, req->follow_trailing_symlink(),
+				 req, ondelay,
+				 MDS_TRAVERSE_FORWARD,
+				 true); // is MClientRequest
+  if (r > 0) return false; // delayed
+  if (r < 0) {  // error
+    reply_request(mdr, r);
+    return 0;
+  }
+
+  // open ref inode
+  CInode *ref = 0;
+  if (mdr->trace.empty())
+    ref = mdcache->get_root();
+  else {
+    CDentry *dn = mdr->trace[mdr->trace.size()-1];
+
+    // if no inode, fw to dentry auth?
+    if (want_auth && 
+	dn->is_remote() &&
+	!dn->inode && 
+	!dn->is_auth()) {
+      if (dn->dir->auth_is_ambiguous()) {
+	dout(10) << "waiting for single auth on " << *dn << endl;
+	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, 
+			    dn->get_name(),
+			    new C_MDS_RetryMessage(mds, req));
+      } else {
+	dout(10) << "fw to auth for " << *dn << endl;
+	mds->forward_message_mds(req, dn->authority().first, MDS_PORT_SERVER);
+      }
+    }
+
+    // open ref inode
+    ref = mdcache->get_dentry_inode(dn, mdr);
+    if (!ref) return 0;
+  }
+
+  // fw to inode auth?
+  if (want_auth && !ref->is_auth()) {
+    if (ref->auth_is_ambiguous()) {
+      dout(10) << "waiting for single auth on " << *ref << endl;
+      ref->add_waiter(CInode::WAIT_SINGLEAUTH, 
+		      new C_MDS_RetryMessage(mds, req));
+    } else {
+      dout(10) << "fw to auth for " << *ref << endl;
+      mds->forward_message_mds(req, ref->authority().first, MDS_PORT_SERVER);
+    }
+  }
+
+  // auth_pin?
+  if (want_auth) {
+    if (!ref->can_auth_pin()) {
+      dout(7) << "waiting for authpinnable on " << *ref << endl;
+      ref->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      return 0;
+    }
+    mdr->auth_pin(ref);
+  }
+
+  // lock the path
+  set<CDentry*> dentry_rdlocks;
+  set<CDentry*> dentry_xlocks;
+  set<CInode*> inode_empty;
+
+  for (unsigned i=0; i<trace.size(); i++) 
+    dentry_rdlocks.insert(trace[i]);
+
+  if (!mds->locker->acquire_locks(mdr, 
+				  dentry_rdlocks, dentry_xlocks,
+				  inode_empty, inode_empty))
+    return 0;
+  
+  // set and pin ref
+  mdr->pin(ref);
+  mdr->ref = ref;
+
+  // save the locked trace.
+  mdr->trace.swap(trace);
+  
+  return ref;
+}
+
+
 /** rdlock_path_xlock_dentry
  * traverse path to the directory that could/would contain dentry.
  * make sure i am auth for that dentry, forward as necessary.
@@ -679,7 +673,7 @@ CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
 
   // not open and inode frozen?
   if (!dir && diri->is_frozen_dir()) {
-    dout(10) << "try_open_dir: dir inode is frozen, waiting " << *diri << endl;
+    dout(10) << "try_open_auth_dir: dir inode is frozen, waiting " << *diri << endl;
     assert(diri->get_parent_dir());
     diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
 				       new C_MDS_RetryRequest(mdcache, mdr));
@@ -705,6 +699,7 @@ CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
   return dir;
 }
 
+/*
 CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
 {
   CDir *dir = diri->get_dirfrag(fg);
@@ -736,7 +731,7 @@ CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
     return 0;
   }
 }
-
+*/
 
 // ===============================================================================
 // STAT
@@ -744,7 +739,7 @@ CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
 void Server::handle_client_stat(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *ref = request_pin_ref(mdr);
+  CInode *ref = rdlock_path_pin_ref(mdr, false);
   if (!ref) return;
 
   // FIXME: this is really not the way to handle the statlite mask.
@@ -810,20 +805,12 @@ public:
 void Server::handle_client_utime(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *cur = request_pin_ref(mdr);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
-
-  // auth pin
-  if (!cur->can_auth_pin()) {
-    dout(7) << "waiting for authpinnable on " << *cur << endl;
-    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-  mdr->auth_pin(cur);
 
   // write
   if (!mds->locker->inode_file_xlock_start(cur, mdr))
-    return;  // fw or (wait for) sync
+    return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
 
@@ -884,20 +871,12 @@ public:
 void Server::handle_client_chmod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *cur = request_pin_ref(mdr);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
-
-  // auth pin
-  if (!cur->can_auth_pin()) {
-    dout(7) << "waiting for authpinnable on " << *cur << endl;
-    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-  mdr->auth_pin(cur);
 
   // write
   if (!mds->locker->inode_hard_xlock_start(cur, mdr))
-    return;  // fw or (wait for) lock
+    return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
 
@@ -951,20 +930,12 @@ public:
 void Server::handle_client_chown(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *cur = request_pin_ref(mdr);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
-
-  // auth pin
-  if (!cur->can_auth_pin()) {
-    dout(7) << "waiting for authpinnable on " << *cur << endl;
-    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-  mdr->auth_pin(cur);
 
   // write
   if (!mds->locker->inode_hard_xlock_start(cur, mdr))
-    return;  // fw or (wait for) lock
+    return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
 
@@ -1029,7 +1000,7 @@ int Server::encode_dir_contents(CDir *dir,
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *diri = request_pin_ref(mdr);
+  CInode *diri = rdlock_path_pin_ref(mdr, false);
   if (!diri) return;
 
   // it's a directory, right?
@@ -1277,24 +1248,20 @@ void Server::handle_client_link(MDRequest *mdr)
 				 req, ondelay,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
+  if (targettrace.empty()) r = -EINVAL;
   if (r < 0) {
     reply_request(mdr, r);
     return;
   }
   
   // identify target inode
-  CInode *targeti;
-  if (targettrace.empty())
-    targeti = mdcache->get_root();
-  else
-    targeti = targettrace[targettrace.size()-1]->inode;
+  CInode *targeti = targettrace[targettrace.size()-1]->inode;
   assert(targeti);
-  assert(r == 0);
 
   // dir?
   dout(7) << "target is " << *targeti << endl;
   if (targeti->is_dir()) {
-    dout(7) << "target is a dir, failing" << endl;
+    dout(7) << "target is a dir, failing..." << endl;
     reply_request(mdr, -EINVAL);
     return;
   }
@@ -1435,10 +1402,9 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_remote " << *dn << " to " << *targeti << endl;
   
-  // ??
-  // 1. send LinkPrepare to dest (lock target on dest, journal target update)
+  // 1. send LinkPrepare to dest (journal nlink++ prepare)
   // 2. create+journal new dentry, as with link_local.
-  // 3. send LinkCommit to dest (unlocks target on dest, journals commit)  
+  // 3. send LinkCommit to dest (journals commit)  
 
   // IMPLEMENT ME
   reply_request(mdr, -EXDEV);
@@ -1534,13 +1500,6 @@ void Server::handle_client_unlink(MDRequest *mdr)
   CDentry *dn = trace[trace.size()-1];
   assert(dn);
 
-  // readable?
-  if (!dn->can_read(mdr)) {
-    dout(10) << "waiting on unreadable dentry " << *dn << endl;
-    dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-
   // rmdir or unlink?
   bool rmdir = false;
   if (req->get_op() == MDS_OP_RMDIR) rmdir = true;
@@ -1550,11 +1509,19 @@ void Server::handle_client_unlink(MDRequest *mdr)
   } else {
     dout(7) << "handle_client_unlink on " << *dn << endl;
   }
+
+  // readable?
+  if (!dn->can_read(mdr)) {
+    dout(10) << "waiting on unreadable dentry " << *dn << endl;
+    dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
   // dn looks ok.
 
   // get/open inode.
   mdr->trace.swap(trace);
-  CInode *in = request_pin_ref(mdr);
+  CInode *in = mdcache->get_dentry_inode(dn, mdr);
   if (!in) return;
   dout(7) << "dn links to " << *in << endl;
 
@@ -1578,7 +1545,21 @@ void Server::handle_client_unlink(MDRequest *mdr)
     }
   }
 
-  dout(7) << "inode is " << *in << endl;
+  // lock
+  set<CDentry*> dentry_rdlocks;
+  set<CDentry*> dentry_xlocks;
+  set<CInode*> inode_hard_rdlocks;
+  set<CInode*> inode_hard_xlocks;
+
+  for (unsigned i=0; i<trace.size()-1; i++)
+    dentry_rdlocks.insert(trace[i]);
+  dentry_xlocks.insert(dn);
+  inode_hard_xlocks.insert(in);
+  
+  if (!mds->locker->acquire_locks(mdr, 
+				  dentry_rdlocks, dentry_xlocks,
+				  inode_hard_rdlocks, inode_hard_xlocks))
+    return;
 
   // ok!
   if (dn->is_remote() && !dn->inode->is_auth()) 
@@ -1613,23 +1594,6 @@ public:
 void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 {
   dout(10) << "_unlink_local " << *dn << endl;
-
-  // auth pin inode
-  if (!mdr->is_auth_pinned(dn->inode) &&
-      !dn->inode->can_auth_pin()) {
-    dn->inode->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-    
-    // drop all locks while we wait (racey?)
-    mdcache->request_drop_locks(mdr);
-    mdr->drop_auth_pins();
-    return;
-  }
-  mdr->auth_pin(dn->inode);
-
-  // lock inode
-  if (!mds->locker->inode_hard_xlock_start(dn->inode, mdr))
-    return;
-
 
   // get stray dn ready?
   CDentry *straydn = 0;
@@ -2475,20 +2439,7 @@ void Server::handle_client_rename_local(MClientRequest *req,
 // ===================================
 // TRUNCATE, FSYNC
 
-class C_MDS_ReplyRequest : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-public:
-  C_MDS_ReplyRequest(MDS *m, MDRequest *r) : mds(m), mdr(r) {}
-  void finish(int r) {
-    // reply
-    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
-    reply->set_result(0);
-    mds->server->reply_request(mdr, reply, mdr->ref);
-  }
-};
-
-class C_MDS_truncate_finish : public Context {
+class C_MDS_truncate_purged : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
@@ -2496,7 +2447,7 @@ class C_MDS_truncate_finish : public Context {
   off_t size;
   time_t ctime;
 public:
-  C_MDS_truncate_finish(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
+  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -2512,33 +2463,38 @@ public:
     // hit pop
     mds->balancer->hit_inode(in, META_POP_IWR);   
 
+    // reply
+    mds->server->reply_request(mdr, 0);
+  }
+};
+
+class C_MDS_truncate_logged : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+  version_t pv;
+  off_t size;
+  time_t ctime;
+public:
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
+    mds(m), mdr(r), in(i), 
+    pv(pdv),
+    size(sz), ctime(ct) { }
+  void finish(int r) {
+    assert(r == 0);
+
     // purge
     mds->mdcache->purge_inode(&in->inode, size);
-    mds->mdcache->wait_for_purge(in->inode.ino, size, new C_MDS_ReplyRequest(mds, mdr));
+    mds->mdcache->wait_for_purge(in->inode.ino, size, 
+				 new C_MDS_truncate_purged(mds, mdr, in, pv, size, ctime));
   }
 };
 
 void Server::handle_client_truncate(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *cur = request_pin_ref(mdr);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
-
-  // not auth?
-  if (!cur->is_auth()) {
-    mdcache->request_forward(mdr, cur->authority().first);
-    return;
-  }
-
-  // lock inode
-  if (!cur->can_auth_pin()) {
-    dout(7) << "waiting for authpinnable on " << *cur << endl;
-    cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-    mdcache->request_drop_locks(mdr);
-    mdr->drop_auth_pins();
-    return;
-  }
-  mdr->auth_pin(cur);
 
   // check permissions?  
 
@@ -2555,8 +2511,8 @@ void Server::handle_client_truncate(MDRequest *mdr)
   // prepare
   version_t pdv = cur->pre_dirty();
   time_t ctime = g_clock.gettime();
-  C_MDS_truncate_finish *fin = new C_MDS_truncate_finish(mds, mdr, cur, 
-							 pdv, req->args.truncate.length, ctime);
+  Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
+					   pdv, req->args.truncate.length, ctime);
   
   // log + wait
   EUpdate *le = new EUpdate("truncate");
@@ -2580,15 +2536,19 @@ void Server::handle_client_truncate(MDRequest *mdr)
 void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request();
-  CInode *cur = request_pin_ref(mdr);
-  if (!cur) return;
 
   int flags = req->args.open.flags;
   int cmode = req->get_open_file_mode();
+  bool need_auth = ((cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY) ||
+		    (flags & O_TRUNC));
+  dout(10) << "open flags = " << flags
+	   << ", filemode = " << cmode
+	   << ", need_auth = " << need_auth
+	   << endl;
 
-  dout(7) << "open " << flags << " on " << *cur << endl;
-  dout(10) << "open flags = " << flags << "  filemode = " << cmode << endl;
-
+  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
+  if (!cur) return;
+  
   // regular file?
   if ((cur->inode.mode & INODE_TYPE_MASK) != INODE_MODE_FILE) {
     dout(7) << "not a regular file " << *cur << endl;
@@ -2596,49 +2556,42 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
 
-  // auth for write access
-  if (cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY &&
-      !cur->is_auth()) {
-    int auth = cur->authority().first;
-    assert(auth != mds->get_nodeid());
-    dout(9) << "open writeable on replica for " << *cur << " fw to auth " << auth << endl;
-    
-    mdcache->request_forward(mdr, auth);
-    return;
-  }
+  // hmm, check permissions or something.
+
 
   // O_TRUNC
   if (flags & O_TRUNC) {
-    // auth pin
-    if (!cur->can_auth_pin()) {
-      dout(7) << "waiting for authpinnable on " << *cur << endl;
-      cur->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    assert(cur->is_auth());
+
+    // xlock file size
+    if (!mds->locker->inode_file_xlock_start(cur, mdr))
+      return;
+    
+    if (cur->inode.size > 0) {
+      handle_client_opent(mdr);
       return;
     }
-    mdr->auth_pin(cur);
-
-    // write
-    if (!mds->locker->inode_file_xlock_start(cur, mdr))
-      return;  // fw or (wait for) lock
-    
-    // do update
-    cur->inode.size = 0;
-    cur->_mark_dirty(); // fixme
-    
-    mds->locker->inode_file_xlock_finish(cur, mdr);
   }
+  
+  // do it
+  _do_open(mdr, cur);
+}
 
-
-  // hmm, check permissions or something.
-
+void Server::_do_open(MDRequest *mdr, CInode *cur)
+{
+  MClientRequest *req = mdr->client_request();
+  int cmode = req->get_open_file_mode();
 
   // can we issue the caps they want?
   version_t fdv = mds->locker->issue_file_data_version(cur);
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, req);
   if (!cap) return; // can't issue (yet), so wait!
-
-  dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
-
+  
+  dout(12) << "_do_open issuing caps " << cap_string(cap->pending())
+	   << " for " << req->get_source()
+	   << " on " << *cur << endl;
+  
+  // hit pop
   mds->balancer->hit_inode(cur, META_POP_IRD);
 
   // reply
@@ -2648,6 +2601,84 @@ void Server::handle_client_open(MDRequest *mdr)
   reply->set_file_data_version(fdv);
   reply_request(mdr, reply, cur);
 }
+
+
+class C_MDS_open_truncate_purged : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+  version_t pv;
+  time_t ctime;
+public:
+  C_MDS_open_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, time_t ct) :
+    mds(m), mdr(r), in(i), 
+    pv(pdv),
+    ctime(ct) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply to cache
+    in->inode.size = 0;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->mark_dirty(pv);
+    
+    // hit pop
+    mds->balancer->hit_inode(in, META_POP_IWR);   
+    
+    // do the open
+    mds->server->_do_open(mdr, in);
+  }
+};
+
+class C_MDS_open_truncate_logged : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+  version_t pv;
+  time_t ctime;
+public:
+  C_MDS_open_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, time_t ct) :
+    mds(m), mdr(r), in(i), 
+    pv(pdv),
+    ctime(ct) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // purge also...
+    mds->mdcache->purge_inode(&in->inode, 0);
+    mds->mdcache->wait_for_purge(in->inode.ino, 0,
+				 new C_MDS_open_truncate_purged(mds, mdr, in, pv, ctime));
+  }
+};
+
+
+void Server::handle_client_opent(MDRequest *mdr)
+{
+  CInode *cur = mdr->ref;
+  assert(cur);
+
+  // prepare
+  version_t pdv = cur->pre_dirty();
+  time_t ctime = g_clock.gettime();
+  Context *fin = new C_MDS_open_truncate_logged(mds, mdr, cur, 
+						pdv, ctime);
+  
+  // log + wait
+  EUpdate *le = new EUpdate("open_truncate");
+  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_inode_truncate(cur->inode, 0);
+  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  pi->mtime = ctime;
+  pi->ctime = ctime;
+  pi->version = pdv;
+  pi->size = 0;
+  
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
+}
+
 
 
 class C_MDS_openc_finish : public Context {

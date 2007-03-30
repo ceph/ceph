@@ -240,10 +240,6 @@ void CInode::close_dirfrags()
 
 void CInode::set_auth(bool a) 
 {
-  if (!is_dangling() && !is_root() && 
-      is_auth() != a) {
-  }
-  
   if (a) state_set(STATE_AUTH);
   else state_clear(STATE_AUTH);
 }
@@ -272,12 +268,6 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
     parent->dir->inode->make_anchor_trace(trace);
     trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
     dout(10) << "make_anchor_trace added " << trace.back() << endl;
-  }
-  else if (state_test(STATE_DANGLING)) {
-    dout(10) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
-    assert(0);
-    //trace.push_back( Anchor(ino(),
-    //MDS_INO_INODEFILE_OFFSET+dangling_auth.first) );
   }
   else 
     assert(is_root());
@@ -512,9 +502,6 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  if (is_dangling()) 
-    return dangling_auth;      // explicit
-
   if (is_root())
     return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
 

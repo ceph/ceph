@@ -15,13 +15,10 @@
 #include "MDS.h"
 #include "MDCache.h"
 #include "Locker.h"
-#include "Server.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
-#include "Migrator.h"
 
-#include "MDBalancer.h"
 #include "MDLog.h"
 #include "MDSMap.h"
 
@@ -2468,8 +2465,9 @@ void Locker::handle_lock_dn(MLock *m)
     if (dn->gather_set.size() == 0) {
       dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
       dn->lockstate = DN_LOCK_XLOCK;
-      mdcache->active_requests[dn->xlockedby->reqid].dentry_xlocks.insert(dn);
-      mdcache->active_requests[dn->xlockedby->reqid].dentry_locks.insert(dn);
+      // FIXME
+      mdcache->slave_requests[dn->xlockedby->reqid]->dentry_xlocks.insert(dn);
+      mdcache->slave_requests[dn->xlockedby->reqid]->dentry_locks.insert(dn);
       dir->finish_waiting(CDir::WAIT_DNLOCK, dname);
     }
     break;

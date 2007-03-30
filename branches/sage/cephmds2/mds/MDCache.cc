@@ -39,6 +39,7 @@
 
 #include "events/EImportMap.h"
 #include "events/EUpdate.h"
+#include "events/ESlaveUpdate.h"
 #include "events/EString.h"
 #include "events/EUnlink.h"
 #include "events/EPurgeFinish.h"
@@ -2414,9 +2415,6 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_INODELINK:
     handle_inode_link((MInodeLink*)m);
     break;
-  case MSG_MDS_INODELINKACK:
-    handle_inode_link_ack((MInodeLinkAck*)m);
-    break;
 
   case MSG_MDS_DIRUPDATE:
     handle_dir_update((MDirUpdate*)m);
@@ -2933,18 +2931,15 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 
 MDRequest *MDCache::request_start(metareqid_t ri)
 {
-  assert(active_requests.count(ri) == 0);
-  active_requests[ri].reqid = ri;
-  MDRequest *mdr = &active_requests[ri];
+  MDRequest *mdr = new MDRequest(ri);
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
 }
 
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
-  metareqid_t ri = req->get_reqid();
-  MDRequest *mdr = request_start(ri);
-  mdr->request = req;
+  MDRequest *mdr = new MDRequest(req->get_reqid(), req);
+  dout(7) << "request_start " << *mdr << endl;
   return mdr;
 }
 
@@ -3044,7 +3039,6 @@ void MDCache::request_drop_locks(MDRequest *mdr)
 void MDCache::request_cleanup(MDRequest *mdr)
 {
   metareqid_t ri = mdr->reqid;
-  assert(active_requests.count(ri));
 
   // clear ref, trace
   mdr->ref = 0;
@@ -3072,9 +3066,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
        it++) 
     (*it)->put(CDir::PIN_REQUEST);
   mdr->dir_pins.clear();
-
-  // remove from map
-  active_requests.erase(ri);
 
   // log some stats *****
   if (mds->logger) {
@@ -3426,47 +3417,81 @@ void MDCache::migrate_stray(CDentry *dn, int dest)
 // HARD LINKS
 
 
+class C_MDC_InodeLinkAgree : public Context {
+  MDS *mds;
+  MInodeLink *m;
+public:
+  C_MDC_InodeLinkAgree(MDS *_mds, MInodeLink *_m) : mds(_mds), m(_m) {}
+  void finish(int r) {
+    mds->send_message_mds(new MInodeLink(MInodeLink::OP_AGREE,
+					 m->get_ino(), 
+					 m->get_inc(), 
+					 m->get_reqid()),
+			  m->get_source().num(),
+			  m->get_source_port());
+    delete m;
+  }
+};
+
 void MDCache::handle_inode_link(MInodeLink *m)
 {
   CInode *in = get_inode(m->get_ino());
   assert(in);
+  dout(7) << "handle_inode_link " << *m << " on " << *in << endl;
+  
+  // get request.
+  // we should have this bc the inode is xlocked.
+  assert(slave_requests.count(m->get_reqid()));
+  MDRequest *mdr = slave_requests[m->get_reqid()];
 
-  if (!in->is_auth()) {
-    dout(7) << "handle_inode_link not auth for " << *in << ", fw to auth" << endl;
-    mds->send_message_mds(m, in->authority().first, MDS_PORT_CACHE);
+  switch (m->get_op()) {
+    // auth
+  case MInodeLink::OP_PREPARE:
+    assert(in->is_auth());
+    {
+      version_t pv = in->pre_dirty();
+      ESlaveUpdate *le = new ESlaveUpdate("link_prepare", m->get_reqid(), 0);
+      le->metablob.add_dir_context(in->get_parent_dir());
+      inode_t *pi = le->metablob.add_primary_dentry(in->parent, true, in);
+      if (m->get_inc())
+	pi->nlink++;
+      else
+	pi->nlink--;
+      pi->ctime = m->get_ctime();
+      pi->version = pv;
+      mdr->projected_inode[in->ino()] = *pi;
+      mds->mdlog->submit_entry(le);
+      mds->mdlog->wait_for_sync(new C_MDC_InodeLinkAgree(mds, m));
+    }
     return;
-  }
-
-  dout(7) << "handle_inode_link on " << *in << endl;
-
-  if (!in->is_anchored()) {
-    assert(in->inode.nlink == 1);
-    dout(7) << "needs anchor, nlink=" << in->inode.nlink << ", creating anchor" << endl;
     
-    anchor_create(in, new C_MDS_RetryMessage(mds, m));
+  case MInodeLink::OP_COMMIT:
+    assert(in->is_auth());
+    {
+      // make the update to our cache
+      in->inode = mdr->projected_inode[in->ino()];
+      in->mark_dirty(in->inode.version);
+
+      // journal the commit
+      ESlaveUpdate *le = new ESlaveUpdate("link_commit", m->get_reqid(), 1);
+      mds->mdlog->submit_entry(le);
+    }
+    delete m;
     return;
+
+
+  case MInodeLink::OP_AGREE:
+    assert(!in->is_auth());
+    in->finish_waiting(CInode::WAIT_SLAVEAGREE);
+    delete m;
+    return;
+    
+  default:
+    assert(0);
   }
-
-  in->inode.nlink++;
-  in->_mark_dirty(); // fixme
-
-  // reply
-  dout(7) << " nlink++, now " << in->inode.nlink++ << endl;
-
-  mds->send_message_mds(new MInodeLinkAck(m->get_ino(), true), m->get_from(), MDS_PORT_CACHE);
-  delete m;
 }
 
 
-void MDCache::handle_inode_link_ack(MInodeLinkAck *m) 
-{
-  CInode *in = get_inode(m->get_ino());
-  assert(in);
-
-  dout(7) << "handle_inode_link_ack success = " << m->is_success() << " on " << *in << endl;
-  in->finish_waiting(CInode::WAIT_LINK,
-                     m->is_success() ? 1:-1);
-}
 
 
 

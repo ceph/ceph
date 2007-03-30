@@ -93,12 +93,15 @@ struct MDRequest {
   set< CInode* >  inode_file_rdlocks;
   set< CInode* >  inode_file_xlocks;
   
+  // projected updates
+  map< inodeno_t, inode_t > projected_inode;
+
   // old
   set< CDentry* >           xlocks;           // xlocks (local)
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
 
   MDRequest() : request(0), ref(0) {}
-  MDRequest(metareqid_t ri) : reqid(ri), request(0), ref(0) {}
+  MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), ref(0) {}
   
   // requeest
   MClientRequest *client_request() {
@@ -239,7 +242,7 @@ public:
 
   
 protected:
-  hash_map<metareqid_t, MDRequest> active_requests; 
+  hash_map<metareqid_t, MDRequest*> slave_requests; 
   
 public:
   MDRequest* request_start(metareqid_t rid);
@@ -458,9 +461,6 @@ protected:
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
   void migrate_stray(CDentry *dn, int dest);
 
-  // -- hard links --
-  void handle_inode_link(class MInodeLink *m);
-  void handle_inode_link_ack(class MInodeLinkAck *m);
 
   // == messages ==
  public:
@@ -477,9 +477,12 @@ protected:
 			list<Context*>& finished);
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
     
+
+  // -- hard links --
+  void handle_inode_link(class MInodeLink *m);
+
   // -- namespace --
   void handle_dentry_unlink(MDentryUnlink *m);
-
 
 
   // -- updates --
@@ -489,6 +492,7 @@ protected:
   int send_dir_updates(CDir *in, bool bcast=false);
   void handle_dir_update(MDirUpdate *m);
 
+  // -- cache expiration --
   void handle_cache_expire(MCacheExpire *m);
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);

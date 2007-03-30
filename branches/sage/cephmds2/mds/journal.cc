@@ -18,6 +18,7 @@
 #include "events/EAnchor.h"
 #include "events/EAnchorClient.h"
 #include "events/EUpdate.h"
+#include "events/ESlaveUpdate.h"
 #include "events/EImportMap.h"
 
 #include "events/EMount.h"
@@ -629,6 +630,26 @@ void EUpdate::expire(MDS *mds, Context *c)
 void EUpdate::replay(MDS *mds)
 {
   metablob.replay(mds);
+}
+
+
+// -----------------------
+// EUpdate
+
+bool ESlaveUpdate::has_expired(MDS *mds)
+{
+  return true;
+  //return metablob.has_expired(mds);
+}
+
+void ESlaveUpdate::expire(MDS *mds, Context *c)
+{
+  metablob.expire(mds, c);
+}
+
+void ESlaveUpdate::replay(MDS *mds)
+{
+  //metablob.replay(mds);
 }
 
 

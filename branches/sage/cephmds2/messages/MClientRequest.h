@@ -164,6 +164,28 @@ class MClientRequest : public Message {
       return open_file_mode_is_readonly();
     return (st.op < 1000);
   }
+  bool follow_trailing_symlink() {
+    switch (st.op) {
+    case MDS_OP_LSTAT:
+    case MDS_OP_LINK:
+    case MDS_OP_UNLINK:
+    case MDS_OP_RENAME:
+      return false;
+      
+    case MDS_OP_STAT:
+    case MDS_OP_UTIME:
+    case MDS_OP_CHMOD:
+    case MDS_OP_CHOWN:
+    case MDS_OP_READDIR:
+    case MDS_OP_OPEN:
+      return true;
+
+    default:
+      assert(0);
+    }
+  }
+
+
 
   // normal fields
   void set_tid(long t) { st.tid = t; }

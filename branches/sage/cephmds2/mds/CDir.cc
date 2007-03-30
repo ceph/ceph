@@ -275,9 +275,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
   // set inode version
   //in->inode.version = dn->get_version();
   
-  // clear dangling
-  in->state_clear(CInode::STATE_DANGLING);
-
   // pin dentry?
   if (in->get_num_ref())
     dn->get(CDentry::PIN_INODEPIN);
@@ -320,10 +317,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     // primary
     assert(dn->is_primary());
  
-    // explicitly define auth
-    in->dangling_auth = in->authority();
-    //dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
-
     // unpin dentry?
     if (in->get_num_ref())
       dn->put(CDentry::PIN_INODEPIN);
@@ -332,9 +325,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     if (in->auth_pins + in->nested_auth_pins)
       adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
     
-    // set dangling flag
-    in->state_set(CInode::STATE_DANGLING);
-
     // detach inode
     in->remove_primary_parent(dn);
     dn->inode = 0;

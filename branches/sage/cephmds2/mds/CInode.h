@@ -92,9 +92,8 @@ class CInode : public MDSCacheObject {
   static const int STATE_AUTH =       (1<<0);
   static const int STATE_ROOT =       (1<<1);
   static const int STATE_DIRTY =      (1<<2);
-  static const int STATE_UNSAFE =     (1<<3);   // not logged yet
-  static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
-  static const int STATE_UNLINKING =  (1<<5);
+  //static const int STATE_UNSAFE =     (1<<3);   // not logged yet
+  //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
   static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
   static const int STATE_ANCHORING =  (1<<7);
   static const int STATE_UNANCHORING = (1<<8);
@@ -103,35 +102,30 @@ class CInode : public MDSCacheObject {
   //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
 
   // -- waiters --
-  static const int WAIT_AUTHPINNABLE  = (1<<10);
-    // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
-    //          handle_client_chmod, handle_client_touch             (mds)
-    // trigger: (see CDIR_WAIT_UNFREEZE)
-  static const int WAIT_SINGLEAUTH  = (1<<11);
-
-  static const int WAIT_DIR          = (1<<13);
-    // waiters: traverse_path
-    // triggers: handle_disocver_reply
-  static const int WAIT_LINK        = (1<<14);  // as in remotely nlink++
-  static const int WAIT_ANCHORED    = (1<<15);
-  static const int WAIT_UNANCHORED  = (1<<16);
-  static const int WAIT_UNLINK      = (1<<17);  // as in remotely nlink--
-  static const int WAIT_HARDR       = (1<<18);  // 131072
-  static const int WAIT_HARDW       = (1<<19);  // 262...
-  static const int WAIT_HARDB       = (1<<20);
+  static const int WAIT_SLAVEAGREE  = (1<<0);
+  static const int WAIT_AUTHPINNABLE = (1<<1);
+  static const int WAIT_SINGLEAUTH  = (1<<2);
+  static const int WAIT_DIR         = (1<<3);
+  static const int WAIT_LINK        = (1<<4);  // as in remotely nlink++
+  static const int WAIT_ANCHORED    = (1<<5);
+  static const int WAIT_UNANCHORED  = (1<<6);
+  static const int WAIT_UNLINK      = (1<<7);  // as in remotely nlink--
+  static const int WAIT_HARDR       = (1<<8);  // 131072
+  static const int WAIT_HARDW       = (1<<9);  // 262...
+  static const int WAIT_HARDB       = (1<<10);
   static const int WAIT_HARDRWB     = (WAIT_HARDR|WAIT_HARDW|WAIT_HARDB);
-  static const int WAIT_HARDSTABLE  = (1<<21);
-  static const int WAIT_HARDNORD    = (1<<22);
-  static const int WAIT_FILER       = (1<<23);
-  static const int WAIT_FILEW       = (1<<24);
-  static const int WAIT_FILEB       = (1<<25);
+  static const int WAIT_HARDSTABLE  = (1<<11);
+  static const int WAIT_HARDNORD    = (1<<12);
+  static const int WAIT_FILER       = (1<<13);
+  static const int WAIT_FILEW       = (1<<14);
+  static const int WAIT_FILEB       = (1<<15);
   static const int WAIT_FILERWB     = (WAIT_FILER|WAIT_FILEW|WAIT_FILEB);
-  static const int WAIT_FILESTABLE  = (1<<26);
-  static const int WAIT_FILENORD    = (1<<27);
-  static const int WAIT_FILENOWR    = (1<<28);
-  static const int WAIT_RENAMEACK       =(1<<29);
-  static const int WAIT_RENAMENOTIFYACK =(1<<30);
-  static const int WAIT_CAPS            =(1<<31);
+  static const int WAIT_FILESTABLE  = (1<<16);
+  static const int WAIT_FILENORD    = (1<<17);
+  static const int WAIT_FILENOWR    = (1<<18);
+  static const int WAIT_RENAMEACK       =(1<<19);
+  static const int WAIT_RENAMENOTIFYACK =(1<<20);
+  static const int WAIT_CAPS            =(1<<21);
   static const int WAIT_ANY           = 0xffffffff;
 
   // misc
@@ -171,7 +165,7 @@ class CInode : public MDSCacheObject {
 
   // -- other --
   // distributed caching (old)
-  pair<int,int> dangling_auth;    // explicit auth, when dangling.
+  //pair<int,int> dangling_auth;    // explicit auth, when dangling.
 
   // waiters
   multimap<int, Context*>  waiting;
@@ -248,20 +242,7 @@ protected:
   void name_stray_dentry(string& dname);
 
 
-
-  // -- state --
-  bool is_unsafe() { return state & STATE_UNSAFE; }
-  bool is_dangling() { return state & STATE_DANGLING; }
-  bool is_unlinking() { return state & STATE_UNLINKING; }
-
-  void mark_unsafe() { state |= STATE_UNSAFE; }
-  void mark_safe() { state &= ~STATE_UNSAFE; }
-
   // -- state encoding --
-  //void encode_basic_state(bufferlist& r);
-  //void decode_basic_state(bufferlist& r, int& off);
-
-
   void encode_file_state(bufferlist& r);
   void decode_file_state(bufferlist& r, int& off);
 

@@ -20,6 +20,7 @@
 #include "events/EImportMap.h"
 #include "events/EMetaBlob.h"
 #include "events/EUpdate.h"
+#include "events/ESlaveUpdate.h"
 #include "events/EUnlink.h"
 #include "events/EMount.h"
 #include "events/EClientMap.h"
@@ -50,6 +51,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_STRING: le = new EString(); break;
   case EVENT_IMPORTMAP: le = new EImportMap; break;
   case EVENT_UPDATE: le = new EUpdate; break;
+  case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
   case EVENT_UNLINK: le = new EUnlink(); break;
   case EVENT_PURGEFINISH: le = new EPurgeFinish(); break;
   case EVENT_MOUNT: le = new EMount(); break;

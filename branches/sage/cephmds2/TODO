@@ -38,8 +38,6 @@ mds
     - or, only put frag size/mtime in inode when frag is closed.  otherwise, soft (journaled) state, possibly on another mds.
   - 
 
-- fix auth_pin/export vs mds recovery deadlock: unfrozen exports should abort.  maybe delay exportdiscover until after frozen?
-
 - discover
 /  - hard link dentries
   - open_remote_ino needs major work...
@@ -59,26 +57,24 @@ mds
   - journaled bit in MDRequest
   - journal 
 
-/untested- truncate
-
+/untested- truncate...
 
 - mds failure vs clients
-/  - clean up client op redirection
   - idempotent client ops
     - how to track in memory?
     - how to trim?
     - EMetablob replay, expire logic
 - journal+recovery
-/  - test anchortable, anchorclient
-/  - local link
-/  - local unlink
   - local rename
 /    - fix dir renames vs subtrees
     - how to notify replicas...
 /  - stray purge
   - stray reintegration
   - remote link
+    - impl remote inode xlock
+    - ESlaveUpdate replay, resolution, etc.
   - remote unlink
+    - rewrite to look link _link
   - remote rename
   - open(wr cap), open+create
   - file capabilities i/o
@@ -86,16 +82,11 @@ mds
   - client readdir for dirfrags
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-- sync clients on stat
-  - will need to ditch 10s client metadata caching before this is useful
-  - implement truncate
 - real chdir (directory "open")
   - relative metadata ops
 - statfs?
 
 
-foreign link
-- 
 
 foreign rename
 - question: can we generalize foreign and local rename?
