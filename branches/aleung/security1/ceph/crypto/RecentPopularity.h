@@ -25,6 +25,7 @@ public:
   RecentPopularity(int jay, int kay) : J(jay), K(kay) {}
   RecentPopularity(map<inodeno_t, deque<inodeno_t> > sequence) : J(4), K(6),
 								 inode_sequences(sequence) {}
+  RecentPopularity(int jay, int kay, map<inodeno_t, deque<inodeno_t> > sequence) : J(jay), K(kay), inode_sequences(sequence) {}
   
 
   map<inodeno_t, deque<inodeno_t> >& get_sequence() { return inode_sequences; }
