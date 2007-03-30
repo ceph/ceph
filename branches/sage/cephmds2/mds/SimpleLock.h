@@ -1,0 +1,230 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+
+#ifndef __SIMPLELOCK_H
+#define __SIMPLELOCK_H
+
+// -- lock types --
+// NOTE: this also defines the lock ordering!
+#define LOCK_OTYPE_DN       1
+#define LOCK_OTYPE_IFILE    2
+#define LOCK_OTYPE_IHARD    3  // deprecate me?
+
+#define LOCK_OTYPE_IPERM    4
+#define LOCK_OTYPE_ILINK    5
+#define LOCK_OTYPE_IDIRTREE 6
+#define LOCK_OTYPE_DIR      7
+
+inline const char *get_lock_type_name(int t) {
+  switch (t) {
+  case LOCK_OTYPE_DN: return "dentry";
+  case LOCK_OTYPE_IFILE: return "inode_file";
+  case LOCK_OTYPE_IHARD: return "inode_hard";
+  case LOCK_OTYPE_IPERM: return "inode_perm";
+  case LOCK_OTYPE_ILINK: return "inode_link";
+  case LOCK_OTYPE_IDIRTREE: return "inode_dirtree";
+  default: assert(0);
+  }
+}
+
+// -- lock states --
+//                                auth   rep
+#define LOCK_SYNC     0  // AR   R .    R .
+#define LOCK_LOCK     1  // AR   R W    . .
+#define LOCK_GLOCKR   2  // AR   R .    . .
+
+inline const char *get_simplelock_state_name(int n) {
+  switch (n) {
+  case LOCK_SYNC: return "sync";
+  case LOCK_LOCK: return "lock";
+  case LOCK_GLOCKR: return "glockr";
+  default: assert(0);
+  }
+}
+
+class MDRequest;
+
+class SimpleLock {
+public:
+  static const int WAIT_RD     = (1<<0);  // to read
+  static const int WAIT_NORD   = (1<<1);  // for last rdlock to finish
+  static const int WAIT_WR     = (1<<2);  // to write
+  //static const int WAIT_RDWR   = (1<<3);  // to read+write
+  static const int WAIT_LOCK   = (1<<4);  // for locked state
+  static const int WAIT_STABLE = (1<<5);  // for a stable state
+  static const int WAIT_BITS   = 6;
+
+protected:
+  // parent (what i lock)
+  MDSCacheObject *parent;
+  int             type;
+
+  // lock state
+  char           state;
+  set<__int32_t> gather_set;  // auth
+
+  // local state
+  int        num_rdlock;
+  MDRequest *xlock_by;
+
+public:
+  SimpleLock(MDSCacheObject *o, int t) :
+    parent(o), type(t),
+    state(LOCK_SYNC), 
+    num_rdlock(0), xlock_by(0) { }
+
+  // parent
+  MDSCacheObject *get_parent() { return parent; }
+  int get_type() { return type; }
+
+  struct ptr_lt {
+    bool operator()(const SimpleLock* l, const SimpleLock* r) const {
+      if (l->type < r->type) return true;
+      if (l->type == r->type) return l->parent->is_lt(r->parent);
+      return false;
+    }
+  };
+
+  void decode_locked_state(bufferlist& bl) {
+    parent->decode_lock_state(type, bl);
+  }
+  void encode_locked_state(bufferlist& bl) {
+    parent->encode_lock_state(type, bl);
+  }
+  void finish_waiters(int mask, int r=0) {
+    parent->finish_lock_waiters(type, mask, r);
+  }
+  void add_waiter(int mask, Context *c) {
+    parent->add_lock_waiter(type, mask, c);
+  }
+  bool is_waiting(int mask) {
+    return parent->is_lock_waiting(type, mask);
+  }
+  
+  
+
+  // state
+  char get_state() { return state; }
+  char set_state(char s) { 
+    state = s; 
+    assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
+    return s;
+  };
+  bool is_stable() {
+    return state >= 0;
+  }
+
+
+  // gather set
+  const set<int>& get_gather_set() { return gather_set; }
+  void init_gather() {
+    for (map<int,int>::const_iterator p = parent->replicas_begin(); 
+	 p != parent->replicas_end(); 
+	 ++p)
+      gather_set.insert(p->first);
+  }
+  bool is_gathering() { return !gather_set.empty(); }
+  bool is_gathering(int i) {
+    return gather_set.count(i);
+  }
+  void clear_gather() {
+    gather_set.clear();
+  }
+  void remove_gather(int i) {
+    gather_set.erase(i);
+  }
+
+  // ref counting
+  int get_rdlock() { return ++num_rdlock; }
+  int put_rdlock() {
+    assert(num_rdlock>0);
+    return --num_rdlock;
+  }
+  int get_num_rdlock() { return num_rdlock; }
+
+  void get_xlock(MDRequest *who) { 
+    assert(xlock_by == 0);
+    xlock_by = who; 
+  }
+  void put_xlock() {
+    assert(xlock_by);
+    xlock_by = 0;
+  }
+  bool is_xlocked() { return xlock_by ? true:false; }
+  MDRequest *get_xlocked_by() { return xlock_by; }
+  bool is_used() {
+    return (is_xlocked() || (num_rdlock>0)) ? true:false;
+  }
+
+  // encode/decode
+  void _encode(bufferlist& bl) {
+    ::_encode(state, bl);
+    ::_encode(gather_set, bl);
+  }
+  void _decode(bufferlist& bl, int& off) {
+    ::_decode(state, bl, off);
+    ::_decode(gather_set, bl, off);
+  }
+
+  
+  // simplelock specifics
+  char get_replica_state() {
+    switch (state) {
+    case LOCK_LOCK:
+    case LOCK_GLOCKR: 
+      return LOCK_LOCK;
+    case LOCK_SYNC:
+      return LOCK_SYNC;
+    default: 
+      assert(0);
+    }
+    return 0;
+  }
+
+  bool can_rdlock(MDRequest *mdr) {
+    if (state == LOCK_SYNC)
+      return true;
+    if (state == LOCK_LOCK && mdr && xlock_by == mdr)
+      return true;
+    return false;
+  }
+  bool can_xlock(MDRequest *mdr) {
+    if (!parent->is_auth()) return false;
+    if (state != LOCK_LOCK) return false;
+    if (mdr && xlock_by == mdr) return true;
+    return false;
+  }
+  bool can_xlock_soon() {
+    if (parent->is_auth())
+      return (state == LOCK_GLOCKR);
+    else
+      return false;
+  }
+};
+
+inline ostream& operator<<(ostream& out, SimpleLock& l) 
+{
+  out << "(" << get_lock_type_name(l.get_type())
+      << get_simplelock_state_name(l.get_state());
+  if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
+  if (l.get_num_rdlock()) 
+    out << " r=" << l.get_num_rdlock();
+  if (l.is_xlocked())
+    out << " w=" << l.get_xlocked_by();
+  out << ")";
+  return out;
+}
+
+
+#endif

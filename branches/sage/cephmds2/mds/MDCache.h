@@ -28,7 +28,6 @@
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
-#include "Lock.h"
 #include "include/Context.h"
 
 class MDS;
@@ -81,24 +80,13 @@ struct MDRequest {
   set< CInode* >            inode_auth_pins;
   
   // held locks
-  set< CDentry*, CDentry::ptr_lt > dentry_locks; // sorted list of dentry locks we hold
-  set< CDentry* > dentry_rdlocks;
-  set< CDentry* > dentry_xlocks;
+  set< SimpleLock* > rdlocks;
+  set< SimpleLock* > xlocks;
+  set< SimpleLock*, SimpleLock::ptr_lt > locks;
 
-  set< CInode*, CInode::ptr_lt > inode_hard_locks; // sorted list of inode locks we hold
-  set< CInode* >  inode_hard_rdlocks;
-  set< CInode* >  inode_hard_xlocks;
-
-  set< CInode*, CInode::ptr_lt > inode_file_locks; // sorted list of inode locks we hold
-  set< CInode* >  inode_file_rdlocks;
-  set< CInode* >  inode_file_xlocks;
-  
   // projected updates
   map< inodeno_t, inode_t > projected_inode;
 
-  // old
-  set< CDentry* >           xlocks;           // xlocks (local)
-  set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
 
   MDRequest() : request(0), ref(0) {}
   MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), ref(0) {}

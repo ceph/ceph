@@ -235,13 +235,16 @@ namespace __gnu_cxx {
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
-
-  // other.
   FileLayout layout;  // ?immutable?
-  int        nlink;   // base, 
+
+  // affected by any inode change...
   time_t     ctime;   // inode change time
 
-  // hard/perm (namespace permissions)
+  // nlink
+  int        nlink;  
+  bool       anchored;          // auth only?
+
+  // perm (namespace permissions)
   mode_t     mode;
   uid_t      uid;
   gid_t      gid;
@@ -255,8 +258,6 @@ struct inode_t {
 
   // special stuff
   version_t     version;           // auth only
-  unsigned char hash_seed;         // only defined for dir; 0 if not hashed.
-  bool          anchored;          // auth only
   version_t     file_data_version; // auth only
 
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
@@ -267,8 +268,6 @@ struct inode_t {
 
 
 
-// client types
-typedef int        fh_t;          // file handle 
 
 
 // dentries

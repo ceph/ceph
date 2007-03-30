@@ -87,6 +87,8 @@ mds
 - statfs?
 
 
+- fix lock caps gather ack versus ambiguous auth
+
 
 foreign rename
 - question: can we generalize foreign and local rename?

@@ -236,7 +236,12 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 
 // ================================================================
 
-#define MDS_PIN_REPLICATED 1
+#define MDS_PIN_REPLICATED     1
+#define MDS_STATE_AUTH     (1<<0)
+
+class MLock;
+class Context;
+class SimpleLock;
 
 class MDSCacheObject {
  protected:
@@ -262,6 +267,8 @@ class MDSCacheObject {
   void state_set(unsigned mask) { state |= mask; }
   unsigned state_test(unsigned mask) { return state & mask; }
   void state_reset(unsigned s) { state = s; }
+
+  bool is_auth() { return state & MDS_STATE_AUTH; }
 
   // --------------------------------------------
   // pins
@@ -358,7 +365,37 @@ class MDSCacheObject {
 
   int get_replica_nonce() { return replica_nonce;}
   void set_replica_nonce(int n) { replica_nonce = n; }
+
+
+  // ---------------------------------------------
+  // locking
+  // noop unless overloaded.
+  virtual SimpleLock* get_lock(int type) { assert(0); }
+  virtual void set_mlock_info(MLock *m) { assert(0); }
+  virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
+  virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
+  virtual void finish_lock_waiters(int type, int mask, int r=0) { assert(0); }
+  virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
+  virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
+
+
+  // ---------------------------------------------
+  // ordering
+  virtual bool is_lt(const MDSCacheObject *r) const = 0;
+  struct ptr_lt {
+    bool operator()(const MDSCacheObject* l, const MDSCacheObject* r) const {
+      return l->is_lt(r);
+    }
+  };
+
+  // printing
+  virtual void print(ostream& out) = 0;
 };
+
+inline ostream& operator<<(ostream& out, MDSCacheObject& o) {
+  o.print(out);
+  return out;
+}
 
 
 #endif

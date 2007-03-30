@@ -21,6 +21,8 @@
 #include "MDS.h"
 #include "MDCache.h"
 
+#include "messages/MLock.h"
+
 #include <cassert>
 
 #undef dout
@@ -48,11 +50,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_null()) out << " NULL";
   if (dn.is_remote()) out << " REMOTE";
 
-  if (dn.is_rdlocked()) out << " " << dn.get_num_rdlocks() << " rdlocks";
-
-  if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
-  if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
-  if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock=" << dn.get_xlockedby();
+  out << " " << dn.lock;
 
   out << " v=" << dn.get_version();
   out << " pv=" << dn.get_projected_version();
@@ -70,7 +68,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
 }
 
 
-bool operator<(CDentry& l, CDentry& r)
+bool operator<(const CDentry& l, const CDentry& r)
 {
   if (l.get_dir()->ino() < r.get_dir()->ino()) return true;
   if (l.get_dir()->ino() == r.get_dir()->ino() &&
@@ -79,9 +77,9 @@ bool operator<(CDentry& l, CDentry& r)
 }
 
 
-
-CDentry::CDentry(const CDentry& m) {
-  assert(0); //std::cerr << "copy cons called, implement me" << endl;
+void CDentry::print(ostream& out)
+{
+  out << *this;
 }
 
 
@@ -196,6 +194,47 @@ CDentryDiscover *CDentry::replicate_to(int who)
 }
 
 
+// ----------------------------
+// locking
+
+void CDentry::set_mlock_info(MLock *m) 
+{
+  m->set_dn(dir->dirfrag(), name);
+}
+
+void CDentry::encode_lock_state(int type, bufferlist& bl)
+{
+  
+}
+
+void CDentry::decode_lock_state(int type, bufferlist& bl)
+{
+
+}
+
+int CDentry::convert_lock_mask(int mask)
+{
+  return mask << CDir::WAIT_DNLOCK_OFFSET;
+}
+
+void CDentry::finish_lock_waiters(int type, int mask, int r)
+{
+  dir->finish_waiting(convert_lock_mask(mask), name, r);
+}
+
+void CDentry::add_lock_waiter(int type, int mask, Context *c)
+{
+  dir->add_waiter(convert_lock_mask(mask), name, c);
+}
+
+bool CDentry::is_lock_waiting(int type, int mask) 
+{
+  return dir->waiting_for(convert_lock_mask(mask), name);
+}
+
+
+
+/*
 
 
 // =
@@ -204,22 +243,4 @@ const CDentry& CDentry::operator= (const CDentry& right) {
   return *this;
 }
 
-  // comparisons
-  bool CDentry::operator== (const CDentry& right) const {
-    return name == right.name;
-  }
-  bool CDentry::operator!= (const CDentry& right) const {
-    return name == right.name;
-  }
-  bool CDentry::operator< (const CDentry& right) const {
-    return name < right.name;
-  }
-  bool CDentry::operator> (const CDentry& right) const {
-    return name > right.name;
-  }
-  bool CDentry::operator>= (const CDentry& right) const {
-    return name >= right.name;
-  }
-  bool CDentry::operator<= (const CDentry& right) const {
-    return name <= right.name;
-  }
+*/

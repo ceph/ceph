@@ -68,9 +68,9 @@ class InodeStat {
   {
     // inode.mask
     inode.mask = INODE_MASK_BASE;
-    if (in->filelock.can_read(in->is_auth()))
+    if (in->filelock.can_rdlock(0))
       inode.mask |= INODE_MASK_PERM;
-    if (in->hardlock.can_read(in->is_auth()))
+    if (in->hardlock.can_rdlock(0))
       inode.mask |= INODE_MASK_SIZE | INODE_MASK_MTIME;      // fixme when we separate this out.
     
     // symlink content?

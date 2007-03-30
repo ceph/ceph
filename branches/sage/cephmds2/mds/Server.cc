@@ -376,9 +376,9 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   // does it already exist?
   CDentry *dn = dir->lookup(dname);
   if (dn) {
-    if (!dn->can_read(mdr)) {
+    if (!dn->lock.can_rdlock(mdr)) {
       dout(10) << "waiting on (existing!) unreadable dentry " << *dn << endl;
-      dir->add_waiter(CDir::WAIT_DNREAD, dname, new C_MDS_RetryRequest(mdcache, mdr));
+      dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
 
@@ -550,16 +550,13 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   }
 
   // lock the path
-  set<CDentry*> dentry_rdlocks;
-  set<CDentry*> dentry_xlocks;
-  set<CInode*> inode_empty;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> xlocks;
 
   for (unsigned i=0; i<trace.size(); i++) 
-    dentry_rdlocks.insert(trace[i]);
+    rdlocks.insert(&trace[i]->lock);
 
-  if (!mds->locker->acquire_locks(mdr, 
-				  dentry_rdlocks, dentry_xlocks,
-				  inode_empty, inode_empty))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return 0;
   
   // set and pin ref
@@ -609,9 +606,9 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     }
 
     // readable?
-    if (dn && !dn->can_read(mdr)) {
+    if (dn && !dn->lock.can_rdlock(mdr)) {
       dout(10) << "waiting on (existing!) unreadable dentry " << *dn << endl;
-      dir->add_waiter(CDir::WAIT_DNREAD, dname, new C_MDS_RetryRequest(mdcache, mdr));
+      dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
       
@@ -628,23 +625,20 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   }
 
   // -- lock --
-  set<CDentry*> dentry_rdlocks;
-  set<CDentry*> dentry_xlocks;
-  set<CInode*>  inode_empty;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> xlocks;
 
   for (unsigned i=0; i<trace.size(); i++) {
     dout(10) << "will rdlock trace " << i << " " << *trace[i] << endl;
-    dentry_rdlocks.insert(trace[i]);
+    rdlocks.insert(&trace[i]->lock);
   }
   dout(10) << "will rd or x lock " << *dn << endl;
   if (dn->is_null())
-    dentry_xlocks.insert(dn);   // new dn, xlock
+    xlocks.insert(&dn->lock);   // new dn, xlock
   else
-    dentry_rdlocks.insert(dn);  // existing dn, rdlock
+    rdlocks.insert(&dn->lock);  // existing dn, rdlock
 
-  if (!mds->locker->acquire_locks(mdr, 
-				  dentry_rdlocks, dentry_xlocks,
-				  inode_empty, inode_empty))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return 0;
 
   // save the locked trace.
@@ -748,9 +742,9 @@ void Server::handle_client_stat(MDRequest *mdr)
   int mask = req->args.stat.mask;
   if (mask & (INODE_MASK_SIZE|INODE_MASK_MTIME)) {
     // yes.  do a full stat.
-    if (!mds->locker->inode_file_rdlock_start(ref, mdr))
+    if (!mds->locker->rdlock_start(&ref->filelock, mdr))
       return;  // syncing
-    mds->locker->inode_file_rdlock_finish(ref, mdr);
+    mds->locker->rdlock_finish(&ref->filelock, mdr);
   } else {
     // nope!  easy peasy.
   }
@@ -809,7 +803,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   if (!cur) return;
 
   // write
-  if (!mds->locker->inode_file_xlock_start(cur, mdr))
+  if (!mds->locker->xlock_start(&cur->filelock, mdr))
     return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -875,7 +869,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   if (!cur) return;
 
   // write
-  if (!mds->locker->inode_hard_xlock_start(cur, mdr))
+  if (!mds->locker->xlock_start(&cur->hardlock, mdr))
     return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -934,7 +928,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   if (!cur) return;
 
   // write
-  if (!mds->locker->inode_hard_xlock_start(cur, mdr))
+  if (!mds->locker->xlock_start(&cur->hardlock, mdr))
     return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -1293,21 +1287,17 @@ void Server::handle_client_link(MDRequest *mdr)
   if (!dn) return;
 
   // create lock lists
-  set<CDentry*> dentry_rdlocks;
-  set<CDentry*> dentry_xlocks;
-  set<CInode*> inode_hard_rdlocks;
-  set<CInode*> inode_hard_xlocks;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> xlocks;
 
   for (unsigned i=0; i<linktrace.size(); i++)
-    dentry_rdlocks.insert(linktrace[i]);
-  dentry_xlocks.insert(dn);
+    rdlocks.insert(&linktrace[i]->lock);
+  xlocks.insert(&dn->lock);
   for (unsigned i=0; i<targettrace.size(); i++)
-    dentry_rdlocks.insert(targettrace[i]);
-  inode_hard_xlocks.insert(targeti);
+    rdlocks.insert(&targettrace[i]->lock);
+  xlocks.insert(&targeti->hardlock);
 
-  if (!mds->locker->acquire_locks(mdr, 
-				  dentry_rdlocks, dentry_xlocks,
-				  inode_hard_rdlocks, inode_hard_xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;
 
   // go!
@@ -1511,9 +1501,9 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // readable?
-  if (!dn->can_read(mdr)) {
+  if (!dn->lock.can_rdlock(mdr)) {
     dout(10) << "waiting on unreadable dentry " << *dn << endl;
-    dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name, new C_MDS_RetryRequest(mdcache, mdr));
+    dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
@@ -1546,19 +1536,15 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // lock
-  set<CDentry*> dentry_rdlocks;
-  set<CDentry*> dentry_xlocks;
-  set<CInode*> inode_hard_rdlocks;
-  set<CInode*> inode_hard_xlocks;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> xlocks;
 
   for (unsigned i=0; i<trace.size()-1; i++)
-    dentry_rdlocks.insert(trace[i]);
-  dentry_xlocks.insert(dn);
-  inode_hard_xlocks.insert(in);
+    rdlocks.insert(&trace[i]->lock);
+  xlocks.insert(&dn->lock);
+  xlocks.insert(&in->hardlock);
   
-  if (!mds->locker->acquire_locks(mdr, 
-				  dentry_rdlocks, dentry_xlocks,
-				  inode_hard_rdlocks, inode_hard_xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;
 
   // ok!
@@ -1814,10 +1800,9 @@ public:
 bool Server::_rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *mdr)
 {
   // xlocked?
-  if (dn && !dn->can_read(mdr)) {
+  if (dn && !dn->lock.can_rdlock(mdr)) {
     dout(10) << "_rename_open_dn waiting on " << *dn << endl;
-    dir->add_waiter(CDir::WAIT_DNREAD,
-			dn->name,
+    dn->lock.add_waiter(SimpleLock::WAIT_RD,
 			new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
@@ -1903,8 +1888,9 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // identify/create dest dentry
   CDentry *destdn = destdir->lookup(destname);
-  if (destdn && !destdn->can_read(mdr)) {
-    destdir->add_waiter(CDir::WAIT_DNREAD, destname, new C_MDS_RetryRequest(mdcache, mdr));
+  if (destdn && !destdn->lock.can_rdlock(mdr)) {
+    destdn->lock.add_waiter(SimpleLock::WAIT_RD,
+			    new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
@@ -1939,27 +1925,23 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 
   // -- locks --
-  set<CDentry*> dentry_rdlocks;
-  set<CDentry*> dentry_xlocks;
-  set<CInode*> inode_hard_rdlocks;
-  set<CInode*> inode_hard_xlocks;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> xlocks;
 
   // rdlock sourcedir path, xlock src dentry
   for (unsigned i=0; i<srctrace.size()-1; i++) 
-    dentry_rdlocks.insert(srctrace[i]);
-  dentry_xlocks.insert(srcdn);
+    rdlocks.insert(&srctrace[i]->lock);
+  xlocks.insert(&srcdn->lock);
 
   // rdlock destdir path, xlock dest dentry
   for (unsigned i=0; i<desttrace.size(); i++)
-    dentry_rdlocks.insert(desttrace[i]);
-  dentry_xlocks.insert(destdn);
+    rdlocks.insert(&desttrace[i]->lock);
+  xlocks.insert(&destdn->lock);
 
   // xlock oldin
-  if (oldin) inode_hard_xlocks.insert(oldin);
+  if (oldin) xlocks.insert(&oldin->hardlock);
   
-  if (!mds->locker->acquire_locks(mdr, 
-				  dentry_rdlocks, dentry_xlocks,
-				  inode_hard_rdlocks, inode_hard_xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;
 
   
@@ -2499,7 +2481,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   // check permissions?  
 
   // xlock inode
-  if (!mds->locker->inode_file_xlock_start(cur, mdr))
+  if (!mds->locker->xlock_start(&cur->filelock, mdr))
     return;  // fw or (wait for) lock
   
   // already small enough?
@@ -2564,7 +2546,7 @@ void Server::handle_client_open(MDRequest *mdr)
     assert(cur->is_auth());
 
     // xlock file size
-    if (!mds->locker->inode_file_xlock_start(cur, mdr))
+    if (!mds->locker->xlock_start(&cur->filelock, mdr))
       return;
     
     if (cur->inode.size > 0) {
@@ -2701,7 +2683,7 @@ public:
     newi->mark_dirty(pv);
 
     // downgrade xlock to rdlock
-    mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
+    //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
 
     // set/pin ref inode for open()
     mdr->ref = newi;

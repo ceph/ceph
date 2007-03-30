@@ -26,16 +26,11 @@ using namespace std;
 #include "include/lru.h"
 #include "mdstypes.h"
 
+#include "SimpleLock.h"
+
 class CInode;
 class CDir;
 class MDRequest;
-
-#define DN_LOCK_SYNC      0
-#define DN_LOCK_PREXLOCK  1
-#define DN_LOCK_XLOCK     2
-#define DN_LOCK_UNPINNING 3  // waiting for pins to go away .. FIXME REVIEW THIS CODE ..
-
-#define DN_XLOCK_FOREIGN  ((MDRequest*)0x1)  // not 0, not a valid pointer.  FIXME FIXME
 
 class Message;
 class CDentryDiscover;
@@ -44,7 +39,7 @@ class Anchor;
 class CDentry;
 
 // define an ordering
-bool operator<(CDentry& l, CDentry& r);
+bool operator<(const CDentry& l, const CDentry& r);
 
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject {
@@ -74,11 +69,9 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
   static const int EXPORT_NONCE = 1;
 
-  struct ptr_lt {
-    bool operator()(const CDentry* l, const CDentry* r) const {
-      return *l < *r;
-    }
-  };
+  bool is_lt(const MDSCacheObject *r) const {
+    return *this < *(CDentry*)r;
+  }
 
  protected:
   string          name;
@@ -90,14 +83,6 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t       version;  // dir version when last touched.
   version_t       projected_version;  // what it will be when i unlock/commit.
 
-  // xlocks
-  int            lockstate;
-  MDRequest     *xlockedby;
-  set<int>       gather_set;
-  
-  // rdlocks
-  int            num_rdlocks;
-  multiset<MDRequest*> rdlock_set;
 
   friend class Migrator;
   friend class Locker;
@@ -108,6 +93,13 @@ class CDentry : public MDSCacheObject, public LRUObject {
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
+
+public:
+  // lock
+  SimpleLock lock;
+
+
+
  public:
   // cons
   CDentry() :
@@ -116,9 +108,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     remote_ino(0),
     version(0),
     projected_version(0),
-    lockstate(DN_LOCK_SYNC),
-    xlockedby(0),
-    num_rdlocks(0) { }
+    lock(this, LOCK_OTYPE_DN) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
     name(n),
     inode(in),
@@ -126,9 +116,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     remote_ino(ino),
     version(0),
     projected_version(0),
-    lockstate(DN_LOCK_SYNC),
-    xlockedby(0),
-    num_rdlocks(0) { }
+    lock(this, LOCK_OTYPE_DN) { }
   CDentry(const string& n, CInode *in) :
     name(n),
     inode(in),
@@ -136,13 +124,11 @@ class CDentry : public MDSCacheObject, public LRUObject {
     remote_ino(0),
     version(0),
     projected_version(0),
-    lockstate(DN_LOCK_SYNC),
-    xlockedby(0),
-    num_rdlocks(0) { }
+    lock(this, LOCK_OTYPE_DN) { }
 
-  CInode *get_inode() { return inode; }
-  CDir *get_dir() { return dir; }
-  const string& get_name() { return name; }
+  CInode *get_inode() const { return inode; }
+  CDir *get_dir() const { return dir; }
+  const string& get_name() const { return name; }
   inodeno_t get_ino();
   inodeno_t get_remote_ino() { return remote_ino; }
 
@@ -172,14 +158,6 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // copy cons
   CDentry(const CDentry& m);
   const CDentry& operator= (const CDentry& right);
-
-  // comparisons
-  bool operator== (const CDentry& right) const;
-  bool operator!= (const CDentry& right) const;
-  bool operator< (const CDentry& right) const;
-  bool operator> (const CDentry& right) const;
-  bool operator>= (const CDentry& right) const;
-  bool operator<= (const CDentry& right) const;
 
   // misc
   void make_path(string& p);
@@ -214,8 +192,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     bl.append((char*)&state, sizeof(state));
     bl.append((char*)&version, sizeof(version));
     bl.append((char*)&projected_version, sizeof(projected_version));
-    bl.append((char*)&lockstate, sizeof(lockstate));
-    ::_encode(gather_set, bl);
+    lock._encode(bl);
     ::_encode(replicas, bl);
 
     // twiddle
@@ -233,9 +210,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
     off += sizeof(version);
     bl.copy(off, sizeof(projected_version), (char*)&projected_version);
     off += sizeof(projected_version);
-    bl.copy(off, sizeof(lockstate), (char*)&lockstate);
-    off += sizeof(lockstate);
-    ::_decode(gather_set, bl, off);
+    lock._decode(bl, off);
     ::_decode(replicas, bl, off);
 
     // twiddle
@@ -250,55 +225,21 @@ class CDentry : public MDSCacheObject, public LRUObject {
       remove_replica(to);
   }
 
-  // -- locking
-  int get_lockstate() { return lockstate; }
-  set<int>& get_gather_set() { return gather_set; }
-
-  bool is_sync() { return lockstate == DN_LOCK_SYNC; }
-  bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
-  bool can_read(MDRequest *m) { return is_xlockedbyme(m) || can_read(); }
-  bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
-  MDRequest* get_xlockedby() { return xlockedby; } 
-  bool is_xlockedbyother(MDRequest *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
-  bool is_xlockedbyme(MDRequest *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
-  bool is_prexlockbyother(MDRequest *m) {
-    return (lockstate == DN_LOCK_PREXLOCK) && m != xlockedby;
+  // -- locking --
+  SimpleLock* get_lock(int type) {
+    assert(type == LOCK_OTYPE_DN);
+    return &lock;
   }
+  void set_mlock_info(MLock *m);
+  void encode_lock_state(int type, bufferlist& bl);
+  void decode_lock_state(int type, bufferlist& bl);
+  int convert_lock_mask(int mask);
+  void finish_lock_waiters(int type, int mask, int r=0);
+  void add_lock_waiter(int type, int mask, Context *c);
+  bool is_lock_waiting(int type, int mask);
 
-  int get_replica_lockstate() {
-    switch (lockstate) {
-    case DN_LOCK_XLOCK:
-    case DN_LOCK_SYNC: 
-      return lockstate;
-    case DN_LOCK_PREXLOCK:
-      return DN_LOCK_XLOCK;
-    case DN_LOCK_UNPINNING:
-      return DN_LOCK_SYNC;
-    }
-    assert(0); 
-    return 0;
-  }
-  void set_lockstate(int s) { lockstate = s; }
   
-  // path pins
-  void get_rdlock(MDRequest *m) { 
-    num_rdlocks++; 
-    rdlock_set.insert(m);
-    assert(rdlock_set.size() == (unsigned)num_rdlocks);
-  }
-  void put_rdlock(MDRequest *m) { 
-    num_rdlocks--; 
-    assert(num_rdlocks >= 0); 
-    assert(rdlock_set.count(m) > 0);
-    rdlock_set.erase(rdlock_set.find(m));
-    assert(rdlock_set.size() == (unsigned)num_rdlocks);
-  }
-  bool can_rdlock(MDRequest *m) { 
-    return (lockstate == DN_LOCK_SYNC) ||
-      (lockstate == DN_LOCK_UNPINNING && m && rdlock_set.count(m)); 
-  }
-  bool is_rdlocked() { return num_rdlocks>0; }
-  int get_num_rdlocks() { return num_rdlocks; }
+  void print(ostream& out);
 
   friend class CDir;
 };
@@ -319,7 +260,7 @@ public:
   CDentryDiscover() {}
   CDentryDiscover(CDentry *dn, int nonce) :
     dname(dn->get_name()), replica_nonce(nonce),
-    lockstate(dn->get_replica_lockstate()),
+    lockstate(dn->lock.get_replica_state()),
     ino(dn->get_ino()),
     remote_ino(dn->get_remote_ino()) { }
 
@@ -335,7 +276,7 @@ public:
   }
   void update_new_dentry(CDentry *dn) {
     update_dentry(dn);
-    dn->set_lockstate( lockstate );
+    dn->lock.set_state( lockstate );
   }
 
   void _encode(bufferlist& bl) {

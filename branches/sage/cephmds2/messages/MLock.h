@@ -17,36 +17,30 @@
 
 #include "msg/Message.h"
 
-#define LOCK_OTYPE_IHARD  1
-#define LOCK_OTYPE_IFILE  2
-#define LOCK_OTYPE_DIR    3
-#define LOCK_OTYPE_DN     4
 
 // for replicas
-#define LOCK_AC_SYNC          0
-#define LOCK_AC_MIXED         1
-#define LOCK_AC_LOCK          2
+#define LOCK_AC_SYNC        -1
+#define LOCK_AC_MIXED       -2
+#define LOCK_AC_LOCK        -3
 
-#define LOCK_AC_REQXLOCKACK   9  // req dentry xlock
-#define LOCK_AC_REQXLOCKNAK  10  // req dentry xlock
-#define LOCK_AC_LOCKNAK      12  // for dentry xlock
+#define LOCK_AC_REQXLOCKACK -4  // req dentry xlock
+#define LOCK_AC_REQXLOCKNAK -5  // req dentry xlock
 
-#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 10)
-#define LOCK_AC_FOR_AUTH(a)     ((a) >= 11)
+#define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
+#define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
 
 // for auth
+#define LOCK_AC_SYNCACK      1
+#define LOCK_AC_MIXEDACK     2
+#define LOCK_AC_LOCKACK      3
 
-#define LOCK_AC_SYNCACK      13
-#define LOCK_AC_MIXEDACK     14
-#define LOCK_AC_LOCKACK      15
 
+#define LOCK_AC_REQREAD      4
+#define LOCK_AC_REQWRITE     5
 
-#define LOCK_AC_REQREAD      19
-#define LOCK_AC_REQWRITE     20
-
-#define LOCK_AC_REQXLOCK     21
-#define LOCK_AC_REQXLOCKC    22 // create if necessary
-#define LOCK_AC_UNXLOCK      23
+#define LOCK_AC_REQXLOCK     6
+#define LOCK_AC_REQXLOCKC    7 // create if necessary
+#define LOCK_AC_UNXLOCK      8
 
 #define lock_ac_name(x)      
 
@@ -59,8 +53,8 @@ class MLock : public Message {
   inodeno_t ino;    // ino ref, or possibly
   dirfrag_t dirfrag;
   string    dn;     // dentry name
-  bufferlist data;   // and possibly some data
-  string    path;   // possibly a path too (for dentry lock discovers)
+  
+  bufferlist data;  // and possibly some data
 
  public:
   inodeno_t get_ino() { return ino; }
@@ -70,7 +64,6 @@ class MLock : public Message {
   int get_asker() { return asker; }
   int get_action() { return action; }
   int get_otype() { return otype; }
-  string& get_path() { return path; }
 
   MLock() {}
   MLock(int action, int asker) :
@@ -78,10 +71,20 @@ class MLock : public Message {
     this->action = action;
     this->asker = asker;
   }
+  MLock(SimpleLock *lock, int action, int asker) :
+    Message(MSG_MDS_LOCK) {
+    this->otype = lock->get_type();
+    lock->get_parent()->set_mlock_info(this);
+    this->action = action;
+    this->asker = asker;
+  }
   virtual char *get_type_name() { return "ILock"; }
   
   void set_ino(inodeno_t ino, char ot) {
     otype = ot;
+    this->ino = ino;
+  }
+  void set_ino(inodeno_t ino) {
     this->ino = ino;
   }
   void set_dirfrag(dirfrag_t df) {
@@ -95,9 +98,6 @@ class MLock : public Message {
   }
   void set_data(bufferlist& data) {
     this->data.claim( data );
-  }
-  void set_path(const string& p) {
-    path = p;
   }
   
   void decode_payload() {
@@ -113,7 +113,6 @@ class MLock : public Message {
     payload.copy(off,sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
     ::_decode(dn, payload, off);
-    ::_decode(path, payload, off);
     ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
@@ -123,7 +122,6 @@ class MLock : public Message {
     payload.append((char*)&ino, sizeof(ino));
     payload.append((char*)&dirfrag, sizeof(dirfrag));
     ::_encode(dn, payload);
-    ::_encode(path, payload);
     ::_encode(data, payload);
   }
 

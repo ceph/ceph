@@ -88,6 +88,11 @@ ostream& operator<<(ostream& out, CDir& dir)
   return out << "]";
 }
 
+void CDir::print(ostream& out) 
+{
+  out << *this;
+}
+
 
 #include "config.h"
 #undef dout
@@ -348,7 +353,6 @@ void CDir::remove_null_dentries() {
        it != dns.end();
        it++) {
     CDentry *dn = *it;
-    assert(dn->is_sync());
     remove_dentry(dn);
   }
   //assert(null_items.empty());         

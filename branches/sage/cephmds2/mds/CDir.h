@@ -164,12 +164,8 @@ class CDir : public MDSCacheObject {
   static const int WAIT_IMPORTED     = (1<<4);  // import finish
   static const int WAIT_SINGLEAUTH   = (1<<5); 
 
-  static const int WAIT_DNREAD       = (1<<20);
-  static const int WAIT_DNLOCK       = (1<<21);
-  static const int WAIT_DNUNPINNED   = (1<<22);
-  static const int WAIT_DNPINNABLE   = (WAIT_DNREAD|WAIT_DNUNPINNED);
-  static const int WAIT_DNREQXLOCK   = (1<<23);
-  
+  static const int WAIT_DNLOCK_OFFSET = 6;
+
   static const int WAIT_ANY  = (0xffffffff);
   static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
   static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
@@ -183,6 +179,10 @@ class CDir : public MDSCacheObject {
 
   CInode          *inode;  // my inode
   frag_t           frag;   // my frag
+
+  bool is_lt(const MDSCacheObject *r) const {
+    return dirfrag() < ((const CDir*)r)->dirfrag();
+  }
 
  protected:
   // contents
@@ -230,8 +230,8 @@ class CDir : public MDSCacheObject {
 
 
   // -- accessors --
-  inodeno_t ino()     { return inode->ino(); }          // deprecate me?
-  dirfrag_t dirfrag() { return dirfrag_t(inode->ino(), frag); }
+  inodeno_t ino()     const { return inode->ino(); }          // deprecate me?
+  dirfrag_t dirfrag() const { return dirfrag_t(inode->ino(), frag); }
 
   CInode *get_inode()    { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
@@ -341,7 +341,8 @@ class CDir : public MDSCacheObject {
     return true;
   }
  
-  
+
+ 
   // -- fetch --
   object_t get_ondisk_object() { return object_t(ino(), frag); }
   void fetch(Context *c);
@@ -464,6 +465,9 @@ class CDir : public MDSCacheObject {
 
   CDir *get_frozen_tree_root();
 
+
+
+  void print(ostream& out);
 };
 
 

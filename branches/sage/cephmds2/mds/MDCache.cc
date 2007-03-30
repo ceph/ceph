@@ -174,10 +174,7 @@ void MDCache::remove_inode(CInode *o)
     // FIXME: multiple parents?
     CDentry *dn = o->get_parent_dn();
     assert(!dn->is_dirty());
-    if (dn->is_sync())
-      dn->dir->remove_dentry(dn);  // unlink inode AND hose dentry
-    else
-      dn->dir->unlink_inode(dn);   // leave dentry
+    dn->dir->unlink_inode(dn);   // leave dentry ... FIXME?
   }
 
   // remove from inode map
@@ -1476,7 +1473,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
       assert(dn);
       int nonce = dn->add_replica(from);
       dout(10) << " has " << *dn << endl;
-      ack->add_dentry(*p, *q, dn->get_lockstate(), nonce);
+      ack->add_dentry(*p, *q, dn->lock.get_state(), nonce);
     }
   }
 
@@ -1491,8 +1488,8 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
       in->mds_caps_wanted[from] = p->second;
     else
       in->mds_caps_wanted.erase(from);
-    in->hardlock.gather_set.erase(from);  // just in case
-    in->filelock.gather_set.erase(from);  // just in case
+    in->hardlock.remove_gather(from);  // just in case
+    in->filelock.remove_gather(from);  // just in case
     dout(10) << " has " << *in << endl;
     ack->add_inode(p->first, 
 		   in->hardlock.get_replica_state(), in->filelock.get_replica_state(), 
@@ -1528,7 +1525,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
       CDentry *dn = dir->lookup(q->first);
       assert(dn);
       dn->set_replica_nonce(q->second.nonce);
-      dn->set_lockstate(q->second.lock);
+      dn->lock.set_state(q->second.lock);
       dout(10) << " got " << *dn << endl;
     }
   }
@@ -2151,20 +2148,20 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   // note: this code calls _eval more often than it needs to!
   // fix lock
   if (in->hardlock.is_gathering(from)) {
-    in->hardlock.gather_set.erase(from);
-    if (in->hardlock.gather_set.size() == 0)
-      mds->locker->inode_hard_eval(in);
+    in->hardlock.remove_gather(from);
+    if (!in->hardlock.is_gathering())
+      mds->locker->simple_eval(&in->hardlock);
   }
   if (in->filelock.is_gathering(from)) {
-    in->filelock.gather_set.erase(from);
-    if (in->filelock.gather_set.size() == 0)
-      mds->locker->inode_file_eval(in);
+    in->filelock.remove_gather(from);
+    if (!in->filelock.is_gathering())
+      mds->locker->file_eval(&in->filelock);
   }
   
   // alone now?
   if (!in->is_replicated()) {
-    mds->locker->inode_hard_eval(in);
-    mds->locker->inode_file_eval(in);
+    mds->locker->simple_eval(&in->hardlock);
+    mds->locker->file_eval(&in->filelock);
   }
 }
 
@@ -2572,7 +2569,7 @@ int MDCache::path_traverse(MDRequest *mdr,
     */
 
     // must read directory hard data (permissions, x bit) to traverse
-    if (!noperm && !mds->locker->inode_hard_rdlock_try(cur, ondelay)) {
+    if (!noperm && !mds->locker->simple_rdlock_try(&cur->hardlock, ondelay)) {
       return 1;
     }
     
@@ -2601,11 +2598,9 @@ int MDCache::path_traverse(MDRequest *mdr,
 
     if (dn && !dn->is_null()) {
       // dentry exists.  xlocked?
-      if (!noperm && dn->is_xlockedbyother(mdr)) {
+      if (!noperm && dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
         dout(10) << "traverse: xlocked dentry at " << *dn << endl;
-        curdir->add_waiter(CDir::WAIT_DNREAD,
-			   path[depth],
-			   ondelay);
+        dn->lock.add_waiter(SimpleLock::WAIT_RD, ondelay);
         return 1;
       }
 
@@ -2976,9 +2971,9 @@ void MDCache::dispatch_request(MDRequest *mdr)
     mds->server->dispatch_request(mdr);
     break;
 
-  case MSG_MDS_LOCK:
-    mds->locker->handle_lock_dn((MLock*)mdr->request);
-    break;
+    //case MSG_MDS_LOCK:
+    //mds->locker->handle_lock_dn((MLock*)mdr->request);
+    //break;
 
   default:
     assert(0);  // shouldn't get here
@@ -2990,23 +2985,11 @@ void MDCache::dispatch_request(MDRequest *mdr)
 
 void MDCache::request_drop_locks(MDRequest *mdr)
 {
-  // leftover dentry locks
-  while (!mdr->dentry_xlocks.empty()) 
-    mds->locker->dentry_xlock_finish(*mdr->dentry_xlocks.begin(), mdr);
-  while (!mdr->dentry_rdlocks.empty()) 
-    mds->locker->dentry_rdlock_finish(*mdr->dentry_rdlocks.begin(), mdr);
-
-  // inode locks
-  while (!mdr->inode_hard_xlocks.empty()) 
-    mds->locker->inode_hard_xlock_finish(*mdr->inode_hard_xlocks.begin(), mdr);
-  while (!mdr->inode_hard_rdlocks.empty()) 
-    mds->locker->inode_hard_rdlock_finish(*mdr->inode_hard_rdlocks.begin(), mdr);
-
-  while (!mdr->inode_file_xlocks.empty()) 
-    mds->locker->inode_file_xlock_finish(*mdr->inode_file_xlocks.begin(), mdr);
-  while (!mdr->inode_file_rdlocks.empty()) 
-    mds->locker->inode_file_rdlock_finish(*mdr->inode_file_rdlocks.begin(), mdr);
-  
+  // leftover locks
+  while (!mdr->xlocks.empty()) 
+    mds->locker->xlock_finish(*mdr->xlocks.begin(), mdr);
+  while (!mdr->rdlocks.empty()) 
+    mds->locker->rdlock_finish(*mdr->rdlocks.begin(), mdr);
 
   /*
   // foreign xlocks?

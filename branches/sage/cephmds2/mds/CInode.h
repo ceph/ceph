@@ -23,7 +23,8 @@
 #include "mdstypes.h"
 
 #include "CDentry.h"
-#include "Lock.h"
+#include "SimpleLock.h"
+#include "FileLock.h"
 #include "Capability.h"
 
 
@@ -110,22 +111,11 @@ class CInode : public MDSCacheObject {
   static const int WAIT_ANCHORED    = (1<<5);
   static const int WAIT_UNANCHORED  = (1<<6);
   static const int WAIT_UNLINK      = (1<<7);  // as in remotely nlink--
-  static const int WAIT_HARDR       = (1<<8);  // 131072
-  static const int WAIT_HARDW       = (1<<9);  // 262...
-  static const int WAIT_HARDB       = (1<<10);
-  static const int WAIT_HARDRWB     = (WAIT_HARDR|WAIT_HARDW|WAIT_HARDB);
-  static const int WAIT_HARDSTABLE  = (1<<11);
-  static const int WAIT_HARDNORD    = (1<<12);
-  static const int WAIT_FILER       = (1<<13);
-  static const int WAIT_FILEW       = (1<<14);
-  static const int WAIT_FILEB       = (1<<15);
-  static const int WAIT_FILERWB     = (WAIT_FILER|WAIT_FILEW|WAIT_FILEB);
-  static const int WAIT_FILESTABLE  = (1<<16);
-  static const int WAIT_FILENORD    = (1<<17);
-  static const int WAIT_FILENOWR    = (1<<18);
-  static const int WAIT_RENAMEACK       =(1<<19);
-  static const int WAIT_RENAMENOTIFYACK =(1<<20);
-  static const int WAIT_CAPS            =(1<<21);
+  static const int WAIT_CAPS        = (1<<8);
+  
+  static const int WAIT_HARDLOCK_OFFSET = 9;
+  static const int WAIT_FILELOCK_OFFSET = 17;
+
   static const int WAIT_ANY           = 0xffffffff;
 
   // misc
@@ -172,10 +162,6 @@ class CInode : public MDSCacheObject {
 
 
   // -- distributed state --
-public:
-  // inode metadata locks
-  CLock        hardlock;
-  CLock        filelock;
 protected:
   // file capabilities
   map<int, Capability>  client_caps;         // client -> caps
@@ -228,11 +214,9 @@ protected:
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
-  struct ptr_lt {
-    bool operator()(const CInode* l, const CInode* r) const {
-      return l->ino() < r->ino();
-    }
-  };
+  bool is_lt(const MDSCacheObject *r) const {
+    return ino() < ((CInode*)r)->ino();
+  }
 
 
 
@@ -274,11 +258,42 @@ protected:
   void finish_waiting(int mask, int result = 0);
 
 
-  bool is_hardlock_write_wanted() {
-    return waiting_for(WAIT_HARDW);
+  // -- locks --
+public:
+  SimpleLock hardlock;
+  FileLock   filelock;
+
+  SimpleLock* get_lock(int type) {
+    switch (type) {
+    case LOCK_OTYPE_IFILE: return &filelock;
+    case LOCK_OTYPE_IHARD: return &hardlock;
+    default: assert(0);
+    }
   }
-  bool is_filelock_write_wanted() {
-    return waiting_for(WAIT_FILEW);
+  void set_mlock_info(MLock *m);
+  void encode_lock_state(int type, bufferlist& bl);
+  void decode_lock_state(int type, bufferlist& bl);
+
+  int convert_lock_mask(int type, int lmask) {
+    switch (type) {
+    case LOCK_OTYPE_IFILE:
+      return lmask << WAIT_FILELOCK_OFFSET;
+      break;
+    case LOCK_OTYPE_IHARD:
+      return lmask << WAIT_HARDLOCK_OFFSET;
+      break;
+    default:
+      assert(0);
+    }
+  }
+  void finish_lock_waiters(int type, int mask, int r=0) {
+    finish_waiting(convert_lock_mask(type, mask), r);
+  }
+  void add_lock_waiter(int type, int mask, Context *c) {
+    add_waiter(convert_lock_mask(type, mask), c);
+  }
+  bool is_lock_waiting(int type, int mask) {
+    return waiting_for(convert_lock_mask(type, mask));
   }
 
   // -- caps -- (new)
@@ -461,6 +476,8 @@ public:
   }
   */
 
+  void print(ostream& out);
+
 };
 
 
@@ -552,7 +569,8 @@ class CInodeExport {
   map<int,int>     replicas;
   map<int,Capability>  cap_map;
 
-  CLock         hardlock,filelock;
+  bufferlist hardlock;
+  bufferlist filelock;
   //int           remaining_issued;
 
 public:
@@ -565,8 +583,8 @@ public:
     st.is_dirty = in->is_dirty();
     replicas = in->replicas;
 
-    hardlock = in->hardlock;
-    filelock = in->filelock;
+    in->hardlock._encode(hardlock);
+    in->filelock._encode(filelock);
     
     st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
@@ -599,8 +617,10 @@ public:
     if (!replicas.empty()) 
       in->get(CInode::PIN_CACHED);
 
-    in->hardlock = hardlock;
-    in->filelock = filelock;
+    int off = 0;
+    in->hardlock._decode(hardlock, off);
+    off = 0;
+    in->filelock._decode(filelock, off);
 
     // caps
     in->merge_client_caps(cap_map, new_client_caps);
@@ -615,8 +635,8 @@ public:
     // cached_by + nonce
     ::_encode(replicas, bl);
 
-    hardlock.encode_state(bl);
-    filelock.encode_state(bl);
+    ::_encode(hardlock, bl);
+    ::_encode(filelock, bl);
 
     // caps
     for (map<int,Capability>::iterator it = cap_map.begin();
@@ -635,8 +655,8 @@ public:
     
     ::_decode(replicas, bl, off);
 
-    hardlock.decode_state(bl, off);
-    filelock.decode_state(bl, off);
+    ::_decode(hardlock, bl, off);
+    ::_decode(filelock, bl, off);
 
     // caps
     for (int i=0; i<st.num_caps; i++) {

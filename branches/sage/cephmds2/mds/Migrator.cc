@@ -870,7 +870,6 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
       // null dentry?
       if (dn->is_null()) {
         enc_dir.append("N", 1);  // null dentry
-        assert(dn->is_sync());
         continue;
       }
       
@@ -1792,10 +1791,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   // twiddle locks
   // hard
   if (in->hardlock.get_state() == LOCK_GLOCKR) {
-    in->hardlock.gather_set.erase(mds->get_nodeid());
-    in->hardlock.gather_set.erase(oldauth);
-    if (in->hardlock.gather_set.empty())
-      mds->locker->inode_hard_eval(in);
+    in->hardlock.remove_gather(mds->get_nodeid());
+    in->hardlock.remove_gather(oldauth);
+    if (!in->hardlock.is_gathering())
+      mds->locker->simple_eval(&in->hardlock);
   }
 
   // caps
@@ -1816,18 +1815,18 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   // filelock
   if (!in->filelock.is_stable()) {
     // take me and old auth out of gather set
-    in->filelock.gather_set.erase(mds->get_nodeid());
-    in->filelock.gather_set.erase(oldauth);
-    if (in->filelock.gather_set.empty())  // necessary but not suffient...
-      mds->locker->inode_file_eval(in);    
+    in->filelock.remove_gather(mds->get_nodeid());
+    in->filelock.remove_gather(oldauth);
+    if (!in->filelock.is_gathering())  // necessary but not suffient...
+      mds->locker->file_eval(&in->filelock);    
   }
 }
 
 
 int Migrator::decode_import_dir(bufferlist& bl,
-			       int oldauth,
-			       CDir *import_root,
-			       EImportStart *le)
+				int oldauth,
+				CDir *import_root,
+				EImportStart *le)
 {
   int off = 0;
   

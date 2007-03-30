@@ -23,6 +23,8 @@
 
 #include "common/Clock.h"
 
+#include "messages/MLock.h"
+
 #include <string>
 #include <sstream>
 
@@ -78,8 +80,15 @@ ostream& operator<<(ostream& out, CInode& in)
 }
 
 
+void CInode::print(ostream& out)
+{
+  out << *this;
+}
+
+
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) 
+CInode::CInode(MDCache *c, bool auth) : hardlock(this, LOCK_OTYPE_IHARD),
+					filelock(this, LOCK_OTYPE_IFILE)
 {
   mdcache = c;
 
@@ -330,6 +339,44 @@ void CInode::mark_clean()
   }
 }    
 
+
+
+// ------------------
+// locking
+
+void CInode::set_mlock_info(MLock *m)
+{
+  m->set_ino(ino());
+}
+
+void CInode::encode_lock_state(int type, bufferlist& bl)
+{
+  switch (type) {
+  case LOCK_OTYPE_IFILE:
+    encode_file_state(bl);
+    break;
+  case LOCK_OTYPE_IHARD:
+    encode_hard_state(bl);
+    break;
+  default:
+    assert(0);
+  }
+}
+
+void CInode::decode_lock_state(int type, bufferlist& bl)
+{
+  int off = 0;
+  switch (type) {
+  case LOCK_OTYPE_IFILE:
+    decode_file_state(bl, off);
+    break;
+  case LOCK_OTYPE_IHARD:
+    decode_hard_state(bl, off);
+    break;
+  default:
+    assert(0);
+  }
+}
 
 
 
