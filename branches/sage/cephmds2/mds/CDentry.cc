@@ -211,36 +211,3 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 {
 
 }
-
-int CDentry::convert_lock_mask(int mask)
-{
-  return mask << CDir::WAIT_DNLOCK_OFFSET;
-}
-
-void CDentry::finish_lock_waiters(int type, int mask, int r)
-{
-  dir->finish_waiting(convert_lock_mask(mask), name, r);
-}
-
-void CDentry::add_lock_waiter(int type, int mask, Context *c)
-{
-  dir->add_waiter(convert_lock_mask(mask), name, c);
-}
-
-bool CDentry::is_lock_waiting(int type, int mask) 
-{
-  return dir->waiting_for(convert_lock_mask(mask), name);
-}
-
-
-
-/*
-
-
-// =
-const CDentry& CDentry::operator= (const CDentry& right) {
-  assert(0); //std::cerr << "copy op called, implement me" << endl;
-  return *this;
-}
-
-*/

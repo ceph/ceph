@@ -67,8 +67,8 @@ typedef map<string, CDentry*> CDir_map_t;
 class CDir : public MDSCacheObject {
  public:
   // -- pins --
+  static const int PIN_DNWAITER = 1;
   static const int PIN_CHILD =    2;
-  static const int PIN_WAITER =   3;  // waiter(s)
   static const int PIN_EXPORT =   4;
   static const int PIN_AUTHPIN =  8;
   static const int PIN_IMPORTING = 9;
@@ -78,8 +78,8 @@ class CDir : public MDSCacheObject {
   static const int PIN_LOGGINGEXPORTFINISH = 17;
   const char *pin_name(int p) {
     switch (p) {
+    case PIN_DNWAITER: return "dnwaiter";
     case PIN_CHILD: return "child";
-    case PIN_WAITER: return "waiter";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
@@ -92,8 +92,6 @@ class CDir : public MDSCacheObject {
   }
 
   // -- state --
-  //static const unsigned STATE_AUTH =          (1<< 0);   // auth for this dir (hashing doesn't count)
-  static const unsigned STATE_DIRTY =         (1<< 1);   // has been modified since last commit
   static const unsigned STATE_COMPLETE =      (1<< 2);   // the complete contents are in cache
   static const unsigned STATE_FROZENTREE =    (1<< 4);   // root of tree (bounded by exports)
   static const unsigned STATE_FREEZINGTREE =  (1<< 5);   // in process of freezing 
@@ -186,11 +184,6 @@ class CDir : public MDSCacheObject {
   int        nested_auth_pins;
   int        request_pins;
 
-
-  // waiters
-  multimap<int, Context*> waiting;  // tag -> context
-  hash_map< string, multimap<int, Context*> >
-                          waiting_on_dentry;
 
   // cache control  (defined for authority; hints for replicas)
   int              dir_rep;
@@ -376,20 +369,20 @@ class CDir : public MDSCacheObject {
 
     
   // -- waiters --
-  bool waiting_for(int tag);
-  bool waiting_for(int tag, const string& dn);
-  void add_waiter(int tag, Context *c);
-  void add_waiter(int tag,
-                  const string& dentry,
-                  Context *c);
-  void take_waiting(int mask, list<Context*>& ls);  // includes dentry waiters
-  void take_waiting(int mask, 
-                    const string& dentry, 
-                    list<Context*>& ls,
-                    int num=0);  
-  void finish_waiting(int mask, int result = 0);    // ditto
-  void finish_waiting(int mask, const string& dn, int result = 0);    // ditto
+protected:
+  hash_map< string, list<Context*> > waiting_on_dentry;
 
+public:
+  bool is_waiting_for_dentry(const string& dn) {
+    return waiting_on_dentry.count(dn);
+  }
+  void add_dentry_waiter(const string& dentry, Context *c);
+  void take_dentry_waiting(const string& dentry, list<Context*>& ls);
+
+  void add_waiter(int mask, Context *c);
+  void take_waiting(int mask, list<Context*>& ls);  // may include dentry waiters
+  void finish_waiting(int mask, int result = 0);    // ditto
+  
 
   // -- auth pins --
   bool can_auth_pin() { return is_auth() && !(is_frozen() || is_freezing()); }

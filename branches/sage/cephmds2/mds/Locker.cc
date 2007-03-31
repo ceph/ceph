@@ -803,7 +803,7 @@ void Locker::simple_eval(SimpleLock *lock)
     // sync?
     if (lock->get_state() != LOCK_SYNC &&
 	lock->get_parent()->is_replicated() &&
-	!lock->is_waiting(SimpleLock::WAIT_WR)) {
+	!lock->is_waiter_for(SimpleLock::WAIT_WR)) {
       dout(7) << "simple_eval stable, syncing " << *lock << " on " << *lock->get_parent() << endl;
       simple_sync(lock);
     }
@@ -902,8 +902,7 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mdr)
 
   // wait!
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << endl;
-  lock->add_waiter(SimpleLock::WAIT_RD, 
-		   new C_MDS_RetryRequest(mdcache, mdr));
+  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
   return false;
 }
 
@@ -985,7 +984,7 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
   dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
 
   // others waiting?
-  if (lock->is_waiting(SimpleLock::WAIT_WR)) {
+  if (lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     // wake 'em up
     lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
   } else {
@@ -1022,8 +1021,7 @@ bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *re
     if (!dn->lock.can_rdlock(0)) {
       if (req) {
 	dout(10) << "can_rdlock_trace can't rdlock " << *dn << ", waiting" << endl;
-	dn->lock.add_waiter(SimpleLock::WAIT_RD,   
-			     new C_MDS_RetryMessage(mds, req));
+	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, req));
       } else {
 	dout(10) << "can_rdlock_trace can't rdlock " << *dn << endl;
       }
@@ -1197,7 +1195,7 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
   
   // drop lock?
-  if (!lock->is_waiting(SimpleLock::WAIT_LOCK)) 
+  if (!lock->is_waiter_for(SimpleLock::WAIT_LOCK)) 
     file_eval(lock);
 }
 
@@ -1351,7 +1349,7 @@ void Locker::file_eval(FileLock *lock)
 
     // * -> loner?
     if (lock->get_num_rdlock() == 0 &&
-        !lock->is_waiting(SimpleLock::WAIT_WR) &&
+        !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
         (wanted & CAP_FILE_WR) &&
         loner &&
         lock->get_state() != LOCK_LONER) {
@@ -1361,7 +1359,7 @@ void Locker::file_eval(FileLock *lock)
 
     // * -> mixed?
     else if (lock->get_num_rdlock() == 0 &&
-	     !lock->is_waiting(SimpleLock::WAIT_WR) &&
+	     !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
              (wanted & CAP_FILE_RD) &&
              (wanted & CAP_FILE_WR) &&
              !(loner && lock->get_state() == LOCK_LONER) &&
@@ -1371,7 +1369,7 @@ void Locker::file_eval(FileLock *lock)
     }
 
     // * -> sync?
-    else if (!in->filelock.is_waiting(SimpleLock::WAIT_WR) &&
+    else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
              !(wanted & CAP_FILE_WR) &&
              ((wanted & CAP_FILE_RD) || 
               in->is_replicated() || 

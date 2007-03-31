@@ -55,7 +55,6 @@ class CInode : public MDSCacheObject {
   //static const int PIN_REPLICATED =     1;
   static const int PIN_DIR =        2;
   static const int PIN_PROXY =      5;  // can't expire yet
-  static const int PIN_WAITER =     6;  // waiter
   static const int PIN_CAPS =       7;  // local fh's
   static const int PIN_AUTHPIN =    8;
   static const int PIN_IMPORTING =  -9;  // importing
@@ -69,7 +68,6 @@ class CInode : public MDSCacheObject {
     switch (p) {
     case PIN_DIR: return "dir";
     case PIN_PROXY: return "proxy";
-    case PIN_WAITER: return "waiter";
     case PIN_CAPS: return "caps";
     case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
@@ -83,8 +81,6 @@ class CInode : public MDSCacheObject {
   }
 
   // -- state --
-  //static const int STATE_AUTH =       (1<<0);
-  static const int STATE_DIRTY =      (1<<1);
   static const int STATE_ROOT =       (1<<2);
   //static const int STATE_UNSAFE =     (1<<3);   // not logged yet
   //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
@@ -113,6 +109,8 @@ class CInode : public MDSCacheObject {
 
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
+
+  ostream& print_db_line_prefix(ostream& out);
 
  public:
   MDCache *mdcache;
@@ -145,13 +143,6 @@ class CInode : public MDSCacheObject {
   // parent dentries in cache
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
-
-  // -- other --
-  // distributed caching (old)
-  //pair<int,int> dangling_auth;    // explicit auth, when dangling.
-
-  // waiters
-  multimap<int, Context*>  waiting;
 
 
   // -- distributed state --
@@ -243,10 +234,7 @@ protected:
 
 
   // -- waiting --
-  bool waiting_for(int tag);
   void add_waiter(int tag, Context *c);
-  void take_waiting(int tag, list<Context*>& ls);
-  void finish_waiting(int mask, int result = 0);
 
 
   // -- locks --
@@ -265,27 +253,6 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
-  int convert_lock_mask(int type, int lmask) {
-    switch (type) {
-    case LOCK_OTYPE_IFILE:
-      return lmask << WAIT_FILELOCK_OFFSET;
-      break;
-    case LOCK_OTYPE_IHARD:
-      return lmask << WAIT_HARDLOCK_OFFSET;
-      break;
-    default:
-      assert(0);
-    }
-  }
-  void finish_lock_waiters(int type, int mask, int r=0) {
-    finish_waiting(convert_lock_mask(type, mask), r);
-  }
-  void add_lock_waiter(int type, int mask, Context *c) {
-    add_waiter(convert_lock_mask(type, mask), c);
-  }
-  bool is_lock_waiting(int type, int mask) {
-    return waiting_for(convert_lock_mask(type, mask));
-  }
 
   // -- caps -- (new)
   // client caps
@@ -660,7 +627,6 @@ public:
     return off;
   }
 };
-
 
 
 

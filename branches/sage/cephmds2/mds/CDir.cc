@@ -376,28 +376,30 @@ CDirDiscover *CDir::replicate_to(int mds)
  * WAITING
  */
 
-bool CDir::waiting_for(int tag)
+void CDir::add_dentry_waiter(const string& dname, Context *c) 
 {
-  return waiting.count(tag) > 0;
+  if (waiting_on_dentry.empty())
+    get(PIN_DNWAITER);
+  waiting_on_dentry[dname].push_back(c);
+  dout(10) << "add_dentry_waiter dentry " << dname << " " << c << " on " << *this << endl;
 }
 
-bool CDir::waiting_for(int tag, const string& dn)
+void CDir::take_dentry_waiting(const string& dname, list<Context*>& ls)
 {
-  if (!waiting_on_dentry.count(dn)) 
-    return false;
-  return waiting_on_dentry[dn].count(tag) > 0;
+  if (waiting_on_dentry.empty()) return;
+  if (waiting_on_dentry.count(dname) == 0) return;
+  dout(10) << "take_dentry_waiting dentry " << dname
+	   << " x " << waiting_on_dentry[dname].size() 
+	   << " on " << *this << endl;
+  ls.splice(ls.end(), waiting_on_dentry[dname]);
+  waiting_on_dentry.erase(dname);
+  if (waiting_on_dentry.empty())
+    put(PIN_DNWAITER);
 }
 
-void CDir::add_waiter(int tag,
-                      const string& dentry,
-                      Context *c) {
-  if (waiting.empty() && waiting_on_dentry.size() == 0)
-    get(PIN_WAITER);
-  waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *this << endl;
-}
 
-void CDir::add_waiter(int tag, Context *c) {
+void CDir::add_waiter(int tag, Context *c) 
+{
   // hierarchical?
 
   // at free root?
@@ -421,78 +423,25 @@ void CDir::add_waiter(int tag, Context *c) {
     }
   }
 
-
-  // this dir.
-  if (waiting.empty() && waiting_on_dentry.size() == 0)
-    get(PIN_WAITER);
-  waiting.insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
+  MDSCacheObject::add_waiter(tag, c);
 }
 
 
-void CDir::take_waiting(int mask, 
-                        const string& dentry,
-                        list<Context*>& ls,
-                        int num)
-{
-  if (waiting_on_dentry.empty()) return;
-  
-  multimap<int,Context*>::iterator it = waiting_on_dentry[dentry].begin();
-  while (it != waiting_on_dentry[dentry].end()) {
-    if (it->first & mask) {
-      ls.push_back(it->second);
-      dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
-      waiting_on_dentry[dentry].erase(it++);
-
-      if (num) {
-        if (num == 1) break;
-        num--;
-      }
-    } else {
-      dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this << endl;
-      it++;
-    }
-  }
-
-  // did we clear dentry?
-  if (waiting_on_dentry[dentry].empty())
-    waiting_on_dentry.erase(dentry);
-  
-  // ...whole map?
-  if (waiting_on_dentry.size() == 0 && waiting.empty())
-    put(PIN_WAITER);
-}
 
 /* NOTE: this checks dentry waiters too */
-void CDir::take_waiting(int mask,
-                        list<Context*>& ls)
+void CDir::take_waiting(int mask, list<Context*>& ls)
 {
-  if (waiting_on_dentry.size()) {
-    // try each dentry
-    hash_map<string, multimap<int,Context*> >::iterator it = 
+  if (mask & WAIT_DENTRY) {
+    // take each each dentry waiter
+    hash_map<string, list<Context*> >::iterator it = 
       waiting_on_dentry.begin(); 
     while (it != waiting_on_dentry.end()) {
-      take_waiting(mask, (it++)->first, ls);   // not post-inc
+      take_dentry_waiting((it++)->first, ls);   // not post-inc
     }
   }
   
   // waiting
-  if (!waiting.empty()) {
-    multimap<int,Context*>::iterator it = waiting.begin();
-    while (it != waiting.end()) {
-      if (it->first & mask) {
-        ls.push_back(it->second);
-        dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
-        waiting.erase(it++);
-      } else {
-        dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this<< endl;
-        it++;
-      }
-    }
-    
-    if (waiting_on_dentry.size() == 0 && waiting.empty())
-      put(PIN_WAITER);
-  }
+  MDSCacheObject::take_waiting(mask, ls);
 }
 
 
@@ -506,15 +455,6 @@ void CDir::finish_waiting(int mask, int result)
   cache->mds->queue_finished(finished);
 }
 
-void CDir::finish_waiting(int mask, const string& dn, int result) 
-{
-  dout(11) << "finish_waiting mask " << mask << " dn " << dn << " result " << result << " on " << *this << endl;
-
-  list<Context*> finished;
-  take_waiting(mask, dn, finished);
-  //finish_contexts(finished, result);
-  cache->mds->queue_finished(finished);
-}
 
 
 // dirty/clean

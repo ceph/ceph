@@ -355,8 +355,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
   // frozen?
   if (dir->is_frozen()) {
     dout(7) << "dir is frozen " << *dir << endl;
-    dir->add_waiter(CDir::WAIT_UNFREEZE,
-                    new C_MDS_RetryRequest(mdcache, mdr));
+    dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
   
@@ -513,9 +512,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 	!dn->is_auth()) {
       if (dn->dir->auth_is_ambiguous()) {
 	dout(10) << "waiting for single auth on " << *dn << endl;
-	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, 
-			    dn->get_name(),
-			    new C_MDS_RetryMessage(mds, req));
+	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
       } else {
 	dout(10) << "fw to auth for " << *dn << endl;
 	mds->forward_message_mds(req, dn->authority().first, MDS_PORT_SERVER);
@@ -532,8 +529,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   if (want_auth && !ref->is_auth()) {
     if (ref->auth_is_ambiguous()) {
       dout(10) << "waiting for single auth on " << *ref << endl;
-      ref->add_waiter(CInode::WAIT_SINGLEAUTH, 
-		      new C_MDS_RetryMessage(mds, req));
+      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
     } else {
       dout(10) << "fw to auth for " << *ref << endl;
       mds->forward_message_mds(req, ref->authority().first, MDS_PORT_SERVER);
@@ -665,8 +661,7 @@ CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
   if (!dir && diri->is_frozen_dir()) {
     dout(10) << "try_open_auth_dir: dir inode is frozen, waiting " << *diri << endl;
     assert(diri->get_parent_dir());
-    diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
-				       new C_MDS_RetryRequest(mdcache, mdr));
+    diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
 
@@ -702,8 +697,7 @@ CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
     if (!dir && diri->is_frozen_dir()) {
       dout(10) << "try_open_dir: dir inode is auth+frozen, waiting " << *diri << endl;
       assert(diri->get_parent_dir());
-      diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
-					 new C_MDS_RetryRequest(mdcache, mdr));
+      diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
     
@@ -1452,8 +1446,7 @@ public:
     mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority().first, MDS_PORT_CACHE);
     
     // wait
-    targeti->add_waiter(CInode::WAIT_LINK,
-                        new C_MDS_RemoteLink(this, req, diri, dn, targeti));
+    targeti->add_waiter(CInode::WAIT_LINK, new C_MDS_RemoteLink(this, req, diri, dn, targeti));
     return;
   }
 
@@ -1742,8 +1735,7 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
         // i should be exporting this now/soon, since the dir is empty.
         dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
 	mdcache->migrator->export_empty_import(in->dir);          
-        in->dir->add_waiter(CDir::WAIT_UNFREEZE,
-                            new C_MDS_RetryRequest(mds, req, diri));
+        in->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mds, req, diri));
         return;
       }
 */
@@ -1798,8 +1790,7 @@ bool Server::_rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *
   // xlocked?
   if (dn && !dn->lock.can_rdlock(mdr)) {
     dout(10) << "_rename_open_dn waiting on " << *dn << endl;
-    dn->lock.add_waiter(SimpleLock::WAIT_RD,
-			new C_MDS_RetryRequest(mdcache, mdr));
+    dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
   
@@ -1885,8 +1876,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // identify/create dest dentry
   CDentry *destdn = destdir->lookup(destname);
   if (destdn && !destdn->lock.can_rdlock(mdr)) {
-    destdn->lock.add_waiter(SimpleLock::WAIT_RD,
-			    new C_MDS_RetryRequest(mdcache, mdr));
+    destdn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 

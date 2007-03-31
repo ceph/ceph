@@ -44,19 +44,20 @@ bool operator<(const CDentry& l, const CDentry& r);
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject {
  public:
-  // state
-  //static const int STATE_AUTH =       (1<<0);
-  static const int STATE_DIRTY =      (1<<1);
+  // -- state --
 
-  // pins
+  // -- pins --
   static const int PIN_INODEPIN = 1;   // linked inode is pinned
-
   const char *pin_name(int p) {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     default: return generic_pin_name(p);
     }
   };
+
+  // -- wait --
+  static const int WAIT_LOCK_OFFSET = 8;
+
 
   static const int EXPORT_NONCE = 1;
 
@@ -99,7 +100,7 @@ public:
     remote_ino(0),
     version(0),
     projected_version(0),
-    lock(this, LOCK_OTYPE_DN) { }
+    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
     name(n),
     inode(in),
@@ -107,7 +108,7 @@ public:
     remote_ino(ino),
     version(0),
     projected_version(0),
-    lock(this, LOCK_OTYPE_DN) { }
+    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, CInode *in) :
     name(n),
     inode(in),
@@ -115,7 +116,7 @@ public:
     remote_ino(0),
     version(0),
     projected_version(0),
-    lock(this, LOCK_OTYPE_DN) { }
+    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
 
   CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }
@@ -223,10 +224,6 @@ public:
   void set_mlock_info(MLock *m);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
-  int convert_lock_mask(int mask);
-  void finish_lock_waiters(int type, int mask, int r=0);
-  void add_lock_waiter(int type, int mask, Context *c);
-  bool is_lock_waiting(int type, int mask);
 
   
   void print(ostream& out);

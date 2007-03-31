@@ -34,6 +34,11 @@
 
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
+ostream& CInode::print_db_line_prefix(ostream& out)
+{
+  return out << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
+}
+
 
 
 ostream& operator<<(ostream& out, CInode& in)
@@ -87,8 +92,8 @@ void CInode::print(ostream& out)
 
 
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) : hardlock(this, LOCK_OTYPE_IHARD),
-					filelock(this, LOCK_OTYPE_IFILE)
+CInode::CInode(MDCache *c, bool auth) : hardlock(this, LOCK_OTYPE_IHARD, WAIT_HARDLOCK_OFFSET),
+					filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
 {
   mdcache = c;
 
@@ -441,11 +446,6 @@ bool CInode::is_freezing()
   return false;
 }
 
-bool CInode::waiting_for(int tag) 
-{
-  return waiting.count(tag) > 0;
-}
-
 void CInode::add_waiter(int tag, Context *c) 
 {
   // wait on the directory?
@@ -457,42 +457,7 @@ void CInode::add_waiter(int tag, Context *c)
     parent->dir->add_waiter(CDir::WAIT_SINGLEAUTH, c);
     return;
   }
-
-  // this inode.
-  if (waiting.empty())
-    get(PIN_WAITER);
-  waiting.insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
-}
-
-void CInode::take_waiting(int mask, list<Context*>& ls)
-{
-  if (waiting.empty()) return;
-  
-  multimap<int,Context*>::iterator it = waiting.begin();
-  while (it != waiting.end()) {
-    if (it->first & mask) {
-      ls.push_back(it->second);
-      dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
-
-      waiting.erase(it++);
-    } else {
-      dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this << endl;
-      it++;
-    }
-  }
-
-  if (waiting.empty())
-    put(PIN_WAITER);
-}
-
-void CInode::finish_waiting(int mask, int result) 
-{
-  dout(11) << "finish_waiting mask " << mask << " result " << result << " on " << *this << endl;
-  
-  list<Context*> finished;
-  take_waiting(mask, finished);
-  finish_contexts(finished, result);
+  MDSCacheObject::add_waiter(tag, c);
 }
 
 

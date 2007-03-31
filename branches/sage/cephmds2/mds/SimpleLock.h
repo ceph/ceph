@@ -68,7 +68,8 @@ public:
 protected:
   // parent (what i lock)
   MDSCacheObject *parent;
-  int             type;
+  int type;
+  int wait_offset;
 
   // lock state
   char           state;
@@ -79,8 +80,8 @@ protected:
   MDRequest *xlock_by;
 
 public:
-  SimpleLock(MDSCacheObject *o, int t) :
-    parent(o), type(t),
+  SimpleLock(MDSCacheObject *o, int t, int wo) :
+    parent(o), type(t), wait_offset(wo),
     state(LOCK_SYNC), 
     num_rdlock(0), xlock_by(0) { }
 
@@ -103,13 +104,13 @@ public:
     parent->encode_lock_state(type, bl);
   }
   void finish_waiters(int mask, int r=0) {
-    parent->finish_lock_waiters(type, mask, r);
+    parent->finish_waiting(mask < wait_offset, r);
   }
   void add_waiter(int mask, Context *c) {
-    parent->add_lock_waiter(type, mask, c);
+    parent->add_waiter(mask < wait_offset, c);
   }
-  bool is_waiting(int mask) {
-    return parent->is_lock_waiting(type, mask);
+  bool is_waiter_for(int mask) {
+    return parent->is_waiter_for(mask < wait_offset);
   }
   
   

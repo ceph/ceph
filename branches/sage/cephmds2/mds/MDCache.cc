@@ -2532,7 +2532,7 @@ int MDCache::path_traverse(MDRequest *mdr,
       } else {
         // discover?
         assert(!cur->is_auth());
-        if (cur->waiting_for(CInode::WAIT_DIR)) {
+        if (cur->is_waiter_for(CInode::WAIT_DIR)) {
           dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
         } 
 	else if (cur->auth_is_ambiguous()) {
@@ -2725,7 +2725,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         // discover?
         filepath want = path.postfixpath(depth);
 
-        if (curdir->waiting_for(CDir::WAIT_DENTRY, path[depth])) {
+        if (curdir->is_waiting_for_dentry(path[depth])) {
           dout(7) << "traverse: already waiting for discover " << want.get_path()
 		  << " from " << *curdir << endl;
         } 
@@ -2746,7 +2746,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         }
         
         // delay processing of current request.
-        curdir->add_waiter(CDir::WAIT_DENTRY, path[depth], ondelay);
+        curdir->add_dentry_waiter(path[depth], ondelay);
         if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       } 
@@ -3584,8 +3584,7 @@ void MDCache::handle_discover(MDiscover *dis)
     if (curdir->is_frozen()) {
       if (reply->is_empty()) {
 	dout(7) << *curdir << " is frozen, empty reply, waiting" << endl;
-	curdir->add_waiter(CDir::WAIT_UNFREEZE,
-			   new C_MDS_RetryMessage(mds, dis));
+	curdir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
 	delete reply;
 	return;
       } else {
@@ -3747,9 +3746,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       assert(cur->is_dir());
       if (curdir) {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
-        curdir->take_waiting(CDir::WAIT_DENTRY,
-			     m->get_error_dentry(),
-			     error);
+        curdir->take_dentry_waiting(m->get_error_dentry(),
+				    error);
       } else {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
         cur->take_waiting(CInode::WAIT_DIR, error);
@@ -3783,9 +3781,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         dout(7) << "added " << *dn << endl;
       }
 
-      curdir->take_waiting(CDir::WAIT_DENTRY,
-			   m->get_dentry(i).get_dname(),
-			   finished);
+      curdir->take_dentry_waiting(m->get_dentry(i).get_dname(), finished);
     }
     
     if (i >= m->get_last_inode()) break;

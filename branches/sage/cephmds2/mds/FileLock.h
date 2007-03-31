@@ -95,7 +95,7 @@ class MDRequest;
 
 class FileLock : public SimpleLock {
  public:
-  FileLock(MDSCacheObject *o, int t) : SimpleLock(o, t) { }
+  FileLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo) { }
   
   char get_replica_state() {
     switch (state) {
