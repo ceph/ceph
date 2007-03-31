@@ -57,6 +57,12 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"ior") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_IOR2 );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"mixed") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_MIXED );
+        syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"renewal") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_RENEWAL );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"wrshared") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_WRSHARED );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -412,10 +418,10 @@ int SyntheticClient::run()
 	cout << "Setup trace:" << setupfile << endl;
 
 	// choose random IOR2 file to open
-	//int randf = rand() % 500;
+	int filenum = rand() % 500;
 	// cant be trace 0, its broken
-	//randf++;
-	int filenum = client->whoami + 1;
+	filenum++;
+	//int filenum = client->whoami + 1;
 	
 	ostringstream ost;
 	ost << "IOR2/IOR_trace_fileperproc.p" << filenum << "t.cephtrace";
@@ -441,6 +447,71 @@ int SyntheticClient::run()
 	  
         }
 	
+      }
+      break;
+    case SYNCLIENT_MODE_MIXED:
+      {
+	string shared1 = "/shared1";
+	string shared2 = "/shared2";
+	string shared3 = "/shared3";
+	string shared4 = "/shared4";
+	string shared5 = "/shared5";
+	string shared6 = "/shared6";
+
+	string personal1 = get_sarg(0);
+	string personal2 = get_sarg(1);
+	string personal3 = get_sarg(2);
+	string personal4 = get_sarg(3);
+
+        int iterations = iargs.front();  iargs.pop_front();
+
+	int size = 10;
+	int inc = 128*1024;
+
+	if (run_me()) {
+	  
+          for (int i=0; i<iterations; i++) {
+
+	    if (time_to_stop()) break;
+	    write_file(shared1, size, inc);
+	    write_file(personal1, size, inc);
+	    write_file(shared2, size, inc);
+	    write_file(shared3, size, inc);
+	    write_file(personal2, size, inc);
+	    write_file(shared4, size, inc);
+	    write_file(personal3, size, inc);
+	    write_file(shared5, size, inc);
+	    write_file(personal4, size, inc);
+	    write_file(shared6, size, inc);
+          }
+	  
+        }
+      }
+      break;
+    case SYNCLIENT_MODE_RENEWAL:
+      {
+        int stop_int = iargs.front();  iargs.pop_front();
+	utime_t stop_time(stop_int, 0);
+
+	int size = 32;
+	int inc = 1024*1024;
+
+	if (run_me()) {
+	  utime_t start_time = g_clock.now();
+	  utime_t cur_time = g_clock.now();
+	  int counter = 0;
+	  string pfile;
+          while (cur_time - start_time < stop_time) {
+	    pfile = get_sarg(counter);
+	    if (time_to_stop()) break;
+	    cout << "Writting " << pfile << endl;
+	    write_file(pfile, size, inc);
+	    cur_time = g_clock.now();
+	    cout << "Time check " << cur_time - start_time << endl;
+	    counter++;
+          }
+	  
+        }
       }
       break;
     case SYNCLIENT_MODE_WRITEFILE:
