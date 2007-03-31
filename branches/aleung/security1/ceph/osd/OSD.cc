@@ -429,6 +429,7 @@ void OSD::update_group(entity_inst_t client, hash_t my_hash, MOSDOp *op) {
   // set up reply
   MOSDUpdate *update = new MOSDUpdate(my_hash);
   Cond cond;
+  //cout << "OSD Requesting list update" << endl;
   
   // if no one has already requested the ticket
   if (update_waiter_op.count(my_hash) == 0) {
@@ -468,11 +469,11 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   if (g_conf.mds_group == 3) {
     user_groups[my_hash].set_inode_list(m->get_file_list());
 
-    cout << "Received a group update for " << my_hash << endl;
+    dout(3) << "Received a group update for " << my_hash << endl;
     for (list<inodeno_t>::iterator ii = m->get_file_list().begin();
 	 ii != m->get_file_list().end();
 	 ii++) {
-      cout << my_hash << " contains " << (*ii) << endl;
+      dout(3) << my_hash << " contains " << (*ii) << endl;
     }
   }
   else
@@ -490,6 +491,7 @@ inline bool OSD::verify_cap(ExtCap *cap) {
   // have i already verified this cap?
   if (!cap_cache->prev_verified(cap->get_id())) {
 
+    dout(10) << "OSD verifying new cap" << endl;
     // actually verify
     if (cap->verif_extcap(monmap->get_key())) {
       // cache the verification
@@ -498,6 +500,8 @@ inline bool OSD::verify_cap(ExtCap *cap) {
     else
       return false;
   }
+  else
+    dout(10) << "OSD already cached cap" << endl;
   return true;
 }
 

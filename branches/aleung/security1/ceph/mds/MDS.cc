@@ -98,6 +98,9 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   myPrivKey = esignPrivKey("crypto/esig1023.dat");
   myPubKey = esignPubKey(myPrivKey);
 
+  cap_cache_hits = 0;
+  cap_requests = 0;
+
   // hard code the unix groups?
   if (g_conf.preload_unix_groups) {
     gid_t group_gid = 1020;
@@ -114,7 +117,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
     //cout << endl << "hash " << cgroup.get_root_hash() << endl;
   }
 
-
+  /*
   // create unix_groups from file?
   if (g_conf.unix_group_file) {
     ifstream from(g_conf.unix_group_file);
@@ -167,6 +170,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
     }
     cout << "Done doing unix group crap" << endl;
   }
+  */
 
   // do prediction read-in
   if (g_conf.mds_group == 4) {
@@ -175,7 +179,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
     bufferlist bl;
     server->get_bl_ss(bl);
     ::_decode(sequence, bl, off);
-    rp_predicter = RecentPopularity(sequence);
+    // set prediction sequence and parameters
+    rp_predicter = RecentPopularity(2, 6, sequence);
 
     for (map<inodeno_t, deque<inodeno_t> >::iterator mi = sequence.begin();
 	 mi != sequence.end();
@@ -881,6 +886,9 @@ int MDS::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
   derr(0) << "mds shutdown start" << endl;
+
+  cout << "Cap cache hits " << cap_cache_hits << endl;
+  cout << "Cap requests " << cap_requests << endl;
 
   // tell everyone to stop.
   set<int> active;

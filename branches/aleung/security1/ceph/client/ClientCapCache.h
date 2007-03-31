@@ -64,7 +64,7 @@ class ClientCapCache {
 							 renewer_thread(this)
   {
     if (g_conf.renewal) {
-      cleaner_thread.create();
+      //cleaner_thread.create();
       renewer_thread.create();
     }
   }
@@ -73,8 +73,8 @@ class ClientCapCache {
     renewer_stop = true;
 
     if (g_conf.renewal) {
-      cleaner_cond.Signal();
-      cleaner_thread.join();
+      //cleaner_cond.Signal();
+      //cleaner_thread.join();
       renewer_cond.Signal();
       renewer_thread.join();
     }
@@ -149,14 +149,16 @@ class ClientCapCache {
 
     while (!renewer_stop) {
 
-      cout << "Renewer running" << endl;
+      cout << "Renewer running, requesting ";
       // renewal all open caps
       MClientRenewal *renewal = new MClientRenewal();
       for (map<uid_t, set<cap_id_t> >::iterator mi = caps_in_use.begin();
 	   mi != caps_in_use.end();
 	   mi++) {
 	renewal->add_cap_set(mi->second);
+	cout << mi->second << ", ";
       }
+      cout << endl;
       
       // make asynchronous renewal request
       // FIXME always send to mds 0

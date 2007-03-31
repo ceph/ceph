@@ -160,6 +160,9 @@ class MDS : public Dispatcher {
 public:
   map<int,version_t> peer_mdsmap_epoch;
 
+  
+  int cap_cache_hits;
+  int cap_requests;
   // logical user group
   //map<gid_t, CapGroup> unix_groups;
   map<gid_t, hash_t> unix_groups_map;
