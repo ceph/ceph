@@ -175,13 +175,36 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   // do prediction read-in
   if (g_conf.mds_group == 4) {
     map<inodeno_t, deque<inodeno_t> > sequence;
-    int off = 0;
-    bufferlist bl;
-    server->get_bl_ss(bl);
-    ::_decode(sequence, bl, off);
+
+    // read in file from disk
+    //int off = 0;
+    //bufferlist bl;
+    //server->get_bl_ss(bl);
+    //::_decode(sequence, bl, off);
+    
+    // hard code the predictions
+    inodeno_t shared1ino(16777216);
+    inodeno_t shared2ino(16777217);
+    inodeno_t shared3ino(16777218);
+    inodeno_t shared4ino(16777219);
+    inodeno_t shared5ino(16777220);
+    inodeno_t shared6ino(16777221);
+
+    for (int addtimes = 0; addtimes < 6; addtimes++)
+      sequence[shared1ino].push_back(shared2ino);
+    for (int addtimes = 0; addtimes < 6; addtimes++)
+      sequence[shared2ino].push_back(shared3ino);
+    for (int addtimes = 0; addtimes < 6; addtimes++)
+      sequence[shared3ino].push_back(shared4ino);
+    for (int addtimes = 0; addtimes < 6; addtimes++)
+      sequence[shared4ino].push_back(shared5ino);
+    for (int addtimes = 0; addtimes < 6; addtimes++)
+      sequence[shared5ino].push_back(shared6ino);
+
     // set prediction sequence and parameters
     rp_predicter = RecentPopularity(2, 6, sequence);
 
+    // preload all of the predictions into groups
     for (map<inodeno_t, deque<inodeno_t> >::iterator mi = sequence.begin();
 	 mi != sequence.end();
 	 mi++) {
@@ -189,14 +212,14 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
       inodeno_t prediction;
       prediction = rp_predicter.predict_successor(mi->first);
       
-      //cout << "Predictions for " << mi->first << ": ";
+      cout << "Predictions for " << mi->first << ": ";
       while(prediction != inodeno_t()) {
-	//cout << prediction << ", ";
+	cout << prediction << ", ";
 	inode_list.add_inode(prediction);
 	prediction = rp_predicter.predict_successor(prediction);
 
       }
-      //cout << "Cannot make any further predictions" << endl;
+      cout << "Cannot make any further predictions" << endl;
 
       // cache the list
       if (inode_list.num_inodes() != 0) {

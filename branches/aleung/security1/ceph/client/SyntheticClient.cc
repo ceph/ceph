@@ -474,15 +474,15 @@ int SyntheticClient::run()
 
 	    if (time_to_stop()) break;
 	    write_file(shared1, size, inc);
-	    write_file(personal1, size, inc);
 	    write_file(shared2, size, inc);
 	    write_file(shared3, size, inc);
-	    write_file(personal2, size, inc);
 	    write_file(shared4, size, inc);
-	    write_file(personal3, size, inc);
 	    write_file(shared5, size, inc);
-	    write_file(personal4, size, inc);
 	    write_file(shared6, size, inc);
+	    write_file(personal1, size, inc);
+	    write_file(personal2, size, inc);
+	    write_file(personal3, size, inc);
+	    write_file(personal4, size, inc);
           }
 	  
         }
