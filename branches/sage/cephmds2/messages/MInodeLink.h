@@ -41,7 +41,7 @@ private:
     int op;             // see above
     bool inc;           // true == ++, false == --
 
-    time_t ctime;
+    utime_t ctime;
   } st;
 
 public:
@@ -50,8 +50,8 @@ public:
   int get_op() { return st.op; }
   bool get_inc() { return st.inc; }
 
-  time_t get_ctime() { return st.ctime; }
-  void set_ctime(time_t ct) { st.ctime = ct; }
+  utime_t get_ctime() { return st.ctime; }
+  void set_ctime(utime_t ct) { st.ctime = ct; }
 
   MInodeLink() {}
   MInodeLink(int op, inodeno_t ino, bool inc, metareqid_t ri) :

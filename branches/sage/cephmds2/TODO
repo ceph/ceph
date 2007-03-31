@@ -78,6 +78,8 @@ mds
   - remote rename
   - open(wr cap), open+create
   - file capabilities i/o
+- filelock to control directory mtime, dentry changes
+  - hmm, may have to change lock ordering, and Server::rdlock_path_pin_ref()
 - dirfrag split/merge
   - client readdir for dirfrags
 - consistency points/snapshots

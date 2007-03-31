@@ -45,25 +45,16 @@ bool operator<(const CDentry& l, const CDentry& r);
 class CDentry : public MDSCacheObject, public LRUObject {
  public:
   // state
-  static const int STATE_AUTH =       (1<<0);
+  //static const int STATE_AUTH =       (1<<0);
   static const int STATE_DIRTY =      (1<<1);
 
   // pins
-  static const int PIN_INODEPIN = 0;   // linked inode is pinned
-  static const int PIN_REPLICATED = 1; // replicated by another MDS
-  static const int PIN_DIRTY = 2;      //
-  static const int PIN_PROXY = 3;      //
-  static const int PIN_XLOCK = 4;
-  static const int PIN_REQUEST = -1;
+  static const int PIN_INODEPIN = 1;   // linked inode is pinned
+
   const char *pin_name(int p) {
     switch (p) {
-    case PIN_REQUEST: return "request";
     case PIN_INODEPIN: return "inodepin";
-    case PIN_REPLICATED: return "replicated";
-    case PIN_DIRTY: return "dirty";
-    case PIN_PROXY: return "proxy";
-    case PIN_XLOCK: return "xlock";
-    default: assert(0);
+    default: return generic_pin_name(p);
     }
   };
 
@@ -171,7 +162,6 @@ public:
   
   pair<int,int> authority();
 
-  bool is_auth() { return state & STATE_AUTH; }
   bool is_dirty() { return state & STATE_DIRTY; }
   bool is_clean() { return !is_dirty(); }
 

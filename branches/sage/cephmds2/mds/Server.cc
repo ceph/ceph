@@ -418,7 +418,7 @@ CInode* Server::prepare_new_inode(MClientRequest *req, CDir *dir)
   CInode *in = mdcache->create_inode();
   in->inode.uid = req->get_caller_uid();
   in->inode.gid = req->get_caller_gid();
-  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.gettime();   // now
+  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.now();   // now
   dout(10) << "prepare_new_inode " << *in << endl;
 
   // bump modify pop
@@ -501,10 +501,10 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   // open ref inode
   CInode *ref = 0;
-  if (mdr->trace.empty())
+  if (trace.empty())
     ref = mdcache->get_root();
   else {
-    CDentry *dn = mdr->trace[mdr->trace.size()-1];
+    CDentry *dn = trace[trace.size()-1];
 
     // if no inode, fw to dentry auth?
     if (want_auth && 
@@ -526,6 +526,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
     ref = mdcache->get_dentry_inode(dn, mdr);
     if (!ref) return 0;
   }
+  dout(10) << "ref is " << *ref << endl;
 
   // fw to inode auth?
   if (want_auth && !ref->is_auth()) {
@@ -628,11 +629,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   set<SimpleLock*> rdlocks;
   set<SimpleLock*> xlocks;
 
-  for (unsigned i=0; i<trace.size(); i++) {
-    dout(10) << "will rdlock trace " << i << " " << *trace[i] << endl;
+  for (unsigned i=0; i<trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
-  }
-  dout(10) << "will rd or x lock " << *dn << endl;
   if (dn->is_null())
     xlocks.insert(&dn->lock);   // new dn, xlock
   else
@@ -650,8 +648,6 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
 
 
-
-// FIXME: this probably should go somewhere else.
 
 CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
 {
@@ -772,9 +768,9 @@ class C_MDS_utime_finish : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  time_t mtime, atime;
+  utime_t mtime, atime;
 public:
-  C_MDS_utime_finish(MDS *m, MDRequest *r, CInode *i, version_t pdv, time_t mt, time_t at) :
+  C_MDS_utime_finish(MDS *m, MDRequest *r, CInode *i, version_t pdv, utime_t mt, utime_t at) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     mtime(mt), atime(at) { }
@@ -810,8 +806,8 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  time_t mtime = req->args.utime.modtime;
-  time_t atime = req->args.utime.actime;
+  utime_t mtime = req->args.utime.mtime;
+  utime_t atime = req->args.utime.atime;
   C_MDS_utime_finish *fin = new C_MDS_utime_finish(mds, mdr, cur, pdv, 
 						   mtime, atime);
 
@@ -822,7 +818,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = mtime;
   pi->atime = mtime;
-  pi->ctime = g_clock.gettime();
+  pi->ctime = g_clock.now();
   pi->version = pdv;
   
   mdlog->submit_entry(le);
@@ -887,7 +883,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mode = mode;
   pi->version = pdv;
-  pi->ctime = g_clock.gettime();
+  pi->ctime = g_clock.now();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -948,7 +944,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   if (uid >= 0) pi->uid = uid;
   if (gid >= 0) pi->gid = gid;
   pi->version = pdv;
-  pi->ctime = g_clock.gettime();
+  pi->ctime = g_clock.now();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -1316,10 +1312,10 @@ class C_MDS_link_local_finish : public Context {
   CDentry *dn;
   CInode *targeti;
   version_t dpv;
-  time_t tctime;
-  time_t tpv;
+  utime_t tctime;
+  version_t tpv;
 public:
-  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, time_t ct) :
+  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, utime_t ct) :
     mds(m), mdr(r), dn(d), targeti(ti),
     dpv(d->get_projected_version()),
     tctime(ct), 
@@ -1352,7 +1348,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   // update journaled target inode
   pi->nlink++;
-  pi->ctime = g_clock.gettime();
+  pi->ctime = g_clock.now();
   pi->version = tpdv;
 
   // finisher
@@ -1364,7 +1360,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-				version_t dpv, time_t tctime, version_t tpv)
+				version_t dpv, utime_t tctime, version_t tpv)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
@@ -1562,11 +1558,11 @@ class C_MDS_unlink_local_finish : public Context {
   CDentry *dn;
   CDentry *straydn;
   version_t ipv;  // referred inode
-  time_t ictime;
+  utime_t ictime;
   version_t dpv;  // deleted dentry
 public:
   C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd,
-			    version_t v, time_t ct) :
+			    version_t v, utime_t ct) :
     mds(m), mdr(r), dn(d), straydn(sd),
     ipv(v), ictime(ct),
     dpv(d->get_projected_version()) { }
@@ -1621,7 +1617,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 
   // update journaled target inode
   pi->nlink--;
-  pi->ctime = g_clock.gettime();
+  pi->ctime = g_clock.now();
   pi->version = ipv;
   
   // finisher
@@ -1637,7 +1633,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
 				  CDentry *dn, CDentry *straydn,
-				  version_t ipv, time_t ictime, version_t dpv) 
+				  version_t ipv, utime_t ictime, version_t dpv) 
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
@@ -1968,13 +1964,13 @@ class C_MDS_rename_local_finish : public Context {
   version_t straypv;
   version_t destpv;
   version_t srcpv;
-  time_t ictime;
+  utime_t ictime;
 public:
   version_t atid1;
   version_t atid2;
   C_MDS_rename_local_finish(MDS *m, MDRequest *r,
 			    CDentry *sdn, CDentry *ddn, CDentry *stdn,
-			    version_t v, time_t ct) :
+			    version_t v, utime_t ct) :
     mds(m), mdr(r),
     srcdn(sdn), destdn(ddn), straydn(stdn),
     ipv(v), 
@@ -2121,13 +2117,13 @@ void Server::_rename_local(MDRequest *mdr,
   if (pi) {
     // update journaled target inode
     pi->nlink--;
-    pi->ctime = g_clock.gettime();
+    pi->ctime = g_clock.now();
     pi->version = ipv;
   }
 
   C_MDS_rename_local_finish *fin = new C_MDS_rename_local_finish(mds, mdr, 
 								 srcdn, destdn, straydn,
-								 ipv, pi ? pi->ctime:0);
+								 ipv, pi ? pi->ctime:utime_t());
   
   if (anchorfin) {
     // doing anchor update prepare first
@@ -2159,7 +2155,7 @@ void Server::_rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *f
 void Server::_rename_local_finish(MDRequest *mdr,
 				  CDentry *srcdn, CDentry *destdn, CDentry *straydn,
 				  version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
-				  time_t ictime,
+				  utime_t ictime,
 				  version_t atid1, version_t atid2)
 {
   MClientRequest *req = mdr->client_request();
@@ -2427,9 +2423,9 @@ class C_MDS_truncate_purged : public Context {
   CInode *in;
   version_t pv;
   off_t size;
-  time_t ctime;
+  utime_t ctime;
 public:
-  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
+  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -2456,9 +2452,9 @@ class C_MDS_truncate_logged : public Context {
   CInode *in;
   version_t pv;
   off_t size;
-  time_t ctime;
+  utime_t ctime;
 public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, time_t ct) :
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -2492,7 +2488,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  time_t ctime = g_clock.gettime();
+  utime_t ctime = g_clock.now();
   Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
 					   pdv, req->args.truncate.length, ctime);
   
@@ -2590,9 +2586,9 @@ class C_MDS_open_truncate_purged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  time_t ctime;
+  utime_t ctime;
 public:
-  C_MDS_open_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, time_t ct) :
+  C_MDS_open_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     ctime(ct) { }
@@ -2618,9 +2614,9 @@ class C_MDS_open_truncate_logged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  time_t ctime;
+  utime_t ctime;
 public:
-  C_MDS_open_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, time_t ct) :
+  C_MDS_open_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     ctime(ct) { }
@@ -2642,7 +2638,7 @@ void Server::handle_client_opent(MDRequest *mdr)
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  time_t ctime = g_clock.gettime();
+  utime_t ctime = g_clock.now();
   Context *fin = new C_MDS_open_truncate_logged(mds, mdr, cur, 
 						pdv, ctime);
   

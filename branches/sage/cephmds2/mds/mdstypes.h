@@ -236,14 +236,37 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 
 // ================================================================
 
-#define MDS_PIN_REPLICATED     1
-#define MDS_STATE_AUTH     (1<<0)
+//#define MDS_PIN_REPLICATED     1
+//#define MDS_STATE_AUTH     (1<<0)
 
 class MLock;
 class Context;
 class SimpleLock;
 
 class MDSCacheObject {
+ public:
+  // -- pins --
+  const static int PIN_REPLICATED =  1000;
+  static const int PIN_DIRTY      =  1001;
+  const static int PIN_RDLOCK     = -1002;
+  const static int PIN_XLOCK      =  1003;
+  static const int PIN_REQUEST    = -1004;
+  
+  const char *generic_pin_name(int p) {
+    switch (p) {
+	case PIN_REPLICATED: return "replicated";
+	case PIN_DIRTY: return "dirty";
+    case PIN_RDLOCK: return "rdlock";
+    case PIN_XLOCK: return "xlock";
+    case PIN_REQUEST: return "request";
+	default: assert(0);
+	}
+  }
+
+  // -- state --
+  const static int STATE_AUTH  = (1<<0);
+  static const int STATE_DIRTY = (1<<1);
+
  protected:
   unsigned state;     // state bits
   
@@ -268,7 +291,7 @@ class MDSCacheObject {
   unsigned state_test(unsigned mask) { return state & mask; }
   void state_reset(unsigned s) { state = s; }
 
-  bool is_auth() { return state & MDS_STATE_AUTH; }
+  bool is_auth() { return state_test(STATE_AUTH); }
 
   // --------------------------------------------
   // pins
@@ -336,12 +359,12 @@ class MDSCacheObject {
 	if (replicas.count(mds)) 
 	  return ++replicas[mds];  // inc nonce
 	if (replicas.empty()) 
-	  get(MDS_PIN_REPLICATED);
+	  get(PIN_REPLICATED);
 	return replicas[mds] = 1;
   }
   void add_replica(int mds, int nonce) {
 	if (replicas.empty()) 
-	  get(MDS_PIN_REPLICATED);
+	  get(PIN_REPLICATED);
 	replicas[mds] = nonce;
   }
   int get_replica_nonce(int mds) {
@@ -352,11 +375,11 @@ class MDSCacheObject {
 	assert(replicas.count(mds));
 	replicas.erase(mds);
 	if (replicas.empty())
-	  put(MDS_PIN_REPLICATED);
+	  put(PIN_REPLICATED);
   }
   void clear_replicas() {
 	if (!replicas.empty())
-	  put(MDS_PIN_REPLICATED);
+	  put(PIN_REPLICATED);
 	replicas.clear();
   }
   map<int,int>::iterator replicas_begin() { return replicas.begin(); }

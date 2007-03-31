@@ -52,47 +52,40 @@ ostream& operator<<(ostream& out, CInode& in);
 class CInode : public MDSCacheObject {
  public:
   // -- pins --
-  static const int PIN_CACHED =     1;
+  //static const int PIN_REPLICATED =     1;
   static const int PIN_DIR =        2;
-  static const int PIN_DIRTY =      4;  // must flush
   static const int PIN_PROXY =      5;  // can't expire yet
   static const int PIN_WAITER =     6;  // waiter
   static const int PIN_CAPS =       7;  // local fh's
   static const int PIN_AUTHPIN =    8;
   static const int PIN_IMPORTING =  -9;  // importing
-  static const int PIN_REQUEST =   -10;  // request is logging, finishing
   static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
   static const int PIN_ANCHORING = 12;
   static const int PIN_UNANCHORING = 13;
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
-  static const int PIN_DENTRYLOCK = 16;
 
   const char *pin_name(int p) {
     switch (p) {
-    case PIN_CACHED: return "cached";
     case PIN_DIR: return "dir";
-    case PIN_DIRTY: return "dirty";
     case PIN_PROXY: return "proxy";
     case PIN_WAITER: return "waiter";
     case PIN_CAPS: return "caps";
     case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
-    case PIN_REQUEST: return "request";
     case PIN_RENAMESRC: return "renamesrc";
     case PIN_ANCHORING: return "anchoring";
     case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
-    case PIN_DENTRYLOCK: return "dentrylock";
-    default: assert(0);
+    default: return generic_pin_name(p);
     }
   }
 
   // -- state --
-  static const int STATE_AUTH =       (1<<0);
-  static const int STATE_ROOT =       (1<<1);
-  static const int STATE_DIRTY =      (1<<2);
+  //static const int STATE_AUTH =       (1<<0);
+  static const int STATE_DIRTY =      (1<<1);
+  static const int STATE_ROOT =       (1<<2);
   //static const int STATE_UNSAFE =     (1<<3);   // not logged yet
   //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
   static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
@@ -205,8 +198,6 @@ protected:
   bool is_root() { return state & STATE_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
 
-  bool is_auth() { return state & STATE_AUTH; }
-  void set_auth(bool auth);
 
   inodeno_t ino() const { return inode.ino; }
   inode_t& get_inode() { return inode; }
@@ -615,7 +606,7 @@ public:
 
     in->replicas = replicas;
     if (!replicas.empty()) 
-      in->get(CInode::PIN_CACHED);
+      in->get(CInode::PIN_REPLICATED);
 
     int off = 0;
     in->hardlock._decode(hardlock, off);

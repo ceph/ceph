@@ -35,6 +35,8 @@ using namespace __gnu_cxx;
 
 
 #include "object.h"
+#include "utime.h"
+
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -238,7 +240,7 @@ struct inode_t {
   FileLayout layout;  // ?immutable?
 
   // affected by any inode change...
-  time_t     ctime;   // inode change time
+  utime_t    ctime;   // inode change time
 
   // nlink
   int        nlink;  
@@ -251,8 +253,8 @@ struct inode_t {
 
   // file (data access)
   off_t      size;
-  time_t     mtime;   // file data modify time.
-  time_t     atime;   // file data access time.
+  utime_t    mtime;   // file data modify time.
+  utime_t    atime;   // file data access time.
  
   int        mask;
 

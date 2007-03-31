@@ -51,8 +51,8 @@
 #define MDS_OP_LSTAT    101
 #define MDS_OP_FSTAT    102
 #define MDS_OP_UTIME    1102
-#define MDS_OP_CHMOD    1103
-#define MDS_OP_CHOWN    1104  
+#define MDS_OP_CHMOD    1104
+#define MDS_OP_CHOWN    1105  
 
 #define MDS_OP_READDIR  200
 #define MDS_OP_MKNOD    1201
@@ -103,8 +103,10 @@ class MClientRequest : public Message {
     struct {
       _frag_t frag;
     } readdir;
-    struct utimbuf utime;
-    struct timeval utimes;
+    struct {
+      _utime_t mtime;
+      _utime_t atime;
+    } utime;
     struct {
       mode_t mode;
     } chmod; 

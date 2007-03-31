@@ -67,49 +67,34 @@ typedef map<string, CDentry*> CDir_map_t;
 class CDir : public MDSCacheObject {
  public:
   // -- pins --
-  static const int PIN_CHILD =    0;
-  static const int PIN_OPENED =   1;  // open by another node
-  static const int PIN_WAITER =   2;  // waiter(s)
-  //static const int PIN_IMPORT =   3;
+  static const int PIN_CHILD =    2;
+  static const int PIN_WAITER =   3;  // waiter(s)
   static const int PIN_EXPORT =   4;
-  //static const int PIN_FREEZE =   5;
-  //  static const int PIN_FREEZELEAF = 6;
-  static const int PIN_PROXY =    7;  // auth just changed.
   static const int PIN_AUTHPIN =  8;
   static const int PIN_IMPORTING = 9;
   static const int PIN_EXPORTING = 10;
   static const int PIN_IMPORTBOUND = 11;
   static const int PIN_EXPORTBOUND = 12;
-  static const int PIN_DIRTY =    15;
-  static const int PIN_REQUEST =  16;
   static const int PIN_LOGGINGEXPORTFINISH = 17;
   const char *pin_name(int p) {
     switch (p) {
     case PIN_CHILD: return "child";
-    case PIN_OPENED: return "opened";
     case PIN_WAITER: return "waiter";
-      //case PIN_IMPORT: return "import";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
-      //case PIN_FREEZE: return "freeze";
-      //    case PIN_FREEZELEAF: return "freezeleaf";
-    case PIN_PROXY: return "proxy";
     case PIN_AUTHPIN: return "authpin";
-    case PIN_DIRTY: return "dirty";
-    case PIN_REQUEST: return "request";
     case PIN_LOGGINGEXPORTFINISH: return "loggingexportfinish";
-    default: assert(0);
+    default: return generic_pin_name(p);
     }
   }
 
   // -- state --
-  static const unsigned STATE_AUTH =          (1<< 0);   // auth for this dir (hashing doesn't count)
-  static const unsigned STATE_PROXY =         (1<< 1);   // proxy auth
+  //static const unsigned STATE_AUTH =          (1<< 0);   // auth for this dir (hashing doesn't count)
+  static const unsigned STATE_DIRTY =         (1<< 1);   // has been modified since last commit
   static const unsigned STATE_COMPLETE =      (1<< 2);   // the complete contents are in cache
-  static const unsigned STATE_DIRTY =         (1<< 3);   // has been modified since last commit
   static const unsigned STATE_FROZENTREE =    (1<< 4);   // root of tree (bounded by exports)
   static const unsigned STATE_FREEZINGTREE =  (1<< 5);   // in process of freezing 
   static const unsigned STATE_FROZENDIR =     (1<< 6);
@@ -137,14 +122,14 @@ class CDir : public MDSCacheObject {
   STATE_EXPORT
   |STATE_IMPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-  |STATE_FROZENTREE|STATE_PROXY;
+  |STATE_FROZENTREE;
   static const unsigned MASK_STATE_EXPORT_KEPT = 
   STATE_EXPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
   |STATE_FROZENTREE
   |STATE_FROZENDIR
-  |STATE_EXPORT
-  |STATE_PROXY;
+  |STATE_EXPORT;
+
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -327,9 +312,6 @@ class CDir : public MDSCacheObject {
   bool is_clean() { return !state_test(STATE_DIRTY); }
 
   bool is_auth() { return state & STATE_AUTH; }
-  bool is_proxy() { return state & STATE_PROXY; }
-  //bool is_import() { return state & STATE_IMPORT; }
-  //bool is_export() { return state & STATE_EXPORT; }
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
 
@@ -591,7 +573,7 @@ class CDirExport {
     dir->replicas = replicas;
     dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replicas << endl;
     if (!replicas.empty())
-      dir->get(CDir::PIN_OPENED);
+      dir->get(CDir::PIN_REPLICATED);
     if (dir->is_dirty()) {
       dir->get(CDir::PIN_DIRTY);  
     }

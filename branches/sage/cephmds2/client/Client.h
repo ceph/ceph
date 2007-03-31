@@ -120,7 +120,7 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  time_t    valid_until;
+  utime_t   valid_until;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -131,7 +131,7 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  time_t    file_wr_mtime;   // [writers] time of last write
+  utime_t   file_wr_mtime;   // [writers] time of last write
   off_t     file_wr_size;    // [writers] largest offset we've written to
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
@@ -163,9 +163,9 @@ class Inode {
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
     inode(_inode),
-    valid_until(0),
+    valid_until(0, 0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    file_wr_mtime(0), file_wr_size(0), 
+    file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), dir(0), dn(0), symlink(0),
     fc(_oc, _inode),

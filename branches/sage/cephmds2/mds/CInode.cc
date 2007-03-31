@@ -247,13 +247,6 @@ void CInode::close_dirfrags()
 }
 
 
-void CInode::set_auth(bool a) 
-{
-  if (a) state_set(STATE_AUTH);
-  else state_clear(STATE_AUTH);
-}
-
-
 
 void CInode::make_path(string& s)
 {

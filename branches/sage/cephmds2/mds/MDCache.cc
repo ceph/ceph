@@ -199,7 +199,7 @@ CInode *MDCache::create_root_inode()
   root->inode.mode = 0755 | INODE_MODE_DIR;
   root->inode.size = 0;
   root->inode.ctime = 
-    root->inode.mtime = g_clock.gettime();
+    root->inode.mtime = g_clock.now();
   
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;
@@ -263,7 +263,7 @@ CInode *MDCache::create_stray_inode(int whose)
   stray->inode.mode = 0755 | INODE_MODE_DIR;
   stray->inode.size = 0;
   stray->inode.ctime = 
-    stray->inode.mtime = g_clock.gettime();
+    stray->inode.mtime = g_clock.now();
   
   stray->inode.nlink = 1;
   stray->inode.layout = g_OSD_MDDirLayout;

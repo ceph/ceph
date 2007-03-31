@@ -791,7 +791,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   
   // mark auth
   assert(in->is_auth());
-  in->set_auth(false);
+  in->state_clear(CInode::STATE_AUTH);
   in->replica_nonce = CInode::EXPORT_NONCE;
   
   // *** other state too?
@@ -1760,7 +1760,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in = new CInode(mds->mdcache);
     added = true;
   } else {
-    in->set_auth(true);
+    in->state_set(CInode::STATE_AUTH);
   }
 
   // state after link  -- or not!  -sage

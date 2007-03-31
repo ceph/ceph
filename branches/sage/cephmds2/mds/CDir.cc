@@ -67,7 +67,6 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " ap=" << dir.get_auth_pins() << "+" << dir.get_nested_auth_pins();
 
   out << " state=" << dir.get_state();
-  if (dir.state_test(CDir::STATE_PROXY)) out << "|proxy";
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
   if (dir.state_test(CDir::STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDir::STATE_FROZENTREE)) out << "|frozentree";

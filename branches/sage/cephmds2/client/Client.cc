@@ -386,7 +386,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
 Inode* Client::insert_trace(MClientReply *reply)
 {
   Inode *cur = root;
-  time_t now = time(NULL);
+  utime_t now = g_clock.now();
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << endl;
 
@@ -420,8 +420,10 @@ Inode* Client::insert_trace(MClientReply *reply)
     update_inode_dist(cur, *pin);
 
     // set cache ttl
-    if (g_conf.client_cache_stat_ttl)
-      cur->valid_until = now + g_conf.client_cache_stat_ttl;
+    if (g_conf.client_cache_stat_ttl) {
+      cur->valid_until = now;
+      cur->valid_until += g_conf.client_cache_stat_ttl;
+    }
   }
 
   return cur;
@@ -1061,7 +1063,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
           << ", acking to " << m->get_source() << endl;
 
   if (in->file_caps() == 0) {
-    in->file_wr_mtime = 0;
+    in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
   }
 
@@ -1095,7 +1097,7 @@ void Client::release_caps(Inode *in,
   }
   
   if (in->file_caps() == 0) {
-    in->file_wr_mtime = 0;
+    in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
   }
 }
@@ -1548,7 +1550,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 
   Dentry *dn = lookup(fpath);
   inode_t inode;
-  time_t now = time(NULL);
+  utime_t now = g_clock.now();
   if (dn && 
       now <= dn->inode->valid_until &&
       ((dn->inode->inode.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
@@ -1556,7 +1558,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
     dout(10) << "lstat cache hit w/ sufficient inode.mask, valid until " << dn->inode->valid_until << endl;
     
     if (g_conf.client_cache_stat_ttl == 0)
-      dn->inode->valid_until = 0;           // only one stat allowed after each readdir
+      dn->inode->valid_until = utime_t();           // only one stat allowed after each readdir
 
     *in = dn->inode;
   } else {  
@@ -1786,7 +1788,10 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->args.utime = *buf;
+  req->args.utime.mtime.tv_sec = buf->modtime;
+  req->args.utime.mtime.tv_usec = 0;
+  req->args.utime.atime.tv_sec = buf->actime;
+  req->args.utime.atime.tv_usec = 0;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1901,7 +1906,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
-      time_t now = time(NULL);
+      utime_t now = g_clock.now();
       
       list<string>::const_iterator pdn = reply->get_dir_dn().begin();
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
@@ -1917,10 +1922,14 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
         // put in cache
         Inode *in = this->insert_inode(dir, *pin, *pdn);
         
-        if (g_conf.client_cache_stat_ttl)
-          in->valid_until = now + g_conf.client_cache_stat_ttl;
-        else if (g_conf.client_cache_readdir_ttl)
-          in->valid_until = now + g_conf.client_cache_readdir_ttl;
+        if (g_conf.client_cache_stat_ttl) {
+          in->valid_until = now;
+	  in->valid_until += g_conf.client_cache_stat_ttl;
+	}
+        else if (g_conf.client_cache_readdir_ttl) {
+          in->valid_until = now;
+	  in->valid_until += g_conf.client_cache_readdir_ttl;
+	}
         
         // contents to caller too!
         contents[*pdn] = in->inode;
@@ -2608,7 +2617,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   }
 
   // mtime
-  in->file_wr_mtime = in->inode.mtime = g_clock.gettime();
+  in->file_wr_mtime = in->inode.mtime = g_clock.now();
 
   // ok!
   client_lock.Unlock();
