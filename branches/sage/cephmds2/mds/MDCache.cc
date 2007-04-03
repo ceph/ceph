@@ -1488,11 +1488,16 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
       in->mds_caps_wanted[from] = p->second;
     else
       in->mds_caps_wanted.erase(from);
-    in->hardlock.remove_gather(from);  // just in case
+    in->authlock.remove_gather(from);  // just in case
+    in->linklock.remove_gather(from);  // just in case
+    in->dirfragtreelock.remove_gather(from);  // just in case
     in->filelock.remove_gather(from);  // just in case
     dout(10) << " has " << *in << endl;
     ack->add_inode(p->first, 
-		   in->hardlock.get_replica_state(), in->filelock.get_replica_state(), 
+		   in->authlock.get_replica_state(), 
+		   in->linklock.get_replica_state(), 
+		   in->dirfragtreelock.get_replica_state(), 
+		   in->filelock.get_replica_state(), 
 		   nonce);
   }
 
@@ -1537,7 +1542,9 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
     CInode *in = get_inode(p->ino);
     assert(in);
     in->set_replica_nonce(p->nonce);
-    in->hardlock.set_state(p->hardlock);
+    in->authlock.set_state(p->authlock);
+    in->linklock.set_state(p->linklock);
+    in->dirfragtreelock.set_state(p->dirfragtreelock);
     in->filelock.set_state(p->filelock);
     dout(10) << " got " << *in << endl;
   }
@@ -2147,20 +2154,20 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   
   // note: this code calls _eval more often than it needs to!
   // fix lock
-  if (in->hardlock.is_gathering(from)) {
-    in->hardlock.remove_gather(from);
-    if (!in->hardlock.is_gathering())
-      mds->locker->simple_eval(&in->hardlock);
-  }
-  if (in->filelock.is_gathering(from)) {
-    in->filelock.remove_gather(from);
-    if (!in->filelock.is_gathering())
-      mds->locker->file_eval(&in->filelock);
-  }
+  if (in->authlock.remove_replica(from))
+    mds->locker->simple_eval(&in->authlock);
+  if (in->linklock.remove_replica(from))
+    mds->locker->simple_eval(&in->linklock);
+  if (in->dirfragtreelock.remove_replica(from))
+    mds->locker->simple_eval(&in->dirfragtreelock);
+  if (in->filelock.remove_replica(from))
+    mds->locker->simple_eval(&in->filelock);
   
   // alone now?
   if (!in->is_replicated()) {
-    mds->locker->simple_eval(&in->hardlock);
+    mds->locker->simple_eval(&in->authlock);
+    mds->locker->simple_eval(&in->linklock);
+    mds->locker->simple_eval(&in->dirfragtreelock);
     mds->locker->file_eval(&in->filelock);
   }
 }
@@ -2569,7 +2576,7 @@ int MDCache::path_traverse(MDRequest *mdr,
     */
 
     // must read directory hard data (permissions, x bit) to traverse
-    if (!noperm && !mds->locker->simple_rdlock_try(&cur->hardlock, ondelay)) {
+    if (!noperm && !mds->locker->simple_rdlock_try(&cur->authlock, ondelay)) {
       return 1;
     }
     

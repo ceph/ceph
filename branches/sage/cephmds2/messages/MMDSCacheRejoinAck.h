@@ -24,11 +24,16 @@ class MMDSCacheRejoinAck : public Message {
  public:
   struct inodeinfo { 
     inodeno_t ino;
-    int hardlock;
+    int authlock;
+    int linklock;
+    int dirfragtreelock;
     int filelock;
     int nonce;
     inodeinfo() {}
-    inodeinfo(inodeno_t i, int h, int f, int n) : ino(i), hardlock(h), filelock(f), nonce(n) {}
+    inodeinfo(inodeno_t i, int a, int l, int dft, int f, int n) : 
+      ino(i), 
+      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), 
+      nonce(n) {}
   };
   struct dninfo {
     int lock;
@@ -56,8 +61,8 @@ class MMDSCacheRejoinAck : public Message {
   void add_dentry(dirfrag_t dirfrag, const string& dn, int ls, int nonce) {
     dentries[dirfrag][dn] = dninfo(ls, nonce);
   }
-  void add_inode(inodeno_t ino, int hl, int fl, int nonce) {
-    inodes.push_back(inodeinfo(ino, hl, fl, nonce));
+  void add_inode(inodeno_t ino, int authl, int linkl, int dftl, int fl, int nonce) {
+    inodes.push_back(inodeinfo(ino, authl, linkl, dftl, fl, nonce));
   }
   
   void encode_payload() {

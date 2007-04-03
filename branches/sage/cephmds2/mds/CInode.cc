@@ -60,9 +60,11 @@ ostream& operator<<(ostream& out, CInode& in)
 
   out << " v" << in.get_version();
 
-  out << " hard=" << in.hardlock;
+  out << " auth=" << in.authlock;
+  out << " link=" << in.linklock;
+  out << " dft=" << in.dirfragtreelock;
   out << " file=" << in.filelock;
-
+  
   if (in.get_num_ref()) {
     out << " |";
     in.print_pin_set(out);
@@ -92,8 +94,11 @@ void CInode::print(ostream& out)
 
 
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) : hardlock(this, LOCK_OTYPE_IHARD, WAIT_HARDLOCK_OFFSET),
-					filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
+CInode::CInode(MDCache *c, bool auth) : 
+  authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
+  linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
+  dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
+  filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
 {
   mdcache = c;
 
@@ -288,7 +293,6 @@ void CInode::name_stray_dentry(string& dname)
 }
 
 
-
 version_t CInode::pre_dirty()
 {    
   assert(parent);
@@ -328,6 +332,7 @@ void CInode::mark_dirty(version_t pv) {
   parent->mark_dirty(pv);
 }
 
+
 void CInode::mark_clean()
 {
   dout(10) << " mark_clean " << *this << endl;
@@ -350,12 +355,27 @@ void CInode::set_mlock_info(MLock *m)
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   switch (type) {
+  case LOCK_OTYPE_IAUTH:
+    ::_encode(inode.mode, bl);
+    ::_encode(inode.uid, bl);
+    ::_encode(inode.gid, bl);  
+    break;
+    
+  case LOCK_OTYPE_ILINK:
+    ::_encode(inode.nlink, bl);
+    ::_encode(inode.anchored, bl);
+    break;
+    
+  case LOCK_OTYPE_IDIRFRAGTREE:
+    dirfragtree._encode(bl);
+    break;
+    
   case LOCK_OTYPE_IFILE:
-    encode_file_state(bl);
+    ::_encode(inode.size, bl);
+    ::_encode(inode.mtime, bl);
+    ::_encode(inode.atime, bl);
     break;
-  case LOCK_OTYPE_IHARD:
-    encode_hard_state(bl);
-    break;
+  
   default:
     assert(0);
   }
@@ -365,61 +385,32 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 {
   int off = 0;
   switch (type) {
+  case LOCK_OTYPE_IAUTH:
+    ::_decode(inode.mode, bl, off);
+    ::_decode(inode.uid, bl, off);
+    ::_decode(inode.gid, bl, off);
+    break;
+
+  case LOCK_OTYPE_ILINK:
+    ::_decode(inode.nlink, bl, off);
+    ::_decode(inode.anchored, bl, off);
+    break;
+
+  case LOCK_OTYPE_IDIRFRAGTREE:
+    dirfragtree._decode(bl, off);
+    break;
+
   case LOCK_OTYPE_IFILE:
-    decode_file_state(bl, off);
+    ::_decode(inode.size, bl, off);
+    ::_decode(inode.mtime, bl, off);
+    ::_decode(inode.atime, bl, off);
     break;
-  case LOCK_OTYPE_IHARD:
-    decode_hard_state(bl, off);
-    break;
+
   default:
     assert(0);
   }
 }
 
-
-
-// new state encoders
-
-void CInode::encode_file_state(bufferlist& bl) 
-{
-  bl.append((char*)&inode.size, sizeof(inode.size));
-  bl.append((char*)&inode.mtime, sizeof(inode.mtime));
-  bl.append((char*)&inode.atime, sizeof(inode.atime));  // ??
-}
-
-void CInode::decode_file_state(bufferlist& r, int& off)
-{
-  r.copy(off, sizeof(inode.size), (char*)&inode.size);
-  off += sizeof(inode.size);
-  r.copy(off, sizeof(inode.mtime), (char*)&inode.mtime);
-  off += sizeof(inode.mtime);
-  r.copy(off, sizeof(inode.atime), (char*)&inode.atime);
-  off += sizeof(inode.atime);
-}
-
-
-void CInode::encode_hard_state(bufferlist& r)
-{
-  r.append((char*)&inode.mode, sizeof(inode.mode));
-  r.append((char*)&inode.uid, sizeof(inode.uid));
-  r.append((char*)&inode.gid, sizeof(inode.gid));
-  r.append((char*)&inode.ctime, sizeof(inode.ctime));
-  r.append((char*)&inode.nlink, sizeof(inode.nlink));
-}
-
-void CInode::decode_hard_state(bufferlist& r, int& off)
-{
-  r.copy(off, sizeof(inode.mode), (char*)&inode.mode);
-  off += sizeof(inode.mode);
-  r.copy(off, sizeof(inode.uid), (char*)&inode.uid);
-  off += sizeof(inode.uid);
-  r.copy(off, sizeof(inode.gid), (char*)&inode.gid);
-  off += sizeof(inode.gid);
-  r.copy(off, sizeof(inode.ctime), (char*)&inode.ctime);
-  off += sizeof(inode.ctime);
-  r.copy(off, sizeof(inode.nlink), (char*)&inode.nlink);
-  off += sizeof(inode.nlink);
-}
 
 
 

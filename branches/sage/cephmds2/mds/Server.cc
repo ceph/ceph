@@ -859,7 +859,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   if (!cur) return;
 
   // write
-  if (!mds->locker->xlock_start(&cur->hardlock, mdr))
+  if (!mds->locker->xlock_start(&cur->authlock, mdr))
     return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -918,7 +918,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   if (!cur) return;
 
   // write
-  if (!mds->locker->xlock_start(&cur->hardlock, mdr))
+  if (!mds->locker->xlock_start(&cur->authlock, mdr))
     return;
 
   mds->balancer->hit_inode(cur, META_POP_IWR);   
@@ -1285,7 +1285,7 @@ void Server::handle_client_link(MDRequest *mdr)
   xlocks.insert(&dn->lock);
   for (unsigned i=0; i<targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
-  xlocks.insert(&targeti->hardlock);
+  xlocks.insert(&targeti->linklock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;
@@ -1531,7 +1531,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   for (unsigned i=0; i<trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
-  xlocks.insert(&in->hardlock);
+  xlocks.insert(&in->linklock);
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;
@@ -1925,7 +1925,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   xlocks.insert(&destdn->lock);
 
   // xlock oldin
-  if (oldin) xlocks.insert(&oldin->hardlock);
+  if (oldin) xlocks.insert(&oldin->linklock);
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
     return;

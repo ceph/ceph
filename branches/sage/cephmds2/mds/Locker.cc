@@ -691,7 +691,9 @@ void Locker::handle_lock(MLock *m)
     }
     break;
 
-  case LOCK_OTYPE_IHARD:
+  case LOCK_OTYPE_IAUTH:
+  case LOCK_OTYPE_ILINK:
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IFILE:
     {
       CInode *in = mdcache->get_inode(m->get_ino());
@@ -701,8 +703,14 @@ void Locker::handle_lock(MLock *m)
 	return;
       }
       switch (m->get_otype()) {
-      case LOCK_OTYPE_IHARD:
-	handle_simple_lock(&in->hardlock, m);
+      case LOCK_OTYPE_IAUTH:
+	handle_simple_lock(&in->authlock, m);
+	break;
+      case LOCK_OTYPE_ILINK:
+	handle_simple_lock(&in->linklock, m);
+	break;
+      case LOCK_OTYPE_IDIRFRAGTREE:
+	handle_simple_lock(&in->dirfragtreelock, m);
 	break;
       case LOCK_OTYPE_IFILE:
 	handle_file_lock(&in->filelock, m);
@@ -1042,6 +1050,12 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
   mdr->xlocks.erase(lock);
   mdr->locks.erase(lock);
   dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
+
+  // slave?
+  if (!lock->get_parent()->is_auth()) {
+    mds->send_message_mds(new MLock(lock, LOCK_AC_UNXLOCK, mds->get_nodeid()),
+			  lock->get_parent()->authority().first, MDS_PORT_LOCKER);
+  }
 
   // others waiting?
   if (lock->is_waiter_for(SimpleLock::WAIT_WR)) {

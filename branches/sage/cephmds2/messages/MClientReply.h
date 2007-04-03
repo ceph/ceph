@@ -68,10 +68,9 @@ class InodeStat {
   {
     // inode.mask
     inode.mask = INODE_MASK_BASE;
-    if (in->filelock.can_rdlock(0))
-      inode.mask |= INODE_MASK_PERM;
-    if (in->hardlock.can_rdlock(0))
-      inode.mask |= INODE_MASK_SIZE | INODE_MASK_MTIME;      // fixme when we separate this out.
+    if (in->authlock.can_rdlock(0)) inode.mask |= INODE_MASK_AUTH;
+    if (in->linklock.can_rdlock(0)) inode.mask |= INODE_MASK_LINK;
+    if (in->filelock.can_rdlock(0)) inode.mask |= INODE_MASK_FILE;
     
     // symlink content?
     if (in->is_symlink()) 
@@ -96,7 +95,7 @@ class InodeStat {
   }
   
   void _encode(bufferlist &bl) {
-    bl.append((char*)&inode, sizeof(inode));
+    ::_encode(inode, bl);
     ::_encode(dirfrag_auth, bl);
     ::_encode(dirfrag_dist, bl);
     ::_encode(dirfrag_rep, bl);
@@ -105,8 +104,7 @@ class InodeStat {
   }
   
   void _decode(bufferlist &bl, int& off) {
-    bl.copy(off, sizeof(inode), (char*)&inode);
-    off += sizeof(inode);
+    ::_decode(inode, bl, off);
     ::_decode(dirfrag_auth, bl, off);
     ::_decode(dirfrag_dist, bl, off);
     ::_decode(dirfrag_rep, bl, off);

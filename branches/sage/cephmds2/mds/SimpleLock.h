@@ -18,22 +18,21 @@
 // -- lock types --
 // NOTE: this also defines the lock ordering!
 #define LOCK_OTYPE_DN       1
-#define LOCK_OTYPE_IFILE    2
-#define LOCK_OTYPE_IHARD    3  // deprecate me?
 
-#define LOCK_OTYPE_IPERM    4
-#define LOCK_OTYPE_ILINK    5
-#define LOCK_OTYPE_IDIRTREE 6
-#define LOCK_OTYPE_DIR      7
+#define LOCK_OTYPE_IFILE    2
+#define LOCK_OTYPE_IAUTH    3
+#define LOCK_OTYPE_ILINK    4
+#define LOCK_OTYPE_IDIRFRAGTREE 5
+
+#define LOCK_OTYPE_DIR      7  // not used
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
   case LOCK_OTYPE_DN: return "dentry";
   case LOCK_OTYPE_IFILE: return "inode_file";
-  case LOCK_OTYPE_IHARD: return "inode_hard";
-  case LOCK_OTYPE_IPERM: return "inode_perm";
+  case LOCK_OTYPE_IAUTH: return "inode_auth";
   case LOCK_OTYPE_ILINK: return "inode_link";
-  case LOCK_OTYPE_IDIRTREE: return "inode_dirtree";
+  case LOCK_OTYPE_IDIRFRAGTREE: return "inode_dirfragtree";
   default: assert(0);
   }
 }
@@ -147,6 +146,7 @@ public:
   }
 
   // ref counting
+  bool is_rdlocked() { return num_rdlock > 0; }
   int get_rdlock() { return ++num_rdlock; }
   int put_rdlock() {
     assert(num_rdlock>0);
@@ -165,7 +165,7 @@ public:
   bool is_xlocked() { return xlock_by ? true:false; }
   MDRequest *get_xlocked_by() { return xlock_by; }
   bool is_used() {
-    return (is_xlocked() || (num_rdlock>0)) ? true:false;
+    return is_xlocked() || is_rdlocked();
   }
 
   // encode/decode
@@ -191,6 +191,32 @@ public:
       assert(0);
     }
     return 0;
+  }
+  /** replicate_relax
+   * called on first replica creation.
+   */
+  void replicate_relax() {
+    assert(parent->is_auth());
+    assert(!parent->is_replicated());
+    if (state == LOCK_LOCK && !is_used())
+      state = LOCK_SYNC;
+  }
+  bool remove_replica(int from) {
+    if (is_gathering(from)) {
+      remove_gather(from);
+      if (!is_gathering())
+	return true;
+    }
+    return false;
+  }
+  bool do_import(int from, int to) {
+    if (!is_stable()) {
+      remove_gather(from);
+      remove_gather(to);
+      if (!is_gathering())
+	return true;
+    }
+    return false;
   }
 
   bool can_rdlock(MDRequest *mdr) {

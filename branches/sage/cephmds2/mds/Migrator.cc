@@ -764,10 +764,20 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   in->clear_replicas();
   
   // twiddle lock states for auth -> replica transition
-  // hard
-  in->hardlock.clear_gather();
-  if (in->hardlock.get_state() == LOCK_GLOCKR)
-    in->hardlock.set_state(LOCK_LOCK);
+  // auth
+  in->authlock.clear_gather();
+  if (in->authlock.get_state() == LOCK_GLOCKR)
+    in->authlock.set_state(LOCK_LOCK);
+
+  // link
+  in->linklock.clear_gather();
+  if (in->linklock.get_state() == LOCK_GLOCKR)
+    in->linklock.set_state(LOCK_LOCK);
+
+  // dirfragtree
+  in->dirfragtreelock.clear_gather();
+  if (in->dirfragtreelock.get_state() == LOCK_GLOCKR)
+    in->dirfragtreelock.set_state(LOCK_LOCK);
 
   // file : we lost all our caps, so move to stable state!
   in->filelock.clear_gather();
@@ -1574,7 +1584,9 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
 	in->clear_replicas();
 	if (in->is_dirty()) 
 	  in->mark_clean();
-	in->hardlock.clear_gather();
+	in->authlock.clear_gather();
+	in->linklock.clear_gather();
+	in->dirfragtreelock.clear_gather();
 	in->filelock.clear_gather();
 
 	// non-bounding dir?
@@ -1789,13 +1801,12 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in->remove_replica(mds->get_nodeid());
   
   // twiddle locks
-  // hard
-  if (in->hardlock.get_state() == LOCK_GLOCKR) {
-    in->hardlock.remove_gather(mds->get_nodeid());
-    in->hardlock.remove_gather(oldauth);
-    if (!in->hardlock.is_gathering())
-      mds->locker->simple_eval(&in->hardlock);
-  }
+  if (in->authlock.do_import(oldauth, mds->get_nodeid()))
+    mds->locker->simple_eval(&in->authlock);
+  if (in->linklock.do_import(oldauth, mds->get_nodeid()))
+    mds->locker->simple_eval(&in->linklock);
+  if (in->dirfragtreelock.do_import(oldauth, mds->get_nodeid()))
+    mds->locker->simple_eval(&in->dirfragtreelock);
 
   // caps
   for (set<int>::iterator it = merged_client_caps.begin();
@@ -1813,13 +1824,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   }
 
   // filelock
-  if (!in->filelock.is_stable()) {
-    // take me and old auth out of gather set
-    in->filelock.remove_gather(mds->get_nodeid());
-    in->filelock.remove_gather(oldauth);
-    if (!in->filelock.is_gathering())  // necessary but not suffient...
-      mds->locker->file_eval(&in->filelock);    
-  }
+  if (in->filelock.do_import(oldauth, mds->get_nodeid()))
+    mds->locker->simple_eval(&in->filelock);
 }
 
 

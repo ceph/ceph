@@ -1679,11 +1679,12 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   tout << path << endl;
 
   // make mask
-  int mask = INODE_MASK_BASE | INODE_MASK_PERM;
+  // FIXME.
+  int mask = INODE_MASK_BASE | INODE_MASK_AUTH;
   if (S_ISVALIDSIZE(stl->st_litemask) || 
       S_ISVALIDBLOCKS(stl->st_litemask)) mask |= INODE_MASK_SIZE;
-  if (S_ISVALIDMTIME(stl->st_litemask)) mask |= INODE_MASK_MTIME;
-  if (S_ISVALIDATIME(stl->st_litemask)) mask |= INODE_MASK_ATIME;
+  if (S_ISVALIDMTIME(stl->st_litemask)) mask |= INODE_MASK_FILE;
+  if (S_ISVALIDATIME(stl->st_litemask)) mask |= INODE_MASK_FILE;
   
   Inode *in = 0;
   int res = _lstat(path, mask, &in);

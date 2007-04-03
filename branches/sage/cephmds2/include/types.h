@@ -224,15 +224,18 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_BASE       1  // ino, nlink
-#define INODE_MASK_PERM       2  // uid, gid, mode
-#define INODE_MASK_SIZE       4  // size, blksize, blocks
-#define INODE_MASK_CTIME      8  // ctime
-#define INODE_MASK_MTIME      16 // mtime
-#define INODE_MASK_ATIME      32 // atime
+#define INODE_MASK_BASE       1  // ino, layout, symlink value
+#define INODE_MASK_AUTH       2  // uid, gid, mode
+#define INODE_MASK_LINK       4  // nlink, anchored
+#define INODE_MASK_FILE       8  // mtime, size.
+// atime?
 
-#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME)
-//#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME|INODE_MASK_ATIME)
+#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_AUTH|INODE_MASK_LINK|INODE_MASK_FILE)
+
+#define INODE_MASK_SIZE       INODE_MASK_FILE // size, blksize, blocks
+#define INODE_MASK_MTIME      INODE_MASK_FILE // mtime
+#define INODE_MASK_ATIME      INODE_MASK_FILE // atime
+#define INODE_MASK_CTIME      (INODE_MASK_FILE|INODE_MASK_AUTH|INODE_MASK_LINK) // ctime
 
 struct inode_t {
   // base (immutable)
@@ -242,23 +245,22 @@ struct inode_t {
   // affected by any inode change...
   utime_t    ctime;   // inode change time
 
-  // nlink
-  int        nlink;  
-  bool       anchored;          // auth only?
-
   // perm (namespace permissions)
   mode_t     mode;
   uid_t      uid;
   gid_t      gid;
+
+  // nlink
+  int        nlink;  
+  bool       anchored;          // auth only?
 
   // file (data access)
   off_t      size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
  
-  int        mask;
-
   // special stuff
+  int           mask;  // used for client stat.  hack.
   version_t     version;           // auth only
   version_t     file_data_version; // auth only
 
