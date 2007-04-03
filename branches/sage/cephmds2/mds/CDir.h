@@ -291,19 +291,13 @@ class CDir : public MDSCacheObject {
 
   // -- state --
   bool is_complete() { return state & STATE_COMPLETE; }
-
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
-
-  bool is_hashed() { return false; }
-  bool is_hashing() { return false; }
 
   bool is_rep() { 
     if (dir_rep == REP_NONE) return false;
     return true;
   }
- 
-
  
   // -- fetch --
   object_t get_ondisk_object() { return object_t(ino(), frag); }
@@ -319,17 +313,12 @@ class CDir : public MDSCacheObject {
   void _committed(version_t v);
   void wait_for_commit(Context *c, version_t v=0);
 
-
-
   // -- dirtyness --
   version_t get_version() { return version; }
   void set_version(version_t v) { projected_version = version = v; }
   version_t get_projected_version() { return projected_version; }
-  
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
-  // as in, we're committing the current version.
-  //void set_committing_version() { committing_version = version; }
   void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty(version_t min=0);
@@ -337,8 +326,6 @@ class CDir : public MDSCacheObject {
   void mark_dirty(version_t pv);
   void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
-
-
 
 
   // -- reference counting --

@@ -3170,9 +3170,6 @@ public:
 void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
 {
   dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << endl;
-
-  //assert(0);
-
   assert(in->inode.anchored == false);
 
   // predirty, prepare log entry

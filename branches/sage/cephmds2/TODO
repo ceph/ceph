@@ -36,20 +36,24 @@ mds
     - put frag size/mtime in fragmap in inode?  we will need that anyway for stat on dirs
       - will need to make inode discover/import_decode smart about dirfrag auth
     - or, only put frag size/mtime in inode when frag is closed.  otherwise, soft (journaled) state, possibly on another mds.
-  - 
+  - need to move state from replicas to auth.  simplelock doesn't currently support that.
+    - ScatterLock or something?  hrm.
 
 - discover
 /  - hard link dentries
   - open_remote_ino needs major work...
 
-- rejoin and replicas that are not in recovered node's cache...  fetch storm?
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 
+- rejoin and replicas that are not in recovered node's cache...  fetch storm?
+
 - remote xlocks
   - drop remote locks on request finish
     - handled by individual MDSCacheObject _finish()'s
+
+- properly recover lock state on rejoin...
 
 - clientmap request history
   - hmm, so we need completion codes, but only after recovery.

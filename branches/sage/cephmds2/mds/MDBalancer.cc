@@ -496,7 +496,6 @@ void MDBalancer::do_rebalance(int beat)
         multimap<int,CDir*>::iterator plast = p.first++;
         
         if (dir->inode->is_root()) continue;
-        if (dir->is_hashed()) continue;
         if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
         double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
         assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
@@ -617,7 +616,6 @@ void MDBalancer::find_exports(CDir *dir,
 	 ++p) {
       CDir *dir = *p;
       if (!dir->is_auth()) continue;
-      if (dir->is_hashed()) continue;
       if (already_exporting.count(dir)) continue;
 
       if (dir->is_frozen()) continue;  // can't export this right now!
@@ -735,7 +733,6 @@ void MDBalancer::hit_dir(CDir *dir, int type)
     if (((v > g_conf.mds_bal_hash_rd && type == META_POP_IRD) ||
          //(v > g_conf.mds_bal_hash_wr && type == META_POP_IWR) ||
          (v > g_conf.mds_bal_hash_wr && type == META_POP_DWR)) &&
-        !(dir->is_hashed() || dir->is_hashing()) &&
         hash_queue.count(dir->ino()) == 0) {
       dout(0) << "hit_dir " << type << " pop is " << v << ", putting in hash_queue: " << *dir << endl;
       hash_queue.insert(dir->ino());

@@ -449,7 +449,6 @@ void Migrator::export_dir(CDir *dir, int dest)
   dout(7) << "export_dir " << *dir << " to " << dest << endl;
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
-  assert(!dir->is_hashed());
    
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << endl;
@@ -465,10 +464,6 @@ void Migrator::export_dir(CDir *dir, int dest)
   if (dir->is_frozen() ||
       dir->is_freezing()) {
     dout(7) << " can't export, freezing|frozen.  wait for other exports to finish first." << endl;
-    return;
-  }
-  if (dir->is_hashed()) {
-    dout(7) << "can't export hashed dir right now.  implement me carefully later." << endl;
     return;
   }
   if (dir->state_test(CDir::STATE_EXPORTING)) {
@@ -840,81 +835,73 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
 
   list<CDir*> subdirs;
 
-  if (dir->is_hashed()) {
-    // fix state
-    dir->state_clear( CDir::STATE_AUTH );
-
-  } else {
+  if (dir->is_dirty())
+    dir->mark_clean();
+  
+  // discard most dir state
+  dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+  
+  // suck up all waiters
+  list<Context*> waiting;
+  dir->take_waiting(CDir::WAIT_ANY, waiting);    // all dir waiters
+  fin->take(waiting);
+  
+  // dentries
+  CDir_map_t::iterator it;
+  for (it = dir->begin(); it != dir->end(); it++) {
+    CDentry *dn = it->second;
+    CInode *in = dn->get_inode();
     
-    if (dir->is_dirty())
-      dir->mark_clean();
+    num_exported++;
     
-    // discard most dir state
-    dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+    // -- dentry
+    dout(7) << "encode_export_dir exporting " << *dn << endl;
     
-    // suck up all waiters
-    list<Context*> waiting;
-    dir->take_waiting(CDir::WAIT_ANY, waiting);    // all dir waiters
-    fin->take(waiting);
+    // name
+    _encode(it->first, enc_dir);
     
-    // inodes
+    // state
+    it->second->encode_export_state(enc_dir);
     
-    CDir_map_t::iterator it;
-    for (it = dir->begin(); it != dir->end(); it++) {
-      CDentry *dn = it->second;
-      CInode *in = dn->get_inode();
-      
-      num_exported++;
-      
-      // -- dentry
-      dout(7) << "encode_export_dir exporting " << *dn << endl;
-
-      // name
-      _encode(it->first, enc_dir);
-      
-      // state
-      it->second->encode_export_state(enc_dir);
-
-      // points to...
-
-      // null dentry?
-      if (dn->is_null()) {
-        enc_dir.append("N", 1);  // null dentry
-        continue;
-      }
-      
-      if (dn->is_remote()) {
-        // remote link
-        enc_dir.append("L", 1);  // remote link
-        
-        inodeno_t ino = dn->get_remote_ino();
-        enc_dir.append((char*)&ino, sizeof(ino));
-        continue;
-      }
-      
-      // primary link
-      // -- inode
-      enc_dir.append("I", 1);    // inode dentry
-      
-      encode_export_inode(in, enc_dir, newauth);  // encode, and (update state for) export
-      
-      // directory?
-      list<CDir*> dfs;
-      in->get_dirfrags(dfs);
-      for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-	CDir *dir = *p;
-	if (!dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	  // include nested dirfrag
-	  assert(dir->get_dir_auth().first == CDIR_AUTH_PARENT);
-	  subdirs.push_back(dir);  // it's ours, recurse (later)
-	}
-      }
-      
-      // waiters
-      list<Context*> waiters;
-      in->take_waiting(CInode::WAIT_ANY, waiters);
-      fin->take(waiters);
+    // points to...
+    
+    // null dentry?
+    if (dn->is_null()) {
+      enc_dir.append("N", 1);  // null dentry
+      continue;
     }
+    
+    if (dn->is_remote()) {
+      // remote link
+      enc_dir.append("L", 1);  // remote link
+      
+      inodeno_t ino = dn->get_remote_ino();
+      enc_dir.append((char*)&ino, sizeof(ino));
+      continue;
+    }
+    
+    // primary link
+    // -- inode
+    enc_dir.append("I", 1);    // inode dentry
+    
+    encode_export_inode(in, enc_dir, newauth);  // encode, and (update state for) export
+    
+    // directory?
+    list<CDir*> dfs;
+    in->get_dirfrags(dfs);
+    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+      CDir *dir = *p;
+      if (!dir->state_test(CDir::STATE_EXPORTBOUND)) {
+	// include nested dirfrag
+	assert(dir->get_dir_auth().first == CDIR_AUTH_PARENT);
+	subdirs.push_back(dir);  // it's ours, recurse (later)
+      }
+    }
+    
+    // waiters
+    list<Context*> waiters;
+    in->take_waiting(CInode::WAIT_ANY, waiters);
+    fin->take(waiters);
   }
 
   // add to dirstatelist
@@ -1866,76 +1853,70 @@ int Migrator::decode_import_dir(bufferlist& bl,
 
   int num_imported = 0;
 
-  if (dir->is_hashed()) {
-
-    // do nothing; dir is hashed
-  } else {
-    // take all waiters on this dir
-    // NOTE: a pass of imported data is guaranteed to get all of my waiters because
-    // a replica's presense in my cache implies/forces it's presense in authority's.
-    list<Context*> waiters;
+  // take all waiters on this dir
+  // NOTE: a pass of imported data is guaranteed to get all of my waiters because
+  // a replica's presense in my cache implies/forces it's presense in authority's.
+  list<Context*> waiters;
+  
+  dir->take_waiting(CDir::WAIT_ANY, waiters);
+  for (list<Context*>::iterator it = waiters.begin();
+       it != waiters.end();
+       it++) 
+    import_root->add_waiter(CDir::WAIT_IMPORTED, *it);
+  
+  dout(15) << "doing contents" << endl;
+  
+  // contents
+  long nden = dstate.get_nden();
+  
+  for (; nden>0; nden--) {
     
-    dir->take_waiting(CDir::WAIT_ANY, waiters);
-    for (list<Context*>::iterator it = waiters.begin();
-         it != waiters.end();
-         it++) 
-      import_root->add_waiter(CDir::WAIT_IMPORTED, *it);
+    num_imported++;
     
-    dout(15) << "doing contents" << endl;
+    // dentry
+    string dname;
+    _decode(dname, bl, off);
     
-    // contents
-    long nden = dstate.get_nden();
-
-    for (; nden>0; nden--) {
+    CDentry *dn = dir->lookup(dname);
+    if (!dn)
+      dn = dir->add_dentry(dname);  // null
+    
+    // decode state
+    dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
+    dout(15) << "decode_import_dir got " << *dn << endl;
+    
+    // points to...
+    char icode;
+    bl.copy(off, 1, &icode);
+    off++;
+    
+    if (icode == 'N') {
+      // null dentry
+      assert(dn->is_null());  
       
-      num_imported++;
-      
-      // dentry
-      string dname;
-      _decode(dname, bl, off);
-
-      CDentry *dn = dir->lookup(dname);
-      if (!dn)
-        dn = dir->add_dentry(dname);  // null
-
-      // decode state
-      dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
-      dout(15) << "decode_import_dir got " << *dn << endl;
-
-      // points to...
-      char icode;
-      bl.copy(off, 1, &icode);
-      off++;
-      
-      if (icode == 'N') {
-        // null dentry
-        assert(dn->is_null());  
-        
-        // fall thru
-      }
-      else if (icode == 'L') {
-        // remote link
-        inodeno_t ino;
-        bl.copy(off, sizeof(ino), (char*)&ino);
-        off += sizeof(ino);
-	if (dn->is_remote()) {
-	  assert(dn->get_remote_ino() == ino);
-	} else {
-	  dir->link_inode(dn, ino);
-	}
-      }
-      else if (icode == 'I') {
-        // inode
-        decode_import_inode(dn, bl, off, oldauth);
-      }
-
-      // add dentry to journal entry
-      if (le)
-	le->metablob.add_dentry(dn, true);  // Hmm: might we do dn->is_dirty() here instead?  
+      // fall thru
     }
-
+    else if (icode == 'L') {
+      // remote link
+      inodeno_t ino;
+      bl.copy(off, sizeof(ino), (char*)&ino);
+      off += sizeof(ino);
+      if (dn->is_remote()) {
+	assert(dn->get_remote_ino() == ino);
+      } else {
+	dir->link_inode(dn, ino);
+      }
+    }
+    else if (icode == 'I') {
+      // inode
+      decode_import_inode(dn, bl, off, oldauth);
+    }
+    
+    // add dentry to journal entry
+    if (le)
+      le->metablob.add_dentry(dn, dn->is_dirty());
   }
-
+  
   dout(7) << "decode_import_dir done " << *dir << endl;
   return num_imported;
 }
