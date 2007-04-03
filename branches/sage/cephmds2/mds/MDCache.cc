@@ -742,7 +742,7 @@ void MDCache::get_fullauth_subtrees(set<CDir*>& s)
        p != subtrees.end();
        ++p) {
     CDir *root = p->first;
-    if (root->is_fullauth())
+    if (root->is_full_dir_auth())
       s.insert(root);
   }
 }
@@ -772,7 +772,7 @@ int MDCache::num_subtrees_fullauth()
        p != subtrees.end();
        ++p) {
     CDir *root = p->first;
-    if (root->is_fullauth())
+    if (root->is_full_dir_auth())
       n++;
   }
   return n;
@@ -785,7 +785,7 @@ int MDCache::num_subtrees_fullnonauth()
        p != subtrees.end();
        ++p) {
     CDir *root = p->first;
-    if (root->is_fullnonauth())
+    if (root->is_full_dir_nonauth())
       n++;
   }
   return n;
@@ -1100,7 +1100,7 @@ void MDCache::handle_import_map(MMDSImportMap *m)
       assert(migrator->is_importing(dir->dirfrag()));
       assert(migrator->get_import_state(dir->dirfrag()) == Migrator::IMPORT_ACKING);
       if (migrator->get_import_peer(dir->dirfrag()) == from) {
-	if (dir->auth_is_ambiguous()) {
+	if (dir->is_ambiguous_dir_auth()) {
 	  dout(7) << "ambiguous import succeeded on " << *dir << endl;
 	  migrator->import_finish(dir, true);	// don't wait for log flush
 	} else {
@@ -1332,7 +1332,7 @@ void MDCache::send_cache_rejoins()
        ++p) {
     CDir *dir = p->first;
     assert(dir->is_subtree_root());
-    assert(!dir->auth_is_ambiguous());
+    assert(!dir->is_ambiguous_dir_auth());
 
     int auth = dir->get_dir_auth().first;
     assert(auth >= 0);
@@ -2284,7 +2284,7 @@ bool MDCache::shutdown_pass()
       CDir *dir = it->first;
       if (dir->get_inode()->is_stray()) continue;
       if (dir->is_frozen() || dir->is_freezing()) continue;
-      if (!dir->is_fullauth()) continue;
+      if (!dir->is_full_dir_auth()) continue;
       ls.push_back(dir);
     }
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -2535,7 +2535,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         if (cur->is_waiter_for(CInode::WAIT_DIR)) {
           dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
         } 
-	else if (cur->auth_is_ambiguous()) {
+	else if (cur->is_ambiguous_auth()) {
 	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
 	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, ondelay);
 	  return 1;
@@ -2729,7 +2729,7 @@ int MDCache::path_traverse(MDRequest *mdr,
           dout(7) << "traverse: already waiting for discover " << want.get_path()
 		  << " from " << *curdir << endl;
         } 
-	else if (curdir->auth_is_ambiguous()) {
+	else if (curdir->is_ambiguous_auth()) {
 	  dout(7) << "traverse: waiting for single auth on " << *curdir << endl;
 	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
 	  return 1;
@@ -2754,7 +2754,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         // forward
         dout(7) << "traverse: not auth for " << path << " in " << *curdir << endl;
 	
-	if (curdir->auth_is_ambiguous()) {
+	if (curdir->is_ambiguous_auth()) {
 	  // wait
 	  dout(7) << "traverse: waiting for single auth in " << *curdir << endl;
 	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
@@ -2927,6 +2927,7 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 MDRequest *MDCache::request_start(metareqid_t ri)
 {
   MDRequest *mdr = new MDRequest(ri);
+  active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
 }
@@ -2934,8 +2935,24 @@ MDRequest *MDCache::request_start(metareqid_t ri)
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
   MDRequest *mdr = new MDRequest(req->get_reqid(), req);
+  active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
+}
+
+MDRequest *MDCache::request_start(MLock *req)
+{
+  MDRequest *mdr = new MDRequest(req->get_reqid(), req);
+  active_requests[mdr->reqid] = mdr;
+  dout(7) << "request_start " << *mdr << endl;
+  return mdr;
+}
+
+MDRequest *MDCache::request_get(metareqid_t rid)
+{
+  assert(active_requests.count(rid));
+  dout(7) << "request_get " << rid << " " << *active_requests[rid] << endl;
+  return active_requests[rid];
 }
 
 void MDCache::request_finish(MDRequest *mdr)
@@ -2971,9 +2988,9 @@ void MDCache::dispatch_request(MDRequest *mdr)
     mds->server->dispatch_request(mdr);
     break;
 
-    //case MSG_MDS_LOCK:
-    //mds->locker->handle_lock_dn((MLock*)mdr->request);
-    //break;
+  case MSG_MDS_LOCK:
+    mds->locker->handle_lock((MLock*)mdr->request);
+    break;
 
   default:
     assert(0);  // shouldn't get here
@@ -3030,25 +3047,19 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // drop locks
   request_drop_locks(mdr);
 
-  // auth pins
+  // drop auth pins
   mdr->drop_auth_pins();
 
   // drop cache pins
-  for (set<CInode*>::iterator it = mdr->inode_pins.begin();
-       it != mdr->inode_pins.end();
+  for (set<MDSCacheObject*>::iterator it = mdr->pins.begin();
+       it != mdr->pins.end();
        it++) 
-    (*it)->put(CInode::PIN_REQUEST);
-  mdr->inode_pins.clear();
-  for (set<CDentry*>::iterator it = mdr->dentry_pins.begin();
-       it != mdr->dentry_pins.end();
-       it++) 
-    (*it)->put(CDentry::PIN_REQUEST);
-  mdr->dentry_pins.clear();
-  for (set<CDir*>::iterator it = mdr->dir_pins.begin();
-       it != mdr->dir_pins.end();
-       it++) 
-    (*it)->put(CDir::PIN_REQUEST);
-  mdr->dir_pins.clear();
+    (*it)->put(MDSCacheObject::PIN_REQUEST);
+  mdr->pins.clear();
+
+  // remove from map
+  active_requests.erase(mdr->reqid);
+  delete mdr;
 
   // log some stats *****
   if (mds->logger) {
@@ -3329,7 +3340,7 @@ void MDCache::eval_stray(CDentry *dn)
 	reintegrate_stray(dn, rlink);
       
       if (!rlink->is_auth() &&
-	  !in->auth_is_ambiguous()) 
+	  !in->is_ambiguous_auth()) 
 	migrate_stray(dn, rlink->authority().first);
     }
   } else {
@@ -3424,8 +3435,7 @@ void MDCache::handle_inode_link(MInodeLink *m)
   
   // get request.
   // we should have this bc the inode is xlocked.
-  assert(slave_requests.count(m->get_reqid()));
-  MDRequest *mdr = slave_requests[m->get_reqid()];
+  MDRequest *mdr = request_get(m->get_reqid());
 
   switch (m->get_op()) {
     // auth
@@ -3597,7 +3607,7 @@ void MDCache::handle_discover(MDiscover *dis)
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "not adding unwanted base dir " << *curdir << endl;
     } else {
-      assert(!curdir->auth_is_ambiguous()); // would be frozen.
+      assert(!curdir->is_ambiguous_auth()); // would be frozen.
       reply->add_dir( curdir->replicate_to(dis->get_asker()) );
       dout(7) << "added dir " << *curdir << endl;
     }
@@ -3872,8 +3882,8 @@ CDir *MDCache::add_replica_dir(CInode *diri,
 
     // is this a dir_auth delegation boundary?
     if (from != diri->authority().first ||
-	diri->auth_is_ambiguous() ||
-	diri->ino() == MDS_INO_ROOT)
+	diri->is_ambiguous_auth() ||
+	diri->ino() < MDS_INO_BASE)
       adjust_subtree_auth(dir, from);
     
     dout(7) << "add_replica_dir added " << *dir << " nonce " << dir->replica_nonce << endl;

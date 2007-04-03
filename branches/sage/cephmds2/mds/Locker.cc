@@ -692,17 +692,6 @@ void Locker::handle_lock(MLock *m)
     break;
 
   case LOCK_OTYPE_IHARD:
-    {
-      CInode *in = mdcache->get_inode(m->get_ino());
-      if (!in) {
-	dout(7) << "dont' have ino " << m->get_ino() << endl;
-	delete m;
-	return;
-      }
-      handle_simple_lock(&in->hardlock, m);
-    }
-    break;
-
   case LOCK_OTYPE_IFILE:
     {
       CInode *in = mdcache->get_inode(m->get_ino());
@@ -711,7 +700,14 @@ void Locker::handle_lock(MLock *m)
 	delete m;
 	return;
       }
-      handle_file_lock(&in->filelock, m);
+      switch (m->get_otype()) {
+      case LOCK_OTYPE_IHARD:
+	handle_simple_lock(&in->hardlock, m);
+	break;
+      case LOCK_OTYPE_IFILE:
+	handle_file_lock(&in->filelock, m);
+	break;
+      }
     }
     break;
 
@@ -753,9 +749,19 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     // update lock and reply
     lock->set_state(LOCK_LOCK);
       
+    mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
+			  from, MDS_PORT_LOCKER);
+    break;
+
+
+  case LOCK_AC_REQXLOCKACK:
+    dout(7) << "handle_simple_lock got remote xlock on "
+	    << *lock << " " << *lock->get_parent() << endl;
     {
-      MLock *reply = new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid());
-      mds->send_message_mds(reply, from, MDS_PORT_LOCKER);
+      MDRequest *mdr = mdcache->request_get(m->get_reqid());
+      mdr->xlocks.insert(lock);
+      mdr->locks.insert(lock);
+      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
     }
     break;
 
@@ -773,6 +779,46 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 	      << ", last one" << endl;
       simple_eval(lock);
     }
+    break;
+
+  case LOCK_AC_REQXLOCK:
+    assert(lock->get_parent()->is_auth());
+    {
+      // register request
+      MDRequest *mdr = mdcache->request_start(m);
+
+      dout(7) << "handle_simple_lock " << m->get_source() << " " << *mdr << " requesting xlock "
+	      << *lock << " on " << *lock->get_parent()
+	      << endl;
+
+      if (!simple_xlock_start(lock, mdr))
+	return;
+
+      // ack
+      MLock *m = new MLock(lock, LOCK_AC_REQXLOCKACK, mds->get_nodeid());
+      mds->send_message_mds(m, mdr->request->get_source().num(), MDS_PORT_LOCKER);
+    }
+    return;
+
+  case LOCK_AC_UNXLOCK:
+    assert(lock->get_parent()->is_auth());
+    {
+      // get request
+      MDRequest *mdr = mdcache->request_get(m->get_reqid());
+
+      dout(7) << "handle_simple_lock " << m->get_source() << " " << *mdr << " dropping xlock "
+	      << *lock << " on " << *lock->get_parent()
+	
+	      << endl;
+
+      simple_xlock_finish(lock, mdr);
+
+      if (mdr->locks.empty()) 
+	mdcache->request_finish(mdr);
+      
+    }
+    return;
+
   }
 
   delete m;
@@ -928,6 +974,11 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   dout(7) << "simple_xlock_start  on " << *lock << " on " << *lock->get_parent() << endl;
 
+  // xlock by me?
+  if (lock->is_xlocked() &&
+      lock->get_xlocked_by() == mdr) 
+    return true;
+
   // auth?
   if (lock->get_parent()->is_auth()) {
     // auth
@@ -939,9 +990,6 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     // already locked?
     if (lock->get_state() == LOCK_LOCK) {
       if (lock->is_xlocked()) {
-	// by me?
-	if (lock->get_xlocked_by() == mdr) 
-	  return true;  
 	// by someone else.
 	lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mdr));
 	return false;
@@ -959,17 +1007,29 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     }
   } else {
     // replica
-
-    assert(0);
+    
+    // wait for single auth
+    if (lock->get_parent()->is_ambiguous_auth()) {
+      lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
+				     new C_MDS_RetryRequest(mdcache, mdr));
+      return false;
+    }
 
     // wait for sync.
+    // (???????????)
     if (lock->get_state() != LOCK_SYNC) {
       lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return false;
     }
 
-    // do remote xlock
-    assert(0);
+    // send lock request
+    int auth = lock->get_parent()->authority().first;
+    MLock *m = new MLock(lock, LOCK_AC_REQXLOCK, mds->get_nodeid());
+    mds->send_message_mds(m, auth, MDS_PORT_LOCKER);
+  
+    // wait
+    lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
   }
 }
 

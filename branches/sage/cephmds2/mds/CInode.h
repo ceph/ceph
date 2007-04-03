@@ -94,7 +94,7 @@ class CInode : public MDSCacheObject {
   // -- waiters --
   static const int WAIT_SLAVEAGREE  = (1<<0);
   static const int WAIT_AUTHPINNABLE = (1<<1);
-  static const int WAIT_SINGLEAUTH  = (1<<2);
+  //static const int WAIT_SINGLEAUTH  = (1<<2);
   static const int WAIT_DIR         = (1<<3);
   static const int WAIT_LINK        = (1<<4);  // as in remotely nlink++
   static const int WAIT_ANCHORED    = (1<<5);
@@ -178,9 +178,9 @@ protected:
   
 
   // -- accessors --
-  bool is_file()    { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_FILE)    ? true:false; }
-  bool is_symlink() { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) ? true:false; }
-  bool is_dir()     { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR)     ? true:false; }
+  bool is_file()    { return inode.is_file(); }
+  bool is_symlink() { return inode.is_symlink(); }
+  bool is_dir()     { return inode.is_dir(); }
 
   bool is_anchored() { return inode.anchored; }
   bool is_anchoring() { return state_test(STATE_ANCHORING); }
@@ -219,9 +219,6 @@ protected:
   // -- dirtyness --
   version_t get_version() { return inode.version; }
 
-  bool is_dirty() { return state & STATE_DIRTY; }
-  bool is_clean() { return !is_dirty(); }
-  
   version_t pre_dirty();
   void _mark_dirty();
   void mark_dirty(version_t projected_dirv);
@@ -358,7 +355,6 @@ public:
 
   // -- authority --
   pair<int,int> authority();
-  bool auth_is_ambiguous();
 
 
   // -- auth pins --

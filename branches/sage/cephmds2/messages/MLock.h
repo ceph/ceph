@@ -34,15 +34,13 @@
 #define LOCK_AC_MIXEDACK     2
 #define LOCK_AC_LOCKACK      3
 
-
 #define LOCK_AC_REQREAD      4
 #define LOCK_AC_REQWRITE     5
 
 #define LOCK_AC_REQXLOCK     6
-#define LOCK_AC_REQXLOCKC    7 // create if necessary
-#define LOCK_AC_UNXLOCK      8
+#define LOCK_AC_UNXLOCK      7
+#define LOCK_AC_FINISH       8
 
-#define lock_ac_name(x)      
 
 
 class MLock : public Message {
@@ -54,6 +52,8 @@ class MLock : public Message {
   dirfrag_t dirfrag;
   string    dn;     // dentry name
   
+  metareqid_t reqid;  // for remote lock requests
+  
   bufferlist data;  // and possibly some data
 
  public:
@@ -64,6 +64,7 @@ class MLock : public Message {
   int get_asker() { return asker; }
   int get_action() { return action; }
   int get_otype() { return otype; }
+  metareqid_t get_reqid() { return reqid; }
 
   MLock() {}
   MLock(int action, int asker) :
@@ -96,6 +97,7 @@ class MLock : public Message {
     this->dirfrag = df;
     this->dn = dn;
   }
+  void set_reqid(metareqid_t ri) { reqid = ri; }
   void set_data(bufferlist& data) {
     this->data.claim( data );
   }
@@ -112,6 +114,7 @@ class MLock : public Message {
     off += sizeof(ino);
     payload.copy(off,sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
+    ::_decode(reqid, payload, off);
     ::_decode(dn, payload, off);
     ::_decode(data, payload, off);
   }
@@ -121,6 +124,7 @@ class MLock : public Message {
     payload.append((char*)&otype, sizeof(otype));
     payload.append((char*)&ino, sizeof(ino));
     payload.append((char*)&dirfrag, sizeof(dirfrag));
+    ::_encode(reqid, payload);
     ::_encode(dn, payload);
     ::_encode(data, payload);
   }

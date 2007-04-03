@@ -44,15 +44,6 @@ class Context;
 class CDirDiscover;
 
 
-// -- authority delegation --
-// directory authority types
-//  >= 0 is the auth mds
-#define CDIR_AUTH_PARENT   -1   // default
-#define CDIR_AUTH_UNKNOWN  -2
-#define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
-#define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
-#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
-
 
 ostream& operator<<(ostream& out, class CDir& dir);
 
@@ -145,7 +136,7 @@ class CDir : public MDSCacheObject {
   static const int WAIT_UNFREEZE     = (1<<3);  // unfreeze
   static const int WAIT_AUTHPINNABLE = WAIT_UNFREEZE;
   static const int WAIT_IMPORTED     = (1<<4);  // import finish
-  static const int WAIT_SINGLEAUTH   = (1<<5); 
+  //static const int WAIT_SINGLEAUTH   = (1<<5); 
 
   static const int WAIT_DNLOCK_OFFSET = 6;
 
@@ -262,20 +253,19 @@ class CDir : public MDSCacheObject {
 
  public:
   pair<int,int> authority();
-  pair<int,int> dentry_authority(const string& d);
   pair<int,int> get_dir_auth() { return dir_auth; }
   void set_dir_auth(pair<int,int> a, bool iamauth=false);
   void set_dir_auth(int a) { 
     set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN), false); 
   }
-  bool auth_is_ambiguous() {
+  bool is_ambiguous_dir_auth() {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }
-  bool is_fullauth() {
-    return is_auth() && !auth_is_ambiguous();
+  bool is_full_dir_auth() {
+    return is_auth() && !is_ambiguous_dir_auth();
   }
-  bool is_fullnonauth() {
-    return !is_auth() && !auth_is_ambiguous();
+  bool is_full_dir_nonauth() {
+    return !is_auth() && !is_ambiguous_dir_auth();
   }
   
   bool is_subtree_root();
@@ -301,10 +291,7 @@ class CDir : public MDSCacheObject {
 
   // -- state --
   bool is_complete() { return state & STATE_COMPLETE; }
-  bool is_dirty() { return state_test(STATE_DIRTY); }
-  bool is_clean() { return !state_test(STATE_DIRTY); }
 
-  bool is_auth() { return state & STATE_AUTH; }
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
 

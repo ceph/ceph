@@ -1001,35 +1001,6 @@ bool CDir::is_subtree_root()
 
 
 
-pair<int,int> CDir::dentry_authority(const string& dn)
-{
-  // forget hashing for now.
-  return authority();
-
-  /*
-  // hashing -- subset of nodes have hashed the contents
-  if (is_hashing() && !hashed_subset.empty()) {
-    int hashauth = cache->hash_dentry( inode->ino(), dn );  // hashed
-    if (hashed_subset.count(hashauth))
-      return hashauth;
-  }
-
-  // hashed
-  if (is_hashed()) {
-    return cache->hash_dentry( inode->ino(), dn );  // hashed
-  }
-  
-  if (dir_auth == CDIR_AUTH_PARENT) {
-    //dout(15) << "dir_auth = parent at " << *this << endl;
-    return inode->authority(a2);       // same as my inode
-  }
-
-  // it's explicit for this whole dir
-  //dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
-  return get_dir_auth(a2);
-  */
-}
-
 
 /** set_dir_auth
  *

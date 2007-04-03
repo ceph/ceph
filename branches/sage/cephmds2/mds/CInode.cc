@@ -516,11 +516,6 @@ pair<int,int> CInode::authority()
   return CDIR_AUTH_UNDEF;
 }
 
-bool CInode::auth_is_ambiguous()
-{
-  return authority().second != CDIR_AUTH_UNKNOWN;
-}
-
 
 CInodeDiscover* CInode::replicate_to( int rep )
 {

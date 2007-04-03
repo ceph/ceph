@@ -510,7 +510,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 	dn->is_remote() &&
 	!dn->inode && 
 	!dn->is_auth()) {
-      if (dn->dir->auth_is_ambiguous()) {
+      if (dn->is_ambiguous_auth()) {
 	dout(10) << "waiting for single auth on " << *dn << endl;
 	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
       } else {
@@ -527,7 +527,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   // fw to inode auth?
   if (want_auth && !ref->is_auth()) {
-    if (ref->auth_is_ambiguous()) {
+    if (ref->is_ambiguous_auth()) {
       dout(10) << "waiting for single auth on " << *ref << endl;
       ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
     } else {

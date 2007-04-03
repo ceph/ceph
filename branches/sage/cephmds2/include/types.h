@@ -263,8 +263,8 @@ struct inode_t {
   version_t     file_data_version; // auth only
 
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
-  bool is_dir() { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
-  bool is_file() { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
+  bool is_dir()     { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
+  bool is_file()    { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
 };
 
 

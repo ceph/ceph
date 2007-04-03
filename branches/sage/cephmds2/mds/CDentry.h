@@ -155,16 +155,13 @@ public:
   void make_path(string& p);
   void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
 
-  // -- state
+  // -- version --
   version_t get_version() { return version; }
   void set_version(version_t v) { projected_version = version = v; }
   version_t get_projected_version() { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
   
   pair<int,int> authority();
-
-  bool is_dirty() { return state & STATE_DIRTY; }
-  bool is_clean() { return !is_dirty(); }
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty();

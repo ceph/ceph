@@ -47,8 +47,9 @@ mds
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 
-- locking rewrites
-  - remote xlocks
+- remote xlocks
+  - drop remote locks on request finish
+    - handled by individual MDSCacheObject _finish()'s
 
 - clientmap request history
   - hmm, so we need completion codes, but only after recovery.

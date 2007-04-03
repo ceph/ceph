@@ -57,13 +57,13 @@ class MDRequest;
 
 class SimpleLock {
 public:
-  static const int WAIT_RD     = (1<<0);  // to read
-  static const int WAIT_NORD   = (1<<1);  // for last rdlock to finish
-  static const int WAIT_WR     = (1<<2);  // to write
-  //static const int WAIT_RDWR   = (1<<3);  // to read+write
-  static const int WAIT_LOCK   = (1<<4);  // for locked state
-  static const int WAIT_STABLE = (1<<5);  // for a stable state
-  static const int WAIT_BITS   = 6;
+  static const int WAIT_RD          = (1<<0);  // to read
+  static const int WAIT_NORD        = (1<<1);  // for last rdlock to finish
+  static const int WAIT_WR          = (1<<2);  // to write
+  static const int WAIT_LOCK        = (1<<3);  // for locked state
+  static const int WAIT_STABLE      = (1<<4);  // for a stable state
+  static const int WAIT_REMOTEXLOCK = (1<<5);  // for a remote xlock
+  static const int WAIT_BITS        = 6;
 
 protected:
   // parent (what i lock)

@@ -101,7 +101,7 @@ bool EMetaBlob::has_expired(MDS *mds)
       continue;       // yay
     }
     
-    if (dir->auth_is_ambiguous()) {
+    if (dir->is_ambiguous_dir_auth()) {
       CDir *ex = mds->mdcache->get_subtree_root(dir);
       if (ex->is_exporting()) {
 	// wait until export is acked (logged on remote) and committed (logged locally)
@@ -179,7 +179,7 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       continue;   // yay
     }
     
-    if (dir->auth_is_ambiguous()) {
+    if (dir->is_ambiguous_dir_auth()) {
       CDir *ex = mds->mdcache->get_subtree_root(dir);
       if (ex->is_exporting()) {
 	// wait until export is acked (logged on remote) and committed (logged locally)

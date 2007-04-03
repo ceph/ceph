@@ -245,6 +245,17 @@ class SimpleLock;
 
 class MDSCacheObject;
 
+// -- authority delegation --
+// directory authority types
+//  >= 0 is the auth mds
+#define CDIR_AUTH_PARENT   -1   // default
+#define CDIR_AUTH_UNKNOWN  -2
+#define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
+#define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
+#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
+
+
+
 // print hack
 struct mdsco_db_line_prefix {
   MDSCacheObject *object;
@@ -260,11 +271,11 @@ class MDSCacheObject {
  public:
   // -- pins --
   const static int PIN_REPLICATED =  1000;
-  static const int PIN_DIRTY      =  1001;
+  const static int PIN_DIRTY      =  1001;
   const static int PIN_RDLOCK     = -1002;
   const static int PIN_XLOCK      =  1003;
-  static const int PIN_REQUEST    = -1004;
-  static const int PIN_WAITER     =  1005;
+  const static int PIN_REQUEST    = -1004;
+  const static int PIN_WAITER     =  1005;
   
   const char *generic_pin_name(int p) {
     switch (p) {
@@ -280,7 +291,10 @@ class MDSCacheObject {
 
   // -- state --
   const static int STATE_AUTH  = (1<<30);
-  static const int STATE_DIRTY = (1<<29);
+  const static int STATE_DIRTY = (1<<29);
+
+  // -- wait --
+  const static int WAIT_SINGLEAUTH = (1<<30);
 
 
   // ============================================
@@ -311,6 +325,15 @@ class MDSCacheObject {
   void state_reset(unsigned s) { state = s; }
 
   bool is_auth() { return state_test(STATE_AUTH); }
+  bool is_dirty() { return state & STATE_DIRTY; }
+  bool is_clean() { return !is_dirty(); }
+
+  // --------------------------------------------
+  // authority
+  virtual pair<int,int> authority() = 0;
+  bool is_ambiguous_auth() {
+	return authority().second != CDIR_AUTH_UNKNOWN;
+  }
 
   // --------------------------------------------
   // pins

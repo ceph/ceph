@@ -396,7 +396,7 @@ void Migrator::audit()
     assert(dir);
     if (p->second == IMPORT_PREPPING) 
       continue;
-    assert(dir->auth_is_ambiguous());
+    assert(dir->is_ambiguous_dir_auth());
     assert(dir->authority().first  == mds->get_nodeid() ||
 	   dir->authority().second == mds->get_nodeid());
   }
@@ -408,7 +408,7 @@ void Migrator::audit()
     CDir *dir = p->first;
     if (p->second == EXPORT_DISCOVERING ||
 	p->second == EXPORT_FREEZING) continue;
-    assert(dir->auth_is_ambiguous());
+    assert(dir->is_ambiguous_dir_auth());
     assert(dir->authority().first  == mds->get_nodeid() ||
 	   dir->authority().second == mds->get_nodeid());
   }
@@ -596,7 +596,7 @@ void Migrator::export_frozen(CDir *dir)
       // include dir?
       // note: don't replicate ambiguous auth items!  they're
       //    frozen anyway.
-      if (cur->is_auth() && !cur->auth_is_ambiguous()) {
+      if (cur->is_auth() && !cur->is_ambiguous_auth()) {
         prep->add_dir( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
         dout(7) << "  added " << *cur << endl;
       }

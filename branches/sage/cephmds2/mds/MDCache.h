@@ -65,54 +65,41 @@ class MClientRequest;
  */
 struct MDRequest {
   metareqid_t reqid;
-  Message *request;  // MClientRequest, or MLock
+  Message *request;        // MClientRequest, or MLock
   
   vector<CDentry*> trace;  // original path traversal.
-  CInode *ref;       // reference inode.  if there is only one, and its path is pinned.
+  CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
   
   // cache pins (so things don't expire)
-  set< CInode* >            inode_pins;
-  set< CDentry* >           dentry_pins;
-  set< CDir* >              dir_pins;
+  set< MDSCacheObject* >  pins;
   
   // auth pins
-  set< CDir* >              dir_auth_pins;
-  set< CInode* >            inode_auth_pins;
+  set< CDir* >   dir_auth_pins;
+  set< CInode* > inode_auth_pins;
   
   // held locks
-  set< SimpleLock* > rdlocks;
-  set< SimpleLock* > xlocks;
-  set< SimpleLock*, SimpleLock::ptr_lt > locks;
+  set< SimpleLock* > rdlocks;  // always local.
+  set< SimpleLock* > xlocks;   // may be remote.
+  set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
   // projected updates
   map< inodeno_t, inode_t > projected_inode;
 
 
+  // ---------------------------------------------------
   MDRequest() : request(0), ref(0) {}
   MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), ref(0) {}
   
-  // requeest
+  // request
   MClientRequest *client_request() {
     return (MClientRequest*)request;
   }
 
   // pin items in cache
-  void pin(CInode *in) {
-    if (inode_pins.count(in) == 0) {
-      in->get(CInode::PIN_REQUEST);
-      inode_pins.insert(in);
-    }      
-  }
-  void pin(CDir *dir) {
-    if (dir_pins.count(dir) == 0) {
-      dir->get(CDir::PIN_REQUEST);
-      dir_pins.insert(dir);
-    }      
-  }
-  void pin(CDentry *dn) {
-    if (dentry_pins.count(dn) == 0) {
-      dn->get(CDentry::PIN_REQUEST);
-      dentry_pins.insert(dn);
+  void pin(MDSCacheObject *o) {
+    if (pins.count(o) == 0) {
+      o->get(MDSCacheObject::PIN_REQUEST);
+      pins.insert(o);
     }      
   }
 
@@ -230,18 +217,19 @@ public:
 
   
 protected:
-  hash_map<metareqid_t, MDRequest*> slave_requests; 
+  hash_map<metareqid_t, MDRequest*> active_requests; 
   
 public:
   MDRequest* request_start(metareqid_t rid);
   MDRequest* request_start(MClientRequest *req);
+  MDRequest* request_start(MLock *req);
+  MDRequest* request_get(metareqid_t rid);
   void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
   void request_finish(MDRequest *mdr);
   void request_forward(MDRequest *mdr, int mds, int port=0);
   void dispatch_request(MDRequest *mdr);
   void request_drop_locks(MDRequest *mdr);
   void request_cleanup(MDRequest *r);
-
 
 
   // inode purging
