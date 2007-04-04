@@ -16,6 +16,7 @@
 #define __THREAD_H
 
 #include <pthread.h>
+#include <errno.h>
 
 class Thread {
  private:
@@ -25,9 +26,7 @@ class Thread {
   Thread() : thread_id(0) {}
   virtual ~Thread() {}
 
-  pthread_t &get_thread_id() { return thread_id; }
-  bool is_started() { return thread_id != 0; }
-
+ protected:
   virtual void *entry() = 0;
 
  private:
@@ -36,27 +35,42 @@ class Thread {
   }
 
  public:
+  pthread_t &get_thread_id() { return thread_id; }
+  bool is_started() { return thread_id != 0; }
+  bool am_self() { return (pthread_self() == thread_id); }
+
   int create() {
     return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }
-
-  bool am_self() {
-    return (pthread_self() == thread_id);
-  }
-
   int join(void **prval = 0) {
-    assert(thread_id);
-    //if (thread_id == 0) return -1;   // never started.
-
-    int status = pthread_join(thread_id, prval);
-    if (status == 0) 
-      thread_id = 0;
-    else {
-      cout << "join status = " << status << endl;
-      assert(0);
+    if (thread_id == 0) {
+      cerr << "WARNING: join on thread that was never started" << endl;
+      //assert(0);
+      return -EINVAL;   // never started.
     }
+    
+    int status = pthread_join(thread_id, prval);
+    if (status != 0) {
+      switch (status) {
+      case -EINVAL:
+	cerr << "thread " << thread_id << " join status = EINVAL" << endl;
+	break;
+      case -ESRCH:
+	cerr << "thread " << thread_id << " join status = ESRCH" << endl;
+	assert(0);
+	break;
+      case -EDEADLK:
+	cerr << "thread " << thread_id << " join status = EDEADLK" << endl;
+	break;
+      default:
+	cerr << "thread " << thread_id << " join status = " << status << endl;
+      }
+      assert(0); // none of these should happen.
+    }
+    thread_id = 0;
     return status;
   }
+
 };
 
 #endif

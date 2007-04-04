@@ -243,21 +243,29 @@ public:
 
   // -- recovery --
 protected:
+  set<int> recovery_set;
+
   // from EImportStart w/o EImportFinish during journal replay
   map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
   // from MMDSImportMaps
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
-  set<int> recovery_set;
   set<int> wants_import_map;   // nodes i need to send my import map to
   set<int> got_import_map;     // nodes i got import_maps from
-  set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
   void handle_import_map(MMDSImportMap *m);
-  void handle_cache_rejoin(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
   void disambiguate_imports();
+
+  set<int> rejoin_gather;      // nodes from whom i need a rejoin
+  set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  set<int> want_rejoin_ack;    // nodes to whom i need to send a rejoin ack
+
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
+  void handle_cache_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void send_cache_rejoin_acks();
   void recalc_auth_bits();
 

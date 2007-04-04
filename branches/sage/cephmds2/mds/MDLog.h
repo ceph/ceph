@@ -102,9 +102,13 @@ class MDLog {
   friend class MDCache;
 
   void init_journaler();
-
-
  public:
+  void add_import_map_expire_waiter(Context *c) {
+    import_map_expire_waiters.push_back(c);
+  }
+
+
+
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 

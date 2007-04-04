@@ -38,13 +38,15 @@ inline const char *get_lock_type_name(int t) {
 }
 
 // -- lock states --
+#define LOCK_UNDEF    0
 //                                auth   rep
-#define LOCK_SYNC     0  // AR   R .    R .
-#define LOCK_LOCK     1  // AR   R W    . .
-#define LOCK_GLOCKR   2  // AR   R .    . .
+#define LOCK_SYNC     1  // AR   R .    R .
+#define LOCK_LOCK     2  // AR   R W    . .
+#define LOCK_GLOCKR   3  // AR   R .    . .
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
+  case LOCK_UNDEF: return "undef";
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
@@ -242,8 +244,9 @@ public:
 
 inline ostream& operator<<(ostream& out, SimpleLock& l) 
 {
-  out << "(" << get_lock_type_name(l.get_type())
-      << " " << get_simplelock_state_name(l.get_state());
+  out << "(";
+  //out << get_lock_type_name(l.get_type()) << " ";
+  out << get_simplelock_state_name(l.get_state());
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
   if (l.get_num_rdlock()) 
     out << " r=" << l.get_num_rdlock();

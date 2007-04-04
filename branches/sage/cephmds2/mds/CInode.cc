@@ -94,33 +94,6 @@ void CInode::print(ostream& out)
 
 
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) : 
-  authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
-  linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
-  dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
-  filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
-{
-  mdcache = c;
-
-  //num_parents = 0;
-  parent = NULL;
-  
-  auth_pins = 0;
-  nested_auth_pins = 0;
-  //num_request_pins = 0;
-
-  state = 0;  
-
-  if (auth) state_set(STATE_AUTH);
-}
-
-CInode::~CInode() {
-  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
-       p != dirfrags.end();
-       ++p)
-    delete p->second;
-}
-
 
 // dirfrags
 
@@ -135,13 +108,15 @@ frag_t CInode::pick_dirfrag(const string& dn)
 
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
+  // all dirfrags
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
        ++p)
     ls.push_back(p->second);
 }
 void CInode::get_nested_dirfrags(list<CDir*>& ls) 
-{  // same subtree
+{  
+  // dirfrags in same subtree
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
        ++p)
@@ -149,7 +124,8 @@ void CInode::get_nested_dirfrags(list<CDir*>& ls)
       ls.push_back(p->second);
 }
 void CInode::get_subtree_dirfrags(list<CDir*>& ls) 
-{  // new subtree
+{ 
+  // dirfrags that are roots of new subtrees
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
        ++p)

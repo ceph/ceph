@@ -59,7 +59,7 @@ using namespace std;
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSImportMap.h"
 #include "messages/MMDSCacheRejoin.h"
-#include "messages/MMDSCacheRejoinAck.h"
+//#include "messages/MMDSCacheRejoinAck.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -259,9 +259,11 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_CACHEREJOIN:
 	m = new MMDSCacheRejoin;
 	break;
+	/*
   case MSG_MDS_CACHEREJOINACK:
 	m = new MMDSCacheRejoinAck;
 	break;
+	*/
 
   case MSG_MDS_DIRUPDATE:
     m = new MDirUpdate();

@@ -93,7 +93,7 @@
 
 #define MSG_MDS_IMPORTMAP          106
 #define MSG_MDS_CACHEREJOIN        107
-#define MSG_MDS_CACHEREJOINACK     108
+//#define MSG_MDS_CACHEREJOINACK     108
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111

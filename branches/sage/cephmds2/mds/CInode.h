@@ -55,7 +55,7 @@ class CInode : public MDSCacheObject {
   //static const int PIN_REPLICATED =     1;
   static const int PIN_DIR =        2;
   static const int PIN_PROXY =      5;  // can't expire yet
-  static const int PIN_CAPS =       7;  // local fh's
+  static const int PIN_CAPS =       7;  // client caps
   static const int PIN_AUTHPIN =    8;
   static const int PIN_IMPORTING =  -9;  // importing
   static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
@@ -122,11 +122,12 @@ class CInode : public MDSCacheObject {
   string           symlink;      // symlink dest, if symlink
   fragtree_t       dirfragtree;  // dir frag tree, if any
 
-  frag_t pick_dirfrag(const string &dn);
+  off_t            last_open_journaled;  // log offset for the last journaled EOpen
 
   // -- cache infrastructure --
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
+  frag_t pick_dirfrag(const string &dn);
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) 
       return dirfrags[fg];
@@ -175,8 +176,23 @@ protected:
 
  public:
   // ---------------------------
-  CInode(MDCache *c, bool auth=true);
-  ~CInode();
+  CInode(MDCache *c, bool auth=true) : 
+    mdcache(c),
+    last_open_journaled(0),
+    parent(0),
+    replica_caps_wanted(0),
+    auth_pins(0), nested_auth_pins(0),
+    authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
+    linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
+    dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
+    filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
+  {
+    state = 0;  
+    if (auth) state_set(STATE_AUTH);
+  };
+  ~CInode() {
+    close_dirfrags();
+  }
   
 
   // -- accessors --

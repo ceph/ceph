@@ -35,6 +35,7 @@
 #include "events/EString.h"
 #include "events/EUpdate.h"
 #include "events/EMount.h"
+#include "events/EOpen.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -2568,6 +2569,13 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);
   reply_request(mdr, reply, cur);
+
+  // journal?
+  if (cur->last_open_journaled == 0) {
+    cur->last_open_journaled = mdlog->get_write_pos();
+    mdlog->submit_entry(new EOpen(cur));
+  }
+
 }
 
 

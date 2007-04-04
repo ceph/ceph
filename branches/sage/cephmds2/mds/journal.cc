@@ -12,23 +12,25 @@
  */
 
 #include "events/EString.h"
-
-#include "events/EMetaBlob.h"
-#include "events/EAlloc.h"
-#include "events/EAnchor.h"
-#include "events/EAnchorClient.h"
-#include "events/EUpdate.h"
-#include "events/ESlaveUpdate.h"
 #include "events/EImportMap.h"
-
 #include "events/EMount.h"
 #include "events/EClientMap.h"
 
+#include "events/EMetaBlob.h"
+
+#include "events/EUpdate.h"
+#include "events/ESlaveUpdate.h"
+#include "events/EOpen.h"
+
+#include "events/EAlloc.h"
 #include "events/EPurgeFinish.h"
-#include "events/EUnlink.h"
+
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
+
+#include "events/EAnchor.h"
+#include "events/EAnchorClient.h"
 
 #include "MDS.h"
 #include "MDLog.h"
@@ -633,6 +635,51 @@ void EUpdate::replay(MDS *mds)
 }
 
 
+// ------------------------
+// EOpen
+
+bool EOpen::has_expired(MDS *mds)
+{
+  CInode *in = mds->mdcache->get_inode(ino);
+  if (!in) return true;
+  if (!in->is_any_caps()) return true;
+  if (in->last_open_journaled > get_start_off() ||
+      in->last_open_journaled == 0) return true;
+  return false;
+}
+
+void EOpen::expire(MDS *mds, Context *c)
+{
+  CInode *in = mds->mdcache->get_inode(ino);
+  assert(in);
+
+  dout(10) << "EOpen.expire " << ino
+	   << " last_open_journaled " << in->last_open_journaled << endl;
+  
+  // wait?
+  // FIXME this is stupid.
+  if (in->last_open_journaled == get_start_off()) {
+    //||
+    //(get_start_off() < mds->mdlog->last_import_map &&
+    //in->last_open_journaled < mds->mdlog->last_import_map)) {
+    dout(10) << "waiting." << endl;
+    // wait
+    mds->mdlog->add_import_map_expire_waiter(c);
+  } else {
+    // rejournal now.
+    dout(10) << "rejournaling" << endl;
+    in->last_open_journaled = mds->mdlog->get_write_pos();
+    mds->mdlog->submit_entry(new EOpen(in));
+  }
+}
+
+void EOpen::replay(MDS *mds)
+{
+  dout(10) << "EOpen.replay " << ino << endl;
+  metablob.replay(mds);
+}
+
+
 // -----------------------
 // EUpdate
 
@@ -713,48 +760,6 @@ void EImportMap::replay(MDS *mds)
     }
   }
   mds->mdcache->show_subtrees();
-}
-
-
-
-// -----------------------
-// EUnlink
-
-bool EUnlink::has_expired(MDS *mds)
-{
-  /*
-  // dir
-  CInode *diri = mds->mdcache->get_inode( diritrace.back().inode.ino );
-  CDir *dir = 0;
-  if (diri) dir = diri->dir;
-
-  if (dir && dir->get_last_committed_version() < dirv) return false;
-
-  if (!inodetrace.trace.empty()) {
-    // inode
-    CInode *in = mds->mdcache->get_inode( inodetrace.back().inode.ino );
-    if (in && in->get_last_committed_version() < inodetrace.back().inode.version)
-      return false;
-  }
-  */
-  return true;
-}
-
-void EUnlink::expire(MDS *mds, Context *c)
-{
-  /*
-  CInode *diri = mds->mdcache->get_inode( diritrace.back().inode.ino );
-  CDir *dir = diri->dir;
-  assert(dir);
-  
-  // okay!
-  dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
-  mds->mdstore->commit_dir(dir, dirv, c);
-  */
-}
-
-void EUnlink::replay(MDS *mds)
-{
 }
 
 

@@ -54,6 +54,16 @@ mds
     - handled by individual MDSCacheObject _finish()'s
 
 - properly recover lock state on rejoin...
+  - recovering mds rejoins replicas it pulled out of its journal
+    - replicas will tell it when they hold an xlock
+  - surviving mds rejoins replicas from a recovering mds
+    - will tell auth if it holds an xlock
+- recovering open files
+  - need to journal EOpen
+  - track openness in hierarchy, so we can tell when to expire vs rejournal EOpen metablobs
+  - need to batch EOpen events when rejournaling to avoid looping
+  - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
+    - path+cap window will require fetching and metadata from disk before doing the rejoin
 
 - clientmap request history
   - hmm, so we need completion codes, but only after recovery.

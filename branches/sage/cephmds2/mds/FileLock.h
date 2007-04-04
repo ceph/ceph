@@ -28,22 +28,22 @@ using namespace std;
 //  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio
 
 //                               -----auth--------   ---replica-------
-#define LOCK_SYNC_    0  // AR   R . / C R . . . L   R . / C R . . . L   stat()
-#define LOCK_GSYNCL  -11 // A    . . / C ? . . . L                       loner -> sync    (*) FIXME: let old loner keep R, somehow...
-#define LOCK_GSYNCM  -12 // A    . . / . R . . . L
+#define LOCK_SYNC_    1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
+#define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync    (*) FIXME: let old loner keep R, somehow...
+#define LOCK_GSYNCM  -13 // A    . . / . R . . . L
 
-#define LOCK_LOCK_    1  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
-#define LOCK_GLOCKR_ -2  // AR   R . / C . . . . .   . . / C . . . . .
-#define LOCK_GLOCKL  -3  // A    . . / . . . . . .                       loner -> lock
-#define LOCK_GLOCKM  -4  // A    . . / . . . . . .
+#define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
+#define LOCK_GLOCKR_ -3  // AR   R . / C . . . . .   . . / C . . . . .
+#define LOCK_GLOCKL  -4  // A    . . / . . . . . .                       loner -> lock
+#define LOCK_GLOCKM  -5  // A    . . / . . . . . .
 
-#define LOCK_MIXED    5  // AR   . . / . R W A . L   . . / . R . . . L
-#define LOCK_GMIXEDR -6  // AR   R . / . R . . . L   . . / . R . . . L 
-#define LOCK_GMIXEDL -7  // A    . . / . . . . . L                       loner -> mixed
+#define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
+#define LOCK_GMIXEDR -7  // AR   R . / . R . . . L   . . / . R . . . L 
+#define LOCK_GMIXEDL -8  // A    . . / . . . . . L                       loner -> mixed
 
-#define LOCK_LONER    8  // A    . . / C R W A B L        (lock)      
-#define LOCK_GLONERR -9  // A    . . / . R . . . L
-#define LOCK_GLONERM -10 // A    . . / . R W A . L
+#define LOCK_LONER    9  // A    . . / C R W A B L        (lock)      
+#define LOCK_GLONERR -10 // A    . . / . R . . . L
+#define LOCK_GLONERM -11 // A    . . / . R W A . L
 
 
 //   4 stable
@@ -207,8 +207,9 @@ class FileLock : public SimpleLock {
 
 inline ostream& operator<<(ostream& out, FileLock& l) 
 {
-  out << "(" << get_lock_type_name(l.get_type())
-      << " " << get_filelock_state_name(l.get_state());
+  out << "(";
+  //out << get_lock_type_name(l.get_type()) << " ";
+  out << get_filelock_state_name(l.get_state());
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
   if (l.get_num_rdlock()) 
     out << " r=" << l.get_num_rdlock();

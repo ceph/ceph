@@ -552,10 +552,12 @@ void Migrator::export_frozen(CDir *dir)
   // include spanning tree for all nested exports.
   // these need to be on the destination _before_ the final export so that
   // dir_auth updates on any nested exports are properly absorbed.
+  // this includes inodes and dirfrags included in the subtree, but
+  // only the inodes at the bounds.
   set<inodeno_t> inodes_added;
 
-  // include base dir
-  prep->add_dir( new CDirDiscover(dir, dir->add_replica(dest)) );
+  // include base dirfrag
+  prep->add_dirfrag( new CDirDiscover(dir, dir->add_replica(dest)) );
   
   // check bounds
   for (set<CDir*>::iterator it = bounds.begin();
@@ -580,23 +582,20 @@ void Migrator::export_frozen(CDir *dir)
       // don't repeat ourselves
       if (inodes_added.count(cur->ino())) break;   // did already!
       inodes_added.insert(cur->ino());
-      
-      CDir *parent_dir = cur->get_parent_dir();
 
-      // inode?
+      // inode
       assert(cur->inode->is_auth());
       inode_trace.push_front(cur->inode);
       dout(7) << "  will add " << *cur->inode << endl;
       
-      // include dir?
-      // note: don't replicate ambiguous auth items!  they're
-      //    frozen anyway.
-      if (cur->is_auth() && !cur->is_ambiguous_auth()) {
-        prep->add_dir( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
+      // include the dirfrag?  only if it's not the bounding subtree root.
+      if (cur != bound) {
+	assert(cur->is_auth());
+        prep->add_dirfrag( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
         dout(7) << "  added " << *cur << endl;
       }
       
-      cur = parent_dir;      
+      cur = cur->get_parent_dir();
     }
 
     for (list<CInode*>::iterator it = inode_trace.begin();

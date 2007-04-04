@@ -34,7 +34,7 @@ class MExportDirPrep : public Message {
   map<inodeno_t,string>          inode_dentry;
 
   map<inodeno_t,list<frag_t> >   frags_by_ino;
-  map<dirfrag_t,CDirDiscover*>   dirs;
+  map<dirfrag_t,CDirDiscover*>   dirfrags;
 
   set<int>                       bystanders;
 
@@ -53,11 +53,11 @@ class MExportDirPrep : public Message {
   string& get_dentry(inodeno_t ino) {
     return inode_dentry[ino];
   }
-  bool have_dir(dirfrag_t df) {
-    return dirs.count(df);
+  bool have_dirfrag(dirfrag_t df) {
+    return dirfrags.count(df);
   }
   CDirDiscover* get_dirfrag_discover(dirfrag_t df) {
-    return dirs[df];
+    return dirfrags[df];
   }
   set<int> &get_bystanders() { return bystanders; }
 
@@ -76,8 +76,8 @@ class MExportDirPrep : public Message {
          iit != inodes.end();
          iit++)
       delete *iit;
-    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirs.begin();
-         dit != dirs.end();
+    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
+         dit != dirfrags.end();
          dit++) 
       delete dit->second;
   }
@@ -96,8 +96,8 @@ class MExportDirPrep : public Message {
     inode_dirfrag[in->get_ino()] = df;
     inode_dentry[in->get_ino()] = dentry;
   }
-  void add_dir(CDirDiscover *dir) {
-    dirs[dir->get_dirfrag()] = dir;
+  void add_dirfrag(CDirDiscover *dir) {
+    dirfrags[dir->get_dirfrag()] = dir;
     frags_by_ino[dir->get_dirfrag().ino].push_back(dir->get_dirfrag().frag);
   }
   void add_bystander(int who) {
@@ -143,7 +143,7 @@ class MExportDirPrep : public Message {
     for (int i=0; i<nd; i++) {
       CDirDiscover *dir = new CDirDiscover;
       dir->_decode(payload, off);
-      dirs[dir->get_dirfrag()] = dir;
+      dirfrags[dir->get_dirfrag()] = dir;
     }
     
     ::_decode(bystanders, payload, off);
@@ -174,10 +174,10 @@ class MExportDirPrep : public Message {
     }
 
     // dirs
-    int nd = dirs.size();
+    int nd = dirfrags.size();
     payload.append((char*)&nd, sizeof(int));
-    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirs.begin();
-         dit != dirs.end();
+    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
+         dit != dirfrags.end();
          dit++)
       dit->second->_encode(payload);
 

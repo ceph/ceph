@@ -41,14 +41,12 @@
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/EString.h"
-#include "events/EUnlink.h"
 #include "events/EPurgeFinish.h"
 
 #include "messages/MGenericMessage.h"
 
 #include "messages/MMDSImportMap.h"
 #include "messages/MMDSCacheRejoin.h"
-#include "messages/MMDSCacheRejoinAck.h"
 
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
@@ -1303,7 +1301,7 @@ void MDCache::recalc_auth_bits()
  * rejoin phase!
  * we start out by sending rejoins to everyone in the recovery set.
  *
- * if _were_ are rejoining, send for all regions in our cache.
+ * if we are rejoin, send for all regions in our cache.
  * if we are active|stopping, send only to nodes that are are rejoining.
  */
 void MDCache::send_cache_rejoins()
@@ -1320,12 +1318,12 @@ void MDCache::send_cache_rejoins()
     if (*p == mds->get_nodeid())  continue;  // nothing to myself!
     if (mds->is_rejoin() ||
 	mds->mdsmap->is_rejoin(*p))
-      rejoins[*p] = new MMDSCacheRejoin;
+      rejoins[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_REJOIN);
   }	
 
   assert(!migrator->is_importing());
   assert(!migrator->is_exporting());
-
+  
   // check all subtrees
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -1353,7 +1351,7 @@ void MDCache::send_cache_rejoins()
   }
 
   // nothing?
-  if (rejoins.empty()) {
+  if (mds->is_rejoin() && rejoins.empty()) {
     dout(10) << "nothing to rejoin, going active" << endl;
     mds->set_want_state(MDSMap::STATE_ACTIVE);
   }
@@ -1363,8 +1361,12 @@ void MDCache::send_cache_rejoins()
 void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 {
   dout(10) << "cache_rejoin_walk " << *dir << endl;
-  rejoin->add_dirfrag(dir->dirfrag());
 
+  //if (mds->is_rejoin()) 
+  rejoin->add_weak_dirfrag(dir->dirfrag());
+  //else
+  //rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce());
+  
   list<CDir*> nested;  // finish this dir, then do nested items
   
   // walk dentries
@@ -1372,13 +1374,43 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
        p != dir->items.end();
        ++p) {
     // dentry
-    rejoin->add_dentry(dir->dirfrag(), p->first);
+    CDentry *dn = p->second;
+    if (mds->is_rejoin())
+      rejoin->add_weak_dentry(dir->dirfrag(), p->first);
+    else {
+      rejoin->add_strong_dentry(dir->dirfrag(), p->first,
+				dn->get_replica_nonce(),
+				dn->lock.get_state());
+      if (dn->lock.is_xlocked())
+	rejoin->add_dentry_xlock(dir->dirfrag(), p->first, 
+				 dn->lock.get_xlocked_by()->reqid);
+    }
     
     // inode?
-    if (p->second->is_primary() && p->second->get_inode()) {
-      CInode *in = p->second->get_inode();
-      rejoin->add_inode(in->ino(), 
-			in->get_caps_wanted());
+    if (dn->is_primary() && dn->get_inode()) {
+      CInode *in = dn->get_inode();
+      if (mds->is_rejoin() && in->get_caps_wanted() == 0)
+	rejoin->add_weak_inode(in->ino());
+      else {
+	rejoin->add_strong_inode(in->ino(), in->get_replica_nonce(),
+				 in->get_caps_wanted(),
+				 in->authlock.get_state(),
+				 in->linklock.get_state(),
+				 in->dirfragtreelock.get_state(),
+				 in->filelock.get_state());
+	if (in->authlock.is_xlocked())
+	  rejoin->add_inode_xlock(in->ino(), in->authlock.get_type(),
+				  in->authlock.get_xlocked_by()->reqid);
+	if (in->linklock.is_xlocked())
+	  rejoin->add_inode_xlock(in->ino(), in->linklock.get_type(),
+				  in->linklock.get_xlocked_by()->reqid);
+	if (in->dirfragtreelock.is_xlocked())
+	  rejoin->add_inode_xlock(in->ino(), in->dirfragtreelock.get_type(),
+				  in->dirfragtreelock.get_xlocked_by()->reqid);
+	if (in->filelock.is_xlocked())
+	  rejoin->add_inode_xlock(in->ino(), in->filelock.get_type(),
+				  in->filelock.get_xlocked_by()->reqid);
+      }
       
       // dirfrags in this subtree?
       list<CDir*> dfs;
@@ -1401,7 +1433,6 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 
 /*
  * i got a rejoin.
- * 
  *  - reply with the lockstate
  *
  * if i am active|stopping, 
@@ -1409,30 +1440,59 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
  */
 void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 {
-  dout(7) << "handle_cache_rejoin from " << m->get_source() << endl;
+  dout(7) << "handle_cache_rejoin " << *m << " from " << m->get_source() << endl;
+
+  switch (m->op) {
+  case MMDSCacheRejoin::OP_REJOIN:
+    handle_cache_rejoin_rejoin(m);
+    break;
+
+  case MMDSCacheRejoin::OP_ACK:
+    handle_cache_rejoin_ack(m);
+    break;
+
+  case MMDSCacheRejoin::OP_MISSING:
+    handle_cache_rejoin_missing(m);
+    break;
+
+  case MMDSCacheRejoin::OP_FULL:
+    handle_cache_rejoin_full(m);
+    break;
+
+  default: 
+    assert(0);
+  }
+  delete m;
+}
+
+void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
+{
   int from = m->get_source().num();
 
-  MMDSCacheRejoinAck *ack = new MMDSCacheRejoinAck;
+  // do immediate ack?
+  MMDSCacheRejoin *ack = 0;
+  MMDSCacheRejoin *missing = 0;
 
   if (mds->is_active() || mds->is_stopping()) {
-    dout(10) << "removing stale cache replicas" << endl;
+    dout(10) << "i am active.  removing stale cache replicas" << endl;
+    
     // first, scour cache of replica references
     for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
 	 p != inode_map.end();
 	 ++p) {
       // inode
       CInode *in = p->second;
-      if (in->is_replica(from) && m->inodes.count(p->first) == 0) {
+      if (in->is_replica(from) && m->weak_inodes.count(p->first) == 0) {
 	inode_remove_replica(in, from);
 	dout(10) << " rem " << *in << endl;
       }
-
+      
       // dentry
       if (in->parent) {
 	CDentry *dn = in->parent;
 	if (dn->is_replica(from) &&
-	    (m->dentries.count(dn->get_dir()->dirfrag()) == 0 ||
-	     m->dentries[dn->get_dir()->dirfrag()].count(dn->get_name()) == 0)) {
+	    (m->weak_dentries.count(dn->get_dir()->dirfrag()) == 0 ||
+	     m->weak_dentries[dn->get_dir()->dirfrag()].count(dn->get_name()) == 0)) {
 	  dn->remove_replica(from);
 	  dout(10) << " rem " << *dn << endl;
 	}
@@ -1445,87 +1505,179 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 	   p != dfs.end();
 	   ++p) {
 	CDir *dir = *p;
-	if (dir->is_replica(from) && m->dirfrags.count(dir->dirfrag()) == 0) {
+	if (dir->is_replica(from) && m->weak_dirfrags.count(dir->dirfrag()) == 0) {
 	  dir->remove_replica(from);
 	  dout(10) << " rem " << *dir << endl;
 	}
       }
     }
-  } else {
-    assert(mds->is_rejoin());
+    
+    // do immediate ack.
+    ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
   }
-
+  
   // dirs
-  for (set<dirfrag_t>::iterator p = m->dirfrags.begin();
-       p != m->dirfrags.end();
+  for (set<dirfrag_t>::iterator p = m->weak_dirfrags.begin();
+       p != m->weak_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(*p);
-    assert(dir);
-    int nonce = dir->add_replica(from);
-    dout(10) << " has " << *dir << endl;
-    ack->add_dirfrag(*p, nonce);
+    if (dir) {
+      int nonce = dir->add_replica(from);
+      dout(10) << " have " << *dir << endl;
+      if (ack) 
+	ack->add_strong_dirfrag(*p, nonce);
     
-    // dentries
-    for (set<string>::iterator q = m->dentries[*p].begin();
-	 q != m->dentries[*p].end();
-	 ++q) {
-      CDentry *dn = dir->lookup(*q);
-      assert(dn);
-      int nonce = dn->add_replica(from);
-      dout(10) << " has " << *dn << endl;
-      ack->add_dentry(*p, *q, dn->lock.get_state(), nonce);
+      // dentries
+      for (set<string>::iterator q = m->weak_dentries[*p].begin();
+	   q != m->weak_dentries[*p].end();
+	   ++q) {
+	CDentry *dn = dir->lookup(*q);
+	if (dn) {
+	  int nonce = dn->add_replica(from);
+	  dout(10) << " have " << *dn << endl;
+	  ack->add_strong_dentry(*p, *q, dn->lock.get_state(), nonce);
+	} else {
+	  dout(10) << " missing " << *p << " " << *q << endl;
+	  if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
+	  missing->add_weak_dentry(*p, *q);
+	}
+	if (ack)
+	  ack->add_strong_dentry(*p, *q, nonce, dn->lock.get_state());
+      }
+    } else {
+      dout(10) << " missing " << *p << endl;
+      if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
+      missing->add_weak_dirfrag(*p);
+      
+      // dentries
+      for (set<string>::iterator q = m->weak_dentries[*p].begin();
+	   q != m->weak_dentries[*p].end();
+	   ++q) 
+	missing->add_weak_dentry(*p, *q);
     }
   }
 
   // inodes
-  for (map<inodeno_t,int>::iterator p = m->inodes.begin();
-       p != m->inodes.end();
+  for (set<inodeno_t>::iterator p = m->weak_inodes.begin();
+       p != m->weak_inodes.end();
        ++p) {
-    CInode *in = get_inode(p->first);
-    assert(in);
-    int nonce = in->add_replica(from);
-    if (p->second)
-      in->mds_caps_wanted[from] = p->second;
-    else
+    CInode *in = get_inode(*p);
+    if (in) {
+      int nonce = in->add_replica(from);
       in->mds_caps_wanted.erase(from);
-    in->authlock.remove_gather(from);  // just in case
-    in->linklock.remove_gather(from);  // just in case
-    in->dirfragtreelock.remove_gather(from);  // just in case
-    in->filelock.remove_gather(from);  // just in case
-    dout(10) << " has " << *in << endl;
-    ack->add_inode(p->first, 
-		   in->authlock.get_replica_state(), 
-		   in->linklock.get_replica_state(), 
-		   in->dirfragtreelock.get_replica_state(), 
-		   in->filelock.get_replica_state(), 
-		   nonce);
+      in->authlock.remove_gather(from);  // just in case
+      in->linklock.remove_gather(from);  // just in case
+      in->dirfragtreelock.remove_gather(from);  // just in case
+      in->filelock.remove_gather(from);  // just in case
+      dout(10) << " have (weak) " << *in << endl;
+      if (ack) 
+	ack->add_strong_inode(in->ino(), 
+			      nonce,
+			      0,
+			      in->authlock.get_replica_state(), 
+			      in->linklock.get_replica_state(), 
+			      in->dirfragtreelock.get_replica_state(), 
+			      in->filelock.get_replica_state());
+    } else {
+      dout(10) << " missing " << *p << endl;
+      if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
+      missing->add_weak_inode(*p);
+    }
   }
 
-  // send ack
-  mds->send_message_mds(ack, from, MDS_PORT_CACHE);
+  // strong inodes too?
+  for (map<inodeno_t, MMDSCacheRejoin::inode_strong>::iterator p = m->strong_inodes.begin();
+       p != m->strong_inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->first);
+    if (in) {
+      dout(10) << " have (strong) " << *in << endl;
+      int nonce = in->add_replica(from);
+      if (p->second.caps_wanted)
+	in->mds_caps_wanted[from] = p->second.caps_wanted;
+      else
+	in->mds_caps_wanted.erase(from);
+      in->authlock.remove_gather(from);  // just in case
+      in->linklock.remove_gather(from);  // just in case
+      in->dirfragtreelock.remove_gather(from);  // just in case
+      in->filelock.remove_gather(from);  // just in case
+      dout(10) << " have (weak) " << *in << endl;
+      if (ack) 
+	ack->add_strong_inode(in->ino(), 
+			      nonce,
+			      0,
+			      in->authlock.get_replica_state(), 
+			      in->linklock.get_replica_state(), 
+			      in->dirfragtreelock.get_replica_state(), 
+			      in->filelock.get_replica_state());
+    } else {
+      dout(10) << " missing " << p->first << endl;
+      if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
+      missing->add_weak_inode(p->first);
+    }
+  }
   
-  delete m;
+  // xlocks
+  for (list<MMDSCacheRejoin::inode_xlock>::iterator p = m->xlocked_inodes.begin();
+       p != m->xlocked_inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->ino);
+    if (!in) continue;  // already missing, from strong_inodes list above.
+    
+    dout(10) << " inode xlock by " << p->reqid << " on " << *in << endl;
+    assert(0);    
+    //SimpleLock *lock = in->get_lock(p->locktype);
+    // .. FIXME IMPLEMENT ME ..
+      
+    
+  }
+  for (map<dirfrag_t, map<string, metareqid_t> >::iterator p = m->xlocked_dentries.begin();
+       p != m->xlocked_dentries.end();
+       ++p) {
+    CDir *dir = get_dirfrag(p->first);
+    if (!dir) continue;  // already missing, from above.
+    for (map<string, metareqid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      CDentry *dn = dir->lookup(q->first);
+      if (!dn) continue;  // already missing, from above.
+      dout(10) << " dn xlock by " << q->second << " on " << *dn << endl;
+      
+      // FIXME IMPLEMENT ME
+      assert(0);
+    }
+  }
+  
+  // send ack?
+  if (ack)
+    mds->send_message_mds(ack, from, MDS_PORT_CACHE);
+  else
+    want_rejoin_ack.insert(from);
+
+  // send missing?
+  if (missing)
+    mds->send_message_mds(missing, from, MDS_PORT_CACHE);
 }
 
 
-void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
+void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
 {
   dout(7) << "handle_cache_rejoin_ack from " << m->get_source() << endl;
   int from = m->get_source().num();
   
   // dirs
-  for (list<MMDSCacheRejoinAck::dirinfo>::iterator p = m->dirfrags.begin();
-       p != m->dirfrags.end();
+  for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = m->strong_dirfrags.begin();
+       p != m->strong_dirfrags.end();
        ++p) {
-    CDir *dir = get_dirfrag(p->dirfrag);
+    CDir *dir = get_dirfrag(p->first);
     assert(dir);
 
-    dir->set_replica_nonce(p->nonce);
+    dir->set_replica_nonce(p->second.nonce);
     dout(10) << " got " << *dir << endl;
 
     // dentries
-    for (map<string,MMDSCacheRejoinAck::dninfo>::iterator q = m->dentries[p->dirfrag].begin();
-	 q != m->dentries[p->dirfrag].end();
+    for (map<string,MMDSCacheRejoin::dn_strong>::iterator q = m->strong_dentries[p->first].begin();
+	 q != m->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
       assert(dn);
@@ -1536,25 +1688,25 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
   }
 
   // inodes
-  for (list<MMDSCacheRejoinAck::inodeinfo>::iterator p = m->inodes.begin();
-       p != m->inodes.end();
+  for (map<inodeno_t, MMDSCacheRejoin::inode_strong>::iterator p = m->strong_inodes.begin();
+       p != m->strong_inodes.end();
        ++p) {
-    CInode *in = get_inode(p->ino);
+    CInode *in = get_inode(p->first);
     assert(in);
-    in->set_replica_nonce(p->nonce);
-    in->authlock.set_state(p->authlock);
-    in->linklock.set_state(p->linklock);
-    in->dirfragtreelock.set_state(p->dirfragtreelock);
-    in->filelock.set_state(p->filelock);
+    in->set_replica_nonce(p->second.nonce);
+    in->authlock.set_state(p->second.authlock);
+    in->linklock.set_state(p->second.linklock);
+    in->dirfragtreelock.set_state(p->second.dirfragtreelock);
+    in->filelock.set_state(p->second.filelock);
     dout(10) << " got " << *in << endl;
   }
-
-  delete m;
 
   // done?
   rejoin_ack_gather.erase(from);
   if (rejoin_ack_gather.empty()) {
     dout(7) << "all done, going active!" << endl;
+    send_cache_rejoin_acks();
+
     show_subtrees();
     show_cache();
     mds->set_want_state(MDSMap::STATE_ACTIVE);
@@ -1565,6 +1717,68 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
 }
 
 
+void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
+{
+  dout(7) << "handle_cache_rejoin_missing from " << m->get_source() << endl;
+
+  MMDSCacheRejoin *full = new MMDSCacheRejoin(MMDSCacheRejoin::OP_FULL);
+
+  // dirs
+  for (set<dirfrag_t>::iterator p = m->weak_dirfrags.begin();
+       p != m->weak_dirfrags.end();
+       ++p) {
+    CDir *dir = get_dirfrag(*p);
+    assert(dir);
+    dout(10) << " sending " << *dir << endl;
+    
+    // dentries
+    for (set<string>::iterator q = m->weak_dentries[*p].begin();
+	 q != m->weak_dentries[*p].end();
+	 ++q) {
+      CDentry *dn = dir->lookup(*q);
+      assert(dn);
+      dout(10) << " sending " << *dn << endl;
+      if (mds->is_rejoin())
+	full->add_weak_dentry(*p, *q);
+      else
+	full->add_strong_dentry(*p, *q, dn->get_replica_nonce(), dn->lock.get_state());
+    }
+  }
+    
+  // inodes
+  for (set<inodeno_t>::iterator p = m->weak_inodes.begin();
+       p != m->weak_inodes.end();
+       ++p) {
+    CInode *in = get_inode(*p);
+    assert(in);
+    
+    dout(10) << " sending " << *in << endl;
+    full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
+    if (mds->is_rejoin())
+      full->add_weak_inode(in->ino());
+    else
+      full->add_strong_inode(in->ino(),
+			     in->get_replica_nonce(),
+			     in->get_caps_wanted(),
+			     in->authlock.get_replica_state(), 
+			     in->linklock.get_replica_state(), 
+			     in->dirfragtreelock.get_replica_state(), 
+			     in->filelock.get_replica_state());
+  }
+
+  mds->send_message_mds(full, m->get_source().num(), MDS_PORT_CACHE);
+}
+
+void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *m)
+{
+  assert(0); // write me
+}
+
+void MDCache::send_cache_rejoin_acks()
+{
+  dout(7) << "send_cache_rejoin_acks to " << want_rejoin_ack << endl;
+  
+}
 
 
 
@@ -2398,9 +2612,11 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_CACHEREJOIN:
     handle_cache_rejoin((MMDSCacheRejoin*)m);
     break;
+    /*
   case MSG_MDS_CACHEREJOINACK:
     handle_cache_rejoin_ack((MMDSCacheRejoinAck*)m);
     break;
+    */
 
 
   case MSG_MDS_DISCOVER:

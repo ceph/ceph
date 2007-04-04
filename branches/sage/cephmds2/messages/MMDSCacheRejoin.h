@@ -22,37 +22,167 @@
 
 class MMDSCacheRejoin : public Message {
  public:
-  map<inodeno_t,int> inodes; // ino -> caps_wanted
-  set<dirfrag_t> dirfrags;
-  map<dirfrag_t, set<string> > dentries;   // dir -> (dentries...)
+  static const int OP_REJOIN  = 1;  // replica -> auth, i exist.  and maybe my lock state.
+  static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
+  static const int OP_MISSING = 4;  // auth -> replica, i am missing these items
+  static const int OP_FULL    = 5;  // replica -> auth, here is the full object.
+  static const char *get_opname(int op) {
+    switch (op) {
+    case OP_REJOIN: return "rejoin";
+    case OP_ACK: return "ack";
+    case OP_MISSING: return "missing";
+    case OP_FULL: return "full";
+    default: assert(0);
+    }
+  }
+
+  // -- types --
+  struct inode_strong { 
+    int caps_wanted;
+    int nonce;
+    int authlock;
+    int linklock;
+    int dirfragtreelock;
+    int filelock;
+    inode_strong() {}
+    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0) : 
+      caps_wanted(cw),
+      nonce(n),
+      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f) { }
+  };
+  struct inode_full {
+    inode_t inode;
+    string symlink;
+    fragtree_t dirfragtree;
+    inode_full() {}
+    inode_full(const inode_t& i, const string& s, const fragtree_t& f) :
+      inode(i), symlink(s), dirfragtree(f) {}
+    inode_full(bufferlist& bl, int& off) {
+      ::_decode(inode, bl, off);
+      ::_decode(symlink, bl, off);
+      ::_decode(dirfragtree, bl, off);
+    }
+    void _encode(bufferlist& bl) {
+      ::_encode(inode, bl);
+      ::_encode(symlink, bl);
+      ::_encode(dirfragtree, bl);
+    }
+  };
+  struct inode_xlock {
+    inodeno_t ino;
+    int locktype;
+    metareqid_t reqid;
+    inode_xlock() {}
+    inode_xlock(inodeno_t i, int lt, const metareqid_t& ri) :
+      ino(i), locktype(lt), reqid(ri) {}
+  };
+
+  struct dirfrag_strong {
+    int nonce;
+    dirfrag_strong() {}
+    dirfrag_strong(int n) : nonce(n) {}
+  };
+  struct dn_strong {
+    int nonce;
+    int lock;
+    dn_strong() {}
+    dn_strong(int n, int l) : nonce(n), lock(l) {}
+  };
+
+  // -- data --
+  int op;
+
+  set<inodeno_t> weak_inodes;
+  map<inodeno_t, inode_strong> strong_inodes;
+  list<inode_full> full_inodes;
+  list<inode_xlock> xlocked_inodes;
+
+  set<dirfrag_t> weak_dirfrags;
+  map<dirfrag_t, dirfrag_strong> strong_dirfrags;
+
+  map<dirfrag_t, set<string> > weak_dentries;
+  map<dirfrag_t, map<string, dn_strong> > strong_dentries;
+  map<dirfrag_t, map<string, metareqid_t> > xlocked_dentries;
 
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
+  MMDSCacheRejoin(int o) : 
+    Message(MSG_MDS_CACHEREJOIN),
+    op(o) {}
 
   char *get_type_name() { return "cache_rejoin"; }
+  void print(ostream& out) {
+    out << "cache_rejoin " << get_opname(op);
+  }
 
-  void add_dirfrag(dirfrag_t dirfrag) {
-    dirfrags.insert(dirfrag);
+  // -- builders --
+  // inodes
+  void add_weak_inode(inodeno_t ino) {
+    weak_inodes.insert(ino);
   }
-  void add_dentry(dirfrag_t dirfrag, const string& dn) {
-    dentries[dirfrag].insert(dn);
+  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f) {
+    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f);
   }
-  void add_inode(inodeno_t ino, int cw) {
-    inodes[ino] = cw;
+  void add_full_inode(inode_t &i, const string& s, const fragtree_t &f) {
+    full_inodes.push_back(inode_full(i, s, f));
+  }
+  void add_inode_xlock(inodeno_t ino, int lt, const metareqid_t& ri) {
+    xlocked_inodes.push_back(inode_xlock(ino, lt, ri));
   }
   
+  // dirfrags
+  void add_weak_dirfrag(dirfrag_t df) {
+    weak_dirfrags.insert(df);
+  }
+  void add_strong_dirfrag(dirfrag_t df, int n) {
+    strong_dirfrags[df] = dirfrag_strong(n);
+  }
+   
+  // dentries
+  void add_weak_dentry(dirfrag_t df, const string& dname) {
+    weak_dentries[df].insert(dname);
+  }
+  void add_strong_dentry(dirfrag_t df, const string& dname, int n, int ls) {
+    strong_dentries[df][dname] = dn_strong(n, ls);
+  }
+  void add_dentry_xlock(dirfrag_t df, const string& dname, const metareqid_t& ri) {
+    xlocked_dentries[df][dname] = ri;
+  }
+
+  // -- encoding --
   void encode_payload() {
-    ::_encode(inodes, payload);
-    ::_encode(dirfrags, payload);
-    for (set<dirfrag_t>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p)
-      ::_encode(dentries[*p], payload);
+    ::_encode(weak_inodes, payload);
+    ::_encode(strong_inodes, payload);
+
+    __uint32_t nfull = full_inodes.size();
+    ::_encode(nfull, payload);
+    for (list<inode_full>::iterator p = full_inodes.begin(); p != full_inodes.end(); ++p)
+      p->_encode(payload);
+
+    ::_encode(xlocked_inodes, payload);
+    ::_encode(weak_dirfrags, payload);
+    //::_encode(strong_dirfrags, payload);
+    ::_encode(weak_dentries, payload);
+    ::_encode(strong_dentries, payload);
+    ::_encode(xlocked_dentries, payload);
   }
   void decode_payload() {
     int off = 0;
-    ::_decode(inodes, payload, off);
-    ::_decode(dirfrags, payload, off);
-    for (set<dirfrag_t>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p)
-      ::_decode(dentries[*p], payload, off);
+    ::_decode(weak_inodes, payload, off);
+    ::_decode(strong_inodes, payload, off);
+
+    __uint32_t nfull;
+    ::_decode(nfull, payload, off);
+    for (unsigned i=0; i<nfull; i++) 
+      full_inodes.push_back(inode_full(payload, off));
+
+    ::_decode(xlocked_inodes, payload, off);
+    ::_decode(weak_dirfrags, payload, off);
+    //::_decode(strong_dirfrags, payload, off);
+    ::_decode(weak_dentries, payload, off);
+    ::_decode(strong_dentries, payload, off);
+    ::_decode(xlocked_dentries, payload, off);
   }
+
 };
 
 #endif

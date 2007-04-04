@@ -129,8 +129,7 @@ off_t MDLog::get_write_pos()
 
 
 
-void MDLog::submit_entry( LogEvent *le,
-			  Context *c ) 
+void MDLog::submit_entry( LogEvent *le, Context *c ) 
 {
   if (g_conf.mds_log) {
     dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
