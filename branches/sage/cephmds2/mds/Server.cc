@@ -177,14 +177,17 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 	   << " (" << strerror(-reply->get_result())
 	   << ") " << *req << endl;
 
+  // note result code in clientmap?
+  if (!req->is_idempotent())
+    mds->clientmap.add_completed_request(mdr->reqid);
+
   // include trace
   if (tracei) {
     reply->set_trace_dist( tracei, mds->get_nodeid() );
   }
   
   // send reply
-  messenger->send_message(reply,
-                          req->get_client_inst());
+  messenger->send_message(reply, req->get_client_inst());
   
   // finish request
   mdcache->request_finish(mdr);
@@ -215,6 +218,21 @@ void Server::handle_client_request(MClientRequest *req)
 
   // okay, i want
   CInode           *ref = 0;
+
+  // retry?
+  if (req->get_retry_attempt()) {
+    if (mds->clientmap.have_completed_request(req->get_reqid())) {
+      dout(5) << "already completed " << req->get_reqid() << endl;
+      mds->messenger->send_message(new MClientReply(req, 0),
+				   req->get_source_inst());
+      delete req;
+      return;
+    }
+  }
+  // trim completed_request list
+  if (req->get_oldest_client_tid())
+    mds->clientmap.trim_completed_requests(req->get_source().num(),
+					   req->get_oldest_client_tid());
 
 
   // -----

@@ -73,7 +73,8 @@
 
 class MClientRequest : public Message {
   struct {
-    long tid;
+    tid_t tid;
+    tid_t oldest_client_tid;
     int num_fwd;
     int retry_attempt;
     inodeno_t  mds_wants_replica_in_dirino;
@@ -190,7 +191,8 @@ class MClientRequest : public Message {
 
 
   // normal fields
-  void set_tid(long t) { st.tid = t; }
+  void set_tid(tid_t t) { st.tid = t; }
+  void set_oldest_client_tid(tid_t t) { st.oldest_client_tid = t; }
   void inc_num_fwd() { st.num_fwd++; }
   void set_retry_attempt(int a) { st.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
@@ -207,7 +209,8 @@ class MClientRequest : public Message {
   const entity_inst_t& get_client_inst() { return st.client_inst; }
 
   int get_client() { return st.client_inst.name.num(); }
-  long get_tid() { return st.tid; }
+  tid_t get_tid() { return st.tid; }
+  tid_t get_oldest_client_tid() { return st.oldest_client_tid; }
   int get_num_fwd() { return st.num_fwd; }
   int get_retry_attempt() { return st.retry_attempt; }
   int get_op() { return st.op; }

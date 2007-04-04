@@ -34,45 +34,13 @@ using namespace __gnu_cxx;
  * contacted if necessary).
  */
 class ClientMap {
+private:
   version_t version;
-
   version_t projected;
   version_t committing;
   version_t committed;
   map<version_t, list<Context*> > commit_waiters;
 
-  hash_map<int,entity_inst_t> client_inst;
-  set<int>           client_mount;
-  hash_map<int, int> client_ref;
-
-  /*
-    hrm, we need completion codes, too.
-  struct active_tid_set_t {
-    tid_t      max;     // max tid we've journaled
-    set<tid_t> active;  // still-active tids that are < max
-  };
-  hash_map<int, active_tid_set_t> client_committed;
-  */
-  
-  void inc_ref(int client, const entity_inst_t& inst) {
-    if (client_inst.count(client)) {
-      assert(client_inst[client] == inst);
-      assert(client_ref.count(client));
-    } else {
-      client_inst[client] = inst;
-    }
-    client_ref[client]++;
-  }
-  void dec_ref(int client) {
-    assert(client_ref.count(client));
-    assert(client_ref[client] > 0);
-    client_ref[client]--;
-    if (client_ref[client] == 0) {
-      client_ref.erase(client);
-      client_inst.erase(client);
-    }
-  }
-  
 public:
   ClientMap() : version(0), projected(0), committing(0), committed(0) {}
 
@@ -94,6 +62,32 @@ public:
     commit_waiters.erase(v);
   }
 
+  // client mount, inst info
+private:
+  hash_map<int,entity_inst_t> client_inst;
+  set<int>           client_mount;
+  hash_map<int, int> client_ref;
+
+  void inc_ref(int client, const entity_inst_t& inst) {
+    if (client_inst.count(client)) {
+      assert(client_inst[client] == inst);
+      assert(client_ref.count(client));
+    } else {
+      client_inst[client] = inst;
+    }
+    client_ref[client]++;
+  }
+  void dec_ref(int client) {
+    assert(client_ref.count(client));
+    assert(client_ref[client] > 0);
+    client_ref[client]--;
+    if (client_ref[client] == 0) {
+      client_ref.erase(client);
+      client_inst.erase(client);
+    }
+  }
+
+public:
   bool empty() {
     return client_inst.empty() && client_mount.empty() && client_ref.empty();
   }
@@ -125,6 +119,31 @@ public:
     //version++;
   }
 
+
+private:
+  // -- completed requests --
+  // client id -> tid -> result code
+  map<int, set<tid_t> > completed_requests;  // completed client requests
+ 
+public:
+  void add_completed_request(metareqid_t ri) {
+    completed_requests[ri.client].insert(ri.tid);
+  }
+  void trim_completed_requests(int client, tid_t mintid) {
+    if (completed_requests.count(client) == 0) return;
+    set<tid_t>& ls = completed_requests[client];
+    while (!ls.empty() && *ls.begin() < mintid)
+      ls.erase(ls.begin());
+    if (ls.empty())
+      completed_requests.erase(client);
+  }
+  bool have_completed_request(metareqid_t ri) {
+    return completed_requests.count(ri.client) &&
+      completed_requests[ri.client].count(ri.tid);
+  }
+
+
+  // -- encoding --
   void encode(bufferlist& bl) {
     bl.append((char*)&version, sizeof(version));
     ::_encode(client_inst, bl);

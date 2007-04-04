@@ -397,6 +397,12 @@ void EMetaBlob::replay(MDS *mds)
 	     << " to " << p->second << endl;
     mds->mdcache->add_recovered_purge(p->first, p->second);  
   }
+
+  // client requests
+  for (list<metareqid_t>::iterator p = client_reqs.begin();
+       p != client_reqs.end();
+       ++p)
+    mds->clientmap.add_completed_request(*p);
 }
 
 // -----------------------
@@ -681,7 +687,7 @@ void EOpen::replay(MDS *mds)
 
 
 // -----------------------
-// EUpdate
+// ESlaveUpdate
 
 bool ESlaveUpdate::has_expired(MDS *mds)
 {

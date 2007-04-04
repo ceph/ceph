@@ -59,11 +59,12 @@ mds
   - surviving mds rejoins replicas from a recovering mds
     - will tell auth if it holds an xlock
 - recovering open files
-  - need to journal EOpen
-  - track openness in hierarchy, so we can tell when to expire vs rejournal EOpen metablobs
+/  - need to journal EOpen
+/  - track openness in hierarchy, so we can tell when to expire vs rejournal EOpen metablobs
   - need to batch EOpen events when rejournaling to avoid looping
   - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
     - path+cap window will require fetching and metadata from disk before doing the rejoin
+- client reconnect after resolve, before rejoin.
 
 - clientmap request history
   - hmm, so we need completion codes, but only after recovery.
@@ -71,6 +72,10 @@ mds
   - list of active tids < max
   - journaled bit in MDRequest
   - journal 
+  - complete request list in MClientMap
+    - populated on replay
+    - periodic client->mds MClientLastRetry -> trim request list
+
 
 /untested- truncate...
 
@@ -198,12 +203,8 @@ rados snapshots
 
 - how to get usage feedback to monitor?
 
-- change messenger entity_inst_t
- - no more rank!  make it a uniquish nonce?
-
 - clean up mds caps release in exporter
 - figure out client failure modes
-- clean up messenger failure modes.  
 - add connection retry.
 
 
@@ -227,7 +228,8 @@ osd/rados
 
 simplemessenger
 - close idle connections
-- retry, timeout on connection or transmission failure
+- buffer sent messages until a receive is acknowledged (handshake!)
+  - retry, timeout on connection or transmission failure
 - exponential backoff on monitor resend attempts (actually, this should go outside the messenger!)
 
 objectcacher

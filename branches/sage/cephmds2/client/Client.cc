@@ -585,6 +585,8 @@ MClientReply* Client::sendrecv(MClientRequest *req, int mds)
   // assign a unique tid
   tid_t tid = ++last_tid;
   req->set_tid(tid);
+  if (!mds_requests.empty()) 
+    req->set_oldest_client_tid(mds_requests.begin()->first);
 
   // make note
   MetaRequest request(req, tid);
