@@ -124,18 +124,39 @@ private:
   // -- completed requests --
   // client id -> tid -> result code
   map<int, set<tid_t> > completed_requests;  // completed client requests
+  map<int, map<tid_t, Context*> > waiting_for_trim;
  
 public:
   void add_completed_request(metareqid_t ri) {
     completed_requests[ri.client].insert(ri.tid);
   }
-  void trim_completed_requests(int client, tid_t mintid) {
-    if (completed_requests.count(client) == 0) return;
-    set<tid_t>& ls = completed_requests[client];
-    while (!ls.empty() && *ls.begin() < mintid)
-      ls.erase(ls.begin());
-    if (ls.empty())
-      completed_requests.erase(client);
+  void trim_completed_requests(int client, 
+			       tid_t mintid) {  // zero means trim all!
+    map<int, set<tid_t> >::iterator p = completed_requests.find(client);
+    if (p == completed_requests.end())
+      return;
+
+    // trim
+    while (!p->second.empty() && (mintid == 0 || *p->second.begin() < mintid))
+      p->second.erase(p->second.begin());
+    if (p->second.empty())
+      completed_requests.erase(p);
+
+    // kick waiters
+    map<int, map<tid_t,Context*> >::iterator q = waiting_for_trim.find(client);
+    if (q != waiting_for_trim.end()) {
+      list<Context*> fls;
+      while (q->second.begin()->first < mintid) {
+	fls.push_back(q->second.begin()->second);
+	q->second.erase(q->second.begin());
+      }
+      if (q->second.empty())
+	waiting_for_trim.erase(q);
+      finish_contexts(fls);
+    }
+  }
+  void add_trim_waiter(metareqid_t ri, Context *c) {
+    waiting_for_trim[ri.client][ri.tid] = c;
   }
   bool have_completed_request(metareqid_t ri) {
     return completed_requests.count(ri.client) &&

@@ -62,27 +62,22 @@ mds
 /  - need to journal EOpen
 /  - track openness in hierarchy, so we can tell when to expire vs rejournal EOpen metablobs
   - need to batch EOpen events when rejournaling to avoid looping
+    - or something.........
   - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
     - path+cap window will require fetching and metadata from disk before doing the rejoin
-- client reconnect after resolve, before rejoin.
+- client reconnect stage after resolve, but before rejoin.
 
-- clientmap request history
-  - hmm, so we need completion codes, but only after recovery.
-  - maxtid
-  - list of active tids < max
-  - journaled bit in MDRequest
-  - journal 
-  - complete request list in MClientMap
-    - populated on replay
-    - periodic client->mds MClientLastRetry -> trim request list
+/- clientmap request history
+/  - journaled bit in MDRequest
+/  - complete request list in MClientMap
+/    - populated on replay
+/    - periodic client->mds MClientLastRetry -> trim request list
 
 
 /untested- truncate...
 
 - mds failure vs clients
   - idempotent client ops
-    - how to track in memory?
-    - how to trim?
     - EMetablob replay, expire logic
 - journal+recovery
   - local rename

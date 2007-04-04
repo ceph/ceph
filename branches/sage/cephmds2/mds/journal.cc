@@ -147,6 +147,18 @@ bool EMetaBlob::has_expired(MDS *mds)
       return false;
     }
   }  
+
+  // client requests
+  for (list<metareqid_t>::iterator p = client_reqs.begin();
+       p != client_reqs.end();
+       ++p) {
+    if (mds->clientmap.have_completed_request(*p)) {
+      dout(10) << "EMetaBlob.has_expired still have completed request " << *p
+	       << endl;
+      return false;
+    }
+  }
+
   
   return true;  // all dirlumps expired, etc.
 }
@@ -250,6 +262,17 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       dout(10) << "EMetaBlob.expire waiting for purge of inode " << p->first.ino
 	       << " to " << p->second << endl;
       mds->mdcache->wait_for_purge(p->first.ino, p->second, gather->new_sub());
+    }
+  }
+
+  // client requests
+  for (list<metareqid_t>::iterator p = client_reqs.begin();
+       p != client_reqs.end();
+       ++p) {
+    if (mds->clientmap.have_completed_request(*p)) {
+      dout(10) << "EMetaBlob.expire waiting on completed request " << *p
+	       << endl;
+      mds->clientmap.add_trim_waiter(*p, gather->new_sub());
     }
   }
 

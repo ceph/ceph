@@ -141,6 +141,9 @@ void Server::handle_client_unmount(Message *m)
 {
   dout(3) << "unmount by " << m->get_source() << " oldv " << mds->clientmap.get_version() << endl;
 
+  // purge completed requests from clientmap
+  mds->clientmap.trim_completed_requests(m->get_source().num(), 0);
+  
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
   mdlog->submit_entry(new EMount(m->get_source_inst(), false, cmapv),
@@ -230,7 +233,7 @@ void Server::handle_client_request(MClientRequest *req)
     }
   }
   // trim completed_request list
-  if (req->get_oldest_client_tid())
+  if (req->get_oldest_client_tid() > 0)
     mds->clientmap.trim_completed_requests(req->get_source().num(),
 					   req->get_oldest_client_tid());
 
