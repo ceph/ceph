@@ -978,14 +978,16 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " was " << cap_string(old_caps) << endl;
   
   // did file size decrease?
-  if ((old_caps & new_caps & CAP_FILE_RDCACHE) &&
+  if ((old_caps & (CAP_FILE_RD|CAP_FILE_WR)) == 0 &&
+      (new_caps & (CAP_FILE_RD|CAP_FILE_WR)) != 0 &&
       in->inode.size > m->get_inode().size) {
-    dout(10) << "**** file size decreased from " << in->inode.size << " to " << m->get_inode().size << " FIXME" << endl;
-    // must have been a truncate() by someone.
-    // trim the buffer cache
-    // ***** fixme write me ****
+    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << endl;
+    
+    // trim filecache?
+    if (g_conf.client_oc)
+      in->fc.truncate(in->inode.size, m->get_inode().size);
 
-    in->file_wr_size = m->get_inode().size; //??
+    in->inode.size = in->file_wr_size = m->get_inode().size; 
   }
 
   // update inode
@@ -2397,8 +2399,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
-  if (offset < 0) 
+  bool movepos = false;
+  if (offset < 0) {
     offset = f->pos;
+    movepos = true;
+  }
 
   bool lazy = f->mode == FILE_MODE_LAZY;
   
@@ -2464,9 +2469,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
     while (!done)
       cond.Wait(client_lock);
   }
-
-  // adjust fd pos
-  f->pos = offset+blist.length();
+  
+  if (movepos) {
+    // adjust fd pos
+    f->pos = offset+blist.length();
+  }
 
   // copy data into caller's char* buf
   blist.copy(0, blist.length(), buf);
@@ -2522,8 +2529,11 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
-  if (offset < 0) 
+  if (offset < 0) {
     offset = f->pos;
+    // adjust fd pos
+    f->pos = offset+size;
+  }
 
   bool lazy = f->mode == FILE_MODE_LAZY;
 
@@ -2543,9 +2553,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
     // write (this may block!)
     in->fc.write(offset, size, blist, client_lock);
     
-    // adjust fd pos
-    f->pos = offset+size;
-
   } else {
     // legacy, inconsistent synchronous write.
     dout(7) << "synchronous write" << endl;
@@ -2579,9 +2586,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 		 //, 1+((int)g_clock.now()) / 10 //f->pos // hack hack test osd revision snapshots
 		 ); 
     
-    // adjust fd pos
-    f->pos = offset+size;
-
     while (!done) {
       cond.Wait(client_lock);
       dout(20) << " sync write bump " << onfinish << endl;

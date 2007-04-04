@@ -41,7 +41,7 @@ class Clock {
  public:
   Clock() {
     // set offset
-    tare();
+    //tare();
   }
 
   // real time.
@@ -55,6 +55,9 @@ class Clock {
   // relative time (from startup)
   void tare() {
     gettimeofday(&zero.timeval(), NULL);
+  }
+  void tare(utime_t z) {
+    zero = z;
   }
   utime_t now() {
     //lock.Lock();  

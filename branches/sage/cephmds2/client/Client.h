@@ -199,6 +199,8 @@ class Inode {
     if (num_open_rd) w |= CAP_FILE_RD|CAP_FILE_RDCACHE;
     if (num_open_wr) w |= CAP_FILE_WR|CAP_FILE_WRBUFFER;
     if (num_open_lazy) w |= CAP_FILE_LAZYIO;
+    if (fc.is_dirty()) w |= CAP_FILE_WRBUFFER;
+    if (fc.is_cached()) w |= CAP_FILE_RDCACHE;
     return w;
   }
 
@@ -552,6 +554,7 @@ protected:
 
   // crap
   int chdir(const char *s);
+  const string getcwd() { return cwd; }
 
   // namespace ops
   int getdir(const char *path, list<string>& contents);

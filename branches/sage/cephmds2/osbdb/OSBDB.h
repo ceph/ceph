@@ -389,6 +389,7 @@ public:
 class OSBDB : public ObjectStore
 {
  private:
+  Mutex lock;
   DbEnv *env;
   Db *db;
   string device;
@@ -400,7 +401,7 @@ class OSBDB : public ObjectStore
  public:
 
   OSBDB(const char *dev) throw(OSBDBException)
-    : env(0), db (0), device (dev), mounted(false), opened(false),
+    : lock(true), env(0), db (0), device (dev), mounted(false), opened(false),
       transactional(g_conf.bdbstore_transactional)
   {
   }
@@ -475,4 +476,5 @@ private:
   int _setattr(object_t oid, const char *name, const void *value,
                size_t size, Context *onsync, DbTxn *txn);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
+  DbEnv *getenv();
 };

@@ -1298,7 +1298,7 @@ void Locker::file_eval(FileLock *lock)
     case LOCK_GLOCKR:
     case LOCK_GLOCKM:
     case LOCK_GLOCKL:
-      if (issued == 0) {
+      if ((issued & ~CAP_FILE_RDCACHE) == 0) {
         lock->set_state(LOCK_LOCK);
         
         // waiters

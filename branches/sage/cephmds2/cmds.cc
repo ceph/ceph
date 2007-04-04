@@ -74,6 +74,7 @@ int main(int argc, char **argv)
     }
   }
 
+  if (g_conf.clock_tare) g_clock.tare();
 
   // load monmap
   MonMap monmap;

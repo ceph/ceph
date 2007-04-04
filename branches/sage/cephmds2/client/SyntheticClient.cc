@@ -154,6 +154,11 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"optest") == 0) {
 	syn_modes.push_back( SYNCLIENT_MODE_OPTEST );
         syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"truncate") == 0) { 
+        syn_modes.push_back( SYNCLIENT_MODE_TRUNCATE );
+	syn_sargs.push_back(args[++i]);
+        syn_iargs.push_back(atoi(args[++i]));
       } else {
         cerr << "unknown syn arg " << args[i] << endl;
         assert(0);
@@ -531,6 +536,16 @@ int SyntheticClient::run()
         }
       }
       break;
+
+    case SYNCLIENT_MODE_TRUNCATE:
+      {
+        string file = get_sarg(0);
+        sargs.push_front(file);
+        int iarg1 = iargs.front();  iargs.pop_front();
+	if (run_me()) 
+	  client->truncate(file.c_str(), iarg1);
+      }
+      break;
       
     default:
       assert(0);
@@ -796,6 +811,27 @@ int SyntheticClient::full_walk(string& basedir)
 	dout(1) << "stat error on " << file << " r=" << r << endl;
 	continue;
       }
+      
+      // print
+      char *tm = ctime(&st.st_mtime);
+      tm[strlen(tm)-1] = 0;
+      printf("%c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+	     S_ISDIR(st.st_mode) ? 'd':'-',
+	     (st.st_mode & 0400) ? 'r':'-',
+	     (st.st_mode & 0200) ? 'w':'-',
+	     (st.st_mode & 0100) ? 'x':'-',
+	     (st.st_mode & 040) ? 'r':'-',
+	     (st.st_mode & 020) ? 'w':'-',
+	     (st.st_mode & 010) ? 'x':'-',
+	     (st.st_mode & 04) ? 'r':'-',
+	     (st.st_mode & 02) ? 'w':'-',
+	     (st.st_mode & 01) ? 'x':'-',
+	     (int)st.st_nlink,
+	     st.st_uid, st.st_gid,
+	     (int)st.st_size,
+	     tm,
+	     file.c_str());
+
       
       if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
 	dirq.push_back(file);

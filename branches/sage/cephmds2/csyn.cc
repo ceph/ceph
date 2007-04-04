@@ -45,6 +45,8 @@ int main(int argc, char **argv, char *envp[]) {
   // args for fuse
   vec_to_argv(args, argc, argv);
 
+  if (g_conf.clock_tare) g_clock.tare();
+
   // load monmap
   MonMap monmap;
   int r = monmap.read(".ceph_monmap");

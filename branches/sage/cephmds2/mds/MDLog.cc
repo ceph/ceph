@@ -95,6 +95,12 @@ void MDLog::init_journaler()
   journaler = new Journaler(log_inode, mds->objecter, logger);
 }
 
+void MDLog::flush_logger()
+{
+  if (logger)
+    logger->flush(true);
+}
+
 
 
 void MDLog::reset()

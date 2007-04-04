@@ -76,8 +76,7 @@ int main(int argc, char **argv)
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
-
-  g_clock.tare();
+  if (g_conf.clock_tare) g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;

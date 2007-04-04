@@ -73,7 +73,9 @@ int main(int argc, char **argv)
       return -1;
     }
   }
-  
+
+  if (g_conf.clock_tare) g_clock.tare();
+
   MonMap monmap;
 
   if (whoami < 0) {

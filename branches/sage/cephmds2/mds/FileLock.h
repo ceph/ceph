@@ -34,7 +34,7 @@ using namespace std;
 
 #define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
 #define LOCK_GLOCKR_ -3  // AR   R . / C . . . . .   . . / C . . . . .
-#define LOCK_GLOCKL  -4  // A    . . / . . . . . .                       loner -> lock
+#define LOCK_GLOCKL  -4  // A    . . / C . . . . .                       loner -> lock
 #define LOCK_GLOCKM  -5  // A    . . / . . . . . .
 
 #define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
@@ -164,9 +164,9 @@ class FileLock : public SimpleLock {
         return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
+      case LOCK_GLOCKL:
         return CAP_FILE_RDCACHE;
 
-      case LOCK_GLOCKL:
       case LOCK_GLOCKM:
         return 0;
 

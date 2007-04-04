@@ -242,7 +242,8 @@ private:
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
-  
+  bool started;
+
   // where i listen
   tcpaddr_t listen_addr;
   entity_addr_t my_addr;

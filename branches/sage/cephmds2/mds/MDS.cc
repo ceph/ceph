@@ -264,6 +264,9 @@ int MDS::init(bool standby)
   // schedule tick
   reset_tick();
 
+  // init logger
+  reopen_logger();
+
   mds_lock.Unlock();
   return 0;
 }
@@ -912,6 +915,11 @@ int MDS::shutdown_final()
 {
   dout(1) << "shutdown_final" << endl;
 
+  // flush loggers
+  if (logger) logger->flush(true);
+  if (logger2) logger2->flush(true);
+  mdlog->flush_logger();
+  
   // send final down:out beacon (it doesn't matter if this arrives)
   set_want_state(MDSMap::STATE_OUT);
 

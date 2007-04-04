@@ -128,7 +128,8 @@ class MDLog {
   }		  
   ~MDLog();
 
- 
+
+  void flush_logger();
 
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }

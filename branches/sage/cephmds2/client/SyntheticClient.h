@@ -53,9 +53,11 @@
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
 
+#define SYNCLIENT_MODE_TRUNCATE     200
 
 #define SYNCLIENT_MODE_FOO        100
 #define SYNCLIENT_MODE_THRASHLINKS  101
+
 
 
 void parse_syn_options(vector<char*>& args);
@@ -197,7 +199,6 @@ class SyntheticClient {
   int play_trace(Trace& t, string& prefix);
 
   void make_dir_mess(const char *basedir, int n);
-
   void foo();
 
   int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
