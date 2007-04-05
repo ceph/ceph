@@ -195,7 +195,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
       // kick any waiters
       if (ack_waiters.count(atid)) {
 	dout(15) << "kicking waiters on atid " << atid << endl;
-	mds->queue_finished(ack_waiters[atid]);
+	mds->queue_waiters(ack_waiters[atid]);
 	ack_waiters.erase(atid);
       }
     }

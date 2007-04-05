@@ -64,7 +64,9 @@ public:
 private:
   // effects version
   hash_map<int,entity_inst_t> client_inst;
-  set<int>                    sessions;
+  set<int> sessions;
+  set<int> opening;
+  set<int> closing;
 
 public:
   bool empty() {
@@ -77,15 +79,21 @@ public:
   }
   const set<int>& get_session_set() { return sessions; }
   
+  bool is_opening(int c) { return opening.count(c); }
+  void add_opening(int c) { opening.insert(c); }
+  bool is_closing(int c) { return closing.count(c); }
+  void add_closing(int c) { closing.insert(c); }
   bool have_session(int client) {
     return client_inst.count(client);
   }
-  void add_session(const entity_inst_t& inst) {
+  void open_session(const entity_inst_t& inst) {
+    opening.erase(inst.name.num());
     client_inst[inst.name.num()] = inst;
     sessions.insert(inst.name.num());
     version++;
   }
-  void rem_session(int client) {
+  void close_session(int client) {
+    closing.erase(client);
     sessions.erase(client);
     client_inst.erase(client);
     version++;
@@ -117,7 +125,8 @@ public:
     map<int, map<tid_t,Context*> >::iterator q = waiting_for_trim.find(client);
     if (q != waiting_for_trim.end()) {
       list<Context*> fls;
-      while (q->second.begin()->first < mintid) {
+      while (!q->second.empty() &&
+	     (mintid == 0 || q->second.begin()->first < mintid)) {
 	fls.push_back(q->second.begin()->second);
 	q->second.erase(q->second.begin());
       }

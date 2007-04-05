@@ -452,7 +452,7 @@ void CDir::finish_waiting(int mask, int result)
   list<Context*> finished;
   take_waiting(mask, finished);
   //finish_contexts(finished, result);
-  cache->mds->queue_finished(finished);
+  cache->mds->queue_waiters(finished);
 }
 
 
@@ -944,7 +944,7 @@ void CDir::_committed(version_t v)
     map<version_t, list<Context*> >::iterator n = p;
     n++;
     if (p->first > committed_version) break; // haven't committed this far yet.
-    cache->mds->queue_finished(p->second);
+    cache->mds->queue_waiters(p->second);
     waiting_for_commit.erase(p);
     p = n;
   } 
@@ -1048,7 +1048,7 @@ void CDir::set_dir_auth(pair<int,int> a, bool iamauth)
   if (was_ambiguous && dir_auth.second == CDIR_AUTH_UNKNOWN) {
     list<Context*> ls;
     take_waiting(WAIT_SINGLEAUTH, ls);
-    cache->mds->queue_finished(ls);
+    cache->mds->queue_waiters(ls);
   }
 }
 

@@ -138,10 +138,10 @@ class MDS : public Dispatcher {
   // -- waiters --
   list<Context*> finished_queue;
 
-  void queue_finished(Context *c) {
+  void queue_waiter(Context *c) {
     finished_queue.push_back(c);
   }
-  void queue_finished(list<Context*>& ls) {
+  void queue_waiters(list<Context*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
   }
   

@@ -59,7 +59,7 @@ void ClientMonitor::handle_client_mount(MClientMount *m)
       (client_map.count(from) && 
        client_map[from] != m->get_source_addr())) {
     from = num_clients++;
-    dout(10) << "client_boot assigned client" << from << endl;
+    dout(10) << "client_mount assigned client" << from << endl;
   }
   
   client_map[from] = m->get_source_addr();

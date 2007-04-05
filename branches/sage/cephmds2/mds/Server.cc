@@ -91,30 +91,15 @@ void Server::dispatch(Message *m)
 
 class C_MDS_session_finish : public Context {
   MDS *mds;
-  MClientSession *m;
+  entity_inst_t client_inst;
   bool open;
   version_t cmapv;
 public:
-  C_MDS_session_finish(MDS *m, MClientSession *msg, bool s, version_t mv) :
-    mds(m), m(msg), open(s), cmapv(mv) { }
+  C_MDS_session_finish(MDS *m, entity_inst_t ci, bool s, version_t mv) :
+    mds(m), client_inst(ci), open(s), cmapv(mv) { }
   void finish(int r) {
     assert(r == 0);
-
-    // apply
-    if (open)
-      mds->clientmap.add_session(m->get_source_inst());
-    else
-      mds->clientmap.rem_session(m->get_source().num());
-    
-    assert(cmapv == mds->clientmap.get_version());
-    
-    // purge completed requests from clientmap?
-    if (!open) 
-      mds->clientmap.trim_completed_requests(m->get_source().num(), 0);
-    
-    // reply
-    mds->messenger->send_message(new MClientSession(m->op+1), m->get_source_inst());
-    delete m;
+    mds->server->_session_logged(client_inst, open, cmapv);
   }
 };
 
@@ -122,13 +107,58 @@ public:
 void Server::handle_client_session(MClientSession *m)
 {
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << endl;
-
+  int from = m->get_source().num();
   bool open = m->op == MClientSession::OP_OPEN;
-  
+
+  if (open) {
+    if (mds->clientmap.is_opening(from)) {
+      dout(10) << "already opening, dropping this req" << endl;
+      delete m;
+      return;
+    }
+    mds->clientmap.add_opening(from);
+  } else {
+    if (mds->clientmap.is_closing(from)) {
+      dout(10) << "already closing, dropping this req" << endl;
+      delete m;
+      return;
+    }
+    mds->clientmap.add_closing(from);
+  }
+
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
   mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
-		      new C_MDS_session_finish(mds, m, open, cmapv));
+		      new C_MDS_session_finish(mds, m->get_source_inst(), open, cmapv));
+  delete m;
+}
+
+void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cmapv)
+{
+  dout(10) << "_session_logged " << client_inst << " " << (open ? "open":"close")
+	   << " " << cmapv 
+	   << endl;
+
+  // apply
+  int from = client_inst.name.num();
+  if (open) {
+    assert(mds->clientmap.is_opening(from));
+    mds->clientmap.open_session(client_inst);
+  } else {
+    assert(mds->clientmap.is_closing(from));
+    mds->clientmap.close_session(from);
+    
+    // purge completed requests from clientmap
+    mds->clientmap.trim_completed_requests(from, 0);
+  }
+  
+  assert(cmapv == mds->clientmap.get_version());
+  
+  // reply
+  if (open) 
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN_ACK), client_inst);
+  else
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE_ACK), client_inst);
 }
 
 
@@ -137,19 +167,16 @@ void Server::terminate_sessions()
   dout(2) << "terminate_sessions" << endl;
 
   // kill them off.  clients will retry etc.
-  while (!mds->clientmap.get_session_set().empty()) {
-    int client = *mds->clientmap.get_session_set().begin();
-    dout(10) << "terminating session for client" << client << endl;
-
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE_ACK),
-				 mds->clientmap.get_inst(client));
-    mds->clientmap.rem_session(client);
-
-    // trim requests
-    mds->clientmap.trim_completed_requests(client, 0);
+  for (set<int>::const_iterator p = mds->clientmap.get_session_set().begin();
+       p != mds->clientmap.get_session_set().end();
+       ++p) {
+    if (mds->clientmap.is_closing(*p)) 
+      continue;
+    mds->clientmap.add_closing(*p);
+    version_t cmapv = mds->clientmap.inc_projected();
+    mdlog->submit_entry(new ESession(mds->clientmap.get_inst(*p), false, cmapv),
+			new C_MDS_session_finish(mds, mds->clientmap.get_inst(*p), false, cmapv));
   }
-  
-  // FIXME hrm, should i journal this?
 }
 
 
@@ -178,24 +205,35 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   dout(7) << "handle_client_reconnect " << m->get_source() << endl;
   int from = m->get_source().num();
 
-  // caps
-  for (map<inodeno_t, MClientReconnect::inode_caps_t>::iterator p = m->inode_caps.begin();
-       p != m->inode_caps.end();
-       ++p) {
-    CInode *in = mdcache->get_inode(p->first);
-    if (!in) {
-      dout(0) << "missing " << p->first << ", fetching via " << m->inode_path[p->first] << endl;
-      assert(0);
-      continue;
+  if (m->closed) {
+    dout(7) << " client had no session, removing from clientmap" << endl;
+
+    mds->clientmap.add_closing(from);
+    version_t cmapv = mds->clientmap.inc_projected();
+    mdlog->submit_entry(new ESession(mds->clientmap.get_inst(from), false, cmapv),
+			new C_MDS_session_finish(mds, mds->clientmap.get_inst(from), false, cmapv));
+
+  } else {
+
+    // caps
+    for (map<inodeno_t, MClientReconnect::inode_caps_t>::iterator p = m->inode_caps.begin();
+	 p != m->inode_caps.end();
+	 ++p) {
+      CInode *in = mdcache->get_inode(p->first);
+      if (!in) {
+	dout(0) << "missing " << p->first << ", fetching via " << m->inode_path[p->first] << endl;
+	assert(0);
+	continue;
+      }
+      
+      dout(10) << " client cap " << cap_string(p->second.wanted)
+	       << " seq " << p->second.seq 
+	       << " on " << *in << endl;
+      Capability cap(p->second.wanted, p->second.seq);
+      in->add_client_cap(from, cap);
+      
+      reconnected_open_files.insert(in);
     }
-
-    dout(10) << " client cap " << cap_string(p->second.wanted)
-	     << " seq " << p->second.seq 
-	     << " on " << *in << endl;
-    Capability cap(p->second.wanted, p->second.seq);
-    in->add_client_cap(from, cap);
-
-    reconnected_open_files.insert(in);
   }
 
   // remove from gather set
@@ -1727,6 +1765,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
   C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
 								 ipv, pi->ctime);
   
+  journal_opens();  // journal pending opens, just in case
+  
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -2224,6 +2264,8 @@ void Server::_rename_local(MDRequest *mdr,
   C_MDS_rename_local_finish *fin = new C_MDS_rename_local_finish(mds, mdr, 
 								 srcdn, destdn, straydn,
 								 ipv, pi ? pi->ctime:utime_t());
+
+  journal_opens();  // journal pending opens, just in case
   
   if (anchorfin) {
     // doing anchor update prepare first
@@ -2681,11 +2723,61 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 
   // journal?
   if (cur->last_open_journaled == 0) {
-    cur->last_open_journaled = mdlog->get_write_pos();
-    mdlog->submit_entry(new EOpen(cur));
+    queue_journal_open(cur);
+    maybe_journal_opens();
   }
 
 }
+
+void Server::queue_journal_open(CInode *in)
+{
+  dout(10) << "queue_journal_open on " << *in << endl;
+
+  // pin so our pointer stays valid
+  in->get(CInode::PIN_BATCHOPENJOURNAL);
+
+  // queue it up for a bit
+  journal_open_queue.insert(in);
+}
+
+
+void Server::journal_opens()
+{
+  dout(10) << "journal_opens " << journal_open_queue.size() << " inodes" << endl;
+  if (journal_open_queue.empty()) return;
+
+  EOpen *le = 0;
+
+  // check queued inodes
+  for (set<CInode*>::iterator p = journal_open_queue.begin();
+       p != journal_open_queue.end();
+       ++p) {
+    (*p)->put(CInode::PIN_BATCHOPENJOURNAL);
+    if ((*p)->is_any_caps()) {
+      if (!le) le = new EOpen;
+      le->add_inode(*p);
+      (*p)->last_open_journaled = mds->mdlog->get_write_pos();
+    }
+  }
+  journal_open_queue.clear();
+  
+  if (le) {
+    // journal
+    mds->mdlog->submit_entry(le);
+  
+    // add waiters to journal entry
+    for (list<Context*>::iterator p = journal_open_waiters.begin();
+	 p != journal_open_waiters.end();
+	 ++p) 
+      mds->mdlog->wait_for_sync(*p);
+    journal_open_waiters.clear();
+  } else {
+    // nothing worth journaling here, just kick the waiters.
+    mds->queue_waiters(journal_open_waiters);
+  }
+}
+
+
 
 
 class C_MDS_open_truncate_purged : public Context {

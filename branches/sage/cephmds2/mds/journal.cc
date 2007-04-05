@@ -35,6 +35,7 @@
 #include "MDS.h"
 #include "MDLog.h"
 #include "MDCache.h"
+#include "Server.h"
 #include "Migrator.h"
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -504,9 +505,9 @@ void ESession::replay(MDS *mds)
 {
   dout(10) << "ESession.replay" << endl;
   if (open)
-    mds->clientmap.add_session(client_inst);
+    mds->clientmap.open_session(client_inst);
   else
-    mds->clientmap.rem_session(client_inst.name.num());
+    mds->clientmap.close_session(client_inst.name.num());
   mds->clientmap.reset_projected(); // make it follow version.
 }
 
@@ -669,42 +670,45 @@ void EUpdate::replay(MDS *mds)
 
 bool EOpen::has_expired(MDS *mds)
 {
-  CInode *in = mds->mdcache->get_inode(ino);
-  if (!in) return true;
-  if (!in->is_any_caps()) return true;
-  if (in->last_open_journaled > get_start_off() ||
-      in->last_open_journaled == 0) return true;
-  return false;
+  for (list<inodeno_t>::iterator p = inos.begin(); p != inos.end(); ++p) {
+    CInode *in = mds->mdcache->get_inode(*p);
+    if (in &&
+	in->is_any_caps() &&
+	!(in->last_open_journaled > get_start_off() ||
+	  in->last_open_journaled == 0)) {
+      dout(10) << "EOpen.has_expired still refer to caps on " << *in << endl;
+      return false;
+    }
+  }
+  return true;
 }
 
 void EOpen::expire(MDS *mds, Context *c)
 {
-  CInode *in = mds->mdcache->get_inode(ino);
-  assert(in);
-
-  dout(10) << "EOpen.expire " << ino
-	   << " last_open_journaled " << in->last_open_journaled << endl;
+  dout(10) << "EOpen.expire " << endl;
   
-  // wait?
-  // FIXME this is stupid.
-  if (in->last_open_journaled == get_start_off()) {
-    //||
-    //(get_start_off() < mds->mdlog->last_import_map &&
-    //in->last_open_journaled < mds->mdlog->last_import_map)) {
-    dout(10) << "waiting." << endl;
-    // wait
-    mds->mdlog->add_import_map_expire_waiter(c);
-  } else {
-    // rejournal now.
-    dout(10) << "rejournaling" << endl;
-    in->last_open_journaled = mds->mdlog->get_write_pos();
-    mds->mdlog->submit_entry(new EOpen(in));
+  if (mds->mdlog->is_capped()) {
+    dout(0) << "uh oh, log is capped, but i have unexpired opens." << endl;
+    assert(0);
   }
+
+  for (list<inodeno_t>::iterator p = inos.begin(); p != inos.end(); ++p) {
+    CInode *in = mds->mdcache->get_inode(*p);
+    if (!in) continue;
+    if (!in->is_any_caps()) continue;
+    
+    dout(10) << "EOpen.expire " << in->ino()
+	     << " last_open_journaled " << in->last_open_journaled << endl;
+
+    mds->server->queue_journal_open(in);
+  }
+  mds->server->add_journal_open_waiter(c);
+  mds->server->maybe_journal_opens();
 }
 
 void EOpen::replay(MDS *mds)
 {
-  dout(10) << "EOpen.replay " << ino << endl;
+  dout(10) << "EOpen.replay " << endl;
   metablob.replay(mds);
 }
 

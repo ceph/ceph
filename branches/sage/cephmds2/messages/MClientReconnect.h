@@ -29,8 +29,10 @@ public:
 
   map<inodeno_t, inode_caps_t>  inode_caps;
   map<inodeno_t, string>        inode_path;
+  bool closed;
 
-  MClientReconnect() : Message(MSG_CLIENT_RECONNECT) { }
+  MClientReconnect() : Message(MSG_CLIENT_RECONNECT),
+		       closed(false) { }
 
   char *get_type_name() { return "client_reconnect"; }
   void print(ostream& out) {
@@ -48,11 +50,13 @@ public:
   }
 
   void encode_payload() {
+    ::_encode(closed, payload);
     ::_encode(inode_caps, payload);
     ::_encode(inode_path, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(closed, payload, off);
     ::_decode(inode_caps, payload, off);
     ::_decode(inode_path, payload, off);
   }

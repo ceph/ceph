@@ -1016,6 +1016,7 @@ void Rank::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << endl;
+  dout(1) << "shutdown complete." << endl;
 }
 
 
@@ -1101,10 +1102,10 @@ int Rank::EntityMessenger::shutdown()
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
-    dout(1) << "shutdown i am dispatch, setting stop flag" << endl;
+    dout(10) << "shutdown i am dispatch, setting stop flag" << endl;
     stop = true;
   } else {
-    dout(1) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
+    dout(10) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
     lock.Lock();
     stop = true;
     cond.Signal();

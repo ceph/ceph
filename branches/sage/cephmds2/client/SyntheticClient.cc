@@ -20,7 +20,8 @@ using namespace std;
 #include "SyntheticClient.h"
 
 #include "include/filepath.h"
-#include "mds/MDS.h"
+#include "mds/mdstypes.h"
+#include "common/Logger.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

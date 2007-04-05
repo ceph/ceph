@@ -40,14 +40,11 @@ mds
     - ScatterLock or something?  hrm.
 
 - discover
-/  - hard link dentries
   - open_remote_ino needs major work...
 
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
-
-- rejoin and replicas that are not in recovered node's cache...  fetch storm?
 
 - remote xlocks
   - drop remote locks on request finish
@@ -58,30 +55,13 @@ mds
     - replicas will tell it when they hold an xlock
   - surviving mds rejoins replicas from a recovering mds
     - will tell auth if it holds an xlock
+
 - recovering open files
-/  - need to journal EOpen
-/  - track openness in hierarchy, so we can tell when to expire vs rejournal EOpen metablobs
-  - need to batch EOpen events when rejournaling to avoid looping
-    - or something.........
   - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
-    - path+cap window will require fetching and metadata from disk before doing the rejoin
-- client reconnect stage after resolve, but before rejoin.
+    - path+cap window will require some fetching of metadata from disk before doing the rejoin
 
-/- clientmap request history
-/  - journaled bit in MDRequest
-/  - complete request list in MClientMap
-/    - populated on replay
-/    - periodic client->mds MClientLastRetry -> trim request list
-
-
-/untested- truncate...
-
-- mds failure vs clients
-  - idempotent client ops
-    - EMetablob replay, expire logic
 - journal+recovery
   - local rename
-/    - fix dir renames vs subtrees
     - how to notify replicas...
 /  - stray purge
   - stray reintegration

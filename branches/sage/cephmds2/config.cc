@@ -176,6 +176,8 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
   mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
+  mds_log_eopen_size: 100,
+
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
   mds_bal_hash_rd: 10000,

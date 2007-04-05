@@ -20,23 +20,27 @@
 class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
-  inodeno_t ino;
+  list<inodeno_t> inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
-  EOpen(CInode *in) : LogEvent(EVENT_OPEN),
-		      ino(in->ino()) {
-    metablob.add_primary_dentry(in->get_parent_dn(), false);
+  EOpen(CInode *in) : LogEvent(EVENT_OPEN) {
+    add_inode(in);
   }
   void print(ostream& out) {
-    out << "EOpen " << ino << " " << metablob;
+    out << "EOpen " << metablob;
+  }
+
+  void add_inode(CInode *in) {
+    inos.push_back(in->ino());
+    metablob.add_primary_dentry(in->get_parent_dn(), false);
   }
 
   void encode_payload(bufferlist& bl) {
-    ::_encode(ino, bl);
+    ::_encode(inos, bl);
     metablob._encode(bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(ino, bl, off);
+    ::_decode(inos, bl, off);
     metablob._decode(bl, off);
   }
 

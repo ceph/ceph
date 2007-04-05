@@ -987,7 +987,7 @@ void MDCache::handle_mds_failure(int who)
       // take waiters
       list<Context*> waiters;
       in->take_waiting(CInode::WAIT_DIR, waiters);
-      mds->queue_finished(waiters);
+      mds->queue_waiters(waiters);
       dout(10) << "kicking WAIT_DIR on " << *in << endl;
       
       // remove from mds list
@@ -1053,7 +1053,7 @@ void MDCache::handle_mds_recovery(int who)
   }
 
   // queue them up.
-  mds->queue_finished(waiters);
+  mds->queue_waiters(waiters);
 }
 
 void MDCache::set_recovery_set(set<int>& s) 
@@ -2489,6 +2489,11 @@ bool MDCache::shutdown_pass()
   trim(0);
   dout(5) << "lru size now " << lru.lru_get_size() << endl;
 
+  // flush batching eopens, so that we can properly expire them.
+  mds->server->journal_opens();    // hrm, this is sort of a hack.
+
+  // flush what we can from the log
+  mds->mdlog->trim(0);
 
   // SUBTREES
   // send all imports back to 0.
@@ -2530,9 +2535,6 @@ bool MDCache::shutdown_pass()
   // empty out stray contents
   // FIXME
   dout(7) << "FIXME: i need to empty out stray dir contents..." << endl;
-
-  // LOG
-  mds->mdlog->trim(0);
 
   // (wait for) flush log?
   if (g_conf.mds_log_flush_on_shutdown) {
@@ -4077,7 +4079,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   // finish errors directly
   finish_contexts(error, -ENOENT);
 
-  mds->queue_finished(finished);
+  mds->queue_waiters(finished);
 
   // done
   delete m;
@@ -4304,7 +4306,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	list<Context*> finished;
 	CDir *dir = add_replica_dir(in, m->straydir->get_dirfrag().frag, *m->straydir,
 				    m->get_source().num(), finished);
-	if (!finished.empty()) mds->queue_finished(finished);
+	if (!finished.empty()) mds->queue_waiters(finished);
 	
 	// dentry
 	straydn = dir->add_dentry( m->straydn->get_dname(), 0, false );

@@ -259,7 +259,7 @@ void Migrator::handle_mds_failure(int who)
 	mds->locker->dentry_anon_rdlock_trace_finish(trace);
 	
 	// wake up any waiters
-	mds->queue_finished(export_finish_waiters[dir]);
+	mds->queue_waiters(export_finish_waiters[dir]);
 	export_finish_waiters.erase(dir);
 	
 	// send pending import_maps?  (these need to go out when all exports have finished.)
@@ -1170,7 +1170,7 @@ void Migrator::export_finish(CDir *dir)
   export_notify_ack_waiting.erase(dir);
 
   // queue finishers
-  mds->queue_finished(export_finish_waiters[dir]);
+  mds->queue_waiters(export_finish_waiters[dir]);
   export_finish_waiters.erase(dir);
 
   // stats

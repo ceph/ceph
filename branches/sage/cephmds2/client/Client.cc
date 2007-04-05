@@ -892,28 +892,34 @@ void Client::send_reconnect(int mds)
 
   MClientReconnect *m = new MClientReconnect;
 
-  for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       p++) {
-    if (p->second->caps.count(mds)) {
-      dout(10) << " caps on " << p->first
-	       << " " << cap_string(p->second->caps[mds].caps)
-	       << " wants " << cap_string(p->second->file_caps_wanted())
-	       << endl;
-      m->add_inode_caps(p->first, 
-			p->second->caps[mds].caps,
-			p->second->caps[mds].seq,
-			p->second->file_caps_wanted());
-      string path;
-      p->second->make_path(path);
-      dout(10) << " path on " << p->first << " is " << path << endl;
-      m->add_inode_path(p->first, path);
-    }
-    if (p->second->stale_caps.count(mds)) {
-      dout(10) << " clearing stale caps on " << p->first << endl;
-      p->second->stale_caps.erase(mds);         // hrm, is this right?
-    }
-  }    
+  if (mds_sessions.count(mds)) {
+    // i have an open session.
+    for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+	 p != inode_map.end();
+	 p++) {
+      if (p->second->caps.count(mds)) {
+	dout(10) << " caps on " << p->first
+		 << " " << cap_string(p->second->caps[mds].caps)
+		 << " wants " << cap_string(p->second->file_caps_wanted())
+		 << endl;
+	m->add_inode_caps(p->first, 
+			  p->second->caps[mds].caps,
+			  p->second->caps[mds].seq,
+			  p->second->file_caps_wanted());
+	string path;
+	p->second->make_path(path);
+	dout(10) << " path on " << p->first << " is " << path << endl;
+	m->add_inode_path(p->first, path);
+      }
+      if (p->second->stale_caps.count(mds)) {
+	dout(10) << " clearing stale caps on " << p->first << endl;
+	p->second->stale_caps.erase(mds);         // hrm, is this right?
+      }
+    }    
+  } else {
+    dout(10) << " i had no session with this mds";
+    m->closed = true;
+  }
 
   messenger->send_message(m, mdsmap->get_inst(mds), MDS_PORT_SERVER);
 }

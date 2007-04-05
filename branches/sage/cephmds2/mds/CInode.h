@@ -63,6 +63,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_UNANCHORING = 13;
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
+  static const int PIN_BATCHOPENJOURNAL = 16;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -76,6 +77,7 @@ class CInode : public MDSCacheObject {
     case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
+    case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     default: return generic_pin_name(p);
     }
   }
