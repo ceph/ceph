@@ -11,27 +11,23 @@
  * 
  */
 
-
 #ifndef __MCLIENTFILECAPS_H
 #define __MCLIENTFILECAPS_H
 
-#define CLIENT_FILECAP_RELEASE 1  // mds closed the cap
-#define CLIENT_FILECAP_STALE   2  // mds has exported the cap
-#define CLIENT_FILECAP_REAP    3  // mds has imported the cap from get_mds()
+#include "msg/Message.h"
 
 class MClientFileCaps : public Message {
  public:
-  static const int FILECAP_RELEASE = 1;
-  static const int FILECAP_STALE = 2;
-  static const int FILECAP_REAP = 3;
-
+  static const int OP_ACK     = 0;  // mds->client or client->mds update.  FIXME?
+  static const int OP_RELEASE = 1;  // mds closed the cap
+  static const int OP_STALE   = 2;  // mds has exported the cap
+  static const int OP_REAP    = 3;  // mds has imported the cap from get_mds()
 
  private:
   inode_t   inode;
   int       caps;
   long      seq;
   int       wanted;
-  //int       client;
   
   int       special;   // stale || reap;  in conjunction w/ mds value
   int       mds;
@@ -42,13 +38,11 @@ class MClientFileCaps : public Message {
   int       get_caps() { return caps; }
   int       get_wanted() { return wanted; }
   long      get_seq() { return seq; }
-  //int       get_client() { return client; }
 
   // for cap migration
   int       get_mds() { return mds; }
   int       get_special() { return special; }
 
-  //void set_client(int c) { client = c; }
   void set_caps(int c) { caps = c; }
   void set_wanted(int w) { wanted = w; }
 
@@ -60,7 +54,7 @@ class MClientFileCaps : public Message {
                   long seq,
                   int caps,
                   int wanted,
-                  int special=0,
+                  int special = OP_ACK,
                   int mds=0) :
     Message(MSG_CLIENT_FILECAPS) {
     this->inode = inode;
@@ -70,33 +64,24 @@ class MClientFileCaps : public Message {
     this->special = special;
     this->mds = mds;
   }
-  virtual char *get_type_name() { return "Cfcap";}
+  char *get_type_name() { return "Cfcap";}
   
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(seq), (char*)&seq);
-    off += sizeof(seq);
-    payload.copy(off, sizeof(inode), (char*)&inode);
-    off += sizeof(inode);
-    payload.copy(off, sizeof(caps), (char*)&caps);
-    off += sizeof(caps);
-    payload.copy(off, sizeof(wanted), (char*)&wanted);
-    off += sizeof(wanted);
-    //payload.copy(off, sizeof(client), (char*)&client);
-    //off += sizeof(client);
-    payload.copy(off, sizeof(mds), (char*)&mds);
-    off += sizeof(mds);
-    payload.copy(off, sizeof(special), (char*)&special);
-    off += sizeof(special);
+    ::_decode(seq, payload, off);
+    ::_decode(inode, payload, off);
+    ::_decode(caps, payload, off);
+    ::_decode(wanted, payload, off);
+    ::_decode(mds, payload, off);
+    ::_decode(special, payload, off);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&seq, sizeof(seq));
-    payload.append((char*)&inode, sizeof(inode));
-    payload.append((char*)&caps, sizeof(caps));
-    payload.append((char*)&wanted, sizeof(wanted));
-    //payload.append((char*)&client, sizeof(client));
-    payload.append((char*)&mds,sizeof(mds));
-    payload.append((char*)&special,sizeof(special));
+  void encode_payload() {
+    ::_encode(seq, payload);
+    ::_encode(inode, payload);
+    ::_encode(caps, payload);
+    ::_encode(wanted, payload);
+    ::_encode(mds, payload);
+    ::_encode(special, payload);
   }
 };
 

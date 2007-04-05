@@ -174,6 +174,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "stop") {
       r = 0;
       rs = "stopping";
+      do_stop();
     }
     else if (m->cmd[0] == "mds") {
       mdsmon->handle_command(m, r, rs);
@@ -188,6 +189,12 @@ void Monitor::handle_command(MMonCommand *m)
   delete m;
 }
 
+
+void Monitor::do_stop()
+{
+  dout(0) << "do_stop -- shutting down" << endl;
+  mdsmon->do_stop();
+}
 
 
 void Monitor::dispatch(Message *m)
@@ -234,7 +241,8 @@ void Monitor::dispatch(Message *m)
       break;
 
       // clients
-    case MSG_CLIENT_BOOT:
+    case MSG_CLIENT_MOUNT:
+    case MSG_CLIENT_UNMOUNT:
       clientmon->dispatch(m);
       break;
 

@@ -45,6 +45,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
 
@@ -124,7 +125,7 @@ class Inode {
 
   // about the dir (if this is one!)
   int       dir_auth;
-  set<int>    dir_contacts;
+  set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
@@ -151,6 +152,15 @@ class Inode {
   list<Cond*>       waitfor_read;
   list<Cond*>       waitfor_lazy;
   list<Context*>    waitfor_no_read, waitfor_no_write;
+
+  void make_path(string& p) {
+    if (dn) {
+      if (dn->dir && dn->dir->parent_inode)
+	dn->dir->parent_inode->make_path(p);
+      p += "/";
+      p += dn->name;
+    }
+  }
 
   void get() { 
     ref++; 
@@ -315,7 +325,13 @@ class Client : public Dispatcher {
   int whoami;
   MonMap *monmap;
   
-  // mds fake RPC
+  // mds sessions
+  set<int> mds_sessions;
+  map<int, list<Cond*> > waiting_for_session;
+
+  void handle_client_session(MClientSession *m);
+
+  // mds requests
   struct MetaRequest {
     tid_t tid;
     MClientRequest *request;    
@@ -348,6 +364,7 @@ class Client : public Dispatcher {
   void handle_client_reply(MClientReply *reply);
   void kick_requests(int mds);
 
+  void send_reconnect(int mds);
 
 
   // cluster descriptors
@@ -526,8 +543,7 @@ protected:
   // messaging
   void dispatch(Message *m);
 
-  void handle_mount_ack(class MClientMountAck*);
-  void handle_unmount_ack(Message*);
+  void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 
   // file caps

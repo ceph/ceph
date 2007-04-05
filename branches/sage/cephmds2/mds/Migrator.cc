@@ -735,7 +735,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
                                              it->second.get_last_seq(), 
                                              it->second.pending(),
                                              it->second.wanted(),
-                                             MClientFileCaps::FILECAP_STALE);
+                                             MClientFileCaps::OP_STALE);
     mds->messenger->send_message(m, mds->clientmap.get_inst(it->first),
 				 0, MDS_PORT_CACHE);
   }
@@ -1802,7 +1802,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
                                                 in->client_caps[*it].get_last_seq(),
                                                 in->client_caps[*it].pending(),
                                                 in->client_caps[*it].wanted(),
-                                                MClientFileCaps::FILECAP_REAP);
+                                                MClientFileCaps::OP_REAP);
     caps->set_mds( oldauth ); // reap from whom?
     mds->messenger->send_message(caps, 
 				 mds->clientmap.get_inst(*it),

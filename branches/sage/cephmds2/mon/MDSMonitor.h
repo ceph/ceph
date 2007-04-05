@@ -84,6 +84,8 @@ class MDSMonitor : public Dispatcher {
 
   void handle_command(class MMonCommand *m, int& r, string& rs);
 
+  void do_stop();
+
 };
 
 #endif

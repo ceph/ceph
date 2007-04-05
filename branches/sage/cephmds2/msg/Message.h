@@ -16,17 +16,6 @@
  
 #define MSG_CLOSE 0
 
-#define MSG_NS_CONNECT     1
-#define MSG_NS_CONNECTACK  2
-#define MSG_NS_REGISTER    3
-#define MSG_NS_REGISTERACK 4
-#define MSG_NS_STARTED     5
-#define MSG_NS_UNREGISTER  6
-#define MSG_NS_LOOKUP      7
-#define MSG_NS_LOOKUPREPLY 8
-#define MSG_NS_FAILURE     9
-
-
 #define MSG_PING        10
 #define MSG_PING_ACK    11
 
@@ -72,16 +61,20 @@
 #define MSG_OSD_PG_LOG         53
 #define MSG_OSD_PG_REMOVE      54
 
-#define MSG_CLIENT_REQUEST         60
-#define MSG_CLIENT_REQUEST_FORWARD 61
-#define MSG_CLIENT_REPLY           62
-#define MSG_CLIENT_FILECAPS        63
-#define MSG_CLIENT_INODEAUTHUPDATE 64
+// -- client --
+// to monitor
+#define MSG_CLIENT_MOUNT           60
+#define MSG_CLIENT_UNMOUNT         61
 
-#define MSG_CLIENT_BOOT            70
-#define MSG_CLIENT_MOUNT           71
-#define MSG_CLIENT_MOUNTACK        72
-#define MSG_CLIENT_UNMOUNT         73
+// to mds
+#define MSG_CLIENT_SESSION         70   // start or stop
+#define MSG_CLIENT_RECONNECT       71
+
+#define MSG_CLIENT_REQUEST         80
+#define MSG_CLIENT_REQUEST_FORWARD 81
+#define MSG_CLIENT_REPLY           82
+#define MSG_CLIENT_FILECAPS        83
+
 
 
 // *** MDS ***
@@ -93,7 +86,6 @@
 
 #define MSG_MDS_IMPORTMAP          106
 #define MSG_MDS_CACHEREJOIN        107
-//#define MSG_MDS_CACHEREJOINACK     108
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111

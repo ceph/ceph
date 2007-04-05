@@ -135,6 +135,8 @@ protected:
   void dispatch(Message *m);
   void tick();
 
+  void do_stop();
+
 };
 
 #endif

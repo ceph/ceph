@@ -126,6 +126,7 @@ class MDS : public Dispatcher {
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
   bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
+  bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
@@ -192,6 +193,8 @@ class MDS : public Dispatcher {
   void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
   void boot_finish();
 
+  void bcast_mds_map();  // to mounted clients
+
   int shutdown_start();
   int shutdown_final();
 
@@ -208,11 +211,11 @@ class MDS : public Dispatcher {
   virtual void dispatch(Message *m);
   void my_dispatch(Message *m);
 
+  void ms_handle_failure(Message *m, const entity_inst_t& inst);
+
   // special message types
   void handle_ping(class MPing *m);
-
   void handle_mds_map(class MMDSMap *m);
-
   void handle_shutdown_start(Message *m);
 
   // osds

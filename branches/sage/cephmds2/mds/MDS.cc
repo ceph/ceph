@@ -551,6 +551,10 @@ void MDS::handle_mds_map(MMDSMap *m)
       finish_contexts(waitfor_active);  // kick waiters
     }
 
+    else if (is_reconnect()) {
+      server->reconnect_clients();
+    }
+
     else if (is_replay()) {
       // initialize gather sets
       set<int> rs;
@@ -565,7 +569,11 @@ void MDS::handle_mds_map(MMDSMap *m)
       assert(oldstate == MDSMap::STATE_ACTIVE);
       dout(1) << "now stopping" << endl;
       
+      // start cache shutdown
       mdcache->shutdown_start();
+
+      // terminate client sessions
+      server->terminate_sessions();
       
       // flush log
       mdlog->set_max_events(0);
@@ -610,17 +618,12 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
   
-  // we need to make sure clients find out about (new) mds addresses.
-  // clients don't care about mds state.
-  bool share_with_clients = false;
-
   // REJOIN
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
     // did we start?
     if (!wasrejoining && mdsmap->is_rejoining()) {
       mdcache->send_cache_rejoins();
-      share_with_clients = true;
     }
     // did we finish?
     if (wasrejoining && !mdsmap->is_rejoining()) {
@@ -655,24 +658,28 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // inst set changed?
-  if (mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) 
-    share_with_clients = true;
- 
-  // share map with clients?
-  if (share_with_clients) {
-    // share the map with mounted clients
-    dout(10) << "sharing mdsmap with mounted clients" << endl;
-    for (set<int>::const_iterator p = clientmap.get_mount_set().begin();
-	 p != clientmap.get_mount_set().end();
-	 ++p) {
-      messenger->send_message(new MMDSMap(mdsmap),
-			      clientmap.get_inst(*p));
-    }
-    last_client_mdsmap_bcast = mdsmap->get_epoch();
+  if (state >= MDSMap::STATE_ACTIVE &&   // only if i'm active+.  otherwise they'll get map during reconnect.
+      mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) {
+    bcast_mds_map();
   }
 
   delete m;
 }
+
+void MDS::bcast_mds_map()
+{
+  dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << endl;
+
+  // share the map with mounted clients
+  for (set<int>::const_iterator p = clientmap.get_session_set().begin();
+       p != clientmap.get_session_set().end();
+       ++p) {
+    messenger->send_message(new MMDSMap(mdsmap),
+			    clientmap.get_inst(*p));
+  }
+  last_client_mdsmap_bcast = mdsmap->get_epoch();
+}
+
 
 void MDS::handle_osd_map(MOSDMap *m)
 {
@@ -693,6 +700,7 @@ void MDS::handle_osd_map(MOSDMap *m)
   }  
   
   // pass on to clients
+  /*
   for (set<int>::iterator it = clientmap.get_mount_set().begin();
        it != clientmap.get_mount_set().end();
        it++) {
@@ -701,6 +709,7 @@ void MDS::handle_osd_map(MOSDMap *m)
     n->incremental_maps = m->incremental_maps;
     messenger->send_message(n, clientmap.get_inst(*it));
   }
+  */
 }
 
 
@@ -847,14 +856,9 @@ void MDS::boot_replay(int step)
 
   case 5:
     // done with replay!
-    if (mdsmap->get_num_mds(MDSMap::STATE_ACTIVE) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_STOPPING) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_RESOLVE) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_REJOIN) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_REPLAY) == 1 && // me
-	mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) {
-      dout(2) << "boot_replay " << step << ": i am alone, moving to state active" << endl;      
-      set_want_state(MDSMap::STATE_ACTIVE);
+    if (mdsmap->get_num_in_mds() == 1) { // me
+      dout(2) << "boot_replay " << step << ": i am alone, moving to state reconnect" << endl;      
+      set_want_state(MDSMap::STATE_RECONNECT);
     } else {
       dout(2) << "boot_replay " << step << ": i am not alone, moving to state resolve" << endl;
       set_want_state(MDSMap::STATE_RESOLVE);
@@ -1026,6 +1030,7 @@ void MDS::my_dispatch(Message *m)
   // finish any triggered contexts
   if (finished_queue.size()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << endl;
+    dout(10) << finished_queue << endl;
     list<Context*> ls;
     ls.splice(ls.begin(), finished_queue);
     assert(finished_queue.empty());
@@ -1160,6 +1165,19 @@ void MDS::proc_message(Message *m)
 
 }
 
+
+
+void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
+{
+  mds_lock.Lock();
+  dout(10) << "handle_ms_failure to " << inst << " on " << *m << endl;
+  
+  if (m->get_type() == MSG_CLIENT_RECONNECT) 
+    server->client_reconnect_failure(m->get_dest().num());
+
+  delete m;
+  mds_lock.Unlock();
+}
 
 
 

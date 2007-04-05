@@ -1,28 +1,18 @@
 
-# mpicxx must be on your path to build newsyn.  on googoo, this means
-# that /usr/local/mpich2-1.0.2/bin must be on your path.
-
-# For now, use g++ most of the time.
-# When compiling MPI stuff, specify myfile.cc instead of myfile.o so
-# that ${MPICC} is invoked instead of the generic .o rule (or it'll
-# use g++).  This makes it less annoying to build on non-mpi hosts for
-# dev work, and seems to behave just fine...  change ${CC} back to
-# mpicxx if you get paranoid.
-
-#CC = g++
-#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-#LIBS = -lpthread  
+# mpicxx must be on your path to build newsyn.  
+#  on googoo, this means that /usr/local/mpich2-1.0.2/bin must be on your path.
+#  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
 EXTRA_CFLAGS = 
 
 ifeq ($(target),darwin)
 # For Darwin
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -36,7 +26,7 @@ endif
 
 #for normal mpich2 machines
 MPICC = mpicxx
-MPICFLAGS = ${CFLAGS}
+MPICFLAGS = -DMPICH_IGNORE_CXX_SEEK ${CFLAGS}
 MPILIBS = ${LIBS}
 
 #for LLNL boxes without mpicxx

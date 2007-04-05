@@ -327,9 +327,6 @@ Capability* Locker::issue_new_caps(CInode *in,
     in->add_client_cap(my_client, c);
     cap = in->get_client_cap(my_client);
     
-    // note client addr
-    mds->clientmap.add_open(my_client, req->get_client_inst());
-    
   } else {
     // make sure it has sufficient caps
     if (cap->wanted() & ~my_want) {
@@ -547,13 +544,10 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     if (!in->is_auth())
       request_inode_file_caps(in);
 
-    // dec client addr counter
-    mds->clientmap.dec_open(client);
-
     // tell client.
     MClientFileCaps *r = new MClientFileCaps(in->inode, 
                                              0, 0, 0,
-                                             MClientFileCaps::FILECAP_RELEASE);
+                                             MClientFileCaps::OP_RELEASE);
     mds->messenger->send_message(r, m->get_source_inst(), 0, MDS_PORT_LOCKER);
   }
 

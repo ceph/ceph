@@ -9,16 +9,6 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
-/*
-#include "messages/MNSConnect.h"
-#include "messages/MNSConnectAck.h"
-#include "messages/MNSRegister.h"
-#include "messages/MNSRegisterAck.h"
-#include "messages/MNSLookup.h"
-#include "messages/MNSLookupReply.h"
-#include "messages/MNSFailure.h"
-*/
-
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
@@ -46,9 +36,10 @@ using namespace std;
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 
-#include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
+#include "messages/MClientUnmount.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
@@ -118,30 +109,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   switch(env.type) {
 
     // -- with payload --
-
-	/*
-  case MSG_NS_CONNECT:
-    m = new MNSConnect();
-    break;
-  case MSG_NS_CONNECTACK:
-    m = new MNSConnectAck();
-    break;
-  case MSG_NS_REGISTER:
-    m = new MNSRegister();
-    break;
-  case MSG_NS_REGISTERACK:
-    m = new MNSRegisterAck();
-    break;
-  case MSG_NS_LOOKUP:
-    m = new MNSLookup();
-    break;
-  case MSG_NS_LOOKUPREPLY:
-    m = new MNSLookupReply();
-    break;
-  case MSG_NS_FAILURE:
-    m = new MNSFailure();
-    break;
-	*/
 
   case MSG_MON_COMMAND:
     m = new MMonCommand;
@@ -221,14 +188,17 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
     // clients
-  case MSG_CLIENT_BOOT:
-    m = new MClientBoot;
-    break;
   case MSG_CLIENT_MOUNT:
     m = new MClientMount;
     break;
-  case MSG_CLIENT_MOUNTACK:
-    m = new MClientMountAck;
+  case MSG_CLIENT_UNMOUNT:
+    m = new MClientUnmount;
+    break;
+  case MSG_CLIENT_SESSION:
+    m = new MClientSession;
+    break;
+  case MSG_CLIENT_RECONNECT:
+    m = new MClientReconnect;
     break;
   case MSG_CLIENT_REQUEST:
     m = new MClientRequest;
@@ -382,12 +352,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     // -- simple messages without payload --
 
   case MSG_CLOSE:
-  case MSG_NS_STARTED:
-  case MSG_NS_UNREGISTER:
   case MSG_SHUTDOWN:
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
-  case MSG_CLIENT_UNMOUNT:
   case MSG_OSD_MKFS_ACK:
     m = new MGenericMessage(env.type);
     break;

@@ -26,12 +26,11 @@ using namespace __gnu_cxx;
 /*
  * this structure is used by the MDS purely so that
  * it can remember client addresses (entity_inst_t)
- * while processing request(s) on behalf of clients.
- * as such it's only really a sort of short-term cache.
- * 
- * it also remembers which clients mounted via this MDS,
- * for the same reason (so that mounted clients can be 
- * contacted if necessary).
+ * for clients with an active session.
+ *
+ * it is also used to keep track of recently completed
+ * operations, should the client have to resubmit them
+ * (after a connection failure, etc.)
  */
 class ClientMap {
 private:
@@ -62,64 +61,36 @@ public:
     commit_waiters.erase(v);
   }
 
-  // client mount, inst info
 private:
+  // effects version
   hash_map<int,entity_inst_t> client_inst;
-  set<int>           client_mount;
-  hash_map<int, int> client_ref;
-
-  void inc_ref(int client, const entity_inst_t& inst) {
-    if (client_inst.count(client)) {
-      assert(client_inst[client] == inst);
-      assert(client_ref.count(client));
-    } else {
-      client_inst[client] = inst;
-    }
-    client_ref[client]++;
-  }
-  void dec_ref(int client) {
-    assert(client_ref.count(client));
-    assert(client_ref[client] > 0);
-    client_ref[client]--;
-    if (client_ref[client] == 0) {
-      client_ref.erase(client);
-      client_inst.erase(client);
-    }
-  }
+  set<int>                    sessions;
 
 public:
   bool empty() {
-    return client_inst.empty() && client_mount.empty() && client_ref.empty();
+    return client_inst.empty();
   }
 
   const entity_inst_t& get_inst(int client) {
     assert(client_inst.count(client));
     return client_inst[client];
   }
-  const set<int>& get_mount_set() { return client_mount; }
+  const set<int>& get_session_set() { return sessions; }
   
-  void add_mount(const entity_inst_t& inst) {
-    inc_ref(inst.name.num(), inst);
-    client_mount.insert(inst.name.num());
+  bool have_session(int client) {
+    return client_inst.count(client);
+  }
+  void add_session(const entity_inst_t& inst) {
+    client_inst[inst.name.num()] = inst;
+    sessions.insert(inst.name.num());
     version++;
   }
-  void rem_mount(int client) {
-    dec_ref(client);
-    client_mount.erase(client);
+  void rem_session(int client) {
+    sessions.erase(client);
+    client_inst.erase(client);
     version++;
   }
   
-  
-  void add_open(int client, const entity_inst_t& inst) {
-    inc_ref(client, inst);
-    //version++;
-  }
-  void dec_open(int client) {
-    dec_ref(client);
-    //version++;
-  }
-
-
 private:
   // -- completed requests --
   // client id -> tid -> result code
@@ -168,15 +139,13 @@ public:
   void encode(bufferlist& bl) {
     bl.append((char*)&version, sizeof(version));
     ::_encode(client_inst, bl);
-    ::_encode(client_mount, bl);
-    ::_encode(client_ref, bl);
+    ::_encode(sessions, bl);
   }
   void decode(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
     ::_decode(client_inst, bl, off);
-    ::_decode(client_mount, bl, off);
-    ::_decode(client_ref, bl, off);
+    ::_decode(sessions, bl, off);
 
     projected = committing = committed = version;
   }

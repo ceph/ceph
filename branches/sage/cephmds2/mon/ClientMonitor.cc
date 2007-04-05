@@ -15,10 +15,10 @@
 #include "ClientMonitor.h"
 #include "Monitor.h"
 #include "MDSMonitor.h"
+#include "OSDMonitor.h"
 
-#include "messages/MClientBoot.h"
-#include "messages/MMDSMap.h"
-//#include "messages/MMDSFailure.h"
+#include "messages/MClientMount.h"
+#include "messages/MClientUnmount.h"
 
 #include "common/Timer.h"
 
@@ -34,42 +34,66 @@ void ClientMonitor::dispatch(Message *m)
 {
   switch (m->get_type()) {
 
-  case MSG_CLIENT_BOOT:
-    handle_client_boot((MClientBoot*)m);
+  case MSG_CLIENT_MOUNT:
+    handle_client_mount((MClientMount*)m);
+    break;
+
+  case MSG_CLIENT_UNMOUNT:
+    handle_client_unmount((MClientUnmount*)m);
     break;
     
-    /*
-      case MSG_client_FAILURE:
-      handle_client_failure((MClientFailure*)m);
-      break;
-    */
-        
+       
   default:
     assert(0);
   }  
 }
 
-void ClientMonitor::handle_client_boot(MClientBoot *m)
+void ClientMonitor::handle_client_mount(MClientMount *m)
 {
-  dout(7) << "client_boot from " << m->get_source() << " at " << m->get_source_inst() << endl;
+  dout(7) << "client_mount from " << m->get_source_inst() << endl;
   assert(m->get_source().is_client());
   int from = m->get_source().num();
   
   // choose a client id
   if (from < 0 || 
-      (client_map.count(m->get_source()) && client_map[m->get_source()] != m->get_source_addr())) {
-    from = ++num_clients;
+      (client_map.count(from) && 
+       client_map[from] != m->get_source_addr())) {
+    from = num_clients++;
     dout(10) << "client_boot assigned client" << from << endl;
   }
-
-  client_map[MSG_ADDR_CLIENT(from)] = m->get_source_addr();
-
+  
+  client_map[from] = m->get_source_addr();
+  
   // reply with latest mds map
   entity_inst_t to = m->get_source_inst();
   to.name = MSG_ADDR_CLIENT(from);
   mon->mdsmon->send_latest(to);
+  mon->osdmon->send_latest(to);
   delete m;
 }
+
+void ClientMonitor::handle_client_unmount(MClientUnmount *m)
+{
+  dout(7) << "client_unmount from " << m->get_source()
+	  << " at " << m->get_source_inst() << endl;
+  assert(m->get_source().is_client());
+  int from = m->get_source().num();
+
+  if (client_map.count(from)) {
+    client_map.erase(from);
+
+    if (client_map.empty()) {
+      dout(1) << "last client unmounted" << endl;
+      if (g_conf.mds_shutdown_on_last_unmount) 
+	mon->do_stop();
+    }
+  }
+
+  // reply with (same) unmount message to ack
+  mon->messenger->send_message(m, m->get_source_inst());
+}
+
+
 
 /*
 void ClientMonitor::handle_mds_shutdown(Message *m)

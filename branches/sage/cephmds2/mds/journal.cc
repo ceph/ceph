@@ -13,7 +13,7 @@
 
 #include "events/EString.h"
 #include "events/EImportMap.h"
-#include "events/EMount.h"
+#include "events/ESession.h"
 #include "events/EClientMap.h"
 
 #include "events/EMetaBlob.h"
@@ -470,43 +470,43 @@ void EClientMap::replay(MDS *mds)
 }
 
 
-// EMount
-bool EMount::has_expired(MDS *mds) 
+// ESession
+bool ESession::has_expired(MDS *mds) 
 {
   if (mds->clientmap.get_committed() >= cmapv) {
-    dout(10) << "EMount.has_expired newer clientmap " << mds->clientmap.get_committed() 
+    dout(10) << "ESession.has_expired newer clientmap " << mds->clientmap.get_committed() 
 	     << " >= " << cmapv << " has committed" << endl;
     return true;
   } else if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "EMount.has_expired newer clientmap " << mds->clientmap.get_committing() 
+    dout(10) << "ESession.has_expired newer clientmap " << mds->clientmap.get_committing() 
 	     << " >= " << cmapv << " is still committing" << endl;
     return false;
   } else {
-    dout(10) << "EMount.has_expired clientmap " << mds->clientmap.get_version() 
+    dout(10) << "ESession.has_expired clientmap " << mds->clientmap.get_version() 
 	     << " not empty" << endl;
     return false;
   }
 }
 
-void EMount::expire(MDS *mds, Context *c)
+void ESession::expire(MDS *mds, Context *c)
 {
   if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "EMount.expire logging clientmap" << endl;
+    dout(10) << "ESession.expire logging clientmap" << endl;
     assert(mds->clientmap.get_committing() > mds->clientmap.get_committed());
     mds->clientmap.add_commit_waiter(c);
   } else {
-    dout(10) << "EMount.expire logging clientmap" << endl;
+    dout(10) << "ESession.expire logging clientmap" << endl;
     mds->log_clientmap(c);
   }
 }
 
-void EMount::replay(MDS *mds)
+void ESession::replay(MDS *mds)
 {
-  dout(10) << "EMount.replay" << endl;
-  if (mounted)
-    mds->clientmap.add_mount(client_inst);
+  dout(10) << "ESession.replay" << endl;
+  if (open)
+    mds->clientmap.add_session(client_inst);
   else
-    mds->clientmap.rem_mount(client_inst.name.num());
+    mds->clientmap.rem_session(client_inst.name.num());
   mds->clientmap.reset_projected(); // make it follow version.
 }
 

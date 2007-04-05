@@ -33,14 +33,25 @@ public:
     messenger(mds->messenger) {
   }
 
+  // message handler
   void dispatch(Message *m);
 
-  // message handlers
-  void handle_client_mount(class MClientMount *m);
-  void handle_client_unmount(Message *m);
-  void handle_client_request(MClientRequest *m);
+
+  // -- sessions and recovery --
+  utime_t  reconnect_start;
+  set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
+  set<CInode*> reconnected_open_files;
   
-  // requests
+  void handle_client_session(class MClientSession *m);
+  void reconnect_clients();
+  void handle_client_reconnect(class MClientReconnect *m);
+  void client_reconnect_failure(int from);
+  void reconnect_finish();
+  void terminate_sessions();
+  
+  // -- requests --
+  void handle_client_request(MClientRequest *m);
+
   void dispatch_request(MDRequest *mdr);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
@@ -111,10 +122,6 @@ public:
 			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
 			    utime_t ictime,
 			    version_t atid1, version_t atid2);
-
-
-
-
 };
 
 

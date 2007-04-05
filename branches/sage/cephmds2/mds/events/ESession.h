@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __MDS_EMOUNT_H
-#define __MDS_EMOUNT_H
+#ifndef __MDS_ESESSION_H
+#define __MDS_ESESSION_H
 
 #include <assert.h>
 #include "config.h"
@@ -20,44 +20,40 @@
 
 #include "../LogEvent.h"
 
-class EMount : public LogEvent {
+class ESession : public LogEvent {
  protected:
   entity_inst_t client_inst;
-  bool  mounted;    // mount or unmount
+  bool open;    // open or close
   version_t cmapv;  // client map version
 
  public:
-  EMount() : LogEvent(EVENT_MOUNT) { }
-  EMount(entity_inst_t inst, bool m, version_t v) :
-    LogEvent(EVENT_MOUNT),
+  ESession() : LogEvent(EVENT_SESSION) { }
+  ESession(entity_inst_t inst, bool o, version_t v) :
+    LogEvent(EVENT_SESSION),
     client_inst(inst),
-    mounted(m),
+    open(o),
     cmapv(v) {
   }
   
   void encode_payload(bufferlist& bl) {
-    bl.append((char*)&client_inst, sizeof(client_inst));
-    bl.append((char*)&mounted, sizeof(mounted));
-    bl.append((char*)&cmapv, sizeof(cmapv));
+	::_encode(client_inst, bl);
+	::_encode(open, bl);
+	::_encode(cmapv, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(client_inst), (char*)&client_inst);
-    off += sizeof(client_inst);
-    bl.copy(off, sizeof(mounted), (char*)&mounted);
-    off += sizeof(mounted);
-    bl.copy(off, sizeof(cmapv), (char*)&cmapv);
-    off += sizeof(cmapv);
+	::_decode(client_inst, bl, off);
+	::_decode(open, bl, off);
+	::_decode(cmapv, bl, off);
   }
 
 
   void print(ostream& out) {
-    if (mounted)
-      out << "EMount " << client_inst << " mount cmapv " << cmapv;
+    if (open)
+      out << "ESession " << client_inst << " open cmapv " << cmapv;
     else
-      out << "EMount " << client_inst << " unmount cmapv " << cmapv;
+      out << "ESession " << client_inst << " close cmapv " << cmapv;
   }
   
-
   bool has_expired(MDS *mds);
   void expire(MDS *mds, Context *c);
   void replay(MDS *mds);

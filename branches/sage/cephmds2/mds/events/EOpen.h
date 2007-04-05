@@ -28,7 +28,7 @@ public:
     metablob.add_primary_dentry(in->get_parent_dn(), false);
   }
   void print(ostream& out) {
-    out << "open " << metablob;
+    out << "EOpen " << ino << " " << metablob;
   }
 
   void encode_payload(bufferlist& bl) {

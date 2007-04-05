@@ -22,10 +22,10 @@
 
 #include "msg/Messenger.h"
 
-#include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
+#include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientReconnect.h"
 
 #include "messages/MLock.h"
 
@@ -34,7 +34,7 @@
 
 #include "events/EString.h"
 #include "events/EUpdate.h"
-#include "events/EMount.h"
+#include "events/ESession.h"
 #include "events/EOpen.h"
 
 #include "include/filepath.h"
@@ -57,6 +57,12 @@ using namespace std;
 
 void Server::dispatch(Message *m) 
 {
+  switch (m->get_type()) {
+  case MSG_CLIENT_RECONNECT:
+    handle_client_reconnect((MClientReconnect*)m);
+    return;
+  }
+
   // active?
   if (!mds->is_active()) {
     dout(3) << "not active yet, waiting" << endl;
@@ -65,91 +71,165 @@ void Server::dispatch(Message *m)
   }
 
   switch (m->get_type()) {
-  case MSG_CLIENT_MOUNT:
-    handle_client_mount((MClientMount*)m);
-    return;
-  case MSG_CLIENT_UNMOUNT:
-    handle_client_unmount(m);
+  case MSG_CLIENT_SESSION:
+    handle_client_session((MClientSession*)m);
     return;
   case MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
     return;
-
   }
 
-  dout(1) << " main unknown message " << m->get_type() << endl;
+  dout(1) << "server unknown message " << m->get_type() << endl;
   assert(0);
 }
 
 
 
 // ----------------------------------------------------------
-// MOUNT and UNMOUNT
+// SESSION management
 
 
-class C_MDS_mount_finish : public Context {
+class C_MDS_session_finish : public Context {
   MDS *mds;
-  Message *m;
-  bool mount;
+  MClientSession *m;
+  bool open;
   version_t cmapv;
 public:
-  C_MDS_mount_finish(MDS *m, Message *msg, bool mnt, version_t mv) :
-    mds(m), m(msg), mount(mnt), cmapv(mv) { }
+  C_MDS_session_finish(MDS *m, MClientSession *msg, bool s, version_t mv) :
+    mds(m), m(msg), open(s), cmapv(mv) { }
   void finish(int r) {
     assert(r == 0);
 
     // apply
-    if (mount)
-      mds->clientmap.add_mount(m->get_source_inst());
+    if (open)
+      mds->clientmap.add_session(m->get_source_inst());
     else
-      mds->clientmap.rem_mount(m->get_source().num());
+      mds->clientmap.rem_session(m->get_source().num());
     
     assert(cmapv == mds->clientmap.get_version());
     
+    // purge completed requests from clientmap?
+    if (!open) 
+      mds->clientmap.trim_completed_requests(m->get_source().num(), 0);
+    
     // reply
-    if (mount) {
-      // mounted
-      mds->messenger->send_message(new MClientMountAck((MClientMount*)m, mds->mdsmap, mds->osdmap), 
-				   m->get_source_inst());
-      delete m;
-    } else {
-      // ack by sending back to client
-      mds->messenger->send_message(m, m->get_source_inst());
-
-      // unmounted
-      if (g_conf.mds_shutdown_on_last_unmount &&
-	  mds->clientmap.get_mount_set().empty()) {
-	dout(3) << "all clients done, initiating shutdown" << endl;
-	mds->shutdown_start();
-      }
-    }
+    mds->messenger->send_message(new MClientSession(m->op+1), m->get_source_inst());
+    delete m;
   }
 };
 
 
-void Server::handle_client_mount(MClientMount *m)
+void Server::handle_client_session(MClientSession *m)
 {
-  dout(3) << "mount by " << m->get_source() << " oldv " << mds->clientmap.get_version() << endl;
+  dout(3) << "handle_client_session " << *m << " from " << m->get_source() << endl;
 
-  // journal it
-  version_t cmapv = mds->clientmap.inc_projected();
-  mdlog->submit_entry(new EMount(m->get_source_inst(), true, cmapv),
-		      new C_MDS_mount_finish(mds, m, true, cmapv));
-}
-
-void Server::handle_client_unmount(Message *m)
-{
-  dout(3) << "unmount by " << m->get_source() << " oldv " << mds->clientmap.get_version() << endl;
-
-  // purge completed requests from clientmap
-  mds->clientmap.trim_completed_requests(m->get_source().num(), 0);
+  bool open = m->op == MClientSession::OP_OPEN;
   
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
-  mdlog->submit_entry(new EMount(m->get_source_inst(), false, cmapv),
-		      new C_MDS_mount_finish(mds, m, false, cmapv));
+  mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
+		      new C_MDS_session_finish(mds, m, open, cmapv));
 }
 
+
+void Server::terminate_sessions()
+{
+  dout(2) << "terminate_sessions" << endl;
+
+  // kill them off.  clients will retry etc.
+  while (!mds->clientmap.get_session_set().empty()) {
+    int client = *mds->clientmap.get_session_set().begin();
+    dout(10) << "terminating session for client" << client << endl;
+
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE_ACK),
+				 mds->clientmap.get_inst(client));
+    mds->clientmap.rem_session(client);
+
+    // trim requests
+    mds->clientmap.trim_completed_requests(client, 0);
+  }
+  
+  // FIXME hrm, should i journal this?
+}
+
+
+void Server::reconnect_clients()
+{
+  // reconnect with clients
+  if (mds->clientmap.get_session_set().empty()) {
+    dout(7) << "reconnect_clients -- no sessions, doing nothing." << endl;
+    reconnect_finish();
+    return;
+  }
+  
+  dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << endl;
+  mds->set_want_state(MDSMap::STATE_RECONNECT);     // just fyi.
+  
+  // send mdsmap to all mounted clients
+  mds->bcast_mds_map();
+
+  // init gather list
+  reconnect_start = g_clock.now();
+  client_reconnect_gather = mds->clientmap.get_session_set();
+}
+
+void Server::handle_client_reconnect(MClientReconnect *m)
+{
+  dout(7) << "handle_client_reconnect " << m->get_source() << endl;
+  int from = m->get_source().num();
+
+  // caps
+  for (map<inodeno_t, MClientReconnect::inode_caps_t>::iterator p = m->inode_caps.begin();
+       p != m->inode_caps.end();
+       ++p) {
+    CInode *in = mdcache->get_inode(p->first);
+    if (!in) {
+      dout(0) << "missing " << p->first << ", fetching via " << m->inode_path[p->first] << endl;
+      assert(0);
+      continue;
+    }
+
+    dout(10) << " client cap " << cap_string(p->second.wanted)
+	     << " seq " << p->second.seq 
+	     << " on " << *in << endl;
+    Capability cap(p->second.wanted, p->second.seq);
+    in->add_client_cap(from, cap);
+
+    reconnected_open_files.insert(in);
+  }
+
+  // remove from gather set
+  client_reconnect_gather.erase(from);
+  if (client_reconnect_gather.empty()) reconnect_finish();
+
+  delete m;
+}
+
+void Server::client_reconnect_failure(int from) 
+{
+  client_reconnect_gather.erase(from);
+  if (client_reconnect_gather.empty()) 
+    reconnect_finish();
+}
+
+void Server::reconnect_finish()
+{
+  dout(7) << "reconnect_finish" << endl;
+
+  // adjust filelock state appropriately
+  for (set<CInode*>::iterator p = reconnected_open_files.begin();
+       p != reconnected_open_files.end();
+       ++p) {
+    
+  }
+  reconnected_open_files.clear();  // clean up
+
+  // done
+  if (mds->mdsmap->get_num_in_mds() == 1) 
+    mds->set_want_state(MDSMap::STATE_ACTIVE);    // go active
+  else
+    mds->set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
+}
 
 
 
@@ -218,6 +298,14 @@ void Server::handle_client_request(MClientRequest *req)
     mdcache->open_root(new C_MDS_RetryMessage(mds, req));
     return;
   }
+
+  // active session?
+  if (!mds->clientmap.have_session(req->get_source().num())) {
+    dout(1) << "no session for " << req->get_source() << ", dropping" << endl;
+    delete req;
+    return;
+  }
+
 
   // okay, i want
   CInode           *ref = 0;

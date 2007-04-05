@@ -16,7 +16,7 @@
 
 #define EVENT_STRING       1
 
-#define EVENT_MOUNT        7
+#define EVENT_SESSION      7
 #define EVENT_CLIENTMAP    8
 #define EVENT_IMPORTMAP    2
 #define EVENT_EXPORT       30

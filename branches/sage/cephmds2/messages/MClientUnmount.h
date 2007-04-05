@@ -11,21 +11,19 @@
  * 
  */
 
-
-#ifndef __MCLIENTBOOT_H
-#define __MCLIENTBOOT_H
+#ifndef __MCLIENTUNMOUNT_H
+#define __MCLIENTUNMOUNT_H
 
 #include "msg/Message.h"
 
-class MClientBoot : public Message {
+class MClientUnmount : public Message {
+public:
+  MClientUnmount() : Message(MSG_CLIENT_UNMOUNT) { }
 
- public:
-  MClientBoot() : Message(MSG_CLIENT_BOOT) { }
+  char *get_type_name() { return "client_unmount"; }
 
-  char *get_type_name() { return "ClientBoot"; }
-
-  void encode_payload() { }
   void decode_payload() { }
+  void encode_payload() { }
 };
 
 #endif

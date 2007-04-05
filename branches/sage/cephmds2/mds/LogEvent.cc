@@ -18,7 +18,7 @@
 // events i know of
 #include "events/EString.h"
 
-#include "events/EMount.h"
+#include "events/ESession.h"
 #include "events/EClientMap.h"
 #include "events/EImportMap.h"
 #include "events/EExport.h"
@@ -54,7 +54,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   switch (type) {
   case EVENT_STRING: le = new EString; break;
 
-  case EVENT_MOUNT: le = new EMount; break;
+  case EVENT_SESSION: le = new ESession; break;
   case EVENT_CLIENTMAP: le = new EClientMap; break;
   case EVENT_IMPORTMAP: le = new EImportMap; break;
   case EVENT_EXPORT: le = new EExport; break;

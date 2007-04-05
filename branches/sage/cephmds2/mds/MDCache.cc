@@ -1128,14 +1128,14 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     got_import_map.insert(from);
     
     if (got_import_map == recovery_set) {
-      dout(10) << "got all import maps, ready to rejoin" << endl;
+      dout(10) << "got all import maps, done resolving subtrees" << endl;
       disambiguate_imports();
       recalc_auth_bits();
       trim_non_auth(); 
       
-      // move to rejoin state
-      mds->set_want_state(MDSMap::STATE_REJOIN);
-      
+      // reconnect clients
+      mds->set_want_state(MDSMap::STATE_RECONNECT);
+
     } else {
       dout(10) << "still waiting for more importmaps, got " << got_import_map 
 	       << ", need " << recovery_set << endl;

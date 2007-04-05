@@ -1,0 +1,63 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+#ifndef __MCLIENTRECONNECT_H
+#define __MCLIENTRECONNECT_H
+
+#include "msg/Message.h"
+#include "mds/mdstypes.h"
+
+class MClientReconnect : public Message {
+public:
+  struct inode_caps_t {
+    __int32_t caps;
+    __int32_t seq;
+    __int32_t wanted;
+    inode_caps_t() {}
+    inode_caps_t(int c, int s, int w) : caps(c), seq(s), wanted(w) {}
+  };
+
+  map<inodeno_t, inode_caps_t>  inode_caps;
+  map<inodeno_t, string>        inode_path;
+
+  MClientReconnect() : Message(MSG_CLIENT_RECONNECT) { }
+
+  char *get_type_name() { return "client_reconnect"; }
+  void print(ostream& out) {
+    out << "client_reconnect(" << inode_caps.size() << " caps)";
+  }
+
+  void add_inode_caps(inodeno_t ino, 
+		      int havecaps,
+		      long seq,
+		      int wanted) {
+    inode_caps[ino] = inode_caps_t(havecaps, seq, wanted);
+  }
+  void add_inode_path(inodeno_t ino, const string& path) {
+    inode_path[ino] = path;
+  }
+
+  void encode_payload() {
+    ::_encode(inode_caps, payload);
+    ::_encode(inode_path, payload);
+  }
+  void decode_payload() {
+    int off = 0;
+    ::_decode(inode_caps, payload, off);
+    ::_decode(inode_path, payload, off);
+  }
+
+};
+
+
+#endif

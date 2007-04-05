@@ -417,3 +417,15 @@ void MDSMonitor::tick()
     }
   }
 }
+
+
+void MDSMonitor::do_stop()
+{
+  for (map<int,int>::iterator p = mdsmap.mds_state.begin();
+       p != mdsmap.mds_state.end();
+       ++p) 
+    if (mdsmap.is_active(p->first))
+      mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPING;
+
+  issue_map();
+}

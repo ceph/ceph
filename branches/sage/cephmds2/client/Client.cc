@@ -31,12 +31,13 @@ using namespace std;
 // ceph stuff
 #include "Client.h"
 
+#include "messages/MClientMount.h"
+#include "messages/MClientUnmount.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
-
-#include "messages/MClientBoot.h"
-#include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
+#include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
 #include "messages/MGenericMessage.h"
@@ -473,69 +474,91 @@ MClientReply *Client::make_request(MClientRequest *req,
                                    bool auth_best, 
                                    int use_mds)  // this param is purely for debug hacking
 {
-  // find deepest known prefix
-  Inode *diri = root;   // the deepest known containing dir
-  Inode *item = 0;      // the actual item... if we know it
-  int missing_dn = -1;  // which dn we miss on (if we miss)
-  
-  unsigned depth = req->get_filepath().depth();
-  for (unsigned i=0; i<depth; i++) {
-    // dir?
-    if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
-      Dir *dir = diri->dir;
-
-      // do we have the next dentry?
-      if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
-        missing_dn = i;  // no.
-        break;
-      }
-      
-      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
-
-      if (i == depth-1) {  // last one!
-        item = dir->dentries[ req->get_filepath()[i] ]->inode;
-        break;
-      } 
-
-      // continue..
-      diri = dir->dentries[ req->get_filepath()[i] ]->inode;
-      assert(diri);
-    } else {
-      missing_dn = i;
-      break;
-    }
-  }
-
   // choose an mds
   int mds = 0;
-  if (!diri || g_conf.client_use_random_mds) {
-    // no root info, pick a random MDS
-    mds = rand() % mdsmap->get_num_mds();
-  } else {
-    if (auth_best) {
-      // pick the actual auth (as best we can)
-      if (item) {
-        mds = item->authority(mdsmap);
-      } else if (diri->dir_hashed && missing_dn >= 0) {
-        mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-                                     mdsmap);
+  while (1) {
+
+    // find deepest known prefix
+    Inode *diri = root;   // the deepest known containing dir
+    Inode *item = 0;      // the actual item... if we know it
+    int missing_dn = -1;  // which dn we miss on (if we miss)
+    
+    unsigned depth = req->get_filepath().depth();
+    for (unsigned i=0; i<depth; i++) {
+      // dir?
+      if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
+	Dir *dir = diri->dir;
+	
+	// do we have the next dentry?
+	if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
+	  missing_dn = i;  // no.
+	  break;
+	}
+	
+	dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
+	
+	if (i == depth-1) {  // last one!
+	  item = dir->dentries[ req->get_filepath()[i] ]->inode;
+	  break;
+	} 
+	
+	// continue..
+	diri = dir->dentries[ req->get_filepath()[i] ]->inode;
+	assert(diri);
       } else {
-        mds = diri->authority(mdsmap);
+	missing_dn = i;
+	break;
       }
-    } else {
-      // balance our traffic!
-      if (diri->dir_hashed && missing_dn >= 0) 
-        mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-                                     mdsmap);
-      else 
-        mds = diri->pick_replica(mdsmap);
     }
+    
+    // pick mds
+    if (!diri || g_conf.client_use_random_mds) {
+      // no root info, pick a random MDS
+      mds = rand() % mdsmap->get_num_mds();
+    } else {
+      if (auth_best) {
+	// pick the actual auth (as best we can)
+	if (item) {
+	  mds = item->authority(mdsmap);
+	} else if (diri->dir_hashed && missing_dn >= 0) {
+	  mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				       mdsmap);
+	} else {
+	  mds = diri->authority(mdsmap);
+	}
+      } else {
+	// balance our traffic!
+	if (diri->dir_hashed && missing_dn >= 0) 
+	  mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				       mdsmap);
+	else 
+	  mds = diri->pick_replica(mdsmap);
+      }
+    }
+    dout(20) << "mds is " << mds << endl;
+
+    // force use of a particular mds?
+    if (use_mds >= 0) mds = use_mds;
+
+    // open a session?
+    if (mds_sessions.count(mds) == 0) {
+      Cond cond;
+      if (waiting_for_session.count(mds) == 0) {
+	dout(10) << "opening session to mds" << mds << endl;
+	messenger->send_message(new MClientSession(MClientSession::OP_OPEN),
+				mdsmap->get_inst(mds), MDS_PORT_SERVER);
+      }
+
+      // wait
+      waiting_for_session[mds].push_back(&cond);
+      while (waiting_for_session.count(mds)) {
+	dout(10) << "waiting for session to mds" << mds << " to open" << endl;
+	cond.Wait(client_lock);
+      }
+    }
+
+    break;
   }
-  dout(20) << "mds is " << mds << endl;
-
-  // force use of a particular mds?
-  if (use_mds >= 0) mds = use_mds;
-
 
   // time the call
   utime_t start = g_clock.now();
@@ -580,8 +603,39 @@ MClientReply *Client::make_request(MClientRequest *req,
 }
 
 
+void Client::handle_client_session(MClientSession *m) 
+{
+  dout(10) << "handle_client_session " << *m << endl;
+  int from = m->get_source().num();
+
+  switch (m->op) {
+  case MClientSession::OP_OPEN_ACK:
+    mds_sessions.insert(from);
+    break;
+
+  case MClientSession::OP_CLOSE_ACK:
+    mds_sessions.erase(from);
+    // FIXME: kick requests (hard) so that they are redirected.  or fail.
+    break;
+
+  default:
+    assert(0);
+  }
+
+  // kick waiting threads
+  for (list<Cond*>::iterator p = waiting_for_session[from].begin();
+       p != waiting_for_session[from].end();
+       ++p)
+    (*p)->Signal();
+  waiting_for_session.erase(from);
+
+  delete m;
+}
+
+
 MClientReply* Client::sendrecv(MClientRequest *req, int mds)
 {
+  // -- request --
   // assign a unique tid
   tid_t tid = ++last_tid;
   req->set_tid(tid);
@@ -739,13 +793,21 @@ void Client::dispatch(Message *m)
 
   case MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
+    mount_cond.Signal();
     break;
     
-    // client
+    // mounting and mds sessions
   case MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
     break;
-    
+  case MSG_CLIENT_UNMOUNT:
+    handle_unmount(m);
+    break;
+  case MSG_CLIENT_SESSION:
+    handle_client_session((MClientSession*)m);
+    break;
+
+    // requests
   case MSG_CLIENT_REQUEST_FORWARD:
     handle_client_request_forward((MClientRequestForward*)m);
     break;
@@ -757,12 +819,6 @@ void Client::dispatch(Message *m)
     handle_file_caps((MClientFileCaps*)m);
     break;
 
-  case MSG_CLIENT_MOUNTACK:
-    handle_mount_ack((MClientMountAck*)m);
-    break;
-  case MSG_CLIENT_UNMOUNT:
-    handle_unmount_ack(m);
-    break;
 
 
   default:
@@ -792,6 +848,8 @@ void Client::dispatch(Message *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
+  int from = m->get_source().num();
+
   if (mdsmap == 0)
     mdsmap = new MDSMap;
 
@@ -811,6 +869,11 @@ void Client::handle_mds_map(MMDSMap* m)
 
   mount_cond.Signal();  // mount might be waiting for this.
 
+  // send reconnect
+  if (mdsmap->get_state(from) == MDSMap::STATE_RECONNECT) {
+    send_reconnect(from);
+  }
+
   // resubmit any requests to recovering mds's
   set<int> resolving;
   mdsmap->get_mds_set(resolving, MDSMap::STATE_REJOIN);
@@ -821,6 +884,38 @@ void Client::handle_mds_map(MMDSMap* m)
     failed_mds.erase(*p);
   }
 
+}
+
+void Client::send_reconnect(int mds)
+{
+  dout(10) << "send_reconnect to mds" << mds << endl;
+
+  MClientReconnect *m = new MClientReconnect;
+
+  for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       p++) {
+    if (p->second->caps.count(mds)) {
+      dout(10) << " caps on " << p->first
+	       << " " << cap_string(p->second->caps[mds].caps)
+	       << " wants " << cap_string(p->second->file_caps_wanted())
+	       << endl;
+      m->add_inode_caps(p->first, 
+			p->second->caps[mds].caps,
+			p->second->caps[mds].seq,
+			p->second->file_caps_wanted());
+      string path;
+      p->second->make_path(path);
+      dout(10) << " path on " << p->first << " is " << path << endl;
+      m->add_inode_path(p->first, path);
+    }
+    if (p->second->stale_caps.count(mds)) {
+      dout(10) << " clearing stale caps on " << p->first << endl;
+      p->second->stale_caps.erase(mds);         // hrm, is this right?
+    }
+  }    
+
+  messenger->send_message(m, mdsmap->get_inst(mds), MDS_PORT_SERVER);
 }
 
 
@@ -867,7 +962,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   m->clear_payload();  // for if/when we send back to MDS
 
   // reap?
-  if (m->get_special() == MClientFileCaps::FILECAP_REAP) {
+  if (m->get_special() == MClientFileCaps::OP_REAP) {
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
@@ -896,7 +991,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
+  if (m->get_special() == MClientFileCaps::OP_STALE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
     
     // move to stale list
@@ -925,7 +1020,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // release?
-  if (m->get_special() == MClientFileCaps::FILECAP_RELEASE) {
+  if (m->get_special() == MClientFileCaps::OP_RELEASE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
@@ -1133,31 +1228,21 @@ void Client::update_caps_wanted(Inode *in)
 int Client::mount()
 {
   client_lock.Lock();
-
   assert(!mounted);  // caller is confused?
+  assert(!mdsmap);
 
-  // FIXME mds map update race with mount.
-
-  dout(2) << "sending boot msg to monitor" << endl;
-  if (mdsmap) 
-    delete mdsmap;
   int mon = monmap->pick_mon();
-  messenger->send_message(new MClientBoot(),
-			  monmap->get_inst(mon));
+  dout(2) << "sending client_mount to mon" << mon << endl;
+  messenger->send_message(new MClientMount, monmap->get_inst(mon));
   
   while (!mdsmap)
     mount_cond.Wait(client_lock);
   
-  dout(2) << "mounting" << endl;
-  MClientMount *m = new MClientMount();
+  mounted = true;
 
-  int who = 0; // mdsmap->get_root();  // mount at root, for now
-  messenger->send_message(m, 
-			  mdsmap->get_inst(who), 
-			  MDS_PORT_SERVER);
-  
-  while (!mounted)
-    mount_cond.Wait(client_lock);
+  dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
+	  << " and mdsmap " << mdsmap->get_epoch() 
+	  << endl;
 
   client_lock.Unlock();
 
@@ -1172,22 +1257,6 @@ int Client::mount()
   dout(3) << "op: fh_t fh;" << endl;
   */
   return 0;
-}
-
-void Client::handle_mount_ack(MClientMountAck *m)
-{
-  // mdsmap!
-  if (!mdsmap) mdsmap = new MDSMap;
-  mdsmap->decode(m->get_mds_map_state());
-
-  // we got osdmap!
-  osdmap->decode(m->get_osd_map_state());
-
-  dout(2) << "mounted" << endl;
-  mounted = true;
-  mount_cond.Signal();
-
-  delete m;
 }
 
 
@@ -1248,23 +1317,30 @@ int Client::unmount()
   }
   
   // send unmount!
-  Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  messenger->send_message(req, mdsmap->get_inst(0), MDS_PORT_SERVER);
-
+  int mon = monmap->pick_mon();
+  dout(2) << "sending client_unmount to mon" << mon << endl;
+  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
+  
   while (mounted)
     mount_cond.Wait(client_lock);
 
-  dout(2) << "unmounted" << endl;
+  dout(2) << "unmounted." << endl;
 
   client_lock.Unlock();
   return 0;
 }
 
-void Client::handle_unmount_ack(Message* m)
+void Client::handle_unmount(Message* m)
 {
-  dout(1) << "got unmount ack" << endl;
+  dout(1) << "handle_unmount got ack" << endl;
+
   mounted = false;
+
+  delete mdsmap;
+  mdsmap = 0;
+
   mount_cond.Signal();
+
   delete m;
 }
 
