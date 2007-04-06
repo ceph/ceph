@@ -29,7 +29,7 @@ using namespace std;
 
 //                               -----auth--------   ---replica-------
 #define LOCK_SYNC_    1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
-#define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync    (*) FIXME: let old loner keep R, somehow...
+#define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync (*)
 #define LOCK_GSYNCM  -13 // A    . . / . R . . . L
 
 #define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
@@ -45,6 +45,7 @@ using namespace std;
 #define LOCK_GLONERR -10 // A    . . / . R . . . L
 #define LOCK_GLONERM -11 // A    . . / . R W A . L
 
+// (*) FIXME: how to let old loner keep R, somehow, during GSYNCL
 
 //   4 stable
 //  +9 transition

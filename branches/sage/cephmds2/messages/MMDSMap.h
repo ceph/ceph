@@ -18,7 +18,6 @@
 #include "msg/Message.h"
 #include "mds/MDSMap.h"
 
-
 class MMDSMap : public Message {
  public:
   /*
@@ -59,20 +58,21 @@ class MMDSMap : public Message {
     mm->encode(encoded);
   }
 
+  char *get_type_name() { return "mdsmap"; }
+  void print(ostream& out) {
+    out << "mdsmap(e " << epoch << ")";
+  }
 
   // marshalling
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
+    ::_decode(epoch, payload, off);
     ::_decode(encoded, payload, off);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&epoch, sizeof(epoch));
+  void encode_payload() {
+    ::_encode(epoch, payload);
     ::_encode(encoded, payload);
   }
-
-  virtual char *get_type_name() { return "mdsmap"; }
 };
 
 #endif

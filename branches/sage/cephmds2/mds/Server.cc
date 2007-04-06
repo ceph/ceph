@@ -231,6 +231,9 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	       << " on " << *in << endl;
       Capability cap(p->second.wanted, p->second.seq);
       in->add_client_cap(from, cap);
+      in->inode.size = MAX(in->inode.size, p->second.size);
+      in->inode.mtime = MAX(in->inode.mtime, p->second.mtime);
+      in->inode.atime = MAX(in->inode.atime, p->second.atime);
       
       reconnected_open_files.insert(in);
     }
@@ -245,6 +248,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
 void Server::client_reconnect_failure(int from) 
 {
+  dout(5) << "client_reconnect_failure on client" << from << endl;
   client_reconnect_gather.erase(from);
   if (client_reconnect_gather.empty()) 
     reconnect_finish();
@@ -258,7 +262,28 @@ void Server::reconnect_finish()
   for (set<CInode*>::iterator p = reconnected_open_files.begin();
        p != reconnected_open_files.end();
        ++p) {
-    
+    CInode *in = *p;
+    int issued = in->get_caps_issued();
+    if (in->is_auth()) {
+      // wr?
+      if (issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) {
+	if (issued & (CAP_FILE_RDCACHE|CAP_FILE_WRBUFFER)) {
+	  in->filelock.set_state(LOCK_LONER);
+	} else {
+	  in->filelock.set_state(LOCK_MIXED);
+	}
+      }
+    } else {
+      // note that client should perform stale/reap cleanup during reconnect.
+      assert(issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0);   // ????
+      if (in->filelock.is_xlocked())
+	in->filelock.set_state(LOCK_LOCK);
+      else
+	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
+    }
+    dout(10) << " issued " << cap_string(issued)
+	     << " chose " << in->filelock
+	     << " on " << *in << endl;
   }
   reconnected_open_files.clear();  // clean up
 
@@ -324,6 +349,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << endl;
+  int client = req->get_client();
 
   if (!mds->is_active()) {
     dout(5) << " not active, discarding client request." << endl;
@@ -338,8 +364,8 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // active session?
-  if (!mds->clientmap.have_session(req->get_source().num())) {
-    dout(1) << "no session for " << req->get_source() << ", dropping" << endl;
+  if (!mds->clientmap.have_session(client)) {
+    dout(1) << "no session for client" << client << ", dropping" << endl;
     delete req;
     return;
   }
@@ -353,14 +379,14 @@ void Server::handle_client_request(MClientRequest *req)
     if (mds->clientmap.have_completed_request(req->get_reqid())) {
       dout(5) << "already completed " << req->get_reqid() << endl;
       mds->messenger->send_message(new MClientReply(req, 0),
-				   req->get_source_inst());
+				   req->get_client_inst());
       delete req;
       return;
     }
   }
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0)
-    mds->clientmap.trim_completed_requests(req->get_source().num(),
+    mds->clientmap.trim_completed_requests(client,
 					   req->get_oldest_client_tid());
 
 
@@ -565,7 +591,7 @@ CInode* Server::prepare_new_inode(MClientRequest *req, CDir *dir)
   CInode *in = mdcache->create_inode();
   in->inode.uid = req->get_caller_uid();
   in->inode.gid = req->get_caller_gid();
-  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.now();   // now
+  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.real_now();   // now
   dout(10) << "prepare_new_inode " << *in << endl;
 
   // bump modify pop
@@ -960,7 +986,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = mtime;
   pi->atime = mtime;
-  pi->ctime = g_clock.now();
+  pi->ctime = g_clock.real_now();
   pi->version = pdv;
   
   mdlog->submit_entry(le);
@@ -1025,7 +1051,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mode = mode;
   pi->version = pdv;
-  pi->ctime = g_clock.now();
+  pi->ctime = g_clock.real_now();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -1086,7 +1112,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   if (uid >= 0) pi->uid = uid;
   if (gid >= 0) pi->gid = gid;
   pi->version = pdv;
-  pi->ctime = g_clock.now();
+  pi->ctime = g_clock.real_now();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -1490,7 +1516,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   // update journaled target inode
   pi->nlink++;
-  pi->ctime = g_clock.now();
+  pi->ctime = g_clock.real_now();
   pi->version = tpdv;
 
   // finisher
@@ -1758,7 +1784,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 
   // update journaled target inode
   pi->nlink--;
-  pi->ctime = g_clock.now();
+  pi->ctime = g_clock.real_now();
   pi->version = ipv;
   
   // finisher
@@ -2257,7 +2283,7 @@ void Server::_rename_local(MDRequest *mdr,
   if (pi) {
     // update journaled target inode
     pi->nlink--;
-    pi->ctime = g_clock.now();
+    pi->ctime = g_clock.real_now();
     pi->version = ipv;
   }
 
@@ -2630,7 +2656,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  utime_t ctime = g_clock.now();
+  utime_t ctime = g_clock.real_now();
   Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
 					   pdv, req->args.truncate.length, ctime);
   
@@ -2837,7 +2863,7 @@ void Server::handle_client_opent(MDRequest *mdr)
 
   // prepare
   version_t pdv = cur->pre_dirty();
-  utime_t ctime = g_clock.now();
+  utime_t ctime = g_clock.real_now();
   Context *fin = new C_MDS_open_truncate_logged(mds, mdr, cur, 
 						pdv, ctime);
   

@@ -225,12 +225,14 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
 
-    // tell the client
+    // tell the client where it should go
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd()),
 			    creq->get_client_inst());
     
-    if (!creq->is_idempotent()) 
-      return;  // don't forward if non-idempotent
+    if (!creq->is_idempotent()) {
+      delete req;
+      return;  // don't actually forward if non-idempotent
+    }
   }
   
   // forward
@@ -545,6 +547,9 @@ void MDS::handle_mds_map(MMDSMap *m)
 	anchorclient->finish_recovery();
 
 	mdcache->start_recovered_purges();
+	
+	// tell connected clients
+	bcast_mds_map();  
       }
 
       dout(1) << "now active" << endl;
@@ -658,10 +663,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // inst set changed?
+  /*
   if (state >= MDSMap::STATE_ACTIVE &&   // only if i'm active+.  otherwise they'll get map during reconnect.
       mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) {
     bcast_mds_map();
   }
+  */
 
   delete m;
 }

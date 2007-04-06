@@ -387,7 +387,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
 Inode* Client::insert_trace(MClientReply *reply)
 {
   Inode *cur = root;
-  utime_t now = g_clock.now();
+  utime_t now = g_clock.real_now();
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << endl;
 
@@ -470,98 +470,79 @@ Dentry *Client::lookup(filepath& path)
 
 // -------
 
-MClientReply *Client::make_request(MClientRequest *req, 
-                                   bool auth_best, 
-                                   int use_mds)  // this param is purely for debug hacking
+int Client::choose_target_mds(MClientRequest *req) 
 {
-  // choose an mds
   int mds = 0;
-  while (1) {
-
-    // find deepest known prefix
-    Inode *diri = root;   // the deepest known containing dir
-    Inode *item = 0;      // the actual item... if we know it
-    int missing_dn = -1;  // which dn we miss on (if we miss)
     
-    unsigned depth = req->get_filepath().depth();
-    for (unsigned i=0; i<depth; i++) {
-      // dir?
-      if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
-	Dir *dir = diri->dir;
-	
-	// do we have the next dentry?
-	if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
-	  missing_dn = i;  // no.
-	  break;
-	}
-	
-	dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
-	
-	if (i == depth-1) {  // last one!
-	  item = dir->dentries[ req->get_filepath()[i] ]->inode;
-	  break;
-	} 
-	
-	// continue..
-	diri = dir->dentries[ req->get_filepath()[i] ]->inode;
-	assert(diri);
-      } else {
-	missing_dn = i;
+  // find deepest known prefix
+  Inode *diri = root;   // the deepest known containing dir
+  Inode *item = 0;      // the actual item... if we know it
+  int missing_dn = -1;  // which dn we miss on (if we miss)
+  
+  unsigned depth = req->get_filepath().depth();
+  for (unsigned i=0; i<depth; i++) {
+    // dir?
+    if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
+      Dir *dir = diri->dir;
+      
+      // do we have the next dentry?
+      if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
+	missing_dn = i;  // no.
 	break;
       }
-    }
-    
-    // pick mds
-    if (!diri || g_conf.client_use_random_mds) {
-      // no root info, pick a random MDS
-      mds = rand() % mdsmap->get_num_mds();
+      
+      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
+      
+      if (i == depth-1) {  // last one!
+	item = dir->dentries[ req->get_filepath()[i] ]->inode;
+	break;
+      } 
+      
+      // continue..
+      diri = dir->dentries[ req->get_filepath()[i] ]->inode;
+      assert(diri);
     } else {
-      if (auth_best) {
-	// pick the actual auth (as best we can)
-	if (item) {
-	  mds = item->authority(mdsmap);
-	} else if (diri->dir_hashed && missing_dn >= 0) {
-	  mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-				       mdsmap);
-	} else {
-	  mds = diri->authority(mdsmap);
-	}
-      } else {
-	// balance our traffic!
-	if (diri->dir_hashed && missing_dn >= 0) 
-	  mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-				       mdsmap);
-	else 
-	  mds = diri->pick_replica(mdsmap);
-      }
+      missing_dn = i;
+      break;
     }
-    dout(20) << "mds is " << mds << endl;
-
-    // force use of a particular mds?
-    if (use_mds >= 0) mds = use_mds;
-
-    // open a session?
-    if (mds_sessions.count(mds) == 0) {
-      Cond cond;
-      if (waiting_for_session.count(mds) == 0) {
-	dout(10) << "opening session to mds" << mds << endl;
-	messenger->send_message(new MClientSession(MClientSession::OP_OPEN),
-				mdsmap->get_inst(mds), MDS_PORT_SERVER);
-      }
-
-      // wait
-      waiting_for_session[mds].push_back(&cond);
-      while (waiting_for_session.count(mds)) {
-	dout(10) << "waiting for session to mds" << mds << " to open" << endl;
-	cond.Wait(client_lock);
-      }
-    }
-
-    break;
   }
+  
+  // pick mds
+  if (!diri || g_conf.client_use_random_mds) {
+    // no root info, pick a random MDS
+    mds = rand() % mdsmap->get_num_mds();
+  } else {
+    if (req->auth_is_best()) {
+      // pick the actual auth (as best we can)
+      if (item) {
+	mds = item->authority(mdsmap);
+      } else if (diri->dir_hashed && missing_dn >= 0) {
+	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				     mdsmap);
+      } else {
+	mds = diri->authority(mdsmap);
+      }
+    } else {
+      // balance our traffic!
+      if (diri->dir_hashed && missing_dn >= 0) 
+	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				     mdsmap);
+      else 
+	mds = diri->pick_replica(mdsmap);
+    }
+  }
+  dout(20) << "mds is " << mds << endl;
+  
+  return mds;
+}
 
+
+
+MClientReply *Client::make_request(MClientRequest *req,
+                                   int use_mds)  // this param is purely for debug hacking
+{
   // time the call
-  utime_t start = g_clock.now();
+  utime_t start = g_clock.real_now();
   
   bool nojournal = false;
   int op = req->get_op();
@@ -571,10 +552,90 @@ MClientReply *Client::make_request(MClientRequest *req,
       op == MDS_OP_OPEN)
     nojournal = true;
 
-  MClientReply *reply = sendrecv(req, mds);
 
+  // -- request --
+  // assign a unique tid
+  tid_t tid = ++last_tid;
+  req->set_tid(tid);
+  if (!mds_requests.empty()) 
+    req->set_oldest_client_tid(mds_requests.begin()->first);
+
+  // make note
+  MetaRequest request(req, tid);
+  mds_requests[tid] = &request;
+
+  // encode payload now, in case we have to resend (in case of mds failure)
+  req->encode_payload();
+  request.request_payload = req->get_payload();
+
+  // note idempotency
+  request.idempotent = req->is_idempotent();
+
+  // hack target mds?
+  if (use_mds)
+    request.resend_mds = use_mds;
+
+  // set up wait cond
+  Cond cond;
+  request.caller_cond = &cond;
+  
+  while (1) {
+    // choose mds
+    int mds;
+    // force use of a particular mds?
+    if (request.resend_mds >= 0) {
+      mds = request.resend_mds;
+      request.resend_mds = -1;
+      dout(10) << "target resend_mds specified as mds" << mds << endl;
+    } else {
+      mds = choose_target_mds(req);
+      dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
+    }
+    
+    // open a session?
+    if (mds_sessions.count(mds) == 0) {
+      Cond cond;
+      if (waiting_for_session.count(mds) == 0) {
+	dout(10) << "opening session to mds" << mds << endl;
+	messenger->send_message(new MClientSession(MClientSession::OP_OPEN),
+				mdsmap->get_inst(mds), MDS_PORT_SERVER);
+      }
+      
+      // wait
+      waiting_for_session[mds].push_back(&cond);
+      while (waiting_for_session.count(mds)) {
+	dout(10) << "waiting for session to mds" << mds << " to open" << endl;
+	cond.Wait(client_lock);
+      }
+    }
+
+    // send request.
+    send_request(&request, mds);
+
+    // wait for signal
+    dout(20) << "awaiting kick on " << &cond << endl;
+    cond.Wait(client_lock);
+    
+    // did we get a reply?
+    if (request.reply) 
+      break;
+  }
+
+  // got it!
+  MClientReply *reply = request.reply;
+  
+  // kick dispatcher (we've got it!)
+  assert(request.dispatch_cond);
+  request.dispatch_cond->Signal();
+  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << endl;
+  
+  // clean up.
+  mds_requests.erase(tid);
+
+
+  // -- log times --
   if (client_logger) {
-    utime_t lat = g_clock.now();
+    utime_t lat = g_clock.real_now();
     lat -= start;
     dout(20) << "lat " << lat << endl;
     client_logger->finc("lsum",(double)lat);
@@ -633,50 +694,6 @@ void Client::handle_client_session(MClientSession *m)
 }
 
 
-MClientReply* Client::sendrecv(MClientRequest *req, int mds)
-{
-  // -- request --
-  // assign a unique tid
-  tid_t tid = ++last_tid;
-  req->set_tid(tid);
-  if (!mds_requests.empty()) 
-    req->set_oldest_client_tid(mds_requests.begin()->first);
-
-  // make note
-  MetaRequest request(req, tid);
-  mds_requests[tid] = &request;
-
-  // encode payload now, in case we have to resend (in case of mds failure)
-  req->encode_payload();
-  request.request_payload = req->get_payload();
-
-  // note idempotency
-  request.idempotent = req->is_idempotent();
-  
-  // send initial request.
-  send_request(&request, mds);
-
-  // wait for reply
-  Cond cond;
-  request.caller_cond = &cond;
-  while (request.reply == 0) {
-    dout(20) << "sendrecv awaiting reply kick on " << &cond << endl;
-    cond.Wait(client_lock);
-  }
-
-  // got it!
-  MClientReply *reply = request.reply;
-  
-  // kick dispatcher (we've got it!)
-  assert(request.dispatch_cond);
-  request.dispatch_cond->Signal();
-  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << endl;
-  
-  // clean up.
-  mds_requests.erase(tid);
-  return reply;
-}
-
 void Client::send_request(MetaRequest *request, int mds)
 {
   MClientRequest *r = request->request;
@@ -713,11 +730,14 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   // reset retry counter
   request->retry_attempt = 0;
 
-  if (request->idempotent) {
+  if (request->idempotent && 
+      mds_sessions.count(fwd->get_dest_mds())) {
+    // dest mds has a session, and request was forwarded for us.
+
     // note new mds set.
-    // there are now exactly two mds's whose failure should trigger a resend
-    // of this request.
     if (request->num_fwd < fwd->get_num_fwd()) {
+      // there are now exactly two mds's whose failure should trigger a resend
+      // of this request.
       request->mds.clear();
       request->mds.insert(fwd->get_source().num());
       request->mds.insert(fwd->get_dest_mds());
@@ -731,20 +751,21 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
       dout(10) << "handle_client_request tid " << tid
 	       << " previously forwarded to mds" << fwd->get_dest_mds() 
 	       << ", mds still " << request->mds
-	       << endl;
+		 << endl;
     }
   } else {
-    request->mds.clear();
-    request->mds.insert(fwd->get_dest_mds());
-    request->num_fwd = fwd->get_num_fwd();
-    
+    // request not forwarded, or dest mds has no session.
+    // resend.
     dout(10) << "handle_client_request tid " << tid
 	     << " fwd " << fwd->get_num_fwd() 
 	     << " to mds" << fwd->get_dest_mds() 
 	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
 	     << endl;
-    
-    send_request(request, fwd->get_dest_mds());
+
+    request->mds.clear();
+    request->num_fwd = fwd->get_num_fwd();
+    request->resend_mds = fwd->get_dest_mds();
+    request->caller_cond->Signal();
   }
 
   delete fwd;
@@ -869,19 +890,15 @@ void Client::handle_mds_map(MMDSMap* m)
 
   mount_cond.Signal();  // mount might be waiting for this.
 
-  // send reconnect
+  // send reconnect?
   if (mdsmap->get_state(from) == MDSMap::STATE_RECONNECT) {
     send_reconnect(from);
   }
 
-  // resubmit any requests to recovering mds's
-  set<int> resolving;
-  mdsmap->get_mds_set(resolving, MDSMap::STATE_REJOIN);
-  for (set<int>::iterator p = resolving.begin();
-       p != resolving.end();
-       ++p) {
-    kick_requests(*p);
-    failed_mds.erase(*p);
+  // kick requests?
+  if (mdsmap->get_state(from) == MDSMap::STATE_ACTIVE) {
+    kick_requests(from);
+    //failed_mds.erase(from);
   }
 
 }
@@ -905,7 +922,9 @@ void Client::send_reconnect(int mds)
 	m->add_inode_caps(p->first, 
 			  p->second->caps[mds].caps,
 			  p->second->caps[mds].seq,
-			  p->second->file_caps_wanted());
+			  p->second->file_caps_wanted(),
+			  p->second->inode.size, 
+			  p->second->inode.mtime, p->second->inode.atime);
 	string path;
 	p->second->make_path(path);
 	dout(10) << " path on " << p->first << " is " << path << endl;
@@ -1322,6 +1341,15 @@ int Client::unmount()
     }
   }
   
+  // send session closes!
+  for (set<int>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    dout(2) << "sending client_session close to mds" << *p << endl;
+    messenger->send_message(new MClientSession(MClientSession::OP_CLOSE),
+			    mdsmap->get_inst(*p), MDS_PORT_SERVER);
+  }
+
   // send unmount!
   int mon = monmap->pick_mon();
   dout(2) << "sending client_unmount to mon" << mon << endl;
@@ -1375,7 +1403,7 @@ int Client::link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   
   insert_trace(reply);
@@ -1410,7 +1438,7 @@ int Client::unlink(const char *relpath)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
     // remove from local cache
@@ -1457,7 +1485,7 @@ int Client::rename(const char *relfrom, const char *relto)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
@@ -1494,7 +1522,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
@@ -1527,7 +1555,7 @@ int Client::rmdir(const char *relpath)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
     // remove from local cache
@@ -1577,7 +1605,7 @@ int Client::symlink(const char *reltarget, const char *rellink)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  //FIXME assuming trace of link, not of target
   delete reply;
@@ -1636,7 +1664,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 
   Dentry *dn = lookup(fpath);
   inode_t inode;
-  utime_t now = g_clock.now();
+  utime_t now = g_clock.real_now();
   if (dn && 
       now <= dn->inode->valid_until &&
       ((dn->inode->inode.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
@@ -1809,7 +1837,7 @@ int Client::chmod(const char *relpath, mode_t mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1846,7 +1874,7 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 
   //FIXME enforce caller uid rights?
 
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1886,7 +1914,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1923,7 +1951,7 @@ int Client::mknod(const char *relpath, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
 
@@ -1968,7 +1996,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
 
@@ -1993,7 +2021,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
-      utime_t now = g_clock.now();
+      utime_t now = g_clock.real_now();
       
       list<string>::const_iterator pdn = reply->get_dir_dn().begin();
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
@@ -2246,13 +2274,12 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   req->args.open.mode = mode;
 
   int cmode = req->get_open_file_mode();
-  bool tryauth = !req->open_file_mode_is_readonly();
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, tryauth); // try auth if writer
+  MClientReply *reply = make_request(req);
   
   assert(reply);
   dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
@@ -2622,7 +2649,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
   // time it.
-  utime_t start = g_clock.now();
+  utime_t start = g_clock.real_now();
     
   // copy into fresh buffer (since our write may be resub, async)
   bufferptr bp = buffer::copy(buf, size);
@@ -2687,7 +2714,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   }
 
   // time
-  utime_t lat = g_clock.now();
+  utime_t lat = g_clock.real_now();
   lat -= start;
   if (client_logger) {
     client_logger->finc("wrlsum",(double)lat);
@@ -2706,7 +2733,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   }
 
   // mtime
-  in->file_wr_mtime = in->inode.mtime = g_clock.now();
+  in->file_wr_mtime = in->inode.mtime = g_clock.real_now();
 
   // ok!
   client_lock.Unlock();
@@ -2731,7 +2758,7 @@ int Client::truncate(const char *file, off_t length)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -2952,7 +2979,7 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   } 
   else if (dest.is_mds()) {
     dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
-    failed_mds.insert(dest.num());
+    //failed_mds.insert(dest.num());
   }
   else {
     // client?

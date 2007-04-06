@@ -50,15 +50,19 @@ mds
   - drop remote locks on request finish
     - handled by individual MDSCacheObject _finish()'s
 
-- properly recover lock state on rejoin...
-  - recovering mds rejoins replicas it pulled out of its journal
-    - replicas will tell it when they hold an xlock
-  - surviving mds rejoins replicas from a recovering mds
-    - will tell auth if it holds an xlock
+/- properly recover lock state on rejoin...
+/  - recovering mds rejoins replicas it pulled out of its journal
+/    - replicas will tell it when they hold an xlock
+/  - surviving mds rejoins replicas from a recovering mds
+/    - will tell auth if it holds an xlock
+- send_rejoin_acks
 
 - recovering open files
   - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
     - path+cap window will require some fetching of metadata from disk before doing the rejoin
+  - failures during migration.. what about client stale/reap stuff and misplaced WR caps?
+
+- inode.max_size
 
 - journal+recovery
   - local rename
@@ -71,7 +75,6 @@ mds
   - remote unlink
     - rewrite to look link _link
   - remote rename
-  - open(wr cap), open+create
   - file capabilities i/o
 - filelock to control directory mtime, dentry changes
   - hmm, may have to change lock ordering, and Server::rdlock_path_pin_ref()

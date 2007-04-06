@@ -330,6 +330,7 @@ class Client : public Dispatcher {
   map<int, list<Cond*> > waiting_for_session;
 
   void handle_client_session(MClientSession *m);
+  void send_reconnect(int mds);
 
   // mds requests
   struct MetaRequest {
@@ -339,6 +340,7 @@ class Client : public Dispatcher {
 
     bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
+    int      resend_mds;         // someone wants you to (re)send the request here
     int      num_fwd;            // # of times i've been forwarded
     int      retry_attempt;
 
@@ -349,7 +351,7 @@ class Client : public Dispatcher {
 
     MetaRequest(MClientRequest *req, tid_t t) : 
       tid(t), request(req), 
-      idempotent(false), num_fwd(0), retry_attempt(0),
+      idempotent(false), resend_mds(-1), num_fwd(0), retry_attempt(0),
       reply(0), 
       caller_cond(0), dispatch_cond(0) { }
   };
@@ -357,14 +359,12 @@ class Client : public Dispatcher {
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
   
-  MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
-  MClientReply* sendrecv(MClientRequest *req, int mds);
+  MClientReply *make_request(MClientRequest *req, int use_auth=-1);
+  int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
+  void kick_requests(int mds);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
-  void kick_requests(int mds);
-
-  void send_reconnect(int mds);
 
 
   // cluster descriptors

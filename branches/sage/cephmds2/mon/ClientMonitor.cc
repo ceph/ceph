@@ -82,10 +82,10 @@ void ClientMonitor::handle_client_unmount(MClientUnmount *m)
   if (client_map.count(from)) {
     client_map.erase(from);
 
-    if (client_map.empty()) {
+    if (client_map.empty() && 
+	g_conf.mds_shutdown_on_last_unmount) {
       dout(1) << "last client unmounted" << endl;
-      if (g_conf.mds_shutdown_on_last_unmount) 
-	mon->do_stop();
+      mon->do_stop();
     }
   }
 

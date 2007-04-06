@@ -38,7 +38,7 @@ using namespace std;
 #define MDS_INO_STRAY_OFFSET      0x300
 #define MDS_INO_BASE              0x1000
 
-#define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+(x))
+#define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
 #define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)
 
 #define MDS_TRAVERSE_FORWARD       1

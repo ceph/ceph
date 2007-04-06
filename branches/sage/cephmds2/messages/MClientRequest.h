@@ -167,6 +167,11 @@ class MClientRequest : public Message {
       return open_file_mode_is_readonly();
     return (st.op < 1000);
   }
+  bool auth_is_best() {
+    if (!is_idempotent()) return true;
+    if (st.op == MDS_OP_READDIR) return true;
+    return false;    
+  }
   bool follow_trailing_symlink() {
     switch (st.op) {
     case MDS_OP_LSTAT:

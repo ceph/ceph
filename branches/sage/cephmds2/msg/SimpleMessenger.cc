@@ -255,8 +255,9 @@ int Rank::Pipe::connect()
     return -1;
   }
   if (peer_addr != paddr) {
-    derr(0) << "pipe(" << peer_addr << ' ' << this << ").connect peer is " << paddr << ", wtf" << endl;
-    assert(0);
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << endl;
+    ::close(sd);
+    sd = 0;
     return -1;
   }
 

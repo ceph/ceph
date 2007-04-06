@@ -38,12 +38,12 @@ class MMDSCacheRejoin : public Message {
 
   // -- types --
   struct inode_strong { 
-    int caps_wanted;
-    int nonce;
-    int authlock;
-    int linklock;
-    int dirfragtreelock;
-    int filelock;
+    __int32_t caps_wanted;
+    __int32_t nonce;
+    __int32_t authlock;
+    __int32_t linklock;
+    __int32_t dirfragtreelock;
+    __int32_t filelock;
     inode_strong() {}
     inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0) : 
       caps_wanted(cw),
@@ -70,7 +70,7 @@ class MMDSCacheRejoin : public Message {
   };
   struct inode_xlock {
     inodeno_t ino;
-    int locktype;
+    __int32_t locktype;
     metareqid_t reqid;
     inode_xlock() {}
     inode_xlock(inodeno_t i, int lt, const metareqid_t& ri) :
@@ -78,19 +78,19 @@ class MMDSCacheRejoin : public Message {
   };
 
   struct dirfrag_strong {
-    int nonce;
+    __int32_t nonce;
     dirfrag_strong() {}
     dirfrag_strong(int n) : nonce(n) {}
   };
   struct dn_strong {
-    int nonce;
-    int lock;
+    __int32_t nonce;
+    __int32_t lock;
     dn_strong() {}
     dn_strong(int n, int l) : nonce(n), lock(l) {}
   };
 
   // -- data --
-  int op;
+  __int32_t op;
 
   set<inodeno_t> weak_inodes;
   map<inodeno_t, inode_strong> strong_inodes;
@@ -150,6 +150,7 @@ class MMDSCacheRejoin : public Message {
 
   // -- encoding --
   void encode_payload() {
+    ::_encode(op, payload);
     ::_encode(weak_inodes, payload);
     ::_encode(strong_inodes, payload);
 
@@ -160,13 +161,14 @@ class MMDSCacheRejoin : public Message {
 
     ::_encode(xlocked_inodes, payload);
     ::_encode(weak_dirfrags, payload);
-    //::_encode(strong_dirfrags, payload);
+    ::_encode(strong_dirfrags, payload);
     ::_encode(weak_dentries, payload);
     ::_encode(strong_dentries, payload);
     ::_encode(xlocked_dentries, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(op, payload, off);
     ::_decode(weak_inodes, payload, off);
     ::_decode(strong_inodes, payload, off);
 
@@ -177,7 +179,7 @@ class MMDSCacheRejoin : public Message {
 
     ::_decode(xlocked_inodes, payload, off);
     ::_decode(weak_dirfrags, payload, off);
-    //::_decode(strong_dirfrags, payload, off);
+    ::_decode(strong_dirfrags, payload, off);
     ::_decode(weak_dentries, payload, off);
     ::_decode(strong_dentries, payload, off);
     ::_decode(xlocked_dentries, payload, off);

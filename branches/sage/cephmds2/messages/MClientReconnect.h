@@ -23,8 +23,13 @@ public:
     __int32_t caps;
     __int32_t seq;
     __int32_t wanted;
+    off_t size;
+    utime_t mtime, atime;
     inode_caps_t() {}
-    inode_caps_t(int c, int s, int w) : caps(c), seq(s), wanted(w) {}
+    inode_caps_t(int c, int s, int w) : 
+      caps(c), seq(s), wanted(w), size(0) {}
+    inode_caps_t(int c, int s, int w, off_t sz, utime_t mt, utime_t at) : 
+      caps(c), seq(s), wanted(w), size(sz), mtime(mt), atime(at) {}
   };
 
   map<inodeno_t, inode_caps_t>  inode_caps;
@@ -40,10 +45,9 @@ public:
   }
 
   void add_inode_caps(inodeno_t ino, 
-		      int havecaps,
-		      long seq,
-		      int wanted) {
-    inode_caps[ino] = inode_caps_t(havecaps, seq, wanted);
+		      int havecaps, long seq, int wanted,
+		      off_t sz, utime_t mt, utime_t at) {
+    inode_caps[ino] = inode_caps_t(havecaps, seq, wanted, sz, mt, at);
   }
   void add_inode_path(inodeno_t ino, const string& path) {
     inode_path[ino] = path;
