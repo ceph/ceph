@@ -869,38 +869,43 @@ void Client::dispatch(Message *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  int from = m->get_source().num();
+  int frommds = -1;
+  if (m->get_source().is_mds())
+    frommds = m->get_source().num();
 
   if (mdsmap == 0)
     mdsmap = new MDSMap;
 
   if (whoami < 0) {
+    // mounted!
+    assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
     messenger->reset_myname(m->get_dest());
+
+    // note our inc #
+    objecter->set_client_incarnation(0);  // client always 0, for now.
+    
+    mount_cond.Signal();  // mount might be waiting for this.
   }    
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
   mdsmap->decode(m->get_encoded());
   
-  delete m;
-
-  // note our inc #
-  objecter->set_client_incarnation(0);  // fixme
-
-  mount_cond.Signal();  // mount might be waiting for this.
-
   // send reconnect?
-  if (mdsmap->get_state(from) == MDSMap::STATE_RECONNECT) {
-    send_reconnect(from);
+  if (frommds >= 0 && 
+      mdsmap->get_state(frommds) == MDSMap::STATE_RECONNECT) {
+    send_reconnect(frommds);
   }
 
   // kick requests?
-  if (mdsmap->get_state(from) == MDSMap::STATE_ACTIVE) {
-    kick_requests(from);
+  if (frommds >= 0 &&
+      mdsmap->get_state(frommds) == MDSMap::STATE_ACTIVE) {
+    kick_requests(frommds);
     //failed_mds.erase(from);
   }
 
+  delete m;
 }
 
 void Client::send_reconnect(int mds)
@@ -2969,7 +2974,7 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+    dout(0) << "ms_handle_failure " << *m << " to " << inst 
             << ", resending to mon" << mon 
             << endl;
     messenger->send_message(m, monmap->get_inst(mon));
@@ -2978,13 +2983,12 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
     objecter->ms_handle_failure(m, dest, inst);
   } 
   else if (dest.is_mds()) {
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << endl;
     //failed_mds.insert(dest.num());
   }
   else {
     // client?
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping" << endl;
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << endl;
     delete m;
   }
 }

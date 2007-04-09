@@ -134,6 +134,8 @@ class FileLock : public SimpleLock {
       return (state == LOCK_SYNC);
     if (state == LOCK_LOCK && mdr && xlock_by == mdr)
       return true;
+    if (state == LOCK_LOCK && !xlock_by) 
+      return true;
     return (state == LOCK_SYNC) || (state == LOCK_GMIXEDR) 
       || (state == LOCK_GLOCKR);
   }

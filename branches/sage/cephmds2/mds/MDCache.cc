@@ -1724,7 +1724,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
 
   // done?
   rejoin_ack_gather.erase(from);
-  if (rejoin_ack_gather.empty()) {
+  if (mds->is_rejoin() && 
+      rejoin_ack_gather.empty()) {
     dout(7) << "all done, going active!" << endl;
     send_cache_rejoin_acks();
 
@@ -1799,6 +1800,8 @@ void MDCache::send_cache_rejoin_acks()
 {
   dout(7) << "send_cache_rejoin_acks to " << want_rejoin_ack << endl;
   
+  assert(mds->is_rejoin());
+
   /* nope, not necessary, we adjust lock state gradually.
      after we've processed all rejoins, lockstate is legal.
      we just have to do a final _eval-ish thing at the end...
