@@ -63,6 +63,20 @@ public:
   }
 
   friend class Cond;
+
+
+public:
+  class Locker {
+    Mutex &mutex;
+
+  public:
+    Locker(Mutex& m) : mutex(m) {
+      mutex.Lock();
+    }
+    ~Locker() {
+      mutex.Unlock();
+    }
+  };
 };
 
 #endif
