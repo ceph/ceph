@@ -155,6 +155,14 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1overwrite
   (JNIEnv *, jobject, jlong, jstring);
 
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_kill_client
+ * Signature: (J)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1kill_1client
+  (JNIEnv *, jobject, jlong);
+
 #undef org_apache_hadoop_fs_ceph_CephInputStream_SKIP_BUFFER_SIZE
 #define org_apache_hadoop_fs_ceph_CephInputStream_SKIP_BUFFER_SIZE 2048L
 /*

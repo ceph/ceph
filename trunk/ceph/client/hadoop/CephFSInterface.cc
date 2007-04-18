@@ -48,16 +48,6 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   return clientp;
 }
 
-/* on shutdown,
-
-client->unmount();
-client->shutdown();
-delete client;
-  
-// wait for messenger to finish
-rank.wait();
-
-*/
 
 
 /*
@@ -485,6 +475,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_getdir
  * Signature: (JLjava/lang/String;)[Ljava/lang/String;
+ * Returns a Java array of Strings with the directory contents
  */
 JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getdir
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_path) {
@@ -507,13 +498,15 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
 
   //cout << "checking for empty dir" << endl;
   jint dir_size = contents.size();
-  if (dir_size < 1) 
-    {
-      //    cout << "dir was empty" << endl;
-      //return NULL;
-    }
-  //out << "dir was not empty" << endl;
 
+  // Hadoop doesn't want . or .. in the listing, so we shrink the
+  // listing size by two, or by one if the directory's root
+  if(('/' == c_path[0]) && (0 == c_path[1]))
+    dir_size -= 1;
+  else
+    dir_size -= 2;
+  assert (dir_size >= 0);
+		
   // Create a Java String array of the size of the directory listing
   // jstring blankString = env->NewStringUTF("");
   jclass stringClass = env->FindClass("java/lang/String");
@@ -523,13 +516,21 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   }
   jobjectArray dirListingStringArray = (jobjectArray) env->NewObjectArray(dir_size, stringClass, NULL);
   
-  // populate the array with the elements of the directory list
+  // populate the array with the elements of the directory list,
+  // omitting . and ..
   int i = 0;
+  string dot(".");
+  string dotdot ("..");
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    // is it "."?
+    if (it->first == dot) continue;
+    if (it->first == dotdot) continue;
+
     if (0 == dir_size)
       cout << "WARNING: adding stuff to an empty array" << endl;
+    assert (i < dir_size);
     env->SetObjectArrayElement(dirListingStringArray, i, 
 			       env->NewStringUTF(it->first.c_str()));
     ++i;
@@ -594,6 +595,30 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   // returns file handle, or -1 on failure
   return result;       
 }
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_kill_client
+ * Signature: (J)Z
+ * 
+ * Closes the Ceph client.
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1kill_1client
+  (JNIEnv *env, jobject obj, jlong clientp)
+{  
+  Client* client;
+  client = *(Client**)&clientp;
+
+  client->unmount();
+  client->shutdown();
+  delete client;
+  
+  // wait for messenger to finish
+  rank.wait();
+
+  return true;
+}
+
 
 
 /*
@@ -769,8 +794,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1clo
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
 {
-  cout << "In write" << endl;
-  cout.flush();
+  //cout << "In write" << endl;
+  //cout.flush();
 
 
   // IMPORTANT NOTE: Hadoop write arguments are a bit different from POSIX so we
