@@ -3348,27 +3348,8 @@ void MDCache::request_drop_locks(MDRequest *mdr)
     mds->locker->xlock_finish(*mdr->xlocks.begin(), mdr);
   while (!mdr->rdlocks.empty()) 
     mds->locker->rdlock_finish(*mdr->rdlocks.begin(), mdr);
-
-  /*
-  // foreign xlocks?
-  if (active_requests[req].foreign_xlocks.size()) {
-    set<CDentry*> dns = active_requests[req].foreign_xlocks;
-    active_requests[req].foreign_xlocks.clear();
-    
-    for (set<CDentry*>::iterator it = dns.begin();
-         it != dns.end();
-         it++) {
-      CDentry *dn = *it;
-      
-      dout(7) << "request_cleanup sending unxlock for foreign xlock on " << *dn << endl;
-      assert(dn->is_xlocked());
-      int dauth = dn->dir->dentry_authority(dn->name).first;
-      MLock *m = new MLock(LOCK_AC_UNXLOCK, mds->get_nodeid());
-      m->set_dn(dn->dir->dirfrag(), dn->name);
-      mds->send_message_mds(m, dauth, MDS_PORT_CACHE);
-    }
-  }
-  */
+  while (!mdr->wrlocks.empty()) 
+    mds->locker->wrlock_finish(*mdr->wrlocks.begin(), mdr);
 
   // make sure ref and trace are empty
   //  if we are doing our own locking, we can't use them!

@@ -45,6 +45,7 @@ class Capability;
 
 class SimpleLock;
 class FileLock;
+class ScatterLock;
 
 class Locker {
 private:
@@ -63,13 +64,15 @@ private:
   // -- locks --
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
+		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks);
 
-  bool rdlock_try(SimpleLock *lock, Context *con);
   bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
   void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
   bool xlock_start(SimpleLock *lock, MDRequest *mdr);
   void xlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool wrlock_start(SimpleLock *lock, MDRequest *mdr);
+  void wrlock_finish(SimpleLock *lock, MDRequest *mdr);
 
   // simple
   void handle_simple_lock(SimpleLock *lock, MLock *m);
@@ -85,6 +88,16 @@ private:
   bool dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req);
   void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
+
+  // scatter
+  void handle_scatter_lock(ScatterLock *lock, MLock *m);
+  void scatter_eval(ScatterLock *lock);
+  void scatter_sync(ScatterLock *lock);
+  void scatter_scatter(ScatterLock *lock);
+  bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
+  void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
+  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
+  void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
 
   // file
   void handle_file_lock(FileLock *lock, MLock *m);

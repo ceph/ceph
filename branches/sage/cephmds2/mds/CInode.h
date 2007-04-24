@@ -25,6 +25,7 @@
 #include "CDentry.h"
 #include "SimpleLock.h"
 #include "FileLock.h"
+#include "ScatterLock.h"
 #include "Capability.h"
 
 
@@ -97,17 +98,16 @@ class CInode : public MDSCacheObject {
   static const int WAIT_SLAVEAGREE  = (1<<0);
   static const int WAIT_AUTHPINNABLE = (1<<1);
   //static const int WAIT_SINGLEAUTH  = (1<<2);
-  static const int WAIT_DIR         = (1<<3);
-  static const int WAIT_LINK        = (1<<4);  // as in remotely nlink++
-  static const int WAIT_ANCHORED    = (1<<5);
-  static const int WAIT_UNANCHORED  = (1<<6);
-  static const int WAIT_UNLINK      = (1<<7);  // as in remotely nlink--
-  static const int WAIT_CAPS        = (1<<8);
+  static const int WAIT_DIR         = (1<<2);
+  static const int WAIT_ANCHORED    = (1<<3);
+  static const int WAIT_UNANCHORED  = (1<<4);
+  static const int WAIT_CAPS        = (1<<5);
   
-  static const int WAIT_AUTHLOCK_OFFSET = 9;
-  static const int WAIT_LINKLOCK_OFFSET = 9 + SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 9 + 2*SimpleLock::WAIT_BITS;;
-  static const int WAIT_FILELOCK_OFFSET = 9 + 3*SimpleLock::WAIT_BITS;;
+  static const int WAIT_AUTHLOCK_OFFSET = 6;
+  static const int WAIT_LINKLOCK_OFFSET = 6 + SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 6 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET = 6 + 3*SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRLOCK_OFFSET = 6 + 4*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY           = 0xffffffff;
 
@@ -123,6 +123,7 @@ class CInode : public MDSCacheObject {
   inode_t          inode;        // the inode itself
   string           symlink;      // symlink dest, if symlink
   fragtree_t       dirfragtree;  // dir frag tree, if any
+  map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t            last_open_journaled;  // log offset for the last journaled EOpen
 
@@ -187,7 +188,8 @@ protected:
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
     linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
-    filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET)
+    filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET),
+    dirlock(this, LOCK_OTYPE_IDIR, WAIT_DIRLOCK_OFFSET)
   {
     state = 0;  
     if (auth) state_set(STATE_AUTH);
@@ -253,6 +255,7 @@ public:
   SimpleLock linklock;
   SimpleLock dirfragtreelock;
   FileLock   filelock;
+  ScatterLock dirlock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -260,6 +263,7 @@ public:
     case LOCK_OTYPE_IAUTH: return &authlock;
     case LOCK_OTYPE_ILINK: return &linklock;
     case LOCK_OTYPE_IDIRFRAGTREE: return &dirfragtreelock;
+    case LOCK_OTYPE_IDIR: return &dirlock;
     default: assert(0);
     }
   }
@@ -359,6 +363,8 @@ public:
 
     if (get_caps_issued() & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0) 
       filelock.replicate_relax();
+
+    dirlock.replicate_relax();
   }
 
 

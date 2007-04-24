@@ -26,8 +26,7 @@
 #define LOCK_AC_REQXLOCKACK -4  // req dentry xlock
 #define LOCK_AC_REQXLOCKNAK -5  // req dentry xlock
 
-#define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
-#define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
+#define LOCK_AC_SCATTER     -6
 
 // for auth
 #define LOCK_AC_SYNCACK      1
@@ -41,6 +40,9 @@
 #define LOCK_AC_UNXLOCK      7
 #define LOCK_AC_FINISH       8
 
+
+#define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
+#define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
 
 
 class MLock : public Message {
@@ -79,6 +81,14 @@ class MLock : public Message {
     this->action = action;
     this->asker = asker;
   }
+  MLock(SimpleLock *lock, int action, int asker, bufferlist& bl) :
+    Message(MSG_MDS_LOCK) {
+    this->otype = lock->get_type();
+    lock->get_parent()->set_mlock_info(this);
+    this->action = action;
+    this->asker = asker;
+    data.claim(bl);
+  }
   virtual char *get_type_name() { return "ILock"; }
   
   void set_ino(inodeno_t ino, char ot) {
@@ -88,10 +98,12 @@ class MLock : public Message {
   void set_ino(inodeno_t ino) {
     this->ino = ino;
   }
+  /*
   void set_dirfrag(dirfrag_t df) {
     otype = LOCK_OTYPE_DIR;
     this->dirfrag = df;
   }
+  */
   void set_dn(dirfrag_t df, const string& dn) {
     otype = LOCK_OTYPE_DN;
     this->dirfrag = df;

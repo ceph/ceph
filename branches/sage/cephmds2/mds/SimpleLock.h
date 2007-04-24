@@ -23,8 +23,9 @@
 #define LOCK_OTYPE_IAUTH    3
 #define LOCK_OTYPE_ILINK    4
 #define LOCK_OTYPE_IDIRFRAGTREE 5
+#define LOCK_OTYPE_IDIR     6
 
-#define LOCK_OTYPE_DIR      7  // not used
+//#define LOCK_OTYPE_DIR      7  // not used
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
@@ -33,6 +34,7 @@ inline const char *get_lock_type_name(int t) {
   case LOCK_OTYPE_IAUTH: return "inode_auth";
   case LOCK_OTYPE_ILINK: return "inode_link";
   case LOCK_OTYPE_IDIRFRAGTREE: return "inode_dirfragtree";
+  case LOCK_OTYPE_IDIR: return "inode_dir";
   default: assert(0);
   }
 }
@@ -59,12 +61,12 @@ class MDRequest;
 class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
-  static const int WAIT_NORD        = (1<<1);  // for last rdlock to finish
-  static const int WAIT_WR          = (1<<2);  // to write
-  static const int WAIT_LOCK        = (1<<3);  // for locked state
-  static const int WAIT_STABLE      = (1<<4);  // for a stable state
-  static const int WAIT_REMOTEXLOCK = (1<<5);  // for a remote xlock
-  static const int WAIT_BITS        = 6;
+  static const int WAIT_WR          = (1<<1);  // to write
+  static const int WAIT_NOLOCKS     = (1<<2);  // for last rdlock to finish
+  //static const int WAIT_LOCK        = (1<<3);  // for locked state
+  static const int WAIT_STABLE      = (1<<3);  // for a stable state
+  static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock
+  static const int WAIT_BITS        = 5;
 
 protected:
   // parent (what i lock)
@@ -154,7 +156,7 @@ public:
     assert(num_rdlock>0);
     return --num_rdlock;
   }
-  int get_num_rdlock() { return num_rdlock; }
+  int get_num_rdlocks() { return num_rdlock; }
 
   void get_xlock(MDRequest *who) { 
     assert(xlock_by == 0);
@@ -248,8 +250,8 @@ inline ostream& operator<<(ostream& out, SimpleLock& l)
   //out << get_lock_type_name(l.get_type()) << " ";
   out << get_simplelock_state_name(l.get_state());
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
-  if (l.get_num_rdlock()) 
-    out << " r=" << l.get_num_rdlock();
+  if (l.is_rdlocked()) 
+    out << " r=" << l.get_num_rdlocks();
   if (l.is_xlocked())
     out << " w=" << l.get_xlocked_by();
   out << ")";

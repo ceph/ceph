@@ -214,8 +214,8 @@ inline ostream& operator<<(ostream& out, FileLock& l)
   //out << get_lock_type_name(l.get_type()) << " ";
   out << get_filelock_state_name(l.get_state());
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
-  if (l.get_num_rdlock()) 
-    out << " r=" << l.get_num_rdlock();
+  if (l.is_rdlocked()) 
+    out << " r=" << l.get_num_rdlocks();
   if (l.is_xlocked())
     out << " x=" << l.get_xlocked_by();
   out << ")";

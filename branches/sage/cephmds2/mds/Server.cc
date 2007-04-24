@@ -721,13 +721,12 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   }
 
   // lock the path
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
+  set<SimpleLock*> rdlocks, empty;
 
   for (unsigned i=0; i<trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, empty, empty))
     return 0;
   
   // set and pin ref
@@ -796,17 +795,17 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   }
 
   // -- lock --
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   for (unsigned i=0; i<trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
-  if (dn->is_null())
-    xlocks.insert(&dn->lock);   // new dn, xlock
-  else
+  if (dn->is_null()) {
+    xlocks.insert(&dn->lock);                 // new dn, xlock
+    wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
+  } else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
 
   // save the locked trace.
@@ -900,23 +899,24 @@ void Server::handle_client_stat(MDRequest *mdr)
   CInode *ref = rdlock_path_pin_ref(mdr, false);
   if (!ref) return;
 
-  // FIXME: this is really not the way to handle the statlite mask.
-
-  // do I need file info?
+  // which inode locks do I want?
+  /* note: this works because we include existing locks in our lists,
+     and because all new locks are on inodes and sort to the right of
+     the dentry rdlocks previous acquired by rdlock_path_pin_ref(). */
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+  
   int mask = req->args.stat.mask;
-  if (mask & (INODE_MASK_SIZE|INODE_MASK_MTIME)) {
-    // yes.  do a full stat.
-    if (!mds->locker->rdlock_start(&ref->filelock, mdr))
-      return;  // syncing
-    mds->locker->rdlock_finish(&ref->filelock, mdr);
-  } else {
-    // nope!  easy peasy.
-  }
-  
-  mds->balancer->hit_inode(ref, META_POP_IRD);   
-  
+  if (mask & INODE_MASK_LINK) rdlocks.insert(&ref->linklock);
+  if (mask & INODE_MASK_AUTH) rdlocks.insert(&ref->authlock);
+  if (ref->is_file() && mask & INODE_MASK_FILE) rdlocks.insert(&ref->filelock);
+  if (ref->is_dir() && mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+
+  mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+
   // reply
-  //dout(10) << "reply to " << *req << " stat " << ref->inode.mtime << endl;
+  dout(10) << "reply to stat on " << *req << endl;
   MClientReply *reply = new MClientReply(req);
   reply_request(mdr, reply, ref);
 }
@@ -1451,17 +1451,17 @@ void Server::handle_client_link(MDRequest *mdr)
   if (!dn) return;
 
   // create lock lists
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   for (unsigned i=0; i<linktrace.size(); i++)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
+  wrlocks.insert(&dn->dir->inode->dirlock);
   for (unsigned i=0; i<targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   // go!
@@ -1699,15 +1699,15 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // lock
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   for (unsigned i=0; i<trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
+  wrlocks.insert(&dn->dir->inode->dirlock);
   xlocks.insert(&in->linklock);
   
-  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   // ok!
@@ -2087,23 +2087,24 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 
   // -- locks --
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   // rdlock sourcedir path, xlock src dentry
   for (unsigned i=0; i<srctrace.size()-1; i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
+  wrlocks.insert(&srcdn->dir->inode->dirlock);
 
   // rdlock destdir path, xlock dest dentry
   for (unsigned i=0; i<desttrace.size(); i++)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
+  wrlocks.insert(&destdn->dir->inode->dirlock);
 
   // xlock oldin
   if (oldin) xlocks.insert(&oldin->linklock);
   
-  if (!mds->locker->acquire_locks(mdr, rdlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   

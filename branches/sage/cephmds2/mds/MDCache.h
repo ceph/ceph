@@ -79,7 +79,8 @@ struct MDRequest {
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
-  set< SimpleLock* > xlocks;   // may be remote.
+  set< SimpleLock* > wrlocks;  // always local.
+  set< SimpleLock* > xlocks;   // local or remote.
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
   // projected updates
