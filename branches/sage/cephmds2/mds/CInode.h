@@ -64,7 +64,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_UNANCHORING = 13;
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
-  static const int PIN_BATCHOPENJOURNAL = 16;
+  static const int PIN_BATCHOPENJOURNAL = -16;
 
   const char *pin_name(int p) {
     switch (p) {
