@@ -16,6 +16,7 @@
 #define __THREAD_H
 
 #include <pthread.h>
+#include <errno.h>
 
 class Thread {
  private:
@@ -45,8 +46,11 @@ class Thread {
   }
 
   int join(void **prval = 0) {
-    //assert(thread_id);  // for now
-    //if (thread_id == 0) return -1;   // never started.
+    if (thread_id == 0) {
+      cerr << "WARNING: join on thread that was never started" << endl;
+      //assert(0);
+      return -EINVAL;   // never started.
+    }
 
     int status = pthread_join(thread_id, prval);
     if (status == 0) 

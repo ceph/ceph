@@ -573,6 +573,16 @@ void MDS::handle_osd_map(MOSDMap *m)
   
   dout(10) << "handle_osd_map had " << had << endl;
 
+  // pass on to clients
+  for (set<int>::iterator it = clientmap.get_mount_set().begin();
+       it != clientmap.get_mount_set().end();
+       it++) {
+    MOSDMap *n = new MOSDMap;
+    n->maps = m->maps;
+    n->incremental_maps = m->incremental_maps;
+    messenger->send_message(n, clientmap.get_inst(*it));
+  }
+
   // process locally
   objecter->handle_osd_map(m);
 
@@ -587,15 +597,6 @@ void MDS::handle_osd_map(MOSDMap *m)
       assert(is_standby());
   }  
   
-  // pass on to clients
-  for (set<int>::iterator it = clientmap.get_mount_set().begin();
-       it != clientmap.get_mount_set().end();
-       it++) {
-    MOSDMap *n = new MOSDMap;
-    n->maps = m->maps;
-    n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, clientmap.get_inst(*it));
-  }
 }
 
 
