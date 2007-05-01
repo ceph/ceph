@@ -682,6 +682,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       char *buf = new char[size];
       client->read(fh, buf, size, off);
       delete[] buf;
+    } else if (strcmp(op, "lseek") == 0) {
+      __int64_t id = t.get_int();
+      __int64_t fh = open_files[id];
+      int off = t.get_int();
+      int whence = t.get_int();
+      client->lseek(fh, off, whence);
     } else if (strcmp(op, "write") == 0) {
       __int64_t id = t.get_int();
       __int64_t fh = open_files[id];
