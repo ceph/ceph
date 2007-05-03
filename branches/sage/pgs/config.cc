@@ -32,6 +32,7 @@ long buffer_total_alloc = 0;
 Mutex bufferlock;
 
 #include "osd/osd_types.h"
+Mutex _dout_lock;
 
 FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // stripe over 1M objects, 2x replication
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
@@ -103,8 +104,12 @@ md_config_t g_conf = {
   
   debug_after: 0,
   
+  // -- misc --
+  use_abspaths: false,      // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
+
   // --- clock ---
   clock_lock: false,
+  clock_tare: true,
   
   // --- messenger ---
   ms_single_dispatch: false,
@@ -161,7 +166,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 30,
 
   mds_beacon_interval: 5.0,
-  mds_beacon_grace: 10.0,
+  mds_beacon_grace: 100.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -312,7 +317,8 @@ md_config_t g_conf = {
   bdbstore_ffactor: 0,
   bdbstore_nelem: 0,
   bdbstore_pagesize: 0,
-  bdbstore_cachesize: 0
+  bdbstore_cachesize: 0,
+  bdbstore_transactional: false
 #endif // USE_OSBDB
 };
 
@@ -558,12 +564,19 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--clock_lock") == 0) 
       g_conf.clock_lock = atoi(args[++i]);
+    else if (strcmp(args[i], "--clock_tare") == 0) 
+      g_conf.clock_tare = atoi(args[++i]);
 
     else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+      g_conf.mds_beacon_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+      g_conf.mds_beacon_grace = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
@@ -818,6 +831,12 @@ void parse_config_options(std::vector<char*>& args)
     }
     else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
       g_conf.bdbstore_cachesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-transactional") == 0) {
+      g_conf.bdbstore_transactional = true;
+    }
+    else if (strcmp(args[i], "--debug-bdbstore") == 0) {
+      g_conf.debug_bdbstore = atoi(args[++i]);
     }
 #endif // USE_OSBDB
 

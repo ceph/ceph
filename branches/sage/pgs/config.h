@@ -21,6 +21,8 @@ extern class FileLayout g_OSD_MDLogLayout;
 #include <vector>
 #include <map>
 
+#include "common/Mutex.h"
+
 extern std::map<int,float> g_fake_osd_down;
 extern std::map<int,float> g_fake_osd_out;
 
@@ -81,8 +83,12 @@ struct md_config_t {
 
   int debug_after;
 
+  // misc
+  bool use_abspaths;
+
   // clock
   bool clock_lock;
+  bool clock_tare;
 
   // messenger
 
@@ -300,15 +306,48 @@ struct md_config_t {
   int bdbstore_nelem;
   int bdbstore_pagesize;
   int bdbstore_cachesize;
+  bool bdbstore_transactional;
 #endif // USE_OSBDB
 };
 
 extern md_config_t g_conf;     
 extern md_config_t g_debug_after_conf;     
 
+
+/**
+ * debug output framework
+ */
 #define dout(x)  if ((x) <= g_conf.debug) std::cout
 #define dout2(x) if ((x) <= g_conf.debug) std::cout
 
+/**
+ * for cleaner output, bracket each line with
+ * dbeginl (in the dout macro) and dendl (in place of endl).
+ */
+extern Mutex _dout_lock;
+struct _dbeginl_t {
+  _dbeginl_t(int) {}
+};
+struct _dendl_t {
+  _dendl_t(int) {}
+};
+static const _dbeginl_t dbeginl = 0;
+static const _dendl_t dendl = 0;
+
+inline ostream& operator<<(ostream& out, _dbeginl_t) {
+  _dout_lock.Lock();
+  return out;
+}
+inline ostream& operator<<(ostream& out, _dendl_t) {
+  out << endl;
+  _dout_lock.Unlock();
+  return out;
+}
+
+
+/**
+ * command line / environment argument parsing
+ */
 void env_to_vec(std::vector<char*>& args);
 void argv_to_vec(int argc, char **argv,
                  std::vector<char*>& args);

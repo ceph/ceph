@@ -30,6 +30,7 @@
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << dev.get_device_name() << ")."
 #define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << dev.get_device_name() << ")."
 
+
 char *nice_blocks(block_t b) 
 {
   static char s[20];
@@ -574,7 +575,7 @@ Onode* Ebofs::get_onode(object_t oid)
 {
   while (1) {
     // in cache?
-    if (onode_map.count(oid)) {
+    if (have_onode(oid)) {
       // yay
       Onode *on = onode_map[oid];
       on->get();
@@ -1840,14 +1841,15 @@ int Ebofs::is_cached(object_t oid, off_t off, size_t len)
 
 int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
 {
-  Onode *on = 0;
-  if (onode_map.count(oid) == 0) {
+  if (!have_onode(oid)) {
     dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << endl;
     return -1;  // object dne?
   } 
+  Onode *on = get_onode(oid);
   
   if (!on->have_oc()) {  
     // nothing is cached.  return # of extents in file.
+    dout(10) << "_is_cached have onode but no object cache, returning extent count" << endl;
     return on->extent_map.size();
   }
   
@@ -1860,8 +1862,10 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  on->get_oc(&bc)->map_read(bstart, blen, hits, missing, rx, partials);
-  return missing.size() + rx.size() + partials.size();
+  
+  int num_missing = on->get_oc(&bc)->try_map_read(bstart, blen);
+  dout(7) << "_is_cached try_map_read reports " << num_missing << " missing extents" << endl;
+  return num_missing;
 
   // FIXME: actually, we should calculate if these extents are contiguous.
   // and not using map_read, probably...
@@ -1887,11 +1891,14 @@ void Ebofs::trim_from_cache(object_t oid, off_t off, size_t len)
 
 void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
 {
-  Onode *on = 0;
-  if (onode_map.count(oid) == 0) {
+  // be careful not to load it if we don't have it
+  if (!have_onode(oid)) {
     dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << endl;
     return; 
   } 
+  
+  // ok, we have it, get a pointer.
+  Onode *on = get_onode(oid);
   
   if (!on->have_oc()) 
     return; // nothing is cached. 

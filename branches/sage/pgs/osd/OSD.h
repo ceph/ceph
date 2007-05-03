@@ -25,8 +25,6 @@
 #include "ObjectStore.h"
 #include "PG.h"
 
-#include "messages/MOSDOp.h"
-
 
 #include <map>
 using namespace std;
@@ -41,7 +39,6 @@ class Message;
 class Logger;
 class ObjectStore;
 class OSDMap;
-
 
 class OSD : public Dispatcher {
 public:
@@ -120,7 +117,7 @@ private:
   // -- object locking --
   hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
   
-  bool block_if_wrlocked(MOSDOp* op);
+  bool block_if_wrlocked(class MOSDOp* op);
 
 
   // -- op queue --

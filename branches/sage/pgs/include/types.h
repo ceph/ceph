@@ -54,12 +54,14 @@ namespace __gnu_cxx {
     }
   };
 
+#ifndef __LP64__
   template<> struct hash<__int64_t> {
     size_t operator()(__int64_t __x) const { 
       static hash<__int32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
+#endif
 
 }
 
@@ -129,7 +131,7 @@ struct FileLayout {
   // -- file -> object mapping --
   int stripe_unit;     // stripe unit, in bytes
   int stripe_count;    // over this many objects
-  int object_size;     // until objects are this big, then use a new set of objects.
+  int object_size;     // until objects are this big, then move to new objects
 
   int stripe_width() { return stripe_unit * stripe_count; }
 
@@ -137,7 +139,7 @@ struct FileLayout {
   int period() { return object_size * stripe_count; }
 
   // -- object -> pg layout --
-  char pg_type;        // pg type (replicated, raid, etc.) (pg_t::TYPE_*)
+  char pg_type;        // pg type (replicated, raid, etc.) (see pg_t::TYPE_*)
   char pg_size;        // pg size (num replicas, or raid4 stripe width)
   int  preferred;      // preferred primary osd?
 

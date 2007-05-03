@@ -2265,6 +2265,19 @@ void Server::handle_client_open(MClientRequest *req,
     return;
   }
 
+  // O_TRUNC
+  if (flags & O_TRUNC) {
+    // write
+    if (!mds->locker->inode_file_write_start(cur, req))
+      return;  // fw or (wait for) lock
+    
+    // do update
+    cur->inode.size = req->get_sizearg();
+    cur->_mark_dirty(); // fixme
+    
+    mds->locker->inode_file_write_finish(cur);
+  }
+
 
   // hmm, check permissions or something.
 
@@ -2326,7 +2339,8 @@ void Server::handle_client_openc(MClientRequest *req, CInode *diri)
   CDentry *dn = 0;
   
   // make dentry and inode, xlock dentry.
-  int r = prepare_mknod(req, diri, &in, &dn);
+  bool excl = req->get_iarg() & O_EXCL;
+  int r = prepare_mknod(req, diri, &in, &dn, !excl);
   if (!r) 
     return; // wait on something
   assert(in);

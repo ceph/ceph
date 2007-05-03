@@ -10,7 +10,7 @@
 # mpicxx if you get paranoid.
 
 #CC = g++
-#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+#CFLAGS = -g -fPIC -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 #LIBS = -lpthread  
 
 # Hook for extra -I options, etc.
@@ -22,7 +22,7 @@ CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRAN
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -g -fPIC -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -99,12 +99,12 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
-
 CLIENT_OBJS= \
 	client/FileCache.o\
 	client/Client.o\
 	client/SyntheticClient.o\
 	client/Trace.o
+
 
 ifeq ($(want_bdb),yes)
 OSBDB_OBJS = \
@@ -113,11 +113,15 @@ OSBDB_OBJS = \
 OSBDB_OBJ = osbdb.o
 endif
 
-TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn mkmonmap
+TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cfuse fakefuse
+NO_FUSE = cmon cosd cmds csyn newsyn fakesyn mkmonmap
+
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 all: depend ${TARGETS}
+
+nofuse: depend ${NO_FUSE}
 
 test: depend ${TEST_TARGETS}
 
@@ -184,6 +188,9 @@ osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 
+# hadoop
+libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} -I/usr/local/java/include -I/usr/local/java/include/linux  ${LIBS} $^ -o $@
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}

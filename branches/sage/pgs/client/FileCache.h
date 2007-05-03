@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __FILECACHE_H
 #define __FILECACHE_H
 
@@ -22,9 +35,9 @@ class FileCache {
   //int num_unsafe;
 
   // waiters
-  list<Cond*> waitfor_read;
-  list<Cond*> waitfor_write;
-  //list<Context*> waitfor_safe;
+  set<Cond*> waitfor_read;
+  set<Cond*> waitfor_write;
+
   bool waitfor_release;
 
  public:
@@ -34,15 +47,18 @@ class FileCache {
     latest_caps(0),
     num_reading(0), num_writing(0),// num_unsafe(0),
     waitfor_release(false) {}
+  ~FileCache() {
+    tear_down();
+  }
 
   // waiters/waiting
   bool can_read() { return latest_caps & CAP_FILE_RD; }
   bool can_write() { return latest_caps & CAP_FILE_WR; }
   bool all_safe();// { return num_unsafe == 0; }
 
-  void add_read_waiter(Cond *c) { waitfor_read.push_back(c); }
-  void add_write_waiter(Cond *c) { waitfor_write.push_back(c); }
-  void add_safe_waiter(Context *c);// { waitfor_safe.push_back(c); }
+  void add_safe_waiter(Context *c);
+  
+  void truncate(off_t olds, off_t news);
 
   // ...
   void flush_dirty(Context *onflush=0);
@@ -52,7 +68,10 @@ class FileCache {
   bool is_cached();
   bool is_dirty();  
 
+  void tear_down();
+
   int get_caps() { return latest_caps; }
+  int get_used_caps();
   void set_caps(int caps, Context *onimplement=0);
   void check_caps();
   

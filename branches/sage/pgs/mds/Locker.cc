@@ -937,6 +937,8 @@ void Locker::inode_file_read_finish(CInode *in)
 
 bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
 {
+  dout(7) << "inode_file_write_start on " << *in << endl;
+
   // can't write?
   if (!in->filelock.can_write(in->is_auth())) {
   
@@ -990,8 +992,9 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
 void Locker::inode_file_write_finish(CInode *in)
 {
   // drop ref
-  assert(in->filelock.can_write(in->is_auth()));
+  //assert(in->filelock.can_write(in->is_auth()));
   in->filelock.put_write();
+  in->auth_unpin();
   dout(7) << "inode_file_write_finish on " << *in << ", filelock=" << in->filelock << endl;
   
   // drop lock?
@@ -1025,7 +1028,7 @@ void Locker::inode_file_eval(CInode *in)
     case LOCK_GLOCKR:
     case LOCK_GLOCKM:
     case LOCK_GLOCKL:
-      if (issued == 0) {
+      if ((issued & ~CAP_FILE_RDCACHE) == 0) {
         in->filelock.set_state(LOCK_LOCK);
         
         // waiters
@@ -1850,7 +1853,13 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
   
   // unpin dir
   dn->dir->auth_unpin();
+
+  // kick waiters
+  list<Context*> finished;
+  dn->dir->take_waiting(CDIR_WAIT_DNREAD, finished);
+  mds->queue_finished(finished);
 }
+
 
 /*
  * onfinish->finish() will be called with 

@@ -120,6 +120,10 @@ MDS::~MDS() {
   if (anchormgr) { delete anchormgr; anchormgr = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (mdsmap) { delete mdsmap; mdsmap = 0; }
+
+  if (server) { delete server; server = 0; }
+  if (locker) { delete locker; locker = 0; }
 
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
@@ -236,6 +240,9 @@ int MDS::init(bool standby)
   
   // schedule tick
   reset_tick();
+
+  // init logger
+  reopen_logger();
 
   mds_lock.Unlock();
   return 0;
@@ -446,11 +453,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     // update messenger.
     messenger->reset_myname(MSG_ADDR_MDS(whoami));
 
-    // tell objecter my incarnation
-    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
-
     reopen_logger();
-    dout(1) << "handle_mds_map i am now mds" << whoami << endl;
+    dout(1) << "handle_mds_map i am now mds" << whoami
+	    << " incarnation " << mdsmap->get_inc(whoami)
+	    << endl;
 
     // do i need an osdmap?
     if (oldwhoami < 0) {
@@ -459,6 +465,13 @@ void MDS::handle_mds_map(MMDSMap *m)
       messenger->send_message(new MOSDGetMap(0),
 			      monmap->get_inst(mon));
     }
+  }
+
+  // tell objecter my incarnation
+  if (objecter->get_client_incarnation() < 0 &&
+      mdsmap->have_inst(whoami)) {
+    assert(mdsmap->get_inc(whoami) > 0);
+    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
   }
 
   // update my state
@@ -558,10 +571,22 @@ void MDS::handle_osd_map(MOSDMap *m)
 {
   version_t had = osdmap->get_epoch();
   
+  dout(10) << "handle_osd_map had " << had << endl;
+
+  // pass on to clients
+  for (set<int>::iterator it = clientmap.get_mount_set().begin();
+       it != clientmap.get_mount_set().end();
+       it++) {
+    MOSDMap *n = new MOSDMap;
+    n->maps = m->maps;
+    n->incremental_maps = m->incremental_maps;
+    messenger->send_message(n, clientmap.get_inst(*it));
+  }
+
   // process locally
   objecter->handle_osd_map(m);
 
-  if (had == 0) {
+  if (had == 0 && osdmap->get_epoch() > 0) {
     if (is_creating()) 
       boot_create();    // new tables, journal
     else if (is_starting())
@@ -572,15 +597,6 @@ void MDS::handle_osd_map(MOSDMap *m)
       assert(is_standby());
   }  
   
-  // pass on to clients
-  for (set<int>::iterator it = clientmap.get_mount_set().begin();
-       it != clientmap.get_mount_set().end();
-       it++) {
-    MOSDMap *n = new MOSDMap;
-    n->maps = m->maps;
-    n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, clientmap.get_inst(*it));
-  }
 }
 
 
@@ -787,6 +803,11 @@ int MDS::shutdown_final()
 {
   dout(1) << "shutdown_final" << endl;
 
+  // flush loggers
+  if (logger) logger->flush(true);
+  if (logger2) logger2->flush(true);
+  mdlog->flush_logger();
+  
   // send final down:out beacon (it doesn't matter if this arrives)
   set_want_state(MDSMap::STATE_OUT);
 

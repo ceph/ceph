@@ -34,6 +34,14 @@ Logger::Logger(string fn, LogType *type)
 {
   logger_lock.Lock();
   {
+    filename = "";
+    if (g_conf.use_abspaths) {
+      char *cwd = get_current_dir_name(); 
+      filename = cwd;
+      delete cwd;
+      filename += "/";
+    }
+
     filename = "log/";
     if (g_conf.log_name) {
       filename += g_conf.log_name;
@@ -44,7 +52,9 @@ Logger::Logger(string fn, LogType *type)
     //cout << "log " << filename << endl;
     interval = g_conf.log_interval;
     
-    //start = g_clock.now();  // time 0!
+    if (!g_conf.clock_tare)
+      start = g_clock.now();  // time 0!  otherwise g_clock does it for us.
+
     last_logged = 0;
     wrote_header = -1;
     open = false;

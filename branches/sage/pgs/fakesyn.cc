@@ -31,9 +31,6 @@ using namespace std;
 
 #include "common/Timer.h"
 
-#define NUMMDS g_conf.num_mds
-#define NUMOSD g_conf.num_osd
-#define NUMCLIENT g_conf.num_client
 
 class C_Test : public Context {
 public:
@@ -79,8 +76,7 @@ int main(int argc, char **argv)
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
-
-  g_clock.tare();
+  if (g_conf.clock_tare) g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
@@ -97,9 +93,9 @@ int main(int argc, char **argv)
   }
 
   // create mds
-  MDS *mds[NUMMDS];
-  OSD *mdsosd[NUMMDS];
-  for (int i=0; i<NUMMDS; i++) {
+  MDS *mds[g_conf.num_mds];
+  OSD *mdsosd[g_conf.num_mds];
+  for (int i=0; i<g_conf.num_mds; i++) {
     //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
     mds[i] = new MDS(-1, new FakeMessenger(MSG_ADDR_MDS_NEW), monmap);
     if (g_conf.mds_local_osd)
@@ -108,17 +104,17 @@ int main(int argc, char **argv)
   }
   
   // create osd
-  OSD *osd[NUMOSD];
-  for (int i=0; i<NUMOSD; i++) {
+  OSD *osd[g_conf.num_osd];
+  for (int i=0; i<g_conf.num_osd; i++) {
     //cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
     osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
     start++;
   }
   
   // create client
-  Client *client[NUMCLIENT];
-  SyntheticClient *syn[NUMCLIENT];
-  for (int i=0; i<NUMCLIENT; i++) {
+  Client *client[g_conf.num_client];
+  SyntheticClient *syn[g_conf.num_client];
+  for (int i=0; i<g_conf.num_client; i++) {
     //cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
     client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(i)), monmap);
     start++;
@@ -132,19 +128,19 @@ int main(int argc, char **argv)
   for (int i=0; i<g_conf.num_mon; i++) {
     mon[i]->init();
   }
-  for (int i=0; i<NUMMDS; i++) {
+  for (int i=0; i<g_conf.num_mds; i++) {
     mds[i]->init();
     if (g_conf.mds_local_osd)
       mdsosd[i]->init();
   }
   
-  for (int i=0; i<NUMOSD; i++) {
+  for (int i=0; i<g_conf.num_osd; i++) {
     osd[i]->init();
   }
 
   
   // create client(s)
-  for (int i=0; i<NUMCLIENT; i++) {
+  for (int i=0; i<g_conf.num_client; i++) {
     client[i]->init();
     
     // use my argc, argv (make sure you pass a mount point!)
@@ -158,7 +154,7 @@ int main(int argc, char **argv)
   }
 
 
-  for (int i=0; i<NUMCLIENT; i++) {
+  for (int i=0; i<g_conf.num_client; i++) {
     
     cout << "waiting for synthetic client " << i << " to finish" << endl;
     syn[i]->join_thread();
@@ -174,13 +170,16 @@ int main(int argc, char **argv)
   fakemessenger_wait();
   
   // cleanup
-  for (int i=0; i<NUMMDS; i++) {
+  for (int i=0; i<g_conf.num_mon; i++) {
+    delete mon[i];
+  }
+  for (int i=0; i<g_conf.num_mds; i++) {
     delete mds[i];
   }
-  for (int i=0; i<NUMOSD; i++) {
+  for (int i=0; i<g_conf.num_osd; i++) {
     delete osd[i];
   }
-  for (int i=0; i<NUMCLIENT; i++) {
+  for (int i=0; i<g_conf.num_client; i++) {
     delete client[i];
   }
 

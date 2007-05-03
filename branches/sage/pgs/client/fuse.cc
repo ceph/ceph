@@ -177,13 +177,12 @@ static int ceph_write(const char *path, const char *buf, size_t size,
   return client->write(fh, buf, size, offset);
 }
 
-/*
 static int ceph_flush(const char *path, struct fuse_file_info *fi)
 {
-  fh_t fh = fi->fh;
-  return client->flush(fh);
+//fh_t fh = fi->fh;
+  //return client->flush(fh);
+  return 0;
 }
-*/
 
 
 static int ceph_statfs(const char *path, struct statvfs *stbuf)
@@ -227,7 +226,7 @@ static struct fuse_operations ceph_oper = {
   read: ceph_read,
   write: ceph_write,
   statfs: ceph_statfs,
-  flush: 0, //ceph_flush,   
+  flush: ceph_flush,   
   release: ceph_release,
   fsync: ceph_fsync
 };
@@ -276,5 +275,6 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // go fuse go
   cout << "ok, calling fuse_main" << endl;
-  return fuse_main(newargc, newargv, &ceph_oper);
+  int r = fuse_main(newargc, newargv, &ceph_oper);
+  return r;
 }

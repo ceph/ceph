@@ -53,6 +53,8 @@
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
 
+#define SYNCLIENT_MODE_TRUNCATE     200
+
 
 
 
@@ -195,7 +197,6 @@ class SyntheticClient {
   int play_trace(Trace& t, string& prefix);
 
   void make_dir_mess(const char *basedir, int n);
-
 };
 
 #endif

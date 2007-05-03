@@ -11,7 +11,7 @@
 /*** ObjectCacher::Object ***/
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << oc->objecter->messenger->get_myaddr() << ".objectcacher.object(" << oid << ") "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
@@ -96,50 +96,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   dout(10) << "merge_left result " << *left << endl;
 }
 
-/* buggy possibly, but more importnatly, unnecessary.
-void ObjectCacher::Object::merge_right(BufferHead *left, BufferHead *right)
-{
-  assert(left->end() == right->start());
-  assert(left->get_state() == right->get_state());
 
-  dout(10) << "merge_right " << *left << " + " << *right << endl;
-  oc->bh_remove(this, left);
-  oc->bh_stat_sub(right);
-  data.erase(right->start());
-  right->set_start( left->start() );
-  data[right->start()] = right;
-  right->set_length( left->length() + right->length());
-  oc->bh_stat_add(right);
-
-  // data
-  bufferlist nbl;
-  nbl.claim(left->bl);
-  nbl.claim_append(right->bl);
-  right->bl.claim(nbl);
-  
-  // version 
-  // note: this is sorta busted, but should only be used for dirty buffers
-  right->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
-
-  // waiters
-  map<off_t,list<Context*> > old;
-  old.swap(right->waitfor_read);
-
-  // take left's waiters
-  right->waitfor_read.swap(left->waitfor_read);
-
-  // shift old waiters
-  for (map<off_t, list<Context*> >::iterator p = old.begin();
-       p != old.end();
-       p++) 
-    right->waitfor_read[p->first + left->length()].swap( p->second );
-  
-  // hose left
-  delete left;
-
-  dout(10) << "merge_right result " << *right << endl;
-}
-*/
 
 /*
  * map a range of bytes into buffer_heads.
@@ -367,14 +324,53 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 }
 
 
+void ObjectCacher::Object::truncate(off_t s)
+{
+  dout(10) << "truncate to " << s << endl;
+  
+  while (!data.empty()) {
+	BufferHead *bh = data.rbegin()->second;
+	if (bh->end() <= s) 
+	  break;
+	
+	// split bh at truncation point?
+	if (bh->start() < s) {
+	  split(bh, s);
+	  continue;
+	}
+
+	// remove bh entirely
+	assert(bh->start() >= s);
+	oc->bh_remove(this, bh);
+	delete bh;
+  }
+}
+
 
 /*** ObjectCacher ***/
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << objecter->messenger->get_myaddr() << ".objectcacher "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
+
 
 
 /* private */
+
+void ObjectCacher::close_object(Object *ob) 
+{
+  dout(10) << "close_object " << *ob << endl;
+  assert(ob->can_close());
+  
+  // ok!
+  objects.erase(ob->get_oid());
+  objects_by_ino[ob->get_ino()].erase(ob);
+  if (objects_by_ino[ob->get_ino()].empty())
+	objects_by_ino.erase(ob->get_ino());
+  delete ob;
+}
+
+
+
 
 void ObjectCacher::bh_read(BufferHead *bh)
 {
@@ -638,6 +634,11 @@ void ObjectCacher::flush(off_t amount)
 
   dout(10) << "flush " << amount << endl;
   
+  /*
+   * NOTE: we aren't actually pulling things off the LRU here, just looking at the
+   * tail item.  Then we call bh_write, which moves it to the other LRU, so that we
+   * can call lru_dirty.lru_get_next_expire() again.
+   */
   off_t did = 0;
   while (amount == 0 || did < amount) {
     BufferHead *bh = (BufferHead*) lru_dirty.lru_get_next_expire();
@@ -811,6 +812,9 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
     rd->bl->claim_append(i->second);
   }
   dout(10) << "readx  result is " << rd->bl->length() << endl;
+
+  // done with read.
+  delete rd;
 
   trim();
   
@@ -1253,6 +1257,27 @@ bool ObjectCacher::set_is_dirty_or_committing(inodeno_t ino)
 }
 
 
+// purge.  non-blocking.  violently removes dirty buffers from cache.
+void ObjectCacher::purge(Object *ob)
+{
+  dout(10) << "purge " << *ob << endl;
+
+  for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
+       p != ob->data.end();
+       p++) {
+    BufferHead *bh = p->second;
+	if (!bh->is_clean())
+	  dout(0) << "purge forcibly removing " << *ob << " " << *bh << endl;
+	bh_remove(ob, bh);
+	delete bh;
+  }
+
+  if (ob->can_close()) {
+	dout(10) << "trim trimming " << *ob << endl;
+	close_object(ob);
+  }
+}
+
 // flush.  non-blocking.  no callback.
 // true if clean, already flushed.  
 // false if we wrote something.
@@ -1361,6 +1386,24 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   return false;
 }
 
+void ObjectCacher::purge_set(inodeno_t ino)
+{
+  if (objects_by_ino.count(ino) == 0) {
+    dout(10) << "purge_set on " << ino << " dne" << endl;
+    return;
+  }
+
+  dout(10) << "purge_set " << ino << endl;
+
+  set<Object*>& s = objects_by_ino[ino];
+  for (set<Object*>::iterator i = s.begin();
+       i != s.end();
+       i++) {
+    Object *ob = *i;
+	purge(ob);
+  }
+}
+
 
 off_t ObjectCacher::release(Object *ob)
 {
@@ -1379,8 +1422,15 @@ off_t ObjectCacher::release(Object *ob)
 
   for (list<BufferHead*>::iterator p = clean.begin();
 	   p != clean.end();
-	   p++)
+	   p++) {
 	bh_remove(ob, *p);
+	delete *p;
+  }
+
+  if (ob->can_close()) {
+	dout(10) << "trim trimming " << *ob << endl;
+	close_object(ob);
+  }
 
   return o_unclean;
 }
@@ -1397,7 +1447,7 @@ off_t ObjectCacher::release_set(inodeno_t ino)
 
   dout(10) << "release_set " << ino << endl;
 
-  set<Object*>& s = objects_by_ino[ino];
+  set<Object*> s = objects_by_ino[ino];
   for (set<Object*>::iterator i = s.begin();
        i != s.end();
        i++) {
@@ -1419,6 +1469,39 @@ off_t ObjectCacher::release_set(inodeno_t ino)
   }
 
   return unclean;
+}
+
+void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
+{
+  if (objects_by_ino.count(ino) == 0) {
+    dout(10) << "truncate_set on " << ino << " dne" << endl;
+    return;
+  }
+  
+  dout(10) << "truncate_set " << ino << endl;
+
+  for (list<ObjectExtent>::iterator p = exls.begin();
+	   p != exls.end();
+	   ++p) {
+	ObjectExtent &ex = *p;
+	if (objects.count(ex.oid) == 0) continue;
+	Object *ob = objects[ex.oid];
+
+	// purge or truncate?
+	if (ex.start == 0) {
+	  dout(10) << "truncate_set purging " << *ob << endl;
+	  purge(ob);
+	} else {
+	  // hrm, truncate object
+	  dout(10) << "truncate_set truncating " << *ob << " at " << ex.start << endl;
+	  ob->truncate(ex.start);
+
+	  if (ob->can_close()) {
+		dout(10) << "truncate_set trimming " << *ob << endl;
+		close_object(ob);
+	  }
+	}
+  }
 }
 
 

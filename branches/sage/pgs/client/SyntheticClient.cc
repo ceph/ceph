@@ -144,6 +144,11 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"optest") == 0) {
 	syn_modes.push_back( SYNCLIENT_MODE_OPTEST );
         syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"truncate") == 0) { 
+        syn_modes.push_back( SYNCLIENT_MODE_TRUNCATE );
+	syn_sargs.push_back(args[++i]);
+        syn_iargs.push_back(atoi(args[++i]));
       } else {
         cerr << "unknown syn arg " << args[i] << endl;
         assert(0);
@@ -500,6 +505,16 @@ int SyntheticClient::run()
         }
       }
       break;
+
+    case SYNCLIENT_MODE_TRUNCATE:
+      {
+        string file = get_sarg(0);
+        sargs.push_front(file);
+        int iarg1 = iargs.front();  iargs.pop_front();
+	if (run_me()) 
+	  client->truncate(file.c_str(), iarg1);
+      }
+      break;
       
     default:
       assert(0);
@@ -667,6 +682,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       char *buf = new char[size];
       client->read(fh, buf, size, off);
       delete[] buf;
+    } else if (strcmp(op, "lseek") == 0) {
+      __int64_t id = t.get_int();
+      __int64_t fh = open_files[id];
+      int off = t.get_int();
+      int whence = t.get_int();
+      client->lseek(fh, off, whence);
     } else if (strcmp(op, "write") == 0) {
       __int64_t id = t.get_int();
       __int64_t fh = open_files[id];
@@ -707,6 +728,8 @@ int SyntheticClient::clean_dir(string& basedir)
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    if (it->first == ".") continue;
+    if (it->first == "..") continue;
     string file = basedir + "/" + it->first;
 
     if (time_to_stop()) break;
@@ -763,6 +786,27 @@ int SyntheticClient::full_walk(string& basedir)
 	dout(1) << "stat error on " << file << " r=" << r << endl;
 	continue;
       }
+      
+      // print
+      char *tm = ctime(&st.st_mtime);
+      tm[strlen(tm)-1] = 0;
+      printf("%c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+	     S_ISDIR(st.st_mode) ? 'd':'-',
+	     (st.st_mode & 0400) ? 'r':'-',
+	     (st.st_mode & 0200) ? 'w':'-',
+	     (st.st_mode & 0100) ? 'x':'-',
+	     (st.st_mode & 040) ? 'r':'-',
+	     (st.st_mode & 020) ? 'w':'-',
+	     (st.st_mode & 010) ? 'x':'-',
+	     (st.st_mode & 04) ? 'r':'-',
+	     (st.st_mode & 02) ? 'w':'-',
+	     (st.st_mode & 01) ? 'x':'-',
+	     (int)st.st_nlink,
+	     st.st_uid, st.st_gid,
+	     (int)st.st_size,
+	     tm,
+	     file.c_str());
+
       
       if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
 	dirq.push_back(file);
@@ -973,16 +1017,15 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     }
     dout(2) << "writing block " << i << "/" << chunks << endl;
     
-    // fill buf with a fingerprint
-    int *p = (int*)buf;
+    // fill buf with a 16 byte fingerprint
+    // 64 bits : file offset
+    // 64 bits : client id
+    // = 128 bits (16 bytes)
+    __uint64_t *p = (__uint64_t*)buf;
     while ((char*)p < buf + wrsize) {
-      *p = (char*)p - buf;      
-      p++;
-      *p = i;
+      *p = i*wrsize + (char*)p - buf;      
       p++;
       *p = client->get_nodeid();
-      p++;
-      *p = 0;
       p++;
     }
 
@@ -1018,42 +1061,33 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
     dout(2) << "reading block " << i << "/" << chunks << endl;
-    client->read(fd, buf, rdsize, i*rdsize);
+    int r = client->read(fd, buf, rdsize, i*rdsize);
+    if (r < rdsize) {
+      dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
+      break;
+    }
 
     // verify fingerprint
-    int *p = (int*)buf;
     int bad = 0;
-    int boff, bgoff, bchunk, bclient, bzero;
+    __int64_t *p = (__int64_t*)buf;
+    __int64_t readoff, readclient;
     while ((char*)p + 32 < buf + rdsize) {
-      boff = *p;
-      bgoff = (int)((char*)p - buf);
+      readoff = *p;
+      __int64_t wantoff = i*rdsize + (__int64_t)((char*)p - buf);
       p++;
-      bchunk = *p;
+      readclient = *p;
       p++;
-      bclient = *p;
-      p++;
-      bzero = *p;
-      p++;
-      if (boff != bgoff ||
-          bchunk != (int)i ||
-          bclient != client->get_nodeid() ||
-          bzero != 0) {
+      if (readoff != wantoff ||
+	  readclient != client->get_nodeid()) {
         if (!bad)
-          dout(0) << "WARNING: wrong data from OSD, it should be " 
-                  << "(block=" << i 
-                  << " offset=" << bgoff
-                  << " client=" << client->get_nodeid() << ")"
-                  << " .. but i read back .. " 
-                  << "(block=" << bchunk
-                  << " offset=" << boff
-                  << " client=" << bclient << " zero=" << bzero << ")" << endl;
-
+          dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		  << endl;
         bad++;
       }
     }
     if (bad) 
       dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
-
   }
   
   client->close(fd);

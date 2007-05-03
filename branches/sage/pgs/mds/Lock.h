@@ -32,7 +32,7 @@ using namespace std;
 #define LOCK_GLOCKR   2  // AR   R . / C . . . . .   . . / C . . . . .
 
 // file lock states
-#define LOCK_GLOCKL   3  // A    . . / . . . . . .                       loner -> lock
+#define LOCK_GLOCKL   3  // A    . . / C . . . . .                       loner -> lock
 #define LOCK_GLOCKM   4  // A    . . / . . . . . .
 #define LOCK_MIXED    5  // AR   . . / . R W A . L   . . / . R . . . L
 #define LOCK_GMIXEDR  6  // AR   R . / . R . . . L   . . / . R . . . L 
@@ -232,9 +232,9 @@ class CLock {
         return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
+      case LOCK_GLOCKL:
         return CAP_FILE_RDCACHE;
 
-      case LOCK_GLOCKL:
       case LOCK_GLOCKM:
         return 0;
 

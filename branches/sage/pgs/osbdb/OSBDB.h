@@ -12,11 +12,7 @@ Foundation.  See file COPYING. */
 #include <db_cxx.h>
 #include "osd/ObjectStore.h"
 
-// Redefine this to use a different BDB access type. DB_BTREE is
-// probably the only other one that makes sense.
-#ifndef OSBDB_DB_TYPE
-#define OSBDB_DB_TYPE DB_HASH
-#endif // OSBDB_DB_TYPE
+#define OSBDB_MAGIC 0x05BDB
 
 /*
  * Maximum length of an attribute name.
@@ -378,55 +374,36 @@ inline ostream& operator<<(ostream& out, stored_coll *c)
   return out;
 }
 
+class OSBDBException : public std::exception
+{
+  const char *msg;
+
+public:
+  OSBDBException(const char *msg) : msg(msg) { }
+  const char *what() { return msg; }
+};
+
 /*
  * The object store interface for Berkeley DB.
  */
 class OSBDB : public ObjectStore
 {
  private:
+  Mutex lock;
   DbEnv *env;
   Db *db;
   string device;
+  string env_dir;
   bool mounted;
   bool opened;
+  bool transactional;
 
  public:
 
-  OSBDB(const char *dev)
-    : env(0), db (0), device (dev), mounted(false), opened(false)
+  OSBDB(const char *dev) throw(OSBDBException)
+    : lock(true), env(0), db (0), device (dev), mounted(false), opened(false),
+      transactional(g_conf.bdbstore_transactional)
   {
-    /*env = new DbEnv (DB_CXX_NO_EXCEPTIONS);
-    env->set_error_stream (&std::cerr);
-    // WTF? You can't open an env if you set this flag here, but BDB
-    // says you also can't set it after you open the env.
-    //env->set_flags (DB_LOG_INMEMORY, 1);
-    char *p = strrchr (dev, '/');
-    int env_flags = (DB_CREATE | DB_THREAD | DB_INIT_LOCK
-                     | DB_INIT_MPOOL | DB_INIT_TXN | DB_INIT_LOG);
-    if (p != NULL)
-      {
-        *p = '\0';
-        if (env->open (dev, env_flags, 0) != 0)
-          {
-            std::cerr << "failed to open environment: "
-                      << dev << std::endl;
-            ::abort();
-          }
-        *p = '/';
-        dev = p+1;
-      }
-    else
-      {
-        if (env->open (NULL, env_flags, 0) != 0)
-          {
-            std::cerr << "failed to open environment: ." << std::endl;
-            ::abort();
-          }
-      }
-
-    // Double WTF: if you remove the DB_LOG_INMEMORY bit, db->open
-    // fails, inexplicably, with EINVAL!*/
-    //    env->set_flags (DB_DIRECT_DB | /*DB_AUTO_COMMIT |*/ DB_LOG_INMEMORY, 1);
   }
 
   ~OSBDB()
@@ -434,11 +411,6 @@ class OSBDB : public ObjectStore
     if (mounted)
       {
         umount();
-      }
-    if (env != NULL)
-      {
-        env->close (0);
-        delete env;
       }
   }
 
@@ -499,9 +471,10 @@ class OSBDB : public ObjectStore
   void sync();
 
 private:
-  int opendb (DBTYPE type=DB_UNKNOWN, int flags=0);
+  int opendb (DBTYPE type=DB_UNKNOWN, int flags=0, bool new_env=false);
 
   int _setattr(object_t oid, const char *name, const void *value,
-               size_t size, Context *onsync);
+               size_t size, Context *onsync, DbTxn *txn);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
+  DbEnv *getenv();
 };

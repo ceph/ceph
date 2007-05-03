@@ -697,7 +697,8 @@ void Rank::Pipe::fail(list<Message*>& out)
  */
 
 Rank::Rank() : 
-  single_dispatcher(this) {
+  single_dispatcher(this),
+  started(false) {
   // default to any listen_addr
   memset((char*)&listen_addr, 0, sizeof(listen_addr));
   listen_addr.sin_family = AF_INET;
@@ -787,7 +788,14 @@ void Rank::reaper()
 
 int Rank::start_rank()
 {
+  lock.Lock();
+  if (started) {
+    dout(10) << "start_rank already started" << endl;
+    lock.Unlock();
+    return 0;
+  }
   dout(10) << "start_rank" << endl;
+  lock.Unlock();
 
   // bind to a socket
   if (accepter.start() < 0) 
@@ -802,7 +810,7 @@ int Rank::start_rank()
   lock.Lock();
 
   dout(1) << "start_rank at " << listen_addr << endl;
-
+  started = true;
   lock.Unlock();
   return 0;
 }
@@ -858,6 +866,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   EntityMessenger *msgr = new EntityMessenger(name);
 
   // add to directory
+  assert(local.count(name) == 0);
   local[name] = msgr;
   
   lock.Unlock();
@@ -904,7 +913,7 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
         }
       } else {
         derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << endl;
-        assert(0);  // hmpf
+        //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
       }
     }
     else {

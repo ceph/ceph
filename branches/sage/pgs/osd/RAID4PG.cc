@@ -25,7 +25,7 @@
 #include "config.h"
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -82,20 +82,20 @@ void RAID4PG::wait_for_missing_object(object_t oid, MOSDOp *op)
 
 void RAID4PG::note_failed_osd(int o)
 {
-  dout(10) << "note_failed_osd osd" << o << endl;
+  dout(10) << "note_failed_osd osd" << o << dendl;
   assert(0);
 }
 
 void RAID4PG::on_acker_change()
 {
-  dout(10) << "on_acker_change" << endl;
+  dout(10) << "on_acker_change" << dendl;
   assert(0);
 }
 
 
 void RAID4PG::on_role_change()
 {
-  dout(10) << "on_role_change" << endl;
+  dout(10) << "on_role_change" << dendl;
   assert(0);
 }
 

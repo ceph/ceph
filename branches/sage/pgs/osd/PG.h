@@ -454,10 +454,6 @@ protected:
   friend class OSD;
 
 
-  // [primary|tail]
-
-  
-  // [primary|replica]
   // pg waiters
   list<class Message*>            waiting_for_active;
   hash_map<object_t, 

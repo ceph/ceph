@@ -143,6 +143,13 @@ class BlockDevice {
     BarrierQueue(BlockDevice *bd, const char *d) : bdev(bd), dev(d) {
       barrier();
     }
+    ~BarrierQueue() {
+      for (list<Queue*>::iterator p = qls.begin();
+	   p != qls.end();
+	   ++p) 
+	delete *p;
+      qls.clear();
+    }
     int size() {
       // this isn't perfectly accurate.
       if (!qls.empty())

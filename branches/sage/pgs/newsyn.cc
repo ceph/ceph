@@ -58,9 +58,21 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
   // first, synchronize clocks.
-  MPI_Barrier(MPI_COMM_WORLD);
-  //dout(-10) << "tare" << endl;
-  g_clock.tare();
+  if (g_conf.clock_tare) {
+    if (1) {
+      // use an MPI barrier.  probably not terribly precise.
+      MPI_Barrier(MPI_COMM_WORLD);
+      g_clock.tare();
+    } else {
+      // use wall clock; assume NTP has all nodes synchronized already.
+      // FIXME someday: this hangs for some reason.  whatever.
+      utime_t z = g_clock.now();
+      MPI_Bcast( &z, sizeof(z), MPI_CHAR,
+		 0, MPI_COMM_WORLD);
+      cout << "z is " << z << endl;
+      g_clock.tare(z);
+    }
+  }
   
   // start up all monitors at known addresses.
   entity_inst_t moninst[mpi_world];  // only care about first g_conf.num_mon of these.
@@ -287,6 +299,7 @@ int main(int argc, char **argv)
   set<int> clientlist;
   map<int,Client *> client;//[NUMCLIENT];
   map<int,SyntheticClient *> syn;//[NUMCLIENT];
+  int nclients = 0;
   for (int i=0; i<NUMCLIENT; i++) {
     //if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
     if (myrank != g_conf.ms_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
@@ -321,21 +334,21 @@ int main(int argc, char **argv)
     started++;
 
     syn[i] = new SyntheticClient(client[i]);
+
+    client[i]->mount();
+    nclients++;
   }
 
   if (!clientlist.empty()) dout(2) << "i have " << clientlist << endl;
 
-  int nclients = 0;
   for (set<int>::iterator it = clientlist.begin();
        it != clientlist.end();
        it++) {
     int i = *it;
 
     //cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
-    client[i]->mount();
     syn[i]->start_thread();
     
-    nclients++;
   }
   if (nclients) {
     cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << endl;

@@ -164,6 +164,7 @@ class Objecter {
     return !(op_read.empty() && op_modify.empty());
   }
 
+  int get_client_incarnation() { return client_inc; }
   void set_client_incarnation(int inc) {
 	client_inc = inc;
   }

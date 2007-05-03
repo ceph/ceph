@@ -71,7 +71,7 @@ public:
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
 
-  bool is_null() { return cap_history.empty(); }
+  bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 
   // most recently issued caps.
   int pending()   { 
