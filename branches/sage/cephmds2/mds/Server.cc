@@ -2760,11 +2760,13 @@ void Server::queue_journal_open(CInode *in)
 {
   dout(10) << "queue_journal_open on " << *in << endl;
 
-  // pin so our pointer stays valid
-  in->get(CInode::PIN_BATCHOPENJOURNAL);
-
-  // queue it up for a bit
-  journal_open_queue.insert(in);
+  if (journal_open_queue.count(in) == 0) {
+    // pin so our pointer stays valid
+    in->get(CInode::PIN_BATCHOPENJOURNAL);
+    
+    // queue it up for a bit
+    journal_open_queue.insert(in);
+  }
 }
 
 

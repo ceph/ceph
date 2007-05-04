@@ -206,20 +206,19 @@ class FileLock : public SimpleLock {
     assert(0);
     return 0;
   }
+
+  void print(ostream& out) {
+    out << "(";
+    //out << get_lock_type_name(l.get_type()) << " ";
+    out << get_filelock_state_name(get_state());
+    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    if (is_rdlocked()) 
+      out << " r=" << get_num_rdlocks();
+    if (is_xlocked())
+      out << " x=" << get_xlocked_by();
+    out << ")";
+  }
 };
 
-inline ostream& operator<<(ostream& out, FileLock& l) 
-{
-  out << "(";
-  //out << get_lock_type_name(l.get_type()) << " ";
-  out << get_filelock_state_name(l.get_state());
-  if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
-  if (l.is_rdlocked()) 
-    out << " r=" << l.get_num_rdlocks();
-  if (l.is_xlocked())
-    out << " x=" << l.get_xlocked_by();
-  out << ")";
-  return out;
-}
 
 #endif

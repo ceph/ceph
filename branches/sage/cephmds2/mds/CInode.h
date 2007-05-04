@@ -55,25 +55,21 @@ class CInode : public MDSCacheObject {
   // -- pins --
   //static const int PIN_REPLICATED =     1;
   static const int PIN_DIR =        2;
-  static const int PIN_PROXY =      5;  // can't expire yet
   static const int PIN_CAPS =       7;  // client caps
   static const int PIN_AUTHPIN =    8;
   static const int PIN_IMPORTING =  -9;  // importing
-  static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
   static const int PIN_ANCHORING = 12;
   static const int PIN_UNANCHORING = 13;
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
-  static const int PIN_BATCHOPENJOURNAL = -16;
+  static const int PIN_BATCHOPENJOURNAL = 16;
 
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DIR: return "dir";
-    case PIN_PROXY: return "proxy";
     case PIN_CAPS: return "caps";
     case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
-    case PIN_RENAMESRC: return "renamesrc";
     case PIN_ANCHORING: return "anchoring";
     case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
@@ -85,19 +81,15 @@ class CInode : public MDSCacheObject {
 
   // -- state --
   static const int STATE_ROOT =       (1<<2);
-  //static const int STATE_UNSAFE =     (1<<3);   // not logged yet
   //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
   static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
   static const int STATE_ANCHORING =  (1<<7);
   static const int STATE_UNANCHORING = (1<<8);
   static const int STATE_OPENINGDIR = (1<<9);
-  //static const int STATE_RENAMING =   (1<<8);  // moving me
-  //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
 
   // -- waiters --
   static const int WAIT_SLAVEAGREE  = (1<<0);
   static const int WAIT_AUTHPINNABLE = (1<<1);
-  //static const int WAIT_SINGLEAUTH  = (1<<2);
   static const int WAIT_DIR         = (1<<2);
   static const int WAIT_ANCHORED    = (1<<3);
   static const int WAIT_UNANCHORED  = (1<<4);
@@ -468,6 +460,7 @@ class CInodeDiscover {
   int        linklock_state;
   int        dirfragtreelock_state;
   int        filelock_state;
+  int        dirlock_state;
 
  public:
   CInodeDiscover() {}
@@ -482,6 +475,7 @@ class CInodeDiscover {
     linklock_state = in->linklock.get_replica_state();
     dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
     filelock_state = in->filelock.get_replica_state();
+    dirlock_state = in->dirlock.get_replica_state();
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -497,6 +491,7 @@ class CInodeDiscover {
     in->linklock.set_state(linklock_state);
     in->dirfragtreelock.set_state(dirfragtreelock_state);
     in->filelock.set_state(filelock_state);
+    in->dirlock.set_state(dirlock_state);
   }
   
   void _encode(bufferlist& bl) {
@@ -508,6 +503,7 @@ class CInodeDiscover {
     ::_encode(linklock_state, bl);
     ::_encode(dirfragtreelock_state, bl);
     ::_encode(filelock_state, bl);
+    ::_encode(dirlock_state, bl);
   }
 
   void _decode(bufferlist& bl, int& off) {
@@ -519,6 +515,7 @@ class CInodeDiscover {
     ::_decode(linklock_state, bl, off);
     ::_decode(dirfragtreelock_state, bl, off);
     ::_decode(filelock_state, bl, off);
+    ::_decode(dirlock_state, bl, off);
   }  
 
 };
@@ -560,6 +557,7 @@ public:
     in->linklock._encode(locks);
     in->dirfragtreelock._encode(locks);
     in->filelock._encode(locks);
+    in->dirlock._encode(locks);
     
     st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
@@ -597,6 +595,7 @@ public:
     in->linklock._decode(locks, off);
     in->dirfragtreelock._decode(locks, off);
     in->filelock._decode(locks, off);
+    in->dirlock._decode(locks, off);
 
     // caps
     in->merge_client_caps(cap_map, new_client_caps);

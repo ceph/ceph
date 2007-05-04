@@ -128,8 +128,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   nested_auth_pins = 0;
   request_pins = 0;
   
-  //dir_rep = REP_NONE;
-  dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
+  dir_rep = REP_NONE;
+  //dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
 }
 
 

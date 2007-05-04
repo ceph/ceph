@@ -2640,7 +2640,7 @@ bool MDCache::shutdown_pass()
   if (!subtrees.empty()) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
     show_subtrees();
-    //show_cache();
+    show_cache();
     return false;
   }
   assert(subtrees.empty());

@@ -79,24 +79,21 @@ public:
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }
-  
+
+  void print(ostream& out) {
+    out << "(";
+    //out << get_lock_type_name(l.get_type()) << " ";
+    out << get_scatterlock_state_name(get_state());
+    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    if (is_rdlocked()) 
+      out << " r=" << get_num_rdlocks();
+    //if (l.is_xlocked())
+    //out << " x=" << l.get_xlocked_by();
+    if (is_wrlocked()) 
+      out << " wr=" << get_num_wrlocks();
+    out << ")";
+  }
+
 };
-
-inline ostream& operator<<(ostream& out, ScatterLock& l) 
-{
-  out << "(";
-  //out << get_lock_type_name(l.get_type()) << " ";
-  out << get_scatterlock_state_name(l.get_state());
-  if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
-  if (l.is_rdlocked()) 
-    out << " r=" << l.get_num_rdlocks();
-  //if (l.is_xlocked())
-  //out << " x=" << l.get_xlocked_by();
-  if (l.is_wrlocked()) 
-    out << " wr=" << l.get_num_wrlocks();
-  out << ")";
-  return out;
-}
-
 
 #endif

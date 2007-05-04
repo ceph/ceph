@@ -87,6 +87,7 @@ public:
     parent(o), type(t), wait_offset(wo),
     state(LOCK_SYNC), 
     num_rdlock(0), xlock_by(0) { }
+  virtual ~SimpleLock() {}
 
   // parent
   MDSCacheObject *get_parent() { return parent; }
@@ -242,19 +243,23 @@ public:
     else
       return false;
   }
+
+  virtual void print(ostream& out) {
+    out << "(";
+    //out << get_lock_type_name(l.get_type()) << " ";
+    out << get_simplelock_state_name(get_state());
+    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    if (is_rdlocked()) 
+      out << " r=" << get_num_rdlocks();
+    if (is_xlocked())
+      out << " w=" << get_xlocked_by();
+    out << ")";
+  }
 };
 
 inline ostream& operator<<(ostream& out, SimpleLock& l) 
 {
-  out << "(";
-  //out << get_lock_type_name(l.get_type()) << " ";
-  out << get_simplelock_state_name(l.get_state());
-  if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
-  if (l.is_rdlocked()) 
-    out << " r=" << l.get_num_rdlocks();
-  if (l.is_xlocked())
-    out << " w=" << l.get_xlocked_by();
-  out << ")";
+  l.print(out);
   return out;
 }
 
