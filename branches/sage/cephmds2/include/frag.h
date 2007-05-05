@@ -147,6 +147,22 @@ class fragtree_t {
 	ls.push_back(t);  // not spit, it's a leaf.
     }
   }
+  bool contains(frag_t fg) const {
+    list<frag_t> q;
+    q.push_back(frag_t());
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      int nb = get_split(t);
+      if (nb) {
+	if (t == fg) return false;  // it's split.
+	t.split(nb, q);   // queue up children
+      } else {
+	if (t == fg) return true;   // it's there.
+      }
+    }
+    return false;
+  }
 
   frag_t operator[](unsigned v) const {
     frag_t t;

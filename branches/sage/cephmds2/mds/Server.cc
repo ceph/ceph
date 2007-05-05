@@ -910,8 +910,10 @@ void Server::handle_client_stat(MDRequest *mdr)
   int mask = req->args.stat.mask;
   if (mask & INODE_MASK_LINK) rdlocks.insert(&ref->linklock);
   if (mask & INODE_MASK_AUTH) rdlocks.insert(&ref->authlock);
-  if (ref->is_file() && mask & INODE_MASK_FILE) rdlocks.insert(&ref->filelock);
-  if (ref->is_dir() && mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+  if (ref->is_file() && 
+      mask & INODE_MASK_FILE) rdlocks.insert(&ref->filelock);
+  if (ref->is_dir() &&
+      mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 
   mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
 
@@ -1243,9 +1245,13 @@ public:
 
     // link the inode
     dn->get_dir()->link_inode(dn, newi);
-
+    
     // dirty inode, dn, dir
     newi->mark_dirty(pv);
+
+    // dir inode's mtime
+    dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+						  newi->inode.ctime);
 
     // hit pop
     mds->balancer->hit_inode(newi, META_POP_IWR);
@@ -1542,6 +1548,10 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   targeti->inode.ctime = tctime;
   targeti->mark_dirty(tpv);
 
+  // dir inode's mtime
+  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+						tctime);
+  
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
 
@@ -1819,6 +1829,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   in->mark_dirty(ipv);  // dirty inode
   dn->mark_dirty(dpv);  // dirty old dentry
 
+  // dir inode's mtime
+  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+						ictime);
+  
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();

@@ -21,7 +21,6 @@
 #include "MDBalancer.h"
 #include "AnchorClient.h"
 #include "Migrator.h"
-//#include "Renamer.h"
 
 #include "MDSMap.h"
 
@@ -998,6 +997,19 @@ void MDCache::handle_mds_failure(int who)
     p = n;
   }
 
+  // clean up any slave requests from this node
+  list<MDRequest*> ls;
+  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+       p != active_requests.end();
+       ++p) 
+    if (p->second->by_mds == who) 
+      ls.push_back(p->second);
+  while (!ls.empty()) {
+    dout(10) << "cleaning up slave request " << *ls.front() << endl;
+    request_finish(ls.front());
+    ls.pop_front();
+  }
+
   show_subtrees();  
 }
 
@@ -1486,7 +1498,7 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
 	inode_remove_replica(in, from);
 	dout(10) << " rem " << *in << endl;
       }
-      
+
       // dentry
       if (in->parent) {
 	CDentry *dn = in->parent;
@@ -1622,26 +1634,30 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
   }
   
   // xlocks
-  for (list<MMDSCacheRejoin::inode_xlock>::iterator p = m->xlocked_inodes.begin();
+  for (map<inodeno_t, map<int, metareqid_t> >::iterator p = m->xlocked_inodes.begin();
        p != m->xlocked_inodes.end();
        ++p) {
-    CInode *in = get_inode(p->ino);
-    if (!in) continue;  // already missing, from strong_inodes list above.
-    
-    dout(10) << " inode xlock by " << p->reqid << " on " << *in << endl;
-
-    // create slave mdrequest
-    MDRequest *mdr = request_start(p->reqid);
-
-    // auth_pin
-    mdr->auth_pin(in);
-
-    // xlock
-    SimpleLock *lock = in->get_lock(p->locktype);
-    lock->set_state(LOCK_LOCK);
-    lock->get_xlock(mdr);
-    mdr->xlocks.insert(lock);
-    mdr->locks.insert(lock);
+    for (map<int, metareqid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      CInode *in = get_inode(p->first);
+      if (!in) continue;  // already missing, from strong_inodes list above.
+      
+      dout(10) << " inode xlock by " << q->second << " on " << *in << endl;
+      
+      // create slave mdrequest
+      MDRequest *mdr = request_start(q->second);
+      
+      // auth_pin
+      mdr->auth_pin(in);
+      
+      // xlock
+      SimpleLock *lock = in->get_lock(q->first);
+      lock->set_state(LOCK_LOCK);
+      lock->get_xlock(mdr);
+      mdr->xlocks.insert(lock);
+      mdr->locks.insert(lock);
+    }
   }
   for (map<dirfrag_t, map<string, metareqid_t> >::iterator p = m->xlocked_dentries.begin();
        p != m->xlocked_dentries.end();
@@ -3186,23 +3202,24 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
 }
 
 
-class C_MDC_OpenRemoteInoLookup : public Context {
-  MDCache *mdc;
+class C_MDC_OpenRemoteIno : public Context {
+  MDCache *mdcache;
   inodeno_t ino;
   MDRequest *mdr;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
-  C_MDC_OpenRemoteInoLookup(MDCache *mdc, inodeno_t ino, MDRequest *r, Context *onfinish) {
-    this->mdc = mdc;
-    this->ino = ino;
-    this->mdr = r;
-    this->onfinish = onfinish;
-  }
+
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, MDRequest *r, Context *c) :
+    mdcache(mdc), ino(i), mdr(r), onfinish(c) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at,
+		      MDRequest *r, Context *c) :
+    mdcache(mdc), ino(i), mdr(r), onfinish(c), anchortrace(at) {}
+
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdc->open_remote_ino_2(ino, mdr, anchortrace, onfinish);
+      mdcache->open_remote_ino_2(ino, mdr, anchortrace, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -3216,7 +3233,7 @@ void MDCache::open_remote_ino(inodeno_t ino,
 {
   dout(7) << "open_remote_ino on " << ino << endl;
   
-  C_MDC_OpenRemoteInoLookup *c = new C_MDC_OpenRemoteInoLookup(this, ino, mdr, onfinish);
+  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, mdr, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
@@ -3225,28 +3242,75 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
                                 vector<Anchor>& anchortrace,
                                 Context *onfinish)
 {
-  dout(7) << "open_remote_ino_2 on " << ino << ", trace depth is " << anchortrace.size() << endl;
+  dout(7) << "open_remote_ino_2 on " << ino
+	  << ", trace depth is " << anchortrace.size() << endl;
   
-  // REWRITE ME: we're not going to use ref_dn.
+  // find deepest cached inode in prefix
+  unsigned i = anchortrace.size();  // i := array index + 1
+  CInode *in = 0;
+  while (1) {
+    // inode?
+    CInode *in = get_inode(anchortrace[i-1].ino);
+    if (in) break;
+    i--;
+    if (!i) {
+      in = root;
+      break;
+    }
+  }
+  dout(10) << "deepest cached inode at " << i << " is " << *in << endl;
 
-  /*
-  // construct path
-  filepath path;
-  for (unsigned i=0; i<anchortrace.size(); i++) 
-    path.push_dentry(anchortrace[i].ref_dn);
+  if (in->ino() == ino) {
+    // success
+    dout(10) << "open_remote_ino_2 have " << *in << endl;
+    onfinish->finish(0);
+    delete onfinish;
+    return;
+  } 
 
-  dout(7) << " path is " << path << endl;
+  // open dirfrag beneath *in
+  frag_t frag = anchortrace[i].dirfrag.frag;
 
-  vector<CDentry*> trace;
-  int r = path_traverse(path, trace, false,
-                        req,
-                        onfinish,  // delay actually
-                        MDS_TRAVERSE_DISCOVER);
-  if (r > 0) return;
-  
-  onfinish->finish(r);
-  delete onfinish;
-  */
+  if (!in->dirfragtree.contains(frag)) {
+    dout(10) << "frag " << frag << " not valid, requerying anchortable" << endl;
+    open_remote_ino(ino, mdr, onfinish);
+    return;
+  }
+
+  if (!in->is_auth()) {
+    dout(10) << "opening remote dirfrag " << frag << " under " << *in << endl;
+    open_remote_dir(in, frag,
+		    new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
+    return;
+  }
+
+  CDir *dir = in->get_or_open_dirfrag(this, frag);
+  assert(dir);
+  if (dir->is_auth()) {
+    if (dir->is_complete()) {
+      // hrm.  requery anchor table.
+      dout(10) << "expected ino " << anchortrace[i].ino
+	       << " in complete dir " << *dir
+	       << ", requerying anchortable"
+	       << endl;
+      open_remote_ino(ino, mdr, onfinish);
+    } else {
+      dout(10) << "need ino " << anchortrace[i].ino
+	       << ", fetching incomplete dir " << *dir
+	       << endl;
+      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
+    }
+  } else {
+    // hmm, discover.
+    dout(10) << "have remote dirfrag " << *dir << ", discovering " 
+	     << anchortrace[i].ino << endl;
+    
+    MDiscover *dis = new MDiscover(mds->get_nodeid(),
+				   dir->dirfrag(),
+				   anchortrace[i].ino,
+				   true);  // being conservative here.
+    mds->send_message_mds(dis, dir->authority().first, MDS_PORT_CACHE);
+  }
 }
 
 
@@ -3284,6 +3348,7 @@ MDRequest *MDCache::request_start(MClientRequest *req)
 MDRequest *MDCache::request_start(MLock *req)
 {
   MDRequest *mdr = new MDRequest(req->get_reqid(), req);
+  mdr->by_mds = req->get_source().num();
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
@@ -3863,7 +3928,9 @@ void MDCache::handle_discover(MDiscover *dis)
   
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
-  for (unsigned i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
+  for (unsigned i = 0; 
+       i < dis->get_want().depth() || dis->get_want().depth() == 0; 
+       i++) {
     
     // -- figure out the dir
 
@@ -3932,11 +3999,19 @@ void MDCache::handle_discover(MDiscover *dis)
     }
     if (dis->get_want().depth() == 0) break;
     
-    // lookup dentry
-    CDentry *dn = curdir->lookup( dis->get_dentry(i) );
+    // lookup inode?
+    CDentry *dn = 0;
+    if (dis->get_want_ino()) {
+      CInode *in = get_inode(dis->get_want_ino());
+      if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir)
+	dn = in->get_parent_dn();
+    } else {
+      // lookup dentry
+      dn = curdir->lookup( dis->get_dentry(i) );
+    }
     
+    // incomplete dir?
     if (!dn) {
-      // don't have it.
       if (!curdir->is_complete()) {
 	// readdir
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << endl;
@@ -3950,20 +4025,21 @@ void MDCache::handle_discover(MDiscover *dis)
 	  break;
 	}
       }
-
-      if (1) {
-	// send null dentry
-	dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
-		<< *curdir << endl;
-	dn = curdir->add_dentry(dis->get_dentry(i), 0);
-      } else {
+      
+      // don't have wanted ino in this dir?
+      if (dis->get_want_ino()) {
 	// set error flag in reply
-	dout(7) << "dentry " << dis->get_dentry(i) << " dne, flagging error in "
+	dout(7) << "ino " << dis->get_want_ino() << " in this dir, flagging error in "
 		<< *curdir << endl;
-	reply->set_flag_error_dn( dis->get_dentry(i) );
+	reply->set_flag_error_ino();
+	break;
       }
+      
+      // send null dentry
+      dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
+	      << *curdir << endl;
+      dn = curdir->add_dentry(dis->get_dentry(i), 0);
     }
-
     assert(dn);
 
     // add dentry

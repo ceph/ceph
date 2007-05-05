@@ -68,14 +68,6 @@ class MMDSCacheRejoin : public Message {
       ::_encode(dirfragtree, bl);
     }
   };
-  struct inode_xlock {
-    inodeno_t ino;
-    __int32_t locktype;
-    metareqid_t reqid;
-    inode_xlock() {}
-    inode_xlock(inodeno_t i, int lt, const metareqid_t& ri) :
-      ino(i), locktype(lt), reqid(ri) {}
-  };
 
   struct dirfrag_strong {
     __int32_t nonce;
@@ -95,7 +87,7 @@ class MMDSCacheRejoin : public Message {
   set<inodeno_t> weak_inodes;
   map<inodeno_t, inode_strong> strong_inodes;
   list<inode_full> full_inodes;
-  list<inode_xlock> xlocked_inodes;
+  map<inodeno_t, map<int, metareqid_t> > xlocked_inodes;
 
   set<dirfrag_t> weak_dirfrags;
   map<dirfrag_t, dirfrag_strong> strong_dirfrags;
@@ -126,7 +118,7 @@ class MMDSCacheRejoin : public Message {
     full_inodes.push_back(inode_full(i, s, f));
   }
   void add_inode_xlock(inodeno_t ino, int lt, const metareqid_t& ri) {
-    xlocked_inodes.push_back(inode_xlock(ino, lt, ri));
+    xlocked_inodes[ino][lt] = ri;
   }
   
   // dirfrags

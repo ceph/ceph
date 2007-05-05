@@ -66,6 +66,7 @@ class MClientRequest;
 struct MDRequest {
   metareqid_t reqid;
   Message *request;        // MClientRequest, or MLock
+  int by_mds;              // if MLock, and remote xlock attempt
   
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
@@ -88,8 +89,8 @@ struct MDRequest {
 
 
   // ---------------------------------------------------
-  MDRequest() : request(0), ref(0) {}
-  MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), ref(0) {}
+  MDRequest() : request(0), by_mds(-1), ref(0) {}
+  MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), by_mds(-1), ref(0) {}
   
   // request
   MClientRequest *client_request() {

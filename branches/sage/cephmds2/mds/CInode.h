@@ -568,12 +568,15 @@ public:
     in->take_client_caps(cap_map);
     //remaining_issued = in->get_caps_issued();
   }
-  ~CInodeExport() {
-  }
   
   inodeno_t get_ino() { return st.inode.ino; }
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
+    // treat scatterlocked mtime special, since replica may have newer info
+    if (in->dirlock.get_state() == SimpleLock::LOCK_SCATTER ||
+	in->dirlock.get_state() == SimpleLock::LOCK_GSYNCS)
+      st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
+
     in->inode = st.inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;

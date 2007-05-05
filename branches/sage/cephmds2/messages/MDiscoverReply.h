@@ -72,6 +72,7 @@ class MDiscoverReply : public Message {
   bool         no_base_dir;     // no base dir (but IS dentry+inode)
   bool         no_base_dentry;  // no base dentry (but IS inode)
   bool        flag_error_dn;
+  bool flag_error_ino;
   bool        flag_error_dir;
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
   int         dir_auth_hint;
@@ -109,6 +110,7 @@ class MDiscoverReply : public Message {
 
   //  bool is_flag_forward() { return flag_forward; }
   bool is_flag_error_dn() { return flag_error_dn; }
+  bool is_flag_error_ino() { return flag_error_ino; }
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
   int get_dir_auth_hint() { return dir_auth_hint; }
@@ -173,6 +175,9 @@ class MDiscoverReply : public Message {
     flag_error_dn = true; 
     error_dentry = dn; 
   }
+  void set_flag_error_ino() {
+    flag_error_ino = true;
+  }
   void set_flag_error_dir() { 
     flag_error_dir = true; 
   }
@@ -187,23 +192,14 @@ class MDiscoverReply : public Message {
   // ...
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(base_ino), (char*)&base_ino);
-    off += sizeof(base_ino);
-    payload.copy(off, sizeof(bool), (char*)&no_base_dir);
-    off += sizeof(bool);
-    payload.copy(off, sizeof(bool), (char*)&no_base_dentry);
-    off += sizeof(bool);
-    //    payload.copy(off, sizeof(bool), (char*)&flag_forward);
-    //off += sizeof(bool);
-    payload.copy(off, sizeof(bool), (char*)&flag_error_dn);
-    off += sizeof(bool);
-    
+    ::_decode(base_ino, payload, off);
+    ::_decode(no_base_dir, payload, off);
+    ::_decode(no_base_dentry, payload, off);
+    ::_decode(flag_error_dn, payload, off);
+    ::_decode(flag_error_ino, payload, off);
+    ::_decode(flag_error_dir, payload, off);
     ::_decode(error_dentry, payload, off);
-    payload.copy(off, sizeof(bool), (char*)&flag_error_dir);
-    off += sizeof(bool);
-
-    payload.copy(off, sizeof(dir_auth_hint), (char*)&dir_auth_hint);
-    off += sizeof(dir_auth_hint);
+    ::_decode(dir_auth_hint, payload, off);
     
     // dirs
     int n;
@@ -233,16 +229,14 @@ class MDiscoverReply : public Message {
     }
   }
   void encode_payload() {
-    payload.append((char*)&base_ino, sizeof(base_ino));
-    payload.append((char*)&no_base_dir, sizeof(bool));
-    payload.append((char*)&no_base_dentry, sizeof(bool));
-    //    payload.append((char*)&flag_forward, sizeof(bool));
-    payload.append((char*)&flag_error_dn, sizeof(bool));
-
+    ::_encode(base_ino, payload);
+    ::_encode(no_base_dir, payload);
+    ::_encode(no_base_dentry, payload);
+    ::_encode(flag_error_dn, payload);
+    ::_encode(flag_error_ino, payload);
+    ::_encode(flag_error_dir, payload);
     ::_encode(error_dentry, payload);
-    payload.append((char*)&flag_error_dir, sizeof(bool));
-
-    payload.append((char*)&dir_auth_hint, sizeof(dir_auth_hint));
+    ::_encode(dir_auth_hint, payload);
 
     // dirs
     int n = dirs.size();

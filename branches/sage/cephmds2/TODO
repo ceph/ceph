@@ -11,17 +11,20 @@ doc
 - metablob version semantics
 
 
+
 mds
+- finish multistage rejoin 
+
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
 
 - locker vs node failure
-- does inode need it's own replica list?  no?
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 - fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 - incremental mdsmaps?
 - client failure
+
 - dirfrag split
   - make sure we are freezing _before_ we fetch to complete the dirfrag, else 
     we break commit()'s preconditions when it fetches an incomplete dir.
@@ -39,19 +42,15 @@ mds
   - need to move state from replicas to auth.  simplelock doesn't currently support that.
     - ScatterLock or something?  hrm.
 
-- discover
-  - open_remote_ino needs major work...
+- test open_remote_ino
 
 - scatterlock
   - unlink, link, rename need to pre_dirty and update dir inode's mtime
+  - tho need to make sure that behaves when dirfrag's inode is non-auth...
 
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
-
-- remote xlocks
-  - drop remote locks on request finish
-    - handled by individual MDSCacheObject _finish()'s
 
 /- properly recover lock state on rejoin...
 /  - recovering mds rejoins replicas it pulled out of its journal

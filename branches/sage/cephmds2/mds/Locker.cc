@@ -1568,6 +1568,8 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   mdr->locks.erase(lock);
   mdr->xlocks.erase(lock);
   dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
+
+  assert(lock->get_parent()->is_auth());  // or implement remote xlocks
   
   // drop lock?
   if (!lock->is_waiter_for(SimpleLock::WAIT_STABLE)) 
