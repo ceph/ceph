@@ -139,7 +139,7 @@ void OSDMonitor::create_initial()
     }
 
     // 7 bits per osd.
-    osdmap.set_pg_bits(osdbits + 7);
+    osdmap.set_pg_bits(osdbits + 4);  // FIXME
   }
   
   // start at epoch 0 until all osds boot

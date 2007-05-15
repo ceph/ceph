@@ -48,7 +48,7 @@ class Thread {
       //assert(0);
       return -EINVAL;   // never started.
     }
-    
+
     int status = pthread_join(thread_id, prval);
     if (status != 0) {
       switch (status) {

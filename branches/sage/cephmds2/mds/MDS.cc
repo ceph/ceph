@@ -692,10 +692,12 @@ void MDS::handle_osd_map(MOSDMap *m)
 {
   version_t had = osdmap->get_epoch();
   
+  dout(10) << "handle_osd_map had " << had << endl;
+
   // process locally
   objecter->handle_osd_map(m);
 
-  if (had == 0) {
+  if (had == 0 && osdmap->get_epoch() > 0) {
     if (is_creating()) 
       boot_create();    // new tables, journal
     else if (is_starting())
@@ -706,17 +708,6 @@ void MDS::handle_osd_map(MOSDMap *m)
       assert(is_standby());
   }  
   
-  // pass on to clients
-  /*
-  for (set<int>::iterator it = clientmap.get_mount_set().begin();
-       it != clientmap.get_mount_set().end();
-       it++) {
-    MOSDMap *n = new MOSDMap;
-    n->maps = m->maps;
-    n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, clientmap.get_inst(*it));
-  }
-  */
 }
 
 
