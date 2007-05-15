@@ -656,6 +656,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     tid = usetid;
   else
     tid = ++last_tid;
+  assert(client_inc >= 0);
 
   // add to gather set
   wr->waitfor_ack[tid] = ex;

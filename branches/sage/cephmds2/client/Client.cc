@@ -123,6 +123,7 @@ Client::Client(Messenger *m, MonMap *mm)
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, monmap, osdmap);
+  objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
 }
@@ -873,7 +874,7 @@ void Client::handle_mds_map(MMDSMap* m)
   if (m->get_source().is_mds())
     frommds = m->get_source().num();
 
-  if (mdsmap == 0)
+  if (mdsmap == 0) 
     mdsmap = new MDSMap;
 
   if (whoami < 0) {
@@ -883,9 +884,6 @@ void Client::handle_mds_map(MMDSMap* m)
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
     messenger->reset_myname(m->get_dest());
 
-    // note our inc #
-    objecter->set_client_incarnation(0);  // client always 0, for now.
-    
     mount_cond.Signal();  // mount might be waiting for this.
   }    
 
