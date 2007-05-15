@@ -361,7 +361,9 @@ Capability* Locker::issue_new_caps(CInode *in,
     Capability c(my_want);
     in->add_client_cap(my_client, c);
     cap = in->get_client_cap(my_client);
-    
+
+    // suppress file cap messages for new cap (we'll bundle with the open() reply)
+    cap->set_suppress(true);
   } else {
     // make sure it has sufficient caps
     if (cap->wanted() & ~my_want) {
@@ -370,8 +372,6 @@ Capability* Locker::issue_new_caps(CInode *in,
     }
   }
 
-  // suppress file cap messages for this guy for a few moments (we'll bundle with the open() reply)
-  cap->set_suppress(true);
   int before = cap->pending();
 
   if (in->is_auth()) {
@@ -1747,7 +1747,7 @@ void Locker::file_eval(FileLock *lock)
 
     // * -> sync?
     else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-             !(wanted & CAP_FILE_WR) &&
+             !(wanted & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) &&
              ((wanted & CAP_FILE_RD) || 
               in->is_replicated() || 
               (!loner && lock->get_state() == LOCK_LONER)) &&

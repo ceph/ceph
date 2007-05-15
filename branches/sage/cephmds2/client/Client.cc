@@ -2321,13 +2321,15 @@ int Client::open(const char *relpath, int flags, mode_t mode)
 
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
+      int old_caps = f->inode->caps[mds].caps;
+
       dout(7) << "open got caps " << cap_string(new_caps)
+	      << " (had " << cap_string(old_caps) << ")"
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
 	      << endl;
 
-      int old_caps = f->inode->caps[mds].caps;
       f->inode->caps[mds].caps = new_caps;
       f->inode->caps[mds].seq = reply->get_file_caps_seq();
 

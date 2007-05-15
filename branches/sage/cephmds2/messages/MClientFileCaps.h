@@ -64,7 +64,15 @@ class MClientFileCaps : public Message {
     this->special = special;
     this->mds = mds;
   }
+
   char *get_type_name() { return "Cfcap";}
+  void print(ostream& out) {
+    out << "client_file_caps(" << inode.ino
+	<< " seq " << seq
+	<< " caps " << cap_string(caps) 
+	<< " wanted" << cap_string(wanted) 
+	<< ")";
+  }
   
   void decode_payload() {
     int off = 0;
