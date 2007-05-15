@@ -1250,7 +1250,7 @@ public:
     newi->mark_dirty(pv);
 
     // dir inode's mtime
-    dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+    dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
 						  newi->inode.ctime);
 
     // hit pop
@@ -1549,7 +1549,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   targeti->mark_dirty(tpv);
 
   // dir inode's mtime
-  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
 						tctime);
   
   // bump target popularity
@@ -1830,7 +1830,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->mark_dirty(dpv);  // dirty old dentry
 
   // dir inode's mtime
-  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->inode.mtime,
+  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
 						ictime);
   
   // share unlink news with replicas

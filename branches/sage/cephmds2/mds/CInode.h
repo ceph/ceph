@@ -573,8 +573,8 @@ public:
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
     // treat scatterlocked mtime special, since replica may have newer info
-    if (in->dirlock.get_state() == SimpleLock::LOCK_SCATTER ||
-	in->dirlock.get_state() == SimpleLock::LOCK_GSYNCS)
+    if (in->dirlock.get_state() == LOCK_SCATTER ||
+	in->dirlock.get_state() == LOCK_GSYNCS)
       st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
 
     in->inode = st.inode;
