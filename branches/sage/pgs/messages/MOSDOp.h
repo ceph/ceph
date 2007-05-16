@@ -77,7 +77,7 @@ private:
   struct {
     // who's asking?
     entity_inst_t client;
-    reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+    osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
     
     // for replication
     tid_t rep_tid;
@@ -99,6 +99,7 @@ private:
     
     bool   want_ack;
     bool   want_commit;
+    bool   retry_attempt;
   } st;
 
   bufferlist data;
@@ -107,7 +108,7 @@ private:
   friend class MOSDOpReply;
 
  public:
-  const reqid_t&    get_reqid() { return st.reqid; }
+  const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
 
@@ -117,6 +118,9 @@ private:
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
+
+  bool get_retry_attempt() const { return st.retry_attempt; }
+  void set_retry_attempt(bool a) { st.retry_attempt = a; }
 
   const object_t get_oid() { return st.oid; }
   const pg_t     get_pg() { return st.layout.pgid; }
@@ -153,7 +157,6 @@ private:
     return data;
   }
   size_t get_data_len() { return data.length(); }
-
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
@@ -208,9 +211,9 @@ private:
   void print(ostream& out) {
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)
-	<< " " << st.oid
-      //<< " " << this 
-	<< ")";
+	<< " " << st.oid;
+    if (st.retry_attempt) out << " RETRY";
+    out << ")";
   }
 };
 

@@ -43,6 +43,9 @@ class MClientRequest;
 class Anchor;
 class Capability;
 
+class SimpleLock;
+class FileLock;
+class ScatterLock;
 
 class Locker {
 private:
@@ -53,43 +56,63 @@ private:
   Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}  
 
   void dispatch(Message *m);
+  void handle_lock(MLock *m);
 
-  void send_lock_message(CInode *in, int msg, int type);
-  void send_lock_message(CInode *in, int msg, int type, bufferlist& data);
-  void send_lock_message(CDentry *dn, int msg);
+  void send_lock_message(SimpleLock *lock, int msg);
+  void send_lock_message(SimpleLock *lock, int msg, bufferlist &data);
 
   // -- locks --
-  // high level interface
- public:
-  bool inode_hard_read_try(CInode *in, Context *con);
-  bool inode_hard_read_start(CInode *in, MClientRequest *m);
-  void inode_hard_read_finish(CInode *in);
-  bool inode_hard_write_start(CInode *in, MClientRequest *m);
-  void inode_hard_write_finish(CInode *in);
-  bool inode_file_read_start(CInode *in, MClientRequest *m);
-  void inode_file_read_finish(CInode *in);
-  bool inode_file_write_start(CInode *in, MClientRequest *m);
-  void inode_file_write_finish(CInode *in);
+  bool acquire_locks(MDRequest *mdr,
+		     set<SimpleLock*> &rdlocks,
+		     set<SimpleLock*> &wrlocks,
+		     set<SimpleLock*> &xlocks);
 
-  void inode_hard_eval(CInode *in);
-  void inode_file_eval(CInode *in);
+  bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
+  void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool xlock_start(SimpleLock *lock, MDRequest *mdr);
+  void xlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool wrlock_start(SimpleLock *lock, MDRequest *mdr);
+  void wrlock_finish(SimpleLock *lock, MDRequest *mdr);
 
- protected:
-  void inode_hard_mode(CInode *in, int mode);
-  void inode_file_mode(CInode *in, int mode);
+  // simple
+  void handle_simple_lock(SimpleLock *lock, MLock *m);
+  void simple_eval(SimpleLock *lock);
+  void simple_sync(SimpleLock *lock);
+  void simple_lock(SimpleLock *lock);
+  bool simple_rdlock_try(SimpleLock *lock, Context *con);
+  bool simple_rdlock_start(SimpleLock *lock, MDRequest *mdr);
+  void simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool simple_xlock_start(SimpleLock *lock, MDRequest *mdr);
+  void simple_xlock_finish(SimpleLock *lock, MDRequest *mdr);
 
-  // low level triggers
-  void inode_hard_sync(CInode *in);
-  void inode_hard_lock(CInode *in);
-  bool inode_file_sync(CInode *in);
-  void inode_file_lock(CInode *in);
-  void inode_file_mixed(CInode *in);
-  void inode_file_loner(CInode *in);
+  bool dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req);
+  void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
+  void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
-  // messengers
-  void handle_lock(MLock *m);
-  void handle_lock_inode_hard(MLock *m);
-  void handle_lock_inode_file(MLock *m);
+  // scatter
+  void handle_scatter_lock(ScatterLock *lock, MLock *m);
+  void scatter_eval(ScatterLock *lock);
+  void scatter_sync(ScatterLock *lock);
+  void scatter_scatter(ScatterLock *lock);
+  bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
+  void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
+  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
+  void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
+
+  // file
+  void handle_file_lock(FileLock *lock, MLock *m);
+  void file_eval(FileLock *lock);
+  bool file_sync(FileLock *lock);
+  void file_lock(FileLock *lock);
+  void file_mixed(FileLock *lock);
+  void file_loner(FileLock *lock);
+  bool file_rdlock_try(FileLock *lock, Context *con);
+  bool file_rdlock_start(FileLock *lock, MDRequest *mdr);
+  void file_rdlock_finish(FileLock *lock, MDRequest *mdr);
+  bool file_xlock_start(FileLock *lock, MDRequest *mdr);
+  void file_xlock_finish(FileLock *lock, MDRequest *mdr);
+
+
 
   // -- file i/o --
  public:
@@ -102,23 +125,6 @@ private:
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
-
-
-  // dirs
-  void handle_lock_dir(MLock *m);
-
-  // dentry locks
- public:
-  bool dentry_xlock_start(CDentry *dn, 
-                          Message *m, CInode *ref);
-  void dentry_xlock_finish(CDentry *dn, bool quiet=false);
-  void handle_lock_dn(MLock *m);
-  void dentry_xlock_request(CDir *dir, string& dname, bool create,
-                            Message *req, Context *onfinish);
-  void dentry_xlock_request_finish(int r,
-				   CDir *dir, string& dname, 
-				   Message *req,
-				   Context *finisher);
 
 
 };

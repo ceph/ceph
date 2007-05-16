@@ -265,8 +265,12 @@ private:
 
   // oid -> pg
   ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
+    return make_object_layout(oid, layout.pg_type, layout.pg_size, layout.preferred, layout.object_stripe_unit);
+  }
+
+  ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     static crush::Hash H(777);
-    
+
     // calculate ps (placement seed)
     ps_t ps;
     switch (g_conf.osd_object_layout) {
@@ -300,8 +304,8 @@ private:
     }
 
     // construct object layout
-    return ObjectLayout(pg_t(layout.pg_type, layout.pg_size, ps, layout.preferred), 
-			layout.object_stripe_unit);
+    return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
+			object_stripe_unit);
   }
 
 

@@ -22,7 +22,6 @@ using namespace std;
 #include "../CDir.h"
 #include "../CDentry.h"
 
-
 class MDS;
 
 /*
@@ -129,11 +128,10 @@ class EMetaBlob {
   /* dirlump - contains metadata for any dir we have contents for.
    */
   struct dirlump {
-    static const int STATE_IMPORT =   (1<<0);
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
-    dirslice_t dirslice;
+    dirfrag_t  dirfrag;
     version_t  dirv;
     int state;
     int nfull, nremote, nnull;
@@ -148,8 +146,6 @@ class EMetaBlob {
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
-    bool is_import() { return state & STATE_IMPORT; }
-    void mark_import() { state |= STATE_IMPORT; }
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
     bool is_dirty() { return state & STATE_DIRTY; }
@@ -182,7 +178,7 @@ class EMetaBlob {
     }
 
     void _encode(bufferlist& bl) {
-      bl.append((char*)&dirslice, sizeof(dirslice));
+      bl.append((char*)&dirfrag, sizeof(dirfrag));
       bl.append((char*)&dirv, sizeof(dirv));
       bl.append((char*)&state, sizeof(state));
       bl.append((char*)&nfull, sizeof(nfull));
@@ -194,7 +190,7 @@ class EMetaBlob {
       ::_encode(bnull, bl);
     }
     void _decode(bufferlist& bl, int& off) {
-      bl.copy(off, sizeof(dirslice), (char*)&dirslice);  off += sizeof(dirslice);
+      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);  off += sizeof(dirfrag);
       bl.copy(off, sizeof(dirv), (char*)&dirv);  off += sizeof(dirv);
       bl.copy(off, sizeof(state), (char*)&state);  off += sizeof(state);
       bl.copy(off, sizeof(nfull), (char*)&nfull);  off += sizeof(nfull);
@@ -209,84 +205,123 @@ class EMetaBlob {
   };
   
   // my lumps.  preserve the order we added them in a list.
-  list<inodeno_t>         lump_order;
-  map<inodeno_t, dirlump> lump_map;
+  list<dirfrag_t>         lump_order;
+  map<dirfrag_t, dirlump> lump_map;
+
+  // anchor transactions included in this update.
+  list<version_t>         atids;
+
+  // inodes i've destroyed.
+  list< pair<inode_t,off_t> > truncated_inodes;
+
+  // idempotent op(s)
+  list<metareqid_t> client_reqs;
 
  public:
-  
-  // remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
-  inode_t *add_dentry(CDentry *dn, bool dirty, CInode *in=0) {
-    CDir *dir = dn->get_dir();
-    if (!in) in = dn->get_inode();
 
-    // add the dir
-    dirlump& lump = add_dir(dir, false);
+  void add_client_req(metareqid_t r) {
+    client_reqs.push_back(r);
+  }
 
-    // add the dirbit
-    if (dn->is_remote()) {
-      lump.nremote++;
-      if (dirty)
-	lump.get_dremote().push_front(remotebit(dn->get_name(), 
-						dn->get_projected_version(), 
-						dn->get_remote_ino(), 
-						dirty));
-      else
-	lump.get_dremote().push_back(remotebit(dn->get_name(), 
-					       dn->get_projected_version(), 
-					       dn->get_remote_ino(), 
-					       dirty));
-    } 
-    else if (!in) {
-      lump.nnull++;
-      if (dirty)
-	lump.get_dnull().push_front(nullbit(dn->get_name(), 
-					    dn->get_projected_version(), 
-					    dirty));
-      else
-	lump.get_dnull().push_back(nullbit(dn->get_name(), 
-					   dn->get_projected_version(), 
-					   dirty));
-    }
-    else {
-      lump.nfull++;
-      if (dirty) {
-	lump.get_dfull().push_front(fullbit(dn->get_name(), 
-					    dn->get_projected_version(), 
-					    in->inode, in->symlink, 
-					    dirty));
-	return &lump.get_dfull().front().inode;
-      } else {
-	lump.get_dfull().push_back(fullbit(dn->get_name(), 
-					   dn->get_projected_version(),
-					   in->inode, in->symlink, 
-					   dirty));
-	return &lump.get_dfull().back().inode;
-      }
-    }
-    return 0;
+  void add_anchor_transaction(version_t atid) {
+    atids.push_back(atid);
+  }  
+
+  void add_inode_truncate(const inode_t& inode, off_t newsize) {
+    truncated_inodes.push_back(pair<inode_t,off_t>(inode, newsize));
   }
   
-  dirlump& add_dir(CDir *dir, bool dirty) {
-    if (lump_map.count(dir->ino()) == 0) {
-      lump_order.push_back(dir->ino());
-      lump_map[dir->ino()].dirv = dir->get_projected_version();
+  void add_null_dentry(CDentry *dn, bool dirty) {
+    // add the dir
+    dirlump& lump = add_dir(dn->get_dir(), false);
+
+    lump.nnull++;
+    if (dirty)
+      lump.get_dnull().push_front(nullbit(dn->get_name(), 
+					  dn->get_projected_version(), 
+					  dirty));
+    else
+      lump.get_dnull().push_back(nullbit(dn->get_name(), 
+					 dn->get_projected_version(), 
+					 dirty));
+  }
+
+  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino=0) {
+    if (!rino) 
+      rino = dn->get_remote_ino();
+
+    dirlump& lump = add_dir(dn->get_dir(), false);
+
+    lump.nremote++;
+    if (dirty)
+      lump.get_dremote().push_front(remotebit(dn->get_name(), 
+					      dn->get_projected_version(), 
+					      rino,
+					      dirty));
+    else
+      lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					     dn->get_projected_version(), 
+					     rino,
+					     dirty));
+  }
+
+  // return remote pointer to to-be-journaled inode
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
+    if (!in) in = dn->get_inode();
+
+    dirlump& lump = add_dir(dn->get_dir(), false);
+
+    lump.nfull++;
+    if (dirty) {
+      lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					  dn->get_projected_version(), 
+					  in->inode, in->symlink, 
+					  dirty));
+      return &lump.get_dfull().front().inode;
+    } else {
+      lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					 dn->get_projected_version(),
+					 in->inode, in->symlink, 
+					 dirty));
+      return &lump.get_dfull().back().inode;
     }
-    dirlump& l = lump_map[dir->ino()];
+  }
+
+  // convenience: primary or remote?  figure it out.
+  inode_t *add_dentry(CDentry *dn, bool dirty) {
+    // primary or remote
+    if (dn->is_remote()) {
+      add_remote_dentry(dn, dirty);
+      return 0;
+    } else if (dn->is_null()) {
+      add_null_dentry(dn, dirty);
+      return 0;
+    }
+    assert(dn->is_primary());
+    return add_primary_dentry(dn, dirty);
+  }
+
+  
+  dirlump& add_dir(CDir *dir, bool dirty) {
+    dirfrag_t df = dir->dirfrag();
+    if (lump_map.count(df) == 0) {
+      lump_order.push_back(df);
+      lump_map[df].dirv = dir->get_projected_version();
+    }
+    dirlump& l = lump_map[df];
     if (dir->is_complete()) l.mark_complete();
-    if (dir->is_import()) l.mark_import();
     if (dirty) l.mark_dirty();
     return l;
   }
 
   void add_dir_context(CDir *dir, bool toroot=false) {
     // already have this dir?  (we must always add in order)
-    if (lump_map.count(dir->ino())) 
+    if (lump_map.count(dir->dirfrag())) 
       return;
 
     CInode *diri = dir->get_inode();
-    if (!toroot && 
-	(dir->is_import() || dir->is_hashed()))
-      return;  // stop at import point
+    if (!toroot && dir->is_subtree_root() && dir->is_auth())
+      return;  // stop at subtree root
     if (!dir->get_inode()->get_parent_dn())
       return;
 
@@ -301,29 +336,39 @@ class EMetaBlob {
   void _encode(bufferlist& bl) {
     int n = lump_map.size();
     bl.append((char*)&n, sizeof(n));
-    for (list<inodeno_t>::iterator i = lump_order.begin();
+    for (list<dirfrag_t>::iterator i = lump_order.begin();
 	 i != lump_order.end();
 	 ++i) {
       bl.append((char*)&(*i), sizeof(*i));
       lump_map[*i]._encode(bl);
     }
+    ::_encode(atids, bl);
+    ::_encode(truncated_inodes, bl);
+    ::_encode(client_reqs, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
     int n;
     bl.copy(off, sizeof(n), (char*)&n);  
     off += sizeof(n);
     for (int i=0; i<n; i++) {
-      inodeno_t dirino;
-      bl.copy(off, sizeof(dirino), (char*)&dirino);
-      off += sizeof(dirino);
-      lump_order.push_back(dirino);
-      lump_map[dirino]._decode(bl, off);
+      dirfrag_t dirfrag;
+      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+      off += sizeof(dirfrag);
+      lump_order.push_back(dirfrag);
+      lump_map[dirfrag]._decode(bl, off);
     }
+    ::_decode(atids, bl, off);
+    ::_decode(truncated_inodes, bl, off);
+    ::_decode(client_reqs, bl, off);
   }
   
   void print(ostream& out) const {
-    out << "[metablob " << lump_order.front()
-	<< ", " << lump_map.size() << " dirs]";
+    out << "[metablob";
+    if (!lump_order.empty()) 
+      out << lump_order.front() << ", " << lump_map.size() << " dirs";
+    if (!atids.empty())
+      out << " atids " << atids;
+    out << "]";
   }
 
   bool has_expired(MDS *mds);

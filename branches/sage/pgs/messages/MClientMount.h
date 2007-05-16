@@ -11,24 +11,19 @@
  * 
  */
 
-
 #ifndef __MCLIENTMOUNT_H
 #define __MCLIENTMOUNT_H
 
 #include "msg/Message.h"
 
 class MClientMount : public Message {
+public:
+  MClientMount() : Message(MSG_CLIENT_MOUNT) { }
 
- public:
-  MClientMount() : Message(MSG_CLIENT_MOUNT) { 
-  }
+  char *get_type_name() { return "client_mount"; }
 
-  char *get_type_name() { return "Cmnt"; }
-
-  virtual void decode_payload(crope& s, int& off) {  
-  }
-  virtual void encode_payload(crope& s) {  
-  }
+  void decode_payload() { }
+  void encode_payload() { }
 };
 
 #endif

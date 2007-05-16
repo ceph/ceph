@@ -28,17 +28,23 @@
 #include <vector>
 using namespace std;
 
-#include <ext/rope>
-using namespace __gnu_cxx;
-
 #include "buffer.h"
 
 
 class filepath {
+  /** path
+   * can be relative "a/b/c" or absolute "/a/b/c".
+   */
   string path;
-  vector<string> bits;
 
-  void rebuild() {
+  /** bits - path segemtns
+   * this is ['a', 'b', 'c'] for both the aboslute and relative case.
+   *
+   * NOTE: this value is LAZILY maintained... i.e. it's a cache
+   */
+  mutable vector<string> bits;
+
+  void rebuild_path() {
     if (absolute()) 
       path = "/";
     else 
@@ -48,7 +54,7 @@ class filepath {
       path += bits[i];
     }
   }
-  void parse() {
+  void parse_bits() const {
     bits.clear();
     int off = 0;
     while (off < (int)path.length()) {
@@ -74,126 +80,97 @@ class filepath {
   filepath(const char* s) {
     set_path(s);
   }
-
-  bool absolute() { return path[0] == '/'; }
-  bool relative() { return !absolute(); }
-  
-  void set_path(const string& s) {
-    path = s;
-    parse();
-  }
-  void set_path(const char *s) {
-    path = s;
-    parse();
+  filepath(const filepath& o) {
+    set_path(o.get_path());
   }
 
-  string& get_path() {
+
+  // accessors
+  const string& get_path() const {
     return path;
   }
-  int length() const {
-    return path.length();
-  }
-
   const char *c_str() const {
     return path.c_str();
   }
 
+  int length() const {
+    return path.length();
+  }
+  unsigned depth() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return bits.size();
+  }
+  bool empty() const {
+    return path.length() == 0;
+  }
+
+  // FIXME: const-edness
+  bool absolute() { return path.length() && path[0] == '/'; }
+  bool relative() { return !absolute(); }
+  
+  const string& operator[](int i) const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return bits[i];
+  }
+
+  const string& last_dentry() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return bits[ bits.size()-1 ];
+  }
 
   filepath prefixpath(int s) const {
     filepath t;
     for (int i=0; i<s; i++)
-      t.add_dentry(bits[i]);
+      t.push_dentry(bits[i]);
     return t;
   }
   filepath postfixpath(int s) const {
     filepath t;
     for (unsigned i=s; i<bits.size(); i++)
-      t.add_dentry(bits[i]);
+      t.push_dentry(bits[i]);
     return t;
   }
-  void add_dentry(const string& s) {
-    bits.push_back(s);
-    if (path.length())
-      path += "/";
-    path += s;
+
+
+
+  // modifiers
+  void set_path(const string& s) {
+    path = s;
+    bits.clear();
   }
-  void append(const filepath& a) {
-    for (unsigned i=0; i<a.depth(); i++) 
-      add_dentry(a[i]);
+  void set_path(const char *s) {
+    path = s;
+    bits.clear();
   }
-
-  void pop_dentry() {
-    bits.pop_back();
-    rebuild();
-  }    
-    
-
-
   void clear() {
     path = "";
     bits.clear();
   }
 
-  const string& operator[](int i) const {
-    return bits[i];
+  void pop_dentry() {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    bits.pop_back();
+    rebuild_path();
+  }    
+  void push_dentry(const string& s) {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    bits.push_back(s);
+    if (path.length() && path[path.length()-1] != '/')
+      path += "/";
+    path += s;
+  }
+  void append(const filepath& a) {
+    for (unsigned i=0; i<a.depth(); i++) 
+      push_dentry(a[i]);
   }
 
-  const string& last_bit() const {
-    return bits[ bits.size()-1 ];
-  }
-
-  unsigned depth() const {
-    return bits.size();
-  }
-  bool empty() {
-    return bits.size() == 0;
-  }
-
-  
-  void _rope(crope& r) {
-    char n = bits.size();
-    r.append((char*)&n, sizeof(char));
-    for (vector<string>::iterator it = bits.begin();
-         it != bits.end();
-         it++) { 
-      r.append((*it).c_str(), (*it).length()+1);
-    }
-  }
-
-  void _unrope(crope& r, int& off) {
-    clear();
-
-    char n;
-    r.copy(off, sizeof(char), (char*)&n);
-    off += sizeof(char);
-    for (int i=0; i<n; i++) {
-      string s = r.c_str() + off;
-      off += s.length() + 1;
-      add_dentry(s);
-    }
-  }
-
+  // encoding
   void _encode(bufferlist& bl) {
-    char n = bits.size();
-    bl.append((char*)&n, sizeof(char));
-    for (vector<string>::iterator it = bits.begin();
-         it != bits.end();
-         it++) { 
-      bl.append((*it).c_str(), (*it).length()+1);
-    }
+    ::_encode(path, bl);
   }
-
   void _decode(bufferlist& bl, int& off) {
-    clear();
-
-    char n;
-    bl.copy(off, sizeof(char), (char*)&n);
-    off += sizeof(char);
-    for (int i=0; i<n; i++) {
-      string s = bl.c_str() + off;
-      off += s.length() + 1;
-      add_dentry(s);
-    }
+    ::_decode(path, bl, off);
+    bits.clear();
   }
 
 };

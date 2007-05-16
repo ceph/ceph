@@ -24,29 +24,29 @@
 
 class EImportStart : public LogEvent {
 protected:
-  inodeno_t dirino;
-  list<inodeno_t> bounds;
+  dirfrag_t base;
+  list<dirfrag_t> bounds;
 
  public:
   EMetaBlob metablob;
 
-  EImportStart(inodeno_t di,
-	       list<inodeno_t>& b) : LogEvent(EVENT_IMPORTSTART), 
-				     dirino(di), bounds(b) { }
+  EImportStart(dirfrag_t di,
+	       list<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
+				     base(di), bounds(b) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
   void print(ostream& out) {
-    out << "EImportStart " << metablob;
+    out << "EImportStart " << base << " " << metablob;
   }
   
   virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&dirino, sizeof(dirino));
+    bl.append((char*)&base, sizeof(base));
     metablob._encode(bl);
     ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(dirino), (char*)&dirino);
-    off += sizeof(dirino);
+    bl.copy(off, sizeof(base), (char*)&base);
+    off += sizeof(base);
     metablob._decode(bl, off);
     ::_decode(bounds, bl, off);
   }

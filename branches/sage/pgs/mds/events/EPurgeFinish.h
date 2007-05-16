@@ -21,22 +21,27 @@
 class EPurgeFinish : public LogEvent {
  protected:
   inodeno_t ino;
+  off_t newsize;
 
  public:
-  EPurgeFinish(inodeno_t i) : 
+  EPurgeFinish(inodeno_t i, off_t s) : 
 	LogEvent(EVENT_PURGEFINISH),
-	ino(i) { }
+	ino(i), newsize(s) { }
   EPurgeFinish() : LogEvent(EVENT_PURGEFINISH) { }
   
   void print(ostream& out) {
-    out << "purgefinish " << ino;
+    out << "purgefinish " << ino << " to " << newsize;
   }
 
   virtual void encode_payload(bufferlist& bl) {
     bl.append((char*)&ino, sizeof(ino));
+    bl.append((char*)&newsize, sizeof(newsize));
   }
   void decode_payload(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    bl.copy(off, sizeof(newsize), (char*)&newsize);
+    off += sizeof(newsize);
   }
   
   bool has_expired(MDS *mds);

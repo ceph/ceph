@@ -32,14 +32,15 @@ class ClientMonitor : public Dispatcher {
 
  private:
   int num_clients;
-  map<entity_name_t,entity_addr_t> client_map;
+  map<int,entity_addr_t> client_map;
 
   void bcast_latest_mds();
 
   //void accept_pending();   // accept pending, new map.
   //void send_incremental(epoch_t since, msg_addr_t dest);
 
-  void handle_client_boot(class MClientBoot *m);
+  void handle_client_mount(class MClientMount *m);
+  void handle_client_unmount(class MClientUnmount *m);
 
  public:
   ClientMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l),

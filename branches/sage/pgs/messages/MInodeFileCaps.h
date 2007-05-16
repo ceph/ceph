@@ -37,18 +37,19 @@ class MInodeFileCaps : public Message {
 
   virtual char *get_type_name() { return "Icap";}
   
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(from), (char*)&from);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(from), (char*)&from);
     off += sizeof(from);
-    s.copy(off, sizeof(ino), (char*)&ino);
+    payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    s.copy(off, sizeof(caps), (char*)&caps);
+    payload.copy(off, sizeof(caps), (char*)&caps);
     off += sizeof(caps);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&from, sizeof(from));
-    s.append((char*)&ino, sizeof(ino));
-    s.append((char*)&caps, sizeof(caps));
+  virtual void encode_payload() {
+    payload.append((char*)&from, sizeof(from));
+    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&caps, sizeof(caps));
   }
 };
 

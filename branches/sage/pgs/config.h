@@ -17,6 +17,7 @@
 extern class FileLayout g_OSD_FileLayout;
 extern class FileLayout g_OSD_MDDirLayout;
 extern class FileLayout g_OSD_MDLogLayout;
+extern class FileLayout g_OSD_MDAnchorTableLayout;
 
 #include <vector>
 #include <map>
@@ -168,6 +169,7 @@ struct md_config_t {
   bool  mds_log_before_reply;
   bool  mds_log_flush_on_shutdown;
   off_t mds_log_import_map_interval;
+  int mds_log_eopen_size;
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
@@ -195,6 +197,8 @@ struct md_config_t {
 
   bool  mds_local_osd;
 
+  int mds_thrash_exports;
+  bool mds_dump_cache_on_map;
 
   // osd
   int   osd_rep;

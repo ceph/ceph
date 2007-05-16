@@ -195,7 +195,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         dout(0) << "kick_requests resub read " << tid << endl;
 
         // resubmit
-        readx_submit(rd, rd->ops[tid]);
+        readx_submit(rd, rd->ops[tid], true);
         rd->ops.erase(tid);
       }
 
@@ -251,7 +251,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout& ol, Context *onfinish,
+tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish,
 					 objectrev_t rev)
 {
   OSDStat *st = new OSDStat(size);
@@ -355,7 +355,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout& ol, bufferlist *bl, 
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
                      Context *onfinish, 
 					 objectrev_t rev)
 {
@@ -381,7 +381,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
   return last_tid;
 }
 
-tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex) 
+tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
   PG &pg = get_pg( ex.layout.pgid );
@@ -410,6 +410,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 						   OSD_OP_READ);
 	m->set_length(ex.length);
 	m->set_offset(ex.start);
+	m->set_retry_attempt(retry);
 	
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
   }
@@ -445,7 +446,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // success?
   if (m->get_result() == -EAGAIN) {
     dout(7) << " got -EAGAIN, resubmitting" << endl;
-    readx_submit(rd, rd->ops[tid]);
+    readx_submit(rd, rd->ops[tid], true);
     delete m;
     return;
   }
@@ -585,7 +586,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout& ol, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
                       Context *onack, Context *oncommit,
 					  objectrev_t rev)
 {
@@ -601,7 +602,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout& ol, buf
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout& ol,
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
                      Context *onack, Context *oncommit,
 					 objectrev_t rev)
 {
@@ -616,7 +617,7 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout& ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, ObjectLayout& ol, 
+tid_t Objecter::lock(int op, object_t oid, ObjectLayout ol, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *l = new OSDModify(op);
@@ -656,6 +657,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     tid = usetid;
   else
     tid = ++last_tid;
+  assert(client_inc >= 0);
 
   // add to gather set
   wr->waitfor_ack[tid] = ex;
@@ -680,6 +682,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 	m->set_length(ex.length);
 	m->set_offset(ex.start);
 	m->set_rev(ex.rev);
+	if (usetid > 0)
+	  m->set_retry_attempt(true);
 	
 	if (wr->tid_version.count(tid)) 
 	  m->set_version(wr->tid_version[tid]);  // we're replaying this op!

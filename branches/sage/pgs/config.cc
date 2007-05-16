@@ -34,19 +34,10 @@ Mutex bufferlock;
 #include "osd/osd_types.h"
 Mutex _dout_lock;
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // stripe over 1M objects, 2x replication
-//FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
-
-// ??
-//FileLayout g_OSD_MDDirLayout( 1<<8, 1<<2, 1<<19, 3 );  // this is stupid, but can bring out an ebofs table bug?
-FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects, 2x replication
-
-// stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
+FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );   // 8M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );  // 8M objects, 2x replication.  (a lie, just object layout policy)
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
-//FileLayout g_OSD_MDLogLayout( 1<<8, 1<<2, 1<<19, 3 );  // 256 byte bits
-//FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // 128 byte stripes over 32 1M objects
-//FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
-//FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
+FileLayout g_OSD_MDAnchorTableLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects.  (a lie, just object layout policy)
 
 // fake osd failures: osd -> time
 std::map<int,float> g_fake_osd_down;
@@ -176,6 +167,8 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
   mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
+  mds_log_eopen_size: 100,   // # open inodes per log entry
+
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
   mds_bal_hash_rd: 10000,
@@ -203,6 +196,8 @@ md_config_t g_conf = {
 
   mds_local_osd: false,
 
+  mds_thrash_exports: 0,
+  mds_dump_cache_on_map: false,
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
@@ -636,6 +631,10 @@ void parse_config_options(std::vector<char*>& args)
     
     else if (strcmp(args[i], "--mds_local_osd") == 0) 
       g_conf.mds_local_osd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
+      g_conf.mds_thrash_exports = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
+      g_conf.mds_dump_cache_on_map = true;
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;

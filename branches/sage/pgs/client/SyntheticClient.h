@@ -55,6 +55,8 @@
 
 #define SYNCLIENT_MODE_TRUNCATE     200
 
+#define SYNCLIENT_MODE_FOO        100
+#define SYNCLIENT_MODE_THRASHLINKS  101
 
 
 
@@ -101,22 +103,22 @@ class SyntheticClient {
     while (r--) it++;
 
     n1 = cwd;
-    n1.add_dentry( *it );
+    n1.push_dentry( *it );
     return n1.get_path().c_str();
   }
   filepath n2;
   const char *get_random_sub() {
     assert(!contents.empty());
     int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
-    if (cwd.depth() && cwd.last_bit().length()) 
-      r += cwd.last_bit().c_str()[0];                                         // slightly permuted
+    if (cwd.depth() && cwd.last_dentry().length()) 
+      r += cwd.last_dentry().c_str()[0];                                         // slightly permuted
     r %= contents.size();
 
     map<string,inode_t>::iterator it = contents.begin();
     while (r--) it++;
 
     n2 = cwd;
-    n2.add_dentry( it->first );
+    n2.push_dentry( it->first );
     return n2.get_path().c_str();
   }
   
@@ -126,7 +128,7 @@ class SyntheticClient {
     sprintf(sub_s, "%s.%d", base, rand() % 100);
     string f = sub_s;
     sub = cwd;
-    sub.add_dentry(f);
+    sub.push_dentry(f);
     return sub.c_str();
   }
 
@@ -197,6 +199,10 @@ class SyntheticClient {
   int play_trace(Trace& t, string& prefix);
 
   void make_dir_mess(const char *basedir, int n);
+  void foo();
+
+  int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
+
 };
 
 #endif

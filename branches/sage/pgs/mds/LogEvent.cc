@@ -17,16 +17,24 @@
 
 // events i know of
 #include "events/EString.h"
+
+#include "events/ESession.h"
+#include "events/EClientMap.h"
 #include "events/EImportMap.h"
-#include "events/EMetaBlob.h"
-#include "events/EUpdate.h"
-#include "events/EUnlink.h"
-#include "events/EAlloc.h"
-#include "events/EPurgeFinish.h"
-#include "events/EExportStart.h"
-#include "events/EExportFinish.h"
+#include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
+
+#include "events/EUpdate.h"
+#include "events/ESlaveUpdate.h"
+#include "events/EOpen.h"
+
+#include "events/EAlloc.h"
+#include "events/EPurgeFinish.h"
+
+#include "events/EAnchor.h"
+#include "events/EAnchorClient.h"
+
 
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
@@ -44,16 +52,24 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   // create event
   LogEvent *le;
   switch (type) {
-  case EVENT_STRING: le = new EString(); break;
+  case EVENT_STRING: le = new EString; break;
+
+  case EVENT_SESSION: le = new ESession; break;
+  case EVENT_CLIENTMAP: le = new EClientMap; break;
   case EVENT_IMPORTMAP: le = new EImportMap; break;
-  case EVENT_UPDATE: le = new EUpdate; break;
-  case EVENT_UNLINK: le = new EUnlink(); break;
-  case EVENT_PURGEFINISH: le = new EPurgeFinish(); break;
-  case EVENT_ALLOC: le = new EAlloc(); break;
-  case EVENT_EXPORTSTART: le = new EExportStart; break;
-  case EVENT_EXPORTFINISH: le = new EExportFinish; break;
+  case EVENT_EXPORT: le = new EExport; break;
   case EVENT_IMPORTSTART: le = new EImportStart; break;
   case EVENT_IMPORTFINISH: le = new EImportFinish; break;
+
+  case EVENT_UPDATE: le = new EUpdate; break;
+  case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
+  case EVENT_OPEN: le = new EOpen; break;
+
+  case EVENT_ALLOC: le = new EAlloc; break;
+  case EVENT_PURGEFINISH: le = new EPurgeFinish; break;
+
+  case EVENT_ANCHOR: le = new EAnchor; break;
+  case EVENT_ANCHORCLIENT: le = new EAnchorClient; break;
   default:
     dout(1) << "uh oh, unknown log event type " << type << endl;
     assert(0);

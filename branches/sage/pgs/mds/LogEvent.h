@@ -16,25 +16,23 @@
 
 #define EVENT_STRING       1
 
-#define EVENT_INODEUPDATE  2
-#define EVENT_DIRUPDATE    3
+#define EVENT_SESSION      7
+#define EVENT_CLIENTMAP    8
+#define EVENT_IMPORTMAP    2
+#define EVENT_EXPORT       30
+#define EVENT_IMPORTSTART  31
+#define EVENT_IMPORTFINISH 32
 
-#define EVENT_IMPORTMAP    4
-#define EVENT_UPDATE       5
+#define EVENT_UPDATE       3
+#define EVENT_SLAVEUPDATE  4
+#define EVENT_OPEN         5
 
 #define EVENT_ALLOC        10
-#define EVENT_MKNOD        11
-#define EVENT_MKDIR        12
-#define EVENT_LINK         13
-
-#define EVENT_UNLINK       20
-#define EVENT_RMDIR        21
 #define EVENT_PURGEFINISH  22
 
-#define EVENT_EXPORTSTART  30
-#define EVENT_EXPORTFINISH 31
-#define EVENT_IMPORTSTART  32
-#define EVENT_IMPORTFINISH 33
+#define EVENT_ANCHOR       40
+#define EVENT_ANCHORCLIENT 41
+
 
 
 
