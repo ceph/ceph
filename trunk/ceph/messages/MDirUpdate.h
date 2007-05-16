@@ -17,19 +17,17 @@
 
 #include "msg/Message.h"
 
-typedef struct {
-  inodeno_t ino;
-  int dir_rep;
-  int discover;
-} MDirUpdate_st;
-
 class MDirUpdate : public Message {
-  MDirUpdate_st st;
+  struct {
+    dirfrag_t dirfrag;
+    int dir_rep;
+    int discover;
+  } st;
   set<int> dir_rep_by;
   string path;
 
  public:
-  inodeno_t get_ino() { return st.ino; }
+  dirfrag_t get_dirfrag() { return st.dirfrag; }
   int get_dir_rep() { return st.dir_rep; }
   set<int>& get_dir_rep_by() { return dir_rep_by; } 
   bool should_discover() { return st.discover > 0; }
@@ -40,31 +38,32 @@ class MDirUpdate : public Message {
   }
 
   MDirUpdate() {}
-  MDirUpdate(inodeno_t ino,
+  MDirUpdate(dirfrag_t dirfrag,
              int dir_rep,
              set<int>& dir_rep_by,
              string& path,
              bool discover = false) :
     Message(MSG_MDS_DIRUPDATE) {
-    this->st.ino = ino;
+    this->st.dirfrag = dirfrag;
     this->st.dir_rep = dir_rep;
     this->dir_rep_by = dir_rep_by;
     if (discover) this->st.discover = 5;
     this->path = path;
   }
-  virtual char *get_type_name() { return "dup"; }
+  virtual char *get_type_name() { return "dir_update"; }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(st), (char*)&st);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
-    _unrope(dir_rep_by, s, off);
-    _unrope(path, s, off);
+    ::_decode(dir_rep_by, payload, off);
+    ::_decode(path, payload, off);
   }
 
-  virtual void encode_payload(crope& r) {
-    r.append((char*)&st, sizeof(st));
-    _rope(dir_rep_by, r);
-    _rope(path, r);
+  virtual void encode_payload() {
+    payload.append((char*)&st, sizeof(st));
+    ::_encode(dir_rep_by, payload);
+    ::_encode(path, payload);
   }
 };
 

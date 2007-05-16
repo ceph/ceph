@@ -96,6 +96,7 @@ protected:
   // messages
   void handle_shutdown(Message *m);
   void handle_ping_ack(class MPingAck *m);
+  void handle_command(class MMonCommand *m);
 
   friend class OSDMonitor;
   friend class MDSMonitor;
@@ -133,6 +134,8 @@ protected:
   void shutdown();
   void dispatch(Message *m);
   void tick();
+
+  void do_stop();
 
 };
 

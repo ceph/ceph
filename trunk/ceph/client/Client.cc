@@ -31,10 +31,13 @@ using namespace std;
 // ceph stuff
 #include "Client.h"
 
-
-#include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
+#include "messages/MClientUnmount.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientReconnect.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
+#include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
 #include "messages/MGenericMessage.h"
@@ -120,6 +123,7 @@ Client::Client(Messenger *m, MonMap *mm)
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, monmap, osdmap);
+  objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
 }
@@ -269,7 +273,6 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dout(12) << "insert_inode " << dname << " ino " << st->inode.ino 
            << "  size " << st->inode.size
            << "  mtime " << st->inode.mtime
-           << "  hashed " << st->hashed
            << endl;
   
   if (dn) {
@@ -353,20 +356,27 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
  */
 void Client::update_inode_dist(Inode *in, InodeStat *st)
 {
-  // dir info
-  in->dir_auth = st->dir_auth;
-  in->dir_hashed = st->hashed;  
-  in->dir_replicated = st->replicated;  
+  // auth
+  in->dir_auth = -1;
+  if (!st->dirfrag_auth.empty()) {        // HACK FIXME ******* FIXME FIXME FIXME FIXME dirfrag_t
+    in->dir_auth = st->dirfrag_auth.begin()->second; 
+  }
+
+  // replicated
+  in->dir_replicated = false;
+  if (!st->dirfrag_rep.empty())
+    in->dir_replicated = true;       // FIXME
   
-  // dir replication
-  if (st->spec_defined) {
-    if (st->dist.empty() && !in->dir_contacts.empty())
+  // dist
+  if (!st->dirfrag_dist.empty()) {   // FIXME
+    set<int> dist = st->dirfrag_dist.begin()->second;
+    if (dist.empty() && !in->dir_contacts.empty())
       dout(9) << "lost dist spec for " << in->inode.ino 
-              << " " << st->dist << endl;
-    if (!st->dist.empty() && in->dir_contacts.empty()) 
+              << " " << dist << endl;
+    if (!dist.empty() && in->dir_contacts.empty()) 
       dout(9) << "got dist spec for " << in->inode.ino 
-              << " " << st->dist << endl;
-    in->dir_contacts = st->dist;
+              << " " << dist << endl;
+    in->dir_contacts = dist;
   }
 }
 
@@ -378,7 +388,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
 Inode* Client::insert_trace(MClientReply *reply)
 {
   Inode *cur = root;
-  time_t now = time(NULL);
+  utime_t now = g_clock.real_now();
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << endl;
 
@@ -412,8 +422,10 @@ Inode* Client::insert_trace(MClientReply *reply)
     update_inode_dist(cur, *pin);
 
     // set cache ttl
-    if (g_conf.client_cache_stat_ttl)
-      cur->valid_until = now + g_conf.client_cache_stat_ttl;
+    if (g_conf.client_cache_stat_ttl) {
+      cur->valid_until = now;
+      cur->valid_until += g_conf.client_cache_stat_ttl;
+    }
   }
 
   return cur;
@@ -459,13 +471,10 @@ Dentry *Client::lookup(filepath& path)
 
 // -------
 
-MClientReply *Client::make_request(MClientRequest *req, 
-                                   bool auth_best, 
-                                   int use_mds)  // this param is purely for debug hacking
+int Client::choose_target_mds(MClientRequest *req) 
 {
-  // assign a unique tid
-  req->set_tid(++last_tid);
-
+  int mds = 0;
+    
   // find deepest known prefix
   Inode *diri = root;   // the deepest known containing dir
   Inode *item = 0;      // the actual item... if we know it
@@ -476,20 +485,20 @@ MClientReply *Client::make_request(MClientRequest *req,
     // dir?
     if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
       Dir *dir = diri->dir;
-
+      
       // do we have the next dentry?
       if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
-        missing_dn = i;  // no.
-        break;
+	missing_dn = i;  // no.
+	break;
       }
       
       dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
-
+      
       if (i == depth-1) {  // last one!
-        item = dir->dentries[ req->get_filepath()[i] ]->inode;
-        break;
+	item = dir->dentries[ req->get_filepath()[i] ]->inode;
+	break;
       } 
-
+      
       // continue..
       diri = dir->dentries[ req->get_filepath()[i] ]->inode;
       assert(diri);
@@ -498,54 +507,136 @@ MClientReply *Client::make_request(MClientRequest *req,
       break;
     }
   }
-
-  // choose an mds
-  int mds = 0;
+  
+  // pick mds
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
     mds = rand() % mdsmap->get_num_mds();
   } else {
-    if (auth_best) {
+    if (req->auth_is_best()) {
       // pick the actual auth (as best we can)
       if (item) {
-        mds = item->authority(mdsmap);
+	mds = item->authority(mdsmap);
       } else if (diri->dir_hashed && missing_dn >= 0) {
-        mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-                                     mdsmap);
+	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				     mdsmap);
       } else {
-        mds = diri->authority(mdsmap);
+	mds = diri->authority(mdsmap);
       }
     } else {
       // balance our traffic!
       if (diri->dir_hashed && missing_dn >= 0) 
-        mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-                                     mdsmap);
+	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+				     mdsmap);
       else 
-        mds = diri->pick_replica(mdsmap);
+	mds = diri->pick_replica(mdsmap);
     }
   }
   dout(20) << "mds is " << mds << endl;
+  
+  return mds;
+}
 
-  // force use of a particular mds?
-  if (use_mds >= 0) mds = use_mds;
 
 
+MClientReply *Client::make_request(MClientRequest *req,
+                                   int use_mds)  // this param is purely for debug hacking
+{
   // time the call
-  utime_t start = g_clock.now();
+  utime_t start = g_clock.real_now();
   
   bool nojournal = false;
   int op = req->get_op();
   if (op == MDS_OP_STAT ||
       op == MDS_OP_LSTAT ||
       op == MDS_OP_READDIR ||
-      op == MDS_OP_OPEN ||
-      op == MDS_OP_RELEASE)
+      op == MDS_OP_OPEN)
     nojournal = true;
 
-  MClientReply *reply = sendrecv(req, mds);
 
+  // -- request --
+  // assign a unique tid
+  tid_t tid = ++last_tid;
+  req->set_tid(tid);
+  if (!mds_requests.empty()) 
+    req->set_oldest_client_tid(mds_requests.begin()->first);
+
+  // make note
+  MetaRequest request(req, tid);
+  mds_requests[tid] = &request;
+
+  // encode payload now, in case we have to resend (in case of mds failure)
+  req->encode_payload();
+  request.request_payload = req->get_payload();
+
+  // note idempotency
+  request.idempotent = req->is_idempotent();
+
+  // hack target mds?
+  if (use_mds)
+    request.resend_mds = use_mds;
+
+  // set up wait cond
+  Cond cond;
+  request.caller_cond = &cond;
+  
+  while (1) {
+    // choose mds
+    int mds;
+    // force use of a particular mds?
+    if (request.resend_mds >= 0) {
+      mds = request.resend_mds;
+      request.resend_mds = -1;
+      dout(10) << "target resend_mds specified as mds" << mds << endl;
+    } else {
+      mds = choose_target_mds(req);
+      dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
+    }
+    
+    // open a session?
+    if (mds_sessions.count(mds) == 0) {
+      Cond cond;
+      if (waiting_for_session.count(mds) == 0) {
+	dout(10) << "opening session to mds" << mds << endl;
+	messenger->send_message(new MClientSession(MClientSession::OP_OPEN),
+				mdsmap->get_inst(mds), MDS_PORT_SERVER);
+      }
+      
+      // wait
+      waiting_for_session[mds].push_back(&cond);
+      while (waiting_for_session.count(mds)) {
+	dout(10) << "waiting for session to mds" << mds << " to open" << endl;
+	cond.Wait(client_lock);
+      }
+    }
+
+    // send request.
+    send_request(&request, mds);
+
+    // wait for signal
+    dout(20) << "awaiting kick on " << &cond << endl;
+    cond.Wait(client_lock);
+    
+    // did we get a reply?
+    if (request.reply) 
+      break;
+  }
+
+  // got it!
+  MClientReply *reply = request.reply;
+  
+  // kick dispatcher (we've got it!)
+  assert(request.dispatch_cond);
+  request.dispatch_cond->Signal();
+  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << endl;
+  
+  // clean up.
+  mds_requests.erase(tid);
+
+
+  // -- log times --
   if (client_logger) {
-    utime_t lat = g_clock.now();
+    utime_t lat = g_clock.real_now();
     lat -= start;
     dout(20) << "lat " << lat << endl;
     client_logger->finc("lsum",(double)lat);
@@ -574,59 +665,138 @@ MClientReply *Client::make_request(MClientRequest *req,
 }
 
 
-MClientReply* Client::sendrecv(MClientRequest *req, int mds)
+void Client::handle_client_session(MClientSession *m) 
 {
-  // NEW way.
-  Cond cond;
-  tid_t tid = req->get_tid();
-  mds_rpc_cond[tid] = &cond;
-  
-  messenger->send_message(req, mdsmap->get_inst(mds), MDS_PORT_SERVER);
-  
-  // wait
-  while (mds_rpc_reply.count(tid) == 0) {
-    dout(20) << "sendrecv awaiting reply kick on " << &cond << endl;
-    cond.Wait(client_lock);
-  }
-  
-  // got it!
-  MClientReply *reply = mds_rpc_reply[tid];
-  
-  // kick dispatcher (we've got it!)
-  assert(mds_rpc_dispatch_cond.count(tid));
-  mds_rpc_dispatch_cond[tid]->Signal();
-  dout(20) << "sendrecv kickback on tid " << tid << " " << mds_rpc_dispatch_cond[tid] << endl;
-  
-  // clean up.
-  mds_rpc_cond.erase(tid);
-  mds_rpc_reply.erase(tid);
+  dout(10) << "handle_client_session " << *m << endl;
+  int from = m->get_source().num();
 
-  return reply;
+  switch (m->op) {
+  case MClientSession::OP_OPEN_ACK:
+    mds_sessions.insert(from);
+    break;
+
+  case MClientSession::OP_CLOSE_ACK:
+    mds_sessions.erase(from);
+    // FIXME: kick requests (hard) so that they are redirected.  or fail.
+    break;
+
+  default:
+    assert(0);
+  }
+
+  // kick waiting threads
+  for (list<Cond*>::iterator p = waiting_for_session[from].begin();
+       p != waiting_for_session[from].end();
+       ++p)
+    (*p)->Signal();
+  waiting_for_session.erase(from);
+
+  delete m;
+}
+
+
+void Client::send_request(MetaRequest *request, int mds)
+{
+  MClientRequest *r = request->request;
+  if (!r) {
+    // make a new one
+    dout(10) << "send_request rebuilding request " << request->tid
+	     << " for mds" << mds << endl;
+    r = new MClientRequest;
+    r->copy_payload(request->request_payload);
+    r->decode_payload();
+    r->set_retry_attempt(request->retry_attempt);
+  }
+  request->request = 0;
+
+  dout(10) << "send_request " << *r << " to mds" << mds << endl;
+  messenger->send_message(r, mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  
+  request->mds.insert(mds);
+}
+
+void Client::handle_client_request_forward(MClientRequestForward *fwd)
+{
+  tid_t tid = fwd->get_tid();
+
+  if (mds_requests.count(tid) == 0) {
+    dout(10) << "handle_client_request_forward no pending request on tid " << tid << endl;
+    delete fwd;
+    return;
+  }
+
+  MetaRequest *request = mds_requests[tid];
+  assert(request);
+
+  // reset retry counter
+  request->retry_attempt = 0;
+
+  if (request->idempotent && 
+      mds_sessions.count(fwd->get_dest_mds())) {
+    // dest mds has a session, and request was forwarded for us.
+
+    // note new mds set.
+    if (request->num_fwd < fwd->get_num_fwd()) {
+      // there are now exactly two mds's whose failure should trigger a resend
+      // of this request.
+      request->mds.clear();
+      request->mds.insert(fwd->get_source().num());
+      request->mds.insert(fwd->get_dest_mds());
+      request->num_fwd = fwd->get_num_fwd();
+      dout(10) << "handle_client_request tid " << tid
+	       << " fwd " << fwd->get_num_fwd() 
+	       << " to mds" << fwd->get_dest_mds() 
+	       << ", mds set now " << request->mds
+	       << endl;
+    } else {
+      dout(10) << "handle_client_request tid " << tid
+	       << " previously forwarded to mds" << fwd->get_dest_mds() 
+	       << ", mds still " << request->mds
+		 << endl;
+    }
+  } else {
+    // request not forwarded, or dest mds has no session.
+    // resend.
+    dout(10) << "handle_client_request tid " << tid
+	     << " fwd " << fwd->get_num_fwd() 
+	     << " to mds" << fwd->get_dest_mds() 
+	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
+	     << endl;
+
+    request->mds.clear();
+    request->num_fwd = fwd->get_num_fwd();
+    request->resend_mds = fwd->get_dest_mds();
+    request->caller_cond->Signal();
+  }
+
+  delete fwd;
 }
 
 void Client::handle_client_reply(MClientReply *reply)
 {
   tid_t tid = reply->get_tid();
 
+  if (mds_requests.count(tid) == 0) {
+    dout(10) << "handle_client_reply no pending request on tid " << tid << endl;
+    delete reply;
+    return;
+  }
+  MetaRequest *request = mds_requests[tid];
+  assert(request);
+
   // store reply
-  mds_rpc_reply[tid] = reply;
+  request->reply = reply;
 
   // wake up waiter
-  assert(mds_rpc_cond.count(tid));
-  dout(20) << "handle_client_reply kicking caller on " << mds_rpc_cond[tid] << endl;
-  mds_rpc_cond[tid]->Signal();
+  request->caller_cond->Signal();
 
   // wake for kick back
-  assert(mds_rpc_dispatch_cond.count(tid) == 0);
   Cond cond;
-  mds_rpc_dispatch_cond[tid] = &cond;
-  while (mds_rpc_cond.count(tid)) {
+  request->dispatch_cond = &cond;
+  while (mds_requests.count(tid)) {
     dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << endl;
     cond.Wait(client_lock);
   }
-
-  // ok, clean up!
-  mds_rpc_dispatch_cond.erase(tid);
 }
 
 
@@ -645,13 +815,24 @@ void Client::dispatch(Message *m)
 
   case MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
+    mount_cond.Signal();
     break;
     
-    // client
+    // mounting and mds sessions
   case MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
     break;
-    
+  case MSG_CLIENT_UNMOUNT:
+    handle_unmount(m);
+    break;
+  case MSG_CLIENT_SESSION:
+    handle_client_session((MClientSession*)m);
+    break;
+
+    // requests
+  case MSG_CLIENT_REQUEST_FORWARD:
+    handle_client_request_forward((MClientRequestForward*)m);
+    break;
   case MSG_CLIENT_REPLY:
     handle_client_reply((MClientReply*)m);
     break;
@@ -660,12 +841,6 @@ void Client::dispatch(Message *m)
     handle_file_caps((MClientFileCaps*)m);
     break;
 
-  case MSG_CLIENT_MOUNTACK:
-    handle_mount_ack((MClientMountAck*)m);
-    break;
-  case MSG_CLIENT_UNMOUNT:
-    handle_unmount_ack(m);
-    break;
 
 
   default:
@@ -695,24 +870,94 @@ void Client::dispatch(Message *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  if (mdsmap == 0)
+  int frommds = -1;
+  if (m->get_source().is_mds())
+    frommds = m->get_source().num();
+
+  if (mdsmap == 0) 
     mdsmap = new MDSMap;
 
   if (whoami < 0) {
+    // mounted!
+    assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
     messenger->reset_myname(m->get_dest());
+
+    mount_cond.Signal();  // mount might be waiting for this.
   }    
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
   mdsmap->decode(m->get_encoded());
   
+  // send reconnect?
+  if (frommds >= 0 && 
+      mdsmap->get_state(frommds) == MDSMap::STATE_RECONNECT) {
+    send_reconnect(frommds);
+  }
+
+  // kick requests?
+  if (frommds >= 0 &&
+      mdsmap->get_state(frommds) == MDSMap::STATE_ACTIVE) {
+    kick_requests(frommds);
+    //failed_mds.erase(from);
+  }
+
   delete m;
+}
 
-  // note our inc #
-  objecter->set_client_incarnation(0);  // fixme
+void Client::send_reconnect(int mds)
+{
+  dout(10) << "send_reconnect to mds" << mds << endl;
 
-  mount_cond.Signal();  // mount might be waiting for this.
+  MClientReconnect *m = new MClientReconnect;
+
+  if (mds_sessions.count(mds)) {
+    // i have an open session.
+    for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+	 p != inode_map.end();
+	 p++) {
+      if (p->second->caps.count(mds)) {
+	dout(10) << " caps on " << p->first
+		 << " " << cap_string(p->second->caps[mds].caps)
+		 << " wants " << cap_string(p->second->file_caps_wanted())
+		 << endl;
+	m->add_inode_caps(p->first, 
+			  p->second->caps[mds].caps,
+			  p->second->caps[mds].seq,
+			  p->second->file_caps_wanted(),
+			  p->second->inode.size, 
+			  p->second->inode.mtime, p->second->inode.atime);
+	string path;
+	p->second->make_path(path);
+	dout(10) << " path on " << p->first << " is " << path << endl;
+	m->add_inode_path(p->first, path);
+      }
+      if (p->second->stale_caps.count(mds)) {
+	dout(10) << " clearing stale caps on " << p->first << endl;
+	p->second->stale_caps.erase(mds);         // hrm, is this right?
+      }
+    }    
+  } else {
+    dout(10) << " i had no session with this mds";
+    m->closed = true;
+  }
+
+  messenger->send_message(m, mdsmap->get_inst(mds), MDS_PORT_SERVER);
+}
+
+
+void Client::kick_requests(int mds)
+{
+  dout(10) << "kick_requests for mds" << mds << endl;
+
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) 
+    if (p->second->mds.count(mds)) {
+      p->second->retry_attempt++;   // inc retry counter
+      send_request(p->second, mds);
+    }
 }
 
 
@@ -745,7 +990,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   m->clear_payload();  // for if/when we send back to MDS
 
   // reap?
-  if (m->get_special() == MClientFileCaps::FILECAP_REAP) {
+  if (m->get_special() == MClientFileCaps::OP_REAP) {
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
@@ -774,7 +1019,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
+  if (m->get_special() == MClientFileCaps::OP_STALE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
     
     // move to stale list
@@ -803,7 +1048,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // release?
-  if (m->get_special() == MClientFileCaps::FILECAP_RELEASE) {
+  if (m->get_special() == MClientFileCaps::OP_RELEASE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
@@ -945,7 +1190,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
           << ", acking to " << m->get_source() << endl;
 
   if (in->file_caps() == 0) {
-    in->file_wr_mtime = 0;
+    in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
   }
 
@@ -979,7 +1224,7 @@ void Client::release_caps(Inode *in,
   }
   
   if (in->file_caps() == 0) {
-    in->file_wr_mtime = 0;
+    in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
   }
 }
@@ -1011,31 +1256,21 @@ void Client::update_caps_wanted(Inode *in)
 int Client::mount()
 {
   client_lock.Lock();
-
   assert(!mounted);  // caller is confused?
+  assert(!mdsmap);
 
-  // FIXME mds map update race with mount.
-
-  dout(2) << "sending boot msg to monitor" << endl;
-  if (mdsmap) 
-    delete mdsmap;
   int mon = monmap->pick_mon();
-  messenger->send_message(new MClientBoot(),
-			  monmap->get_inst(mon));
+  dout(2) << "sending client_mount to mon" << mon << endl;
+  messenger->send_message(new MClientMount, monmap->get_inst(mon));
   
   while (!mdsmap)
     mount_cond.Wait(client_lock);
   
-  dout(2) << "mounting" << endl;
-  MClientMount *m = new MClientMount();
+  mounted = true;
 
-  int who = 0; // mdsmap->get_root();  // mount at root, for now
-  messenger->send_message(m, 
-			  mdsmap->get_inst(who), 
-			  MDS_PORT_SERVER);
-  
-  while (!mounted)
-    mount_cond.Wait(client_lock);
+  dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
+	  << " and mdsmap " << mdsmap->get_epoch() 
+	  << endl;
 
   client_lock.Unlock();
 
@@ -1050,22 +1285,6 @@ int Client::mount()
   dout(3) << "op: fh_t fh;" << endl;
   */
   return 0;
-}
-
-void Client::handle_mount_ack(MClientMountAck *m)
-{
-  // mdsmap!
-  if (!mdsmap) mdsmap = new MDSMap;
-  mdsmap->decode(m->get_mds_map_state());
-
-  // we got osdmap!
-  osdmap->decode(m->get_osd_map_state());
-
-  dout(2) << "mounted" << endl;
-  mounted = true;
-  mount_cond.Signal();
-
-  delete m;
 }
 
 
@@ -1125,24 +1344,40 @@ int Client::unmount()
     }
   }
   
-  // send unmount!
-  Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  messenger->send_message(req, mdsmap->get_inst(0), MDS_PORT_SERVER);
+  // send session closes!
+  for (set<int>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    dout(2) << "sending client_session close to mds" << *p << endl;
+    messenger->send_message(new MClientSession(MClientSession::OP_CLOSE),
+			    mdsmap->get_inst(*p), MDS_PORT_SERVER);
+  }
 
+  // send unmount!
+  int mon = monmap->pick_mon();
+  dout(2) << "sending client_unmount to mon" << mon << endl;
+  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
+  
   while (mounted)
     mount_cond.Wait(client_lock);
 
-  dout(2) << "unmounted" << endl;
+  dout(2) << "unmounted." << endl;
 
   client_lock.Unlock();
   return 0;
 }
 
-void Client::handle_unmount_ack(Message* m)
+void Client::handle_unmount(Message* m)
 {
-  dout(1) << "got unmount ack" << endl;
+  dout(1) << "handle_unmount got ack" << endl;
+
   mounted = false;
+
+  delete mdsmap;
+  mdsmap = 0;
+
   mount_cond.Signal();
+
   delete m;
 }
 
@@ -1163,7 +1398,7 @@ int Client::link(const char *existing, const char *newname)
   // sarg is target (existing file)
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_LINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_LINK, messenger->get_myinst());
   req->set_path(newname);
   req->set_sarg(existing);
   
@@ -1171,7 +1406,7 @@ int Client::link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   
   insert_trace(reply);
@@ -1197,7 +1432,7 @@ int Client::unlink(const char *relpath)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1206,7 +1441,7 @@ int Client::unlink(const char *relpath)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
     // remove from local cache
@@ -1243,7 +1478,7 @@ int Client::rename(const char *relfrom, const char *relto)
   tout << to << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, messenger->get_myinst());
   req->set_path(from);
   req->set_sarg(to);
  
@@ -1253,7 +1488,7 @@ int Client::rename(const char *relfrom, const char *relto)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
@@ -1280,9 +1515,9 @@ int Client::mkdir(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, messenger->get_myinst());
   req->set_path(path);
-  req->set_iarg( (int)mode );
+  req->args.mkdir.mode = mode;
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1290,7 +1525,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
@@ -1314,7 +1549,7 @@ int Client::rmdir(const char *relpath)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1323,7 +1558,7 @@ int Client::rmdir(const char *relpath)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
     // remove from local cache
@@ -1363,7 +1598,7 @@ int Client::symlink(const char *reltarget, const char *rellink)
   tout << link << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, messenger->get_myinst());
   req->set_path(link);
   req->set_sarg(target);
  
@@ -1373,7 +1608,7 @@ int Client::symlink(const char *reltarget, const char *rellink)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  //FIXME assuming trace of link, not of target
   delete reply;
@@ -1432,7 +1667,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 
   Dentry *dn = lookup(fpath);
   inode_t inode;
-  time_t now = time(NULL);
+  utime_t now = g_clock.real_now();
   if (dn && 
       now <= dn->inode->valid_until &&
       ((dn->inode->inode.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
@@ -1440,7 +1675,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
     dout(10) << "lstat cache hit w/ sufficient inode.mask, valid until " << dn->inode->valid_until << endl;
     
     if (g_conf.client_cache_stat_ttl == 0)
-      dn->inode->valid_until = 0;           // only one stat allowed after each readdir
+      dn->inode->valid_until = utime_t();           // only one stat allowed after each readdir
 
     *in = dn->inode;
   } else {  
@@ -1449,8 +1684,8 @@ int Client::_lstat(const char *path, int mask, Inode **in)
     //req->set_caller_uid(fc->uid);
     //req->set_caller_gid(fc->gid);
     
-    req = new MClientRequest(MDS_OP_LSTAT, whoami);
-    req->set_iarg(mask);
+    req = new MClientRequest(MDS_OP_LSTAT, messenger->get_myinst());
+    req->args.stat.mask = mask;
     req->set_path(fpath);
 
     MClientReply *reply = make_request(req);
@@ -1482,7 +1717,7 @@ void Client::fill_stat(inode_t& inode, struct stat *st)
   st->st_nlink = inode.nlink;
   st->st_uid = inode.uid;
   st->st_gid = inode.gid;
-  st->st_ctime = inode.ctime;
+  st->st_ctime = MAX(inode.ctime, inode.mtime);
   st->st_atime = inode.atime;
   st->st_mtime = inode.mtime;
   st->st_size = inode.size;
@@ -1500,7 +1735,7 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   st->st_gid = inode.gid;
 #ifndef DARWIN
   // FIXME what's going on here with darwin?
-  st->st_ctime = inode.ctime;
+  st->st_ctime = MAX(inode.ctime, inode.mtime);
   st->st_atime = inode.atime;
   st->st_mtime = inode.mtime;
 #endif
@@ -1561,11 +1796,12 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   tout << path << endl;
 
   // make mask
-  int mask = INODE_MASK_BASE | INODE_MASK_PERM;
+  // FIXME.
+  int mask = INODE_MASK_BASE | INODE_MASK_AUTH;
   if (S_ISVALIDSIZE(stl->st_litemask) || 
       S_ISVALIDBLOCKS(stl->st_litemask)) mask |= INODE_MASK_SIZE;
-  if (S_ISVALIDMTIME(stl->st_litemask)) mask |= INODE_MASK_MTIME;
-  if (S_ISVALIDATIME(stl->st_litemask)) mask |= INODE_MASK_ATIME;
+  if (S_ISVALIDMTIME(stl->st_litemask)) mask |= INODE_MASK_FILE;
+  if (S_ISVALIDATIME(stl->st_litemask)) mask |= INODE_MASK_FILE;
   
   Inode *in = 0;
   int res = _lstat(path, mask, &in);
@@ -1596,15 +1832,15 @@ int Client::chmod(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( (int)mode );
+  req->args.chmod.mode = mode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1630,10 +1866,10 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << gid << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( (int)uid );
-  req->set_iarg2( (int)gid );
+  req->args.chown.uid = uid;
+  req->args.chown.gid = gid;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1641,7 +1877,7 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 
   //FIXME enforce caller uid rights?
 
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1668,10 +1904,12 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   tout << buf->modtime << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->set_targ( buf->modtime );
-  req->set_targ2( buf->actime );
+  req->args.utime.mtime.tv_sec = buf->modtime;
+  req->args.utime.mtime.tv_usec = 0;
+  req->args.utime.atime.tv_sec = buf->actime;
+  req->args.utime.atime.tv_usec = 0;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1679,7 +1917,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -1706,9 +1944,9 @@ int Client::mknod(const char *relpath, mode_t mode)
   tout << mode << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg( mode );
+  req->args.mknod.mode = mode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1716,7 +1954,7 @@ int Client::mknod(const char *relpath, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
 
@@ -1752,7 +1990,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
   tout << path << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
@@ -1761,7 +1999,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
 
@@ -1781,16 +2019,18 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       contents[dotdot] = diri->dn->dir->parent_inode->inode;
     }
 
+    // the rest?
     if (!reply->get_dir_in().empty()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
-      time_t now = time(NULL);
+      utime_t now = g_clock.real_now();
       
       list<string>::const_iterator pdn = reply->get_dir_dn().begin();
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
            pin != reply->get_dir_in().end(); 
            ++pin, ++pdn) {
+	// ignore .
 	if (*pdn == ".") 
 	  continue;
 
@@ -1800,10 +2040,14 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
         // put in cache
         Inode *in = this->insert_inode(dir, *pin, *pdn);
         
-        if (g_conf.client_cache_stat_ttl)
-          in->valid_until = now + g_conf.client_cache_stat_ttl;
-        else if (g_conf.client_cache_readdir_ttl)
-          in->valid_until = now + g_conf.client_cache_readdir_ttl;
+        if (g_conf.client_cache_stat_ttl) {
+          in->valid_until = now;
+	  in->valid_until += g_conf.client_cache_stat_ttl;
+	}
+        else if (g_conf.client_cache_readdir_ttl) {
+          in->valid_until = now;
+	  in->valid_until += g_conf.client_cache_readdir_ttl;
+	}
         
         // contents to caller too!
         contents[*pdn] = in->inode;
@@ -1811,7 +2055,6 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       if (dir->is_empty())
 	close_dir(dir);
     }
-    
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
@@ -2014,7 +2257,7 @@ struct dirent_lite *Client::readdirlite(DIR *dirp)
 
 /****** file i/o **********/
 
-int Client::open(const char *relpath, int flags) 
+int Client::open(const char *relpath, int flags, mode_t mode) 
 {
   client_lock.Lock();
 
@@ -2027,33 +2270,19 @@ int Client::open(const char *relpath, int flags)
   tout << path << endl;
   tout << flags << endl;
 
-  int cmode = 0;
-  bool tryauth = false;
-  if (flags & O_LAZY) 
-    cmode = FILE_MODE_LAZY;
-  else if (flags & O_WRONLY) {
-    cmode = FILE_MODE_W;
-    tryauth = true;
-  } else if (flags & O_RDWR) {
-    cmode = FILE_MODE_RW;
-    tryauth = true;
-  } else if (flags & O_APPEND) {
-    cmode = FILE_MODE_W;
-    tryauth = true;
-  } else
-    cmode = FILE_MODE_R;
-
   // go
-  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, messenger->get_myinst());
   req->set_path(path); 
-  req->set_iarg(flags);
-  req->set_iarg2(cmode);
+  req->args.open.flags = flags;
+  req->args.open.mode = mode;
+
+  int cmode = req->get_open_file_mode();
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, tryauth); // try auth if writer
+  MClientReply *reply = make_request(req);
   
   assert(reply);
   dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
@@ -2090,13 +2319,15 @@ int Client::open(const char *relpath, int flags)
 
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
+      int old_caps = f->inode->caps[mds].caps;
+
       dout(7) << "open got caps " << cap_string(new_caps)
+	      << " (had " << cap_string(old_caps) << ")"
               << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
 	      << endl;
 
-      int old_caps = f->inode->caps[mds].caps;
       f->inode->caps[mds].caps = new_caps;
       f->inode->caps[mds].seq = reply->get_file_caps_seq();
 
@@ -2423,7 +2654,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
   // time it.
-  utime_t start = g_clock.now();
+  utime_t start = g_clock.real_now();
     
   // copy into fresh buffer (since our write may be resub, async)
   bufferptr bp = buffer::copy(buf, size);
@@ -2488,7 +2719,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   }
 
   // time
-  utime_t lat = g_clock.now();
+  utime_t lat = g_clock.real_now();
   lat -= start;
   if (client_logger) {
     client_logger->finc("wrlsum",(double)lat);
@@ -2507,7 +2738,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   }
 
   // mtime
-  in->file_wr_mtime = in->inode.mtime = g_clock.gettime();
+  in->file_wr_mtime = in->inode.mtime = g_clock.real_now();
 
   // ok!
   client_lock.Unlock();
@@ -2515,24 +2746,24 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 }
 
 
-int Client::truncate(const char *file, off_t size) 
+int Client::truncate(const char *file, off_t length) 
 {
   client_lock.Lock();
-  dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
+  dout(3) << "op: client->truncate(\"" << file << "\", " << length << ");" << endl;
   tout << "truncate" << endl;
   tout << file << endl;
-  tout << size << endl;
+  tout << length << endl;
 
 
-  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
   req->set_path(file); 
-  req->set_sizearg( size );
+  req->args.truncate.length = length;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
@@ -2743,7 +2974,7 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+    dout(0) << "ms_handle_failure " << *m << " to " << inst 
             << ", resending to mon" << mon 
             << endl;
     messenger->send_message(m, monmap->get_inst(mon));
@@ -2752,14 +2983,12 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
     objecter->ms_handle_failure(m, dest, inst);
   } 
   else if (dest.is_mds()) {
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
-    // help!
-    assert(0);
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << endl;
+    //failed_mds.insert(dest.num());
   }
   else {
     // client?
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping" << endl;
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << endl;
     delete m;
   }
 }

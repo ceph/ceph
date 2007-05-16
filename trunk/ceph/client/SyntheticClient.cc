@@ -20,7 +20,8 @@ using namespace std;
 #include "SyntheticClient.h"
 
 #include "include/filepath.h"
-#include "mds/MDS.h"
+#include "mds/mdstypes.h"
+#include "common/Logger.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -120,6 +121,16 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_TRACE );
         syn_sargs.push_back( args[++i] );
         syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"thrashlinks") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_THRASHLINKS );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"foo") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_FOO );
 
       } else if (strcmp(args[i],"until") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
@@ -221,6 +232,11 @@ int SyntheticClient::run()
     dout(3) << "mode " << mode << endl;
 
     switch (mode) {
+    case SYNCLIENT_MODE_FOO:
+      if (run_me()) 
+	foo();
+      break;
+
     case SYNCLIENT_MODE_RANDOMSLEEP:
       {
         int iarg1 = iargs.front();
@@ -337,6 +353,22 @@ int SyntheticClient::run()
         }
       }
       break;
+
+
+    case SYNCLIENT_MODE_THRASHLINKS:
+      {
+        string sarg1 = get_sarg(0);
+        int iarg1 = iargs.front();  iargs.pop_front();
+        int iarg2 = iargs.front();  iargs.pop_front();
+        int iarg3 = iargs.front();  iargs.pop_front();
+        int iarg4 = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "thrashlinks " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+          thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3, iarg4);
+        }
+      }
+      break;
+
 
 
     case SYNCLIENT_MODE_MAKEFILES:
@@ -1121,7 +1153,7 @@ int SyntheticClient::random_walk(int num_req)
     // descend?
     if (.9*roll_die(::pow((double).9,(double)cwd.depth())) && subdirs.size()) {
       string s = get_random_subdir();
-      cwd.add_dentry( s );
+      cwd.push_dentry( s );
       dout(DBL) << "cd " << s << " -> " << cwd << endl;
       clear_dir();
       continue;
@@ -1322,4 +1354,112 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
     
   
 }
+
+
+
+void SyntheticClient::foo()
+{
+  // link fun
+  client->mknod("one", 0755);
+  client->mknod("two", 0755);
+  client->link("one", "three");
+  client->mkdir("dir", 0755);
+  client->link("two", "/dir/twolink");
+  client->link("dir/twolink", "four");
+  
+  // unlink fun
+  client->mknod("a", 0644);
+  client->unlink("a");
+  client->mknod("b", 0644);
+  client->link("b", "c");
+  client->unlink("c");
+  client->mkdir("d", 0755);
+  client->unlink("d");
+  client->rmdir("d");
+
+  // rename fun
+  client->mknod("p1", 0644);
+  client->mknod("p2", 0644);
+  client->rename("p1","p2");
+  client->mknod("p3", 0644);
+  client->rename("p3","p4");
+
+  // check dest dir ambiguity thing
+  client->mkdir("dir1", 0755);
+  client->mkdir("dir2", 0755);
+  client->rename("p2","dir1/p2");
+  client->rename("dir1/p2","dir2/p2");
+  client->rename("dir2/p2","/p2");
+  
+  // check primary+remote link merging
+  client->link("p2","p2.l");
+  client->link("p4","p4.l");
+  client->rename("p2.l","p2");
+  client->rename("p4","p4.l");
+
+  // check anchor updates
+  client->mknod("dir1/a", 0644);
+  client->link("dir1/a", "da1");
+  client->link("dir1/a", "da2");
+  client->link("da2","da3");
+  client->rename("dir1/a","dir2/a");
+  client->rename("dir2/a","da2");
+  client->rename("da1","da2");
+  client->rename("da2","da3");
+
+  // check directory renames
+  client->mkdir("dir3", 0755);
+  client->mknod("dir3/asdf", 0644);
+  client->mkdir("dir4", 0755);
+  client->mkdir("dir5", 0755);
+  client->mknod("dir5/asdf", 0644);
+  client->rename("dir3","dir4"); // ok
+  client->rename("dir4","dir5"); // fail
+}
+
+int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)
+{
+  dout(1) << "thrash_links " << basedir << " " << dirs << " " << files << " " << depth
+	  << " links " << n
+	  << endl;
+
+  if (time_to_stop()) return 0;
+ 
+  // now link shit up
+  for (int i=0; i<n; i++) {
+    if (time_to_stop()) return 0;
+
+    char f[20];
+
+    // pick a file
+    string file = basedir;
+
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	file += f;
+      }
+    }
+    sprintf(f, "/file.%d", rand() % files);
+    file += f;
+
+    // pick a dir for our link
+    string ln = basedir;
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	ln += f;
+      }
+    }
+    sprintf(f, "/ln.%d", i);
+    ln += f;
+
+    client->link(file.c_str(), ln.c_str());  
+  }
+
+  return 0;
+}
+
 

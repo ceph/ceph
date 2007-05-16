@@ -20,39 +20,46 @@
 #include "include/types.h"
 
 class MExportDirPrep : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
   /* nested export discover payload.
      not all inodes will have dirs; they may require a separate discover.
      dentries are the links to each inode.
      dirs map includes base dir (ino)
   */
-  list<inodeno_t>                exports;
+  list<dirfrag_t>                bounds;
 
   list<CInodeDiscover*>          inodes;
-  map<inodeno_t,inodeno_t>       inode_dirino;
+  map<inodeno_t,dirfrag_t>       inode_dirfrag;
   map<inodeno_t,string>          inode_dentry;
 
-  map<inodeno_t,CDirDiscover*>   dirs;
+  map<inodeno_t,list<frag_t> >   frags_by_ino;
+  map<dirfrag_t,CDirDiscover*>   dirfrags;
+
+  set<int>                       bystanders;
 
   bool b_did_assim;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  list<inodeno_t>& get_exports() { return exports; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
+  list<dirfrag_t>& get_bounds() { return bounds; }
   list<CInodeDiscover*>& get_inodes() { return inodes; }
-  inodeno_t get_containing_dirino(inodeno_t ino) {
-    return inode_dirino[ino];
+  list<frag_t>& get_inode_dirfrags(inodeno_t ino) { 
+    return frags_by_ino[ino];
+  }
+  dirfrag_t get_containing_dirfrag(inodeno_t ino) {
+    return inode_dirfrag[ino];
   }
   string& get_dentry(inodeno_t ino) {
     return inode_dentry[ino];
   }
-  bool have_dir(inodeno_t ino) {
-    return dirs.count(ino);
+  bool have_dirfrag(dirfrag_t df) {
+    return dirfrags.count(df);
   }
-  CDirDiscover* get_dir(inodeno_t ino) {
-    return dirs[ino];
+  CDirDiscover* get_dirfrag_discover(dirfrag_t df) {
+    return dirfrags[df];
   }
+  set<int> &get_bystanders() { return bystanders; }
 
   bool did_assim() { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
@@ -60,57 +67,50 @@ class MExportDirPrep : public Message {
   MExportDirPrep() {
     b_did_assim = false;
   }
-  MExportDirPrep(CInode *in) : 
-    Message(MSG_MDS_EXPORTDIRPREP) {
-    ino = in->ino();
-    b_did_assim = false;
-  }
+  MExportDirPrep(dirfrag_t df) : 
+    Message(MSG_MDS_EXPORTDIRPREP),
+    dirfrag(df),
+    b_did_assim(false) { }
   ~MExportDirPrep() {
     for (list<CInodeDiscover*>::iterator iit = inodes.begin();
          iit != inodes.end();
          iit++)
       delete *iit;
-    for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
-         dit != dirs.end();
+    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
+         dit != dirfrags.end();
          dit++) 
       delete dit->second;
   }
 
 
   virtual char *get_type_name() { return "ExP"; }
-
-
-
-
-  void add_export(inodeno_t dirino) {
-    exports.push_back( dirino );
+  void print(ostream& o) {
+    o << "export_prep(" << dirfrag << ")";
   }
-  void add_inode(inodeno_t dirino, const string& dentry, CInodeDiscover *in) {
+
+  void add_export(dirfrag_t df) {
+    bounds.push_back( df );
+  }
+  void add_inode(dirfrag_t df, const string& dentry, CInodeDiscover *in) {
     inodes.push_back(in);
-    inode_dirino.insert(pair<inodeno_t, inodeno_t>(in->get_ino(), dirino));
-    inode_dentry.insert(pair<inodeno_t, string>(in->get_ino(), dentry));
+    inode_dirfrag[in->get_ino()] = df;
+    inode_dentry[in->get_ino()] = dentry;
   }
-  void add_dir(CDirDiscover *dir) {
-    dirs.insert(pair<inodeno_t, CDirDiscover*>(dir->get_ino(), dir));
+  void add_dirfrag(CDirDiscover *dir) {
+    dirfrags[dir->get_dirfrag()] = dir;
+    frags_by_ino[dir->get_dirfrag().ino].push_back(dir->get_dirfrag().frag);
   }
-
+  void add_bystander(int who) {
+    bystanders.insert(who);
+  }
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     
-    // exports
-    int ne;
-    payload.copy(off, sizeof(int), (char*)&ne);
-    off += sizeof(int);
-    for (int i=0; i<ne; i++) {
-      inodeno_t ino;
-      payload.copy(off, sizeof(ino), (char*)&ino);
-      off += sizeof(ino);
-      exports.push_back(ino);
-    }
-
+    ::_decode(bounds, payload, off);
+    
     // inodes
     int ni;
     payload.copy(off, sizeof(int), (char*)&ni);
@@ -127,10 +127,13 @@ class MExportDirPrep : public Message {
       inode_dentry[in->get_ino()] = d;
       
       // dir ino
-      inodeno_t dino;
-      payload.copy(off, sizeof(dino), (char*)&dino);
-      off += sizeof(dino);
-      inode_dirino[in->get_ino()] = dino;
+      dirfrag_t df;
+      payload.copy(off, sizeof(df), (char*)&df);
+      off += sizeof(df);
+      inode_dirfrag[in->get_ino()] = df;
+
+      // child frags
+      ::_decode(frags_by_ino[in->get_ino()], payload, off);
     }
 
     // dirs
@@ -140,22 +143,16 @@ class MExportDirPrep : public Message {
     for (int i=0; i<nd; i++) {
       CDirDiscover *dir = new CDirDiscover;
       dir->_decode(payload, off);
-      dirs[dir->get_ino()] = dir;
+      dirfrags[dir->get_dirfrag()] = dir;
     }
+    
+    ::_decode(bystanders, payload, off);
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
 
-    // exports
-    int ne = exports.size();
-    payload.append((char*)&ne, sizeof(int));
-    for (list<inodeno_t>::iterator it = exports.begin();
-         it != exports.end();
-         it++) {
-      inodeno_t ino = *it;
-      payload.append((char*)&ino, sizeof(ino));
-    }
+    ::_encode(bounds, payload);
 
     // inodes
     int ni = inodes.size();
@@ -169,17 +166,22 @@ class MExportDirPrep : public Message {
       _encode(inode_dentry[(*iit)->get_ino()], payload);
 
       // dir ino
-      inodeno_t ino = inode_dirino[(*iit)->get_ino()];
-      payload.append((char*)&ino, sizeof(ino));
+      dirfrag_t df = inode_dirfrag[(*iit)->get_ino()];
+      payload.append((char*)&df, sizeof(df));
+
+      // child frags
+      ::_encode(frags_by_ino[(*iit)->get_ino()], payload);
     }
 
     // dirs
-    int nd = dirs.size();
+    int nd = dirfrags.size();
     payload.append((char*)&nd, sizeof(int));
-    for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
-         dit != dirs.end();
+    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
+         dit != dirfrags.end();
          dit++)
       dit->second->_encode(payload);
+
+    ::_encode(bystanders, payload);
   }
 };
 

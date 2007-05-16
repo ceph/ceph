@@ -52,27 +52,28 @@ class MRenameReq : public Message {
   }
   virtual char *get_type_name() { return "RnReq";}
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(initiator), (char*)&initiator);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(initiator), (char*)&initiator);
     off += sizeof(initiator);
-    s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
+    payload.copy(off, sizeof(srcdirino), (char*)&srcdirino);
     off += sizeof(srcdirino);
-    s.copy(off, sizeof(destdirino), (char*)&destdirino);
+    payload.copy(off, sizeof(destdirino), (char*)&destdirino);
     off += sizeof(destdirino);
-    _unrope(srcname, s, off);
-    _unrope(destname, s, off);
-    _unrope(destpath, s, off);
-    s.copy(off, sizeof(destauth), (char*)&destauth);
+    ::_decode(srcname, payload, off);
+    ::_decode(destname, payload, off);
+    ::_decode(destpath, payload, off);
+    payload.copy(off, sizeof(destauth), (char*)&destauth);
     off += sizeof(destauth);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&initiator,sizeof(initiator));
-    s.append((char*)&srcdirino,sizeof(srcdirino));
-    s.append((char*)&destdirino,sizeof(destdirino));
-    _rope(srcname, s);
-    _rope(destname, s);
-    _rope(destpath, s);
-    s.append((char*)&destauth, sizeof(destauth));
+  virtual void encode_payload() {
+    payload.append((char*)&initiator,sizeof(initiator));
+    payload.append((char*)&srcdirino,sizeof(srcdirino));
+    payload.append((char*)&destdirino,sizeof(destdirino));
+    ::_encode(srcname, payload);
+    ::_encode(destname, payload);
+    ::_encode(destpath, payload);
+    payload.append((char*)&destauth, sizeof(destauth));
   }
 };
 

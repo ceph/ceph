@@ -26,12 +26,13 @@ class MPingAck : public Message {
     this->seq = p->seq;
   }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(0, sizeof(seq), (char*)&seq);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(0, sizeof(seq), (char*)&seq);
     off += sizeof(seq);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&seq, sizeof(seq));
+  virtual void encode_payload() {
+    payload.append((char*)&seq, sizeof(seq));
   }
 
   virtual char *get_type_name() { return "pinga"; }

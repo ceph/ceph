@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRPREPACK_H
 #define __MEXPORTDIRPREPACK_H
 
@@ -19,25 +18,28 @@
 #include "include/types.h"
 
 class MExportDirPrepAck : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirPrepAck() {}
-  MExportDirPrepAck(inodeno_t ino) :
-    Message(MSG_MDS_EXPORTDIRPREPACK) {
-    this->ino = ino;
-  }
+  MExportDirPrepAck(dirfrag_t df) :
+    Message(MSG_MDS_EXPORTDIRPREPACK),
+    dirfrag(df) { }
   
   virtual char *get_type_name() { return "ExPAck"; }
-
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+  void print(ostream& o) {
+    o << "export_prep_ack(" << dirfrag << ")";
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
+
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
+  }
+  virtual void encode_payload() {
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
   }
 };
 

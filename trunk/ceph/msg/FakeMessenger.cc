@@ -157,6 +157,7 @@ int fakemessenger_do_loop_2()
         dout(1) << "---- " << m->get_dest() 
 		<< " <- " << m->get_source()
                 << " ---- " << *m 
+		<< " ---- " << m
                 << endl;
         
         if (g_conf.fakemessenger_serialize) {
@@ -310,11 +311,13 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
 
   // queue
   if (directory.count(inst.addr)) {
-    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m
+	    << endl;
     directory[inst.addr]->queue_incoming(m);
   } else {
-    dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m
-	    << " *** destination DNE ***" << endl;
+    dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m
+	    << " *** destination DNE ***" 
+	    << endl;
     for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
 	 p != directory.end();
 	 ++p) {

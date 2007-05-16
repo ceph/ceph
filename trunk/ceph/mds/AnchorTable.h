@@ -22,59 +22,104 @@
 using namespace __gnu_cxx;
 
 class MDS;
-
+class MAnchor;
 
 class AnchorTable {
   MDS *mds;
-  hash_map<inodeno_t, Anchor*>  anchor_map;
 
+  // keep the entire table in memory.
+  hash_map<inodeno_t, Anchor>  anchor_map;
+
+  // uncommitted operations
+  map<version_t, int> pending_reqmds;
+  map<version_t, inodeno_t> pending_create;
+  map<version_t, inodeno_t> pending_destroy;
+  map<version_t, pair<inodeno_t, vector<Anchor> > > pending_update;
+
+  version_t version;  // this includes anchor_map AND pending_* state.
+  version_t committing_version;
+  version_t committed_version;
+
+  // load/save state
   bool opening, opened;
+
+  // waiters
   list<Context*> waiting_for_open;
+  map<version_t, list<Context*> > waiting_for_save;
 
- public:
-  inode_t table_inode;
+protected:
 
- public:
-  AnchorTable(MDS *mds); 
-
- protected:
-  void init_inode();  // call this before doing anything.
-
-  // 
-  bool have_ino(inodeno_t ino) { 
-    return true;                  // always in memory for now.
-  } 
-  void fetch_ino(inodeno_t ino, Context *onfinish) {
-    assert(!opened);
-    load(onfinish);
-  }
-
-  // adjust table
-  bool add(inodeno_t ino, inodeno_t dirino, string& ref_dn);
+  // basic updates
+  bool add(inodeno_t ino, dirfrag_t dirfrag);
   void inc(inodeno_t ino);
   void dec(inodeno_t ino);
 
-  
+  // mid-level
+  void create_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds);
+  void destroy_prepare(inodeno_t ino, int reqmds);
+  void update_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmds);
+  void commit(version_t atid);
+  void rollback(version_t atid);
+  friend class EAnchor;  // used for journal replay.
+
   // high level interface
-  void lookup(inodeno_t ino, vector<Anchor*>& trace);
-  void create(inodeno_t ino, vector<Anchor*>& trace);
-  void destroy(inodeno_t ino);
+  void handle_lookup(MAnchor *req);
+
+  void handle_create_prepare(MAnchor *req);
+  void _create_prepare_logged(MAnchor *req, version_t atid);
+  friend class C_AT_CreatePrepare;
+
+  void handle_destroy_prepare(MAnchor *req);
+  void _destroy_prepare_logged(MAnchor *req, version_t atid);
+  friend class C_AT_DestroyPrepare;
+
+  void handle_update_prepare(MAnchor *req);
+  void _update_prepare_logged(MAnchor *req, version_t atid);
+  friend class C_AT_UpdatePrepare;
+
+  void handle_commit(MAnchor *req);
+  void _commit_logged(MAnchor *req);
+  friend class C_AT_Commit;
+
+  void handle_rollback(MAnchor *req);
 
   // messages
- public:
+  void handle_anchor_request(MAnchor *m);  
+
+  void dump();
+
+public:
+  AnchorTable(MDS *m) :
+    mds(m),
+    version(0), committing_version(0), committed_version(0), 
+    opening(false), opened(false) { }
+
   void dispatch(class Message *m);
- protected:
-  void handle_anchor_request(class MAnchorRequest *m);  
 
+  version_t get_version() { return version; }
+  version_t get_committed_version() { return committed_version; }
 
- public:
+  void create_fresh() {   
+    // reset (i.e. on mkfs) to empty, but unsaved table.
+    version = 1;
+    opened = true;
+    opening = false;
+    anchor_map.clear();
+    pending_create.clear();
+    pending_destroy.clear();
+    pending_update.clear();
+  }
 
   // load/save entire table for now!
-  void reset();
   void save(Context *onfinish);
+  void _saved(version_t v);
   void load(Context *onfinish);
-  void load_2(size_t size, bufferlist& bl);
+  void _loaded(bufferlist& bl);
 
+  // recovery
+  void handle_mds_recovery(int who);
+  void finish_recovery();
+  void resend_agree(version_t v, int who);
 
 };
 

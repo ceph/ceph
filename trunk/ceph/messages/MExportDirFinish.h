@@ -11,31 +11,33 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRFINISH_H
 #define __MEXPORTDIRFINISH_H
 
-#include "MExportDir.h"
+#include "msg/Message.h"
 
 class MExportDirFinish : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirFinish() {}
-  MExportDirFinish(inodeno_t ino) :
+  MExportDirFinish(dirfrag_t dirfrag) :
     Message(MSG_MDS_EXPORTDIRFINISH) {
-    this->ino = ino;
+    this->dirfrag = dirfrag;
   }  
   virtual char *get_type_name() { return "ExFin"; }
-  
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+  void print(ostream& o) {
+    o << "export_finish(" << dirfrag << ")";
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
+  }
+  virtual void encode_payload() {
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
   }
 
 };

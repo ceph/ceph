@@ -82,6 +82,10 @@ class MDSMonitor : public Dispatcher {
 
   void send_latest(entity_inst_t dest);
 
+  void handle_command(class MMonCommand *m, int& r, string& rs);
+
+  void do_stop();
+
 };
 
 #endif

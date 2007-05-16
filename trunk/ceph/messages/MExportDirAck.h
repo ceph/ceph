@@ -11,30 +11,33 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRACK_H
 #define __MEXPORTDIRACK_H
 
 #include "MExportDir.h"
 
 class MExportDirAck : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirAck() {}
-  MExportDirAck(MExportDir *req) :
-    Message(MSG_MDS_EXPORTDIRACK) {
-    ino = req->get_ino();
-  }  
+  MExportDirAck(dirfrag_t i) :
+    Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
+
   virtual char *get_type_name() { return "ExAck"; }
-  
-  virtual void decode_payload(crope& s) {
-    s.copy(0, sizeof(ino), (char*)&ino);
+    void print(ostream& o) {
+    o << "export_ack(" << dirfrag << ")";
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
+
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
+  }
+  virtual void encode_payload() {
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
   }
 
 };

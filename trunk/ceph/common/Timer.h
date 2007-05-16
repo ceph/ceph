@@ -53,15 +53,11 @@ class Timer {
   map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
   hash_map< Context*, utime_t >  event_times;  // event -> time
 
-  // get time of the next event
-  //Context* get_next_scheduled(utime_t& when);
-
   bool get_next_due(utime_t &when);
 
   void register_timer();  // make sure i get a callback
   void cancel_timer();    // make sure i get a callback
 
-  //pthread_t thread_id;
   bool      thread_stop;
   Mutex     lock;
   bool      timed_sleep;

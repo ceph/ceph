@@ -22,6 +22,7 @@ extern "C" {
 }
 
 #include <string>
+#include <list>
 #include <set>
 #include <map>
 #include <vector>
@@ -29,10 +30,13 @@ extern "C" {
 #include <iomanip>
 using namespace std;
 
-#include <ext/rope>
+#include <ext/hash_map>
 using namespace __gnu_cxx;
 
+
 #include "object.h"
+#include "utime.h"
+
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -127,6 +131,8 @@ typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 
 
 
 
+#define O_LAZY 01000000
+
 
 
 /** object layout
@@ -183,12 +189,13 @@ struct FileLayout {
 
 // -- inode --
 
+typedef __uint64_t _inodeno_t;
 struct inodeno_t {
-  __uint64_t val;
-  inodeno_t() : val() {}
-  inodeno_t(__uint64_t v) : val(v) {}
+  _inodeno_t val;
+  inodeno_t() : val(0) {}
+  inodeno_t(_inodeno_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
-  operator __uint64_t() const { return val; }
+  operator _inodeno_t() const { return val; }
 };
 
 inline ostream& operator<<(ostream& out, inodeno_t ino) {
@@ -217,51 +224,54 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_BASE       1  // ino, ctime, nlink
-#define INODE_MASK_PERM       2  // uid, gid, mode
-#define INODE_MASK_SIZE       4  // size, blksize, blocks
-#define INODE_MASK_MTIME      8  // mtime
-#define INODE_MASK_ATIME      16 // atime
+#define INODE_MASK_BASE       1  // ino, layout, symlink value
+#define INODE_MASK_AUTH       2  // uid, gid, mode
+#define INODE_MASK_LINK       4  // nlink, anchored
+#define INODE_MASK_FILE       8  // mtime, size.
+// atime?
 
-#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME)
-//#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME|INODE_MASK_ATIME)
+#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_AUTH|INODE_MASK_LINK|INODE_MASK_FILE)
+
+#define INODE_MASK_SIZE       INODE_MASK_FILE // size, blksize, blocks
+#define INODE_MASK_MTIME      INODE_MASK_FILE // mtime
+#define INODE_MASK_ATIME      INODE_MASK_FILE // atime
+#define INODE_MASK_CTIME      (INODE_MASK_FILE|INODE_MASK_AUTH|INODE_MASK_LINK) // ctime
 
 struct inode_t {
   // base (immutable)
-  inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
-  time_t    ctime;
-
-  // other
+  inodeno_t ino;
   FileLayout layout;  // ?immutable?
-  int        nlink;   // base, 
 
-  // hard/perm (namespace permissions)
+  // affected by any inode change...
+  utime_t    ctime;   // inode change time
+
+  // perm (namespace permissions)
   mode_t     mode;
   uid_t      uid;
   gid_t      gid;
 
-  // file (data access)
-  off_t      size;
-  time_t     atime, mtime;      // maybe atime different?  "lazy"?
-  
-  int        mask;
+  // nlink
+  int        nlink;  
+  bool       anchored;          // auth only?
 
+  // file (data access)
+  off_t      size, max_size;
+  utime_t    mtime;   // file data modify time.
+  utime_t    atime;   // file data access time.
+ 
   // special stuff
+  int           mask;  // used for client stat.  hack.
   version_t     version;           // auth only
-  unsigned char hash_seed;         // only defined for dir; 0 if not hashed.
-  bool          anchored;          // auth only
   version_t     file_data_version; // auth only
 
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
-  bool is_dir() { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
-  bool is_file() { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
+  bool is_dir()     { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
+  bool is_file()    { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
 };
 
 
 
 
-// client types
-typedef int        fh_t;          // file handle 
 
 
 // dentries
@@ -272,6 +282,11 @@ typedef int        fh_t;          // file handle
 
 // -- io helpers --
 
+template<class A, class B>
+inline ostream& operator<<(ostream& out, pair<A,B> v) {
+  return out << v.first << "," << v.second;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, vector<A>& v) {
   out << "[";
@@ -280,6 +295,17 @@ inline ostream& operator<<(ostream& out, vector<A>& v) {
     out << v[i];
   }
   out << "]";
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const list<A>& ilist) {
+  for (typename list<A>::const_iterator it = ilist.begin();
+       it != ilist.end();
+       it++) {
+    if (it != ilist.begin()) out << ",";
+    out << *it;
+  }
   return out;
 }
 
@@ -320,48 +346,5 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
 }
 
 
-
-
-// -- rope helpers --
-
-// string
-inline void _rope(string& s, crope& r) 
-{
-  r.append(s.c_str(), s.length()+1);
-}
-inline void _unrope(string& s, crope& r, int& off)
-{
-  s = r.c_str() + off;
-  off += s.length() + 1;
-}
-
-// set<int>
-inline void _rope(set<int>& s, crope& r)
-{
-  int n = s.size();
-  r.append((char*)&n, sizeof(n));
-  for (set<int>::iterator it = s.begin();
-       it != s.end();
-       it++) {
-    int v = *it;
-    r.append((char*)&v, sizeof(v));
-    n--;
-  }
-  assert(n==0);
-}
-inline void _unrope(set<int>& s, crope& r, int& off) 
-{
-  s.clear();
-  int n;
-  r.copy(off, sizeof(n), (char*)&n);
-  off += sizeof(n);
-  for (int i=0; i<n; i++) {
-    int v;
-    r.copy(off, sizeof(v), (char*)&v);
-    off += sizeof(v);
-    s.insert(v);
-  }
-  assert(s.size() == (unsigned)n);
-}
 
 #endif

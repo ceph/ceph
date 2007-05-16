@@ -22,17 +22,17 @@
 
 class EImportFinish : public LogEvent {
  protected:
-  inodeno_t dirino; // imported dir
+  dirfrag_t base; // imported dir
   bool success;
 
  public:
   EImportFinish(CDir *dir, bool s) : LogEvent(EVENT_IMPORTFINISH), 
-				     dirino(dir->ino()),
+				     base(dir->dirfrag()),
 				     success(s) { }
   EImportFinish() : LogEvent(EVENT_IMPORTFINISH) { }
   
   void print(ostream& out) {
-    out << "import_finish " << dirino;
+    out << "import_finish " << base;
     if (success)
       out << " success";
     else
@@ -40,12 +40,12 @@ class EImportFinish : public LogEvent {
   }
 
   virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&dirino, sizeof(dirino));
+    bl.append((char*)&base, sizeof(base));
     bl.append((char*)&success, sizeof(success));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(dirino), (char*)&dirino);
-    off += sizeof(dirino);
+    bl.copy(off, sizeof(base), (char*)&base);
+    off += sizeof(base);
     bl.copy(off, sizeof(success), (char*)&success);
     off += sizeof(success);
   }

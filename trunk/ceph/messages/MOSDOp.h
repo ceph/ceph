@@ -75,11 +75,9 @@ public:
 
 private:
   struct {
-    long pcid;
-    
     // who's asking?
     entity_inst_t client;
-    reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+    osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
     
     // for replication
     tid_t rep_tid;
@@ -101,6 +99,7 @@ private:
     
     bool   want_ack;
     bool   want_commit;
+    bool   retry_attempt;
   } st;
 
   bufferlist data;
@@ -109,7 +108,7 @@ private:
   friend class MOSDOpReply;
 
  public:
-  const reqid_t&    get_reqid() { return st.reqid; }
+  const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
 
@@ -119,6 +118,9 @@ private:
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
+
+  bool get_retry_attempt() const { return st.retry_attempt; }
+  void set_retry_attempt(bool a) { st.retry_attempt = a; }
 
   const object_t get_oid() { return st.oid; }
   const pg_t     get_pg() { return st.pg; }
@@ -155,10 +157,6 @@ private:
   }
   size_t get_data_len() { return data.length(); }
 
-
-  // keep a pcid (procedure call id) to match up request+reply
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
          object_t oid, pg_t pg, epoch_t mapepoch, int op) :
@@ -206,14 +204,13 @@ private:
     ::_encode(data, payload);
   }
 
-  virtual char *get_type_name() { return "oop"; }
-
+  virtual char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)
-	<< " " << st.oid
-      //<< " " << this 
-	<< ")";
+	<< " " << st.oid;
+    if (st.retry_attempt) out << " RETRY";
+    out << ")";
   }
 };
 

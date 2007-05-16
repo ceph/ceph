@@ -102,6 +102,10 @@ private:
 
   void mark_all_down();
 
+  void send_latest(entity_inst_t i) {
+    send_full(i);
+  }
+
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();

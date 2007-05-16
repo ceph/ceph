@@ -25,10 +25,7 @@
 #include "msg/Messenger.h"
 #include "msg/SerialMessenger.h"
 
-#include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
-
-//#include "msgthread.h"
 
 #include "include/types.h"
 #include "include/lru.h"
@@ -47,8 +44,10 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-#define O_LAZY 01000000
 
+class MClientSession;
+class MClientRequest;
+class MClientRequestForward;
 
 class Filer;
 class Objecter;
@@ -122,18 +121,18 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  time_t    valid_until;
+  utime_t   valid_until;
 
   // about the dir (if this is one!)
   int       dir_auth;
-  set<int>    dir_contacts;
+  set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  time_t    file_wr_mtime;   // [writers] time of last write
+  utime_t   file_wr_mtime;   // [writers] time of last write
   off_t     file_wr_size;    // [writers] largest offset we've written to
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
@@ -154,6 +153,15 @@ class Inode {
   list<Cond*>       waitfor_lazy;
   list<Context*>    waitfor_no_read, waitfor_no_write;
 
+  void make_path(string& p) {
+    if (dn) {
+      if (dn->dir && dn->dir->parent_inode)
+	dn->dir->parent_inode->make_path(p);
+      p += "/";
+      p += dn->name;
+    }
+  }
+
   void get() { 
     ref++; 
     //cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
@@ -165,9 +173,9 @@ class Inode {
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
     inode(_inode),
-    valid_until(0),
+    valid_until(0, 0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    file_wr_mtime(0), file_wr_size(0), 
+    file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), dir(0), dn(0), symlink(0),
     fc(_oc, _inode),
@@ -317,11 +325,47 @@ class Client : public Dispatcher {
   int whoami;
   MonMap *monmap;
   
-  // mds fake RPC
+  // mds sessions
+  set<int> mds_sessions;
+  map<int, list<Cond*> > waiting_for_session;
+
+  void handle_client_session(MClientSession *m);
+  void send_reconnect(int mds);
+
+  // mds requests
+  struct MetaRequest {
+    tid_t tid;
+    MClientRequest *request;    
+    bufferlist request_payload;  // in case i have to retry
+
+    bool     idempotent;         // is request idempotent?
+    set<int> mds;                // who i am asking
+    int      resend_mds;         // someone wants you to (re)send the request here
+    int      num_fwd;            // # of times i've been forwarded
+    int      retry_attempt;
+
+    MClientReply *reply;         // the reply
+
+    Cond  *caller_cond;          // who to take up
+    Cond  *dispatch_cond;        // who to kick back
+
+    MetaRequest(MClientRequest *req, tid_t t) : 
+      tid(t), request(req), 
+      idempotent(false), resend_mds(-1), num_fwd(0), retry_attempt(0),
+      reply(0), 
+      caller_cond(0), dispatch_cond(0) { }
+  };
   tid_t last_tid;
-  map<tid_t, Cond*>                mds_rpc_cond;
-  map<tid_t, class MClientReply*>  mds_rpc_reply;
-  map<tid_t, Cond*>                mds_rpc_dispatch_cond;
+  map<tid_t, MetaRequest*> mds_requests;
+  set<int>                 failed_mds;
+  
+  MClientReply *make_request(MClientRequest *req, int use_auth=-1);
+  int choose_target_mds(MClientRequest *req);
+  void send_request(MetaRequest *request, int mds);
+  void kick_requests(int mds);
+  void handle_client_request_forward(MClientRequestForward *reply);
+  void handle_client_reply(MClientReply *reply);
+
 
   // cluster descriptors
   MDSMap *mdsmap; 
@@ -412,6 +456,7 @@ protected:
     
     // link to dir
     dn->dir = dir;
+    //cout << "link dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << in->inode.ino << endl;
     dir->dentries[dn->name] = dn;
 
     // link to inode
@@ -430,7 +475,7 @@ protected:
     dn->inode = 0;
     in->dn = 0;
     put_inode(in);
-    
+        
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
     if (dn->dir->is_empty()) 
@@ -450,6 +495,8 @@ protected:
     strcpy((char*)dn->name, name.c_str());
     dir->dentries[dn->name] = dn;
     */
+    //cout << "relink dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << dn->inode->inode.ino << endl;
+
     dir->dentries[name] = dn;
 
     // unlink from old dir
@@ -476,11 +523,6 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
 
-  // make blocking mds request
-  MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
-  MClientReply* sendrecv(MClientRequest *req, int mds);
-  void handle_client_reply(MClientReply *reply);
-
   void fill_stat(inode_t& inode, struct stat *st);
   void fill_statlite(inode_t& inode, struct statlite *st);
 
@@ -501,8 +543,7 @@ protected:
   // messaging
   void dispatch(Message *m);
 
-  void handle_mount_ack(class MClientMountAck*);
-  void handle_unmount_ack(Message*);
+  void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 
   // file caps
@@ -571,7 +612,7 @@ protected:
   
   // file ops
   int mknod(const char *path, mode_t mode);
-  int open(const char *path, int mode);
+  int open(const char *path, int flags, mode_t mode=0);
   int close(fh_t fh);
   off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);

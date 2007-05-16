@@ -137,8 +137,8 @@ private:
 
     void close();
     void join() {
-      writer_thread.join();
-      reader_thread.join();
+      if (writer_thread.is_started()) writer_thread.join();
+      if (reader_thread.is_started()) reader_thread.join();
     }
 
     void send(Message *m) {
@@ -152,6 +152,10 @@ private:
       q.splice(q.end(), ls);
       cond.Signal();
       lock.Unlock();
+    }
+
+    void force_close() {
+      ::close(sd);
     }
   };
 

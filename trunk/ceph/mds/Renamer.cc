@@ -12,7 +12,6 @@
  */
 
 #include "MDCache.h"
-#include "MDStore.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "MDS.h"
@@ -95,6 +94,13 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
   dout(7) << "fix_renamed_dir on " << *in << endl;
   dout(7) << "fix_renamed_dir on " << *in->dir << endl;
 
+
+  assert(0); // rewrite .
+
+  // 1- fix subtree tree.
+  // 2- adjust subtree auth.
+
+  /*
   if (in->dir->is_auth()) {
     // dir ours
     dout(7) << "dir is auth" << endl;
@@ -102,36 +108,16 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
     if (in->is_auth()) {
       // inode now ours
-
       if (authchanged) {
         // inode _was_ replica, now ours
-        dout(7) << "inode was replica, now ours.  removing from import list." << endl;
-        assert(in->dir->is_import());
-        
-        // not import anymore!
-        cache->imports.erase(in->dir);
-        in->dir->state_clear(CDIR_STATE_IMPORT);
-        in->dir->put(CDir::PIN_IMPORT);
-
-        in->dir->set_dir_auth( CDIR_AUTH_PARENT );
-        dout(7) << " fixing dir_auth to be " << in->dir->get_dir_auth() << endl;
-
-        // move my nested imports to in's containing import
-        CDir *con = cache->get_auth_container(in->dir);
-        assert(con);
-        for (set<CDir*>::iterator p = cache->nested_exports[in->dir].begin();
-             p != cache->nested_exports[in->dir].end();
-             p++) {
-          dout(7) << "moving nested export under new container " << *con << endl;
-          cache->nested_exports[con].insert(*p);
-        }
-        cache->nested_exports.erase(in->dir);
-        
+        dout(7) << "inode was replica, now ours." << endl;
+	cache->adjust_subtree_auth(dir, mds->get_nodeid());
       } else {
         // inode was ours, still ours.
         dout(7) << "inode was ours, still ours." << endl;
+	
         assert(!in->dir->is_import());
-        assert(in->dir->get_dir_auth() == CDIR_AUTH_PARENT);
+        assert(in->dir->get_dir_auth().first == CDIR_AUTH_PARENT);
         
         // move any exports nested beneath me?
         CDir *newcon = cache->get_auth_container(in->dir);
@@ -161,7 +147,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // i am now an import
         cache->imports.insert(in->dir);
-        in->dir->state_set(CDIR_STATE_IMPORT);
+        in->dir->state_set(CDir::STATE_IMPORT);
         in->dir->get(CDir::PIN_IMPORT);
 
         in->dir->set_dir_auth( mds->get_nodeid() );
@@ -189,7 +175,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         assert(in->dir->is_import());
 
         // verify dir_auth
-        assert(in->dir->get_dir_auth() == mds->get_nodeid()); // me, because i'm auth for dir.
+        assert(in->dir->get_dir_auth().first == mds->get_nodeid()); // me, because i'm auth for dir.
         assert(in->authority() != in->dir->get_dir_auth());   // inode not me.
       }
 
@@ -210,7 +196,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         
         // now export
         cache->exports.insert(in->dir);
-        in->dir->state_set(CDIR_STATE_EXPORT);
+        in->dir->state_set(CDir::STATE_EXPORT);
         in->dir->get(CDir::PIN_EXPORT);
         
         assert(dir_auth >= 0);  // better be defined
@@ -227,7 +213,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // sanity
         assert(in->dir->is_export());
-        assert(in->dir->get_dir_auth() >= 0);              
+        assert(in->dir->get_dir_auth().first >= 0);              
         assert(in->dir->get_dir_auth() != in->authority());
 
         // moved under new import?
@@ -251,7 +237,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // remove from export list
         cache->exports.erase(in->dir);
-        in->dir->state_clear(CDIR_STATE_EXPORT);
+        in->dir->state_clear(CDir::STATE_EXPORT);
         in->dir->put(CDir::PIN_EXPORT);
         
         CDir *oldcon = cache->get_auth_container(srcdir);
@@ -264,7 +250,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
           in->dir->set_dir_auth( CDIR_AUTH_PARENT );
           dout(7) << "simplified dir_auth to -1, inode auth is (also) " << in->authority() << endl;
         } else {
-          assert(in->dir->get_dir_auth() >= 0);    // someone else's export,
+          assert(in->dir->get_dir_auth().first >= 0);    // someone else's export,
         }
 
       } else {
@@ -272,7 +258,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         dout(7) << "inode was replica, still replica.  do nothing." << endl;
         
         // fix dir_auth?
-        if (in->authority() == dir_auth)
+        if (in->authority().first == dir_auth)
           in->dir->set_dir_auth( CDIR_AUTH_PARENT );
         else
           in->dir->set_dir_auth( dir_auth );
@@ -284,8 +270,8 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
       assert(!in->dir->is_export());
     }  
   }
-
-  cache->show_imports();
+  */
+  cache->show_subtrees();
 }
 
 /*
@@ -346,8 +332,8 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
 
 
   // determine the players
-  int srcauth = srcdir->dentry_authority(srcdn->name);
-  int destauth = destdir->dentry_authority(destname);
+  int srcauth = srcdir->dentry_authority(srcdn->name).first;
+  int destauth = destdir->dentry_authority(destname).first;
 
 
   // FOREIGN rename?
@@ -372,7 +358,7 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
                                        srcauth);  // tell dest who src is (maybe even me)
       mds->send_message_mds(m, destauth, MDS_PORT_CACHE);
       
-      cache->show_imports();
+      cache->show_subtrees();
       
     }
     
@@ -394,7 +380,7 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
       assert(0);
 
     // set waiter on the inode (is this the best place?)
-    in->add_waiter(CINODE_WAIT_RENAMEACK, 
+    in->add_waiter(CInode::WAIT_RENAMEACK, 
                    new C_MDC_RenameAck(this, 
                                        srcdir, in, onfinish));
     return;
@@ -437,11 +423,11 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
     file_rename_notify(in, srcdir, srcname, destdir, destname, notify, mds->get_nodeid());
 
     // wait for MRenameNotifyAck's
-    in->add_waiter(CINODE_WAIT_RENAMENOTIFYACK,
+    in->add_waiter(CInode::WAIT_RENAMENOTIFYACK,
                    new C_MDC_RenameNotifyAck(this, in, mds->get_nodeid()));  // i am initiator
 
     // wait for finish
-    in->add_waiter(CINODE_WAIT_RENAMEACK,
+    in->add_waiter(CInode::WAIT_RENAMEACK,
                    new C_MDC_RenameAck(this, srcdir, in, onfinish));
   } else {
     // sweet, no notify necessary, we're done!
@@ -457,7 +443,7 @@ void Renamer::handle_rename_ack(MRenameAck *m)
   dout(7) << "handle_rename_ack on " << *in << endl;
 
   // all done!
-  in->finish_waiting(CINODE_WAIT_RENAMEACK);
+  in->finish_waiting(CInode::WAIT_RENAMEACK);
 
   delete m;
 }
@@ -467,7 +453,7 @@ void Renamer::file_rename_finish(CDir *srcdir, CInode *in, Context *c)
   dout(10) << "file_rename_finish on " << *in << endl;
 
   // did i empty out an imported dir?  FIXME this check should go somewhere else???
-  if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
+  if (srcdir->is_auth() && !srcdir->inode->is_auth() && srcdir->get_size() == 0) 
     cache->migrator->export_empty_import(srcdir);
 
   // finish our caller
@@ -516,7 +502,7 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
   assert(in);
   assert(in->is_auth());
 
-  if (in->is_dir()) cache->show_imports();
+  if (in->is_dir()) cache->show_subtrees();
 
   // encode and export inode state
   bufferlist inode_state;
@@ -560,8 +546,8 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
   srcdn->_mark_dirty(); // fixme
 
   // proxy!
-  in->state_set(CInode::STATE_PROXY);
-  in->get(CInode::PIN_PROXY);
+  //in->state_set(CInode::STATE_PROXY);
+  //in->get(CInode::PIN_PROXY);
   
   // generate notify list (everybody but src|dst) and send warnings
   set<int> notify;
@@ -574,7 +560,7 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
 
 
   // wait for MRenameNotifyAck's
-  in->add_waiter(CINODE_WAIT_RENAMENOTIFYACK,
+  in->add_waiter(CInode::WAIT_RENAMENOTIFYACK,
                  new C_MDC_RenameNotifyAck(this, in, initiator));
 }
 
@@ -605,7 +591,7 @@ void Renamer::handle_rename_notify_ack(MRenameNotifyAck *m)
   if (rename_waiting_for_ack[in->ino()].empty()) {
     // last one!
 	rename_waiting_for_ack.erase(in->ino());
-    in->finish_waiting(CINODE_WAIT_RENAMENOTIFYACK, 0);
+    in->finish_waiting(CInode::WAIT_RENAMENOTIFYACK, 0);
   } else {
     dout(7) << "still waiting for " << rename_waiting_for_ack[in->ino()] << endl;
   }
@@ -617,17 +603,17 @@ void Renamer::file_rename_ack(CInode *in, int initiator)
   // we got all our MNotifyAck's.
 
   // was i proxy (if not, it's cuz this was a local rename)
-  if (in->state_test(CInode::STATE_PROXY)) {
+  /*if (in->state_test(CInode::STATE_PROXY)) {
     dout(10) << "file_rename_ack clearing proxy bit on " << *in << endl;
     in->state_clear(CInode::STATE_PROXY);
     in->put(CInode::PIN_PROXY);
-  }
+    }*/
 
   // done!
   if (initiator == mds->get_nodeid()) {
     // it's me, finish
     dout(7) << "file_rename_ack i am initiator, finishing" << endl;
-    in->finish_waiting(CINODE_WAIT_RENAMEACK);
+    in->finish_waiting(CInode::WAIT_RENAMEACK);
   } else {
     // send ack
     dout(7) << "file_rename_ack sending MRenameAck to initiator " << initiator << endl;
@@ -665,8 +651,8 @@ void Renamer::handle_rename_prep(MRenamePrep *m)
   if (srcin->is_dir()) {
     if (!srcin->dir) {
       dout(7) << "handle_rename_prep need to open dir" << endl;
-      cache->open_remote_dir(srcin,
-							 new C_MDS_RetryMessage(mds,m));
+      cache->open_remote_dir(srcin, frag_t(), // FIXME dirfrag
+			     new C_MDS_RetryMessage(mds,m));
       return;
     }
 
@@ -714,7 +700,7 @@ void Renamer::handle_rename(MRename *m)
 
   // note old dir auth
   int old_dir_auth = -1;
-  if (srcdn->inode->dir) old_dir_auth = srcdn->inode->dir->authority();
+  if (srcdn->inode->dir) old_dir_auth = srcdn->inode->dir->authority().first;
     
   // rename replica into position
   if (destdn->inode && destdn->inode->is_dirty())
@@ -845,7 +831,7 @@ void Renamer::handle_rename_notify(MRenameNotify *m)
     CInode *in = srcdn->inode;
 
     int old_dir_auth = -1;
-    if (in && in->dir) old_dir_auth = in->dir->authority();
+    if (in && in->dir) old_dir_auth = in->dir->authority().first;
 
     if (!destdn) {
       destdn = destdir->add_dentry(m->get_destname());  // create null dentry
@@ -873,8 +859,8 @@ void Renamer::handle_rename_notify(MRenameNotify *m)
 
     if (destdiri) {
       dout(7) << "have destdiri, opening dir " << *destdiri << endl;
-      cache->open_remote_dir(destdiri,
-							 new C_MDS_RetryMessage(mds,m));
+      cache->open_remote_dir(destdiri, frag_t(), // FIXME dirfrag
+			     new C_MDS_RetryMessage(mds,m));
     } else {
       filepath destdirpath = m->get_destdirpath();
       dout(7) << "don't have destdiri even, doing traverse+discover on " << destdirpath << endl;

@@ -28,36 +28,38 @@ using namespace std;
 class MDSMap {
  public:
   // mds states
-  static const int STATE_DNE =      0;    // down, never existed.
-  static const int STATE_OUT =      1;    // down, once existed, but no imports, empty log.
-  static const int STATE_FAILED =   2;    // down, holds (er, held) metadata; needs to be recovered.
+  static const int STATE_DNE =       0;  // down, never existed.
+  static const int STATE_OUT =       1;  // down, once existed, but no subtrees, empty log.
+  static const int STATE_FAILED =    2;  // down, active subtrees; needs to be recovered.
 
-  static const int STATE_STANDBY =  3;    // up, but inactive.  waiting for assignment by monitor.
-  static const int STATE_CREATING = 4;    // up, creating MDS instance (new journal, idalloc..)
-  static const int STATE_STARTING = 5;    // up, starting prior out MDS instance.
-  static const int STATE_REPLAY   = 6;    // up, scanning journal, recoverying any shared state
-  static const int STATE_RESOLVE  = 7;    // up, disambiguating partial distributed operations (import/export, ...rename?)
-  static const int STATE_REJOIN   = 8;    // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =   9;    // up, active
-  static const int STATE_STOPPING = 10;    // up, exporting metadata (-> standby or out)
-  static const int STATE_STOPPED  = 11;   // up, finished stopping.  like standby, but not avail to takeover.
+  static const int STATE_STANDBY  =  3;  // up, but inactive.  waiting for assignment by monitor.
+  static const int STATE_CREATING  = 4;  // up, creating MDS instance (new journal, idalloc..)
+  static const int STATE_STARTING  = 5;  // up, starting prior out MDS instance.
+  static const int STATE_REPLAY    = 6;  // up, scanning journal, recoverying any shared state
+  static const int STATE_RESOLVE   = 7;  // up, disambiguating partial distributed operations (import/export, ...rename?)
+  static const int STATE_RECONNECT = 8;  // up, reconnect to clients
+  static const int STATE_REJOIN    = 9;  // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =    10; // up, active
+  static const int STATE_STOPPING  = 11; // up, exporting metadata (-> standby or out)
+  static const int STATE_STOPPED   = 12; // up, finished stopping.  like standby, but not avail to takeover.
   
   static const char *get_state_name(int s) {
     switch (s) {
       // down
-    case STATE_DNE:      return "down:dne";
-    case STATE_OUT:      return "down:out";
-    case STATE_FAILED:   return "down:failed";
+    case STATE_DNE:       return "down:dne";
+    case STATE_OUT:       return "down:out";
+    case STATE_FAILED:    return "down:failed";
       // up
-    case STATE_STANDBY:  return "up:standby";
-    case STATE_CREATING: return "up:creating";
-    case STATE_STARTING: return "up:starting";
-    case STATE_REPLAY:   return "up:replay";
-    case STATE_RESOLVE:  return "up:resolve";
-    case STATE_REJOIN:   return "up:rejoin";
-    case STATE_ACTIVE:   return "up:active";
-    case STATE_STOPPING: return "up:stopping";
-    case STATE_STOPPED:  return "up:stopped";
+    case STATE_STANDBY:   return "up:standby";
+    case STATE_CREATING:  return "up:creating";
+    case STATE_STARTING:  return "up:starting";
+    case STATE_REPLAY:    return "up:replay";
+    case STATE_RESOLVE:   return "up:resolve";
+    case STATE_RECONNECT: return "up:reconnect";
+    case STATE_REJOIN:    return "up:rejoin";
+    case STATE_ACTIVE:    return "up:active";
+    case STATE_STOPPING:  return "up:stopping";
+    case STATE_STOPPED:   return "up:stopped";
     default: assert(0);
     }
     return 0;
@@ -65,7 +67,8 @@ class MDSMap {
 
  protected:
   epoch_t epoch;
-  utime_t ctime;
+  utime_t created;
+  epoch_t same_inst_since;
 
   int anchortable;   // which MDS has anchortable (fixme someday)
   int root;          // which MDS has root directory
@@ -79,12 +82,13 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), anchortable(0), root(0) {}
+  MDSMap() : epoch(0), same_inst_since(0), anchortable(0), root(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  const utime_t& get_ctime() const { return ctime; }
+  const utime_t& get_create() const { return created; }
+  epoch_t get_same_inst_since() const { return same_inst_since; }
 
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }
@@ -98,6 +102,9 @@ class MDSMap {
 	 p++)
       if (p->second == state) ++n;
     return n;
+  }
+  int get_num_in_mds() {
+    return get_num_up_mds() - get_num_mds(STATE_STANDBY) - get_num_mds(STATE_STOPPED);
   }
   int get_num_up_mds() {
     int n = 0;
@@ -119,14 +126,12 @@ class MDSMap {
 
   // sets
   void get_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       s.insert(p->first);
   }
   void get_up_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
@@ -134,7 +139,6 @@ class MDSMap {
 	s.insert(p->first);
   }
   void get_mds_set(set<int>& s, int state) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
@@ -148,13 +152,11 @@ class MDSMap {
     get_mds_set(s, MDSMap::STATE_FAILED);
   }
   void get_recovery_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (is_failed(p->first) || 
-	  is_replay(p->first) || is_resolve(p->first) || is_rejoin(p->first) ||
-	  is_active(p->first) || is_stopping(p->first))
+	  (p->second >= STATE_REPLAY && p->second <= STATE_STOPPING))
 	s.insert(p->first);
   }
 
@@ -172,9 +174,11 @@ class MDSMap {
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
   bool is_replay(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REPLAY; }
   bool is_resolve(int m)   { return mds_state.count(m) && mds_state[m] == STATE_RESOLVE; }
+  bool is_reconnect(int m) { return mds_state.count(m) && mds_state[m] == STATE_RECONNECT; }
   bool is_rejoin(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REJOIN; }
   bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
   bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
+  bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
 
   bool has_created(int m) { return mds_created.count(m); }
@@ -183,6 +187,7 @@ class MDSMap {
   bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     return get_num_mds(STATE_REPLAY) + 
       get_num_mds(STATE_RESOLVE) + 
+      get_num_mds(STATE_RECONNECT) + 
       get_num_mds(STATE_REJOIN) + 
       get_num_mds(STATE_FAILED);
   }
@@ -192,6 +197,7 @@ class MDSMap {
   bool is_rejoining() {  
     // nodes are rejoining cache state
     return get_num_mds(STATE_REJOIN) > 0 &&
+      get_num_mds(STATE_RECONNECT) == 0 &&
       get_num_mds(STATE_RESOLVE) == 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_FAILED) == 0;
@@ -252,7 +258,8 @@ class MDSMap {
   // serialize, unserialize
   void encode(bufferlist& blist) {
     blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&ctime, sizeof(ctime));
+    blist.append((char*)&created, sizeof(created));
+    blist.append((char*)&same_inst_since, sizeof(same_inst_since));
     blist.append((char*)&anchortable, sizeof(anchortable));
     blist.append((char*)&root, sizeof(root));
     
@@ -266,8 +273,10 @@ class MDSMap {
     int off = 0;
     blist.copy(off, sizeof(epoch), (char*)&epoch);
     off += sizeof(epoch);
-    blist.copy(off, sizeof(ctime), (char*)&ctime);
-    off += sizeof(ctime);
+    blist.copy(off, sizeof(created), (char*)&created);
+    off += sizeof(created);
+    blist.copy(off, sizeof(same_inst_since), (char*)&same_inst_since);
+    off += sizeof(same_inst_since);
     blist.copy(off, sizeof(anchortable), (char*)&anchortable);
     off += sizeof(anchortable);
     blist.copy(off, sizeof(root), (char*)&root);

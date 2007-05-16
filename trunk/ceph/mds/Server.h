@@ -17,6 +17,8 @@
 #include "MDS.h"
 
 class LogEvent;
+class C_MDS_rename_local_finish;
+class MDRequest;
 
 class Server {
   MDS *mds;
@@ -24,132 +26,117 @@ class Server {
   MDLog *mdlog;
   Messenger *messenger;
 
-  __uint64_t stat_ops;
-
-
 public:
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger),
-    stat_ops(0) {
+    messenger(mds->messenger) {
   }
 
+  // message handler
   void dispatch(Message *m);
 
-  // generic request helpers
-  void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
-  void reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei);
+
+  // -- sessions and recovery --
+  utime_t  reconnect_start;
+  set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
+  set<CInode*> reconnected_open_files;
   
-  void submit_update(MClientRequest *req, CInode *wrlockedi,
-		     LogEvent *event,
-		     Context *oncommit);
-
-  void commit_request(MClientRequest *req,
-                      MClientReply *reply,
-                      CInode *tracei,
-                      LogEvent *event,
-                      LogEvent *event2 = 0);
+  void handle_client_session(class MClientSession *m);
+  void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void reconnect_clients();
+  void handle_client_reconnect(class MClientReconnect *m);
+  void client_reconnect_failure(int from);
+  void reconnect_finish();
+  void terminate_sessions();
   
-  bool try_open_dir(CInode *in, MClientRequest *req);
-
-
-  // clients
-  void handle_client_mount(class MClientMount *m);
-  void handle_client_unmount(Message *m);
-
+  // -- requests --
   void handle_client_request(MClientRequest *m);
-  void handle_client_request_2(MClientRequest *req, 
-                               vector<CDentry*>& trace,
-                               int r);
-  
-  // fs ops
-  void handle_client_fstat(MClientRequest *req);
 
-  // requests
-  void dispatch_request(Message *m, CInode *ref);
+  void dispatch_request(MDRequest *mdr);
+  void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0);
+  void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
 
-  // inode request *req, CInode *ref;
-  void handle_client_stat(MClientRequest *req, CInode *ref);
-  void handle_client_utime(MClientRequest *req, CInode *ref);
-  void handle_client_inode_soft_update_2(MClientRequest *req,
-                                         MClientReply *reply,
-                                         CInode *ref);
-  void handle_client_chmod(MClientRequest *req, CInode *ref);
-  void handle_client_chown(MClientRequest *req, CInode *ref);
-  void handle_client_inode_hard_update_2(MClientRequest *req,
-                                         MClientReply *reply,
-                                         CInode *ref);
+  // some helpers
+  CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
+  CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
+  CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
+  CInode* prepare_new_inode(MClientRequest *req, CDir *dir);
 
-  // readdir
-  void handle_client_readdir(MClientRequest *req, CInode *ref);
-  int encode_dir_contents(CDir *dir, 
-                          list<class InodeStat*>& inls,
-                          list<string>& dnls);
-  void handle_hash_readdir(MHashReaddir *m);
-  void handle_hash_readdir_reply(MHashReaddirReply *m);
-  void finish_hash_readdir(MClientRequest *req, CDir *dir); 
+  CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth);
+  CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
+
+  CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
+  //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
+
+  // requests on existing inodes.
+  void handle_client_stat(MDRequest *mdr);
+  void handle_client_utime(MDRequest *mdr);
+  void handle_client_chmod(MDRequest *mdr);
+  void handle_client_chown(MDRequest *mdr);
+  void handle_client_readdir(MDRequest *mdr);
+  int encode_dir_contents(CDir *dir, list<class InodeStat*>& inls, list<string>& dnls);
+  void handle_client_truncate(MDRequest *mdr);
+  void handle_client_fsync(MDRequest *mdr);
+
+  // open
+  void handle_client_open(MDRequest *mdr);
+  void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
+  void handle_client_opent(MDRequest *mdr);  // O_TRUNC variant.
+  void _do_open(MDRequest *mdr, CInode *ref);
+
+  set<CInode*> journal_open_queue; // to be journal
+  list<Context*> journal_open_waiters;
+  void queue_journal_open(CInode *in);
+  void add_journal_open_waiter(Context *c) {
+    journal_open_waiters.push_back(c);
+  }
+  void maybe_journal_opens() {
+    if (journal_open_queue.size() >= (unsigned)g_conf.mds_log_eopen_size)
+      journal_opens();
+  }
+  void journal_opens();
 
   // namespace changes
-  void handle_client_mknod(MClientRequest *req, CInode *ref);
-  void handle_client_link(MClientRequest *req, CInode *ref);
-  void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
-  void handle_client_link_finish(MClientRequest *req, CInode *ref,
-                                 CDentry *dn, CInode *targeti);
+  void handle_client_mknod(MDRequest *mdr);
+  void handle_client_mkdir(MDRequest *mdr);
+  void handle_client_symlink(MDRequest *mdr);
 
-  void handle_client_unlink(MClientRequest *req, CInode *ref);
-  void handle_client_rename(MClientRequest *req, CInode *ref);
-  void handle_client_rename_2(MClientRequest *req,
-                              CInode *ref,
-                              CInode *srcdiri,
-                              CDir *srcdir,
+  // link
+  void handle_client_link(MDRequest *mdr);
+  void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
+  void _link_local_finish(MDRequest *mdr,
+			  CDentry *dn, CInode *targeti,
+			  version_t, utime_t, version_t);
+  void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
+
+  // unlink
+  void handle_client_unlink(MDRequest *mdr);
+  bool _verify_rmdir(MDRequest *mdr, CInode *rmdiri);
+  void _unlink_local(MDRequest *mdr, CDentry *dn);
+  void _unlink_local_finish(MDRequest *mdr, 
+			    CDentry *dn, CDentry *straydn,
+			    version_t, utime_t, version_t);    
+  void _unlink_remote(MDRequest *mdr, CDentry *dn);
+
+  // rename
+  bool _rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *mdr);
+  void handle_client_rename(MDRequest *mdr);
+  void handle_client_rename_2(MDRequest *mdr,
                               CDentry *srcdn,
                               filepath& destpath,
                               vector<CDentry*>& trace,
                               int r);
-  void handle_client_rename_local(MClientRequest *req, CInode *ref,
-                                  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-                                  string& destpath, CDir *destdir, CDentry *destdn, string& name);
-
-  void handle_client_mkdir(MClientRequest *req, CInode *ref);
-  void handle_client_rmdir(MClientRequest *req, CInode *ref);
-  void handle_client_symlink(MClientRequest *req, CInode *ref);
-
-  // file
-  void handle_client_open(MClientRequest *req, CInode *ref);
-  void handle_client_openc(MClientRequest *req, CInode *ref);
-  void handle_client_release(MClientRequest *req, CInode *in);  
-  void handle_client_truncate(MClientRequest *req, CInode *in);
-  void handle_client_fsync(MClientRequest *req, CInode *in);
-
-
-  // some helpers
-  CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
-
-  CDir *validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
-  int prepare_mknod(MClientRequest *req, CInode *diri, 
-		    CInode **pin, CDentry **pdn, 
-		    bool okexist=false);
-
-
-
+  void _rename_local(MDRequest *mdr, CDentry *srcdn, CDentry *destdn);
+  void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
+				version_t atid1, version_t atid2);
+  void _rename_local_finish(MDRequest *mdr,
+			    CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
+			    utime_t ictime,
+			    version_t atid1, version_t atid2);
 };
 
-class C_MDS_RetryRequest : public Context {
-  MDS *mds;
-  Message *req;   // MClientRequest or MLock
-  CInode *ref;
- public:
-  C_MDS_RetryRequest(MDS *mds, Message *req, CInode *ref) {
-    assert(ref);
-    this->mds = mds;
-    this->req = req;
-    this->ref = ref;
-  }
-  virtual void finish(int r) {
-    mds->server->dispatch_request(req, ref);
-  }
-};
 
 
 

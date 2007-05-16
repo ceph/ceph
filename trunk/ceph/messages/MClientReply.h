@@ -17,6 +17,8 @@
 
 #include "include/types.h"
 
+#include "MClientRequest.h"
+
 #include "msg/Message.h"
 #include "mds/CInode.h"
 #include "mds/CDir.h"
@@ -36,12 +38,12 @@ class CInode;
  *  int result - error code, or fh if it was open
  *
  * for most requests:
- *  trace is a vector of c_inoe_info's tracing from root to the file/dir/whatever
+ *  trace is a vector of InodeStat's tracing from root to the file/dir/whatever
  *  the operation referred to, so that the client can update it's info about what
  *  metadata lives on what MDS.
  *
  * for readdir replies:
- *  dir_contents is a vector c_inode_info*'s.  
+ *  dir_contents is a vector of InodeStat*'s.  
  * 
  * that's mostly it, i think!
  *
@@ -52,13 +54,12 @@ class InodeStat {
  public:
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
-
+  fragtree_t dirfragtree;
 
   // mds distribution hints
-  int      dir_auth;
-  bool     hashed, replicated;
-  bool     spec_defined;
-  set<int> dist;    // where am i replicated?
+  map<frag_t,int>       dirfrag_auth;
+  map<frag_t,set<int> > dirfrag_dist;
+  set<frag_t>           dirfrag_rep;
 
  public:
   InodeStat() {}
@@ -67,77 +68,65 @@ class InodeStat {
   {
     // inode.mask
     inode.mask = INODE_MASK_BASE;
-    if (in->filelock.can_read(in->is_auth()))
-      inode.mask |= INODE_MASK_PERM;
-    if (in->hardlock.can_read(in->is_auth()))
-      inode.mask |= INODE_MASK_SIZE | INODE_MASK_MTIME;      // fixme when we separate this out.
+    if (in->authlock.can_rdlock(0)) inode.mask |= INODE_MASK_AUTH;
+    if (in->linklock.can_rdlock(0)) inode.mask |= INODE_MASK_LINK;
+    if (in->filelock.can_rdlock(0)) inode.mask |= INODE_MASK_FILE;
     
     // symlink content?
     if (in->is_symlink()) 
       symlink = in->symlink;
+    
+    // dirfragtree
+    dirfragtree = in->dirfragtree;
       
-    // replicated where?
-    if (in->dir && in->dir->is_auth()) {
-      spec_defined = true;
-      in->dir->get_dist_spec(this->dist, whoami);
-    } else 
-      spec_defined = false;
-
-    if (in->dir)
-      dir_auth = in->dir->get_dir_auth();
-    else
-      dir_auth = -1;
-
-    // dir info
-    hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
-    replicated = (in->dir && in->dir->is_rep());
+    // dirfrag info
+    list<CDir*> ls;
+    in->get_dirfrags(ls);
+    for (list<CDir*>::iterator p = ls.begin();
+	 p != ls.end();
+	 ++p) {
+      CDir *dir = *p;
+      dirfrag_auth[dir->dirfrag().frag] = dir->get_dir_auth().first;
+      if (dir->is_auth()) 
+	dir->get_dist_spec(dirfrag_dist[dir->dirfrag().frag], whoami);
+      if (dir->is_rep())
+	dirfrag_rep.insert(dir->dirfrag().frag);
+    }
   }
   
   void _encode(bufferlist &bl) {
-    bl.append((char*)&inode, sizeof(inode));
-    bl.append((char*)&spec_defined, sizeof(spec_defined));
-    bl.append((char*)&dir_auth, sizeof(dir_auth));
-    bl.append((char*)&hashed, sizeof(hashed));
-    bl.append((char*)&replicated, sizeof(replicated));
-
+    ::_encode(inode, bl);
+    ::_encode(dirfrag_auth, bl);
+    ::_encode(dirfrag_dist, bl);
+    ::_encode(dirfrag_rep, bl);
     ::_encode(symlink, bl);
-    ::_encode(dist, bl);    // distn
+    dirfragtree._encode(bl);
   }
   
   void _decode(bufferlist &bl, int& off) {
-    bl.copy(off, sizeof(inode), (char*)&inode);
-    off += sizeof(inode);
-    bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);
-    off += sizeof(spec_defined);
-    bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
-    off += sizeof(dir_auth);
-    bl.copy(off, sizeof(hashed), (char*)&hashed);
-    off += sizeof(hashed);
-    bl.copy(off, sizeof(replicated), (char*)&replicated);
-    off += sizeof(replicated);
-
+    ::_decode(inode, bl, off);
+    ::_decode(dirfrag_auth, bl, off);
+    ::_decode(dirfrag_dist, bl, off);
+    ::_decode(dirfrag_rep, bl, off);
     ::_decode(symlink, bl, off);
-    ::_decode(dist, bl, off);
+    dirfragtree._decode(bl, off);
   }
 };
 
 
-typedef struct {
-  long pcid;
-  long tid;
-  int op;
-  int result;  // error code
-  unsigned char file_caps;  // for open
-  long          file_caps_seq;
-  __uint64_t file_data_version;  // for client buffercache consistency
-
-  int _num_trace_in;
-  int _dir_size;
-} MClientReply_st;
-
 class MClientReply : public Message {
   // reply data
-  MClientReply_st st;
+  struct {
+    long tid;
+    int op;
+    int result;  // error code
+    unsigned char file_caps;  // for open
+    long          file_caps_seq;
+    __uint64_t file_data_version;  // for client buffercache consistency
+    
+    int _num_trace_in;
+    int _dir_size;
+  } st;
  
   string path;
   list<InodeStat*> trace_in;
@@ -147,9 +136,6 @@ class MClientReply : public Message {
   list<string>     dir_dn;
 
  public:
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
-
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
 
@@ -178,7 +164,6 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.pcid = req->get_pcid();    // match up procedure call id!!!
     this->st.tid = req->get_tid();
     this->st.op = req->get_op();
     this->path = req->get_path();
@@ -197,7 +182,11 @@ class MClientReply : public Message {
       delete *it;
   }
   virtual char *get_type_name() { return "creply"; }
-
+  void print(ostream& o) {
+    o << "creply(" << env.dst.name << "." << st.tid;
+    if (st.result) o << " = " << st.result;
+    o << ")";
+  }
 
   // serialization
   virtual void decode_payload() {
