@@ -134,9 +134,14 @@ void Elector::handle_propose(MMonElectionPropose *m)
   int from = m->get_source().num();
 
   if (from > whoami) {
-    // wait, i should win!
-    if (!electing_me)
-      start();
+    if (leader_acked >= 0 &&  // we already acked someone
+	leader_acked < from) {  // who would win over them
+      dout(5) << "no, we already acked " << leader_acked << endl;
+    } else {
+      // wait, i should win!
+      if (!electing_me)
+	start();
+    }
   } else {
     // they would win over me
     if (leader_acked < 0 ||      // haven't acked anyone yet, or
