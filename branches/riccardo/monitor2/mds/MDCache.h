@@ -28,8 +28,7 @@
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
-#include "Lock.h"
-
+#include "include/Context.h"
 
 class MDS;
 class Migrator;
@@ -49,7 +48,7 @@ class MDirUpdate;
 class MDentryUnlink;
 class MLock;
 
-
+class Message;
 class MClientRequest;
 
 
@@ -64,22 +63,83 @@ class MClientRequest;
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
-typedef struct {
-  CInode *ref;                                // reference inode
-  set< CInode* >            request_pins;
-  set< CDir* >              request_dir_pins;
-  map< CDentry*, vector<CDentry*> > traces;   // path pins held
-  set< CDentry* >           xlocks;           // xlocks (local)
-  set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
-} active_request_t;
+struct MDRequest {
+  metareqid_t reqid;
+  Message *request;        // MClientRequest, or MLock
+  int by_mds;              // if MLock, and remote xlock attempt
+  
+  vector<CDentry*> trace;  // original path traversal.
+  CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
+  
+  // cache pins (so things don't expire)
+  set< MDSCacheObject* >  pins;
+  
+  // auth pins
+  set< CDir* >   dir_auth_pins;
+  set< CInode* > inode_auth_pins;
+  
+  // held locks
+  set< SimpleLock* > rdlocks;  // always local.
+  set< SimpleLock* > wrlocks;  // always local.
+  set< SimpleLock* > xlocks;   // local or remote.
+  set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
-namespace __gnu_cxx {
-  template<> struct hash<Message*> {
-    size_t operator()(const Message *p) const { 
-      static hash<unsigned long> H;
-      return H((unsigned long)p); 
+  // projected updates
+  map< inodeno_t, inode_t > projected_inode;
+
+
+  // ---------------------------------------------------
+  MDRequest() : request(0), by_mds(-1), ref(0) {}
+  MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), by_mds(-1), ref(0) {}
+  
+  // request
+  MClientRequest *client_request() {
+    return (MClientRequest*)request;
+  }
+
+  // pin items in cache
+  void pin(MDSCacheObject *o) {
+    if (pins.count(o) == 0) {
+      o->get(MDSCacheObject::PIN_REQUEST);
+      pins.insert(o);
+    }      
+  }
+
+  // auth pins
+  bool is_auth_pinned(CInode *in) { return inode_auth_pins.count(in); }
+  bool is_auth_pinned(CDir *dir) { return dir_auth_pins.count(dir); }
+  void auth_pin(CInode *in) {
+    if (!is_auth_pinned(in)) {
+      in->auth_pin();
+      inode_auth_pins.insert(in);
     }
-  };
+  }
+  void auth_pin(CDir *dir) {
+    if (!is_auth_pinned(dir)) {
+      dir->auth_pin();
+      dir_auth_pins.insert(dir);
+    }
+  }
+  void drop_auth_pins() {
+    for (set<CInode*>::iterator it = inode_auth_pins.begin();
+	 it != inode_auth_pins.end();
+	 it++) 
+      (*it)->auth_unpin();
+    inode_auth_pins.clear();
+    for (set<CDir*>::iterator it = dir_auth_pins.begin();
+	 it != dir_auth_pins.end();
+	 it++) 
+      (*it)->auth_unpin();
+    dir_auth_pins.clear();
+  }
+};
+
+inline ostream& operator<<(ostream& out, MDRequest &mdr)
+{
+  out << "request(" << mdr.reqid;
+  //if (mdr.request) out << " " << *mdr.request;
+  out << ")";
+  return out;
 }
 
 class MDCache {
@@ -92,88 +152,149 @@ class MDCache {
  protected:
   // the cache
   CInode                       *root;        // root inode
-  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
-  
-  list<CInode*>                 inode_expire_queue;  // inodes to delete
-
+  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino
+  CInode                       *stray;       // my stray dir
 
   // root
-  list<Context*>     waiting_for_root;
+  list<Context*> waiting_for_root;
+  map<inodeno_t,list<Context*> > waiting_for_stray;
 
-  // imports, exports, and hashes.
-  set<CDir*>             imports;                // includes root (on mds0)
-  set<CDir*>             exports;
-  set<CDir*>             hashdirs;
-  map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
-  
-  void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
-  void adjust_import(int from, CDir *root, set<CDir*>& bounds);
-  
-  
+public:
+  int get_num_inodes() { return inode_map.size(); }
+  int get_num_dentries() { return lru.lru_get_size(); }
 
-  // active MDS requests
-  hash_map<Message*, active_request_t>   active_requests;
+
+  // -- subtrees --
+protected:
+  map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
   
+  // adjust subtree auth specification
+  //  dir->dir_auth
+  //  imports/exports/nested_exports
+  //  join/split subtrees as appropriate
+public:
+  bool is_subtrees() { return !subtrees.empty(); }
+  void adjust_subtree_auth(CDir *root, pair<int,int> auth);
+  void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
+    adjust_subtree_auth(root, pair<int,int>(a,b)); 
+  }
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
+    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  }
+  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, int a) {
+    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  }
+  void adjust_export_state(CDir *dir);
+  void try_subtree_merge(CDir *root);
+  void try_subtree_merge_at(CDir *root);
+  CDir *get_subtree_root(CDir *dir);
+  void remove_subtree(CDir *dir);
+  void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
+  void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);
+  void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
+  void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
+
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir);
+
+  void get_auth_subtrees(set<CDir*>& s);
+  void get_fullauth_subtrees(set<CDir*>& s);
+
+  int num_subtrees();
+  int num_subtrees_fullauth();
+  int num_subtrees_fullnonauth();
+
+  
+protected:
+  // delayed cache expire
+  map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
+
+  // -- discover --
+  hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
+
+
+  // -- requests --
+public:
+
+  
+protected:
+  hash_map<metareqid_t, MDRequest*> active_requests; 
+  
+public:
+  MDRequest* request_start(metareqid_t rid);
+  MDRequest* request_start(MClientRequest *req);
+  MDRequest* request_start(MLock *req);
+  MDRequest* request_get(metareqid_t rid);
+  void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
+  void request_finish(MDRequest *mdr);
+  void request_forward(MDRequest *mdr, int mds, int port=0);
+  void dispatch_request(MDRequest *mdr);
+  void request_drop_locks(MDRequest *mdr);
+  void request_cleanup(MDRequest *r);
+
+
   // inode purging
-  map<inodeno_t, inode_t>         purging;
-  map<inodeno_t, list<Context*> > waiting_for_purge;
-
+  map<inodeno_t, map<off_t, inode_t> >         purging;
+  map<inodeno_t, map<off_t, list<Context*> > > waiting_for_purge;
+  
   // shutdown crap
   int shutdown_commits;
-  bool did_shutdown_exports;
   bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
 
-  // recovery
+  // -- recovery --
 protected:
-  // from EImportStart w/o EImportFinish during journal replay
-  map<inodeno_t, set<inodeno_t> >            my_ambiguous_imports;  
-  // from MMDSImportMaps
-  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
-
   set<int> recovery_set;
+
+  // from EImportStart w/o EImportFinish during journal replay
+  map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
+  // from MMDSImportMaps
+  map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
+
   set<int> wants_import_map;   // nodes i need to send my import map to
-  set<int> got_import_map;     // nodes i need to send my import map to (when exports finish)
-  set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
+  set<int> got_import_map;     // nodes i got import_maps from
   
   void handle_import_map(MMDSImportMap *m);
-  void handle_cache_rejoin(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
   void disambiguate_imports();
+
+  set<int> rejoin_gather;      // nodes from whom i need a rejoin
+  set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  set<int> want_rejoin_ack;    // nodes to whom i need to send a rejoin ack
+
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
+  void handle_cache_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void send_cache_rejoin_acks();
+  void recalc_auth_bits();
+
 public:
+  void set_recovery_set(set<int>& s);
+  void handle_mds_failure(int who);
+  void handle_mds_recovery(int who);
   void send_import_map(int who);
   void send_import_map_now(int who);
-  void send_import_map_later(int who) {
-    wants_import_map.insert(who);
-  }
+  void send_import_map_later(int who);
   void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
+  void log_import_map(Context *onsync=0);
 
-  void set_recovery_set(set<int>& s) {
-    recovery_set = s;
-  }
 
   // ambiguous imports
-  void add_ambiguous_import(inodeno_t base, set<inodeno_t>& bounds) {
-    my_ambiguous_imports[base].swap(bounds);
-  }
-  void cancel_ambiguous_import(inodeno_t dirino);
-  void finish_ambiguous_import(inodeno_t dirino);
-  
-  void finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds);
+  void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
+  void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
+  void cancel_ambiguous_import(dirfrag_t dirino);
+  void finish_ambiguous_import(dirfrag_t dirino);
 
 
 
-  
-
-  friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
-  friend class EImportMap;
 
 
  public:
@@ -192,19 +313,16 @@ public:
   // root inode
   CInode *get_root() { return root; }
   void set_root(CInode *r);
+  CInode *get_stray() { return stray; }
 
-  int get_num_imports() { return imports.size(); }
-  void add_import(CDir *dir);
-  void remove_import(CDir *dir);
-  void recalc_auth_bits();
-
-  void log_import_map(Context *onsync=0);
-
- 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
+  void trim_dirfrag(CDir *dir, CDir *con,
+		    map<int, MCacheExpire*>& expiremap);
+  void trim_inode(CDentry *dn, CInode *in, CDir *con,
+		  map<int,class MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
   // shutdown
@@ -217,10 +335,16 @@ public:
   bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
   CInode* get_inode( inodeno_t ino ) {
     if (have_inode(ino))
-      return inode_map[ ino ];
+      return inode_map[ino];
     return NULL;
   }
-  
+  CDir* get_dir(inodeno_t dirino) {  // deprecated
+    return get_dirfrag(dirfrag_t(dirino, frag_t()));
+  }    
+  CDir* get_dirfrag(dirfrag_t df) {
+    if (!have_inode(df.ino)) return NULL;
+    return inode_map[df.ino]->get_dirfrag(df.frag);
+  }
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme
@@ -231,9 +355,8 @@ public:
   CInode *create_inode();
   void add_inode(CInode *in);
 
- protected:
   void remove_inode(CInode *in);
-  void destroy_inode(CInode *in);
+ protected:
   void touch_inode(CInode *in) {
     if (in->get_parent_dn())
       touch_dentry(in->get_parent_dn());
@@ -256,10 +379,18 @@ public:
 
  public:
   // inode purging
-  void purge_inode(inode_t& inode);
-  void purge_inode_finish(inodeno_t ino);
-  void purge_inode_finish_2(inodeno_t ino);
-  void waitfor_purge(inodeno_t ino, Context *c);
+  void purge_inode(inode_t *inode, off_t newsize);
+  void purge_inode_finish(inodeno_t ino, off_t newsize);
+  void purge_inode_finish_2(inodeno_t ino, off_t newsize);
+  bool is_purging(inodeno_t ino, off_t newsize) {
+    return purging.count(ino) && purging[ino].count(newsize);
+  }
+  void wait_for_purge(inodeno_t ino, off_t newsize, Context *c) {
+    waiting_for_purge[ino][newsize].push_back(c);
+  }
+
+  void add_recovered_purge(const inode_t& inode, off_t newsize);
+  void remove_recovered_purge(inodeno_t ino, off_t newsize);
   void start_recovered_purges();
 
 
@@ -269,40 +400,53 @@ public:
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
-
  public:
   CInode *create_root_inode();
-  int open_root(Context *c);
-  int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
+  void open_root(Context *c);
+  CInode *create_stray_inode(int whose=-1);
+  void open_local_stray();
+  void open_foreign_stray(int who, Context *c);
+  int path_traverse(MDRequest *mdr,
+		    CInode *base,
+		    filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,
-                    int onfail,
-                    Context *onfinish=0,
-                    bool is_client_req = false);
-  void open_remote_dir(CInode *diri, Context *fin);
-  void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
-  void open_remote_ino_2(inodeno_t ino, Message *req,
-                         vector<Anchor*>& anchortrace,
+                    int onfail, 
+                    bool is_client_req = false,
+		    bool null_okay = false);
+  void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
+  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
+  void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);
+  void open_remote_ino_2(inodeno_t ino, MDRequest *mdr,
+                         vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
-  void path_unpin(vector<CDentry*>& trace, Message *m);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
-  bool request_start(Message *req,
-                     CInode *ref,
-                     vector<CDentry*>& trace);
-  void request_cleanup(Message *req);
-  void request_finish(Message *req);
-  void request_forward(Message *req, int mds, int port=0);
-  void request_pin_inode(Message *req, CInode *in);
-  void request_pin_dir(Message *req, CDir *dir);
+  // -- anchors --
+public:
+  void anchor_create(CInode *in, Context *onfinish);
+  void anchor_destroy(CInode *in, Context *onfinish);
+protected:
+  void _anchor_create_prepared(CInode *in, version_t atid);
+  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_destroy_prepared(CInode *in, version_t atid);
+  void _anchor_destroy_logged(CInode *in, version_t atid, version_t pdv);
 
-  // anchors
-  void anchor_inode(CInode *in, Context *onfinish);
-  //void unanchor_inode(CInode *in, Context *c);
+  friend class C_MDC_AnchorCreatePrepared;
+  friend class C_MDC_AnchorCreateLogged;
+  friend class C_MDC_AnchorDestroyPrepared;
+  friend class C_MDC_AnchorDestroyLogged;
 
-  void handle_inode_link(class MInodeLink *m);
-  void handle_inode_link_ack(class MInodeLinkAck *m);
+  // -- stray --
+public:
+  void eval_stray(CDentry *dn);
+protected:
+  void _purge_stray(CDentry *dn);
+  void _purge_stray_logged(CDentry *dn, version_t pdv);
+  friend class C_MDC_PurgeStray;
+  void reintegrate_stray(CDentry *dn, CDentry *rlink);
+  void migrate_stray(CDentry *dn, int dest);
+
 
   // == messages ==
  public:
@@ -313,29 +457,18 @@ public:
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
 
+  CDir* add_replica_dir(CInode *diri, 
+			frag_t fg, CDirDiscover& dis, 
+			int from,
+			list<Context*>& finished);
+  CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+    
+
+  // -- hard links --
+  void handle_inode_link(class MInodeLink *m);
 
   // -- namespace --
-  // these handle logging, cache sync themselves.
-  // UNLINK
- public:
-  void dentry_unlink(CDentry *in, Context *c);
- protected:
-  void dentry_unlink_finish(CDentry *in, CDir *dir, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
-  void handle_inode_unlink(class MInodeUnlink *m);
-  void handle_inode_unlink_ack(class MInodeUnlinkAck *m);
-  friend class C_MDC_DentryUnlink;
-
-
-
-  // -- misc auth --
-  int ino_proxy_auth(inodeno_t ino, 
-                     int frommds,
-                     map<CDir*, set<inodeno_t> >& inomap);
-  void do_ino_proxy(CInode *in, Message *m);
-  void do_dir_proxy(CDir *dir, Message *m);
-
-
 
 
   // -- updates --
@@ -345,20 +478,36 @@ public:
   int send_dir_updates(CDir *in, bool bcast=false);
   void handle_dir_update(MDirUpdate *m);
 
+  // -- cache expiration --
   void handle_cache_expire(MCacheExpire *m);
-
+  void process_delayed_expire(CDir *dir);
+  void discard_delayed_expire(CDir *dir);
 
 
   // == crap fns ==
  public:
-  void dump() {
-    if (root) root->dump();
-  }
-
-  void show_imports();
   void show_cache();
+  void dump_cache();
+  void show_subtrees(int dbl=10);
+
+  CInode *hack_pick_random_inode() {
+    assert(!inode_map.empty());
+    int n = rand() % inode_map.size();
+    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    while (n--) p++;
+    return p->second;
+  }
 
 };
 
+class C_MDS_RetryRequest : public Context {
+  MDCache *cache;
+  MDRequest *mdr;
+ public:
+  C_MDS_RetryRequest(MDCache *c, MDRequest *r) : cache(c), mdr(r) {}
+  virtual void finish(int r) {
+    cache->dispatch_request(mdr);
+  }
+};
 
 #endif

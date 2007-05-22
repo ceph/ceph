@@ -1,28 +1,18 @@
 
-# mpicxx must be on your path to build newsyn.  on googoo, this means
-# that /usr/local/mpich2-1.0.2/bin must be on your path.
-
-# For now, use g++ most of the time.
-# When compiling MPI stuff, specify myfile.cc instead of myfile.o so
-# that ${MPICC} is invoked instead of the generic .o rule (or it'll
-# use g++).  This makes it less annoying to build on non-mpi hosts for
-# dev work, and seems to behave just fine...  change ${CC} back to
-# mpicxx if you get paranoid.
-
-#CC = g++
-#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-#LIBS = -lpthread  
+# mpicxx must be on your path to build newsyn.  
+#  on googoo, this means that /usr/local/mpich2-1.0.2/bin must be on your path.
+#  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
 EXTRA_CFLAGS = 
 
 ifeq ($(target),darwin)
 # For Darwin
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -g -fPIC -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -36,7 +26,7 @@ endif
 
 #for normal mpich2 machines
 MPICC = mpicxx
-MPICFLAGS = ${CFLAGS}
+MPICFLAGS = -DMPICH_IGNORE_CXX_SEEK ${CFLAGS}
 MPILIBS = ${LIBS}
 
 #for LLNL boxes without mpicxx
@@ -57,14 +47,12 @@ MDS_OBJS= \
 	mds/MDCache.o\
 	mds/Locker.o\
 	mds/Migrator.o\
-	mds/Renamer.o\
 	mds/MDBalancer.o\
 	mds/CDentry.o\
 	mds/CDir.o\
 	mds/CInode.o\
 	mds/AnchorTable.o\
 	mds/AnchorClient.o\
-	mds/MDStore.o\
 	mds/LogEvent.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o
@@ -97,12 +85,12 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
-
 CLIENT_OBJS= \
 	client/FileCache.o\
 	client/Client.o\
 	client/SyntheticClient.o\
 	client/Trace.o
+
 
 ifeq ($(want_bdb),yes)
 OSBDB_OBJS = \
@@ -111,11 +99,15 @@ OSBDB_OBJS = \
 OSBDB_OBJ = osbdb.o
 endif
 
-TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn mkmonmap
+TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cmonctl cfuse fakefuse
+NO_FUSE = cmon cosd cmds csyn newsyn fakesyn mkmonmap
+
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 all: depend ${TARGETS}
+
+nofuse: depend ${NO_FUSE}
 
 test: depend ${TEST_TARGETS}
 
@@ -127,6 +119,9 @@ mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cosd: cosd.cc osd.o ebofs.o ${OSBDB_OBJ} msg/SimpleMessenger.o common.o
@@ -182,6 +177,9 @@ osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 
+# hadoop
+libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} -I/usr/local/java/include -I/usr/local/java/include/linux  ${LIBS} $^ -o $@
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}

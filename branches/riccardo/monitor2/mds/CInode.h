@@ -23,7 +23,9 @@
 #include "mdstypes.h"
 
 #include "CDentry.h"
-#include "Lock.h"
+#include "SimpleLock.h"
+#include "FileLock.h"
+#include "ScatterLock.h"
 #include "Capability.h"
 
 
@@ -34,51 +36,6 @@
 #include <map>
 #include <iostream>
 using namespace std;
-
-
-// wait reasons
-#define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
-    // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
-    //          handle_client_chmod, handle_client_touch             (mds)
-    // trigger: (see CDIR_WAIT_UNFREEZE)
-#define CINODE_WAIT_GETREPLICA    (1<<11)  // update/replicate individual inode
-    // waiters: import_dentry_inode
-    // trigger: handle_inode_replicate_ack
-
-#define CINODE_WAIT_DIR           (1<<13)
-    // waiters: traverse_path
-    // triggers: handle_disocver_reply
-
-#define CINODE_WAIT_LINK         (1<<14)  // as in remotely nlink++
-#define CINODE_WAIT_ANCHORED     (1<<15)
-#define CINODE_WAIT_UNLINK       (1<<16)  // as in remotely nlink--
-
-#define CINODE_WAIT_HARDR        (1<<17)  // 131072
-#define CINODE_WAIT_HARDW        (1<<18)  // 262...
-#define CINODE_WAIT_HARDB        (1<<19)
-#define CINODE_WAIT_HARDRWB      (CINODE_WAIT_HARDR|CINODE_WAIT_HARDW|CINODE_WAIT_HARDB)
-#define CINODE_WAIT_HARDSTABLE   (1<<20)
-#define CINODE_WAIT_HARDNORD     (1<<21)
-#define CINODE_WAIT_FILER        (1<<22)  
-#define CINODE_WAIT_FILEW        (1<<23)
-#define CINODE_WAIT_FILEB        (1<<24)
-#define CINODE_WAIT_FILERWB      (CINODE_WAIT_FILER|CINODE_WAIT_FILEW|CINODE_WAIT_FILEB)
-#define CINODE_WAIT_FILESTABLE   (1<<25)
-#define CINODE_WAIT_FILENORD     (1<<26)
-#define CINODE_WAIT_FILENOWR     (1<<27)
-
-#define CINODE_WAIT_RENAMEACK       (1<<28)
-#define CINODE_WAIT_RENAMENOTIFYACK (1<<29)
-
-#define CINODE_WAIT_CAPS            (1<<30)
-
-#define CINODE_WAIT_ANY           0xffffffff
-
-
-
-// misc
-#define CINODE_EXPORT_NONCE      1 // nonce given to replicas created by export
-#define CINODE_HASHREPLICA_NONCE 1 // hashed inodes that are duped ???FIXME???
 
 class Context;
 class CDentry;
@@ -96,86 +53,97 @@ ostream& operator<<(ostream& out, CInode& in);
 class CInode : public MDSCacheObject {
  public:
   // -- pins --
-  static const int PIN_CACHED =     1;
+  //static const int PIN_REPLICATED =     1;
   static const int PIN_DIR =        2;
-  static const int PIN_DIRTY =      4;  // must flush
-  static const int PIN_PROXY =      5;  // can't expire yet
-  static const int PIN_WAITER =     6;  // waiter
-  static const int PIN_CAPS =       7;  // local fh's
+  static const int PIN_CAPS =       7;  // client caps
   static const int PIN_AUTHPIN =    8;
-  static const int PIN_IMPORTING =  9;  // multipurpose, for importing
-  static const int PIN_REQUEST =   10;  // request is logging, finishing
-  static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
+  static const int PIN_IMPORTING =  -9;  // importing
   static const int PIN_ANCHORING = 12;
-  
-  static const int PIN_OPENINGDIR = 13;
+  static const int PIN_UNANCHORING = 13;
+  static const int PIN_OPENINGDIR = 14;
+  static const int PIN_REMOTEPARENT = 15;
+  static const int PIN_BATCHOPENJOURNAL = 16;
 
-  static const int PIN_DENTRYLOCK = 14;
-
-  static const char *pin_name(int p) {
+  const char *pin_name(int p) {
     switch (p) {
-    case PIN_CACHED: return "cached";
     case PIN_DIR: return "dir";
-    case PIN_DIRTY: return "dirty";
-    case PIN_PROXY: return "proxy";
-    case PIN_WAITER: return "waiter";
     case PIN_CAPS: return "caps";
     case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
-    case PIN_REQUEST: return "request";
-    case PIN_RENAMESRC: return "renamesrc";
     case PIN_ANCHORING: return "anchoring";
+    case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
-    case PIN_DENTRYLOCK: return "dentrylock";
-    default: assert(0);
+    case PIN_REMOTEPARENT: return "remoteparent";
+    case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
+    default: return generic_pin_name(p);
     }
   }
 
-  // state
-  static const int STATE_AUTH =       (1<<0);
-  static const int STATE_ROOT =       (1<<1);
-  static const int STATE_DIRTY =      (1<<2);
-  static const int STATE_UNSAFE =     (1<<3);   // not logged yet
-  static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
-  static const int STATE_UNLINKING =  (1<<5);
-  static const int STATE_PROXY =      (1<<6);   // can't expire yet
-  static const int STATE_EXPORTING =  (1<<7);   // on nonauth bystander.
-  static const int STATE_ANCHORING =  (1<<8);
+  // -- state --
+  static const int STATE_ROOT =       (1<<2);
+  //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
+  static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
+  static const int STATE_ANCHORING =  (1<<7);
+  static const int STATE_UNANCHORING = (1<<8);
   static const int STATE_OPENINGDIR = (1<<9);
-  //static const int STATE_RENAMING =   (1<<8);  // moving me
-  //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
 
+  // -- waiters --
+  static const int WAIT_SLAVEAGREE  = (1<<0);
+  static const int WAIT_AUTHPINNABLE = (1<<1);
+  static const int WAIT_DIR         = (1<<2);
+  static const int WAIT_ANCHORED    = (1<<3);
+  static const int WAIT_UNANCHORED  = (1<<4);
+  static const int WAIT_CAPS        = (1<<5);
+  
+  static const int WAIT_AUTHLOCK_OFFSET = 6;
+  static const int WAIT_LINKLOCK_OFFSET = 6 + SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 6 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET = 6 + 3*SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRLOCK_OFFSET = 6 + 4*SimpleLock::WAIT_BITS;
 
+  static const int WAIT_ANY           = 0xffffffff;
 
+  // misc
+  static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
+
+  ostream& print_db_line_prefix(ostream& out);
 
  public:
   MDCache *mdcache;
 
-  inode_t          inode;     // the inode itself
+  // inode contents proper
+  inode_t          inode;        // the inode itself
+  string           symlink;      // symlink dest, if symlink
+  fragtree_t       dirfragtree;  // dir frag tree, if any
+  map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
-  CDir            *dir;       // directory, if we have it opened.
-  string           symlink;   // symlink dest, if symlink
+  off_t            last_open_journaled;  // log offset for the last journaled EOpen
+
+  // -- cache infrastructure --
+  map<frag_t,CDir*> dirfrags; // cached dir fragments
+
+  frag_t pick_dirfrag(const string &dn);
+  CDir* get_dirfrag(frag_t fg) {
+    if (dirfrags.count(fg)) 
+      return dirfrags[fg];
+    else
+      return 0;
+  }
+  void get_dirfrags(list<CDir*>& ls);
+  void get_nested_dirfrags(list<CDir*>& ls);
+  void get_subtree_dirfrags(list<CDir*>& ls);
+  CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
+  CDir *add_dirfrag(CDir *dir);
+  void close_dirfrag(frag_t fg);
+  void close_dirfrags();
 
  protected:
   // parent dentries in cache
-  int              num_parents;
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
-  // -- distributed caching
-  int              dangling_auth;    // explicit auth, when dangling.
-
-  int              num_request_pins;
-
-  // waiters
-  multimap<int, Context*>  waiting;
-
 
   // -- distributed state --
-public:
-  // inode metadata locks
-  CLock        hardlock;
-  CLock        filelock;
 protected:
   // file capabilities
   map<int, Capability>  client_caps;         // client -> caps
@@ -185,7 +153,7 @@ protected:
 
 
  private:
-  // lock nesting
+  // auth pin
   int auth_pins;
   int nested_auth_pins;
 
@@ -203,70 +171,61 @@ protected:
 
  public:
   // ---------------------------
-  CInode(MDCache *c, bool auth=true);
-  ~CInode();
+  CInode(MDCache *c, bool auth=true) : 
+    mdcache(c),
+    last_open_journaled(0),
+    parent(0),
+    replica_caps_wanted(0),
+    auth_pins(0), nested_auth_pins(0),
+    authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
+    linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
+    dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
+    filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET),
+    dirlock(this, LOCK_OTYPE_IDIR, WAIT_DIRLOCK_OFFSET)
+  {
+    state = 0;  
+    if (auth) state_set(STATE_AUTH);
+  };
+  ~CInode() {
+    close_dirfrags();
+  }
   
 
   // -- accessors --
-  bool is_file()    { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_FILE)    ? true:false; }
-  bool is_symlink() { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) ? true:false; }
-  bool is_dir()     { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR)     ? true:false; }
+  bool is_file()    { return inode.is_file(); }
+  bool is_symlink() { return inode.is_symlink(); }
+  bool is_dir()     { return inode.is_dir(); }
 
   bool is_anchored() { return inode.anchored; }
-
+  bool is_anchoring() { return state_test(STATE_ANCHORING); }
+  bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
+  
   bool is_root() { return state & STATE_ROOT; }
-  bool is_proxy() { return state & STATE_PROXY; }
+  bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
 
-  bool is_auth() { return state & STATE_AUTH; }
-  void set_auth(bool auth);
 
-  inodeno_t ino() { return inode.ino; }
+  inodeno_t ino() const { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
-  CInode *get_realm_root();   // import, hash, or root
   
-  CDir *get_or_open_dir(MDCache *mdcache);
-  CDir *set_dir(CDir *newdir);
-  void close_dir();
-  
-  bool dir_is_auth();
+  bool is_lt(const MDSCacheObject *r) const {
+    return ino() < ((CInode*)r)->ino();
+  }
 
 
 
   // -- misc -- 
   void make_path(string& s);
-  void make_anchor_trace(vector<class Anchor*>& trace);
+  void make_anchor_trace(vector<class Anchor>& trace);
+  void name_stray_dentry(string& dname);
 
-
-
-  // -- state --
-  bool is_unsafe() { return state & STATE_UNSAFE; }
-  bool is_dangling() { return state & STATE_DANGLING; }
-  bool is_unlinking() { return state & STATE_UNLINKING; }
-
-  void mark_unsafe() { state |= STATE_UNSAFE; }
-  void mark_safe() { state &= ~STATE_UNSAFE; }
-
-  // -- state encoding --
-  //void encode_basic_state(bufferlist& r);
-  //void decode_basic_state(bufferlist& r, int& off);
-
-
-  void encode_file_state(bufferlist& r);
-  void decode_file_state(bufferlist& r, int& off);
-
-  void encode_hard_state(bufferlist& r);
-  void decode_hard_state(bufferlist& r, int& off);
 
   
   // -- dirtyness --
   version_t get_version() { return inode.version; }
 
-  bool is_dirty() { return state & STATE_DIRTY; }
-  bool is_clean() { return !is_dirty(); }
-  
   version_t pre_dirty();
   void _mark_dirty();
   void mark_dirty(version_t projected_dirv);
@@ -279,21 +238,35 @@ protected:
 
 
   // -- waiting --
-  bool waiting_for(int tag);
   void add_waiter(int tag, Context *c);
-  void take_waiting(int tag, list<Context*>& ls);
-  void finish_waiting(int mask, int result = 0);
 
 
-  bool is_hardlock_write_wanted() {
-    return waiting_for(CINODE_WAIT_HARDW);
+  // -- locks --
+public:
+  SimpleLock authlock;
+  SimpleLock linklock;
+  SimpleLock dirfragtreelock;
+  FileLock   filelock;
+  ScatterLock dirlock;
+
+  SimpleLock* get_lock(int type) {
+    switch (type) {
+    case LOCK_OTYPE_IFILE: return &filelock;
+    case LOCK_OTYPE_IAUTH: return &authlock;
+    case LOCK_OTYPE_ILINK: return &linklock;
+    case LOCK_OTYPE_IDIRFRAGTREE: return &dirfragtreelock;
+    case LOCK_OTYPE_IDIR: return &dirlock;
+    default: assert(0);
+    }
   }
-  bool is_filelock_write_wanted() {
-    return waiting_for(CINODE_WAIT_FILEW);
-  }
+  void set_mlock_info(MLock *m);
+  void encode_lock_state(int type, bufferlist& bl);
+  void decode_lock_state(int type, bufferlist& bl);
+
 
   // -- caps -- (new)
   // client caps
+  bool is_any_caps() { return !client_caps.empty(); }
   map<int,Capability>& get_client_caps() { return client_caps; }
   void add_client_cap(int client, Capability& cap) {
     if (client_caps.empty())
@@ -372,36 +345,30 @@ protected:
 
 
   void replicate_relax_locks() {
+    dout(10) << " relaxing locks on " << *this << endl;
     assert(is_auth());
     assert(!is_replicated());
-    dout(10) << " relaxing locks on " << *this << endl;
 
-    if (hardlock.get_state() == LOCK_LOCK &&
-        !hardlock.is_used()) {
-      dout(10) << " hard now sync " << *this << endl;
-      hardlock.set_state(LOCK_SYNC);
-    }
-    if (filelock.get_state() == LOCK_LOCK) {
-      if (!filelock.is_used() &&
-          (get_caps_issued() & CAP_FILE_WR) == 0) {
-        filelock.set_state(LOCK_SYNC);
-        dout(10) << " file now sync " << *this << endl;
-      } else {
-        dout(10) << " can't relax filelock on " << *this << endl;
-      }
-    }
+    authlock.replicate_relax();
+    linklock.replicate_relax();
+    dirfragtreelock.replicate_relax();
+
+    if (get_caps_issued() & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0) 
+      filelock.replicate_relax();
+
+    dirlock.replicate_relax();
   }
 
 
   // -- authority --
-  int authority();
+  pair<int,int> authority();
 
 
   // -- auth pins --
   int is_auth_pinned() { 
     return auth_pins;
   }
-  int adjust_nested_auth_pins(int a);
+  void adjust_nested_auth_pins(int a);
   bool can_auth_pin();
   void auth_pin();
   void auth_unpin();
@@ -419,13 +386,10 @@ protected:
      linked to an active_request, so they're automatically cleaned
      up when a request is finished.  pin at will! */
   void request_pin_get() {
-    if (num_request_pins == 0) get(PIN_REQUEST);
-    num_request_pins++;
+    get(PIN_REQUEST);
   }
   void request_pin_put() {
-    num_request_pins--;
-    if (num_request_pins == 0) put(PIN_REQUEST);
-    assert(num_request_pins >= 0);
+    put(PIN_REQUEST);
   }
 
   void bad_put(int by) {
@@ -443,30 +407,20 @@ protected:
 
   // -- hierarchy stuff --
 private:
-  void get_parent();
-  void put_parent();
+  //void get_parent();
+  //void put_parent();
 
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
-    get_parent();
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
     parent = 0;
-    put_parent();
   }
-  void add_remote_parent(CDentry *p) {
-    if (remote_parents.empty())
-      get_parent();
-    remote_parents.insert(p);
-  }
-  void remove_remote_parent(CDentry *p) {
-    remote_parents.erase(p);
-    if (remote_parents.empty())
-      put_parent();
-  }
+  void add_remote_parent(CDentry *p);
+  void remove_remote_parent(CDentry *p);
   int num_remote_parents() {
     return remote_parents.size(); 
   }
@@ -483,8 +437,8 @@ public:
   }
   */
 
-  // dbg
-  void dump(int d = 0);
+  void print(ostream& out);
+
 };
 
 
@@ -497,19 +451,31 @@ public:
 class CInodeDiscover {
   
   inode_t    inode;
+  string     symlink;
+  fragtree_t dirfragtree;
+
   int        replica_nonce;
   
-  int        hardlock_state;
+  int        authlock_state;
+  int        linklock_state;
+  int        dirfragtreelock_state;
   int        filelock_state;
+  int        dirlock_state;
 
  public:
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
     inode = in->inode;
+    symlink = in->symlink;
+    dirfragtree = in->dirfragtree;
+
     replica_nonce = nonce;
 
-    hardlock_state = in->hardlock.get_replica_state();
+    authlock_state = in->authlock.get_replica_state();
+    linklock_state = in->linklock.get_replica_state();
+    dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
     filelock_state = in->filelock.get_replica_state();
+    dirlock_state = in->dirlock.get_replica_state();
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -517,28 +483,39 @@ class CInodeDiscover {
 
   void update_inode(CInode *in) {
     in->inode = inode;
+    in->symlink = symlink;
+    in->dirfragtree = dirfragtree;
 
     in->replica_nonce = replica_nonce;
-    in->hardlock.set_state(hardlock_state);
+    in->authlock.set_state(authlock_state);
+    in->linklock.set_state(linklock_state);
+    in->dirfragtreelock.set_state(dirfragtreelock_state);
     in->filelock.set_state(filelock_state);
+    in->dirlock.set_state(dirlock_state);
   }
   
   void _encode(bufferlist& bl) {
-    bl.append((char*)&inode, sizeof(inode));
-    bl.append((char*)&replica_nonce, sizeof(replica_nonce));
-    bl.append((char*)&hardlock_state, sizeof(hardlock_state));
-    bl.append((char*)&filelock_state, sizeof(filelock_state));
+    ::_encode(inode, bl);
+    ::_encode(symlink, bl);
+    dirfragtree._encode(bl);
+    ::_encode(replica_nonce, bl);
+    ::_encode(authlock_state, bl);
+    ::_encode(linklock_state, bl);
+    ::_encode(dirfragtreelock_state, bl);
+    ::_encode(filelock_state, bl);
+    ::_encode(dirlock_state, bl);
   }
 
   void _decode(bufferlist& bl, int& off) {
-    bl.copy(off,sizeof(inode_t), (char*)&inode);
-    off += sizeof(inode_t);
-    bl.copy(off, sizeof(int), (char*)&replica_nonce);
-    off += sizeof(int);
-    bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
-    off += sizeof(hardlock_state);
-    bl.copy(off, sizeof(filelock_state), (char*)&filelock_state);
-    off += sizeof(filelock_state);
+    ::_decode(inode, bl, off);
+    ::_decode(symlink, bl, off);
+    dirfragtree._decode(bl, off);
+    ::_decode(replica_nonce, bl, off);
+    ::_decode(authlock_state, bl, off);
+    ::_decode(linklock_state, bl, off);
+    ::_decode(dirfragtreelock_state, bl, off);
+    ::_decode(filelock_state, bl, off);
+    ::_decode(dirlock_state, bl, off);
   }  
 
 };
@@ -548,8 +525,9 @@ class CInodeDiscover {
 
 class CInodeExport {
 
-  struct {
+  struct st_ {
     inode_t        inode;
+
     meta_load_t    popularity_justme;
     meta_load_t    popularity_curdom;
     bool           is_dirty;       // dirty inode?
@@ -557,21 +535,29 @@ class CInodeExport {
     int            num_caps;
   } st;
 
+  string         symlink;
+  fragtree_t     dirfragtree;
+
   map<int,int>     replicas;
   map<int,Capability>  cap_map;
 
-  CLock         hardlock,filelock;
-  //int           remaining_issued;
+  bufferlist locks;
 
 public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
     st.inode = in->inode;
+    symlink = in->symlink;
+    dirfragtree = in->dirfragtree;
+
     st.is_dirty = in->is_dirty();
     replicas = in->replicas;
 
-    hardlock = in->hardlock;
-    filelock = in->filelock;
+    in->authlock._encode(locks);
+    in->linklock._encode(locks);
+    in->dirfragtreelock._encode(locks);
+    in->filelock._encode(locks);
+    in->dirlock._encode(locks);
     
     st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
@@ -582,13 +568,18 @@ public:
     in->take_client_caps(cap_map);
     //remaining_issued = in->get_caps_issued();
   }
-  ~CInodeExport() {
-  }
   
   inodeno_t get_ino() { return st.inode.ino; }
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
+    // treat scatterlocked mtime special, since replica may have newer info
+    if (in->dirlock.get_state() == LOCK_SCATTER ||
+	in->dirlock.get_state() == LOCK_GSYNCS)
+      st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
+
     in->inode = st.inode;
+    in->symlink = symlink;
+    in->dirfragtree = dirfragtree;
 
     in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
     in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
@@ -600,10 +591,14 @@ public:
 
     in->replicas = replicas;
     if (!replicas.empty()) 
-      in->get(CInode::PIN_CACHED);
+      in->get(CInode::PIN_REPLICATED);
 
-    in->hardlock = hardlock;
-    in->filelock = filelock;
+    int off = 0;
+    in->authlock._decode(locks, off);
+    in->linklock._decode(locks, off);
+    in->dirfragtreelock._decode(locks, off);
+    in->filelock._decode(locks, off);
+    in->dirlock._decode(locks, off);
 
     // caps
     in->merge_client_caps(cap_map, new_client_caps);
@@ -611,13 +606,12 @@ public:
 
   void _encode(bufferlist& bl) {
     st.num_caps = cap_map.size();
-    bl.append((char*)&st, sizeof(st));
-    
-    // cached_by + nonce
-    ::_encode(replicas, bl);
 
-    hardlock.encode_state(bl);
-    filelock.encode_state(bl);
+    ::_encode(st, bl);
+    ::_encode(symlink, bl);
+    dirfragtree._encode(bl);
+    ::_encode(replicas, bl);
+    ::_encode(locks, bl);
 
     // caps
     for (map<int,Capability>::iterator it = cap_map.begin();
@@ -629,13 +623,11 @@ public:
   }
 
   int _decode(bufferlist& bl, int off = 0) {
-    bl.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
-    
+    ::_decode(st, bl, off);
+    ::_decode(symlink, bl, off);
+    dirfragtree._decode(bl, off);
     ::_decode(replicas, bl, off);
-
-    hardlock.decode_state(bl, off);
-    filelock.decode_state(bl, off);
+    ::_decode(locks, bl, off);
 
     // caps
     for (int i=0; i<st.num_caps; i++) {
@@ -648,7 +640,6 @@ public:
     return off;
   }
 };
-
 
 
 

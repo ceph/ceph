@@ -28,12 +28,11 @@
 #include "Server.h"
 #include "Locker.h"
 #include "MDCache.h"
-#include "MDStore.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "Migrator.h"
-#include "Renamer.h"
+//#include "Renamer.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -42,6 +41,8 @@
 #include "common/LogType.h"
 
 #include "common/Timer.h"
+
+#include "events/EClientMap.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
@@ -52,6 +53,9 @@
 
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
+
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
 
 
 LogType mds_logtype, mds_cache_logtype;
@@ -79,18 +83,20 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
-  mdstore = new MDStore(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  anchorclient = new AnchorClient(messenger, mdsmap);
+  anchorclient = new AnchorClient(this);
   idalloc = new IdAllocator(this);
 
-  anchormgr = new AnchorTable(this);
+  anchortable = new AnchorTable(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+
+  // clients
+  last_client_mdsmap_bcast = 0;
   
   // beacon
   beacon_last_seq = 0;
@@ -104,7 +110,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 
   want_state = state = MDSMap::STATE_DNE;
 
-
   logger = logger2 = 0;
 
   // i'm ready!
@@ -113,13 +118,16 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
-  if (mdstore) { delete mdstore; mdstore = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
-  if (anchormgr) { delete anchormgr; anchormgr = NULL; }
+  if (anchortable) { delete anchortable; anchortable = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
+  if (mdsmap) { delete mdsmap; mdsmap = 0; }
+
+  if (server) { delete server; server = 0; }
+  if (locker) { delete locker; locker = 0; }
 
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
@@ -210,6 +218,27 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
   messenger->send_message(m, mdsmap->get_inst(mds), port, fromport);
 }
 
+void MDS::forward_message_mds(Message *req, int mds, int port)
+{
+  // client request?
+  if (req->get_type() == MSG_CLIENT_REQUEST) {
+    MClientRequest *creq = (MClientRequest*)req;
+    creq->inc_num_fwd();    // inc forward counter
+
+    // tell the client where it should go
+    messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd()),
+			    creq->get_client_inst());
+    
+    if (!creq->is_idempotent()) {
+      delete req;
+      return;  // don't actually forward if non-idempotent
+    }
+  }
+  
+  // forward
+  send_message_mds(req, mds, port);
+}
+
 
 class C_MDS_Tick : public Context {
   MDS *mds;
@@ -236,6 +265,9 @@ int MDS::init(bool standby)
   
   // schedule tick
   reset_tick();
+
+  // init logger
+  reopen_logger();
 
   mds_lock.Unlock();
   return 0;
@@ -409,7 +441,7 @@ void MDS::beacon_kill(utime_t lab)
 void MDS::handle_mds_map(MMDSMap *m)
 {
   version_t epoch = m->get_epoch();
-  dout(1) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
+  dout(5) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
 
   // note source's map version
   if (m->get_source().is_mds() && 
@@ -422,7 +454,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // is it new?
   if (epoch <= mdsmap->get_epoch()) {
-    dout(1) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
+    dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
 	    << ", discarding" << endl;
     delete m;
     return;
@@ -436,21 +468,26 @@ void MDS::handle_mds_map(MMDSMap *m)
   bool wasrejoining = mdsmap->is_rejoining();
   set<int> oldfailed;
   mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
+  set<int> oldactive;
+  mdsmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
+  set<int> oldcreating;
+  mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
+  set<int> oldout;
+  mdsmap->get_mds_set(oldout, MDSMap::STATE_OUT);
 
   // decode and process
   mdsmap->decode(m->get_encoded());
-
+  
   // see who i am
   whoami = mdsmap->get_inst_rank(messenger->get_myaddr());
   if (oldwhoami != whoami) {
     // update messenger.
     messenger->reset_myname(MSG_ADDR_MDS(whoami));
 
-    // tell objecter my incarnation
-    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
-
     reopen_logger();
-    dout(1) << "handle_mds_map i am now mds" << whoami << endl;
+    dout(1) << "handle_mds_map i am now mds" << whoami
+	    << " incarnation " << mdsmap->get_inc(whoami)
+	    << endl;
 
     // do i need an osdmap?
     if (oldwhoami < 0) {
@@ -460,6 +497,17 @@ void MDS::handle_mds_map(MMDSMap *m)
 			      monmap->get_inst(mon));
     }
   }
+
+  // tell objecter my incarnation
+  if (objecter->get_client_incarnation() < 0 &&
+      mdsmap->have_inst(whoami)) {
+    assert(mdsmap->get_inc(whoami) > 0);
+    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
+  }
+
+  // for debug
+  if (g_conf.mds_dump_cache_on_map)
+    mdcache->dump_cache();
 
   // update my state
   state = mdsmap->get_state(whoami);
@@ -473,12 +521,43 @@ void MDS::handle_mds_map(MMDSMap *m)
 	      << ", although i wanted " << mdsmap->get_state_name(want_state)
 	      << endl;
       want_state = state;
+    }    
+
+    // contemplate suicide
+    if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
+      dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << endl;
+      exit(-1);
+    }
+    if (mdsmap->is_down(whoami)) {
+      dout(1) << "apparently i'm down. committing suicide." << endl;
+      exit(-1);
     }
 
     // now active?
     if (is_active()) {
+      // did i just recover?
+      if (oldstate == MDSMap::STATE_REJOIN) {
+	dout(1) << "successful recovery!" << endl;
+
+	// kick anchortable (resent AGREEs)
+	if (mdsmap->get_anchortable() == whoami) 
+	  anchortable->finish_recovery();
+
+	// kick anchorclient (resent COMMITs)
+	anchorclient->finish_recovery();
+
+	mdcache->start_recovered_purges();
+	
+	// tell connected clients
+	bcast_mds_map();  
+      }
+
       dout(1) << "now active" << endl;
       finish_contexts(waitfor_active);  // kick waiters
+    }
+
+    else if (is_reconnect()) {
+      server->reconnect_clients();
     }
 
     else if (is_replay()) {
@@ -495,14 +574,11 @@ void MDS::handle_mds_map(MMDSMap *m)
       assert(oldstate == MDSMap::STATE_ACTIVE);
       dout(1) << "now stopping" << endl;
       
+      // start cache shutdown
       mdcache->shutdown_start();
-      
-      // save anchor table
-      if (mdsmap->get_anchortable() == whoami) 
-	anchormgr->save(0);  // FIXME?  or detect completion via filer?
-      
-      if (idalloc) 
-	idalloc->save(0);    // FIXME?  or detect completion via filer?
+
+      // terminate client sessions
+      server->terminate_sessions();
       
       // flush log
       mdlog->set_max_events(0);
@@ -518,24 +594,59 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   
   
-  // is anyone resolving?
-  if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
+  // RESOLVE
+  // am i newly resolving?
+  if (is_resolve() && oldstate == MDSMap::STATE_REPLAY) {
+    // send to all resolve, active, stopping
+    dout(10) << "i am newly resolving, sharing import map" << endl;
+    set<int> who;
+    mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
+    mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
+    mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);     // hrm. FIXME.
+    for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
+      if (*p == whoami) continue;
+      mdcache->send_import_map(*p);  // now.
+    }
+  }
+  // is someone else newly resolving?
+  else if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
     set<int> resolve;
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
-    if (oldresolve != resolve) 
+    if (oldresolve != resolve) {
       dout(10) << "resolve set is " << resolve << ", was " << oldresolve << endl;
-    for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
-      if (*p == whoami) continue;
-      if (oldresolve.count(*p) == 0 ||         // if other guy newly resolve, or
-	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly resolve,
-	mdcache->send_import_map(*p);          // share my import map (now or later)
+      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
+	if (*p == whoami) continue;
+	if (oldresolve.count(*p)) continue;
+	mdcache->send_import_map(*p);  // now or later.
+      }
     }
   }
   
+  // REJOIN
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
+    // did we start?
     if (!wasrejoining && mdsmap->is_rejoining()) {
       mdcache->send_cache_rejoins();
+    }
+    // did we finish?
+    if (wasrejoining && !mdsmap->is_rejoining()) {
+      mdcache->dump_cache();
+    }
+  }
+
+  // did someone go active?
+  if (is_active() || is_stopping()) {
+    set<int> active;
+    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) {
+      if (*p == whoami) continue;         // not me
+      if (oldactive.count(*p)) continue;  // newly so?
+      mdcache->handle_mds_recovery(*p);
+      if (anchortable)
+	anchortable->handle_mds_recovery(*p);
+      anchorclient->handle_mds_recovery(*p);
     }
   }
 
@@ -547,21 +658,46 @@ void MDS::handle_mds_map(MMDSMap *m)
       // newly so?
       if (oldfailed.count(*p)) continue;      
 
-      mdcache->migrator->handle_mds_failure(*p);
+      mdcache->handle_mds_failure(*p);
     }
   }
 
+  // inst set changed?
+  /*
+  if (state >= MDSMap::STATE_ACTIVE &&   // only if i'm active+.  otherwise they'll get map during reconnect.
+      mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) {
+    bcast_mds_map();
+  }
+  */
+
   delete m;
 }
+
+void MDS::bcast_mds_map()
+{
+  dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << endl;
+
+  // share the map with mounted clients
+  for (set<int>::const_iterator p = clientmap.get_session_set().begin();
+       p != clientmap.get_session_set().end();
+       ++p) {
+    messenger->send_message(new MMDSMap(mdsmap),
+			    clientmap.get_inst(*p));
+  }
+  last_client_mdsmap_bcast = mdsmap->get_epoch();
+}
+
 
 void MDS::handle_osd_map(MOSDMap *m)
 {
   version_t had = osdmap->get_epoch();
   
+  dout(10) << "handle_osd_map had " << had << endl;
+
   // process locally
   objecter->handle_osd_map(m);
 
-  if (had == 0) {
+  if (had == 0 && osdmap->get_epoch() > 0) {
     if (is_creating()) 
       boot_create();    // new tables, journal
     else if (is_starting())
@@ -572,15 +708,6 @@ void MDS::handle_osd_map(MOSDMap *m)
       assert(is_standby());
   }  
   
-  // pass on to clients
-  for (set<int>::iterator it = clientmap.get_mount_set().begin();
-       it != clientmap.get_mount_set().end();
-       it++) {
-    MOSDMap *n = new MOSDMap;
-    n->maps = m->maps;
-    n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, clientmap.get_inst(*it));
-  }
 }
 
 
@@ -606,12 +733,23 @@ void MDS::boot_create()
     assert(root);
     
     // force empty root dir
-    CDir *dir = root->dir;
+    CDir *dir = root->get_dirfrag(frag_t());
     dir->mark_complete();
     dir->mark_dirty(dir->pre_dirty());
     
     // save it
-    mdstore->commit_dir(dir, fin->new_sub());
+    dir->commit(0, fin->new_sub());
+  }
+
+  // create my stray dir
+  {
+    dout(10) << "boot_create creating local stray dir" << endl;
+    mdcache->open_local_stray();
+    CInode *stray = mdcache->get_stray();
+    CDir *dir = stray->get_dirfrag(frag_t());
+    dir->mark_complete();
+    dir->mark_dirty(dir->pre_dirty());
+    dir->commit(0, fin->new_sub());
   }
 
   // start with a fresh journal
@@ -630,8 +768,8 @@ void MDS::boot_create()
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << endl;
-    anchormgr->reset();
-    anchormgr->save(fin->new_sub());
+    anchortable->create_fresh();
+    anchortable->save(fin->new_sub());
   }
 }
 
@@ -646,7 +784,7 @@ void MDS::boot_start()
   
   if (mdsmap->get_anchortable() == whoami) {
     dout(2) << "boot_start opening anchor table" << endl;
-    anchormgr->load(fin->new_sub());
+    anchortable->load(fin->new_sub());
   } else {
     dout(2) << "boot_start i have no anchor table" << endl;
   }
@@ -658,6 +796,9 @@ void MDS::boot_start()
     dout(2) << "boot_start opening root directory" << endl;
     mdcache->open_root(fin->new_sub());
   }
+
+  dout(2) << "boot_start opening local stray directory" << endl;
+  mdcache->open_local_stray();
 }
 
 void MDS::boot_finish()
@@ -695,7 +836,7 @@ void MDS::boot_replay(int step)
   case 2:
     if (mdsmap->get_anchortable() == whoami) {
       dout(2) << "boot_replay " << step << ": opening anchor table" << endl;
-      anchormgr->load(new C_MDS_BootRecover(this, 3));
+      anchortable->load(new C_MDS_BootRecover(this, 3));
       break;
     }
     dout(2) << "boot_replay " << step << ": i have no anchor table" << endl;
@@ -712,21 +853,10 @@ void MDS::boot_replay(int step)
     break;
 
   case 5:
-    dout(2) << "boot_replay " << step << ": restarting any recovered purges" << endl;
-    mdcache->start_recovered_purges();
-    
-    step++;    // fall-thru
-    
-  case 6:
     // done with replay!
-    if (mdsmap->get_num_mds(MDSMap::STATE_ACTIVE) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_STOPPING) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_RESOLVE) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_REJOIN) == 0 &&
-	mdsmap->get_num_mds(MDSMap::STATE_REPLAY) == 1 && // me
-	mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) {
-      dout(2) << "boot_replay " << step << ": i am alone, moving to state active" << endl;      
-      set_want_state(MDSMap::STATE_ACTIVE);
+    if (mdsmap->get_num_in_mds() == 1) { // me
+      dout(2) << "boot_replay " << step << ": i am alone, moving to state reconnect" << endl;      
+      set_want_state(MDSMap::STATE_RECONNECT);
     } else {
       dout(2) << "boot_replay " << step << ": i am not alone, moving to state resolve" << endl;
       set_want_state(MDSMap::STATE_RESOLVE);
@@ -787,6 +917,11 @@ int MDS::shutdown_final()
 {
   dout(1) << "shutdown_final" << endl;
 
+  // flush loggers
+  if (logger) logger->flush(true);
+  if (logger2) logger2->flush(true);
+  mdlog->flush_logger();
+  
   // send final down:out beacon (it doesn't matter if this arrives)
   set_want_state(MDSMap::STATE_OUT);
 
@@ -834,10 +969,11 @@ void MDS::my_dispatch(Message *m)
   if (m->get_source().is_mds()) {
     int from = m->get_source().num();
     if (!mdsmap->have_inst(from) ||
-	mdsmap->get_inst(from) != m->get_source_inst()) {
+	mdsmap->get_inst(from) != m->get_source_inst() ||
+	mdsmap->is_down(from)) {
       // bogus mds?
       if (m->get_type() != MSG_MDS_MAP) {
-	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
+	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << endl;
 	delete m;
 	return;
@@ -851,8 +987,8 @@ void MDS::my_dispatch(Message *m)
 
   switch (m->get_dest_port()) {
     
-  case MDS_PORT_ANCHORMGR:
-    anchormgr->dispatch(m);
+  case MDS_PORT_ANCHORTABLE:
+    anchortable->dispatch(m);
     break;
   case MDS_PORT_ANCHORCLIENT:
     anchorclient->dispatch(m);
@@ -869,7 +1005,7 @@ void MDS::my_dispatch(Message *m)
     mdcache->migrator->dispatch(m);
     break;
   case MDS_PORT_RENAMER:
-    mdcache->renamer->dispatch(m);
+    //mdcache->renamer->dispatch(m);
     break;
 
   case MDS_PORT_BALANCER:
@@ -888,6 +1024,16 @@ void MDS::my_dispatch(Message *m)
     dout(1) << "MDS dispatch unknown message port" << m->get_dest_port() << endl;
     assert(0);
   }
+  
+  // finish any triggered contexts
+  if (finished_queue.size()) {
+    dout(7) << "mds has " << finished_queue.size() << " queued contexts" << endl;
+    dout(10) << finished_queue << endl;
+    list<Context*> ls;
+    ls.splice(ls.begin(), finished_queue);
+    assert(finished_queue.empty());
+    finish_contexts(ls);
+  }
 
 
   // HACK FOR NOW
@@ -898,19 +1044,40 @@ void MDS::my_dispatch(Message *m)
     // trim cache
     mdcache->trim();
   }
+
   
-  // finish any triggered contexts
-  if (finished_queue.size()) {
-    dout(7) << "mds has " << finished_queue.size() << " queued contexts" << endl;
-    list<Context*> ls;
-    ls.splice(ls.begin(), finished_queue);
-    assert(finished_queue.empty());
-    finish_contexts(ls);
+  // hack: thrash exports
+  for (int i=0; i<g_conf.mds_thrash_exports; i++) {
+    set<int> s;
+    mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
+    if (s.size() < 2 || mdcache->get_num_inodes() < 10) 
+      break;  // need peers for this to work.
+
+    dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf.mds_thrash_exports << endl;
+    
+    // pick a random dir inode
+    CInode *in = mdcache->hack_pick_random_inode();
+
+    list<CDir*> ls;
+    in->get_dirfrags(ls);
+    if (ls.empty()) continue;                // must be an open dir.
+    CDir *dir = ls.front();
+    if (!dir->get_parent_dir()) continue;    // must be linked.
+    if (!dir->is_auth()) continue;           // must be auth.
+
+    int dest;
+    do {
+      int k = rand() % s.size();
+      set<int>::iterator p = s.begin();
+      while (k--) p++;
+      dest = *p;
+    } while (dest == whoami);
+    mdcache->migrator->export_dir(dir,dest);
   }
 
-  
 
   // hack: force hash root?
+  /*
   if (false &&
       mdcache->get_root() &&
       mdcache->get_root()->dir &&
@@ -919,12 +1086,13 @@ void MDS::my_dispatch(Message *m)
     dout(0) << "hashing root" << endl;
     mdcache->migrator->hash_dir(mdcache->get_root()->dir);
   }
-
+  */
 
 
 
   // HACK to force export to test foreign renames
   if (false && whoami == 0) {
+    /*
     static bool didit = false;
     
     // 7 to 1
@@ -937,6 +1105,7 @@ void MDS::my_dispatch(Message *m)
         didit = true;
       }
     }
+    */
   }
 
 
@@ -996,6 +1165,19 @@ void MDS::proc_message(Message *m)
 
 
 
+void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
+{
+  mds_lock.Lock();
+  dout(10) << "handle_ms_failure to " << inst << " on " << *m << endl;
+  
+  if (m->get_type() == MSG_CLIENT_RECONNECT) 
+    server->client_reconnect_failure(m->get_dest().num());
+
+  delete m;
+  mds_lock.Unlock();
+}
+
+
 
 
 
@@ -1009,3 +1191,33 @@ void MDS::handle_ping(MPing *m)
   delete m;
 }
 
+
+
+
+class C_LogClientmap : public Context {
+  ClientMap *clientmap;
+  version_t cmapv;
+public:
+  C_LogClientmap(ClientMap *cm, version_t v) : 
+    clientmap(cm), cmapv(v) {}
+  void finish(int r) {
+    clientmap->set_committed(cmapv);
+    list<Context*> ls;
+    clientmap->take_commit_waiters(cmapv, ls);
+    finish_contexts(ls);
+  }
+};
+
+void MDS::log_clientmap(Context *c)
+{
+  dout(10) << "log_clientmap " << clientmap.get_version() << endl;
+
+  bufferlist bl;
+  clientmap.encode(bl);
+
+  clientmap.set_committing(clientmap.get_version());
+  clientmap.add_commit_waiter(c);
+
+  mdlog->submit_entry(new EClientMap(bl, clientmap.get_version()),
+		      new C_LogClientmap(&clientmap, clientmap.get_version()));
+}

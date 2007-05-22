@@ -1,3 +1,15 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
 
 #include "config.h"
 #include "include/types.h"
@@ -8,8 +20,8 @@
 #include "msg/Messenger.h"
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
-#define derr(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
+#define dout(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
+#define derr(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
 
 
 // flush/release/clean
@@ -50,28 +62,90 @@ void FileCache::empty(Context *onempty)
 }
 
 
+void FileCache::tear_down()
+{
+  off_t unclean = release_clean();
+  if (unclean) {
+    dout(0) << "tear_down " << unclean << " unclean bytes, purging" << endl;
+    oc->purge_set(inode.ino);
+  }
+}
+
+// truncate
+
+void FileCache::truncate(off_t olds, off_t news)
+{
+  dout(5) << "truncate " << olds << " -> " << news << endl;
+
+  // map range to objects
+  list<ObjectExtent> ls;
+  oc->filer.file_to_extents(inode, news, olds-news, ls);
+  oc->truncate_set(inode.ino, ls);
+}
+
 // caps
+
+class C_FC_CheckCaps : public Context {
+  FileCache *fc;
+public:
+  C_FC_CheckCaps(FileCache *f) : fc(f) {}
+  void finish(int r) {
+	fc->check_caps();
+  }
+};
 
 void FileCache::set_caps(int caps, Context *onimplement) 
 {
   if (onimplement) {
+    dout(10) << "set_caps setting onimplement context for " << cap_string(caps) << endl;
     assert(latest_caps & ~caps);  // we should be losing caps.
     caps_callbacks[caps].push_back(onimplement);
   }
   
   latest_caps = caps;
   check_caps();  
+
+  // kick waiters?  (did we gain caps?)
+  if (can_read() && !waitfor_read.empty()) 
+    for (set<Cond*>::iterator p = waitfor_read.begin();
+	 p != waitfor_read.end();
+	 ++p)
+      (*p)->Signal();
+  if (can_write() && !waitfor_write.empty()) 
+    for (set<Cond*>::iterator p = waitfor_write.begin();
+	 p != waitfor_write.end();
+	 ++p)
+      (*p)->Signal();
+  
 }
 
-
-void FileCache::check_caps()
+int FileCache::get_used_caps()
 {
   int used = 0;
   if (num_reading) used |= CAP_FILE_RD;
   if (oc->set_is_cached(inode.ino)) used |= CAP_FILE_RDCACHE;
   if (num_writing) used |= CAP_FILE_WR;
   if (oc->set_is_dirty_or_committing(inode.ino)) used |= CAP_FILE_WRBUFFER;
-  dout(10) << "check_caps used " << cap_string(used) << endl;
+  return used;
+}
+
+void FileCache::check_caps()
+{
+  // calc used
+  int used = get_used_caps();
+  dout(10) << "check_caps used was " << cap_string(used) << endl;
+
+  // try to implement caps?
+  // BUG? latest_caps, not least caps i've seen?
+  if ((latest_caps & CAP_FILE_RDCACHE) == 0 &&
+      (used & CAP_FILE_RDCACHE))
+    release_clean();
+  if ((latest_caps & CAP_FILE_WRBUFFER) == 0 &&
+      (used & CAP_FILE_WRBUFFER))
+    flush_dirty(new C_FC_CheckCaps(this));
+  
+  used = get_used_caps();
+  dout(10) << "check_caps used now " << cap_string(used) << endl;
 
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
@@ -99,6 +173,15 @@ void FileCache::check_caps()
 int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
   int r = 0;
+
+  // can i read?
+  while ((latest_caps & CAP_FILE_RD) == 0) {
+    dout(10) << "read doesn't have RD cap, blocking" << endl;
+    Cond c;
+    waitfor_read.insert(&c);
+    c.Wait(client_lock);
+    waitfor_read.erase(&c);
+  }
 
   // inc reading counter
   num_reading++;
@@ -136,6 +219,15 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
 
 void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
+  // can i write
+  while ((latest_caps & CAP_FILE_WR) == 0) {
+    dout(10) << "write doesn't have WR cap, blocking" << endl;
+    Cond c;
+    waitfor_write.insert(&c);
+    c.Wait(client_lock);
+    waitfor_write.erase(&c);
+  }
+
   // inc writing counter
   num_writing++;
 

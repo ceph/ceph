@@ -59,10 +59,10 @@ class Capability {
   bool suppress;
 
 public:
-  Capability(int want=0) :
+  Capability(int want=0, long s=0) :
     wanted_caps(want),
-    last_sent(0),
-    last_recv(0),
+    last_sent(s),
+    last_recv(s),
     suppress(false) { 
     //cap_history[last_sent] = 0;
   }
@@ -71,7 +71,7 @@ public:
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
 
-  bool is_null() { return cap_history.empty(); }
+  bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 
   // most recently issued caps.
   int pending()   { 

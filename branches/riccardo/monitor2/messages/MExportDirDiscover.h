@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRDISCOVER_H
 #define __MEXPORTDIRDISCOVER_H
 
@@ -20,31 +19,40 @@
 #include "include/types.h"
 
 class MExportDirDiscover : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
   string path;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  inodeno_t get_ino() { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   string& get_path() { return path; }
 
-  MExportDirDiscover() {}
-  MExportDirDiscover(CInode *in) : 
-    Message(MSG_MDS_EXPORTDIRDISCOVER) {
-    in->make_path(path);
-    ino = in->ino();
+  bool started;
+
+  MExportDirDiscover() :     
+    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    started(false) { }
+  MExportDirDiscover(CDir *dir) : 
+    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    started(false) {
+    dir->get_inode()->make_path(path);
+    dirfrag = dir->dirfrag();
   }
   virtual char *get_type_name() { return "ExDis"; }
-
-
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    _unrope(path, s, off);
+  void print(ostream& o) {
+    o << "export_discover(" << dirfrag << " " << path << ")";
   }
 
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
-    _rope(path, s);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
+    ::_decode(path, payload, off);
+  }
+
+  virtual void encode_payload() {
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
+    ::_encode(path, payload);
   }
 };
 

@@ -16,25 +16,13 @@
  
 #define MSG_CLOSE 0
 
-#define MSG_NS_CONNECT     1
-#define MSG_NS_CONNECTACK  2
-#define MSG_NS_REGISTER    3
-#define MSG_NS_REGISTERACK 4
-#define MSG_NS_STARTED     5
-#define MSG_NS_UNREGISTER  6
-#define MSG_NS_LOOKUP      7
-#define MSG_NS_LOOKUPREPLY 8
-#define MSG_NS_FAILURE     9
-
-
 #define MSG_PING        10
 #define MSG_PING_ACK    11
 
-#define MSG_FAILURE     12
-#define MSG_FAILURE_ACK 13
-
 #define MSG_SHUTDOWN    99999
 
+#define MSG_MON_COMMAND            13
+#define MSG_MON_COMMAND_ACK        14
 
 
 #define MSG_MON_ELECTION_ACK       15
@@ -73,16 +61,20 @@
 #define MSG_OSD_PG_LOG         53
 #define MSG_OSD_PG_REMOVE      54
 
-#define MSG_CLIENT_REQUEST         60
-#define MSG_CLIENT_REPLY           61
-//#define MSG_CLIENT_DONE            62
-#define MSG_CLIENT_FILECAPS        63
-#define MSG_CLIENT_INODEAUTHUPDATE 64
+// -- client --
+// to monitor
+#define MSG_CLIENT_MOUNT           60
+#define MSG_CLIENT_UNMOUNT         61
 
-#define MSG_CLIENT_BOOT            70
-#define MSG_CLIENT_MOUNT           71
-#define MSG_CLIENT_MOUNTACK        72
-#define MSG_CLIENT_UNMOUNT         73
+// to mds
+#define MSG_CLIENT_SESSION         70   // start or stop
+#define MSG_CLIENT_RECONNECT       71
+
+#define MSG_CLIENT_REQUEST         80
+#define MSG_CLIENT_REQUEST_FORWARD 81
+#define MSG_CLIENT_REPLY           82
+#define MSG_CLIENT_FILECAPS        83
+
 
 
 // *** MDS ***
@@ -94,7 +86,6 @@
 
 #define MSG_MDS_IMPORTMAP          106
 #define MSG_MDS_CACHEREJOIN        107
-#define MSG_MDS_CACHEREJOINACK     108
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111
@@ -113,42 +104,44 @@
 
 #define MSG_MDS_CACHEEXPIRE  125
 
-#define MSG_MDS_ANCHORREQUEST 130
-#define MSG_MDS_ANCHORREPLY   131
+#define MSG_MDS_ANCHOR 130
 
 #define MSG_MDS_INODELINK       140
 #define MSG_MDS_INODELINKACK    141
 #define MSG_MDS_INODEUNLINK     142
 #define MSG_MDS_INODEUNLINKACK  143
 
-#define MSG_MDS_EXPORTDIRDISCOVER      150
-#define MSG_MDS_EXPORTDIRDISCOVERACK   151
-#define MSG_MDS_EXPORTDIRPREP      152
-#define MSG_MDS_EXPORTDIRPREPACK   153
-#define MSG_MDS_EXPORTDIRWARNING   154
-#define MSG_MDS_EXPORTDIR          155
-#define MSG_MDS_EXPORTDIRNOTIFY    156
-#define MSG_MDS_EXPORTDIRNOTIFYACK 157
-#define MSG_MDS_EXPORTDIRFINISH    158
+#define MSG_MDS_EXPORTDIRDISCOVER     149
+#define MSG_MDS_EXPORTDIRDISCOVERACK  150
+#define MSG_MDS_EXPORTDIRCANCEL       151
+#define MSG_MDS_EXPORTDIRPREP         152
+#define MSG_MDS_EXPORTDIRPREPACK      153
+#define MSG_MDS_EXPORTDIRWARNING      154
+#define MSG_MDS_EXPORTDIRWARNINGACK   155
+#define MSG_MDS_EXPORTDIR             156
+#define MSG_MDS_EXPORTDIRACK          157
+#define MSG_MDS_EXPORTDIRNOTIFY       158
+#define MSG_MDS_EXPORTDIRNOTIFYACK    159
+#define MSG_MDS_EXPORTDIRFINISH       160
 
 
-#define MSG_MDS_HASHDIRDISCOVER    160
-#define MSG_MDS_HASHDIRDISCOVERACK 161
-#define MSG_MDS_HASHDIRPREP        162
-#define MSG_MDS_HASHDIRPREPACK     163
-#define MSG_MDS_HASHDIR            164
-#define MSG_MDS_HASHDIRACK         165
-#define MSG_MDS_HASHDIRNOTIFY      166
+#define MSG_MDS_HASHDIRDISCOVER    170
+#define MSG_MDS_HASHDIRDISCOVERACK 171
+#define MSG_MDS_HASHDIRPREP        172
+#define MSG_MDS_HASHDIRPREPACK     173
+#define MSG_MDS_HASHDIR            174
+#define MSG_MDS_HASHDIRACK         175
+#define MSG_MDS_HASHDIRNOTIFY      176
 
-#define MSG_MDS_HASHREADDIR        168
-#define MSG_MDS_HASHREADDIRREPLY   169
+#define MSG_MDS_HASHREADDIR        178
+#define MSG_MDS_HASHREADDIRREPLY   179
 
-#define MSG_MDS_UNHASHDIRPREP      170
-#define MSG_MDS_UNHASHDIRPREPACK   171
-#define MSG_MDS_UNHASHDIR          172
-#define MSG_MDS_UNHASHDIRACK       173
-#define MSG_MDS_UNHASHDIRNOTIFY    174
-#define MSG_MDS_UNHASHDIRNOTIFYACK 175
+#define MSG_MDS_UNHASHDIRPREP      180
+#define MSG_MDS_UNHASHDIRPREPACK   181
+#define MSG_MDS_UNHASHDIR          182
+#define MSG_MDS_UNHASHDIRACK       183
+#define MSG_MDS_UNHASHDIRNOTIFY    184
+#define MSG_MDS_UNHASHDIRNOTIFYACK 185
 
 #define MSG_MDS_DENTRYUNLINK      200
 
@@ -175,9 +168,7 @@
 using std::list;
 
 #include <ext/hash_map>
-#include <ext/rope>
 
-using __gnu_cxx::crope;
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -238,6 +229,9 @@ public:
   void set_payload(bufferlist& bl) {
     payload.claim(bl);
   }
+  void copy_payload(bufferlist& bl) {
+    payload = bl;
+  }
   msg_envelope_t& get_envelope() {
     return env;
   }
@@ -277,33 +271,8 @@ public:
     payload.clear();
   }
 
-  // overload either the rope version (easier!)
-  virtual void encode_payload(crope& s)           { assert(0); }
-  virtual void decode_payload(crope& s, int& off) { assert(0); }
- 
-  // of the bufferlist versions (faster!)
-  virtual void decode_payload() {
-    // use a crope for convenience, small messages, etc.  FIXME someday.
-    crope ser;
-    for (list<bufferptr>::const_iterator it = payload.buffers().begin();
-         it != payload.buffers().end();
-         it++)
-      ser.append((*it).c_str(), (*it).length());
-    
-    int off = 0;
-    decode_payload(ser, off);
-    assert((unsigned)off == payload.length());
-  }
-  virtual void encode_payload() {
-    assert(payload.length() == 0);  // caller should reset payload
-
-    // use crope for convenience, small messages. FIXME someday.
-    crope r;
-    encode_payload(r);
-
-    // copy payload
-    payload.push_back( buffer::copy(r.c_str(), r.length()) );
-  }
+  virtual void decode_payload() = 0;
+  virtual void encode_payload() = 0;
 
   virtual void print(ostream& out) {
     out << get_type_name();

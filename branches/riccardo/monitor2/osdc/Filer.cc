@@ -31,7 +31,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".filer "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".filer "
 
 
 class Filer::C_Probe : public Context {

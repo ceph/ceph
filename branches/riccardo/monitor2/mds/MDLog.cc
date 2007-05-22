@@ -30,7 +30,8 @@
 
 LogType mdlog_logtype;
 
-MDLog::MDLog(MDS *m) 
+/*
+MDLog::MDLog(MDS *m) : replay_thread(this)
 {
   mds = m;
   num_events = 0;
@@ -49,6 +50,7 @@ MDLog::MDLog(MDS *m)
   journaler = 0;
   logger = 0;
 }
+*/
 
 
 MDLog::~MDLog()
@@ -93,6 +95,12 @@ void MDLog::init_journaler()
   journaler = new Journaler(log_inode, mds->objecter, logger);
 }
 
+void MDLog::flush_logger()
+{
+  if (logger)
+    logger->flush(true);
+}
+
 
 
 void MDLog::reset()
@@ -127,8 +135,7 @@ off_t MDLog::get_write_pos()
 
 
 
-void MDLog::submit_entry( LogEvent *le,
-			  Context *c ) 
+void MDLog::submit_entry( LogEvent *le, Context *c ) 
 {
   if (g_conf.mds_log) {
     dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
@@ -236,8 +243,14 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
+  // successful trim?
+  if (!le->has_expired(mds)) {
+    dout(7) << "retrimming : " << le->get_start_off() << " : " << *le << endl;
+    le->expire(mds, new C_MDL_Trimmed(this, le));
+    return;
+  }
+
   dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << endl;
-  assert(le->has_expired(mds));
 
   if (trimming.begin()->first == le->_end_off) {
     // we trimmed off the front!  
@@ -341,6 +354,8 @@ void MDLog::trim(Context *c)
 }
 
 
+
+
 void MDLog::replay(Context *c)
 {
   assert(journaler->is_active());
@@ -368,18 +383,95 @@ void MDLog::replay(Context *c)
 
   assert(num_events == 0);
 
-  _replay(); 
+  replay_thread.create();
+  //_replay(); 
 }
 
 class C_MDL_Replay : public Context {
   MDLog *mdlog;
 public:
   C_MDL_Replay(MDLog *l) : mdlog(l) {}
-  void finish(int r) { mdlog->_replay(); }
+  void finish(int r) { 
+    mdlog->replay_cond.Signal();
+    //mdlog->_replay(); 
+  }
 };
+
+
+
+// i am a separate thread
+void MDLog::_replay_thread()
+{
+  mds->mds_lock.Lock();
+  dout(10) << "_replay_thread start" << endl;
+
+  // loop
+  while (1) {
+    // wait for read?
+    while (!journaler->is_readable() &&
+	   journaler->get_read_pos() < journaler->get_write_pos()) {
+      journaler->wait_for_readable(new C_MDL_Replay(this));
+      replay_cond.Wait(mds->mds_lock);
+    }
+    
+    if (!journaler->is_readable() &&
+	journaler->get_read_pos() == journaler->get_write_pos())
+      break;
+    
+    assert(journaler->is_readable());
+    
+    // read it
+    off_t pos = journaler->get_read_pos();
+    bufferlist bl;
+    bool r = journaler->try_read_entry(bl);
+    assert(r);
+    
+    // unpack event
+    LogEvent *le = LogEvent::decode(bl);
+    num_events++;
+
+    // have we seen an import map yet?
+    if (!seen_import_map &&
+	le->get_type() != EVENT_IMPORTMAP) {
+      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+	       << " -- waiting for import_map.  (skipping " << *le << ")" << endl;
+    } else {
+      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+	       << " : " << *le << endl;
+      le->replay(mds);
+
+      if (le->get_type() == EVENT_IMPORTMAP)
+	seen_import_map = true;
+    }
+    delete le;
+
+    // drop lock for a second, so other events/messages (e.g. beacon timer!) can go off
+    mds->mds_lock.Unlock();
+    mds->mds_lock.Lock();
+  }
+
+  // done!
+  assert(journaler->get_read_pos() == journaler->get_write_pos());
+  dout(10) << "_replay - complete" << endl;
+  
+  // move read pointer _back_ to expire pos, for eventual trimming
+  journaler->set_read_pos(journaler->get_expire_pos());
+  
+  // kick waiter(s)
+  list<Context*> ls;
+  ls.swap(waitfor_replay);
+  finish_contexts(ls,0);  
+  
+  dout(10) << "_replay_thread finish" << endl;
+  mds->mds_lock.Unlock();
+}
+
+
 
 void MDLog::_replay()
 {
+  mds->mds_lock.Lock();
+
   // read what's buffered
   while (journaler->is_readable() &&
 	 journaler->get_read_pos() < journaler->get_write_pos()) {
@@ -407,6 +499,10 @@ void MDLog::_replay()
 	seen_import_map = true;
     }
     delete le;
+
+    // drop lock for a second, so other events (e.g. beacon timer!) can go off
+    mds->mds_lock.Unlock();
+    mds->mds_lock.Lock();
   }
 
   // wait for read?

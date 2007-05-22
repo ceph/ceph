@@ -40,6 +40,8 @@
 Rank rank;
 
 
+sighandler_t old_sigint_handler;
+
 
 /********************************************
  * Accepter
@@ -48,14 +50,23 @@ Rank rank;
 void simplemessenger_sigint(int r)
 {
   rank.sigint();
+  old_sigint_handler(r);
 }
 
 void Rank::sigint()
 {
   lock.Lock();
   derr(0) << "got control-c, exiting" << endl;
+  
+  // force close listener socket
   ::close(accepter.listen_sd);
-  _exit(-1);
+
+  // force close all pipe sockets, too
+  for (hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.begin();
+       p != rank_pipe.end();
+       ++p) 
+    p->second->force_close();
+
   lock.Unlock();
 }
 
@@ -117,7 +128,7 @@ int Rank::Accepter::start()
   dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
 
   // set up signal handler
-  signal(SIGINT, simplemessenger_sigint);
+  old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
 
   // start thread
   create();
@@ -236,7 +247,7 @@ int Rank::Pipe::connect()
     return rc;
   }
 
-  // identify peer
+  // identify peer ..... FIXME
   entity_addr_t paddr;
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (!rc) { // bool
@@ -244,8 +255,9 @@ int Rank::Pipe::connect()
     return -1;
   }
   if (peer_addr != paddr) {
-    derr(0) << "pipe(" << peer_addr << ' ' << this << ").connect peer is " << paddr << ", wtf" << endl;
-    assert(0);
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << endl;
+    ::close(sd);
+    sd = 0;
     return -1;
   }
 
@@ -683,7 +695,8 @@ void Rank::Pipe::fail(list<Message*>& out)
            k != j->second.end();
            ++k) {
 	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << endl;
-        i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
+	if (i->first)
+	  i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
       }
 }
 
@@ -697,7 +710,8 @@ void Rank::Pipe::fail(list<Message*>& out)
  */
 
 Rank::Rank() : 
-  single_dispatcher(this) {
+  single_dispatcher(this),
+  started(false) {
   // default to any listen_addr
   memset((char*)&listen_addr, 0, sizeof(listen_addr));
   listen_addr.sin_family = AF_INET;
@@ -787,7 +801,14 @@ void Rank::reaper()
 
 int Rank::start_rank()
 {
+  lock.Lock();
+  if (started) {
+    dout(10) << "start_rank already started" << endl;
+    lock.Unlock();
+    return 0;
+  }
   dout(10) << "start_rank" << endl;
+  lock.Unlock();
 
   // bind to a socket
   if (accepter.start() < 0) 
@@ -802,7 +823,7 @@ int Rank::start_rank()
   lock.Lock();
 
   dout(1) << "start_rank at " << listen_addr << endl;
-
+  started = true;
   lock.Unlock();
   return 0;
 }
@@ -858,6 +879,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   EntityMessenger *msgr = new EntityMessenger(name);
 
   // add to directory
+  assert(local.count(name) == 0);
   local[name] = msgr;
   
   lock.Unlock();
@@ -904,7 +926,7 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
         }
       } else {
         derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << endl;
-        assert(0);  // hmpf
+        //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
       }
     }
     else {
@@ -995,6 +1017,7 @@ void Rank::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << endl;
+  dout(1) << "shutdown complete." << endl;
 }
 
 
@@ -1080,10 +1103,10 @@ int Rank::EntityMessenger::shutdown()
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
-    dout(1) << "shutdown i am dispatch, setting stop flag" << endl;
+    dout(10) << "shutdown i am dispatch, setting stop flag" << endl;
     stop = true;
   } else {
-    dout(1) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
+    dout(10) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
     lock.Lock();
     stop = true;
     cond.Signal();

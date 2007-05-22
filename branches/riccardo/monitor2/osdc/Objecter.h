@@ -154,7 +154,7 @@ class Objecter {
   void handle_osd_map(class MOSDMap *m);
 
  private:
-  tid_t readx_submit(OSDRead *rd, ObjectExtent& ex);
+  tid_t readx_submit(OSDRead *rd, ObjectExtent& ex, bool retry=false);
   tid_t modifyx_submit(OSDModify *wr, ObjectExtent& ex, tid_t tid=0);
   tid_t stat_submit(OSDStat *st);
 
@@ -164,6 +164,7 @@ class Objecter {
     return !(op_read.empty() && op_modify.empty());
   }
 
+  int get_client_incarnation() { return client_inc; }
   void set_client_incarnation(int inc) {
 	client_inc = inc;
   }

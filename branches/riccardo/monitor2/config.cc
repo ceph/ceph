@@ -31,21 +31,13 @@
 long buffer_total_alloc = 0;
 Mutex bufferlock;
 
+Mutex _dout_lock;
 
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
-//FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
+FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, 2 );  // stripe over 8M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, 2 );  // 8M objects, 2x replication.  (a lie)
+FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
 
-// ??
-//FileLayout g_OSD_MDDirLayout( 1<<8, 1<<2, 1<<19, 3 );  // this is stupid, but can bring out an ebofs table bug?
-FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
-
-// stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects
-//FileLayout g_OSD_MDLogLayout( 1<<8, 1<<2, 1<<19, 3 );  // 256 byte bits
-//FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // 128 byte stripes over 32 1M objects
-//FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
-//FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
 // fake osd failures: osd -> time
 std::map<int,float> g_fake_osd_down;
@@ -103,8 +95,12 @@ md_config_t g_conf = {
   
   debug_after: 0,
   
+  // -- misc --
+  use_abspaths: false,      // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
+
   // --- clock ---
   clock_lock: false,
+  clock_tare: true,
   
   // --- messenger ---
   ms_single_dispatch: false,
@@ -161,7 +157,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 30,
 
   mds_beacon_interval: 5.0,
-  mds_beacon_grace: 10.0,
+  mds_beacon_grace: 100.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -171,6 +167,8 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
   mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
+  mds_log_eopen_size: 100,   // # open inodes per log entry
+
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
   mds_bal_hash_rd: 10000,
@@ -198,6 +196,8 @@ md_config_t g_conf = {
 
   mds_local_osd: false,
 
+  mds_thrash_exports: 0,
+  mds_dump_cache_on_map: false,
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
@@ -309,7 +309,8 @@ md_config_t g_conf = {
   bdbstore_ffactor: 0,
   bdbstore_nelem: 0,
   bdbstore_pagesize: 0,
-  bdbstore_cachesize: 0
+  bdbstore_cachesize: 0,
+  bdbstore_transactional: false
 #endif // USE_OSBDB
 };
 
@@ -555,12 +556,19 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--clock_lock") == 0) 
       g_conf.clock_lock = atoi(args[++i]);
+    else if (strcmp(args[i], "--clock_tare") == 0) 
+      g_conf.clock_tare = atoi(args[++i]);
 
     else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+      g_conf.mds_beacon_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+      g_conf.mds_beacon_grace = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
@@ -620,6 +628,10 @@ void parse_config_options(std::vector<char*>& args)
     
     else if (strcmp(args[i], "--mds_local_osd") == 0) 
       g_conf.mds_local_osd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
+      g_conf.mds_thrash_exports = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
+      g_conf.mds_dump_cache_on_map = true;
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;
@@ -807,6 +819,12 @@ void parse_config_options(std::vector<char*>& args)
     }
     else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
       g_conf.bdbstore_cachesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-transactional") == 0) {
+      g_conf.bdbstore_transactional = true;
+    }
+    else if (strcmp(args[i], "--debug-bdbstore") == 0) {
+      g_conf.debug_bdbstore = atoi(args[++i]);
     }
 #endif // USE_OSBDB
 

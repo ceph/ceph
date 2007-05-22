@@ -20,41 +20,36 @@
 class EImportMap : public LogEvent {
 public:
   EMetaBlob metablob;
-  set<inodeno_t> imports;
-  set<inodeno_t> exports;
-  //set<inodeno_t> hashdirs;
-  map<inodeno_t, set<inodeno_t> > nested_exports;
+  set<dirfrag_t> imports;
+  map<dirfrag_t, set<dirfrag_t> > bounds;
 
   EImportMap() : LogEvent(EVENT_IMPORTMAP) { }
   
   void print(ostream& out) {
-    out << "import_map " << imports.size() << " imports, " 
-	<< exports.size() << " exports"
-	<< " " << metablob;
+    out << "import_map " << imports.size() << " imports " 
+	<< metablob;
   }
 
   void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
     ::_encode(imports, bl);
-    ::_encode(exports, bl);
-    for (set<inodeno_t>::iterator p = imports.begin();
+    for (set<dirfrag_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
-      ::_encode(nested_exports[*p], bl);
-      if (nested_exports[*p].empty())
-	nested_exports.erase(*p);
+      ::_encode(bounds[*p], bl);
+      if (bounds[*p].empty())
+	bounds.erase(*p);
     }
   } 
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
     ::_decode(imports, bl, off);
-    ::_decode(exports, bl, off);
-    for (set<inodeno_t>::iterator p = imports.begin();
+    for (set<dirfrag_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
-      ::_decode(nested_exports[*p], bl, off);
-      if (nested_exports[*p].empty())
-	nested_exports.erase(*p);
+      ::_decode(bounds[*p], bl, off);
+      if (bounds[*p].empty())
+	bounds.erase(*p);
     }
   }
 

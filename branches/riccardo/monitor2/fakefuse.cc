@@ -75,6 +75,11 @@ int main(int argc, char **argv) {
   args = nargs;
   vec_to_argv(args, argc, argv);
 
+  // FUSE will chdir("/"); be ready.
+  g_conf.use_abspaths = true;
+
+  if (g_conf.clock_tare) g_clock.tare();
+
   MonMap *monmap = new MonMap(g_conf.num_mon);
   
   Monitor *mon[g_conf.num_mon];
@@ -118,7 +123,11 @@ int main(int argc, char **argv) {
     // use my argc, argv (make sure you pass a mount point!)
     cout << "starting fuse on pid " << getpid() << endl;
     client[i]->mount();
+
+    char *oldcwd = get_current_dir_name();  // note previous wd
     ceph_fuse_main(client[i], argc, argv);
+    ::chdir(oldcwd);                        // return to previous wd
+
     client[i]->unmount();
     cout << "fuse finished on pid " << getpid() << endl;
     client[i]->shutdown();

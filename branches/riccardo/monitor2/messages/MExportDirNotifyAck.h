@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRNOTIFYACK_H
 #define __MEXPORTDIRNOTIFYACK_H
 
@@ -20,25 +19,29 @@
 using namespace std;
 
 class MExportDirNotifyAck : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirNotifyAck() {}
-  MExportDirNotifyAck(inodeno_t ino) :
+  MExportDirNotifyAck(dirfrag_t dirfrag) :
     Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
-    this->ino = ino;
+    this->dirfrag = dirfrag;
   }
   virtual char *get_type_name() { return "ExNotA"; }
+  void print(ostream& o) {
+    o << "export_notify_ack(" << dirfrag << ")";
+  }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
   }
   
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
+  virtual void encode_payload() {
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
   }
   
 };

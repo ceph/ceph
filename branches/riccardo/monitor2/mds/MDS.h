@@ -43,31 +43,6 @@ using namespace __gnu_cxx;
 #include "ClientMap.h"
 
 
-#define MDS_PORT_MAIN     0
-#define MDS_PORT_SERVER   1
-#define MDS_PORT_CACHE    2
-#define MDS_PORT_LOCKER   3
-#define MDS_PORT_STORE    4
-#define MDS_PORT_BALANCER 5
-#define MDS_PORT_MIGRATOR 6
-#define MDS_PORT_RENAMER  7
-
-#define MDS_PORT_ANCHORCLIENT 10
-#define MDS_PORT_ANCHORMGR    11
-
-
-#define MDS_INO_ROOT              1
-#define MDS_INO_PGTABLE           2
-#define MDS_INO_LOG_OFFSET        0x100
-#define MDS_INO_IDS_OFFSET        0x200
-#define MDS_INO_INODEFILE_OFFSET  0x300
-#define MDS_INO_ANCHORTABLE       0x400
-#define MDS_INO_BASE              0x1000
-
-#define MDS_TRAVERSE_FORWARD       1
-#define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
-#define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
-#define MDS_TRAVERSE_FAIL          4
 
 
 class filepath;
@@ -81,7 +56,6 @@ class Locker;
 class AnchorTable;
 class AnchorClient;
 class MDCache;
-class MDStore;
 class MDLog;
 class MDBalancer;
 class IdAllocator;
@@ -118,19 +92,16 @@ class MDS : public Dispatcher {
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
 
-  ClientMap    clientmap;
-
   // sub systems
   Server       *server;
   MDCache      *mdcache;
   Locker       *locker;
-  MDStore      *mdstore;
   MDLog        *mdlog;
   MDBalancer   *balancer;
 
   IdAllocator  *idalloc;
 
-  AnchorTable  *anchormgr;
+  AnchorTable  *anchortable;
   AnchorClient *anchorclient;
 
   Logger       *logger, *logger2;
@@ -155,6 +126,7 @@ class MDS : public Dispatcher {
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
   bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
+  bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
@@ -166,10 +138,10 @@ class MDS : public Dispatcher {
   // -- waiters --
   list<Context*> finished_queue;
 
-  void queue_finished(Context *c) {
+  void queue_waiter(Context *c) {
     finished_queue.push_back(c);
   }
-  void queue_finished(list<Context*>& ls) {
+  void queue_waiters(list<Context*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
   }
   
@@ -184,7 +156,11 @@ class MDS : public Dispatcher {
   Context *tick_event;
   void     reset_tick();
 
-  
+  // -- client map --
+  ClientMap    clientmap;
+  epoch_t      last_client_mdsmap_bcast;
+  void log_clientmap(Context *c);
+
 
   // shutdown crap
   int req_rate;
@@ -193,10 +169,6 @@ class MDS : public Dispatcher {
  public:
 
   int get_req_rate() { return req_rate; }
-
- protected:
-
-  friend class MDStore;
 
  
  public:
@@ -209,6 +181,8 @@ class MDS : public Dispatcher {
   OSDMap *get_osd_map() { return osdmap; }
 
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
+  void forward_message_mds(Message *req, int mds, int port=0);
+
 
   // start up, shutdown
   int init(bool standby=false);
@@ -218,6 +192,8 @@ class MDS : public Dispatcher {
   void boot_start();              // i am old but empty (was down:out) mds.
   void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
   void boot_finish();
+
+  void bcast_mds_map();  // to mounted clients
 
   int shutdown_start();
   int shutdown_final();
@@ -235,11 +211,11 @@ class MDS : public Dispatcher {
   virtual void dispatch(Message *m);
   void my_dispatch(Message *m);
 
+  void ms_handle_failure(Message *m, const entity_inst_t& inst);
+
   // special message types
   void handle_ping(class MPing *m);
-
   void handle_mds_map(class MMDSMap *m);
-
   void handle_shutdown_start(Message *m);
 
   // osds

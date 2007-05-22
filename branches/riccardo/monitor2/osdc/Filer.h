@@ -30,7 +30,6 @@
 using namespace std;
 
 #include <ext/hash_map>
-#include <ext/rope>
 using namespace __gnu_cxx;
 
 #include "include/types.h"

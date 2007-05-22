@@ -70,6 +70,7 @@ void MDBalancer::tick()
   // balance?
   if (true && 
       mds->get_nodeid() == 0 &&
+      g_conf.mds_bal_interval > 0 &&
       (num_bal_times || 
        (g_conf.mds_bal_max_until >= 0 && 
 	elapsed.sec() > g_conf.mds_bal_max_until)) && 
@@ -133,19 +134,21 @@ void MDBalancer::send_heartbeat()
   mds_load_t load = get_load();
   mds_load[ mds->get_nodeid() ] = load;
 
-  // import_map
+  // import_map -- how much do i import from whom
   map<int, float> import_map;
-
-  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
-       it != mds->mdcache->imports.end();
+  set<CDir*> authsubs;
+  mds->mdcache->get_auth_subtrees(authsubs);
+  for (set<CDir*>::iterator it = authsubs.begin();
+       it != authsubs.end();
        it++) {
     CDir *im = *it;
-    if (im->inode->is_root()) continue;
-    int from = im->inode->authority();
+    int from = im->inode->authority().first;
+    if (from == mds->get_nodeid()) continue;
+    if (im->get_inode()->is_stray()) continue;
     import_map[from] += im->popularity[MDS_POP_CURDOM].meta_load();
   }
   mds_import_map[ mds->get_nodeid() ] = import_map;
-
+  
   
   dout(5) << "mds" << mds->get_nodeid() << " sending heartbeat " << beat_epoch << " " << load << endl;
   for (map<int, float>::iterator it = import_map.begin();
@@ -207,15 +210,17 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 void MDBalancer::export_empties() 
 {
   dout(5) << "export_empties checking for empty imports" << endl;
-
-  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
-       it != mds->mdcache->imports.end();
+  dout(0) << "IMPLEMENT ME" << endl;
+  /*
+  for (set<CDir*>::iterator it = mds->mdcache->subtrees.begin();
+       it != mds->mdcache->subtrees.end();
        it++) {
     CDir *dir = *it;
     
     if (!dir->inode->is_root() && dir->get_size() == 0) 
       mds->mdcache->migrator->export_empty_import(dir);
   }
+  */
 }
 
 
@@ -259,12 +264,14 @@ void MDBalancer::do_hashing()
     inodeno_t dirino = *i;
     CInode *in = mds->mdcache->get_inode(dirino);
     if (!in) continue;
+    /*
     CDir *dir = in->dir;
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_hashing hashing " << *dir << endl;
     mds->mdcache->migrator->hash_dir(dir);
+    */
   }
   hash_queue.clear();
 }
@@ -288,7 +295,8 @@ void MDBalancer::do_rebalance(int beat)
   if (mds_load[whoami].mds_load() > 0) {
     load_fac = mds_load[whoami].root.meta_load() / mds_load[whoami].mds_load();
     dout(7) << " load_fac is " << load_fac 
-             << " <- " << mds_load[whoami].root.meta_load() << " / " << mds_load[whoami].mds_load()
+             << " <- " << mds_load[whoami].root.meta_load()
+	    << " / " << mds_load[whoami].mds_load()
              << endl;
   }
   
@@ -417,23 +425,29 @@ void MDBalancer::do_rebalance(int beat)
   // make a sorted list of my imports
   map<double,CDir*>    import_pop_map;
   multimap<int,CDir*>  import_from_map;
-  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
-       it != mds->mdcache->imports.end();
+  set<CDir*> fullauthsubs;
+
+  mds->mdcache->get_fullauth_subtrees(fullauthsubs);
+  for (set<CDir*>::iterator it = fullauthsubs.begin();
+       it != fullauthsubs.end();
        it++) {
-    if ((*it)->is_hashed()) continue;
-    double pop = (*it)->popularity[MDS_POP_CURDOM].meta_load();
+    CDir *im = *it;
+    if (im->get_inode()->is_stray()) continue;
+
+    double pop = im->popularity[MDS_POP_CURDOM].meta_load();
     if (pop < g_conf.mds_bal_idle_threshold &&
-        (*it)->inode != mds->mdcache->get_root()) {
-      dout(-5) << " exporting idle import " << **it 
-               << " back to mds" << (*it)->inode->authority()
+        im->inode != mds->mdcache->get_root() &&
+	im->inode->authority().first != mds->get_nodeid()) {
+      dout(-5) << " exporting idle import " << *im
+               << " back to mds" << im->inode->authority().first
                << endl;
-      mds->mdcache->migrator->export_dir(*it, (*it)->inode->authority());
+      mds->mdcache->migrator->export_dir(im, im->inode->authority().first);
       continue;
     }
-    import_pop_map[ pop ] = *it;
-    int from = (*it)->inode->authority();
-    dout(15) << "  map: i imported " << **it << " from " << from << endl;
-    import_from_map.insert(pair<int,CDir*>(from, *it));
+    import_pop_map[ pop ] = im;
+    int from = im->inode->authority().first;
+    dout(15) << "  map: i imported " << *im << " from " << from << endl;
+    import_from_map.insert(pair<int,CDir*>(from, im));
   }
   
 
@@ -482,10 +496,9 @@ void MDBalancer::do_rebalance(int beat)
         multimap<int,CDir*>::iterator plast = p.first++;
         
         if (dir->inode->is_root()) continue;
-        if (dir->is_hashed()) continue;
         if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
         double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
-        assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
+        assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
         
         if (pop <= amount-have) {
           dout(-5) << "reexporting " << *dir 
@@ -521,7 +534,7 @@ void MDBalancer::do_rebalance(int beat)
                  << " back to mds" << imp->inode->authority()
                  << endl;
         have += pop;
-        mds->mdcache->migrator->export_dir(imp, imp->inode->authority());
+        mds->mdcache->migrator->export_dir(imp, imp->inode->authority().first);
       }
       if (amount-have < MIN_OFFLOAD) break;
     }
@@ -532,13 +545,15 @@ void MDBalancer::do_rebalance(int beat)
     }
 
     // okay, search for fragments of my workload
-    set<CDir*> candidates = mds->mdcache->imports;
+    set<CDir*> candidates;
+    mds->mdcache->get_fullauth_subtrees(candidates);
 
     list<CDir*> exports;
     
     for (set<CDir*>::iterator pot = candidates.begin();
          pot != candidates.end();
          pot++) {
+      if ((*pot)->get_inode()->is_stray()) continue;
       find_exports(*pot, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD) {
         break;
@@ -593,33 +608,38 @@ void MDBalancer::find_exports(CDir *dir,
     CInode *in = it->second->get_inode();
     if (!in) continue;
     if (!in->is_dir()) continue;
-    if (!in->dir) continue;       // clearly not popular
     
-    if (in->dir->is_export()) continue;
-    if (in->dir->is_hashed()) continue;
-    if (already_exporting.count(in->dir)) continue;
+    list<CDir*> dfls;
+    in->get_dirfrags(dfls);
+    for (list<CDir*>::iterator p = dfls.begin();
+	 p != dfls.end();
+	 ++p) {
+      CDir *dir = *p;
+      if (!dir->is_auth()) continue;
+      if (already_exporting.count(dir)) continue;
 
-    if (in->dir->is_frozen()) continue;  // can't export this right now!
-    //if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
-    
-    // how popular?
-    double pop = in->dir->popularity[MDS_POP_CURDOM].meta_load();
-    dir_sum += pop;
-    dout(20) << "   pop " << pop << " " << *in->dir << endl;
+      if (dir->is_frozen()) continue;  // can't export this right now!
+      //if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
+      
+      // how popular?
+      double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
+      dir_sum += pop;
+      dout(20) << "   pop " << pop << " " << *dir << endl;
 
-    if (pop < minchunk) continue;
-
-    // lucky find?
-    if (pop > needmin && pop < needmax) {
-      exports.push_back(in->dir);
-      have += pop;
-      return;
+      if (pop < minchunk) continue;
+      
+      // lucky find?
+      if (pop > needmin && pop < needmax) {
+	exports.push_back(dir);
+	have += pop;
+	return;
+      }
+      
+      if (pop > need)
+	bigger.push_back(dir);
+      else
+	smaller.insert(pair<double,CDir*>(pop, dir));
     }
-    
-    if (pop > need)
-      bigger.push_back(in->dir);
-    else
-      smaller.insert(pair<double,CDir*>(pop, in->dir));
   }
   dout(7) << " .. sum " << dir_sum << " / " << dir_pop << endl;
 
@@ -713,7 +733,6 @@ void MDBalancer::hit_dir(CDir *dir, int type)
     if (((v > g_conf.mds_bal_hash_rd && type == META_POP_IRD) ||
          //(v > g_conf.mds_bal_hash_wr && type == META_POP_IWR) ||
          (v > g_conf.mds_bal_hash_wr && type == META_POP_DWR)) &&
-        !(dir->is_hashed() || dir->is_hashing()) &&
         hash_queue.count(dir->ino()) == 0) {
       dout(0) << "hit_dir " << type << " pop is " << v << ", putting in hash_queue: " << *dir << endl;
       hash_queue.insert(dir->ino());
@@ -746,7 +765,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 
       dout(1) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << endl;
           
-      dir->dir_rep = CDIR_REP_ALL;
+      dir->dir_rep = CDir::REP_ALL;
       mds->mdcache->send_dir_updates(dir, true);
 
       dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].adjust(rd_adj);
@@ -759,7 +778,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
       // unreplicate
       dout(1) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
       
-      dir->dir_rep = CDIR_REP_NONE;
+      dir->dir_rep = CDir::REP_NONE;
       mds->mdcache->send_dir_updates(dir);
     }
   }
@@ -783,7 +802,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
       in->popularity[MDS_POP_CURDOM].pop[type].hit();
     }
     
-    if (dir->is_import()) 
+    if (dir->is_subtree_root()) 
       curdom = false;   // end of auth domain, stop hitting auth counters.
     dir = dir->inode->get_parent_dir();
   }
@@ -797,7 +816,7 @@ void MDBalancer::subtract_export(CDir *dir)
 {
   meta_load_t curdom = dir->popularity[MDS_POP_CURDOM];
   
-  bool in_domain = !dir->is_import();
+  bool in_domain = !dir->is_subtree_root();
   
   while (true) {
     CInode *in = dir->inode;
@@ -808,7 +827,7 @@ void MDBalancer::subtract_export(CDir *dir)
     dir = in->get_parent_dir();
     if (!dir) break;
     
-    if (dir->is_import()) in_domain = false;
+    if (dir->is_subtree_root()) in_domain = false;
     
     dir->popularity[MDS_POP_ANYDOM] -= curdom;
     if (in_domain) dir->popularity[MDS_POP_CURDOM] -= curdom;
@@ -820,7 +839,7 @@ void MDBalancer::add_import(CDir *dir)
 {
   meta_load_t curdom = dir->popularity[MDS_POP_CURDOM];
 
-  bool in_domain = !dir->is_import();
+  bool in_domain = !dir->is_subtree_root();
   
   while (true) {
     CInode *in = dir->inode;
@@ -831,7 +850,7 @@ void MDBalancer::add_import(CDir *dir)
     dir = in->get_parent_dir();
     if (!dir) break;
     
-    if (dir->is_import()) in_domain = false;
+    if (dir->is_subtree_root()) in_domain = false;
     
     dir->popularity[MDS_POP_ANYDOM] += curdom;
     if (in_domain) dir->popularity[MDS_POP_CURDOM] += curdom;
@@ -846,7 +865,7 @@ void MDBalancer::add_import(CDir *dir)
 
 void MDBalancer::show_imports(bool external)
 {
-  mds->mdcache->show_imports();
+  mds->mdcache->show_subtrees();
 }
 
 

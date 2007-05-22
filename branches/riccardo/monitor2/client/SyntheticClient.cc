@@ -20,7 +20,8 @@ using namespace std;
 #include "SyntheticClient.h"
 
 #include "include/filepath.h"
-#include "mds/MDS.h"
+#include "mds/mdstypes.h"
+#include "common/Logger.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -121,6 +122,16 @@ void parse_syn_options(vector<char*>& args)
         syn_sargs.push_back( args[++i] );
         syn_iargs.push_back( atoi(args[++i]) );
 
+      } else if (strcmp(args[i],"thrashlinks") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_THRASHLINKS );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"foo") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_FOO );
+
       } else if (strcmp(args[i],"until") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -144,6 +155,11 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"optest") == 0) {
 	syn_modes.push_back( SYNCLIENT_MODE_OPTEST );
         syn_iargs.push_back( atoi(args[++i]) );
+
+      } else if (strcmp(args[i],"truncate") == 0) { 
+        syn_modes.push_back( SYNCLIENT_MODE_TRUNCATE );
+	syn_sargs.push_back(args[++i]);
+        syn_iargs.push_back(atoi(args[++i]));
       } else {
         cerr << "unknown syn arg " << args[i] << endl;
         assert(0);
@@ -216,6 +232,11 @@ int SyntheticClient::run()
     dout(3) << "mode " << mode << endl;
 
     switch (mode) {
+    case SYNCLIENT_MODE_FOO:
+      if (run_me()) 
+	foo();
+      break;
+
     case SYNCLIENT_MODE_RANDOMSLEEP:
       {
         int iarg1 = iargs.front();
@@ -332,6 +353,22 @@ int SyntheticClient::run()
         }
       }
       break;
+
+
+    case SYNCLIENT_MODE_THRASHLINKS:
+      {
+        string sarg1 = get_sarg(0);
+        int iarg1 = iargs.front();  iargs.pop_front();
+        int iarg2 = iargs.front();  iargs.pop_front();
+        int iarg3 = iargs.front();  iargs.pop_front();
+        int iarg4 = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "thrashlinks " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+          thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3, iarg4);
+        }
+      }
+      break;
+
 
 
     case SYNCLIENT_MODE_MAKEFILES:
@@ -498,6 +535,16 @@ int SyntheticClient::run()
 	    client->chmod("test", 0777);
           }
         }
+      }
+      break;
+
+    case SYNCLIENT_MODE_TRUNCATE:
+      {
+        string file = get_sarg(0);
+        sargs.push_front(file);
+        int iarg1 = iargs.front();  iargs.pop_front();
+	if (run_me()) 
+	  client->truncate(file.c_str(), iarg1);
       }
       break;
       
@@ -667,6 +714,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       char *buf = new char[size];
       client->read(fh, buf, size, off);
       delete[] buf;
+    } else if (strcmp(op, "lseek") == 0) {
+      __int64_t id = t.get_int();
+      __int64_t fh = open_files[id];
+      int off = t.get_int();
+      int whence = t.get_int();
+      client->lseek(fh, off, whence);
     } else if (strcmp(op, "write") == 0) {
       __int64_t id = t.get_int();
       __int64_t fh = open_files[id];
@@ -707,6 +760,8 @@ int SyntheticClient::clean_dir(string& basedir)
   for (map<string, inode_t>::iterator it = contents.begin();
        it != contents.end();
        it++) {
+    if (it->first == ".") continue;
+    if (it->first == "..") continue;
     string file = basedir + "/" + it->first;
 
     if (time_to_stop()) break;
@@ -763,6 +818,27 @@ int SyntheticClient::full_walk(string& basedir)
 	dout(1) << "stat error on " << file << " r=" << r << endl;
 	continue;
       }
+      
+      // print
+      char *tm = ctime(&st.st_mtime);
+      tm[strlen(tm)-1] = 0;
+      printf("%c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+	     S_ISDIR(st.st_mode) ? 'd':'-',
+	     (st.st_mode & 0400) ? 'r':'-',
+	     (st.st_mode & 0200) ? 'w':'-',
+	     (st.st_mode & 0100) ? 'x':'-',
+	     (st.st_mode & 040) ? 'r':'-',
+	     (st.st_mode & 020) ? 'w':'-',
+	     (st.st_mode & 010) ? 'x':'-',
+	     (st.st_mode & 04) ? 'r':'-',
+	     (st.st_mode & 02) ? 'w':'-',
+	     (st.st_mode & 01) ? 'x':'-',
+	     (int)st.st_nlink,
+	     st.st_uid, st.st_gid,
+	     (int)st.st_size,
+	     tm,
+	     file.c_str());
+
       
       if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
 	dirq.push_back(file);
@@ -973,16 +1049,15 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     }
     dout(2) << "writing block " << i << "/" << chunks << endl;
     
-    // fill buf with a fingerprint
-    int *p = (int*)buf;
+    // fill buf with a 16 byte fingerprint
+    // 64 bits : file offset
+    // 64 bits : client id
+    // = 128 bits (16 bytes)
+    __uint64_t *p = (__uint64_t*)buf;
     while ((char*)p < buf + wrsize) {
-      *p = (char*)p - buf;      
-      p++;
-      *p = i;
+      *p = i*wrsize + (char*)p - buf;      
       p++;
       *p = client->get_nodeid();
-      p++;
-      *p = 0;
       p++;
     }
 
@@ -1018,42 +1093,33 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
     dout(2) << "reading block " << i << "/" << chunks << endl;
-    client->read(fd, buf, rdsize, i*rdsize);
+    int r = client->read(fd, buf, rdsize, i*rdsize);
+    if (r < rdsize) {
+      dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
+      break;
+    }
 
     // verify fingerprint
-    int *p = (int*)buf;
     int bad = 0;
-    int boff, bgoff, bchunk, bclient, bzero;
+    __int64_t *p = (__int64_t*)buf;
+    __int64_t readoff, readclient;
     while ((char*)p + 32 < buf + rdsize) {
-      boff = *p;
-      bgoff = (int)((char*)p - buf);
+      readoff = *p;
+      __int64_t wantoff = i*rdsize + (__int64_t)((char*)p - buf);
       p++;
-      bchunk = *p;
+      readclient = *p;
       p++;
-      bclient = *p;
-      p++;
-      bzero = *p;
-      p++;
-      if (boff != bgoff ||
-          bchunk != (int)i ||
-          bclient != client->get_nodeid() ||
-          bzero != 0) {
+      if (readoff != wantoff ||
+	  readclient != client->get_nodeid()) {
         if (!bad)
-          dout(0) << "WARNING: wrong data from OSD, it should be " 
-                  << "(block=" << i 
-                  << " offset=" << bgoff
-                  << " client=" << client->get_nodeid() << ")"
-                  << " .. but i read back .. " 
-                  << "(block=" << bchunk
-                  << " offset=" << boff
-                  << " client=" << bclient << " zero=" << bzero << ")" << endl;
-
+          dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		  << endl;
         bad++;
       }
     }
     if (bad) 
       dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
-
   }
   
   client->close(fd);
@@ -1087,7 +1153,7 @@ int SyntheticClient::random_walk(int num_req)
     // descend?
     if (.9*roll_die(::pow((double).9,(double)cwd.depth())) && subdirs.size()) {
       string s = get_random_subdir();
-      cwd.add_dentry( s );
+      cwd.push_dentry( s );
       dout(DBL) << "cd " << s << " -> " << cwd << endl;
       clear_dir();
       continue;
@@ -1288,4 +1354,112 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
     
   
 }
+
+
+
+void SyntheticClient::foo()
+{
+  // link fun
+  client->mknod("one", 0755);
+  client->mknod("two", 0755);
+  client->link("one", "three");
+  client->mkdir("dir", 0755);
+  client->link("two", "/dir/twolink");
+  client->link("dir/twolink", "four");
+  
+  // unlink fun
+  client->mknod("a", 0644);
+  client->unlink("a");
+  client->mknod("b", 0644);
+  client->link("b", "c");
+  client->unlink("c");
+  client->mkdir("d", 0755);
+  client->unlink("d");
+  client->rmdir("d");
+
+  // rename fun
+  client->mknod("p1", 0644);
+  client->mknod("p2", 0644);
+  client->rename("p1","p2");
+  client->mknod("p3", 0644);
+  client->rename("p3","p4");
+
+  // check dest dir ambiguity thing
+  client->mkdir("dir1", 0755);
+  client->mkdir("dir2", 0755);
+  client->rename("p2","dir1/p2");
+  client->rename("dir1/p2","dir2/p2");
+  client->rename("dir2/p2","/p2");
+  
+  // check primary+remote link merging
+  client->link("p2","p2.l");
+  client->link("p4","p4.l");
+  client->rename("p2.l","p2");
+  client->rename("p4","p4.l");
+
+  // check anchor updates
+  client->mknod("dir1/a", 0644);
+  client->link("dir1/a", "da1");
+  client->link("dir1/a", "da2");
+  client->link("da2","da3");
+  client->rename("dir1/a","dir2/a");
+  client->rename("dir2/a","da2");
+  client->rename("da1","da2");
+  client->rename("da2","da3");
+
+  // check directory renames
+  client->mkdir("dir3", 0755);
+  client->mknod("dir3/asdf", 0644);
+  client->mkdir("dir4", 0755);
+  client->mkdir("dir5", 0755);
+  client->mknod("dir5/asdf", 0644);
+  client->rename("dir3","dir4"); // ok
+  client->rename("dir4","dir5"); // fail
+}
+
+int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)
+{
+  dout(1) << "thrash_links " << basedir << " " << dirs << " " << files << " " << depth
+	  << " links " << n
+	  << endl;
+
+  if (time_to_stop()) return 0;
+ 
+  // now link shit up
+  for (int i=0; i<n; i++) {
+    if (time_to_stop()) return 0;
+
+    char f[20];
+
+    // pick a file
+    string file = basedir;
+
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	file += f;
+      }
+    }
+    sprintf(f, "/file.%d", rand() % files);
+    file += f;
+
+    // pick a dir for our link
+    string ln = basedir;
+    if (depth) {
+      int d = rand() % (depth+1);
+      for (int k=0; k<d; k++) {
+	sprintf(f, "/dir.%d", rand() % dirs);
+	ln += f;
+      }
+    }
+    sprintf(f, "/ln.%d", i);
+    ln += f;
+
+    client->link(file.c_str(), ln.c_str());  
+  }
+
+  return 0;
+}
+
 

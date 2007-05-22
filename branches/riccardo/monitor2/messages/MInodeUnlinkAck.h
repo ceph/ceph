@@ -32,12 +32,13 @@ class MInodeUnlinkAck : public Message {
   }
   virtual char *get_type_name() { return "InUlA";}
   
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(st), (char*)&st);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&st,sizeof(st));
+  virtual void encode_payload() {
+    payload.append((char*)&st,sizeof(st));
   }
 };
 

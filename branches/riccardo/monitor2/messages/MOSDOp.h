@@ -75,11 +75,9 @@ public:
 
 private:
   struct {
-    long pcid;
-    
     // who's asking?
     entity_inst_t client;
-    reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+    osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
     
     // for replication
     tid_t rep_tid;
@@ -93,12 +91,15 @@ private:
     eversion_t pg_trim_to;   // primary->replica: trim to here
     
     int op;
-    size_t length, offset;
+    size_t length;
+    off_t offset;
+
     eversion_t version;
     eversion_t old_version;
     
     bool   want_ack;
     bool   want_commit;
+    bool   retry_attempt;
   } st;
 
   bufferlist data;
@@ -107,7 +108,7 @@ private:
   friend class MOSDOpReply;
 
  public:
-  const reqid_t&    get_reqid() { return st.reqid; }
+  const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
 
@@ -117,6 +118,9 @@ private:
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
+
+  bool get_retry_attempt() const { return st.retry_attempt; }
+  void set_retry_attempt(bool a) { st.retry_attempt = a; }
 
   const object_t get_oid() { return st.oid; }
   const pg_t     get_pg() { return st.pg; }
@@ -136,7 +140,7 @@ private:
   void set_op(int o) { st.op = o; }
 
   const size_t get_length() { return st.length; }
-  const size_t get_offset() { return st.offset; }
+  const off_t get_offset() { return st.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
@@ -153,10 +157,6 @@ private:
   }
   size_t get_data_len() { return data.length(); }
 
-
-  // keep a pcid (procedure call id) to match up request+reply
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
          object_t oid, pg_t pg, epoch_t mapepoch, int op) :
@@ -183,7 +183,7 @@ private:
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_length(size_t l) { st.length = l; }
-  void set_offset(size_t o) { st.offset = o; }
+  void set_offset(off_t o) { st.offset = o; }
   void set_version(eversion_t v) { st.version = v; }
   void set_old_version(eversion_t ov) { st.old_version = ov; }
   
@@ -204,14 +204,13 @@ private:
     ::_encode(data, payload);
   }
 
-  virtual char *get_type_name() { return "oop"; }
-
+  virtual char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)
-	<< " " << st.oid
-      //<< " " << this 
-	<< ")";
+	<< " " << st.oid;
+    if (st.retry_attempt) out << " RETRY";
+    out << ")";
   }
 };
 

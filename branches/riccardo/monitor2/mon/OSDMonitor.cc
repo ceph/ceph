@@ -126,15 +126,20 @@ void OSDMonitor::create_initial()
   if (g_conf.osd_pg_bits) {
     osdmap.set_pg_bits(g_conf.osd_pg_bits);
   } else {
-    int osdbits = 1;
+    // figure out how many bits worth of osds we have.
+    //     1 osd  -> 0 bits
+    //  <= 2 osds -> 1 bit
+    //  <= 4 osds -> 2 bits
+    int osdbits = -1;
     int n = g_conf.num_osd;
+    assert(n > 0);
     while (n) {
       n = n >> 1;
       osdbits++;
     }
 
-    // 2 bits per osd.
-    osdmap.set_pg_bits(osdbits + 2);
+    // 7 bits per osd.
+    osdmap.set_pg_bits(osdbits + 4);  // FIXME
   }
   
   // start at epoch 0 until all osds boot
@@ -399,6 +404,8 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
               << (osdmap.osds.size() - osdmap.osd_inst.size())
               << " osds to boot" << endl;
     }
+
+    delete m;
     return;
   }
   

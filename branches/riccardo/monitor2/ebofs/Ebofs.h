@@ -21,11 +21,6 @@ using namespace __gnu_cxx;
 #include "include/Context.h"
 #include "include/buffer.h"
 
-template<typename U,typename V>
-inline ostream& operator<<(ostream& out, const pair<U,V>& p) {
-  return out << p.first << "," << p.second;
-}
-
 #include "types.h"
 #include "Onode.h"
 #include "Cnode.h"
@@ -118,6 +113,9 @@ class Ebofs : public ObjectStore {
   map<object_t, list<Cond*> > waitfor_onode;
 
   Onode* new_onode(object_t oid);     // make new onode.  ref++.
+  bool have_onode(object_t oid) {
+    return onode_map.count(oid);
+  }
   Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.

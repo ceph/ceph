@@ -16,9 +16,12 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "Anchor.h"
 
 #include "MDS.h"
 #include "MDCache.h"
+
+#include "messages/MLock.h"
 
 #include <cassert>
 
@@ -47,11 +50,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_null()) out << " NULL";
   if (dn.is_remote()) out << " REMOTE";
 
-  if (dn.is_pinned()) out << " " << dn.num_pins() << " pathpins";
-
-  if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
-  if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
-  if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock=" << dn.get_xlockedby();
+  out << " " << dn.lock;
 
   out << " v=" << dn.get_version();
   out << " pv=" << dn.get_projected_version();
@@ -60,10 +59,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
   if (dn.get_num_ref()) {
     out << " |";
-    for(set<int>::iterator it = dn.get_ref_set().begin();
-        it != dn.get_ref_set().end();
-        it++)
-      out << " " << CDentry::pin_name(*it);
+    dn.print_pin_set(out);
   }
 
   out << " " << &dn;
@@ -71,8 +67,19 @@ ostream& operator<<(ostream& out, CDentry& dn)
   return out;
 }
 
-CDentry::CDentry(const CDentry& m) {
-  assert(0); //std::cerr << "copy cons called, implement me" << endl;
+
+bool operator<(const CDentry& l, const CDentry& r)
+{
+  if (l.get_dir()->ino() < r.get_dir()->ino()) return true;
+  if (l.get_dir()->ino() == r.get_dir()->ino() &&
+      l.get_name() < r.get_name()) return true;
+  return false;
+}
+
+
+void CDentry::print(ostream& out)
+{
+  out << *this;
 }
 
 
@@ -84,16 +91,15 @@ inodeno_t CDentry::get_ino()
 }
 
 
-int CDentry::authority()
+pair<int,int> CDentry::authority()
 {
-  return dir->dentry_authority( name );
+  return dir->authority();
 }
 
 
-version_t CDentry::pre_dirty()
+version_t CDentry::pre_dirty(version_t min)
 {
-  // NOTE: in the future, this will dirty a particular slice/subset of the dir.
-  projected_version = dir->pre_dirty();
+  projected_version = dir->pre_dirty(min);
   dout(10) << " pre_dirty " << *this << endl;
   return projected_version;
 }
@@ -138,14 +144,28 @@ void CDentry::mark_clean() {
 void CDentry::make_path(string& s)
 {
   if (dir) {
-    if (dir->inode->get_parent_dn()) 
-      dir->inode->get_parent_dn()->make_path(s);
+    dir->inode->make_path(s);
   } else {
     s = "???";
   }
   s += "/";
   s += name;
 }
+
+/** make_anchor_trace
+ * construct an anchor trace for this dentry, as if it were linked to *in.
+ */
+void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
+{
+  // start with parent dir inode
+  if (dir)
+    dir->inode->make_anchor_trace(trace);
+
+  // add this inode (in my dirfrag) to the end
+  trace.push_back(Anchor(in->ino(), dir->dirfrag()));
+  dout(10) << "make_anchor_trace added " << trace.back() << endl;
+}
+
 
 
 void CDentry::link_remote(CInode *in)
@@ -174,30 +194,20 @@ CDentryDiscover *CDentry::replicate_to(int who)
 }
 
 
+// ----------------------------
+// locking
 
-
-// =
-const CDentry& CDentry::operator= (const CDentry& right) {
-  assert(0); //std::cerr << "copy op called, implement me" << endl;
-  return *this;
+void CDentry::set_mlock_info(MLock *m) 
+{
+  m->set_dn(dir->dirfrag(), name);
 }
 
-  // comparisons
-  bool CDentry::operator== (const CDentry& right) const {
-    return name == right.name;
-  }
-  bool CDentry::operator!= (const CDentry& right) const {
-    return name == right.name;
-  }
-  bool CDentry::operator< (const CDentry& right) const {
-    return name < right.name;
-  }
-  bool CDentry::operator> (const CDentry& right) const {
-    return name > right.name;
-  }
-  bool CDentry::operator>= (const CDentry& right) const {
-    return name >= right.name;
-  }
-  bool CDentry::operator<= (const CDentry& right) const {
-    return name <= right.name;
-  }
+void CDentry::encode_lock_state(int type, bufferlist& bl)
+{
+  
+}
+
+void CDentry::decode_lock_state(int type, bufferlist& bl)
+{
+
+}

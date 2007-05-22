@@ -27,7 +27,7 @@ using namespace std;
 #include "osd/OSD.h"
 #include "ebofs/Ebofs.h"
 
-#include "msg/NewMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
 
@@ -61,6 +61,8 @@ int main(int argc, char **argv)
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
   if (g_conf.debug_after) 
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
+
+  if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
   char *dev;
