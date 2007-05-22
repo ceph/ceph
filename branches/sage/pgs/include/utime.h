@@ -15,7 +15,7 @@
 #define __UTIME_H
 
 #include <math.h>
-
+#include <sys/time.h>
 
 // --------
 // utime_t

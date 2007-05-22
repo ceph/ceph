@@ -104,6 +104,8 @@ private:
 
   bufferlist data;
   map<string,bufferptr> attrset;
+  double request_received_time;
+  
 
   friend class MOSDOpReply;
 
@@ -148,6 +150,13 @@ private:
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
+
+  void set_received_time(double time) {
+    request_received_time = time;
+  }
+  double get_received_time() {
+    return request_received_time;
+  }
 
   
   void set_data(bufferlist &d) {

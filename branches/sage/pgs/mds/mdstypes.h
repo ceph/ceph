@@ -494,7 +494,7 @@ protected:
   // ---------------------------------------------
   // locking
   // noop unless overloaded.
-  virtual SimpleLock* get_lock(int type) { assert(0); }
+  virtual SimpleLock* get_lock(int type) { assert(0); return 0; }
   virtual void set_mlock_info(MLock *m) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }

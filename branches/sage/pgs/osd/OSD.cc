@@ -77,6 +77,9 @@
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./dev";
 
+const int LOAD_LATENCY =1;
+const int LOAD_QUEUE_SIZE=2;
+const int LOAD_HYBRID =3;
 
 object_t SUPERBLOCK_OBJECT(0,0);
 
@@ -109,7 +112,9 @@ void OSD::force_remount()
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
+OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
+  timer(osd_lock),
+  load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq)
 {
   whoami = id;
   messenger = m;
@@ -642,9 +647,12 @@ void OSD::heartbeat()
   float avg_qlen = 0;
   if (hb_stat_ops) avg_qlen = (float)hb_stat_qlen / (float)hb_stat_ops;
 
+  double read_mean_time = load_calc.get_average();
+
   dout(5) << "heartbeat " << now 
 	  << ": ops " << hb_stat_ops
 	  << ", avg qlen " << avg_qlen
+ 	  << ", mean read time " << read_mean_time
 	  << dendl;
   
   // reset until next time around
@@ -671,8 +679,10 @@ void OSD::heartbeat()
        i != pingset.end();
        i++) {
     _share_map_outgoing( osdmap->get_inst(*i) );
-    messenger->send_message(new MOSDPing(osdmap->get_epoch(), avg_qlen), 
-                            osdmap->get_inst(*i));
+    messenger->send_message(new MOSDPing(osdmap->get_epoch(), 
+				avg_qlen, 
+				read_mean_time ), 
+				osdmap->get_inst(*i));
   }
 
   if (logger) logger->set("pingset", pingset.size());
@@ -910,10 +920,12 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "osdping from " << m->get_source() << dendl;
+
   _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
   int from = m->get_source().num();
   peer_qlen[from] = m->avg_qlen;
+  peer_read_time[from] = m->read_mean_time;
 
   //if (!m->ack)
   //messenger->send_message(new MOSDPing(osdmap->get_epoch(), true),
@@ -1937,8 +1949,11 @@ void OSD::handle_op(MOSDOp *op)
   const pg_t pgid = op->get_pg();
   PG *pg = _have_pg(pgid) ? _lock_pg(pgid):0;
 
-
   logger->set("buf", buffer_total_alloc);
+
+  // mark the read request received time for finding the 
+  // read througput load.  
+  op->set_received_time(g_clock.now());
 
   // update qlen stats
   hb_stat_ops++;
@@ -1947,7 +1962,7 @@ void OSD::handle_op(MOSDOp *op)
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) {
-    _unlock_pg(pgid);
+    if (pg) _unlock_pg(pgid);
     return;
   }
 
@@ -1970,7 +1985,6 @@ void OSD::handle_op(MOSDOp *op)
               << pgid 
               << ", waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
-      _unlock_pg(pgid);
       return;
     }
 
@@ -2056,51 +2070,152 @@ void OSD::handle_op(MOSDOp *op)
     }
     */
 
+
+    dout(10) << "handle_op " << *op << " in " << *pg << endl;
+
+    // if this is a read and the data is in the cache ,do an immediate read.. 
+    if ( read && g_conf.osd_immediate_read_from_cache ) {
+      dout(10) << "trying to see whether data is in cache" << *op <<  endl;
+      if ( store->is_cached( op->get_oid() , 
+			     op->get_offset(), 
+			     op->get_length() ) == 0  )
+	{ 
+	  dout(10) << "data is in cache, reading from cache" << *op <<  endl;
+	  pg->do_op(op); // do it now
+	  _unlock_pg(pgid);
+	  return;
+        }
+    }
+
     dout(7) << "handle_op " << *op << " in " << *pg << dendl;
-    
     
     // balance reads?
     if (read &&
 	g_conf.osd_balance_reads &&
-	pg->get_acker() == whoami) {
-      // test
-      if (false) {
-	if (pg->acting.size() > 1) {
-	  int peer = pg->acting[1];
-	  dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << dendl;
-	  messenger->send_message(op, osdmap->get_inst(peer));
-	  _unlock_pg(pgid);
-	  return;
-	}
-      }
-      
-      // am i above my average?
-      float my_avg = hb_stat_qlen / hb_stat_ops;
-      if (pending_ops > my_avg) {
-	// is there a peer who is below my average?
-	for (unsigned i=1; i<pg->acting.size(); ++i) {
-	  int peer = pg->acting[i];
-	  if (peer_qlen.count(peer) &&
-	      peer_qlen[peer] < my_avg) {
-	    // calculate a probability that we should redirect
-	    float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
-	    
-	    if (drand48() <= p) {
-	      // take the first one
-	      dout(-10) << "my qlen " << pending_ops << " > my_avg " << my_avg
-			<< ", p=" << p 
-			<< ", fwd to peer w/ qlen " << peer_qlen[peer]
-			<< " osd" << peer
-			<< dendl;
-	      messenger->send_message(op, osdmap->get_inst(peer));
-	      _unlock_pg(pgid);
-	      return;
-	    }
+	pg->get_acker() == whoami) 
+      {
+	// test
+	if (false) {
+	  if (pg->acting.size() > 1) {
+	    int peer = pg->acting[1];
+	    dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << dendl;
+	    messenger->send_message(op, osdmap->get_inst(peer));
+	    _unlock_pg(pgid);
+	    return;
 	  }
 	}
-      }
-    }
+	
 
+	// check my load. 
+	// TODO xxx we must also compare with our own load
+	// if i am x percentage higher than replica , 
+	// redirect the read 
+	
+	//if ( g_conf.osd_load_balance_scheme == LOAD_LATENCY)
+	if ( g_conf.osd_balance_reads == LOAD_LATENCY)
+	  {
+	    
+	    double mean_read_time = load_calc.get_average();
+	    
+	    if ( mean_read_time != -1 )
+	      {
+		
+		for (unsigned i=1; 
+		     i<pg->acting.size(); 
+		     ++i) 
+		  {
+		    int peer = pg->acting[i];
+		    
+		    dout(10) << "my read time " << mean_read_time 
+			     << "peer_readtime" << peer_read_time[peer] 
+			     << " of peer" << peer << endl;
+		    
+		    if ( peer_read_time.count(peer) &&
+			 ( (peer_read_time[peer]*100/mean_read_time) <
+			   ( 100 - g_conf.osd_load_diff_percent)))
+		      {
+			dout(10) << " forwarding to peer osd" << peer << endl;
+			
+			messenger->send_message(op, osdmap->get_inst(peer));
+			_unlock_pg(pgid);
+			return;
+		      }
+		  } 
+	      }
+	  }
+	//else if ( g_conf.osd_load_balance_scheme == LOAD_QUEUE_SIZE )
+	else if ( g_conf.osd_balance_reads == LOAD_QUEUE_SIZE )
+	  {
+	    
+	    
+	    // am i above my average?
+	    float my_avg = hb_stat_qlen / hb_stat_ops;
+	    
+	    if (pending_ops > my_avg) {
+	      // is there a peer who is below my average?
+	      for (unsigned i=1; i<pg->acting.size(); ++i) {
+		int peer = pg->acting[i];
+		if (peer_qlen.count(peer) &&
+		    peer_qlen[peer] < my_avg) {
+		  // calculate a probability that we should redirect
+		  float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
+		  
+		  if (drand48() <= p) {
+		    // take the first one
+		    dout(10) << "my qlen " << pending_ops << " > my_avg " << my_avg
+			     << ", p=" << p 
+			     << ", fwd to peer w/ qlen " << peer_qlen[peer]
+			     << " osd" << peer
+			     << dendl;
+		    messenger->send_message(op, osdmap->get_inst(peer));
+		    _unlock_pg(pgid);
+		    return;
+		  }
+		}
+	      }
+	    }
+	    
+	  }
+	//else if ( g_conf.osd_load_balance_scheme == LOAD_HYBRID )
+	else if ( g_conf.osd_balance_reads == LOAD_HYBRID )
+	  {
+	    
+	    // am i above my average?
+	    float my_avg = hb_stat_qlen / hb_stat_ops;
+	    
+	    if (pending_ops > my_avg) {
+	      // is there a peer who is below my average?
+	      for (unsigned i=1; i<pg->acting.size(); ++i) {
+		int peer = pg->acting[i];
+		if (peer_qlen.count(peer) &&
+		    peer_qlen[peer] < my_avg) {
+		  // calculate a probability that we should redirect
+		  //float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
+		  
+		  double mean_read_time = load_calc.get_average();
+		  
+		  if ( mean_read_time != -1 &&  
+		       peer_read_time.count(peer) &&
+		       ( (peer_read_time[peer]*100/mean_read_time) <
+			 ( 100 - g_conf.osd_load_diff_percent) ) )
+		    //if (drand48() <= p) {
+		    // take the first one
+		    dout(10) << "using hybrid :my qlen " << pending_ops << " > my_avg " << my_avg
+			     << "my read time  "<<  mean_read_time
+			     << "peer read time " << peer_read_time[peer]  
+			     << ", fwd to peer w/ qlen " << peer_qlen[peer]
+			     << " osd" << peer
+			     << endl;
+		  messenger->send_message(op, osdmap->get_inst(peer));
+		  _unlock_pg(pgid);
+		  return;
+		  //}
+		}
+	      }
+	    }
+	  }
+	
+      }
   } else {
     // REPLICATION OP (it's from another OSD)
 
@@ -2125,7 +2240,24 @@ void OSD::handle_op(MOSDOp *op)
 
     assert(pg->get_role() >= 0);
     dout(7) << "handle_rep_op " << op << " in " << *pg << dendl;
+
+    // a redirected read...handle this differently ..
+    // if the data is in cache ( a rare case? ), return the data immediately
+    if ( read && g_conf.osd_immediate_read_from_cache )
+    {
+      dout(10) << "redirected read, trying to see whether data is in cache " << *op <<  endl;
+      if ( store->is_cached( op->get_oid() , 
+			     op->get_offset(), 
+			     op->get_length()) == 0   )
+        { 
+	  dout(10) << "redirected read, data is in cache, reading from cache " << *op <<  endl;
+	  pg->do_op(op); // do it now
+	  _unlock_pg(pgid);
+	  return;
+        }
+    }
   }
+
   
   if (g_conf.osd_maxthreads < 1) {
 
@@ -2139,14 +2271,10 @@ void OSD::handle_op(MOSDOp *op)
     _unlock_pg(pgid);
   } else {
     _unlock_pg(pgid);
-    // queue for worker threads
-    /*if (read) 
-      enqueue_op(0, op);     // no locking needed for reads
-    else 
-    */
-      enqueue_op(pgid, op);     
+    enqueue_op(pgid, op);         // queue for worker threads
   }
 }
+
 
 void OSD::handle_op_reply(MOSDOpReply *op)
 {

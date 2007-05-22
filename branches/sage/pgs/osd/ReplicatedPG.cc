@@ -210,6 +210,12 @@ int ReplicatedPG::op_read(MOSDOp *op)
     reply->set_result(0);
     reply->set_data(bl);
     reply->set_length(r);
+
+    dout(10) <<  "READ TIME DIFF"
+	     << (double)g_clock.now()-op->get_received_time()
+	     << endl;
+    osd->load_calc.add((double)g_clock.now() - op->get_received_time());
+
   } else {
     reply->set_result(r);   // error
     reply->set_length(0);
@@ -891,6 +897,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     put_rep_gather(repop);
 
   } else {
+    // not acker.  
     // chain or splay.  apply.
     ObjectStore::Transaction t;
     prepare_log_transaction(t, op, nv, crev, op->get_rev(), peers_complete_thru);
@@ -904,6 +911,10 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       cerr << "error applying transaction: r = " << r << dendl;
       assert(r == 0);
     }
+
+    // lets evict the data from our cache to maintain a total large cache size
+    if (g_conf.osd_exclusive_caching)
+      osd->store->trim_from_cache(op->get_oid() , op->get_offset(), op->get_length());
 
     oncommit->ack();
   }

@@ -202,6 +202,11 @@ md_config_t g_conf = {
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
   osd_balance_reads: false,
+  osd_immediate_read_from_cache: false,     //osds to read from the cache immediately?
+  osd_exclusive_caching: false,
+  osd_load_diff_percent: 20, // load diff for read forwarding
+  osd_load_balance_scheme: 1,
+
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
@@ -714,6 +719,15 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
+      g_conf.osd_load_diff_percent = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_load_balance_scheme") == 0) 
+      g_conf.osd_load_balance_scheme = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
+      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
+      g_conf.osd_exclusive_caching = atoi(args[++i]);
+
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_rep_chain") == 0) 

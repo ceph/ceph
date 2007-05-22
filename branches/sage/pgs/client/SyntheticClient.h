@@ -40,6 +40,9 @@
 #define SYNCLIENT_MODE_READFILE    21
 #define SYNCLIENT_MODE_WRITEBATCH  22
 #define SYNCLIENT_MODE_WRSHARED    23
+#define SYNCLIENT_MODE_READSHARED    24
+#define SYNCLIENT_MODE_RDWRRANDOM    25
+#define SYNCLIENT_MODE_RDWRRANDOM_EX    26
 
 #define SYNCLIENT_MODE_TRACE       30
 
@@ -193,6 +196,8 @@ class SyntheticClient {
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);
+  int read_random(string& fn, int mb, int chunk);
+  int read_random_ex(string& fn, int mb, int chunk);
 
   int clean_dir(string& basedir);
 

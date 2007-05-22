@@ -203,6 +203,10 @@ struct md_config_t {
   // osd
   int   osd_rep;
   bool  osd_balance_reads;
+  bool  osd_immediate_read_from_cache;
+  bool  osd_exclusive_caching;
+  int  osd_load_diff_percent;
+  int osd_load_balance_scheme;
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;

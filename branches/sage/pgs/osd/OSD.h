@@ -48,6 +48,37 @@ public:
   static const int STATE_STOPPING = 3;
 
 
+  // load calculation
+  //current implementation is moving averges.
+  class LoadCalculator {
+  private:
+    deque<double> m_Data ;
+    unsigned m_Size ;
+    double  m_Total ;
+    
+  public:
+    LoadCalculator( unsigned size ) : m_Size(0), m_Total(0) { }
+
+    void add( double element ) {
+      // add item
+      m_Data.push_back(element);
+      m_Total += element;
+
+      // trim
+      while (m_Data.size() > m_Size) {
+	m_Total -= m_Data.front();
+	m_Data.pop_front();
+      }
+    }
+    
+    double get_average() {
+      if (m_Data.empty())
+	return -1;
+      return m_Total / (double)m_Data.size();
+    }
+  };
+
+
   /** OSD **/
 protected:
   Mutex osd_lock;     // global lock
@@ -57,6 +88,7 @@ protected:
   Logger      *logger;
   ObjectStore *store;
   MonMap      *monmap;
+  LoadCalculator load_calc;
 
   int whoami;
   char dev_path[100];
@@ -105,6 +137,7 @@ private:
   int hb_stat_qlen; // cumulative queue length since last hb
 
   hash_map<int, float> peer_qlen;
+  hash_map<int, double> peer_read_time;
   
 
   // -- waiters --
