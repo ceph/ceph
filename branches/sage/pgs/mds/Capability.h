@@ -30,6 +30,8 @@ using namespace std;
 #define CAP_FILE_WREXTEND  8    // client can extend file
 #define CAP_FILE_WRBUFFER  16   // client can safely buffer writes
 #define CAP_FILE_LAZYIO    32   // client can perform lazy io
+#define CAP_FILE_RDREPLICA 64   // client can read object replicas (does not mix with _WRSLOPPY)
+#define CAP_FILE_WRSLOPPY  128  // client can write sloppily across replicas (does not mix with _RDREPLICA)
 
 
 // heuristics
@@ -45,6 +47,8 @@ inline string cap_string(int cap)
   if (cap & CAP_FILE_WRBUFFER) s += " wrbuffer";
   if (cap & CAP_FILE_WRBUFFER) s += " wrextend";
   if (cap & CAP_FILE_LAZYIO) s += " lazyio";
+  if (cap & CAP_FILE_RDREPLICA) s += " rdreplica";
+  if (cap & CAP_FILE_WRSLOPPY) s += " wrsloppy";
   s += " ]";
   return s;
 }
@@ -55,7 +59,7 @@ class Capability {
 
   map<long, int>  cap_history;  // seq -> cap
   long last_sent, last_recv;
-    
+  
   bool suppress;
 
 public:
@@ -63,9 +67,7 @@ public:
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
-    suppress(false) { 
-    //cap_history[last_sent] = 0;
-  }
+    suppress(false) { }
 
   
   bool is_suppress() { return suppress; }
@@ -112,13 +114,18 @@ public:
   }
   int needed() { return needed(wanted_caps); }
 
-  // conflicts
+  /** conflicts
+   * defines fundamental conflicts between issued capability bits
+   */
   static int conflicts(int from) {
     int c = 0;
     if (from & CAP_FILE_WRBUFFER) c |= CAP_FILE_RDCACHE|CAP_FILE_RD;
     if (from & CAP_FILE_WR) c |= CAP_FILE_RDCACHE;
     if (from & CAP_FILE_RD) c |= CAP_FILE_WRBUFFER;
     if (from & CAP_FILE_RDCACHE) c |= CAP_FILE_WRBUFFER|CAP_FILE_WR;
+
+    if (from & CAP_FILE_RDREPLICA) c |= CAP_FILE_WRSLOPPY;
+    if (from & CAP_FILE_WRSLOPPY) c |= CAP_FILE_RDREPLICA;
     return c;
   }
   int wanted_conflicts() { return conflicts(wanted()); }

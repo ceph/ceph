@@ -25,47 +25,58 @@ using namespace std;
 #include "Capability.h"
 
 // states and such.
-//  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio
+//  C = cache reads, R = read, W = write, A = append, B = buffer writes
+//  L = lazyio
+//  R = readable replicas, S = sloppy writes
 
-//                               -----auth--------   ---replica-------
-#define LOCK_SYNC_    1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
-#define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync (*)
-#define LOCK_GSYNCM  -13 // A    . . / . R . . . L
+//                                -----auth------------   ---replica-----------
+#define LOCK_SYNC_     1  // AR   R . / C R . . . L R .   R . / C R . . . L . .   stat()
+#define LOCK_GSYNCL   -12 // A    . . / C ? . . . L . .                           loner -> sync (*)
+#define LOCK_GSYNCRM  -13 // A    . . / . R . . . L R .
+#define LOCK_GSYNCWM  -13 // A    . . / . R . . . L . .
 
-#define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
-#define LOCK_GLOCKR_ -3  // AR   R . / C . . . . .   . . / C . . . . .
-#define LOCK_GLOCKL  -4  // A    . . / C . . . . .                       loner -> lock
-#define LOCK_GLOCKM  -5  // A    . . / . . . . . .
+#define LOCK_LOCK_     2  // AR   R W / C . . . . . . .   . . / C . . . . . . .   truncate()
+#define LOCK_GLOCKR_  -3  // AR   R . / C . . . . . . .   . . / C . . . . . . .
+#define LOCK_GLOCKL   -4  // A    . . / C . . . . . . .                           loner -> lock
+#define LOCK_GLOCKM   -5  // A    . . / . . . . . . . .
 
-#define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
-#define LOCK_GMIXEDR -7  // AR   R . / . R . . . L   . . / . R . . . L 
-#define LOCK_GMIXEDL -8  // A    . . / . . . . . L                       loner -> mixed
+#define LOCK_RMIXED    6  // AR   . . / . R W A . L R .   . . / . R . . . L R .
+#define LOCK_GRMIXEDR -7  // AR   R . / . R . . . L R .   . . / . R . . . L . . 
+#define LOCK_GRMIXEDL -8  // A    . . / . . . . . L R .                           loner -> rmixed
+#define LOCK_GRMIXEDM -17 // A    . . / . R W A . L R .   . . / . R . . . L . .   wmixed -> rmixed
 
-#define LOCK_LONER    9  // A    . . / C R W A B L        (lock)      
-#define LOCK_GLONERR -10 // A    . . / . R . . . L
-#define LOCK_GLONERM -11 // A    . . / . R W A . L
+#define LOCK_WMIXED    14 // AR   . . / . R W A . L . S   . . / . R . . . L . S
+#define LOCK_GWMIXEDR -15 // AR   R . / . R . . . L . S   . . / . R . . . L . . 
+#define LOCK_GWMIXEDL -16 // A    . . / . . . . . L . S                           loner -> mixed
+#define LOCK_GWMIXEDM -17 // A    . . / . R W A . L . S   . . / . R . . . L . .   rmixed -> wmixed
+
+#define LOCK_LONER     9  // A    . . / C R W A B L R S        (lock)      
+#define LOCK_GLONERR  -10 // A    . . / . R . . . L R .
+#define LOCK_GLONERRM -11 // A    . . / . R W A . L R .
+#define LOCK_GLONERWM -18 // A    . . / . R W A . L . S
 
 // (*) FIXME: how to let old loner keep R, somehow, during GSYNCL
-
-//   4 stable
-//  +9 transition
-//  13 total
 
 inline const char *get_filelock_state_name(int n) {
   switch (n) {
   case LOCK_SYNC: return "sync";
   case LOCK_GSYNCL: return "gsyncl";
-  case LOCK_GSYNCM: return "gsyncm";
+  case LOCK_GSYNCRM: return "gsyncrm";
+  case LOCK_GSYNCWM: return "gsyncwm";
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
   case LOCK_GLOCKL: return "glockl";
   case LOCK_GLOCKM: return "glockm";
-  case LOCK_MIXED: return "mixed";
-  case LOCK_GMIXEDR: return "gmixedr";
-  case LOCK_GMIXEDL: return "gmixedl";
+  case LOCK_RMIXED: return "rmixed";
+  case LOCK_GRMIXEDR: return "grmixedr";
+  case LOCK_GRMIXEDL: return "grmixedl";
+  case LOCK_WMIXED: return "wmixed";
+  case LOCK_GWMIXEDR: return "gwmixedr";
+  case LOCK_GWMIXEDL: return "gwmixedl";
   case LOCK_LONER: return "loner";
   case LOCK_GLONERR: return "glonerr";
-  case LOCK_GLONERM: return "glonerm";
+  case LOCK_GLONERRM: return "glonerrm";
+  case LOCK_GLONERWM: return "glonerwm";
   default: assert(0);
   }
 }
@@ -108,15 +119,25 @@ class FileLock : public SimpleLock {
     case LOCK_GLONERR:
     case LOCK_GLONERM:
       return LOCK_LOCK;
-    case LOCK_MIXED:
-    case LOCK_GMIXEDR:
-      return LOCK_MIXED;
+    case LOCK_RMIXED:
+    case LOCK_GRMIXEDR:
+      return LOCK_RMIXED;
+    case LOCK_WMIXED:
+    case LOCK_GWMIXEDR:
+      return LOCK_WMIXED;
     case LOCK_SYNC:
       return LOCK_SYNC;
 
+    case LOCK_GRMIXEDM:
+      return LOCK_GRMIXEDM;
+    case LOCK_GWMIXEDM:
+      return LOCK_GWMIXEDM;
+
       // after gather auth will bc LOCK_AC_MIXED or whatever
-    case LOCK_GSYNCM:
-      return LOCK_MIXED;
+    case LOCK_GSYNCRM:
+      return LOCK_RMIXED;
+    case LOCK_GSYNCWM:
+      return LOCK_WMIXED;
     case LOCK_GSYNCL:
     case LOCK_GMIXEDL:     // ** LOCK isn't exact right state, but works.
       return LOCK_LOCK;
@@ -141,7 +162,7 @@ class FileLock : public SimpleLock {
   }
   bool can_rdlock_soon() {
     if (parent->is_auth())
-      return (state == LOCK_GLOCKL);
+      return (state == LOCK_FGLOCKL);
     else
       return false;
   }
@@ -164,7 +185,7 @@ class FileLock : public SimpleLock {
     if (parent->is_auth())
       switch (state) {
       case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO | CAP_FILE_RDREPLICA;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
       case LOCK_GLOCKL:
@@ -181,7 +202,7 @@ class FileLock : public SimpleLock {
         return 0;
 
       case LOCK_LONER:  // single client writer, of course.
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER | CAP_FILE_LAZYIO;
+        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER | CAP_FILE_LAZYIO | CAP_FILE_RDREPLICA | CAP_FILE_WRSLOPPY;
       case LOCK_GLONERR:
         return CAP_FILE_RD | CAP_FILE_LAZYIO;
       case LOCK_GLONERM:
@@ -195,7 +216,7 @@ class FileLock : public SimpleLock {
     else
       switch (state) {
       case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO | CAP_FILE_RDREPLICA;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
         return CAP_FILE_RDCACHE;
