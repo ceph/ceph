@@ -15,6 +15,8 @@ doc
 mds
 - finish multistage rejoin 
 
+- trim_on_rejoin
+
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
 

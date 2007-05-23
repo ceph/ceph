@@ -1409,7 +1409,8 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->authlock.get_state(),
 				 in->linklock.get_state(),
 				 in->dirfragtreelock.get_state(),
-				 in->filelock.get_state());
+				 in->filelock.get_state(),
+				 in->dirlock.get_state());
 	if (in->authlock.is_xlocked())
 	  rejoin->add_inode_xlock(in->ino(), in->authlock.get_type(),
 				  in->authlock.get_xlocked_by()->reqid);
@@ -1488,7 +1489,7 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
   if (mds->is_active() || mds->is_stopping()) {
     dout(10) << "i am active.  removing stale cache replicas" << endl;
     
-    // first, scour cache of replica references
+    // first, scour cache of unmentioned replica references
     for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
 	 p != inode_map.end();
 	 ++p) {
@@ -1547,7 +1548,8 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
 	if (dn) {
 	  int nonce = dn->add_replica(from);
 	  dout(10) << " have " << *dn << endl;
-	  ack->add_strong_dentry(*p, *q, dn->lock.get_state(), nonce);
+	  if (ack)
+	    ack->add_strong_dentry(*p, *q, dn->lock.get_state(), nonce);
 	} else {
 	  dout(10) << " missing " << *p << " " << *q << endl;
 	  if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
@@ -1577,19 +1579,22 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
     if (in) {
       int nonce = in->add_replica(from);
       in->mds_caps_wanted.erase(from);
-      in->authlock.remove_gather(from);  // just in case
-      in->linklock.remove_gather(from);  // just in case
-      in->dirfragtreelock.remove_gather(from);  // just in case
-      in->filelock.remove_gather(from);  // just in case
       dout(10) << " have (weak) " << *in << endl;
-      if (ack) 
+      if (ack) {
+	in->authlock.remove_gather(from);
+	in->linklock.remove_gather(from);
+	in->dirfragtreelock.remove_gather(from);
+	in->filelock.remove_gather(from);
+	in->dirlock.remove_gather(from);
 	ack->add_strong_inode(in->ino(), 
 			      nonce,
 			      0,
 			      in->authlock.get_replica_state(), 
 			      in->linklock.get_replica_state(), 
 			      in->dirfragtreelock.get_replica_state(), 
-			      in->filelock.get_replica_state());
+			      in->filelock.get_replica_state(),
+			      in->dirlock.get_replica_state());
+      }
     } else {
       dout(10) << " missing " << *p << endl;
       if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
@@ -1608,23 +1613,34 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
 	in->mds_caps_wanted[from] = p->second.caps_wanted;
       else
 	in->mds_caps_wanted.erase(from);
-      in->authlock.remove_gather(from);  // just in case
-      in->linklock.remove_gather(from);  // just in case
-      in->dirfragtreelock.remove_gather(from);  // just in case
-      in->filelock.remove_gather(from);  // just in case
       dout(10) << " have (strong) " << *in << endl;
       if (ack) {
+	// i had inode, just tell replica the correct state
+	in->authlock.remove_gather(from);
+	in->linklock.remove_gather(from);
+	in->dirfragtreelock.remove_gather(from);
+	in->filelock.remove_gather(from);
+	in->dirlock.remove_gather(from);
 	ack->add_strong_inode(in->ino(), 
 			      nonce,
 			      0,
 			      in->authlock.get_replica_state(), 
 			      in->linklock.get_replica_state(), 
 			      in->dirfragtreelock.get_replica_state(), 
-			      in->filelock.get_replica_state());
+			      in->filelock.get_replica_state(),
+			      in->dirlock.get_replica_state());
       } else {
-	// note strong replica filelock state requests 
-	//if (p->second.filelock & CAP_FILE_RD)
-	//filelock_replica_readers.insert(in);
+	// take note of replica state values.
+	// SimpleLock -- 
+	//  we can ignore; locked replicas can be safely changed to sync.
+	// FileLock --
+	//  we can also ignore.  
+	//  replicas will at most issue RDCACHE|RD, which is covered by the default SYNC,
+	//  so only _locally_ opened files are significant.
+	// ScatterLock -- adjust accordingly
+	if (p->second.dirlock == LOCK_SCATTER || 
+	    p->second.dirlock == LOCK_GSCATTERS)  // replica still has rdlocks
+	  in->dirlock.set_state(LOCK_SCATTER);
       }
     } else {
       dout(10) << " missing " << p->first << endl;
@@ -1735,6 +1751,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
     in->linklock.set_state(p->second.linklock);
     in->dirfragtreelock.set_state(p->second.dirfragtreelock);
     in->filelock.set_state(p->second.filelock);
+    in->dirlock.set_state(p->second.dirlock);
     dout(10) << " got " << *in << endl;
   }
 
@@ -1766,7 +1783,11 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
        p != m->weak_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(*p);
-    assert(dir);
+    if (!dir) {
+      dout(10) << " don't have dirfrag " << *p << endl;   
+      continue;      // we must have trimmed it after the original rejoin
+    }
+
     dout(10) << " sending " << *dir << endl;
     
     // dentries
@@ -1774,7 +1795,10 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
 	 q != m->weak_dentries[*p].end();
 	 ++q) {
       CDentry *dn = dir->lookup(*q);
-      assert(dn);
+      if (!dn) {
+	dout(10) << " don't have dentry " << *q << " in " << *dir << endl;
+	continue; // we must have trimmed it after our original rejoin
+      }
       dout(10) << " sending " << *dn << endl;
       if (mds->is_rejoin())
 	full->add_weak_dentry(*p, *q);
@@ -1788,7 +1812,10 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
        p != m->weak_inodes.end();
        ++p) {
     CInode *in = get_inode(*p);
-    assert(in);
+    if (!in) {
+      dout(10) << " don't have inode " << *p << endl;
+      continue; // we must have trimmed it after the originalo rejoin
+    }
     
     dout(10) << " sending " << *in << endl;
     full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
@@ -1801,7 +1828,8 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
 			     in->authlock.get_replica_state(), 
 			     in->linklock.get_replica_state(), 
 			     in->dirfragtreelock.get_replica_state(), 
-			     in->filelock.get_replica_state());
+			     in->filelock.get_replica_state(),
+			     in->dirlock.get_replica_state());
   }
 
   mds->send_message_mds(full, m->get_source().num(), MDS_PORT_CACHE);
@@ -1809,7 +1837,13 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *m)
 
 void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *m)
 {
+  dout(7) << "handle_cache_rejoin_full from " << m->get_source() << endl;
+
+  
   assert(0); // write me
+
+
+  delete m;
 }
 
 void MDCache::send_cache_rejoin_acks()
@@ -1892,7 +1926,8 @@ void MDCache::send_cache_rejoin_acks()
 					  in->authlock.get_replica_state(),
 					  in->linklock.get_replica_state(),
 					  in->dirfragtreelock.get_replica_state(),
-					  in->filelock.get_replica_state());
+					  in->filelock.get_replica_state(),
+					  in->dirlock.get_replica_state());
 	}
 	
 	// subdirs in this subtree?
@@ -1913,6 +1948,7 @@ void MDCache::send_cache_rejoin_acks()
 
 // ===============================================================================
 
+/*
 void MDCache::rename_file(CDentry *srcdn, 
                           CDentry *destdn)
 {
@@ -1927,7 +1963,7 @@ void MDCache::rename_file(CDentry *srcdn,
   // link inode w/ dentry
   destdn->dir->link_inode( destdn, in );
 }
-
+*/
 
 
 void MDCache::set_root(CInode *in)

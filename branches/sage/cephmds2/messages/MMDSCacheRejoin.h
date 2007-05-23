@@ -44,11 +44,12 @@ class MMDSCacheRejoin : public Message {
     __int32_t linklock;
     __int32_t dirfragtreelock;
     __int32_t filelock;
+    __int32_t dirlock;
     inode_strong() {}
-    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0) : 
+    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0, int dl=0) : 
       caps_wanted(cw),
       nonce(n),
-      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f) { }
+      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), dirlock(dl) { }
   };
   struct inode_full {
     inode_t inode;
@@ -111,8 +112,8 @@ class MMDSCacheRejoin : public Message {
   void add_weak_inode(inodeno_t ino) {
     weak_inodes.insert(ino);
   }
-  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f) {
-    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f);
+  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f, int dl) {
+    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f, dl);
   }
   void add_full_inode(inode_t &i, const string& s, const fragtree_t &f) {
     full_inodes.push_back(inode_full(i, s, f));

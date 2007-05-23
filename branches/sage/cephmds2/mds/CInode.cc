@@ -60,17 +60,13 @@ ostream& operator<<(ostream& out, CInode& in)
 
   out << " v" << in.get_version();
 
-  out << " auth=" << in.authlock;
-  out << " link=" << in.linklock;
-  out << " dft=" << in.dirfragtreelock;
-  out << " file=" << in.filelock;
-  out << " dir=" << in.dirlock;
+  // locks
+  out << " " << in.authlock;
+  out << " " << in.linklock;
+  out << " " << in.dirfragtreelock;
+  out << " " << in.filelock;
+  out << " " << in.dirlock;
   
-  if (in.get_num_ref()) {
-    out << " |";
-    in.print_pin_set(out);
-  }
-
   // hack: spit out crap on which clients have caps
   if (!in.get_client_caps().empty()) {
     out << " caps={";
@@ -82,6 +78,12 @@ ostream& operator<<(ostream& out, CInode& in)
     }
     out << "}";
   }
+
+  if (in.get_num_ref()) {
+    out << " |";
+    in.print_pin_set(out);
+  }
+
   out << " " << &in;
   out << "]";
   return out;

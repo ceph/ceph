@@ -209,7 +209,7 @@ class FileLock : public SimpleLock {
 
   void print(ostream& out) {
     out << "(";
-    //out << get_lock_type_name(l.get_type()) << " ";
+    out << get_lock_type_name(get_type()) << " ";
     out << get_filelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (is_rdlocked()) 

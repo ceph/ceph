@@ -157,7 +157,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 30,
 
   mds_beacon_interval: 5.0,
-  mds_beacon_grace: 100.0,
+  mds_beacon_grace: 10.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -188,6 +188,7 @@ md_config_t g_conf = {
   mds_bal_midchunk: .3,       // any sub bigger than this taken in full
   mds_bal_minchunk: .001,     // never take anything smaller than this
 
+  mds_trim_on_rejoin: true,
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
   mds_shutdown_on_last_unmount: true,
