@@ -1,3 +1,10 @@
+<div class="mainsegment">
+	<h3>We are hiring!</h3>
+	<div>
+Ceph is actively seeking experienced C/C++ and Linux kernel developers who are interested in helping turn Ceph into a stable production-grade storage system.  Competitive salaries, benefits, etc.  If interested, please contact sage at newdream dot net.
+	</div>
+</div>
+
 
 <div class="mainsegment">
 	<h3>Welcome</h3>
@@ -6,7 +13,7 @@
 
 		<ol>
 		<li><b>Petabyte-scale storage</b> -- Ceph is built from the ground up to seamlessly and gracefully scale from gigabytes to petabytes and beyond.  Scalability is considered in terms of workload as well as total storage.  Ceph is designed to gracefully handle workloads in which tens thousands of clients or more simultaneously access the same file, or write to the same directory--usage scenarios that bring typical enterprise storage systems to their knees.
-		<li><b>Robust, open-source distributed storage</b> -- Ceph is released under the terms of the LGPL, which means it is free software (as in speech).  Ceph will provide a variety of key features that are sorely lacking from existing open-source file systems, seamless scalability (the ability to simply add disks to expand volumes), intelligent load balancing, and snapshot functionality.
+		<li><b>Robust, open-source distributed storage</b> -- Ceph is released under the terms of the LGPL, which means it is free software (as in speech).  Ceph will provide a variety of key features that are sorely lacking from existing open-source file systems, including seamless scalability (the ability to simply add disks to expand volumes), intelligent load balancing, content-addressable storage (CAS), and snapshot functionality.
 		</ol>
 
 		Here are some of the key features that make Ceph different from existing file systems that you may have worked with:

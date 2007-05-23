@@ -10,9 +10,8 @@
 		<div>
 			You can check out a working copy with
 			<pre>
-svn co https://ceph.svn.sourceforge.net/svnroot/ceph
+svn co https://ceph.svn.sourceforge.net/svnroot/ceph/trunk/ceph
 </pre>
-			The rest works essentially the same as CVS, but with <tt>svn</tt> instead of <tt>cvs</tt>.
 		</div>
 
 		<h4>Build Targets</h4>
