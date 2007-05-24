@@ -27,6 +27,10 @@ mds
    - auth -> replica :
 ???
 
+ - failure safe (above)
+ - export safe (ambiguous auth...)
+
+
 - trim_on_rejoin
 
 - more testing of failures + thrashing.

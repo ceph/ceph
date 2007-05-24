@@ -290,8 +290,9 @@ class MDSCacheObject {
   }
 
   // -- state --
-  const static int STATE_AUTH  = (1<<30);
-  const static int STATE_DIRTY = (1<<29);
+  const static int STATE_AUTH      = (1<<30);
+  const static int STATE_DIRTY     = (1<<29);
+  const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
   const static int WAIT_SINGLEAUTH = (1<<30);
@@ -325,8 +326,9 @@ class MDSCacheObject {
   void state_reset(unsigned s) { state = s; }
 
   bool is_auth() { return state_test(STATE_AUTH); }
-  bool is_dirty() { return state & STATE_DIRTY; }
+  bool is_dirty() { return state_test(STATE_DIRTY); }
   bool is_clean() { return !is_dirty(); }
+  bool is_rejoining() { return state_test(STATE_REJOINING); }
 
   // --------------------------------------------
   // authority

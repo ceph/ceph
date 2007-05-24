@@ -41,10 +41,11 @@ inline const char *get_lock_type_name(int t) {
 
 // -- lock states --
 #define LOCK_UNDEF    0
-//                                auth   rep
+//                               auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
 #define LOCK_GLOCKR  -3  // AR   R .    . .
+#define LOCK_REMOTEXLOCK  -50    // on NON-auth
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
@@ -52,6 +53,7 @@ inline const char *get_simplelock_state_name(int n) {
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
+  case LOCK_REMOTEXLOCK: return "remote_xlock";
   default: assert(0);
   }
 }
@@ -62,8 +64,7 @@ class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
   static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_NOLOCKS     = (1<<2);  // for last rdlock to finish
-  //static const int WAIT_LOCK        = (1<<3);  // for locked state
+  static const int WAIT_SINGLEAUTH  = (1<<2);
   static const int WAIT_STABLE      = (1<<3);  // for a stable state
   static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock
   static const int WAIT_BITS        = 5;

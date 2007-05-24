@@ -1286,6 +1286,7 @@ void MDCache::recalc_auth_bits()
       if (auth) 
 	dir->state_set(CDir::STATE_AUTH);
       else {
+	dir->state_set(CDir::STATE_REJOINING);
 	dir->state_clear(CDir::STATE_AUTH);
 	if (dir->is_dirty()) 
 	  dir->mark_clean();
@@ -1300,6 +1301,7 @@ void MDCache::recalc_auth_bits()
 	if (auth)
 	  dn->state_set(CDentry::STATE_AUTH);
 	else {
+	  dn->state_set(CDentry::STATE_REJOINING);
 	  dn->state_clear(CDentry::STATE_AUTH);
 	  if (dn->is_dirty()) 
 	    dn->mark_clean();
@@ -1310,6 +1312,7 @@ void MDCache::recalc_auth_bits()
 	  if (auth) 
 	    dn->inode->state_set(CInode::STATE_AUTH);
 	  else {
+	    dn->inode->state_set(CInode::STATE_REJOINING);
 	    dn->inode->state_clear(CInode::STATE_AUTH);
 	    if (dn->inode->is_dirty())
 	      dn->inode->mark_clean();
@@ -1744,6 +1747,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
     assert(dir);
 
     dir->set_replica_nonce(p->second.nonce);
+    dir->state_clear(CDir::STATE_REJOINING);
     dout(10) << " got " << *dir << endl;
 
     // dentries
@@ -1754,6 +1758,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
       assert(dn);
       dn->set_replica_nonce(q->second.nonce);
       dn->lock.set_state(q->second.lock);
+      dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << endl;
     }
   }
@@ -1770,6 +1775,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *m)
     in->dirfragtreelock.set_state(p->second.dirfragtreelock);
     in->filelock.set_state(p->second.filelock);
     in->dirlock.set_state(p->second.dirlock);
+    in->state_clear(CInode::STATE_REJOINING);
     dout(10) << " got " << *in << endl;
   }
 
