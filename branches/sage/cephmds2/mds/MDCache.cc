@@ -1261,50 +1261,68 @@ void MDCache::finish_ambiguous_import(dirfrag_t df)
 }
 
 
-/*
+/** recalc_auth_bits()
  * once subtree auth is disambiguated, we need to adjust all the 
- * auth (and dirty) bits in our cache before moving on.
+ * auth and dirty bits in our cache before moving on.
  */
 void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << endl;
 
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
        ++p) {
-    CInode *in = p->second;
-    if (in->authority().first == mds->get_nodeid())
-      in->state_set(CInode::STATE_AUTH);
-    else {
-      in->state_clear(CInode::STATE_AUTH);
-      if (in->is_dirty())
-	in->mark_clean();
-    }
+    list<CDir*> dfq;  // dirfrag queue
+    dfq.push_back(p->first);
 
-    if (in->parent) {
-      if (in->parent->authority().first == mds->get_nodeid())
-	in->parent->state_set(CDentry::STATE_AUTH);
-      else {
-	in->parent->state_clear(CDentry::STATE_AUTH);
-	if (in->parent->is_dirty()) 
-	  in->parent->mark_clean();
-      }
-    }
+    bool auth = p->first->authority().first == mds->get_nodeid();
+    dout(10) << " subtree auth=" << auth << " for " << *p->first << endl;
 
-    list<CDir*> ls;
-    for (list<CDir*>::iterator p = ls.begin();
-	 p != ls.end();
-	 ++p) {
-      CDir *dir = *p;
-      if (dir->authority().first == mds->get_nodeid())
+    while (!dfq.empty()) {
+      CDir *dir = dfq.front();
+      dfq.pop_front();
+
+      // dir
+      if (auth) 
 	dir->state_set(CDir::STATE_AUTH);
       else {
 	dir->state_clear(CDir::STATE_AUTH);
 	if (dir->is_dirty()) 
 	  dir->mark_clean();
       }
+
+      // dentries in this dir
+      for (map<string,CDentry*>::iterator q = dir->items.begin();
+	   q != dir->items.end();
+	   ++q) {
+	// dn
+	CDentry *dn = q->second;
+	if (auth)
+	  dn->state_set(CDentry::STATE_AUTH);
+	else {
+	  dn->state_clear(CDentry::STATE_AUTH);
+	  if (dn->is_dirty()) 
+	    dn->mark_clean();
+	}
+
+	if (dn->is_primary()) {
+	  // inode
+	  if (auth) 
+	    dn->inode->state_set(CInode::STATE_AUTH);
+	  else {
+	    dn->inode->state_clear(CInode::STATE_AUTH);
+	    if (dn->inode->is_dirty())
+	      dn->inode->mark_clean();
+	  }
+
+	  // recurse?
+	  if (dn->inode->is_dir()) 
+	    dn->inode->get_nested_dirfrags(dfq);
+	}
+      }
     }
   }
+  
   show_subtrees();
   show_cache();
 }
@@ -4682,9 +4700,9 @@ void MDCache::show_cache()
 	   p != dir->items.end();
 	   ++p) {
 	CDentry *dn = p->second;
-	dout(7) << "  dentry " << *dn << endl;
+	dout(7) << "   dentry " << *dn << endl;
 	if (dn->is_primary() && dn->inode) 
-	  dout(7) << "   inode " << *dn->inode << endl;
+	  dout(7) << "    inode " << *dn->inode << endl;
       }
     }
   }

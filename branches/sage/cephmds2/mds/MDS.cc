@@ -1049,6 +1049,7 @@ void MDS::my_dispatch(Message *m)
   // hack: thrash exports
   for (int i=0; i<g_conf.mds_thrash_exports; i++) {
     set<int> s;
+    if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
     if (s.size() < 2 || mdcache->get_num_inodes() < 10) 
       break;  // need peers for this to work.

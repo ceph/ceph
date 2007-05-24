@@ -59,6 +59,7 @@
 
 void Locker::dispatch(Message *m)
 {
+
   switch (m->get_type()) {
 
     // locking
@@ -508,18 +509,15 @@ void Locker::request_inode_file_caps(CInode *in)
 
 void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
+  // nobody should be talking to us during recovery.
+  assert(mds->is_active() || mds->is_stopping());
+
+  // ok
   CInode *in = mdcache->get_inode(m->get_ino());
   assert(in);
-  assert(in->is_auth());// || in->is_proxy());
+  assert(in->is_auth());
   
   dout(7) << "handle_inode_file_caps replica mds" << m->get_from() << " wants caps " << cap_string(m->get_caps()) << " on " << *in << endl;
-
-  /*if (in->is_proxy()) {
-    dout(7) << "proxy, fw" << endl;
-    mds->send_message_mds(m, in->authority().first, MDS_PORT_LOCKER);
-    return;
-  }
-  */
 
   if (m->get_caps())
     in->mds_caps_wanted[m->get_from()] = m->get_caps();
@@ -702,6 +700,9 @@ ALSO:
 
 void Locker::handle_lock(MLock *m)
 {
+  // nobody should be talking to us during recovery.
+  assert(mds->is_active() || mds->is_stopping());
+
   switch (m->get_otype()) {
   case LOCK_OTYPE_DN:
     {

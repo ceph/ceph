@@ -44,11 +44,11 @@ inline const char *get_lock_type_name(int t) {
 //                                auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
-#define LOCK_GLOCKR   3  // AR   R .    . .
+#define LOCK_GLOCKR  -3  // AR   R .    . .
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
-  case LOCK_UNDEF: return "undef";
+  case LOCK_UNDEF: return "UNDEF";
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
