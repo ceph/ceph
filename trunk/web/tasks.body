@@ -20,7 +20,7 @@
 
 		<h4>Snapshots</h4>
 		<div>
-			The distributed object storage fabric (RADOS) includes a simple mechanism of versioning files, and performing copy-on-write when old objects are updated.  In order to utilize this mechanism for implementing flexible snapshots, the MDS needs to be extended to manage versioned directory entries and maintain some additional directory links.  For more information, see <a href="http://www.soe.ucsc.edu/~sage/papers/290s.osdsnapshots.pdf">this tech report</a>.
+			The distributed object storage fabric (RADOS) includes a simple mechanism of versioning objects, and performing copy-on-write when old objects are updated.  In order to utilize this mechanism for implementing flexible snapshots, the MDS needs to be extended to manage versioned directory entries and maintain some additional directory links.  For more information, see <a href="http://www.soe.ucsc.edu/~sage/papers/290s.osdsnapshots.pdf">this tech report</a>.
 		</div>
 
 		<h4>Content-addressable Storage</h4>
