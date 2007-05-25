@@ -1715,8 +1715,10 @@ void Locker::file_eval(FileLock *lock)
   // stable.
   assert(lock->is_stable());
 
-  if (in->is_auth()) {
-    // [auth]
+  if (in->is_auth() &&
+      !lock->is_xlocked()) {
+    // [auth] 
+    // and not xlocked!
     int wanted = in->get_caps_wanted();
     bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
     dout(7) << "file_eval wanted=" << cap_string(wanted)
@@ -1762,10 +1764,6 @@ void Locker::file_eval(FileLock *lock)
              lock->get_state() != LOCK_LOCK) {
       file_lock(lock);
     }
-    
-  } else {
-    // replica
-    // recall? check wiaters?  XXX
   }
 }
 
