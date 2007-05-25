@@ -320,6 +320,11 @@ class Client : public Dispatcher {
   };
 
 
+  // cluster descriptors
+  MDSMap *mdsmap; 
+  OSDMap *osdmap;
+
+
  protected:
   Messenger *messenger;  
   int whoami;
@@ -365,11 +370,6 @@ class Client : public Dispatcher {
   void kick_requests(int mds);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
-
-
-  // cluster descriptors
-  MDSMap *mdsmap; 
-  OSDMap *osdmap;
 
   bool   mounted;
   bool   unmounting;

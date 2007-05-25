@@ -2966,7 +2966,6 @@ int Client::enumerate_layout(int fh, list<ObjectExtent>& result,
 }
 
 
-
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
   entity_name_t dest = inst.name;
