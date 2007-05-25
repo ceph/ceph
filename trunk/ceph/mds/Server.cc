@@ -915,7 +915,8 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (ref->is_dir() &&
       mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 
-  mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
 
   // reply
   dout(10) << "reply to stat on " << *req << endl;
