@@ -3185,7 +3185,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   st.num_free_extent = 0;
   st.avg_free_extent = 0;
 /*
-  __uint64_t tfree = 0;
+  uint64_t tfree = 0;
   for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
     Table<block_t,block_t> *tab;
     if (b < EBOFS_NUM_FREE_BUCKETS) {

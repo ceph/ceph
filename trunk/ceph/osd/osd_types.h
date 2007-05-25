@@ -62,25 +62,25 @@ namespace __gnu_cxx {
 
 
 // osd types
-typedef __uint64_t coll_t;        // collection id
+typedef uint64_t coll_t;        // collection id
 
 // pg stuff
 
 #define PG_INO 1
 
-typedef __uint16_t ps_t;
-typedef __uint8_t pruleset_t;
+typedef uint16_t ps_t;
+typedef uint8_t pruleset_t;
 
 // placement group id
 struct pg_t {
   union {
     struct {
-      __uint32_t  preferred:32; // 32
+      uint32_t  preferred:32; // 32
       ps_t        ps:16;        // 16
-      __uint8_t   nrep:8;       //  8
+      uint8_t   nrep:8;       //  8
       pruleset_t  ruleset:8;    //  8
     } fields;
-    __uint64_t val;          // 64
+    uint64_t val;          // 64
   } u;
 
   pg_t() { u.val = 0; }
@@ -91,15 +91,15 @@ struct pg_t {
     u.fields.nrep = n;
     u.fields.ruleset = r;
   }
-  pg_t(__uint64_t v) { u.val = v; }
+  pg_t(uint64_t v) { u.val = v; }
   /*
-  pg_t operator=(__uint64_t v) { u.val = v; return *this; }
-  pg_t operator&=(__uint64_t v) { u.val &= v; return *this; }
+  pg_t operator=(uint64_t v) { u.val = v; return *this; }
+  pg_t operator&=(uint64_t v) { u.val &= v; return *this; }
   pg_t operator+=(pg_t o) { u.val += o.val; return *this; }
   pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
   pg_t operator++() { ++u.val; return *this; }
   */
-  operator __uint64_t() const { return u.val; }
+  operator uint64_t() const { return u.val; }
 
   object_t to_object() const { return object_t(PG_INO, u.val >> 32, u.val & 0xffffffff); }
 };
@@ -113,7 +113,7 @@ inline ostream& operator<<(ostream& out, pg_t pg) {
     out << pg.u.fields.preferred << '.';
   out << hex << pg.u.fields.ps << dec;
   out << "=" << hex << pg.u.val << dec;
-  out << "=" << hex << (__uint64_t)pg << dec;
+  out << "=" << hex << (uint64_t)pg << dec;
   return out;
 }
 
@@ -122,7 +122,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const pg_t& x ) const
     {
-      static hash<__uint64_t> H;
+      static hash<uint64_t> H;
       return H(x);
     }
   };
@@ -195,13 +195,13 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 
 class OSDSuperblock {
 public:
-  const static __uint64_t MAGIC = 0xeb0f505dULL;
-  __uint64_t magic;
-  __uint64_t fsid;      // unique fs id (random number)
+  const static uint64_t MAGIC = 0xeb0f505dULL;
+  uint64_t magic;
+  uint64_t fsid;      // unique fs id (random number)
   int        whoami;    // my role in this fs.
   epoch_t    current_epoch;             // most recent epoch
   epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
-  OSDSuperblock(__uint64_t f=0, int w=0) : 
+  OSDSuperblock(uint64_t f=0, int w=0) : 
     magic(MAGIC), fsid(f), whoami(w), 
     current_epoch(0), oldest_map(0), newest_map(0) {}
 };

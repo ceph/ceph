@@ -49,13 +49,13 @@ ssize_t Ager::age_pick_size() {
 
 bool start_debug = false;
 
-__uint64_t Ager::age_fill(float pc, utime_t until) {
+uint64_t Ager::age_fill(float pc, utime_t until) {
   int max = 1024*1024;
   bufferptr bp(max);
   bp.zero();
   bufferlist bl;
   bl.push_back(bp);
-  __uint64_t wrote = 0;
+  uint64_t wrote = 0;
   while (1) {
     if (g_clock.now() > until) break;
     
@@ -162,7 +162,7 @@ void Ager::age_empty(float pc) {
   g_conf.ebofs_verify = false;
 }
 
-void pfrag(__uint64_t written, ObjectStore::FragmentationStat &st)
+void pfrag(uint64_t written, ObjectStore::FragmentationStat &st)
 {
   cout << "#gb wr\ttotal\tn x\tavg x\tavg per\tavg j\tfree\tn fr\tavg fr\tnum<2\tsum<2\tnum<4\tsum<4\t..." 
        << endl;
@@ -177,7 +177,7 @@ void pfrag(__uint64_t written, ObjectStore::FragmentationStat &st)
        << "\t" << st.avg_free_extent;
     
   int n = st.num_extent;
-  for (__uint64_t i=1; i <= 30; i += 1) {
+  for (uint64_t i=1; i <= 30; i += 1) {
     cout << "\t" << st.extent_dist[i];
     cout << "\t" << st.extent_dist_sum[i];
     //cout << "\ta " << (st.extent_dist[i] ? (st.extent_dist_sum[i] / st.extent_dist[i]):0);
@@ -244,7 +244,7 @@ void Ager::age(int time,
   
   ObjectStore::FragmentationStat st;
 
-  __uint64_t wrote = 0;
+  uint64_t wrote = 0;
 
   for (int c=1; c<=count; c++) {
     if (g_clock.now() > until) break;
@@ -252,7 +252,7 @@ void Ager::age(int time,
     //if (c == 7) start_debug = true;
     
     dout(1) << "#age " << c << "/" << count << " filling to " << high_water << endl;
-    __uint64_t w = age_fill(high_water, until);
+    uint64_t w = age_fill(high_water, until);
     //dout(1) << "age wrote " << w << endl;
     wrote += w;
     //store->sync();

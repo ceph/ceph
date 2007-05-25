@@ -627,7 +627,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 
   const char *p = prefix.c_str();
 
-  map<__int64_t, __int64_t> open_files;
+  map<int64_t, int64_t> open_files;
 
   while (!t.end()) {
     
@@ -649,7 +649,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       client->rename(a,b);      
     } else if (strcmp(op, "mkdir") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
+      int64_t b = t.get_int();
       client->mkdir(a, b);
     } else if (strcmp(op, "rmdir") == 0) {
       const char *a = t.get_string(p);
@@ -668,24 +668,24 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       client->lstat(a, &st);
     } else if (strcmp(op, "chmod") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
+      int64_t b = t.get_int();
       client->chmod(a, b);
     } else if (strcmp(op, "chown") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
-      __int64_t c = t.get_int();
+      int64_t b = t.get_int();
+      int64_t c = t.get_int();
       client->chown(a, b, c);
     } else if (strcmp(op, "utime") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
-      __int64_t c = t.get_int();
+      int64_t b = t.get_int();
+      int64_t c = t.get_int();
       struct utimbuf u;
       u.actime = b;
       u.modtime = c;
       client->utime(a, &u);
     } else if (strcmp(op, "mknod") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
+      int64_t b = t.get_int();
       client->mknod(a, b);
     } else if (strcmp(op, "getdir") == 0) {
       const char *a = t.get_string(p);
@@ -693,36 +693,36 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       client->getdir(a, contents);
     } else if (strcmp(op, "open") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int(); 
-      __int64_t id = t.get_int();
-      __int64_t fh = client->open(a, b);
+      int64_t b = t.get_int(); 
+      int64_t id = t.get_int();
+      int64_t fh = client->open(a, b);
       open_files[id] = fh;
     } else if (strcmp(op, "close") == 0) {
-      __int64_t id = t.get_int();
-      __int64_t fh = open_files[id];
+      int64_t id = t.get_int();
+      int64_t fh = open_files[id];
       if (fh > 0) client->close(fh);
       open_files.erase(id);
     } else if (strcmp(op, "truncate") == 0) {
       const char *a = t.get_string(p);
-      __int64_t b = t.get_int();
+      int64_t b = t.get_int();
       client->truncate(a,b);
     } else if (strcmp(op, "read") == 0) {
-      __int64_t id = t.get_int();
-      __int64_t fh = open_files[id];
+      int64_t id = t.get_int();
+      int64_t fh = open_files[id];
       int size = t.get_int();
       int off = t.get_int();
       char *buf = new char[size];
       client->read(fh, buf, size, off);
       delete[] buf;
     } else if (strcmp(op, "lseek") == 0) {
-      __int64_t id = t.get_int();
-      __int64_t fh = open_files[id];
+      int64_t id = t.get_int();
+      int64_t fh = open_files[id];
       int off = t.get_int();
       int whence = t.get_int();
       client->lseek(fh, off, whence);
     } else if (strcmp(op, "write") == 0) {
-      __int64_t id = t.get_int();
-      __int64_t fh = open_files[id];
+      int64_t id = t.get_int();
+      int64_t fh = open_files[id];
       int size = t.get_int();
       int off = t.get_int();
       char *buf = new char[size];
@@ -736,7 +736,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   }
 
   // close open files
-  for (map<__int64_t, __int64_t>::iterator fi = open_files.begin();
+  for (map<int64_t, int64_t>::iterator fi = open_files.begin();
        fi != open_files.end();
        fi++) {
     dout(1) << "leftover close " << fi->second << endl;
@@ -1033,10 +1033,10 @@ int SyntheticClient::open_shared(int num, int count)
 
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
 {
-  //__uint64_t wrsize = 1024*256;
+  //uint64_t wrsize = 1024*256;
   char *buf = new char[wrsize+100];   // 1 MB
   memset(buf, 7, wrsize);
-  __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)wrsize;
+  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
 
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << endl;
@@ -1053,7 +1053,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     // 64 bits : file offset
     // 64 bits : client id
     // = 128 bits (16 bytes)
-    __uint64_t *p = (__uint64_t*)buf;
+    uint64_t *p = (uint64_t*)buf;
     while ((char*)p < buf + wrsize) {
       *p = i*wrsize + (char*)p - buf;      
       p++;
@@ -1084,7 +1084,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
 {
   char *buf = new char[rdsize]; 
   memset(buf, 1, rdsize);
-  __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)rdsize;
+  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
 
   int fd = client->open(fn.c_str(), O_RDONLY);
   dout(5) << "reading from " << fn << " fd " << fd << endl;
@@ -1101,11 +1101,11 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
 
     // verify fingerprint
     int bad = 0;
-    __int64_t *p = (__int64_t*)buf;
-    __int64_t readoff, readclient;
+    int64_t *p = (int64_t*)buf;
+    int64_t readoff, readclient;
     while ((char*)p + 32 < buf + rdsize) {
       readoff = *p;
-      __int64_t wantoff = i*rdsize + (__int64_t)((char*)p - buf);
+      int64_t wantoff = i*rdsize + (int64_t)((char*)p - buf);
       p++;
       readclient = *p;
       p++;

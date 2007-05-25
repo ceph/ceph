@@ -78,7 +78,7 @@ inline bool operator>=(const metareqid_t& l, const metareqid_t& r) { return !(l 
 namespace __gnu_cxx {
   template<> struct hash<metareqid_t> {
     size_t operator()(const metareqid_t &r) const { 
-      hash<__uint64_t> H;
+      hash<uint64_t> H;
       return H(r.client) ^ H(r.tid);
     }
   };

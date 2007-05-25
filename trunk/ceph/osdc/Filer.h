@@ -134,7 +134,7 @@ class Filer {
      (to be used on any osd in the proper replica group) */
   /*object_t file_to_object(inodeno_t ino,
                           size_t    _ono) {  
-    __uint64_t ono = _ono;
+    uint64_t ono = _ono;
     assert(ino < (1ULL<<OID_INO_BITS));       // legal ino can't be too big
     assert(ono < (1ULL<<OID_ONO_BITS));
     return ono + (ino << OID_ONO_BITS);

@@ -21,7 +21,7 @@ class Ager {
   bool         did_distn;
 
   void age_empty(float pc);
-  __uint64_t age_fill(float pc, utime_t until);
+  uint64_t age_fill(float pc, utime_t until);
   ssize_t age_pick_size();
   object_t age_get_oid();
 

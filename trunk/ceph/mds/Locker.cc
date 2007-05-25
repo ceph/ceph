@@ -335,7 +335,7 @@ void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
 
 // file i/o -----------------------------------------
 
-__uint64_t Locker::issue_file_data_version(CInode *in)
+version_t Locker::issue_file_data_version(CInode *in)
 {
   dout(7) << "issue_file_data_version on " << *in << endl;
   return in->inode.file_data_version;

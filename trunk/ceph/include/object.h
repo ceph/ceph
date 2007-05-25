@@ -14,6 +14,8 @@
 #ifndef __OBJECT_H
 #define __OBJECT_H
 
+#include <stdint.h>
+
 #include <iostream>
 #include <iomanip>
 using namespace std;
@@ -22,18 +24,18 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-typedef __uint32_t objectrev_t;
+typedef uint32_t objectrev_t;
 
 struct object_t {
-  static const __uint32_t MAXREV = 0xffffffffU;
+  static const uint32_t MAXREV = 0xffffffffU;
 
-  __uint64_t ino;  // "file" identifier
-  __uint32_t bno;  // "block" in that "file"
+  uint64_t ino;  // "file" identifier
+  uint32_t bno;  // "block" in that "file"
   objectrev_t rev; // revision.  normally ctime (as epoch).
 
   object_t() : ino(0), bno(0), rev(0) {}
-  object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b), rev(0) {}
-  object_t(__uint64_t i, __uint32_t b, __uint32_t r) : ino(i), bno(b), rev(r) {}
+  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
+  object_t(uint64_t i, uint32_t b, uint32_t r) : ino(i), bno(b), rev(r) {}
 };
 
 
@@ -79,9 +81,9 @@ inline ostream& operator<<(ostream& out, const object_t o) {
 
 namespace __gnu_cxx {
 #ifndef __LP64__
-  template<> struct hash<__uint64_t> {
-    size_t operator()(__uint64_t __x) const { 
-      static hash<__uint32_t> H;
+  template<> struct hash<uint64_t> {
+    size_t operator()(uint64_t __x) const { 
+      static hash<uint32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
@@ -89,8 +91,8 @@ namespace __gnu_cxx {
 
   template<> struct hash<object_t> {
     size_t operator()(const object_t &r) const { 
-      static hash<__uint64_t>  H;
-      static hash<__uint32_t> I;
+      static hash<uint64_t> H;
+      static hash<uint32_t> I;
       return H(r.ino) ^ I(r.bno);
     }
   };

@@ -19,15 +19,15 @@
 
 
 class MOSDPGPeerRequest : public Message {
-  __uint64_t       map_version;
+  version_t       map_version;
   list<repgroup_t> pg_list;
 
  public:
-  __uint64_t get_version() { return map_version; }
+  version_t get_version() { return map_version; }
   list<repgroup_t>& get_pg_list() { return pg_list; }
 
   MOSDPGPeerRequest() {}
-  MOSDPGPeerRequest(__uint64_t v, list<repgroup_t>& l) :
+  MOSDPGPeerRequest(version_t v, list<repgroup_t>& l) :
     Message(MSG_OSD_PG_PEERREQUEST) {
     this->map_version = v;
     pg_list.splice(pg_list.begin(), l);

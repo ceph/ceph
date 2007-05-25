@@ -19,16 +19,16 @@
 #include "osd/OSD.h"
 
 class MOSDPGPeerAck : public Message {
-  __uint64_t       map_version;
+  version_t       map_version;
 
  public:
   list<pg_t>                pg_dne;   // pg dne
   map<pg_t, PGReplicaInfo > pg_state; // state, lists, etc.
 
-  __uint64_t get_version() { return map_version; }
+  version_t get_version() { return map_version; }
 
   MOSDPGPeerAck() {}
-  MOSDPGPeerAck(__uint64_t v) :
+  MOSDPGPeerAck(version_t v) :
     Message(MSG_OSD_PG_PEERACK) {
     this->map_version = v;
   }

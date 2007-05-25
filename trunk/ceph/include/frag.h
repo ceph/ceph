@@ -14,6 +14,7 @@
 #ifndef __FRAG_H
 #define __FRAG_H
 
+#include <stdint.h>
 #include <map>
 #include <list>
 #include "buffer.h"
@@ -51,7 +52,7 @@
  * we get 0/1 and 1/1.  quartering gives us 0/2, 1/2, 2/2, 3/2.  and so on.
  */
 
-typedef __uint32_t _frag_t;
+typedef uint32_t _frag_t;
 
 class frag_t {
   /* encoded value.
