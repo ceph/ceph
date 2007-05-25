@@ -949,7 +949,7 @@ void Locker::simple_eval(SimpleLock *lock)
     }
     
     lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(SimpleLock::WAIT_STABLE);
+    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
   }
 
   // stable -> sync?

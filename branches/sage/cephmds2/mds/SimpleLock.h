@@ -29,12 +29,12 @@
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
-  case LOCK_OTYPE_DN: return "dentry";
-  case LOCK_OTYPE_IFILE: return "inode_file";
-  case LOCK_OTYPE_IAUTH: return "inode_auth";
-  case LOCK_OTYPE_ILINK: return "inode_link";
-  case LOCK_OTYPE_IDIRFRAGTREE: return "inode_dirfragtree";
-  case LOCK_OTYPE_IDIR: return "inode_dir";
+  case LOCK_OTYPE_DN: return "dn";
+  case LOCK_OTYPE_IFILE: return "ifile";
+  case LOCK_OTYPE_IAUTH: return "iauth";
+  case LOCK_OTYPE_ILINK: return "ilink";
+  case LOCK_OTYPE_IDIRFRAGTREE: return "idft";
+  case LOCK_OTYPE_IDIR: return "idir";
   default: assert(0);
   }
 }

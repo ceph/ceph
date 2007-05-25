@@ -39,7 +39,7 @@ public:
   set<dirfrag_t> &get_bounds() { return bounds; }
   
   void print(ostream& out) {
-    out << "export " << base << " " << metablob;
+    out << "EExport " << base << " " << metablob;
   }
 
   virtual void encode_payload(bufferlist& bl) {

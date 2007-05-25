@@ -15,22 +15,6 @@ doc
 mds
 - finish multistage rejoin 
 
-- no lock messaging with down|recovering node..
- - SimpleLock
-   - replica -> auth : 
-   - auth -> replica : skip before rejoin, we can lock (or unlock/sync) with impunity
- - ScatterLock
-   - replica -> auth : 
-   - auth -> replica :
- - FileLock
-   - replica -> auth : 
-   - auth -> replica :
-???
-
- - failure safe (above)
- - export safe (ambiguous auth...)
-
-
 - trim_on_rejoin
 
 - more testing of failures + thrashing.

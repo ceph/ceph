@@ -32,7 +32,7 @@ class EImportFinish : public LogEvent {
   EImportFinish() : LogEvent(EVENT_IMPORTFINISH) { }
   
   void print(ostream& out) {
-    out << "import_finish " << base;
+    out << "EImportFinish " << base;
     if (success)
       out << " success";
     else

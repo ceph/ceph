@@ -41,6 +41,7 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EString.h"
 #include "events/EPurgeFinish.h"
+#include "events/EImportFinish.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -1199,9 +1200,11 @@ void MDCache::disambiguate_imports()
     if (dir->authority().first != CDIR_AUTH_UNKNOWN) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << endl;
       cancel_ambiguous_import(q->first);
+      mds->mdlog->submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unknown, must be me " << *dir << endl;
       finish_ambiguous_import(q->first);
+      mds->mdlog->submit_entry(new EImportFinish(dir, true));
     }
   }
   assert(my_ambiguous_imports.empty());
