@@ -294,7 +294,10 @@ struct Fh {
 
   bool is_lazy() { return mode & O_LAZY; }
 
-  Fh() : inode(0), pos(0), mds(0), mode(0) {}
+  bool pos_locked;           // pos is currently in use
+  list<Cond*> pos_waiters;   // waiters for pos
+
+  Fh() : inode(0), pos(0), mds(0), mode(0), pos_locked(false) {}
 };
 
 
@@ -555,6 +558,9 @@ protected:
   void close_release(Inode *in);
   void close_safe(Inode *in);
 
+  void lock_fh_pos(Fh *f);
+  void unlock_fh_pos(Fh *f);
+  
   // metadata cache
   Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
   void update_inode_dist(Inode *in, InodeStat *st);

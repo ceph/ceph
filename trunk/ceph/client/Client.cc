@@ -2497,6 +2497,30 @@ off_t Client::lseek(fh_t fh, off_t offset, int whence)
 }
 
 
+
+void Client::lock_fh_pos(Fh *f)
+{
+  dout(10) << "lock_fh_pos " << f << endl;
+
+  if (f->pos_locked || !f->pos_waiters.empty()) {
+    Cond cond;
+    f->pos_waiters.push_back(&cond);
+    while (f->pos_locked || f->pos_waiters.front() != &cond)
+      cond.Wait(client_lock);
+    assert(f->pos_waiters.front() == &cond);
+    f->pos_waiters.pop_front();
+  }
+  
+  f->pos_locked = true;
+}
+
+void Client::unlock_fh_pos(Fh *f)
+{
+  dout(10) << "unlock_fh_pos " << f << endl;
+  f->pos_locked = false;
+}
+
+
 // blocking osd interface
 
 int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
@@ -2515,6 +2539,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 
   bool movepos = false;
   if (offset < 0) {
+    lock_fh_pos(f);
     offset = f->pos;
     movepos = true;
   }
@@ -2526,8 +2551,9 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(-10) << "file size: " << in->inode.size << endl;
+    dout(10) << "file size: " << in->inode.size << endl;
     if (offset > 0 && offset >= in->inode.size) {
+      if (movepos) unlock_fh_pos(f);
       client_lock.Unlock();
       return 0;
     }
@@ -2535,7 +2561,8 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
       size = (off_t)in->inode.size - offset;
     
     if (size == 0) {
-      dout(-10) << "read is size=0, returning 0" << endl;
+      dout(10) << "read is size=0, returning 0" << endl;
+      if (movepos) unlock_fh_pos(f);
       client_lock.Unlock();
       return 0;
     }
@@ -2587,6 +2614,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   if (movepos) {
     // adjust fd pos
     f->pos = offset+blist.length();
+    unlock_fh_pos(f);
   }
 
   // copy data into caller's char* buf
@@ -2643,10 +2671,12 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
+  // use/adjust fd pos?
   if (offset < 0) {
+    lock_fh_pos(f);
     offset = f->pos;
-    // adjust fd pos
-    f->pos = offset+size;
+    f->pos = offset+size;    
+    unlock_fh_pos(f);
   }
 
   bool lazy = f->mode == FILE_MODE_LAZY;

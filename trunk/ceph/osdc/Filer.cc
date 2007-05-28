@@ -177,11 +177,11 @@ void Filer::file_to_extents(inode_t inode,
   off_t left = len;
   while (left > 0) {
     // layout into objects
-    off_t blockno = cur / inode.layout.stripe_size;
-    off_t stripeno = blockno / inode.layout.stripe_count;
-    off_t stripepos = blockno % inode.layout.stripe_count;
-    off_t objectsetno = stripeno / stripes_per_object;
-    off_t objectno = objectsetno * inode.layout.stripe_count + stripepos;
+    off_t blockno = cur / inode.layout.stripe_size;          // which block
+    off_t stripeno = blockno / inode.layout.stripe_count;    // which horizontal stripe        (Y)
+    off_t stripepos = blockno % inode.layout.stripe_count;   // which object in the object set (X)
+    off_t objectsetno = stripeno / stripes_per_object;       // which object set
+    off_t objectno = objectsetno * inode.layout.stripe_count + stripepos;  // object id
     
     // find oid, extent
     ObjectExtent *ex = 0;
