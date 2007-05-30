@@ -2505,8 +2505,10 @@ void Client::lock_fh_pos(Fh *f)
   if (f->pos_locked || !f->pos_waiters.empty()) {
     Cond cond;
     f->pos_waiters.push_back(&cond);
+    dout(10) << "lock_fh_pos BLOCKING on " << f << endl;
     while (f->pos_locked || f->pos_waiters.front() != &cond)
       cond.Wait(client_lock);
+    dout(10) << "lock_fh_pos UNBLOCKING on " << f << endl;
     assert(f->pos_waiters.front() == &cond);
     f->pos_waiters.pop_front();
   }

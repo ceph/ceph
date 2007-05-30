@@ -345,16 +345,31 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
   dout(10) << "In getblocksize" << endl;
 
   Client* client;
-  struct stat stbuf;
+  //struct stat stbuf;
   client = *(Client**)&clientp;
   
   jint result;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
+
+  /*
   if (0 > client->lstat(c_path, &stbuf))
     result =  -1;
   else
     result = stbuf.st_blksize;
+  */
+
+  // we need to open the file to retrieve the stripe size
+  dout(10) << "CephFSInterface: getblocksize: opening file" << endl;
+  int fh = client->open(c_path, O_RDONLY);  
+  if (fh < 0)
+    return -1;
+
+  result = client->get_stripe_unit(fh);
+
+  int close_result = client->close(fh);
+  assert (close_result > -1);
+
 
   env->ReleaseStringUTFChars(j_path, c_path);
   return result;

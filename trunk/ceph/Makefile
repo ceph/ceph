@@ -136,6 +136,20 @@ csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o
 cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
+activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+echotestclient: active/echotestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+msgtestclient: active/msgtestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+
+
 
 # misc
 gprof-helper.so: test/gprof-helper.c
