@@ -2,28 +2,25 @@
 
 use strict;
 my $fn = shift @ARGV;
-my $f = `cat $fn`;
+my $old = `cat $fn`;
 
-my $header = '// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
- * Foundation.  See file COPYING.
- * 
- */
+my $header = `cat doc/header.txt`;
 
-';
+# strip existing header
+my $new = $old;
+if ($new =~ /^(.*)\* Ceph - scalable distributed file system/s) {
+	my ($a,@b) = split(/\*\/\n/, $new);
+	$new = join("*/\n",@b);
+}
+$new = $header . $new;
 
-unless ($f =~ /Ceph - scalable distributed file system/) {
+if ($new ne $old) {
 	open(O, ">$fn.new");
-	print O $header;
-	print O $f;
+	print O $new;
 	close O;
+	system "diff $fn $fn.new";
 	rename "$fn.new", $fn;
+	#unlink "$fn.new";
+
 }
 
