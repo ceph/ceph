@@ -21,6 +21,15 @@
 
 
 class FileJournal : public Journal {
+public:
+  struct header_t {
+    epoch_t epoch1;
+    off_t top1;
+    epoch_t epoch2;
+    off_t top2;
+  } header;
+
+private:
   string fn;
 
   off_t max_size;
@@ -31,10 +40,12 @@ class FileJournal : public Journal {
   int fd;
 
   list<pair<epoch_t,bufferlist> > writeq;  // currently journaling
-  map<off_t,Context*> commitq; // currently journaling
+  list<Context*> commitq; // currently journaling
   
   // write thread
-  bool writer_stop;
+  Mutex write_lock;
+  Cond write_cond;
+  bool write_stop;
 
   void write_header();
   void start_writer();
@@ -42,23 +53,23 @@ class FileJournal : public Journal {
   void write_thread_entry();
 
   class Writer : public Thread {
-	FileJournal *journal;
+    FileJournal *journal;
   public:
-	Writer(FileJournal *fj) : journal(fj) {}
-	void *entry() {
-	  journal->write_thread();
-	  return 0;
-	}
-  } writer_thread;
+    Writer(FileJournal *fj) : journal(fj) {}
+    void *entry() {
+      journal->write_thread();
+      return 0;
+    }
+  } write_thread;
 
  public:
   FileJournal(Ebofs *e, char *f, off_t sz) : 
-	Journal(e),
-	fn(f), max_size(sz),
-	top(0), bottom(0), committing_to(0),
-	fd(0),
-	writer_stop(false), writer_thread(this)
-	{ }
+    Journal(e),
+    fn(f), max_size(sz),
+    top(0), bottom(0), committing_to(0),
+    fd(0),
+    write_stop(false), write_thread(this)
+  { }
   ~FileJournal() {}
 
   void create();
