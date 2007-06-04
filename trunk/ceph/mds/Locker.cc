@@ -425,7 +425,7 @@ bool Locker::issue_caps(CInode *in)
   for (map<int, Capability>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    if (it->second.issued() != (it->second.wanted() & allowed)) {
+    if (it->second.pending() != (it->second.wanted() & allowed)) {
       // issue
       nissued++;
 
@@ -941,7 +941,7 @@ void Locker::simple_sync(SimpleLock *lock)
   lock->set_state(LOCK_SYNC);
   
   // waiters?
-  lock->finish_waiters(SimpleLock::WAIT_STABLE);
+  lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
 }
 
 void Locker::simple_lock(SimpleLock *lock)
@@ -998,9 +998,6 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mdr)
     return true;
   }
   
-  // can't read, and replicated.
-  assert(!lock->get_parent()->is_auth());
-
   // wait!
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << endl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));

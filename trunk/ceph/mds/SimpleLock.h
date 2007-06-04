@@ -45,7 +45,7 @@ inline const char *get_lock_type_name(int t) {
 //                                auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
-#define LOCK_GLOCKR   3  // AR   R .    . .
+#define LOCK_GLOCKR  -3  // AR   R .    . .
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
@@ -109,13 +109,13 @@ public:
     parent->encode_lock_state(type, bl);
   }
   void finish_waiters(int mask, int r=0) {
-    parent->finish_waiting(mask < wait_offset, r);
+    parent->finish_waiting(mask << wait_offset, r);
   }
   void add_waiter(int mask, Context *c) {
-    parent->add_waiter(mask < wait_offset, c);
+    parent->add_waiter(mask << wait_offset, c);
   }
   bool is_waiter_for(int mask) {
-    return parent->is_waiter_for(mask < wait_offset);
+    return parent->is_waiter_for(mask << wait_offset);
   }
   
   
