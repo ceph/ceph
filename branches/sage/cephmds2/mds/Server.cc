@@ -2755,7 +2755,11 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 	   << " on " << *cur << endl;
   
   // hit pop
-  mds->balancer->hit_inode(cur, META_POP_IRD);
+  if (cmode == FILE_MODE_RW ||
+      cmode == FILE_MODE_W) 
+    mds->balancer->hit_inode(cur, META_POP_IWR);
+  else
+    mds->balancer->hit_inode(cur, META_POP_IRD);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);

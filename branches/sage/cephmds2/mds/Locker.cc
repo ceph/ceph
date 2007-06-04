@@ -97,7 +97,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg)
   }
 }
 
-void Locker::send_lock_message(SimpleLock *lock, int msg, bufferlist &data)
+void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data)
 {
   for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
        it != lock->get_parent()->replicas_end(); 
@@ -1884,19 +1884,15 @@ bool Locker::file_sync(FileLock *lock)
 
   if (lock->get_state() == LOCK_LOCK) {
     if (in->is_replicated()) {
-      // soft data
       bufferlist softdata;
       lock->encode_locked_state(softdata);
-      
-      // bcast to replicas
       send_lock_message(lock, LOCK_AC_SYNC, softdata);
     }
-
+    
     // change lock
     lock->set_state(LOCK_SYNC);
 
-    // reissue caps
-    issue_caps(in);
+    issue_caps(in);    // reissue caps
     return true;
   }
 
@@ -1908,10 +1904,10 @@ bool Locker::file_sync(FileLock *lock)
       issue_caps(in);
     } else {
       // no writers, go straight to sync
-
       if (in->is_replicated()) {
-        // bcast to replicas
-	send_lock_message(lock, LOCK_AC_SYNC);
+	bufferlist softdata;
+	lock->encode_locked_state(softdata);
+	send_lock_message(lock, LOCK_AC_SYNC, softdata);
       }
     
       // change lock
@@ -1929,8 +1925,9 @@ bool Locker::file_sync(FileLock *lock)
     } else {
       // no writers, go straight to sync
       if (in->is_replicated()) {
-        // bcast to replicas
-	send_lock_message(lock, LOCK_AC_SYNC);
+	bufferlist softdata;
+	lock->encode_locked_state(softdata);
+	send_lock_message(lock, LOCK_AC_SYNC, softdata);
       }
 
       // change lock

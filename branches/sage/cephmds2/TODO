@@ -57,7 +57,8 @@ sage mds
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 
 - incremental mdsmaps?
-- client failure
+
+- detect and deal with client failure
 
 - dirfrag split
   - make sure we are freezing _before_ we fetch to complete the dirfrag, else 

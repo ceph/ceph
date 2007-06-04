@@ -766,7 +766,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
   // replicate?
   float dir_pop = dir->popularity[MDS_POP_CURDOM].pop[type].get();    // hmm??
 
-  dout(-20) << "hit_recursive " << dir_pop << " curdom " << *dir << endl;
+  dout(-20) << "hit_recursive " << type << " pop " << dir_pop << " curdom " << *dir << endl;
 
   if (dir->is_auth()) {
     if (!dir->is_rep() &&

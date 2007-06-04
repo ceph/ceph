@@ -17,7 +17,7 @@
 #define __MLOCK_H
 
 #include "msg/Message.h"
-
+#include "mds/SimpleLock.h"
 
 // for replicas
 #define LOCK_AC_SYNC        -1
@@ -91,6 +91,12 @@ class MLock : public Message {
     data.claim(bl);
   }
   virtual char *get_type_name() { return "ILock"; }
+  void print(ostream& out) {
+    out << "lock(a=" << action 
+	<< " " << ino
+	<< " " << get_lock_type_name(otype)
+	<< ")";
+  }
   
   void set_ino(inodeno_t ino, char ot) {
     otype = ot;
@@ -111,32 +117,27 @@ class MLock : public Message {
     this->dn = dn;
   }
   void set_reqid(metareqid_t ri) { reqid = ri; }
-  void set_data(bufferlist& data) {
-    this->data.claim( data );
+  void set_data(const bufferlist& data) {
+    this->data = data;
   }
   
   void decode_payload() {
     int off = 0;
-    payload.copy(off,sizeof(action), (char*)&action);
-    off += sizeof(action);
-    payload.copy(off,sizeof(asker), (char*)&asker);
-    off += sizeof(asker);
-    payload.copy(off,sizeof(otype), (char*)&otype);
-    off += sizeof(otype);
-    payload.copy(off,sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    payload.copy(off,sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
+    ::_decode(action, payload, off);
+    ::_decode(asker, payload, off);
+    ::_decode(otype, payload, off);
+    ::_decode(ino, payload, off);
+    ::_decode(dirfrag, payload, off);
     ::_decode(reqid, payload, off);
     ::_decode(dn, payload, off);
     ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
-    payload.append((char*)&action, sizeof(action));
-    payload.append((char*)&asker, sizeof(asker));
-    payload.append((char*)&otype, sizeof(otype));
-    payload.append((char*)&ino, sizeof(ino));
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
+    ::_encode(action, payload);
+    ::_encode(asker, payload);
+    ::_encode(otype, payload);
+    ::_encode(ino, payload);
+    ::_encode(dirfrag, payload);
     ::_encode(reqid, payload);
     ::_encode(dn, payload);
     ::_encode(data, payload);
