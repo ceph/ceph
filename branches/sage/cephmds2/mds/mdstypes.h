@@ -457,7 +457,7 @@ protected:
 	if (waiting.empty())
 	  get(PIN_WAITER);
 	waiting.insert(pair<int,Context*>(mask, c));
-	dout(10) << (mdsco_db_line_prefix(this)) 
+	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			 << "add_waiter " << mask << " " << c
 			 << " on " << *this
 			 << endl;
@@ -469,14 +469,14 @@ protected:
 	while (it != waiting.end()) {
 	  if (it->first & mask) {
 		ls.push_back(it->second);
-		dout(10) << (mdsco_db_line_prefix(this))
+		pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
 				 << "take_waiting mask " << mask << " took " << it->second
 				 << " tag " << it->first
 				 << " on " << *this
 				 << endl;
 		waiting.erase(it++);
 	  } else {
-		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second
+		pdout(10,g_conf.debug_mds) << "take_waiting mask " << mask << " SKIPPING " << it->second
 				 << " tag " << it->first
 				 << " on " << *this 
 				 << endl;

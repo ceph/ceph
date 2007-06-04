@@ -323,6 +323,8 @@ extern md_config_t g_debug_after_conf;
 #define dout(x)  if ((x) <= g_conf.debug) std::cout
 #define dout2(x) if ((x) <= g_conf.debug) std::cout
 
+#define pdout(x,p)  if ((x) <= (p)) std::cout
+
 /**
  * for cleaner output, bracket each line with
  * dbeginl (in the dout macro) and dendl (in place of endl).
