@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,7 @@
 #ifndef __LRU_H
 #define __LRU_H
 
+#include <stdint.h>
 #include <assert.h>
 #include <iostream>
 using namespace std;
@@ -52,7 +54,7 @@ class LRUObject {
 class LRUList {
  private:
   LRUObject *head, *tail;
-  __uint32_t len;
+  uint32_t len;
 
  public:
   LRUList() {
@@ -60,7 +62,7 @@ class LRUList {
     len = 0;
   }
   
-  __uint32_t  get_length() { return len; }
+  uint32_t  get_length() { return len; }
 
   LRUObject *get_head() {
     return head;
@@ -116,8 +118,8 @@ class LRUList {
 class LRU {
  protected:
   LRUList lru_top, lru_bot, lru_pintail;
-  __uint32_t lru_num, lru_num_pinned;
-  __uint32_t lru_max;   // max items
+  uint32_t lru_num, lru_num_pinned;
+  uint32_t lru_max;   // max items
   double lru_midpoint;
 
   friend class LRUObject;
@@ -131,14 +133,14 @@ class LRU {
     lru_max = max;
   }
 
-  __uint32_t lru_get_size() { return lru_num; }
-  __uint32_t lru_get_top() { return lru_top.get_length(); }
-  __uint32_t lru_get_bot() { return lru_bot.get_length(); }
-  __uint32_t lru_get_pintail() { return lru_pintail.get_length(); }
-  __uint32_t lru_get_max() { return lru_max; }
-  __uint32_t lru_get_num_pinned() { return lru_num_pinned; }
+  uint32_t lru_get_size() { return lru_num; }
+  uint32_t lru_get_top() { return lru_top.get_length(); }
+  uint32_t lru_get_bot() { return lru_bot.get_length(); }
+  uint32_t lru_get_pintail() { return lru_pintail.get_length(); }
+  uint32_t lru_get_max() { return lru_max; }
+  uint32_t lru_get_num_pinned() { return lru_num_pinned; }
 
-  void lru_set_max(__uint32_t m) { lru_max = m; }
+  void lru_set_max(uint32_t m) { lru_max = m; }
   void lru_set_midpoint(float f) { lru_midpoint = f; }
   
 

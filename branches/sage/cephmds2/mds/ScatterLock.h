@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,9 +39,10 @@ class ScatterLock : public SimpleLock {
   int num_wrlock;
   
 public:
-  ScatterLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo) {}
+  ScatterLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo),
+						  num_wrlock(0) {}
 
-  char get_replica_state() {
+  int get_replica_state() {
     switch (state) {
     case LOCK_SYNC: 
     case LOCK_GSYNCS:

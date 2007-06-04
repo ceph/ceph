@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -122,7 +123,7 @@ class MClientReply : public Message {
     int result;  // error code
     unsigned char file_caps;  // for open
     long          file_caps_seq;
-    __uint64_t file_data_version;  // for client buffercache consistency
+    uint64_t file_data_version;  // for client buffercache consistency
     
     int _num_trace_in;
     int _dir_size;
@@ -153,12 +154,12 @@ class MClientReply : public Message {
 
   unsigned char get_file_caps() { return st.file_caps; }
   long get_file_caps_seq() { return st.file_caps_seq; }
-  __uint64_t get_file_data_version() { return st.file_data_version; }
+  uint64_t get_file_data_version() { return st.file_data_version; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
-  void set_file_data_version(__uint64_t v) { st.file_data_version = v; }
+  void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 

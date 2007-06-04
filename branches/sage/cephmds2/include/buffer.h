@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -13,6 +14,8 @@
 
 #ifndef __BUFFER_H
 #define __BUFFER_H
+
+#include <stdint.h>
 
 #include "common/Mutex.h"
 
@@ -772,7 +775,7 @@ inline void _decoderaw(T& t, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::list<T>& ls, bufferlist& bl)
 {
-  __uint32_t n = ls.size();
+  uint32_t n = ls.size();
   _encoderaw(n, bl);
   for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
     _encode(*p, bl);
@@ -780,7 +783,7 @@ inline void _encode(const std::list<T>& ls, bufferlist& bl)
 template<class T>
 inline void _decode(std::list<T>& ls, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   ls.clear();
   while (n--) {
@@ -794,7 +797,7 @@ inline void _decode(std::list<T>& ls, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::deque<T>& ls, bufferlist& bl)
 {
-  __uint32_t n = ls.size();
+  uint32_t n = ls.size();
   _encoderaw(n, bl);
   for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
     _encode(*p, bl);
@@ -802,7 +805,7 @@ inline void _encode(const std::deque<T>& ls, bufferlist& bl)
 template<class T>
 inline void _decode(std::deque<T>& ls, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   ls.clear();
   while (n--) {
@@ -816,7 +819,7 @@ inline void _decode(std::deque<T>& ls, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::set<T>& s, bufferlist& bl)
 {
-  __uint32_t n = s.size();
+  uint32_t n = s.size();
   _encoderaw(n, bl);
   for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
     _encode(*p, bl);
@@ -824,7 +827,7 @@ inline void _encode(const std::set<T>& s, bufferlist& bl)
 template<class T>
 inline void _decode(std::set<T>& s, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   s.clear();
   while (n--) {
@@ -838,7 +841,7 @@ inline void _decode(std::set<T>& s, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::vector<T>& v, bufferlist& bl)
 {
-  __uint32_t n = v.size();
+  uint32_t n = v.size();
   _encoderaw(n, bl);
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     _encode(*p, bl);
@@ -846,10 +849,10 @@ inline void _encode(const std::vector<T>& v, bufferlist& bl)
 template<class T>
 inline void _decode(std::vector<T>& v, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   v.resize(n);
-  for (__uint32_t i=0; i<n; i++) 
+  for (uint32_t i=0; i<n; i++) 
     _decode(v[i], bl, off);
 }
 
@@ -857,7 +860,7 @@ inline void _decode(std::vector<T>& v, bufferlist& bl, int& off)
 template<class T, class U>
 inline void _encode(const std::map<T,U>& m, bufferlist& bl)
 {
-  __uint32_t n = m.size();
+  uint32_t n = m.size();
   _encoderaw(n, bl);
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     _encode(p->first, bl);
@@ -867,7 +870,7 @@ inline void _encode(const std::map<T,U>& m, bufferlist& bl)
 template<class T, class U>
 inline void _decode(std::map<T,U>& m, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   m.clear();
   while (n--) {
@@ -881,7 +884,7 @@ inline void _decode(std::map<T,U>& m, bufferlist& bl, int& off)
 template<class T, class U>
 inline void _encode(const __gnu_cxx::hash_map<T,U>& m, bufferlist& bl)
 {
-  __uint32_t n = m.size();
+  uint32_t n = m.size();
   _encoderaw(n, bl);
   for (typename __gnu_cxx::hash_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     _encode(p->first, bl);
@@ -891,7 +894,7 @@ inline void _encode(const __gnu_cxx::hash_map<T,U>& m, bufferlist& bl)
 template<class T, class U>
 inline void _decode(__gnu_cxx::hash_map<T,U>& m, bufferlist& bl, int& off)
 {
-  __uint32_t n;
+  uint32_t n;
   _decoderaw(n, bl, off);
   m.clear();
   while (n--) {
@@ -904,13 +907,13 @@ inline void _decode(__gnu_cxx::hash_map<T,U>& m, bufferlist& bl, int& off)
 // string
 inline void _encode(const std::string& s, bufferlist& bl) 
 {
-  __uint32_t len = s.length();
+  uint32_t len = s.length();
   _encoderaw(len, bl);
   bl.append(s.c_str(), len+1);
 }
 inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
-  __uint32_t len;
+  uint32_t len;
   _decoderaw(len, bl, off);
   s = bl.c_str() + off;    // FIXME someday to avoid a huge buffer copy?
   off += len+1;
@@ -919,13 +922,13 @@ inline void _decode(std::string& s, bufferlist& bl, int& off)
 // bufferptr (encapsulated)
 inline void _encode(bufferptr& bp, bufferlist& bl) 
 {
-  __uint32_t len = bp.length();
+  uint32_t len = bp.length();
   _encoderaw(len, bl);
   bl.append(bp);
 }
 inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
 {
-  __uint32_t len;
+  uint32_t len;
   _decoderaw(len, bl, off);
 
   bufferlist s;
@@ -941,13 +944,13 @@ inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
 // bufferlist (encapsulated)
 inline void _encode(const bufferlist& s, bufferlist& bl) 
 {
-  __uint32_t len = s.length();
+  uint32_t len = s.length();
   _encoderaw(len, bl);
   bl.append(s);
 }
 inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 {
-  __uint32_t len;
+  uint32_t len;
   _decoderaw(len, bl, off);
   s.substr_of(bl, off, len);
   off += len;

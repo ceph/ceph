@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,18 +20,18 @@
 
 
 class MOSDPGPeer : public Message {
-  __uint64_t       map_version;
+  uint64_t       map_version;
   list<pg_t> pg_list;
 
   bool complete;
 
  public:
-  __uint64_t get_version() { return map_version; }
+  uint64_t get_version() { return map_version; }
   list<pg_t>& get_pg_list() { return pg_list; }
   bool get_complete() { return complete; }
 
   MOSDPGPeer() {}
-  MOSDPGPeer(__uint64_t v, list<pg_t>& l, bool c=false) :
+  MOSDPGPeer(uint64_t v, list<pg_t>& l, bool c=false) :
     Message(MSG_OSD_PG_PEER) {
     this->map_version = v;
     this->complete = c;

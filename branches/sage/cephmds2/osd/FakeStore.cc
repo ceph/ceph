@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -70,12 +71,12 @@ void FakeStore::get_oname(object_t oid, char *s)
   assert(sizeof(oid) == 16);
 #ifdef __LP64__
   sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
-	  *((__uint64_t*)&oid),
-	  *(((__uint64_t*)&oid) + 1));
+	  *((uint64_t*)&oid),
+	  *(((uint64_t*)&oid) + 1));
 #else
   sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
-	  *((__uint64_t*)&oid),
-	  *(((__uint64_t*)&oid) + 1));
+	  *((uint64_t*)&oid),
+	  *(((uint64_t*)&oid) + 1));
 #endif
 }
 
@@ -96,12 +97,12 @@ void FakeStore::get_coname(coll_t cid, object_t oid, char *s)
   assert(sizeof(oid) == 16);
 #ifdef __LP64__
   sprintf(s, "%s/collections/%016lx/%016lx.%016lx", basedir.c_str(), cid, 
-	  *((__uint64_t*)&oid),
-	  *(((__uint64_t*)&oid) + 1));
+	  *((uint64_t*)&oid),
+	  *(((uint64_t*)&oid) + 1));
 #else
   sprintf(s, "%s/collections/%016llx/%016llx.%016llx", basedir.c_str(), cid, 
-	  *((__uint64_t*)&oid),
-	  *(((__uint64_t*)&oid) + 1));
+	  *((uint64_t*)&oid),
+	  *(((uint64_t*)&oid) + 1));
 #endif
 }
 
@@ -628,9 +629,9 @@ int FakeStore::collection_list(coll_t c, list<object_t>& ls)
     // parse
     object_t o;
     assert(sizeof(o) == 16);
-    *(((__uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
+    *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
     assert(de->d_name[16] == '.');
-    *(((__uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
+    *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
     dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << endl;
     if (errno) continue;
     ls.push_back(o);

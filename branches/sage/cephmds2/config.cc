@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -34,7 +35,7 @@ Mutex bufferlock;
 Mutex _dout_lock;
 
 
-FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, 2 );  // stripe over 8M objects, 2x replication
+FileLayout g_OSD_FileLayout( 1<<26, 1, 1<<26, 2 );  // stripe over 64M objects, 2x replication
 FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, 2 );  // 8M objects, 2x replication.  (a lie)
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
 

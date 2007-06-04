@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,7 @@
 #define __MDS_TYPES_H
 
 extern "C" {
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
@@ -28,6 +30,7 @@ extern "C" {
 #include <vector>
 #include <iostream>
 #include <iomanip>
+
 using namespace std;
 
 #include <ext/hash_map>
@@ -87,9 +90,9 @@ namespace __gnu_cxx {
   };
 
 #ifndef __LP64__
-  template<> struct hash<__int64_t> {
-    size_t operator()(__int64_t __x) const { 
-      static hash<__int32_t> H;
+  template<> struct hash<int64_t> {
+    size_t operator()(int64_t __x) const { 
+      static hash<int32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
@@ -125,9 +128,9 @@ struct ltstr
 // ----------------------
 // some basic types
 
-typedef __uint64_t tid_t;         // transaction id
-typedef __uint64_t version_t;
-typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
+typedef uint64_t tid_t;         // transaction id
+typedef uint64_t version_t;
+typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 
 
@@ -189,7 +192,7 @@ struct FileLayout {
 
 // -- inode --
 
-typedef __uint64_t _inodeno_t;
+typedef uint64_t _inodeno_t;
 struct inodeno_t {
   _inodeno_t val;
   inodeno_t() : val(0) {}
@@ -207,7 +210,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const inodeno_t& x ) const
     {
-      static hash<__uint64_t> H;
+      static hash<uint64_t> H;
       return H(x.val);
     }
   };

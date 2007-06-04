@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -294,7 +295,10 @@ struct Fh {
 
   bool is_lazy() { return mode & O_LAZY; }
 
-  Fh() : inode(0), pos(0), mds(0), mode(0) {}
+  bool pos_locked;           // pos is currently in use
+  list<Cond*> pos_waiters;   // waiters for pos
+
+  Fh() : inode(0), pos(0), mds(0), mode(0), pos_locked(false) {}
 };
 
 
@@ -318,6 +322,11 @@ class Client : public Dispatcher {
     struct dirent_lite dl;
     DirResult() : p(contents.end()), off(-1), size(0) {}
   };
+
+
+  // cluster descriptors
+  MDSMap *mdsmap; 
+  OSDMap *osdmap;
 
 
  protected:
@@ -365,11 +374,6 @@ class Client : public Dispatcher {
   void kick_requests(int mds);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
-
-
-  // cluster descriptors
-  MDSMap *mdsmap; 
-  OSDMap *osdmap;
 
   bool   mounted;
   bool   unmounting;
@@ -555,6 +559,9 @@ protected:
   void close_release(Inode *in);
   void close_safe(Inode *in);
 
+  void lock_fh_pos(Fh *f);
+  void unlock_fh_pos(Fh *f);
+  
   // metadata cache
   Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
   void update_inode_dist(Inode *in, InodeStat *st);

@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -102,9 +103,9 @@ namespace __gnu_cxx {
  * ipv4 for now.
  */
 struct entity_addr_t {
-  __uint8_t  ipq[4];
-  __uint32_t port;
-  __uint32_t nonce;  // bind time, or pid, or something unique!
+  uint8_t  ipq[4];
+  uint32_t port;
+  uint32_t nonce;  // bind time, or pid, or something unique!
 
   entity_addr_t() : port(0), nonce(0) {
     ipq[0] = ipq[1] = ipq[2] = ipq[3] = 0;

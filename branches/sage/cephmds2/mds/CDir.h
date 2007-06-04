@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -477,13 +478,13 @@ class CDirDiscover {
 class CDirExport {
   struct {
     dirfrag_t   dirfrag;
-    long        nden;   // num dentries (including null ones)
+    uint32_t    nden;   // num dentries (including null ones)
     version_t   version;
     version_t   committed_version;
-    unsigned    state;
+    uint32_t    state;
     meta_load_t popularity_justme;
     meta_load_t popularity_curdom;
-    int         dir_rep;
+    int32_t     dir_rep;
   } st;
   map<int,int> replicas;
   set<int>     rep_by;
@@ -512,7 +513,7 @@ class CDirExport {
   }
 
   dirfrag_t get_dirfrag() { return st.dirfrag; }
-  __uint64_t get_nden() { return st.nden; }
+  uint32_t get_nden() { return st.nden; }
 
   void update_dir(CDir *dir) {
     assert(dir->dirfrag() == st.dirfrag);
