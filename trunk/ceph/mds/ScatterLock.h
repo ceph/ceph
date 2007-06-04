@@ -42,7 +42,7 @@ public:
   ScatterLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo),
 						  num_wrlock(0) {}
 
-  char get_replica_state() {
+  int get_replica_state() {
     switch (state) {
     case LOCK_SYNC: 
     case LOCK_GSYNCS:

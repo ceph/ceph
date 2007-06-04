@@ -99,7 +99,7 @@ class FileLock : public SimpleLock {
  public:
   FileLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo) { }
   
-  char get_replica_state() {
+  int get_replica_state() {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKM:

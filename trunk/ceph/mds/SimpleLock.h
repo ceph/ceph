@@ -76,7 +76,7 @@ protected:
   int wait_offset;
 
   // lock state
-  char           state;
+  int           state;
   set<__int32_t> gather_set;  // auth
 
   // local state
@@ -121,8 +121,8 @@ public:
   
 
   // state
-  char get_state() { return state; }
-  char set_state(char s) { 
+  int get_state() { return state; }
+  int set_state(int s) { 
     state = s; 
     assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
@@ -186,7 +186,7 @@ public:
 
   
   // simplelock specifics
-  char get_replica_state() {
+  int get_replica_state() {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKR: 
