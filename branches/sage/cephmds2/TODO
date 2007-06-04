@@ -20,10 +20,9 @@ mds
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
 
-- locker vs node failure
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
-- fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
+
 - incremental mdsmaps?
 - client failure
 

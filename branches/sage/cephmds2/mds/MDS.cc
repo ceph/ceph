@@ -440,6 +440,7 @@ void MDS::beacon_kill(utime_t lab)
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
+  version_t hadepoch = mdsmap->get_epoch();
   version_t epoch = m->get_epoch();
   dout(5) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
 
@@ -670,6 +671,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   */
 
+  // just got mdsmap+osdmap?
+  if (hadepoch == 0 && 
+      mdsmap->get_epoch() > 0 &&
+      osdmap->get_epoch() > 0)
+    boot();
+
   delete m;
 }
 
@@ -690,24 +697,30 @@ void MDS::bcast_mds_map()
 
 void MDS::handle_osd_map(MOSDMap *m)
 {
-  version_t had = osdmap->get_epoch();
+  version_t hadepoch = osdmap->get_epoch();
+  dout(10) << "handle_osd_map had " << hadepoch << endl;
   
-  dout(10) << "handle_osd_map had " << had << endl;
-
-  // process locally
+  // process
   objecter->handle_osd_map(m);
 
-  if (had == 0 && osdmap->get_epoch() > 0) {
-    if (is_creating()) 
-      boot_create();    // new tables, journal
-    else if (is_starting())
-      boot_start();     // old tables, empty journal
-    else if (is_replay()) 
-      boot_replay();    // replay, join
-    else 
-      assert(is_standby());
-  }  
-  
+  // just got mdsmap+osdmap?
+  if (hadepoch == 0 && 
+      osdmap->get_epoch() > 0 &&
+      mdsmap->get_epoch() > 0) 
+    boot();
+}
+
+
+void MDS::boot()
+{   
+  if (is_creating()) 
+    boot_create();    // new tables, journal
+  else if (is_starting())
+    boot_start();     // old tables, empty journal
+  else if (is_replay()) 
+    boot_replay();    // replay, join
+  else 
+    assert(0);
 }
 
 

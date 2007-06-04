@@ -188,6 +188,7 @@ class MDS : public Dispatcher {
   int init(bool standby=false);
   void reopen_logger();
 
+  void boot();
   void boot_create();             // i am new mds.
   void boot_start();              // i am old but empty (was down:out) mds.
   void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
