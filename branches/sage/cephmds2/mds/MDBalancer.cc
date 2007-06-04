@@ -705,13 +705,22 @@ void MDBalancer::find_exports(CDir *dir,
 void MDBalancer::hit_inode(CInode *in, int type)
 {
   // hit me
-  in->popularity[MDS_POP_JUSTME].pop[type].hit();
-  in->popularity[MDS_POP_NESTED].pop[type].hit();
+  float me = in->popularity[MDS_POP_JUSTME].pop[type].hit();
+  float nested = in->popularity[MDS_POP_NESTED].pop[type].hit();
+  float curdom = 0;
+  float anydom = 0;
   if (in->is_auth()) {
-    in->popularity[MDS_POP_CURDOM].pop[type].hit();
-    in->popularity[MDS_POP_ANYDOM].pop[type].hit();
+    curdom = in->popularity[MDS_POP_CURDOM].pop[type].hit();
+    anydom = in->popularity[MDS_POP_ANYDOM].pop[type].hit();
   }
-  
+
+  dout(-20) << "hit_inode " << type << " pop " << me << " me, "
+           << nested << " nested, "
+           << curdom << " curdom, " 
+           << anydom << " anydom" 
+           << " on " << *in
+           << endl;
+
   // hit auth up to import
   CDir *dir = in->get_parent_dir();
   if (dir) hit_dir(dir, type);
@@ -727,7 +736,8 @@ void MDBalancer::hit_dir(CDir *dir, int type)
   if (g_conf.num_mds > 2 &&             // FIXME >2 thing
       !dir->inode->is_root() &&        // not root (for now at least)
       dir->is_auth()) {
-    //dout(-20) << "hit_dir " << type << " pop is " << v << "  " << *dir << endl;
+    dout(-20) << "hit_dir " << type << " pop " << v << " me "
+             << *dir << endl;
 
     // hash this dir?  (later?)
     if (((v > g_conf.mds_bal_hash_rd && type == META_POP_IRD) ||
@@ -754,6 +764,8 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 
   // replicate?
   float dir_pop = dir->popularity[MDS_POP_CURDOM].pop[type].get();    // hmm??
+
+  dout(-20) << "hit_recursive " << dir_pop << " curdom " << *dir << endl;
 
   if (dir->is_auth()) {
     if (!dir->is_rep() &&
