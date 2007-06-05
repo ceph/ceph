@@ -72,6 +72,9 @@ protected:
   map<tid_t, RepGather*>               rep_gather;
   map<tid_t, list<class Message*> > waiting_for_repop;
 
+  // load balancing
+  set<object_t>  replicated_objects;
+
   void get_rep_gather(RepGather*);
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
@@ -131,7 +134,7 @@ public:
   { }
   ~ReplicatedPG() {}
 
-
+  bool preprocess_op(MOSDOp *op);
   void do_op(MOSDOp *op);
   void do_op_reply(MOSDOpReply *r);
 

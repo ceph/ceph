@@ -78,10 +78,6 @@
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./dev";
 
-const int LOAD_LATENCY =1;
-const int LOAD_QUEUE_SIZE=2;
-const int LOAD_HYBRID =3;
-
 object_t SUPERBLOCK_OBJECT(0,0);
 
 
@@ -115,7 +111,8 @@ LogType osd_logtype;
 
 OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
   timer(osd_lock),
-  load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq)
+  load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
+  iat_averager(g_conf.osd_flash_crowd_iat_alpha)
 {
   whoami = id;
   messenger = m;
@@ -1947,6 +1944,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 void OSD::handle_op(MOSDOp *op)
 {
+  // get and lock *pg.
   const pg_t pgid = op->get_pg();
   PG *pg = _have_pg(pgid) ? _lock_pg(pgid):0;
 
@@ -1960,7 +1958,6 @@ void OSD::handle_op(MOSDOp *op)
   hb_stat_ops++;
   hb_stat_qlen += pending_ops;
 
-
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) {
     if (pg) _unlock_pg(pgid);
@@ -1969,9 +1966,6 @@ void OSD::handle_op(MOSDOp *op)
 
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
-
-  // what kind of op?
-  bool read = op->get_op() < 10;   // read, stat.  but not pull.
 
   if (!op->get_source().is_osd()) {
     // REGULAR OP (non-replication)
@@ -1990,24 +1984,62 @@ void OSD::handle_op(MOSDOp *op)
     }
 
     // pg must be same-ish...
-    if (read && !pg->same_for_read_since(op->get_map_epoch())) {
-      dout(7) << "handle_rep_op pg changed " << pg->info.history
-	      << " after " << op->get_map_epoch() 
-	      << ", dropping" << dendl;
-      assert(op->get_map_epoch() < osdmap->get_epoch());
-      _unlock_pg(pgid);
-      delete op;
-      return;
+    if (op->is_read()) {
+      // read
+      if (!pg->same_for_read_since(op->get_map_epoch())) {
+	dout(7) << "handle_rep_op pg changed " << pg->info.history
+		<< " after " << op->get_map_epoch() 
+		<< ", dropping" << dendl;
+	assert(op->get_map_epoch() < osdmap->get_epoch());
+	_unlock_pg(pgid);
+	delete op;
+	return;
+      }
+
+      /*
+    if (read && op->get_oid().rev > 0) {
+    // versioned read.  hrm.
+      // are we missing a revision that we might need?
+      object_t moid = op->get_oid();
+      if (pick_missing_object_rev(moid, pg)) {
+	// is there a local revision we might use instead?
+	object_t loid = op->get_oid();
+	if (store->pick_object_revision_lt(loid) &&
+	    moid <= loid) {
+	  // we need moid.  pull it.
+	  dout(10) << "handle_op read on " << op->get_oid()
+		   << ", have " << loid
+		   << ", but need missing " << moid
+		   << ", pulling" << dendl;
+	  pull(pg, moid);
+	  pg->waiting_for_missing_object[moid].push_back(op);
+	  return;
+	} 
+	  
+	dout(10) << "handle_op read on " << op->get_oid()
+		 << ", have " << loid
+		 << ", don't need missing " << moid 
+		 << dendl;
+      }
+    } else {
+      // live revision.  easy.
+      if (op->get_op() != OSD_OP_PUSH &&
+	  waitfor_missing_object(op, pg)) return;
     }
-    if (!read && (pg->get_primary() != whoami ||
-		  !pg->same_for_modify_since(op->get_map_epoch()))) {
-      dout(7) << "handle_rep_op pg changed " << pg->info.history
-	      << " after " << op->get_map_epoch() 
-	      << ", dropping" << dendl;
-      assert(op->get_map_epoch() < osdmap->get_epoch());
-      _unlock_pg(pgid);
-      delete op;
-      return;
+      */
+
+    } else {
+      // modify
+      if ((pg->get_primary() != whoami ||
+	   !pg->same_for_modify_since(op->get_map_epoch()))) {
+	dout(7) << "handle_rep_op pg changed " << pg->info.history
+		<< " after " << op->get_map_epoch() 
+		<< ", dropping" << dendl;
+	assert(op->get_map_epoch() < osdmap->get_epoch());
+	_unlock_pg(pgid);
+	delete op;
+	return;
+      }
     }
     
     // pg must be active.
@@ -2039,184 +2071,9 @@ void OSD::handle_op(MOSDOp *op)
       _unlock_pg(pgid);
       return;
     }
-    /*
-    if (read && op->get_oid().rev > 0) {
-      // versioned read.  hrm.
-      // are we missing a revision that we might need?
-      object_t moid = op->get_oid();
-      if (pick_missing_object_rev(moid, pg)) {
-	// is there a local revision we might use instead?
-	object_t loid = op->get_oid();
-	if (store->pick_object_revision_lt(loid) &&
-	    moid <= loid) {
-	  // we need moid.  pull it.
-	  dout(10) << "handle_op read on " << op->get_oid()
-		   << ", have " << loid
-		   << ", but need missing " << moid
-		   << ", pulling" << dendl;
-	  pull(pg, moid);
-	  pg->waiting_for_missing_object[moid].push_back(op);
-	  return;
-	} 
-	  
-	dout(10) << "handle_op read on " << op->get_oid()
-		 << ", have " << loid
-		 << ", don't need missing " << moid 
-		 << dendl;
-      }
-    } else {
-      // live revision.  easy.
-      if (op->get_op() != OSD_OP_PUSH &&
-	  waitfor_missing_object(op, pg)) return;
-    }
-    */
-
 
     dout(10) << "handle_op " << *op << " in " << *pg << endl;
 
-    // if this is a read and the data is in the cache ,do an immediate read.. 
-    if ( read && g_conf.osd_immediate_read_from_cache ) {
-      dout(10) << "trying to see whether data is in cache" << *op <<  endl;
-      if ( store->is_cached( op->get_oid() , 
-			     op->get_offset(), 
-			     op->get_length() ) == 0  )
-	{ 
-	  dout(10) << "data is in cache, reading from cache" << *op <<  endl;
-	  pg->do_op(op); // do it now
-	  _unlock_pg(pgid);
-	  return;
-        }
-    }
-
-    dout(7) << "handle_op " << *op << " in " << *pg << dendl;
-    
-    // balance reads?
-    if (read &&
-	g_conf.osd_balance_reads &&
-	pg->get_acker() == whoami) 
-      {
-	// test
-	if (false) {
-	  if (pg->acting.size() > 1) {
-	    int peer = pg->acting[1];
-	    dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << dendl;
-	    messenger->send_message(op, osdmap->get_inst(peer));
-	    _unlock_pg(pgid);
-	    return;
-	  }
-	}
-	
-
-	// check my load. 
-	// TODO xxx we must also compare with our own load
-	// if i am x percentage higher than replica , 
-	// redirect the read 
-	
-	//if ( g_conf.osd_load_balance_scheme == LOAD_LATENCY)
-	if ( g_conf.osd_balance_reads == LOAD_LATENCY)
-	  {
-	    
-	    double mean_read_time = load_calc.get_average();
-	    
-	    if ( mean_read_time != -1 )
-	      {
-		
-		for (unsigned i=1; 
-		     i<pg->acting.size(); 
-		     ++i) 
-		  {
-		    int peer = pg->acting[i];
-		    
-		    dout(10) << "my read time " << mean_read_time 
-			     << "peer_readtime" << peer_read_time[peer] 
-			     << " of peer" << peer << endl;
-		    
-		    if ( peer_read_time.count(peer) &&
-			 ( (peer_read_time[peer]*100/mean_read_time) <
-			   ( 100 - g_conf.osd_load_diff_percent)))
-		      {
-			dout(10) << " forwarding to peer osd" << peer << endl;
-			
-			messenger->send_message(op, osdmap->get_inst(peer));
-			_unlock_pg(pgid);
-			return;
-		      }
-		  } 
-	      }
-	  }
-	//else if ( g_conf.osd_load_balance_scheme == LOAD_QUEUE_SIZE )
-	else if ( g_conf.osd_balance_reads == LOAD_QUEUE_SIZE )
-	  {
-	    
-	    
-	    // am i above my average?
-	    float my_avg = hb_stat_qlen / hb_stat_ops;
-	    
-	    if (pending_ops > my_avg) {
-	      // is there a peer who is below my average?
-	      for (unsigned i=1; i<pg->acting.size(); ++i) {
-		int peer = pg->acting[i];
-		if (peer_qlen.count(peer) &&
-		    peer_qlen[peer] < my_avg) {
-		  // calculate a probability that we should redirect
-		  float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
-		  
-		  if (drand48() <= p) {
-		    // take the first one
-		    dout(10) << "my qlen " << pending_ops << " > my_avg " << my_avg
-			     << ", p=" << p 
-			     << ", fwd to peer w/ qlen " << peer_qlen[peer]
-			     << " osd" << peer
-			     << dendl;
-		    messenger->send_message(op, osdmap->get_inst(peer));
-		    _unlock_pg(pgid);
-		    return;
-		  }
-		}
-	      }
-	    }
-	    
-	  }
-	//else if ( g_conf.osd_load_balance_scheme == LOAD_HYBRID )
-	else if ( g_conf.osd_balance_reads == LOAD_HYBRID )
-	  {
-	    
-	    // am i above my average?
-	    float my_avg = hb_stat_qlen / hb_stat_ops;
-	    
-	    if (pending_ops > my_avg) {
-	      // is there a peer who is below my average?
-	      for (unsigned i=1; i<pg->acting.size(); ++i) {
-		int peer = pg->acting[i];
-		if (peer_qlen.count(peer) &&
-		    peer_qlen[peer] < my_avg) {
-		  // calculate a probability that we should redirect
-		  //float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
-		  
-		  double mean_read_time = load_calc.get_average();
-		  
-		  if ( mean_read_time != -1 &&  
-		       peer_read_time.count(peer) &&
-		       ( (peer_read_time[peer]*100/mean_read_time) <
-			 ( 100 - g_conf.osd_load_diff_percent) ) )
-		    //if (drand48() <= p) {
-		    // take the first one
-		    dout(10) << "using hybrid :my qlen " << pending_ops << " > my_avg " << my_avg
-			     << "my read time  "<<  mean_read_time
-			     << "peer read time " << peer_read_time[peer]  
-			     << ", fwd to peer w/ qlen " << peer_qlen[peer]
-			     << " osd" << peer
-			     << endl;
-		  messenger->send_message(op, osdmap->get_inst(peer));
-		  _unlock_pg(pgid);
-		  return;
-		  //}
-		}
-	      }
-	    }
-	  }
-	
-      }
   } else {
     // REPLICATION OP (it's from another OSD)
 
@@ -2241,29 +2098,18 @@ void OSD::handle_op(MOSDOp *op)
 
     assert(pg->get_role() >= 0);
     dout(7) << "handle_rep_op " << op << " in " << *pg << dendl;
-
-    // a redirected read...handle this differently ..
-    // if the data is in cache ( a rare case? ), return the data immediately
-    if ( read && g_conf.osd_immediate_read_from_cache )
-    {
-      dout(10) << "redirected read, trying to see whether data is in cache " << *op <<  endl;
-      if ( store->is_cached( op->get_oid() , 
-			     op->get_offset(), 
-			     op->get_length()) == 0   )
-        { 
-	  dout(10) << "redirected read, data is in cache, reading from cache " << *op <<  endl;
-	  pg->do_op(op); // do it now
-	  _unlock_pg(pgid);
-	  return;
-        }
-    }
   }
 
-  
-  if (g_conf.osd_maxthreads < 1) {
+  // proprocess op? 
+  if (pg->preprocess_op(op)) {
+    _unlock_pg(pgid);
+    return;
+  }
 
+  if (g_conf.osd_maxthreads < 1) {
+    // do it now.
     if (op->get_type() == MSG_OSD_OP)
-      pg->do_op((MOSDOp*)op); // do it now
+      pg->do_op((MOSDOp*)op);
     else if (op->get_type() == MSG_OSD_OPREPLY)
       pg->do_op_reply((MOSDOpReply*)op);
     else 
@@ -2271,8 +2117,9 @@ void OSD::handle_op(MOSDOp *op)
 
     _unlock_pg(pgid);
   } else {
+    // queue for worker threads
     _unlock_pg(pgid);
-    enqueue_op(pgid, op);         // queue for worker threads
+    enqueue_op(pgid, op);         
   }
 }
 

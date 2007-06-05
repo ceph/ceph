@@ -594,6 +594,7 @@ public:
 
 
   // abstract bits
+  virtual bool preprocess_op(MOSDOp *op) { return false; } 
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_op_reply(MOSDOpReply *op) = 0;
 

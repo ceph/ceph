@@ -31,6 +31,9 @@
 #define OSD_OP_READ       1
 #define OSD_OP_STAT       2
 
+#define OSD_OP_REPLICATE    3
+#define OSD_OP_UNREPLICATE  4
+
 #define OSD_OP_WRNOOP     10
 #define OSD_OP_WRITE      11
 #define OSD_OP_DELETE     12
@@ -44,8 +47,12 @@
 #define OSD_OP_UPLOCK     24
 #define OSD_OP_DNLOCK     25
 
+#define OSD_OP_PRIMARYLOCK    26
+#define OSD_OP_PRIMARYUNLOCK  27
+
 #define OSD_OP_PULL       30
 #define OSD_OP_PUSH       31
+
 
 
 class MOSDOp : public Message {
@@ -66,6 +73,9 @@ public:
     case OSD_OP_RDUNLOCK: return "rdunlock"; 
     case OSD_OP_UPLOCK: return "uplock"; 
     case OSD_OP_DNLOCK: return "dnlock"; 
+
+    case OSD_OP_PRIMARYLOCK: return "primary-lock";
+    case OSD_OP_PRIMARYUNLOCK: return "primary-unlock";
 
     case OSD_OP_PULL: return "pull";
     case OSD_OP_PUSH: return "push";
@@ -142,6 +152,9 @@ private:
   
   const int    get_op() { return st.op; }
   void set_op(int o) { st.op = o; }
+  bool is_read() { 
+    return st.op < 10;
+  }
 
   const size_t get_length() { return st.length; }
   const off_t get_offset() { return st.offset; }

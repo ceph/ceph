@@ -407,14 +407,21 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
            << endl;
 
   if (pg.acker() >= 0) {
-	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-						   ex.oid, ex.layout, osdmap->get_epoch(), 
-						   OSD_OP_READ);
-	m->set_length(ex.length);
-	m->set_offset(ex.start);
-	m->set_retry_attempt(retry);
-	
-    messenger->send_message(m, osdmap->get_inst(pg.acker()));
+    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+			   ex.oid, ex.layout, osdmap->get_epoch(), 
+			   OSD_OP_READ);
+    m->set_length(ex.length);
+    m->set_offset(ex.start);
+    m->set_retry_attempt(retry);
+    
+    int who = pg.acker();
+    if (rd->balance_reads) {
+      int replica = messenger->get_myname().num() % pg.acting.size();
+      who = pg.acting[replica];
+      dout(-10) << "readx_submit reading from random replica " << replica
+		<< " = osd" << who <<  endl;
+    }
+    messenger->send_message(m, osdmap->get_inst(who));
   }
     
   return last_tid;

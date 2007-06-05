@@ -142,6 +142,8 @@ md_config_t g_conf = {
   client_oc_max_dirty: 1024*1024* 5,    // MB * n
   client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
 
+  client_hack_balance_reads: false,
+
   client_trace: 0,
   fuse_direct_io: 0,
   
@@ -202,11 +204,13 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
+
   osd_balance_reads: false,
-  osd_immediate_read_from_cache: false,     //osds to read from the cache immediately?
+  osd_immediate_read_from_cache: true,  // osds to read from the cache immediately?
   osd_exclusive_caching: false,
   osd_load_diff_percent: 20, // load diff for read forwarding
-  osd_load_balance_scheme: 1,
+  osd_flash_crowd_iat_threshold: 100,
+  osd_flash_crowd_iat_alpha: 0.125,
 
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
@@ -669,6 +673,8 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--client_oc_max_dirty") == 0)
       g_conf.client_oc_max_dirty = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--client_hack_balance_reads") == 0)
+      g_conf.client_hack_balance_reads = atoi(args[++i]);
 
     else if (strcmp(args[i], "--ebofs") == 0) 
       g_conf.ebofs = 1;
@@ -720,14 +726,16 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
-      g_conf.osd_load_diff_percent = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_load_balance_scheme") == 0) 
-      g_conf.osd_load_balance_scheme = atoi(args[++i]);
     else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
       g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
     else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
       g_conf.osd_exclusive_caching = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
+      g_conf.osd_load_diff_percent = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0) 
+      g_conf.osd_flash_crowd_iat_threshold = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0) 
+      g_conf.osd_flash_crowd_iat_alpha = atoi(args[++i]);
 
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);

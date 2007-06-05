@@ -154,6 +154,10 @@ class Inode {
   list<Cond*>       waitfor_lazy;
   list<Context*>    waitfor_no_read, waitfor_no_write;
 
+  // <hack>
+  bool hack_balance_reads;
+  // </hack>
+
   void make_path(string& p) {
     if (dn) {
       if (dn->dir && dn->dir->parent_inode)
@@ -180,7 +184,8 @@ class Inode {
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), dir(0), dn(0), symlink(0),
     fc(_oc, _inode),
-    sync_reads(0), sync_writes(0)
+    sync_reads(0), sync_writes(0),
+    hack_balance_reads(false)
   { }
   ~Inode() {
     if (symlink) { delete symlink; symlink = 0; }

@@ -48,8 +48,9 @@ class Objecter {
     Context *onfinish;
     map<tid_t, ObjectExtent> ops;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
+    int balance_reads;  // if non-zero, direct reads to a pseudo-random replica
 
-    OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+    OSDRead(bufferlist *b) : bl(b), onfinish(0), balance_reads(0) {
       bl->clear();
     }
   };

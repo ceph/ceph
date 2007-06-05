@@ -79,6 +79,42 @@ public:
     }
   };
 
+  class IATAverager {
+  public:
+    struct iat_data {
+      double last_req_stamp;
+      double average_iat;
+      iat_data() : last_req_stamp(0), average_iat(0) {}
+    };
+  private:
+    double alpha;
+    hash_map<object_t, iat_data> iat_map;
+
+  public:
+    IATAverager(double a) : alpha(a) {}
+    
+    void add_sample(object_t oid, double now) {
+      iat_data &r = iat_map[oid];
+      double iat = now - r.last_req_stamp;
+      r.last_req_stamp = now;
+      r.average_iat = r.average_iat*(1.0-alpha) + iat*alpha;
+    }
+    
+    bool have(object_t oid) {
+      return iat_map.count(oid);
+    }
+
+    double get_average_iat(object_t oid) {
+      assert(have(oid));
+      return iat_map[oid].average_iat;
+    }
+
+    bool is_flash_crowd_candidate(object_t oid) {
+      assert(have(oid));
+      return get_average_iat(oid) <= g_conf.osd_flash_crowd_iat_threshold;
+    }
+  };
+
 
   /** OSD **/
 protected:
@@ -89,8 +125,10 @@ protected:
   Logger      *logger;
   ObjectStore *store;
   MonMap      *monmap;
-  LoadCalculator load_calc;
 
+  LoadCalculator load_calc;
+  IATAverager    iat_averager;
+  
   int whoami;
   char dev_path[100];
 
@@ -150,6 +188,7 @@ private:
   
   // -- object locking --
   hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
+  hash_map<object_t, list<Message*> > waiting_for_primary_unlock; 
   
   bool block_if_wrlocked(class MOSDOp* op);
 

@@ -195,6 +195,7 @@ SyntheticClient::SyntheticClient(Client *client)
   did_readdir = false;
 
   run_only = -1;
+  exclude = -1;
 
   this->modes = syn_modes;
   this->iargs = syn_iargs;
@@ -280,6 +281,15 @@ int SyntheticClient::run()
           dout(2) << "only " << run_only << endl;
       }
       break;
+    case SYNCLIENT_MODE_EXCLUDE:
+      {
+        exclude = iargs.front();
+        iargs.pop_front();
+        if (exclude == client->get_nodeid())
+          dout(2) << "not running " << exclude << endl;
+      }
+      break;
+
 
     case SYNCLIENT_MODE_UNTIL:
       {

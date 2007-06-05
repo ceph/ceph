@@ -31,6 +31,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+static const int LOAD_LATENCY    = 1;
+static const int LOAD_QUEUE_SIZE = 2;
+static const int LOAD_HYBRID     = 3;
 
 
 // =======================
@@ -93,6 +96,224 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, MOSDOp *op)
 
 
 
+
+/** preprocess_op - preprocess an op (before it gets queued).
+ * fasttrack read
+ */
+bool ReplicatedPG::preprocess_op(MOSDOp *op)
+{
+  // we only care about reads here on out..
+  if (!op->is_read()) 
+    return false;
+
+
+  // -- load balance reads --
+  if (g_conf.osd_balance_reads) {
+
+    // replicate/unreplicate?
+    if (!is_acker()) {
+      // -- replica --
+      if (op->get_op() == OSD_OP_REPLICATE) {
+	dout(-10) << "preprocess_op replicating " << op->get_oid() << endl;
+	replicated_objects.insert(op->get_oid());
+	delete op;
+	return true;
+      }
+      if (op->get_op() == OSD_OP_UNREPLICATE) {
+	dout(-10) << "preprocess_op un-replicating " << op->get_oid() << endl;
+	replicated_objects.erase(op->get_oid());
+	delete op;
+	return true;
+      }
+    
+      if (!op->get_source().is_osd()) {
+	// -- read on replica --
+	if (!osd->store->exists(op->get_oid())) {
+	  // fwd to primary
+	  dout(-10) << "preprocess_op got read on replica, object dne, fwd to primary" << endl;
+	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
+	  return true;
+	}
+
+	// primary lock?
+	//  FIXME: this may cause a (blocking) stat+disk seek.
+	char v;
+	if (osd->store->getattr(op->get_oid(), "primary-lock", &v, 1) >= 0) {
+	  dout(-10) << "preprocess_op primary-lock on " << op->get_oid() << " fwd to primary" << endl;
+	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
+	  return true;
+	}
+
+	// in replicate list?
+	if (replicated_objects.count(op->get_oid())) {
+	  // yes.  continue.  
+	  // note that we've already failed the fastpath above.
+	  dout(-10) << "preprocess_op got read on replica, object replicated, processing/queuing as usual" << endl;
+	} else {
+	  // no.  forward to primary.
+	  dout(-10) << "preprocess_op got read on replica, object not replicated, fwd to primary" << endl;
+	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
+	  return true;
+	}
+      }
+    }
+  
+    if (is_acker()) {
+      // -- read on acker ---
+
+      // test
+      if (false) {
+	if (acting.size() > 1) {
+	  int peer = acting[1];
+	  dout(-10) << "preprocess_op fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << dendl;
+	  osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+	  return true;
+	}
+      }
+      
+      // -- flash crowd?
+      if (!op->get_source().is_osd()) {
+	// candidate?
+	bool is_flash_crowd_candidate = osd->iat_averager.is_flash_crowd_candidate( op->get_oid() );
+	bool is_replicated = replicated_objects.count( op->get_oid() );
+	
+	if (!is_replicated && is_flash_crowd_candidate) {
+	  // replicate
+	  dout(-10) << "preprocess_op replicating " << op->get_oid() << endl;
+	  replicated_objects.insert(op->get_oid());
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    osd->messenger->send_message(new MOSDOp(osd->messenger->get_myinst(), 0, 0,
+						    op->get_oid(), ObjectLayout(info.pgid),
+						    osd->osdmap->get_epoch(),
+						    OSD_OP_REPLICATE),
+					 osd->osdmap->get_inst(acting[i]));
+	  }
+	}
+	if (is_replicated && !is_flash_crowd_candidate) {
+	  // unreplicate
+	  dout(-10) << "preprocess_op unreplicating " << op->get_oid() << endl;
+	  replicated_objects.erase(op->get_oid());
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    osd->messenger->send_message(new MOSDOp(osd->messenger->get_myinst(), 0, 0,
+						    op->get_oid(), ObjectLayout(info.pgid),
+						    osd->osdmap->get_epoch(),
+						    OSD_OP_REPLICATE),
+					 osd->osdmap->get_inst(acting[i]));
+	  }
+	}
+      }
+      
+    
+      // check my load. 
+      // TODO xxx we must also compare with our own load
+      // if i am x percentage higher than replica , 
+      // redirect the read 
+      
+      if ( g_conf.osd_balance_reads == LOAD_LATENCY) {
+	double mean_read_time = osd->load_calc.get_average();
+	
+	if ( mean_read_time != -1 ) {
+	  
+	  for (unsigned i=1; 
+	       i<acting.size(); 
+	       ++i) {
+	    int peer = acting[i];
+	    
+	    dout(10) << "my read time " << mean_read_time 
+		     << "peer_readtime" << osd->peer_read_time[peer] 
+		     << " of peer" << peer << endl;
+	    
+	    if ( osd->peer_read_time.count(peer) &&
+		 ( (osd->peer_read_time[peer]*100/mean_read_time) <
+		   (100 - g_conf.osd_load_diff_percent))) {
+	      dout(10) << " forwarding to peer osd" << peer << endl;
+	      
+	      osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+	      return true;
+	    }
+	  }
+	}
+      }
+      else if ( g_conf.osd_balance_reads == LOAD_QUEUE_SIZE ) {
+	// am i above my average?
+	float my_avg = osd->hb_stat_qlen / osd->hb_stat_ops;
+	
+	if (osd->pending_ops > my_avg) {
+	  // is there a peer who is below my average?
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_qlen.count(peer) &&
+		osd->peer_qlen[peer] < my_avg) {
+	      // calculate a probability that we should redirect
+	      float p = (my_avg - osd->peer_qlen[peer]) / my_avg;             // this is dumb.
+	      
+	      if (drand48() <= p) {
+		// take the first one
+		dout(10) << "my qlen " << osd->pending_ops << " > my_avg " << my_avg
+			 << ", p=" << p 
+			 << ", fwd to peer w/ qlen " << osd->peer_qlen[peer]
+			 << " osd" << peer
+			 << dendl;
+		osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+		return true;
+	      }
+	    }
+	  }
+	}
+      }
+      
+      else if ( g_conf.osd_balance_reads == LOAD_HYBRID ) {
+	// am i above my average?
+	float my_avg = osd->hb_stat_qlen / osd->hb_stat_ops;
+	
+	if (osd->pending_ops > my_avg) {
+	  // is there a peer who is below my average?
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_qlen.count(peer) &&
+		osd->peer_qlen[peer] < my_avg) {
+	      // calculate a probability that we should redirect
+	      //float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
+	      
+	      double mean_read_time = osd->load_calc.get_average();
+	      
+	      if ( mean_read_time != -1 &&  
+		   osd->peer_read_time.count(peer) &&
+		   ( (osd->peer_read_time[peer]*100/mean_read_time) <
+		     ( 100 - g_conf.osd_load_diff_percent) ) )
+		//if (drand48() <= p) {
+		// take the first one
+		dout(10) << "using hybrid :my qlen " << osd->pending_ops << " > my_avg " << my_avg
+			 << "my read time  "<<  mean_read_time
+			 << "peer read time " << osd->peer_read_time[peer]  
+			 << ", fwd to peer w/ qlen " << osd->peer_qlen[peer]
+			 << " osd" << peer
+			 << endl;
+	      osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+	      return true;
+	    }
+	  }
+	}
+      }
+    }
+  } // endif balance reads
+
+
+  // -- fastpath read?
+  // if this is a read and the data is in the cache, do an immediate read.. 
+  if ( g_conf.osd_immediate_read_from_cache ) {
+    if (osd->store->is_cached( op->get_oid() , 
+			       op->get_offset(), 
+			       op->get_length() ) == 0) {
+      // do it now
+      dout(-10) << "preprocess_op data is in cache, reading from cache" << *op <<  endl;
+      do_op(op);
+      return true;
+    }
+  }
+
+  return false;
+}
 
 
 /** do_op - do an op
@@ -350,6 +571,9 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
 
   // apply the op
   switch (op->get_op()) {
+
+    // -- locking --
+
   case OSD_OP_WRLOCK:
     { // lock object
       //r = store->setattr(oid, "wrlock", &op->get_asker(), sizeof(msg_addr_t), oncommit);
@@ -369,7 +593,29 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
       }
     }
     break;
-    
+
+  case OSD_OP_PRIMARYLOCK:
+    { // lock object
+      bool locked = true;
+      t.setattr(oid, "primary-lock", &locked, sizeof(locked));
+    }
+    break;
+
+  case OSD_OP_PRIMARYUNLOCK:
+    { // unlock object
+      t.rmattr(oid, "primary-lock");
+
+      // kick waiters? -- only if we make replicas block ops instead of fwd to primary.
+      if (osd->waiting_for_primary_unlock.count(oid)) {
+        osd->take_waiters(osd->waiting_for_primary_unlock[oid]);
+        osd->waiting_for_primary_unlock.erase(oid);
+      }
+    }
+    break;
+
+
+    // -- modify --
+
   case OSD_OP_WRITE:
     { // write
       assert(op->get_data().length() == op->get_length());
@@ -1325,6 +1571,10 @@ void ReplicatedPG::on_role_change()
        it++)
     osd->take_waiters(it->second);
   waiting_for_missing_object.clear();
+  
+  // clear object replica list?
+  if (get_role() < 0)
+    replicated_objects.clear();  // hmm, should i be less sloppy about this?  FIXME.
 }
 
 
