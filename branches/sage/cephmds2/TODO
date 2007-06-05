@@ -79,10 +79,6 @@ sage mds
 
 - test open_remote_ino
 
-- scatterlock
-  - unlink, link, rename need to pre_dirty and update dir inode's mtime
-  - tho need to make sure that behaves when dirfrag's inode is non-auth...
-
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?

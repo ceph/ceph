@@ -1700,7 +1700,7 @@ void Locker::file_eval(FileLock *lock)
         
         // waiters
         lock->get_rdlock();
-        lock->finish_waiters(SimpleLock::WAIT_STABLE);
+        lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
         lock->put_rdlock();
       }
       break;

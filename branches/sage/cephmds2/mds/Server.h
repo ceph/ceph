@@ -70,6 +70,9 @@ public:
   CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
   //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
 
+  version_t predirty_dn_diri(CDentry *dn, class EMetaBlob *blob, utime_t mtime);
+  void dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime);
+
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
   void handle_client_utime(MDRequest *mdr);
@@ -108,7 +111,7 @@ public:
   void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_local_finish(MDRequest *mdr,
 			  CDentry *dn, CInode *targeti,
-			  version_t, utime_t, version_t);
+			  version_t, utime_t, version_t, version_t);
   void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
 
   // unlink
@@ -117,7 +120,7 @@ public:
   void _unlink_local(MDRequest *mdr, CDentry *dn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, utime_t, version_t);    
+			    version_t, utime_t, version_t, version_t);    
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
 
   // rename
@@ -134,7 +137,7 @@ public:
   void _rename_local_finish(MDRequest *mdr,
 			    CDentry *srcdn, CDentry *destdn, CDentry *straydn,
 			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
-			    utime_t ictime,
+			    version_t ddirpv, version_t sdirpv, utime_t ictime,
 			    version_t atid1, version_t atid2);
 };
 
