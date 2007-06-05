@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -723,7 +724,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   // lock the path
   set<SimpleLock*> rdlocks, empty;
 
-  for (unsigned i=0; i<trace.size(); i++) 
+  for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, empty, empty))
@@ -797,7 +798,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   // -- lock --
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
-  for (unsigned i=0; i<trace.size(); i++) 
+  for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
   if (dn->is_null()) {
     xlocks.insert(&dn->lock);                 // new dn, xlock
@@ -915,7 +916,8 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (ref->is_dir() &&
       mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 
-  mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
 
   // reply
   dout(10) << "reply to stat on " << *req << endl;
@@ -1459,11 +1461,11 @@ void Server::handle_client_link(MDRequest *mdr)
   // create lock lists
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
-  for (unsigned i=0; i<linktrace.size(); i++)
+  for (int i=0; i<(int)linktrace.size(); i++)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
-  for (unsigned i=0; i<targettrace.size(); i++)
+  for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
 
@@ -1711,7 +1713,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
-  for (unsigned i=0; i<trace.size()-1; i++)
+  for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
@@ -2104,13 +2106,13 @@ void Server::handle_client_rename(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   // rdlock sourcedir path, xlock src dentry
-  for (unsigned i=0; i<srctrace.size()-1; i++) 
+  for (int i=0; i<(int)srctrace.size()-1; i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
 
   // rdlock destdir path, xlock dest dentry
-  for (unsigned i=0; i<desttrace.size(); i++)
+  for (int i=0; i<(int)desttrace.size(); i++)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);

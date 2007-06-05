@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -279,7 +280,7 @@ block_t BlockDevice::get_num_blocks()
       num_blocks = st.st_size;
     }
     
-    num_blocks /= (__uint64_t)EBOFS_BLOCK_SIZE;
+    num_blocks /= (uint64_t)EBOFS_BLOCK_SIZE;
 
     if (g_conf.bdev_fake_mb) {
       num_blocks = g_conf.bdev_fake_mb * 256;
@@ -699,7 +700,7 @@ int BlockDevice::open(kicker *idle)
   }
                
   // figure size
-  __uint64_t bsize = get_num_blocks();
+  uint64_t bsize = get_num_blocks();
   
   dout(2) << "open " << bsize << " bytes, " << num_blocks << " blocks" << endl;
   

@@ -1,7 +1,40 @@
-sage
- mds diropen
 
-doc
+
+some smallish projects:
+
+- crush rewrite in C
+ - generalize any memory management etc. to allow use in kernel and userspace
+- userspace crush tools
+ - xml import/export?  
+ - ?
+
+- SimpleMessenger
+ - clean up/merge Messenger/Dispatcher interfaces
+ - auto close idle connections
+ - delivery ack and buffering, and then reconnect
+ - take a look at RDS?  http://oss.oracle.com/projects/rds/
+
+- generalize monitor client?
+ - throttle message resend attempts
+
+- paxos layer work
+ - integrate leasing into paxos framework
+ - carefully interface design...
+
+
+code cleanup
+- endian portability
+- word size
+  - clean up all encoded structures 
+
+general kernel planning
+- soft consistency on lookup?
+
+
+
+
+
+sage doc
 - mdsmonitor beacon semantics
 - cache expiration, cache invariants
  - including dual expire states, transition, vs subtree grouping of expire messages
@@ -12,7 +45,7 @@ doc
 
 
 
-mds
+sage mds
 - finish multistage rejoin 
 
 - more testing of failures + thrashing.
@@ -51,13 +84,6 @@ mds
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
-
-/- properly recover lock state on rejoin...
-/  - recovering mds rejoins replicas it pulled out of its journal
-/    - replicas will tell it when they hold an xlock
-/  - surviving mds rejoins replicas from a recovering mds
-/    - will tell auth if it holds an xlock
-- send_rejoin_acks
 
 - recovering open files
   - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.

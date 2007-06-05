@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 #ifndef __AGER_H
 #define __AGER_H
 
@@ -21,7 +23,7 @@ class Ager {
   bool         did_distn;
 
   void age_empty(float pc);
-  __uint64_t age_fill(float pc, utime_t until);
+  uint64_t age_fill(float pc, utime_t until);
   ssize_t age_pick_size();
   object_t age_get_oid();
 

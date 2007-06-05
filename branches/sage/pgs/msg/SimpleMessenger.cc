@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -1158,13 +1159,17 @@ const entity_addr_t &Rank::EntityMessenger::get_myaddr()
 
 void Rank::EntityMessenger::reset_myname(entity_name_t newname)
 {
-  entity_name_t oldname = get_myname();
-  dout(10) << "reset_myname " << oldname << " to " << newname << endl;
-
-  rank.local.erase(oldname);
-  rank.local[newname] = this;
-
-  _set_myname(newname);
+  rank.lock.Lock();
+  {
+    entity_name_t oldname = get_myname();
+    dout(10) << "reset_myname " << oldname << " to " << newname << endl;
+    
+    rank.local.erase(oldname);
+    rank.local[newname] = this;
+   
+    _set_myname(newname);
+  }
+  rank.lock.Unlock();
 }
 
 

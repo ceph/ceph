@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -80,7 +81,10 @@ int main(int argc, char **argv)
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
-  monmap->mon_inst[0] = entity_inst_t(MSG_ADDR_MON(0), a);  // hack ; see FakeMessenger.cc
+  for (int i=0; i<g_conf.num_mon; i++) {
+    a.port = i;
+    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+  }
   
   char hostname[100];
   gethostname(hostname,100);
@@ -88,9 +92,8 @@ int main(int argc, char **argv)
 
   // create mon
   Monitor *mon[g_conf.num_mon];
-  for (int i=0; i<g_conf.num_mon; i++) {
+  for (int i=0; i<g_conf.num_mon; i++) 
     mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
-  }
 
   // create mds
   MDS *mds[g_conf.num_mds];

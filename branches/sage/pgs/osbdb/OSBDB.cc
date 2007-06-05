@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /* OSBDB.cc -- ObjectStore on top of Berkeley DB.
    Copyright (C) 2007 Casey Marshall <csm@soe.ucsc.edu>
 

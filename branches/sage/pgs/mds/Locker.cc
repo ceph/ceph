@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -335,7 +336,7 @@ void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
 
 // file i/o -----------------------------------------
 
-__uint64_t Locker::issue_file_data_version(CInode *in)
+version_t Locker::issue_file_data_version(CInode *in)
 {
   dout(7) << "issue_file_data_version on " << *in << endl;
   return in->inode.file_data_version;
@@ -424,7 +425,7 @@ bool Locker::issue_caps(CInode *in)
   for (map<int, Capability>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    if (it->second.issued() != (it->second.wanted() & allowed)) {
+    if (it->second.pending() != (it->second.wanted() & allowed)) {
       // issue
       nissued++;
 
@@ -940,7 +941,7 @@ void Locker::simple_sync(SimpleLock *lock)
   lock->set_state(LOCK_SYNC);
   
   // waiters?
-  lock->finish_waiters(SimpleLock::WAIT_STABLE);
+  lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
 }
 
 void Locker::simple_lock(SimpleLock *lock)
@@ -997,9 +998,6 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mdr)
     return true;
   }
   
-  // can't read, and replicated.
-  assert(!lock->get_parent()->is_auth());
-
   // wait!
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << endl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
@@ -1715,8 +1713,10 @@ void Locker::file_eval(FileLock *lock)
   // stable.
   assert(lock->is_stable());
 
-  if (in->is_auth()) {
-    // [auth]
+  if (in->is_auth() &&
+      !lock->is_xlocked()) {
+    // [auth] 
+    // and not xlocked!
     int wanted = in->get_caps_wanted();
     bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
     dout(7) << "file_eval wanted=" << cap_string(wanted)
@@ -1762,10 +1762,6 @@ void Locker::file_eval(FileLock *lock)
              lock->get_state() != LOCK_LOCK) {
       file_lock(lock);
     }
-    
-  } else {
-    // replica
-    // recall? check wiaters?  XXX
   }
 }
 

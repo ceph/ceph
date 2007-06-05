@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -44,7 +45,7 @@ inline const char *get_lock_type_name(int t) {
 //                                auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
-#define LOCK_GLOCKR   3  // AR   R .    . .
+#define LOCK_GLOCKR  -3  // AR   R .    . .
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
@@ -75,7 +76,7 @@ protected:
   int wait_offset;
 
   // lock state
-  char           state;
+  int           state;
   set<__int32_t> gather_set;  // auth
 
   // local state
@@ -108,20 +109,20 @@ public:
     parent->encode_lock_state(type, bl);
   }
   void finish_waiters(int mask, int r=0) {
-    parent->finish_waiting(mask < wait_offset, r);
+    parent->finish_waiting(mask << wait_offset, r);
   }
   void add_waiter(int mask, Context *c) {
-    parent->add_waiter(mask < wait_offset, c);
+    parent->add_waiter(mask << wait_offset, c);
   }
   bool is_waiter_for(int mask) {
-    return parent->is_waiter_for(mask < wait_offset);
+    return parent->is_waiter_for(mask << wait_offset);
   }
   
   
 
   // state
-  char get_state() { return state; }
-  char set_state(char s) { 
+  int get_state() { return state; }
+  int set_state(int s) { 
     state = s; 
     assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
@@ -185,7 +186,7 @@ public:
 
   
   // simplelock specifics
-  char get_replica_state() {
+  int get_replica_state() {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKR: 
@@ -234,7 +235,8 @@ public:
   bool can_xlock(MDRequest *mdr) {
     if (!parent->is_auth()) return false;
     if (state != LOCK_LOCK) return false;
-    if (mdr && xlock_by == mdr) return true;
+    if (xlock_by == 0 || 
+	(mdr && xlock_by == mdr)) return true;
     return false;
   }
   bool can_xlock_soon() {

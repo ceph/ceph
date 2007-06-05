@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -61,7 +62,7 @@ namespace __gnu_cxx {
 
 
 // disk
-typedef __uint64_t block_t;        // disk location/sector/block
+typedef uint64_t block_t;        // disk location/sector/block
 
 static const int EBOFS_BLOCK_SIZE = 4096;
 static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
@@ -101,7 +102,7 @@ struct ebofs_nodepool {
 
 // objects
 
-typedef __uint64_t coll_t;
+typedef uint64_t coll_t;
 
 struct ebofs_onode {
   Extent     onode_loc;       /* this is actually the block we live in */
@@ -132,7 +133,7 @@ struct ebofs_table {
 
 
 // super
-typedef __uint64_t version_t;
+typedef uint64_t version_t;
 
 static const unsigned EBOFS_MAGIC = 0x000EB0F5;
 

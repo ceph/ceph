@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -218,12 +219,24 @@ CDir *CInode::add_dirfrag(CDir *dir)
 
 void CInode::close_dirfrag(frag_t fg)
 {
+  dout(14) << "close_dirfrag " << fg << endl;
   assert(dirfrags.count(fg));
   
-  dirfrags[fg]->remove_null_dentries();
+  CDir *dir = dirfrags[fg];
+  dir->remove_null_dentries();
   
-  assert(dirfrags[fg]->get_num_ref() == 0);
-  delete dirfrags[fg];
+  // clear dirty flag
+  if (dir->is_dirty())
+    dir->mark_clean();
+  
+  // dump any remaining dentries, for debugging purposes
+  for (map<string,CDentry*>::iterator p = dir->items.begin();
+       p != dir->items.end();
+       ++p) 
+    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
+
+  assert(dir->get_num_ref() == 0);
+  delete dir;
   dirfrags.erase(fg);
 }
 

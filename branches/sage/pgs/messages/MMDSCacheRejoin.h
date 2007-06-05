@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,12 +39,12 @@ class MMDSCacheRejoin : public Message {
 
   // -- types --
   struct inode_strong { 
-    __int32_t caps_wanted;
-    __int32_t nonce;
-    __int32_t authlock;
-    __int32_t linklock;
-    __int32_t dirfragtreelock;
-    __int32_t filelock;
+    int32_t caps_wanted;
+    int32_t nonce;
+    int32_t authlock;
+    int32_t linklock;
+    int32_t dirfragtreelock;
+    int32_t filelock;
     inode_strong() {}
     inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0) : 
       caps_wanted(cw),
@@ -70,19 +71,19 @@ class MMDSCacheRejoin : public Message {
   };
 
   struct dirfrag_strong {
-    __int32_t nonce;
+    int32_t nonce;
     dirfrag_strong() {}
     dirfrag_strong(int n) : nonce(n) {}
   };
   struct dn_strong {
-    __int32_t nonce;
-    __int32_t lock;
+    int32_t nonce;
+    int32_t lock;
     dn_strong() {}
     dn_strong(int n, int l) : nonce(n), lock(l) {}
   };
 
   // -- data --
-  __int32_t op;
+  int32_t op;
 
   set<inodeno_t> weak_inodes;
   map<inodeno_t, inode_strong> strong_inodes;
@@ -146,7 +147,7 @@ class MMDSCacheRejoin : public Message {
     ::_encode(weak_inodes, payload);
     ::_encode(strong_inodes, payload);
 
-    __uint32_t nfull = full_inodes.size();
+    uint32_t nfull = full_inodes.size();
     ::_encode(nfull, payload);
     for (list<inode_full>::iterator p = full_inodes.begin(); p != full_inodes.end(); ++p)
       p->_encode(payload);
@@ -164,7 +165,7 @@ class MMDSCacheRejoin : public Message {
     ::_decode(weak_inodes, payload, off);
     ::_decode(strong_inodes, payload, off);
 
-    __uint32_t nfull;
+    uint32_t nfull;
     ::_decode(nfull, payload, off);
     for (unsigned i=0; i<nfull; i++) 
       full_inodes.push_back(inode_full(payload, off));
