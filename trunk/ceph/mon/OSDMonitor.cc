@@ -400,6 +400,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 
       bcast_latest_osd();
       bcast_latest_mds();
+      send_waiting();
     } else {
       dout(7) << "osd_boot waiting for " 
               << (osdmap.osds.size() - osdmap.osd_inst.size())
