@@ -113,7 +113,6 @@ sage mds
 - statfs?
 
 
-- fix lock caps gather ack versus ambiguous auth
 
 
 foreign rename
@@ -213,9 +212,13 @@ rados snapshots
 
 
 objecter
+- transaction prepare/commit
 - read+floor_lockout
 
 osd/rados
+- transaction prepare/commit
+  - rollback
+  - rollback logging (to fix slow prepare vs rollback race)
 - read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
 - separate out replication code into a PG class, to pave way for RAID
 

@@ -151,7 +151,8 @@ struct md_config_t {
 
   // journaler
   bool  journaler_allow_split_entries;
-
+  bool  journaler_safe;
+  
   // mds
   int   mds_cache_size;
   float mds_cache_mid;
@@ -166,7 +167,6 @@ struct md_config_t {
   int mds_log_max_trimming;
   int mds_log_read_inc;
   int mds_log_pad_entry;
-  bool  mds_log_before_reply;
   bool  mds_log_flush_on_shutdown;
   off_t mds_log_import_map_interval;
   int mds_log_eopen_size;
