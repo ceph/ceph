@@ -46,6 +46,7 @@
 #define OSD_OP_RDUNLOCK   23
 #define OSD_OP_UPLOCK     24
 #define OSD_OP_DNLOCK     25
+#define OSD_OP_MININCLOCK 26 // minimum incarnation lock
 
 #define OSD_OP_PULL       30
 #define OSD_OP_PUSH       31
@@ -73,6 +74,8 @@ public:
     case OSD_OP_RDUNLOCK: return "rdunlock"; 
     case OSD_OP_UPLOCK: return "uplock"; 
     case OSD_OP_DNLOCK: return "dnlock"; 
+
+    case OSD_OP_MININCLOCK: return "mininclock";
 
     case OSD_OP_BALANCEREADS: return "balance-reads";
     case OSD_OP_UNBALANCEREADS: return "unbalance-reads";

@@ -374,7 +374,10 @@ void ReplicatedPG::op_read(MOSDOp *op)
     return;
 
   // !primary and unbalanced?
-  if (!is_primary()) {
+  //  (ignore ops forwarded from the primary)
+  if (!is_primary() &&
+      !(op->get_source().is_osd() &&
+	op->get_source().num() == get_primary())) {
     // make sure i exist and am balanced, otherwise fw back to acker.
     bool b;
     if (!osd->store->exists(oid) || 
@@ -550,15 +553,24 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
     }
     break;
 
+  case OSD_OP_MININCLOCK:
+    {
+      uint32_t mininc = op->get_length();
+      t.setattr(oid, "mininclock", &mininc, sizeof(mininc));
+    }
+    break;
+
   case OSD_OP_BALANCEREADS:
     {
       bool bal = true;
       t.setattr(oid, "balance-reads", &bal, sizeof(bal));
     }
+    break;
   case OSD_OP_UNBALANCEREADS:
     {
       t.rmattr(oid, "balance-reads");
     }
+    break;
 
 
     // -- modify --
@@ -1168,7 +1180,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
     // lets evict the data from our cache to maintain a total large cache size
     if (g_conf.osd_exclusive_caching)
-      osd->store->trim_from_cache(op->get_oid() , op->get_offset(), op->get_length());
+      osd->store->trim_from_cache(op->get_oid(), op->get_offset(), op->get_length());
 
     oncommit->ack();
   }

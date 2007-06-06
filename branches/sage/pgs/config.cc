@@ -206,8 +206,8 @@ md_config_t g_conf = {
   osd_rep: OSD_REP_PRIMARY,
 
   osd_balance_reads: false,
-  osd_immediate_read_from_cache: true,  // osds to read from the cache immediately?
-  osd_exclusive_caching: false,
+  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
+  osd_exclusive_caching: true,         // replicas evict replicated writes
   osd_load_diff_percent: 20, // load diff for read forwarding
   osd_flash_crowd_iat_threshold: 100,
   osd_flash_crowd_iat_alpha: 0.125,

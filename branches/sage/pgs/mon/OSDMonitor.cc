@@ -125,22 +125,10 @@ void OSDMonitor::create_initial()
   osdmap.ctime = g_clock.now();
 
   if (g_conf.osd_pg_bits) {
-    osdmap.set_pg_bits(g_conf.osd_pg_bits);
+    osdmap.set_pg_num(1 << g_conf.osd_pg_bits);
   } else {
-    // figure out how many bits worth of osds we have.
-    //     1 osd  -> 0 bits
-    //  <= 2 osds -> 1 bit
-    //  <= 4 osds -> 2 bits
-    int osdbits = -1;
-    int n = g_conf.num_osd;
-    assert(n > 0);
-    while (n) {
-      n = n >> 1;
-      osdbits++;
-    }
-
-    // 7 bits per osd.
-    osdmap.set_pg_bits(osdbits + 4);  // FIXME
+    // 4 bits of pgs per osd.
+    osdmap.set_pg_num(g_conf.num_osd << 4);
   }
   
   // start at epoch 0 until all osds boot

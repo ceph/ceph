@@ -1157,9 +1157,15 @@ void OSD::advance_map(ObjectStore::Transaction& t)
           << dendl;
   
   if (osdmap->is_mkfs()) {
-    ps_t maxps = 1ULL << osdmap->get_pg_bits();
-    ps_t maxlps = 1ULL << osdmap->get_localized_pg_bits();
-    dout(1) << "mkfs on " << osdmap->get_pg_bits() << " bits, " << maxps << " pgs" << dendl;
+    ps_t numps = osdmap->get_pg_num();
+    ps_t numlps = osdmap->get_localized_pg_num();
+    dout(1) << "mkfs on " << numps << " normal, " << numlps << " localized pg sets" << dendl;
+    int minrep = 1;
+    int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
+    int minraid = g_conf.osd_min_raid_width;
+    int maxraid = g_conf.osd_max_raid_width;
+    dout(1) << "mkfs    " << minrep << ".." << maxrep << " replicas, " 
+	    << minraid << ".." << maxraid << " osd raid groups" << dendl;
     assert(osdmap->get_epoch() == 1);
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
@@ -1170,9 +1176,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     // create PGs
     //  replicated
     for (int nrep = 1; 
-         nrep <= MIN(g_conf.num_osd, g_conf.osd_max_rep);    // for low osd counts..  hackish bleh
+         nrep <= maxrep;    // for low osd counts..  hackish bleh
          nrep++) {
-      for (ps_t ps = 0; ps < maxps; ++ps) {
+      for (ps_t ps = 0; ps < numps; ++ps) {
 	vector<int> acting;
 	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
 	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
@@ -1193,7 +1199,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	_unlock_pg(pgid);
       }
 
-      for (ps_t ps = 0; ps < maxlps; ++ps) {
+      for (ps_t ps = 0; ps < numlps; ++ps) {
 	// local PG too
 	vector<int> acting;
 	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, whoami);
@@ -1216,10 +1222,10 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
 
     // raided
-    for (int size = g_conf.osd_min_raid_width;
-	 size <= g_conf.osd_max_raid_width;
+    for (int size = minraid;
+	 size <= maxraid;
 	 size++) {
-      for (ps_t ps = 0; ps < maxps; ++ps) {
+      for (ps_t ps = 0; ps < numps; ++ps) {
 	vector<int> acting;
 	pg_t pgid = pg_t(pg_t::TYPE_RAID4, size, ps, -1);
 	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
@@ -1240,7 +1246,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	_unlock_pg(pgid);
       }
 
-      for (ps_t ps = 0; ps < maxlps; ++ps) {
+      for (ps_t ps = 0; ps < numlps; ++ps) {
 	// local PG too
 	vector<int> acting;
 	pg_t pgid = pg_t(pg_t::TYPE_RAID4, size, ps, whoami);

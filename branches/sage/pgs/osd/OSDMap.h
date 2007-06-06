@@ -49,7 +49,7 @@ using namespace std;
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
 
 #define PG_TYPE_RAND     1   // default: distribution randomly
-#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
+#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD
 
 // pg roles
 #define PG_ROLE_STRAY   -1
@@ -57,6 +57,23 @@ using namespace std;
 #define PG_ROLE_ACKER    1
 #define PG_ROLE_MIDDLE   2  // der.. misnomer
 //#define PG_ROLE_TAIL     2
+
+
+inline int stable_mod(int x, int b, int bmask) {
+  if ((x & bmask) < b) 
+    return x & bmask;
+  else
+    return (x & (bmask>>1));
+}
+
+inline int calc_bits_of(int t) {
+  int b = 0;
+  while (t) {
+    t = t >> 1;
+    b++;
+  }
+  return b;
+}
 
 
 
@@ -108,8 +125,10 @@ private:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
-  int       pg_bits;     // placement group bits 
-  int       localized_pg_bits;  // bits for localized pgs
+  int pg_num;       // placement group count
+  int pg_num_mask;  // bitmask for above
+  int localized_pg_num;      // localized place group count
+  int localized_pg_num_mask; // ditto
 
   set<int>  osds;        // all osds
   set<int>  down_osds;   // list of down disks
@@ -124,15 +143,24 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mon_epoch(0), pg_bits(5), localized_pg_bits(3) {}
+  OSDMap() : epoch(0), mon_epoch(0), 
+	     pg_num(1<<5),
+	     localized_pg_num(1<<3) { 
+    calc_pg_masks();
+  }
 
   // map info
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  int get_pg_bits() const { return pg_bits; }
-  void set_pg_bits(int b) { pg_bits = b; }
-  int get_localized_pg_bits() const { return localized_pg_bits; }
+  void calc_pg_masks() {
+    pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
+    localized_pg_num_mask = (1 << calc_bits_of(localized_pg_num-1)) - 1;
+  }
+
+  int get_pg_num() const { return pg_num; }
+  void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
+  int get_localized_pg_num() const { return localized_pg_num; }
 
   const utime_t& get_ctime() const { return ctime; }
 
@@ -225,36 +253,35 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
-    blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&mon_epoch, sizeof(mon_epoch));
-    blist.append((char*)&ctime, sizeof(ctime));
-    blist.append((char*)&pg_bits, sizeof(pg_bits));
+    ::_encode(epoch, blist);
+    ::_encode(mon_epoch, blist);
+    ::_encode(ctime, blist);
+    ::_encode(pg_num, blist);
+    ::_encode(localized_pg_num, blist);
     
-    _encode(osds, blist);
-    _encode(down_osds, blist);
-    _encode(out_osds, blist);
-    _encode(overload_osds, blist);
-    _encode(osd_inst, blist);
+    ::_encode(osds, blist);
+    ::_encode(down_osds, blist);
+    ::_encode(out_osds, blist);
+    ::_encode(overload_osds, blist);
+    ::_encode(osd_inst, blist);
     
     crush._encode(blist);
   }
   
   void decode(bufferlist& blist) {
     int off = 0;
-    blist.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
-    blist.copy(off, sizeof(mon_epoch), (char*)&mon_epoch);
-    off += sizeof(mon_epoch);
-    blist.copy(off, sizeof(ctime), (char*)&ctime);
-    off += sizeof(ctime);
-    blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);
-    off += sizeof(pg_bits);
-    
-    _decode(osds, blist, off);
-    _decode(down_osds, blist, off);
-    _decode(out_osds, blist, off);
-    _decode(overload_osds, blist, off);
-    _decode(osd_inst, blist, off);
+    ::_decode(epoch, blist, off);
+    ::_decode(mon_epoch, blist, off);
+    ::_decode(ctime, blist, off);
+    ::_decode(pg_num, blist, off);
+    ::_decode(localized_pg_num, blist, off);
+    calc_pg_masks();
+
+    ::_decode(osds, blist, off);
+    ::_decode(down_osds, blist, off);
+    ::_decode(out_osds, blist, off);
+    ::_decode(overload_osds, blist, off);
+    ::_decode(osd_inst, blist, off);
     
     crush._decode(blist, off);
   }
@@ -276,28 +303,15 @@ private:
     ps_t ps;
     switch (g_conf.osd_object_layout) {
     case OBJECT_LAYOUT_LINEAR:
-      {
-        //const object_t ono = oid.bno;
-        //const inodeno_t ino = oid >> OID_ONO_BITS;
-        ps = (oid.bno + oid.ino) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(oid.bno + oid.ino, pg_num, pg_num_mask);
       break;
       
     case OBJECT_LAYOUT_HASHINO:
-      {
-        //const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
-        //const inodeno_t ino = oid >> OID_ONO_BITS;
-        ps = (oid.bno + H(oid.ino)) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(oid.bno + H(oid.ino), pg_num, pg_num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
-      {
-        ps = H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), pg_num, pg_num_mask);
       break;
 
     default:
