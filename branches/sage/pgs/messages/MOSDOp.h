@@ -47,11 +47,11 @@
 #define OSD_OP_UPLOCK     24
 #define OSD_OP_DNLOCK     25
 
-#define OSD_OP_PRIMARYLOCK    26
-#define OSD_OP_PRIMARYUNLOCK  27
-
 #define OSD_OP_PULL       30
 #define OSD_OP_PUSH       31
+
+#define OSD_OP_BALANCEREADS    101
+#define OSD_OP_UNBALANCEREADS  102
 
 
 
@@ -74,8 +74,8 @@ public:
     case OSD_OP_UPLOCK: return "uplock"; 
     case OSD_OP_DNLOCK: return "dnlock"; 
 
-    case OSD_OP_PRIMARYLOCK: return "primary-lock";
-    case OSD_OP_PRIMARYUNLOCK: return "primary-unlock";
+    case OSD_OP_BALANCEREADS: return "balance-reads";
+    case OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 
     case OSD_OP_PULL: return "pull";
     case OSD_OP_PUSH: return "push";
@@ -128,6 +128,11 @@ private:
   const entity_name_t& get_client() { return st.client.name; }
   const entity_inst_t& get_client_inst() { return st.client; }
   void set_client_inst(const entity_inst_t& i) { st.client = i; }
+
+  bool wants_reply() {
+    if (st.op < 100) return true;
+    return false;  // no reply needed for primary-lock, -unlock.
+  }
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }

@@ -616,12 +616,15 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
   }
 
   // finishers?
+  finished_lock.Lock();
   if (finished.empty()) {
+    finished_lock.Unlock();
     osd_lock.Unlock();
   } else {
     list<Message*> waiting;
     waiting.splice(waiting.begin(), finished);
 
+    finished_lock.Unlock();
     osd_lock.Unlock();
     
     for (list<Message*>::iterator it = waiting.begin();
@@ -858,10 +861,12 @@ void OSD::dispatch(Message *m)
   }
 
   // finishers?
+  finished_lock.Lock();
   if (!finished.empty()) {
     list<Message*> waiting;
     waiting.splice(waiting.begin(), finished);
 
+    finished_lock.Unlock();
     osd_lock.Unlock();
     
     for (list<Message*>::iterator it = waiting.begin();
@@ -872,6 +877,7 @@ void OSD::dispatch(Message *m)
     return;
   }
   
+  finished_lock.Unlock();
   osd_lock.Unlock();
 }
 
@@ -1530,17 +1536,17 @@ bool OSD::require_current_map(Message *m, epoch_t ep)
  */
 bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 {
-  dout(10) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ")" << dendl;
+  dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ")" << dendl;
 
   // newer map?
   if (epoch > osdmap->get_epoch()) {
-    dout(7) << "  from newer map epoch " << epoch << " > " << osdmap->get_epoch() << dendl;
+    dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << dendl;
     wait_for_new_map(m);
     return false;
   }
 
   if (epoch < boot_epoch) {
-    dout(7) << "  from pre-boot epoch " << epoch << " < " << boot_epoch << dendl;
+    dout(7) << "from pre-boot epoch " << epoch << " < " << boot_epoch << dendl;
     delete m;
     return false;
   }
@@ -2072,7 +2078,7 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
 
-    dout(10) << "handle_op " << *op << " in " << *pg << endl;
+    dout(10) << "handle_op " << *op << " in " << *pg << dendl;
 
   } else {
     // REPLICATION OP (it's from another OSD)
@@ -2260,32 +2266,3 @@ void OSD::wait_for_no_ops()
 
 
 
-// ==============================
-// Object locking
-
-//
-// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
-// returns true if object was locked, otherwise returns false
-// 
-bool OSD::block_if_wrlocked(MOSDOp* op)
-{
-  object_t oid = op->get_oid();
-
-  entity_name_t source;
-  int len = store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
-  //cout << "getattr returns " << len << " on " << oid << dendl;
-
-  if (len == sizeof(source) &&
-      source != op->get_client()) {
-    //the object is locked for writing by someone else -- add the op to the waiting queue      
-    waiting_for_wr_unlock[oid].push_back(op);
-    return true;
-  }
-
-  return false; //the object wasn't locked, so the operation can be handled right away
-}
-
-
-
-// ===============================
-// OPS

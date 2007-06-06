@@ -461,6 +461,11 @@ protected:
            list<class Message*> > waiting_for_missing_object;   
   map<eversion_t,class MOSDOp*>   replay_queue;
   
+  hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
+
+  bool block_if_wrlocked(MOSDOp* op);
+
+
   // recovery
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
@@ -549,7 +554,12 @@ public:
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
-  bool       is_acker() const { return role == PG_ROLE_ACKER; }
+  bool       is_acker() const { 
+    if (g_conf.osd_rep == OSD_REP_PRIMARY)
+      return is_primary();
+    else
+      return role == PG_ROLE_ACKER; 
+  }
   bool       is_head() const { return role == PG_ROLE_HEAD; }
   bool       is_middle() const { return role == PG_ROLE_MIDDLE; }
   bool       is_residual() const { return role == PG_ROLE_STRAY; }

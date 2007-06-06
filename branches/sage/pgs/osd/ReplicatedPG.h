@@ -73,7 +73,10 @@ protected:
   map<tid_t, list<class Message*> > waiting_for_repop;
 
   // load balancing
-  set<object_t>  replicated_objects;
+  set<object_t> balancing_reads;
+  set<object_t> unbalancing_reads;
+  hash_map<object_t, list<Message*> > waiting_for_balanced_reads;
+  hash_map<object_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   void get_rep_gather(RepGather*);
   void apply_repop(RepGather *repop);
@@ -117,8 +120,7 @@ protected:
   void clean_replicas();
 
 
-  void op_stat(MOSDOp *op);
-  int op_read(MOSDOp *op);
+  void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
   void op_rep_modify(MOSDOp *op);
   void op_push(MOSDOp *op);

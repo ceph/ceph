@@ -1141,6 +1141,31 @@ void PG::read_log(ObjectStore *store)
 
 
 
+// ==============================
+// Object locking
+
+//
+// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
+// returns true if object was locked, otherwise returns false
+// 
+bool PG::block_if_wrlocked(MOSDOp* op)
+{
+  object_t oid = op->get_oid();
+
+  entity_name_t source;
+  int len = osd->store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
+  //cout << "getattr returns " << len << " on " << oid << dendl;
+  
+  if (len == sizeof(source) &&
+      source != op->get_client()) {
+    //the object is locked for writing by someone else -- add the op to the waiting queue      
+    waiting_for_wr_unlock[oid].push_back(op);
+    return true;
+  }
+  
+  return false; //the object wasn't locked, so the operation can be handled right away
+}
+
 
 
 
@@ -1197,6 +1222,7 @@ bool PG::pick_object_rev(object_t& oid)
 
   return false;  
 }
+
 
 
 

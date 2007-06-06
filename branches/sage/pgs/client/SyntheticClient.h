@@ -213,7 +213,7 @@ class SyntheticClient {
 
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
-  int read_file(string& fn, int mb, int chunk);
+  int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
   int read_random(string& fn, int mb, int chunk);
   int read_random_ex(string& fn, int mb, int chunk);
 

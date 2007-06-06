@@ -175,24 +175,20 @@ private:
   int hb_stat_ops;  // ops since last heartbeat
   int hb_stat_qlen; // cumulative queue length since last hb
 
-  hash_map<int, float> peer_qlen;
+  hash_map<int, float>  peer_qlen;
   hash_map<int, double> peer_read_time;
   
 
   // -- waiters --
   list<class Message*> finished;
-
+  Mutex finished_lock;
+  
   void take_waiters(list<class Message*>& ls) {
+    finished_lock.Lock();
     finished.splice(finished.end(), ls);
+    finished_lock.Unlock();
   }
   
-  // -- object locking --
-  hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
-  hash_map<object_t, list<Message*> > waiting_for_primary_unlock; 
-  
-  bool block_if_wrlocked(class MOSDOp* op);
-
-
   // -- op queue --
   class ThreadPool<class OSD*, pg_t>   *threadpool;
   hash_map<pg_t, list<Message*> >       op_queue;

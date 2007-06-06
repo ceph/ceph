@@ -482,7 +482,7 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
         if (run_me())
-          read_file(sarg1, iarg1, iarg2);
+          read_file(sarg1, iarg1, iarg2, true);
       }
       break;
     case SYNCLIENT_MODE_WRITEBATCH:
@@ -1138,7 +1138,7 @@ int SyntheticClient::write_batch(int nfile, int size, int wrsize)
   return 0;
 }
 
-int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
+int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprint)   // size is in MB, wrsize in bytes
 {
   char *buf = new char[rdsize]; 
   memset(buf, 1, rdsize);
@@ -1169,14 +1169,14 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
       p++;
       if (readoff != wantoff ||
 	  readclient != client->get_nodeid()) {
-        if (!bad)
+        if (!bad && !ignoreprint)
           dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
 		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
 		  << endl;
         bad++;
       }
     }
-    if (bad) 
+    if (bad && !ignoreprint) 
       dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
   }
   
