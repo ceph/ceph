@@ -1264,7 +1264,9 @@ int Client::mount()
   dout(2) << "sending client_mount to mon" << mon << endl;
   messenger->send_message(new MClientMount, monmap->get_inst(mon));
   
-  while (!mdsmap)
+  while (!mdsmap ||
+	 !osdmap || 
+	 osdmap->get_epoch() == 0)
     mount_cond.Wait(client_lock);
   
   mounted = true;
