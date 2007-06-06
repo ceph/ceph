@@ -46,23 +46,51 @@ sage doc
 
 
 sage mds
-- finish multistage rejoin 
+- journal+recovery
+  - local rename
+    - how to notify replicas...
+/  - stray purge
+  - stray reintegration
+  - remote link
+    - impl remote inode xlock
+    - ESlaveUpdate replay, resolution, etc.
+  - remote unlink
+  - remote rename
+  - file capabilities i/o
+- dirfrag split/merge
+  - client readdir for dirfrags
+- consistency points/snapshots
+  - dentry versions vs dirfrags...
+- statfs?
 
+- finish multistage rejoin 
 - trim_on_rejoin
 
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
-
-- osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
-
-- incremental mdsmaps?
-
-- detect and deal with client failure
 
 - dirfrag split
   - make sure we are freezing _before_ we fetch to complete the dirfrag, else 
     we break commit()'s preconditions when it fetches an incomplete dir.
+
+- detect and deal with client failure
+
+- recovering open files
+  - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
+    - path+cap window will require some fetching of metadata from disk before doing the rejoin
+  - failures during migration.. what about client stale/reap stuff and misplaced WR caps?
+
+- inode.max_size
+
+- real chdir (directory "open")
+  - relative metadata ops
+
+
+
+- osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
+
+- incremental mdsmaps?
 
 - EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
 - dir version/committed/etc versus migration, log expires.  
@@ -83,34 +111,8 @@ sage mds
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 
-- recovering open files
-  - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
-    - path+cap window will require some fetching of metadata from disk before doing the rejoin
-  - failures during migration.. what about client stale/reap stuff and misplaced WR caps?
 
-- inode.max_size
 
-- journal+recovery
-  - local rename
-    - how to notify replicas...
-/  - stray purge
-  - stray reintegration
-  - remote link
-    - impl remote inode xlock
-    - ESlaveUpdate replay, resolution, etc.
-  - remote unlink
-    - rewrite to look link _link
-  - remote rename
-  - file capabilities i/o
-- filelock to control directory mtime, dentry changes
-  - hmm, may have to change lock ordering, and Server::rdlock_path_pin_ref()
-- dirfrag split/merge
-  - client readdir for dirfrags
-- consistency points/snapshots
-  - dentry versions vs dirfrags...
-- real chdir (directory "open")
-  - relative metadata ops
-- statfs?
 
 
 
