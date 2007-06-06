@@ -30,29 +30,31 @@
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
-  case LOCK_OTYPE_DN: return "dentry";
-  case LOCK_OTYPE_IFILE: return "inode_file";
-  case LOCK_OTYPE_IAUTH: return "inode_auth";
-  case LOCK_OTYPE_ILINK: return "inode_link";
-  case LOCK_OTYPE_IDIRFRAGTREE: return "inode_dirfragtree";
-  case LOCK_OTYPE_IDIR: return "inode_dir";
+  case LOCK_OTYPE_DN: return "dn";
+  case LOCK_OTYPE_IFILE: return "ifile";
+  case LOCK_OTYPE_IAUTH: return "iauth";
+  case LOCK_OTYPE_ILINK: return "ilink";
+  case LOCK_OTYPE_IDIRFRAGTREE: return "idft";
+  case LOCK_OTYPE_IDIR: return "idir";
   default: assert(0);
   }
 }
 
 // -- lock states --
 #define LOCK_UNDEF    0
-//                                auth   rep
+//                               auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
 #define LOCK_GLOCKR  -3  // AR   R .    . .
+#define LOCK_REMOTEXLOCK  -50    // on NON-auth
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
-  case LOCK_UNDEF: return "undef";
+  case LOCK_UNDEF: return "UNDEF";
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
+  case LOCK_REMOTEXLOCK: return "remote_xlock";
   default: assert(0);
   }
 }
@@ -63,8 +65,7 @@ class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
   static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_NOLOCKS     = (1<<2);  // for last rdlock to finish
-  //static const int WAIT_LOCK        = (1<<3);  // for locked state
+  static const int WAIT_SINGLEAUTH  = (1<<2);
   static const int WAIT_STABLE      = (1<<3);  // for a stable state
   static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock
   static const int WAIT_BITS        = 5;
@@ -248,7 +249,7 @@ public:
 
   virtual void print(ostream& out) {
     out << "(";
-    //out << get_lock_type_name(l.get_type()) << " ";
+    out << get_lock_type_name(get_type()) << " ";
     out << get_simplelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (is_rdlocked()) 

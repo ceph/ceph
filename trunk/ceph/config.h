@@ -151,7 +151,8 @@ struct md_config_t {
 
   // journaler
   bool  journaler_allow_split_entries;
-
+  bool  journaler_safe;
+  
   // mds
   int   mds_cache_size;
   float mds_cache_mid;
@@ -166,7 +167,6 @@ struct md_config_t {
   int mds_log_max_trimming;
   int mds_log_read_inc;
   int mds_log_pad_entry;
-  bool  mds_log_before_reply;
   bool  mds_log_flush_on_shutdown;
   off_t mds_log_import_map_interval;
   int mds_log_eopen_size;
@@ -190,9 +190,11 @@ struct md_config_t {
   float mds_bal_midchunk;
   float mds_bal_minchunk;
 
+  bool  mds_trim_on_rejoin;
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
   bool  mds_shutdown_on_last_unmount;
+
   bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;
@@ -321,6 +323,8 @@ extern md_config_t g_debug_after_conf;
  */
 #define dout(x)  if ((x) <= g_conf.debug) std::cout
 #define dout2(x) if ((x) <= g_conf.debug) std::cout
+
+#define pdout(x,p)  if ((x) <= (p)) std::cout
 
 /**
  * for cleaner output, bracket each line with

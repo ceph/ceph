@@ -60,7 +60,7 @@ private:
   void handle_lock(MLock *m);
 
   void send_lock_message(SimpleLock *lock, int msg);
-  void send_lock_message(SimpleLock *lock, int msg, bufferlist &data);
+  void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
   bool acquire_locks(MDRequest *mdr,

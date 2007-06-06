@@ -891,6 +891,54 @@ CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
 }
 */
 
+
+/** predirty_dn_diri
+ * predirty the directory inode for a new dentry, if it is auth (and not root)
+ * BUG: root inode doesn't get dirtied properly, currently.  blech.
+ */
+version_t Server::predirty_dn_diri(CDentry *dn, EMetaBlob *blob, utime_t mtime)
+{
+  version_t dirpv = 0;
+  CInode *diri = dn->dir->inode;
+
+  if (diri->is_auth() && !diri->is_root()) {
+    dirpv = diri->pre_dirty();
+    inode_t *pi = blob->add_primary_dentry(diri->get_parent_dn(), true);
+    pi->version = dirpv;
+    pi->ctime = pi->mtime = mtime;
+    dout(10) << "predirty_dn_diri ctime/mtime " << mtime << " pv " << dirpv << " on " << *diri << endl;
+  }
+
+  return dirpv;
+}
+
+/** dirty_dn_diri
+ * follow-up with actual dirty of inode after journal entry commits.
+ */
+void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
+{
+  CInode *diri = dn->dir->inode;
+  
+  // make the udpate
+  diri->inode.ctime = diri->inode.mtime = mtime;
+
+  if (diri->is_auth() && !diri->is_root()) {
+    // we're auth.  
+    diri->mark_dirty(dirpv);
+    dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
+  } else {
+    // we're not auth.  dirlock scatterlock will propagate the update.
+  }
+}
+
+
+
+
+
+
+
+
+
 // ===============================================================================
 // STAT
 
@@ -1238,10 +1286,11 @@ class C_MDS_mknod_finish : public Context {
   CDentry *dn;
   CInode *newi;
   version_t pv;
+  version_t dirpv;
 public:
-  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
+  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dirpv_) :
     mds(m), mdr(r), dn(d), newi(ni),
-    pv(d->get_projected_version()) {}
+    pv(d->get_projected_version()), dirpv(dirpv_) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -1252,9 +1301,8 @@ public:
     newi->mark_dirty(pv);
 
     // dir inode's mtime
-    dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
-						  newi->inode.ctime);
-
+    mds->server->dirty_dn_diri(dn, dirpv, newi->inode.ctime);
+    
     // hit pop
     mds->balancer->hit_inode(newi, META_POP_IWR);
 
@@ -1264,6 +1312,8 @@ public:
     mds->server->reply_request(mdr, reply, newi);
   }
 };
+
+
 
 void Server::handle_client_mknod(MDRequest *mdr)
 {
@@ -1282,14 +1332,17 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.mode |= INODE_MODE_FILE;
   
   // prepare finisher
-  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi);
   EUpdate *le = new EUpdate("mknod");
   le->metablob.add_client_req(req->get_reqid());
+
+  version_t dirpv = predirty_dn_diri(dn, &le->metablob, newi->inode.ctime);  // dir mtime too
+
   le->metablob.add_dir_context(dn->dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait
+  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv);
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
 }
@@ -1322,15 +1375,16 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newdir->mark_dirty(newdir->pre_dirty());
 
   // prepare finisher
-  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi);
   EUpdate *le = new EUpdate("mkdir");
   le->metablob.add_client_req(req->get_reqid());
+  version_t dirpv = predirty_dn_diri(dn, &le->metablob, newi->inode.ctime);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   le->metablob.add_dir(newdir, true);
   
   // log + wait
+  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv);
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
 
@@ -1370,14 +1424,15 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->symlink = req->get_sarg();
 
   // prepare finisher
-  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi);
   EUpdate *le = new EUpdate("symlink");
   le->metablob.add_client_req(req->get_reqid());
+  version_t dirpv = predirty_dn_diri(dn, &le->metablob, newi->inode.ctime);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   inode_t *pi = le->metablob.add_primary_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait
+  C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv);
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
 }
@@ -1490,15 +1545,17 @@ class C_MDS_link_local_finish : public Context {
   version_t dpv;
   utime_t tctime;
   version_t tpv;
+  version_t dirpv;
 public:
-  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, utime_t ct) :
+  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, version_t dirpv_, utime_t ct) :
     mds(m), mdr(r), dn(d), targeti(ti),
     dpv(d->get_projected_version()),
     tctime(ct), 
-    tpv(targeti->get_parent_dn()->get_projected_version()) {}
+    tpv(targeti->get_parent_dn()->get_projected_version()),
+    dirpv(dirpv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_link_local_finish(mdr, dn, targeti, dpv, tctime, tpv);
+    mds->server->_link_local_finish(mdr, dn, targeti, dpv, tctime, tpv, dirpv);
   }
 };
 
@@ -1517,6 +1574,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   version_t tpdv = targeti->pre_dirty();
   
   // add to event
+  utime_t now = g_clock.real_now();
+  version_t dirpv = predirty_dn_diri(dn, &le->metablob, now);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
@@ -1524,11 +1583,11 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   // update journaled target inode
   pi->nlink++;
-  pi->ctime = g_clock.real_now();
+  pi->ctime = now;
   pi->version = tpdv;
 
   // finisher
-  C_MDS_link_local_finish *fin = new C_MDS_link_local_finish(mds, mdr, dn, targeti, pi->ctime);
+  C_MDS_link_local_finish *fin = new C_MDS_link_local_finish(mds, mdr, dn, targeti, dirpv, now);
   
   // log + wait
   mdlog->submit_entry(le);
@@ -1536,7 +1595,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-				version_t dpv, utime_t tctime, version_t tpv)
+				version_t dpv, utime_t tctime, version_t tpv, version_t dirpv)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
@@ -1551,8 +1610,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   targeti->mark_dirty(tpv);
 
   // dir inode's mtime
-  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
-						tctime);
+  dirty_dn_diri(dn, dirpv, tctime);
   
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
@@ -1738,16 +1796,17 @@ class C_MDS_unlink_local_finish : public Context {
   CDentry *straydn;
   version_t ipv;  // referred inode
   utime_t ictime;
-  version_t dpv;  // deleted dentry
+  version_t dnpv;  // deleted dentry
+  version_t dirpv;
 public:
   C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd,
-			    version_t v, utime_t ct) :
+			    version_t v, version_t dirpv_, utime_t ct) :
     mds(m), mdr(r), dn(d), straydn(sd),
     ipv(v), ictime(ct),
-    dpv(d->get_projected_version()) { }
+    dnpv(d->get_projected_version()), dirpv(dirpv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_local_finish(mdr, dn, straydn, ipv, ictime, dpv);
+    mds->server->_unlink_local_finish(mdr, dn, straydn, ipv, ictime, dnpv, dirpv);
   }
 };
 
@@ -1790,18 +1849,20 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
   }
   
   // the unlinked dentry
+  utime_t now = g_clock.real_now();
   dn->pre_dirty();
+  version_t dirpv = predirty_dn_diri(dn, &le->metablob, now);
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
   // update journaled target inode
   pi->nlink--;
-  pi->ctime = g_clock.real_now();
+  pi->ctime = now;
   pi->version = ipv;
   
   // finisher
   C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
-								 ipv, pi->ctime);
+								 ipv, dirpv, now);
   
   journal_opens();  // journal pending opens, just in case
   
@@ -1814,7 +1875,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
 				  CDentry *dn, CDentry *straydn,
-				  version_t ipv, utime_t ictime, version_t dpv) 
+				  version_t ipv, utime_t ictime, version_t dnpv, version_t dirpv) 
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
@@ -1829,11 +1890,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   in->inode.ctime = ictime;
   in->inode.nlink--;
   in->mark_dirty(ipv);  // dirty inode
-  dn->mark_dirty(dpv);  // dirty old dentry
+  dn->mark_dirty(dnpv);  // dirty old dentry
 
   // dir inode's mtime
-  dn->get_dir()->get_inode()->inode.mtime = MAX(dn->get_dir()->get_inode()->inode.mtime,
-						ictime);
+  dirty_dn_diri(dn, dirpv, ictime);
   
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
@@ -2147,25 +2207,27 @@ class C_MDS_rename_local_finish : public Context {
   version_t straypv;
   version_t destpv;
   version_t srcpv;
+  version_t ddirpv, sdirpv;
   utime_t ictime;
 public:
   version_t atid1;
   version_t atid2;
   C_MDS_rename_local_finish(MDS *m, MDRequest *r,
 			    CDentry *sdn, CDentry *ddn, CDentry *stdn,
-			    version_t v, utime_t ct) :
+			    version_t v, version_t ddirpv_, version_t sdirpv_, utime_t ct) :
     mds(m), mdr(r),
     srcdn(sdn), destdn(ddn), straydn(stdn),
     ipv(v), 
     straypv(straydn ? straydn->get_projected_version():0),
     destpv(destdn->get_projected_version()),
     srcpv(srcdn->get_projected_version()),
+    ddirpv(ddirpv_), sdirpv(sdirpv_),
     ictime(ct),
     atid1(0), atid2(0) { }
   void finish(int r) {
     assert(r == 0);
     mds->server->_rename_local_finish(mdr, srcdn, destdn, straydn,
-				      srcpv, destpv, straypv, ipv, ictime, 
+				      srcpv, destpv, straypv, ipv, ddirpv, sdirpv, ictime, 
 				      atid1, atid2);
   }
 };
@@ -2194,6 +2256,8 @@ void Server::_rename_local(MDRequest *mdr,
   EUpdate *le = new EUpdate("rename_local");
   le->metablob.add_client_req(mdr->reqid);
 
+  utime_t now = g_clock.real_now();
+
   CDentry *straydn = 0;
   inode_t *pi = 0;
   version_t ipv = 0;
@@ -2204,9 +2268,14 @@ void Server::_rename_local(MDRequest *mdr,
   // primary+remote link merge?
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
+
+  // dir mtimes
+  version_t ddirpv = predirty_dn_diri(destdn, &le->metablob, now);
+  version_t sdirpv = predirty_dn_diri(srcdn, &le->metablob, now);
+
   if (linkmerge) {
     dout(10) << "will merge remote+primary links" << endl;
-    
+
     // destdn -> primary
     le->metablob.add_dir_context(destdn->dir);
     ipv = destdn->pre_dirty(destdn->inode->inode.version);
@@ -2300,13 +2369,13 @@ void Server::_rename_local(MDRequest *mdr,
   if (pi) {
     // update journaled target inode
     pi->nlink--;
-    pi->ctime = g_clock.real_now();
+    pi->ctime = now;
     pi->version = ipv;
   }
 
   C_MDS_rename_local_finish *fin = new C_MDS_rename_local_finish(mds, mdr, 
 								 srcdn, destdn, straydn,
-								 ipv, pi ? pi->ctime:utime_t());
+								 ipv, ddirpv, sdirpv, now);
 
   journal_opens();  // journal pending opens, just in case
   
@@ -2340,6 +2409,7 @@ void Server::_rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *f
 void Server::_rename_local_finish(MDRequest *mdr,
 				  CDentry *srcdn, CDentry *destdn, CDentry *straydn,
 				  version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
+				  version_t ddirpv, version_t sdirpv,
 				  utime_t ictime,
 				  version_t atid1, version_t atid2)
 {
@@ -2352,8 +2422,13 @@ void Server::_rename_local_finish(MDRequest *mdr,
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
 
+  // dir mtimes
+  dirty_dn_diri(destdn, ddirpv, ictime);
+  dirty_dn_diri(srcdn, sdirpv, ictime);
+  
   if (linkmerge) {
     assert(ipv);
+
     if (destdn->is_primary()) {
       dout(10) << "merging remote onto primary link" << endl;
 
@@ -2755,7 +2830,11 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 	   << " on " << *cur << endl;
   
   // hit pop
-  mds->balancer->hit_inode(cur, META_POP_IRD);
+  if (cmode == FILE_MODE_RW ||
+      cmode == FILE_MODE_W) 
+    mds->balancer->hit_inode(cur, META_POP_IWR);
+  else
+    mds->balancer->hit_inode(cur, META_POP_IRD);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);

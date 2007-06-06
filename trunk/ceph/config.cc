@@ -150,6 +150,7 @@ md_config_t g_conf = {
 
   // --- journaler ---
   journaler_allow_split_entries: true,
+  journaler_safe: false,  // wait for COMMIT on journal writes
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -158,14 +159,13 @@ md_config_t g_conf = {
   mds_decay_halflife: 30,
 
   mds_beacon_interval: 5.0,
-  mds_beacon_grace: 100.0,
+  mds_beacon_grace: 10.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 10000,
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
-  mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
   mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
@@ -189,6 +189,7 @@ md_config_t g_conf = {
   mds_bal_midchunk: .3,       // any sub bigger than this taken in full
   mds_bal_minchunk: .001,     // never take anything smaller than this
 
+  mds_trim_on_rejoin: true,
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
   mds_shutdown_on_last_unmount: true,
@@ -231,7 +232,7 @@ md_config_t g_conf = {
   ebofs_cloneable: false,
   ebofs_verify: false,
   ebofs_commit_ms:      2000,       // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_idle_commit_ms: 20,         // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (80 *256), // 4k blocks, *256 for MB
@@ -563,6 +564,9 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--journaler_safe") == 0) 
+      g_conf.journaler_safe = atoi(args[++i]);
+
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
 
@@ -573,8 +577,6 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_before_reply") == 0) 
-      g_conf.mds_log_before_reply = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_max_len") == 0) 
       g_conf.mds_log_max_len = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_read_inc") == 0) 
