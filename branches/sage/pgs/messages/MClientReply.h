@@ -185,7 +185,9 @@ class MClientReply : public Message {
   virtual char *get_type_name() { return "creply"; }
   void print(ostream& o) {
     o << "creply(" << env.dst.name << "." << st.tid;
-    if (st.result) o << " = " << st.result;
+    o << " = " << st.result;
+    if (st.result <= 0)
+      o << " " << strerror(-st.result);
     o << ")";
   }
 

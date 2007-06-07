@@ -169,7 +169,8 @@ void Journaler::write_head(Context *oncommit)
   bufferlist bl;
   bl.append((char*)&last_written, sizeof(last_written));
   filer.write(inode, 0, bl.length(), bl, 0, 
-	      0, new C_WriteHead(this, last_written, oncommit));
+	      0, 
+	      new C_WriteHead(this, last_written, oncommit));
 }
 
 void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
@@ -293,8 +294,10 @@ void Journaler::flush(Context *onsync)
   dout(10) << "flush flushing " << flush_pos << "~" << len << endl;
 
   // submit write for anything pending
+  // flush _start_ pos to _finish_flush
   filer.write(inode, flush_pos, len, write_buf, 0,
-	      new C_Flush(this, flush_pos), 0);  // flush _start_ pos to _finish_flush
+	      g_conf.journaler_safe ? 0:new C_Flush(this, flush_pos),  // on ACK
+	      g_conf.journaler_safe ?   new C_Flush(this, flush_pos):0); // on COMMIT
   pending_flush[flush_pos] = g_clock.now();
   
   // adjust pointers

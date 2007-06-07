@@ -414,6 +414,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 
       bcast_latest_osd();
       bcast_latest_mds();
+      send_waiting();
     } else {
       dout(7) << "osd_boot waiting for " 
               << (osdmap.osds.size() - osdmap.osd_inst.size())
@@ -541,10 +542,25 @@ void OSDMonitor::send_waiting()
 
   for (map<entity_name_t,pair<entity_inst_t,epoch_t> >::iterator i = awaiting_map.begin();
        i != awaiting_map.end();
-       i++)
-    send_incremental(i->second.second, i->second.first);
+       i++) {
+    if (i->second.second)
+      send_incremental(i->second.second, i->second.first);
+    else
+      send_full(i->second.first);
+  }
 }
 
+
+void OSDMonitor::send_latest(entity_inst_t who)
+{
+  // FIXME this is super naive
+  if (osdmap.get_epoch() == 0) {
+    awaiting_map[who.name].first = who;
+    awaiting_map[who.name].second = 0;
+  } else {
+    send_full(who);
+  }
+}
 
 void OSDMonitor::send_full(entity_inst_t who)
 {

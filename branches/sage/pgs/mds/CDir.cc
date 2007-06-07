@@ -1191,6 +1191,14 @@ void CDir::freeze_tree(Context *c)
 
 void CDir::freeze_tree_finish(Context *c)
 {
+  // still freezing?  (we may have been canceled)
+  if (!is_freezing()) {
+    dout(10) << "freeze_tree_finish no longer freezing, done on " << *this << endl;
+    c->finish(-1);
+    delete c;
+    return;
+  }
+
   // freezeable now?
   if (!is_freezeable()) {
     // wait again!
@@ -1246,6 +1254,7 @@ void CDir::unfreeze_tree()
     state_clear(STATE_FREEZINGTREE);
     
     // cancel freeze waiters
+    finish_waiting(WAIT_UNFREEZE);
     finish_waiting(WAIT_FREEZEABLE, -1);
   }
 }
