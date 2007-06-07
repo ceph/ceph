@@ -2199,21 +2199,18 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     assert(lock->get_state() == LOCK_SYNC ||
            lock->get_state() == LOCK_MIXED);
     
+    lock->set_state(LOCK_GLOCKR);
+    
     // call back caps?
     if (issued & CAP_FILE_RD) {
       dout(7) << "handle_file_lock client readers, gathering caps on " << *in << endl;
       issue_caps(in);
+      break;
     }
     if (lock->is_rdlocked()) {
       dout(7) << "handle_file_lock rdlocked, waiting before ack on " << *in << endl;
-      lock->set_state(LOCK_GLOCKR);
       break;
     } 
-    if (issued & CAP_FILE_RD) {
-      dout(7) << "handle_file_lock RD cap issued, waiting before ack on " << *in << endl;
-      lock->set_state(LOCK_GLOCKR);
-      break;
-    }
     
     // nothing to wait for, lock and ack.
     {
