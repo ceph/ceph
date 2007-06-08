@@ -137,6 +137,70 @@ void CInode::get_subtree_dirfrags(list<CDir*>& ls)
       ls.push_back(p->second);
 }
 
+
+CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
+{
+  assert(is_dir());
+
+  // have it?
+  CDir *dir = get_dirfrag(fg);
+  if (dir) return dir;
+  
+  // create it.
+  assert(is_auth());
+  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
+  return dir;
+}
+
+CDir *CInode::add_dirfrag(CDir *dir)
+{
+  assert(dirfrags.count(dir->dirfrag().frag) == 0);
+  dirfrags[dir->dirfrag().frag] = dir;
+  return dir;
+}
+
+void CInode::close_dirfrag(frag_t fg)
+{
+  dout(14) << "close_dirfrag " << fg << endl;
+  assert(dirfrags.count(fg));
+  
+  CDir *dir = dirfrags[fg];
+  dir->remove_null_dentries();
+  
+  // clear dirty flag
+  if (dir->is_dirty())
+    dir->mark_clean();
+  
+  // dump any remaining dentries, for debugging purposes
+  for (map<string,CDentry*>::iterator p = dir->items.begin();
+       p != dir->items.end();
+       ++p) 
+    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
+
+  assert(dir->get_num_ref() == 0);
+  delete dir;
+  dirfrags.erase(fg);
+}
+
+void CInode::close_dirfrags()
+{
+  while (!dirfrags.empty()) 
+    close_dirfrag(dirfrags.begin()->first);
+}
+
+bool CInode::has_subtree_root_dirfrag()
+{
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    if (p->second->is_subtree_root())
+      return true;
+  return false;
+}
+
+
+
+
 // pins
 
 void CInode::first_get()
@@ -196,56 +260,6 @@ CInode *CInode::get_parent_inode()
   if (parent) 
     return parent->dir->inode;
   return NULL;
-}
-
-CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
-{
-  assert(is_dir());
-
-  // have it?
-  CDir *dir = get_dirfrag(fg);
-  if (dir) return dir;
-  
-  // create it.
-  assert(is_auth());
-  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
-  return dir;
-}
-
-CDir *CInode::add_dirfrag(CDir *dir)
-{
-  assert(dirfrags.count(dir->dirfrag().frag) == 0);
-  dirfrags[dir->dirfrag().frag] = dir;
-  return dir;
-}
-
-void CInode::close_dirfrag(frag_t fg)
-{
-  dout(14) << "close_dirfrag " << fg << endl;
-  assert(dirfrags.count(fg));
-  
-  CDir *dir = dirfrags[fg];
-  dir->remove_null_dentries();
-  
-  // clear dirty flag
-  if (dir->is_dirty())
-    dir->mark_clean();
-  
-  // dump any remaining dentries, for debugging purposes
-  for (map<string,CDentry*>::iterator p = dir->items.begin();
-       p != dir->items.end();
-       ++p) 
-    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
-
-  assert(dir->get_num_ref() == 0);
-  delete dir;
-  dirfrags.erase(fg);
-}
-
-void CInode::close_dirfrags()
-{
-  while (!dirfrags.empty()) 
-    close_dirfrag(dirfrags.begin()->first);
 }
 
 
@@ -339,9 +353,9 @@ void CInode::mark_clean()
 // ------------------
 // locking
 
-void CInode::set_mlock_info(MLock *m)
+void CInode::set_object_info(MDSCacheObjectInfo &info)
 {
-  m->set_ino(ino());
+  info.ino = ino();
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)

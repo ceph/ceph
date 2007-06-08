@@ -46,6 +46,19 @@ sage doc
 
 
 sage mds
+- dirlock-protected mtime updates vs migration, journaling, recovery
+- rename fun
+  - remote pinning
+  - is there race with discover?  
+  - generic pin_witnesses func we can use for local and remote renames
+  - fix up local rename
+  - journal renames on witnesses
+- then?
+  - ESlaveUpdate
+  - remote link
+  - remote rename
+  - remote unlink
+
 - journal+recovery
   - local rename
     - how to notify replicas...

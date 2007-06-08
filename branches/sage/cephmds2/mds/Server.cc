@@ -28,6 +28,8 @@
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
 
+#include "messages/MMDSSlaveRequest.h"
+
 #include "messages/MLock.h"
 
 #include "messages/MDentryUnlink.h"
@@ -77,6 +79,9 @@ void Server::dispatch(Message *m)
     return;
   case MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
+    return;
+  case MSG_MDS_SLAVE_REQUEST:
+    handle_slave_request((MMDSSlaveRequest*)m);
     return;
   }
 
@@ -307,8 +312,7 @@ void Server::reconnect_finish()
  */
 void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
 {
-  MClientRequest *req = mdr->client_request();
-  reply_request(mdr, new MClientReply(req, r), tracei);
+  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei);
 }
 
 
@@ -318,7 +322,7 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
  */
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei) 
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << strerror(-reply->get_result())
@@ -421,19 +425,19 @@ void Server::handle_client_request(MClientRequest *req)
     mdr->pin(ref);
   }
 
-  dispatch_request(mdr);
+  dispatch_client_request(mdr);
   return;
 }
 
 
-void Server::dispatch_request(MDRequest *mdr)
+void Server::dispatch_client_request(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   if (mdr->ref) {
-    dout(7) << "dispatch_request " << *req << " ref " << *mdr->ref << endl;
+    dout(7) << "dispatch_client_request " << *req << " ref " << *mdr->ref << endl;
   } else {
-    dout(7) << "dispatch_request " << *req << endl;
+    dout(7) << "dispatch_client_request " << *req << endl;
   }
 
   switch (req->get_op()) {
@@ -496,6 +500,116 @@ void Server::dispatch_request(MDRequest *mdr)
 
   default:
     dout(1) << " unknown client op " << req->get_op() << endl;
+    assert(0);
+  }
+}
+
+
+// ---------------------------------------
+// SLAVE REQUESTS
+
+void Server::handle_slave_request(MMDSSlaveRequest *m)
+{
+  dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << endl;
+  
+  // reply?
+  if (m->is_reply()) {
+    // yay!
+    switch (m->get_op()) {
+    case MMDSSlaveRequest::OP_XLOCKACK:
+      {
+	// identify lock, master request
+	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
+						 m->get_object_info());
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	mdr->xlocks.insert(lock);
+	mdr->locks.insert(lock);
+	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+      }
+      delete m;
+      return;
+      
+    default:
+      assert(0);
+    }
+  } else {
+    // am i a new slave?
+    MDRequest *mdr;
+    if (mdcache->have_request(m->get_reqid())) {
+      mdr = mdcache->request_get(m->get_reqid());
+      assert(mdr->slave_request == 0);     // only one at a time, please!  
+      mdr->slave_request = m;
+    } else {
+      // new.
+      mdcache->request_start(m);
+    }
+    
+    dispatch_slave_request(mdr);
+  }
+}
+
+void Server::dispatch_slave_request(MDRequest *mdr)
+{
+  dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << endl;
+
+  switch (mdr->slave_request->get_op()) {
+  case MMDSSlaveRequest::OP_XLOCK:
+    {
+      // identify object
+      SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
+					       mdr->slave_request->get_object_info());
+
+      if (lock && lock->get_parent()->is_auth()) {
+	// xlock
+	if (!mds->locker->xlock_start(lock, mdr))
+	  return;
+	
+	// ack
+	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
+	r->set_lock_type(lock->get_type());
+	lock->get_parent()->set_object_info(r->get_object_info());
+	mds->send_message_mds(r, mdr->slave_request->get_source().num(), MDS_PORT_SERVER);
+      } else {
+	if (lock) {
+	  dout(10) << "not auth for remote xlock attempt, dropping on " 
+		   << *lock << " on " << *lock->get_parent() << endl;
+	} else {
+	  dout(10) << "don't have object, dropping" << endl;
+	  assert(0); // can this happen?  hmm.
+	}
+      }
+
+      // done.
+      delete mdr->slave_request;
+      mdr->slave_request = 0;
+    }
+    break;
+
+  case MMDSSlaveRequest::OP_UNXLOCK:
+    {  
+      SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
+					       mdr->slave_request->get_object_info());
+      assert(lock);
+      mds->locker->xlock_finish(lock, mdr);
+      
+      // done.  no ack necessary.
+      delete mdr->slave_request;
+      mdr->slave_request = 0;
+    }
+    break;
+
+  case MMDSSlaveRequest::OP_PINDN:
+  case MMDSSlaveRequest::OP_UNPINDN:
+    // get the CDentry*
+    
+
+    break;
+
+  case MMDSSlaveRequest::OP_FINISH:
+    mdcache->request_finish(mdr);
+    break;
+
+  default: 
     assert(0);
   }
 }
@@ -621,7 +735,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   int r = mdcache->path_traverse(mdr,
 				 0,
 				 refpath, trace, true,
-				 mdr->request, ondelay,
+				 mdr->client_request, ondelay,
 				 MDS_TRAVERSE_FORWARD,
 				 true); // is MClientRequest
   if (r > 0) return 0; // delayed
@@ -656,7 +770,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   if (mdr->ref) 
     return mdr->ref;
 
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   // traverse
   filepath refpath = req->get_filepath();
@@ -749,7 +863,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
  */
 CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   vector<CDentry*> trace;
   CDir *dir = traverse_to_auth_dir(mdr, trace, req->get_filepath());
@@ -944,7 +1058,7 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
 
 void Server::handle_client_stat(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *ref = rdlock_path_pin_ref(mdr, false);
   if (!ref) return;
 
@@ -1003,7 +1117,7 @@ public:
     in->mark_dirty(pv);
 
     // reply
-    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+    MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
     mds->server->reply_request(mdr, reply, in);
   }
@@ -1014,7 +1128,7 @@ public:
 
 void Server::handle_client_utime(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
@@ -1069,7 +1183,7 @@ public:
     in->mark_dirty(pv);
 
     // reply
-    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+    MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
     mds->server->reply_request(mdr, reply, in);
   }
@@ -1080,7 +1194,7 @@ public:
 
 void Server::handle_client_chmod(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
@@ -1130,7 +1244,7 @@ public:
     in->mark_dirty(pv);
 
     // reply
-    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+    MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
     mds->server->reply_request(mdr, reply, in);
   }
@@ -1139,7 +1253,7 @@ public:
 
 void Server::handle_client_chown(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
@@ -1209,7 +1323,7 @@ int Server::encode_dir_contents(CDir *dir,
 
 void Server::handle_client_readdir(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *diri = rdlock_path_pin_ref(mdr, false);
   if (!diri) return;
 
@@ -1307,7 +1421,7 @@ public:
     mds->balancer->hit_inode(newi, META_POP_IWR);
 
     // reply
-    MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+    MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
     mds->server->reply_request(mdr, reply, newi);
   }
@@ -1317,7 +1431,7 @@ public:
 
 void Server::handle_client_mknod(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
@@ -1353,7 +1467,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
 void Server::handle_client_mkdir(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
@@ -1409,7 +1523,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
 void Server::handle_client_symlink(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
@@ -1445,7 +1559,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
 
 void Server::handle_client_link(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   dout(7) << "handle_client_link " << req->get_filepath()
 	  << " to " << req->get_sarg()
@@ -1616,7 +1730,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   mds->balancer->hit_inode(targeti, META_POP_IWR);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
 }
 
@@ -1704,7 +1818,7 @@ public:
 
 void Server::handle_client_unlink(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   // traverse to path
   vector<CDentry*> trace;
@@ -1913,7 +2027,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request(), 0);
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
 
   if (straydn)
@@ -2071,7 +2185,7 @@ bool Server::_rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *
 
 void Server::handle_client_rename(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << endl;
 
   // traverse to dest dir (not dest)
@@ -2271,7 +2385,9 @@ void Server::_rename_local(MDRequest *mdr,
 
   // dir mtimes
   version_t ddirpv = predirty_dn_diri(destdn, &le->metablob, now);
-  version_t sdirpv = predirty_dn_diri(srcdn, &le->metablob, now);
+  version_t sdirpv = 0;
+  if (destdn->dir != srcdn->dir)
+    sdirpv = predirty_dn_diri(srcdn, &le->metablob, now);
 
   if (linkmerge) {
     dout(10) << "will merge remote+primary links" << endl;
@@ -2413,7 +2529,7 @@ void Server::_rename_local_finish(MDRequest *mdr,
 				  utime_t ictime,
 				  version_t atid1, version_t atid2)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   dout(10) << "_rename_local_finish " << *req << endl;
 
   CInode *oldin = destdn->inode;
@@ -2424,7 +2540,8 @@ void Server::_rename_local_finish(MDRequest *mdr,
 
   // dir mtimes
   dirty_dn_diri(destdn, ddirpv, ictime);
-  dirty_dn_diri(srcdn, sdirpv, ictime);
+  if (destdn->dir != srcdn->dir)
+    dirty_dn_diri(srcdn, sdirpv, ictime);
   
   if (linkmerge) {
     assert(ipv);
@@ -2730,7 +2847,7 @@ public:
 
 void Server::handle_client_truncate(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
@@ -2773,7 +2890,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 
 void Server::handle_client_open(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   int flags = req->args.open.flags;
   int cmode = req->get_open_file_mode();
@@ -2817,7 +2934,7 @@ void Server::handle_client_open(MDRequest *mdr)
 
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
   int cmode = req->get_open_file_mode();
 
   // can we issue the caps they want?
@@ -3019,7 +3136,7 @@ public:
 
 void Server::handle_client_openc(MDRequest *mdr)
 {
-  MClientRequest *req = mdr->client_request();
+  MClientRequest *req = mdr->client_request;
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << endl;
   

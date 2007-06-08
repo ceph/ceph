@@ -137,6 +137,7 @@ class CInode : public MDSCacheObject {
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
+  bool has_subtree_root_dirfrag();
 
  protected:
   // parent dentries in cache
@@ -260,7 +261,7 @@ public:
     default: assert(0);
     }
   }
-  void set_mlock_info(MLock *m);
+  void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
@@ -575,7 +576,8 @@ public:
   void update_inode(CInode *in, set<int>& new_client_caps) {
     // treat scatterlocked mtime special, since replica may have newer info
     if (in->dirlock.get_state() == LOCK_SCATTER ||
-	in->dirlock.get_state() == LOCK_GSYNCS)
+	in->dirlock.get_state() == LOCK_GLOCKC ||
+	in->dirlock.get_state() == LOCK_GTEMPSYNCC)
       st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
 
     in->inode = st.inode;

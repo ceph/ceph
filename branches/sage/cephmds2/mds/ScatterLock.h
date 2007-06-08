@@ -19,18 +19,43 @@
 #include "SimpleLock.h"
 
 
-// lock state machine states.
-#define LOCK_SYNC__        // rdlocks allowed (e.g., for stat)
-#define LOCK_GSYNCS   -20  // waiting for replicas to gather
-#define LOCK_SCATTER   21  // mtime updates on replicas allowed, no reads.
-#define LOCK_GSCATTERS 22  // waiting for rdlocks to release
+// lock state machine states:
+//  Sync  --  Lock  --  sCatter
+//  Tempsync _/
+//                              auth repl
+#define LOCK_SYNC__          // R .  R .  rdlocks allowed on auth and replicas
+#define LOCK_GLOCKS     -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
+
+#define LOCK_GSYNCL__        // . w       LOCK on replica.
+#define LOCK_LOCK__          // . W  . .
+#define LOCK_GTEMPSYNCL -21  // . w       LOCK on replica.
+
+#define LOCK_GLOCKC     -22  // . w  . w  waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
+#define LOCK_SCATTER     23  // . W  . W  mtime updates on replicas allowed, no reads.  stable here.
+#define LOCK_GTEMPSYNCC -24  // . w  . w  GLOCKC|LOCK on replica
+
+#define LOCK_GSCATTERT  -25  // r .       LOCK on replica.
+#define LOCK_GLOCKT     -26  // r .       LOCK on replica.
+#define LOCK_TEMPSYNC    27  // R .       LOCK on replica.
+
 
 inline const char *get_scatterlock_state_name(int s) {
   switch(s) {
-  case LOCK_SYNC: return "sync";
-  case LOCK_GSYNCS: return "gsyncs";
-  case LOCK_SCATTER: return "scatter";
-  case LOCK_GSCATTERS: return "gscatters";
+  case LOCK_SYNC: return "Sync";
+  case LOCK_GLOCKS: return "gLockS";
+    
+  case LOCK_GSYNCL: return "gSyncL";
+  case LOCK_LOCK: return "Lock";
+  case LOCK_GTEMPSYNCL: return "gTempsyncL";
+    
+  case LOCK_GLOCKC: return "gLockC";
+  case LOCK_SCATTER: return "sCatter";
+  case LOCK_GTEMPSYNCC: return "gTempsyncC";
+    
+  case LOCK_GSCATTERT: return "gsCatterT";
+  case LOCK_GLOCKT: return "gLockT";
+  case LOCK_TEMPSYNC: return "Tempsync";
+    
   default: assert(0);
   }
 }
@@ -45,35 +70,56 @@ public:
   int get_replica_state() {
     switch (state) {
     case LOCK_SYNC: 
-    case LOCK_GSYNCS:
-    case LOCK_GSCATTERS:
       return LOCK_SYNC;
+      
+    case LOCK_GLOCKS:
+    case LOCK_GSYNCL:
+    case LOCK_LOCK:
+    case LOCK_GTEMPSYNCL:
+    case LOCK_GLOCKC:
+      return LOCK_LOCK;
+
     case LOCK_SCATTER:
       return LOCK_SCATTER;
+
+    case LOCK_GTEMPSYNCC:
+    case LOCK_GSCATTERT:
+    case LOCK_GLOCKT:
+    case LOCK_TEMPSYNC:
+      return LOCK_LOCK;
     default:
       assert(0);
     }
   }
 
   void replicate_relax() {
-    if (state == LOCK_SYNC && !is_rdlocked())
-      state = LOCK_SCATTER;
+    //if (state == LOCK_SYNC && !is_rdlocked())
+    //state = LOCK_SCATTER;
   }
 
   // rdlock
   bool can_rdlock(MDRequest *mdr) {
-    return state == LOCK_SYNC;
+    return state == LOCK_SYNC || state == LOCK_TEMPSYNC;
   }
   bool can_rdlock_soon() {
-    return state == LOCK_SYNC || state == LOCK_GSYNCS;
+    return state == LOCK_GTEMPSYNCC;
+  }
+  
+  // xlock
+  bool can_xlock_soon() {
+    if (parent->is_auth())
+      return (state == LOCK_GLOCKC ||
+	      state == LOCK_GLOCKS);
+    else
+      return false;
   }
 
   // wrlock
   bool can_wrlock() {
-    return state == LOCK_SCATTER;
+    return state == LOCK_SCATTER || state == LOCK_LOCK;
   }
   void get_wrlock() {
-    assert(state == LOCK_SCATTER);
+    assert(can_wrlock());
     ++num_wrlock;
   }
   void put_wrlock() {
@@ -89,8 +135,8 @@ public:
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
-    //if (l.is_xlocked())
-    //out << " x=" << l.get_xlocked_by();
+    if (is_xlocked())
+      out << " x=" << get_xlocked_by();
     if (is_wrlocked()) 
       out << " wr=" << get_num_wrlocks();
     out << ")";

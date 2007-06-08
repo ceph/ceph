@@ -47,6 +47,8 @@ using namespace std;
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
+#include "messages/MMDSSlaveRequest.h"
+
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
@@ -216,6 +218,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
     // mds
+  case MSG_MDS_SLAVE_REQUEST:
+    m = new MMDSSlaveRequest;
+    break;
+
   case MSG_MDS_GETMAP:
 	m = new MMDSGetMap();
 	break;

@@ -198,9 +198,10 @@ CDentryDiscover *CDentry::replicate_to(int who)
 // ----------------------------
 // locking
 
-void CDentry::set_mlock_info(MLock *m) 
+void CDentry::set_object_info(MDSCacheObjectInfo &info) 
 {
-  m->set_dn(dir->dirfrag(), name);
+  info.dirfrag = dir->dirfrag();
+  info.dname = name;
 }
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)

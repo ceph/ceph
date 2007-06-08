@@ -219,7 +219,7 @@ public:
     assert(type == LOCK_OTYPE_DN);
     return &lock;
   }
-  void set_mlock_info(MLock *m);
+  void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 

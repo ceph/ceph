@@ -21,6 +21,8 @@ class LogEvent;
 class C_MDS_rename_local_finish;
 class MDRequest;
 
+class MMDSSlaveRequest;
+
 class Server {
   MDS *mds;
   MDCache *mdcache;
@@ -54,9 +56,12 @@ public:
   // -- requests --
   void handle_client_request(MClientRequest *m);
 
-  void dispatch_request(MDRequest *mdr);
+  void dispatch_client_request(MDRequest *mdr);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
+
+  void handle_slave_request(MMDSSlaveRequest *m);
+  void dispatch_slave_request(MDRequest *mdr);
 
   // some helpers
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);

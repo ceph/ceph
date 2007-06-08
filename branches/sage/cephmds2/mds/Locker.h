@@ -56,6 +56,8 @@ private:
  public:
   Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}  
 
+  SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
+  
   void dispatch(Message *m);
   void handle_lock(MLock *m);
 
@@ -94,7 +96,9 @@ private:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void scatter_eval(ScatterLock *lock);
   void scatter_sync(ScatterLock *lock);
+  void scatter_lock(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock);
+  void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);

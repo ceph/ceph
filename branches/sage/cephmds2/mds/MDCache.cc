@@ -69,6 +69,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientFileCaps.h"
 
+#include "messages/MMDSSlaveRequest.h"
+
 #include "IdAllocator.h"
 
 #include "common/Timer.h"
@@ -369,6 +371,11 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
        ++p) 
     adjust_export_state(*p);
   
+  // evaluate subtree inode dirlock?
+  //  (we should scatter the dirlock on subtree bounds)
+  if (dir->inode->is_auth())
+    mds->locker->scatter_eval(&dir->inode->dirlock);
+
   show_subtrees();
 }
 
@@ -1004,7 +1011,7 @@ void MDCache::handle_mds_failure(int who)
   for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) 
-    if (p->second->by_mds == who) 
+    if (p->second->slave_to_mds == who) 
       ls.push_back(p->second);
   while (!ls.empty()) {
     dout(10) << "cleaning up slave request " << *ls.front() << endl;
@@ -1664,7 +1671,7 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
 	//  so only _locally_ opened files are significant.
 	// ScatterLock -- adjust accordingly
 	if (p->second.dirlock == LOCK_SCATTER || 
-	    p->second.dirlock == LOCK_GSCATTERS)  // replica still has rdlocks
+	    p->second.dirlock == LOCK_GLOCKC)  // replica still has wrlocks
 	  in->dirlock.set_state(LOCK_SCATTER);
       }
     } else {
@@ -1687,7 +1694,7 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
       dout(10) << " inode xlock by " << q->second << " on " << *in << endl;
       
       // create slave mdrequest
-      MDRequest *mdr = request_start(q->second);
+      MDRequest *mdr = request_start_slave(q->second, from);
       
       // auth_pin
       mdr->auth_pin(in);
@@ -1713,7 +1720,7 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
       dout(10) << " dn xlock by " << q->second << " on " << *dn << endl;
    
       // create slave mdrequest
-      MDRequest *mdr = request_start(q->second);
+      MDRequest *mdr = request_start_slave(q->second, from);
 
       // auth_pin
       mdr->auth_pin(dn->dir);
@@ -2720,7 +2727,7 @@ bool MDCache::shutdown_pass()
   if (!subtrees.empty()) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
     show_subtrees();
-    show_cache();
+    //show_cache();
     return false;
   }
   assert(subtrees.empty());
@@ -3191,7 +3198,10 @@ int MDCache::path_traverse(MDRequest *mdr,
 	    req->clear_payload();  // reencode!
 	  }
 	  
-	  mds->forward_message_mds(req, dauth.first, req->get_dest_port());
+	  if (mdr) 
+	    request_forward(mdr, dauth.first, req->get_dest_port());
+	  else
+	    mds->forward_message_mds(req, dauth.first, req->get_dest_port());
 	  
 	  if (mds->logger) mds->logger->inc("cfw");
 	  delete ondelay;
@@ -3393,26 +3403,28 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 }
 
 
-MDRequest *MDCache::request_start(metareqid_t ri)
+MDRequest *MDCache::request_start_slave(metareqid_t ri, int by)
 {
-  MDRequest *mdr = new MDRequest(ri);
+  MDRequest *mdr = new MDRequest(ri, 0, by);
+  assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start " << *mdr << endl;
+  dout(7) << "request_start_slave " << *mdr << " by mds" << by << endl;
   return mdr;
 }
 
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
   MDRequest *mdr = new MDRequest(req->get_reqid(), req);
+  assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
 }
 
-MDRequest *MDCache::request_start(MLock *req)
+MDRequest *MDCache::request_start(MMDSSlaveRequest *slavereq)
 {
-  MDRequest *mdr = new MDRequest(req->get_reqid(), req);
-  mdr->by_mds = req->get_source().num();
+  MDRequest *mdr = new MDRequest(slavereq->get_reqid(), slavereq, slavereq->get_source().num());
+  assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
@@ -3429,7 +3441,8 @@ void MDCache::request_finish(MDRequest *mdr)
 {
   dout(7) << "request_finish " << *mdr << endl;
 
-  delete mdr->request;
+  delete mdr->client_request;
+  delete mdr->slave_request;
   request_cleanup(mdr);
   
   if (mds->logger) mds->logger->inc("reply");
@@ -3440,9 +3453,9 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
   if (!port) port = MDS_PORT_SERVER;
 
-  dout(7) << "request_forward to " << who << " req " << *mdr << endl;
+  dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << endl;
 
-  mds->forward_message_mds(mdr->request, who, port);  
+  mds->forward_message_mds(mdr->client_request, who, port);  
   request_cleanup(mdr);
 
   if (mds->logger) mds->logger->inc("fw");
@@ -3451,20 +3464,12 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 
 void MDCache::dispatch_request(MDRequest *mdr)
 {
-  assert(mdr->request);
-
-  switch (mdr->request->get_type()) {
-  case MSG_CLIENT_REQUEST:
-    mds->server->dispatch_request(mdr);
-    break;
-
-  case MSG_MDS_LOCK:
-    mds->locker->handle_lock((MLock*)mdr->request);
-    break;
-
-  default:
-    assert(0);  // shouldn't get here
-  }
+  if (mdr->client_request) {
+    mds->server->dispatch_client_request(mdr);
+  } else if (mdr->slave_request) {
+    mds->server->dispatch_slave_request(mdr);
+  } else
+    assert(0);
 }
 
 
@@ -3489,6 +3494,7 @@ void MDCache::request_drop_locks(MDRequest *mdr)
 
 void MDCache::request_cleanup(MDRequest *mdr)
 {
+  dout(15) << "request_cleanup " << *mdr << endl;
   metareqid_t ri = mdr->reqid;
 
   // clear ref, trace
@@ -3508,9 +3514,28 @@ void MDCache::request_cleanup(MDRequest *mdr)
     (*it)->put(MDSCacheObject::PIN_REQUEST);
   mdr->pins.clear();
 
+  // drop remote dn pins
+  for (map<CDentry*, set<int> >::iterator p = mdr->remote_dn_pins.begin();
+       p != mdr->remote_dn_pins.end();
+       ++p) {
+    //.....
+    assert(0);
+  }
+
+  // slaves
+  for (set<int>::iterator p = mdr->slaves.begin();
+       p != mdr->slaves.end();
+       ++p) {
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
+    mds->send_message_mds(r, *p, MDS_PORT_SERVER);
+  }
+
   // remove from map
   active_requests.erase(mdr->reqid);
   delete mdr;
+
+
+
 
   // log some stats *****
   if (mds->logger) {

@@ -268,6 +268,24 @@ ostream& operator<<(ostream& out, mdsco_db_line_prefix o);
 // printer
 ostream& operator<<(ostream& out, MDSCacheObject &o);
 
+class MDSCacheObjectInfo {
+public:
+  inodeno_t ino;
+  dirfrag_t dirfrag;
+  string dname;
+
+  void _encode(bufferlist& bl) {
+    ::_encode(ino, bl);
+    ::_encode(dirfrag, bl);
+    ::_encode(dname, bl);
+  }
+  void _decode(bufferlist& bl, int& off) {
+    ::_decode(ino, bl, off);
+    ::_decode(dirfrag, bl, off);
+    ::_decode(dname, bl, off);
+  }
+};
+
 
 class MDSCacheObject {
  public:
@@ -499,7 +517,7 @@ protected:
   // locking
   // noop unless overloaded.
   virtual SimpleLock* get_lock(int type) { assert(0); }
-  virtual void set_mlock_info(MLock *m) { assert(0); }
+  virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void finish_lock_waiters(int type, int mask, int r=0) { assert(0); }

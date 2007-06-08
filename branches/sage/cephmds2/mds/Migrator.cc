@@ -47,22 +47,6 @@
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
 
-#include "messages/MHashDirDiscover.h"
-#include "messages/MHashDirDiscoverAck.h"
-#include "messages/MHashDirPrep.h"
-#include "messages/MHashDirPrepAck.h"
-#include "messages/MHashDir.h"
-#include "messages/MHashDirNotify.h"
-#include "messages/MHashDirAck.h"
-
-#include "messages/MUnhashDirPrep.h"
-#include "messages/MUnhashDirPrepAck.h"
-#include "messages/MUnhashDir.h"
-#include "messages/MUnhashDirAck.h"
-#include "messages/MUnhashDirNotify.h"
-#include "messages/MUnhashDirNotifyAck.h"
-
-
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "

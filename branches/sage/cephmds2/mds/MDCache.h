@@ -51,7 +51,7 @@ class MLock;
 
 class Message;
 class MClientRequest;
-
+class MMDSSlaveRequest;
 
 // MDCache
 
@@ -66,17 +66,25 @@ class MClientRequest;
  */
 struct MDRequest {
   metareqid_t reqid;
-  Message *request;        // MClientRequest, or MLock
-  int by_mds;              // if MLock, and remote xlock attempt
-  
+
+  // -- i am a client (master) request
+  MClientRequest *client_request;    // client request (if any)
+  set<int> slaves;                   // mds nodes that have slave requests to me (implies client_request)
+
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
+
+  // -- i am a slave request
+  MMDSSlaveRequest *slave_request;   // slave request (if one is pending; implies slave == true)
+  int slave_to_mds;                  // this is a slave request.  slave_request may or may not be a pending op.
+
   
   // cache pins (so things don't expire)
-  set< MDSCacheObject* >  pins;
+  set< MDSCacheObject* > pins;
+  map< CDentry*, set<int> > remote_dn_pins; // [master] dn -> mds set it's pinned on
   
   // auth pins
-  set< CDir* >   dir_auth_pins;
+  set< CDir* > dir_auth_pins;
   set< CInode* > inode_auth_pins;
   
   // held locks
@@ -89,13 +97,20 @@ struct MDRequest {
   map< inodeno_t, inode_t > projected_inode;
 
 
+
   // ---------------------------------------------------
-  MDRequest() : request(0), by_mds(-1), ref(0) {}
-  MDRequest(metareqid_t ri, Message *req=0) : reqid(ri), request(req), by_mds(-1), ref(0) {}
+  MDRequest() : 
+    client_request(0), ref(0), 
+    slave_request(0), slave_to_mds(-1) { }
+  MDRequest(metareqid_t ri, MClientRequest *req) : 
+    reqid(ri), client_request(req), ref(0), 
+    slave_request(0), slave_to_mds(-1) { }
+  MDRequest(metareqid_t ri, MMDSSlaveRequest *req, int by) : 
+    reqid(ri), client_request(0), ref(0),
+    slave_request(req), slave_to_mds(by) { }
   
-  // request
-  MClientRequest *client_request() {
-    return (MClientRequest*)request;
+  bool is_slave() { 
+    return slave_to_mds >= 0; 
   }
 
   // pin items in cache
@@ -139,6 +154,7 @@ inline ostream& operator<<(ostream& out, MDRequest &mdr)
 {
   out << "request(" << mdr.reqid;
   //if (mdr.request) out << " " << *mdr.request;
+  if (mdr.is_slave()) out << " slave_to mds" << mdr.slave_to_mds;
   out << ")";
   return out;
 }
@@ -223,9 +239,12 @@ protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
   
 public:
-  MDRequest* request_start(metareqid_t rid);
   MDRequest* request_start(MClientRequest *req);
-  MDRequest* request_start(MLock *req);
+  MDRequest* request_start(MMDSSlaveRequest *slavereq);
+  MDRequest* request_start_slave(metareqid_t rid, int by);
+  bool have_request(metareqid_t rid) {
+    return active_requests.count(rid);
+  }
   MDRequest* request_get(metareqid_t rid);
   void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
   void request_finish(MDRequest *mdr);

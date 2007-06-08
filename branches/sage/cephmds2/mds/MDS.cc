@@ -232,7 +232,7 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
     
     if (!creq->is_idempotent()) {
       delete req;
-      return;  // don't actually forward if non-idempotent
+      return;  // don't actually forward if non-idempotent!  client has to do it.
     }
   }
   

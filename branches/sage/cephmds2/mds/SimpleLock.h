@@ -41,6 +41,7 @@ inline const char *get_lock_type_name(int t) {
 }
 
 // -- lock states --
+// sync <-> lock
 #define LOCK_UNDEF    0
 //                               auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
@@ -65,10 +66,10 @@ class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
   static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_SINGLEAUTH  = (1<<2);
+  static const int WAIT_XLOCK       = (1<<2);  // to xlock
   static const int WAIT_STABLE      = (1<<3);  // for a stable state
-  static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock
-  static const int WAIT_BITS        = 5;
+  static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock (*)
+  static const int WAIT_BITS        = 4;
 
 protected:
   // parent (what i lock)
@@ -77,11 +78,11 @@ protected:
   int wait_offset;
 
   // lock state
-  int           state;
-  set<__int32_t> gather_set;  // auth
+  int state;
+  set<int32_t> gather_set;  // auth
 
   // local state
-  int        num_rdlock;
+  int num_rdlock;
   MDRequest *xlock_by;
 
 public:
@@ -113,7 +114,11 @@ public:
     parent->finish_waiting(mask << wait_offset, r);
   }
   void add_waiter(int mask, Context *c) {
-    parent->add_waiter(mask << wait_offset, c);
+    // (*) REMOTEXLOCK events alsowait on parent's WAIT_SINGLEAUTH.
+    if (mask & WAIT_REMOTEXLOCK)
+      parent->add_waiter((mask << wait_offset) | MDSCacheObject::WAIT_SINGLEAUTH, c);
+    else
+      parent->add_waiter(mask << wait_offset, c);
   }
   bool is_waiter_for(int mask) {
     return parent->is_waiter_for(mask << wait_offset);
