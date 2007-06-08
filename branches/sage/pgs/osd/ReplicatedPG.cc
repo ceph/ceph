@@ -317,6 +317,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
   case OSD_OP_RDUNLOCK:
   case OSD_OP_UPLOCK:
   case OSD_OP_DNLOCK:
+  case OSD_OP_BALANCEREADS:
+  case OSD_OP_UNBALANCEREADS:
     if (op->get_source().is_osd()) {
       op_rep_modify(op);
     } else {
@@ -706,10 +708,12 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 
   case OSD_OP_BALANCEREADS:
     dout(-10) << "apply_repop  completed balance-reads on " << oid << dendl;
+    /*
     if (waiting_for_balanced_reads.count(oid)) {
       osd->take_waiters(waiting_for_balanced_reads[oid]);
       waiting_for_balanced_reads.erase(oid);
     }
+    */
     break;
     
   case OSD_OP_WRUNLOCK:
@@ -1052,8 +1056,9 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   
   // balance-reads set?
   char v;
-  if (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) >= 0 ||
-      balancing_reads.count(op->get_oid())) {
+  if ((op->get_op() != OSD_OP_BALANCEREADS && op->get_op() != OSD_OP_UNBALANCEREADS) &&
+      (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) >= 0 ||
+       balancing_reads.count(op->get_oid()))) {
     
     if (!unbalancing_reads.count(op->get_oid())) {
       // unbalance

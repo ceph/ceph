@@ -229,7 +229,7 @@ osd/rados
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- pg_bit/pg_num changes
+- pg_num changes
 - report crashed pgs?
 
 simplemessenger

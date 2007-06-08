@@ -75,7 +75,6 @@ protected:
   // load balancing
   set<object_t> balancing_reads;
   set<object_t> unbalancing_reads;
-  hash_map<object_t, list<Message*> > waiting_for_balanced_reads;
   hash_map<object_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   void get_rep_gather(RepGather*);
