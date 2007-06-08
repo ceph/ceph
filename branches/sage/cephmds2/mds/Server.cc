@@ -870,8 +870,9 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   if (!dir) return 0;
   dout(10) << "rdlock_path_xlock_dentry dir " << *dir << endl;
 
-  // make sure we can auth_pin dir
-  if (!dir->can_auth_pin()) {
+  // make sure we can auth_pin (or have already authpinned) dir
+  if (!dir->can_auth_pin() &&
+      !mdr->is_auth_pinned(dir)) {
     dout(7) << "waiting for authpinnable on " << *dir << endl;
     dir->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;

@@ -204,6 +204,11 @@ public:
     }
     return 0;
   }
+  void export_twiddle() {
+    clear_gather();
+    state = get_replica_state();
+  }
+
   /** replicate_relax
    * called on first replica creation.
    */
@@ -234,7 +239,9 @@ public:
   bool can_rdlock(MDRequest *mdr) {
     if (state == LOCK_SYNC)
       return true;
-    if (state == LOCK_LOCK && mdr && xlock_by == mdr)
+    if (state == LOCK_LOCK && 
+	(xlock_by == 0 ||
+	 (mdr && xlock_by == mdr)))
       return true;
     return false;
   }
@@ -260,7 +267,7 @@ public:
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())
-      out << " w=" << get_xlocked_by();
+      out << " x=" << get_xlocked_by();
     out << ")";
   }
 };

@@ -127,7 +127,10 @@ class FileLock : public SimpleLock {
     }
     return 0;
   }
-
+  void export_twiddle() {
+    clear_gather();
+    state = get_replica_state();
+  }
 
   // read/write access
   bool can_rdlock(MDRequest *mdr) {

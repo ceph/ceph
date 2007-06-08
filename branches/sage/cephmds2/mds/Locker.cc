@@ -918,6 +918,7 @@ void Locker::simple_eval(SimpleLock *lock)
   // stable -> sync?
   if (lock->get_parent()->is_auth() &&
       lock->is_stable() &&
+      !lock->is_xlocked() &&
       lock->get_state() != LOCK_SYNC &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
@@ -1370,10 +1371,12 @@ void Locker::scatter_eval(ScatterLock *lock)
       }
     }
 
-    // gscattert -> scatter?
-    if (lock->get_state() == LOCK_GSCATTERT &&
+    // gscattert|gscatters -> scatter?
+    if ((lock->get_state() == LOCK_GSCATTERT ||
+	 lock->get_state() == LOCK_GSCATTERS) &&
+	!lock->is_gathering() &&
 	!lock->is_rdlocked()) {
-      dout(7) << "scatter_eval finished scatter un-rdlock on " << *lock
+      dout(7) << "scatter_eval finished scatter un-rdlock(/gather) on " << *lock
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_SCATTER);
       lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -1479,11 +1482,15 @@ void Locker::scatter_scatter(ScatterLock *lock)
   
   switch (lock->get_state()) {
   case LOCK_SYNC:
-    if (lock->is_rdlocked()) {
-      scatter_lock(lock);      // lock first.
-      return;
+    if (!lock->is_rdlocked() &&
+	!lock->get_parent()->is_replicated())
+      break; // do it
+    if (lock->get_parent()->is_replicated()) {
+      send_lock_message(lock, LOCK_AC_LOCK);
+      lock->init_gather();
     }
-    break; // do it.
+    lock->set_state(LOCK_GSCATTERS);
+    return;
 
   case LOCK_LOCK:
     if (lock->is_xlocked())
@@ -1669,7 +1676,8 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     // -- for auth --
   case LOCK_AC_LOCKACK:
     assert(lock->get_state() == LOCK_GLOCKS ||
-	   lock->get_state() == LOCK_GLOCKC);
+	   lock->get_state() == LOCK_GLOCKC ||
+	   lock->get_state() == LOCK_GSCATTERS);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     lock->decode_locked_state(m->get_data());

@@ -25,6 +25,7 @@
 //                              auth repl
 #define LOCK_SYNC__          // R .  R .  rdlocks allowed on auth and replicas
 #define LOCK_GLOCKS     -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
+#define LOCK_GSCATTERS  -28  // r .  r .  
 
 #define LOCK_GSYNCL__        // . w       LOCK on replica.
 #define LOCK_LOCK__          // . W  . .
@@ -43,6 +44,7 @@ inline const char *get_scatterlock_state_name(int s) {
   switch(s) {
   case LOCK_SYNC: return "Sync";
   case LOCK_GLOCKS: return "gLockS";
+  case LOCK_GSCATTERS: return "gScatterS";
     
   case LOCK_GSYNCL: return "gSyncL";
   case LOCK_LOCK: return "Lock";
@@ -72,6 +74,7 @@ public:
     case LOCK_SYNC: 
       return LOCK_SYNC;
       
+    case LOCK_GSCATTERS:  // hrm.
     case LOCK_GLOCKS:
     case LOCK_GSYNCL:
     case LOCK_LOCK:
@@ -91,10 +94,15 @@ public:
       assert(0);
     }
   }
-
+  
   void replicate_relax() {
     //if (state == LOCK_SYNC && !is_rdlocked())
     //state = LOCK_SCATTER;
+  }
+
+  void export_twiddle() {
+    clear_gather();
+    state = get_replica_state();
   }
 
   // rdlock

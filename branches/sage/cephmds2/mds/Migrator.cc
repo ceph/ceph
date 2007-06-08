@@ -743,41 +743,12 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   in->clear_replicas();
   
   // twiddle lock states for auth -> replica transition
-  // auth
-  in->authlock.clear_gather();
-  if (in->authlock.get_state() == LOCK_GLOCKR)
-    in->authlock.set_state(LOCK_LOCK);
+  in->authlock.export_twiddle();
+  in->linklock.export_twiddle();
+  in->dirfragtreelock.export_twiddle();
+  in->filelock.export_twiddle();
+  in->dirlock.export_twiddle();
 
-  // link
-  in->linklock.clear_gather();
-  if (in->linklock.get_state() == LOCK_GLOCKR)
-    in->linklock.set_state(LOCK_LOCK);
-
-  // dirfragtree
-  in->dirfragtreelock.clear_gather();
-  if (in->dirfragtreelock.get_state() == LOCK_GLOCKR)
-    in->dirfragtreelock.set_state(LOCK_LOCK);
-
-  // file : we lost all our caps, so move to stable state!
-  in->filelock.clear_gather();
-  if (in->filelock.get_state() == LOCK_GLOCKR ||
-      in->filelock.get_state() == LOCK_GLOCKM ||
-      in->filelock.get_state() == LOCK_GLOCKL ||
-      in->filelock.get_state() == LOCK_GLONERR ||
-      in->filelock.get_state() == LOCK_GLONERM ||
-      in->filelock.get_state() == LOCK_LONER)
-    in->filelock.set_state(LOCK_LOCK);
-  if (in->filelock.get_state() == LOCK_GMIXEDR)
-    in->filelock.set_state(LOCK_MIXED);
-  // this looks like a step backwards, but it's what we want!
-  if (in->filelock.get_state() == LOCK_GSYNCM)
-    in->filelock.set_state(LOCK_MIXED);
-  if (in->filelock.get_state() == LOCK_GSYNCL)
-    in->filelock.set_state(LOCK_LOCK);
-  if (in->filelock.get_state() == LOCK_GMIXEDL)
-    in->filelock.set_state(LOCK_LOCK);
-    //in->filelock.set_state(LOCK_MIXED);
-  
   // mark auth
   assert(in->is_auth());
   in->state_clear(CInode::STATE_AUTH);
