@@ -100,17 +100,17 @@ public:
       r.average_iat = r.average_iat*(1.0-alpha) + iat*alpha;
     }
     
-    bool have(object_t oid) {
+    bool have(object_t oid) const {
       return iat_map.count(oid);
     }
 
-    double get_average_iat(object_t oid) {
-      assert(have(oid));
-      return iat_map[oid].average_iat;
+    double get_average_iat(object_t oid) const {
+      hash_map<object_t, iat_data>::const_iterator p = iat_map.find(oid);
+      assert(p != iat_map.end());
+      return p->second.average_iat;
     }
 
-    bool is_flash_crowd_candidate(object_t oid) {
-      assert(have(oid));
+    bool is_flash_crowd_candidate(object_t oid) const {
       return get_average_iat(oid) <= g_conf.osd_flash_crowd_iat_threshold;
     }
   };

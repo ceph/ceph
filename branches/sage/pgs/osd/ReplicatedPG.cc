@@ -124,7 +124,11 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     }
     
     // -- flash crowd?
-    if (!op->get_source().is_osd()) {
+    if (!op->get_source().is_osd() && 
+	is_primary()) {
+      // add sample
+      osd->iat_averager.add_sample( op->get_oid(), (double)g_clock.now() );
+      
       // candidate?
       bool is_flash_crowd_candidate = osd->iat_averager.is_flash_crowd_candidate( op->get_oid() );
       bool is_balanced = false;
