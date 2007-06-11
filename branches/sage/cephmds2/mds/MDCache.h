@@ -105,9 +105,9 @@ struct MDRequest {
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1) { }
-  MDRequest(metareqid_t ri, MMDSSlaveRequest *req, int by) : 
+  MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
-    slave_request(req), slave_to_mds(by) { }
+    slave_request(0), slave_to_mds(by) { }
   
   bool is_slave() { 
     return slave_to_mds >= 0; 
@@ -155,6 +155,8 @@ inline ostream& operator<<(ostream& out, MDRequest &mdr)
   out << "request(" << mdr.reqid;
   //if (mdr.request) out << " " << *mdr.request;
   if (mdr.is_slave()) out << " slave_to mds" << mdr.slave_to_mds;
+  if (mdr.client_request) out << " cr=" << mdr.client_request;
+  if (mdr.slave_request) out << " sr=" << mdr.slave_request;
   out << ")";
   return out;
 }
@@ -240,7 +242,6 @@ protected:
   
 public:
   MDRequest* request_start(MClientRequest *req);
-  MDRequest* request_start(MMDSSlaveRequest *slavereq);
   MDRequest* request_start_slave(metareqid_t rid, int by);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);

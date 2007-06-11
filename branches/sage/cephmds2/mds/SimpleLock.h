@@ -233,6 +233,8 @@ public:
       if (!is_gathering())
 	return true;
     }
+    if (!is_stable() && !is_gathering())
+      return true;
     return false;
   }
 

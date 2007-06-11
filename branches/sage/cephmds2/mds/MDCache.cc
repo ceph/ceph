@@ -3403,15 +3403,6 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 }
 
 
-MDRequest *MDCache::request_start_slave(metareqid_t ri, int by)
-{
-  MDRequest *mdr = new MDRequest(ri, 0, by);
-  assert(active_requests.count(mdr->reqid) == 0);
-  active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start_slave " << *mdr << " by mds" << by << endl;
-  return mdr;
-}
-
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
   MDRequest *mdr = new MDRequest(req->get_reqid(), req);
@@ -3421,14 +3412,15 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   return mdr;
 }
 
-MDRequest *MDCache::request_start(MMDSSlaveRequest *slavereq)
+MDRequest *MDCache::request_start_slave(metareqid_t ri, int by)
 {
-  MDRequest *mdr = new MDRequest(slavereq->get_reqid(), slavereq, slavereq->get_source().num());
+  MDRequest *mdr = new MDRequest(ri, by);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start " << *mdr << endl;
+  dout(7) << "request_start_slave " << *mdr << " by mds" << by << endl;
   return mdr;
 }
+
 
 MDRequest *MDCache::request_get(metareqid_t rid)
 {

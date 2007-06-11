@@ -537,12 +537,14 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     MDRequest *mdr;
     if (mdcache->have_request(m->get_reqid())) {
       mdr = mdcache->request_get(m->get_reqid());
-      assert(mdr->slave_request == 0);     // only one at a time, please!  
-      mdr->slave_request = m;
     } else {
       // new.
-      mdcache->request_start(m);
+      mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
     }
+    assert(mdr->client_request == 0);
+
+    assert(mdr->slave_request == 0);     // only one at a time, please!  
+    mdr->slave_request = m;
     
     dispatch_slave_request(mdr);
   }
@@ -1039,15 +1041,52 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
 
   if (diri->is_auth() && !diri->is_root()) {
     // we're auth.  
-    diri->mark_dirty(dirpv);
-    dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
+    if (dirpv) {
+      // we were before, too.
+      diri->mark_dirty(dirpv);
+      dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
+    } else {
+      // write-behind.
+      if (!diri->is_dirty())
+	dirty_diri_mtime_writebehind(diri, mtime);
+      // otherwise, if it's dirty, we know the mtime is journaled by another local update.
+      // (something after the import, or the import itself)
+    }
   } else {
     // we're not auth.  dirlock scatterlock will propagate the update.
   }
 }
 
 
+class C_MDS_DirtyDiriMtimeWB : public Context {
+  Server *server;
+  CInode *diri;
+  version_t dirpv;
+public:
+  C_MDS_DirtyDiriMtimeWB(Server *s, CInode *i, version_t v) :
+    server(s), diri(i), dirpv(v) {}
+  void finish(int r) {
+    diri->mark_dirty(dirpv);
+    diri->auth_unpin();
+  }
+};
 
+void Server::dirty_diri_mtime_writebehind(CInode *diri, utime_t mtime)
+{
+  if (!diri->can_auth_pin())
+    return;  // oh well!  hrm.
+
+  diri->auth_pin();
+  
+  // we're newly auth.  write-behind.
+  EUpdate *le = new EUpdate("dir.mtime writebehind");
+  le->metablob.add_dir_context(diri->get_parent_dn()->get_dir());
+  inode_t *pi = le->metablob.add_primary_dentry(diri->get_parent_dn(), true);
+  pi->version = diri->pre_dirty();
+  
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_sync(new C_MDS_DirtyDiriMtimeWB(this, diri, pi->version));
+}
 
 
 

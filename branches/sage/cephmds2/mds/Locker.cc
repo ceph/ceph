@@ -1074,7 +1074,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
   } else {
     // replica
     // this had better not be a remote xlock attempt!
-    assert(mdr->slave_request);
+    assert(!mdr->slave_request);
 
     // wait for single auth
     if (lock->get_parent()->is_ambiguous_auth()) {
@@ -1089,11 +1089,10 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
-    mds->send_message_mds(r, auth, MDS_PORT_LOCKER);
+    mds->send_message_mds(r, auth, MDS_PORT_SERVER);
     
-
     // wait
-    //  note: this also waits on parent object's SINGLEAUTH bit, in case of migration race
+    //  note: this also waits on parent object's SINGLEAUTH bit, in case of a migration race
     lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }

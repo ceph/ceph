@@ -1749,6 +1749,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     mds->locker->simple_eval(&in->linklock);
   if (in->dirfragtreelock.do_import(oldauth, mds->get_nodeid()))
     mds->locker->simple_eval(&in->dirfragtreelock);
+  if (in->dirlock.do_import(oldauth, mds->get_nodeid()))
+    mds->locker->simple_eval(&in->dirlock);
 
   // caps
   for (set<int>::iterator it = merged_client_caps.begin();
