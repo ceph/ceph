@@ -137,7 +137,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
   // make list of items to authpin
   set<SimpleLock*> mustpin = xlocks;
   for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p)
-    mustpin.insert(*p);
+    if ((*p)->get_parent()->is_auth())
+      mustpin.insert(*p);
   
   // can i auth pin them all now?
   for (set<SimpleLock*>::iterator p = mustpin.begin();
