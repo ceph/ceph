@@ -58,20 +58,52 @@ class Paxos {
   int machine_id;
   const char *machine_name;
 
-  // phase 1
+  // LEADER+PEON
+
+  // -- generic state --
+  const static int STATE_RECOVERING = 1;  // leader|peon: recovering paxos state
+  const static int STATE_ACTIVE     = 2;  // leader|peon: idle.  peon may or may not have valid lease
+  const static int STATE_UPDATING   = 3;  // leader|peon: updating to new value
+  const char *get_statename(int s) {
+    switch (s) {
+    case STATE_RECOVERING: return "recovering";
+    case STATE_ACTIVE: return "active";
+    case STATE_UPDATING: return "updating";
+    default: assert(0); return 0;
+    }
+  }
+
+  int state;
+  bool is_recovering() { return state == STATE_RECOVERING; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_updating() { return state == STATE_UPDATING; }
+
+  // recovery (phase 1)
   version_t last_committed;
   version_t accepted_pn;
   version_t accepted_pn_from;
-  
-  // results from our last replies
-  int        num_last;
+
+  // active (phase 2)
+  utime_t lease_timeout;
+  list<Context*> waiting_for_readable;
+
+
+  // -- leader --
+  // recovery (phase 1)
+  unsigned   num_last;
+  version_t  old_accepted_v;
   version_t  old_accepted_pn;
   bufferlist old_accepted_value;
 
-  // phase 2
+  // updating (phase 2)
   bufferlist new_value;
-  int        num_accepted;
- 
+  unsigned   num_accepted;
+  utime_t    accept_timeout;
+
+  list<Context*> waiting_for_writeable;
+  list<Context*> waiting_for_commit;
+
+
   void collect(version_t oldpn);
   void handle_collect(MMonPaxos*);
   void handle_last(MMonPaxos*);
@@ -80,6 +112,8 @@ class Paxos {
   void handle_accept(MMonPaxos*);
   void commit();
   void handle_commit(MMonPaxos*);
+  void extend_lease();
+  void handle_lease(MMonPaxos*);
 
   version_t get_new_proposal_number(version_t gt=0);
   
@@ -91,7 +125,23 @@ public:
 
   void dispatch(Message *m);
 
-  void leader_start();
+  void leader_init();
+  void peon_init();
+
+
+  // -- service interface --
+  // read
+  bool is_readable();
+  version_t read_current(bufferlist &bl);
+  void wait_for_readable(Context *onreadable);
+
+  // write
+  bool is_leader();
+  bool is_writeable();
+  bool propose_new_value(bufferlist& bl, Context *oncommit=0);
+  void wait_for_commit(Context *oncommit) {
+    waiting_for_commit.push_back(oncommit);
+  }
 
 };
 

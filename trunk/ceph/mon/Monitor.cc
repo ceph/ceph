@@ -80,7 +80,7 @@ void Monitor::init()
     // we're standalone.
     set<int> q;
     q.insert(whoami);
-    win_election(q);
+    win_election(1, q);
   }
 
   lock.Unlock();
@@ -135,32 +135,37 @@ void Monitor::call_election()
   dout(10) << "call_election" << endl;
   state = STATE_STARTING;
 
-  elector.start();
+  elector.call_election();
 
   osdmon->election_starting();
   //mdsmon->election_starting();
 }
 
-void Monitor::win_election(set<int>& active) 
+void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
   leader = whoami;
+  mon_epoch = epoch;
   quorum = active;
-  dout(10) << "win_election, quorum is " << quorum << endl;
+  dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << endl;
 
   // init
   osdmon->election_finished();
   mdsmon->election_finished();
 
   // init paxos
-  test_paxos.leader_start();
+  test_paxos.leader_init();
 } 
 
-void Monitor::lose_election(int l) 
+void Monitor::lose_election(epoch_t epoch, int l) 
 {
   state = STATE_PEON;
+  mon_epoch = epoch;
   leader = l;
-  dout(10) << "lose_election, leader is mon" << leader << endl;
+  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << endl;
+
+  // init paxos
+  test_paxos.peon_init();
 }
 
 
@@ -264,9 +269,7 @@ void Monitor::dispatch(Message *m)
       break;
 
       // elector messages
-    case MSG_MON_ELECTION_PROPOSE:
-    case MSG_MON_ELECTION_ACK:
-    case MSG_MON_ELECTION_VICTORY:
+    case MSG_MON_ELECTION:
       elector.dispatch(m);
       break;
 

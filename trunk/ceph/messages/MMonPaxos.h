@@ -26,6 +26,7 @@ class MMonPaxos : public Message {
   const static int OP_BEGIN = 4;	 // proposer: value proposed for this round
   const static int OP_ACCEPT = 5;	 // voter:    accept propsed value
   const static int OP_COMMIT = 7;   // proposer: notify learners of agreed value
+  const static int OP_LEASE = 8;   // extend reader lease
   const static char *get_opname(int op) {
     switch (op) {
     case OP_COLLECT: return "collect";
@@ -33,6 +34,7 @@ class MMonPaxos : public Message {
     case OP_BEGIN: return "begin";
     case OP_ACCEPT: return "accept";
     case OP_COMMIT: return "commit";
+    case OP_LEASE: return "lease";
     default: assert(0); return 0;
     }
   }
@@ -45,6 +47,7 @@ class MMonPaxos : public Message {
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
   version_t old_accepted_pn;     // previous pn, if we are a LAST with an uncommitted value
+  utime_t lease_timeout;
 
   map<version_t,bufferlist> values;
 
@@ -69,6 +72,7 @@ class MMonPaxos : public Message {
     ::_encode(pn_from, payload);
     ::_encode(pn, payload);
     ::_encode(old_accepted_pn, payload);
+    ::_encode(lease_timeout, payload);
     ::_encode(values, payload);
   }
   void decode_payload() {
@@ -79,6 +83,7 @@ class MMonPaxos : public Message {
     ::_decode(pn_from, payload, off);   
     ::_decode(pn, payload, off);   
     ::_decode(old_accepted_pn, payload, off);
+    ::_decode(lease_timeout, payload, off);
     ::_decode(values, payload, off);
   }
 };
