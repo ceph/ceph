@@ -90,6 +90,8 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << endl;
 
+  elector.shutdown();
+
   // cancel all events
   cancel_tick();
   timer.cancel_all();
@@ -255,16 +257,28 @@ void Monitor::dispatch(Message *m)
 
       // paxos
     case MSG_MON_PAXOS:
-      // send it to the right paxos instance
-      switch (((MMonPaxos*)m)->machine_id) {
-      case PAXOS_TEST:
-	test_paxos.dispatch(m);
-	break;
-      case PAXOS_OSDMAP:
-	//...
-	
-      default:
-	assert(0);
+      {
+	MMonPaxos *pm = (MMonPaxos*)m;
+
+	// sanitize
+	if (pm->epoch > mon_epoch) 
+	  assert(0); 	//call_election();   // wtf
+	if (pm->epoch != mon_epoch) {
+	  delete pm;
+	  break;
+	}
+
+	// send it to the right paxos instance
+	switch (pm->machine_id) {
+	case PAXOS_TEST:
+	  test_paxos.dispatch(m);
+	  break;
+	case PAXOS_OSDMAP:
+	  //...
+	  
+	default:
+	  assert(0);
+	}
       }
       break;
 

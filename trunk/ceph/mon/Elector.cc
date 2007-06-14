@@ -33,6 +33,12 @@ void Elector::init()
   dout(1) << "init, last seen epoch " << epoch << endl;
 }
 
+void Elector::shutdown()
+{
+  if (expire_event)
+    mon->timer.cancel_event(expire_event);
+}
+
 void Elector::bump_epoch(epoch_t e) 
 {
   dout(10) << "bump_epoch " << epoch << " to " << e << endl;
@@ -94,15 +100,17 @@ void Elector::reset_timer(double plus)
   // set the timer
   cancel_timer();
   expire_event = new C_ElectionExpire(this);
-  g_timer.add_event_after(g_conf.mon_lease + plus,
-			  expire_event);
+  mon->timer.add_event_after(g_conf.mon_lease + plus,
+			     expire_event);
 }
 
 
 void Elector::cancel_timer()
 {
-  if (expire_event)
-    g_timer.cancel_event(expire_event);
+  if (expire_event) {
+    mon->timer.cancel_event(expire_event);
+    expire_event = 0;
+  }
 }
 
 void Elector::expire()

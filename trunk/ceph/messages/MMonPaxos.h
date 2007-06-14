@@ -39,10 +39,10 @@ class MMonPaxos : public Message {
     }
   }
 
-  // which state machine?
-  int op;   
-  int machine_id;
-  
+  epoch_t epoch;   // monitor epoch
+  int op;          // paxos op
+  int machine_id;  // which state machine?
+
   version_t last_committed;  // i've committed to
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
@@ -52,9 +52,11 @@ class MMonPaxos : public Message {
   map<version_t,bufferlist> values;
 
   MMonPaxos() : Message(MSG_MON_PAXOS) {}
-  MMonPaxos(int o, int mid) : Message(MSG_MON_PAXOS),
-			      op(o), machine_id(mid),
-			      last_committed(0), pn_from(0), pn(0), old_accepted_pn(0) { }
+  MMonPaxos(epoch_t e, int o, int mid) : 
+    Message(MSG_MON_PAXOS),
+    epoch(e),
+    op(o), machine_id(mid),
+    last_committed(0), pn_from(0), pn(0), old_accepted_pn(0) { }
   
   virtual char *get_type_name() { return "paxos"; }
   
@@ -66,6 +68,7 @@ class MMonPaxos : public Message {
   }
 
   void encode_payload() {
+    ::_encode(epoch, payload);
     ::_encode(op, payload);
     ::_encode(machine_id, payload);
     ::_encode(last_committed, payload);
@@ -77,6 +80,7 @@ class MMonPaxos : public Message {
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(epoch, payload, off);
     ::_decode(op, payload, off);
     ::_decode(machine_id, payload, off);
     ::_decode(last_committed, payload, off);

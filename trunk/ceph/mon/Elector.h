@@ -69,19 +69,23 @@ class Elector {
   void handle_propose(class MMonElection *m);
   void handle_ack(class MMonElection *m);
   void handle_victory(class MMonElection *m);
-
   
  public:  
-  Elector(Monitor *m, int w) : mon(m), whoami(w) {
-    // initialize all those values!
-    // ...
-  }
+  Elector(Monitor *m, int w) : mon(m), whoami(w),
+			       expire_event(0),
+			       epoch(0),
+			       electing_me(false),
+			       leader_acked(-1) { }
 
   void init();
+  void shutdown();
+
+  void dispatch(Message *m);
+
   void call_election() {
     start();
   }
-  void dispatch(Message *m);
+
 };
 
 

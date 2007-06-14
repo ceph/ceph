@@ -51,7 +51,7 @@ void Paxos::collect(version_t oldpn)
        ++p) {
     if (*p == whoami) continue;
     
-    MMonPaxos *collect = new MMonPaxos(MMonPaxos::OP_COLLECT, machine_id);
+    MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT, machine_id);
     collect->last_committed = last_committed;
     collect->pn = accepted_pn;
     mon->messenger->send_message(collect, mon->monmap->get_inst(*p));
@@ -74,7 +74,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   state = STATE_RECOVERING;
 
   // reply
-  MMonPaxos *last = new MMonPaxos(MMonPaxos::OP_LAST, machine_id);
+  MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST, machine_id);
   last->last_committed = last_committed;
   
   // do we have an accepted but uncommitted value?
@@ -135,7 +135,7 @@ void Paxos::handle_last(MMonPaxos *last)
   if (last->last_committed < last_committed) {
     // share committed values
     dout(10) << "sending commit to " << last->get_source() << endl;
-    MMonPaxos *commit = new MMonPaxos(MMonPaxos::OP_COMMIT, machine_id);
+    MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     for (version_t v = last->last_committed;
 	 v <= last_committed;
 	 v++) {
@@ -232,7 +232,7 @@ void Paxos::begin(bufferlist& v)
     if (*p == whoami) continue;
     
     dout(10) << " sending begin to mon" << *p << endl;
-    MMonPaxos *begin = new MMonPaxos(MMonPaxos::OP_BEGIN, machine_id);
+    MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id);
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
     begin->pn = accepted_pn;
@@ -264,7 +264,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
   mon->store->put_bl_sn(begin->values[v], machine_name, v);
   
   // reply
-  MMonPaxos *accept = new MMonPaxos(MMonPaxos::OP_ACCEPT, machine_id);
+  MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT, machine_id);
   accept->pn = accepted_pn;
   accept->last_committed = last_committed;
   mon->messenger->send_message(accept, begin->get_source_inst());
@@ -325,7 +325,7 @@ void Paxos::commit()
     if (*p == whoami) continue;
 
     dout(10) << " sending commit to mon" << *p << endl;
-    MMonPaxos *commit = new MMonPaxos(MMonPaxos::OP_COMMIT, machine_id);
+    MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
     
@@ -376,7 +376,7 @@ void Paxos::extend_lease()
        p != mon->get_quorum().end();
        ++p) {
     if (*p == whoami) continue;
-    MMonPaxos *lease = new MMonPaxos(MMonPaxos::OP_LEASE, machine_id);
+    MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
     lease->lease_timeout = lease_timeout;
     mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
@@ -444,7 +444,7 @@ void Paxos::leader_init()
 {
   state = STATE_RECOVERING;
   lease_timeout = utime_t();
-  dout(10) << "leader_init -- i am the leader, starting paxos recovery" << endl;
+  dout(10) << "leader_init -- starting paxos recovery" << endl;
   collect(0);
 }
 
@@ -468,20 +468,13 @@ void Paxos::dispatch(Message *m)
     delete m;
     return;    
   }
+
+  // check sanity
+  assert(mon->is_leader() || 
+	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
   
-  // from the proper leader?
-  if (mon->is_peon()) {
-    if (m->get_source().num() != mon->get_leader()) {
-      dout(5) << "dropping from non-leader " << m->get_source() << " " << *m << endl;
-      delete m;
-      return;
-    }
-  } 
-
-  assert(mon->is_peon() || mon->is_leader());
-
   switch (m->get_type()) {
-	
+    
   case MSG_MON_PAXOS:
     {
       MMonPaxos *pm = (MMonPaxos*)m;
@@ -492,27 +485,21 @@ void Paxos::dispatch(Message *m)
       case MMonPaxos::OP_COLLECT:
 	handle_collect(pm);
 	break;
-	
       case MMonPaxos::OP_LAST:
 	handle_last(pm);
 	break;
-	
       case MMonPaxos::OP_BEGIN:
 	handle_begin(pm);
 	break;
-	
       case MMonPaxos::OP_ACCEPT:
 	handle_accept(pm);
 	break;		
-	
       case MMonPaxos::OP_COMMIT:
 	handle_commit(pm);
 	break;
-	
       case MMonPaxos::OP_LEASE:
 	handle_lease(pm);
 	break;
-
       default:
 	assert(0);
       }

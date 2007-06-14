@@ -35,6 +35,17 @@ e 12v
 
 */
 
+
+/*
+ * NOTE: This libary is based on the Paxos algorithm, but varies in a few key ways:
+ *  1- Only a single new value is generated at a time, simplifying the recovery logic.
+ *  2- Nodes track "committed" values, and share them generously (and trustingly)
+ *  3- A 'leasing' mechism is built-in, allowing nodes to determine when it is safe to 
+ *     "read" their copy of the last committed value.
+ *
+ * This provides a simple replication substrate that services can be built on top of.
+ */
+
 #ifndef __MON_PAXOS_H
 #define __MON_PAXOS_H
 

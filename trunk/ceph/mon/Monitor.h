@@ -80,15 +80,13 @@ private:
   utime_t last_called_election;  // [starting] last time i called an election
   
 public:
-  // initiate election
-  void call_election();
-
-  // end election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q);
-  void lose_election(epoch_t epoch, int l);
-
+  epoch_t get_epoch() { return mon_epoch; }
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
+
+  void call_election();  // initiate election
+  void win_election(epoch_t epoch, set<int>& q);  // end election (called by Elector)
+  void lose_election(epoch_t epoch, int l);       // end election (called by Elector)
 
 
   // -- paxos --
