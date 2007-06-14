@@ -31,10 +31,6 @@ class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
 
-#define PAXOS_TEST       0
-#define PAXOS_OSDMAP     1
-#define PAXOS_MDSMAP     2
-#define PAXOS_CLIENTMAP  3
 
 class Monitor : public Dispatcher {
 protected:
@@ -90,7 +86,10 @@ public:
 
 
   // -- paxos --
-  Paxos test_paxos;
+  Paxos paxos_test;
+  Paxos paxos_mdsmap;
+  Paxos paxos_osdmap;
+  Paxos paxos_clientmap;
   friend class Paxos;
   
 
@@ -125,7 +124,10 @@ public:
     mon_epoch(0), 
     leader(0),
     
-    test_paxos(this, w, PAXOS_TEST, "tester"),  // tester state machine
+    paxos_test(this, w, PAXOS_TEST),
+    paxos_mdsmap(this, w, PAXOS_MDSMAP),
+    paxos_osdmap(this, w, PAXOS_OSDMAP),
+    paxos_clientmap(this, w, PAXOS_CLIENTMAP),
 
     osdmon(0), mdsmon(0), clientmon(0)
   {

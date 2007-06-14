@@ -50,6 +50,7 @@ e 12v
 #define __MON_PAXOS_H
 
 #include "include/types.h"
+#include "mon_types.h"
 #include "include/buffer.h"
 #include "msg/Message.h"
 
@@ -59,6 +60,7 @@ e 12v
 
 class Monitor;
 class MMonPaxos;
+
 
 // i am one state machine.
 class Paxos {
@@ -72,6 +74,7 @@ class Paxos {
   // LEADER+PEON
 
   // -- generic state --
+public:
   const static int STATE_RECOVERING = 1;  // leader|peon: recovering paxos state
   const static int STATE_ACTIVE     = 2;  // leader|peon: idle.  peon may or may not have valid lease
   const static int STATE_UPDATING   = 3;  // leader|peon: updating to new value
@@ -84,35 +87,73 @@ class Paxos {
     }
   }
 
+private:
   int state;
+
+public:
   bool is_recovering() { return state == STATE_RECOVERING; }
   bool is_active() { return state == STATE_ACTIVE; }
   bool is_updating() { return state == STATE_UPDATING; }
 
+private:
   // recovery (phase 1)
   version_t last_committed;
   version_t accepted_pn;
   version_t accepted_pn_from;
 
   // active (phase 2)
-  utime_t lease_timeout;
+  utime_t lease_expire;
+  list<Context*> waiting_for_active;
   list<Context*> waiting_for_readable;
 
 
   // -- leader --
-  // recovery (phase 1)
+  // recovery (paxos phase 1)
   unsigned   num_last;
   version_t  old_accepted_v;
   version_t  old_accepted_pn;
   bufferlist old_accepted_value;
 
-  // updating (phase 2)
+  // active
+  set<int>   acked_lease;
+  Context    *lease_renew_event;
+  Context    *lease_ack_timeout_event;
+
+  // updating (paxos phase 2)
   bufferlist new_value;
   unsigned   num_accepted;
-  utime_t    accept_timeout;
+
+  Context    *accept_timeout_event;
 
   list<Context*> waiting_for_writeable;
   list<Context*> waiting_for_commit;
+
+  class C_AcceptTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_AcceptTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->accept_timeout();
+    }
+  };
+
+  class C_LeaseAckTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->lease_ack_timeout();
+    }
+  };
+
+  class C_LeaseRenew : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseRenew(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->extend_lease();
+    }
+  };
 
 
   void collect(version_t oldpn);
@@ -121,18 +162,26 @@ class Paxos {
   void begin(bufferlist& value);
   void handle_begin(MMonPaxos*);
   void handle_accept(MMonPaxos*);
+  void accept_timeout();
   void commit();
   void handle_commit(MMonPaxos*);
   void extend_lease();
   void handle_lease(MMonPaxos*);
+  void handle_lease_ack(MMonPaxos*);
+  void lease_ack_timeout();
+  
+  void cancel_events();
 
   version_t get_new_proposal_number(version_t gt=0);
   
 public:
   Paxos(Monitor *m, int w,
-	int mid,const char *mnm) : mon(m), whoami(w), 
-				   machine_id(mid), machine_name(mnm) {
-  }
+	int mid) : mon(m), whoami(w), 
+		   machine_id(mid), 
+		   machine_name(get_paxos_name(mid)),
+		   lease_renew_event(0),
+		   lease_ack_timeout_event(0),
+		   accept_timeout_event(0) { }
 
   void dispatch(Message *m);
 
@@ -141,14 +190,31 @@ public:
 
 
   // -- service interface --
+  /*
+  void wait_for_active(Context *c) {
+    assert(!is_active());
+    waiting_for_active.push_back(c);
+  }
+  */
+  
   // read
+  version_t get_version() { return last_committed; }
   bool is_readable();
+  bool read(version_t v, bufferlist &bl);
   version_t read_current(bufferlist &bl);
-  void wait_for_readable(Context *onreadable);
+  void wait_for_readable(Context *onreadable) {
+    assert(!is_readable());
+    waiting_for_readable.push_back(onreadable);
+  }
 
   // write
   bool is_leader();
   bool is_writeable();
+  void wait_for_writeable(Context *c) {
+    assert(!is_writeable());
+    waiting_for_writeable.push_back(c);
+  }
+
   bool propose_new_value(bufferlist& bl, Context *oncommit=0);
   void wait_for_commit(Context *oncommit) {
     waiting_for_commit.push_back(oncommit);

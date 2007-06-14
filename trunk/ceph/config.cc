@@ -125,7 +125,10 @@ md_config_t g_conf = {
   // --- mon ---
   mon_tick_interval: 5,
   mon_osd_down_out_interval: 5,  // seconds
-  mon_lease: 2.000,  // seconds
+  mon_lease: 5,  // seconds
+  mon_lease_renew_interval: 3, 
+  mon_lease_ack_timeout: 10.0,
+  mon_accept_timeout: 10.0,
   mon_stop_with_last_mds: true,
 
   // --- client ---

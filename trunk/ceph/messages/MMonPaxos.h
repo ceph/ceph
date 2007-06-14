@@ -17,16 +17,18 @@
 #define __MMONPAXOS_H
 
 #include "msg/Message.h"
+#include "mon/mon_types.h"
 
 class MMonPaxos : public Message {
  public:
   // op types
-  const static int OP_COLLECT = 1;   // proposer: propose round
-  const static int OP_LAST = 2;		 // voter:    accept proposed round
-  const static int OP_BEGIN = 4;	 // proposer: value proposed for this round
-  const static int OP_ACCEPT = 5;	 // voter:    accept propsed value
-  const static int OP_COMMIT = 7;   // proposer: notify learners of agreed value
-  const static int OP_LEASE = 8;   // extend reader lease
+  const static int OP_COLLECT =   1; // proposer: propose round
+  const static int OP_LAST =      2; // voter:    accept proposed round
+  const static int OP_BEGIN =     3; // proposer: value proposed for this round
+  const static int OP_ACCEPT =    4; // voter:    accept propsed value
+  const static int OP_COMMIT =    5; // proposer: notify learners of agreed value
+  const static int OP_LEASE =     6; // leader: extend peon lease
+  const static int OP_LEASE_ACK = 7; // peon: lease ack
   const static char *get_opname(int op) {
     switch (op) {
     case OP_COLLECT: return "collect";
@@ -35,6 +37,7 @@ class MMonPaxos : public Message {
     case OP_ACCEPT: return "accept";
     case OP_COMMIT: return "commit";
     case OP_LEASE: return "lease";
+    case OP_LEASE_ACK: return "lease_ack";
     default: assert(0); return 0;
     }
   }
@@ -47,7 +50,7 @@ class MMonPaxos : public Message {
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
   version_t old_accepted_pn;     // previous pn, if we are a LAST with an uncommitted value
-  utime_t lease_timeout;
+  utime_t lease_expire;
 
   map<version_t,bufferlist> values;
 
@@ -61,7 +64,7 @@ class MMonPaxos : public Message {
   virtual char *get_type_name() { return "paxos"; }
   
   void print(ostream& out) {
-    out << "paxos(m" << machine_id
+    out << "paxos(" << get_paxos_name(machine_id)
 	<< " " << get_opname(op) << " lc " << last_committed
 	<< " pn " << pn << " opn " << old_accepted_pn
 	<< ")";
@@ -75,7 +78,7 @@ class MMonPaxos : public Message {
     ::_encode(pn_from, payload);
     ::_encode(pn, payload);
     ::_encode(old_accepted_pn, payload);
-    ::_encode(lease_timeout, payload);
+    ::_encode(lease_expire, payload);
     ::_encode(values, payload);
   }
   void decode_payload() {
@@ -87,7 +90,7 @@ class MMonPaxos : public Message {
     ::_decode(pn_from, payload, off);   
     ::_decode(pn, payload, off);   
     ::_decode(old_accepted_pn, payload, off);
-    ::_decode(lease_timeout, payload, off);
+    ::_decode(lease_expire, payload, off);
     ::_decode(values, payload, off);
   }
 };

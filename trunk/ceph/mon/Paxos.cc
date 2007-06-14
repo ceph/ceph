@@ -20,8 +20,8 @@
 
 #include "config.h"
 #undef dout
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << ") "
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << ") "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
 
 
 // ---------------------------------
@@ -64,11 +64,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
 {
   dout(10) << "handle_collect " << *collect << endl;
 
-  if (!mon->is_peon()) {
-    dout(10) << "hmm, not peon, dropping!" << endl;
-    delete collect;
-    return;
-  }
+  assert(mon->is_peon()); // mon epoch filter should catch strays
 
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
@@ -163,12 +159,13 @@ void Paxos::handle_last(MMonPaxos *last)
   // do they accept your pn?
   if (last->old_accepted_pn > accepted_pn) {
     // no, try again.
-    dout(10) << "uh oh, they have a higher pn than us.  pick a new one." << endl;
+    dout(10) << " they had a higher pn than us, picking a new one." << endl;
     collect(last->old_accepted_pn);
   } else {
     // yes, they accepted our pn.  great.
     num_last++;
-    dout(10) << "great, they accepted our pn, we now have " << num_last << endl;
+    dout(10) << " they accepted our pn, we now have " 
+	     << num_last << " peons" << endl;
 
     // did this person send back an accepted but uncommitted value?
     if (last->old_accepted_pn &&
@@ -193,6 +190,7 @@ void Paxos::handle_last(MMonPaxos *last)
 	// active!
 	dout(10) << "that's everyone.  active!" << endl;
 	state = STATE_ACTIVE;
+	finish_contexts(waiting_for_active);
 	extend_lease();
       }
     }
@@ -215,8 +213,9 @@ void Paxos::begin(bufferlist& v)
   state = STATE_UPDATING;
 
   // we must already have a majority for this to work.
-  assert(num_last > (unsigned)mon->monmap->num_mon/2);
-
+  assert(mon->get_quorum().size() == 1 ||
+	 num_last > (unsigned)mon->monmap->num_mon/2);
+  
   // and no value, yet.
   assert(new_value.length() == 0);
   
@@ -224,6 +223,15 @@ void Paxos::begin(bufferlist& v)
   num_accepted = 1;
   new_value = v;
   mon->store->put_bl_sn(new_value, machine_name, last_committed+1);
+
+  if (mon->get_quorum().size() == 1) {
+    // we're alone, take it easy
+    commit();
+    state = STATE_ACTIVE;
+    finish_contexts(waiting_for_commit);
+    finish_contexts(waiting_for_active);
+    return;
+  }
 
   // ask others to accept it to!
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -239,6 +247,10 @@ void Paxos::begin(bufferlist& v)
     
     mon->messenger->send_message(begin, mon->monmap->get_inst(*p));
   }
+
+  // set timeout event
+  accept_timeout_event = new C_AcceptTimeout(this);
+  mon->timer.add_event_after(g_conf.mon_accept_timeout, accept_timeout_event);
 }
 
 // peon
@@ -257,6 +269,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
   
   // set state.
   state = STATE_UPDATING;
+  lease_expire = utime_t();  // cancel lease
 
   // yes.
   version_t v = last_committed+1;
@@ -270,7 +283,6 @@ void Paxos::handle_begin(MMonPaxos *begin)
   mon->messenger->send_message(accept, begin->get_source_inst());
   
   delete begin;
-
 }
 
 // leader
@@ -284,11 +296,14 @@ void Paxos::handle_accept(MMonPaxos *accept)
     delete accept;
     return;
   }
-  if (accept->last_committed != last_committed) {
-    dout(10) << " this is from an old round that's already committed, ignoring" << endl;
+  if (last_committed > 0 &&
+      accept->last_committed < last_committed-1) {
+    dout(10) << " this is from an old round, ignoring" << endl;
     delete accept;
     return;
   }
+  assert(accept->last_committed == last_committed ||   // not committed
+	 accept->last_committed == last_committed-1);  // committed
 
   assert(state == STATE_UPDATING);
   num_accepted++;
@@ -297,17 +312,30 @@ void Paxos::handle_accept(MMonPaxos *accept)
   // new majority?
   if (num_accepted == (unsigned)mon->monmap->num_mon/2+1) {
     // yay, commit!
-    // note: this may happen a bit before the lease is reextended.
+    // note: this may happen before the lease is reextended (below)
     dout(10) << "we got a majority, committing too" << endl;
     commit();
-    finish_contexts(waiting_for_commit);
   }
 
   // done?
   if (num_accepted == mon->get_quorum().size()) {
     state = STATE_ACTIVE;
+    finish_contexts(waiting_for_commit);
+    finish_contexts(waiting_for_active);
     extend_lease();
+
+    // cancel timeout event
+    mon->timer.cancel_event(accept_timeout_event);
+    accept_timeout_event = 0;
   }
+}
+
+void Paxos::accept_timeout()
+{
+  dout(5) << "accept timeout, calling fresh election" << endl;
+  assert(mon->is_leader());
+  assert(is_updating());
+  mon->call_election();
 }
 
 void Paxos::commit()
@@ -334,7 +362,6 @@ void Paxos::commit()
 
   // get ready for a new round.
   new_value.clear();
-
 }
 
 
@@ -367,9 +394,12 @@ void Paxos::extend_lease()
   assert(mon->is_leader());
   assert(is_active());
 
-  lease_timeout = g_clock.now();
-  lease_timeout += g_conf.mon_lease;
-  dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_timeout << ")" << endl;
+  lease_expire = g_clock.now();
+  lease_expire += g_conf.mon_lease;
+  acked_lease.clear();
+  acked_lease.insert(whoami);
+
+  dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_expire << ")" << endl;
 
   // bcast
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -378,16 +408,31 @@ void Paxos::extend_lease()
     if (*p == whoami) continue;
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
-    lease->lease_timeout = lease_timeout;
+    lease->lease_expire = lease_expire;
     mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
   }
 
-  if (is_readable())
-    finish_contexts(waiting_for_readable);
-  if (is_writeable())
-    finish_contexts(waiting_for_readable);
+  // wake people up
+  finish_contexts(waiting_for_readable);
+  finish_contexts(waiting_for_writeable);
+
+  // set renew event
+  lease_renew_event = new C_LeaseRenew(this);
+  utime_t at = lease_expire;
+  at -= g_conf.mon_lease;
+  at += g_conf.mon_lease_renew_interval;
+  mon->timer.add_event_at(at, lease_renew_event);	
+  
+  // set timeout event.
+  //  if old timeout is still in place, leave it.
+  if (!lease_ack_timeout_event) {
+    lease_ack_timeout_event = new C_LeaseAckTimeout(this);
+    mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_ack_timeout_event);
+  }
 }
 
+
+// peon
 void Paxos::handle_lease(MMonPaxos *lease)
 {
   // sanity
@@ -399,19 +444,61 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
   
   // extend lease
-  if (lease_timeout < lease->lease_timeout) 
-    lease_timeout = lease->lease_timeout;
+  if (lease_expire < lease->lease_expire) 
+    lease_expire = lease->lease_expire;
 
   state = STATE_ACTIVE;
-
+  finish_contexts(waiting_for_active);
+  
   dout(10) << "handle_lease on " << lease->last_committed
-	   << " now " << lease_timeout << endl;
+	   << " now " << lease_expire << endl;
 
+  // ack
+  MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
+  ack->last_committed = last_committed;
+  ack->lease_expire = lease_expire;
+  mon->messenger->send_message(ack, lease->get_source_inst());
+  
   // kick waiters
   if (is_readable())
     finish_contexts(waiting_for_readable);
 
   delete lease;
+}
+
+void Paxos::handle_lease_ack(MMonPaxos *ack)
+{
+  int from = ack->get_source().num();
+
+  if (acked_lease.count(from) == 0) {
+    acked_lease.insert(from);
+    
+    if (acked_lease == mon->get_quorum()) {
+      // yay!
+      dout(10) << "handle_lease_ack from " << ack->get_source() 
+	       << " -- got everyone" << endl;
+      mon->timer.cancel_event(lease_ack_timeout_event);
+      lease_ack_timeout_event = 0;
+    } else {
+      dout(10) << "handle_lease_ack from " << ack->get_source() 
+	       << " -- still need "
+	       << mon->get_quorum().size() - acked_lease.size()
+	       << " more" << endl;
+    }
+  } else {
+    dout(10) << "handle_lease_ack from " << ack->get_source() 
+	     << " dup (lagging!), ignoring" << endl;
+  }
+  
+  delete ack;
+}
+
+void Paxos::lease_ack_timeout()
+{
+  dout(5) << "lease_ack_timeout -- calling new election" << endl;
+  assert(mon->is_leader());
+  assert(is_active());
+  mon->call_election();
 }
 
 
@@ -440,18 +527,40 @@ version_t Paxos::get_new_proposal_number(version_t gt)
 }
 
 
+void Paxos::cancel_events()
+{
+  if (accept_timeout_event) {
+    mon->timer.cancel_event(accept_timeout_event);
+    accept_timeout_event = 0;
+  }
+  if (lease_renew_event) {
+    mon->timer.cancel_event(lease_renew_event);
+    lease_renew_event = 0;
+  }
+  if (lease_ack_timeout_event) {
+    mon->timer.cancel_event(lease_ack_timeout_event);
+    lease_ack_timeout_event = 0;
+  }  
+}
+
 void Paxos::leader_init()
 {
+  if (mon->get_quorum().size() == 1) {
+    state = STATE_ACTIVE;			    
+    return;
+  } 
+  cancel_events();
   state = STATE_RECOVERING;
-  lease_timeout = utime_t();
+  lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << endl;
   collect(0);
 }
 
 void Paxos::peon_init()
 {
+  cancel_events();
   state = STATE_RECOVERING;
-  lease_timeout = utime_t();
+  lease_expire = utime_t();
   dout(10) << "peon_init -- i am a peon" << endl;
 
   // no chance to write now!
@@ -500,6 +609,9 @@ void Paxos::dispatch(Message *m)
       case MMonPaxos::OP_LEASE:
 	handle_lease(pm);
 	break;
+      case MMonPaxos::OP_LEASE_ACK:
+	handle_lease_ack(pm);
+	break;
       default:
 	assert(0);
       }
@@ -521,26 +633,32 @@ void Paxos::dispatch(Message *m)
 
 bool Paxos::is_readable()
 {
+  if (mon->get_quorum().size() == 1) return true;
   return 
     (mon->is_peon() || mon->is_leader()) &&
     is_active() &&
-    last_committed > 0 &&
-    g_clock.now() < lease_timeout;
+    g_clock.now() < lease_expire;
+}
+
+bool Paxos::read(version_t v, bufferlist &bl)
+{
+  if (!is_readable()) 
+    return false;
+
+  if (!mon->store->get_bl_sn(bl, machine_name, v))
+    return false;
+  return true;
 }
 
 version_t Paxos::read_current(bufferlist &bl)
 {
   if (!is_readable()) 
     return 0;
-  mon->store->get_bl_sn(bl, machine_name, last_committed);
-  return last_committed;
+  if (read(last_committed, bl))
+    return last_committed;
+  return 0;
 }
 
-void Paxos::wait_for_readable(Context *onreadable)
-{
-  assert(!is_readable());
-  waiting_for_readable.push_back(onreadable);
-}
 
 
 
@@ -548,15 +666,16 @@ void Paxos::wait_for_readable(Context *onreadable)
 
 bool Paxos::is_writeable()
 {
+  if (mon->get_quorum().size() == 1) return true;
   return
     mon->is_leader() &&
     is_active() &&
-    last_committed > 0 &&
-    g_clock.now() < lease_timeout;
+    g_clock.now() < lease_expire;
 }
 
 bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
 {
+  /*
   // writeable?
   if (!is_writeable()) {
     dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes"
@@ -567,7 +686,13 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
     }
     return false;
   }
+  */
   
+  assert(mon->is_leader() && is_active());
+
+  // cancel lease renewal and timeout events.
+  cancel_events();
+
   // ok!
   dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes" << endl;
   if (oncommit)
