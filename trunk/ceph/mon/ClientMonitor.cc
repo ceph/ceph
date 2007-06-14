@@ -31,59 +31,6 @@
 
 
 
-
-void ClientMonitor::dispatch(Message *m)
-{
-  switch (m->get_type()) {
-
-  case MSG_CLIENT_MOUNT:
-  case MSG_CLIENT_UNMOUNT:
-    handle_query(m);
-    break;
-       
-  default:
-    assert(0);
-  }  
-}
-
-
-void ClientMonitor::handle_query(Message *m)
-{
-  dout(10) << "handle_query " << *m << " from " << m->get_source_inst() << endl;
-  
-  // make sure our map is readable and up to date
-  if (!paxos->is_readable() ||
-      !update_from_paxos()) {
-    dout(10) << " waiting for paxos -> readable" << endl;
-    paxos->wait_for_readable(new C_RetryMessage(this, m));
-    return;
-  }
-
-  // preprocess
-  if (preprocess_update(m)) 
-    return;  // easy!
-
-  // leader?
-  if (!mon->is_leader()) {
-    // fw to leader
-    dout(10) << " fw to leader mon" << mon->get_leader() << endl;
-    mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
-    return;
-  }
-  
-  // writeable?
-  if (!paxos->is_writeable()) {
-    dout(10) << " waiting for paxos -> writeable" << endl;
-    paxos->wait_for_writeable(new C_RetryMessage(this, m));
-    return;
-  }
-
-  prepare_update(m);
-
-  // do it now (for now!) ***
-  propose_pending();
-}
-
 bool ClientMonitor::update_from_paxos()
 {
   assert(paxos->is_active());
@@ -307,9 +254,3 @@ void ClientMonitor::create_initial()
 }
 
 
-void ClientMonitor::election_finished()
-{
- 
-  if (mon->is_leader() && g_conf.mkfs)
-    create_initial();
-}

@@ -38,6 +38,8 @@ class MDSMonitor : public Dispatcher {
  private:
   bufferlist encoded_map;
 
+  list<Context*> waiting_for_active;
+
   //map<epoch_t, bufferlist> inc_maps;
   //MDSMap::Incremental pending_inc;
   

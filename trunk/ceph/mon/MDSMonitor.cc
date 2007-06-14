@@ -36,8 +36,29 @@
 
 /********* MDS map **************/
 
+  class C_RetryMessage : public Context {
+    Dispatcher *svc;
+    Message *m;
+  public:
+    C_RetryMessage(Dispatcher *s, Message *m_) : svc(s), m(m_) {}
+    void finish(int r) {
+      svc->dispatch(m);
+    }
+  };
+
 void MDSMonitor::dispatch(Message *m)
 {
+  if (mon->is_peon()) {
+    dout(1) << "peon, fw to leader" << endl;
+    mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
+    return;
+  }
+  if (mon->is_starting()) {
+    dout(1) << "starting, waiting" << endl;
+    waiting_for_active.push_back(new C_RetryMessage(this, m));
+    return;
+  }
+
   switch (m->get_type()) {
 
   case MSG_MDS_BEACON:
@@ -68,6 +89,8 @@ void MDSMonitor::election_finished()
       load_map();
     }
   }
+
+  finish_contexts(waiting_for_active);
 }
 
 

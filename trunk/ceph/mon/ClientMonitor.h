@@ -24,10 +24,12 @@ using namespace std;
 
 #include "mds/MDSMap.h"
 
+#include "PaxosService.h"
+
 class Monitor;
 class Paxos;
 
-class ClientMonitor : public Dispatcher {
+class ClientMonitor : public PaxosService {
 public:
 
   struct Incremental {
@@ -36,7 +38,7 @@ public:
     map<int32_t, entity_addr_t> mount;
     set<int32_t> unmount;
     
-    Incremental(int nc=0) : next_client(nc) {}
+    Incremental() : version(0), next_client() {}
 
     bool is_empty() { return mount.empty() && unmount.empty(); }
     void add_mount(uint32_t client, entity_addr_t addr) {
@@ -71,7 +73,7 @@ public:
     map<uint32_t,entity_addr_t> client_addr;
     hash_map<entity_addr_t,uint32_t> addr_client;
 
-    Map() : next_client(0) {}
+    Map() : version(0), next_client(0) {}
 
     void reverse() {
       addr_client.clear();
@@ -123,16 +125,6 @@ public:
     }
   };
 
-  class C_RetryMessage : public Context {
-    ClientMonitor *cmon;
-    Message *m;
-  public:
-    C_RetryMessage(ClientMonitor *cm, Message *m_) : cmon(cm), m(m_) {}
-    void finish(int r) {
-      cmon->dispatch(m);
-    }
-  };
-
   class C_Mounted : public Context {
     ClientMonitor *cmon;
     int client;
@@ -144,7 +136,7 @@ public:
       if (r >= 0)
 	cmon->_mounted(client, m);
       else
-	cmon->handle_query(m);
+	cmon->dispatch(m);
     }
   };
 
@@ -158,7 +150,7 @@ public:
       if (r >= 0)
 	cmon->_unmounted(m);
       else
-	cmon->handle_query(m);
+	cmon->dispatch(m);
     }
   };
 
@@ -173,17 +165,12 @@ public:
   };
 
 private:
-  Monitor *mon;
-  Paxos *paxos;
-
   Map client_map;
   list<Message*> waiting_for_active;
 
   // leader
   Incremental pending_inc;
   list<Context*> pending_commit;   // contributers to pending_inc
-
-  //void bcast_latest_mds();
 
   void create_initial();
   bool update_from_paxos();
@@ -200,12 +187,10 @@ private:
 
   
  public:
-  ClientMonitor(Monitor *mn, Paxos *p) : mon(mn), paxos(p) { }
+  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
-  void dispatch(Message *m);
-  void tick();  // check state, take actions
+  //void tick();  // check state, take actions
 
-  void election_finished();
 };
 
 #endif

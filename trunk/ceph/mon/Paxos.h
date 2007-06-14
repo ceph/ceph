@@ -71,6 +71,8 @@ class Paxos {
   int machine_id;
   const char *machine_name;
 
+  friend class PaxosService;
+
   // LEADER+PEON
 
   // -- generic state --
@@ -97,6 +99,7 @@ public:
 
 private:
   // recovery (phase 1)
+  version_t last_pn;
   version_t last_committed;
   version_t accepted_pn;
   version_t accepted_pn_from;
@@ -179,11 +182,14 @@ public:
 	int mid) : mon(m), whoami(w), 
 		   machine_id(mid), 
 		   machine_name(get_paxos_name(mid)),
+		   state(STATE_RECOVERING),
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
 		   accept_timeout_event(0) { }
 
   void dispatch(Message *m);
+
+  void init();
 
   void leader_init();
   void peon_init();

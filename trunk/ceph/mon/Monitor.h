@@ -33,7 +33,7 @@ class ClientMonitor;
 
 
 class Monitor : public Dispatcher {
-protected:
+public:
   // me
   int whoami;
   Messenger *messenger;
@@ -49,8 +49,8 @@ protected:
   friend class C_Mon_Tick;
 
   // -- local storage --
+public:
   MonitorStore *store;
-
 
   // -- monitor state --
 private:

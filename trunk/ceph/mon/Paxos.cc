@@ -24,6 +24,16 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
 
 
+void Paxos::init()
+{
+  // load paxos variables from stable storage
+  last_pn = mon->store->get_int(machine_name, "last_pn");
+  accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
+  last_committed = mon->store->get_int(machine_name, "last_committed");
+
+  dout(10) << "init" << endl;
+}
+
 // ---------------------------------
 
 // PHASE 1
@@ -90,6 +100,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
     accepted_pn = collect->pn;
     accepted_pn_from = collect->pn_from;
     dout(10) << "accepting pn " << accepted_pn << " from " << accepted_pn_from << endl;
+    mon->store->put_int(accepted_pn, machine_name, "accepted_pn");
   } else {
     // don't accept!
     dout(10) << "NOT accepting pn " << collect->pn << " from " << collect->pn_from 
@@ -152,7 +163,7 @@ void Paxos::handle_last(MMonPaxos *last)
 	       << last->values[v].length() << " bytes" << endl;
     }
     last_committed = last->last_committed;
-    mon->store->put_int(last_committed, machine_name, "last_commtted");
+    mon->store->put_int(last_committed, machine_name, "last_committed");
     dout(10) << "last_committed now " << last_committed << endl;
   }
       
@@ -507,23 +518,20 @@ void Paxos::lease_ack_timeout()
  */
 version_t Paxos::get_new_proposal_number(version_t gt)
 {
-  // read last
-  version_t last = mon->store->get_int("last_paxos_proposal");
-  if (last < gt) 
-    last = gt;
+  if (last_pn < gt) 
+    last_pn = gt;
   
-  // update
-  last /= 100;
-  last++;
-
-  // make it unique among all monitors.
-  version_t pn = last*100 + (version_t)whoami;
+  // update. make it unique among all monitors.
+  last_pn /= 100;
+  last_pn++;
+  last_pn *= 100;
+  last_pn += (version_t)whoami;
   
   // write
-  mon->store->put_int(pn, "last_paxos_proposal");
+  mon->store->put_int(last_pn, machine_name, "last_pn");
 
-  dout(10) << "get_new_proposal_number = " << pn << endl;
-  return pn;
+  dout(10) << "get_new_proposal_number = " << last_pn << endl;
+  return last_pn;
 }
 
 

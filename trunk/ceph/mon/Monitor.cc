@@ -66,6 +66,12 @@
    mdsmon = new MDSMonitor(this, messenger, lock);
    clientmon = new ClientMonitor(this, &paxos_clientmap);
 
+   // init paxos
+   paxos_test.init();
+   paxos_osdmap.init();
+   paxos_mdsmap.init();
+   paxos_clientmap.init();
+
    // i'm ready!
    messenger->set_dispatcher(this);
 
