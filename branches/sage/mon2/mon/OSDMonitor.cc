@@ -419,21 +419,25 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   int badboy = m->get_failed().name.num();
 
   // weird?
-  if (!osdmap.have_inst(badboy) ||
-      osdmap.get_inst(badboy) != m->get_failed()) {
-    dout(5) << "preprocess_failure weird: " << m->get_failed() << " from " << m->get_from() << endl;
+  if (!osdmap.have_inst(badboy)) {
+    dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << endl;
     send_incremental(m->get_epoch(), m->get_from());
     return true;
   }
-
+  if (osdmap.get_inst(badboy) != m->get_failed()) {
+    dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
+	    << ", from " << m->get_from() << endl;
+    send_incremental(m->get_epoch(), m->get_from());
+    return true;
+  }
   // already reported?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dup: " << m->get_failed() << " from " << m->get_from() << endl;
+    dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << endl;
     send_incremental(m->get_epoch(), m->get_from());
     return true;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_failed() << " from " << m->get_from() << endl;
+  dout(10) << "preprocess_failure new: " << m->get_failed() << ", from " << m->get_from() << endl;
   return false;
 }
 
