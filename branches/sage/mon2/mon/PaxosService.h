@@ -54,15 +54,6 @@ protected:
     }
   };
   friend class C_Update;
-  class C_CreateInitial : public Context {
-    PaxosService *svc;
-  public:
-    C_CreateInitial(PaxosService *s) : svc(s) {}
-    void finish(int r) {
-      svc->_try_create_initial();
-    }
-  };
-  friend class C_CreateInitial;
 
 private:
   bool have_pending;
@@ -76,7 +67,6 @@ public:
   void election_finished();
 
 private:
-  void _try_create_initial();
   void _active();
   void _commit();
 

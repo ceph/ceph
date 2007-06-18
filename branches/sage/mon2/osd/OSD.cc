@@ -275,7 +275,7 @@ int OSD::init()
     
     // announce to monitor i exist and have booted.
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDBoot(superblock), monmap->get_inst(mon));
+    messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), monmap->get_inst(mon));
     
     // start the heart
     timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
@@ -744,7 +744,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
             << ", dropping and reporting to mon" << mon 
 	    << " " << *m
             << dendl;
-    messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()),
+    messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()),
                             monmap->get_inst(mon));
     delete m;
   } else if (dest.is_mon()) {

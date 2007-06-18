@@ -151,8 +151,7 @@ bool MDSMonitor::preprocess_query(Message *m)
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
   dout(12) << "preprocess_beacon " << *m
-	   << " from " << m->get_source()
-	   << " " << m->get_source_inst()
+	   << " from " << m->get_mds_inst()
 	   << endl;
 
   // fw to leader?
@@ -163,7 +162,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   }
 
   // let's see.
-  int from = m->get_source().num();
+  int from = m->get_mds_inst().name.num();
   int state = m->get_state();
   version_t seq = m->get_seq();
 
@@ -172,7 +171,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // boot?
   if (state == MDSMap::STATE_BOOT) {
     // already booted?
-    int already = mdsmap.get_addr_rank(m->get_source_addr());
+    int already = mdsmap.get_addr_rank(m->get_mds_inst().addr);
     if (already < 0) 
       return false;  // need to update map
     
@@ -190,8 +189,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // reply to beacon?
   if (state != MDSMap::STATE_OUT) {
     last_beacon[from] = g_clock.now();  // note time
-    mon->messenger->send_message(new MMDSBeacon(state, seq), 
-				 m->get_source_inst());
+    mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), state, seq), 
+				 m->get_mds_inst());
   }
   
   // is there a state change here?
@@ -235,10 +234,9 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
 {
   // -- this is an update --
   dout(12) << "handle_beacon " << *m
-	   << " from " << m->get_source()
-	   << " " << m->get_source_inst()
+	   << " from " << m->get_mds_inst()
 	   << endl;
-  int from = m->get_source().num();
+  int from = m->get_mds_inst().name.num();
   int state = m->get_state();
   version_t seq = m->get_seq();
 
@@ -253,13 +251,13 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
       } else if (mdsmap.is_out(from)) {
 	dout(10) << "mds_beacon boot: mds" << from << " was out, starting" << endl;
 	state = MDSMap::STATE_STARTING;
-      } else if (mdsmap.get_inst(from) != m->get_source_inst()) {
+      } else if (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst()) {
 	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << endl;
 	from = -1;
       }
     }
     if (from < 0) {
-      from = pending_mdsmap.get_addr_rank(m->get_source_addr());
+      from = pending_mdsmap.get_addr_rank(m->get_mds_inst().addr);
       if (from >= 0) {
 	state = pending_mdsmap.mds_state[from];
 	dout(10) << "mds_beacon boot: already pending mds" << from
@@ -296,7 +294,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     assert(state != MDSMap::STATE_BOOT);
 
     // put it in the map.
-    pending_mdsmap.mds_inst[from].addr = m->get_source_addr();
+    pending_mdsmap.mds_inst[from].addr = m->get_mds_inst().addr;
     pending_mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
     pending_mdsmap.mds_inc[from]++;
     
@@ -445,6 +443,7 @@ void MDSMonitor::tick()
   // make sure mds's are still alive
   utime_t now = g_clock.now();
 
+  // ...if i am an active leader
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 

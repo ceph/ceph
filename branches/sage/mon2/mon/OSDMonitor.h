@@ -67,6 +67,7 @@ private:
 
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
+  void _reported_failure(MOSDFailure *m);
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);
@@ -81,6 +82,19 @@ private:
     void finish(int r) {
       if (r >= 0)
 	cmon->_booted(m);
+      else
+	cmon->dispatch((Message*)m);
+    }
+  };
+  class C_Reported : public Context {
+    OSDMonitor *cmon;
+    MOSDFailure *m;
+  public:
+    C_Reported(OSDMonitor *cm, MOSDFailure *m_) : 
+      cmon(cm), m(m_) {}
+    void finish(int r) {
+      if (r >= 0)
+	cmon->_reported_failure(m);
       else
 	cmon->dispatch((Message*)m);
     }

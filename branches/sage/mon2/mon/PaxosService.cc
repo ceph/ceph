@@ -105,9 +105,6 @@ void PaxosService::election_finished()
     have_pending = false;
   }
 
-  if (g_conf.mkfs) 
-    _try_create_initial();
-  
   // make sure we update our state
   if (paxos->is_active())
     _active();
@@ -118,28 +115,20 @@ void PaxosService::election_finished()
 void PaxosService::_active()
 {
   dout(10) << "_active" << endl;
+  assert(paxos->is_active());
+
+  // pull latest from paxos
   update_from_paxos();
 
-  if (mon->is_leader() &&
-      !have_pending) {
-    create_pending();
-    have_pending = true;
-  }
-}
-
-void PaxosService::_try_create_initial()
-{
-  if (mon->is_leader() && 
-      paxos->get_version() == 0) {
-    
-    if (!paxos->is_writeable()) {
-      dout(1) << "election_finished -- waiting for writeable to create initial state" << endl;
-      paxos->wait_for_writeable(new C_CreateInitial(this));
-    } else {
-      // do it
-      assert(have_pending == false);
+  // create pending state?
+  if (mon->is_leader()) {
+    if (!have_pending) {
       create_pending();
       have_pending = true;
+    }
+
+    if (g_conf.mkfs &&
+	paxos->get_version() == 0) {
       create_initial();
       propose_pending();
     }

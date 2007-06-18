@@ -22,23 +22,29 @@
 
 class MOSDBoot : public Message {
  public:
+  entity_inst_t inst;
   OSDSuperblock sb;
 
   MOSDBoot() {}
-  MOSDBoot(OSDSuperblock& s) : 
+  MOSDBoot(entity_inst_t i, OSDSuperblock& s) : 
     Message(MSG_OSD_BOOT),
+    inst(i),
     sb(s) {
   }
 
-  char *get_type_name() { return "oboot"; }
+  char *get_type_name() { return "osd_boot"; }
+  void print(ostream& out) {
+    out << "osd_boot(" << inst << ")";
+  }
   
   void encode_payload() {
-    payload.append((char*)&sb, sizeof(sb));
+    ::_encode(inst, payload);
+    ::_encode(sb, payload);
   }
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(sb), (char*)&sb);
-    off += sizeof(sb);
+    ::_decode(inst, payload, off);
+    ::_decode(sb, payload, off);
   }
 };
 

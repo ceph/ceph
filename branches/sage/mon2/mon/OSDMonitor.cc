@@ -418,38 +418,50 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
   int badboy = m->get_failed().name.num();
 
-  // already reported?
-  if (osdmap.is_down(badboy) &&
-      (!osdmap.have_inst(badboy) ||
-       osdmap.get_inst(badboy) == m->get_failed())) {
-    dout(5) << "preprocess_failure dup: " << m->get_failed() << " from " << m->get_source() << endl;
-    send_incremental(m->get_epoch(), m->get_source_inst());
+  // weird?
+  if (!osdmap.have_inst(badboy) ||
+      osdmap.get_inst(badboy) != m->get_failed()) {
+    dout(5) << "preprocess_failure weird: " << m->get_failed() << " from " << m->get_from() << endl;
+    send_incremental(m->get_epoch(), m->get_from());
     return true;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_failed() << " from " << m->get_source() << endl;
+  // already reported?
+  if (osdmap.is_down(badboy)) {
+    dout(5) << "preprocess_failure dup: " << m->get_failed() << " from " << m->get_from() << endl;
+    send_incremental(m->get_epoch(), m->get_from());
+    return true;
+  }
+
+  dout(10) << "preprocess_failure new: " << m->get_failed() << " from " << m->get_from() << endl;
   return false;
 }
 
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
-  dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_source() << endl;
+  dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_from() << endl;
   
   // FIXME
   // take their word for it
   int badboy = m->get_failed().name.num();
-  if (osdmap.is_up(badboy) &&
-      (osdmap.osd_inst.count(badboy) == 0 ||
-       osdmap.osd_inst[badboy] == m->get_failed())) {
-    
-    pending_inc.new_down[badboy] = m->get_failed();
-    
-    if (osdmap.is_in(badboy))
-      down_pending_out[badboy] = g_clock.now();
-  }
+  assert(osdmap.is_up(badboy));
+  assert(osdmap.osd_inst[badboy] == m->get_failed());
+  
+  pending_inc.new_down[badboy] = m->get_failed();
+  
+  if (osdmap.is_in(badboy))
+    down_pending_out[badboy] = g_clock.now();
 
+  paxos->wait_for_commit(new C_Reported(this, m));
+  
   delete m;
   return true;
+}
+
+void OSDMonitor::_reported_failure(MOSDFailure *m)
+{
+  dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_from() << endl;
+  send_latest(m->get_epoch(), m->get_from());
 }
 
 
@@ -457,27 +469,27 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 
 bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
-  assert(m->get_source().is_osd());
-  int from = m->get_source().num();
+  assert(m->inst.name.is_osd());
+  int from = m->inst.name.num();
   
   // already booted?
   if (osdmap.is_up(from) &&
-      osdmap.get_inst(from) == m->get_source_inst()) {
+      osdmap.get_inst(from) == m->inst) {
     // yup.
-    dout(7) << "preprocess_boot dup from " << m->get_source() << endl;
+    dout(7) << "preprocess_boot dup from " << m->inst << endl;
     _booted(m);
     return true;
   }
   
-  dout(10) << "preprocess_boot from " << m->get_source() << endl;
+  dout(10) << "preprocess_boot from " << m->inst << endl;
   return false;
 }
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
-  dout(7) << "prepare_boot from " << m->get_source() << endl;
-  assert(m->get_source().is_osd());
-  int from = m->get_source().num();
+  dout(7) << "prepare_boot from " << m->inst << endl;
+  assert(m->inst.name.is_osd());
+  int from = m->inst.name.num();
   
   // does this osd exist?
   if (!osdmap.exists(from)) {
@@ -488,7 +500,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
-    assert(osdmap.get_inst(from) != m->get_source_inst());  // preproces should have caught it
+    assert(osdmap.get_inst(from) != m->inst);  // preproces should have caught it
     
     // mark previous guy down
     pending_inc.new_down[from] = osdmap.osd_inst[from];
@@ -496,8 +508,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   
   // mark new guy up.
   down_pending_out.erase(from);  // if any
-  assert(osdmap.is_down(from));
-  pending_inc.new_up[from] = m->get_source_inst();
+  pending_inc.new_up[from] = m->inst;
   
   // mark in?
   if (osdmap.out_osds.count(from)) 
@@ -511,8 +522,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
 void OSDMonitor::_booted(MOSDBoot *m)
 {
-  dout(7) << "_booted " << m->get_source() << endl;
-  send_latest(m->sb.current_epoch, m->get_source_inst());
+  dout(7) << "_booted " << m->inst << endl;
+  send_latest(m->sb.current_epoch, m->inst);
   delete m;
 }
 

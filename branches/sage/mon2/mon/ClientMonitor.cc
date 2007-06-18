@@ -224,10 +224,11 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   mon->messenger->send_message(m, m->inst);
 
   // auto-shutdown?
+  // (hack for fakesyn/newsyn, mostly)
   if (mon->is_leader() &&
       client_map.version > 1 &&
       client_map.client_addr.empty() && 
-      g_conf.mds_shutdown_on_last_unmount) {
+      g_conf.mon_stop_on_last_unmount) {
     dout(1) << "last client unmounted" << endl;
     mon->do_stop();
   }

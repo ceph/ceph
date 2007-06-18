@@ -22,33 +22,37 @@
 #include "mds/MDSMap.h"
 
 class MMDSBeacon : public Message {
+  entity_inst_t inst;
   int state;
   version_t seq;
 
  public:
   MMDSBeacon() : Message(MSG_MDS_BEACON) {}
-  MMDSBeacon(int st, version_t se) : Message(MSG_MDS_BEACON), 
-				     state(st), seq(se) { }
+  MMDSBeacon(entity_inst_t i, int st, version_t se) : 
+    Message(MSG_MDS_BEACON), 
+    inst(i), state(st), seq(se) { }
 
+  entity_inst_t& get_mds_inst() { return inst; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
   char *get_type_name() { return "mdsbeacon"; }
 
   void print(ostream& out) {
-    out << "mdsbeacon(" << MDSMap::get_state_name(state) 
+    out << "mdsbeacon(" << inst
+	<< " " << MDSMap::get_state_name(state) 
 	<< " seq " << seq << ")";
   }
   
   void encode_payload() {
-    payload.append((char*)&state, sizeof(state));
-    payload.append((char*)&seq, sizeof(seq));
+    ::_encode(inst, payload);
+    ::_encode(state, payload);
+    ::_encode(seq, payload);
   }
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(state), (char*)&state);
-    off += sizeof(state);
-    payload.copy(off, sizeof(seq), (char*)&seq);
-    off += sizeof(seq);
+    ::_decode(inst, payload, off);
+    ::_decode(state, payload, off);
+    ::_decode(seq, payload, off);
   }
 };
 
