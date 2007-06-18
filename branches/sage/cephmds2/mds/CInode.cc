@@ -478,12 +478,8 @@ bool CInode::is_freezing()
 void CInode::add_waiter(int tag, Context *c) 
 {
   // wait on the directory?
-  if (tag & WAIT_AUTHPINNABLE) {
-    parent->dir->add_waiter(CDir::WAIT_AUTHPINNABLE, c);
-    return;
-  }
-  if (tag & WAIT_SINGLEAUTH) {
-    parent->dir->add_waiter(CDir::WAIT_SINGLEAUTH, c);
+  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+    parent->dir->add_waiter(tag, c);
     return;
   }
   MDSCacheObject::add_waiter(tag, c);

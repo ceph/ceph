@@ -22,23 +22,25 @@
 
 class MMDSSlaveRequest : public Message {
  public:
-  static const int OP_XLOCK = 1;
+  static const int OP_XLOCK =     1;
   static const int OP_XLOCKACK = -1;
-  static const int OP_UNXLOCK = 3;
-  static const int OP_PINDN = 4;
-  static const int OP_UNPINDN = 5;
-  static const int OP_FINISH = 6;
+  static const int OP_UNXLOCK =   2;
+  static const int OP_PINDN =     3;
+  static const int OP_PINDNACK = -3;
+  static const int OP_UNPINDN =   4;
+  static const int OP_FINISH =    5;
 
   const static char *get_opname(int o) {
-	switch (o) { 
-	case OP_XLOCK: return "xlock";
-	case OP_XLOCKACK: return "xlock_ack";
-	case OP_UNXLOCK: return "unxlock";
-	case OP_PINDN: return "pin_dn";
-	case OP_UNPINDN: return "unpin_dn";
-	case OP_FINISH: return "finish";
-	default: assert(0); return 0;
-	}
+    switch (o) { 
+    case OP_XLOCK: return "xlock";
+    case OP_XLOCKACK: return "xlock_ack";
+    case OP_UNXLOCK: return "unxlock";
+    case OP_PINDN: return "pin_dn";
+    case OP_PINDNACK: return "pin_dn_ack";
+    case OP_UNPINDN: return "unpin_dn";
+    case OP_FINISH: return "finish";
+    default: assert(0); return 0;
+    }
   }
 
  private:
@@ -50,6 +52,7 @@ class MMDSSlaveRequest : public Message {
   MDSCacheObjectInfo object_info;
   
   // for dn pins
+  inodeno_t dnpathbase;
   string dnpath;
 
  public:
@@ -60,38 +63,42 @@ class MMDSSlaveRequest : public Message {
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
+  inodeno_t get_dnpathbase() { return dnpathbase; }
   const string& get_dnpath() { return dnpath; }
 
   void set_lock_type(int t) { lock_type = t; }
+  void set_dnpath(string& p, inodeno_t i) { dnpath = p; dnpathbase = i; }
 
   // ----
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, int o) : 
-	Message(MSG_MDS_SLAVE_REQUEST),
-	reqid(ri), op(o)
-	{ }
-
+    Message(MSG_MDS_SLAVE_REQUEST),
+    reqid(ri), op(o)
+  { }
+  
   void encode_payload() {
-	::_encode(reqid, payload);
-	::_encode(op, payload);
+    ::_encode(reqid, payload);
+    ::_encode(op, payload);
     ::_encode(lock_type, payload);
-	object_info._encode(payload);
+    object_info._encode(payload);
     ::_encode(dnpath, payload);
+    ::_encode(dnpathbase, payload);
   }
   void decode_payload() {
-	int off = 0;
-	::_decode(reqid, payload, off);
-	::_decode(op, payload, off);
-	::_decode(lock_type, payload, off);
-	object_info._decode(payload, off);
+    int off = 0;
+    ::_decode(reqid, payload, off);
+    ::_decode(op, payload, off);
+    ::_decode(lock_type, payload, off);
+    object_info._decode(payload, off);
     ::_decode(dnpath, payload, off);
+    ::_decode(dnpathbase, payload, off);
   }
 
   char *get_type_name() { return "slave_request"; }
   void print(ostream& out) {
-	out << "slave_request(" << reqid
-		<< " " << get_opname(op) 
-		<< ")";
+    out << "slave_request(" << reqid
+	<< " " << get_opname(op) 
+	<< ")";
   }  
 	
 };

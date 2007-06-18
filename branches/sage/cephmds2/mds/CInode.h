@@ -90,17 +90,16 @@ class CInode : public MDSCacheObject {
 
   // -- waiters --
   static const int WAIT_SLAVEAGREE  = (1<<0);
-  static const int WAIT_AUTHPINNABLE = (1<<1);
-  static const int WAIT_DIR         = (1<<2);
-  static const int WAIT_ANCHORED    = (1<<3);
-  static const int WAIT_UNANCHORED  = (1<<4);
-  static const int WAIT_CAPS        = (1<<5);
+  static const int WAIT_DIR         = (1<<1);
+  static const int WAIT_ANCHORED    = (1<<2);
+  static const int WAIT_UNANCHORED  = (1<<3);
+  static const int WAIT_CAPS        = (1<<4);
   
-  static const int WAIT_AUTHLOCK_OFFSET = 6;
-  static const int WAIT_LINKLOCK_OFFSET = 6 + SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 6 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET = 6 + 3*SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRLOCK_OFFSET = 6 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_AUTHLOCK_OFFSET = 5;
+  static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET = 5 + 3*SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY           = 0xffffffff;
 

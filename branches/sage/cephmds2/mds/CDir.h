@@ -134,12 +134,10 @@ class CDir : public MDSCacheObject {
   static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
   static const int WAIT_FREEZEABLE   = (1<<2);  // hard_pins removed
-  static const int WAIT_UNFREEZE     = (1<<3);  // unfreeze
-  static const int WAIT_AUTHPINNABLE = WAIT_UNFREEZE;
-  static const int WAIT_IMPORTED     = (1<<4);  // import finish
-  //static const int WAIT_SINGLEAUTH   = (1<<5); 
+  static const int WAIT_UNFREEZE     = WAIT_AUTHPINNABLE;  // unfreeze
+  static const int WAIT_IMPORTED     = (1<<3);  // import finish
 
-  static const int WAIT_DNLOCK_OFFSET = 6;
+  static const int WAIT_DNLOCK_OFFSET = 4;
 
   static const int WAIT_ANY  = (0xffffffff);
   static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
@@ -417,6 +415,7 @@ public:
 
 
 
+  ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 };
 

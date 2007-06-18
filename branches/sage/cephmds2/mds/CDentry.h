@@ -59,6 +59,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- wait --
   static const int WAIT_LOCK_OFFSET = 8;
 
+  void add_waiter(int tag, Context *c);
 
   static const int EXPORT_NONCE = 1;
 
@@ -154,6 +155,7 @@ public:
 
   // misc
   void make_path(string& p);
+  void make_path(string& p, inodeno_t tobase);
   void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
 
   // -- version --
@@ -224,6 +226,7 @@ public:
   void decode_lock_state(int type, bufferlist& bl);
 
   
+  ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 
   friend class CDir;

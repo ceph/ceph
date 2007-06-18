@@ -3506,15 +3506,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
     (*it)->put(MDSCacheObject::PIN_REQUEST);
   mdr->pins.clear();
 
-  // drop remote dn pins
-  for (map<CDentry*, set<int> >::iterator p = mdr->remote_dn_pins.begin();
-       p != mdr->remote_dn_pins.end();
-       ++p) {
-    //.....
-    assert(0);
-  }
-
-  // slaves
+  // clean up slaves
+  //  (will implicitly drop remote dn pins)
   for (set<int>::iterator p = mdr->slaves.begin();
        p != mdr->slaves.end();
        ++p) {

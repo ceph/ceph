@@ -88,6 +88,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   return out << "]";
 }
 
+
 void CDir::print(ostream& out) 
 {
   out << *this;
@@ -98,6 +99,13 @@ void CDir::print(ostream& out)
 #undef dout
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") "
 //#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
+
+
+ostream& CDir::print_db_line_prefix(ostream& out) 
+{
+  return out << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") ";
+}
+
 
 
 // -------------------------------------------------------------------
@@ -448,7 +456,7 @@ void CDir::take_waiting(int mask, list<Context*>& ls)
 
 void CDir::finish_waiting(int mask, int result) 
 {
-  dout(11) << "finish_waiting mask " << mask << " result " << result << " on " << *this << endl;
+  dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << endl;
 
   list<Context*> finished;
   take_waiting(mask, finished);

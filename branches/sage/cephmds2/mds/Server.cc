@@ -377,7 +377,7 @@ void Server::handle_client_request(MClientRequest *req)
 
 
   // okay, i want
-  CInode           *ref = 0;
+  CInode *ref = 0;
 
   // retry?
   if (req->get_retry_attempt()) {
@@ -524,14 +524,49 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
+	lock->get_xlock(mdr);
 	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
       }
-      delete m;
-      return;
+      break;
+
+    case MMDSSlaveRequest::OP_PINDNACK:
+      {
+	if (!mdcache->have_request(m->get_reqid()))
+	  break; // must have finished, without needing this pin.
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+
+	MDSCacheObjectInfo &info = m->get_object_info();
+	CDir *dir = mdcache->get_dirfrag(info.dirfrag);
+	CDentry *dn = 0;
+	if (dir) 
+	  dn = dir->lookup(info.dname);
+	if (!dn) {
+	  dout(7) << "hmm don't have dn " << info.dirfrag << " " << info.dname << endl;
+	  break;
+	}
+
+	// ok!
+	int from = m->get_source().num();
+	dout(7) << "remote pinned on mds" << from << " dn " << *dn << endl;
+	mdr->remote_dn_pinning[dn].erase(from);
+	mdr->remote_dn_pins[dn].insert(from);
+
+	// re-dispatch request?
+	if (mdr->waiting_on_remote_dn_pin) {
+	  mdr->waiting_on_remote_dn_pin = false;
+	  dispatch_client_request(mdr);
+	}
+      }
+      break;
       
     default:
       assert(0);
     }
+
+    // done with reply.
+    delete m;
+    return;
+
   } else {
     // am i a new slave?
     MDRequest *mdr;
@@ -562,8 +597,14 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 					       mdr->slave_request->get_object_info());
 
       if (lock && lock->get_parent()->is_auth()) {
-	// xlock
-	if (!mds->locker->xlock_start(lock, mdr))
+	// xlock.
+	// use acquire_locks so that we get auth_pinning.
+	set<SimpleLock*> rdlocks;
+	set<SimpleLock*> wrlocks;
+	set<SimpleLock*> xlocks = mdr->xlocks;
+	xlocks.insert(lock);
+	
+	if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
 	  return;
 	
 	// ack
@@ -603,8 +644,29 @@ void Server::dispatch_slave_request(MDRequest *mdr)
   case MMDSSlaveRequest::OP_PINDN:
   case MMDSSlaveRequest::OP_UNPINDN:
     // get the CDentry*
-    
-
+    {
+      filepath path(mdr->slave_request->get_dnpath());
+      dout(10) << "dnpath " << path << endl;
+      vector<CDentry*> trace;
+      int r = mdcache->path_traverse(mdr, 0, path, trace, false, mdr->slave_request, 
+				     new C_MDS_RetryRequest(mdcache, mdr),
+				     MDS_TRAVERSE_DISCOVERXLOCK, false, true);
+      if (r < 0) return;
+      
+      // pin final cdentry in cache
+      CDentry *dn = trace[trace.size()-1];
+      dout(10) << "discovered and pinning " << *dn << endl;
+      mdr->pin(dn);
+      
+      // ack
+      MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_PINDNACK);
+      dn->set_object_info(reply->get_object_info());
+      mds->send_message_mds(reply, mdr->slave_request->get_source().num(), MDS_PORT_SERVER);
+      
+      // done.
+      delete mdr->slave_request;
+      mdr->slave_request = 0;
+    }
     break;
 
   case MMDSSlaveRequest::OP_FINISH:
@@ -2400,11 +2462,57 @@ public:
   }
 };
 
+
+bool Server::_rename_pin_dn_on_replicas(MDRequest *mdr, CDentry *dn, inodeno_t reltoino, set<int>& ls) 
+{
+  dout(10) << "_rename_pin_dn_on_replicas " << ls << " " << *dn << endl;
+  
+  bool ok = true;
+
+  for (set<int>::iterator p = ls.begin();
+       p != ls.end();
+       ++p) {
+    if (mdr->is_remote_pinned_dn(dn, *p)) {
+      dout(10) << "_rename_pin_dn_on_replicas already pinned on mds" << *p << " " << *dn << endl;
+      continue;
+    }
+    if (mdr->is_remote_pinning_dn(dn, *p)) {
+      ok = false;
+      dout(10) << "_rename_pin_dn_on_replicas already pinning on mds" << *p << " " << *dn << endl;
+      continue;
+    }
+
+    // remote pin.
+    dout(10) << "_rename_pin_dn_on_replicas pinning on mds" << *p << " " << *dn << endl;
+    ok = false;   
+    mdr->remote_dn_pinning[dn].insert(*p);
+
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_PINDN);
+    string dnpath;
+    dn->make_path(dnpath, reltoino);
+    r->set_dnpath(dnpath, reltoino);
+    mds->send_message_mds(r, *p, MDS_PORT_SERVER);
+  }
+
+  return ok;
+}
+
 void Server::_rename_local(MDRequest *mdr,
 			   CDentry *srcdn,
 			   CDentry *destdn)
 {
   dout(10) << "_rename_local " << *srcdn << " to " << *destdn << endl;
+
+  // propagate dest dir to any witnesses
+  inodeno_t baseino = mdr->client_request->get_cwd_ino();
+  set<int> need_to_pin;
+  srcdn->list_replicas(need_to_pin);
+  destdn->list_replicas(need_to_pin);
+  if (!_rename_pin_dn_on_replicas(mdr, srcdn, baseino, need_to_pin) ||
+      !_rename_pin_dn_on_replicas(mdr, destdn, baseino, need_to_pin)) {
+    mdr->waiting_on_remote_dn_pin = true;
+    return;  // note: no explicit waiter, so we can || these checks, yay.
+  }
 
   // let's go.
   EUpdate *le = new EUpdate("rename_local");

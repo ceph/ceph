@@ -138,6 +138,7 @@ public:
                               filepath& destpath,
                               vector<CDentry*>& trace,
                               int r);
+  bool _rename_pin_dn_on_replicas(MDRequest *mdr, CDentry *dn, inodeno_t baseino, set<int>& ls);
   void _rename_local(MDRequest *mdr, CDentry *srcdn, CDentry *destdn);
   void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
 				version_t atid1, version_t atid2);

@@ -315,7 +315,8 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
-  const static int WAIT_SINGLEAUTH = (1<<30);
+  const static int WAIT_SINGLEAUTH  = (1<<30);
+  const static int WAIT_AUTHPINNABLE = (1<<29);
 
 
   // ============================================
@@ -459,6 +460,12 @@ protected:
   map<int,int>::iterator replicas_begin() { return replicas.begin(); }
   map<int,int>::iterator replicas_end() { return replicas.end(); }
   const map<int,int>& get_replicas() { return replicas; }
+  void list_replicas(set<int>& ls) {
+    for (map<int,int>::const_iterator p = replicas.begin();
+	 p != replicas.end();
+	 ++p) 
+      ls.insert(p->first);
+  }
 
   int get_replica_nonce() { return replica_nonce;}
   void set_replica_nonce(int n) { replica_nonce = n; }
@@ -478,7 +485,7 @@ protected:
       get(PIN_WAITER);
     waiting.insert(pair<int,Context*>(mask, c));
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
-			       << "add_waiter " << mask << " " << c
+			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
 			       << endl;
     
@@ -490,13 +497,13 @@ protected:
       if (it->first & mask) {
 	ls.push_back(it->second);
 	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
-				   << "take_waiting mask " << mask << " took " << it->second
+				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 				   << " tag " << it->first
 				   << " on " << *this
 				   << endl;
 	waiting.erase(it++);
       } else {
-	pdout(10,g_conf.debug_mds) << "take_waiting mask " << mask << " SKIPPING " << it->second
+	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 				   << " tag " << it->first
 				   << " on " << *this 
 				   << endl;

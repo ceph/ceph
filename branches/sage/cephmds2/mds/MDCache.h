@@ -81,8 +81,7 @@ struct MDRequest {
   
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
-  map< CDentry*, set<int> > remote_dn_pins; // [master] dn -> mds set it's pinned on
-  
+
   // auth pins
   set< CDir* > dir_auth_pins;
   set< CInode* > inode_auth_pins;
@@ -97,17 +96,26 @@ struct MDRequest {
   map< inodeno_t, inode_t > projected_inode;
 
 
+  // remote dn pins
+  map< CDentry*, set<int> > remote_dn_pinning; // [master] dn -> mds set it's pinning on
+  map< CDentry*, set<int> > remote_dn_pins;    // [master] dn -> mds set it's pinned on
+  bool waiting_on_remote_dn_pin;
+  
+
 
   // ---------------------------------------------------
   MDRequest() : 
     client_request(0), ref(0), 
-    slave_request(0), slave_to_mds(-1) { }
+    slave_request(0), slave_to_mds(-1), 
+    waiting_on_remote_dn_pin(false) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
-    slave_request(0), slave_to_mds(-1) { }
+    slave_request(0), slave_to_mds(-1), 
+    waiting_on_remote_dn_pin(false) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
-    slave_request(0), slave_to_mds(by) { }
+    slave_request(0), slave_to_mds(by), 
+    waiting_on_remote_dn_pin(false) { }
   
   bool is_slave() { 
     return slave_to_mds >= 0; 
@@ -147,6 +155,15 @@ struct MDRequest {
 	 it++) 
       (*it)->auth_unpin();
     dir_auth_pins.clear();
+  }
+
+  bool is_remote_pinning_dn(CDentry *dn, int who) {
+    return remote_dn_pinning.count(dn) &&
+      remote_dn_pinning[dn].count(who);
+  }
+  bool is_remote_pinned_dn(CDentry *dn, int who) {
+    return remote_dn_pins.count(dn) &&
+      remote_dn_pins[dn].count(who);
   }
 };
 
@@ -428,8 +445,8 @@ public:
   void open_local_stray();
   void open_foreign_stray(int who, Context *c);
   int path_traverse(MDRequest *mdr,
-		    CInode *base,
-		    filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
+		    CInode *base, filepath& path, 
+		    vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,
                     int onfail, 
                     bool is_client_req = false,

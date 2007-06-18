@@ -84,6 +84,7 @@ class MClientRequest : public Message {
 
     int op;
     int caller_uid, caller_gid;
+    inodeno_t cwd_ino;
   } st;
 
   // path arguments
@@ -228,6 +229,8 @@ class MClientRequest : public Message {
   string& get_sarg() { return sarg; }
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return st.mds_wants_replica_in_dirino; }
+
+  inodeno_t get_cwd_ino() { return st.cwd_ino ? st.cwd_ino:inodeno_t(MDS_INO_ROOT); }
 
   void decode_payload() {
     int off = 0;

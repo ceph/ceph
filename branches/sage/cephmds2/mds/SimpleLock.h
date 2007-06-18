@@ -248,10 +248,10 @@ public:
     return false;
   }
   bool can_xlock(MDRequest *mdr) {
+    if (mdr && xlock_by == mdr) return true; // auth or replica!  xlocked by me.
     if (!parent->is_auth()) return false;
     if (state != LOCK_LOCK) return false;
-    if (xlock_by == 0 || 
-	(mdr && xlock_by == mdr)) return true;
+    if (xlock_by == 0) return true;
     return false;
   }
   bool can_xlock_soon() {

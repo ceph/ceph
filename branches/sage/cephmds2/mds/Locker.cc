@@ -211,10 +211,18 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if (existing != mdr->locks.end() && *existing == *p) {
       // right kind?
       SimpleLock *had = *existing;
-      if (xlocks.count(*p) == mdr->xlocks.count(*p) &&
-	  wrlocks.count(*p) == mdr->wrlocks.count(*p) &&
-	  rdlocks.count(*p) == mdr->rdlocks.count(*p)) {
-	dout(10) << "acquire_locks already locked " << *had << " " << *had->get_parent() << endl;
+      if (xlocks.count(*p) && mdr->xlocks.count(*p)) {
+	dout(10) << "acquire_locks already xlocked " << *had << " " << *had->get_parent() << endl;
+	existing++;
+	continue;
+      }
+      if (wrlocks.count(*p) && mdr->wrlocks.count(*p)) {
+	dout(10) << "acquire_locks already wrlocked " << *had << " " << *had->get_parent() << endl;
+	existing++;
+	continue;
+      }
+      if (rdlocks.count(*p) && mdr->rdlocks.count(*p)) {
+	dout(10) << "acquire_locks already rdlocked " << *had << " " << *had->get_parent() << endl;
 	existing++;
 	continue;
       }
@@ -873,6 +881,8 @@ public:
 
 void Locker::simple_eval(SimpleLock *lock)
 {
+  dout(10) << "simple_eval " << *lock << " on " << *lock->get_parent() << endl;
+
   // unstable and ambiguous auth?
   if (!lock->is_stable() &&
       lock->get_parent()->is_ambiguous_auth()) {
@@ -1102,13 +1112,14 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
 
 void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
+  dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
+
   // drop ref
   assert(lock->can_xlock(mdr));
   lock->put_xlock();
   assert(mdr);
   mdr->xlocks.erase(lock);
   mdr->locks.erase(lock);
-  dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
 
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
@@ -1306,6 +1317,8 @@ public:
 
 void Locker::scatter_eval(ScatterLock *lock)
 {
+  dout(10) << "scatter_eval " << *lock << " on " << *lock->get_parent() << endl;
+
   // unstable and ambiguous auth?
   if (!lock->is_stable() &&
       lock->get_parent()->is_ambiguous_auth()) {
@@ -1775,13 +1788,13 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mdr)
 
 void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
 {
+  dout(7) << "rdlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
+
   // drop ref
   assert(lock->can_rdlock(mdr));
   lock->put_rdlock();
   mdr->rdlocks.erase(lock);
   mdr->locks.erase(lock);
-
-  dout(7) << "rdlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
 
   if (!lock->is_rdlocked()) 
     file_eval(lock);
@@ -1833,12 +1846,13 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mdr)
 
 void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
 {
+  dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
+
   // drop ref
   assert(lock->can_xlock(mdr));
   lock->put_xlock();
   mdr->locks.erase(lock);
   mdr->xlocks.erase(lock);
-  dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
 
   assert(lock->get_parent()->is_auth());  // or implement remote xlocks
 

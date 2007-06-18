@@ -29,6 +29,11 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") "
 
+ostream& CDentry::print_db_line_prefix(ostream& out) 
+{
+  return out << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+}
+
 
 // CDentry
 
@@ -98,6 +103,17 @@ pair<int,int> CDentry::authority()
 }
 
 
+void CDentry::add_waiter(int tag, Context *c)
+{
+  // wait on the directory?
+  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+    dir->add_waiter(tag, c);
+    return;
+  }
+  MDSCacheObject::add_waiter(tag, c);
+}
+
+
 version_t CDentry::pre_dirty(version_t min)
 {
   projected_version = dir->pre_dirty(min);
@@ -150,6 +166,21 @@ void CDentry::make_path(string& s)
     s = "???";
   }
   s += "/";
+  s += name;
+}
+
+void CDentry::make_path(string& s, inodeno_t tobase)
+{
+  assert(dir);
+  
+  if (dir->inode->is_root()) {
+    s += "/";  // make it an absolute path (no matter what) if we hit the root.
+  } 
+  else if (dir->inode->get_parent_dn() &&
+	   dir->inode->ino() != tobase) {
+    dir->inode->get_parent_dn()->make_path(s, tobase);
+    s += "/";
+  }
   s += name;
 }
 
