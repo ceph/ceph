@@ -116,6 +116,7 @@ struct md_config_t {
   float mon_lease;
   float mon_lease_renew_interval;
   float mon_lease_ack_timeout;
+  float mon_lease_timeout;
   float mon_accept_timeout;
   bool mon_stop_with_last_mds;
 

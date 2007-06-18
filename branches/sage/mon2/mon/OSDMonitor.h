@@ -25,85 +25,82 @@ using namespace std;
 
 #include "osd/OSDMap.h"
 
+#include "PaxosService.h"
+
 class Monitor;
+class MOSDBoot;
 
-class OSDMonitor : public Dispatcher {
-  Monitor *mon;
-  Messenger *messenger;
-  Mutex &lock;
-
-  // osd maps
+class OSDMonitor : public PaxosService {
 public:
   OSDMap osdmap;
 
 private:
   map<entity_name_t, pair<entity_inst_t, epoch_t> > awaiting_map;
-  
-  void create_initial();
-  bool get_map_bl(epoch_t epoch, bufferlist &bl);
-  bool get_inc_map_bl(epoch_t epoch, bufferlist &bl);
-
-  void save_map();
-  void save_inc_map(OSDMap::Incremental &inc);
 
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
-  set<int>            pending_ack; 
+  // svc
+  void create_initial();
+  bool update_from_paxos();
+  void create_pending();  // prepare a new pending
+  void encode_pending(bufferlist &bl);
 
-  // we are distributed
-  const static int STATE_INIT = 0;     // startup
-  const static int STATE_SYNC = 1;     // sync map copy (readonly)
-  const static int STATE_LOCK = 2;     // [peon] map locked
-  const static int STATE_UPDATING = 3; // [leader] map locked, waiting for peon ack
+  void handle_query(Message *m);
+  bool preprocess_query(Message *m);  // true if processed.
+  bool prepare_update(Message *m);
+  bool should_propose_now();
 
-  int state;
-  utime_t lease_expire;     // when lease expires
+  // ...
+  bool get_map_bl(epoch_t epoch, bufferlist &bl);
+  bool get_inc_map_bl(epoch_t epoch, bufferlist &bl);
   
-  //void init();
-
-  // maps
-  void accept_pending();   // accept pending, new map.
-  void send_waiting();     // send current map to waiters.
+  void send_to_waiting();     // send current map to waiters.
   void send_full(entity_inst_t dest);
   void send_incremental(epoch_t since, entity_inst_t dest);
   void bcast_latest_mds();
   void bcast_latest_osd();
-  
-  void update_map();
-
-  void handle_osd_boot(class MOSDBoot *m);
-  void handle_osd_in(class MOSDIn *m);
-  void handle_osd_out(class MOSDOut *m);
-  void handle_osd_failure(class MOSDFailure *m);
+  void bcast_full_osd();
+ 
   void handle_osd_getmap(class MOSDGetMap *m);
 
-  void handle_info(class MMonOSDMapInfo*);
-  void handle_lease(class MMonOSDMapLease*);
-  void handle_lease_ack(class MMonOSDMapLeaseAck*);
-  void handle_update_prepare(class MMonOSDMapUpdatePrepare*);
-  void handle_update_ack(class MMonOSDMapUpdateAck*);
-  void handle_update_commit(class MMonOSDMapUpdateCommit*);
+  bool preprocess_failure(class MOSDFailure *m);
+  bool prepare_failure(class MOSDFailure *m);
+
+  bool preprocess_boot(class MOSDBoot *m);
+  bool prepare_boot(class MOSDBoot *m);
+  void _booted(MOSDBoot *m);
+
+  class C_Booted : public Context {
+    OSDMonitor *cmon;
+    MOSDBoot *m;
+  public:
+    C_Booted(OSDMonitor *cm, MOSDBoot *m_) : 
+      cmon(cm), m(m_) {}
+    void finish(int r) {
+      if (r >= 0)
+	cmon->_booted(m);
+      else
+	cmon->dispatch((Message*)m);
+    }
+  };
+
+  bool preprocess_in(class MOSDIn *m);
+  bool prepare_in(class MOSDIn *m);
+
+  bool preprocess_out(class MOSDOut *m);
+  bool prepare_out(class MOSDOut *m);
 
  public:
-  OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : 
-    mon(mn), messenger(m), lock(l),
-    state(STATE_SYNC) {
-    //init();
-  }
+  OSDMonitor(Monitor *mn, Paxos *p) : 
+    PaxosService(mn, p) { }
 
-  void dispatch(Message *m);
   void tick();  // check state, take actions
-
-  void election_starting();  // abort whatever.
-  void election_finished();  // reinitialize whatever.
-
-  void issue_leases();
 
   void mark_all_down();
 
-  void send_latest(entity_inst_t i);
+  void send_latest(epoch_t since, entity_inst_t i);
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

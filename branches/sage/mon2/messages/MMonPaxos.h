@@ -49,7 +49,7 @@ class MMonPaxos : public Message {
   version_t last_committed;  // i've committed to
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
-  version_t old_accepted_pn;     // previous pn, if we are a LAST with an uncommitted value
+  version_t uncommitted_pn;     // previous pn, if we are a LAST with an uncommitted value
   utime_t lease_expire;
 
   map<version_t,bufferlist> values;
@@ -59,14 +59,14 @@ class MMonPaxos : public Message {
     Message(MSG_MON_PAXOS),
     epoch(e),
     op(o), machine_id(mid),
-    last_committed(0), pn_from(0), pn(0), old_accepted_pn(0) { }
+    last_committed(0), pn_from(0), pn(0), uncommitted_pn(0) { }
   
   virtual char *get_type_name() { return "paxos"; }
   
   void print(ostream& out) {
     out << "paxos(" << get_paxos_name(machine_id)
 	<< " " << get_opname(op) << " lc " << last_committed
-	<< " pn " << pn << " opn " << old_accepted_pn
+	<< " pn " << pn << " opn " << uncommitted_pn
 	<< ")";
   }
 
@@ -77,7 +77,7 @@ class MMonPaxos : public Message {
     ::_encode(last_committed, payload);
     ::_encode(pn_from, payload);
     ::_encode(pn, payload);
-    ::_encode(old_accepted_pn, payload);
+    ::_encode(uncommitted_pn, payload);
     ::_encode(lease_expire, payload);
     ::_encode(values, payload);
   }
@@ -89,7 +89,7 @@ class MMonPaxos : public Message {
     ::_decode(last_committed, payload, off);
     ::_decode(pn_from, payload, off);   
     ::_decode(pn, payload, off);   
-    ::_decode(old_accepted_pn, payload, off);
+    ::_decode(uncommitted_pn, payload, off);
     ::_decode(lease_expire, payload, off);
     ::_decode(values, payload, off);
   }

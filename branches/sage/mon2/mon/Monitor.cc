@@ -62,8 +62,8 @@
    store->mount();
 
    // create 
-   osdmon = new OSDMonitor(this, messenger, lock);
-   mdsmon = new MDSMonitor(this, messenger, lock);
+   osdmon = new OSDMonitor(this, &paxos_osdmap);
+   mdsmon = new MDSMonitor(this, &paxos_mdsmap);
    clientmon = new ClientMonitor(this, &paxos_clientmap);
 
    // init paxos
@@ -98,34 +98,35 @@
 
    elector.shutdown();
 
+   if (is_leader()) {
+     // stop osds.
+     for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
+	  it != osdmon->osdmap.get_osds().end();
+	  it++) {
+       if (osdmon->osdmap.is_down(*it)) continue;
+       dout(10) << "sending shutdown to osd" << *it << endl;
+       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+			       osdmon->osdmap.get_inst(*it));
+     }
+     osdmon->mark_all_down();
+     
+     // monitors too.
+     for (int i=0; i<monmap->num_mon; i++)
+       if (i != whoami)
+	 messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+				 monmap->get_inst(i));
+   }
+
    // cancel all events
    cancel_tick();
    timer.cancel_all();
    timer.join();
-
-   // stop osds.
-   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
-	it != osdmon->osdmap.get_osds().end();
-	it++) {
-     if (osdmon->osdmap.is_down(*it)) continue;
-     dout(10) << "sending shutdown to osd" << *it << endl;
-     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-			     osdmon->osdmap.get_inst(*it));
-   }
-   osdmon->mark_all_down();
-
-   // monitors too.
-   for (int i=0; i<monmap->num_mon; i++)
-     if (i != whoami)
-       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-			       monmap->get_inst(i));
 
    // unmount my local storage
    if (store) 
      delete store;
 
    // clean up
-   if (monmap) delete monmap;
    if (osdmon) delete osdmon;
    if (mdsmon) delete mdsmon;
    if (clientmon) delete clientmon;
@@ -143,10 +144,14 @@
    dout(10) << "call_election" << endl;
    state = STATE_STARTING;
 
-   elector.call_election();
+   // tell paxos
+   paxos_test.election_starting();
+   paxos_mdsmap.election_starting();
+   paxos_osdmap.election_starting();
+   paxos_clientmap.election_starting();
 
-   osdmon->election_starting();
-   //mdsmon->election_starting();
+   // call a new election
+   elector.call_election();
  }
 
  void Monitor::win_election(epoch_t epoch, set<int>& active) 
@@ -181,6 +186,11 @@
    paxos_mdsmap.peon_init();
    paxos_osdmap.peon_init();
    paxos_clientmap.peon_init();
+
+   // init
+   osdmon->election_finished();
+   mdsmon->election_finished();
+   clientmon->election_finished();
  }
 
 
@@ -198,7 +208,8 @@
        do_stop();
      }
      else if (m->cmd[0] == "mds") {
-       mdsmon->handle_command(m, r, rs);
+       mdsmon->dispatch(m);
+       return;
      }
      else if (m->cmd[0] == "osd") {
 
@@ -234,8 +245,7 @@
 	osdmon->dispatch(m);
        else
 	handle_shutdown(m);
-    
-      break;
+       break;
 
     case MSG_MON_COMMAND:
       handle_command((MMonCommand*)m);
@@ -256,13 +266,6 @@
     case MSG_MDS_BEACON:
     case MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
-
-      // hackish: did all mds's shut down?
-      if (g_conf.mon_stop_with_last_mds &&
-	  mdsmon->mdsmap.get_num_up_or_failed_mds() == 0 &&
-	  is_leader()) 
-	shutdown();
-
       break;
 
       // clients

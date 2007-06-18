@@ -25,36 +25,75 @@ class PaxosService : public Dispatcher {
 protected:
   Monitor *mon;
   Paxos *paxos;
-
   
   class C_RetryMessage : public Context {
-    Dispatcher *svc;
+    PaxosService *svc;
     Message *m;
   public:
-    C_RetryMessage(Dispatcher *s, Message *m_) : svc(s), m(m_) {}
+    C_RetryMessage(PaxosService *s, Message *m_) : svc(s), m(m_) {}
     void finish(int r) {
       svc->dispatch(m);
     }
   };
+  class C_Active : public Context {
+    PaxosService *svc;
+  public:
+    C_Active(PaxosService *s) : svc(s) {}
+    void finish(int r) {
+      if (r >= 0) 
+	svc->_active();
+    }
+  };
+  class C_Commit : public Context {
+    PaxosService *svc;
+  public:
+    C_Commit(PaxosService *s) : svc(s) {}
+    void finish(int r) {
+      if (r >= 0)
+	svc->_commit();
+    }
+  };
+  friend class C_Update;
+  class C_CreateInitial : public Context {
+    PaxosService *svc;
+  public:
+    C_CreateInitial(PaxosService *s) : svc(s) {}
+    void finish(int r) {
+      svc->_try_create_initial();
+    }
+  };
+  friend class C_CreateInitial;
+
+private:
+  bool have_pending;
 
 public:
-  PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p) { }
+  PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
+					have_pending(false) { }
   
-  // i implement
+  // i implement and you ignore
   void dispatch(Message *m);
   void election_finished();
 
+private:
+  void _try_create_initial();
+  void _active();
+  void _commit();
+
+public:
+  // i implement and you use
+  void propose_pending();     // propose current pending as new paxos state
+
   // you implement
-  virtual void create_initial() = 0;
-  virtual bool update_from_paxos() = 0;
-  virtual void prepare_pending() = 0;
-  virtual void propose_pending() = 0;
+  virtual bool update_from_paxos() = 0;    // assimilate latest paxos state
+  virtual void create_pending() = 0;       // [leader] create new pending structures
+  virtual void create_initial() = 0;       // [leader] populate pending with initial state (1)
+  virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state
+  virtual void discard_pending() { }       // [leader] discard pending
 
-  virtual bool preprocess_update(Message *m) = 0;  // true if processed.
-  virtual void prepare_update(Message *m)= 0;
-
-  virtual void tick() {};  // check state, take actions
-
+  virtual bool preprocess_query(Message *m) = 0;  // true if processed (e.g., read-only)
+  virtual bool prepare_update(Message *m) = 0;
+  virtual bool should_propose_now() { return true; }
 
 };
 

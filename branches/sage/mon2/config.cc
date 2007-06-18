@@ -101,7 +101,7 @@ md_config_t g_conf = {
 
   // --- clock ---
   clock_lock: false,
-  clock_tare: true,
+  clock_tare: false,
   
   // --- messenger ---
   ms_single_dispatch: false,
@@ -125,11 +125,12 @@ md_config_t g_conf = {
   // --- mon ---
   mon_tick_interval: 5,
   mon_osd_down_out_interval: 5,  // seconds
-  mon_lease: 5,  // seconds
-  mon_lease_renew_interval: 3, 
-  mon_lease_ack_timeout: 10.0,
-  mon_accept_timeout: 10.0,
-  mon_stop_with_last_mds: true,
+  mon_lease: 5,  // seconds    // lease interval
+  mon_lease_renew_interval: 3, // on leader, to renew the lease
+  mon_lease_ack_timeout: 10.0, // on leader, if lease isn't acked by all peons
+  mon_lease_timeout: 10.0,     // on peon, if lease isn't extended
+  mon_accept_timeout: 10.0,    // on leader, if paxos update isn't accepted
+  mon_stop_with_last_mds: false,
 
   // --- client ---
   client_cache_size: 300,

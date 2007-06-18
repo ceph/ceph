@@ -1260,7 +1260,8 @@ int Client::mount()
 
   int mon = monmap->pick_mon();
   dout(2) << "sending client_mount to mon" << mon << endl;
-  messenger->send_message(new MClientMount, monmap->get_inst(mon));
+  messenger->send_message(new MClientMount(messenger->get_myaddr()), 
+			  monmap->get_inst(mon));
   
   while (!mdsmap ||
 	 !osdmap || 
@@ -1357,7 +1358,8 @@ int Client::unmount()
   // send unmount!
   int mon = monmap->pick_mon();
   dout(2) << "sending client_unmount to mon" << mon << endl;
-  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
+  messenger->send_message(new MClientUnmount(messenger->get_myinst()), 
+			  monmap->get_inst(mon));
   
   while (mounted)
     mount_cond.Wait(client_lock);
