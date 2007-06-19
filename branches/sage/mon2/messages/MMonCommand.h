@@ -26,7 +26,7 @@ class MMonCommand : public Message {
   vector<string> cmd;
 
   MMonCommand() : Message(MSG_MON_COMMAND) {}
-  MMonCommand(entity_inst_t &i) : 
+  MMonCommand(entity_inst_t i) : 
     Message(MSG_MON_COMMAND),
     inst(i) { }
   
