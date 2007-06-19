@@ -350,11 +350,15 @@ public:
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
+
+  // trimming
   bool trim(int max = -1);   // trim cache
+  void trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
   void trim_inode(CDentry *dn, CInode *in, CDir *con,
 		  map<int,class MCacheExpire*>& expiremap);
+  void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
   // shutdown

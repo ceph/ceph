@@ -152,7 +152,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 
     dout(10) << " must authpin " << *object << endl;
 
-    if (mdr->is_auth_pinned(object)) continue;
+    if (mdr->is_auth_pinned(object)) 
+      continue;
     
     if (!object->is_auth()) {
       if (object->is_ambiguous_auth()) {
@@ -178,16 +179,12 @@ bool Locker::acquire_locks(MDRequest *mdr,
   for (set<SimpleLock*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
-    if ((*p)->get_type() == LOCK_OTYPE_DN) {
-      CDir *dir = ((CDentry*)(*p)->get_parent())->dir;
-      if (!dir->is_auth()) continue;
-      dout(10) << " auth_pinning " << *dir << endl;
-      mdr->auth_pin(dir);
-    } else {
-      CInode *in = (CInode*)(*p)->get_parent();
-      if (!in->is_auth()) continue;
-      dout(10) << " auth_pinning " << *in << endl;
-      mdr->auth_pin(in);
+    MDSCacheObject *object = (*p)->get_parent();
+    if (mdr->is_auth_pinned(object)) {
+      dout(10) << " auth_pinned " << *object << endl;
+    } else if (object->is_auth()) {
+      dout(10) << " auth_pinning " << *object << endl;
+      mdr->auth_pin(object);
     }
   }
 
@@ -202,7 +199,6 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	 q != p->second.end();
 	 ++q) {
       dout(10) << " req remote auth_pin of " << **q << endl;
-      mdr->pin(*q);  // pin locally!
       MDSCacheObjectInfo info;
       (*q)->set_object_info(info);
       req->get_authpins().push_back(info);      
@@ -847,6 +843,18 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SYNC);
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+
+    // special case: trim replica no-longer-null dentry?
+    if (lock->get_type() == LOCK_OTYPE_DN) {
+      CDentry *dn = (CDentry*)lock->get_parent();
+      if (dn->is_null() && m->get_data().length() > 0) {
+	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
+		 << *dn << endl;
+	map<int, MCacheExpire*> expiremap;
+	mdcache->trim_dentry(dn, expiremap);
+	mdcache->send_expire_messages(expiremap);
+      }
+    }
     break;
     
   case LOCK_AC_LOCK:
@@ -1123,7 +1131,6 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     mds->send_message_mds(r, auth, MDS_PORT_SERVER);
     
     // wait
-    //  note: this also waits on parent object's SINGLEAUTH bit, in case of a migration race
     lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }

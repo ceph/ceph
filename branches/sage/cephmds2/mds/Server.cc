@@ -522,6 +522,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 						 m->get_object_info());
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << endl;
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
 	lock->get_xlock(mdr);
@@ -1018,8 +1019,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   // auth_pin?
   if (want_auth) {
-    if (!ref->can_auth_pin()) {
-      dout(7) << "waiting for authpinnable on " << *ref << endl;
+    if (ref->is_frozen()) {
+      dout(7) << "waiting for !frozen/authpinnable on " << *ref << endl;
       ref->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
@@ -1062,9 +1063,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   dout(10) << "rdlock_path_xlock_dentry dir " << *dir << endl;
 
   // make sure we can auth_pin (or have already authpinned) dir
-  if (!dir->can_auth_pin() &&
-      !mdr->is_auth_pinned(dir)) {
-    dout(7) << "waiting for authpinnable on " << *dir << endl;
+  if (dir->is_frozen()) {
+    dout(7) << "waiting for !frozen/authpinnable on " << *dir << endl;
     dir->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }

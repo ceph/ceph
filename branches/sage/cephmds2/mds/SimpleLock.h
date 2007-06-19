@@ -66,9 +66,9 @@ class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
   static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_XLOCK       = (1<<2);  // to xlock
-  static const int WAIT_STABLE      = (1<<3);  // for a stable state
-  static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock (*)
+  static const int WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const int WAIT_STABLE      = (1<<2);  // for a stable state
+  static const int WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
   static const int WAIT_BITS        = 4;
 
 protected:
@@ -114,11 +114,7 @@ public:
     parent->finish_waiting(mask << wait_offset, r);
   }
   void add_waiter(int mask, Context *c) {
-    // (*) REMOTEXLOCK events alsowait on parent's WAIT_SINGLEAUTH.
-    if (mask & WAIT_REMOTEXLOCK)
-      parent->add_waiter((mask << wait_offset) | MDSCacheObject::WAIT_SINGLEAUTH, c);
-    else
-      parent->add_waiter(mask << wait_offset, c);
+    parent->add_waiter(mask << wait_offset, c);
   }
   bool is_waiter_for(int mask) {
     return parent->is_waiter_for(mask << wait_offset);

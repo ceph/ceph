@@ -259,10 +259,52 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
-  
+  // null, ino, or remote_ino?
+  int c;
+  if (is_primary()) {
+    c = 1;
+    ::_encode(c, bl);
+    ::_encode(inode->inode.ino, bl);
+  }
+  else if (is_remote()) {
+    c = 2;
+    ::_encode(c, bl);
+    ::_encode(remote_ino, bl);
+  }
+  else if (is_null()) {
+    // encode nothing.
+  }
+  else assert(0);  
 }
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
-{
+{  
+  if (bl.length() == 0) {
+    // null
+    assert(is_null());
+    return;
+  }
 
+  int off = 0;
+  char c;
+  inodeno_t ino;
+  ::_decode(c, bl, off);
+
+  switch (c) {
+  case 1:
+  case 2:
+    _decode(ino, bl, off);
+    // newly linked?
+    if (is_null() && !is_auth()) {
+      // force trim from cache!
+      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim!" << endl;
+      assert(get_num_ref() == 0);
+    } else {
+      // verify?
+      
+    }
+    break;
+  default: 
+    assert(0);
+  }
 }

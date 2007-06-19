@@ -2159,65 +2159,7 @@ bool MDCache::trim(int max)
   while (lru.lru_get_size() > (unsigned)max) {
     CDentry *dn = (CDentry*)lru.lru_expire();
     if (!dn) break;
-    
-    CDir *dir = dn->get_dir();
-    assert(dir);
-
-    CDir *con = get_subtree_root(dir);
-    assert(con);
-
-    dout(12) << "trim removing " << *dn << endl;
-    dout(12) << " in container " << *con << endl;
-    
-    // notify dentry authority?
-    if (!dn->is_auth()) {
-      pair<int,int> auth = dn->authority();
-
-      for (int p=0; p<2; p++) {
-	int a = auth.first;
-	if (p) a = auth.second;
-	if (a < 0 || (p == 1 && auth.second == auth.first)) break;
-	if (mds->get_nodeid() == auth.second &&
-	    con->is_importing()) break;                // don't send any expire while importing.
-	if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
-
-	dout(12) << "  sending expire to mds" << a << " on " << *dn << endl;
-	assert(a != mds->get_nodeid());
-	if (expiremap.count(a) == 0) 
-	  expiremap[a] = new MCacheExpire(mds->get_nodeid());
-	expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->get_replica_nonce());
-      }
-    }
-    
-    // unlink the dentry
-    if (dn->is_remote()) {
-      // just unlink.
-      dir->unlink_inode(dn);
-    } 
-    else if (dn->is_primary()) {
-      // expire the inode, too.
-      CInode *in = dn->get_inode();
-      assert(in);
-      trim_inode(dn, in, con, expiremap);
-    } 
-    else {
-      assert(dn->is_null());
-    }
-
-    // adjust the dir state
-    // NOTE: we can safely remove a clean, null dentry without effecting
-    //       directory completeness.
-    if (!(dn->is_null() && dn->is_clean())) 
-      dir->state_clear(CDir::STATE_COMPLETE); 
-
-    // remove dentry
-    dir->remove_dentry(dn);
-
-    // reexport?
-    if (dir->get_size() == 0 && dir->is_subtree_root())
-      migrator->export_empty_import(dir);
-    
-    if (mds->logger) mds->logger->inc("cex");
+    trim_dentry(dn, expiremap);
   }
 
   // trim root inode+dir?
@@ -2246,6 +2188,14 @@ bool MDCache::trim(int max)
     } 
   }
 
+  // send!
+  send_expire_messages(expiremap);
+
+  return true;
+}
+
+void MDCache::send_expire_messages(map<int, MCacheExpire*>& expiremap)
+{
   // send expires
   for (map<int, MCacheExpire*>::iterator it = expiremap.begin();
        it != expiremap.end();
@@ -2253,9 +2203,72 @@ bool MDCache::trim(int max)
     dout(7) << "sending cache_expire to " << it->first << endl;
     mds->send_message_mds(it->second, it->first, MDS_PORT_CACHE);
   }
-
-  return true;
 }
+
+
+void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
+{
+  dout(12) << "trim_dentry " << *dn << endl;
+
+  CDir *dir = dn->get_dir();
+  assert(dir);
+  
+  CDir *con = get_subtree_root(dir);
+  assert(con);
+  
+  dout(12) << " in container " << *con << endl;
+
+  // notify dentry authority?
+  if (!dn->is_auth()) {
+    pair<int,int> auth = dn->authority();
+    
+    for (int p=0; p<2; p++) {
+      int a = auth.first;
+      if (p) a = auth.second;
+      if (a < 0 || (p == 1 && auth.second == auth.first)) break;
+      if (mds->get_nodeid() == auth.second &&
+	  con->is_importing()) break;                // don't send any expire while importing.
+      if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
+      
+      dout(12) << "  sending expire to mds" << a << " on " << *dn << endl;
+      assert(a != mds->get_nodeid());
+      if (expiremap.count(a) == 0) 
+	expiremap[a] = new MCacheExpire(mds->get_nodeid());
+      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->get_replica_nonce());
+    }
+  }
+  
+  // unlink the dentry
+  if (dn->is_remote()) {
+    // just unlink.
+    dir->unlink_inode(dn);
+  } 
+  else if (dn->is_primary()) {
+    // expire the inode, too.
+    CInode *in = dn->get_inode();
+    assert(in);
+    trim_inode(dn, in, con, expiremap);
+  } 
+  else {
+    assert(dn->is_null());
+  }
+  
+  // adjust the dir state
+    // NOTE: we can safely remove a clean, null dentry without effecting
+    //       directory completeness.
+    if (!(dn->is_null() && dn->is_clean())) 
+      dir->state_clear(CDir::STATE_COMPLETE); 
+
+    // remove dentry
+    dir->remove_dentry(dn);
+
+    // reexport?
+    if (dir->get_size() == 0 && dir->is_subtree_root())
+      migrator->export_empty_import(dir);
+    
+    if (mds->logger) mds->logger->inc("cex");
+}
+
 
 void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expiremap)
 {
