@@ -101,11 +101,9 @@ class MDiscoverReply : public Message {
                 dirs.size() + no_base_dir ));                  // dn/inode + dirs
   }
 
-  bool      has_base_dir() { return !no_base_dir && dirs.size(); }
-  bool      has_base_dentry() { return !no_base_dentry && dentries.size(); }
-  bool has_root() {
-    return (base_ino == MDS_INO_ROOT && no_base_dir && no_base_dentry);
-  }
+  bool has_base_dir() { return !no_base_dir && dirs.size(); }
+  bool has_base_dentry() { return !no_base_dentry && dentries.size(); }
+  bool has_base_inode() { return no_base_dir && no_base_dentry; }
 
   const string& get_path() { return path; }
 

@@ -233,8 +233,6 @@ protected:
   void mark_clean();
 
 
-
-
   CInodeDiscover* replicate_to(int rep);
 
 
@@ -382,17 +380,6 @@ public:
 
 
   // -- reference counting --
-  
-  /* these can be pinned any # of times, and are
-     linked to an active_request, so they're automatically cleaned
-     up when a request is finished.  pin at will! */
-  void request_pin_get() {
-    get(PIN_REQUEST);
-  }
-  void request_pin_put() {
-    put(PIN_REQUEST);
-  }
-
   void bad_put(int by) {
     dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
     assert(ref_set.count(by) == 1);
@@ -407,10 +394,6 @@ public:
 
 
   // -- hierarchy stuff --
-private:
-  //void get_parent();
-  //void put_parent();
-
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);

@@ -47,9 +47,8 @@ sage doc
 
 sage mds
 
-- dn unlock should take a CInodeDiscover payload with it?
-- general issue of lock messages vs trimming...
-
+- slave request cleanup on failure
+  - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
 
 - dirlock-protected mtime updates vs migration, journaling, recovery
 - rename fun

@@ -95,6 +95,7 @@ MDCache::MDCache(MDS *m)
   migrator = new Migrator(mds, this);
   //  renamer = new Renamer(mds, this);
   root = NULL;
+  stray = NULL;
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
@@ -289,11 +290,11 @@ void MDCache::open_foreign_stray(int who, Context *c)
 
   // discover
   filepath want;
-  MDiscover *req = new MDiscover(who,
+  MDiscover *req = new MDiscover(mds->get_nodeid(),
 				 ino,
 				 want,
-				 false);
-  mds->send_message_mds(req, 0, MDS_PORT_CACHE);
+				 false);  // there _is_ no base dir for the stray inode
+  mds->send_message_mds(req, who, MDS_PORT_CACHE);
 
   // wait
   waiting_for_stray[ino].push_back(c);
@@ -3511,7 +3512,6 @@ void MDCache::request_drop_locks(MDRequest *mdr)
   assert(mdr->trace.empty());
 }
 
-
 void MDCache::request_cleanup(MDRequest *mdr)
 {
   dout(15) << "request_cleanup " << *mdr << endl;
@@ -3524,8 +3524,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // drop locks
   request_drop_locks(mdr);
 
-  // drop auth pins
-  mdr->drop_auth_pins();
+  // drop (local) auth pins
+  mdr->drop_local_auth_pins();
 
   // drop cache pins
   for (set<MDSCacheObject*>::iterator it = mdr->pins.begin();
@@ -3999,8 +3999,17 @@ void MDCache::handle_discover(MDiscover *dis)
     dout(10) << "added root " << *root << endl;
 
     cur = root;
+  }
+  else if (dis->get_base_ino() == MDS_INO_STRAY(whoami)) {
+    // wants root
+    dout(7) << "handle_discover from mds" << dis->get_asker() << " wants stray + " << dis->get_want().get_path() << endl;
     
-  } else {
+    reply->add_inode( stray->replicate_to( dis->get_asker() ) );
+    dout(10) << "added stray " << *stray << endl;
+
+    cur = stray;
+  }
+  else {
     // there's a base inode
     cur = get_inode(dis->get_base_ino());
     
@@ -4051,7 +4060,7 @@ void MDCache::handle_discover(MDiscover *dis)
     } else {
       // requester explicity specified the frag
       fg = dis->get_base_dir_frag();
-      assert(dis->wants_base_dir() || dis->get_base_ino() == MDS_INO_ROOT);
+      assert(dis->wants_base_dir() || dis->get_base_ino() < MDS_INO_BASE);
     }
     CDir *curdir = cur->get_dirfrag(fg);
 
@@ -4186,16 +4195,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     
   if (cur) {
     dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
-  } else {
-    if (!m->has_root()) {
-      dout(7) << "discover_reply don't have base ino " << m->get_base_ino() << ", dropping" << endl;
-      delete m;
-      return;
-    }
-
+  } 
+  else if (m->get_base_ino() == MDS_INO_ROOT) {
     // it's the root inode.
     assert(!root);
-    assert(m->get_base_ino() == MDS_INO_ROOT);
     assert(!m->has_base_dentry());
     assert(!m->has_base_dir());
     
@@ -4213,13 +4216,26 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // take root waiters
     finished.swap(waiting_for_root);
   }
+  else if (MDS_INO_IS_STRAY(m->get_base_ino())) {
+    dout(7) << "discover_reply stray + " << m->get_path() << " " << m->get_num_inodes() << " inodes" << endl;
+    
+    // add in root
+    cur = new CInode(this, false);
+    m->get_inode(0).update_inode(cur);  // that thar 0 is an array index (the 0th inode in the reply).
+    add_inode( cur );
+    dout(7) << "discover_reply got stray " << *cur << endl;
+    
+    // take waiters
+    finished.swap(waiting_for_stray[cur->ino()]);
+    waiting_for_stray.erase(cur->ino());
+  }
 
   // fyi
   if (m->is_flag_error_dir()) dout(7) << " flag error, dir" << endl;
   if (m->is_flag_error_dn()) dout(7) << " flag error, dentry = " << m->get_error_dentry() << endl;
   dout(10) << "depth = " << m->get_depth()
 	   << ", has base_dir/base_dn/root = " 
-	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_root()
+	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_base_inode()
 	   << ", num dirs/dentries/inodes = " 
 	   << m->get_num_dirs() << " / " << m->get_num_dentries() << " / " << m->get_num_inodes()
 	   << endl;
@@ -4228,7 +4244,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   // indexese follow each ([[dir] dentry] inode) 
   // can start, end with any type.
   
-  for (int i=m->has_root(); i<m->get_depth(); i++) {
+  for (int i=m->has_base_inode(); i<m->get_depth(); i++) {
     dout(10) << "discover_reply i=" << i << " cur " << *cur << endl;
 
     frag_t fg;

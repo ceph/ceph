@@ -20,6 +20,10 @@
 
 class ESlaveUpdate : public LogEvent {
 public:
+  const static int OP_PREPARE = 1;
+  const static int OP_COMMIT = 2;
+  const static int OP_ABORT = 3;
+  
   string type;
   metareqid_t reqid;
   int op;  // prepare, commit, abort

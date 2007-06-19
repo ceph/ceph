@@ -160,7 +160,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	// wait
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
 	mdcache->request_drop_locks(mdr);
-	mdr->drop_auth_pins();
+	mdr->drop_local_auth_pins();
 	return false;
       }
       mustpin_remote[object->authority().first].insert(object);
@@ -170,7 +170,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
       // wait
       object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
       mdcache->request_drop_locks(mdr);
-      mdr->drop_auth_pins();
+      mdr->drop_local_auth_pins();
       return false;
     }
   }
@@ -181,7 +181,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
        ++p) {
     MDSCacheObject *object = (*p)->get_parent();
     if (mdr->is_auth_pinned(object)) {
-      dout(10) << " auth_pinned " << *object << endl;
+      dout(10) << " already auth_pinned " << *object << endl;
     } else if (object->is_auth()) {
       dout(10) << " auth_pinning " << *object << endl;
       mdr->auth_pin(object);
@@ -212,7 +212,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
   for (set<SimpleLock*>::iterator p = rdlocks.begin();
 	 p != rdlocks.end();
        ++p) {
-    dout(20) << " will rdlock " << **p << " " << *(*p)->get_parent() << endl;
+    dout(20) << " must rdlock " << **p << " " << *(*p)->get_parent() << endl;
     sorted.insert(*p);
   }
 
@@ -226,64 +226,61 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // already locked?
     if (existing != mdr->locks.end() && *existing == *p) {
       // right kind?
-      SimpleLock *had = *existing;
+      SimpleLock *have = *existing;
+      existing++;
       if (xlocks.count(*p) && mdr->xlocks.count(*p)) {
-	dout(10) << "acquire_locks already xlocked " << *had << " " << *had->get_parent() << endl;
-	existing++;
-	continue;
+	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << endl;
       }
-      if (wrlocks.count(*p) && mdr->wrlocks.count(*p)) {
-	dout(10) << "acquire_locks already wrlocked " << *had << " " << *had->get_parent() << endl;
-	existing++;
-	continue;
+      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p)) {
+	dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << endl;
       }
-      if (rdlocks.count(*p) && mdr->rdlocks.count(*p)) {
-	dout(10) << "acquire_locks already rdlocked " << *had << " " << *had->get_parent() << endl;
-	existing++;
-	continue;
+      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p)) {
+	dout(10) << " already rdlocked " << *have << " " << *have->get_parent() << endl;
       }
+      else assert(0);
+      continue;
     }
     
     // hose any stray locks
     while (existing != mdr->locks.end()) {
-      SimpleLock *had = *existing;
+      SimpleLock *stray = *existing;
       existing++;
-      dout(10) << "acquire_locks unlocking out-of-order " << **existing
-	       << " " << *(*existing)->get_parent() << endl;
-      if (mdr->xlocks.count(had)) 
-	xlock_finish(had, mdr);
-      else if (mdr->wrlocks.count(had))
-	wrlock_finish(had, mdr);
+      dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << endl;
+      if (mdr->xlocks.count(stray)) 
+	xlock_finish(stray, mdr);
+      else if (mdr->wrlocks.count(stray))
+	wrlock_finish(stray, mdr);
       else
-	rdlock_finish(had, mdr);
+	rdlock_finish(stray, mdr);
     }
       
     // lock
     if (xlocks.count(*p)) {
       if (!xlock_start(*p, mdr)) 
 	return false;
-      dout(10) << "acquire_locks got xlock on " << **p << " " << *(*p)->get_parent() << endl;
+      dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << endl;
     } else if (wrlocks.count(*p)) {
       if (!wrlock_start(*p, mdr)) 
 	return false;
-      dout(10) << "acquire_locks got wrlock on " << **p << " " << *(*p)->get_parent() << endl;
+      dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << endl;
     } else {
       if (!rdlock_start(*p, mdr)) 
 	return false;
-      dout(10) << "acquire_locks got rdlock on " << **p << " " << *(*p)->get_parent() << endl;
+      dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << endl;
     }
   }
     
   // any extra unneeded locks?
   while (existing != mdr->locks.end()) {
-    dout(10) << "acquire_locks unlocking " << *existing
-	     << " " << *(*existing)->get_parent() << endl;
-    if (mdr->xlocks.count(*existing))
-      xlock_finish(*existing, mdr);
-    else if (mdr->wrlocks.count(*existing))
-      wrlock_finish(*existing, mdr);
+    SimpleLock *stray = *existing;
+    existing++;
+    dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << endl;
+    if (mdr->xlocks.count(stray))
+      xlock_finish(stray, mdr);
+    else if (mdr->wrlocks.count(stray))
+      wrlock_finish(stray, mdr);
     else
-      rdlock_finish(*existing, mdr);
+      rdlock_finish(stray, mdr);
   }
 
   return true;
@@ -791,20 +788,24 @@ void Locker::handle_lock(MLock *m)
   assert(mds->is_rejoin() || mds->is_active() || mds->is_stopping());
 
   SimpleLock *lock = get_lock(m->get_lock_type(), m->get_object_info());
-  assert(lock);
+  if (!lock) {
+    dout(10) << "don't have object " << m->get_object_info() << ", must have trimmed, dropping" << endl;
+    delete m;
+    return;
+  }
 
-  switch (m->get_lock_type()) {
+  switch (lock->get_type()) {
   case LOCK_OTYPE_DN:
   case LOCK_OTYPE_IAUTH:
   case LOCK_OTYPE_ILINK:
   case LOCK_OTYPE_IDIRFRAGTREE:
     handle_simple_lock(lock, m);
     break;
-
+    
   case LOCK_OTYPE_IFILE:
     handle_file_lock((FileLock*)lock, m);
     break;
-
+    
   case LOCK_OTYPE_IDIR:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;

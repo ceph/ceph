@@ -27,7 +27,7 @@
 #include "messages/MLock.h"
 
 #include <string>
-#include <sstream>
+#include <stdio.h>
 
 #include "config.h"
 #undef dout
@@ -293,9 +293,9 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
 
 void CInode::name_stray_dentry(string& dname)
 {
-  stringstream ss;
-  ss << inode.ino;
-  ss >> dname;
+  char s[20];
+  sprintf(s, "%ld", inode.ino.val);
+  dname = s;
 }
 
 

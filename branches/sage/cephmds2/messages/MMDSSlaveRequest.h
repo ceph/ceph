@@ -28,10 +28,15 @@ class MMDSSlaveRequest : public Message {
   static const int OP_UNXLOCK =     2;
   static const int OP_AUTHPIN =     3;
   static const int OP_AUTHPINACK = -3;
+
   static const int OP_PINDN =       5;
   static const int OP_PINDNACK =   -5;
   static const int OP_UNPINDN =     6;
-  static const int OP_FINISH =      7;
+
+  static const int OP_RENAMEPREP =     7;
+  static const int OP_RENAMEPREPACK = -7;
+
+  static const int OP_FINISH =     17;
 
   const static char *get_opname(int o) {
     switch (o) { 
@@ -40,9 +45,14 @@ class MMDSSlaveRequest : public Message {
     case OP_UNXLOCK: return "unxlock";
     case OP_AUTHPIN: return "authpin";
     case OP_AUTHPINACK: return "authpin_ack";
+
+    case OP_RENAMEPREP: return "rename_prep";
+    case OP_RENAMEPREPACK: return "rename_prep_ack";
+
     case OP_PINDN: return "pin_dn";
     case OP_PINDNACK: return "pin_dn_ack";
     case OP_UNPINDN: return "unpin_dn";
+
     case OP_FINISH: return "finish";
     default: assert(0); return 0;
     }
@@ -64,6 +74,13 @@ class MMDSSlaveRequest : public Message {
   list<MDSCacheObjectInfo> authpins;
 
  public:
+  // for rename prep
+  string srcdnpath;
+  string destdnpath;
+  set<int> srcdn_replicas;
+  utime_t now;
+
+public:
   metareqid_t get_reqid() { return reqid; }
   int get_op() { return op; }
   bool is_reply() { return op < 0; }
@@ -94,6 +111,10 @@ class MMDSSlaveRequest : public Message {
     ::_encode(dnpath, payload);
     ::_encode(dnpathbase, payload);
     ::_encode_complex(authpins, payload);
+    ::_encode(srcdnpath, payload);
+    ::_encode(destdnpath, payload);
+    ::_encode(srcdn_replicas, payload);
+    ::_encode(now, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -104,6 +125,10 @@ class MMDSSlaveRequest : public Message {
     ::_decode(dnpath, payload, off);
     ::_decode(dnpathbase, payload, off);
     ::_decode_complex(authpins, payload, off);
+    ::_decode(srcdnpath, payload, off);
+    ::_decode(destdnpath, payload, off);
+    ::_decode(srcdn_replicas, payload, off);
+    ::_decode(now, payload, off);
   }
 
   char *get_type_name() { return "slave_request"; }

@@ -1360,7 +1360,7 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
-  if (1) {
+  if (0) {
     // rename fun
     for (int i=0; i<100; i++) {
       int s = 5;

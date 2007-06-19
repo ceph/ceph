@@ -58,6 +58,13 @@ class MMDSSlaveRequest;
 //typedef const char* pchar;
 
 
+struct PVList {
+  map<MDSCacheObject*,version_t> ls;
+
+  version_t add(MDSCacheObject* o, version_t v) {
+    return ls[o] = v;
+  }
+};
 
 /** active_request_t
  * state we track for requests we are currently processing.
@@ -95,35 +102,36 @@ struct MDRequest {
   map< inodeno_t, inode_t > projected_inode;
 
 
-  // remote dn pins
-  map< CDentry*, set<int> > remote_dn_pinning; // [master] dn -> mds set it's pinning on
-  map< CDentry*, set<int> > remote_dn_pins;    // [master] dn -> mds set it's pinned on
-  bool waiting_on_remote_dn_pin;
-    
   int waiting_on_remote_auth_pin; // which mds?
 
+  // for rename
+  set<int> extra_witnesses; // replica list from srcdn auth
+  set<int> witnessed;       // nodes who have journaled a RenamePrepare
+  utime_t now;
+  int waiting_on_remote_witness;
+  map<MDSCacheObject*,version_t> pvmap;
+  
 
 
   // ---------------------------------------------------
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_dn_pin(false),
-    waiting_on_remote_auth_pin(-1) { }
+    waiting_on_remote_auth_pin(-1), 
+    waiting_on_remote_witness(-1) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_dn_pin(false),
-    waiting_on_remote_auth_pin(-1) { }
+    waiting_on_remote_auth_pin(-1), 
+    waiting_on_remote_witness(-1) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
-    waiting_on_remote_dn_pin(false),
-    waiting_on_remote_auth_pin(-1) { }
+    waiting_on_remote_auth_pin(-1), 
+    waiting_on_remote_witness(-1) { }
   
-  bool is_slave() { 
-    return slave_to_mds >= 0; 
-  }
+  bool is_master() { return slave_to_mds < 0; }
+  bool is_slave() { return slave_to_mds >= 0; }
 
   // pin items in cache
   void pin(MDSCacheObject *o) {
@@ -143,21 +151,17 @@ struct MDRequest {
       auth_pins.insert(object);
     }
   }
-  void drop_auth_pins() {
-    for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
-	 it != auth_pins.end();
-	 it++) 
-      (*it)->auth_unpin();
+  void drop_local_auth_pins() {
+    set<MDSCacheObject*>::iterator it = auth_pins.begin();
+    while (it != auth_pins.end()) {
+      if ((*it)->is_auth()) {
+	(*it)->auth_unpin();
+	auth_pins.erase(it++);
+      } else {
+	it++;
+      }
+    }
     auth_pins.clear();
-  }
-
-  bool is_remote_pinning_dn(CDentry *dn, int who) {
-    return remote_dn_pinning.count(dn) &&
-      remote_dn_pinning[dn].count(who);
-  }
-  bool is_remote_pinned_dn(CDentry *dn, int who) {
-    return remote_dn_pins.count(dn) &&
-      remote_dn_pins[dn].count(who);
   }
 };
 

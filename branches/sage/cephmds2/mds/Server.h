@@ -18,9 +18,10 @@
 #include "MDS.h"
 
 class LogEvent;
-class C_MDS_rename_local_finish;
+class C_MDS_rename_finish;
 class MDRequest;
-
+class EMetaBlob;
+class PVList;
 class MMDSSlaveRequest;
 
 class Server {
@@ -133,22 +134,23 @@ public:
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
 
   // rename
-  bool _rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *mdr);
   void handle_client_rename(MDRequest *mdr);
-  void handle_client_rename_2(MDRequest *mdr,
-                              CDentry *srcdn,
-                              filepath& destpath,
-                              vector<CDentry*>& trace,
-                              int r);
-  bool _rename_pin_dn_on_replicas(MDRequest *mdr, CDentry *dn, inodeno_t baseino, set<int>& ls);
-  void _rename_local(MDRequest *mdr, CDentry *srcdn, CDentry *destdn);
-  void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
-				version_t atid1, version_t atid2);
-  void _rename_local_finish(MDRequest *mdr,
-			    CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
-			    version_t ddirpv, version_t sdirpv, utime_t ictime,
-			    version_t atid1, version_t atid2);
+  void _rename_reanchored(LogEvent *le, C_MDS_rename_finish *fin, 
+			  version_t atid1, version_t atid2);
+  void _rename_finish(MDRequest *mdr,
+		      CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+		      version_t atid1, version_t atid2);
+
+  // helpers
+  CDentry *_rename_prepare(MDRequest *mdr,
+			   EMetaBlob *metablob, 
+			   CDentry *srcdn, CDentry *destdn);
+  void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
+
+  // slaving
+  void handle_slave_rename_prep(MDRequest *mdr);
+  void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void _logged_slave_rename_prep(MDRequest *mdr, CDentry *srcdn);
 };
 
 
