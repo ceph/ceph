@@ -227,6 +227,28 @@ CDentryDiscover *CDentry::replicate_to(int who)
 
 
 // ----------------------------
+// auth pins
+
+bool CDentry::can_auth_pin()
+{
+  assert(dir);
+  return dir->can_auth_pin();
+}
+
+void CDentry::auth_pin()
+{
+  assert(dir);
+  dir->auth_pin();
+}
+
+void CDentry::auth_unpin()
+{
+  assert(dir);
+  dir->auth_unpin();
+}
+
+
+// ----------------------------
 // locking
 
 void CDentry::set_object_info(MDSCacheObjectInfo &info) 

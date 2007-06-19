@@ -46,6 +46,11 @@ sage doc
 
 
 sage mds
+
+- dn unlock should take a CInodeDiscover payload with it?
+- general issue of lock messages vs trimming...
+
+
 - dirlock-protected mtime updates vs migration, journaling, recovery
 - rename fun
   - remote pinning

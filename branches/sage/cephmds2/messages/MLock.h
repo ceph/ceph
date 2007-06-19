@@ -97,9 +97,7 @@ class MLock : public Message {
   void print(ostream& out) {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
-	<< " " << object_info.ino
-	<< "/" << object_info.dirfrag
-	<< "/" << object_info.dname
+	<< " " << object_info
 	<< ")";
   }
   

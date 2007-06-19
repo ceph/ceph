@@ -62,6 +62,8 @@ public:
 
   void handle_slave_request(MMDSSlaveRequest *m);
   void dispatch_slave_request(MDRequest *mdr);
+  void handle_slave_auth_pin(MDRequest *mdr);
+  void handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
 
   // some helpers
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);

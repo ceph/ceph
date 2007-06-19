@@ -139,64 +139,84 @@ bool Locker::acquire_locks(MDRequest *mdr,
   for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p)
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
+
+  map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
   // can i auth pin them all now?
   for (set<SimpleLock*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
-    dout(10) << "must authpin " << **p << " " << *(*p)->get_parent() << endl;
+    MDSCacheObject *object = (*p)->get_parent();
 
-    // sort in
-    sorted.insert(*p);
+    sorted.insert(*p);  // sort in
 
-    if ((*p)->get_type() == LOCK_OTYPE_DN) {
-      CDir *dir = ((CDentry*)(*p)->get_parent())->dir;
-      dout(10) << "might auth_pin " << *dir << endl;
-      
-      if (!dir->is_auth()) continue;
-      if (!mdr->is_auth_pinned(dir) &&
-	  !dir->can_auth_pin()) {
+    dout(10) << " must authpin " << *object << endl;
+
+    if (mdr->is_auth_pinned(object)) continue;
+    
+    if (!object->is_auth()) {
+      if (object->is_ambiguous_auth()) {
 	// wait
-	dir->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
 	mdcache->request_drop_locks(mdr);
 	mdr->drop_auth_pins();
 	return false;
       }
-    } else {
-      CInode *in = (CInode*)(*p)->get_parent();
-      if (!in->is_auth()) continue;
-      if (!mdr->is_auth_pinned(in) &&
-	  !in->can_auth_pin()) {
-	in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-	mdcache->request_drop_locks(mdr);
-	mdr->drop_auth_pins();
-	return false;
-      }
+      mustpin_remote[object->authority().first].insert(object);
+      continue;
+    }
+    if (!object->can_auth_pin()) {
+      // wait
+      object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      mdcache->request_drop_locks(mdr);
+      mdr->drop_auth_pins();
+      return false;
     }
   }
 
-  // ok, grab the auth pins
+  // ok, grab local auth pins
   for (set<SimpleLock*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
     if ((*p)->get_type() == LOCK_OTYPE_DN) {
       CDir *dir = ((CDentry*)(*p)->get_parent())->dir;
       if (!dir->is_auth()) continue;
-      dout(10) << "auth_pinning " << *dir << endl;
+      dout(10) << " auth_pinning " << *dir << endl;
       mdr->auth_pin(dir);
     } else {
       CInode *in = (CInode*)(*p)->get_parent();
       if (!in->is_auth()) continue;
-      dout(10) << "auth_pinning " << *in << endl;
+      dout(10) << " auth_pinning " << *in << endl;
       mdr->auth_pin(in);
     }
+  }
+
+  // request remote auth_pins
+  if (!mustpin_remote.empty()) {
+    // do these one at a time. (***)
+    map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
+    dout(10) << "requesting remote auth_pins from mds" << p->first << endl;
+
+    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPIN);
+    for (set<MDSCacheObject*>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      dout(10) << " req remote auth_pin of " << **q << endl;
+      mdr->pin(*q);  // pin locally!
+      MDSCacheObjectInfo info;
+      (*q)->set_object_info(info);
+      req->get_authpins().push_back(info);      
+    }
+    mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
+    mdr->waiting_on_remote_auth_pin = p->first;
+    return false;
   }
 
   // sort in rdlocks too
   for (set<SimpleLock*>::iterator p = rdlocks.begin();
 	 p != rdlocks.end();
        ++p) {
-    dout(10) << "will rdlock " << **p << " " << *(*p)->get_parent() << endl;
+    dout(20) << " will rdlock " << **p << " " << *(*p)->get_parent() << endl;
     sorted.insert(*p);
   }
 

@@ -300,6 +300,21 @@ void MDCache::open_foreign_stray(int who, Context *c)
 }
 
 
+MDSCacheObject *MDCache::get_object(MDSCacheObjectInfo &info) 
+{
+  // inode?
+  if (info.ino) 
+    return get_inode(info.ino);
+
+  // dir or dentry.
+  CDir *dir = get_dirfrag(info.dirfrag);
+  if (!dir) return 0;
+    
+  if (info.dname.length()) 
+    return dir->lookup(info.dname);
+  else
+    return dir;
+}
 
 
 

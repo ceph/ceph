@@ -274,7 +274,7 @@ public:
   dirfrag_t dirfrag;
   string dname;
 
-  void _encode(bufferlist& bl) {
+  void _encode(bufferlist& bl) const {
     ::_encode(ino, bl);
     ::_encode(dirfrag, bl);
     ::_encode(dname, bl);
@@ -421,6 +421,13 @@ protected:
 
 
   // --------------------------------------------
+  // auth pins
+  virtual bool can_auth_pin() = 0;
+  virtual void auth_pin() = 0;
+  virtual void auth_unpin() = 0;
+
+
+  // --------------------------------------------
   // replication
  protected:
   map<int,int> replicas;      // [auth] mds -> nonce
@@ -546,6 +553,12 @@ protected:
 inline ostream& operator<<(ostream& out, MDSCacheObject &o) {
   o.print(out);
   return out;
+}
+
+inline ostream& operator<<(ostream& out, const MDSCacheObjectInfo &info) {
+  if (info.ino) return out << info.ino;
+  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname;
+  return out << info.dirfrag;
 }
 
 inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {

@@ -78,13 +78,12 @@ struct MDRequest {
   MMDSSlaveRequest *slave_request;   // slave request (if one is pending; implies slave == true)
   int slave_to_mds;                  // this is a slave request.  slave_request may or may not be a pending op.
 
-  
+
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
 
   // auth pins
-  set< CDir* > dir_auth_pins;
-  set< CInode* > inode_auth_pins;
+  set< MDSCacheObject* > auth_pins;
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
@@ -100,22 +99,27 @@ struct MDRequest {
   map< CDentry*, set<int> > remote_dn_pinning; // [master] dn -> mds set it's pinning on
   map< CDentry*, set<int> > remote_dn_pins;    // [master] dn -> mds set it's pinned on
   bool waiting_on_remote_dn_pin;
-  
+    
+  int waiting_on_remote_auth_pin; // which mds?
+
 
 
   // ---------------------------------------------------
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_dn_pin(false) { }
+    waiting_on_remote_dn_pin(false),
+    waiting_on_remote_auth_pin(-1) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_dn_pin(false) { }
+    waiting_on_remote_dn_pin(false),
+    waiting_on_remote_auth_pin(-1) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
-    waiting_on_remote_dn_pin(false) { }
+    waiting_on_remote_dn_pin(false),
+    waiting_on_remote_auth_pin(-1) { }
   
   bool is_slave() { 
     return slave_to_mds >= 0; 
@@ -130,31 +134,21 @@ struct MDRequest {
   }
 
   // auth pins
-  bool is_auth_pinned(CInode *in) { return inode_auth_pins.count(in); }
-  bool is_auth_pinned(CDir *dir) { return dir_auth_pins.count(dir); }
-  void auth_pin(CInode *in) {
-    if (!is_auth_pinned(in)) {
-      in->auth_pin();
-      inode_auth_pins.insert(in);
-    }
+  bool is_auth_pinned(MDSCacheObject *object) { 
+    return auth_pins.count(object); 
   }
-  void auth_pin(CDir *dir) {
-    if (!is_auth_pinned(dir)) {
-      dir->auth_pin();
-      dir_auth_pins.insert(dir);
+  void auth_pin(MDSCacheObject *object) {
+    if (!is_auth_pinned(object)) {
+      object->auth_pin();
+      auth_pins.insert(object);
     }
   }
   void drop_auth_pins() {
-    for (set<CInode*>::iterator it = inode_auth_pins.begin();
-	 it != inode_auth_pins.end();
+    for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
+	 it != auth_pins.end();
 	 it++) 
       (*it)->auth_unpin();
-    inode_auth_pins.clear();
-    for (set<CDir*>::iterator it = dir_auth_pins.begin();
-	 it != dir_auth_pins.end();
-	 it++) 
-      (*it)->auth_unpin();
-    dir_auth_pins.clear();
+    auth_pins.clear();
   }
 
   bool is_remote_pinning_dn(CDentry *dn, int who) {
@@ -384,9 +378,8 @@ public:
     return inode_map[df.ino]->get_dirfrag(df.frag);
   }
 
-  int hash_dentry(inodeno_t ino, const string& s) {
-    return 0; // fixme
-  }
+  MDSCacheObject *get_object(MDSCacheObjectInfo &info);
+
   
 
  public:

@@ -136,6 +136,11 @@ public:
   void last_put() {
     lru_unpin();
   }
+
+  // auth pins
+  bool can_auth_pin();
+  void auth_pin();
+  void auth_unpin();
   
 
   // dentry type is primary || remote || null

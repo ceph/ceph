@@ -559,6 +559,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
       
+    case MMDSSlaveRequest::OP_AUTHPINACK:
+      {
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	handle_slave_auth_pin_ack(mdr, m);
+      }
+      break;
+
     default:
       assert(0);
     }
@@ -641,6 +648,12 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     }
     break;
 
+  case MMDSSlaveRequest::OP_AUTHPIN:
+    {
+      handle_slave_auth_pin(mdr);
+    }
+    break;
+
   case MMDSSlaveRequest::OP_PINDN:
   case MMDSSlaveRequest::OP_UNPINDN:
     // get the CDentry*
@@ -678,6 +691,120 @@ void Server::dispatch_slave_request(MDRequest *mdr)
   }
 }
 
+
+void Server::handle_slave_auth_pin(MDRequest *mdr)
+{
+  dout(10) << "handle_slave_auth_pin " << *mdr << endl;
+
+  // build list of objects
+  list<MDSCacheObject*> objects;
+  bool fail = false;
+
+  for (list<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
+       p != mdr->slave_request->get_authpins().end();
+       ++p) {
+    MDSCacheObject *object = mdcache->get_object(*p);
+    if (!object) {
+      dout(10) << " don't have " << *p << endl;
+      fail = true;
+      break;
+    }
+
+    objects.push_back(object);
+  }
+  
+  // can we auth pin them?
+  if (!fail) {
+    for (list<MDSCacheObject*>::iterator p = objects.begin();
+	 p != objects.end();
+	 ++p) {
+      if (!(*p)->is_auth()) {
+	dout(10) << " not auth for " << **p << endl;
+	fail = true;
+	break;
+      }
+      if (!mdr->is_auth_pinned(*p) &&
+	  !(*p)->can_auth_pin()) {
+	// wait
+	dout(10) << " waiting for authpinnable on " << **p << endl;
+	(*p)->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+	mdr->drop_auth_pins();
+	return;
+      }
+    }
+  }
+
+  // auth pin!
+  if (fail) {
+    mdr->drop_auth_pins();  // just in case
+  } else {
+    for (list<MDSCacheObject*>::iterator p = objects.begin();
+	 p != objects.end();
+	 ++p) {
+      dout(10) << "auth_pinning " << **p << endl;
+      mdr->auth_pin(*p);
+    }
+  }
+
+  // ack!
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPINACK);
+  
+  // return list of my auth_pins (if any)
+  for (set<MDSCacheObject*>::iterator p = mdr->auth_pins.begin();
+       p != mdr->auth_pins.end();
+       ++p) {
+    MDSCacheObjectInfo info;
+    (*p)->set_object_info(info);
+    reply->get_authpins().push_back(info);
+  }
+
+  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+  
+  // clean up this request
+  delete mdr->slave_request;
+  mdr->slave_request = 0;
+  return;
+}
+
+void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
+{
+  dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << endl;
+  int from = ack->get_source().num();
+
+  // added auth pins?
+  set<MDSCacheObject*> pinned;
+  for (list<MDSCacheObjectInfo>::iterator p = ack->get_authpins().begin();
+       p != ack->get_authpins().end();
+       ++p) {
+    MDSCacheObject *object = mdcache->get_object(*p);
+    assert(object);  // we pinned it
+    dout(10) << " remote has pinned " << *object << endl;
+    if (!mdr->is_auth_pinned(object))
+      mdr->auth_pins.insert(object);
+    pinned.insert(object);
+  }
+
+  // removed auth pins?
+  set<MDSCacheObject*>::iterator p = mdr->auth_pins.begin();
+  while (p != mdr->auth_pins.end()) {
+    if ((*p)->authority().first == from &&
+	pinned.count(*p) == 0) {
+      dout(10) << " remote has unpinned " << **p << endl;
+      set<MDSCacheObject*>::iterator o = p;
+      ++p;
+      mdr->auth_pins.erase(o);
+    } else {
+      ++p;
+    }
+  }
+  
+  // clear waiting flag
+  assert(mdr->waiting_on_remote_auth_pin == from);
+  mdr->waiting_on_remote_auth_pin = -1;
+
+  // go again!
+  dispatch_client_request(mdr);
+}
 
 
 // ---------------------------------------

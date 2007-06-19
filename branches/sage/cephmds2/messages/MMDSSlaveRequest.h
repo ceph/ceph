@@ -19,22 +19,27 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
+#include "include/encodable.h"
 
 class MMDSSlaveRequest : public Message {
  public:
-  static const int OP_XLOCK =     1;
-  static const int OP_XLOCKACK = -1;
-  static const int OP_UNXLOCK =   2;
-  static const int OP_PINDN =     3;
-  static const int OP_PINDNACK = -3;
-  static const int OP_UNPINDN =   4;
-  static const int OP_FINISH =    5;
+  static const int OP_XLOCK =       1;
+  static const int OP_XLOCKACK =   -1;
+  static const int OP_UNXLOCK =     2;
+  static const int OP_AUTHPIN =     3;
+  static const int OP_AUTHPINACK = -3;
+  static const int OP_PINDN =       5;
+  static const int OP_PINDNACK =   -5;
+  static const int OP_UNPINDN =     6;
+  static const int OP_FINISH =      7;
 
   const static char *get_opname(int o) {
     switch (o) { 
     case OP_XLOCK: return "xlock";
     case OP_XLOCKACK: return "xlock_ack";
     case OP_UNXLOCK: return "unxlock";
+    case OP_AUTHPIN: return "authpin";
+    case OP_AUTHPINACK: return "authpin_ack";
     case OP_PINDN: return "pin_dn";
     case OP_PINDNACK: return "pin_dn_ack";
     case OP_UNPINDN: return "unpin_dn";
@@ -55,6 +60,9 @@ class MMDSSlaveRequest : public Message {
   inodeno_t dnpathbase;
   string dnpath;
 
+  // for authpins
+  list<MDSCacheObjectInfo> authpins;
+
  public:
   metareqid_t get_reqid() { return reqid; }
   int get_op() { return op; }
@@ -65,6 +73,8 @@ class MMDSSlaveRequest : public Message {
 
   inodeno_t get_dnpathbase() { return dnpathbase; }
   const string& get_dnpath() { return dnpath; }
+
+  list<MDSCacheObjectInfo>& get_authpins() { return authpins; }
 
   void set_lock_type(int t) { lock_type = t; }
   void set_dnpath(string& p, inodeno_t i) { dnpath = p; dnpathbase = i; }
@@ -83,6 +93,7 @@ class MMDSSlaveRequest : public Message {
     object_info._encode(payload);
     ::_encode(dnpath, payload);
     ::_encode(dnpathbase, payload);
+    ::_encode_complex(authpins, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -92,6 +103,7 @@ class MMDSSlaveRequest : public Message {
     object_info._decode(payload, off);
     ::_decode(dnpath, payload, off);
     ::_decode(dnpathbase, payload, off);
+    ::_decode_complex(authpins, payload, off);
   }
 
   char *get_type_name() { return "slave_request"; }
