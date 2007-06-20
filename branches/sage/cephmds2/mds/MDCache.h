@@ -104,13 +104,14 @@ struct MDRequest {
 
   int waiting_on_remote_auth_pin; // which mds?
 
-  // for rename
-  set<int> extra_witnesses; // replica list from srcdn auth
+  // for rename/link/unlink
+  set<int> extra_witnesses; // replica list from srcdn auth (rename)
   set<int> witnessed;       // nodes who have journaled a RenamePrepare
   utime_t now;
   int waiting_on_remote_witness;
   map<MDSCacheObject*,version_t> pvmap;
-  
+
+  Context *slave_commit;
 
 
   // ---------------------------------------------------
@@ -118,17 +119,20 @@ struct MDRequest {
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1) { }
+    waiting_on_remote_witness(-1),
+    slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1) { }
+    waiting_on_remote_witness(-1),
+    slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
     waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1) { }
+    waiting_on_remote_witness(-1),
+    slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
@@ -266,6 +270,7 @@ public:
   void request_finish(MDRequest *mdr);
   void request_forward(MDRequest *mdr, int mds, int port=0);
   void dispatch_request(MDRequest *mdr);
+  void request_forget_foreign_locks(set<SimpleLock*>& s);
   void request_drop_locks(MDRequest *mdr);
   void request_cleanup(MDRequest *r);
 

@@ -512,10 +512,12 @@ void Server::dispatch_client_request(MDRequest *mdr)
 void Server::handle_slave_request(MMDSSlaveRequest *m)
 {
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << endl;
-  
+  int from = m->get_source().num();
+
   // reply?
   if (m->is_reply()) {
     // yay!
+
     switch (m->get_op()) {
     case MMDSSlaveRequest::OP_XLOCKACK:
       {
@@ -523,6 +525,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 						 m->get_object_info());
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	mdr->slaves.insert(from);
 	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << endl;
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
@@ -531,38 +534,6 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
 
-      /*
-    case MMDSSlaveRequest::OP_PINDNACK:
-      {
-	if (!mdcache->have_request(m->get_reqid()))
-	  break; // must have finished, without needing this pin.
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-
-	MDSCacheObjectInfo &info = m->get_object_info();
-	CDir *dir = mdcache->get_dirfrag(info.dirfrag);
-	CDentry *dn = 0;
-	if (dir) 
-	  dn = dir->lookup(info.dname);
-	if (!dn) {
-	  dout(7) << "hmm don't have dn " << info.dirfrag << " " << info.dname << endl;
-	  break;
-	}
-
-	// ok!
-	int from = m->get_source().num();
-	dout(7) << "remote pinned on mds" << from << " dn " << *dn << endl;
-	mdr->remote_dn_pinning[dn].erase(from);
-	mdr->remote_dn_pins[dn].insert(from);
-
-	// re-dispatch request?
-	if (mdr->waiting_on_remote_dn_pin) {
-	  mdr->waiting_on_remote_dn_pin = false;
-	  dispatch_client_request(mdr);
-	}
-      }
-      break;
-      */
-      
     case MMDSSlaveRequest::OP_AUTHPINACK:
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
@@ -668,6 +639,14 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_FINISH:
+    // slave finisher?
+    if (mdr->slave_commit) {
+      mdr->slave_commit->finish(0);
+      delete mdr->slave_commit;
+      mdr->slave_commit = 0;
+    }
+
+    // finish off request.
     mdcache->request_finish(mdr);
     break;
 
@@ -786,6 +765,9 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   // clear waiting flag
   assert(mdr->waiting_on_remote_auth_pin == from);
   mdr->waiting_on_remote_auth_pin = -1;
+
+  // note slave
+  mdr->slaves.insert(from);
 
   // go again!
   dispatch_client_request(mdr);
@@ -2751,15 +2733,6 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     }
   } 
   else {
-    // straydn?
-    if (destdn->is_primary() && !straydn) {
-      string straydname;
-      destdn->inode->name_stray_dentry(straydname);
-      frag_t fg = mdcache->get_stray()->pick_dirfrag(straydname);
-      CDir *straydir = mdcache->get_stray()->get_dirfrag(fg);
-      straydn = straydir->lookup(straydname);
-    }
-    
     // unlink destdn?
     if (!destdn->is_null())
       destdn->dir->unlink_inode(destdn);
@@ -2816,11 +2789,24 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 class C_MDS_SlaveRenamePrep : public Context {
   Server *server;
   MDRequest *mdr;
-  CDentry *srcdn;
+  CDentry *srcdn, *destdn, *straydn;
 public:
-  C_MDS_SlaveRenamePrep(Server *s, MDRequest *m, CDentry *d) : server(s), mdr(m), srcdn(d) {}
+  C_MDS_SlaveRenamePrep(Server *s, MDRequest *m, CDentry *sr, CDentry *de, CDentry *st) :
+    server(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
-    server->_logged_slave_rename_prep(mdr, srcdn);
+    server->_logged_slave_rename(mdr, srcdn, destdn, straydn);
+  }
+};
+
+class C_MDS_SlaveRenameCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CDentry *srcdn, *destdn, *straydn;
+public:
+  C_MDS_SlaveRenameCommit(Server *s, MDRequest *m, CDentry *sr, CDentry *de, CDentry *st) :
+    server(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
+  void finish(int r) {
+    server->_commit_slave_rename(mdr, srcdn, destdn, straydn);
   }
 };
 
@@ -2858,8 +2844,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " srcdn " << *srcdn << endl;
   mdr->pin(srcdn);
 
-  // open destdn stray?
-  CDentry *straydn = 0;
+  // open destdn stray dirfrag?
   if (destdn->is_primary()) {
     CInode *dstray = mdcache->get_inode(MDS_INO_STRAY(mdr->slave_to_mds));
     if (!dstray) {
@@ -2875,23 +2860,22 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       mdcache->open_remote_dir(dstray, fg, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
-
-    straydn = straydir->add_dentry(straydname, 0);
-    dout(10) << " straydn is " << *straydn << endl;
+    dout(10) << " straydir is " << *straydir << endl;
   }
 
   // journal it
-  ESlaveUpdate *le = new ESlaveUpdate("rename_prep", mdr->reqid, ESlaveUpdate::OP_PREPARE);
+  ESlaveUpdate *le = new ESlaveUpdate("slave_rename_prep", mdr->reqid, ESlaveUpdate::OP_PREPARE);
   
   mdr->now = mdr->slave_request->now;
-  _rename_prepare(mdr, &le->metablob, srcdn, destdn);
+  CDentry *straydn = _rename_prepare(mdr, &le->metablob, srcdn, destdn);
 
-  mds->mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn));
+  mds->mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
 }
 
-void Server::_logged_slave_rename_prep(MDRequest *mdr, CDentry *srcdn)
+void Server::_logged_slave_rename(MDRequest *mdr, 
+				  CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_logged_slave_rename_prep " << *mdr << endl;
+  dout(10) << "_logged_slave_rename " << *mdr << endl;
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
@@ -2899,11 +2883,24 @@ void Server::_logged_slave_rename_prep(MDRequest *mdr, CDentry *srcdn)
     srcdn->list_replicas(reply->srcdn_replicas);
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
+  // set up commit waiter
+  mdr->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
+
   // done.
   delete mdr->slave_request;
   mdr->slave_request = 0;
 }
 
+void Server::_commit_slave_rename(MDRequest *mdr, 
+				  CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+{
+  dout(10) << "_commit_slave_rename " << *mdr << endl;
+  _rename_apply(mdr, srcdn, destdn, straydn);
+
+  // write a commit to the journal
+  ESlaveUpdate *le = new ESlaveUpdate("slave_rename_commit", mdr->reqid, ESlaveUpdate::OP_COMMIT);
+  mds->mdlog->submit_entry(le);
+}
 
 void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
@@ -2911,7 +2908,10 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 	   << " witnessed by " << m->get_source()
 	   << " " << *m << endl;
   int from = m->get_source().num();
-  
+
+  // note slave
+  mdr->slaves.insert(from);
+
   // witnessed!
   assert(mdr->witnessed.count(from) == 0);
   mdr->witnessed.insert(from);

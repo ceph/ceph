@@ -3495,6 +3495,16 @@ void MDCache::dispatch_request(MDRequest *mdr)
 
 
 
+void MDCache::request_forget_foreign_locks(set<SimpleLock*>& s)
+{
+  set<SimpleLock*>::iterator p = s.begin();
+  while (p != s.end()) {
+    if ((*p)->get_parent()->is_auth()) 
+      p++;
+    else
+      s.erase(p++);
+  }
+}
 
 void MDCache::request_drop_locks(MDRequest *mdr)
 {
@@ -3505,7 +3515,7 @@ void MDCache::request_drop_locks(MDRequest *mdr)
     mds->locker->rdlock_finish(*mdr->rdlocks.begin(), mdr);
   while (!mdr->wrlocks.empty()) 
     mds->locker->wrlock_finish(*mdr->wrlocks.begin(), mdr);
-
+  
   // make sure ref and trace are empty
   //  if we are doing our own locking, we can't use them!
   assert(mdr->ref == 0);
@@ -3521,6 +3531,20 @@ void MDCache::request_cleanup(MDRequest *mdr)
   mdr->ref = 0;
   mdr->trace.clear();
 
+  // clean up slaves
+  //  (will implicitly drop remote dn pins)
+  for (set<int>::iterator p = mdr->slaves.begin();
+       p != mdr->slaves.end();
+       ++p) {
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
+    mds->send_message_mds(r, *p, MDS_PORT_SERVER);
+  }
+  // strip foreign locks out of lock lists, since the above drops them implicitly.
+  request_forget_foreign_locks(mdr->xlocks);
+  request_forget_foreign_locks(mdr->wrlocks);
+  request_forget_foreign_locks(mdr->rdlocks);
+
+
   // drop locks
   request_drop_locks(mdr);
 
@@ -3533,15 +3557,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
        it++) 
     (*it)->put(MDSCacheObject::PIN_REQUEST);
   mdr->pins.clear();
-
-  // clean up slaves
-  //  (will implicitly drop remote dn pins)
-  for (set<int>::iterator p = mdr->slaves.begin();
-       p != mdr->slaves.end();
-       ++p) {
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
-    mds->send_message_mds(r, *p, MDS_PORT_SERVER);
-  }
 
   // remove from map
   active_requests.erase(mdr->reqid);

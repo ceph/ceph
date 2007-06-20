@@ -29,10 +29,6 @@ class MMDSSlaveRequest : public Message {
   static const int OP_AUTHPIN =     3;
   static const int OP_AUTHPINACK = -3;
 
-  static const int OP_PINDN =       5;
-  static const int OP_PINDNACK =   -5;
-  static const int OP_UNPINDN =     6;
-
   static const int OP_RENAMEPREP =     7;
   static const int OP_RENAMEPREPACK = -7;
 
@@ -49,11 +45,7 @@ class MMDSSlaveRequest : public Message {
     case OP_RENAMEPREP: return "rename_prep";
     case OP_RENAMEPREPACK: return "rename_prep_ack";
 
-    case OP_PINDN: return "pin_dn";
-    case OP_PINDNACK: return "pin_dn_ack";
-    case OP_UNPINDN: return "unpin_dn";
-
-    case OP_FINISH: return "finish";
+    case OP_FINISH: return "finish"; // commit
     default: assert(0); return 0;
     }
   }
@@ -66,10 +58,6 @@ class MMDSSlaveRequest : public Message {
   char lock_type;  // lock object type
   MDSCacheObjectInfo object_info;
   
-  // for dn pins
-  inodeno_t dnpathbase;
-  string dnpath;
-
   // for authpins
   list<MDSCacheObjectInfo> authpins;
 
@@ -88,13 +76,9 @@ public:
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
-  inodeno_t get_dnpathbase() { return dnpathbase; }
-  const string& get_dnpath() { return dnpath; }
-
   list<MDSCacheObjectInfo>& get_authpins() { return authpins; }
 
   void set_lock_type(int t) { lock_type = t; }
-  void set_dnpath(string& p, inodeno_t i) { dnpath = p; dnpathbase = i; }
 
   // ----
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
@@ -108,8 +92,6 @@ public:
     ::_encode(op, payload);
     ::_encode(lock_type, payload);
     object_info._encode(payload);
-    ::_encode(dnpath, payload);
-    ::_encode(dnpathbase, payload);
     ::_encode_complex(authpins, payload);
     ::_encode(srcdnpath, payload);
     ::_encode(destdnpath, payload);
@@ -122,8 +104,6 @@ public:
     ::_decode(op, payload, off);
     ::_decode(lock_type, payload, off);
     object_info._decode(payload, off);
-    ::_decode(dnpath, payload, off);
-    ::_decode(dnpathbase, payload, off);
     ::_decode_complex(authpins, payload, off);
     ::_decode(srcdnpath, payload, off);
     ::_decode(destdnpath, payload, off);
