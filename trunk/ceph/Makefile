@@ -38,7 +38,8 @@ EBOFS_OBJS= \
 	ebofs/BlockDevice.o\
 	ebofs/BufferCache.o\
 	ebofs/Ebofs.o\
-	ebofs/Allocator.o
+	ebofs/Allocator.o\
+	ebofs/FileJournal.o
 
 MDS_OBJS= \
 	mds/MDS.o\
