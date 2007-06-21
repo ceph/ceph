@@ -2068,7 +2068,11 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 
   unsigned r = _apply_transaction(t);
 
-  // set up commit waiter
+  // journal, wait for commit
+  if (r != 0 && onsafe) {
+    delete onsafe;  // kill callback, but still journal below (in case transaction had side effects)
+    onsafe = 0;
+  }
   while (1) {
     if (journal) {
       bufferlist bl;
@@ -2432,7 +2436,7 @@ int Ebofs::remove(object_t oid, Context *onsafe)
   // do it
   int r = _remove(oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2517,7 +2521,7 @@ int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
   
   int r = _truncate(oid, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2546,7 +2550,7 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
   
   int r = _clone(from, to);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2732,7 +2736,7 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
   ebofs_lock.Lock();
   int r = _setattr(oid, name, value, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2775,7 +2779,7 @@ int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsaf
   ebofs_lock.Lock();
   int r = _setattrs(oid, attrset);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2870,7 +2874,7 @@ int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe)
 
   int r = _rmattr(oid, name);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -2957,7 +2961,7 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
 
   int r = _create_collection(cid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -3014,7 +3018,7 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
 
   int r = _destroy_collection(cid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -3078,7 +3082,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
 
   int r = _collection_add(cid, oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -3129,7 +3133,7 @@ int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
 
   int r = _collection_remove(cid, oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -3202,7 +3206,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
 
   int r = _collection_setattr(cid, name, value, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {
@@ -3270,7 +3274,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
 
   int r = _collection_rmattr(cid, name);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
     while (1) {
       if (journal) {

@@ -53,7 +53,9 @@ int FileJournal::create()
   header.max_size = st.st_size;
   write_header();
   
-  read_pos = write_pos = queue_pos = sizeof(header);
+  // writeable.
+  read_pos = 0;
+  write_pos = queue_pos = sizeof(header);
 
   ::close(fd);
 
@@ -73,37 +75,34 @@ int FileJournal::open()
   }
   assert(fd > 0);
 
+  // assume writeable, unless...
+  read_pos = 0;
+  write_pos = queue_pos = sizeof(header);
+
   // read header?
   read_header();
-  if (header.num == 0 ||
-      header.fsid != ebofs->get_fsid()) {
-    // empty.
-    read_pos = 0;
-    write_pos = queue_pos = sizeof(header);
-  } else {
-    // pick an offset
-    read_pos = write_pos = queue_pos = 0;
+  if (header.num > 0 && header.fsid == ebofs->get_fsid()) {
+    // valid header, pick an offset
     for (int i=0; i<header.num; i++) {
       if (header.epoch[i] == ebofs->get_super_epoch()) {
 	dout(2) << "using read_pos header pointer "
 		<< header.epoch[i] << " at " << header.offset[i]
 		<< endl;
 	read_pos = header.offset[i];
+	write_pos = queue_pos = 0;
 	break;
       }      
-      if (header.epoch[i] < ebofs->get_super_epoch()) {
+      else if (header.epoch[i] < ebofs->get_super_epoch()) {
 	dout(2) << "super_epoch is " << ebofs->get_super_epoch() 
-		<< ", skipping " << header.epoch[i] << " at " << header.offset[i]
+		<< ", skipping old " << header.epoch[i] << " at " << header.offset[i]
 		<< endl;
-	continue;
       }
-      if (header.epoch[i] > ebofs->get_super_epoch()) {
+      else if (header.epoch[i] > ebofs->get_super_epoch()) {
 	dout(2) << "super_epoch is " << ebofs->get_super_epoch() 
 		<< ", but wtf, journal is later " << header.epoch[i] << " at " << header.offset[i]
 		<< endl;
 	break;
       }
-      assert(0);
     }
   }
 
@@ -257,7 +256,7 @@ void FileJournal::write_thread_entry()
 
 bool FileJournal::submit_entry(bufferlist& e, Context *oncommit)
 {
-  assert(queue_pos != 0); // bad create(), or journal didn't replay to completion.
+  assert(queue_pos != 0);  // bad create(), or journal didn't replay to completion.
 
   // ** lock **
   Mutex::Locker locker(write_lock);
