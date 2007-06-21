@@ -50,6 +50,17 @@ sage mds
 - slave request cleanup on failure
   - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
 
+- resolve DISCOVERXLOCK versus rename issue
+  - witness list may change..
+- revisit wrlocks, dir inode mtime updates.  esp in rename.
+
+- reimplement _local_link/unlink using rename as model. 
+
+
+- Q: locker vs migration
+  - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).
+  - ...but does it play nice with wrlock?  and unfortuantely auth_pinning wrlocks would kill performance on updates at dir delegation points.
+
 - dirlock-protected mtime updates vs migration, journaling, recovery
 - rename fun
   - remote pinning

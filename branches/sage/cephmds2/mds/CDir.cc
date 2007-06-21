@@ -148,14 +148,14 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
  * linking fun
  */
 
-CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth) 
+CDentry* CDir::add_dentry( const string& dname, inodeno_t ino) 
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, ino);
-  if (auth) 
+  if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
 
@@ -180,14 +180,14 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth)
 }
 
 
-CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth ) 
+CDentry* CDir::add_dentry( const string& dname, CInode *in) 
 {
   // primary
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, in);
-  if (auth) 
+  if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
 

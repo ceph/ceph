@@ -136,9 +136,12 @@ bool Locker::acquire_locks(MDRequest *mdr,
 
   // make list of items to authpin
   set<SimpleLock*> mustpin = xlocks;
+
+  /* don't auth_pin wrlocks.. they're a moving target!  (might import while an update is in progress)
   for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p)
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
+  */
 
   map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
@@ -158,6 +161,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if (!object->is_auth()) {
       if (object->is_ambiguous_auth()) {
 	// wait
+	dout(10) << " ambiguous auth, waiting to authpin " << *object << endl;
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
 	mdcache->request_drop_locks(mdr);
 	mdr->drop_local_auth_pins();
@@ -168,6 +172,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     }
     if (!object->can_auth_pin()) {
       // wait
+      dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << endl;
       object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
       mdcache->request_drop_locks(mdr);
       mdr->drop_local_auth_pins();

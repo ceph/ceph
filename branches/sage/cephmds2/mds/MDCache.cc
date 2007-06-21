@@ -3473,11 +3473,13 @@ void MDCache::request_finish(MDRequest *mdr)
 void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
   if (!port) port = MDS_PORT_SERVER;
-
   dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << endl;
-
-  mds->forward_message_mds(mdr->client_request, who, port);  
+  
+  // first clean up (notably, finish any slave requests),
   request_cleanup(mdr);
+  
+  // _then_ forward.
+  mds->forward_message_mds(mdr->client_request, who, port);  
 
   if (mds->logger) mds->logger->inc("fw");
 }
@@ -3495,14 +3497,20 @@ void MDCache::dispatch_request(MDRequest *mdr)
 
 
 
-void MDCache::request_forget_foreign_locks(set<SimpleLock*>& s)
+void MDCache::request_forget_foreign_locks(MDRequest *mdr)
 {
-  set<SimpleLock*>::iterator p = s.begin();
-  while (p != s.end()) {
+  // xlocks
+  set<SimpleLock*>::iterator p = mdr->xlocks.begin();
+  while (p != mdr->xlocks.end()) {
     if ((*p)->get_parent()->is_auth()) 
       p++;
-    else
-      s.erase(p++);
+    else {
+      dout(10) << "request_forget_foreign_locks " << **p
+	       << " on " << *(*p)->get_parent() << endl;
+      (*p)->put_xlock();
+      mdr->locks.erase(*p);
+      mdr->xlocks.erase(p++);
+    }
   }
 }
 
@@ -3539,10 +3547,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
     mds->send_message_mds(r, *p, MDS_PORT_SERVER);
   }
-  // strip foreign locks out of lock lists, since the above drops them implicitly.
-  request_forget_foreign_locks(mdr->xlocks);
-  request_forget_foreign_locks(mdr->wrlocks);
-  request_forget_foreign_locks(mdr->rdlocks);
+  // strip foreign xlocks out of lock lists, since the OP_FINISH drops them implicitly.
+  request_forget_foreign_locks(mdr);
 
 
   // drop locks
@@ -4314,7 +4320,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         dout(7) << "had " << *dn << endl;
 	m->get_dentry(i).update_dentry(dn);
       } else {
-        dn = curdir->add_dentry( m->get_dentry(i).get_dname(), 0, false );
+        dn = curdir->add_dentry( m->get_dentry(i).get_dname(), 0 );
 	m->get_dentry(i).update_new_dentry(dn);
         dout(7) << "added " << *dn << endl;
       }
@@ -4615,7 +4621,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	if (!finished.empty()) mds->queue_waiters(finished);
 	
 	// dentry
-	straydn = dir->add_dentry( m->straydn->get_dname(), 0, false );
+	straydn = dir->add_dentry( m->straydn->get_dname(), 0 );
 	m->straydn->update_new_dentry(straydn);
       }
 

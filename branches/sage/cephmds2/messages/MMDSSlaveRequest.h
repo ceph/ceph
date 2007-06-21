@@ -47,7 +47,7 @@ class MMDSSlaveRequest : public Message {
     case OP_RENAMEPREP: return "rename_prep";
     case OP_RENAMEPREPACK: return "rename_prep_ack";
     case OP_RENAMEGETINODE: return "rename_get_inode";
-    case OP_RENAMEGOTINODE: return "rename_got_inode";
+    case OP_RENAMEGETINODEACK: return "rename_get_inode_ack";
 
     case OP_FINISH: return "finish"; // commit
     default: assert(0); return 0;

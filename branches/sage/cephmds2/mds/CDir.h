@@ -229,8 +229,8 @@ class CDir : public MDSCacheObject {
       return iter->second;
   }
 
-  CDentry* add_dentry( const string& dname, CInode *in=0, bool auth=true );
-  CDentry* add_dentry( const string& dname, inodeno_t ino, bool auth=true );
+  CDentry* add_dentry( const string& dname, CInode *in=0 );
+  CDentry* add_dentry( const string& dname, inodeno_t ino );
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_inode( CDentry *dn, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );

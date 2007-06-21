@@ -516,7 +516,6 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 
   // reply?
   if (m->is_reply()) {
-    // yay!
 
     switch (m->get_op()) {
     case MMDSSlaveRequest::OP_XLOCKACK:
@@ -545,6 +544,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
 	handle_slave_rename_prep_ack(mdr, m);
+      }
+      break;
+
+    case MMDSSlaveRequest::OP_RENAMEGETINODEACK:
+      {
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	handle_slave_rename_get_inode_ack(mdr, m);
       }
       break;
 
@@ -636,6 +642,10 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 
   case MMDSSlaveRequest::OP_RENAMEPREP:
     handle_slave_rename_prep(mdr);
+    break;
+
+  case MMDSSlaveRequest::OP_RENAMEGETINODE:
+    handle_slave_rename_get_inode(mdr);
     break;
 
   case MMDSSlaveRequest::OP_FINISH:
@@ -2468,7 +2478,10 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- prepare witnesses --
   set<int> witnesses = mdr->extra_witnesses;
-  srcdn->list_replicas(witnesses);
+  if (srcdn->is_auth())
+    srcdn->list_replicas(witnesses);
+  else
+    witnesses.insert(srcdn->authority().first);
   destdn->list_replicas(witnesses);
 
   for (set<int>::iterator p = witnesses.begin();
@@ -2488,12 +2501,27 @@ void Server::handle_client_rename(MDRequest *mdr)
     }
   }
 
+  // -- inode migration? --
+  if (!srcdn->is_auth() &&
+      srcdn->is_primary()) {
+    if (mdr->inode_import.length() == 0) {
+      // get inode
+      int auth = srcdn->authority().first;
+      dout(10) << " requesting inode export from srcdn auth mds" << auth << endl;
+      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODE);
+      srcdn->make_path(req->srcdnpath);
+      mds->send_message_mds(req, auth, MDS_PORT_SERVER);
+      mdr->waiting_on_remote_witness = auth;  // FIXME hrm.
+      return;
+    }
+    dout(10) << " already (just!) got inode export from srcdn auth" << endl;
+  }
+  
   // -- prepare journal entry --
   EUpdate *le = new EUpdate("rename");
   le->metablob.add_client_req(mdr->reqid);
   
   CDentry *straydn = _rename_prepare(mdr, &le->metablob, srcdn, destdn);
-
 
   // -- prepare anchor updates --
   C_MDS_rename_anchor *anchorfin = 0;
@@ -2532,6 +2560,9 @@ void Server::handle_client_rename(MDRequest *mdr)
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
 
+  // and apply!
+  _rename_apply(mdr, srcdn, destdn, straydn);
+
   journal_opens();  // journal pending opens, just in case
 
   if (anchorfin) {
@@ -2565,7 +2596,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   dout(10) << "_rename_finish " << *mdr << endl;
 
   // apply
-  _rename_apply(mdr, srcdn, destdn, straydn);
+  //_rename_apply(mdr, srcdn, destdn, straydn);
   
   // commit anchor updates?
   if (atid1) mds->anchorclient->commit(atid1);
@@ -2775,8 +2806,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->pvmap[srcdn]);
 
-    // import srcdn inode?
-    if (mdr->inode_import.length()) {
+    // srcdn inode import?
+    if (!srcdn->is_auth() && destdn->is_auth()) {
+      assert(mdr->inode_import.length() > 0);
       int off = 0;
       mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
 					     srcdn->authority().first);
@@ -2889,13 +2921,11 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
   if (srcdn->is_auth()) {
+    // share the replica list, so that they can all witness the rename.
     srcdn->list_replicas(reply->srcdn_replicas);
 
-    if (srcdn->is_primary()) {
-      dout(10) << " including inode export info" << endl;
-      mdcache->migrator->encode_export_inode(srcdn->inode, reply->inode_export, mdr->slave_to_mds);
-      reply->inode_export_v = srcdn->inode->inode.version;
-    }
+    // note srcdn, we'll get asked for inode momentarily
+    mdr->srcdn = srcdn;
   }  
 
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
@@ -2953,6 +2983,43 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 }
 
 
+
+void Server::handle_slave_rename_get_inode(MDRequest *mdr)
+{
+  dout(10) << "handle_slave_rename_get_inode " << *mdr << endl;
+
+  assert(mdr->srcdn);
+  assert(mdr->srcdn->is_auth());
+  assert(mdr->srcdn->is_primary());
+
+  // reply
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODEACK);
+  dout(10) << " replying with inode export info" << endl;
+  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, reply->inode_export, mdr->slave_to_mds);
+  reply->inode_export_v = mdr->srcdn->inode->inode.version;
+
+  mdr->inode_import = reply->inode_export;   // keep a copy locally, in case we have to rollback
+  
+  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+
+  // clean up.
+  delete mdr->slave_request;
+  mdr->slave_request = 0;
+}
+
+void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m)
+{
+  dout(10) << "handle_slave_rename_get_inode_ack " << *mdr 
+	   << " " << *m << endl;
+
+  assert(m->inode_export.length());
+  dout(10) << " got inode export, saving in " << *mdr << endl;
+  mdr->inode_import.claim(m->inode_export);
+  mdr->inode_import_v = m->inode_export_v;
+  mdr->waiting_on_remote_witness = -1;  // FIXME hrm.
+
+  dispatch_client_request(mdr);  // go again!
+}
 
 
 
