@@ -147,6 +147,8 @@ md_config_t g_conf = {
   client_oc_max_dirty: 1024*1024* 5,    // MB * n
   client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
 
+  client_mount_timeout: 10.0,  // retry every N seconds
+
   client_trace: 0,
   fuse_direct_io: 0,
   

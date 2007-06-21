@@ -135,6 +135,8 @@ struct md_config_t {
   int      client_oc_max_dirty;
   size_t   client_oc_max_sync_write;
 
+  double   client_mount_timeout;
+
   
 
   /*
