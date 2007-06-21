@@ -18,7 +18,6 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
-
 #include "include/encodable.h"
 
 class MMDSSlaveRequest : public Message {
@@ -32,6 +31,9 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RENAMEPREP =     7;
   static const int OP_RENAMEPREPACK = -7;
 
+  static const int OP_RENAMEGETINODE =     8;
+  static const int OP_RENAMEGETINODEACK = -8;
+
   static const int OP_FINISH =     17;
 
   const static char *get_opname(int o) {
@@ -44,6 +46,8 @@ class MMDSSlaveRequest : public Message {
 
     case OP_RENAMEPREP: return "rename_prep";
     case OP_RENAMEPREPACK: return "rename_prep_ack";
+    case OP_RENAMEGETINODE: return "rename_get_inode";
+    case OP_RENAMEGOTINODE: return "rename_got_inode";
 
     case OP_FINISH: return "finish"; // commit
     default: assert(0); return 0;
@@ -66,6 +70,8 @@ class MMDSSlaveRequest : public Message {
   string srcdnpath;
   string destdnpath;
   set<int> srcdn_replicas;
+  bufferlist inode_export;
+  version_t inode_export_v;
   utime_t now;
 
 public:
@@ -84,9 +90,7 @@ public:
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, int o) : 
     Message(MSG_MDS_SLAVE_REQUEST),
-    reqid(ri), op(o)
-  { }
-  
+    reqid(ri), op(o) { }
   void encode_payload() {
     ::_encode(reqid, payload);
     ::_encode(op, payload);
@@ -97,6 +101,8 @@ public:
     ::_encode(destdnpath, payload);
     ::_encode(srcdn_replicas, payload);
     ::_encode(now, payload);
+    ::_encode(inode_export, payload);
+    ::_encode(inode_export_v, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -109,6 +115,8 @@ public:
     ::_decode(destdnpath, payload, off);
     ::_decode(srcdn_replicas, payload, off);
     ::_decode(now, payload, off);
+    ::_decode(inode_export, payload, off);
+    ::_decode(inode_export_v, payload, off);
   }
 
   char *get_type_name() { return "slave_request"; }

@@ -2650,8 +2650,10 @@ CDentry *Server::_rename_prepare(MDRequest *mdr,
     metablob->add_dir_context(destdn->dir);
     if (srcdn->is_primary()) {
       dout(10) << "src is a primary dentry" << endl;
-      if (destdn->is_auth())
-	mdr->pvmap[destdn] = destdn->pre_dirty(srcdn->inode->inode.version);
+      if (destdn->is_auth()) {
+	mdr->pvmap[destdn] = destdn->pre_dirty(MAX(srcdn->inode->inode.version,
+						   mdr->inode_import_v));
+      }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
 
     } else {
@@ -2772,6 +2774,13 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->mark_dirty(mdr->pvmap[destdn]);
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->pvmap[srcdn]);
+
+    // import srcdn inode?
+    if (mdr->inode_import.length()) {
+      int off = 0;
+      mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
+					     srcdn->authority().first);
+    }
   }
 
   // update subtree map?
@@ -2879,8 +2888,16 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
-  if (srcdn->is_auth()) 
+  if (srcdn->is_auth()) {
     srcdn->list_replicas(reply->srcdn_replicas);
+
+    if (srcdn->is_primary()) {
+      dout(10) << " including inode export info" << endl;
+      mdcache->migrator->encode_export_inode(srcdn->inode, reply->inode_export, mdr->slave_to_mds);
+      reply->inode_export_v = srcdn->inode->inode.version;
+    }
+  }  
+
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
   // set up commit waiter
@@ -2924,6 +2941,12 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
     dout(10) << " extra witnesses (srcdn replicas) are " << m->srcdn_replicas << endl;
     mdr->extra_witnesses = m->srcdn_replicas;
     mdr->extra_witnesses.erase(mds->get_nodeid());  // not me!
+  }
+
+  if (m->inode_export.length()) {
+    dout(10) << " got inode export, saving in " << *mdr << endl;
+    mdr->inode_import.claim(m->inode_export);
+    mdr->inode_import_v = m->inode_export_v;
   }
 
   dispatch_client_request(mdr);  // go again!

@@ -110,7 +110,9 @@ struct MDRequest {
   utime_t now;
   int waiting_on_remote_witness;
   map<MDSCacheObject*,version_t> pvmap;
-
+  bufferlist inode_import;
+  version_t inode_import_v;
+  
   Context *slave_commit;
 
 
@@ -120,18 +122,21 @@ struct MDRequest {
     slave_request(0), slave_to_mds(-1), 
     waiting_on_remote_auth_pin(-1), 
     waiting_on_remote_witness(-1),
+    inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     waiting_on_remote_auth_pin(-1), 
     waiting_on_remote_witness(-1),
+    inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
     waiting_on_remote_auth_pin(-1), 
     waiting_on_remote_witness(-1),
+    inode_import_v(0),
     slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
