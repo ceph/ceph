@@ -2899,60 +2899,48 @@ void MDCache::dispatch(Message *m)
 /* path_traverse
  *
  * return values:
- *   <0 : traverse error (ENOTDIR, ENOENT)
+ *   <0 : traverse error (ENOTDIR, ENOENT, etc.)
  *    0 : success
  *   >0 : delayed or forwarded
  *
- * Notes:
- *   onfinish context is only needed if you specify MDS_TRAVERSE_DISCOVER _and_
- *   you aren't absolutely certain that the path actually exists.  If it doesn't,
- *   the context is needed to pass a (failure) result code.
+ * onfail values:
+ *
+ *  MDS_TRAVERSE_FORWARD       - forward to auth (or best guess)
+ *  MDS_TRAVERSE_DISCOVER      - discover missing items.  skip permission checks.
+ *  MDS_TRAVERSE_DISCOVERXLOCK - discover XLOCKED items too (be careful!).
+ *  MDS_TRAVERSE_FAIL          - return an error
  */
 
-/*
-class C_MDC_TraverseDiscover : public Context {
-  Context *onfinish, *ondelay;
- public:
-  C_MDC_TraverseDiscover(Context *onfinish, Context *ondelay) {
-    this->ondelay = ondelay;
-    this->onfinish = onfinish;
-  }
-  void finish(int r) {
-    //dout(10) << "TraverseDiscover r = " << r << endl;
-    if (r < 0 && onfinish) {   // ENOENT on discover, pass back to caller.
-      onfinish->finish(r);
-    } else {
-      ondelay->finish(r);      // retry as usual
-    }
-    delete onfinish;
-    delete ondelay;
-  }
-};
-*/
-
-int MDCache::path_traverse(MDRequest *mdr,
-			   CInode *base,             // traverse starting from here.
-			   filepath& origpath, 
-                           vector<CDentry*>& trace, 
-                           bool follow_trailing_symlink,
-                           Message *req,
-                           Context *ondelay,
-                           int onfail,
-                           bool is_client_req,
-			   bool null_okay)  // true if req is MClientRequest .. gross, FIXME
+Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 {
-  set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
+  if (mdr)
+    return new C_MDS_RetryRequest(this, mdr);
+  else
+    return new C_MDS_RetryMessage(mds, req);
+}
 
+int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
+			   CInode *base, filepath& origpath, // what
+                           vector<CDentry*>& trace,          // result
+                           bool follow_trailing_symlink,     // how
+                           int onfail)
+{
+  assert(mdr || req);
+  bool null_okay = onfail == MDS_TRAVERSE_DISCOVERXLOCK;
   bool noperm = false;
   if (onfail == MDS_TRAVERSE_DISCOVER ||
-      onfail == MDS_TRAVERSE_DISCOVERXLOCK) noperm = true;
+      onfail == MDS_TRAVERSE_DISCOVERXLOCK) 
+    noperm = true;
+
+  // keep a list of symlinks we touch to avoid loops
+  set< pair<CInode*, string> > symlinks_resolved; 
 
   // root
   CInode *cur = base;
   if (!cur) cur = get_root();
   if (cur == NULL) {
     dout(7) << "traverse: i don't have root" << endl;
-    open_root(ondelay);
+    open_root(_get_waiter(mdr, req));
     return 1;
   }
 
@@ -2969,7 +2957,6 @@ int MDCache::path_traverse(MDRequest *mdr,
     // ENOTDIR?
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << endl;
-      delete ondelay;
       return -ENOTDIR;
     }
 
@@ -2981,7 +2968,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         // parent dir frozen_dir?
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << endl;
-          cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
+          cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
           return 1;
         }
 
@@ -2994,7 +2981,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         } 
 	else if (cur->is_ambiguous_auth()) {
 	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
-	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, ondelay);
+	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
 	  return 1;
 	} else {
 	  filepath want = path.postfixpath(depth);
@@ -3007,7 +2994,7 @@ int MDCache::path_traverse(MDRequest *mdr,
 				cur->authority().first, MDS_PORT_CACHE);
 	  dir_discovers[cur->ino()].insert(cur->authority().first);
 	}
-	cur->add_waiter(CInode::WAIT_DIR, ondelay);
+	cur->add_waiter(CInode::WAIT_DIR, _get_waiter(mdr, req));
         return 1;
       }
     }
@@ -3019,14 +3006,14 @@ int MDCache::path_traverse(MDRequest *mdr,
       // doh!
       // FIXME: traverse is allowed?
       dout(7) << "traverse: " << *curdir << " is frozen, waiting" << endl;
-      curdir->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
+      curdir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
       if (onfinish) delete onfinish;
       return 1;
     }
     */
 
     // must read directory hard data (permissions, x bit) to traverse
-    if (!noperm && !mds->locker->simple_rdlock_try(&cur->authlock, ondelay)) {
+    if (!noperm && !mds->locker->simple_rdlock_try(&cur->authlock, _get_waiter(mdr, req))) {
       return 1;
     }
     
@@ -3057,7 +3044,7 @@ int MDCache::path_traverse(MDRequest *mdr,
       // dentry exists.  xlocked?
       if (!noperm && dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
         dout(10) << "traverse: xlocked dentry at " << *dn << endl;
-        dn->lock.add_waiter(SimpleLock::WAIT_RD, ondelay);
+        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
         return 1;
       }
 
@@ -3072,7 +3059,7 @@ int MDCache::path_traverse(MDRequest *mdr,
         } else {
           dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
 	  assert(0); // REWRITE ME
-          //open_remote_ino(dn->get_remote_ino(), req, ondelay);
+          //open_remote_ino(dn->get_remote_ino(), req, _get_waiter(mdr, req));
           return 1;
         }        
       }
@@ -3115,10 +3102,13 @@ int MDCache::path_traverse(MDRequest *mdr,
       }
 
       // forwarder wants replicas?
-      if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
-	dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << curdir->dirfrag() << endl;
+      if (mdr && mdr->client_request && 
+	  mdr->client_request->get_mds_wants_replica_in_dirino()) {
+	dout(30) << "traverse: REP is here, " 
+		 << mdr->client_request->get_mds_wants_replica_in_dirino() 
+		 << " vs " << curdir->dirfrag() << endl;
 	
-	if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == curdir->ino() &&
+	if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
 	    curdir->is_auth() && 
 	    curdir->is_rep() &&
 	    curdir->is_replica(req->get_source().num()) &&
@@ -3156,21 +3146,13 @@ int MDCache::path_traverse(MDRequest *mdr,
       // dentry is mine.
       if (curdir->is_complete()) {
         // file not found
-        delete ondelay;
         return -ENOENT;
       } else {
-        
-        //wrong?
-        //if (onfail == MDS_TRAVERSE_DISCOVER) 
-        //  return -1;
-        
-        // directory isn't complete; reload
+	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << endl;
         touch_inode(cur);
-        curdir->fetch(ondelay);
-        
-        if (mds->logger) mds->logger->inc("cmiss");
-
+        curdir->fetch(_get_waiter(mdr, req));
+	if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       }
     } else {
@@ -3188,22 +3170,24 @@ int MDCache::path_traverse(MDRequest *mdr,
         } 
 	else if (curdir->is_ambiguous_auth()) {
 	  dout(7) << "traverse: waiting for single auth on " << *curdir << endl;
-	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
 	  return 1;
-	} else {
+	} 
+	else {
           dout(7) << "traverse: discover " << want << " from " << *curdir << endl;
           touch_inode(cur);
           
           mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					      cur->ino(),
 					      want,
-					      false),
+					      false,
+					      onfail == MDS_TRAVERSE_DISCOVERXLOCK),
 				dauth.first, MDS_PORT_CACHE);
           if (mds->logger) mds->logger->inc("dis");
         }
         
         // delay processing of current request.
-        curdir->add_dentry_waiter(path[depth], ondelay);
+        curdir->add_dentry_waiter(path[depth], _get_waiter(mdr, req));
         if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       } 
@@ -3214,16 +3198,16 @@ int MDCache::path_traverse(MDRequest *mdr,
 	if (curdir->is_ambiguous_auth()) {
 	  // wait
 	  dout(7) << "traverse: waiting for single auth in " << *curdir << endl;
-	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, ondelay);
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
 	  return 1;
 	} else {
 	  dout(7) << "traverse: forwarding, not auth for " << *curdir << endl;
 
 	  // request replication?
-	  if (is_client_req && curdir->is_rep()) {
+	  if (mdr && mdr->client_request && curdir->is_rep()) {
 	    dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under "
 		     << *curdir << " req " << *(MClientRequest*)req << endl;
-	    ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(curdir->ino());
+	    mdr->client_request->set_mds_wants_replica_in_dirino(curdir->ino());
 	    req->clear_payload();  // reencode!
 	  }
 	  
@@ -3233,12 +3217,10 @@ int MDCache::path_traverse(MDRequest *mdr,
 	    mds->forward_message_mds(req, dauth.first, req->get_dest_port());
 	  
 	  if (mds->logger) mds->logger->inc("cfw");
-	  delete ondelay;
 	  return 2;
 	}
       }    
       if (onfail == MDS_TRAVERSE_FAIL) {
-        delete ondelay;
         return -ENOENT;  // not necessarily exactly true....
       }
     }
@@ -3247,7 +3229,6 @@ int MDCache::path_traverse(MDRequest *mdr,
   }
   
   // success.
-  delete ondelay;
   return 0;
 }
 
@@ -4010,7 +3991,8 @@ void MDCache::handle_discover(MDiscover *dis)
   // get started.
   if (dis->get_base_ino() == MDS_INO_ROOT) {
     // wants root
-    dout(7) << "handle_discover from mds" << dis->get_asker() << " wants root + " << dis->get_want().get_path() << endl;
+    dout(7) << "handle_discover from mds" << dis->get_asker()
+	    << " wants root + " << dis->get_want().get_path() << endl;
 
     assert(mds->get_nodeid() == 0);
     assert(root->is_auth());
@@ -4023,7 +4005,8 @@ void MDCache::handle_discover(MDiscover *dis)
   }
   else if (dis->get_base_ino() == MDS_INO_STRAY(whoami)) {
     // wants root
-    dout(7) << "handle_discover from mds" << dis->get_asker() << " wants stray + " << dis->get_want().get_path() << endl;
+    dout(7) << "handle_discover from mds" << dis->get_asker()
+	    << " wants stray + " << dis->get_want().get_path() << endl;
     
     reply->add_inode( stray->replicate_to( dis->get_asker() ) );
     dout(10) << "added stray " << *stray << endl;
@@ -4063,7 +4046,7 @@ void MDCache::handle_discover(MDiscover *dis)
   for (unsigned i = 0; 
        i < dis->get_want().depth() || dis->get_want().depth() == 0; 
        i++) {
-    
+
     // -- figure out the dir
 
     // is *cur even a dir at all?
@@ -4173,6 +4156,22 @@ void MDCache::handle_discover(MDiscover *dis)
       dn = curdir->add_dentry(dis->get_dentry(i), 0);
     }
     assert(dn);
+
+    // xlocked dentry?
+    //  ...always block on non-tail items (they are unrelated)
+    //  ...allow xlocked tail disocvery _only_ if explicitly requested
+    if (dn->lock.is_xlocked()) {
+      // is this the last (tail) item in the discover traversal?
+      bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
+      if (tailitem && dis->wants_xlocked()) {
+	dout(7) << "allowing discovery of xlocked tail " << *dn << endl;
+      } else {
+	dout(7) << "blocking on xlocked " << *dn << endl;
+	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
+	delete reply;
+	return;
+      }
+    }
 
     // add dentry
     reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
@@ -4552,9 +4551,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
       dout(5) << "trying discover on dir_update for " << path << endl;
 
-      int r = path_traverse(0, 0,
-			    path, trace, true,
-                            m, new C_MDS_RetryMessage(mds, m),
+      int r = path_traverse(0, m,
+			    0, path, trace, true,
                             MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;

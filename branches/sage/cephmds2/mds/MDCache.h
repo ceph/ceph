@@ -456,13 +456,13 @@ public:
   CInode *create_stray_inode(int whose=-1);
   void open_local_stray();
   void open_foreign_stray(int who, Context *c);
-  int path_traverse(MDRequest *mdr,
+
+  Context *_get_waiter(MDRequest *mdr, Message *req);
+  int path_traverse(MDRequest *mdr, Message *req, 
 		    CInode *base, filepath& path, 
 		    vector<CDentry*>& trace, bool follow_trailing_sym,
-                    Message *req, Context *ondelay,
-                    int onfail, 
-                    bool is_client_req = false,
-		    bool null_okay = false);
+                    int onfail);
+
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
   void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);

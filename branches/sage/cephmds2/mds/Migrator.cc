@@ -1179,10 +1179,8 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     // must discover it!
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
-    int r = cache->path_traverse(0, 
-				 0,
-				 fpath, trace, true,
-				 m, new C_MDS_RetryMessage(mds, m),       // on delay/retry
+    int r = cache->path_traverse(0, m,
+				 0, fpath, trace, true,
 				 MDS_TRAVERSE_DISCOVER);
     if (r > 0) return; // wait
     if (r < 0) {

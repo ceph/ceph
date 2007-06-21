@@ -899,13 +899,9 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << endl;
 
   // traverse to parent dir
-  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr,
-				 0,
-				 refpath, trace, true,
-				 mdr->client_request, ondelay,
-				 MDS_TRAVERSE_FORWARD,
-				 true); // is MClientRequest
+  int r = mdcache->path_traverse(mdr, mdr->client_request,
+				 0, refpath, trace, true,
+				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
@@ -942,13 +938,11 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   // traverse
   filepath refpath = req->get_filepath();
-  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, 0,
-				 refpath, trace, req->follow_trailing_symlink(),
-				 req, ondelay,
-				 MDS_TRAVERSE_FORWARD,
-				 true); // is MClientRequest
+  int r = mdcache->path_traverse(mdr, req,
+				 0, refpath, 
+				 trace, req->follow_trailing_symlink(),
+				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     reply_request(mdr, r);
@@ -1180,6 +1174,8 @@ CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
  */
 version_t Server::predirty_dn_diri(CDentry *dn, EMetaBlob *blob, utime_t mtime)
 {
+  return 0;
+  /*
   version_t dirpv = 0;
   CInode *diri = dn->dir->inode;
 
@@ -1192,6 +1188,7 @@ version_t Server::predirty_dn_diri(CDentry *dn, EMetaBlob *blob, utime_t mtime)
   }
 
   return dirpv;
+  */
 }
 
 /** dirty_dn_diri
@@ -1199,6 +1196,7 @@ version_t Server::predirty_dn_diri(CDentry *dn, EMetaBlob *blob, utime_t mtime)
  */
 void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
 {
+  /*
   CInode *diri = dn->dir->inode;
   
   // make the udpate
@@ -1220,6 +1218,7 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
   } else {
     // we're not auth.  dirlock scatterlock will propagate the update.
   }
+  */
 }
 
 
@@ -1781,11 +1780,9 @@ void Server::handle_client_link(MDRequest *mdr)
   // traverse to link target
   filepath targetpath = req->get_sarg();
   dout(7) << "handle_client_link discovering target " << targetpath << endl;
-  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
   vector<CDentry*> targettrace;
-  int r = mdcache->path_traverse(mdr, 0,
-				 targetpath, targettrace, false,
-				 req, ondelay,
+  int r = mdcache->path_traverse(mdr, req,
+				 0, targetpath, targettrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL;
@@ -2027,10 +2024,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // traverse to path
   vector<CDentry*> trace;
-  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, 0,
-				 req->get_filepath(), trace, false,
-				 req, ondelay,
+  int r = mdcache->path_traverse(mdr, req, 
+				 0, req->get_filepath(), trace, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't unlink root
@@ -2376,10 +2371,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   // traverse to src
   filepath srcpath = req->get_filepath();
   vector<CDentry*> srctrace;
-  Context *ondelay = new C_MDS_RetryRequest(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, 0,
-				 srcpath, srctrace, false,
-				 req, ondelay,
+  int r = mdcache->path_traverse(mdr, req,
+				 0, srcpath, srctrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (srctrace.empty()) r = -EINVAL;  // can't rename root
@@ -2862,9 +2855,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << endl;
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, 0, destpath, trace, false, mdr->slave_request, 
-				 new C_MDS_RetryRequest(mdcache, mdr),
-				 MDS_TRAVERSE_DISCOVERXLOCK, false, true);
+  int r = mdcache->path_traverse(mdr, mdr->slave_request, 
+				 0, destpath, trace, false,
+				 MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
       
@@ -2875,9 +2868,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << endl;
-  r = mdcache->path_traverse(mdr, 0, srcpath, trace, false, mdr->slave_request, 
-			     new C_MDS_RetryRequest(mdcache, mdr),
-			     MDS_TRAVERSE_DISCOVERXLOCK, false, true);
+  r = mdcache->path_traverse(mdr, mdr->slave_request,
+			     0, srcpath, trace, false,  
+			     MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
       
