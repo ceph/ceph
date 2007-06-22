@@ -112,12 +112,19 @@ class MDS : public Dispatcher {
   // -- MDS state --
   int state;         // my confirmed state
   int want_state;    // the state i want
-  list<Context*> waitfor_active;
+
+  list<Context*> waiting_for_active;
+  map<int, list<Context*> > waiting_for_active_peer;
 
   map<int,version_t> peer_mdsmap_epoch;
 
  public:
-  void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
+  void wait_for_active(Context *c) { 
+    waiting_for_active.push_back(c); 
+  }
+  void wait_for_active_peer(int who, Context *c) { 
+    waiting_for_active_peer[who].push_back(c);
+  }
 
   bool is_dne()      { return state == MDSMap::STATE_DNE; }
   bool is_out()      { return state == MDSMap::STATE_OUT; }

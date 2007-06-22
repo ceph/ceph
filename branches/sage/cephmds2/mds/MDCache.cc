@@ -58,11 +58,6 @@
 
 #include "messages/MInodeFileCaps.h"
 
-#include "messages/MInodeLink.h"
-#include "messages/MInodeLinkAck.h"
-#include "messages/MInodeUnlink.h"
-#include "messages/MInodeUnlinkAck.h"
-
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
 
@@ -913,6 +908,17 @@ void MDCache::send_pending_import_maps()
   wants_import_map.clear();
 }
 
+
+class C_MDC_SendImportMap : public Context {
+  MDCache *mdc;
+  int who;
+public:
+  C_MDC_SendImportMap(MDCache *c, int w) : mdc(c), who(w) { }
+  void finish(int r) {
+    mdc->send_import_map_now(who);
+  }
+};
+
 void MDCache::send_import_map_now(int who)
 {
   dout(10) << "send_import_map_now to mds" << who << endl;
@@ -954,6 +960,35 @@ void MDCache::send_import_map_now(int who)
        ++p) 
     m->add_ambiguous_import(p->first, p->second);
   
+
+  // [survivor] list requests that may have slave PREPARE events journaled
+  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+       p != active_requests.end();
+       ++p) {
+    // might this slave have a PREPARE journaled?
+    // or, were we just waiting on this slave?
+    if (p->second->is_master() &&
+	(p->second->witnessed.count(who) ||
+	 p->second->waiting_on_slave.count(who))) {
+      if (p->second->committing) {
+	dout(10) << " committing " << *p->second << ", waiting for log to flush" << endl;
+	mds->mdlog->wait_for_sync(new C_MDC_SendImportMap(this, who));
+	delete m;
+	return;	
+      }
+
+      dout(10) << " including uncommitted " << *p->second << endl;
+      m->add_master_request(p->first);
+
+      // discard this peer's prepare (if any)
+      p->second->witnessed.erase(who);
+      p->second->waiting_on_slave.erase(who);
+      
+      // retry request when peer recovers!
+      mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
+    }
+  }
+
   // send
   mds->send_message_mds(m, who, MDS_PORT_CACHE);
 }
@@ -995,7 +1030,7 @@ void MDCache::handle_mds_failure(int who)
   }
 
   // tell the migrator too.
-  migrator->handle_mds_failure(who);
+  migrator->handle_mds_failure_or_stop(who);
 
   // kick any dir discovers that are waiting
   hash_map<inodeno_t,set<int> >::iterator p = dir_discovers.begin();
@@ -1031,13 +1066,6 @@ void MDCache::handle_mds_failure(int who)
     if (p->second->slave_to_mds == who) 
       finish.push_back(p->second);
 
-    // waiting on the failed node?
-    else if (p->second->waiting_on_slave.count(who)) {
-      dout(10) << "request " << *p->second << " was waiting on mds" << who << endl;
-      p->second->waiting_on_slave.erase(who);
-      if (p->second->waiting_on_slave.empty()) 
-	mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
-    }
   }
   while (!finish.empty()) {
     dout(10) << "cleaning up slave request " << *finish.front() << endl;
@@ -1121,6 +1149,18 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   dout(7) << "handle_import_map from " << m->get_source() << endl;
   int from = m->get_source().num();
 
+  // try to disambiguate any unmatched slave prepares
+  for (list<metareqid_t>::iterator p = m->master_requests.begin();
+       p != m->master_requests.end();
+       ++p) {
+    if (uncommitted_slave_updates.count(*p)) {
+      // master request still exists; ABORT
+      dout(10) << " master request " << *p << " still in-progress, ABORTing our PREPARE" << endl;
+      uncommitted_slave_updates.erase(*p);
+      mds->mdlog->submit_entry(new ESlaveUpdate("unknown/recovered", *p, ESlaveUpdate::OP_ABORT));
+    }
+  }
+
   // update my dir_auth values
   for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->imap.begin();
        pi != m->imap.end();
@@ -1176,10 +1216,11 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     
     if (got_import_map == recovery_set) {
       dout(10) << "got all import maps, done resolving subtrees" << endl;
+      commit_slave_updates();
       disambiguate_imports();
       recalc_auth_bits();
       trim_non_auth(); 
-      
+
       // reconnect clients
       mds->set_want_state(MDSMap::STATE_RECONNECT);
 
@@ -1192,6 +1233,18 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   delete m;
 }
 
+
+void MDCache::commit_slave_updates()
+{
+  dout(10) << "commit_slave_updates" << endl;
+  
+  while (!uncommitted_slave_updates.empty()) {
+    map<metareqid_t, EMetaBlob>::iterator p = uncommitted_slave_updates.begin();
+    dout(10) << " committing slave update " << *p << endl;
+    p->second.replay(mds);
+    mds->mdlog->submit_entry(new ESlaveUpdate("unknown/recovered", p->first, ESlaveUpdate::OP_COMMIT));
+  }
+}
 
 void MDCache::disambiguate_imports()
 {
@@ -1411,6 +1464,48 @@ void MDCache::send_cache_rejoins()
     cache_rejoin_walk(dir, rejoins[auth]);
   }
 
+  // note request authpins, xlocks
+  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+       p != active_requests.end();
+       ++p) {
+    // auth pins
+    for (set<MDSCacheObject*>::iterator q = p->second->auth_pins.begin();
+	 q != p->second->auth_pins.end();
+	 ++q) {
+      if (!(*q)->is_auth()) {
+	int who = (*q)->authority().first;
+	if (rejoins.count(who) == 0) continue;
+	MMDSCacheRejoin *rejoin = rejoins[who];
+
+	dout(15) << " " << *p->second << " authpin on " << **q << endl;
+	MDSCacheObjectInfo i;
+	(*q)->set_object_info(i);
+	if (i.ino)
+	  rejoin->add_inode_authpin(i.ino, p->second->reqid);
+	else
+	  rejoin->add_dentry_authpin(i.dirfrag, i.dname, p->second->reqid);
+      }
+    }
+    // xlocks
+    for (set<SimpleLock*>::iterator q = p->second->xlocks.begin();
+	 q != p->second->xlocks.end();
+	 ++q) {
+      if (!(*q)->get_parent()->is_auth()) {
+	int who = (*q)->get_parent()->authority().first;
+	if (rejoins.count(who) == 0) continue;
+	MMDSCacheRejoin *rejoin = rejoins[who];
+
+	dout(15) << " " << *p->second << " xlock on " << **q << " " << *(*q)->get_parent() << endl;
+	MDSCacheObjectInfo i;
+	(*q)->get_parent()->set_object_info(i);
+	if (i.ino)
+	  rejoin->add_inode_xlock(i.ino, (*q)->get_type(), p->second->reqid);
+	else
+	  rejoin->add_dentry_xlock(i.dirfrag, i.dname, p->second->reqid);
+      }
+    }
+  }  
+
   // send the messages
   assert(rejoin_ack_gather.empty());
   for (map<int,MMDSCacheRejoin*>::iterator p = rejoins.begin();
@@ -1451,9 +1546,6 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       rejoin->add_strong_dentry(dir->dirfrag(), p->first,
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
-      if (dn->lock.is_xlocked())
-	rejoin->add_dentry_xlock(dir->dirfrag(), p->first, 
-				 dn->lock.get_xlocked_by()->reqid);
     }
     
     // inode?
@@ -1469,18 +1561,6 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->dirfragtreelock.get_state(),
 				 in->filelock.get_state(),
 				 in->dirlock.get_state());
-	if (in->authlock.is_xlocked())
-	  rejoin->add_inode_xlock(in->ino(), in->authlock.get_type(),
-				  in->authlock.get_xlocked_by()->reqid);
-	if (in->linklock.is_xlocked())
-	  rejoin->add_inode_xlock(in->ino(), in->linklock.get_type(),
-				  in->linklock.get_xlocked_by()->reqid);
-	if (in->dirfragtreelock.is_xlocked())
-	  rejoin->add_inode_xlock(in->ino(), in->dirfragtreelock.get_type(),
-				  in->dirfragtreelock.get_xlocked_by()->reqid);
-	if (in->filelock.is_xlocked())
-	  rejoin->add_inode_xlock(in->ino(), in->filelock.get_type(),
-				  in->filelock.get_xlocked_by()->reqid);
       }
       
       // dirfrags in this subtree?
@@ -1743,13 +1823,34 @@ void MDCache::handle_cache_rejoin_rejoin(MMDSCacheRejoin *m)
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
       if (!dn) continue;  // already missing, from above.
-      dout(10) << " dn xlock by " << q->second << " on " << *dn << endl;
-   
-      // create slave mdrequest
-      MDRequest *mdr = request_start_slave(q->second, from);
+      dout(10) << " dn authpin by " << q->second << " on " << *dn << endl;
+
+      // get/create slave mdrequest
+      MDRequest *mdr;
+      if (have_request(q->second))
+	mdr = request_get(q->second);
+      else
+	mdr = request_start_slave(q->second, from);
 
       // auth_pin
-      mdr->auth_pin(dn->dir);
+      mdr->auth_pin(dn);
+    }
+  }
+  for (map<dirfrag_t, map<string, metareqid_t> >::iterator p = m->xlocked_dentries.begin();
+       p != m->xlocked_dentries.end();
+       ++p) {
+    CDir *dir = get_dirfrag(p->first);
+    if (!dir) continue;  // already missing, from above.
+    for (map<string, metareqid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      CDentry *dn = dir->lookup(q->first);
+      if (!dn) continue;  // already missing, from above.
+      dout(10) << " dn xlock by " << q->second << " on " << *dn << endl;
+   
+      // get slave mdrequest (we should have it bc of authpin!)
+      MDRequest *mdr = request_get(q->second);
+      assert(mdr->is_auth_pinned(dn));
 
       // xlock
       dn->lock.set_state(LOCK_LOCK);
@@ -2741,8 +2842,9 @@ bool MDCache::shutdown_pass()
   // send all imports back to 0.
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0 && 
-      !migrator->is_exporting() &&
-      !migrator->is_importing()) {
+      !migrator->is_exporting() //&&
+      //!migrator->is_importing()
+      ) {
     // export to root
     dout(7) << "looking for subtrees to export to mds0" << endl;
     list<CDir*> ls;
@@ -2766,6 +2868,8 @@ bool MDCache::shutdown_pass()
   if (!subtrees.empty()) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
     show_subtrees();
+    migrator->show_importing();
+    migrator->show_exporting();
     //show_cache();
     return false;
   }
@@ -2875,10 +2979,6 @@ void MDCache::dispatch(Message *m)
     handle_inode_update((MInodeUpdate*)m);
     break;
     */
-
-  case MSG_MDS_INODELINK:
-    handle_inode_link((MInodeLink*)m);
-    break;
 
   case MSG_MDS_DIRUPDATE:
     handle_dir_update((MDirUpdate*)m);
@@ -3523,11 +3623,6 @@ void MDCache::request_drop_locks(MDRequest *mdr)
     mds->locker->rdlock_finish(*mdr->rdlocks.begin(), mdr);
   while (!mdr->wrlocks.empty()) 
     mds->locker->wrlock_finish(*mdr->wrlocks.begin(), mdr);
-  
-  // make sure ref and trace are empty
-  //  if we are doing our own locking, we can't use them!
-  //assert(mdr->ref == 0);
-  //assert(mdr->trace.empty());
 }
 
 void MDCache::request_cleanup(MDRequest *mdr)
@@ -3914,85 +4009,6 @@ void MDCache::migrate_stray(CDentry *dn, int dest)
   dout(10) << "migrate_stray to mds" << dest << " " << *dn << endl;
 
 }
-
-
-// -------------------------------------------------------------------------------
-// HARD LINKS
-
-
-class C_MDC_InodeLinkAgree : public Context {
-  MDS *mds;
-  MInodeLink *m;
-public:
-  C_MDC_InodeLinkAgree(MDS *_mds, MInodeLink *_m) : mds(_mds), m(_m) {}
-  void finish(int r) {
-    mds->send_message_mds(new MInodeLink(MInodeLink::OP_AGREE,
-					 m->get_ino(), 
-					 m->get_inc(), 
-					 m->get_reqid()),
-			  m->get_source().num(),
-			  m->get_source_port());
-    delete m;
-  }
-};
-
-void MDCache::handle_inode_link(MInodeLink *m)
-{
-  CInode *in = get_inode(m->get_ino());
-  assert(in);
-  dout(7) << "handle_inode_link " << *m << " on " << *in << endl;
-  
-  // get request.
-  // we should have this bc the inode is xlocked.
-  MDRequest *mdr = request_get(m->get_reqid());
-
-  switch (m->get_op()) {
-    // auth
-  case MInodeLink::OP_PREPARE:
-    assert(in->is_auth());
-    {
-      version_t pv = in->pre_dirty();
-      ESlaveUpdate *le = new ESlaveUpdate("link_prepare", m->get_reqid(), 0);
-      le->metablob.add_dir_context(in->get_parent_dir());
-      inode_t *pi = le->metablob.add_primary_dentry(in->parent, true, in);
-      if (m->get_inc())
-	pi->nlink++;
-      else
-	pi->nlink--;
-      pi->ctime = m->get_ctime();
-      pi->version = pv;
-      mdr->projected_inode[in->ino()] = *pi;
-      mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_InodeLinkAgree(mds, m));
-    }
-    return;
-    
-  case MInodeLink::OP_COMMIT:
-    assert(in->is_auth());
-    {
-      // make the update to our cache
-      in->inode = mdr->projected_inode[in->ino()];
-      in->mark_dirty(in->inode.version);
-
-      // journal the commit
-      ESlaveUpdate *le = new ESlaveUpdate("link_commit", m->get_reqid(), 1);
-      mds->mdlog->submit_entry(le);
-    }
-    delete m;
-    return;
-
-
-  case MInodeLink::OP_AGREE:
-    assert(!in->is_auth());
-    in->finish_waiting(CInode::WAIT_SLAVEAGREE);
-    delete m;
-    return;
-    
-  default:
-    assert(0);
-  }
-}
-
 
 
 

@@ -38,11 +38,6 @@
 
 #include "messages/MInodeFileCaps.h"
 
-#include "messages/MInodeLink.h"
-#include "messages/MInodeLinkAck.h"
-#include "messages/MInodeUnlink.h"
-#include "messages/MInodeUnlinkAck.h"
-
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
 

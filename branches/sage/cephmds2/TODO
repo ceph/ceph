@@ -50,6 +50,23 @@ sage mds
 - slave request cleanup on failure
   - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
 
+ - recovering node needs to know what slave ops committed
+   - either commit or abort
+   - if master op still exists, then ABORT.
+   - if master op dne, then COMMIT.
+ - surviving node needs to 
+   - wait for log to flush (commits to finish), then
+   - for uncommitted requests, 
+     - include reqid in resolve message to recovering node
+     - remove failed from witnesses, waiting_on_slave, and
+     - redispatch
+   - somehow wait for needed peers to recover...
+
+- new thrashing test with
+ - link, unlink, and rename (lots of hard links!)
+
+- check/fix mdr->slaves, wrt slave ops (authpin etc.) that 'fail'
+
 - fix up writeback of dir inode mtime
 
 - revisit wrlocks, dir inode mtime updates.  esp in rename.
@@ -59,36 +76,17 @@ sage mds
   - mtime will always get journaled...
   -> so, just make sure v/pv/dirtyness is sane on recovery...
   -> scatterlock should recover into scatter state, or whatever...
+- dirlock-protected mtime updates vs migration, journaling, recovery
 
-- reimplement _local_link/unlink using rename as model. 
 
 - Q: locker vs migration
   - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).
   - ...but does it play nice with wrlock?  and unfortuantely auth_pinning wrlocks would kill performance on updates at dir delegation points.
 
-- dirlock-protected mtime updates vs migration, journaling, recovery
-- rename fun
-  - remote pinning
-  - is there race with discover?  
-  - generic pin_witnesses func we can use for local and remote renames
-  - fix up local rename
-  - journal renames on witnesses
-- then?
-  - ESlaveUpdate
-  - remote link
-  - remote rename
-  - remote unlink
 
 - journal+recovery
-  - local rename
-    - how to notify replicas...
 /  - stray purge
   - stray reintegration
-  - remote link
-    - impl remote inode xlock
-    - ESlaveUpdate replay, resolution, etc.
-  - remote unlink
-  - remote rename
   - file capabilities i/o
 - dirfrag split/merge
   - client readdir for dirfrags
@@ -96,7 +94,7 @@ sage mds
   - dentry versions vs dirfrags...
 - statfs?
 
-- finish multistage rejoin 
+- finish multistage rejoin
 - trim_on_rejoin
 
 - more testing of failures + thrashing.

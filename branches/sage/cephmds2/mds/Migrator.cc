@@ -152,9 +152,9 @@ void Migrator::export_empty_import(CDir *dir)
 // ==========================================================
 // mds failure handling
 
-void Migrator::handle_mds_failure(int who)
+void Migrator::handle_mds_failure_or_stop(int who)
 {
-  dout(5) << "handle_mds_failure mds" << who << endl;
+  dout(5) << "handle_mds_failure_or_stop mds" << who << endl;
 
   // check my exports
   map<CDir*,int>::iterator p = export_state.begin();
@@ -359,6 +359,24 @@ void Migrator::handle_mds_failure(int who)
 }
 
 
+
+void Migrator::show_importing()
+{  
+  dout(10) << "show_importing" << endl;
+  for (map<dirfrag_t,int>::iterator p = import_state.begin();
+       p != import_state.end();
+       p++) 
+    dout (10) << " " << p->first << " " << get_import_statename(p->second) << endl;
+}
+
+void Migrator::show_exporting() 
+{
+  dout(10) << "show_exporting" << endl;
+  for (map<CDir*,int>::iterator p = export_state.begin();
+       p != export_state.end();
+       p++) 
+    dout (10) << " " << get_export_statename(p->second) << " " << *p->first << endl;
+}
 
 
 

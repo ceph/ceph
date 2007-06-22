@@ -33,7 +33,6 @@
 #include "messages/MLock.h"
 
 #include "messages/MDentryUnlink.h"
-#include "messages/MInodeLink.h"
 
 #include "events/EString.h"
 #include "events/EUpdate.h"
@@ -70,7 +69,7 @@ void Server::dispatch(Message *m)
   // active?
   if (!mds->is_active()) {
     dout(3) << "not active yet, waiting" << endl;
-    mds->queue_waitfor_active(new C_MDS_RetryMessage(mds, m));
+    mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
     return;
   }
 
@@ -2015,6 +2014,9 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // finisher
   C_MDS_link_remote_finish *fin = new C_MDS_link_remote_finish(mds, mdr, dn, targeti, dirpv);
   
+  // mark committing (needed for proper recovery)
+  mdr->committing = true;
+
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -2474,6 +2476,9 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   
   journal_opens();  // journal pending opens, just in case
   
+  // mark committing (needed for proper recovery)
+  mdr->committing = true;
+
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -2580,20 +2585,6 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
 
 // ======================================================
 
-class C_MDS_rename_anchor : public Context {
-  Server *server;
-public:
-  LogEvent *le;
-  C_MDS_rename_finish *fin;
-  version_t atid1;
-  version_t atid2;
-  
-  C_MDS_rename_anchor(Server *s) : server(s), le(0), fin(0), atid1(0), atid2(0) { }
-  void finish(int r) {
-    server->_rename_reanchored(le, fin, atid1, atid2);
-  }
-};
-
 
 class C_MDS_rename_finish : public Context {
   MDS *mds;
@@ -2602,17 +2593,13 @@ class C_MDS_rename_finish : public Context {
   CDentry *destdn;
   CDentry *straydn;
 public:
-  version_t atid1;
-  version_t atid2;
   C_MDS_rename_finish(MDS *m, MDRequest *r,
 		      CDentry *sdn, CDentry *ddn, CDentry *stdn) :
     mds(m), mdr(r),
-    srcdn(sdn), destdn(ddn), straydn(stdn),
-    atid1(0), atid2(0) { }
+    srcdn(sdn), destdn(ddn), straydn(stdn) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_rename_finish(mdr, srcdn, destdn, straydn,
-				atid1, atid2);
+    mds->server->_rename_finish(mdr, srcdn, destdn, straydn);
   }
 };
 
@@ -2792,39 +2779,41 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   CDentry *straydn = _rename_prepare(mdr, &le->metablob, srcdn, destdn);
 
-  // -- prepare anchor updates --
-  C_MDS_rename_anchor *anchorfin = 0;
-  C_Gather *anchorgather = 0;
-  
+  // -- prepare anchor updates -- 
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
 
   if (!linkmerge) {
+    C_Gather *anchorgather = 0;
+
     if (srcdn->is_primary() && srcdn->inode->is_anchored() &&
-	srcdn->dir != destdn->dir) {
+	srcdn->dir != destdn->dir &&
+	!mdr->src_reanchor_atid) {
       dout(10) << "reanchoring src->dst " << *srcdn->inode << endl;
       vector<Anchor> trace;
       destdn->make_anchor_trace(trace, srcdn->inode);
       
-      anchorfin = new C_MDS_rename_anchor(this);
-      anchorgather = new C_Gather(anchorfin);
-      mds->anchorclient->prepare_update(srcdn->inode->ino(), trace, &anchorfin->atid1, 
+      anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
+      mds->anchorclient->prepare_update(srcdn->inode->ino(), trace, &mdr->src_reanchor_atid, 
 					anchorgather->new_sub());
     }
     if (destdn->is_primary() &&
-	destdn->inode->is_anchored()) {
+	destdn->inode->is_anchored() &&
+	!mdr->dst_reanchor_atid) {
       dout(10) << "reanchoring dst->stray " << *destdn->inode << endl;
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, destdn->inode);
       
-      if (!anchorfin) {
-	anchorfin = new C_MDS_rename_anchor(this);
-	anchorgather = new C_Gather(anchorfin);
-      }
-      mds->anchorclient->prepare_update(destdn->inode->ino(), trace, &anchorfin->atid2, 
+      if (!anchorgather)
+	anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
+      mds->anchorclient->prepare_update(destdn->inode->ino(), trace, &mdr->dst_reanchor_atid, 
 					anchorgather->new_sub());
     }
+
+    if (anchorgather) 
+      return;  // waiting for anchor prepares
   }
+
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
@@ -2834,33 +2823,16 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   journal_opens();  // journal pending opens, just in case
 
-  if (anchorfin) {
-    // doing anchor update prepare first
-    anchorfin->fin = fin;
-    anchorfin->le = le;
-  } else {
-    // log + wait
-    mdlog->submit_entry(le);
-    mdlog->wait_for_sync(fin);
-  }
-}
-
-void Server::_rename_reanchored(LogEvent *le, C_MDS_rename_finish *fin, 
-				version_t atid1, version_t atid2)
-{
-  dout(10) << "_rename_reanchored, logging " << *le << endl;
+  // mark committing (needed for proper recovery)
+  mdr->committing = true;
   
-  // note anchor transaction ids
-  fin->atid1 = atid1;
-  fin->atid2 = atid2;
-
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
 }
 
-void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-			    version_t atid1, version_t atid2)
+
+void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_finish " << *mdr << endl;
 
@@ -2868,8 +2840,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   //_rename_apply(mdr, srcdn, destdn, straydn);
   
   // commit anchor updates?
-  if (atid1) mds->anchorclient->commit(atid1);
-  if (atid2) mds->anchorclient->commit(atid2);
+  if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid);
+  if (mdr->dst_reanchor_atid) mds->anchorclient->commit(mdr->dst_reanchor_atid);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);

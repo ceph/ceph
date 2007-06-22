@@ -719,8 +719,7 @@ void EOpen::replay(MDS *mds)
 
 bool ESlaveUpdate::has_expired(MDS *mds)
 {
-  return true;
-  //return metablob.has_expired(mds);
+  return metablob.has_expired(mds);
 }
 
 void ESlaveUpdate::expire(MDS *mds, Context *c)
@@ -730,7 +729,37 @@ void ESlaveUpdate::expire(MDS *mds, Context *c)
 
 void ESlaveUpdate::replay(MDS *mds)
 {
-  //metablob.replay(mds);
+  switch (op) {
+  case ESlaveUpdate::OP_PREPARE:
+    // FIXME: horribly inefficient
+    dout(10) << "ESlaveUpdate.replay prepare " << reqid << ": saving blob for later commit" << endl;
+    assert(mds->mdcache->uncommitted_slave_updates.count(reqid) == 0);
+    mds->mdcache->uncommitted_slave_updates[reqid] = metablob;
+    break;
+
+  case ESlaveUpdate::OP_COMMIT:
+    if (mds->mdcache->uncommitted_slave_updates.count(reqid)) {
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << ": applying previously saved blob" << endl;
+      mds->mdcache->uncommitted_slave_updates[reqid].replay(mds);
+      mds->mdcache->uncommitted_slave_updates.erase(reqid);
+    } else {
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << ": ignoring, no previously saved blob" << endl;
+    }
+    break;
+
+  case ESlaveUpdate::OP_ABORT:
+    if (mds->mdcache->uncommitted_slave_updates.count(reqid)) {
+      dout(10) << "ESlaveUpdate.replay abort " << reqid << ": discarding previously saved blob" << endl;
+      assert(mds->mdcache->uncommitted_slave_updates.count(reqid));
+      mds->mdcache->uncommitted_slave_updates.erase(reqid);
+    } else {
+      dout(10) << "ESlaveUpdate.replay abort " << reqid << ": ignoring, no previously saved blob" << endl;
+    }
+    break;
+
+  default:
+    assert(0);
+  }
 }
 
 

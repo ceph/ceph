@@ -30,6 +30,7 @@
 #include "CDentry.h"
 #include "CDir.h"
 #include "include/Context.h"
+#include "events/EMetaBlob.h"
 
 class MDS;
 class Migrator;
@@ -102,20 +103,22 @@ struct MDRequest {
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
   bool done_locking; 
-
-  // projected updates
-  map< inodeno_t, inode_t > projected_inode;
-
+  bool committing;
 
   // for rename/link/unlink
-  set<int> extra_witnesses; // replica list from srcdn auth (rename)
-  set<int> witnessed;       // nodes who have journaled a RenamePrepare
   utime_t now;
+  set<int> witnessed;       // nodes who have journaled a RenamePrepare
   map<MDSCacheObject*,version_t> pvmap;
+
+  // for rename
+  set<int> extra_witnesses; // replica list from srcdn auth (rename)
+  version_t src_reanchor_atid;  // src->dst
+  version_t dst_reanchor_atid;  // dst->stray
   bufferlist inode_import;
   version_t inode_import_v;
   CDentry *srcdn; // srcdn, if auth, on slave
   
+  // called when slave commits
   Context *slave_commit;
 
 
@@ -123,20 +126,20 @@ struct MDRequest {
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    done_locking(false),
-    inode_import_v(0),
+    done_locking(false), committing(false),
+    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    done_locking(false),
-    inode_import_v(0),
+    done_locking(false), committing(false),
+    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
-    done_locking(false),
-    inode_import_v(0),
+    done_locking(false), committing(false),
+    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
@@ -298,10 +301,14 @@ protected:
   // from MMDSImportMaps
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
+  map<metareqid_t, EMetaBlob> uncommitted_slave_updates;
+  friend class ESlaveUpdate;
+
   set<int> wants_import_map;   // nodes i need to send my import map to
   set<int> got_import_map;     // nodes i got import_maps from
   
   void handle_import_map(MMDSImportMap *m);
+  void commit_slave_updates();
   void disambiguate_imports();
 
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
@@ -512,9 +519,6 @@ protected:
 			list<Context*>& finished);
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
     
-
-  // -- hard links --
-  void handle_inode_link(class MInodeLink *m);
 
   // -- namespace --
   void handle_dentry_unlink(MDentryUnlink *m);

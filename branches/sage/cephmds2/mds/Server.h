@@ -147,11 +147,8 @@ public:
 
   // rename
   void handle_client_rename(MDRequest *mdr);
-  void _rename_reanchored(LogEvent *le, C_MDS_rename_finish *fin, 
-			  version_t atid1, version_t atid2);
   void _rename_finish(MDRequest *mdr,
-		      CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-		      version_t atid1, version_t atid2);
+		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // helpers
   CDentry *_rename_prepare(MDRequest *mdr,

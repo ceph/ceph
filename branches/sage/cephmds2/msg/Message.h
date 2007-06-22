@@ -107,11 +107,6 @@
 
 #define MSG_MDS_ANCHOR 130
 
-#define MSG_MDS_INODELINK       140
-#define MSG_MDS_INODELINKACK    141
-#define MSG_MDS_INODEUNLINK     142
-#define MSG_MDS_INODEUNLINKACK  143
-
 #define MSG_MDS_EXPORTDIRDISCOVER     149
 #define MSG_MDS_EXPORTDIRDISCOVERACK  150
 #define MSG_MDS_EXPORTDIRCANCEL       151
@@ -128,15 +123,6 @@
 #define MSG_MDS_SLAVE_REQUEST         170
 
 #define MSG_MDS_DENTRYUNLINK      200
-
-#define MSG_MDS_RENAMEWARNING    300   // sent from src to bystanders
-#define MSG_MDS_RENAMENOTIFY     301   // sent from dest to bystanders
-#define MSG_MDS_RENAMENOTIFYACK  302   // sent back to src
-#define MSG_MDS_RENAMEACK        303   // sent from src to initiator, to xlock_finish
-
-#define MSG_MDS_RENAMEPREP       304   // sent from initiator to dest auth (if dir)
-#define MSG_MDS_RENAMEREQ        305   // sent from initiator (or dest if dir) to src auth
-#define MSG_MDS_RENAME           306   // sent from src to dest, includes inode
 
 #define MSG_MDS_LOCK             500
 

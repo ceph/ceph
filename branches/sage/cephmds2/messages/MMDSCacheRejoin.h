@@ -89,6 +89,7 @@ class MMDSCacheRejoin : public Message {
   set<inodeno_t> weak_inodes;
   map<inodeno_t, inode_strong> strong_inodes;
   list<inode_full> full_inodes;
+  map<inodeno_t, metareqid_t> authpinned_inodes;
   map<inodeno_t, map<int, metareqid_t> > xlocked_inodes;
 
   set<dirfrag_t> weak_dirfrags;
@@ -96,6 +97,7 @@ class MMDSCacheRejoin : public Message {
 
   map<dirfrag_t, set<string> > weak_dentries;
   map<dirfrag_t, map<string, dn_strong> > strong_dentries;
+  map<dirfrag_t, map<string, metareqid_t> > authpinned_dentries;
   map<dirfrag_t, map<string, metareqid_t> > xlocked_dentries;
 
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
@@ -119,6 +121,9 @@ class MMDSCacheRejoin : public Message {
   void add_full_inode(inode_t &i, const string& s, const fragtree_t &f) {
     full_inodes.push_back(inode_full(i, s, f));
   }
+  void add_inode_authpin(inodeno_t ino, const metareqid_t& ri) {
+    authpinned_inodes[ino] = ri;
+  }
   void add_inode_xlock(inodeno_t ino, int lt, const metareqid_t& ri) {
     xlocked_inodes[ino][lt] = ri;
   }
@@ -138,6 +143,9 @@ class MMDSCacheRejoin : public Message {
   void add_strong_dentry(dirfrag_t df, const string& dname, int n, int ls) {
     strong_dentries[df][dname] = dn_strong(n, ls);
   }
+  void add_dentry_authpin(dirfrag_t df, const string& dname, const metareqid_t& ri) {
+    authpinned_dentries[df][dname] = ri;
+  }
   void add_dentry_xlock(dirfrag_t df, const string& dname, const metareqid_t& ri) {
     xlocked_dentries[df][dname] = ri;
   }
@@ -153,11 +161,13 @@ class MMDSCacheRejoin : public Message {
     for (list<inode_full>::iterator p = full_inodes.begin(); p != full_inodes.end(); ++p)
       p->_encode(payload);
 
+    ::_encode(authpinned_inodes, payload);
     ::_encode(xlocked_inodes, payload);
     ::_encode(weak_dirfrags, payload);
     ::_encode(strong_dirfrags, payload);
     ::_encode(weak_dentries, payload);
     ::_encode(strong_dentries, payload);
+    ::_encode(authpinned_dentries, payload);
     ::_encode(xlocked_dentries, payload);
   }
   void decode_payload() {
@@ -171,11 +181,13 @@ class MMDSCacheRejoin : public Message {
     for (unsigned i=0; i<nfull; i++) 
       full_inodes.push_back(inode_full(payload, off));
 
+    ::_decode(authpinned_inodes, payload, off);
     ::_decode(xlocked_inodes, payload, off);
     ::_decode(weak_dirfrags, payload, off);
     ::_decode(strong_dirfrags, payload, off);
     ::_decode(weak_dentries, payload, off);
     ::_decode(strong_dentries, payload, off);
+    ::_decode(authpinned_dentries, payload, off);
     ::_decode(xlocked_dentries, payload, off);
   }
 

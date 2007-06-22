@@ -60,6 +60,19 @@ public:
   const static int EXPORT_LOGGINGFINISH = 7;  // logging EExportFinish
   const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
   const static int EXPORT_ABORTING      = 9;  // notifying bystanders of abort
+  static const char *get_export_statename(int s) {
+    switch (s) {
+    case EXPORT_DISCOVERING: return "discovering";
+    case EXPORT_FREEZING: return "freezing";
+    case EXPORT_PREPPING: return "prepping";
+    case EXPORT_WARNING: return "warning";
+    case EXPORT_EXPORTING: return "exporting";
+    case EXPORT_LOGGINGFINISH: return "loggingfinish";
+    case EXPORT_NOTIFYING: return "notifying";
+    case EXPORT_ABORTING: return "aborting";
+    default: assert(0); return 0;
+    }
+  }
 
 protected:
   // export fun
@@ -83,6 +96,18 @@ public:
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
   //const static int IMPORT_LOGGINGFINISH = 7; // logging EImportFinish
   const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
+  static const char *get_import_statename(int s) {
+    switch (s) {
+    case IMPORT_DISCOVERING: return "discovering";
+    case IMPORT_DISCOVERED: return "discovered";
+    case IMPORT_PREPPING: return "prepping";
+    case IMPORT_PREPPED: return "prepped";
+    case IMPORT_LOGGINGSTART: return "loggingstart";
+    case IMPORT_ACKING: return "acking";
+    case IMPORT_ABORTING: return "aborting";
+    default: assert(0); return 0;
+    }
+  }
 
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
@@ -107,6 +132,8 @@ public:
 
   void dispatch(Message*);
 
+  void show_importing();
+  void show_exporting();
   
   // -- status --
   int is_exporting(CDir *dir) {
@@ -153,7 +180,7 @@ public:
 
 
   // -- misc --
-  void handle_mds_failure(int who);
+  void handle_mds_failure_or_stop(int who);
 
   void audit();
 

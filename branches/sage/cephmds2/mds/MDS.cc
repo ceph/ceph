@@ -476,6 +476,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
   set<int> oldout;
   mdsmap->get_mds_set(oldout, MDSMap::STATE_OUT);
+  set<int> oldstopped;
+  mdsmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
 
   // decode and process
   mdsmap->decode(m->get_encoded());
@@ -555,7 +557,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       }
 
       dout(1) << "now active" << endl;
-      finish_contexts(waitfor_active);  // kick waiters
+      finish_contexts(waiting_for_active);  // kick waiters
     }
 
     else if (is_reconnect()) {
@@ -649,11 +651,14 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (anchortable)
 	anchortable->handle_mds_recovery(*p);
       anchorclient->handle_mds_recovery(*p);
+
+      queue_waiters(waiting_for_active_peer[*p]);
+      waiting_for_active_peer.erase(*p);
     }
   }
 
-  // did anyone go down?
   if (is_active() || is_stopping()) {
+    // did anyone go down?
     set<int> failed;
     mdsmap->get_mds_set(failed, MDSMap::STATE_FAILED);
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
@@ -662,7 +667,17 @@ void MDS::handle_mds_map(MMDSMap *m)
 
       mdcache->handle_mds_failure(*p);
     }
+
+    // did anyone stop?
+    set<int> stopped;
+    mdsmap->get_mds_set(stopped, MDSMap::STATE_STOPPED);
+    for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) {
+      // newly so?
+      if (oldstopped.count(*p)) continue;      
+      mdcache->migrator->handle_mds_failure_or_stop(*p);
+    }
   }
+
 
   // inst set changed?
   /*
