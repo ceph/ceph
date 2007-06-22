@@ -127,6 +127,10 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks)
 {
+  if (mdr->done_locking) {
+    dout(10) << "acquire_locks " << *mdr << " -- done locking" << endl;    
+    return true;  // at least we had better be!
+  }
   dout(10) << "acquire_locks " << *mdr << endl;
 
   // sort everything we will lock
@@ -195,21 +199,26 @@ bool Locker::acquire_locks(MDRequest *mdr,
 
   // request remote auth_pins
   if (!mustpin_remote.empty()) {
-    // do these one at a time. (***)
-    map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
-    dout(10) << "requesting remote auth_pins from mds" << p->first << endl;
+    for (map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
+	 p != mustpin_remote.end();
+	 ++p) {
+      dout(10) << "requesting remote auth_pins from mds" << p->first << endl;
+      
+      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPIN);
+      for (set<MDSCacheObject*>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q) {
+	dout(10) << " req remote auth_pin of " << **q << endl;
+	MDSCacheObjectInfo info;
+	(*q)->set_object_info(info);
+	req->get_authpins().push_back(info);      
+      }
+      mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
 
-    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPIN);
-    for (set<MDSCacheObject*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      dout(10) << " req remote auth_pin of " << **q << endl;
-      MDSCacheObjectInfo info;
-      (*q)->set_object_info(info);
-      req->get_authpins().push_back(info);      
+      // put in waiting list
+      assert(mdr->waiting_on_slave.count(p->first) == 0);
+      mdr->waiting_on_slave.insert(p->first);
     }
-    mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
-    mdr->waiting_on_remote_auth_pin = p->first;
     return false;
   }
 

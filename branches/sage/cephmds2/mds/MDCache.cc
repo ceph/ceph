@@ -1023,16 +1023,26 @@ void MDCache::handle_mds_failure(int who)
   }
 
   // clean up any slave requests from this node
-  list<MDRequest*> ls;
+  list<MDRequest*> finish;
   for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
        p != active_requests.end();
-       ++p) 
+       ++p) {
+    // slave to the failed node?
     if (p->second->slave_to_mds == who) 
-      ls.push_back(p->second);
-  while (!ls.empty()) {
-    dout(10) << "cleaning up slave request " << *ls.front() << endl;
-    request_finish(ls.front());
-    ls.pop_front();
+      finish.push_back(p->second);
+
+    // waiting on the failed node?
+    else if (p->second->waiting_on_slave.count(who)) {
+      dout(10) << "request " << *p->second << " was waiting on mds" << who << endl;
+      p->second->waiting_on_slave.erase(who);
+      if (p->second->waiting_on_slave.empty()) 
+	mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
+    }
+  }
+  while (!finish.empty()) {
+    dout(10) << "cleaning up slave request " << *finish.front() << endl;
+    request_finish(finish.front());
+    finish.pop_front();
   }
 
   show_subtrees();  

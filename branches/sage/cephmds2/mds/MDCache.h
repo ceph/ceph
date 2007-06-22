@@ -75,17 +75,18 @@ struct MDRequest {
   metareqid_t reqid;
 
   // -- i am a client (master) request
-  MClientRequest *client_request;    // client request (if any)
-  set<int> slaves;                   // mds nodes that have slave requests to me (implies client_request)
+  MClientRequest *client_request; // client request (if any)
+  set<int> slaves;            // mds nodes that have slave requests to me (implies client_request)
+  set<int> waiting_on_slave;  // peers i'm waiting for slavereq replies from. 
 
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
 
   // -- i am a slave request
-  MMDSSlaveRequest *slave_request;   // slave request (if one is pending; implies slave == true)
-  int slave_to_mds;                  // this is a slave request.  slave_request may or may not be a pending op.
+  MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
+  int slave_to_mds;                // this is a slave request if >= 0.
 
-
+  // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
 
@@ -98,17 +99,18 @@ struct MDRequest {
   set< SimpleLock* > xlocks;   // local or remote.
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
+  // if this flag is set, do not attempt to acquire further locks.
+  //  (useful for wrlock, which may be a moving auth target)
+  bool done_locking; 
+
   // projected updates
   map< inodeno_t, inode_t > projected_inode;
 
-
-  int waiting_on_remote_auth_pin; // which mds?
 
   // for rename/link/unlink
   set<int> extra_witnesses; // replica list from srcdn auth (rename)
   set<int> witnessed;       // nodes who have journaled a RenamePrepare
   utime_t now;
-  int waiting_on_remote_witness;
   map<MDSCacheObject*,version_t> pvmap;
   bufferlist inode_import;
   version_t inode_import_v;
@@ -121,22 +123,19 @@ struct MDRequest {
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1),
+    done_locking(false),
     inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1),
+    done_locking(false),
     inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
-    waiting_on_remote_auth_pin(-1), 
-    waiting_on_remote_witness(-1),
+    done_locking(false),
     inode_import_v(0),
     slave_commit(0) { }
   

@@ -78,7 +78,7 @@ public:
   CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
   //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
 
-  version_t predirty_dn_diri(CDentry *dn, class EMetaBlob *blob, utime_t mtime);
+  version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob, utime_t mtime);
   void dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime);
   void dirty_diri_mtime_writebehind(CInode *diri, utime_t mtime);
 
