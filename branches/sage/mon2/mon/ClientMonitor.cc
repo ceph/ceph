@@ -67,12 +67,12 @@ bool ClientMonitor::update_from_paxos()
       dout(7) << "update_from_paxos  couldn't read incremental " << client_map.version+1 << endl;
       return false;
     }
-    
-    // save latest
-    bl.clear();
-    client_map._encode(bl);
-    mon->store->put_bl_ss(bl, "clientmap", "latest");
   }
+
+  // save latest
+  bl.clear();
+  client_map._encode(bl);
+  mon->store->put_bl_ss(bl, "clientmap", "latest");
 
   return true;
 }
