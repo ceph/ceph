@@ -3425,9 +3425,18 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
+  // did we win a forward race against a slave?
+  if (active_requests.count(req->get_reqid())) {
+    MDRequest *mdr = active_requests[req->get_reqid()];
+    dout(10) << "request_start already had (slave?) " << *mdr << endl;
+    assert(mdr->is_slave());
+    request_cleanup(mdr);
+    delete mdr;
+  }
+
+  // register new client request
   MDRequest *mdr = new MDRequest(req->get_reqid(), req);
-  assert(active_requests.count(mdr->reqid) == 0);
-  active_requests[mdr->reqid] = mdr;
+  active_requests[req->get_reqid()] = mdr;
   dout(7) << "request_start " << *mdr << endl;
   return mdr;
 }

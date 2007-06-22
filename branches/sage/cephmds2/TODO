@@ -50,9 +50,7 @@ sage mds
 - slave request cleanup on failure
   - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
 
-- resolve DISCOVERXLOCK versus rename issue
-  - witness list may change..
-  -> DISCOVERXLOCK _only_ used by witnesses!
+- fix up writeback of dir inode mtime
 
 - revisit wrlocks, dir inode mtime updates.  esp in rename.
   - if auth, pin and be happy.  decide early.
@@ -63,7 +61,6 @@ sage mds
   -> scatterlock should recover into scatter state, or whatever...
 
 - reimplement _local_link/unlink using rename as model. 
-
 
 - Q: locker vs migration
   - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).

@@ -571,7 +571,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     if (mdcache->have_request(m->get_reqid())) {
       mdr = mdcache->request_get(m->get_reqid());
     } else {
-      // new.
+      // new?
+      if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
+	dout(10) << "missing slave request for " << m->get_reqid() 
+		 << " OP_FINISH, must have lost race with a forward" << endl;
+	delete m;
+	return;
+      }
       mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
     }
     assert(mdr->client_request == 0);
