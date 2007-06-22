@@ -297,8 +297,8 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
     // newly linked?
     if (is_null() && !is_auth()) {
       // force trim from cache!
-      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim!" << endl;
-      assert(get_num_ref() == 0);
+      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << endl;
+      //assert(get_num_ref() == 0);
     } else {
       // verify?
       

@@ -128,18 +128,22 @@ public:
 			   version_t, version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
-  void _logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv);
-  void _commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc);
+  void _commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
   bool _verify_rmdir(MDRequest *mdr, CInode *rmdiri);
-  void _unlink_local(MDRequest *mdr, CDentry *dn);
+  void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, utime_t, version_t, version_t);    
+			    version_t, version_t, version_t);    
+
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
+  void _unlink_remote_finish(MDRequest *mdr, 
+			     CDentry *dn, 
+			     version_t, version_t);    
 
   // rename
   void handle_client_rename(MDRequest *mdr);

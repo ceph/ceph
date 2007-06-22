@@ -865,6 +865,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
       if (dn->is_null() && m->get_data().length() > 0) {
 	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
 		 << *dn << endl;
+	assert(dn->get_num_ref() == 0);
 	map<int, MCacheExpire*> expiremap;
 	mdcache->trim_dentry(dn, expiremap);
 	mdcache->send_expire_messages(expiremap);

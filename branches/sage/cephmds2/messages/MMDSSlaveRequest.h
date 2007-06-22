@@ -28,14 +28,15 @@ class MMDSSlaveRequest : public Message {
   static const int OP_AUTHPIN =     3;
   static const int OP_AUTHPINACK = -3;
 
+  static const int OP_LINKPREP =     4;
+  static const int OP_UNLINKPREP =   5;
+  static const int OP_LINKPREPACK = -4;
+
   static const int OP_RENAMEPREP =     7;
   static const int OP_RENAMEPREPACK = -7;
 
   static const int OP_RENAMEGETINODE =     8;
   static const int OP_RENAMEGETINODEACK = -8;
-
-  static const int OP_LINKPREP =     9;
-  static const int OP_LINKPREPACK = -9;
 
   static const int OP_FINISH =     17;
 
@@ -47,13 +48,14 @@ class MMDSSlaveRequest : public Message {
     case OP_AUTHPIN: return "authpin";
     case OP_AUTHPINACK: return "authpin_ack";
 
+    case OP_LINKPREP: return "link_prep";
+    case OP_LINKPREPACK: return "link_prep_ack";
+    case OP_UNLINKPREP: return "unlink_prep";
+
     case OP_RENAMEPREP: return "rename_prep";
     case OP_RENAMEPREPACK: return "rename_prep_ack";
     case OP_RENAMEGETINODE: return "rename_get_inode";
     case OP_RENAMEGETINODEACK: return "rename_get_inode_ack";
-
-    case OP_LINKPREP: return "link_prep";
-    case OP_LINKPREPACK: return "link_prep_ack";
 
     case OP_FINISH: return "finish"; // commit
     default: assert(0); return 0;

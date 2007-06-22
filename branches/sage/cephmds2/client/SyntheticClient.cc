@@ -1381,6 +1381,7 @@ void SyntheticClient::foo()
 
   if (1) {
     // link fun
+    srand(0);
     for (int i=0; i<100; i++) {
       int s = 5;
       int a = rand() % s;
@@ -1395,6 +1396,23 @@ void SyntheticClient::foo()
       sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
       client->link(src, dst);
     }
+    srand(0);
+    for (int i=0; i<100; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      int d = rand() % s;
+      int e = rand() % s;
+      int f = rand() % s;
+      char src[80];
+      char dst[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      client->unlink(dst);
+    }
+
+    
     return;
   }
 

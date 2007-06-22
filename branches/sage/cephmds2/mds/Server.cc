@@ -657,6 +657,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_LINKPREP:
+  case MMDSSlaveRequest::OP_UNLINKPREP:
     handle_slave_link_prep(mdr);
     break;
 
@@ -2041,17 +2042,20 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 }
 
 
+// remote linking/unlinking
+
 class C_MDS_SlaveLinkPrep : public Context {
   Server *server;
   MDRequest *mdr;
   CInode *targeti;
   version_t tpv;
+  bool inc;
 public:
-  C_MDS_SlaveLinkPrep(Server *s, MDRequest *r, CInode *t, version_t v) :
-    server(s), mdr(r), targeti(t), tpv(v) { }
+  C_MDS_SlaveLinkPrep(Server *s, MDRequest *r, CInode *t, version_t v, bool in) :
+    server(s), mdr(r), targeti(t), tpv(v), inc(in) { }
   void finish(int r) {
     assert(r == 0);
-    server->_logged_slave_link(mdr, targeti, tpv);
+    server->_logged_slave_link(mdr, targeti, tpv, inc);
   }
 };
 
@@ -2063,20 +2067,23 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   CInode *targeti = mdcache->get_inode(mdr->slave_request->get_object_info().ino);
   assert(targeti);
-  
   dout(10) << "targeti " << *targeti << endl;
-  
+  CDentry *dn = targeti->get_parent_dn();
+  assert(dn->is_primary());
+
   mdr->now = mdr->slave_request->now;
 
   // anchor?
-  if (targeti->is_anchored() && !targeti->is_unanchoring()) {
-    dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
-  } 
-  else {
-    dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
-    mdcache->anchor_create(mdr, targeti,
-			   new C_MDS_RetryRequest(mdcache, mdr));
-    return;
+  if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
+    if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+    } 
+    else {
+      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+      mdcache->anchor_create(mdr, targeti,
+			     new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
   }
 
   // journal it
@@ -2085,16 +2092,22 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   version_t tpv = targeti->pre_dirty();
 
   // add to event
-  le->metablob.add_remote_dentry(targeti->get_parent_dn(), true, targeti->ino());  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
-  inode_t *pi = le->metablob.add_primary_dentry(targeti->parent, true, targeti);  // update old primary
+  inode_t *pi = le->metablob.add_primary_dentry(dn, true, targeti);  // update old primary
 
   // update journaled target inode
-  pi->nlink++;
+  bool inc;
+  if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
+    inc = true;
+    pi->nlink++;
+  } else {
+    inc = false;
+    pi->nlink--;
+  }
   pi->ctime = mdr->now;
   pi->version = tpv;
 
-  mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, tpv));
+  mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, tpv, inc));
 }
 
 class C_MDS_SlaveLinkCommit : public Context {
@@ -2102,38 +2115,45 @@ class C_MDS_SlaveLinkCommit : public Context {
   MDRequest *mdr;
   CInode *targeti;
   version_t tpv;
+  bool inc;
 public:
-  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, version_t v) :
-    server(s), mdr(r), targeti(t), tpv(v) { }
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, version_t v, bool in) :
+    server(s), mdr(r), targeti(t), tpv(v), inc(in) { }
   void finish(int r) {
     assert(r == 0);
-    server->_commit_slave_link(mdr, targeti, tpv);
+    server->_commit_slave_link(mdr, targeti, tpv, inc);
   }
 };
 
-void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv) 
+void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc) 
 {
-  dout(10) << "_logged_slave_link " << *mdr << " " << *targeti << endl;
+  dout(10) << "_logged_slave_link " << *mdr
+	   << " inc=" << inc
+	   << " " << *targeti << endl;
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
   // set up commit waiter
-  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, tpv);
+  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, tpv, inc);
 
   // done.
   delete mdr->slave_request;
   mdr->slave_request = 0;
-
 }
 
-void Server::_commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv)
+void Server::_commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc)
 {  
-  dout(10) << "_commit_slave_link " << *mdr << " " << *targeti << endl;
+  dout(10) << "_commit_slave_link " << *mdr
+	   << " inc=" << inc
+	   << " " << *targeti << endl;
 
   // update the target
-  targeti->inode.nlink++;
+  if (inc)
+    targeti->inode.nlink++;
+  else
+    targeti->inode.nlink--;
   targeti->inode.ctime = mdr->now;
   targeti->mark_dirty(tpv);
 
@@ -2191,6 +2211,13 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   CDentry *dn = trace[trace.size()-1];
   assert(dn);
+  
+  // is it my dentry?
+  if (!dn->is_auth()) {
+    // fw to auth
+    mdcache->request_forward(mdr, dn->authority().first);
+    return;
+  }
 
   // rmdir or unlink?
   bool rmdir = false;
@@ -2249,11 +2276,28 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  // yay!
+  mdr->done_locking = true;  // avoid wrlock racing
+
+  if (mdr->now == utime_t())
+    mdr->now = g_clock.real_now();
+
+  // get stray dn ready?
+  CDentry *straydn = 0;
+  if (dn->is_primary()) {
+    string straydname;
+    dn->inode->name_stray_dentry(straydname);
+    frag_t fg = mdcache->get_stray()->pick_dirfrag(straydname);
+    CDir *straydir = mdcache->get_stray()->get_or_open_dirfrag(mdcache, fg);
+    straydn = straydir->add_dentry(straydname, 0);
+    dout(10) << " straydn is " << *straydn << endl;
+  }
+
   // ok!
   if (dn->is_remote() && !dn->inode->is_auth()) 
     _unlink_remote(mdr, dn);
   else
-    _unlink_local(mdr, dn);
+    _unlink_local(mdr, dn, straydn);
 }
 
 
@@ -2264,38 +2308,25 @@ class C_MDS_unlink_local_finish : public Context {
   CDentry *dn;
   CDentry *straydn;
   version_t ipv;  // referred inode
-  utime_t ictime;
   version_t dnpv;  // deleted dentry
   version_t dirpv;
 public:
   C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd,
-			    version_t v, version_t dirpv_, utime_t ct) :
+			    version_t v, version_t dirpv_) :
     mds(m), mdr(r), dn(d), straydn(sd),
-    ipv(v), ictime(ct),
+    ipv(v), 
     dnpv(d->get_projected_version()), dirpv(dirpv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_local_finish(mdr, dn, straydn, ipv, ictime, dnpv, dirpv);
+    mds->server->_unlink_local_finish(mdr, dn, straydn, ipv, dnpv, dirpv);
   }
 };
 
 
-void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
+void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
   dout(10) << "_unlink_local " << *dn << endl;
 
-  // get stray dn ready?
-  CDentry *straydn = 0;
-  if (dn->is_primary()) {
-    string straydname;
-    dn->inode->name_stray_dentry(straydname);
-    frag_t fg = mdcache->get_stray()->pick_dirfrag(straydname);
-    CDir *straydir = mdcache->get_stray()->get_or_open_dirfrag(mdcache, fg);
-    straydn = straydir->add_dentry(straydname, 0);
-    dout(10) << "_unlink_local straydn is " << *straydn << endl;
-  }
-
-  
   // ok, let's do it.
   // prepare log entry
   EUpdate *le = new EUpdate("unlink_local");
@@ -2318,20 +2349,19 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
   }
   
   // the unlinked dentry
-  utime_t now = g_clock.real_now();
   dn->pre_dirty();
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, now);
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, mdr->now);
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
   // update journaled target inode
   pi->nlink--;
-  pi->ctime = now;
+  pi->ctime = mdr->now;
   pi->version = ipv;
   
   // finisher
   C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
-								 ipv, dirpv, now);
+								 ipv, dirpv);
   
   journal_opens();  // journal pending opens, just in case
   
@@ -2344,9 +2374,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn)
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
 				  CDentry *dn, CDentry *straydn,
-				  version_t ipv, utime_t ictime, version_t dnpv, version_t dirpv) 
+				  version_t ipv, version_t dnpv, version_t dirpv) 
 {
-  dout(10) << "_unlink_local " << *dn << endl;
+  dout(10) << "_unlink_local_finish " << *dn << endl;
 
   // unlink main dentry
   CInode *in = dn->inode;
@@ -2356,14 +2386,17 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   if (straydn) straydn->dir->link_inode(straydn, in);  
 
   // nlink--
-  in->inode.ctime = ictime;
+  in->inode.ctime = mdr->now;
   in->inode.nlink--;
   in->mark_dirty(ipv);  // dirty inode
   dn->mark_dirty(dnpv);  // dirty old dentry
 
   // dir inode's mtime
-  dirty_dn_diri(dn, dirpv, ictime);
+  dirty_dn_diri(dn, dirpv, mdr->now);
   
+  // bump target popularity
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
+
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
@@ -2378,9 +2411,6 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
 
-  // bump target popularity
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
-
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
@@ -2391,11 +2421,94 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 }
 
 
+class C_MDS_unlink_remote_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CDentry *dn;
+  version_t dnpv;  // deleted dentry
+  version_t dirpv;
+public:
+  C_MDS_unlink_remote_finish(MDS *m, MDRequest *r, CDentry *d, 
+			     version_t dirpv_) :
+    mds(m), mdr(r), dn(d), 
+    dnpv(d->get_projected_version()), dirpv(dirpv_) { }
+  void finish(int r) {
+    assert(r == 0);
+    mds->server->_unlink_remote_finish(mdr, dn, dnpv, dirpv);
+  }
+};
 
 void Server::_unlink_remote(MDRequest *mdr, CDentry *dn) 
 {
-  // IMPLEMENT ME
-  reply_request(mdr, -EXDEV);
+  dout(10) << "_unlink_remote " << *dn << " " << *dn->inode << endl;
+
+  // 1. send LinkPrepare to dest (journal nlink-- prepare)
+  int inauth = dn->inode->authority().first;
+  if (mdr->witnessed.count(inauth) == 0) {
+    dout(10) << " inode auth must prepare nlink--" << endl;
+
+    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNLINKPREP);
+    dn->inode->set_object_info(req->get_object_info());
+    req->now = mdr->now;
+    mds->send_message_mds(req, inauth, MDS_PORT_SERVER);
+
+    assert(mdr->waiting_on_slave.count(inauth) == 0);
+    mdr->waiting_on_slave.insert(inauth);
+    return;
+  }
+  dout(10) << " inode auth has prepared nlink--" << endl;
+
+  // ok, let's do it.
+  // prepare log entry
+  EUpdate *le = new EUpdate("unlink_remote");
+  le->metablob.add_client_req(mdr->reqid);
+
+  // the unlinked dentry
+  dn->pre_dirty();
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, mdr->now);
+  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_null_dentry(dn, true);
+
+  // finisher
+  C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn, dirpv);
+  
+  journal_opens();  // journal pending opens, just in case
+  
+  // log + wait
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
+  
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
+}
+
+void Server::_unlink_remote_finish(MDRequest *mdr, 
+				   CDentry *dn, 
+				   version_t dnpv, version_t dirpv) 
+{
+  dout(10) << "_unlink_remote_finish " << *dn << endl;
+
+  // unlink main dentry
+  dn->dir->unlink_inode(dn);
+  dn->mark_dirty(dnpv);  // dirty old dentry
+
+  // dir inode's mtime
+  dirty_dn_diri(dn, dirpv, mdr->now);
+    
+  // bump target popularity
+  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
+
+  // share unlink news with replicas
+  for (map<int,int>::iterator it = dn->replicas_begin();
+       it != dn->replicas_end();
+       it++) {
+    dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << endl;
+    MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
+    mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
+  }
+
+  // reply
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
 }
 
 

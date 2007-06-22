@@ -3526,8 +3526,8 @@ void MDCache::request_drop_locks(MDRequest *mdr)
   
   // make sure ref and trace are empty
   //  if we are doing our own locking, we can't use them!
-  assert(mdr->ref == 0);
-  assert(mdr->trace.empty());
+  //assert(mdr->ref == 0);
+  //assert(mdr->trace.empty());
 }
 
 void MDCache::request_cleanup(MDRequest *mdr)
