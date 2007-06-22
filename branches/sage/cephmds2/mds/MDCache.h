@@ -473,7 +473,7 @@ public:
   
   // -- anchors --
 public:
-  void anchor_create(CInode *in, Context *onfinish);
+  void anchor_create(MDRequest *mdr, CInode *in, Context *onfinish);
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_create_prepared(CInode *in, version_t atid);

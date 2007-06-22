@@ -543,6 +543,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
 
+    case MMDSSlaveRequest::OP_LINKPREPACK:
+      {
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	handle_slave_link_prep_ack(mdr, m);
+      }
+      break;
+
     case MMDSSlaveRequest::OP_RENAMEPREPACK:
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
@@ -647,6 +654,10 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 
   case MMDSSlaveRequest::OP_AUTHPIN:
     handle_slave_auth_pin(mdr);
+    break;
+
+  case MMDSSlaveRequest::OP_LINKPREP:
+    handle_slave_link_prep(mdr);
     break;
 
   case MMDSSlaveRequest::OP_RENAMEPREP:
@@ -1794,7 +1805,7 @@ void Server::handle_client_link(MDRequest *mdr)
 				 0, targetpath, targettrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
-  if (targettrace.empty()) r = -EINVAL;
+  if (targettrace.empty()) r = -EINVAL; 
   if (r < 0) {
     reply_request(mdr, r);
     return;
@@ -1812,30 +1823,8 @@ void Server::handle_client_link(MDRequest *mdr)
     return;
   }
   
-  // does the target need an anchor?
-  if (targeti->is_auth()) {
-    /*if (targeti->get_parent_dir() == dn->dir) {
-      dout(7) << "target is in the same dirfrag, sweet" << endl;
-    } 
-    else 
-      */
-    if (targeti->is_anchored() && !targeti->is_unanchoring()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
-    } 
-    else {
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
-      
-      mdcache->anchor_create(targeti,
-			     new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-  }
-
-  // can we create the dentry?
-  CDentry *dn = 0;
-  
-  // make null link dentry
-  dn = prepare_null_dentry(mdr, dir, dname, false);
+  // get/make null link dentry
+  CDentry *dn = prepare_null_dentry(mdr, dir, dname, false);
   if (!dn) return;
 
   // create lock lists
@@ -1851,6 +1840,31 @@ void Server::handle_client_link(MDRequest *mdr)
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
+
+  mdr->done_locking = true;  // avoid wrlock moving target issues.
+  
+  // pick mtime
+  if (mdr->now == utime_t())
+    mdr->now = g_clock.real_now();
+
+  // does the target need an anchor?
+  if (targeti->is_auth()) {
+    /*if (targeti->get_parent_dir() == dn->dir) {
+      dout(7) << "target is in the same dirfrag, sweet" << endl;
+    } 
+    else 
+      */
+    if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+    } 
+    else {
+      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+      
+      mdcache->anchor_create(mdr, targeti,
+			     new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+  }
 
   // go!
 
@@ -1868,19 +1882,17 @@ class C_MDS_link_local_finish : public Context {
   CDentry *dn;
   CInode *targeti;
   version_t dpv;
-  utime_t tctime;
   version_t tpv;
   version_t dirpv;
 public:
-  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, version_t dirpv_, utime_t ct) :
+  C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, version_t dirpv_) :
     mds(m), mdr(r), dn(d), targeti(ti),
     dpv(d->get_projected_version()),
-    tctime(ct), 
     tpv(targeti->get_parent_dn()->get_projected_version()),
     dirpv(dirpv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_link_local_finish(mdr, dn, targeti, dpv, tctime, tpv, dirpv);
+    mds->server->_link_local_finish(mdr, dn, targeti, dpv, tpv, dirpv);
   }
 };
 
@@ -1900,7 +1912,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   
   // add to event
   utime_t now = g_clock.real_now();
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, now);   // dir inode's mtime
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, mdr->now);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
@@ -1908,11 +1920,11 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   // update journaled target inode
   pi->nlink++;
-  pi->ctime = now;
+  pi->ctime = mdr->now;
   pi->version = tpdv;
 
   // finisher
-  C_MDS_link_local_finish *fin = new C_MDS_link_local_finish(mds, mdr, dn, targeti, dirpv, now);
+  C_MDS_link_local_finish *fin = new C_MDS_link_local_finish(mds, mdr, dn, targeti, dirpv);
   
   // log + wait
   mdlog->submit_entry(le);
@@ -1920,7 +1932,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-				version_t dpv, utime_t tctime, version_t tpv, version_t dirpv)
+				version_t dpv, version_t tpv, version_t dirpv)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
@@ -1931,11 +1943,11 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // update the target
   targeti->inode.nlink++;
-  targeti->inode.ctime = tctime;
+  targeti->inode.ctime = mdr->now;
   targeti->mark_dirty(tpv);
 
   // dir inode's mtime
-  dirty_dn_diri(dn, dirpv, tctime);
+  dirty_dn_diri(dn, dirpv, mdr->now);
   
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
@@ -1946,80 +1958,214 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 }
 
 
+// remote
+
+class C_MDS_link_remote_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CDentry *dn;
+  CInode *targeti;
+  version_t dpv;
+  version_t dirpv;
+public:
+  C_MDS_link_remote_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, version_t dirpv_) :
+    mds(m), mdr(r), dn(d), targeti(ti),
+    dpv(d->get_projected_version()),
+    dirpv(dirpv_) { }
+  void finish(int r) {
+    assert(r == 0);
+    mds->server->_link_remote_finish(mdr, dn, targeti, dpv, dirpv);
+  }
+};
 
 void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_remote " << *dn << " to " << *targeti << endl;
-  
+    
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
-  // 2. create+journal new dentry, as with link_local.
-  // 3. send LinkCommit to dest (journals commit)  
+  int linkauth = targeti->authority().first;
+  if (mdr->witnessed.count(linkauth) == 0) {
+    dout(10) << " targeti auth must prepare nlink++" << endl;
 
-  // IMPLEMENT ME
-  reply_request(mdr, -EXDEV);
-}
+    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREP);
+    targeti->set_object_info(req->get_object_info());
+    req->now = mdr->now;
+    mds->send_message_mds(req, linkauth, MDS_PORT_SERVER);
 
-
-/*
-void Server::handle_client_link_finish(MClientRequest *req, CInode *ref,
-				       CDentry *dn, CInode *targeti)
-{
-  // create remote link
-  dn->dir->link_inode(dn, targeti->ino());
-  dn->link_remote( targeti );   // since we have it
-  dn->_mark_dirty(); // fixme
-  
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
-
-  // done!
-  commit_request(req, new MClientReply(req, 0), ref,
-                 0);          // FIXME i should log something
-}
-*/
-
-/*
-class C_MDS_RemoteLink : public Context {
-  Server *server;
-  MClientRequest *req;
-  CInode *ref;
-  CDentry *dn;
-  CInode *targeti;
-public:
-  C_MDS_RemoteLink(Server *server, MClientRequest *req, CInode *ref, CDentry *dn, CInode *targeti) {
-    this->server = server;
-    this->req = req;
-    this->ref = ref;
-    this->dn = dn;
-    this->targeti = targeti;
+    assert(mdr->waiting_on_slave.count(linkauth) == 0);
+    mdr->waiting_on_slave.insert(linkauth);
+    return;
   }
+  dout(10) << " targeti auth has prepared nlink++" << endl;
+
+  // 2. create+journal new dentry, as with link_local.
+  // prepare log entry
+  EUpdate *le = new EUpdate("link_remote");
+  le->metablob.add_client_req(mdr->reqid);
+  
+  // predirty
+  dn->pre_dirty();
+  
+  // add to event
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob, mdr->now);   // dir inode's mtime
+  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
+
+  // finisher
+  C_MDS_link_remote_finish *fin = new C_MDS_link_remote_finish(mds, mdr, dn, targeti, dirpv);
+  
+  // log + wait
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(fin);
+}
+
+void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
+				 version_t dpv, version_t dirpv)
+{
+  dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << endl;
+
+  // link the new dentry
+  dn->dir->link_inode(dn, targeti->ino());
+  dn->set_version(dpv);
+  dn->mark_dirty(dpv);
+
+  // dir inode's mtime
+  dirty_dn_diri(dn, dirpv, mdr->now);
+  
+  // bump target popularity
+  mds->balancer->hit_inode(targeti, META_POP_IWR);
+
+  // reply
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+}
+
+
+class C_MDS_SlaveLinkPrep : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CInode *targeti;
+  version_t tpv;
+public:
+  C_MDS_SlaveLinkPrep(Server *s, MDRequest *r, CInode *t, version_t v) :
+    server(s), mdr(r), targeti(t), tpv(v) { }
   void finish(int r) {
-    if (r > 0) { // success
-      // yay
-      server->handle_client_link_finish(req, ref, dn, targeti);
-    } 
-    else if (r == 0) {
-      // huh?  retry!
-      assert(0);
-      server->dispatch_request(req, ref);      
-    } else {
-      // link failed
-      server->reply_request(req, r);
-    }
+    assert(r == 0);
+    server->_logged_slave_link(mdr, targeti, tpv);
   }
 };
 
+void Server::handle_slave_link_prep(MDRequest *mdr)
+{
+  dout(10) << "handle_slave_link_prep " << *mdr 
+	   << " on " << mdr->slave_request->get_object_info() 
+	   << endl;
 
-  } else {
-    // remote: send nlink++ request, wait
-    dout(7) << "target is remote, sending InodeLink" << endl;
-    mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority().first, MDS_PORT_CACHE);
-    
-    // wait
-    targeti->add_waiter(CInode::WAIT_LINK, new C_MDS_RemoteLink(this, req, diri, dn, targeti));
+  CInode *targeti = mdcache->get_inode(mdr->slave_request->get_object_info().ino);
+  assert(targeti);
+  
+  dout(10) << "targeti " << *targeti << endl;
+  
+  mdr->now = mdr->slave_request->now;
+
+  // anchor?
+  if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+    dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+  } 
+  else {
+    dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+    mdcache->anchor_create(mdr, targeti,
+			   new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
-*/
+  // journal it
+  ESlaveUpdate *le = new ESlaveUpdate("slave_link_prep", mdr->reqid, ESlaveUpdate::OP_PREPARE);
+
+  version_t tpv = targeti->pre_dirty();
+
+  // add to event
+  le->metablob.add_remote_dentry(targeti->get_parent_dn(), true, targeti->ino());  // new remote
+  le->metablob.add_dir_context(targeti->get_parent_dir());
+  inode_t *pi = le->metablob.add_primary_dentry(targeti->parent, true, targeti);  // update old primary
+
+  // update journaled target inode
+  pi->nlink++;
+  pi->ctime = mdr->now;
+  pi->version = tpv;
+
+  mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, tpv));
+}
+
+class C_MDS_SlaveLinkCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CInode *targeti;
+  version_t tpv;
+public:
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, version_t v) :
+    server(s), mdr(r), targeti(t), tpv(v) { }
+  void finish(int r) {
+    assert(r == 0);
+    server->_commit_slave_link(mdr, targeti, tpv);
+  }
+};
+
+void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv) 
+{
+  dout(10) << "_logged_slave_link " << *mdr << " " << *targeti << endl;
+
+  // ack
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
+  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+  
+  // set up commit waiter
+  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, tpv);
+
+  // done.
+  delete mdr->slave_request;
+  mdr->slave_request = 0;
+
+}
+
+void Server::_commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv)
+{  
+  dout(10) << "_commit_slave_link " << *mdr << " " << *targeti << endl;
+
+  // update the target
+  targeti->inode.nlink++;
+  targeti->inode.ctime = mdr->now;
+  targeti->mark_dirty(tpv);
+
+  // write a commit to the journal
+  ESlaveUpdate *le = new ESlaveUpdate("slave_link_commit", mdr->reqid, ESlaveUpdate::OP_COMMIT);
+  mds->mdlog->submit_entry(le);
+}
+
+
+
+
+void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
+{
+  dout(10) << "handle_slave_link_prep_ack " << *mdr 
+	   << " " << *m << endl;
+  int from = m->get_source().num();
+
+  // note slave
+  mdr->slaves.insert(from);
+  
+  // witnessed!
+  assert(mdr->witnessed.count(from) == 0);
+  mdr->witnessed.insert(from);
+  
+  // remove from waiting list
+  assert(mdr->waiting_on_slave.count(from));
+  mdr->waiting_on_slave.erase(from);
+
+  assert(mdr->waiting_on_slave.empty());
+
+  dispatch_client_request(mdr);  // go again!
+}
 
 
 

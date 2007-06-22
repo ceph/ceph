@@ -121,8 +121,16 @@ public:
   void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_local_finish(MDRequest *mdr,
 			  CDentry *dn, CInode *targeti,
-			  version_t, utime_t, version_t, version_t);
+			  version_t, version_t, version_t);
+
   void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
+			   version_t, version_t);
+
+  void handle_slave_link_prep(MDRequest *mdr);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv);
+  void _commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv);
+  void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);

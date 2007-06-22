@@ -1360,7 +1360,7 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
-  if (1) {
+  if (0) {
     // rename fun
     for (int i=0; i<100; i++) {
       int s = 5;
@@ -1375,6 +1375,25 @@ void SyntheticClient::foo()
       sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       sprintf(dst, "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
       client->rename(src, dst);
+    }
+    return;
+  }
+
+  if (1) {
+    // link fun
+    for (int i=0; i<100; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      int d = rand() % s;
+      int e = rand() % s;
+      int f = rand() % s;
+      char src[80];
+      char dst[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      client->link(src, dst);
     }
     return;
   }

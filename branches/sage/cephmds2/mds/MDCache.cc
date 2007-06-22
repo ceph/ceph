@@ -3621,12 +3621,13 @@ public:
   }
 };
 
-void MDCache::anchor_create(CInode *in, Context *onfinish)
+void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
 
   // auth pin
-  if (!in->can_auth_pin()) {
+  if (!in->can_auth_pin() &&
+      !mdr->is_auth_pinned(in)) {
     dout(7) << "anchor_create not authpinnable, waiting on " << *in << endl;
     in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
     return;
@@ -3734,7 +3735,8 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   assert(in->is_auth());
 
   // auth pin
-  if (!in->can_auth_pin()) {
+  if (!in->can_auth_pin()/* &&
+			    !mdr->is_auth_pinned(in)*/) {
     dout(7) << "anchor_destroy not authpinnable, waiting on " << *in << endl;
     in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
     return;

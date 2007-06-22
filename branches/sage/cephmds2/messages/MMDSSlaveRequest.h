@@ -34,6 +34,9 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RENAMEGETINODE =     8;
   static const int OP_RENAMEGETINODEACK = -8;
 
+  static const int OP_LINKPREP =     9;
+  static const int OP_LINKPREPACK = -9;
+
   static const int OP_FINISH =     17;
 
   const static char *get_opname(int o) {
@@ -48,6 +51,9 @@ class MMDSSlaveRequest : public Message {
     case OP_RENAMEPREPACK: return "rename_prep_ack";
     case OP_RENAMEGETINODE: return "rename_get_inode";
     case OP_RENAMEGETINODEACK: return "rename_get_inode_ack";
+
+    case OP_LINKPREP: return "link_prep";
+    case OP_LINKPREPACK: return "link_prep_ack";
 
     case OP_FINISH: return "finish"; // commit
     default: assert(0); return 0;
