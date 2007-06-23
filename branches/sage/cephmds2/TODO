@@ -83,10 +83,12 @@ sage mds
   - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).
   - ...but does it play nice with wrlock?  and unfortuantely auth_pinning wrlocks would kill performance on updates at dir delegation points.
 
+- stray reintegration
+- stray purge on shutdown
+  - need to export stray crap to another mds..
+- verify stray is empty on shutdown
 
 - journal+recovery
-/  - stray purge
-  - stray reintegration
   - file capabilities i/o
 - dirfrag split/merge
   - client readdir for dirfrags
