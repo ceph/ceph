@@ -801,6 +801,8 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   // go again?
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);
+  else 
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
 }
 
 
@@ -3268,6 +3270,8 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
+  else 
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
 }
 
 
@@ -3311,6 +3315,8 @@ void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest 
 
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
+  else 
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
 }
 
 
