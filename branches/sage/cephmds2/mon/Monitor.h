@@ -31,13 +31,9 @@ class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
 
-#define PAXOS_TEST       0
-#define PAXOS_OSDMAP     1
-#define PAXOS_MDSMAP     2
-#define PAXOS_CLIENTMAP  3
 
 class Monitor : public Dispatcher {
-protected:
+public:
   // me
   int whoami;
   Messenger *messenger;
@@ -52,63 +48,65 @@ protected:
   void reset_tick();
   friend class C_Mon_Tick;
 
-  // my local store
-  //ObjectStore *store;
+  // -- local storage --
+public:
   MonitorStore *store;
 
-  const static int INO_ELECTOR = 1;
-  const static int INO_MON_MAP = 2;
-  const static int INO_OSD_MAP = 10;
-  const static int INO_OSD_INC_MAP = 11;
-  const static int INO_MDS_MAP = 20;
-
-  // elector
-  Elector elector;
-  friend class Elector;
-
-  epoch_t  mon_epoch;    // monitor epoch (election instance)
-  set<int> quorum;       // current active set of monitors (if !starting)
-
-  //void call_election();
-
-  // paxos
-  Paxos test_paxos;
-  friend class Paxos;
-
-
-  // monitor state
+  // -- monitor state --
+private:
   const static int STATE_STARTING = 0; // electing
   const static int STATE_LEADER =   1;
   const static int STATE_PEON =     2;
   int state;
 
-  int leader;                    // current leader (to best of knowledge)
-  utime_t last_called_election;  // [starting] last time i called an election
-
+public:
   bool is_starting() { return state == STATE_STARTING; }
   bool is_leader() { return state == STATE_LEADER; }
   bool is_peon() { return state == STATE_PEON; }
 
-  // my public services
+
+  // -- elector --
+private:
+  Elector elector;
+  friend class Elector;
+  
+  epoch_t  mon_epoch;    // monitor epoch (election instance)
+  int leader;            // current leader (to best of knowledge)
+  set<int> quorum;       // current active set of monitors (if !starting)
+  utime_t last_called_election;  // [starting] last time i called an election
+  
+public:
+  epoch_t get_epoch() { return mon_epoch; }
+  int get_leader() { return leader; }
+  const set<int>& get_quorum() { return quorum; }
+
+  void call_election();  // initiate election
+  void win_election(epoch_t epoch, set<int>& q);  // end election (called by Elector)
+  void lose_election(epoch_t epoch, int l);       // end election (called by Elector)
+
+
+  // -- paxos --
+  Paxos paxos_test;
+  Paxos paxos_mdsmap;
+  Paxos paxos_osdmap;
+  Paxos paxos_clientmap;
+  friend class Paxos;
+  
+
+  // -- services --
   OSDMonitor *osdmon;
   MDSMonitor *mdsmon;
   ClientMonitor *clientmon;
-
-  // messages
-  void handle_shutdown(Message *m);
-  void handle_ping_ack(class MPingAck *m);
-  void handle_command(class MMonCommand *m);
 
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class ClientMonitor;
 
-  // initiate election
-  void call_election();
 
-  // end election (called by Elector)
-  void win_election(set<int>& q);
-  void lose_election(int l);
+  // messages
+  void handle_shutdown(Message *m);
+  void handle_ping_ack(class MPingAck *m);
+  void handle_command(class MMonCommand *m);
 
 
 
@@ -119,17 +117,21 @@ protected:
     monmap(mm),
     timer(lock), tick_timer(0),
     store(0),
-    elector(this, w),
-    mon_epoch(0), 
-    
-    test_paxos(this, w, PAXOS_TEST, "tester"),  // tester state machine
 
     state(STATE_STARTING),
+
+    elector(this, w),
+    mon_epoch(0), 
     leader(0),
+    
+    paxos_test(this, w, PAXOS_TEST),
+    paxos_mdsmap(this, w, PAXOS_MDSMAP),
+    paxos_osdmap(this, w, PAXOS_OSDMAP),
+    paxos_clientmap(this, w, PAXOS_CLIENTMAP),
+
     osdmon(0), mdsmon(0), clientmon(0)
   {
   }
-
 
   void init();
   void shutdown();

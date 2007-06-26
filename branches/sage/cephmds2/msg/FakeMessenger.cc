@@ -71,17 +71,17 @@ void *fakemessenger_thread(void *ptr)
 {
   lock.Lock();
   while (1) {
+    if (fm_shutdown) break;
+    fakemessenger_do_loop_2();
+    
+    if (directory.empty()) break;
+    
     dout(20) << "thread waiting" << endl;
     if (fm_shutdown) break;
     awake = false;
     cond.Wait(lock);
     awake = true;
     dout(20) << "thread woke up" << endl;
-    if (fm_shutdown) break;
-
-    fakemessenger_do_loop_2();
-
-    if (directory.empty()) break;
   }
   lock.Unlock();
 

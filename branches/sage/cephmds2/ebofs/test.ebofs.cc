@@ -145,6 +145,7 @@ int main(int argc, char **argv)
   char *filename = args[0];
   int seconds = atoi(args[1]);
   int threads = atoi(args[2]);
+  if (!threads) threads = 1;
 
   cout << "dev " << filename << " .. " << threads << " threads .. " << seconds << " seconds" << endl;
 
@@ -153,7 +154,7 @@ int main(int argc, char **argv)
 
 
   // explicit tests
-  if (1) {
+  if (0) {
     // verify that clone() plays nice with partial writes
     object_t oid(1,1);
     bufferptr bp(10000);

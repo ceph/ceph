@@ -102,13 +102,28 @@ public:
     list<off_t>    offsets;
     list<size_t>   lengths;
     list<const char*> attrnames;
+    list<string> attrnames2;
     //list< pair<const void*,int> > attrvals;
     list<bufferlist>  attrbls;
 
+    // for reads only (not encoded)
     list<bufferlist*> pbls;
     list<struct stat*> psts;
     list< pair<void*,int*> > pattrvals;
     list< map<string,bufferptr>* > pattrsets;
+
+    const char *get_attrname() {
+      if (attrnames.empty()) 
+	return attrnames2.front().c_str();
+      else
+	return attrnames.front();
+    }
+    void pop_attrname() {
+      if (attrnames.empty()) 
+	attrnames2.pop_front();
+      else
+	attrnames.pop_front();
+    }
 
     void read(object_t oid, off_t off, size_t len, bufferlist *pbl) {
       int op = OP_READ;
@@ -232,6 +247,27 @@ public:
     }
 
     // etc.
+
+    void _encode(bufferlist& bl) {
+      ::_encode(ops, bl);
+      ::_encode(bls, bl);
+      ::_encode(oids, bl);
+      ::_encode(cids, bl);
+      ::_encode(offsets, bl);
+      ::_encode(lengths, bl);
+      ::_encode(attrnames, bl);
+      ::_encode(attrbls, bl);
+    }
+    void _decode(bufferlist& bl, int& off) {
+      ::_decode(ops, bl, off);
+      ::_decode(bls, bl, off);
+      ::_decode(oids, bl, off);
+      ::_decode(cids, bl, off);
+      ::_decode(offsets, bl, off);
+      ::_decode(lengths, bl, off);
+      ::_decode(attrnames2, bl, off);
+      ::_decode(attrbls, bl, off);      
+    }
   };
 
 
@@ -264,7 +300,7 @@ public:
       case Transaction::OP_GETATTR:
         {
           object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+          const char *attrname = t.get_attrname(); t.pop_attrname();
           pair<void*,int*> pattrval = t.pattrvals.front(); t.pattrvals.pop_front();
           *pattrval.second = getattr(oid, attrname, pattrval.first, *pattrval.second);
         }
@@ -314,7 +350,7 @@ public:
       case Transaction::OP_SETATTR:
         {
           object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+          const char *attrname = t.get_attrname(); t.pop_attrname();
           //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
           bufferlist bl;
           bl.claim( t.attrbls.front() );
@@ -333,7 +369,7 @@ public:
       case Transaction::OP_RMATTR:
         {
           object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+          const char *attrname = t.get_attrname(); t.pop_attrname();
           rmattr(oid, attrname, 0);
         }
         break;
@@ -379,7 +415,7 @@ public:
       case Transaction::OP_COLL_SETATTR:
         {
           coll_t cid = t.cids.front(); t.cids.pop_front();
-          const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+          const char *attrname = t.get_attrname(); t.pop_attrname();
           //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
           bufferlist bl;
           bl.claim( t.attrbls.front() );
@@ -391,7 +427,7 @@ public:
       case Transaction::OP_COLL_RMATTR:
         {
           coll_t cid = t.cids.front(); t.cids.pop_front();
-          const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+          const char *attrname = t.get_attrname(); t.pop_attrname();
           collection_rmattr(cid, attrname, 0);
         }
         break;

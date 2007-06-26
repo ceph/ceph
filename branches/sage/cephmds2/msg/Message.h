@@ -26,9 +26,7 @@
 #define MSG_MON_COMMAND_ACK        14
 
 
-#define MSG_MON_ELECTION_ACK       15
-#define MSG_MON_ELECTION_PROPOSE   16
-#define MSG_MON_ELECTION_VICTORY   17
+#define MSG_MON_ELECTION           15
 
 #define MSG_MON_OSDMAP_INFO            20
 #define MSG_MON_OSDMAP_LEASE           21

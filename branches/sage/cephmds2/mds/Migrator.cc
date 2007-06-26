@@ -366,7 +366,7 @@ void Migrator::show_importing()
   for (map<dirfrag_t,int>::iterator p = import_state.begin();
        p != import_state.end();
        p++) {
-    CDir *dir = mdcache->get_dirfrag(p->first);
+    CDir *dir = mds->mdcache->get_dirfrag(p->first);
     if (dir) {
       dout(10) << "importing: (" << p->second << ") " << get_import_statename(p->second) 
 	       << " " << p->first
@@ -377,6 +377,7 @@ void Migrator::show_importing()
 	       << " " << *dir
 	       << endl;
     }
+  }
 }
 
 void Migrator::show_exporting() 
@@ -386,7 +387,7 @@ void Migrator::show_exporting()
        p != export_state.end();
        p++) 
     dout(10) << "exporting: (" << p->second << ") " << get_export_statename(p->second) 
-	     << " " << p->first->get_dirfrag()
+	     << " " << p->first->dirfrag()
 	     << " " << *p->first
 	     << endl;
 }

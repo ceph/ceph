@@ -38,7 +38,8 @@ EBOFS_OBJS= \
 	ebofs/BlockDevice.o\
 	ebofs/BufferCache.o\
 	ebofs/Ebofs.o\
-	ebofs/Allocator.o
+	ebofs/Allocator.o\
+	ebofs/FileJournal.o
 
 MDS_OBJS= \
 	mds/MDS.o\
@@ -72,6 +73,7 @@ OSDC_OBJS= \
 MON_OBJS= \
 	mon/Monitor.o\
 	mon/Paxos.o\
+	mon/PaxosService.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\

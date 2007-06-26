@@ -3402,7 +3402,6 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
   switch (op->get_op()) {
   case OSD_OP_WRLOCK:
     { // lock object
-      //r = store->setattr(oid, "wrlock", &op->get_asker(), sizeof(msg_addr_t), oncommit);
       t.setattr(oid, "wrlock", &op->get_client(), sizeof(entity_name_t));
     }
     break;  

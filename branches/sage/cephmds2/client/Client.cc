@@ -875,16 +875,14 @@ void Client::handle_mds_map(MMDSMap* m)
   if (m->get_source().is_mds())
     frommds = m->get_source().num();
 
-  if (mdsmap == 0) 
+  if (mdsmap == 0) {
     mdsmap = new MDSMap;
 
-  if (whoami < 0) {
-    // mounted!
     assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
     messenger->reset_myname(m->get_dest());
-
+    
     mount_cond.Signal();  // mount might be waiting for this.
   }    
 

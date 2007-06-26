@@ -1,217 +1,240 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
- * Foundation.  See file COPYING.
- * 
- */
+ // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+ // vim: ts=8 sw=2 smarttab
+ /*
+  * Ceph - scalable distributed file system
+  *
+  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+  *
+  * This is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+  * License version 2.1, as published by the Free Software 
+  * Foundation.  See file COPYING.
+  * 
+  */
 
-// TODO: missing run() method, which creates the two main timers, refreshTimer and readTimer
+ // TODO: missing run() method, which creates the two main timers, refreshTimer and readTimer
 
-#include "Monitor.h"
+ #include "Monitor.h"
 
-#include "osd/OSDMap.h"
+ #include "osd/OSDMap.h"
 
-#include "MonitorStore.h"
+ #include "MonitorStore.h"
 
-#include "msg/Message.h"
-#include "msg/Messenger.h"
+ #include "msg/Message.h"
+ #include "msg/Messenger.h"
 
-#include "messages/MPing.h"
-#include "messages/MPingAck.h"
-#include "messages/MGenericMessage.h"
-#include "messages/MMonCommand.h"
-#include "messages/MMonCommandAck.h"
+ #include "messages/MPing.h"
+ #include "messages/MPingAck.h"
+ #include "messages/MGenericMessage.h"
+ #include "messages/MMonCommand.h"
+ #include "messages/MMonCommandAck.h"
 
-#include "messages/MMonPaxos.h"
+ #include "messages/MMonPaxos.h"
 
-#include "common/Timer.h"
-#include "common/Clock.h"
+ #include "common/Timer.h"
+ #include "common/Clock.h"
 
-#include "OSDMonitor.h"
-#include "MDSMonitor.h"
-#include "ClientMonitor.h"
+ #include "OSDMonitor.h"
+ #include "MDSMonitor.h"
+ #include "ClientMonitor.h"
 
-#include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
-
-
-
-void Monitor::init()
-{
-  lock.Lock();
-  
-  dout(1) << "init" << endl;
-  
-  // store
-  char s[80];
-  sprintf(s, "mondata/mon%d", whoami);
-  store = new MonitorStore(s);
-
-  if (g_conf.mkfs) 
-    store->mkfs();
-
-  store->mount();
-
-  // create 
-  osdmon = new OSDMonitor(this, messenger, lock);
-  mdsmon = new MDSMonitor(this, messenger, lock);
-  clientmon = new ClientMonitor(this, messenger, lock);
-
-  // i'm ready!
-  messenger->set_dispatcher(this);
-  
-  // start ticker
-  reset_tick();
-
-  // call election?
-  if (monmap->num_mon > 1) {
-    assert(monmap->num_mon != 2); 
-    call_election();
-  } else {
-    // we're standalone.
-    set<int> q;
-    q.insert(whoami);
-    win_election(q);
-  }
-
-  lock.Unlock();
-}
-
-void Monitor::shutdown()
-{
-  dout(1) << "shutdown" << endl;
-
-  // cancel all events
-  cancel_tick();
-  timer.cancel_all();
-  timer.join();
-  
-  // stop osds.
-  for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
-       it != osdmon->osdmap.get_osds().end();
-       it++) {
-    if (osdmon->osdmap.is_down(*it)) continue;
-    dout(10) << "sending shutdown to osd" << *it << endl;
-    messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-			    osdmon->osdmap.get_inst(*it));
-  }
-  osdmon->mark_all_down();
-  
-  // monitors too.
-  for (int i=0; i<monmap->num_mon; i++)
-    if (i != whoami)
-      messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-			      monmap->get_inst(i));
-
-  // unmount my local storage
-  if (store) 
-    delete store;
-  
-  // clean up
-  if (monmap) delete monmap;
-  if (osdmon) delete osdmon;
-  if (mdsmon) delete mdsmon;
-  if (clientmon) delete clientmon;
-
-  // die.
-  messenger->shutdown();
-  delete messenger;
-}
+ #include "config.h"
+ #undef dout
+ #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
+ #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
-void Monitor::call_election()
-{
-  if (monmap->num_mon == 1) return;
 
-  dout(10) << "call_election" << endl;
-  state = STATE_STARTING;
+ void Monitor::init()
+ {
+   lock.Lock();
 
-  elector.start();
+   dout(1) << "init" << endl;
 
-  osdmon->election_starting();
-  //mdsmon->election_starting();
-}
+   // store
+   char s[80];
+   sprintf(s, "mondata/mon%d", whoami);
+   store = new MonitorStore(s);
 
-void Monitor::win_election(set<int>& active) 
-{
-  state = STATE_LEADER;
-  leader = whoami;
-  quorum = active;
-  dout(10) << "win_election, quorum is " << quorum << endl;
+   if (g_conf.mkfs) 
+     store->mkfs();
 
-  // init
-  osdmon->election_finished();
-  mdsmon->election_finished();
+   store->mount();
 
-  // init paxos
-  test_paxos.leader_start();
-} 
+   // create 
+   osdmon = new OSDMonitor(this, messenger, lock);
+   mdsmon = new MDSMonitor(this, messenger, lock);
+   clientmon = new ClientMonitor(this, &paxos_clientmap);
 
-void Monitor::lose_election(int l) 
-{
-  state = STATE_PEON;
-  leader = l;
-  dout(10) << "lose_election, leader is mon" << leader << endl;
-}
+   // init paxos
+   paxos_test.init();
+   paxos_osdmap.init();
+   paxos_mdsmap.init();
+   paxos_clientmap.init();
+
+   // i'm ready!
+   messenger->set_dispatcher(this);
+
+   // start ticker
+   reset_tick();
+
+   // call election?
+   if (monmap->num_mon > 1) {
+     assert(monmap->num_mon != 2); 
+     call_election();
+   } else {
+     // we're standalone.
+     set<int> q;
+     q.insert(whoami);
+     win_election(1, q);
+   }
+
+   lock.Unlock();
+ }
+
+ void Monitor::shutdown()
+ {
+   dout(1) << "shutdown" << endl;
+
+   elector.shutdown();
+
+   // cancel all events
+   cancel_tick();
+   timer.cancel_all();
+   timer.join();
+
+   // stop osds.
+   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
+	it != osdmon->osdmap.get_osds().end();
+	it++) {
+     if (osdmon->osdmap.is_down(*it)) continue;
+     dout(10) << "sending shutdown to osd" << *it << endl;
+     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+			     osdmon->osdmap.get_inst(*it));
+   }
+   osdmon->mark_all_down();
+
+   // monitors too.
+   for (int i=0; i<monmap->num_mon; i++)
+     if (i != whoami)
+       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+			       monmap->get_inst(i));
+
+   // unmount my local storage
+   if (store) 
+     delete store;
+
+   // clean up
+   if (monmap) delete monmap;
+   if (osdmon) delete osdmon;
+   if (mdsmon) delete mdsmon;
+   if (clientmon) delete clientmon;
+
+   // die.
+   messenger->shutdown();
+   delete messenger;
+ }
 
 
-void Monitor::handle_command(MMonCommand *m)
-{
-  dout(0) << "handle_command " << *m << endl;
-  
-  int r = -1;
-  string rs = "unrecognized command";
+ void Monitor::call_election()
+ {
+   if (monmap->num_mon == 1) return;
 
-  if (!m->cmd.empty()) {
-    if (m->cmd[0] == "stop") {
-      r = 0;
-      rs = "stopping";
-      do_stop();
-    }
-    else if (m->cmd[0] == "mds") {
-      mdsmon->handle_command(m, r, rs);
-    }
-    else if (m->cmd[0] == "osd") {
+   dout(10) << "call_election" << endl;
+   state = STATE_STARTING;
 
-    }
-  }
+   elector.call_election();
 
-  // reply
-  messenger->send_message(new MMonCommandAck(r, rs), m->get_source_inst());
-  delete m;
-}
+   osdmon->election_starting();
+   //mdsmon->election_starting();
+ }
+
+ void Monitor::win_election(epoch_t epoch, set<int>& active) 
+ {
+   state = STATE_LEADER;
+   leader = whoami;
+   mon_epoch = epoch;
+   quorum = active;
+   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << endl;
+
+   // init paxos
+   paxos_test.leader_init();
+   paxos_mdsmap.leader_init();
+   paxos_osdmap.leader_init();
+   paxos_clientmap.leader_init();
+
+   // init
+   osdmon->election_finished();
+   mdsmon->election_finished();
+   clientmon->election_finished();
+ } 
+
+ void Monitor::lose_election(epoch_t epoch, int l) 
+ {
+   state = STATE_PEON;
+   mon_epoch = epoch;
+   leader = l;
+   dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << endl;
+
+   // init paxos
+   paxos_test.peon_init();
+   paxos_mdsmap.peon_init();
+   paxos_osdmap.peon_init();
+   paxos_clientmap.peon_init();
+ }
 
 
-void Monitor::do_stop()
-{
-  dout(0) << "do_stop -- shutting down" << endl;
-  mdsmon->do_stop();
-}
+ void Monitor::handle_command(MMonCommand *m)
+ {
+   dout(0) << "handle_command " << *m << endl;
+
+   int r = -1;
+   string rs = "unrecognized command";
+
+   if (!m->cmd.empty()) {
+     if (m->cmd[0] == "stop") {
+       r = 0;
+       rs = "stopping";
+       do_stop();
+     }
+     else if (m->cmd[0] == "mds") {
+       mdsmon->handle_command(m, r, rs);
+     }
+     else if (m->cmd[0] == "osd") {
+
+     }
+   }
+
+   // reply
+   messenger->send_message(new MMonCommandAck(r, rs), m->get_source_inst());
+   delete m;
+ }
 
 
-void Monitor::dispatch(Message *m)
-{
-  lock.Lock();
-  {
-    switch (m->get_type()) {
+ void Monitor::do_stop()
+ {
+   dout(0) << "do_stop -- shutting down" << endl;
+   mdsmon->do_stop();
+ }
 
-      // misc
-    case MSG_PING_ACK:
-      handle_ping_ack((MPingAck*)m);
-      break;
 
-    case MSG_SHUTDOWN:
-      assert(m->get_source().is_osd());
-      osdmon->dispatch(m);
+ void Monitor::dispatch(Message *m)
+ {
+   lock.Lock();
+   {
+     switch (m->get_type()) {
+
+       // misc
+     case MSG_PING_ACK:
+       handle_ping_ack((MPingAck*)m);
+       break;
+
+     case MSG_SHUTDOWN:
+       if (m->get_source().is_osd()) 
+	osdmon->dispatch(m);
+       else
+	handle_shutdown(m);
+    
       break;
 
     case MSG_MON_COMMAND:
@@ -236,7 +259,8 @@ void Monitor::dispatch(Message *m)
 
       // hackish: did all mds's shut down?
       if (g_conf.mon_stop_with_last_mds &&
-	  mdsmon->mdsmap.get_num_up_or_failed_mds() == 0) 
+	  mdsmon->mdsmap.get_num_up_or_failed_mds() == 0 &&
+	  is_leader()) 
 	shutdown();
 
       break;
@@ -250,23 +274,39 @@ void Monitor::dispatch(Message *m)
 
       // paxos
     case MSG_MON_PAXOS:
-      // send it to the right paxos instance
-      switch (((MMonPaxos*)m)->machine_id) {
-      case PAXOS_TEST:
-	test_paxos.dispatch(m);
-	break;
-      case PAXOS_OSDMAP:
-	//...
-	
-      default:
-	assert(0);
+      {
+	MMonPaxos *pm = (MMonPaxos*)m;
+
+	// sanitize
+	if (pm->epoch > mon_epoch) 
+	  assert(0); 	//call_election();   // wtf
+	if (pm->epoch != mon_epoch) {
+	  delete pm;
+	  break;
+	}
+
+	// send it to the right paxos instance
+	switch (pm->machine_id) {
+	case PAXOS_TEST:
+	  paxos_test.dispatch(m);
+	  break;
+	case PAXOS_OSDMAP:
+	  paxos_osdmap.dispatch(m);
+	  break;
+	case PAXOS_MDSMAP:
+	  paxos_mdsmap.dispatch(m);
+	  break;
+	case PAXOS_CLIENTMAP:
+	  paxos_clientmap.dispatch(m);
+	  break;
+	default:
+	  assert(0);
+	}
       }
       break;
 
       // elector messages
-    case MSG_MON_ELECTION_PROPOSE:
-    case MSG_MON_ELECTION_ACK:
-    case MSG_MON_ELECTION_VICTORY:
+    case MSG_MON_ELECTION:
       elector.dispatch(m);
       break;
 
@@ -282,9 +322,13 @@ void Monitor::dispatch(Message *m)
 
 void Monitor::handle_shutdown(Message *m)
 {
-  dout(1) << "shutdown from " << m->get_source() << endl;
-
-  shutdown();
+  assert(m->get_source().is_mon());
+  if (m->get_source().num() == get_leader()) {
+    dout(1) << "shutdown from leader " << m->get_source() << endl;
+    shutdown();
+  } else {
+    dout(1) << "ignoring shutdown from non-leader " << m->get_source() << endl;
+  }
   delete m;
 }
 

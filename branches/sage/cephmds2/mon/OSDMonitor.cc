@@ -232,18 +232,18 @@ void OSDMonitor::create_initial()
 
 bool OSDMonitor::get_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  if (!mon->store->exists_bl_sn("osdmap", epoch))
+  if (!mon->store->exists_bl_sn("osdmap_full", epoch))
     return false;
-  int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
+  int r = mon->store->get_bl_sn(bl, "osdmap_full", epoch);
   assert(r > 0);
   return true;  
 }
 
 bool OSDMonitor::get_inc_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  if (!mon->store->exists_bl_sn("osdincmap", epoch))
+  if (!mon->store->exists_bl_sn("osdmap_inc", epoch))
     return false;
-  int r = mon->store->get_bl_sn(bl, "osdincmap", epoch);
+  int r = mon->store->get_bl_sn(bl, "osdmap_inc", epoch);
   assert(r > 0);
   return true;  
 }
@@ -254,7 +254,7 @@ void OSDMonitor::save_map()
   bufferlist bl;
   osdmap.encode(bl);
 
-  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(bl, "osdmap_full", osdmap.get_epoch());
   mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
@@ -266,8 +266,8 @@ void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
   bufferlist incbl;
   inc.encode(incbl);
 
-  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
-  mon->store->put_bl_sn(incbl, "osdincmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(bl, "osdmap_full", osdmap.get_epoch());
+  mon->store->put_bl_sn(incbl, "osdmap_inc", osdmap.get_epoch());
   mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
@@ -400,6 +400,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 
       bcast_latest_osd();
       bcast_latest_mds();
+      send_waiting();
     } else {
       dout(7) << "osd_boot waiting for " 
               << (osdmap.osds.size() - osdmap.osd_inst.size())
@@ -663,7 +664,7 @@ void OSDMonitor::election_finished()
       epoch_t epoch = mon->store->get_int("osd_epoch");
       dout(10) << " last epoch was " << epoch << endl;
       bufferlist bl, blinc;
-      int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
+      int r = mon->store->get_bl_sn(bl, "osdmap_full", epoch);
       assert(r>0);
       osdmap.decode(bl);
 

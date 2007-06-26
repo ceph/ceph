@@ -114,6 +114,9 @@ struct md_config_t {
   int mon_tick_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
+  float mon_lease_renew_interval;
+  float mon_lease_ack_timeout;
+  float mon_accept_timeout;
   bool mon_stop_with_last_mds;
 
   // client

@@ -12,21 +12,22 @@
  * 
  */
 
+#ifndef __MON_TYPES_H
+#define __MON_TYPES_H
 
-#ifndef __MMONELECTIONACK_H
-#define __MMONELECTIONACK_H
+#define PAXOS_TEST       0
+#define PAXOS_MDSMAP     1
+#define PAXOS_OSDMAP     2
+#define PAXOS_CLIENTMAP  3
 
-#include "msg/Message.h"
-
-
-class MMonElectionAck : public Message {
- public:
-  MMonElectionAck() : Message(MSG_MON_ELECTION_ACK) {}
-  
-  virtual char *get_type_name() { return "election_ack"; }
-
-  void encode_payload() {}
-  void decode_payload() {}
-};
+inline const char *get_paxos_name(int p) {
+  switch (p) {
+  case PAXOS_TEST: return "test";
+  case PAXOS_MDSMAP: return "mdsmap";
+  case PAXOS_OSDMAP: return "osdmap";
+  case PAXOS_CLIENTMAP: return "clientmap";
+  default: assert(0); return 0;
+  }
+}
 
 #endif
