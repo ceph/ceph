@@ -41,6 +41,7 @@ class Logger;
 class Message;
 
 class MMDSImportMap;
+class MMDSResolveAck;
 class MMDSCacheRejoin;
 class MMDSCacheRejoinAck;
 class MDiscover;
@@ -104,6 +105,7 @@ struct MDRequest {
   //  (useful for wrlock, which may be a moving auth target)
   bool done_locking; 
   bool committing;
+  bool aborted;
 
   // for rename/link/unlink
   utime_t now;
@@ -126,25 +128,27 @@ struct MDRequest {
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    done_locking(false), committing(false),
+    done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
-    done_locking(false), committing(false),
+    done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
-    done_locking(false), committing(false),
+    done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
 
+  bool slave_did_prepare() { return slave_commit; }
+  
   // pin items in cache
   void pin(MDSCacheObject *o) {
     if (pins.count(o) == 0) {
@@ -296,21 +300,44 @@ public:
 protected:
   set<int> recovery_set;
 
+public:
+  void set_recovery_set(set<int>& s);
+  void handle_mds_failure(int who);
+  void handle_mds_recovery(int who);
+
+protected:
+  // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
   map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
   // from MMDSImportMaps
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
-  map<metareqid_t, EMetaBlob> uncommitted_slave_updates;
+  map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;
   friend class ESlaveUpdate;
 
   set<int> wants_import_map;   // nodes i need to send my import map to
   set<int> got_import_map;     // nodes i got import_maps from
+  set<int> need_resolve_ack;   // nodes i need a resolve_ack from
   
   void handle_import_map(MMDSImportMap *m);
-  void commit_slave_updates();
+  void handle_resolve_ack(MMDSResolveAck *m);
+  void maybe_resolve_finish();
   void disambiguate_imports();
+  void recalc_auth_bits();
+public:
+  // ambiguous imports
+  void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
+  void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
+  void cancel_ambiguous_import(dirfrag_t dirino);
+  void finish_ambiguous_import(dirfrag_t dirino);
+  void send_import_map(int who);
+  void send_import_map_now(int who);
+  void send_import_map_later(int who);
+  void send_pending_import_maps();  // maybe.
+  void log_import_map(Context *onsync=0);
 
+protected:
+  // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   set<int> want_rejoin_ack;    // nodes to whom i need to send a rejoin ack
@@ -322,25 +349,9 @@ protected:
   void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
   void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void send_cache_rejoin_acks();
-  void recalc_auth_bits();
-
 public:
-  void set_recovery_set(set<int>& s);
-  void handle_mds_failure(int who);
-  void handle_mds_recovery(int who);
-  void send_import_map(int who);
-  void send_import_map_now(int who);
-  void send_import_map_later(int who);
-  void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
-  void log_import_map(Context *onsync=0);
 
-
-  // ambiguous imports
-  void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
-  void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
-  void cancel_ambiguous_import(dirfrag_t dirino);
-  void finish_ambiguous_import(dirfrag_t dirino);
 
 
 
@@ -430,6 +441,7 @@ public:
   }
 
   void inode_remove_replica(CInode *in, int rep);
+  void dentry_remove_replica(CDentry *dn, int rep);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
@@ -462,6 +474,7 @@ public:
   CInode *create_stray_inode(int whose=-1);
   void open_local_stray();
   void open_foreign_stray(int who, Context *c);
+  CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
   int path_traverse(MDRequest *mdr, Message *req, 
@@ -518,6 +531,10 @@ protected:
 			int from,
 			list<Context*>& finished);
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+public:
+  CDentry *add_replica_stray(bufferlist &bl, CInode *strayin, int from);
+protected:
+
     
 
   // -- namespace --

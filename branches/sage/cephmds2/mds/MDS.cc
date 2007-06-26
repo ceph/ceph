@@ -605,9 +605,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(10) << "i am newly resolving, sharing import map" << endl;
     set<int> who;
     mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
+    mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
     mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
-    mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);     // hrm. FIXME.
     for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
       if (*p == whoami) continue;
       mdcache->send_import_map(*p);  // now.

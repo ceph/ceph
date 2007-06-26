@@ -246,7 +246,7 @@ class CDentryDiscover {
   int    replica_nonce;
   int    lockstate;
 
-  inodeno_t ino;
+  //inodeno_t ino;
   inodeno_t remote_ino;
 
 public:
@@ -254,7 +254,7 @@ public:
   CDentryDiscover(CDentry *dn, int nonce) :
     dname(dn->get_name()), replica_nonce(nonce),
     lockstate(dn->lock.get_replica_state()),
-    ino(dn->get_ino()),
+    //ino(dn->get_ino()),
     remote_ino(dn->get_remote_ino()) { }
 
   string& get_dname() { return dname; }
@@ -274,16 +274,18 @@ public:
 
   void _encode(bufferlist& bl) {
     ::_encode(dname, bl);
-    bl.append((char*)&replica_nonce, sizeof(replica_nonce));
-    bl.append((char*)&lockstate, sizeof(lockstate));
+    //::_encode(ino, bl);
+    ::_encode(remote_ino, bl);
+    ::_encode(replica_nonce, bl);
+    ::_encode(lockstate, bl);
   }
   
   void _decode(bufferlist& bl, int& off) {
     ::_decode(dname, bl, off);
-    bl.copy(off, sizeof(replica_nonce), (char*)&replica_nonce);
-    off += sizeof(replica_nonce);
-    bl.copy(off, sizeof(lockstate), (char*)&lockstate);
-    off += sizeof(lockstate);
+    //::_decode(ino, bl, off);
+    ::_decode(remote_ino, bl, off);
+    ::_decode(replica_nonce, bl, off);
+    ::_decode(lockstate, bl, off);
   }
 
 };

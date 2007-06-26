@@ -24,7 +24,7 @@ class MMDSImportMap : public Message {
  public:
   map<dirfrag_t, list<dirfrag_t> > imap;
   map<dirfrag_t, list<dirfrag_t> > ambiguous_imap;
-  list<metareqid_t> master_requests;
+  list<metareqid_t> slave_requests;
 
   MMDSImportMap() : Message(MSG_MDS_IMPORTMAP) {}
 
@@ -33,7 +33,7 @@ class MMDSImportMap : public Message {
   void print(ostream& out) {
     out << "mdsimportmap(" << imap.size()
 	<< "+" << ambiguous_imap.size()
-	<< " imports +" << master_requests.size() << " requests)";
+	<< " imports +" << slave_requests.size() << " slave requests)";
   }
   
   void add_import(dirfrag_t im) {
@@ -47,20 +47,20 @@ class MMDSImportMap : public Message {
     ambiguous_imap[im] = m;
   }
 
-  void add_master_request(metareqid_t reqid) {
-    master_requests.push_back(reqid);
+  void add_slave_request(metareqid_t reqid) {
+    slave_requests.push_back(reqid);
   }
 
   void encode_payload() {
     ::_encode(imap, payload);
     ::_encode(ambiguous_imap, payload);
-    ::_encode(master_requests, payload);
+    ::_encode(slave_requests, payload);
   }
   void decode_payload() {
     int off = 0;
     ::_decode(imap, payload, off);
     ::_decode(ambiguous_imap, payload, off);
-    ::_decode(master_requests, payload, off);
+    ::_decode(slave_requests, payload, off);
   }
 };
 

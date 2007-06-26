@@ -47,28 +47,32 @@ sage doc
 
 sage mds
 
-- slave request cleanup on failure
-  - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
+- unlink needs to adjust anchortable
 
- - recovering node needs to know what slave ops committed
-   - either commit or abort
-   - if master op still exists, then ABORT.
-   - if master op dne, then COMMIT.
- - surviving node needs to 
-   - wait for log to flush (commits to finish), then
-   - for uncommitted requests, 
-     - include reqid in resolve message to recovering node
-     - remove failed from witnesses, waiting_on_slave, and
-     - redispatch
-   - somehow wait for needed peers to recover...
+/- rename_prep needs to do a CDentryDiscover on straydn.  and a CDirDiscover while we're at it!
+
+/- slave request cleanup on failure
+/  - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
+
+/- fix slave op commit/abort logic:
+/ - recovering node needs to know what stray prepare ops committed
+/   - include with import_map
+/   - wait for explicit commit/abort from peer.
+/ - surviving node needs to 
+/   - wait for log to flush (commits to finish), then
+/   - for uncommitted master requests, 
+/     - remove failed from witnesses, waiting_on_slave, and
+/     - redispatch
+/     - somehow wait for needed peers to recover...
+/   - for uncommitted slave requests,
+/     - include with import_map, wait for explicit commit/abort from peer.
+
+- make unlink/link behave with commit/abort recovery
 
 - new thrashing test with
  - link, unlink, and rename (lots of hard links!)
 
-- check/fix mdr->slaves, wrt slave ops (authpin etc.) that 'fail'
-
 - fix up writeback of dir inode mtime
-
 - revisit wrlocks, dir inode mtime updates.  esp in rename.
   - if auth, pin and be happy.  decide early.
   - make no attempt to dirty inodes until a gather

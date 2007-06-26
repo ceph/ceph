@@ -129,7 +129,7 @@ public:
 
   void handle_slave_link_prep(MDRequest *mdr);
   void _logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc);
-  void _commit_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, version_t tpv, bool inc);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink
@@ -151,16 +151,16 @@ public:
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // helpers
-  CDentry *_rename_prepare(MDRequest *mdr,
-			   EMetaBlob *metablob, 
-			   CDentry *srcdn, CDentry *destdn);
+  void _rename_prepare(MDRequest *mdr,
+		       EMetaBlob *metablob, 
+		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
 
   // slaving
   void handle_slave_rename_prep(MDRequest *mdr);
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void _commit_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void handle_slave_rename_get_inode(MDRequest *mdr);
   void handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 

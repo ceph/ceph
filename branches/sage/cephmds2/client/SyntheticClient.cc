@@ -1496,7 +1496,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       sprintf(t, "/file.%d", a);
       src += t;
     }
-    string dst;
+    string dst = basedir;
     {
       char t[80];
       for (int d=0; d<depth; d++) {

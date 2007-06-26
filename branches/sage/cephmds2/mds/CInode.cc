@@ -273,7 +273,10 @@ void CInode::make_path(string& s)
     s = "";  // root
   } 
   else if (is_stray()) {
-    s = "~";
+    s = "~stray";
+    char n[10];
+    sprintf(n, "%d", (int)(ino()-MDS_INO_STRAY_OFFSET));
+    s += n;
   }
   else {
     s = "(dangling)";  // dangling
@@ -288,7 +291,7 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
     dout(10) << "make_anchor_trace added " << trace.back() << endl;
   }
   else 
-    assert(is_root());
+    assert(is_root() || is_stray());
 }
 
 void CInode::name_stray_dentry(string& dname)

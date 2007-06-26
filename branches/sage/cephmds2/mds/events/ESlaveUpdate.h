@@ -26,14 +26,16 @@ public:
   
   string type;
   metareqid_t reqid;
+  int master;
   int op;  // prepare, commit, abort
   EMetaBlob metablob;
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
-  ESlaveUpdate(const char *s, metareqid_t ri, int o) : 
+  ESlaveUpdate(const char *s, metareqid_t ri, int mastermds, int o) : 
     LogEvent(EVENT_SLAVEUPDATE),
     type(s),
     reqid(ri),
+    master(mastermds),
     op(o) { }
   
   void print(ostream& out) {
@@ -41,18 +43,21 @@ public:
       out << type << " ";
     out << " " << op;
     out << " " << reqid;
+    out << " for mds" << master;
     out << metablob;
   }
 
   void encode_payload(bufferlist& bl) {
     ::_encode(type, bl);
     ::_encode(reqid, bl);
+    ::_encode(master, bl);
     ::_encode(op, bl);
     metablob._encode(bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
     ::_decode(type, bl, off);
     ::_decode(reqid, bl, off);
+    ::_decode(master, bl, off);
     ::_decode(op, bl, off);
     metablob._decode(bl, off);
   }

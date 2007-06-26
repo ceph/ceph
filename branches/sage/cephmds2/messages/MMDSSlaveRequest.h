@@ -38,7 +38,11 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RENAMEGETINODE =     8;
   static const int OP_RENAMEGETINODEACK = -8;
 
-  static const int OP_FINISH =     17;
+  static const int OP_FINISH = 17;  
+
+  static const int OP_ABORT =  20;  // used for recovery only
+  //static const int OP_COMMIT = 21;  // used for recovery only
+
 
   const static char *get_opname(int o) {
     switch (o) { 
@@ -58,6 +62,9 @@ class MMDSSlaveRequest : public Message {
     case OP_RENAMEGETINODEACK: return "rename_get_inode_ack";
 
     case OP_FINISH: return "finish"; // commit
+    case OP_ABORT: return "abort";
+      //case OP_COMMIT: return "commit";
+
     default: assert(0); return 0;
     }
   }
@@ -81,6 +88,8 @@ class MMDSSlaveRequest : public Message {
   bufferlist inode_export;
   version_t inode_export_v;
   utime_t now;
+
+  bufferlist stray;  // stray dir + dentry
 
 public:
   metareqid_t get_reqid() { return reqid; }
@@ -111,6 +120,7 @@ public:
     ::_encode(now, payload);
     ::_encode(inode_export, payload);
     ::_encode(inode_export_v, payload);
+    ::_encode(stray, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -125,6 +135,7 @@ public:
     ::_decode(now, payload, off);
     ::_decode(inode_export, payload, off);
     ::_decode(inode_export_v, payload, off);
+    ::_decode(stray, payload, off);
   }
 
   char *get_type_name() { return "slave_request"; }
