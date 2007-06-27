@@ -301,7 +301,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
         dout(12) << " had ino " << in->inode.ino
                  << " linked at wrong position, unlinking"
                  << endl;
-        dn = relink(in->dn, dir, dname);
+        dn = relink(dir, dname, in);
       } else {
         // link
         dout(12) << " had ino " << in->inode.ino
