@@ -3283,8 +3283,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           dn->link_remote(in);
         } else {
           dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
-	  assert(0); // REWRITE ME
-          //open_remote_ino(dn->get_remote_ino(), req, _get_waiter(mdr, req));
+	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
+          open_remote_ino(dn->get_remote_ino(), mdr, _get_waiter(mdr, req));
           return 1;
         }        
       }
@@ -3645,7 +3645,7 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
     MDRequest *mdr = active_requests[req->get_reqid()];
-    dout(10) << "request_start already had (slave?) " << *mdr << endl;
+    dout(10) << "request_start already had " << *mdr << ", cleaning up" << endl;
     assert(mdr->is_slave());
     request_cleanup(mdr);
     delete mdr;
@@ -3699,11 +3699,8 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
   if (!port) port = MDS_PORT_SERVER;
   dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << endl;
   
-  // first clean up (notably, finish any slave requests),
-  request_cleanup(mdr);
-  
-  // _then_ forward.
   mds->forward_message_mds(mdr->client_request, who, port);  
+  request_cleanup(mdr);
 
   if (mds->logger) mds->logger->inc("fw");
 }

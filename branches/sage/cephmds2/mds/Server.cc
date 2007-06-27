@@ -575,7 +575,14 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     // am i a new slave?
     MDRequest *mdr;
     if (mdcache->have_request(m->get_reqid())) {
+      // existing?
       mdr = mdcache->request_get(m->get_reqid());
+      if (mdr->slave_to_mds != from) {   // may not even be a slave! (e.g. forward race)
+	dout(10) << "local request " << *mdr << " not slave to mds" << from
+		 << ", ignoring " << *m << endl;
+	delete m;
+	return;
+      }
     } else {
       // new?
       if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
@@ -586,8 +593,6 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
     }
-    assert(mdr->client_request == 0);
-
     assert(mdr->slave_request == 0);     // only one at a time, please!  
     mdr->slave_request = m;
     
@@ -2432,14 +2437,14 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
   
-  // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
-  
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->dst_reanchor_atid);
 
+  // reply
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+  
   // clean up?
   if (straydn)
     mdcache->eval_stray(straydn);
@@ -2537,13 +2542,13 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
     mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
 
-  // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
-
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->dst_reanchor_atid);
+
+  // reply
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
 }
 
 
