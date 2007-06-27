@@ -494,7 +494,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   // pin path?
   vector<CDentry*> trace;
   cache->make_trace(trace, dir->inode);
-  if (!mds->locker->dentry_can_rdlock_trace(trace, 0)) {
+  if (!mds->locker->dentry_can_rdlock_trace(trace)) {
     dout(7) << "export_dir couldn't pin path, failing." << endl;
     return;
   }

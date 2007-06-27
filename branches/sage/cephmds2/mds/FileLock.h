@@ -134,14 +134,13 @@ class FileLock : public SimpleLock {
 
   // read/write access
   bool can_rdlock(MDRequest *mdr) {
-    if (!parent->is_auth())
-      return (state == LOCK_SYNC);
-    if (state == LOCK_LOCK && mdr && xlock_by == mdr)
-      return true;
-    if (state == LOCK_LOCK && !xlock_by) 
-      return true;
-    return (state == LOCK_SYNC) || (state == LOCK_GMIXEDR) 
-      || (state == LOCK_GLOCKR);
+    if (!parent->is_auth()) return (state == LOCK_SYNC);
+    //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true;
+    if (state == LOCK_LOCK && !xlock_by) return true;
+    return 
+      (state == LOCK_SYNC) ||
+      (state == LOCK_GMIXEDR) || 
+      (state == LOCK_GLOCKR);
   }
   bool can_rdlock_soon() {
     if (parent->is_auth())

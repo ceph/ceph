@@ -1189,7 +1189,7 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
  * see if we can _anonymously_ rdlock an entire trace.  
  * if not, and req is specified, wait and retry that message.
  */
-bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req) 
+bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace) 
 {
   // verify dentries are rdlockable.
   // we do this because
@@ -1200,12 +1200,7 @@ bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *re
        it++) {
     CDentry *dn = *it;
     if (!dn->lock.can_rdlock(0)) {
-      if (req) {
-	dout(10) << "can_rdlock_trace can't rdlock " << *dn << ", waiting" << endl;
-	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, req));
-      } else {
-	dout(10) << "can_rdlock_trace can't rdlock " << *dn << endl;
-      }
+      dout(10) << "can_rdlock_trace can't rdlock " << *dn << endl;
       return false;
     }
   }
@@ -1217,8 +1212,10 @@ void Locker::dentry_anon_rdlock_trace_start(vector<CDentry*>& trace)
   // grab dentry rdlocks
   for (vector<CDentry*>::iterator it = trace.begin();
        it != trace.end();
-       it++)
+       it++) {
+    dout(10) << "dentry_anon_rdlock_trace_start rdlocking " << (*it)->lock << " " << **it << endl;
     (*it)->lock.get_rdlock();
+  }
 }
 
 

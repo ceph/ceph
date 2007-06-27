@@ -725,13 +725,17 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << endl;
 
+  show_subtrees();
+
   list<CDir*> dfls;
   diri->get_dirfrags(dfls);
   for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
     CDir *dir = *p;
-    
+    dout(10) << "dirfrag " << *dir << endl;
     CDir *oldparent = get_subtree_root(olddir);
+    dout(10) << " old parent " << *oldparent << endl;
     CDir *newparent = get_subtree_root(diri->get_parent_dir());
+    dout(10) << " new parent " << *newparent << endl;
 
     if (oldparent == newparent) {
       dout(10) << "parent unchanged for " << *dir << " at " << *oldparent << endl;
@@ -749,6 +753,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
       // mid-subtree.
 
       // see if any old bounds move to the new parent.
+      list<CDir*> tomove;
       for (set<CDir*>::iterator p = subtrees[oldparent].begin();
 	   p != subtrees[oldparent].end();
 	   ++p) {
@@ -756,10 +761,14 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 	CDir *broot = get_subtree_root(bound->get_parent_dir());
 	if (broot != oldparent) {
 	  assert(broot == newparent);
-	  dout(10) << "moving bound " << *bound << " from " << *oldparent << " to " << *newparent << endl;
-	  subtrees[oldparent].erase(broot);
-	  subtrees[newparent].insert(broot);
+	  tomove.push_back(bound);
 	}
+      }
+      for (list<CDir*>::iterator p = tomove.begin(); p != tomove.end(); ++p) {
+	CDir *bound = *p;
+	dout(10) << "moving bound " << *bound << " from " << *oldparent << " to " << *newparent << endl;
+	subtrees[oldparent].erase(bound);
+	subtrees[newparent].insert(bound);
       }	   
 
       // did auth change?
@@ -768,6 +777,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
     }
   }
 
+  show_subtrees();
 }
 
 
@@ -4851,13 +4861,14 @@ void MDCache::show_subtrees(int dbl)
   list<CDir*> rootfrags;
   if (root) root->get_dirfrags(rootfrags);
   if (stray) stray->get_dirfrags(rootfrags);
+  dout(15) << "rootfrags " << rootfrags << endl;
 
   // queue stuff
   list<pair<CDir*,int> > q;
   string indent;
   set<CDir*> seen;
 
-  // calc depth
+  // calc max depth
   for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
     q.push_back(pair<CDir*,int>(*p, 0));
 
@@ -4870,6 +4881,7 @@ void MDCache::show_subtrees(int dbl)
     if (d > depth) depth = d;
 
     // sanity check
+    //dout(25) << "saw depth " << d << " " << *dir << endl;
     if (seen.count(dir)) dout(0) << "aah, already seen " << *dir << endl;
     assert(seen.count(dir) == 0);
     seen.insert(dir);
@@ -4878,8 +4890,10 @@ void MDCache::show_subtrees(int dbl)
     if (!subtrees[dir].empty()) {
       for (set<CDir*>::iterator p = subtrees[dir].begin();
 	   p != subtrees[dir].end();
-	   ++p) 
+	   ++p) {
+	//dout(25) << " saw sub " << **p << endl;
 	q.push_front(pair<CDir*,int>(*p, d+1));
+      }
     }
   }
 

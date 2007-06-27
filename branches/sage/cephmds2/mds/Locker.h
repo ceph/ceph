@@ -88,7 +88,7 @@ private:
   bool simple_xlock_start(SimpleLock *lock, MDRequest *mdr);
   void simple_xlock_finish(SimpleLock *lock, MDRequest *mdr);
 
-  bool dentry_can_rdlock_trace(vector<CDentry*>& trace, MClientRequest *req);
+  bool dentry_can_rdlock_trace(vector<CDentry*>& trace);
   void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 

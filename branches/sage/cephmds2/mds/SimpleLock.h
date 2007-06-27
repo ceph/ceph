@@ -235,19 +235,13 @@ public:
   }
 
   bool can_rdlock(MDRequest *mdr) {
-    if (state == LOCK_SYNC)
-      return true;
-    if (state == LOCK_LOCK && 
-	(xlock_by == 0 ||
-	 (mdr && xlock_by == mdr)))
-      return true;
-    return false;
+    if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
+    if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
+    return (state == LOCK_SYNC);
   }
   bool can_xlock(MDRequest *mdr) {
     if (mdr && xlock_by == mdr) return true; // auth or replica!  xlocked by me.
-    if (!parent->is_auth()) return false;
-    if (state != LOCK_LOCK) return false;
-    if (xlock_by == 0) return true;
+    if (state == LOCK_LOCK && parent->is_auth() && !xlock_by) return true;
     return false;
   }
   bool can_xlock_soon() {

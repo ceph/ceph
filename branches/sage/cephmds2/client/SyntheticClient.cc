@@ -1483,6 +1483,36 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
   if (time_to_stop()) return 0;
 
   for (int k=0; k<n; k++) {
+
+    if (rand() % 10 == 0) {
+      // rename some directories.  whee!
+      int dep = (rand() % depth) + 1;
+      string src = basedir;
+      {
+	char t[80];
+	for (int d=0; d<dep; d++) {
+	  int a = rand() % dirs;
+	  sprintf(t, "/dir.%d", a);
+	  src += t;
+	}
+      }
+      string dst = basedir;
+      {
+	char t[80];
+	for (int d=0; d<dep; d++) {
+	  int a = rand() % dirs;
+	  sprintf(t, "/dir.%d", a);
+	  dst += t;
+	}
+      }
+      
+      if (client->rename(dst.c_str(), "/tmp") == 0) {
+	client->rename(src.c_str(), dst.c_str());
+	client->rename("/tmp", src.c_str());
+      }
+      continue;
+    } 
+
     // pick a dest dir
     string src = basedir;
     {
