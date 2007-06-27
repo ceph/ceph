@@ -47,9 +47,6 @@ sage doc
 
 sage mds
 
-?- inode replicate/discover versus lock state
-?- dentry replicate/discover versus lock state
-
 /- fix slave op commit/abort logic:
 / - recovering node needs to know what stray prepare ops committed
 /   - include with import_map
@@ -63,7 +60,7 @@ sage mds
 /   - for uncommitted slave requests,
 /     - include with import_map, wait for explicit commit/abort from peer.
 
-- make unlink/link behave with commit/abort recovery
+/- make unlink/link behave with commit/abort recovery
 
 - new thrashing test with
  - link, unlink, and rename (lots of hard links!)
@@ -82,6 +79,7 @@ sage mds
 - Q: locker vs migration
   - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).
   - ...but does it play nice with wrlock?  and unfortuantely auth_pinning wrlocks would kill performance on updates at dir delegation points.
+  - ????
 
 - stray reintegration
 - stray purge on shutdown
