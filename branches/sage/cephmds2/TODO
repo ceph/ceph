@@ -47,12 +47,8 @@ sage doc
 
 sage mds
 
-- unlink needs to adjust anchortable
-
-/- rename_prep needs to do a CDentryDiscover on straydn.  and a CDirDiscover while we're at it!
-
-/- slave request cleanup on failure
-/  - flag request, and discard on re-dispatch?  (cuz it'll be waiting on random stuff)
+?- inode replicate/discover versus lock state
+?- dentry replicate/discover versus lock state
 
 /- fix slave op commit/abort logic:
 / - recovering node needs to know what stray prepare ops committed

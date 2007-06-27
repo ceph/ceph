@@ -469,8 +469,9 @@ class CInodeDiscover {
     in->inode = inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;
-
     in->replica_nonce = replica_nonce;
+  }
+  void init_inode_locks(CInode *in) {
     in->authlock.set_state(authlock_state);
     in->linklock.set_state(linklock_state);
     in->dirfragtreelock.set_state(dirfragtreelock_state);

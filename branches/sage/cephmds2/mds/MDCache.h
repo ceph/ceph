@@ -531,6 +531,10 @@ protected:
 			int from,
 			list<Context*>& finished);
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+
+  CDentry *add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished);
+  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn);
+
 public:
   CDentry *add_replica_stray(bufferlist &bl, CInode *strayin, int from);
 protected:
