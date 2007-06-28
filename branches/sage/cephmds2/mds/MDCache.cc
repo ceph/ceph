@@ -725,7 +725,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << endl;
 
-  show_subtrees();
+  //show_subtrees();
 
   list<CDir*> dfls;
   diri->get_dirfrags(dfls);
@@ -3210,13 +3210,13 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       } else {
         // discover?
         assert(!cur->is_auth());
-        if (cur->is_waiter_for(CInode::WAIT_DIR)) {
-          dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
-        } 
-	else if (cur->is_ambiguous_auth()) {
+        if (cur->is_ambiguous_auth()) {
 	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
 	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
 	  return 1;
+	} else if (dir_discovers.count(cur->ino())) {
+          dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
+	  assert(cur->is_waiter_for(CInode::WAIT_DIR));
 	} else {
 	  filepath want = path.postfixpath(depth);
 	  dout(10) << "traverse: need dir, doing discover, want " << want.get_path() 
@@ -3238,7 +3238,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     // frozen?
     /*
     if (curdir->is_frozen()) {
-      // doh!
+    // doh!
       // FIXME: traverse is allowed?
       dout(7) << "traverse: " << *curdir << " is frozen, waiting" << endl;
       curdir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
@@ -3248,9 +3248,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     */
 
     // must read directory hard data (permissions, x bit) to traverse
-    if (!noperm && !mds->locker->simple_rdlock_try(&cur->authlock, _get_waiter(mdr, req))) {
+    if (!noperm && 
+	!mds->locker->simple_rdlock_try(&cur->authlock, _get_waiter(mdr, req))) 
       return 1;
-    }
     
     // check permissions?
     // XXX
@@ -4497,8 +4497,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     dis->set_base_dir_frag(fg);    
     mds->send_message_mds(dis, hint, MDS_PORT_CACHE);
     
-    // note the dangling discover
-    dir_discovers[cur->ino()].insert(hint);
+    // note the dangling discover... but only if it's already noted in dir_discovers (i.e. someone is waiting)
+    if (dir_discovers.count(cur->ino())) {
+      dir_discovers[cur->ino()].insert(hint);
+      assert(cur->is_waiter_for(CInode::WAIT_DIR));
+    }
   }
   else if (m->is_flag_error_dir()) {
     // dir error at the end there?

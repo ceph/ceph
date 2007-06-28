@@ -2757,6 +2757,28 @@ void Server::handle_client_rename(MDRequest *mdr)
   // set done_locking flag, to avoid problems with wrlock moving auth target
   mdr->done_locking = true;
 
+  // -- open all srcdn inode frags, if any --
+  // we need these open so that auth can properly delegate from inode to dirfrags
+  // after the inode is _ours_.
+  if (srcdn->is_primary() && 
+      !srcdn->is_auth() && 
+      srci->is_dir()) {
+    dout(10) << "srci is remote dir, opening all frags" << endl;
+    list<frag_t> frags;
+    srci->dirfragtree.get_leaves(frags);
+    for (list<frag_t>::iterator p = frags.begin();
+	 p != frags.end();
+	 ++p) {
+      CDir *dir = srci->get_dirfrag(*p);
+      if (dir) {
+	dout(10) << " opened " << *dir << endl;
+	mdr->pin(dir);
+      } else {
+	mdcache->open_remote_dir(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+    }
+  }
 
   // -- declare now --
   if (mdr->now == utime_t())
@@ -2796,6 +2818,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 	indis->_encode(req->stray);
 	dirdis->_encode(req->stray);
 	dndis->_encode(req->stray);
+	delete indis;
 	delete dirdis;
 	delete dndis;
       }
@@ -3164,6 +3187,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   CDentry *destdn = trace[trace.size()-1];
   dout(10) << " destdn " << *destdn << endl;
   mdr->pin(destdn);
+  
       
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
