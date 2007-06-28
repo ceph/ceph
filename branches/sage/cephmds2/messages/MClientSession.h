@@ -41,7 +41,7 @@ public:
 
   char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
-    out << "client_session " << get_opname(op);
+    out << "client_session(" << get_opname(op) << ")";
   }
 
   void decode_payload() { 

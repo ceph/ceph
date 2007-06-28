@@ -40,7 +40,10 @@ FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, 2 );  // 8M objects, 2x replicati
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
 
 
+#include <msg/msg_types.h>
+
 // fake osd failures: osd -> time
+std::map<entity_name_t,float> g_fake_kill_after;
 std::map<int,float> g_fake_osd_down;
 std::map<int,float> g_fake_osd_out;
 
@@ -161,8 +164,8 @@ md_config_t g_conf = {
 
   mds_decay_halflife: 30,
 
-  mds_beacon_interval: 30.0,
-  mds_beacon_grace: 60*60.0,
+  mds_beacon_interval: 5, //30.0,
+  mds_beacon_grace: 15, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -459,6 +462,24 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.fake_osd_mttf = atoi(args[++i]);
     else if (strcmp(args[i], "--fake_osd_mttr") == 0) 
       g_conf.fake_osd_mttr = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--fake_kill_osd_after") == 0) {
+      g_fake_kill_after[entity_name_t(entity_name_t::TYPE_OSD, atoi(args[i+1]))] = atof(args[i+2]); 
+      i += 2;
+    }
+    else if (strcmp(args[i], "--fake_kill_mds_after") == 0) {
+      g_fake_kill_after[entity_name_t(entity_name_t::TYPE_MDS, atoi(args[i+1]))] = atof(args[i+2]);
+      i += 2;
+    }
+    else if (strcmp(args[i], "--fake_kill_mon_after") == 0) {
+      g_fake_kill_after[entity_name_t(entity_name_t::TYPE_MON, atoi(args[i+1]))] = atof(args[i+2]);
+      i += 2;
+    }
+    else if (strcmp(args[i], "--fake_kill_client_after") == 0) {
+      g_fake_kill_after[entity_name_t(entity_name_t::TYPE_CLIENT, atoi(args[i+1]))] = atof(args[i+2]);
+      i += 2;
+    }
+
     else if (strcmp(args[i], "--fake_osd_down") == 0) {
       int osd = atoi(args[++i]);
       float when = atof(args[++i]);

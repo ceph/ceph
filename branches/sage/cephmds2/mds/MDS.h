@@ -157,11 +157,37 @@ class MDS : public Dispatcher {
   version_t               beacon_last_seq;          // last seq sent to monitor
   map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
-  Context *beacon_sender;
-  Context *beacon_killer;                           // next scheduled time of death
+
+  class C_MDS_BeaconSender : public Context {
+    MDS *mds;
+  public:
+    C_MDS_BeaconSender(MDS *m) : mds(m) {}
+    void finish(int r) {
+      mds->beacon_sender = 0;
+      mds->beacon_send();
+    }
+  } *beacon_sender;
+  class C_MDS_BeaconKiller : public Context {
+    MDS *mds;
+    utime_t lab;
+  public:
+    C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
+    void finish(int r) {
+      mds->beacon_killer = 0;
+      mds->beacon_kill(lab);
+    }
+  } *beacon_killer;
 
   // tick and other timer fun
-  Context *tick_event;
+  class C_MDS_Tick : public Context {
+    MDS *mds;
+  public:
+    C_MDS_Tick(MDS *m) : mds(m) {}
+    void finish(int r) {
+      mds->tick_event = 0;
+      mds->tick();
+    }
+  } *tick_event;
   void     reset_tick();
 
   // -- client map --

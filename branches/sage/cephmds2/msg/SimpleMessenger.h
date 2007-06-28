@@ -210,6 +210,7 @@ private:
     void reset_myname(entity_name_t m);
 
     int shutdown();
+    void suicide();
     void prepare_dest(const entity_addr_t& addr);
     int send_message(Message *m, entity_inst_t dest,
 		     int port=0, int fromport=0);

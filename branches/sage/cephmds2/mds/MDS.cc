@@ -241,14 +241,6 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
 }
 
 
-class C_MDS_Tick : public Context {
-  MDS *mds;
-public:
-  C_MDS_Tick(MDS *m) : mds(m) {}
-  void finish(int r) {
-    mds->tick();
-  }
-};
 
 
 
@@ -286,6 +278,8 @@ void MDS::reset_tick()
 
 void MDS::tick()
 {
+  tick_event = 0;
+
   // reschedule
   reset_tick();
 
@@ -347,14 +341,6 @@ void MDS::beacon_start()
 }
   
 
-class C_MDS_BeaconSender : public Context {
-  MDS *mds;
-public:
-  C_MDS_BeaconSender(MDS *m) : mds(m) {}
-  void finish(int r) {
-    mds->beacon_send();
-  }
-};
 
 void MDS::beacon_send()
 {
@@ -398,16 +384,6 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   delete m;
 }
 
-class C_MDS_BeaconKiller : public Context {
-  MDS *mds;
-  utime_t lab;
-public:
-  C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
-  void finish(int r) {
-    mds->beacon_kill(lab);
-  }
-};
-
 void MDS::reset_beacon_killer()
 {
   utime_t when = beacon_last_acked_stamp;
@@ -428,7 +404,8 @@ void MDS::beacon_kill(utime_t lab)
     dout(0) << "beacon_kill last_acked_stamp " << lab 
 	    << ", killing myself."
 	    << endl;
-    exit(0);
+    messenger->suicide();
+    //exit(0);
   } else {
     dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
 	     << " != my " << lab 

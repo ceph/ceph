@@ -1118,6 +1118,12 @@ int Rank::EntityMessenger::shutdown()
   return 0;
 }
 
+void Rank::EntityMessenger::suicide()
+{
+  dout(10) << "suicide " << get_myaddr() << endl;
+  shutdown();
+  // hmm, or exit(0)?
+}
 
 void Rank::EntityMessenger::prepare_dest(const entity_addr_t& addr)
 {

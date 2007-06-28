@@ -62,8 +62,9 @@ sage mds
 
 /- make unlink/link behave with commit/abort recovery
 
-- new thrashing test with
- - link, unlink, and rename (lots of hard links!)
+/- new thrashing test with
+/ - link, unlink, and rename (lots of hard links!)
+/ - directory renames
 
 - fix up writeback of dir inode mtime
 - revisit wrlocks, dir inode mtime updates.  esp in rename.
