@@ -2821,21 +2821,21 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   // note: this code calls _eval more often than it needs to!
   // fix lock
   if (in->authlock.remove_replica(from))
-    mds->locker->simple_eval(&in->authlock);
+    mds->locker->simple_eval_gather(&in->authlock);
   if (in->linklock.remove_replica(from))
-    mds->locker->simple_eval(&in->linklock);
+    mds->locker->simple_eval_gather(&in->linklock);
   if (in->dirfragtreelock.remove_replica(from))
-    mds->locker->simple_eval(&in->dirfragtreelock);
+    mds->locker->simple_eval_gather(&in->dirfragtreelock);
   if (in->filelock.remove_replica(from))
-    mds->locker->simple_eval(&in->filelock);
+    mds->locker->simple_eval_gather(&in->filelock);
   
   // alone now?
   if (!in->is_replicated()) {
-    mds->locker->simple_eval(&in->authlock);
-    mds->locker->simple_eval(&in->linklock);
-    mds->locker->simple_eval(&in->dirfragtreelock);
-    mds->locker->file_eval(&in->filelock);
-    mds->locker->scatter_eval(&in->dirlock);
+    mds->locker->simple_eval_gather(&in->authlock);
+    mds->locker->simple_eval_gather(&in->linklock);
+    mds->locker->simple_eval_gather(&in->dirfragtreelock);
+    mds->locker->file_eval_gather(&in->filelock);
+    mds->locker->scatter_eval_gather(&in->dirlock);
   }
 }
 

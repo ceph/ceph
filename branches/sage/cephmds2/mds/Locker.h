@@ -86,6 +86,7 @@ protected:
 
   // simple
 public:
+  void simple_eval_gather(SimpleLock *lock);
   void simple_eval(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, Context *con);
 protected:
@@ -104,6 +105,7 @@ public:
 
   // scatter
 public:
+  void scatter_eval_gather(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
@@ -118,7 +120,9 @@ protected:
 
   // file
 public:
+  void file_eval_gather(FileLock *lock);
   void file_eval(FileLock *lock);
+  void try_file_eval(FileLock *lock);
 protected:
   void handle_file_lock(FileLock *lock, MLock *m);
   bool file_sync(FileLock *lock);

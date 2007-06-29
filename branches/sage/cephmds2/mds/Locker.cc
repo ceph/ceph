@@ -584,7 +584,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   else
     in->mds_caps_wanted.erase(m->get_from());
 
-  file_eval(&in->filelock);  // ** may or may not be auth_pinned **
+  try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   delete m;
 }
 
@@ -674,7 +674,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }  
 
   // reevaluate, waiters
-  file_eval(&in->filelock);  // ** may or may not be auth_pinned **
+  try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   in->finish_waiting(CInode::WAIT_CAPS, 0);
 
   delete m;
@@ -844,7 +844,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     } else {
       dout(7) << "handle_simple_lock " << *lock << " on " << *lock->get_parent() << " from " << from
 	      << ", last one" << endl;
-      simple_eval(lock);
+      simple_eval_gather(lock);
     }
     break;
 
@@ -863,6 +863,33 @@ public:
     locker->simple_eval(lock);
   }
 };
+
+void Locker::simple_eval_gather(SimpleLock *lock)
+{
+  dout(10) << "simple_eval_gather " << *lock << " on " << *lock->get_parent() << endl;
+
+  // finished gathering?
+  if (lock->get_state() == LOCK_GLOCKR &&
+      !lock->is_gathering() &&
+      !lock->is_rdlocked()) {
+    dout(7) << "simple_eval finished gather on " << *lock << " on " << *lock->get_parent() << endl;
+
+    // replica: tell auth
+    if (!lock->get_parent()->is_auth()) {
+      int auth = lock->get_parent()->authority().first;
+      if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) 
+	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
+			      lock->get_parent()->authority().first, MDS_PORT_LOCKER);
+    }
+    
+    lock->set_state(LOCK_LOCK);
+    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
+
+    // re-eval?
+    if (lock->get_parent()->can_auth_pin())
+      simple_eval(lock);
+  }
+}
 
 void Locker::simple_eval(SimpleLock *lock)
 {
@@ -892,24 +919,6 @@ void Locker::simple_eval(SimpleLock *lock)
     lock->set_state(LOCK_LOCK);
   }
   */
-
-  // finished gathering?
-  if (lock->get_state() == LOCK_GLOCKR &&
-      !lock->is_gathering() &&
-      !lock->is_rdlocked()) {
-    dout(7) << "simple_eval finished gather on " << *lock << " on " << *lock->get_parent() << endl;
-
-    // replica: tell auth
-    if (!lock->get_parent()->is_auth()) {
-      int auth = lock->get_parent()->authority().first;
-      if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) 
-	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
-			      lock->get_parent()->authority().first, MDS_PORT_LOCKER);
-    }
-    
-    lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
-  }
 
   // stable -> sync?
   if (lock->get_parent()->is_auth() &&
@@ -1029,7 +1038,7 @@ void Locker::simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr)
   
   // last one?
   if (!lock->is_rdlocked())
-    simple_eval(lock);
+    simple_eval_gather(lock);
 }
 
 bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
@@ -1122,7 +1131,7 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
   lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
 
   // eval
-  simple_eval(lock);
+  simple_eval_gather(lock);
 }
 
 
@@ -1231,7 +1240,7 @@ void Locker::scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr)
     mdr->locks.erase(lock);
   }
   
-  scatter_eval(lock);
+  scatter_eval_gather(lock);
 }
 
 
@@ -1282,7 +1291,7 @@ void Locker::scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr)
     mdr->locks.erase(lock);
   }
   
-  scatter_eval(lock);
+  scatter_eval_gather(lock);
 }
 
 
@@ -1296,18 +1305,10 @@ public:
   }
 };
 
-void Locker::scatter_eval(ScatterLock *lock)
-{
-  dout(10) << "scatter_eval " << *lock << " on " << *lock->get_parent() << endl;
 
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
-    return;
-  }
+void Locker::scatter_eval_gather(ScatterLock *lock)
+{
+  dout(10) << "scatter_eval_gather " << *lock << " on " << *lock->get_parent() << endl;
 
   if (!lock->get_parent()->is_auth()) {
     // REPLICA
@@ -1406,22 +1407,41 @@ void Locker::scatter_eval(ScatterLock *lock)
     }
 
 
-    // stable -> ???
-    if (lock->is_stable()) {
-      if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
-	// i _should_ be scattered.
-	if (!lock->is_rdlocked() &&
-	    !lock->is_xlocked()) {
-	  dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << endl;
-	  scatter_scatter(lock);
-	}
-      } else {
-	// i _should_ be sync.
-	if (!lock->is_wrlocked() &&
-	    !lock->is_xlocked()) {
-	  dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << endl;
-	  scatter_sync(lock);
-	}
+    // re-eval?
+    if (lock->is_stable() &&
+	lock->get_parent()->can_auth_pin())
+      scatter_eval(lock);
+  }
+}
+
+void Locker::scatter_eval(ScatterLock *lock)
+{
+  dout(10) << "scatter_eval " << *lock << " on " << *lock->get_parent() << endl;
+
+  // unstable and ambiguous auth?
+  if (!lock->is_stable() &&
+      lock->get_parent()->is_ambiguous_auth()) {
+    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
+    return;
+  }
+
+  if (lock->get_parent()->is_auth() &&
+      lock->is_stable()) {
+    if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
+      // i _should_ be scattered.
+      if (!lock->is_rdlocked() &&
+	  !lock->is_xlocked()) {
+	dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << endl;
+	scatter_scatter(lock);
+      }
+    } else {
+      // i _should_ be sync.
+      if (!lock->is_wrlocked() &&
+	  !lock->is_xlocked()) {
+	dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << endl;
+	scatter_sync(lock);
       }
     }
   }
@@ -1800,7 +1820,7 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
   mdr->locks.erase(lock);
 
   if (!lock->is_rdlocked()) 
-    file_eval(lock);
+    file_eval_gather(lock);
 }
 
 
@@ -1864,7 +1884,7 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
 
   //// drop lock?
   //if (!lock->is_waiter_for(SimpleLock::WAIT_STABLE)) 
-  file_eval(lock);
+  file_eval_gather(lock);
 }
 
 
@@ -1885,21 +1905,34 @@ public:
   }
 };
 
-
-void Locker::file_eval(FileLock *lock)
+void Locker::try_file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
 
   // unstable and ambiguous auth?
   if (!lock->is_stable() &&
       in->is_ambiguous_auth()) {
-    dout(7) << "file_eval not stable and ambiguous auth, waiting on " << *in << endl;
+    dout(7) << "try_file_eval not stable and ambiguous auth, waiting on " << *in << endl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
     in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
     return;
   }
 
+  if (!lock->get_parent()->can_auth_pin()) {
+    dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_Locker_FileEval(this, lock));
+    return;
+  }
 
+  file_eval(lock);
+}
+
+
+
+void Locker::file_eval_gather(FileLock *lock)
+{
+  CInode *in = (CInode*)lock->get_parent();
   int issued = in->get_caps_issued();
 
   // [auth] finished gather?
@@ -2019,9 +2052,29 @@ void Locker::file_eval(FileLock *lock)
     }
   }
 
+
+  // re-eval?
+  if (lock->get_parent()->is_auth() &&
+      lock->is_stable() &&
+      lock->get_parent()->can_auth_pin())
+    file_eval(lock);
+}
+
+void Locker::file_eval(FileLock *lock)
+{
+  CInode *in = (CInode*)lock->get_parent();
+
+  // unstable and ambiguous auth?
+  if (!lock->is_stable() &&
+      in->is_ambiguous_auth()) {
+    dout(7) << "file_eval not stable and ambiguous auth, waiting on " << *in << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
+    return;
+  }
+
   // !stable -> do nothing.
   if (!lock->is_stable()) return; 
-
 
   // stable.
   assert(lock->is_stable());
@@ -2410,7 +2463,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     lock->get_rdlock();
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     lock->put_rdlock();
-    file_eval(lock);
+    file_eval_gather(lock);
     break;
     
   case LOCK_AC_LOCK:
@@ -2469,7 +2522,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     
     // waiters
     lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
-    file_eval(lock);
+    file_eval_gather(lock);
     break;
 
  
@@ -2490,7 +2543,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     } else {
       dout(7) << "handle_lock_inode_file " << *in << " from " << from
 	      << ", last one" << endl;
-      file_eval(lock);
+      file_eval_gather(lock);
     }
     break;
     
@@ -2513,7 +2566,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     } else {
       dout(7) << "handle_lock_inode_file " << *in << " from " << from
 	      << ", last one" << endl;
-      file_eval(lock);
+      file_eval_gather(lock);
     }
     break;
 
@@ -2528,7 +2581,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     } else {
       dout(7) << "handle_lock_inode_file " << *in << " from " << from
 	      << ", last one" << endl;
-      file_eval(lock);
+      file_eval_gather(lock);
     }
     break;
 

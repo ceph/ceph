@@ -1719,11 +1719,6 @@ void Migrator::import_finish(CDir *dir, bool now)
   dout(5) << "finishing any waiters on imported data" << endl;
   dir->finish_waiting(CDir::WAIT_IMPORTED);
 
-  // log it
-  if (mds->logger) {
-    //mds->logger->set("nex", cache->exports.size());
-    //mds->logger->set("nim", cache->imports.size());
-  }
   cache->show_subtrees();
   audit();
 
@@ -1782,6 +1777,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in->remove_replica(mds->get_nodeid());
   
   // twiddle locks
+  /*
   if (in->authlock.do_import(oldauth, mds->get_nodeid()))
     mds->locker->simple_eval(&in->authlock);
   if (in->linklock.do_import(oldauth, mds->get_nodeid()))
@@ -1790,6 +1786,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     mds->locker->simple_eval(&in->dirfragtreelock);
   if (in->dirlock.do_import(oldauth, mds->get_nodeid()))
     mds->locker->scatter_eval(&in->dirlock);
+  */
 
   // caps
   for (set<int>::iterator it = merged_client_caps.begin();
@@ -1807,8 +1804,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   }
 
   // filelock
+  /*
   if (in->filelock.do_import(oldauth, mds->get_nodeid()))
     mds->locker->simple_eval(&in->filelock);
+  */
 }
 
 
