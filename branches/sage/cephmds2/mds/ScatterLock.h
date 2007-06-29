@@ -31,9 +31,9 @@
 #define LOCK_LOCK__          // . W  . .
 #define LOCK_GTEMPSYNCL -21  // . w       LOCK on replica.
 
-#define LOCK_GLOCKC     -22  // . w  . w  waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
-#define LOCK_SCATTER     23  // . W  . W  mtime updates on replicas allowed, no reads.  stable here.
-#define LOCK_GTEMPSYNCC -24  // . w  . w  GLOCKC|LOCK on replica
+#define LOCK_GLOCKC     -22  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
+#define LOCK_SCATTER     23  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
+#define LOCK_GTEMPSYNCC -24  // . wp . wp GLOCKC|LOCK on replica
 
 #define LOCK_GSCATTERT  -25  // r .       LOCK on replica.
 #define LOCK_GLOCKT     -26  // r .       LOCK on replica.
@@ -64,10 +64,12 @@ inline const char *get_scatterlock_state_name(int s) {
 
 class ScatterLock : public SimpleLock {
   int num_wrlock;
-  
+  bool updated;
+
 public:
   ScatterLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo),
-						  num_wrlock(0) {}
+						  num_wrlock(0),
+						  updated(false) {}
 
   int get_replica_state() {
     switch (state) {
@@ -94,6 +96,10 @@ public:
       assert(0);
     }
   }
+
+  void set_updated() { updated = true; }
+  void clear_updated() { updated = false; }
+  bool is_updated() { return updated; }
   
   void replicate_relax() {
     //if (state == LOCK_SYNC && !is_rdlocked())

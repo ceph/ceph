@@ -64,6 +64,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
   static const int PIN_BATCHOPENJOURNAL = 16;
+  static const int PIN_SCATTERED = 17;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -76,6 +77,7 @@ class CInode : public MDSCacheObject {
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
+    case PIN_SCATTERED: return "scattered";
     default: return generic_pin_name(p);
     }
   }
@@ -118,6 +120,36 @@ class CInode : public MDSCacheObject {
   map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t            last_open_journaled;  // log offset for the last journaled EOpen
+
+  // projected values (only defined while dirty)
+  list<inode_t>    projected_inode;
+  list<fragtree_t> projected_dirfragtree;
+  
+  inode_t *project_inode() {
+    if (projected_inode.empty())
+      projected_inode.push_back(inode);
+    else
+      projected_inode.push_back(projected_inode.back());
+    return &projected_inode.back();
+  }
+  fragtree_t *project_dirfragtree() {
+    if (projected_dirfragtree.empty())
+      projected_dirfragtree.push_back(dirfragtree);
+    else
+      projected_dirfragtree.push_back(projected_dirfragtree.back());
+    return &projected_dirfragtree.back();
+  }
+  void pop_and_dirty_projected_inode() {
+    mark_dirty(projected_inode.front().version);
+    inode = projected_inode.front();
+    projected_inode.pop_front();
+  }
+  void pop_and_dirty_projected_dirfragtree() {
+    mark_dirty(projected_inode.front().version);
+    dirfragtree = projected_dirfragtree.front();
+    projected_dirfragtree.pop_front();
+  }
+
 
   // -- cache infrastructure --
   map<frag_t,CDir*> dirfrags; // cached dir fragments

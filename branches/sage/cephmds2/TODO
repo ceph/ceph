@@ -47,6 +47,29 @@ sage doc
 
 sage mds
 
+- fix utime to use acquire_locks.. don't call into locker manually!
+
+- projected inode content skipping.
+  - roll projected_version in to a *projected_inode.  clean up the *pi code in Server.cc.
+  - list<inode_t> projected_inode and list<fragtree_t> projected_dirfragtree, &push_projected_*(), etc.
+
+- make locks auth_pin for unstable states.
+
+- fix rename to delay the _apply.
+  - need to fix locking vs migration first.
+
+- then, mtimes:
+  - avoid migration race concern (on auth).
+  - writeback and dirty on gather.
+    - cleaned up pv/pi makes writebehind play nice with concurrent updates.
+    - should pin lock in LOCK state?
+  - scatterlock 'updated' flag.  
+    - on replica, clear only on sync | rescatter.
+  - make sure "dirty" scatterlock prevents journal expire.
+    - EMetaBlob map<inodeno_t,utime_t> dirty_scatter;
+      - mtime must be greater, or scatterlock must be !updated.
+ 
+
 /- fix slave op commit/abort logic:
 / - recovering node needs to know what stray prepare ops committed
 /   - include with import_map
@@ -70,7 +93,7 @@ sage mds
 - revisit wrlocks, dir inode mtime updates.  esp in rename.
   - if auth, pin and be happy.  decide early.
   - make no attempt to dirty inodes until a gather
-  - pin scattered inodes
+/  - pin scattered inodes
   - mtime will always get journaled...
   -> so, just make sure v/pv/dirtyness is sane on recovery...
   -> scatterlock should recover into scatter state, or whatever...
@@ -86,6 +109,8 @@ sage mds
 - stray purge on shutdown
   - need to export stray crap to another mds..
 - verify stray is empty on shutdown
+
+- roll EAlloc into EMetaBlob (and maybe Purge)
 
 - journal+recovery
   - file capabilities i/o

@@ -136,12 +136,13 @@ bool Locker::acquire_locks(MDRequest *mdr,
   // make list of items to authpin
   set<SimpleLock*> mustpin = xlocks;
 
-  /* don't auth_pin wrlocks.. they're a moving target!  (might import while an update is in progress)
-  for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p)
+  for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p) {
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
-  */
-
+    else
+      sorted.insert(*p);
+  }
+  
   map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
   // can i auth pin them all now?
@@ -1300,7 +1301,7 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
       !lock->is_rdlocked() &&
       !lock->is_xlocked() &&
       lock->get_state() == LOCK_SYNC) 
-    scatter_scatter(lock);
+    scatter_lock(lock);
 
   // can wrlock?
   if (lock->can_wrlock()) {
@@ -1377,6 +1378,7 @@ void Locker::scatter_eval(ScatterLock *lock)
 			      auth, MDS_PORT_LOCKER);
       }
       lock->set_state(LOCK_LOCK);
+      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
     }
     
   } else {
@@ -1400,6 +1402,15 @@ void Locker::scatter_eval(ScatterLock *lock)
       dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_LOCK);
+      //lock->get_parent()->put(CInode::PIN_SCATTERED);
+
+      if (lock->is_updated()) {
+	// updated flag is set: we got new data during the gather.
+	// write-behind journal.
+	//	version_t v
+
+      }
+
       lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
     }
 
@@ -1427,6 +1438,7 @@ void Locker::scatter_eval(ScatterLock *lock)
       dout(7) << "scatter_eval finished scatter un-rdlock(/gather) on " << *lock
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_SCATTER);
+      //lock->get_parent()->get(CInode::PIN_SCATTERED);
       lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
       
       if (lock->get_parent()->is_replicated()) {
@@ -1499,8 +1511,10 @@ void Locker::scatter_sync(ScatterLock *lock)
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
     } else {
-      if (!lock->is_wrlocked()) 
+      if (!lock->is_wrlocked()) {
+	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
 	break; // do it now, we're fine
+      }
     }
     lock->set_state(LOCK_GLOCKC);
     return;
@@ -1567,6 +1581,7 @@ void Locker::scatter_scatter(ScatterLock *lock)
     send_lock_message(lock, LOCK_AC_SCATTER, data);
   } 
   lock->set_state(LOCK_SCATTER);
+  //lock->get_parent()->get(CInode::PIN_SCATTERED);
   lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
 }
 
@@ -1596,9 +1611,11 @@ void Locker::scatter_lock(ScatterLock *lock)
 
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated()) {
+      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
-    
+    }
+
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
@@ -1641,8 +1658,10 @@ void Locker::scatter_tempsync(ScatterLock *lock)
 
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated()) {
+      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
+    }
     
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
@@ -1705,6 +1724,9 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_GLOCKS);
     } else {
+      //if (lock->get_state() == LOCK_SCATTER) 
+	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
+
       // encode and reply
       bufferlist data;
       lock->encode_locked_state(data);
@@ -1718,6 +1740,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SCATTER);
+    //lock->get_parent()->get(CInode::PIN_SCATTERED);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
     break;
 

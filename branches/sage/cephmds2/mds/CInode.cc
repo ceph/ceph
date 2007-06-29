@@ -365,16 +365,16 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   switch (type) {
   case LOCK_OTYPE_IAUTH:
-    ::_encode(inode.ctime, bl);
-    ::_encode(inode.mode, bl);
-    ::_encode(inode.uid, bl);
-    ::_encode(inode.gid, bl);  
+    _encode(inode.ctime, bl);
+    _encode(inode.mode, bl);
+    _encode(inode.uid, bl);
+    _encode(inode.gid, bl);  
     break;
     
   case LOCK_OTYPE_ILINK:
-    ::_encode(inode.ctime, bl);
-    ::_encode(inode.nlink, bl);
-    ::_encode(inode.anchored, bl);
+    _encode(inode.ctime, bl);
+    _encode(inode.nlink, bl);
+    _encode(inode.anchored, bl);
     break;
     
   case LOCK_OTYPE_IDIRFRAGTREE:
@@ -382,21 +382,21 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case LOCK_OTYPE_IFILE:
-    ::_encode(inode.size, bl);
-    ::_encode(inode.mtime, bl);
-    ::_encode(inode.atime, bl);
+    _encode(inode.size, bl);
+    _encode(inode.mtime, bl);
+    _encode(inode.atime, bl);
     break;
 
   case LOCK_OTYPE_IDIR:
-    ::_encode(inode.mtime, bl);
-    {
+    _encode(inode.mtime, bl);
+    if (0) {
       map<frag_t,int> dfsz;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
 	if (p->second->is_auth())
 	  dfsz[p->first] = p->second->get_nitems();
-      ::_encode(dfsz, bl);
+      _encode(dfsz, bl);
     }
     break;
   
@@ -412,18 +412,18 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   switch (type) {
   case LOCK_OTYPE_IAUTH:
-    ::_decode(tm, bl, off);
+    _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::_decode(inode.mode, bl, off);
-    ::_decode(inode.uid, bl, off);
-    ::_decode(inode.gid, bl, off);
+    _decode(inode.mode, bl, off);
+    _decode(inode.uid, bl, off);
+    _decode(inode.gid, bl, off);
     break;
 
   case LOCK_OTYPE_ILINK:
-    ::_decode(tm, bl, off);
+    _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::_decode(inode.nlink, bl, off);
-    ::_decode(inode.anchored, bl, off);
+    _decode(inode.nlink, bl, off);
+    _decode(inode.anchored, bl, off);
     break;
 
   case LOCK_OTYPE_IDIRFRAGTREE:
@@ -431,16 +431,19 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case LOCK_OTYPE_IFILE:
-    ::_decode(inode.size, bl, off);
-    ::_decode(inode.mtime, bl, off);
-    ::_decode(inode.atime, bl, off);
+    _decode(inode.size, bl, off);
+    _decode(inode.mtime, bl, off);
+    _decode(inode.atime, bl, off);
     break;
 
   case LOCK_OTYPE_IDIR:
     //::_decode(inode.size, bl, off);
-    ::_decode(tm, bl, off);
-    if (inode.mtime < tm) inode.mtime = tm;
-    {
+    _decode(tm, bl, off);
+    if (inode.mtime < tm) {
+      inode.mtime = tm;
+      dirlock.set_updated();
+    }
+    if (0) {
       map<frag_t,int> dfsz;
       ::_decode(dfsz, bl, off);
       // hmm which to keep?

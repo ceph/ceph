@@ -254,25 +254,27 @@ void Migrator::handle_mds_failure_or_stop(int who)
       }
     } else {
       // bystander failed.
-      if (p->second == EXPORT_WARNING) {
-	// exporter waiting for warning acks, let's fake theirs.
-	if (export_warning_ack_waiting[dir].count(who)) {
+      if (export_warning_ack_waiting.count(dir) &&
+	  export_warning_ack_waiting[dir].count(who)) {
+	export_warning_ack_waiting[dir].erase(who);
+	export_notify_ack_waiting[dir].erase(who);   // they won't get a notify either.
+	if (p->second == EXPORT_WARNING) {
+	  // exporter waiting for warning acks, let's fake theirs.
 	  dout(10) << "faking export_warning_ack from mds" << who
 		   << " on " << *dir << " to mds" << export_peer[dir] 
 		   << endl;
-	  export_warning_ack_waiting[dir].erase(who);
-	  export_notify_ack_waiting[dir].erase(who);   // they won't get a notify either.
 	  if (export_warning_ack_waiting[dir].empty()) 
 	    export_go(dir);
 	}
       }
-      if (p->second == EXPORT_NOTIFYING) {
-	// exporter is waiting for notify acks, fake it
-	if (export_notify_ack_waiting[dir].count(who)) {
+      if (export_notify_ack_waiting.count(dir) &&
+	  export_notify_ack_waiting[dir].count(who)) {
+	export_notify_ack_waiting[dir].erase(who);
+	if (p->second == EXPORT_NOTIFYING) {
+	  // exporter is waiting for notify acks, fake it
 	  dout(10) << "faking export_notify_ack from mds" << who
 		   << " on " << *dir << " to mds" << export_peer[dir] 
 		   << endl;
-	  export_notify_ack_waiting[dir].erase(who);
 	  if (export_notify_ack_waiting[dir].empty()) 
 	    export_finish(dir);
 	}
@@ -1724,6 +1726,10 @@ void Migrator::import_finish(CDir *dir, bool now)
   }
   cache->show_subtrees();
   audit();
+
+  // re-eval scatterlock?
+  if (dir->inode->is_auth())
+    mds->locker->scatter_eval(&dir->inode->dirlock);
 
   // is it empty?
   if (dir->get_size() == 0 &&

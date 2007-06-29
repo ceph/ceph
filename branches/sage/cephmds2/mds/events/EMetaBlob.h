@@ -267,7 +267,7 @@ class EMetaBlob {
   }
 
   // return remote pointer to to-be-journaled inode
-  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
     if (!in) in = dn->get_inode();
 
     dirlump& lump = add_dir(dn->get_dir(), false);
@@ -278,12 +278,14 @@ class EMetaBlob {
 					  dn->get_projected_version(), 
 					  in->inode, in->symlink, 
 					  dirty));
+      if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->get_projected_version(),
 					 in->inode, in->symlink, 
 					 dirty));
+      if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;
     }
   }
