@@ -163,7 +163,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << endl;
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-	mdcache->request_drop_locks(mdr);
+	mds->locker->drop_locks(mdr);
 	mdr->drop_local_auth_pins();
 	return false;
       }
@@ -174,7 +174,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
       // wait
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << endl;
       object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
-      mdcache->request_drop_locks(mdr);
+      mds->locker->drop_locks(mdr);
       mdr->drop_local_auth_pins();
       return false;
     }
@@ -296,6 +296,17 @@ bool Locker::acquire_locks(MDRequest *mdr,
   return true;
 }
 
+
+void Locker::drop_locks(MDRequest *mdr)
+{
+  // leftover locks
+  while (!mdr->xlocks.empty()) 
+    xlock_finish(*mdr->xlocks.begin(), mdr);
+  while (!mdr->rdlocks.empty()) 
+    rdlock_finish(*mdr->rdlocks.begin(), mdr);
+  while (!mdr->wrlocks.empty()) 
+    wrlock_finish(*mdr->wrlocks.begin(), mdr);
+}
 
 
 // generics
@@ -573,7 +584,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   else
     in->mds_caps_wanted.erase(m->get_from());
 
-  file_eval(&in->filelock);
+  file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   delete m;
 }
 
@@ -663,7 +674,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }  
 
   // reevaluate, waiters
-  file_eval(&in->filelock);
+  file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   in->finish_waiting(CInode::WAIT_CAPS, 0);
 
   delete m;

@@ -3341,8 +3341,12 @@ void Server::handle_client_truncate(MDRequest *mdr)
   // check permissions?  
 
   // xlock inode
-  if (!mds->locker->xlock_start(&cur->filelock, mdr))
-    return;  // fw or (wait for) lock
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+  xlocks.insert(&cur->filelock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
   
   // already small enough?
   if (cur->inode.size >= req->args.truncate.length) {
@@ -3406,9 +3410,13 @@ void Server::handle_client_open(MDRequest *mdr)
     assert(cur->is_auth());
 
     // xlock file size
-    if (!mds->locker->xlock_start(&cur->filelock, mdr))
+    set<SimpleLock*> rdlocks = mdr->rdlocks;
+    set<SimpleLock*> wrlocks = mdr->wrlocks;
+    set<SimpleLock*> xlocks = mdr->xlocks;
+    xlocks.insert(&cur->filelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
-    
+
     if (cur->inode.size > 0) {
       handle_client_opent(mdr);
       return;

@@ -47,11 +47,8 @@ sage doc
 
 sage mds
 
-- fix utime to use acquire_locks.. don't call into locker manually!
-
-- projected inode content skipping.
-  - roll projected_version in to a *projected_inode.  clean up the *pi code in Server.cc.
-  - list<inode_t> projected_inode and list<fragtree_t> projected_dirfragtree, &push_projected_*(), etc.
+- unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
+- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
 
 - make locks auth_pin for unstable states.
 
@@ -111,6 +108,8 @@ sage mds
 - verify stray is empty on shutdown
 
 - roll EAlloc into EMetaBlob (and maybe Purge)
+
+- dir complete flag on migration.. does it go into the EMetaBlob too?  can it be safely dropped?
 
 - journal+recovery
   - file capabilities i/o

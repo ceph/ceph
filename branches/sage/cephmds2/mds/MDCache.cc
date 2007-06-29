@@ -403,7 +403,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
   // evaluate subtree inode dirlock?
   //  (we should scatter the dirlock on subtree bounds)
   if (dir->inode->is_auth())
-    mds->locker->scatter_eval(&dir->inode->dirlock);
+    mds->locker->scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
 
   show_subtrees();
 }
@@ -3745,17 +3745,6 @@ void MDCache::request_forget_foreign_locks(MDRequest *mdr)
   }
 }
 
-void MDCache::request_drop_locks(MDRequest *mdr)
-{
-  // leftover locks
-  while (!mdr->xlocks.empty()) 
-    mds->locker->xlock_finish(*mdr->xlocks.begin(), mdr);
-  while (!mdr->rdlocks.empty()) 
-    mds->locker->rdlock_finish(*mdr->rdlocks.begin(), mdr);
-  while (!mdr->wrlocks.empty()) 
-    mds->locker->wrlock_finish(*mdr->wrlocks.begin(), mdr);
-}
-
 void MDCache::request_cleanup(MDRequest *mdr)
 {
   dout(15) << "request_cleanup " << *mdr << endl;
@@ -3778,7 +3767,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
 
   // drop locks
-  request_drop_locks(mdr);
+  mds->locker->drop_locks(mdr);
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();

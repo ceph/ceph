@@ -61,40 +61,52 @@ private:
   void dispatch(Message *m);
   void handle_lock(MLock *m);
 
+protected:
   void send_lock_message(SimpleLock *lock, int msg);
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
+public:
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks);
 
+  void drop_locks(MDRequest *mdr);
+
+protected:
   bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
   void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
   bool xlock_start(SimpleLock *lock, MDRequest *mdr);
-  void xlock_finish(SimpleLock *lock, MDRequest *mdr);
+public:
+  void xlock_finish(SimpleLock *lock, MDRequest *mdr);  // public for Server's slave UNXLOCK
+protected:
   bool wrlock_start(SimpleLock *lock, MDRequest *mdr);
   void wrlock_finish(SimpleLock *lock, MDRequest *mdr);
 
   // simple
-  void handle_simple_lock(SimpleLock *lock, MLock *m);
+public:
   void simple_eval(SimpleLock *lock);
+  bool simple_rdlock_try(SimpleLock *lock, Context *con);
+protected:
+  void handle_simple_lock(SimpleLock *lock, MLock *m);
   void simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
-  bool simple_rdlock_try(SimpleLock *lock, Context *con);
   bool simple_rdlock_start(SimpleLock *lock, MDRequest *mdr);
   void simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr);
   bool simple_xlock_start(SimpleLock *lock, MDRequest *mdr);
   void simple_xlock_finish(SimpleLock *lock, MDRequest *mdr);
 
+public:
   bool dentry_can_rdlock_trace(vector<CDentry*>& trace);
   void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
   // scatter
-  void handle_scatter_lock(ScatterLock *lock, MLock *m);
+public:
   void scatter_eval(ScatterLock *lock);
+protected:
+  void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void scatter_sync(ScatterLock *lock);
   void scatter_lock(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock);
@@ -105,8 +117,10 @@ private:
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
 
   // file
-  void handle_file_lock(FileLock *lock, MLock *m);
+public:
   void file_eval(FileLock *lock);
+protected:
+  void handle_file_lock(FileLock *lock, MLock *m);
   bool file_sync(FileLock *lock);
   void file_lock(FileLock *lock);
   void file_mixed(FileLock *lock);
