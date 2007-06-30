@@ -70,7 +70,7 @@ bool ClientMonitor::update_from_paxos()
   }
 
   // save latest
-  bl.clear();
+  bufferlist bl;
   client_map._encode(bl);
   mon->store->put_bl_ss(bl, "clientmap", "latest");
 
