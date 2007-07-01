@@ -282,7 +282,7 @@
 
 	// sanitize
 	if (pm->epoch > mon_epoch) 
-	  assert(0); 	//call_election();   // wtf
+	  call_election();
 	if (pm->epoch != mon_epoch) {
 	  delete pm;
 	  break;

@@ -458,7 +458,6 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 
   paxos->wait_for_commit(new C_Reported(this, m));
   
-  delete m;
   return true;
 }
 

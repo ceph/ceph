@@ -885,10 +885,12 @@ void Client::handle_mds_map(MMDSMap* m)
     messenger->reset_myname(m->get_dest());
     
     mount_cond.Signal();  // mount might be waiting for this.
-  }    
+  } 
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  epoch_t was = mdsmap->get_epoch();
   mdsmap->decode(m->get_encoded());
+  assert(mdsmap->get_epoch() >= was);
   
   // send reconnect?
   if (frommds >= 0 && 
