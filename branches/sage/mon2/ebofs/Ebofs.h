@@ -29,6 +29,7 @@ using namespace __gnu_cxx;
 #include "nodes.h"
 #include "Allocator.h"
 #include "Table.h"
+#include "Journal.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -40,20 +41,23 @@ typedef pair<coll_t,object_t> coll_object_t;
 
 
 class Ebofs : public ObjectStore {
- protected:
+protected:
   Mutex        ebofs_lock;    // a beautiful global lock
 
   // ** debuggy **
   bool         fake_writes;
 
   // ** super **
+public:
   BlockDevice  dev;
+protected:
   bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
   bool         commit_thread_started, mid_commit;
   Cond         commit_cond;   // to wake up the commit thread
   Cond         sync_cond;
+  uint64_t     super_fsid;
 
   map<version_t, list<Context*> > commit_waiters;
 
@@ -71,8 +75,15 @@ class Ebofs : public ObjectStore {
     }
   } commit_thread;
 
-  
+public:
+  uint64_t get_fsid() { return super_fsid; }
+  epoch_t get_super_epoch() { return super_epoch; }
+protected:
 
+
+  // ** journal **
+  char *journalfn;
+  Journal *journal;
 
   // ** allocator **
   block_t      free_blocks, limbo_blocks;
@@ -188,6 +199,21 @@ class Ebofs : public ObjectStore {
   bool           finisher_stop;
   list<Context*> finisher_queue;
 
+public:
+  void queue_finisher(Context *c) {
+    finisher_lock.Lock();
+    finisher_queue.push_back(c);
+    finisher_cond.Signal();
+    finisher_lock.Unlock();
+  }
+  void queue_finishers(list<Context*>& ls) {
+    finisher_lock.Lock();
+    finisher_queue.splice(finisher_queue.end(), ls);
+    finisher_cond.Signal();
+    finisher_lock.Unlock();
+  }
+protected:
+
   void *finisher_thread_entry();
   class FinisherThread : public Thread {
     Ebofs *ebofs;
@@ -204,12 +230,13 @@ class Ebofs : public ObjectStore {
 
 
  public:
-  Ebofs(char *devfn) : 
+  Ebofs(char *devfn, char *jfn=0) : 
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 
     super_epoch(0), commit_thread_started(false), mid_commit(false),
     commit_thread(this),
+    journalfn(jfn), journal(0),
     free_blocks(0), limbo_blocks(0),
     allocator(this),
     nodepool(ebofs_lock),
@@ -222,6 +249,11 @@ class Ebofs : public ObjectStore {
     finisher_stop(false), finisher_thread(this) {
     for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
       free_tab[i] = 0;
+    if (!journalfn) {
+      journalfn = new char[strlen(devfn) + 100];
+      strcpy(journalfn, devfn);
+      strcat(journalfn, ".journal");
+    }
   }
   ~Ebofs() {
   }
@@ -298,6 +330,8 @@ class Ebofs : public ObjectStore {
 
 private:
   // private interface -- use if caller already holds lock
+  unsigned _apply_transaction(Transaction& t);
+
   int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
   int _is_cached(object_t oid, off_t off, size_t len);
   int _stat(object_t oid, struct stat *st);

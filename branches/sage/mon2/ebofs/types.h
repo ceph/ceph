@@ -142,15 +142,16 @@ static const int EBOFS_FREE_BUCKET_BITS = 2;
 
 
 struct ebofs_super {
-  unsigned s_magic;
-  
-  unsigned epoch;             // version of this superblock.
+  uint64_t s_magic;
+  uint64_t fsid;
 
-  unsigned num_blocks;        /* # blocks in filesystem */
+  epoch_t epoch;             // version of this superblock.
+
+  uint64_t num_blocks;        /* # blocks in filesystem */
 
   // some basic stats, for kicks
-  unsigned free_blocks;       /* unused blocks */
-  unsigned limbo_blocks;      /* limbo blocks */
+  uint64_t free_blocks;       /* unused blocks */
+  uint64_t limbo_blocks;      /* limbo blocks */
   //unsigned num_objects;
   //unsigned num_fragmented;
   
