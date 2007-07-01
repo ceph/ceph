@@ -24,7 +24,7 @@
 
 class MonMap {
  public:
-  epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
+  epoch_t   epoch;       // what epoch/version of the monmap
   int       num_mon;
   vector<entity_inst_t> mon_inst;
 
@@ -41,7 +41,7 @@ class MonMap {
   // choice should be stable, unless we explicitly ask for a new one.
   int pick_mon(bool newmon=false) { 
     if (newmon || (last_mon < 0)) {
-      last_mon = 0;  //last_mon = rand() % num_mon;
+      last_mon = rand() % num_mon;
     }
     return last_mon;    
   }
@@ -68,6 +68,7 @@ class MonMap {
     _decode(mon_inst, blist, off);
   }
 
+  // read from/write to a file
   int write(char *fn) {
     // encode
     bufferlist bl;

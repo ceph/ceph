@@ -160,9 +160,17 @@ void Elector::handle_propose(MMonElection *m)
   int from = m->get_source().num();
 
   assert(m->epoch % 2 == 1); // election
-  if (m->epoch > epoch) 
+  if (m->epoch > epoch) {
     bump_epoch(m->epoch);
-  
+  }
+  else if (m->epoch < epoch &&  // got an "old" propose,
+	   epoch % 2 == 0 &&    // in a non-election cycle
+	   mon->quorum.count(from) == 0) {  // from someone outside the quorum
+    // a mon just started up, call a new election so they can rejoin!
+    dout(5) << " got propose from old epoch, " << m->get_source() << " must have just started" << endl;
+    start();
+  }
+
   if (whoami < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
@@ -250,6 +258,12 @@ void Elector::dispatch(Message *m)
     {
       MMonElection *em = (MMonElection*)m;
 
+      switch (em->op) {
+      case MMonElection::OP_PROPOSE:
+	handle_propose(em);
+	return;
+      }
+
       if (em->epoch < epoch) {
 	dout(5) << "old epoch, dropping" << endl;
 	delete em;
@@ -259,13 +273,10 @@ void Elector::dispatch(Message *m)
       switch (em->op) {
       case MMonElection::OP_ACK:
 	handle_ack(em);
-	break;
-      case MMonElection::OP_PROPOSE:
-	handle_propose(em);
-	break;
+	return;
       case MMonElection::OP_VICTORY:
 	handle_victory(em);
-	break;
+	return;
       default:
 	assert(0);
       }

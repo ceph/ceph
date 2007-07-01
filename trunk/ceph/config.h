@@ -116,7 +116,9 @@ struct md_config_t {
   float mon_lease;
   float mon_lease_renew_interval;
   float mon_lease_ack_timeout;
+  float mon_lease_timeout;
   float mon_accept_timeout;
+  bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
 
   // client
@@ -132,6 +134,8 @@ struct md_config_t {
   int      client_oc_size;
   int      client_oc_max_dirty;
   size_t   client_oc_max_sync_write;
+
+  double   client_mount_timeout;
 
   
 
@@ -196,7 +200,6 @@ struct md_config_t {
   bool  mds_trim_on_rejoin;
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
-  bool  mds_shutdown_on_last_unmount;
 
   bool  mds_verify_export_dirauth;     // debug flag
 

@@ -134,6 +134,7 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
   
   struct stat st;
   int r = ::stat(fn, &st);
+  //dout(15) << "exists_bl stat " << fn << " r=" << r << " errno " << errno << " " << strerror(errno) << endl;
   return r == 0;
 }
 

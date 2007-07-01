@@ -113,18 +113,19 @@ private:
   // -- leader --
   // recovery (paxos phase 1)
   unsigned   num_last;
-  version_t  old_accepted_v;
-  version_t  old_accepted_pn;
-  bufferlist old_accepted_value;
+  version_t  uncommitted_v;
+  version_t  uncommitted_pn;
+  bufferlist uncommitted_value;
 
   // active
   set<int>   acked_lease;
   Context    *lease_renew_event;
   Context    *lease_ack_timeout_event;
+  Context    *lease_timeout_event;
 
   // updating (paxos phase 2)
   bufferlist new_value;
-  unsigned   num_accepted;
+  set<int>   accepted;
 
   Context    *accept_timeout_event;
 
@@ -149,12 +150,21 @@ private:
     }
   };
 
+  class C_LeaseTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->lease_timeout();
+    }
+  };
+
   class C_LeaseRenew : public Context {
     Paxos *paxos;
   public:
     C_LeaseRenew(Paxos *p) : paxos(p) {}
     void finish(int r) {
-      paxos->extend_lease();
+      paxos->lease_renew_timeout();
     }
   };
 
@@ -171,8 +181,11 @@ private:
   void extend_lease();
   void handle_lease(MMonPaxos*);
   void handle_lease_ack(MMonPaxos*);
-  void lease_ack_timeout();
-  
+
+  void lease_ack_timeout();    // on leader, if lease isn't acked by all peons
+  void lease_renew_timeout();  // on leader, to renew the lease
+  void lease_timeout();        // on peon, if lease isn't extended
+
   void cancel_events();
 
   version_t get_new_proposal_number(version_t gt=0);
@@ -185,23 +198,23 @@ public:
 		   state(STATE_RECOVERING),
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
+		   lease_timeout_event(0),
 		   accept_timeout_event(0) { }
 
   void dispatch(Message *m);
 
   void init();
 
+  void election_starting();
   void leader_init();
   void peon_init();
 
 
   // -- service interface --
-  /*
   void wait_for_active(Context *c) {
     assert(!is_active());
     waiting_for_active.push_back(c);
   }
-  */
   
   // read
   version_t get_version() { return last_committed; }
@@ -224,6 +237,9 @@ public:
   bool propose_new_value(bufferlist& bl, Context *oncommit=0);
   void wait_for_commit(Context *oncommit) {
     waiting_for_commit.push_back(oncommit);
+  }
+  void wait_for_commit_front(Context *oncommit) {
+    waiting_for_commit.push_front(oncommit);
   }
 
 };

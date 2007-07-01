@@ -275,7 +275,7 @@ int OSD::init()
     
     // announce to monitor i exist and have booted.
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDBoot(superblock), monmap->get_inst(mon));
+    messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), monmap->get_inst(mon));
     
     // start the heart
     timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
@@ -744,7 +744,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
             << ", dropping and reporting to mon" << mon 
 	    << " " << *m
             << dendl;
-    messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()),
+    messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()),
                             monmap->get_inst(mon));
     delete m;
   } else if (dest.is_mon()) {
@@ -1018,7 +1018,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     ps_t maxps = 1ULL << osdmap->get_pg_bits();
     ps_t maxlps = 1ULL << osdmap->get_localized_pg_bits();
     dout(1) << "mkfs on " << osdmap->get_pg_bits() << " bits, " << maxps << " pgs" << dendl;
-    assert(osdmap->get_epoch() == 1);
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
     logger->set_start( osdmap->get_ctime() );
@@ -1317,7 +1316,7 @@ void OSD::get_map(epoch_t epoch, OSDMap &m)
       incs.push_front(inc);
     }
   }
-  assert(e > 0);
+  assert(e >= 0);
 
   // apply incrementals
   for (e++; e <= epoch; e++) {

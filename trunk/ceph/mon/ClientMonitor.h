@@ -28,6 +28,8 @@ using namespace std;
 
 class Monitor;
 class Paxos;
+class MClientMount;
+class MClientUnmount;
 
 class ClientMonitor : public PaxosService {
 public:
@@ -116,74 +118,52 @@ public:
     }
   };
 
-  class C_CreateInitial : public Context {
-    ClientMonitor *cmon;
-  public:
-    C_CreateInitial(ClientMonitor *cm) : cmon(cm) {}
-    void finish(int r) {
-      cmon->create_initial();
-    }
-  };
-
   class C_Mounted : public Context {
     ClientMonitor *cmon;
     int client;
-    Message *m;
+    MClientMount *m;
   public:
-    C_Mounted(ClientMonitor *cm, int c, Message *m_) : 
+    C_Mounted(ClientMonitor *cm, int c, MClientMount *m_) : 
       cmon(cm), client(c), m(m_) {}
     void finish(int r) {
       if (r >= 0)
 	cmon->_mounted(client, m);
       else
-	cmon->dispatch(m);
+	cmon->dispatch((Message*)m);
     }
   };
 
   class C_Unmounted : public Context {
     ClientMonitor *cmon;
-    Message *m;
+    MClientUnmount *m;
   public:
-    C_Unmounted(ClientMonitor *cm, Message *m_) : 
+    C_Unmounted(ClientMonitor *cm, MClientUnmount *m_) : 
       cmon(cm), m(m_) {}
     void finish(int r) {
       if (r >= 0)
 	cmon->_unmounted(m);
       else
-	cmon->dispatch(m);
+	cmon->dispatch((Message*)m);
     }
   };
 
-  class C_Commit : public Context {
-    ClientMonitor *cmon;
-  public:
-    C_Commit(ClientMonitor *cm) :
-      cmon(cm) {}
-    void finish(int r) {
-      cmon->_commit(r);
-    }
-  };
 
 private:
   Map client_map;
-  list<Message*> waiting_for_active;
 
   // leader
   Incremental pending_inc;
-  list<Context*> pending_commit;   // contributers to pending_inc
 
   void create_initial();
   bool update_from_paxos();
-  void prepare_pending();  // prepare a new pending
-  void propose_pending();  // propose pending update to peers
+  void create_pending();  // prepare a new pending
+  void encode_pending(bufferlist &bl);  // propose pending update to peers
 
-  void _mounted(int c, Message *m);
-  void _unmounted(Message *m);
-  void _commit(int r);
+  void _mounted(int c, MClientMount *m);
+  void _unmounted(MClientUnmount *m);
  
-  void handle_query(Message *m);
-  bool preprocess_update(Message *m);  // true if processed.
-  void prepare_update(Message *m);
+  bool preprocess_query(Message *m);  // true if processed.
+  bool prepare_update(Message *m);
 
   
  public:

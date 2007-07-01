@@ -66,7 +66,8 @@ int main(int argc, char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
-  char *dev;
+  char *dev = 0;
+  char dev_default[20];
   int whoami = -1;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--dev") == 0) 
@@ -77,6 +78,13 @@ int main(int argc, char **argv)
       cerr << "unrecognized arg " << args[i] << endl;
       return -1;
     }
+  }
+  if (whoami < 0) {
+    cerr << "must specify '--osd #' where # is the osd number" << endl;
+  }
+  if (!dev) {
+    sprintf(dev_default, "dev/osd%d", whoami);
+    dev = dev_default;
   }
   cout << "dev " << dev << endl;
   
