@@ -97,7 +97,7 @@ void CInode::print(ostream& out)
 }
 
 
-
+/*
 inode_t *CInode::project_inode() 
 {
   if (projected_inode.empty()) {
@@ -120,7 +120,7 @@ void CInode::pop_and_dirty_projected_inode()
   projected_inode.pop_front();
 }
 
-
+*/
 
 
 // ====== CInode =======

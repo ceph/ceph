@@ -60,8 +60,8 @@ sage mds
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
 
 
-- make locks auth_pin for unstable states.
-  - can locker *_eval() starve freezing?
+/- make locks auth_pin for unstable states.
+/  - can locker *_eval() starve freezing?
 
 - fix rename to delay the _apply.
   - need to fix locking vs migration first.

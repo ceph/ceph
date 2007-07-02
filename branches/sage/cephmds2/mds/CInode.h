@@ -128,43 +128,30 @@ class CInode : public MDSCacheObject {
   list<fragtree_t> projected_dirfragtree;
 
 
-  inode_t *project_inode();
-  void pop_and_dirty_projected_inode();
-
-  /*
-  inode_t *project_inode() {
+  //inode_t *project_inode();
+  //void pop_and_dirty_projected_inode();
+  inode_t *project_inode() 
+  {
     if (projected_inode.empty()) {
       projected_inode.push_back(new inode_t(inode));
     } else {
-      inode_t *lastback = projected_inode.back();
-      projected_inode.push_back(new inode_t);
-      *projected_inode.back() = *lastback;
+      projected_inode.push_back(new inode_t(*projected_inode.back()));
     }
+    dout(15) << "project_inode " << projected_inode.back() << endl;
     return projected_inode.back();
   }
-  void pop_and_dirty_projected_inode() {
+  
+  void pop_and_dirty_projected_inode() 
+  {
     assert(!projected_inode.empty());
+    dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
+	     << " v" << projected_inode.front()->version << endl;
     mark_dirty(projected_inode.front()->version);
     inode = *projected_inode.front();
     delete projected_inode.front();
     projected_inode.pop_front();
-    }*/
-
-  /*
-  fragtree_t *project_dirfragtree() {
-    if (projected_dirfragtree.empty())
-      projected_dirfragtree.push_back(dirfragtree);
-    else
-      projected_dirfragtree.push_back(projected_dirfragtree.back());
-    return &projected_dirfragtree.back();
   }
-  void pop_and_dirty_projected_dirfragtree() {
-    assert(!projected_dirfragtree.empty());
-    mark_dirty(projected_dirfragtree.front().version);
-    dirfragtree = projected_dirfragtree.front();
-    projected_dirfragtree.pop_front();
-  }*/
-
+  
 
   // -- cache infrastructure --
   map<frag_t,CDir*> dirfrags; // cached dir fragments

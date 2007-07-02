@@ -356,6 +356,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IDIR:
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
+  case LOCK_OTYPE_IVERSION:
+    return local_wrlock_start((LocalLock*)lock, mdr);
   default:
     assert(0);
   }
@@ -366,6 +368,8 @@ void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IDIR:
     return scatter_wrlock_finish((ScatterLock*)lock, mdr);
+  case LOCK_OTYPE_IVERSION:
+    return local_wrlock_finish((LocalLock*)lock, mdr);
   default:
     assert(0);
   }
@@ -376,6 +380,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IFILE:
     return file_xlock_start((FileLock*)lock, mdr);
+  case LOCK_OTYPE_IVERSION:
+    return local_xlock_start((LocalLock*)lock, mdr);
   case LOCK_OTYPE_IDIR:
     assert(0);
   default:
@@ -388,6 +394,8 @@ void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IFILE:
     return file_xlock_finish((FileLock*)lock, mdr);
+  case LOCK_OTYPE_IVERSION:
+    return local_xlock_finish((LocalLock*)lock, mdr);
   case LOCK_OTYPE_IDIR:
     assert(0);
   default:
@@ -1788,6 +1796,63 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 }
 
 
+// ==========================================================================
+// local lock
+
+
+bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mdr)
+{
+  dout(7) << "local_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << endl;  
+  
+  if (lock->can_wrlock()) {
+    lock->get_wrlock();
+    mdr->wrlocks.insert(lock);
+    mdr->locks.insert(lock);
+    return true;
+  } else {
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+  }
+}
+
+void Locker::local_wrlock_finish(LocalLock *lock, MDRequest *mdr)
+{
+  dout(7) << "local_wrlock_finish  on " << *lock
+	  << " on " << *lock->get_parent() << endl;  
+  lock->put_wrlock();
+  mdr->wrlocks.erase(lock);
+  mdr->locks.erase(lock);
+}
+
+bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mdr)
+{
+  dout(7) << "local_xlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << endl;  
+  
+  if (lock->is_xlocked_by_other(mdr)) {
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+  }
+
+  lock->get_xlock(mdr);
+  mdr->xlocks.insert(lock);
+  mdr->locks.insert(lock);
+  return true;
+}
+
+void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mdr)
+{
+  dout(7) << "local_xlock_finish  on " << *lock
+	  << " on " << *lock->get_parent() << endl;  
+  lock->put_xlock();
+  mdr->xlocks.erase(lock);
+  mdr->locks.erase(lock);
+
+  lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
+}
+
+
 
 // ==========================================================================
 // file lock
@@ -1866,7 +1931,6 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
   dout(7) << "rdlock_finish on " << *lock << " on " << *lock->get_parent() << endl;
 
   // drop ref
-  assert(lock->can_rdlock(mdr));
   lock->put_rdlock();
   mdr->rdlocks.erase(lock);
   mdr->locks.erase(lock);

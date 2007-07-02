@@ -45,7 +45,7 @@ public:
 
   void print(ostream& out) {
     out << "(";
-    out << get_lock_type_name(get_type()) << " ";
+    out << get_lock_type_name(get_type());
     if (is_xlocked())
       out << " x=" << get_xlocked_by();
     if (is_wrlocked()) 

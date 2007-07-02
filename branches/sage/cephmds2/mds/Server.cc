@@ -859,8 +859,8 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   // does it already exist?
   CDentry *dn = dir->lookup(dname);
   if (dn) {
-    if (!dn->lock.can_rdlock(mdr)) {
-      dout(10) << "waiting on (existing!) unreadable dentry " << *dn << endl;
+    if (dn->lock.is_xlocked_by_other(mdr)) {
+      dout(10) << "waiting on xlocked dentry " << *dn << endl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
@@ -1080,8 +1080,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     }
 
     // readable?
-    if (dn && !dn->lock.can_rdlock(mdr)) {
-      dout(10) << "waiting on (existing!) unreadable dentry " << *dn << endl;
+    if (dn && dn->lock.is_xlocked_by_other(mdr)) {
+      dout(10) << "waiting on xlocked dentry " << *dn << endl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
@@ -2201,8 +2201,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // readable?
-  if (!dn->lock.can_rdlock(mdr)) {
-    dout(10) << "waiting on unreadable dentry " << *dn << endl;
+  if (dn->lock.is_xlocked_by_other(mdr)) {
+    dout(10) << "waiting on xlocked dentry " << *dn << endl;
     dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
@@ -2648,7 +2648,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // identify/create dest dentry
   CDentry *destdn = destdir->lookup(destname);
-  if (destdn && !destdn->lock.can_rdlock(mdr)) {
+  if (destdn && destdn->lock.is_xlocked_by_other(mdr)) {
     destdn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }

@@ -47,6 +47,7 @@ class Capability;
 class SimpleLock;
 class FileLock;
 class ScatterLock;
+class LocalLock;
 
 class Locker {
 private:
@@ -119,6 +120,14 @@ protected:
   void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
+
+  // local
+protected:
+  bool local_wrlock_start(LocalLock *lock, MDRequest *mdr);
+  void local_wrlock_finish(LocalLock *lock, MDRequest *mdr);
+  bool local_xlock_start(LocalLock *lock, MDRequest *mdr);
+  void local_xlock_finish(LocalLock *lock, MDRequest *mdr);
+
 
   // file
 public:

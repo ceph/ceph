@@ -181,6 +181,9 @@ public:
     xlock_by = 0;
   }
   bool is_xlocked() { return xlock_by ? true:false; }
+  bool is_xlocked_by_other(MDRequest *mdr) {
+    return is_xlocked() && xlock_by != mdr;
+  }
   MDRequest *get_xlocked_by() { return xlock_by; }
   bool is_used() {
     return is_xlocked() || is_rdlocked();
