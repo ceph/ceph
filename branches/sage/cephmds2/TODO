@@ -33,7 +33,6 @@ general kernel planning
 
 
 
-
 sage doc
 - mdsmonitor beacon semantics
 - cache expiration, cache invariants
@@ -47,14 +46,26 @@ sage doc
 
 sage mds
 
+- slave request rollback - why it's hard.
+  - we pipeline multiple updates to the same inode.
+- e.g., link/unlink
+  - live metadata needs to be cleaned (fi slave survives)
+  - sufficient data for rollback (old ctime, ++ or --) needs to be journaled with original prepare
+  - slave recovery needs to apply prepare's rollback to it's live metadata... _and_ re-journal a rollback entry (if it needs to)
+  - rollback should include cleaned inode data, with (!!) incremented version so that reverted data gets flushed to storage properly.
+- e.g., rename
+  - hrm.!
+
+
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
-- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
+
 
 - make locks auth_pin for unstable states.
-
+  - can locker *_eval() starve freezing?
 
 - fix rename to delay the _apply.
   - need to fix locking vs migration first.
+- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
 
 - then, mtimes:
   - avoid migration race concern (on auth).

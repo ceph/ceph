@@ -69,6 +69,9 @@ void Migrator::dispatch(Message *m)
   case MSG_MDS_EXPORTDIRFINISH:
     handle_export_finish((MExportDirFinish*)m);
     break;
+  case MSG_MDS_EXPORTDIRCANCEL:
+    handle_export_cancel((MExportDirCancel*)m);
+    break;
 
     // export 
   case MSG_MDS_EXPORTDIRDISCOVERACK:
@@ -165,7 +168,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
     
     // abort exports:
     //  - that are going to the failed node
-    //  - that aren't frozen yet (to about auth_pin deadlock)
+    //  - that aren't frozen yet (to avoid auth_pin deadlock)
     if (export_peer[dir] == who ||
 	p->second == EXPORT_DISCOVERING || p->second == EXPORT_FREEZING) { 
       // the guy i'm exporting to failed, or we're just freezing.
@@ -178,8 +181,9 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->auth_unpin();
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	dir->put(CDir::PIN_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
-	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), who, MDS_PORT_MIGRATOR);
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
 	break;
 	
       case EXPORT_FREEZING:
@@ -187,8 +191,9 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	dir->put(CDir::PIN_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
-	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), who, MDS_PORT_MIGRATOR);
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
 	break;
 
 	// NOTE: state order reversal, warning comes after loggingstart+prepping
@@ -213,6 +218,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	cache->try_subtree_merge(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	dir->put(CDir::STATE_EXPORTING);
 	break;
 	
       case EXPORT_EXPORTING:
@@ -220,6 +226,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_reverse(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	dir->put(CDir::PIN_EXPORTING);
 	break;
 
       case EXPORT_LOGGINGFINISH:
@@ -508,6 +515,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   export_peer[dir] = dest;
 
   dir->state_set(CDir::STATE_EXPORTING);
+  dir->get(CDir::PIN_EXPORTING);
 
   // send ExportDirDiscover (ask target)
   mds->send_message_mds(new MExportDirDiscover(dir), export_peer[dir], MDS_PORT_MIGRATOR);
@@ -1157,6 +1165,7 @@ void Migrator::export_finish(CDir *dir)
 
   // remove from exporting list, clean up state
   dir->state_clear(CDir::STATE_EXPORTING);
+  dir->put(CDir::PIN_EXPORTING);
   export_state.erase(dir);
   export_peer.erase(dir);
   export_bounds.erase(dir);
@@ -1722,9 +1731,6 @@ void Migrator::import_finish(CDir *dir, bool now)
   cache->show_subtrees();
   audit();
 
-  // re-eval scatterlock?
-  if (dir->inode->is_auth())
-    mds->locker->scatter_eval(&dir->inode->dirlock);
 
   // is it empty?
   if (dir->get_size() == 0 &&

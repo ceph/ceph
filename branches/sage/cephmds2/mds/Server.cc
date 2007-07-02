@@ -1232,7 +1232,8 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
     assert(diri->is_auth() && !diri->is_root());
 
     // we were before, too.
-    diri->mark_dirty(dirpv);
+    diri->pop_and_dirty_projected_inode();
+    //diri->mark_dirty(dirpv);
     dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
   } else {
     assert(!diri->is_auth() || diri->is_root() ||
@@ -1974,14 +1975,14 @@ class C_MDS_SlaveLinkPrep : public Context {
   Server *server;
   MDRequest *mdr;
   CInode *targeti;
-  version_t tpv;
+  utime_t old_ctime;
   bool inc;
 public:
-  C_MDS_SlaveLinkPrep(Server *s, MDRequest *r, CInode *t, version_t v, bool in) :
-    server(s), mdr(r), targeti(t), tpv(v), inc(in) { }
+  C_MDS_SlaveLinkPrep(Server *s, MDRequest *r, CInode *t, utime_t oct, bool in) :
+    server(s), mdr(r), targeti(t), old_ctime(oct), inc(in) { }
   void finish(int r) {
     assert(r == 0);
-    server->_logged_slave_link(mdr, targeti, tpv, inc);
+    server->_logged_slave_link(mdr, targeti, old_ctime, inc);
   }
 };
 
@@ -2012,13 +2013,6 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
     }
   }
 
-  // journal it
-  ESlaveUpdate *le = new ESlaveUpdate("slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
-
-  version_t tpv = targeti->pre_dirty();
-
-  // add to event
-  le->metablob.add_dir_context(targeti->get_parent_dir());
 
   inode_t *pi = dn->inode->project_inode();
 
@@ -2031,75 +2025,114 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
     inc = false;
     pi->nlink--;
   }
+  utime_t old_ctime = pi->ctime;
   pi->ctime = mdr->now;
-  pi->version = tpv;
-  le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  pi->version = targeti->pre_dirty();
 
-  mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, tpv, inc));
+  dout(10) << " projected inode " << pi << " v " << pi->version << endl;
+
+  // journal it
+  ESlaveUpdate *le = new ESlaveUpdate("slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
+  le->metablob.add_dir_context(targeti->get_parent_dir());
+  le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
 }
 
 class C_MDS_SlaveLinkCommit : public Context {
   Server *server;
   MDRequest *mdr;
   CInode *targeti;
-  version_t tpv;
+  utime_t old_ctime;
   bool inc;
 public:
-  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, version_t v, bool in) :
-    server(s), mdr(r), targeti(t), tpv(v), inc(in) { }
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, utime_t oct, bool in) :
+    server(s), mdr(r), targeti(t), old_ctime(oct), inc(in) { }
   void finish(int r) {
-    server->_commit_slave_link(mdr, r, targeti, tpv, inc);
+    server->_commit_slave_link(mdr, r, targeti, old_ctime, inc);
   }
 };
 
-void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc) 
+void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc) 
 {
   dout(10) << "_logged_slave_link " << *mdr
 	   << " inc=" << inc
 	   << " " << *targeti << endl;
+
+  // update the target
+  targeti->pop_and_dirty_projected_inode();
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
   // set up commit waiter
-  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, tpv, inc);
+  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, inc);
 
   // done.
   delete mdr->slave_request;
   mdr->slave_request = 0;
 }
 
-void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti, version_t tpv, bool inc)
+
+class C_MDS_SlaveLinkRollback : public Context {
+  Server *server;
+  CInode *targeti;
+public:
+  C_MDS_SlaveLinkRollback(Server *s, CInode *t) :
+    server(s), targeti(t) { }
+  void finish(int r) {
+    targeti->pop_and_dirty_projected_inode();
+  }
+};
+
+void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti, utime_t old_ctime, bool inc)
 {  
   dout(10) << "_commit_slave_link " << *mdr
 	   << " r=" << r
 	   << " inc=" << inc
 	   << " " << *targeti << endl;
 
-  ESlaveUpdate *le;
-  
   if (r == 0) {
-    // commit.
+    // write a commit to the journal
+    ESlaveUpdate *le = new ESlaveUpdate("slave_link_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
+    mds->mdlog->submit_entry(le);
+  } else {
+    // rollback: undo nlink change.
 
-    // update the target
-    if (inc)
+    // -- rollback in journal --
+    ESlaveUpdate *le = new ESlaveUpdate("slave_link_rollback", 
+					mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
+
+    inode_t *pi = targeti->project_inode();
+    if (inc) 
+      pi->nlink++;
+    else 
+      pi->nlink--;
+    if (pi->ctime == mdr->now) 
+      pi->ctime = old_ctime;
+    le->metablob.add_primary_dentry(targeti->parent, true, 0, pi);
+    mds->mdlog->submit_entry(le);
+    mds->mdlog->wait_for_sync(new C_MDS_SlaveLinkRollback(this, targeti));
+
+    // -- rollback in memory --
+    // in inode.
+    if (inc) 
       targeti->inode.nlink++;
     else
       targeti->inode.nlink--;
-    targeti->inode.ctime = mdr->now;
-    targeti->mark_dirty(tpv);
-    
-    // write a commit to the journal
-    le = new ESlaveUpdate("slave_link_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
-  } else {
-    // abort
-    le = new ESlaveUpdate("slave_link_abort", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ABORT);
+    if (targeti->inode.ctime == mdr->now)
+      targeti->inode.ctime = old_ctime;
+
+    // in any queued projected items.
+    for (list<inode_t*>::iterator p = targeti->projected_inode.begin();
+	 p != targeti->projected_inode.end();
+	 ++p) 
+      if (inc)
+	(*p)->nlink++;
+      else
+	(*p)->nlink--;
   }
-
-  mds->mdlog->submit_entry(le);
 }
-
 
 
 
@@ -2250,18 +2283,16 @@ class C_MDS_unlink_local_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CDentry *straydn;
-  version_t ipv;  // referred inode
   version_t dnpv;  // deleted dentry
   version_t dirpv;
 public:
   C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd,
-			    version_t v, version_t dirpv_) :
+			    version_t dirpv_) :
     mds(m), mdr(r), dn(d), straydn(sd),
-    ipv(v), 
     dnpv(d->get_projected_version()), dirpv(dirpv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_local_finish(mdr, dn, straydn, ipv, dnpv, dirpv);
+    mds->server->_unlink_local_finish(mdr, dn, straydn, dnpv, dirpv);
   }
 };
 
@@ -2308,7 +2339,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   // finisher
   C_MDS_unlink_local_finish *fin = new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
-								 ipv, dirpv);
+								 dirpv);
   
   journal_opens();  // journal pending opens, just in case
   
@@ -2321,7 +2352,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
 				  CDentry *dn, CDentry *straydn,
-				  version_t ipv, version_t dnpv, version_t dirpv) 
+				  version_t dnpv, version_t dirpv) 
 {
   dout(10) << "_unlink_local_finish " << *dn << endl;
 
@@ -2332,11 +2363,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   // relink as stray?  (i.e. was primary link?)
   if (straydn) straydn->dir->link_inode(straydn, in);  
 
-  // nlink--
-  in->inode.ctime = mdr->now;
-  in->inode.nlink--;
-  in->mark_dirty(ipv);  // dirty inode
-  dn->mark_dirty(dnpv);  // dirty old dentry
+  // nlink--, dirty old dentry
+  in->pop_and_dirty_projected_inode();
+  dn->mark_dirty(dnpv);  
 
   // dir inode's mtime
   dirty_dn_diri(dn, dirpv, mdr->now);
@@ -3185,7 +3214,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     le = new ESlaveUpdate("slave_rename_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
   } else {
     // abort
-    le = new ESlaveUpdate("slave_rename_abort", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ABORT);
+    le = new ESlaveUpdate("slave_rename_abort", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
   }
   mds->mdlog->submit_entry(le);
 }

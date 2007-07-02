@@ -86,10 +86,11 @@ protected:
 
   // simple
 public:
+  void try_simple_eval(SimpleLock *lock);
   void simple_eval_gather(SimpleLock *lock);
-  void simple_eval(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, Context *con);
 protected:
+  void simple_eval(SimpleLock *lock);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
   void simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
@@ -105,8 +106,9 @@ public:
 
   // scatter
 public:
+  void try_scatter_eval(ScatterLock *lock);
+  void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
-  void scatter_eval(ScatterLock *lock);
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void scatter_sync(ScatterLock *lock);
@@ -121,9 +123,9 @@ protected:
   // file
 public:
   void file_eval_gather(FileLock *lock);
-  void file_eval(FileLock *lock);
   void try_file_eval(FileLock *lock);
 protected:
+  void file_eval(FileLock *lock);
   void handle_file_lock(FileLock *lock, MLock *m);
   bool file_sync(FileLock *lock);
   void file_lock(FileLock *lock);

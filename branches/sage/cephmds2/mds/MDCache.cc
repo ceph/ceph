@@ -402,8 +402,14 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
   
   // evaluate subtree inode dirlock?
   //  (we should scatter the dirlock on subtree bounds)
-  if (dir->inode->is_auth())
-    mds->locker->scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+  if (dir->inode->is_auth() &&
+      dir->inode->dirlock.is_stable()) {
+    // force the issue a bit
+    if (!dir->inode->is_frozen())
+      mds->locker->scatter_eval(&dir->inode->dirlock);
+    else
+      mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+  }
 
   show_subtrees();
 }
@@ -1330,7 +1336,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     if (mds->is_resolve()) {
       assert(uncommitted_slave_updates[from].count(*p));
       uncommitted_slave_updates[from].erase(*p);
-      mds->mdlog->submit_entry(new ESlaveUpdate("unknown", *p, from, ESlaveUpdate::OP_ABORT));
+      mds->mdlog->submit_entry(new ESlaveUpdate("unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {
       MDRequest *mdr = request_get(*p);
       if (mdr->slave_commit) {
@@ -2820,16 +2826,14 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   
   // note: this code calls _eval more often than it needs to!
   // fix lock
-  if (in->authlock.remove_replica(from))
-    mds->locker->simple_eval_gather(&in->authlock);
-  if (in->linklock.remove_replica(from))
-    mds->locker->simple_eval_gather(&in->linklock);
-  if (in->dirfragtreelock.remove_replica(from))
-    mds->locker->simple_eval_gather(&in->dirfragtreelock);
-  if (in->filelock.remove_replica(from))
-    mds->locker->simple_eval_gather(&in->filelock);
+  if (in->authlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->authlock);
+  if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
+  if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
+  if (in->filelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->filelock);
+  if (in->dirlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirlock);
   
   // alone now?
+  /*
   if (!in->is_replicated()) {
     mds->locker->simple_eval_gather(&in->authlock);
     mds->locker->simple_eval_gather(&in->linklock);
@@ -2837,6 +2841,7 @@ void MDCache::inode_remove_replica(CInode *in, int from)
     mds->locker->file_eval_gather(&in->filelock);
     mds->locker->scatter_eval_gather(&in->dirlock);
   }
+  */
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
@@ -2846,7 +2851,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   // fix lock
   if (dn->lock.remove_replica(from) ||
       !dn->is_replicated())
-    mds->locker->simple_eval(&dn->lock);
+    mds->locker->simple_eval_gather(&dn->lock);
 }
 
 
@@ -2990,7 +2995,7 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
-    //show_cache();
+    show_cache();
     return false;
   }
   assert(subtrees.empty());
@@ -4264,11 +4269,11 @@ void MDCache::handle_discover(MDiscover *dis)
     
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
-      dout(7) << "not adding unwanted base dir " << *curdir << endl;
+      dout(7) << "handle_discover not adding unwanted base dir " << *curdir << endl;
     } else {
       assert(!curdir->is_ambiguous_auth()); // would be frozen.
       reply->add_dir( curdir->replicate_to(dis->get_asker()) );
-      dout(7) << "added dir " << *curdir << endl;
+      dout(7) << "handle_discover added dir " << *curdir << endl;
     }
     if (dis->get_want().depth() == 0) break;
     
@@ -4322,9 +4327,9 @@ void MDCache::handle_discover(MDiscover *dis)
       // is this the last (tail) item in the discover traversal?
       bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
       if (tailitem && dis->wants_xlocked()) {
-	dout(7) << "allowing discovery of xlocked tail " << *dn << endl;
+	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << endl;
       } else {
-	dout(7) << "blocking on xlocked " << *dn << endl;
+	dout(7) << "handle_discover blocking on xlocked " << *dn << endl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
 	delete reply;
 	return;
@@ -4333,7 +4338,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
     // add dentry
     reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
-    dout(7) << "added dentry " << *dn << endl;
+    dout(7) << "handle_discover added dentry " << *dn << endl;
     
     if (!dn->is_primary()) break;  // stop on null or remote link.
     
@@ -4342,7 +4347,7 @@ void MDCache::handle_discover(MDiscover *dis)
     assert(next->is_auth());
     
     reply->add_inode( next->replicate_to( dis->get_asker() ) );
-    dout(7) << "added inode " << *next << endl;
+    dout(7) << "handle_discover added inode " << *next << endl;
     
     // descend, keep going.
     cur = next;
@@ -4351,10 +4356,10 @@ void MDCache::handle_discover(MDiscover *dis)
 
   // how did we do?
   if (reply->is_empty()) {
-    dout(7) << "dropping this empty reply)." << endl;
+    dout(7) << "handle_discover dropping this empty reply)." << endl;
     delete reply;
   } else {
-    dout(7) << "sending result back to asker mds" << dis->get_asker() << endl;
+    dout(7) << "handle_discover sending result back to asker mds" << dis->get_asker() << endl;
     mds->send_message_mds(reply, dis->get_asker(), MDS_PORT_CACHE);
   }
 

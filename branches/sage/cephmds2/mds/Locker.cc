@@ -427,7 +427,8 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   if (in->is_auth()) {
     // [auth] twiddle mode?
-    file_eval(&in->filelock);
+    if (in->filelock.is_stable()) 
+      file_eval(&in->filelock);
   } else {
     // [replica] tell auth about any new caps wanted
     request_inode_file_caps(in);
@@ -584,7 +585,8 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   else
     in->mds_caps_wanted.erase(m->get_from());
 
-  try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
+  if (in->filelock.is_stable())
+    try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   delete m;
 }
 
@@ -674,7 +676,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }  
 
   // reevaluate, waiters
-  try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
+  if (in->filelock.is_stable())
+    try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
   in->finish_waiting(CInode::WAIT_CAPS, 0);
 
   delete m;
@@ -853,6 +856,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
   delete m;
 }
 
+/* unused, currently.
 
 class C_Locker_SimpleEval : public Context {
   Locker *locker;
@@ -860,9 +864,37 @@ class C_Locker_SimpleEval : public Context {
 public:
   C_Locker_SimpleEval(Locker *l, SimpleLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
-    locker->simple_eval(lock);
+    locker->try_simple_eval(lock);
   }
 };
+
+void Locker::try_simple_eval(SimpleLock *lock)
+{
+  // unstable and ambiguous auth?
+  if (!lock->is_stable() &&
+      lock->get_parent()->is_ambiguous_auth()) {
+    dout(7) << "simple_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_SimpleEval(this, lock));
+    return;
+  }
+
+  if (!lock->get_parent()->is_auth()) {
+    dout(7) << "try_simple_eval not auth for " << *lock->get_parent() << endl;
+    return;
+  }
+
+  if (!lock->get_parent()->can_auth_pin()) {
+    dout(7) << "try_simple_eval can't auth_pin, waiting on " << *lock->get_parent() << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_SimpleEval(this, lock));
+    return;
+  }
+
+  if (lock->is_stable())
+    simple_eval(lock);
+}
+*/
 
 void Locker::simple_eval_gather(SimpleLock *lock)
 {
@@ -884,9 +916,10 @@ void Locker::simple_eval_gather(SimpleLock *lock)
     
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
+    lock->get_parent()->auth_unpin();
 
     // re-eval?
-    if (lock->get_parent()->can_auth_pin())
+    //if (lock->get_parent()->can_auth_pin())
       simple_eval(lock);
   }
 }
@@ -895,35 +928,11 @@ void Locker::simple_eval(SimpleLock *lock)
 {
   dout(10) << "simple_eval " << *lock << " on " << *lock->get_parent() << endl;
 
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "simple_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_SimpleEval(this, lock));
-    return;
-  }
-
-  // finished remote xlock?
-  /* hmm: why did i do this here, and not in simple_xlock_finish()?
-  if (lock->get_state() == LOCK_REMOTEXLOCK &&
-      !lock->is_xlocked()) {
-    // tell auth
-    assert(!lock->get_parent()->is_auth()); // should be auth_pinned on the auth
-    dout(7) << "simple_eval releasing remote xlock on " << *lock->get_parent()  << endl;
-    int auth = lock->get_parent()->authority().first;
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
-      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest();
-      mds->send_message_mds(new MLock(lock, LOCK_AC_UNXLOCK, mds->get_nodeid()),
-			    auth, MDS_PORT_LOCKER);
-    lock->set_state(LOCK_LOCK);
-  }
-  */
+  assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
 
   // stable -> sync?
-  if (lock->get_parent()->is_auth() &&
-      lock->is_stable() &&
-      !lock->is_xlocked() &&
+  if (!lock->is_xlocked() &&
       lock->get_state() != LOCK_SYNC &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
@@ -940,12 +949,11 @@ void Locker::simple_sync(SimpleLock *lock)
 {
   dout(7) << "simple_sync on " << *lock << " on " << *lock->get_parent() << endl;
   assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
   
   // check state
   if (lock->get_state() == LOCK_SYNC)
     return; // already sync
-  if (lock->get_state() == LOCK_GLOCKR) 
-    assert(0); // um... hmm!
   assert(lock->get_state() == LOCK_LOCK);
 
   // sync.
@@ -969,11 +977,10 @@ void Locker::simple_lock(SimpleLock *lock)
 {
   dout(7) << "simple_lock on " << *lock << " on " << *lock->get_parent() << endl;
   assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
   
   // check state
-  if (lock->get_state() == LOCK_LOCK ||
-      lock->get_state() == LOCK_GLOCKR) 
-    return;  // already lock or locking
+  if (lock->get_state() == LOCK_LOCK) return;
   assert(lock->get_state() == LOCK_SYNC);
   
   if (lock->get_parent()->is_replicated()) {
@@ -983,6 +990,7 @@ void Locker::simple_lock(SimpleLock *lock)
     // change lock
     lock->set_state(LOCK_GLOCKR);
     lock->init_gather();
+    lock->get_parent()->auth_pin();
   } else {
     lock->set_state(LOCK_LOCK);
   }
@@ -1130,8 +1138,9 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
   // others waiting?
   lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
 
-  // eval
-  simple_eval_gather(lock);
+  // eval?
+  if (lock->get_parent()->is_auth())
+    simple_eval(lock);
 }
 
 
@@ -1301,9 +1310,37 @@ class C_Locker_ScatterEval : public Context {
 public:
   C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
-    locker->scatter_eval(lock);
+    locker->try_scatter_eval(lock);
   }
 };
+
+
+void Locker::try_scatter_eval(ScatterLock *lock)
+{
+  // unstable and ambiguous auth?
+  if (!lock->is_stable() &&
+      lock->get_parent()->is_ambiguous_auth()) {
+    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
+    return;
+  }
+
+  if (!lock->get_parent()->is_auth()) {
+    dout(7) << "try_scatter_eval not auth for " << *lock->get_parent() << endl;
+    return;
+  }
+
+  if (!lock->get_parent()->can_auth_pin()) {
+    dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << endl;
+    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_ScatterEval(this, lock));
+    return;
+  }
+
+  if (lock->is_stable())
+    scatter_eval(lock);
+}
 
 
 void Locker::scatter_eval_gather(ScatterLock *lock)
@@ -1339,16 +1376,15 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_LOCK);
       lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
     }
     
     // glockc -> lock?
-    if (lock->get_state() == LOCK_GLOCKC &&
-	!lock->is_gathering() &&
-	!lock->is_wrlocked()) {
+    else if (lock->get_state() == LOCK_GLOCKC &&
+	     !lock->is_gathering() &&
+	     !lock->is_wrlocked()) {
       dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
-      lock->set_state(LOCK_LOCK);
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);
 
       if (lock->is_updated()) {
 	// updated flag is set: we got new data during the gather.
@@ -1357,59 +1393,62 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 
       }
 
+      lock->set_state(LOCK_LOCK);
+      //lock->get_parent()->put(CInode::PIN_SCATTERED);
       lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
     }
 
     // gSyncL -> sync?
-    if (lock->get_state() == LOCK_GSYNCL &&
-	!lock->is_wrlocked()) {
+    else if (lock->get_state() == LOCK_GSYNCL &&
+	     !lock->is_wrlocked()) {
       dout(7) << "scatter_eval finished sync un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
-      lock->set_state(LOCK_SYNC);
-      lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
-
       if (lock->get_parent()->is_replicated()) {
 	// encode and bcast
 	bufferlist data;
 	lock->encode_locked_state(data);
 	send_lock_message(lock, LOCK_AC_SYNC, data);
       }
+      lock->set_state(LOCK_SYNC);
+      lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
     }
 
     // gscattert|gscatters -> scatter?
-    if ((lock->get_state() == LOCK_GSCATTERT ||
-	 lock->get_state() == LOCK_GSCATTERS) &&
-	!lock->is_gathering() &&
-	!lock->is_rdlocked()) {
+    else if ((lock->get_state() == LOCK_GSCATTERT ||
+	      lock->get_state() == LOCK_GSCATTERS) &&
+	     !lock->is_gathering() &&
+	     !lock->is_rdlocked()) {
       dout(7) << "scatter_eval finished scatter un-rdlock(/gather) on " << *lock
 	      << " on " << *lock->get_parent() << endl;
-      lock->set_state(LOCK_SCATTER);
-      //lock->get_parent()->get(CInode::PIN_SCATTERED);
-      lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
-      
       if (lock->get_parent()->is_replicated()) {
 	// encode and bcast
 	bufferlist data;
 	lock->encode_locked_state(data);
 	send_lock_message(lock, LOCK_AC_SCATTER, data);
       }
+      lock->set_state(LOCK_SCATTER);
+      //lock->get_parent()->get(CInode::PIN_SCATTERED);
+      lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);      
+      lock->get_parent()->auth_unpin();
     }
 
     // gTempsyncC|gTempsyncL -> tempsync
-    if ((lock->get_state() == LOCK_GTEMPSYNCC ||
-	 lock->get_state() == LOCK_GTEMPSYNCL) &&
-	!lock->is_gathering() &&
-	!lock->is_wrlocked()) {
+    else if ((lock->get_state() == LOCK_GTEMPSYNCC ||
+	      lock->get_state() == LOCK_GTEMPSYNCL) &&
+	     !lock->is_gathering() &&
+	     !lock->is_wrlocked()) {
       dout(7) << "scatter_eval finished tempsync gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_TEMPSYNC);
       lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
     }
 
 
     // re-eval?
-    if (lock->is_stable() &&
-	lock->get_parent()->can_auth_pin())
+    if (lock->is_stable()) // && lock->get_parent()->can_auth_pin())
       scatter_eval(lock);
   }
 }
@@ -1418,31 +1457,22 @@ void Locker::scatter_eval(ScatterLock *lock)
 {
   dout(10) << "scatter_eval " << *lock << " on " << *lock->get_parent() << endl;
 
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << endl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
-    return;
-  }
+  assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
 
-  if (lock->get_parent()->is_auth() &&
-      lock->is_stable()) {
-    if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
-      // i _should_ be scattered.
-      if (!lock->is_rdlocked() &&
-	  !lock->is_xlocked()) {
-	dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << endl;
-	scatter_scatter(lock);
-      }
-    } else {
-      // i _should_ be sync.
-      if (!lock->is_wrlocked() &&
-	  !lock->is_xlocked()) {
-	dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << endl;
-	scatter_sync(lock);
-      }
+  if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
+    // i _should_ be scattered.
+    if (!lock->is_rdlocked() &&
+	!lock->is_xlocked()) {
+      dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << endl;
+      scatter_scatter(lock);
+    }
+  } else {
+    // i _should_ be sync.
+    if (!lock->is_wrlocked() &&
+	!lock->is_xlocked()) {
+      dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << endl;
+      scatter_sync(lock);
     }
   }
 }
@@ -1453,7 +1483,6 @@ void Locker::scatter_sync(ScatterLock *lock)
   dout(10) << "scatter_sync " << *lock
 	   << " on " << *lock->get_parent() << endl;
   assert(lock->get_parent()->is_auth());
-
   assert(lock->is_stable());
 
   switch (lock->get_state()) {
@@ -1466,6 +1495,7 @@ void Locker::scatter_sync(ScatterLock *lock)
   case LOCK_LOCK:
     if (lock->is_wrlocked() || lock->is_xlocked()) {
       lock->set_state(LOCK_GSYNCL);
+      lock->get_parent()->auth_pin();
       return;
     }
     break; // do it.
@@ -1482,6 +1512,7 @@ void Locker::scatter_sync(ScatterLock *lock)
       }
     }
     lock->set_state(LOCK_GLOCKC);
+    lock->get_parent()->auth_pin();
     return;
 
   default:
@@ -1517,6 +1548,7 @@ void Locker::scatter_scatter(ScatterLock *lock)
       lock->init_gather();
     }
     lock->set_state(LOCK_GSCATTERS);
+    lock->get_parent()->auth_pin();
     return;
 
   case LOCK_LOCK:
@@ -1530,6 +1562,7 @@ void Locker::scatter_scatter(ScatterLock *lock)
   case LOCK_TEMPSYNC:
     if (lock->is_rdlocked()) {
       lock->set_state(LOCK_GSCATTERT);
+      lock->get_parent()->auth_pin();
       return;
     }
     break; // do it
@@ -1555,7 +1588,6 @@ void Locker::scatter_lock(ScatterLock *lock)
   dout(10) << "scatter_lock " << *lock
 	   << " on " << *lock->get_parent() << endl;
   assert(lock->get_parent()->is_auth());
-
   assert(lock->is_stable());
 
   switch (lock->get_state()) {
@@ -1569,6 +1601,7 @@ void Locker::scatter_lock(ScatterLock *lock)
       lock->init_gather();
     } 
     lock->set_state(LOCK_GLOCKS);
+    lock->get_parent()->auth_pin();
     return;
 
   case LOCK_LOCK:
@@ -1586,11 +1619,13 @@ void Locker::scatter_lock(ScatterLock *lock)
       lock->init_gather();
     }
     lock->set_state(LOCK_GLOCKC);
+    lock->get_parent()->auth_pin();
     return;
 
   case LOCK_TEMPSYNC:
     if (lock->is_rdlocked()) {
       lock->set_state(LOCK_GLOCKT);
+      lock->get_parent()->auth_pin();
       return;
     }
     break; // do it.
@@ -1606,7 +1641,6 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   dout(10) << "scatter_tempsync " << *lock
 	   << " on " << *lock->get_parent() << endl;
   assert(lock->get_parent()->is_auth());
-
   assert(lock->is_stable());
 
   switch (lock->get_state()) {
@@ -1617,6 +1651,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
     if (lock->is_wrlocked() ||
 	lock->is_xlocked()) {
       lock->set_state(LOCK_GTEMPSYNCL);
+      lock->get_parent()->auth_pin();
       return;
     }
     break; // do it.
@@ -1633,6 +1668,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
       lock->init_gather();
     }
     lock->set_state(LOCK_GTEMPSYNCC);
+    lock->get_parent()->auth_pin();
     return;
 
   case LOCK_TEMPSYNC:
@@ -1726,7 +1762,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
       dout(7) << "handle_scatter_lock " << *lock << " on " << *lock->get_parent()
 	      << " from " << from << ", last one" 
 	      << endl;
-      scatter_eval(lock);
+      scatter_eval_gather(lock);
     }
     break;
 
@@ -1882,9 +1918,8 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   // others waiting?
   lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
 
-  //// drop lock?
-  //if (!lock->is_waiter_for(SimpleLock::WAIT_STABLE)) 
-  file_eval_gather(lock);
+  if (lock->get_parent()->is_auth())
+    file_eval(lock);
 }
 
 
@@ -1901,7 +1936,7 @@ class C_Locker_FileEval : public Context {
 public:
   C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
-    locker->file_eval(lock);
+    locker->try_file_eval(lock);
   }
 };
 
@@ -1918,6 +1953,11 @@ void Locker::try_file_eval(FileLock *lock)
     return;
   }
 
+  if (!lock->get_parent()->is_auth()) {
+    dout(7) << "try_file_eval not auth for " << *lock->get_parent() << endl;
+    return;
+  }
+
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << endl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
@@ -1925,7 +1965,8 @@ void Locker::try_file_eval(FileLock *lock)
     return;
   }
 
-  file_eval(lock);
+  if (lock->is_stable())
+    file_eval(lock);
 }
 
 
@@ -1935,9 +1976,10 @@ void Locker::file_eval_gather(FileLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   int issued = in->get_caps_issued();
 
+  assert(!lock->is_stable());
+
   // [auth] finished gather?
   if (in->is_auth() &&
-      !lock->is_stable() &&
       !lock->is_gathering()) {
     dout(7) << "file_eval finished mds gather on " << *lock << " on " << *lock->get_parent() << endl;
 
@@ -1953,6 +1995,7 @@ void Locker::file_eval_gather(FileLock *lock)
         lock->get_rdlock();
         lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
         lock->put_rdlock();
+	lock->get_parent()->auth_unpin();
       }
       break;
       
@@ -1961,6 +2004,7 @@ void Locker::file_eval_gather(FileLock *lock)
       if ((issued & ~(CAP_FILE_RD)) == 0) {
         lock->set_state(LOCK_MIXED);
         lock->finish_waiters(SimpleLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
       }
       break;
 
@@ -1978,6 +2022,7 @@ void Locker::file_eval_gather(FileLock *lock)
         }
 
         lock->finish_waiters(SimpleLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
       }
       break;
 
@@ -1986,6 +2031,7 @@ void Locker::file_eval_gather(FileLock *lock)
       if (issued == 0) {
         lock->set_state(LOCK_LONER);
         lock->finish_waiters(SimpleLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
       }
       break;
 
@@ -1993,6 +2039,7 @@ void Locker::file_eval_gather(FileLock *lock)
       if ((issued & ~CAP_FILE_WR) == 0) {
         lock->set_state(LOCK_LONER);
         lock->finish_waiters(SimpleLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
       }
       break;
       
@@ -2013,6 +2060,7 @@ void Locker::file_eval_gather(FileLock *lock)
         lock->get_rdlock();
         lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
         lock->put_rdlock();
+	lock->get_parent()->auth_unpin();
       }
       break;
       
@@ -2021,11 +2069,14 @@ void Locker::file_eval_gather(FileLock *lock)
     }
 
     issue_caps(in);
+
+    // stable re-eval?
+    if (lock->is_stable())    //&& lock->get_parent()->can_auth_pin())
+      file_eval(lock);
   }
   
   // [replica] finished caps gather?
-  if (!in->is_auth() &&
-      !lock->is_stable()) {
+  if (!in->is_auth()) {
     switch (lock->get_state()) {
     case LOCK_GMIXEDR:
       if ((issued & ~(CAP_FILE_RD)) == 0) {
@@ -2053,81 +2104,61 @@ void Locker::file_eval_gather(FileLock *lock)
   }
 
 
-  // re-eval?
-  if (lock->get_parent()->is_auth() &&
-      lock->is_stable() &&
-      lock->get_parent()->can_auth_pin())
-    file_eval(lock);
 }
 
 void Locker::file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
+  int wanted = in->get_caps_wanted();
+  bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+  dout(7) << "file_eval wanted=" << cap_string(wanted)
+	  << "  filelock=" << *lock << " on " << *lock->get_parent()
+	  << "  loner=" << loner
+	  << endl;
 
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      in->is_ambiguous_auth()) {
-    dout(7) << "file_eval not stable and ambiguous auth, waiting on " << *in << endl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
-    return;
-  }
-
-  // !stable -> do nothing.
-  if (!lock->is_stable()) return; 
-
-  // stable.
+  assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (in->is_auth() &&
-      !lock->is_xlocked()) {
-    // [auth] 
-    // and not xlocked!
-    int wanted = in->get_caps_wanted();
-    bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
-    dout(7) << "file_eval wanted=" << cap_string(wanted)
-            << "  filelock=" << *lock << " on " << *lock->get_parent()
-            << "  loner=" << loner
-            << endl;
+  // not xlocked!
+  if (lock->is_xlocked()) return;
+  
+  // * -> loner?
+  if (!lock->is_rdlocked() &&
+      !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+      (wanted & CAP_FILE_WR) &&
+      loner &&
+      lock->get_state() != LOCK_LONER) {
+    dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << endl;
+    file_loner(lock);
+  }
 
-    // * -> loner?
-    if (!lock->is_rdlocked() &&
-        !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-        (wanted & CAP_FILE_WR) &&
-        loner &&
-        lock->get_state() != LOCK_LONER) {
-      dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << endl;
-      file_loner(lock);
-    }
-
-    // * -> mixed?
-    else if (!lock->is_rdlocked() &&
-	     !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-             (wanted & CAP_FILE_RD) &&
-             (wanted & CAP_FILE_WR) &&
-             !(loner && lock->get_state() == LOCK_LONER) &&
-             lock->get_state() != LOCK_MIXED) {
-      dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << endl;
-      file_mixed(lock);
-    }
-
-    // * -> sync?
-    else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-             !(wanted & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) &&
-             ((wanted & CAP_FILE_RD) || 
-              in->is_replicated() || 
-              (!loner && lock->get_state() == LOCK_LONER)) &&
-             lock->get_state() != LOCK_SYNC) {
-      dout(7) << "file_eval stable, bump to sync " << *lock << " on " << *lock->get_parent() << endl;
-      file_sync(lock);
-    }
-
-    // * -> lock?  (if not replicated or open)
-    else if (!in->is_replicated() &&
-             wanted == 0 &&
-             lock->get_state() != LOCK_LOCK) {
-      file_lock(lock);
-    }
+  // * -> mixed?
+  else if (!lock->is_rdlocked() &&
+	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	   (wanted & CAP_FILE_RD) &&
+	   (wanted & CAP_FILE_WR) &&
+	   !(loner && lock->get_state() == LOCK_LONER) &&
+	   lock->get_state() != LOCK_MIXED) {
+    dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << endl;
+    file_mixed(lock);
+  }
+  
+  // * -> sync?
+  else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
+	   !(wanted & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) &&
+	   ((wanted & CAP_FILE_RD) || 
+	    in->is_replicated() || 
+	    (!loner && lock->get_state() == LOCK_LONER)) &&
+	   lock->get_state() != LOCK_SYNC) {
+    dout(7) << "file_eval stable, bump to sync " << *lock << " on " << *lock->get_parent() << endl;
+    file_sync(lock);
+  }
+  
+  // * -> lock?  (if not replicated or open)
+  else if (!in->is_replicated() &&
+	   wanted == 0 &&
+	   lock->get_state() != LOCK_LOCK) {
+    file_lock(lock);
   }
 }
 
@@ -2140,13 +2171,6 @@ bool Locker::file_sync(FileLock *lock)
   dout(7) << "file_sync " << *lock << " on " << *lock->get_parent() << endl;  
 
   assert(in->is_auth());
-
-  // check state
-  if (lock->get_state() == LOCK_SYNC ||
-      lock->get_state() == LOCK_GSYNCL ||
-      lock->get_state() == LOCK_GSYNCM)
-    return true;
-
   assert(lock->is_stable());
 
   int issued = in->get_caps_issued();
@@ -2172,6 +2196,7 @@ bool Locker::file_sync(FileLock *lock)
     if (issued & CAP_FILE_WR) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCM);
+      lock->get_parent()->auth_pin();
       issue_caps(in);
     } else {
       // no writers, go straight to sync
@@ -2192,6 +2217,7 @@ bool Locker::file_sync(FileLock *lock)
     if (issued & CAP_FILE_WR) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCL);
+      lock->get_parent()->auth_pin();
       issue_caps(in);
     } else {
       // no writers, go straight to sync
@@ -2220,14 +2246,6 @@ void Locker::file_lock(FileLock *lock)
   dout(7) << "inode_file_lock " << *lock << " on " << *lock->get_parent() << endl;  
 
   assert(in->is_auth());
-  
-  // check state
-  if (lock->get_state() == LOCK_LOCK ||
-      lock->get_state() == LOCK_GLOCKR ||
-      lock->get_state() == LOCK_GLOCKM ||
-      lock->get_state() == LOCK_GLOCKL) 
-    return;  // lock or locking
-
   assert(lock->is_stable());
 
   int issued = in->get_caps_issued();
@@ -2240,6 +2258,7 @@ void Locker::file_lock(FileLock *lock)
       
       // change lock
       lock->set_state(LOCK_GLOCKR);
+      lock->get_parent()->auth_pin();
 
       // call back caps
       if (issued) 
@@ -2248,6 +2267,7 @@ void Locker::file_lock(FileLock *lock)
       if (issued) {
         // call back caps
         lock->set_state(LOCK_GLOCKR);
+	lock->get_parent()->auth_pin();
         issue_caps(in);
       } else {
         lock->set_state(LOCK_LOCK);
@@ -2263,6 +2283,7 @@ void Locker::file_lock(FileLock *lock)
 
       // change lock
       lock->set_state(LOCK_GLOCKM);
+      lock->get_parent()->auth_pin();
       
       // call back caps
       issue_caps(in);
@@ -2271,6 +2292,7 @@ void Locker::file_lock(FileLock *lock)
       if (issued) {
         // change lock
         lock->set_state(LOCK_GLOCKM);
+	lock->get_parent()->auth_pin();
         
         // call back caps
         issue_caps(in);
@@ -2284,7 +2306,8 @@ void Locker::file_lock(FileLock *lock)
     if (issued & CAP_FILE_WR) {
       // change lock
       lock->set_state(LOCK_GLOCKL);
-  
+      lock->get_parent()->auth_pin();
+
       // call back caps
       issue_caps(in);
     } else {
@@ -2302,12 +2325,6 @@ void Locker::file_mixed(FileLock *lock)
 
   CInode *in = (CInode*)lock->get_parent();
   assert(in->is_auth());
-  
-  // check state
-  if (lock->get_state() == LOCK_GMIXEDR ||
-      lock->get_state() == LOCK_GMIXEDL)
-    return;     // mixed or mixing
-
   assert(lock->is_stable());
 
   int issued = in->get_caps_issued();
@@ -2319,11 +2336,14 @@ void Locker::file_mixed(FileLock *lock)
       lock->init_gather();
     
       lock->set_state(LOCK_GMIXEDR);
+      lock->get_parent()->auth_pin();
+      
       issue_caps(in);
     } else {
       if (issued) {
         lock->set_state(LOCK_GMIXEDR);
-        issue_caps(in);
+	lock->get_parent()->auth_pin();
+	issue_caps(in);
       } else {
         lock->set_state(LOCK_MIXED);
       }
@@ -2349,6 +2369,7 @@ void Locker::file_mixed(FileLock *lock)
     if (issued & CAP_FILE_WRBUFFER) {
       // gather up WRBUFFER caps
       lock->set_state(LOCK_GMIXEDL);
+      lock->get_parent()->auth_pin();
       issue_caps(in);
     }
     else if (in->is_replicated()) {
@@ -2373,14 +2394,8 @@ void Locker::file_loner(FileLock *lock)
   dout(7) << "inode_file_loner " << *lock << " on " << *lock->get_parent() << endl;  
 
   assert(in->is_auth());
-
-  // check state
-  if (lock->get_state() == LOCK_LONER ||
-      lock->get_state() == LOCK_GLONERR ||
-      lock->get_state() == LOCK_GLONERM)
-    return; 
-
   assert(lock->is_stable());
+
   assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
   
   if (lock->get_state() == LOCK_SYNC) {
@@ -2391,6 +2406,7 @@ void Locker::file_loner(FileLock *lock)
       
       // change lock
       lock->set_state(LOCK_GLONERR);
+      lock->get_parent()->auth_pin();
     } else {
       // only one guy with file open, who gets it all, so
       lock->set_state(LOCK_LONER);
@@ -2412,6 +2428,7 @@ void Locker::file_loner(FileLock *lock)
       
       // change lock
       lock->set_state(LOCK_GLONERM);
+      lock->get_parent()->auth_pin();
     } else {
       lock->set_state(LOCK_LONER);
       issue_caps(in);
@@ -2478,7 +2495,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
       issue_caps(in);
       break;
     }
-    if (lock->is_rdlocked()) {
+    else if (lock->is_rdlocked()) {
       dout(7) << "handle_file_lock rdlocked, waiting before ack on " << *in << endl;
       break;
     } 

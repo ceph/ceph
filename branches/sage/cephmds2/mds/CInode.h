@@ -122,16 +122,33 @@ class CInode : public MDSCacheObject {
   off_t            last_open_journaled;  // log offset for the last journaled EOpen
 
   // projected values (only defined while dirty)
-  list<inode_t>    projected_inode;
+  list<inode_t*>    projected_inode;
   list<fragtree_t> projected_dirfragtree;
-  
+
+
+  inode_t *project_inode();
+  void pop_and_dirty_projected_inode();
+
+  /*
   inode_t *project_inode() {
-    if (projected_inode.empty())
-      projected_inode.push_back(inode);
-    else
-      projected_inode.push_back(projected_inode.back());
-    return &projected_inode.back();
+    if (projected_inode.empty()) {
+      projected_inode.push_back(new inode_t(inode));
+    } else {
+      inode_t *lastback = projected_inode.back();
+      projected_inode.push_back(new inode_t);
+      *projected_inode.back() = *lastback;
+    }
+    return projected_inode.back();
   }
+  void pop_and_dirty_projected_inode() {
+    assert(!projected_inode.empty());
+    mark_dirty(projected_inode.front()->version);
+    inode = *projected_inode.front();
+    delete projected_inode.front();
+    projected_inode.pop_front();
+    }*/
+
+  /*
   fragtree_t *project_dirfragtree() {
     if (projected_dirfragtree.empty())
       projected_dirfragtree.push_back(dirfragtree);
@@ -139,16 +156,12 @@ class CInode : public MDSCacheObject {
       projected_dirfragtree.push_back(projected_dirfragtree.back());
     return &projected_dirfragtree.back();
   }
-  void pop_and_dirty_projected_inode() {
-    mark_dirty(projected_inode.front().version);
-    inode = projected_inode.front();
-    projected_inode.pop_front();
-  }
   void pop_and_dirty_projected_dirfragtree() {
-    mark_dirty(projected_inode.front().version);
+    assert(!projected_dirfragtree.empty());
+    mark_dirty(projected_dirfragtree.front().version);
     dirfragtree = projected_dirfragtree.front();
     projected_dirfragtree.pop_front();
-  }
+  }*/
 
 
   // -- cache infrastructure --

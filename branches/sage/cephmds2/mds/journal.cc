@@ -750,7 +750,7 @@ void ESlaveUpdate::replay(MDS *mds)
     }
     break;
 
-  case ESlaveUpdate::OP_ABORT:
+  case ESlaveUpdate::OP_ROLLBACK:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
 	       << ": discarding previously saved blob" << endl;

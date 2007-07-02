@@ -284,6 +284,10 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     }
   }
 
+  // can't go from stopping -> active
+  if (state == MDSMap::STATE_ACTIVE && mdsmap.mds_state[from] == MDSMap::STATE_STOPPING)
+    state = MDSMap::STATE_STOPPING; // dummy
+  
   // if creating -> active, go to standby instead
   if (state == MDSMap::STATE_ACTIVE && mdsmap.is_creating(from)) {
     mdsmap.mds_created.insert(from);

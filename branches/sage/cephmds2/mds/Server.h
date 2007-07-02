@@ -128,8 +128,8 @@ public:
 			   version_t, version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
-  void _logged_slave_link(MDRequest *mdr, CInode *targeti, version_t tpv, bool inc);
-  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, version_t tpv, bool inc);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, utime_t old_ctime, bool inc);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink
@@ -138,7 +138,7 @@ public:
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, version_t, version_t);    
+			    version_t, version_t);    
 
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
   void _unlink_remote_finish(MDRequest *mdr, 
