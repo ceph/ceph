@@ -564,8 +564,10 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  if (is_root())
-    return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
+  //if (is_root())
+  //return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
+  if (force_auth >= 0) 
+    return pair<int,int>(force_auth, -2);   
 
   if (parent)
     return parent->dir->authority();

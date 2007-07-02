@@ -202,6 +202,8 @@ CInode *MDCache::create_root_inode()
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;
   
+  root->force_auth = mds->get_nodeid();
+
   set_root( root );
   add_inode( root );
 
@@ -4389,6 +4391,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     
     // add in root
     cur = add_replica_inode(m->get_inode(0), NULL);
+    cur->force_auth = m->get_source().num();
     set_root(cur);
     dout(7) << "discover_reply got root " << *cur << endl;
     
@@ -4400,7 +4403,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     
     // add 
     cur = add_replica_inode(m->get_inode(0), NULL);
-    set_root(cur);
+    cur->force_auth = m->get_source().num();
+
     dout(7) << "discover_reply got stray " << *cur << endl;
     
     // take waiters

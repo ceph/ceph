@@ -20,17 +20,19 @@
 // NOTE: this also defines the lock ordering!
 #define LOCK_OTYPE_DN       1
 
-#define LOCK_OTYPE_IFILE    2
-#define LOCK_OTYPE_IAUTH    3
-#define LOCK_OTYPE_ILINK    4
-#define LOCK_OTYPE_IDIRFRAGTREE 5
-#define LOCK_OTYPE_IDIR     6
+#define LOCK_OTYPE_IVERSION 2
+#define LOCK_OTYPE_IFILE    3
+#define LOCK_OTYPE_IAUTH    4
+#define LOCK_OTYPE_ILINK    5
+#define LOCK_OTYPE_IDIRFRAGTREE 6
+#define LOCK_OTYPE_IDIR     7
 
 //#define LOCK_OTYPE_DIR      7  // not used
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
   case LOCK_OTYPE_DN: return "dn";
+  case LOCK_OTYPE_IVERSION: return "iversion";
   case LOCK_OTYPE_IFILE: return "ifile";
   case LOCK_OTYPE_IAUTH: return "iauth";
   case LOCK_OTYPE_ILINK: return "ilink";
@@ -98,8 +100,16 @@ public:
 
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
-      if (l->type < r->type) return true;
-      if (l->type == r->type) return l->parent->is_lt(r->parent);
+      // first sort by object type (dn < inode)
+      if ((l->type>LOCK_OTYPE_DN) <  (r->type>LOCK_OTYPE_DN)) return true;
+      if ((l->type>LOCK_OTYPE_DN) == (r->type>LOCK_OTYPE_DN)) {
+	// then sort by object
+	if (l->parent->is_lt(r->parent)) return true;
+	if (l->parent == r->parent) {
+	  // then sort by (inode) lock type
+	  if (l->type < r->type) return true;
+	}
+      }
       return false;
     }
   };
@@ -235,12 +245,15 @@ public:
   }
 
   bool can_rdlock(MDRequest *mdr) {
-    if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
-    if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
+    //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
+    //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
     return (state == LOCK_SYNC);
   }
   bool can_xlock(MDRequest *mdr) {
-    if (mdr && xlock_by == mdr) return true; // auth or replica!  xlocked by me.
+    if (mdr && xlock_by == mdr) {
+      assert(state == LOCK_LOCK);
+      return true; // auth or replica!  xlocked by me.
+    }
     if (state == LOCK_LOCK && parent->is_auth() && !xlock_by) return true;
     return false;
   }

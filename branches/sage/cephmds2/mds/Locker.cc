@@ -128,21 +128,47 @@ bool Locker::acquire_locks(MDRequest *mdr,
   }
   dout(10) << "acquire_locks " << *mdr << endl;
 
-  // sort everything we will lock
-  set<SimpleLock*, SimpleLock::ptr_lt> sorted;
+  set<SimpleLock*, SimpleLock::ptr_lt> sorted;  // sort everything we will lock
+  set<SimpleLock*> mustpin = xlocks;            // items to authpin
 
-  // (local) AUTH PINS
+  // xlocks
+  for (set<SimpleLock*>::iterator p = xlocks.begin(); p != xlocks.end(); ++p) {
+    dout(20) << " must xlock " << **p << " " << *(*p)->get_parent() << endl;
+    sorted.insert(*p);
 
-  // make list of items to authpin
-  set<SimpleLock*> mustpin = xlocks;
-
-  for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p) {
-    if ((*p)->get_parent()->is_auth())
-      mustpin.insert(*p);
-    else
-      sorted.insert(*p);
+    // augment xlock with a versionlock?
+    if ((*p)->get_type() > LOCK_OTYPE_IVERSION) {
+      // inode version lock?
+      CInode *in = (CInode*)(*p)->get_parent();
+      if (mdr->is_master()) {
+	// master.  wrlock versionlock so we can pipeline inode updates to journal.
+	wrlocks.insert(&in->versionlock);
+      } else {
+	// slave.  exclusively lock the inode version (i.e. block other journal updates)
+	xlocks.insert(&in->versionlock);
+	sorted.insert(&in->versionlock);
+      }
+    }
   }
-  
+
+  // wrlocks
+  for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p) {
+    dout(20) << " must wrlock " << **p << " " << *(*p)->get_parent() << endl;
+    sorted.insert(*p);
+    if ((*p)->get_parent()->is_auth()) 
+      mustpin.insert(*p);
+  }
+
+  // rdlocks
+  for (set<SimpleLock*>::iterator p = rdlocks.begin();
+	 p != rdlocks.end();
+       ++p) {
+    dout(20) << " must rdlock " << **p << " " << *(*p)->get_parent() << endl;
+    sorted.insert(*p);
+  }
+
+ 
+  // AUTH PINS
   map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
   // can i auth pin them all now?
@@ -150,8 +176,6 @@ bool Locker::acquire_locks(MDRequest *mdr,
        p != mustpin.end();
        ++p) {
     MDSCacheObject *object = (*p)->get_parent();
-
-    sorted.insert(*p);  // sort in
 
     dout(10) << " must authpin " << *object << endl;
 
@@ -216,14 +240,6 @@ bool Locker::acquire_locks(MDRequest *mdr,
       mdr->waiting_on_slave.insert(p->first);
     }
     return false;
-  }
-
-  // sort in rdlocks too
-  for (set<SimpleLock*>::iterator p = rdlocks.begin();
-	 p != rdlocks.end();
-       ++p) {
-    dout(20) << " must rdlock " << **p << " " << *(*p)->get_parent() << endl;
-    sorted.insert(*p);
   }
 
   // acquire locks.

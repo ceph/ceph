@@ -27,6 +27,7 @@
 #include "SimpleLock.h"
 #include "FileLock.h"
 #include "ScatterLock.h"
+#include "LocalLock.h"
 #include "Capability.h"
 
 
@@ -102,6 +103,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
   static const int WAIT_FILELOCK_OFFSET = 5 + 3*SimpleLock::WAIT_BITS;
   static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY           = 0xffffffff;
 
@@ -188,6 +190,7 @@ class CInode : public MDSCacheObject {
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
+  int force_auth;
 
   // -- distributed state --
 protected:
@@ -220,9 +223,10 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_open_journaled(0),
-    parent(0),
+    parent(0), force_auth(-1),
     replica_caps_wanted(0),
     auth_pins(0), nested_auth_pins(0),
+    versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
     linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
@@ -287,6 +291,7 @@ protected:
 
   // -- locks --
 public:
+  LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
   SimpleLock dirfragtreelock;

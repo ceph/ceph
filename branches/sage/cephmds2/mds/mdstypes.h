@@ -254,7 +254,7 @@ class MDSCacheObject;
 #define CDIR_AUTH_UNKNOWN  -2
 #define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
 #define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
-#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
+//#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 
 
