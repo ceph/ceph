@@ -253,7 +253,7 @@ class MClientRequest : public Message {
   void print(ostream& out) {
     out << "clientreq(client" << get_client() 
 	<< "." << get_tid() 
-	<< ":";
+	<< " ";
     switch(get_op()) {
     case MDS_OP_STATFS: 
       out << "statfs"; break;
@@ -302,7 +302,7 @@ class MClientRequest : public Message {
       assert(0);
     }
     if (get_path().length()) 
-      out << "=" << get_path();
+      out << " " << get_path();
     if (get_sarg().length())
       out << " " << get_sarg();
     if (st.retry_attempt)

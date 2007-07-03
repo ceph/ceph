@@ -1206,7 +1206,10 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
   
   if (diri->is_auth() && 
       !diri->is_root() &&
-      mdr->wrlocks.count(&diri->dirlock)) {            // only if we've wrlocked it.
+      mdr->is_master()) {
+    assert(mdr->wrlocks.count(&diri->dirlock));// ||  // either we wrlocked,
+    //mdr->is_slave());                      // or the master did.
+
     dirpv = diri->pre_dirty();
     inode_t *pi = diri->project_inode();
     pi->version = dirpv;
@@ -1236,8 +1239,11 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
     //diri->mark_dirty(dirpv);
     dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
   } else {
-    assert(!diri->is_auth() || diri->is_root() ||
+    /*assert(!dn->is_auth() ||   // slave
+	   !diri->is_auth() || 
+	   diri->is_root() ||
 	   diri->is_frozen());  // then not auth, or still importing.
+    */
     // dirlock scatterlock will propagate the update.
   }
 
@@ -2043,12 +2049,14 @@ class C_MDS_SlaveLinkCommit : public Context {
   MDRequest *mdr;
   CInode *targeti;
   utime_t old_ctime;
+  version_t old_version;
   bool inc;
 public:
-  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, utime_t oct, bool in) :
-    server(s), mdr(r), targeti(t), old_ctime(oct), inc(in) { }
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t, utime_t oct, version_t ov, bool in) :
+    server(s), mdr(r), targeti(t), old_ctime(oct), old_version(ov), inc(in) { }
   void finish(int r) {
-    server->_commit_slave_link(mdr, r, targeti, old_ctime, inc);
+    server->_commit_slave_link(mdr, r, targeti, 
+			       old_ctime, old_version, inc);
   }
 };
 
@@ -2058,6 +2066,8 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
 	   << " inc=" << inc
 	   << " " << *targeti << endl;
 
+  version_t old_version = targeti->inode.version;
+
   // update the target
   targeti->pop_and_dirty_projected_inode();
 
@@ -2066,7 +2076,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
   // set up commit waiter
-  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, inc);
+  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, old_version, inc);
 
   // done.
   delete mdr->slave_request;
@@ -2074,64 +2084,34 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
 }
 
 
-class C_MDS_SlaveLinkRollback : public Context {
-  Server *server;
-  CInode *targeti;
-public:
-  C_MDS_SlaveLinkRollback(Server *s, CInode *t) :
-    server(s), targeti(t) { }
-  void finish(int r) {
-    targeti->pop_and_dirty_projected_inode();
-  }
-};
-
-void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti, utime_t old_ctime, bool inc)
+void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti, 
+				utime_t old_ctime, version_t old_version, bool inc)
 {  
   dout(10) << "_commit_slave_link " << *mdr
 	   << " r=" << r
 	   << " inc=" << inc
 	   << " " << *targeti << endl;
 
+  ESlaveUpdate *le;
   if (r == 0) {
     // write a commit to the journal
-    ESlaveUpdate *le = new ESlaveUpdate("slave_link_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
-    mds->mdlog->submit_entry(le);
+    le  = new ESlaveUpdate("slave_link_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
   } else {
-    // rollback: undo nlink change.
-
-    // -- rollback in journal --
-    ESlaveUpdate *le = new ESlaveUpdate("slave_link_rollback", 
-					mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
-
-    inode_t *pi = targeti->project_inode();
-    if (inc) 
-      pi->nlink++;
-    else 
-      pi->nlink--;
-    if (pi->ctime == mdr->now) 
-      pi->ctime = old_ctime;
-    le->metablob.add_primary_dentry(targeti->parent, true, 0, pi);
-    mds->mdlog->submit_entry(le);
-    mds->mdlog->wait_for_sync(new C_MDS_SlaveLinkRollback(this, targeti));
+    le  = new ESlaveUpdate("slave_link_rollback", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
 
     // -- rollback in memory --
-    // in inode.
+    assert(targeti->inode.ctime == mdr->now);
+    assert(targeti->projected_inode.empty());  // we're holding the version lock.
+
+    targeti->inode.ctime = old_ctime;
+    targeti->inode.version = old_version;
     if (inc) 
       targeti->inode.nlink++;
     else
       targeti->inode.nlink--;
-    if (targeti->inode.ctime == mdr->now)
-      targeti->inode.ctime = old_ctime;
-
-    // in any queued projected items.
-    for (list<inode_t*>::iterator p = targeti->projected_inode.begin();
-	 p != targeti->projected_inode.end();
-	 ++p) 
-      if (inc)
-	(*p)->nlink++;
-      else
-	(*p)->nlink--;
   }
+
+  mds->mdlog->submit_entry(le);
 }
 
 
@@ -2796,8 +2776,14 @@ void Server::handle_client_rename(MDRequest *mdr)
       assert(mdr->waiting_on_slave.count(auth) == 0);
       mdr->waiting_on_slave.insert(auth);
       return;
+    } else {
+      dout(10) << " already (just!) got inode export from srcdn auth" << endl;
+      /*int off = 0;
+      mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
+					     srcdn->authority().first);
+      srcdn->inode->force_auth.first = srcdn->authority().first;
+      */
     }
-    dout(10) << " already (just!) got inode export from srcdn auth" << endl;
   }
   
   // -- prepare anchor updates -- 
@@ -2846,11 +2832,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
 
-  // and apply!
-  // we do this now because we may also be importing an inode, and the locker is currently
-  // depending on a this happening quickly.
-  _rename_apply(mdr, srcdn, destdn, straydn);
-
   journal_opens();  // journal pending opens, just in case
 
   // mark committing (needed for proper recovery)
@@ -2867,7 +2848,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   dout(10) << "_rename_finish " << *mdr << endl;
 
   // apply
-  //_rename_apply(mdr, srcdn, destdn, straydn);
+  _rename_apply(mdr, srcdn, destdn, straydn);
   
   // commit anchor updates?
   if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid);
@@ -2948,8 +2929,12 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (srcdn->is_primary()) {
       dout(10) << "src is a primary dentry" << endl;
       if (destdn->is_auth()) {
-	mdr->pvmap[destdn] = destdn->pre_dirty(MAX(srcdn->inode->inode.version,
-						   mdr->inode_import_v));
+	version_t siv;
+	if (srcdn->is_auth())
+	  siv = srcdn->inode->get_projected_version();
+	else
+	  siv = mdr->inode_import_v;
+	mdr->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
 
@@ -2966,6 +2951,16 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (srcdn->is_auth())
       mdr->pvmap[srcdn] = srcdn->pre_dirty();
     metablob->add_null_dentry(srcdn, true);
+
+    // new subtree?
+    if (srcdn->is_primary() &&
+	srcdn->inode->is_dir()) {
+      list<CDir*> ls;
+      srcdn->inode->get_nested_dirfrags(ls);
+      int auth = srcdn->authority().first;
+      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
+	mdcache->adjust_subtree_auth(*p, auth, auth);
+    }       
   }
 
   if (ji) {
@@ -3065,24 +3060,29 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     CInode *in = srcdn->inode;
     assert(in);
     if (srcdn->is_remote()) {
+      // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->link_inode(destdn, in->ino());    
+      if (destdn->is_auth())
+	destdn->mark_dirty(mdr->pvmap[destdn]);
     } else {
+      // srcdn was primary.
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->link_inode(destdn, in);
+
+      // srcdn inode import?
+      if (!srcdn->is_auth() && destdn->is_auth()) {
+	assert(mdr->inode_import.length() > 0);
+	int off = 0;
+	mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
+					       srcdn->authority().first);
+      }
+      if (destdn->inode->is_auth())
+	destdn->inode->mark_dirty(mdr->pvmap[destdn]);
     }
-    if (destdn->is_auth())
-      destdn->mark_dirty(mdr->pvmap[destdn]);
+
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->pvmap[srcdn]);
-
-    // srcdn inode import?
-    if (!srcdn->is_auth() && destdn->is_primary() && destdn->is_auth()) {
-      assert(mdr->inode_import.length() > 0);
-      int off = 0;
-      mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
-					     srcdn->authority().first);
-    }
   }
 
   // update subtree map?
@@ -3155,6 +3155,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   CDentry *srcdn = trace[trace.size()-1];
   dout(10) << " srcdn " << *srcdn << endl;
   mdr->pin(srcdn);
+  assert(srcdn->inode);
+  mdr->pin(srcdn->inode);
 
   // stray?
   CDentry *straydn = 0;
@@ -3241,12 +3243,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
     mdr->extra_witnesses.erase(mds->get_nodeid());  // not me!
   }
 
-  if (m->inode_export.length()) {
-    dout(10) << " got inode export, saving in " << *mdr << endl;
-    mdr->inode_import.claim(m->inode_export);
-    mdr->inode_import_v = m->inode_export_v;
-  }
-
   // remove from waiting list
   assert(mdr->waiting_on_slave.count(from));
   mdr->waiting_on_slave.erase(from);
@@ -3269,7 +3265,7 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 
   // reply
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODEACK);
-  dout(10) << " replying with inode export info" << endl;
+  dout(10) << " replying with inode export info " << *mdr->srcdn->inode << endl;
   mdcache->migrator->encode_export_inode(mdr->srcdn->inode, reply->inode_export, mdr->slave_to_mds);
   reply->inode_export_v = mdr->srcdn->inode->inode.version;
 
@@ -3295,7 +3291,7 @@ void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest 
 
   assert(mdr->waiting_on_slave.count(from));
   mdr->waiting_on_slave.erase(from);
-
+  
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
   else 

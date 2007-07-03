@@ -46,29 +46,17 @@ sage doc
 
 sage mds
 
-- slave request rollback - why it's hard.
-  - we pipeline multiple updates to the same inode.
-- e.g., link/unlink
-  - live metadata needs to be cleaned (fi slave survives)
-  - sufficient data for rollback (old ctime, ++ or --) needs to be journaled with original prepare
-  - slave recovery needs to apply prepare's rollback to it's live metadata... _and_ re-journal a rollback entry (if it needs to)
-  - rollback should include cleaned inode data, with (!!) incremented version so that reverted data gets flushed to storage properly.
-- e.g., rename
-  - hrm.!
-
-
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
-
 
 /- make locks auth_pin for unstable states.
 /  - can locker *_eval() starve freezing?
 
-- fix rename to delay the _apply.
-  - need to fix locking vs migration first.
-- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
+/- fix rename to delay the _apply.
+/  - need to fix locking vs migration first.
+/- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
 
 - then, mtimes:
-  - avoid migration race concern (on auth).
+/  - avoid migration race concern (on auth).
   - writeback and dirty on gather.
     - cleaned up pv/pi makes writebehind play nice with concurrent updates.
     - should pin lock in LOCK state?
@@ -106,7 +94,6 @@ sage mds
   - mtime will always get journaled...
   -> so, just make sure v/pv/dirtyness is sane on recovery...
   -> scatterlock should recover into scatter state, or whatever...
-- dirlock-protected mtime updates vs migration, journaling, recovery
 
 
 - Q: locker vs migration

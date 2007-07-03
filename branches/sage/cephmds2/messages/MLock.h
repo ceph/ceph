@@ -31,9 +31,7 @@
 #define LOCK_AC_MIXEDACK     2
 #define LOCK_AC_LOCKACK      3
 
-//#define LOCK_AC_REQREAD      4
-//#define LOCK_AC_REQWRITE     5
-
+#define LOCK_AC_REQSCATTER   7
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
@@ -48,6 +46,7 @@ static const char *get_lock_action_name(int a) {
   case LOCK_AC_SYNCACK: return "syncack";
   case LOCK_AC_MIXEDACK: return "mixedack";
   case LOCK_AC_LOCKACK: return "lockack";
+  case LOCK_AC_REQSCATTER: return "reqscatter";
   default: assert(0); 
   }
 }

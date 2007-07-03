@@ -202,7 +202,7 @@ CInode *MDCache::create_root_inode()
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;
   
-  root->force_auth = mds->get_nodeid();
+  root->force_auth = pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN);
 
   set_root( root );
   add_inode( root );
@@ -739,6 +739,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
   diri->get_dirfrags(dfls);
   for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
     CDir *dir = *p;
+
     dout(10) << "dirfrag " << *dir << endl;
     CDir *oldparent = get_subtree_root(olddir);
     dout(10) << " old parent " << *oldparent << endl;
@@ -783,6 +784,14 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
       if (oldparent->authority() != newparent->authority()) 
 	adjust_subtree_auth(dir, oldparent->authority());  // caller is responsible for *diri.
     }
+  }
+
+  for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
+    CDir *dir = *p;
+
+    // un-force dir to subtree root
+    if (dir->dir_auth == pair<int,int>(dir->dir_auth.first, dir->dir_auth.first))
+      adjust_subtree_auth(dir, dir->dir_auth.first);
   }
 
   show_subtrees();
@@ -2562,7 +2571,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
     if (con)
       df = con->dirfrag();
     else
-      df = dirfrag_t(1,frag_t());
+      df = dirfrag_t(0,frag_t());   // must be a root or stray inode.
 
     for (int p=0; p<2; p++) {
       int a = auth.first;
@@ -2680,27 +2689,31 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
   for (map<dirfrag_t,MCacheExpire::realm>::iterator p = m->realms.begin();
        p != m->realms.end();
        ++p) {
-    // get container
-    CDir *con = get_dirfrag(p->first);
-    assert(con);  // we had better have this.
-
-    if (!con->is_auth() ||
-	(con->is_auth() && con->is_exporting() &&
-	 migrator->get_export_state(con) == Migrator::EXPORT_WARNING &&
-	 migrator->export_has_warned(con,from))) {
-      // not auth.
-      dout(7) << "delaying nonauth|warned expires for " << *con << endl;
-      assert(con->is_frozen_tree_root());
-
-      // make a message container
-      if (delayed_expire[con].count(from) == 0) 
-	delayed_expire[con][from] = new MCacheExpire(from);
-
-      // merge these expires into it
-      delayed_expire[con][from]->add_realm(p->first, p->second);
-      continue;
+    // check container?
+    if (p->first.ino > 0) {
+      CDir *con = get_dirfrag(p->first);
+      assert(con);  // we had better have this.
+      
+      if (!con->is_auth() ||
+	  (con->is_auth() && con->is_exporting() &&
+	   migrator->get_export_state(con) == Migrator::EXPORT_WARNING &&
+	   migrator->export_has_warned(con,from))) {
+	// not auth.
+	dout(7) << "delaying nonauth|warned expires for " << *con << endl;
+	assert(con->is_frozen_tree_root());
+	
+	// make a message container
+	if (delayed_expire[con].count(from) == 0) 
+	  delayed_expire[con][from] = new MCacheExpire(from);
+	
+	// merge these expires into it
+	delayed_expire[con][from]->add_realm(p->first, p->second);
+	continue;
+      }
+      dout(7) << "expires for " << *con << endl;
+    } else {
+      dout(7) << "containerless expires (root, stray inodes)" << endl;
     }
-    dout(7) << "expires for " << *con << endl;
 
     // INODES
     for (map<inodeno_t,int>::iterator it = p->second.inodes.begin();
@@ -2831,8 +2844,8 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->authlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->authlock);
   if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
   if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
-  if (in->filelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->filelock);
-  if (in->dirlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirlock);
+  if (in->filelock.remove_replica(from)) mds->locker->file_eval_gather(&in->filelock);
+  if (in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
   
   // alone now?
   /*
@@ -4391,7 +4404,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     
     // add in root
     cur = add_replica_inode(m->get_inode(0), NULL);
-    cur->force_auth = m->get_source().num();
+    cur->force_auth = pair<int,int>(m->get_source().num(), CDIR_AUTH_UNKNOWN);
     set_root(cur);
     dout(7) << "discover_reply got root " << *cur << endl;
     
@@ -4403,7 +4416,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     
     // add 
     cur = add_replica_inode(m->get_inode(0), NULL);
-    cur->force_auth = m->get_source().num();
+    cur->force_auth = pair<int,int>(m->get_source().num(), CDIR_AUTH_UNKNOWN);
 
     dout(7) << "discover_reply got stray " << *cur << endl;
     
@@ -4628,6 +4641,7 @@ CDentry *MDCache::add_replica_stray(bufferlist &bl, CInode *in, int from)
   CInodeDiscover indis;
   indis._decode(bl, off);
   CInode *strayin = add_replica_inode(indis, NULL);
+  strayin->force_auth = pair<int,int>(from, CDIR_AUTH_UNKNOWN);
   dout(15) << "strayin " << *strayin << endl;
   
   // dir

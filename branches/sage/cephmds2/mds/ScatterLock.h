@@ -67,9 +67,10 @@ class ScatterLock : public SimpleLock {
   bool updated;
 
 public:
-  ScatterLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo),
-						  num_wrlock(0),
-						  updated(false) {}
+  ScatterLock(MDSCacheObject *o, int t, int wo) : 
+    SimpleLock(o, t, wo),
+    num_wrlock(0),
+    updated(false) {}
 
   int get_replica_state() {
     switch (state) {

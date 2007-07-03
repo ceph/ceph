@@ -129,7 +129,8 @@ public:
 
   void handle_slave_link_prep(MDRequest *mdr);
   void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
-  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, utime_t old_ctime, bool inc);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, 
+			  utime_t old_ctime, version_t old_version, bool inc);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink

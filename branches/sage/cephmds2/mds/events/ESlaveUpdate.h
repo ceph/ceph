@@ -29,7 +29,6 @@ public:
   int master;
   int op;  // prepare, commit, abort
   EMetaBlob metablob;
-  bufferlist rollback_data;  // any special sauce needed for a correct rollback. (*)
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
   ESlaveUpdate(const char *s, metareqid_t ri, int mastermds, int o) : 
@@ -54,7 +53,6 @@ public:
     ::_encode(master, bl);
     ::_encode(op, bl);
     metablob._encode(bl);
-    ::_encode(rollback_data, bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
     ::_decode(type, bl, off);
@@ -62,7 +60,6 @@ public:
     ::_decode(master, bl, off);
     ::_decode(op, bl, off);
     metablob._decode(bl, off);
-    ::_decode(rollback_data, bl, off);
   }
 
   bool has_expired(MDS *mds);

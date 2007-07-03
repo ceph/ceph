@@ -212,6 +212,9 @@ class EMetaBlob {
   // anchor transactions included in this update.
   list<version_t>         atids;
 
+  // ino's i've allocated
+  list<inodeno_t> allocated_inos;
+
   // inodes i've destroyed.
   list< pair<inode_t,off_t> > truncated_inodes;
 
@@ -227,6 +230,10 @@ class EMetaBlob {
   void add_anchor_transaction(version_t atid) {
     atids.push_back(atid);
   }  
+
+  void add_allocated_ino(inodeno_t ino) {
+    allocated_inos.push_back(ino);
+  }
 
   void add_inode_truncate(const inode_t& inode, off_t newsize) {
     truncated_inodes.push_back(pair<inode_t,off_t>(inode, newsize));
@@ -346,6 +353,7 @@ class EMetaBlob {
       lump_map[*i]._encode(bl);
     }
     ::_encode(atids, bl);
+    ::_encode(allocated_inos, bl);
     ::_encode(truncated_inodes, bl);
     ::_encode(client_reqs, bl);
   } 
@@ -361,6 +369,7 @@ class EMetaBlob {
       lump_map[dirfrag]._decode(bl, off);
     }
     ::_decode(atids, bl, off);
+    ::_decode(allocated_inos, bl, off);
     ::_decode(truncated_inodes, bl, off);
     ::_decode(client_reqs, bl, off);
   }
@@ -370,7 +379,9 @@ class EMetaBlob {
     if (!lump_order.empty()) 
       out << lump_order.front() << ", " << lump_map.size() << " dirs";
     if (!atids.empty())
-      out << " atids " << atids;
+      out << " atids=" << atids;
+    if (!allocated_inos.empty())
+      out << " inos=" << allocated_inos;
     out << "]";
   }
 

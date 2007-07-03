@@ -127,6 +127,12 @@ class CInode : public MDSCacheObject {
   list<inode_t*>    projected_inode;
   list<fragtree_t> projected_dirfragtree;
 
+  version_t get_projected_version() {
+    if (projected_inode.empty())
+      return inode.version;
+    else
+      return projected_inode.back()->version;
+  }
 
   //inode_t *project_inode();
   //void pop_and_dirty_projected_inode();
@@ -177,7 +183,7 @@ class CInode : public MDSCacheObject {
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
-  int force_auth;
+  pair<int,int> force_auth;
 
   // -- distributed state --
 protected:
@@ -210,7 +216,7 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_open_journaled(0),
-    parent(0), force_auth(-1),
+    parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),

@@ -311,7 +311,9 @@ protected:
   // from MMDSImportMaps
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
-  map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;
+  map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;  // for replay.
+  map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
+  map<metareqid_t, Context*> waiting_for_slave_update_commit;
   friend class ESlaveUpdate;
 
   set<int> wants_import_map;   // nodes i need to send my import map to

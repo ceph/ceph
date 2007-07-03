@@ -566,8 +566,8 @@ pair<int,int> CInode::authority()
 {
   //if (is_root())
   //return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
-  if (force_auth >= 0) 
-    return pair<int,int>(force_auth, -2);   
+  if (force_auth.first >= 0) 
+    return force_auth;
 
   if (parent)
     return parent->dir->authority();

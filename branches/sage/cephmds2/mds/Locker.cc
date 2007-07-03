@@ -155,8 +155,13 @@ bool Locker::acquire_locks(MDRequest *mdr,
   for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p) {
     dout(20) << " must wrlock " << **p << " " << *(*p)->get_parent() << endl;
     sorted.insert(*p);
-    if ((*p)->get_parent()->is_auth()) 
+    if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
+    else if ((*p)->get_type() == LOCK_OTYPE_IDIR &&
+	     !(*p)->get_parent()->is_auth() && !((ScatterLock*)(*p))->can_wrlock()) { // we might have to request a scatter
+      dout(15) << " will also auth_pin " << *(*p)->get_parent() << " in case we need to request a scatter" << endl;
+      mustpin.insert(*p);
+    }
   }
 
   // rdlocks
@@ -940,11 +945,13 @@ void Locker::simple_eval_gather(SimpleLock *lock)
     
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
-    lock->get_parent()->auth_unpin();
 
-    // re-eval?
-    //if (lock->get_parent()->can_auth_pin())
+    if (lock->get_parent()->is_auth()) {
+      lock->get_parent()->auth_unpin();
+
+      // re-eval?
       simple_eval(lock);
+    }
   }
 }
 
@@ -1302,13 +1309,22 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
   lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
   
   // initiate scatter or lock?
-  if (lock->is_stable() &&
-      lock->get_parent()->is_auth()) {
-    // scatter or lock?
-    if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) 
-      scatter_scatter(lock);
-    else
-      scatter_lock(lock);
+  if (lock->is_stable()) {
+    if (lock->get_parent()->is_auth()) {
+      // auth.  scatter or lock?
+      if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) 
+	scatter_scatter(lock);
+      else
+	scatter_lock(lock);
+    } else {
+      // replica.
+      // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
+      int auth = lock->get_parent()->authority().first;
+      dout(10) << "requesting scatter from auth on " 
+	       << *lock << " on " << *lock->get_parent() << endl;
+      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()),
+			    auth, MDS_PORT_LOCKER);
+    }
   }
 
   return false;
@@ -1787,6 +1803,17 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 	      << " from " << from << ", last one" 
 	      << endl;
       scatter_eval_gather(lock);
+    }
+    break;
+
+  case LOCK_AC_REQSCATTER:
+    if (lock->is_stable()) {
+      dout(7) << "handle_scatter_lock got scatter request on " << *lock << " on " << *lock->get_parent()
+	      << endl;
+      scatter_scatter(lock);
+    } else {
+      dout(7) << "handle_scatter_lock ignoring scatter request on " << *lock << " on " << *lock->get_parent()
+	      << endl;
     }
     break;
 

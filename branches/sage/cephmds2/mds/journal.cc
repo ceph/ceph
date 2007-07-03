@@ -719,12 +719,68 @@ void EOpen::replay(MDS *mds)
 
 bool ESlaveUpdate::has_expired(MDS *mds)
 {
-  return metablob.has_expired(mds);
+  switch (op) {
+  case ESlaveUpdate::OP_PREPARE:
+    if (mds->mdcache->ambiguous_slave_updates.count(reqid) == 0) {
+      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
+	       << ": haven't yet seen commit|rollback" << endl;
+      return false;
+    } 
+    else if (mds->mdcache->ambiguous_slave_updates[reqid]) {
+      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
+	       << ": committed, checking metablob" << endl;
+      bool exp = metablob.has_expired(mds);
+      if (exp) 
+	mds->mdcache->ambiguous_slave_updates.erase(reqid);
+      return exp;      
+    }
+    else {
+      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
+	       << ": aborted" << endl;
+      mds->mdcache->ambiguous_slave_updates.erase(reqid);
+      return true;
+    }
+    
+  case ESlaveUpdate::OP_COMMIT:
+  case ESlaveUpdate::OP_ROLLBACK:
+    if (mds->mdcache->waiting_for_slave_update_commit.count(reqid)) {
+      dout(10) << "ESlaveUpdate.has_expired "
+	       << ((op == ESlaveUpdate::OP_COMMIT) ? "commit ":"rollback ")
+	       << reqid << " for mds" << master 
+	       << ": noting commit, kicking prepare waiter" << endl;
+      mds->mdcache->ambiguous_slave_updates[reqid] = (op == ESlaveUpdate::OP_COMMIT);
+      mds->mdcache->waiting_for_slave_update_commit[reqid]->finish(0);
+      delete mds->mdcache->waiting_for_slave_update_commit[reqid];
+      mds->mdcache->waiting_for_slave_update_commit.erase(reqid);
+    } else {
+      dout(10) << "ESlaveUpdate.has_expired "
+	       << ((op == ESlaveUpdate::OP_COMMIT) ? "commit ":"rollback ")
+	       << reqid << " for mds" << master 
+	       << ": no prepare waiter, ignoring" << endl;
+    }
+    return true;
+
+  default:
+    assert(0);
+  }
 }
 
 void ESlaveUpdate::expire(MDS *mds, Context *c)
 {
-  metablob.expire(mds, c);
+  assert(op == ESlaveUpdate::OP_PREPARE);
+
+  if (mds->mdcache->ambiguous_slave_updates.count(reqid) == 0) {
+    // wait
+    dout(10) << "ESlaveUpdate.expire prepare " << reqid << " for mds" << master
+	     << ": waiting for commit|rollback" << endl;
+    mds->mdcache->waiting_for_slave_update_commit[reqid] = c;
+  } else {
+    // we committed.. expire the metablob
+    assert(mds->mdcache->ambiguous_slave_updates[reqid] == true); 
+    dout(10) << "ESlaveUpdate.expire prepare " << reqid << " for mds" << master
+	     << ": waiting for metablob to expire" << endl;
+    metablob.expire(mds, c);
+  }
 }
 
 void ESlaveUpdate::replay(MDS *mds)
