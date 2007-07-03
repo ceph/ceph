@@ -19,7 +19,6 @@
 #include "IdAllocator.h"
 #include "MDS.h"
 #include "MDLog.h"
-#include "events/EAlloc.h"
 
 #include "osdc/Filer.h"
 
@@ -38,25 +37,27 @@ void IdAllocator::init_inode()
 }
 
 
-idno_t IdAllocator::alloc_id(bool replay) 
+inodeno_t IdAllocator::alloc_id() 
 {
   assert(is_active());
   
   // pick one
-  idno_t id = free.start();
+  inodeno_t id = free.start();
   free.erase(id);
   dout(10) << "idalloc " << this << ": alloc id " << id << endl;
 
   version++;
   
   // log it
+  /*
   if (!replay)
     mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_ALLOC, version));
-  
+  */
+
   return id;
 }
 
-void IdAllocator::reclaim_id(idno_t id, bool replay) 
+void IdAllocator::reclaim_id(inodeno_t id) 
 {
   assert(is_active());
   
@@ -65,8 +66,10 @@ void IdAllocator::reclaim_id(idno_t id, bool replay)
 
   version++;
   
+  /*
   if (!replay)
     mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_FREE, version));
+  */
 }
 
 
@@ -130,16 +133,10 @@ void IdAllocator::reset()
 {
   init_inode();
 
+  // use generic range. FIXME THIS IS CRAP
   free.clear();
-
-  // use generic range FIXME THIS IS CRAP
-  free.insert((long long)0x1000000 * (long long)(mds->get_nodeid()+1),
-	      (long long)0x1000000 * (long long)(mds->get_nodeid()+2) - 1LL);
-  //free[ID_INO].dump();
-  
-  //free[ID_FH].map_insert(10000000LL * (mds->get_nodeid()+1),
-  //10000000LL * (mds->get_nodeid()+2) - 1);
-  //free[ID_FH].dump();
+  free.insert((uint64_t)0x10000000000 * (uint64_t)(mds->get_nodeid()+1),
+	      (uint64_t)0x10000000000 * (uint64_t)(mds->get_nodeid()+2) - (uint64_t)1);
 
   state = STATE_ACTIVE;
 }

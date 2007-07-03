@@ -20,6 +20,7 @@
 #include "Migrator.h"
 #include "MDBalancer.h"
 #include "AnchorClient.h"
+#include "IdAllocator.h"
 
 #include "msg/Messenger.h"
 
@@ -1628,6 +1629,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // prepare finisher
   EUpdate *le = new EUpdate("mknod");
   le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
@@ -1667,6 +1669,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // prepare finisher
   EUpdate *le = new EUpdate("mkdir");
   le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
@@ -1714,6 +1717,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // prepare finisher
   EUpdate *le = new EUpdate("symlink");
   le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
@@ -3693,6 +3697,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
   EUpdate *le = new EUpdate("openc");
   le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   

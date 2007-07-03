@@ -106,7 +106,7 @@ sage mds
   - need to export stray crap to another mds..
 - verify stray is empty on shutdown
 
-- roll EAlloc into EMetaBlob (and maybe Purge)
+/- roll EAlloc into EMetaBlob (and maybe Purge)
 
 - dir complete flag on migration.. does it go into the EMetaBlob too?  can it be safely dropped?
 
@@ -159,8 +159,6 @@ sage mds
     - or, only put frag size/mtime in inode when frag is closed.  otherwise, soft (journaled) state, possibly on another mds.
   - need to move state from replicas to auth.  simplelock doesn't currently support that.
     - ScatterLock or something?  hrm.
-
-- test open_remote_ino
 
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?

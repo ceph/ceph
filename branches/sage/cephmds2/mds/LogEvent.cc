@@ -30,7 +30,6 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
 
-#include "events/EAlloc.h"
 #include "events/EPurgeFinish.h"
 
 #include "events/EAnchor.h"
@@ -66,7 +65,6 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
   case EVENT_OPEN: le = new EOpen; break;
 
-  case EVENT_ALLOC: le = new EAlloc; break;
   case EVENT_PURGEFINISH: le = new EPurgeFinish; break;
 
   case EVENT_ANCHOR: le = new EAnchor; break;

@@ -23,7 +23,6 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
 
-#include "events/EAlloc.h"
 #include "events/EPurgeFinish.h"
 
 #include "events/EExport.h"
@@ -40,6 +39,7 @@
 #include "Migrator.h"
 #include "AnchorTable.h"
 #include "AnchorClient.h"
+#include "IdAllocator.h"
 
 #include "config.h"
 #undef dout
@@ -138,6 +138,20 @@ bool EMetaBlob::has_expired(MDS *mds)
       return false;
     }
   }
+
+  // allocated_ios
+  if (!allocated_inos.empty()) {
+    version_t cv = mds->idalloc->get_committed_version();
+    if (cv < alloc_tablev) {
+      dout(10) << "EMetaBlob.has_expired idalloc tablev " << alloc_tablev << " > " << cv
+	       << ", still dirty" << endl;
+      return false;   // still dirty
+    } else {
+      dout(10) << "EMetaBlob.has_expired idalloc tablev " << alloc_tablev << " <= " << cv
+	       << ", already flushed" << endl;
+    }
+  }
+
 
   // truncated inodes
   for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
@@ -253,6 +267,15 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       dout(10) << "EMetaBlob.expire anchor transaction " << *p 
 	       << " not yet acked, waiting" << endl;
       mds->anchorclient->wait_for_ack(*p, gather->new_sub());
+    }
+  }
+
+  // allocated_inos
+  if (!allocated_inos.empty()) {
+    version_t cv = mds->idalloc->get_committed_version();
+    if (cv < alloc_tablev) {
+      dout(10) << "EMetaBlob.expire saving idalloc table, need " << alloc_tablev << endl;
+      mds->idalloc->save(gather->new_sub(), alloc_tablev);
     }
   }
 
@@ -414,6 +437,27 @@ void EMetaBlob::replay(MDS *mds)
     mds->anchorclient->got_journaled_agree(*p);
   }
 
+  // allocated_inos
+  if (!allocated_inos.empty()) {
+    if (mds->idalloc->get_version() >= alloc_tablev) {
+      dout(10) << "EMetaBlob.replay idalloc tablev " << alloc_tablev
+	       << " <= table " << mds->idalloc->get_version() << endl;
+    } else {
+      for (list<inodeno_t>::iterator p = allocated_inos.begin();
+	   p != allocated_inos.end();
+	   ++p) {
+	dout(10) << " EMetaBlob.replay idalloc " << *p << " tablev " << alloc_tablev
+		 << " - 1 == table " << mds->idalloc->get_version() << endl;
+	assert(alloc_tablev-1 == mds->idalloc->get_version());
+	
+	inodeno_t ino = mds->idalloc->alloc_id();
+	assert(ino == *p);       // this should match.
+    
+	assert(alloc_tablev == mds->idalloc->get_version());
+      }	
+    }
+  }
+
   // truncated inodes
   for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
        p != truncated_inodes.end();
@@ -512,54 +556,6 @@ void ESession::replay(MDS *mds)
   mds->clientmap.reset_projected(); // make it follow version.
 }
 
-
-
-// -----------------------
-// EAlloc
-
-bool EAlloc::has_expired(MDS *mds) 
-{
-  version_t cv = mds->idalloc->get_committed_version();
-  if (cv < table_version) {
-    dout(10) << "EAlloc.has_expired v " << table_version << " > " << cv
-	     << ", still dirty" << endl;
-    return false;   // still dirty
-  } else {
-    dout(10) << "EAlloc.has_expired v " << table_version << " <= " << cv
-	     << ", already flushed" << endl;
-    return true;    // already flushed
-  }
-}
-
-void EAlloc::expire(MDS *mds, Context *c)
-{
-  dout(10) << "EAlloc.expire saving idalloc table" << endl;
-  mds->idalloc->save(c, table_version);
-}
-
-void EAlloc::replay(MDS *mds)
-{
-  if (mds->idalloc->get_version() >= table_version) {
-    dout(10) << "EAlloc.replay event " << table_version
-	     << " <= table " << mds->idalloc->get_version() << endl;
-  } else {
-    dout(10) << " EAlloc.replay event " << table_version
-	     << " - 1 == table " << mds->idalloc->get_version() << endl;
-    assert(table_version-1 == mds->idalloc->get_version());
-    
-    if (what == EALLOC_EV_ALLOC) {
-      idno_t nid = mds->idalloc->alloc_id(true);
-      assert(nid == id);       // this should match.
-    } 
-    else if (what == EALLOC_EV_FREE) {
-      mds->idalloc->reclaim_id(id, true);
-    } 
-    else
-      assert(0);
-    
-    assert(table_version == mds->idalloc->get_version());
-  }
-}
 
 
 // -----------------------

@@ -214,6 +214,7 @@ class EMetaBlob {
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
+  version_t alloc_tablev;
 
   // inodes i've destroyed.
   list< pair<inode_t,off_t> > truncated_inodes;
@@ -231,8 +232,9 @@ class EMetaBlob {
     atids.push_back(atid);
   }  
 
-  void add_allocated_ino(inodeno_t ino) {
+  void add_allocated_ino(inodeno_t ino, version_t tablev) {
     allocated_inos.push_back(ino);
+    alloc_tablev = tablev;
   }
 
   void add_inode_truncate(const inode_t& inode, off_t newsize) {
@@ -354,6 +356,8 @@ class EMetaBlob {
     }
     ::_encode(atids, bl);
     ::_encode(allocated_inos, bl);
+    if (!allocated_inos.empty())
+      ::_encode(alloc_tablev, bl);
     ::_encode(truncated_inodes, bl);
     ::_encode(client_reqs, bl);
   } 
@@ -370,6 +374,8 @@ class EMetaBlob {
     }
     ::_decode(atids, bl, off);
     ::_decode(allocated_inos, bl, off);
+    if (!allocated_inos.empty())
+      ::_decode(alloc_tablev, bl, off);
     ::_decode(truncated_inodes, bl, off);
     ::_decode(client_reqs, bl, off);
   }
@@ -381,7 +387,7 @@ class EMetaBlob {
     if (!atids.empty())
       out << " atids=" << atids;
     if (!allocated_inos.empty())
-      out << " inos=" << allocated_inos;
+      out << " inos=" << allocated_inos << " v" << alloc_tablev;
     out << "]";
   }
 
