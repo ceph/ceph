@@ -165,19 +165,26 @@ public:
 
   // ref counting
   bool is_rdlocked() { return num_rdlock > 0; }
-  int get_rdlock() { return ++num_rdlock; }
+  int get_rdlock() { 
+    if (!num_rdlock) parent->get(MDSCacheObject::PIN_LOCK);
+    return ++num_rdlock; 
+  }
   int put_rdlock() {
     assert(num_rdlock>0);
-    return --num_rdlock;
+    --num_rdlock;
+    if (num_rdlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+    return num_rdlock;
   }
   int get_num_rdlocks() { return num_rdlock; }
 
   void get_xlock(MDRequest *who) { 
     assert(xlock_by == 0);
+    parent->get(MDSCacheObject::PIN_LOCK);
     xlock_by = who; 
   }
   void put_xlock() {
     assert(xlock_by);
+    parent->put(MDSCacheObject::PIN_LOCK);
     xlock_by = 0;
   }
   bool is_xlocked() { return xlock_by ? true:false; }

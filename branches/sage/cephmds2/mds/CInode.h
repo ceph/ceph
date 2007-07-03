@@ -92,7 +92,7 @@ class CInode : public MDSCacheObject {
   static const int STATE_OPENINGDIR = (1<<9);
 
   // -- waiters --
-  static const int WAIT_SLAVEAGREE  = (1<<0);
+  //static const int WAIT_SLAVEAGREE  = (1<<0);
   static const int WAIT_DIR         = (1<<1);
   static const int WAIT_ANCHORED    = (1<<2);
   static const int WAIT_UNANCHORED  = (1<<3);

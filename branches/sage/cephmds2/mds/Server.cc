@@ -1205,18 +1205,25 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
   version_t dirpv = 0;
   CInode *diri = dn->dir->inode;
   
-  if (diri->is_auth() && 
-      !diri->is_root() &&
-      mdr->is_master()) {
-    assert(mdr->wrlocks.count(&diri->dirlock));// ||  // either we wrlocked,
-    //mdr->is_slave());                      // or the master did.
+  if (diri->is_root()) return 0;
 
+  if (diri->is_auth()) {
+    assert(mdr->wrlocks.count(&diri->dirlock));
+    
     dirpv = diri->pre_dirty();
+    dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << endl;
+    
+    // predirty+journal
     inode_t *pi = diri->project_inode();
-    pi->version = dirpv;
+    if (dirpv) pi->version = dirpv;
     pi->ctime = pi->mtime = mdr->now;
     blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
-    dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << endl;
+  } else {
+    // journal the mtime change anyway.
+    inode_t *ji = blob->add_primary_dentry(diri->get_parent_dn(), true);    
+    ji->ctime = ji->mtime = mdr->now;
+    
+    blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
   }
   
   return dirpv;
@@ -1229,66 +1236,19 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
 {
   CInode *diri = dn->dir->inode;
   
-  // make the udpate
-  diri->inode.ctime = diri->inode.mtime = mtime;
+  if (diri->is_root()) return;
 
   if (dirpv) {
+    // we journaled and predirtied.
     assert(diri->is_auth() && !diri->is_root());
-
-    // we were before, too.
     diri->pop_and_dirty_projected_inode();
-    //diri->mark_dirty(dirpv);
     dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
   } else {
-    /*assert(!dn->is_auth() ||   // slave
-	   !diri->is_auth() || 
-	   diri->is_root() ||
-	   diri->is_frozen());  // then not auth, or still importing.
-    */
+    dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " (non-dirty) on " << *diri << endl;
     // dirlock scatterlock will propagate the update.
+    diri->inode.ctime = diri->inode.mtime = mtime;
+    diri->dirlock.set_updated();
   }
-
-    /* any writebehind should be handled by the lock gather probably?
-    } else {
-      // write-behind.
-      if (!diri->is_dirty())
-	dirty_diri_mtime_writebehind(diri, mtime);
-      // otherwise, if it's dirty, we know the mtime is journaled by another local update.
-      // (something after the import, or the import itself)
-    }
-    */
-}
-
-
-class C_MDS_DirtyDiriMtimeWB : public Context {
-  Server *server;
-  CInode *diri;
-  version_t dirpv;
-public:
-  C_MDS_DirtyDiriMtimeWB(Server *s, CInode *i, version_t v) :
-    server(s), diri(i), dirpv(v) {}
-  void finish(int r) {
-    diri->mark_dirty(dirpv);
-    diri->auth_unpin();
-  }
-};
-
-void Server::dirty_diri_mtime_writebehind(CInode *diri, utime_t mtime)
-{
-  if (!diri->can_auth_pin())
-    return;  // oh well!  hrm.
-
-  diri->auth_pin();
-  
-  // we're newly auth.  write-behind.
-  EUpdate *le = new EUpdate("dir.mtime writebehind");
-  le->metablob.add_dir_context(diri->get_parent_dn()->get_dir());
-  inode_t *pi = diri->project_inode();
-  pi->version = diri->pre_dirty();
-  le->metablob.add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
-  
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_MDS_DirtyDiriMtimeWB(this, diri, pi->version));
 }
 
 
@@ -2881,9 +2841,11 @@ void Server::_rename_prepare(MDRequest *mdr,
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
 
-  mdr->pvmap[destdn->dir->inode] = predirty_dn_diri(mdr, destdn, metablob); 
-  if (destdn->dir != srcdn->dir)
-    mdr->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
+  if (mdr->is_master()) {
+    mdr->pvmap[destdn->dir->inode] = predirty_dn_diri(mdr, destdn, metablob); 
+    if (destdn->dir != srcdn->dir)
+      mdr->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
+  }
 
   inode_t *ji = 0; // journaled inode getting nlink--
   version_t ipv;   // it's version
@@ -2996,10 +2958,12 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 		    (srcdn->is_primary() || destdn->is_primary()));
 
   // dir mtimes
-  dirty_dn_diri(destdn, mdr->pvmap[destdn->dir->inode], mdr->now);
-  if (destdn->dir != srcdn->dir)
-    dirty_dn_diri(srcdn, mdr->pvmap[srcdn->dir->inode], mdr->now);
-  
+  if (mdr->is_master()) {
+    dirty_dn_diri(destdn, mdr->pvmap[destdn->dir->inode], mdr->now);
+    if (destdn->dir != srcdn->dir)
+      dirty_dn_diri(srcdn, mdr->pvmap[srcdn->dir->inode], mdr->now);
+  }
+
   if (linkmerge) {
     if (destdn->is_primary()) {
       dout(10) << "merging remote onto primary link" << endl;

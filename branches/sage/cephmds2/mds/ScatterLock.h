@@ -98,8 +98,18 @@ public:
     }
   }
 
-  void set_updated() { updated = true; }
-  void clear_updated() { updated = false; }
+  void set_updated() { 
+    if (!updated) {
+      parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
+      updated = true;
+    }
+  }
+  void clear_updated() { 
+    if (updated) {
+      parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
+      updated = false; 
+    }
+  }
   bool is_updated() { return updated; }
   
   void replicate_relax() {
@@ -135,10 +145,12 @@ public:
   }
   void get_wrlock() {
     assert(can_wrlock());
+    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }
   void put_wrlock() {
     --num_wrlock;
+    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }

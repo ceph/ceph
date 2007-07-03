@@ -292,19 +292,19 @@ class MDSCacheObject {
   // -- pins --
   const static int PIN_REPLICATED =  1000;
   const static int PIN_DIRTY      =  1001;
-  const static int PIN_RDLOCK     = -1002;
-  const static int PIN_XLOCK      =  1003;
-  const static int PIN_REQUEST    = -1004;
-  const static int PIN_WAITER     =  1005;
+  const static int PIN_LOCK       = -1002;
+  const static int PIN_REQUEST    = -1003;
+  const static int PIN_WAITER     =  1004;
+  const static int PIN_DIRTYSCATTERED = 1005;
   
   const char *generic_pin_name(int p) {
     switch (p) {
     case PIN_REPLICATED: return "replicated";
     case PIN_DIRTY: return "dirty";
-    case PIN_RDLOCK: return "rdlock";
-    case PIN_XLOCK: return "xlock";
+    case PIN_LOCK: return "lock";
     case PIN_REQUEST: return "request";
     case PIN_WAITER: return "waiter";
+    case PIN_DIRTYSCATTERED: return "dirtyscattered";
     default: assert(0);
     }
   }

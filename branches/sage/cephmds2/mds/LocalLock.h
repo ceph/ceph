@@ -34,10 +34,12 @@ public:
   }
   void get_wrlock() {
     assert(can_wrlock());
+    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }
   void put_wrlock() {
     --num_wrlock;
+    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }

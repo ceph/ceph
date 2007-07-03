@@ -212,6 +212,9 @@ class EMetaBlob {
   // anchor transactions included in this update.
   list<version_t>         atids;
 
+  // inode dirlocks (scatterlocks) i've touched.
+  map<inodeno_t, utime_t> dirty_inode_mtimes;
+
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
   version_t alloc_tablev;
@@ -231,6 +234,10 @@ class EMetaBlob {
   void add_anchor_transaction(version_t atid) {
     atids.push_back(atid);
   }  
+
+  void add_dirtied_inode_mtime(inodeno_t ino, utime_t ctime) {
+    dirty_inode_mtimes[ino] = ctime;
+  }
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
     allocated_inos.push_back(ino);
@@ -355,6 +362,7 @@ class EMetaBlob {
       lump_map[*i]._encode(bl);
     }
     ::_encode(atids, bl);
+    ::_encode(dirty_inode_mtimes, bl);
     ::_encode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::_encode(alloc_tablev, bl);
@@ -373,6 +381,7 @@ class EMetaBlob {
       lump_map[dirfrag]._decode(bl, off);
     }
     ::_decode(atids, bl, off);
+    ::_decode(dirty_inode_mtimes, bl, off);
     ::_decode(allocated_inos, bl, off);
     if (!allocated_inos.empty())
       ::_decode(alloc_tablev, bl, off);

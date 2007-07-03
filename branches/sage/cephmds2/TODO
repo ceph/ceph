@@ -57,10 +57,10 @@ sage mds
 
 - then, mtimes:
 /  - avoid migration race concern (on auth).
-  - writeback and dirty on gather.
-    - cleaned up pv/pi makes writebehind play nice with concurrent updates.
-    - should pin lock in LOCK state?
-  - scatterlock 'updated' flag.  
+/  - writeback and dirty on gather.
+/    - cleaned up pv/pi makes writebehind play nice with concurrent updates.
+/    - should pin lock in LOCK state? (acdtually, gather)
+/  - scatterlock 'updated' flag.  
     - on replica, clear only on sync | rescatter.
   - make sure "dirty" scatterlock prevents journal expire.
     - EMetaBlob map<inodeno_t,utime_t> dirty_scatter;

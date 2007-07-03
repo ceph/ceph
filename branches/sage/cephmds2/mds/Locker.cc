@@ -1422,17 +1422,10 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     // glockc -> lock?
     else if (lock->get_state() == LOCK_GLOCKC &&
 	     !lock->is_gathering() &&
-	     !lock->is_wrlocked()) {
+	     !lock->is_wrlocked() &&
+	     !lock->is_updated()) {
       dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
-
-      if (lock->is_updated()) {
-	// updated flag is set: we got new data during the gather.
-	// write-behind journal.
-	//	version_t v
-
-      }
-
       lock->set_state(LOCK_LOCK);
       //lock->get_parent()->put(CInode::PIN_SCATTERED);
       lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
@@ -1478,7 +1471,8 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     else if ((lock->get_state() == LOCK_GTEMPSYNCC ||
 	      lock->get_state() == LOCK_GTEMPSYNCL) &&
 	     !lock->is_gathering() &&
-	     !lock->is_wrlocked()) {
+	     !lock->is_wrlocked() &&
+	     !lock->is_updated()) {
       dout(7) << "scatter_eval finished tempsync gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
       lock->set_state(LOCK_TEMPSYNC);
@@ -1746,6 +1740,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
     lock->set_state(LOCK_SYNC);
     lock->decode_locked_state(m->get_data());
+    lock->clear_updated();
     lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
     break;
 
@@ -1780,6 +1775,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_SCATTER:
     assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
+    lock->clear_updated();
     lock->set_state(LOCK_SCATTER);
     //lock->get_parent()->get(CInode::PIN_SCATTERED);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -1802,7 +1798,25 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
       dout(7) << "handle_scatter_lock " << *lock << " on " << *lock->get_parent()
 	      << " from " << from << ", last one" 
 	      << endl;
-      scatter_eval_gather(lock);
+
+      if (lock->is_updated()) {
+	// journal write-behind.
+	CInode *in = (CInode*)lock->get_parent();
+	inode_t *pi = in->project_inode();
+	pi->version = in->pre_dirty();
+	
+	EUpdate *le = new EUpdate("dir.mtime writebehind");
+	le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
+	le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+	
+	mds->mdlog->submit_entry(le);
+	mds->mdlog->wait_for_sync(new C_Locker_GatherWB(this, lock));
+      }
+      else {
+	// WARNING: this is non-optimal, but simplest.
+	// just block the gather until we flush the writeback to the journal.
+	scatter_eval_gather(lock);
+      }
     }
     break;
 
@@ -1821,6 +1835,17 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
   delete m;
 }
+
+void Locker::scatter_gather_writebehind(ScatterLock *lock)
+{
+  CInode *in = (CInode*)lock->get_parent();
+  dout(10) << "scatter_gather_writebehind on " << *lock << " on " << *in << endl;
+  in->pop_and_dirty_projected_inode();
+  lock->clear_updated();
+  scatter_eval_gather(lock);
+}
+
+
 
 
 // ==========================================================================

@@ -138,6 +138,20 @@ bool EMetaBlob::has_expired(MDS *mds)
       return false;
     }
   }
+  
+  if (!dirty_inode_mtimes.empty())
+    for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
+	 p != dirty_inode_mtimes.end();
+	 ++p) {
+      CInode *in = mds->mdcache->get_inode(p->first);
+      if (in) {
+	if (in->inode.ctime == p->second &&
+	    in->dirlock.is_updated()) {
+	  dout(10) << "EMetaBlob.has_expired dirty mtime dirlock hasn't flushed on " << *in << endl;
+	  return false;
+	}
+      }
+    }
 
   // allocated_ios
   if (!allocated_inos.empty()) {
@@ -269,6 +283,22 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       mds->anchorclient->wait_for_ack(*p, gather->new_sub());
     }
   }
+
+  // dirtied inode mtimes
+  if (!dirty_inode_mtimes.empty())
+    for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
+	 p != dirty_inode_mtimes.end();
+	 ++p) {
+      CInode *in = mds->mdcache->get_inode(p->first);
+      if (in) {
+	if (in->inode.ctime == p->second &&
+	    in->dirlock.is_updated()) {
+	  dout(10) << "EMetaBlob.expire dirty mtime dirlock hasn't flushed, waiting on " 
+		   << *in << endl;
+	  in->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+	}
+      }
+    }
 
   // allocated_inos
   if (!allocated_inos.empty()) {
@@ -436,6 +466,16 @@ void EMetaBlob::replay(MDS *mds)
     dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << endl;
     mds->anchorclient->got_journaled_agree(*p);
   }
+
+  // dirtied inode mtimes
+  if (!dirty_inode_mtimes.empty())
+    for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
+	 p != dirty_inode_mtimes.end();
+	 ++p) {
+      CInode *in = mds->mdcache->get_inode(p->first);
+      dout(10) << "EMetaBlob.replay setting dirlock updated flag on " << *in << endl;
+      in->dirlock.set_updated();
+    }
 
   // allocated_inos
   if (!allocated_inos.empty()) {

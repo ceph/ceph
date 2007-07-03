@@ -110,6 +110,7 @@ public:
   void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
+
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void scatter_sync(ScatterLock *lock);
@@ -120,6 +121,17 @@ protected:
   void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
+
+  class C_Locker_GatherWB : public Context {
+    Locker *locker;
+    ScatterLock *lock;
+  public:
+    C_Locker_GatherWB(Locker *l, ScatterLock *sl) : locker(l), lock(sl) {}
+    void finish(int r) { 
+      locker->scatter_gather_writebehind(lock); 
+    }
+  };
+  void scatter_gather_writebehind(ScatterLock *lock);
 
   // local
 protected:
