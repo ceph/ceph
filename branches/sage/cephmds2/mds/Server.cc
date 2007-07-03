@@ -1222,6 +1222,8 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     // journal the mtime change anyway.
     inode_t *ji = blob->add_primary_dentry(diri->get_parent_dn(), true);    
     ji->ctime = ji->mtime = mdr->now;
+
+    dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << endl;
     
     blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
   }
@@ -1244,10 +1246,10 @@ void Server::dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime)
     diri->pop_and_dirty_projected_inode();
     dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " v " << diri->inode.version << " on " << *diri << endl;
   } else {
-    dout(10) << "dirty_dn_diri ctime/mtime " << mtime << " (non-dirty) on " << *diri << endl;
     // dirlock scatterlock will propagate the update.
     diri->inode.ctime = diri->inode.mtime = mtime;
     diri->dirlock.set_updated();
+    dout(10) << "dirty_dn_diri (non-dirty) ctime/mtime " << mtime << " on " << *diri << endl;
   }
 }
 

@@ -1422,14 +1422,17 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     // glockc -> lock?
     else if (lock->get_state() == LOCK_GLOCKC &&
 	     !lock->is_gathering() &&
-	     !lock->is_wrlocked() &&
-	     !lock->is_updated()) {
-      dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
+	     !lock->is_wrlocked()) {
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+      } else {
+	dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << endl;
-      lock->set_state(LOCK_LOCK);
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);
-      lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+	lock->set_state(LOCK_LOCK);
+	//lock->get_parent()->put(CInode::PIN_SCATTERED);
+	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
+      }
     }
 
     // gSyncL -> sync?
@@ -1471,13 +1474,16 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     else if ((lock->get_state() == LOCK_GTEMPSYNCC ||
 	      lock->get_state() == LOCK_GTEMPSYNCL) &&
 	     !lock->is_gathering() &&
-	     !lock->is_wrlocked() &&
-	     !lock->is_updated()) {
-      dout(7) << "scatter_eval finished tempsync gather/un-wrlock on " << *lock
-	      << " on " << *lock->get_parent() << endl;
-      lock->set_state(LOCK_TEMPSYNC);
-      lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+	     !lock->is_wrlocked()) {
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+      } else {
+	dout(7) << "scatter_eval finished tempsync gather/un-wrlock on " << *lock
+		<< " on " << *lock->get_parent() << endl;
+	lock->set_state(LOCK_TEMPSYNC);
+	lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
+      }
     }
 
 
@@ -1485,6 +1491,32 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     if (lock->is_stable()) // && lock->get_parent()->can_auth_pin())
       scatter_eval(lock);
   }
+}
+
+void Locker::scatter_writebehind(ScatterLock *lock)
+{
+  CInode *in = (CInode*)lock->get_parent();
+  dout(10) << "scatter_writebehind on " << *lock << " on " << *in << endl;
+
+  // journal write-behind.
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  
+  EUpdate *le = new EUpdate("dir.mtime writebehind");
+  le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
+  le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+  
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock));
+}
+
+void Locker::scatter_writebehind_finish(ScatterLock *lock)
+{
+  CInode *in = (CInode*)lock->get_parent();
+  dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << endl;
+  in->pop_and_dirty_projected_inode();
+  lock->clear_updated();
+  scatter_eval_gather(lock);
 }
 
 void Locker::scatter_eval(ScatterLock *lock)
@@ -1798,25 +1830,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
       dout(7) << "handle_scatter_lock " << *lock << " on " << *lock->get_parent()
 	      << " from " << from << ", last one" 
 	      << endl;
-
-      if (lock->is_updated()) {
-	// journal write-behind.
-	CInode *in = (CInode*)lock->get_parent();
-	inode_t *pi = in->project_inode();
-	pi->version = in->pre_dirty();
-	
-	EUpdate *le = new EUpdate("dir.mtime writebehind");
-	le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-	le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
-	
-	mds->mdlog->submit_entry(le);
-	mds->mdlog->wait_for_sync(new C_Locker_GatherWB(this, lock));
-      }
-      else {
-	// WARNING: this is non-optimal, but simplest.
-	// just block the gather until we flush the writeback to the journal.
-	scatter_eval_gather(lock);
-      }
+      scatter_eval_gather(lock);
     }
     break;
 
@@ -1836,14 +1850,6 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   delete m;
 }
 
-void Locker::scatter_gather_writebehind(ScatterLock *lock)
-{
-  CInode *in = (CInode*)lock->get_parent();
-  dout(10) << "scatter_gather_writebehind on " << *lock << " on " << *in << endl;
-  in->pop_and_dirty_projected_inode();
-  lock->clear_updated();
-  scatter_eval_gather(lock);
-}
 
 
 

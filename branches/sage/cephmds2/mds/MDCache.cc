@@ -393,6 +393,8 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
 
     // i am now the subtree root.
     root = dir;
+
+    eval_subtree_root(dir);
   }
 
   // adjust export pins
@@ -402,17 +404,6 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
        ++p) 
     adjust_export_state(*p);
   
-  // evaluate subtree inode dirlock?
-  //  (we should scatter the dirlock on subtree bounds)
-  if (dir->inode->is_auth() &&
-      dir->inode->dirlock.is_stable()) {
-    // force the issue a bit
-    if (!dir->inode->is_frozen())
-      mds->locker->scatter_eval(&dir->inode->dirlock);
-    else
-      mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
-  }
-
   show_subtrees();
 }
 
@@ -463,7 +454,6 @@ void MDCache::try_subtree_merge(CDir *dir)
        p != oldbounds.end();
        ++p) 
     try_subtree_merge_at(*p);
-  
 }
 
 void MDCache::try_subtree_merge_at(CDir *dir)
@@ -493,9 +483,25 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     // we are no longer a subtree or bound
     subtrees.erase(dir);
     subtrees[parent].erase(dir);
+
+    eval_subtree_root(dir);
   } 
 
   show_subtrees(15);
+}
+
+void MDCache::eval_subtree_root(CDir *dir)
+{
+  // evaluate subtree inode dirlock?
+  //  (we should scatter the dirlock on subtree bounds)
+  if (dir->inode->is_auth() &&
+      dir->inode->dirlock.is_stable()) {
+    // force the issue a bit
+    if (!dir->inode->is_frozen())
+      mds->locker->scatter_eval(&dir->inode->dirlock);
+    else
+      mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+  }  
 }
 
 
@@ -3590,12 +3596,12 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   while (1) {
     // inode?
     dout(10) << " " << i << ": " << anchortrace[i-1] << endl;
-    CInode *in = get_inode(anchortrace[i-1].ino);
+    in = get_inode(anchortrace[i-1].ino);
     if (in) break;
     i--;
     if (!i) {
-      CInode *in = get_inode(anchortrace[i].dirfrag.ino);
-      assert(in);
+      in = get_inode(anchortrace[i].dirfrag.ino);
+      assert(in);  // actually, we may need to open the root or a foreign stray inode, here.
       break;
     }
   }

@@ -8,6 +8,12 @@ some smallish projects:
  - xml import/export?  
  - ?
 
+- pg monitor service
+ - to support statfs?
+ - general pg health
+ - some sort of (throttled) osd status reporting
+ - dynamic pg creation (eventually!)
+
 - SimpleMessenger
  - clean up/merge Messenger/Dispatcher interfaces
  - auto close idle connections
@@ -17,10 +23,6 @@ some smallish projects:
 - generalize monitor client?
  - throttle message resend attempts
 
-- paxos layer work
- - integrate leasing into paxos framework
- - carefully interface design...
-
 
 code cleanup
 - endian portability
@@ -29,7 +31,7 @@ code cleanup
 
 general kernel planning
 - soft consistency on lookup?
-
+- accurate reconstruction of (syscall) path?
 
 
 
@@ -48,65 +50,10 @@ sage mds
 
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
 
-/- make locks auth_pin for unstable states.
-/  - can locker *_eval() starve freezing?
-
-/- fix rename to delay the _apply.
-/  - need to fix locking vs migration first.
-/- rename_prep should create a subtree (auth,auth) so that cache expires are routed properly
-
-- then, mtimes:
-/  - avoid migration race concern (on auth).
-/  - writeback and dirty on gather.
-/    - cleaned up pv/pi makes writebehind play nice with concurrent updates.
-/    - should pin lock in LOCK state? (acdtually, gather)
-/  - scatterlock 'updated' flag.  
-    - on replica, clear only on sync | rescatter.
-  - make sure "dirty" scatterlock prevents journal expire.
-    - EMetaBlob map<inodeno_t,utime_t> dirty_scatter;
-      - mtime must be greater, or scatterlock must be !updated.
- 
-
-/- fix slave op commit/abort logic:
-/ - recovering node needs to know what stray prepare ops committed
-/   - include with import_map
-/   - wait for explicit commit/abort from peer.
-/ - surviving node needs to 
-/   - wait for log to flush (commits to finish), then
-/   - for uncommitted master requests, 
-/     - remove failed from witnesses, waiting_on_slave, and
-/     - redispatch
-/     - somehow wait for needed peers to recover...
-/   - for uncommitted slave requests,
-/     - include with import_map, wait for explicit commit/abort from peer.
-
-/- make unlink/link behave with commit/abort recovery
-
-/- new thrashing test with
-/ - link, unlink, and rename (lots of hard links!)
-/ - directory renames
-
-- fix up writeback of dir inode mtime
-- revisit wrlocks, dir inode mtime updates.  esp in rename.
-  - if auth, pin and be happy.  decide early.
-  - make no attempt to dirty inodes until a gather
-/  - pin scattered inodes
-  - mtime will always get journaled...
-  -> so, just make sure v/pv/dirtyness is sane on recovery...
-  -> scatterlock should recover into scatter state, or whatever...
-
-
-- Q: locker vs migration
-  - maybe unstable lock states should auth_pin.  would simplify migration logic, and probably avoid a number of bugs.  basically, the freeze would have to wait for any in-progress lock gathers (not that long!).
-  - ...but does it play nice with wrlock?  and unfortuantely auth_pinning wrlocks would kill performance on updates at dir delegation points.
-  - ????
-
 - stray reintegration
 - stray purge on shutdown
   - need to export stray crap to another mds..
 - verify stray is empty on shutdown
-
-/- roll EAlloc into EMetaBlob (and maybe Purge)
 
 - dir complete flag on migration.. does it go into the EMetaBlob too?  can it be safely dropped?
 

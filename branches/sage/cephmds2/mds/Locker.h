@@ -122,16 +122,17 @@ protected:
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
 
-  class C_Locker_GatherWB : public Context {
+  void scatter_writebehind(ScatterLock *lock);
+  class C_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
   public:
-    C_Locker_GatherWB(Locker *l, ScatterLock *sl) : locker(l), lock(sl) {}
+    C_Locker_ScatterWB(Locker *l, ScatterLock *sl) : locker(l), lock(sl) {}
     void finish(int r) { 
-      locker->scatter_gather_writebehind(lock); 
+      locker->scatter_writebehind_finish(lock); 
     }
   };
-  void scatter_gather_writebehind(ScatterLock *lock);
+  void scatter_writebehind_finish(ScatterLock *lock);
 
   // local
 protected:
