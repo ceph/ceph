@@ -24,67 +24,71 @@ using namespace std;
 
 #include "mds/MDSMap.h"
 
-class Monitor;
+#include "PaxosService.h"
 
-class MDSMonitor : public Dispatcher {
-  Monitor *mon;
-  Messenger *messenger;
-  Mutex &lock;
+class MMDSBeacon;
 
-  // mds maps
+class MDSMonitor : public PaxosService {
  public:
-  MDSMap mdsmap;
+  // mds maps
+  MDSMap mdsmap;          // current
+  bufferlist mdsmap_bl;   // encoded
 
- private:
-  bufferlist encoded_map;
+  MDSMap pending_mdsmap;  // current + pending updates
 
-  //map<epoch_t, bufferlist> inc_maps;
-  //MDSMap::Incremental pending_inc;
+  // my helpers
+  void print_map(MDSMap &m);
+
+  class C_Updated : public Context {
+    MDSMonitor *mm;
+    int mds;
+    MMDSBeacon *m;
+  public:
+    C_Updated(MDSMonitor *a, int b, MMDSBeacon *c) :
+      mm(a), mds(b), m(c) {}
+    void finish(int r) {
+      if (r >= 0)
+	mm->_updated(mds, m);   // success
+      else
+	mm->dispatch((Message*)m);        // try again
+    }
+  };
+
+
+  // service methods
+  void create_initial();
+  bool update_from_paxos();
+  void create_pending(); 
+  void encode_pending(bufferlist &bl);
   
-  list<entity_inst_t> awaiting_map;
+  void _updated(int m, MMDSBeacon *m);
+ 
+  bool preprocess_query(Message *m);  // true if processed.
+  bool prepare_update(Message *m);
+  bool should_propose_now();
+
+  bool preprocess_beacon(class MMDSBeacon *m);
+  bool handle_beacon(class MMDSBeacon *m);
+  bool handle_command(class MMonCommand *m);
 
   // beacons
   map<int, utime_t> last_beacon;
 
-  bool is_alive(int mds);
+public:
+  MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
 
+  // sending the map
+private:
+  list<entity_inst_t> waiting_for_map;
 
-  // maps
-  void create_initial();
-  void send_current();         // send current map to waiters.
-  void send_full(entity_inst_t dest);
   void bcast_latest_mds();
+  void send_full(entity_inst_t dest);
+  void send_to_waiting();
 
-  void issue_map();
-
-  void save_map();
-  void load_map();
-  void print_map();
-
-  //void accept_pending();   // accept pending, new map.
-  //void send_incremental(epoch_t since, msg_addr_t dest);
-
-  void handle_mds_state(class MMDSState *m);
-  void handle_mds_beacon(class MMDSBeacon *m);
-  //void handle_mds_failure(class MMDSFailure *m);
-  void handle_mds_getmap(class MMDSGetMap *m);
-
-
-
- public:
-  MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {
-  }
-
-  void dispatch(Message *m);
-  void tick();  // check state, take actions
-
-  void election_starting();
-  void election_finished();
-
+public:
   void send_latest(entity_inst_t dest);
 
-  void handle_command(class MMonCommand *m, int& r, string& rs);
-
+  void tick();     // check state, take actions
   void do_stop();
 
 };

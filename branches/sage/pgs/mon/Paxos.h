@@ -35,10 +35,22 @@ e 12v
 
 */
 
+
+/*
+ * NOTE: This libary is based on the Paxos algorithm, but varies in a few key ways:
+ *  1- Only a single new value is generated at a time, simplifying the recovery logic.
+ *  2- Nodes track "committed" values, and share them generously (and trustingly)
+ *  3- A 'leasing' mechism is built-in, allowing nodes to determine when it is safe to 
+ *     "read" their copy of the last committed value.
+ *
+ * This provides a simple replication substrate that services can be built on top of.
+ */
+
 #ifndef __MON_PAXOS_H
 #define __MON_PAXOS_H
 
 #include "include/types.h"
+#include "mon_types.h"
 #include "include/buffer.h"
 #include "msg/Message.h"
 
@@ -49,6 +61,7 @@ e 12v
 class Monitor;
 class MMonPaxos;
 
+
 // i am one state machine.
 class Paxos {
   Monitor *mon;
@@ -58,40 +71,176 @@ class Paxos {
   int machine_id;
   const char *machine_name;
 
-  // phase 1
+  friend class PaxosService;
+
+  // LEADER+PEON
+
+  // -- generic state --
+public:
+  const static int STATE_RECOVERING = 1;  // leader|peon: recovering paxos state
+  const static int STATE_ACTIVE     = 2;  // leader|peon: idle.  peon may or may not have valid lease
+  const static int STATE_UPDATING   = 3;  // leader|peon: updating to new value
+  const char *get_statename(int s) {
+    switch (s) {
+    case STATE_RECOVERING: return "recovering";
+    case STATE_ACTIVE: return "active";
+    case STATE_UPDATING: return "updating";
+    default: assert(0); return 0;
+    }
+  }
+
+private:
+  int state;
+
+public:
+  bool is_recovering() { return state == STATE_RECOVERING; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_updating() { return state == STATE_UPDATING; }
+
+private:
+  // recovery (phase 1)
+  version_t last_pn;
   version_t last_committed;
   version_t accepted_pn;
   version_t accepted_pn_from;
-  
-  // results from our last replies
-  int        num_last;
-  version_t  old_accepted_pn;
-  bufferlist old_accepted_value;
 
-  // phase 2
+  // active (phase 2)
+  utime_t lease_expire;
+  list<Context*> waiting_for_active;
+  list<Context*> waiting_for_readable;
+
+
+  // -- leader --
+  // recovery (paxos phase 1)
+  unsigned   num_last;
+  version_t  uncommitted_v;
+  version_t  uncommitted_pn;
+  bufferlist uncommitted_value;
+
+  // active
+  set<int>   acked_lease;
+  Context    *lease_renew_event;
+  Context    *lease_ack_timeout_event;
+  Context    *lease_timeout_event;
+
+  // updating (paxos phase 2)
   bufferlist new_value;
-  int        num_accepted;
- 
+  set<int>   accepted;
+
+  Context    *accept_timeout_event;
+
+  list<Context*> waiting_for_writeable;
+  list<Context*> waiting_for_commit;
+
+  class C_AcceptTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_AcceptTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->accept_timeout();
+    }
+  };
+
+  class C_LeaseAckTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->lease_ack_timeout();
+    }
+  };
+
+  class C_LeaseTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->lease_timeout();
+    }
+  };
+
+  class C_LeaseRenew : public Context {
+    Paxos *paxos;
+  public:
+    C_LeaseRenew(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->lease_renew_timeout();
+    }
+  };
+
+
   void collect(version_t oldpn);
   void handle_collect(MMonPaxos*);
   void handle_last(MMonPaxos*);
   void begin(bufferlist& value);
   void handle_begin(MMonPaxos*);
   void handle_accept(MMonPaxos*);
+  void accept_timeout();
   void commit();
   void handle_commit(MMonPaxos*);
+  void extend_lease();
+  void handle_lease(MMonPaxos*);
+  void handle_lease_ack(MMonPaxos*);
+
+  void lease_ack_timeout();    // on leader, if lease isn't acked by all peons
+  void lease_renew_timeout();  // on leader, to renew the lease
+  void lease_timeout();        // on peon, if lease isn't extended
+
+  void cancel_events();
 
   version_t get_new_proposal_number(version_t gt=0);
   
 public:
   Paxos(Monitor *m, int w,
-	int mid,const char *mnm) : mon(m), whoami(w), 
-				   machine_id(mid), machine_name(mnm) {
-  }
+	int mid) : mon(m), whoami(w), 
+		   machine_id(mid), 
+		   machine_name(get_paxos_name(mid)),
+		   state(STATE_RECOVERING),
+		   lease_renew_event(0),
+		   lease_ack_timeout_event(0),
+		   lease_timeout_event(0),
+		   accept_timeout_event(0) { }
 
   void dispatch(Message *m);
 
-  void leader_start();
+  void init();
+
+  void election_starting();
+  void leader_init();
+  void peon_init();
+
+
+  // -- service interface --
+  void wait_for_active(Context *c) {
+    assert(!is_active());
+    waiting_for_active.push_back(c);
+  }
+  
+  // read
+  version_t get_version() { return last_committed; }
+  bool is_readable();
+  bool read(version_t v, bufferlist &bl);
+  version_t read_current(bufferlist &bl);
+  void wait_for_readable(Context *onreadable) {
+    assert(!is_readable());
+    waiting_for_readable.push_back(onreadable);
+  }
+
+  // write
+  bool is_leader();
+  bool is_writeable();
+  void wait_for_writeable(Context *c) {
+    assert(!is_writeable());
+    waiting_for_writeable.push_back(c);
+  }
+
+  bool propose_new_value(bufferlist& bl, Context *oncommit=0);
+  void wait_for_commit(Context *oncommit) {
+    waiting_for_commit.push_back(oncommit);
+  }
+  void wait_for_commit_front(Context *oncommit) {
+    waiting_for_commit.push_front(oncommit);
+  }
 
 };
 

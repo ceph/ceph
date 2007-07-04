@@ -39,6 +39,8 @@ class Elector {
   void reset_timer(double plus=0.0);
   void cancel_timer();
 
+  epoch_t epoch;   // latest epoch we've seen.  odd == election, even == stable, 
+
   // electing me
   bool     electing_me;
   utime_t  start_stamp;
@@ -48,25 +50,42 @@ class Elector {
   int     leader_acked;  // who i've acked
   utime_t ack_stamp;     // and when
   
- public:
- 
+  void bump_epoch(epoch_t e=0);  // i just saw a larger epoch
+
+  class C_ElectionExpire : public Context {
+    Elector *elector;
+  public:
+    C_ElectionExpire(Elector *e) : elector(e) { }
+    void finish(int r) {
+      elector->expire();
+    }
+  };
+
   void start();   // start an electing me
   void defer(int who);
   void expire();  // timer goes off
   void victory();
    
-  void handle_propose(class MMonElectionPropose *m);
-  void handle_ack(class MMonElectionAck *m);
-  void handle_victory(class MMonElectionVictory *m);
-
+  void handle_propose(class MMonElection *m);
+  void handle_ack(class MMonElection *m);
+  void handle_victory(class MMonElection *m);
   
  public:  
-  Elector(Monitor *m, int w) : mon(m), whoami(w) {
-    // initialize all those values!
-    // ...
-  }
+  Elector(Monitor *m, int w) : mon(m), whoami(w),
+			       expire_event(0),
+			       epoch(0),
+			       electing_me(false),
+			       leader_acked(-1) { }
+
+  void init();
+  void shutdown();
 
   void dispatch(Message *m);
+
+  void call_election() {
+    start();
+  }
+
 };
 
 
