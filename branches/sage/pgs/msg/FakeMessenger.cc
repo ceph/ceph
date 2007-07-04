@@ -71,17 +71,17 @@ void *fakemessenger_thread(void *ptr)
 {
   lock.Lock();
   while (1) {
+    if (fm_shutdown) break;
+    fakemessenger_do_loop_2();
+    
+    if (directory.empty()) break;
+    
     dout(20) << "thread waiting" << endl;
     if (fm_shutdown) break;
     awake = false;
     cond.Wait(lock);
     awake = true;
     dout(20) << "thread woke up" << endl;
-    if (fm_shutdown) break;
-
-    fakemessenger_do_loop_2();
-
-    if (directory.empty()) break;
   }
   lock.Unlock();
 
@@ -185,7 +185,7 @@ int fakemessenger_do_loop_2()
       }
     }
     
-    // deal with shutdowns.. dleayed to avoid concurrent directory modification
+    // deal with shutdowns.. delayed to avoid concurrent directory modification
     if (!shutdown_set.empty()) {
       for (set<entity_addr_t>::iterator it = shutdown_set.begin();
            it != shutdown_set.end();
@@ -311,7 +311,8 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
 #endif
 
   // queue
-  if (directory.count(inst.addr)) {
+  if (directory.count(inst.addr) &&
+      shutdown_set.count(inst.addr) == 0) {
     dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << endl;
     directory[inst.addr]->queue_incoming(m);
   } else {

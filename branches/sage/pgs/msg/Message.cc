@@ -15,9 +15,7 @@ using namespace std;
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
 
-#include "messages/MMonElectionAck.h"
-#include "messages/MMonElectionPropose.h"
-#include "messages/MMonElectionVictory.h"
+#include "messages/MMonElection.h"
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
@@ -122,14 +120,8 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     m = new MMonPaxos;
     break;
 
-  case MSG_MON_ELECTION_PROPOSE:
-    m = new MMonElectionPropose;
-    break;
-  case MSG_MON_ELECTION_ACK:
-    m = new MMonElectionAck;
-    break;
-  case MSG_MON_ELECTION_VICTORY:
-    m = new MMonElectionVictory;
+  case MSG_MON_ELECTION:
+    m = new MMonElection;
     break;
 
   case MSG_PING:

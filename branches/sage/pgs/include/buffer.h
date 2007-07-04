@@ -919,6 +919,14 @@ inline void _decode(std::string& s, bufferlist& bl, int& off)
   off += len+1;
 }
 
+// const char* (encode only, string compatible)
+inline void _encode(const char *s, bufferlist& bl) 
+{
+  uint32_t len = strlen(s);
+  _encoderaw(len, bl);
+  bl.append(s, len+1);
+}
+
 // bufferptr (encapsulated)
 inline void _encode(bufferptr& bp, bufferlist& bl) 
 {

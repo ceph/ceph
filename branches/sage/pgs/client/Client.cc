@@ -95,13 +95,14 @@ public:
 
 // cons/des
 
-Client::Client(Messenger *m, MonMap *mm)
+Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
 {
   // which client am i?
   whoami = m->get_myname().num();
   monmap = mm;
 
   mounted = false;
+  mount_timeout_event = 0;
   unmounting = false;
 
   last_tid = 0;
@@ -875,21 +876,21 @@ void Client::handle_mds_map(MMDSMap* m)
   if (m->get_source().is_mds())
     frommds = m->get_source().num();
 
-  if (mdsmap == 0) 
+  if (mdsmap == 0) {
     mdsmap = new MDSMap;
 
-  if (whoami < 0) {
-    // mounted!
     assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
     messenger->reset_myname(m->get_dest());
-
+    
     mount_cond.Signal();  // mount might be waiting for this.
-  }    
+  } 
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  epoch_t was = mdsmap->get_epoch();
   mdsmap->decode(m->get_encoded());
+  assert(mdsmap->get_epoch() >= was);
   
   // send reconnect?
   if (frommds >= 0 && 
@@ -1252,7 +1253,28 @@ void Client::update_caps_wanted(Inode *in)
 
 
 // -------------------
-// fs ops
+// MOUNT
+
+void Client::_try_mount()
+{
+  dout(10) << "_try_mount" << endl;
+  int mon = monmap->pick_mon();
+  dout(2) << "sending client_mount to mon" << mon << endl;
+  messenger->send_message(new MClientMount(messenger->get_myaddr()), 
+			  monmap->get_inst(mon));
+
+  // schedule timeout
+  assert(mount_timeout_event == 0);
+  mount_timeout_event = new C_MountTimeout(this);
+  timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
+}
+
+void Client::_mount_timeout()
+{
+  dout(10) << "_mount_timeout" << endl;
+  mount_timeout_event = 0;
+  _try_mount();
+}
 
 int Client::mount()
 {
@@ -1260,14 +1282,15 @@ int Client::mount()
   assert(!mounted);  // caller is confused?
   assert(!mdsmap);
 
-  int mon = monmap->pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << endl;
-  messenger->send_message(new MClientMount, monmap->get_inst(mon));
+  _try_mount();
   
   while (!mdsmap ||
 	 !osdmap || 
 	 osdmap->get_epoch() == 0)
     mount_cond.Wait(client_lock);
+
+  timer.cancel_event(mount_timeout_event);
+  mount_timeout_event = 0;
   
   mounted = true;
 
@@ -1289,6 +1312,9 @@ int Client::mount()
   */
   return 0;
 }
+
+
+// UNMOUNT
 
 
 int Client::unmount()
@@ -1359,7 +1385,8 @@ int Client::unmount()
   // send unmount!
   int mon = monmap->pick_mon();
   dout(2) << "sending client_unmount to mon" << mon << endl;
-  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
+  messenger->send_message(new MClientUnmount(messenger->get_myinst()), 
+			  monmap->get_inst(mon));
   
   while (mounted)
     mount_cond.Wait(client_lock);

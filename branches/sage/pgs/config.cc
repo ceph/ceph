@@ -101,7 +101,7 @@ md_config_t g_conf = {
 
   // --- clock ---
   clock_lock: false,
-  clock_tare: true,
+  clock_tare: false,
   
   // --- messenger ---
   ms_single_dispatch: false,
@@ -125,8 +125,13 @@ md_config_t g_conf = {
   // --- mon ---
   mon_tick_interval: 5,
   mon_osd_down_out_interval: 5,  // seconds
-  mon_lease: 2.000,  // seconds
-  mon_stop_with_last_mds: true,
+  mon_lease: 5,  // seconds    // lease interval
+  mon_lease_renew_interval: 3, // on leader, to renew the lease
+  mon_lease_ack_timeout: 10.0, // on leader, if lease isn't acked by all peons
+  mon_lease_timeout: 10.0,     // on peon, if lease isn't extended
+  mon_accept_timeout: 10.0,    // on leader, if paxos update isn't accepted
+  mon_stop_on_last_unmount: false,
+  mon_stop_with_last_mds: false,
 
   // --- client ---
   client_cache_size: 300,
@@ -141,6 +146,8 @@ md_config_t g_conf = {
   client_oc_size:      1024*1024* 5,    // MB * n
   client_oc_max_dirty: 1024*1024* 5,    // MB * n
   client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
+
+  client_mount_timeout: 10.0,  // retry every N seconds
 
   client_hack_balance_reads: false,
 
@@ -194,7 +201,6 @@ md_config_t g_conf = {
   mds_trim_on_rejoin: true,
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
-  mds_shutdown_on_last_unmount: true,
 
   mds_verify_export_dirauth: true,
 
@@ -600,8 +606,6 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_commit_on_shutdown = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
       g_conf.mds_shutdown_check = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_shutdown_on_last_unmount") == 0) 
-      g_conf.mds_shutdown_on_last_unmount = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
       g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 
@@ -663,6 +667,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mon_stop_on_last_unmount") == 0) 
+      g_conf.mon_stop_on_last_unmount = atoi(args[++i]);
     else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0)
       g_conf.mon_stop_with_last_mds = atoi(args[++i]);
 

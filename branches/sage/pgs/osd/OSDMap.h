@@ -87,6 +87,11 @@ public:
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
+
+    // full (rare)
+    bufferlist fullmap;  // in leiu of below.
+
+    // incremental
     map<int,entity_inst_t> new_up;
     map<int,entity_inst_t> new_down;
     list<int> new_in;
@@ -103,6 +108,7 @@ public:
       ::_encode(new_in, bl);
       ::_encode(new_out, bl);
       ::_encode(new_overload, bl);
+      ::_encode(fullmap, bl);
     }
     void decode(bufferlist& bl, int& off) {
       bl.copy(off, sizeof(epoch), (char*)&epoch);
@@ -116,6 +122,7 @@ public:
       ::_decode(new_in, bl, off);
       ::_decode(new_out, bl, off);
       ::_decode(new_overload, bl, off);
+      ::_decode(fullmap, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
@@ -164,8 +171,8 @@ private:
 
   const utime_t& get_ctime() const { return ctime; }
 
-  bool is_mkfs() const { return epoch == 1; }
-  //void set_mkfs() { assert(epoch == 1); }
+  bool is_mkfs() const { return epoch == 2; }
+  bool post_mkfs() const { return epoch > 2; }
 
   /***** cluster state *****/
   int num_osds() { return osds.size(); }
@@ -176,11 +183,15 @@ private:
   const set<int>& get_out_osds() { return out_osds; }
   const map<int,float>& get_overload_osds() { return overload_osds; }
   
+  bool exists(int osd) { return osds.count(osd); }
   bool is_down(int osd) { return down_osds.count(osd); }
-  bool is_up(int osd) { return !is_down(osd); }
+  bool is_up(int osd) { return exists(osd) && !is_down(osd); }
   bool is_out(int osd) { return out_osds.count(osd); }
-  bool is_in(int osd) { return !is_out(osd); }
+  bool is_in(int osd) { return exists(osd) && !is_out(osd); }
   
+  bool have_inst(int osd) {
+    return osd_inst.count(osd);
+  }
   const entity_inst_t& get_inst(int osd) {
     assert(osd_inst.count(osd));
     return osd_inst[osd];
@@ -205,15 +216,13 @@ private:
     mon_epoch = inc.mon_epoch;
     ctime = inc.ctime;
 
-    for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
-         i != inc.new_up.end(); 
-         i++) {
-      assert(down_osds.count(i->first));
-      down_osds.erase(i->first);
-      assert(osd_inst.count(i->first) == 0);
-      osd_inst[i->first] = i->second;
-      //cout << "epoch " << epoch << " up osd" << i->first << endl;
+    // full map?
+    if (inc.fullmap.length()) {
+      decode(inc.fullmap);
+      return;
     }
+
+    // nope, incremental.
     for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
          i != inc.new_down.end();
          i++) {
@@ -224,13 +233,6 @@ private:
       osd_inst.erase(i->first);
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (list<int>::iterator i = inc.new_in.begin();
-         i != inc.new_in.end();
-         i++) {
-      assert(out_osds.count(*i));
-      out_osds.erase(*i);
-      //cout << "epoch " << epoch << " in osd" << *i << endl;
-    }
     for (list<int>::iterator i = inc.new_out.begin();
          i != inc.new_out.end();
          i++) {
@@ -238,16 +240,33 @@ private:
       out_osds.insert(*i);
       //cout << "epoch " << epoch << " out osd" << *i << endl;
     }
-    for (map<int,float>::iterator i = inc.new_overload.begin();
-         i != inc.new_overload.end();
-         i++) {
-      overload_osds[i->first] = i->second;
-    }
     for (list<int>::iterator i = inc.old_overload.begin();
          i != inc.old_overload.end();
          i++) {
       assert(overload_osds.count(*i));
       overload_osds.erase(*i);
+    }
+
+    for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+         i != inc.new_up.end(); 
+         i++) {
+      assert(down_osds.count(i->first));
+      down_osds.erase(i->first);
+      assert(osd_inst.count(i->first) == 0);
+      osd_inst[i->first] = i->second;
+      //cout << "epoch " << epoch << " up osd" << i->first << endl;
+    }
+    for (list<int>::iterator i = inc.new_in.begin();
+         i != inc.new_in.end();
+         i++) {
+      assert(out_osds.count(*i));
+      out_osds.erase(*i);
+      //cout << "epoch " << epoch << " in osd" << *i << endl;
+    }
+    for (map<int,float>::iterator i = inc.new_overload.begin();
+         i != inc.new_overload.end();
+         i++) {
+      overload_osds[i->first] = i->second;
     }
   }
 

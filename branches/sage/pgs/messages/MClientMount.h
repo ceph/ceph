@@ -19,12 +19,22 @@
 
 class MClientMount : public Message {
 public:
+  entity_addr_t addr;
+
   MClientMount() : Message(MSG_CLIENT_MOUNT) { }
+  MClientMount(entity_addr_t a) : 
+    Message(MSG_CLIENT_MOUNT),
+    addr(a) { }
 
   char *get_type_name() { return "client_mount"; }
 
-  void decode_payload() { }
-  void encode_payload() { }
+  void decode_payload() { 
+    int off = 0;
+    ::_decode(addr, payload, off);
+  }
+  void encode_payload() { 
+    ::_encode(addr, payload);
+  }
 };
 
 #endif

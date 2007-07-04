@@ -33,16 +33,17 @@ class MDSMap {
   static const int STATE_OUT =       1;  // down, once existed, but no subtrees, empty log.
   static const int STATE_FAILED =    2;  // down, active subtrees; needs to be recovered.
 
-  static const int STATE_STANDBY  =  3;  // up, but inactive.  waiting for assignment by monitor.
-  static const int STATE_CREATING  = 4;  // up, creating MDS instance (new journal, idalloc..)
-  static const int STATE_STARTING  = 5;  // up, starting prior out MDS instance.
-  static const int STATE_REPLAY    = 6;  // up, scanning journal, recoverying any shared state
-  static const int STATE_RESOLVE   = 7;  // up, disambiguating partial distributed operations (import/export, ...rename?)
-  static const int STATE_RECONNECT = 8;  // up, reconnect to clients
-  static const int STATE_REJOIN    = 9;  // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =    10; // up, active
-  static const int STATE_STOPPING  = 11; // up, exporting metadata (-> standby or out)
-  static const int STATE_STOPPED   = 12; // up, finished stopping.  like standby, but not avail to takeover.
+  static const int STATE_BOOT     =  3;  // up, started, joining cluster.
+  static const int STATE_STANDBY  =  4;  // up, but inactive.  waiting for assignment by monitor.
+  static const int STATE_CREATING  = 5;  // up, creating MDS instance (new journal, idalloc..)
+  static const int STATE_STARTING  = 6;  // up, starting prior out MDS instance.
+  static const int STATE_REPLAY    = 7;  // up, scanning journal, recoverying any shared state
+  static const int STATE_RESOLVE   = 8;  // up, disambiguating partial distributed operations (import/export, ...rename?)
+  static const int STATE_RECONNECT = 9;  // up, reconnect to clients
+  static const int STATE_REJOIN    = 10; // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =    11; // up, active
+  static const int STATE_STOPPING  = 12; // up, exporting metadata (-> standby or out)
+  static const int STATE_STOPPED   = 13; // up, finished stopping.  like standby, but not avail to takeover.
   
   static const char *get_state_name(int s) {
     switch (s) {
@@ -51,6 +52,7 @@ class MDSMap {
     case STATE_OUT:       return "down:out";
     case STATE_FAILED:    return "down:failed";
       // up
+    case STATE_BOOT:      return "up:boot";
     case STATE_STANDBY:   return "up:standby";
     case STATE_CREATING:  return "up:creating";
     case STATE_STARTING:  return "up:starting";
@@ -170,6 +172,7 @@ class MDSMap {
   bool is_out(int m)      { return mds_state.count(m) && mds_state[m] == STATE_OUT; }
   bool is_failed(int m)    { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
 
+  bool is_boot(int m)  { return mds_state.count(m) && mds_state[m] == STATE_BOOT; }
   bool is_standby(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STANDBY; }
   bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
@@ -226,7 +229,7 @@ class MDSMap {
     return false;
   }
   
-  int get_inst_rank(const entity_addr_t& addr) {
+  int get_addr_rank(const entity_addr_t& addr) {
     for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
 	 p != mds_inst.end();
 	 ++p) {

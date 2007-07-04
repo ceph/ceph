@@ -114,6 +114,7 @@ we had the following partition:
 The subtree map on mds0 would be
 
  /     -> (/usr, /home)
+ /usr/local -> ()
  /home -> ()
 
 and on mds1:

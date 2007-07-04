@@ -255,11 +255,8 @@ public:
 int MDS::init(bool standby)
 {
   mds_lock.Lock();
-
-  if (standby)
-    want_state = MDSMap::STATE_STANDBY;
-  else
-    want_state = MDSMap::STATE_STARTING;
+  
+  want_state = MDSMap::STATE_BOOT;
   
   // starting beacon.  this will induce an MDSMap from the monitor
   beacon_start();
@@ -367,7 +364,7 @@ void MDS::beacon_send()
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBeacon(want_state, beacon_last_seq),
+  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), want_state, beacon_last_seq),
 			  monmap->get_inst(mon));
 
   // schedule next sender
@@ -481,7 +478,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->decode(m->get_encoded());
   
   // see who i am
-  whoami = mdsmap->get_inst_rank(messenger->get_myaddr());
+  whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
   if (oldwhoami != whoami) {
     // update messenger.
     messenger->reset_myname(MSG_ADDR_MDS(whoami));

@@ -16,6 +16,8 @@
 
 #include "Ebofs.h"
 
+#include "FileJournal.h"
+
 #include <errno.h>
 
 #ifndef DARWIN
@@ -50,6 +52,7 @@ int Ebofs::mount()
   ebofs_lock.Lock();
   assert(!mounted);
 
+  // open dev
   int r = dev.open(&idle_kicker);
   if (r < 0) {
     ebofs_lock.Unlock();
@@ -79,6 +82,8 @@ int Ebofs::mount()
   dout(3) << "mount epoch " << super_epoch << endl;
   assert(super_epoch == sb->epoch);
 
+  super_fsid = sb->fsid;
+
   free_blocks = sb->free_blocks;
   limbo_blocks = sb->limbo_blocks;
 
@@ -101,12 +106,50 @@ int Ebofs::mount()
 
   allocator.release_limbo();
 
+  
+  // open journal?
+  if (journalfn) {
+    journal = new FileJournal(this, journalfn);
+    if (journal->open() < 0) {
+      dout(-3) << "mount journal " << journalfn << " open failed" << endl;
+      delete journal;
+      journal = 0;
+    } else {
+      dout(-3) << "mount journal " << journalfn << " opened, replaying" << endl;
+      
+      while (1) {
+	bufferlist bl;
+	epoch_t e;
+	if (!journal->read_entry(bl, e)) {
+	  dout(-3) << "mount replay: end of journal, done." << endl;
+	  break;
+	}
+
+	if (e < super_epoch) {
+	  dout(-3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << endl;
+	}
+	if (e == super_epoch+1) {
+	  super_epoch++;
+	  dout(-3) << "mount replay: jumped to next epoch " << super_epoch << endl;
+	}
+	assert(e == super_epoch);
+	
+	dout(-3) << "mount replay: applying transaction in epoch " << e << endl;
+	Transaction t;
+	int off = 0;
+	t._decode(bl, off);
+	_apply_transaction(t);
+      }
+    }
+  }
+
   dout(3) << "mount starting commit+finisher threads" << endl;
   commit_thread.create();
   finisher_thread.create();
 
   dout(1) << "mounted " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   mounted = true;
+
 
   ebofs_lock.Unlock();
   return 0;
@@ -125,6 +168,10 @@ int Ebofs::mkfs()
   }
 
   block_t num_blocks = dev.get_num_blocks();
+
+  // make a super-random fsid
+  srand(time(0) ^ getpid());
+  super_fsid = (lrand48() << 32) ^ mrand48();
 
   free_blocks = 0;
   limbo_blocks = 0;
@@ -196,6 +243,18 @@ int Ebofs::mkfs()
   close_tables();
 
   dev.close();
+
+
+  // create journal?
+  if (journalfn) {
+    journal = new FileJournal(this, journalfn);
+    if (journal->create() < 0) {
+      dout(3) << "mount journal " << journalfn << " created failed" << endl;
+      delete journal;
+    } else {
+      dout(3) << "mount journal " << journalfn << " created" << endl;
+    }
+  }
 
   dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   ebofs_lock.Unlock();
@@ -272,6 +331,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   // fill in super
   memset(&sb, 0, sizeof(sb));
   sb.s_magic = EBOFS_MAGIC;
+  sb.fsid = super_fsid;
   sb.epoch = epoch;
   sb.num_blocks = dev.get_num_blocks();
 
@@ -409,6 +469,7 @@ int Ebofs::commit_thread_entry()
               << ", max dirty " << g_conf.ebofs_bc_max_dirty
               << endl;
       
+      if (journal) journal->commit_epoch_start();
       
       // (async) write onodes+condes  (do this first; it currently involves inode reallocation)
       commit_inodes_start();
@@ -453,14 +514,14 @@ int Ebofs::commit_thread_entry()
         alloc_more_node_space();
       }
       
+      // signal journal
+      if (journal) journal->commit_epoch_finish();
+
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << endl;
       
-      finisher_lock.Lock();
-      finisher_queue.splice(finisher_queue.end(), commit_waiters[super_epoch-1]);
+      queue_finishers(commit_waiters[super_epoch-1]);
       commit_waiters.erase(super_epoch-1);
-      finisher_cond.Signal();
-      finisher_lock.Unlock();
 
       sync_cond.Signal();
 
@@ -1222,7 +1283,18 @@ void Ebofs::sync(Context *onsafe)
   ebofs_lock.Lock();
   if (onsafe) {
     dirty = true;
-    commit_waiters[super_epoch].push_back(onsafe);
+
+    while (1) {
+      if (journal) {  
+	// journal empty transaction
+	Transaction t;
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   }
   ebofs_lock.Unlock();
 }
@@ -1994,6 +2066,29 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   ebofs_lock.Lock();
   dout(7) << "apply_transaction start (" << t.ops.size() << " ops)" << endl;
 
+  unsigned r = _apply_transaction(t);
+
+  // journal, wait for commit
+  if (r != 0 && onsafe) {
+    delete onsafe;  // kill callback, but still journal below (in case transaction had side effects)
+    onsafe = 0;
+  }
+  while (1) {
+    if (journal) {
+      bufferlist bl;
+      t._encode(bl);
+      if (journal->submit_entry(bl, onsafe)) break; 
+    }
+    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    break;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+unsigned Ebofs::_apply_transaction(Transaction& t)
+{
   // do ops
   unsigned r = 0;  // bit fields indicate which ops failed.
   int bit = 1;
@@ -2028,7 +2123,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     case Transaction::OP_GETATTR:
       {
         object_t oid = t.oids.front(); t.oids.pop_front();
-        const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+	const char *attrname = t.get_attrname(); t.pop_attrname();
         pair<void*,int*> pattrval = t.pattrvals.front(); t.pattrvals.pop_front();
         if ((*(pattrval.second) = _getattr(oid, attrname, pattrval.first, *(pattrval.second))) < 0) {
           dout(7) << "apply_transaction fail on _getattr" << endl;
@@ -2095,7 +2190,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     case Transaction::OP_SETATTR:
       {
         object_t oid = t.oids.front(); t.oids.pop_front();
-        const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+	const char *attrname = t.get_attrname(); t.pop_attrname();
         //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
         bufferlist bl;
         bl.claim( t.attrbls.front() );
@@ -2121,7 +2216,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     case Transaction::OP_RMATTR:
       {
         object_t oid = t.oids.front(); t.oids.pop_front();
-        const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+	const char *attrname = t.get_attrname(); t.pop_attrname();
         if (_rmattr(oid, attrname) < 0) {
           dout(7) << "apply_transaction fail on _rmattr" << endl;
           r &= bit;
@@ -2185,7 +2280,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     case Transaction::OP_COLL_SETATTR:
       {
         coll_t cid = t.cids.front(); t.cids.pop_front();
-        const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+	const char *attrname = t.get_attrname(); t.pop_attrname();
         //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
         bufferlist bl;
         bl.claim( t.attrbls.front() );
@@ -2201,7 +2296,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     case Transaction::OP_COLL_RMATTR:
       {
         coll_t cid = t.cids.front(); t.cids.pop_front();
-        const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+	const char *attrname = t.get_attrname(); t.pop_attrname();
         if (_collection_rmattr(cid, attrname) < 0) {
           dout(7) << "apply_transaction fail on _collection_rmattr" << endl;
           r &= bit;
@@ -2217,16 +2312,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     bit = bit << 1;
   }
   
-  dout(7) << "apply_transaction finish (r = " << r << ")" << endl;
-  
-  // set up commit waiter
-  //if (r == 0) {
-  if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
-  //} else {
-  //if (onsafe) delete onsafe;
-  //}
-  
-  ebofs_lock.Unlock();
+  dout(7) << "_apply_transaction finish (r = " << r << ")" << endl;
   return r;
 }
 
@@ -2295,36 +2381,6 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 }
 
 
-/*int Ebofs::write(object_t oid, 
-                 off_t off, size_t len,
-                 bufferlist& bl, bool fsync)
-{
-  // wait?
-  if (fsync) {
-    // wait for flush.
-    Cond cond;
-    bool done;
-    int flush = 1;    // write never returns positive
-    Context *c = new C_Cond(&cond, &done, &flush);
-    int r = write(oid, off, len, bl, c);
-    if (r < 0) return r;
-    
-    ebofs_lock.Lock();
-    {
-      while (!done) 
-        cond.Wait(ebofs_lock);
-      assert(flush <= 0);
-    }
-    ebofs_lock.Unlock();
-    if (flush < 0) return flush;
-    return r;
-  } else {
-    // don't wait for flush.
-    return write(oid, off, len, bl, (Context*)0);
-  }
-}
-*/
-
 int Ebofs::write(object_t oid, 
                  off_t off, size_t len,
                  bufferlist& bl, Context *onsafe)
@@ -2338,7 +2394,17 @@ int Ebofs::write(object_t oid,
   // commit waiter
   if (r > 0) {
     assert((size_t)r == len);
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.write(oid, off, len, bl);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2370,9 +2436,19 @@ int Ebofs::remove(object_t oid, Context *onsafe)
   // do it
   int r = _remove(oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.remove(oid);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2445,9 +2521,19 @@ int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
   
   int r = _truncate(oid, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.truncate(oid, size);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2464,9 +2550,19 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
   
   int r = _clone(from, to);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.clone(from, to);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2640,9 +2736,19 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
   ebofs_lock.Lock();
   int r = _setattr(oid, name, value, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.setattr(oid, name, value, size);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2673,9 +2779,19 @@ int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsaf
   ebofs_lock.Lock();
   int r = _setattrs(oid, attrset);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.setattrs(oid, attrset);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2758,9 +2874,19 @@ int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe)
 
   int r = _rmattr(oid, name);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.rmattr(oid, name);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2835,9 +2961,19 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
 
   int r = _create_collection(cid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.create_collection(cid);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2882,9 +3018,19 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
 
   int r = _destroy_collection(cid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.remove_collection(cid);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2936,9 +3082,19 @@ int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
 
   int r = _collection_add(cid, oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.collection_add(cid, oid);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -2977,9 +3133,19 @@ int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
 
   int r = _collection_remove(cid, oid);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.collection_remove(cid, oid);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -3040,9 +3206,19 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
 
   int r = _collection_setattr(cid, name, value, size);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.collection_setattr(cid, name, value, size);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }
@@ -3098,9 +3274,19 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
 
   int r = _collection_rmattr(cid, name);
 
-  // set up commit waiter
+  // journal, wait for commit
   if (r >= 0) {
-    if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.collection_rmattr(cid, name);
+	bufferlist bl;
+	t._encode(bl);
+	if (journal->submit_entry(bl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
   } else {
     if (onsafe) delete onsafe;
   }

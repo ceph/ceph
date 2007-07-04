@@ -150,18 +150,11 @@ foreign rename
 - rejoin will need to explicitly resolve uncommitted items.
   - fully implement link/unlink first, and use that as a model?
 
-monitor
-- finish generic paxos
-
 osdmon
-- distribute w/ paxos framework
 - allow fresh replacement osds.  add osd_created in osdmap, probably
 - monitor needs to monitor some osds...
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
-
-mdsmon
-- distribute w/ paxos framework
 
 journaler
 - fix up for large events (e.g. imports)

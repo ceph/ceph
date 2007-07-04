@@ -16,22 +16,28 @@
 #ifndef __EBOFS_JOURNAL_H
 #define __EBOFS_JOURNAL_H
 
+class Ebofs;
+
+#include "include/buffer.h"
+#include "include/Context.h"
 
 class Journal {
+protected:
   Ebofs *ebofs;
 
- public:
+public:
   Journal(Ebofs *e) : ebofs(e) { }
   virtual ~Journal() { }
 
-  virtual void create() = 0;
-  virtual void open() = 0;
+  virtual int create() = 0;
+  virtual int open() = 0;
   virtual void close() = 0;
 
   // writes
-  virtual void submit_entry(bufferlist& e, Context *oncommit) = 0;// submit an item
+  virtual bool submit_entry(bufferlist& e, Context *oncommit) = 0;// submit an item
   virtual void commit_epoch_start() = 0;  // mark epoch boundary
-  virtual void commit_epoch_finish(list<Context*>& ls) = 0; // mark prior epoch as committed (we can expire)
+  virtual void commit_epoch_finish() = 0; // mark prior epoch as committed (we can expire)
+  virtual bool read_entry(bufferlist& bl, epoch_t &e) = 0;
 
   // reads/recovery
   
