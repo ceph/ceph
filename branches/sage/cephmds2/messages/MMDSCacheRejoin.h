@@ -83,20 +83,28 @@ class MMDSCacheRejoin : public Message {
     dn_strong(int n, int l) : nonce(n), lock(l) {}
   };
 
+  struct dn_weak {
+    inodeno_t ino;
+    inodeno_t remote_ino;
+  };
+
   // -- data --
   int32_t op;
 
-  set<inodeno_t> weak_inodes;
+  // weak
+  map<dirfrag_t, map<string, dn_weak> > weak_dentries;
+
+  // strong
   map<inodeno_t, inode_strong> strong_inodes;
+  map<dirfrag_t, dirfrag_strong> strong_dirfrags;
+  map<dirfrag_t, map<string, dn_strong> > strong_dentries;
+
+  // full
   list<inode_full> full_inodes;
+
+  // authpins, xlocks
   map<inodeno_t, metareqid_t> authpinned_inodes;
   map<inodeno_t, map<int, metareqid_t> > xlocked_inodes;
-
-  set<dirfrag_t> weak_dirfrags;
-  map<dirfrag_t, dirfrag_strong> strong_dirfrags;
-
-  map<dirfrag_t, set<string> > weak_dentries;
-  map<dirfrag_t, map<string, dn_strong> > strong_dentries;
   map<dirfrag_t, map<string, metareqid_t> > authpinned_dentries;
   map<dirfrag_t, map<string, metareqid_t> > xlocked_dentries;
 
@@ -112,9 +120,6 @@ class MMDSCacheRejoin : public Message {
 
   // -- builders --
   // inodes
-  void add_weak_inode(inodeno_t ino) {
-    weak_inodes.insert(ino);
-  }
   void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f, int dl) {
     strong_inodes[i] = inode_strong(n, cw, a, l, dft, f, dl);
   }
@@ -130,15 +135,21 @@ class MMDSCacheRejoin : public Message {
   
   // dirfrags
   void add_weak_dirfrag(dirfrag_t df) {
-    weak_dirfrags.insert(df);
+    weak_dentires[df];
   }
   void add_strong_dirfrag(dirfrag_t df, int n) {
     strong_dirfrags[df] = dirfrag_strong(n);
   }
    
   // dentries
-  void add_weak_dentry(dirfrag_t df, const string& dname) {
-    weak_dentries[df].insert(dname);
+  void add_weak_null_dentry(dirfrag_t df, const string& dname) {
+    weak_dentries[df][dname] = dn_weak(0, 0);
+  }
+  void add_weak_primary_dentry(dirfrag_t df, const string& dname, inodeno_t ino) {
+    weak_dentries[df][dname] = dn_weak(ino, 0);
+  }
+  void add_weak_remote_dentry(dirfrag_t df, const string& dname, inodeno_t ino) {
+    weak_dentries[df][dname] = dn_weak(0, ino);
   }
   void add_strong_dentry(dirfrag_t df, const string& dname, int n, int ls) {
     strong_dentries[df][dname] = dn_strong(n, ls);
@@ -153,7 +164,6 @@ class MMDSCacheRejoin : public Message {
   // -- encoding --
   void encode_payload() {
     ::_encode(op, payload);
-    ::_encode(weak_inodes, payload);
     ::_encode(strong_inodes, payload);
 
     uint32_t nfull = full_inodes.size();
@@ -163,7 +173,6 @@ class MMDSCacheRejoin : public Message {
 
     ::_encode(authpinned_inodes, payload);
     ::_encode(xlocked_inodes, payload);
-    ::_encode(weak_dirfrags, payload);
     ::_encode(strong_dirfrags, payload);
     ::_encode(weak_dentries, payload);
     ::_encode(strong_dentries, payload);
@@ -173,7 +182,6 @@ class MMDSCacheRejoin : public Message {
   void decode_payload() {
     int off = 0;
     ::_decode(op, payload, off);
-    ::_decode(weak_inodes, payload, off);
     ::_decode(strong_inodes, payload, off);
 
     uint32_t nfull;
@@ -183,7 +191,6 @@ class MMDSCacheRejoin : public Message {
 
     ::_decode(authpinned_inodes, payload, off);
     ::_decode(xlocked_inodes, payload, off);
-    ::_decode(weak_dirfrags, payload, off);
     ::_decode(strong_dirfrags, payload, off);
     ::_decode(weak_dentries, payload, off);
     ::_decode(strong_dentries, payload, off);
