@@ -23,6 +23,9 @@ some smallish projects:
 - generalize monitor client?
  - throttle message resend attempts
 
+- ENOSPC on client, OSD
+
+
 
 code cleanup
 - endian portability
@@ -49,12 +52,21 @@ sage doc
 sage mds
 
 - fix rejoin
-  - validate dirfrag/dentry/inode connectivity
+/  - validate dentry<->inode connectivity
+  - clean up remove_gather() crap
+  - add_strong_* should take the cache object
+  - all replicated scatterlocks should start out in scatter state.
   - carefully document rejoin
     - cases
     - confounding factors
 
+
+- fix rename.. don't journal on witnesses unless we have to.
+- fix unlink.. journal on witnesses if the file is open.
+
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
+ -> hmm, no, rejoin needs to be more robust, and validate namespace changes.
+
 
 - stray reintegration
 - stray purge on shutdown

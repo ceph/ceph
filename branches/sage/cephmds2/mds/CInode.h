@@ -163,6 +163,7 @@ class CInode : public MDSCacheObject {
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
   frag_t pick_dirfrag(const string &dn);
+  bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) 
       return dirfrags[fg];

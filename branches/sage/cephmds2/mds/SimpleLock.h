@@ -72,6 +72,7 @@ public:
   static const int WAIT_STABLE      = (1<<2);  // for a stable state
   static const int WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
   static const int WAIT_BITS        = 4;
+  static const int WAIT_ALL         = ((1<<WAIT_BITS)-1);
 
 protected:
   // parent (what i lock)
@@ -122,6 +123,9 @@ public:
   }
   void finish_waiters(int mask, int r=0) {
     parent->finish_waiting(mask << wait_offset, r);
+  }
+  void take_waiting(int mask, list<Context*>& ls) {
+    parent->take_waiting(mask << wait_offset, ls);
   }
   void add_waiter(int mask, Context *c) {
     parent->add_waiter(mask << wait_offset, c);

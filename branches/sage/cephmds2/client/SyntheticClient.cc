@@ -1547,6 +1547,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       break;
     case 1: 
       client->mknod(src.c_str(), 0755); 
+      client->unlink(dst.c_str());
       client->link(src.c_str(), dst.c_str()); 
       break;
     case 2: client->unlink(src.c_str()); break;

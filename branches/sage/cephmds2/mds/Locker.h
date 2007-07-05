@@ -85,6 +85,9 @@ protected:
   bool wrlock_start(SimpleLock *lock, MDRequest *mdr);
   void wrlock_finish(SimpleLock *lock, MDRequest *mdr);
 
+public:
+  void rejoin_set_state(SimpleLock *lock, int s, list<Context*>& waiters);
+
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);
