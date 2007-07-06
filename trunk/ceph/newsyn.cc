@@ -180,6 +180,12 @@ int main(int argc, char **argv)
   parse_config_options(args);
   parse_syn_options(args);
 
+
+  // stop on our own
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
+
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
   if (g_conf.debug_after) 

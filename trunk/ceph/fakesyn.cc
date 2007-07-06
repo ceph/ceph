@@ -79,6 +79,12 @@ int main(int argc, char **argv)
 
   if (g_conf.clock_tare) g_clock.tare();
 
+
+  // stop on our own
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
+
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
   for (int i=0; i<g_conf.num_mon; i++) {
