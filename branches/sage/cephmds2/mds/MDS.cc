@@ -860,7 +860,8 @@ void MDS::boot_replay(int step)
 
   case 5:
     // done with replay!
-    if (mdsmap->get_num_in_mds() == 1) { // me
+    if (mdsmap->get_num_in_mds() == 1 &&
+	mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
       dout(2) << "boot_replay " << step << ": i am alone, moving to state reconnect" << endl;      
       set_want_state(MDSMap::STATE_RECONNECT);
     } else {

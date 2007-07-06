@@ -1360,6 +1360,22 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
+  if (1) {
+    // open some files
+    srand(0);
+    for (int i=0; i<20; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      char src[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      int fd = client->open(src, O_RDWR);
+    }
+
+    return;
+  }
+
   if (0) {
     // rename fun
     for (int i=0; i<100; i++) {

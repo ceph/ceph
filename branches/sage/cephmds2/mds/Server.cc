@@ -984,17 +984,17 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   else {
     CDentry *dn = trace[trace.size()-1];
 
-    // if no inode, fw to dentry auth?
-    if (want_auth && 
-	dn->is_remote() &&
-	!dn->inode && 
-	!dn->is_auth()) {
+    // if no inode (null or unattached remote), fw to dentry auth?
+    if (want_auth && !dn->is_auth() &&
+	(dn->is_null() ||
+	 (dn->is_remote() && dn->inode))) {
       if (dn->is_ambiguous_auth()) {
 	dout(10) << "waiting for single auth on " << *dn << endl;
 	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
       } else {
 	dout(10) << "fw to auth for " << *dn << endl;
-	mds->forward_message_mds(req, dn->authority().first, MDS_PORT_SERVER);
+	mdcache->request_forward(mdr, dn->authority().first);
+	return 0;
       }
     }
 
@@ -1011,8 +1011,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
       ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
     } else {
       dout(10) << "fw to auth for " << *ref << endl;
-      mds->forward_message_mds(req, ref->authority().first, MDS_PORT_SERVER);
+      mdcache->request_forward(mdr, ref->authority().first);
     }
+    return 0;
   }
 
   // auth_pin?

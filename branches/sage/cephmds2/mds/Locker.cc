@@ -2131,12 +2131,18 @@ void Locker::file_eval_gather(FileLock *lock)
   int issued = in->get_caps_issued();
 
   assert(!lock->is_stable());
-
+  
+  dout(7) << "file_eval_gather issued " << cap_string(issued)
+	  << " vs " << cap_string(lock->caps_allowed())
+	  << " on " << *lock << " on " << *lock->get_parent()
+	  << endl;
+  
   // [auth] finished gather?
   if (in->is_auth() &&
-      !lock->is_gathering()) {
-    dout(7) << "file_eval finished mds gather on " << *lock << " on " << *lock->get_parent() << endl;
-
+      !lock->is_gathering() &&
+      ((issued & ~lock->caps_allowed()) == 0)) {
+    dout(7) << "file_eval_gather finished gather" << endl;
+    
     switch (lock->get_state()) {
       // to lock
     case LOCK_GLOCKR:
@@ -2182,7 +2188,7 @@ void Locker::file_eval_gather(FileLock *lock)
 
       // to loner
     case LOCK_GLONERR:
-      if (issued == 0) {
+      if ((issued & ~lock->caps_allowed()) == 0) {
         lock->set_state(LOCK_LONER);
         lock->finish_waiters(SimpleLock::WAIT_STABLE);
 	lock->get_parent()->auth_unpin();

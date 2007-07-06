@@ -224,6 +224,7 @@ protected:
   //  join/split subtrees as appropriate
 public:
   bool is_subtrees() { return !subtrees.empty(); }
+  void list_subtrees(list<CDir*>& ls);
   void adjust_subtree_auth(CDir *root, pair<int,int> auth);
   void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, pair<int,int>(a,b)); 
@@ -342,7 +343,6 @@ protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
-  set<int> want_rejoin_ack;    // nodes to whom i need to send a rejoin ack
 
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -493,6 +493,11 @@ public:
   void open_remote_ino_2(inodeno_t ino, MDRequest *mdr,
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
+
+  void parallel_fetch(map<inodeno_t, set<dirfrag_t> >& inode_children,
+		      map<dirfrag_t, set<inodeno_t> >& dirfrag_children,
+		      set<inodeno_t>& have_ino,
+		      Context *c);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
