@@ -990,7 +990,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 	 (dn->is_remote() && dn->inode))) {
       if (dn->is_ambiguous_auth()) {
 	dout(10) << "waiting for single auth on " << *dn << endl;
-	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
+	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
       } else {
 	dout(10) << "fw to auth for " << *dn << endl;
 	mdcache->request_forward(mdr, dn->authority().first);
@@ -1008,7 +1008,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   if (want_auth && !ref->is_auth()) {
     if (ref->is_ambiguous_auth()) {
       dout(10) << "waiting for single auth on " << *ref << endl;
-      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryMessage(mds, req));
+      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
     } else {
       dout(10) << "fw to auth for " << *ref << endl;
       mdcache->request_forward(mdr, ref->authority().first);

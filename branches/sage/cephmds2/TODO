@@ -51,6 +51,8 @@ sage doc
 
 sage mds
 
+** fix initial root subtree creation thing on recovery.
+
 - fix rejoin
 /  - validate dentry<->inode connectivity
 /  - clean up remove_gather() crap

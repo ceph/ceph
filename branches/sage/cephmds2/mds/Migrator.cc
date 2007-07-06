@@ -218,7 +218,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	cache->try_subtree_merge(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	dir->put(CDir::STATE_EXPORTING);
+	dir->put(CDir::PIN_EXPORTING);
 	break;
 	
       case EXPORT_EXPORTING:

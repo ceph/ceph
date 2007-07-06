@@ -1930,11 +1930,12 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 
 	if (survivor) inode_remove_replica(in, from);
 	int nonce = in->add_replica(from);
-
-	// scatter the dirlock, just in case. 
-	in->dirlock.set_state(LOCK_SCATTER);
-
 	dout(10) << " have " << *in << endl;
+
+	// scatter the dirlock, just in case?
+	if (!survivor)
+	  in->dirlock.set_state(LOCK_SCATTER);
+
 	if (ack) {
 	  ack->add_strong_inode(in->ino(), 
 				nonce,
@@ -5206,6 +5207,8 @@ void MDCache::show_subtrees(int dbl)
     int d = q.front().second;
     q.pop_front();
 
+    if (subtrees.count(dir) == 0) continue;
+
     if (d > depth) depth = d;
 
     // sanity check
@@ -5234,6 +5237,8 @@ void MDCache::show_subtrees(int dbl)
     CDir *dir = q.front().first;
     int d = q.front().second;
     q.pop_front();
+
+    if (subtrees.count(dir) == 0) continue;
 
     // adjust indenter
     while ((unsigned)d < indent.size()) 
