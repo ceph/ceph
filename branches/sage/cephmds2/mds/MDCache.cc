@@ -1326,9 +1326,8 @@ void MDCache::maybe_resolve_finish()
     disambiguate_imports();
     recalc_auth_bits();
     trim_non_auth(); 
-    
-    // reconnect clients
-    mds->set_want_state(MDSMap::STATE_RECONNECT);
+
+    mds->resolve_done();
   } 
 }
 
@@ -1671,8 +1670,8 @@ void MDCache::send_cache_rejoins()
 
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
-    dout(10) << "nothing to rejoin, going active" << endl;
-    mds->set_want_state(MDSMap::STATE_ACTIVE);
+    dout(10) << "nothing left to rejoin" << endl;
+    mds->rejoin_done();
   }
 }
 
@@ -2292,14 +2291,10 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   rejoin_ack_gather.erase(from);
   if (mds->is_rejoin() && 
       rejoin_ack_gather.empty()) {
-    dout(7) << "got all acks, going active!" << endl;
-    show_subtrees();
-    show_cache();
-    mds->set_want_state(MDSMap::STATE_ACTIVE);
+    mds->rejoin_done();
   } else {
     dout(7) << "still need rejoin_ack from " << rejoin_ack_gather << endl;
   }
-
 }
 
 
@@ -2380,22 +2375,18 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
 
   MMDSCacheRejoin *full = new MMDSCacheRejoin(MMDSCacheRejoin::OP_FULL);
   
-
-  assert(0);   // check me out
-
-  /*
-
   // dirs
-  for (map<dirfrag_t, map<string, MMDSCacheRejoin::dn_weak> >::iterator p = missing->weak_dentries.begin();
-       p != missing->weak_dentries.end();
+  for (map<dirfrag_t, map<string,MMDSCacheRejoin::dn_weak> >::iterator p = missing->weak.begin();
+       p != missing->weak.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
     if (!dir) {
       dout(10) << " don't have dirfrag " << p->first << endl;   
-      continue;      // we must have trimmed it after the original rejoin
+      assert(0);
+      continue;      // we must have trimmed it after the original rejoin?
     }
 
-    dout(10) << " sending " << *dir << endl;
+    dout(10) << " in dir " << *dir << endl;
     
     // dentries
     for (map<string, MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
@@ -2404,16 +2395,14 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
       CDentry *dn = dir->lookup(q->first);
       if (!dn) {
 	dout(10) << " don't have dentry " << q->first << " in " << *dir << endl;
+	assert(0);
 	continue; // we must have trimmed it after our original rejoin
       }
       dout(10) << " sending " << *dn << endl;
-      if (mds->is_rejoin())
-	full->add_weak_dentry(*p, *q);
-      else
-	full->add_strong_dentry(*p, *q, 
-			       dn->is_primary() ? dn->get_inode()->ino():0,
-			       dn->is_remote() ? dn->get_remote_ino():0,
-			       dn->get_replica_nonce(), dn->lock.get_state());
+      full->add_strong_dentry(p->first, q->first, 
+			      dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
+			      dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
+			      dn->get_replica_nonce(), dn->lock.get_state());
     }
   }
     
@@ -2424,24 +2413,22 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     CInode *in = get_inode(*p);
     if (!in) {
       dout(10) << " don't have inode " << *p << endl;
+      assert(0); //???
       continue; // we must have trimmed it after the originalo rejoin
     }
     
     dout(10) << " sending " << *in << endl;
     full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
-    if (mds->is_rejoin())
-      full->add_weak_inode(in->ino());
-    else
-      full->add_strong_inode(in->ino(),
-			     in->get_replica_nonce(),
-			     in->get_caps_wanted(),
-			     in->authlock.get_replica_state(), 
-			     in->linklock.get_replica_state(), 
-			     in->dirfragtreelock.get_replica_state(), 
-			     in->filelock.get_replica_state(),
-			     in->dirlock.get_replica_state());
+    full->add_strong_inode(in->ino(),
+			   in->get_replica_nonce(),
+			   in->get_caps_wanted(),
+			   in->authlock.get_replica_state(), 
+			   in->linklock.get_replica_state(), 
+			   in->dirfragtreelock.get_replica_state(), 
+			   in->filelock.get_replica_state(),
+			   in->dirlock.get_replica_state());
   }
-  */
+
   mds->send_message_mds(full, missing->get_source().num(), MDS_PORT_CACHE);
 }
 
@@ -2469,6 +2456,9 @@ void MDCache::send_cache_rejoin_acks()
   dout(7) << "send_cache_rejoin_acks" << endl;
   
   assert(mds->is_rejoin());
+
+  // process any remaining open files reconnects
+  mds->server->process_rejoined_open_files();
 
   // send acks to everyone in the recovery set
   map<int,MMDSCacheRejoin*> ack;
@@ -2910,6 +2900,18 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 }
 
 
+/**
+ * trim_non_auth - remove any non-auth items from our cache
+ *
+ * this is necessary because we can't be sure that these items were
+ * in our cache all the way up to our crash, and as a result can't be
+ * sure that we would have heard about any subtree migrations that 
+ * would affect their authority.  therefore, we must remove!
+ *
+ * the only non-auth items that remain are those that are needed to 
+ * attach our own subtrees to the root.  those we can be sure we had 
+ * at the time of our crash.
+ */
 void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << endl;
@@ -3796,6 +3798,27 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   return 0;
 }
 
+bool MDCache::path_is_mine(filepath& path)
+{
+  dout(15) << "path_is_mine " << path << endl;
+  
+  // start at root.  FIXME.
+  CInode *cur = root;
+  assert(cur);
+
+  for (unsigned i=0; i<path.depth(); i++) {
+    dout(15) << "path_is_mine seg " << i << ": " << path[i] << " under " << *cur << endl;
+    frag_t fg = cur->pick_dirfrag(path[i]);
+    CDir *dir = cur->get_dirfrag(fg);
+    if (!dir) return cur->is_auth();
+    CDentry *dn = dir->lookup(path[i]);
+    if (!dn) return dir->is_auth();
+    assert(dn->is_primary());
+    cur = dn->get_inode();
+  }
+
+  return cur->is_auth();
+}
 
 
 void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin) 

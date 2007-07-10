@@ -45,11 +45,22 @@ public:
   utime_t  reconnect_start;
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
   set<CInode*> reconnected_open_files;
+  struct open_file_reconnect_t {
+    string path;
+    int from;
+    inode_caps_reconnect_t capinfo;
+    open_file_reconnect_t() {}
+    open_file_reconnect_t(string p, int f, inode_caps_reconnect_t& ci) :
+      path(p), from(f), capinfo(ci) {}
+  };
+  map<inodeno_t,open_file_reconnect_t> reconnected_missing_open_files;
   
   void handle_client_session(class MClientSession *m);
   void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
+  void note_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
+  void process_rejoined_open_files();
   void client_reconnect_failure(int from);
   void reconnect_finish();
   void terminate_sessions();
@@ -70,7 +81,7 @@ public:
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
-  CInode* prepare_new_inode(MClientRequest *req, CDir *dir);
+  CInode* prepare_new_inode(MDRequest *mdr, CDir *dir);
 
   CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);

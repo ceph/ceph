@@ -363,8 +363,10 @@ void EMetaBlob::replay(MDS *mds)
       }
       // create the dirfrag
       dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
-      if ((*lp).ino == 1) 
-	dir->set_dir_auth(CDIR_AUTH_UNKNOWN);  // FIXME: can root dir be fragmented?  hrm.
+
+      if ((*lp).ino < MDS_INO_BASE) 
+	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNKNOWN);
+
       dout(10) << "EMetaBlob.replay added dir " << *dir << endl;  
     }
     dir->set_version( lump.dirv );

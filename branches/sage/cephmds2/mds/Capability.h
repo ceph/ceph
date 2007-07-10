@@ -50,13 +50,22 @@ inline string cap_string(int cap)
   return s;
 }
 
-
 class Capability {
-  int wanted_caps;     // what the client wants (ideally)
+public:
+  struct Export {
+    int wanted;
+    int issued;
+    int pending;
+    Export() {}
+    Export(int w, int i, int p) : wanted(w), issued(i), pending(p) {}
+  };
 
+private:
+  int wanted_caps;     // what the client wants (ideally)
+  
   map<long, int>  cap_history;  // seq -> cap
   long last_sent, last_recv;
-    
+  
   bool suppress;
 
 public:
@@ -67,7 +76,14 @@ public:
     suppress(false) { 
     //cap_history[last_sent] = 0;
   }
-
+  Capability(Export& other) : 
+    wanted_caps(other.wanted),
+    last_sent(0), last_recv(0) { 
+    // issued vs pending
+    if (other.issued & ~other.pending)
+      issue(other.issued);
+    issue(other.pending);
+  }
   
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
@@ -75,7 +91,7 @@ public:
   bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 
   // most recently issued caps.
-  int pending()   { 
+  int pending() { 
     if (cap_history.count(last_sent))
       return cap_history[ last_sent ];
     return 0;
@@ -145,15 +161,18 @@ public:
   }
   long get_last_seq() { return last_sent; }
 
-  void merge(Capability& other) {
+  Export make_export() {
+    return Export(wanted_caps, issued(), pending());
+  }
+  void merge(Export& other) {
     // issued + pending
-    int newpending = other.pending() | pending();
-    if (other.issued() & ~newpending)
-      issue(other.issued() | newpending);
+    int newpending = other.pending | pending();
+    if (other.issued & ~newpending)
+      issue(other.issued | newpending);
     issue(newpending);
 
     // wanted
-    wanted_caps = wanted_caps | other.wanted();
+    wanted_caps = wanted_caps | other.wanted;
   }
 
   // confirm receipt of a previous sent/issued seq.

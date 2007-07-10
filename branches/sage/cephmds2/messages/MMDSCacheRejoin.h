@@ -18,6 +18,7 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
+#include "include/encodable.h"
 
 // sent from replica to auth
 
@@ -62,12 +63,13 @@ class MMDSCacheRejoin : public Message {
     inode_full() {}
     inode_full(const inode_t& i, const string& s, const fragtree_t& f) :
       inode(i), symlink(s), dirfragtree(f) {}
-    inode_full(bufferlist& bl, int& off) {
+
+    void _decode(bufferlist& bl, int& off) {
       ::_decode(inode, bl, off);
       ::_decode(symlink, bl, off);
       ::_decode(dirfragtree, bl, off);
     }
-    void _encode(bufferlist& bl) {
+    void _encode(bufferlist& bl) const {
       ::_encode(inode, bl);
       ::_encode(symlink, bl);
       ::_encode(dirfragtree, bl);
@@ -114,6 +116,10 @@ class MMDSCacheRejoin : public Message {
   map<dirfrag_t, map<string, dn_strong> > strong_dentries;
   map<inodeno_t, inode_strong> strong_inodes;
 
+  // open
+  map<inodeno_t,int> open_caps_wanted;
+  map<inodeno_t,string> open_path;
+
   // full
   list<inode_full> full_inodes;
 
@@ -149,6 +155,10 @@ class MMDSCacheRejoin : public Message {
   }
   void add_inode_xlock(inodeno_t ino, int lt, const metareqid_t& ri) {
     xlocked_inodes[ino][lt] = ri;
+  }
+  void add_open_path(inodeno_t ino, int cw, string& p) {
+    open_caps_wanted[ino] = cw;
+    open_path[ino] = p;
   }
   
   // dirfrags
@@ -189,14 +199,11 @@ class MMDSCacheRejoin : public Message {
   void encode_payload() {
     ::_encode(op, payload);
     ::_encode(strong_inodes, payload);
-
-    uint32_t nfull = full_inodes.size();
-    ::_encode(nfull, payload);
-    for (list<inode_full>::iterator p = full_inodes.begin(); p != full_inodes.end(); ++p)
-      p->_encode(payload);
-
+    ::_encode_complex(full_inodes, payload);
     ::_encode(authpinned_inodes, payload);
     ::_encode(xlocked_inodes, payload);
+    ::_encode(open_caps_wanted, payload);
+    ::_encode(open_path, payload);
     ::_encode(strong_dirfrags, payload);
     ::_encode(weak, payload);
     ::_encode(weak_inodes, payload);
@@ -208,14 +215,11 @@ class MMDSCacheRejoin : public Message {
     int off = 0;
     ::_decode(op, payload, off);
     ::_decode(strong_inodes, payload, off);
-
-    uint32_t nfull;
-    ::_decode(nfull, payload, off);
-    for (unsigned i=0; i<nfull; i++) 
-      full_inodes.push_back(inode_full(payload, off));
-
+    ::_decode_complex(full_inodes, payload, off);
     ::_decode(authpinned_inodes, payload, off);
     ::_decode(xlocked_inodes, payload, off);
+    ::_decode(open_caps_wanted, payload, off);
+    ::_decode(open_path, payload, off);
     ::_decode(strong_dirfrags, payload, off);
     ::_decode(weak, payload, off);
     ::_decode(weak_inodes, payload, off);

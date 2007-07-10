@@ -559,8 +559,11 @@ MClientReply *Client::make_request(MClientRequest *req,
   // assign a unique tid
   tid_t tid = ++last_tid;
   req->set_tid(tid);
+
   if (!mds_requests.empty()) 
     req->set_oldest_client_tid(mds_requests.begin()->first);
+  else
+    req->set_oldest_client_tid(tid); // this one is the oldest.
 
   // make note
   MetaRequest request(req, tid);

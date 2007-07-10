@@ -204,6 +204,7 @@ struct md_config_t {
 
   int mds_thrash_exports;
   bool mds_dump_cache_on_map;
+  bool mds_dump_cache_after_rejoin;
 
   // osd
   int   osd_rep;

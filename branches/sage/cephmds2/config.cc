@@ -206,6 +206,7 @@ md_config_t g_conf = {
 
   mds_thrash_exports: 0,
   mds_dump_cache_on_map: false,
+  mds_dump_cache_after_rejoin: true,
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,

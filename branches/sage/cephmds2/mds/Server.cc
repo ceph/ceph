@@ -28,6 +28,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
+#include "messages/MClientFileCaps.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -223,26 +224,50 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   } else {
 
     // caps
-    for (map<inodeno_t, MClientReconnect::inode_caps_t>::iterator p = m->inode_caps.begin();
+    for (map<inodeno_t, inode_caps_reconnect_t>::iterator p = m->inode_caps.begin();
 	 p != m->inode_caps.end();
 	 ++p) {
       CInode *in = mdcache->get_inode(p->first);
-      if (!in) {
-	dout(0) << "missing " << p->first << ", fetching via " << m->inode_path[p->first] << endl;
-	assert(0);
+      if (in && in->is_auth()) {
+	note_reconnect_cap(in, from, p->second);    
+	reconnected_open_files.insert(in);
 	continue;
       }
       
-      dout(10) << " client cap " << cap_string(p->second.wanted)
-	       << " seq " << p->second.seq 
-	       << " on " << *in << endl;
-      Capability cap(p->second.wanted, p->second.seq);
-      in->add_client_cap(from, cap);
-      in->inode.size = MAX(in->inode.size, p->second.size);
-      in->inode.mtime = MAX(in->inode.mtime, p->second.mtime);
-      in->inode.atime = MAX(in->inode.atime, p->second.atime);
-      
-      reconnected_open_files.insert(in);
+      filepath path = m->inode_path[p->first];
+      if ((in && !in->is_auth()) ||
+	  !mds->mdcache->path_is_mine(path)) {
+	// not mine.
+	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
+		<< " (not mine), will pass off to authority" << endl;
+	
+	// mark client caps stale.
+	inode_t fake_inode;
+	fake_inode.ino = p->first;
+	MClientFileCaps *s = new MClientFileCaps(fake_inode, 
+						 p->second.seq,
+						 0,                // doesn't matter.
+						 p->second.wanted, // doesn't matter.
+						 MClientFileCaps::OP_STALE);
+	mds->messenger->send_message(s, m->get_source_inst(), 0, MDS_PORT_CACHE);
+	
+	// add to cap_exports list.
+	// note: we *might* know the auth, if this is a directory inode, and
+	//  we still have it because it is attaching one of our subtrees to the root..
+	Capability::Export capex(p->second.wanted, p->second.issued, p->second.issued);
+	mdcache->rejoin_export_caps(p->first, m->inode_path[p->first],
+				    m->get_source().num(), capex, 
+				    in ? in->authority().first : -1);
+      } else {
+	// mine.  fetch later.
+	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
+		<< " (mine), will load later" << endl;
+	reconnected_missing_open_files[p->first] = 
+	  open_file_reconnect_t(m->inode_path[p->first],
+				from,
+				p->second);
+      }
+
     }
   }
 
@@ -252,6 +277,38 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   delete m;
 }
+
+void Server::note_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo)
+{
+  dout(10) << "note_reconnect_cap " << cap_string(capinfo.wanted)
+	   << " seq " << capinfo.seq 
+	   << " on " << *in << endl;
+  Capability cap(capinfo.wanted, capinfo.seq);
+  in->add_client_cap(from, cap);
+  in->inode.size = MAX(in->inode.size, capinfo.size);
+  in->inode.mtime = MAX(in->inode.mtime, capinfo.mtime);
+  in->inode.atime = MAX(in->inode.atime, capinfo.atime);
+}
+
+void Server::process_rejoined_open_files()
+{
+  dout(10) << "process_rejoined_open_files" << endl;
+
+  for (map<inodeno_t,open_file_reconnect_t>::iterator p = reconnected_missing_open_files.begin();
+       p != reconnected_missing_open_files.end();
+       ++p) {
+    CInode *in = mdcache->get_inode(p->first);
+    if (!in) {
+      dout(0) << " hrm, still don't have " << p->first << " at " 
+	      << p->second.path << endl;
+      continue;
+    }
+    note_reconnect_cap(in, p->second.from, p->second.capinfo);    
+  }
+
+  reconnected_missing_open_files.clear();
+}
+
 
 void Server::client_reconnect_failure(int from) 
 {
@@ -294,11 +351,8 @@ void Server::reconnect_finish()
   }
   reconnected_open_files.clear();  // clean up
 
-  // done
-  if (mds->mdsmap->get_num_in_mds() == 1) 
-    mds->set_want_state(MDSMap::STATE_ACTIVE);    // go active
-  else
-    mds->set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
+  // done.
+  mds->reconnect_done();
 }
 
 
@@ -391,9 +445,11 @@ void Server::handle_client_request(MClientRequest *req)
     }
   }
   // trim completed_request list
-  if (req->get_oldest_client_tid() > 0)
+  if (req->get_oldest_client_tid() > 0) {
+    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << endl;
     mds->clientmap.trim_completed_requests(client,
 					   req->get_oldest_client_tid());
+  }
 
 
   // -----
@@ -897,12 +953,12 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
  *
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
-CInode* Server::prepare_new_inode(MClientRequest *req, CDir *dir) 
+CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir) 
 {
   CInode *in = mdcache->create_inode();
-  in->inode.uid = req->get_caller_uid();
-  in->inode.gid = req->get_caller_gid();
-  in->inode.ctime = in->inode.mtime = in->inode.atime = g_clock.real_now();   // now
+  in->inode.uid = mdr->client_request->get_caller_uid();
+  in->inode.gid = mdr->client_request->get_caller_gid();
+  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
   dout(10) << "prepare_new_inode " << *in << endl;
 
   // bump modify pop
@@ -1580,7 +1636,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
 
-  CInode *newi = prepare_new_inode(req, dn->dir);
+  mdr->now = g_clock.real_now();
+  CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
   // it's a file.
@@ -1614,7 +1671,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   if (!dn) return;
 
   // new inode
-  CInode *newi = prepare_new_inode(req, dn->dir);  
+  mdr->now = g_clock.real_now();
+  CInode *newi = prepare_new_inode(mdr, dn->dir);  
   assert(newi);
 
   // it's a directory.
@@ -1668,7 +1726,8 @@ void Server::handle_client_symlink(MDRequest *mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
 
-  CInode *newi = prepare_new_inode(req, dn->dir);
+  mdr->now = g_clock.real_now();
+  CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
   // it's a symlink
@@ -3651,7 +3710,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   // created null dn.
     
   // create inode.
-  CInode *in = prepare_new_inode(req, dn->dir);
+  mdr->now = g_clock.real_now();
+  CInode *in = prepare_new_inode(mdr, dn->dir);
   assert(in);
   
   // it's a file.

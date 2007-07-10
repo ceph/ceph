@@ -677,7 +677,6 @@ void Rank::Pipe::fail(list<Message*>& out)
       } 
       else {
         // oh well.  sending entity musta just shut down?
-        assert(0);
         delete q.front();
       }
       q.pop_front();

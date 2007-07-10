@@ -222,15 +222,28 @@ class MDS : public Dispatcher {
   int init(bool standby=false);
   void reopen_logger();
 
+  void bcast_mds_map();  // to mounted clients
+
   void boot();
   void boot_create();             // i am new mds.
   void boot_start();              // i am old but empty (was down:out) mds.
   void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
   void boot_finish();
 
-  void bcast_mds_map();  // to mounted clients
+  void replay_start();
+  void replay_done();
+  void resolve_start();
+  void resolve_done();
+  void reconnect_start();
+  void reconnect_done();
+  void rejoin_joint_start();
+  void rejoin_done();
+  void recovery_done();
+  void handle_mds_recovery(int who);
 
-  int shutdown_start();
+  void shutdown_start();
+  void stopping_start();
+  void stopping_done();
   int shutdown_final();
 
   void tick();

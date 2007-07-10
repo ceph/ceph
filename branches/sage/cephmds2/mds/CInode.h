@@ -336,16 +336,21 @@ public:
     client_caps = cl;
   }
   */
-  void take_client_caps(map<int,Capability>& cl) {
+  void take_client_caps(map<int,Capability::Export>& cl) {
     if (!client_caps.empty())
       put(PIN_CAPS);
-    cl = client_caps;
+    for (map<int,Capability>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) {
+      cl[it->first] = it->second.make_export();
+    }
     client_caps.clear();
   }
-  void merge_client_caps(map<int,Capability>& cl, set<int>& new_client_caps) {
+  void merge_client_caps(map<int,Capability::Export>& cl, set<int>& new_client_caps) {
     if (client_caps.empty() && !cl.empty())
       get(PIN_CAPS);
-    for (map<int,Capability>::iterator it = cl.begin();
+    
+    for (map<int,Capability::Export>::iterator it = cl.begin();
          it != cl.end();
          it++) {
       new_client_caps.insert(it->first);
@@ -354,7 +359,7 @@ public:
         client_caps[it->first].merge(it->second);
       } else {
         // new
-        client_caps[it->first] = it->second;
+        client_caps[it->first] = Capability(it->second);
       }
     }      
   }
@@ -568,7 +573,7 @@ class CInodeExport {
   fragtree_t     dirfragtree;
 
   map<int,int>     replicas;
-  map<int,Capability>  cap_map;
+  map<int,Capability::Export>  cap_map;
 
   bufferlist locks;
 
@@ -642,14 +647,7 @@ public:
     dirfragtree._encode(bl);
     ::_encode(replicas, bl);
     ::_encode(locks, bl);
-
-    // caps
-    for (map<int,Capability>::iterator it = cap_map.begin();
-         it != cap_map.end();
-         it++) {
-      bl.append((char*)&it->first, sizeof(it->first));
-      it->second._encode(bl);
-    }
+    ::_encode(cap_map, bl);
   }
 
   int _decode(bufferlist& bl, int off = 0) {
@@ -658,14 +656,7 @@ public:
     dirfragtree._decode(bl, off);
     ::_decode(replicas, bl, off);
     ::_decode(locks, bl, off);
-
-    // caps
-    for (int i=0; i<st.num_caps; i++) {
-      int c;
-      bl.copy(off, sizeof(c), (char*)&c);
-      off += sizeof(c);
-      cap_map[c]._decode(bl, off);
-    }
+    ::_decode(cap_map, bl, off);
 
     return off;
   }

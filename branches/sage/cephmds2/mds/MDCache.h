@@ -343,6 +343,17 @@ protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  struct cap_export_t {
+    inodeno_t ino;
+    string path;
+    int client;
+    Capability::Export capex;
+    cap_export_t() {}
+    cap_export_t(inodeno_t i, string& p, int c, Capability::Export& ce) :
+      ino(i), path(p), client(c), capex(ce) {}
+  };
+  list<cap_export_t>            cap_exports;
+  map<int, list<cap_export_t> > cap_exports_by_auth;
 
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -356,9 +367,13 @@ protected:
   void send_cache_rejoin_acks();
 public:
   void send_cache_rejoins();
-
-
-
+  void rejoin_export_caps(inodeno_t ino, string& path, int client,
+			  Capability::Export& capex, int auth=-1) {
+    if (auth >= 0)
+      cap_exports_by_auth[auth].push_back(cap_export_t(ino, path, client, capex));
+    else
+      cap_exports.push_back(cap_export_t(ino, path, client, capex));
+  }
 
   friend class Locker;
   friend class Migrator;
@@ -486,7 +501,8 @@ public:
 		    CInode *base, filepath& path, 
 		    vector<CDentry*>& trace, bool follow_trailing_sym,
                     int onfail);
-
+  bool path_is_mine(filepath& path);
+  
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
   void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);

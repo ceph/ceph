@@ -51,17 +51,24 @@ sage doc
 
 sage mds
 
-** fix initial root subtree creation thing on recovery.
-
 - fix rejoin
 /  - validate dentry<->inode connectivity
 /  - clean up remove_gather() crap
-  - add_strong_* should take the cache object
+  - add_strong_* should take the cache object?
 /  - all replicated scatterlocks should start out in scatter state.
+  - parallel_fetch
+  - missing/full
   - carefully document rejoin
     - cases
     - confounding factors
-  - missing/full
+
+
+- for open file caps:
+ - a survivor will issue strong caps_watned, etc.  if the rejoiner doesn't have it, they can request via missing/full.
+ - a recovering node:
+   - mark all non-auth caps stale
+   - advertise non-auth open inodes/paths/Capability::Exports in rejoins.
+   - in _weak_rejoin, traverse list, and if a path is mine, add claim cap (or add to parallel_fetch list, etc.)
 
 - fix rename.. don't journal on witnesses unless we have to.
 - fix unlink.. journal on witnesses if the file is open.
@@ -69,6 +76,9 @@ sage mds
 - unlink needs to journal on witnesses (probably), since unlinked inodes may be in those journals
  -> hmm, no, rejoin needs to be more robust, and validate namespace changes.
 
+- extend/clean up filepath to allow paths relative to an ino
+  - fix path_traverse
+  - fix reconnect/rejoin open file weirdness
 
 - stray reintegration
 - stray purge on shutdown
