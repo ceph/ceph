@@ -119,6 +119,11 @@ void Server::handle_client_session(MClientSession *m)
   bool open = m->op == MClientSession::OP_REQUEST_OPEN;
 
   if (open) {
+    if (mds->clientmap.have_session(from)) {
+      dout(10) << "already open, dropping this req" << endl;
+      delete m;
+      return;
+    }
     if (mds->clientmap.is_opening(from)) {
       dout(10) << "already opening, dropping this req" << endl;
       delete m;
@@ -206,10 +211,8 @@ void Server::reconnect_clients()
   }
   
   dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << endl;
-  mds->set_want_state(MDSMap::STATE_RECONNECT);     // just fyi.
   
-  // send mdsmap to all mounted clients
-  mds->bcast_mds_map();
+  mds->bcast_mds_map();  // send mdsmap to all client sessions
 
   // init gather list
   reconnect_start = g_clock.now();
@@ -230,15 +233,17 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 			new C_MDS_session_finish(mds, mds->clientmap.get_inst(from), false, cmapv));
 
   } else {
-
+    
     // caps
     for (map<inodeno_t, inode_caps_reconnect_t>::iterator p = m->inode_caps.begin();
 	 p != m->inode_caps.end();
 	 ++p) {
       CInode *in = mdcache->get_inode(p->first);
       if (in && in->is_auth()) {
-	note_reconnect_cap(in, from, p->second);    
-	reconnected_open_files.insert(in);
+	// we recovered it, and it's ours.  take note.
+	dout(15) << "open caps on " << *in << endl;
+	in->reconnect_cap(from, p->second);
+	reconnected_caps.insert(in);
 	continue;
       }
       
@@ -253,29 +258,21 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
 	MClientFileCaps *s = new MClientFileCaps(fake_inode, 
-						 p->second.seq,
+						 0,
 						 0,                // doesn't matter.
 						 p->second.wanted, // doesn't matter.
 						 MClientFileCaps::OP_STALE);
 	mds->messenger->send_message(s, m->get_source_inst(), 0, MDS_PORT_CACHE);
-	
-	// add to cap_exports list.
-	// note: we *might* know the auth, if this is a directory inode, and
-	//  we still have it because it is attaching one of our subtrees to the root..
-	Capability::Export capex(p->second.wanted, p->second.issued, p->second.issued);
-	mdcache->rejoin_export_caps(p->first, m->inode_path[p->first],
-				    m->get_source().num(), capex, 
-				    in ? in->authority().first : -1);
+
+	// add to cap export list.
+	mdcache->rejoin_export_caps(p->first, m->inode_path[p->first], from, p->second);
       } else {
 	// mine.  fetch later.
 	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
 		<< " (mine), will load later" << endl;
-	reconnected_missing_open_files[p->first] = 
-	  open_file_reconnect_t(m->inode_path[p->first],
-				from,
-				p->second);
+	mdcache->rejoin_recovered_caps(p->first, m->inode_path[p->first], from, p->second, 
+				       -1);  // "from" me.
       }
-
     }
   }
 
@@ -286,53 +283,16 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   delete m;
 }
 
-void Server::note_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo)
+/*
+ * called by mdcache, late in rejoin (right before acks are sent)
+ */
+void Server::process_reconnected_caps()
 {
-  dout(10) << "note_reconnect_cap " << cap_string(capinfo.wanted)
-	   << " seq " << capinfo.seq 
-	   << " on " << *in << endl;
-  Capability cap(capinfo.wanted, capinfo.seq);
-  in->add_client_cap(from, cap);
-  in->inode.size = MAX(in->inode.size, capinfo.size);
-  in->inode.mtime = MAX(in->inode.mtime, capinfo.mtime);
-  in->inode.atime = MAX(in->inode.atime, capinfo.atime);
-}
-
-void Server::process_rejoined_open_files()
-{
-  dout(10) << "process_rejoined_open_files" << endl;
-
-  for (map<inodeno_t,open_file_reconnect_t>::iterator p = reconnected_missing_open_files.begin();
-       p != reconnected_missing_open_files.end();
-       ++p) {
-    CInode *in = mdcache->get_inode(p->first);
-    if (!in) {
-      dout(0) << " hrm, still don't have " << p->first << " at " 
-	      << p->second.path << endl;
-      continue;
-    }
-    note_reconnect_cap(in, p->second.from, p->second.capinfo);    
-  }
-
-  reconnected_missing_open_files.clear();
-}
-
-
-void Server::client_reconnect_failure(int from) 
-{
-  dout(5) << "client_reconnect_failure on client" << from << endl;
-  client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty()) 
-    reconnect_finish();
-}
-
-void Server::reconnect_finish()
-{
-  dout(7) << "reconnect_finish" << endl;
+  dout(10) << "process_reconnected_caps" << endl;
 
   // adjust filelock state appropriately
-  for (set<CInode*>::iterator p = reconnected_open_files.begin();
-       p != reconnected_open_files.end();
+  for (set<CInode*>::iterator p = reconnected_caps.begin();
+       p != reconnected_caps.end();
        ++p) {
     CInode *in = *p;
     int issued = in->get_caps_issued();
@@ -353,13 +313,25 @@ void Server::reconnect_finish()
       else
 	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
     }
-    dout(10) << " issued " << cap_string(issued)
+    dout(15) << " issued " << cap_string(issued)
 	     << " chose " << in->filelock
 	     << " on " << *in << endl;
   }
-  reconnected_open_files.clear();  // clean up
+  reconnected_caps.clear();  // clean up
+}
 
-  // done.
+
+void Server::client_reconnect_failure(int from) 
+{
+  dout(5) << "client_reconnect_failure on client" << from << endl;
+  client_reconnect_gather.erase(from);
+  if (client_reconnect_gather.empty()) 
+    reconnect_finish();
+}
+
+void Server::reconnect_finish()
+{
+  dout(7) << "reconnect_finish" << endl;
   mds->reconnect_done();
 }
 
@@ -1282,6 +1254,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     inode_t *pi = diri->project_inode();
     if (dirpv) pi->version = dirpv;
     pi->ctime = pi->mtime = mdr->now;
+    blob->add_dir_context(diri->get_parent_dir());
     blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
   } else {
     // journal the mtime change anyway.
@@ -1702,7 +1675,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
-  le->metablob.add_dir(newdir, true);
+  le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
   mdlog->submit_entry(le);

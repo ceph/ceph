@@ -174,6 +174,16 @@ public:
     // wanted
     wanted_caps = wanted_caps | other.wanted;
   }
+  void merge(int otherwanted, int otherissued) {
+    // issued + pending
+    int newpending = pending();
+    if (otherissued & ~newpending)
+      issue(otherissued | newpending);
+    issue(newpending);
+
+    // wanted
+    wanted_caps = wanted_caps | otherwanted;
+  }
 
   // confirm receipt of a previous sent/issued seq.
   int confirm_receipt(long seq, int caps) {

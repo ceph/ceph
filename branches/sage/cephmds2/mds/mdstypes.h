@@ -89,18 +89,16 @@ namespace __gnu_cxx {
 
 // inode caps info for client reconnect
 struct inode_caps_reconnect_t {
-  int32_t caps;
-  int32_t seq;
   int32_t wanted;
   int32_t issued;
   off_t size;
   utime_t mtime, atime;
 
   inode_caps_reconnect_t() {}
-  inode_caps_reconnect_t(int c, int s, int w, int i) : 
-    caps(c), seq(s), wanted(w), issued(i), size(0) {}
-  inode_caps_reconnect_t(int c, int s, int w, int i, off_t sz, utime_t mt, utime_t at) : 
-    caps(c), seq(s), wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
+  inode_caps_reconnect_t(int w, int i) : 
+    wanted(w), issued(i), size(0) {}
+  inode_caps_reconnect_t(int w, int i, off_t sz, utime_t mt, utime_t at) : 
+    wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
 };
 
 

@@ -526,7 +526,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     // now active?
     if (is_active()) {
       // did i just recover?
-      if (oldstate == MDSMap::STATE_REJOIN) 
+      if (oldstate == MDSMap::STATE_REJOIN ||
+	  oldstate == MDSMap::STATE_RECONNECT) 
 	recovery_done();
 
       dout(1) << "now active" << endl;
@@ -670,7 +671,7 @@ void MDS::boot()
   else if (is_replay()) 
     boot_replay();    // replay, join
   else 
-    assert(0);
+    assert(is_standby());
 }
 
 
@@ -885,6 +886,10 @@ void MDS::reconnect_done()
   dout(1) << "reconnect_done" << endl;
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
+
+    // finish processing caps (normally, this happens during rejoin, but we're skipping that...)
+    mdcache->rejoin_gather_finish();
+
     set_want_state(MDSMap::STATE_ACTIVE);    // go active
   } else {
     set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state

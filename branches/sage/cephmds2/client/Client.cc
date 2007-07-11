@@ -925,12 +925,11 @@ void Client::send_reconnect(int mds)
 		 << " " << cap_string(p->second->caps[mds].caps)
 		 << " wants " << cap_string(p->second->file_caps_wanted())
 		 << endl;
-	m->add_inode_caps(p->first, 
-			  p->second->caps[mds].caps,
-			  p->second->caps[mds].seq,
-			  p->second->file_caps_wanted(),
-			  p->second->inode.size, 
-			  p->second->inode.mtime, p->second->inode.atime);
+	p->second->caps[mds].seq = 0;  // reset seq.
+	m->add_inode_caps(p->first,    // ino
+			  p->second->file_caps_wanted(), // wanted
+			  p->second->caps[mds].caps,     // issued
+			  p->second->inode.size, p->second->inode.mtime, p->second->inode.atime);
 	string path;
 	p->second->make_path(path);
 	dout(10) << " path on " << p->first << " is " << path << endl;

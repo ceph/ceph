@@ -117,8 +117,9 @@ class MMDSCacheRejoin : public Message {
   map<inodeno_t, inode_strong> strong_inodes;
 
   // open
-  map<inodeno_t,int> open_caps_wanted;
-  map<inodeno_t,string> open_path;
+  bufferlist cap_export_bl;
+  map<inodeno_t,map<int, inode_caps_reconnect_t> > cap_exports;
+  map<inodeno_t,string> cap_export_paths;
 
   // full
   list<inode_full> full_inodes;
@@ -156,9 +157,9 @@ class MMDSCacheRejoin : public Message {
   void add_inode_xlock(inodeno_t ino, int lt, const metareqid_t& ri) {
     xlocked_inodes[ino][lt] = ri;
   }
-  void add_open_path(inodeno_t ino, int cw, string& p) {
-    open_caps_wanted[ino] = cw;
-    open_path[ino] = p;
+
+  void copy_cap_exports(bufferlist &bl) {
+    cap_export_bl = bl;
   }
   
   // dirfrags
@@ -202,8 +203,7 @@ class MMDSCacheRejoin : public Message {
     ::_encode_complex(full_inodes, payload);
     ::_encode(authpinned_inodes, payload);
     ::_encode(xlocked_inodes, payload);
-    ::_encode(open_caps_wanted, payload);
-    ::_encode(open_path, payload);
+    ::_encode(cap_export_bl, payload);
     ::_encode(strong_dirfrags, payload);
     ::_encode(weak, payload);
     ::_encode(weak_inodes, payload);
@@ -218,8 +218,12 @@ class MMDSCacheRejoin : public Message {
     ::_decode_complex(full_inodes, payload, off);
     ::_decode(authpinned_inodes, payload, off);
     ::_decode(xlocked_inodes, payload, off);
-    ::_decode(open_caps_wanted, payload, off);
-    ::_decode(open_path, payload, off);
+    ::_decode(cap_export_bl, payload, off);
+    {
+      int off = 0;
+      ::_decode(cap_exports, cap_export_bl, off);
+      ::_decode(cap_export_paths, cap_export_bl, off);
+    }
     ::_decode(strong_dirfrags, payload, off);
     ::_decode(weak, payload, off);
     ::_decode(weak_inodes, payload, off);

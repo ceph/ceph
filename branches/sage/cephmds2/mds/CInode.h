@@ -328,6 +328,19 @@ public:
       return &client_caps[client];
     return 0;
   }
+  void reconnect_cap(int client, inode_caps_reconnect_t& icr) {
+    Capability *cap = get_client_cap(client);
+    if (cap) {
+      cap->merge(icr.wanted, icr.issued);
+    } else {
+      Capability newcap(icr.wanted, 0);
+      newcap.issue(icr.issued);
+      add_client_cap(client, newcap);
+    }
+    inode.size = MAX(inode.size, icr.size);
+    inode.mtime = MAX(inode.mtime, icr.mtime);
+    inode.atime = MAX(inode.atime, icr.atime);
+  }
   /*
   void set_client_caps(map<int,Capability>& cl) {
     if (client_caps.empty() && !cl.empty())

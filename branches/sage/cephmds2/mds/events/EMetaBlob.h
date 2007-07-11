@@ -321,14 +321,14 @@ class EMetaBlob {
   }
 
   
-  dirlump& add_dir(CDir *dir, bool dirty) {
+  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
     dirfrag_t df = dir->dirfrag();
     if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
       lump_map[df].dirv = dir->get_projected_version();
     }
     dirlump& l = lump_map[df];
-    if (dir->is_complete()) l.mark_complete();
+    if (complete) l.mark_complete();
     if (dirty) l.mark_dirty();
     return l;
   }

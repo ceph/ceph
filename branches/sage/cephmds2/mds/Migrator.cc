@@ -1847,7 +1847,9 @@ int Migrator::decode_import_dir(bufferlist& bl,
 
   // add to journal entry
   if (le) 
-    le->metablob.add_dir(dir, true);  // Hmm: false would be okay in some cases
+    le->metablob.add_dir(dir, 
+			 true,                 // Hmm: dirty=false would be okay in some cases
+			 dir->is_complete());  
 
   int num_imported = 0;
 

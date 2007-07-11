@@ -343,17 +343,12 @@ protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
-  struct cap_export_t {
-    inodeno_t ino;
-    string path;
-    int client;
-    Capability::Export capex;
-    cap_export_t() {}
-    cap_export_t(inodeno_t i, string& p, int c, Capability::Export& ce) :
-      ino(i), path(p), client(c), capex(ce) {}
-  };
-  list<cap_export_t>            cap_exports;
-  map<int, list<cap_export_t> > cap_exports_by_auth;
+
+  map<inodeno_t,map<int,inode_caps_reconnect_t> > cap_exports; // ino -> client -> capex
+  map<inodeno_t,string> cap_export_paths;
+
+  map<inodeno_t,map<int, map<int,inode_caps_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
+  map<inodeno_t,string> cap_import_paths;
 
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -366,14 +361,19 @@ protected:
   void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void send_cache_rejoin_acks();
 public:
+  void rejoin_gather_finish();
   void send_cache_rejoins();
-  void rejoin_export_caps(inodeno_t ino, string& path, int client,
-			  Capability::Export& capex, int auth=-1) {
-    if (auth >= 0)
-      cap_exports_by_auth[auth].push_back(cap_export_t(ino, path, client, capex));
-    else
-      cap_exports.push_back(cap_export_t(ino, path, client, capex));
+  void rejoin_export_caps(inodeno_t ino, string& path, int client, inode_caps_reconnect_t& icr) {
+    cap_exports[ino][client] = icr;
+    cap_export_paths[ino] = path;
   }
+  void rejoin_recovered_caps(inodeno_t ino, string& path, int client, inode_caps_reconnect_t& icr, 
+			     int frommds=-1) {
+    cap_imports[ino][client][frommds] = icr;
+    cap_import_paths[ino] = path;
+  }
+  void rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& icr, int frommds);
+
 
   friend class Locker;
   friend class Migrator;
@@ -502,6 +502,11 @@ public:
 		    vector<CDentry*>& trace, bool follow_trailing_sym,
                     int onfail);
   bool path_is_mine(filepath& path);
+  bool path_is_mine(string& p) {
+    filepath path(p);
+    return path_is_mine(path);
+  }
+  CDir *path_traverse_to_dir(filepath& path);
   
   void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
@@ -510,9 +515,7 @@ public:
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  void parallel_fetch(map<inodeno_t, set<dirfrag_t> >& inode_children,
-		      map<dirfrag_t, set<inodeno_t> >& dirfrag_children,
-		      set<inodeno_t>& have_ino,
+  bool parallel_fetch(map<inodeno_t,string>& pathmap,
 		      Context *c);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);

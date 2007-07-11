@@ -44,26 +44,21 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
-  set<CInode*> reconnected_open_files;
-  struct open_file_reconnect_t {
-    string path;
-    int from;
-    inode_caps_reconnect_t capinfo;
-    open_file_reconnect_t() {}
-    open_file_reconnect_t(string p, int f, inode_caps_reconnect_t& ci) :
-      path(p), from(f), capinfo(ci) {}
-  };
-  map<inodeno_t,open_file_reconnect_t> reconnected_missing_open_files;
-  
+  set<CInode*> reconnected_caps;
+
   void handle_client_session(class MClientSession *m);
   void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void terminate_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
-  void note_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
-  void process_rejoined_open_files();
+  void process_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
+  void add_reconnected_cap_inode(CInode *in) {
+    reconnected_caps.insert(in);
+  }
+  void process_reconnected_caps();
   void client_reconnect_failure(int from);
   void reconnect_finish();
-  void terminate_sessions();
+
   
   // -- requests --
   void handle_client_request(MClientRequest *m);

@@ -62,6 +62,17 @@ sage mds
     - cases
     - confounding factors
 
+- client sessions vs cap migration.  
+  - sessions need incarnation to avoid close races.
+  - mds->client session open on cap import, if needed.
+  - cap REAP needs to be bundled with "open_ack", so that client doesn't try to close sessions with imported state
+NO
+
+
+
+
+
+  
 
 - for open file caps:
  - a survivor will issue strong caps_watned, etc.  if the rejoiner doesn't have it, they can request via missing/full.

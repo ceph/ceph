@@ -1581,6 +1581,13 @@ void MDCache::send_cache_rejoins()
 
   map<int, MMDSCacheRejoin*> rejoins;
 
+  // encode cap list once.
+  bufferlist cap_export_bl;
+  if (mds->is_rejoin()) {
+    ::_encode(cap_exports, cap_export_bl);
+    ::_encode(cap_export_paths, cap_export_bl);
+  }
+
   // if i am rejoining, send a rejoin to everyone.
   // otherwise, just send to others who are rejoining.
   for (set<int>::iterator p = recovery_set.begin();
@@ -1590,6 +1597,7 @@ void MDCache::send_cache_rejoins()
     if (mds->is_rejoin()) {
       rejoin_gather.insert(*p);
       rejoins[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_WEAK);
+      rejoins[*p]->copy_cap_exports(cap_export_bl);
     } else if (mds->mdsmap->is_rejoin(*p))
       rejoins[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_STRONG);
   }	
@@ -1814,62 +1822,47 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
   bool survivor = false;
   if (mds->is_active() || mds->is_stopping()) {
     survivor = true;
-    dout(10) << "i am surivivor; removing stale replicas, acking immediately" << endl;
+    dout(10) << "i am surivivor; will ack immediately and remove stale replicas" << endl;
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
   } else {
     assert(mds->is_rejoin());
+  }
 
-    /* make sure i have all strong inodes.
-     * i may need to pull the missing metadata off disk.
-     * sender should have had correct linkage for all strong 
-     *  inodes, so we can use *weak to traverse to the missing 
-     *  inodes..
-     */
-    set<inodeno_t> missing;
-    for (map<inodeno_t, MMDSCacheRejoin::inode_strong>::iterator p = weak->strong_inodes.begin();
-	 p != weak->strong_inodes.end();
+  // check cap exports.
+  if (mds->is_rejoin()) {
+    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
+	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
-      if (in) continue;  // all good, we'll process them below.
-
-      dout(10) << " missing strong_inode " << p->first << endl;
-      missing.insert(p->first);
-    }
-
-    if (!missing.empty()) {
-      // figure out the path for these, so that we can traverse and load.
-      map<inodeno_t, set<dirfrag_t> > inode_children;    // ino     -> [child dirfrags]
-      map<dirfrag_t, set<inodeno_t> > dirfrag_children;  // dirfrag -> [child inos]
-      set<inodeno_t> need_ino = missing;
-      set<inodeno_t> have_ino;
-      while (!need_ino.empty()) {
-	// find dirfrags for need
-	for (map<dirfrag_t, map<string, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
-	     p != weak->weak.end();
-	     ++p) {
-	  for (map<string,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
-	       q != p->second.end();
-	       ++q) {
-	    if (need_ino.count(q->second.ino)) {
-	      need_ino.erase(q->second.ino);
-	      dout(15) << " " << q->second.ino << " parent is " << p->first << endl;
-	      
-	      inode_children[p->first.ino].insert(p->first);
-	      dirfrag_children[p->first].insert(q->second.ino);
-	      
-	      if (have_inode(p->first.ino)) {
-		have_ino.insert(p->first.ino);
-	      } else {
-		dout(15) << " need " << p->first.ino << endl;
-		need_ino.insert(p->first.ino);
-	      }
-	    }
-	  }
-	}
+      if (in && !in->is_auth()) continue;
+      if (!in) {
+	if (!path_is_mine(weak->cap_export_paths[p->first]))
+	  continue;
+	cap_import_paths[p->first] = weak->cap_export_paths[p->first];
+	dout(10) << " noting cap import " << p->first << " path " << weak->cap_export_paths[p->first] << endl;
       }
-      parallel_fetch(inode_children, dirfrag_children, have_ino,
-		     new C_MDS_RetryMessage(mds, weak));
-      return;
+      
+      // note
+      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q) {
+	dout(10) << " claiming cap import " << p->first << " client" << q->first << endl;
+	cap_imports[p->first][q->first][from] = q->second;
+      }
+    }
+  } else {
+    // survivor.
+    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
+	 p != weak->cap_exports.end();
+	 ++p) {
+      CInode *in = get_inode(p->first);
+      if (!in || !in->is_auth()) continue;
+      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q) {
+	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << endl;
+	rejoin_import_cap(in, q->first, q->second, from);
+      }
     }
   }
 
@@ -1965,7 +1958,7 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
     rejoin_gather.erase(from);
     if (rejoin_gather.empty()) {
       dout(7) << "got all rejoins, sending acks!" << endl;
-      send_cache_rejoin_acks();
+      rejoin_gather_finish();
     } else {
       dout(7) << "still need rejoin from " << rejoin_gather << endl;
     }
@@ -1973,75 +1966,57 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 }
 
 
-class C_MDC_ParallelFetch : public Context {
-  MDCache *cache;
-public:
-  map<inodeno_t, set<dirfrag_t> > inode_children;
-  map<dirfrag_t, set<inodeno_t> > dirfrag_children;
-  set<inodeno_t> have_ino;
-  Context *c;
-  C_MDC_ParallelFetch(MDCache *mdc, 
-		      map<inodeno_t, set<dirfrag_t> >& ic, 
-		      map<dirfrag_t, set<inodeno_t> >& dc,
-		      Context *c_) :
-    cache(mdc), inode_children(ic), dirfrag_children(dc), c(c_) { }
-  void finish(int r) {
-    cache->parallel_fetch(inode_children, dirfrag_children, have_ino, c);
-  }
-};
-
-void MDCache::parallel_fetch(map<inodeno_t, set<dirfrag_t> >& inode_children,   // ino     -> [child dirfrags]
-			     map<dirfrag_t, set<inodeno_t> >& dirfrag_children,
-			     set<inodeno_t>& have_ino,
-			     Context *c) // dirfrag -> [child inos]
+/**
+ * parallel_fetch -- make a pass at fetching a bunch of paths in parallel
+ *
+ * @pathmap - map of inodeno to full pathnames.  we remove items from this map 
+ *            as we discover we have them.
+ * @retry   - non-completion callback context.  called when a pass of fetches
+ *            completes.  deleted if we are done (i.e. pathmap is empty).
+ */
+bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
+			     Context *retry)
 {
-  dout(10) << "parallel_fetch " 
-	   << inode_children.size() << " inode children, " 
-	   << dirfrag_children.size() << " dirfrag children" 
-	   << endl;
+  dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << endl;
 
-  if (dirfrag_children.empty()) {
-    dout(10) << " no more missing dirfrag children, we must be done" << endl;
-    c->finish(0);
-    delete c;
-    return;
-  }
-
-  // go
-  C_MDC_ParallelFetch *fin = new C_MDC_ParallelFetch(this, inode_children, dirfrag_children, c);
-  C_Gather *gather = new C_Gather(fin);
-
-  // open dirfrags
-  for (set<inodeno_t>::iterator p = have_ino.begin();
-       p != have_ino.end();
-       ++p) {
-    CInode *in = get_inode(*p);
-    assert(in);
-    dout(15) << " have " << *in << endl;
-    
-    for (set<dirfrag_t>::iterator q = inode_children[*p].begin();
-	 q != inode_children[*p].end();
-	 ++q) {
-      CDir *dir = in->get_or_open_dirfrag(this, q->frag);
-
-      dout(15) << " fetching " << *dir << endl;
-      dir->fetch(gather->new_sub());
-      
-      for (set<inodeno_t>::iterator r = dirfrag_children[*q].begin();
-	   r != dirfrag_children[*q].end();
-	   ++r)
-	fin->have_ino.insert(*r);
-      fin->dirfrag_children.erase(*q);
+  // scan list
+  set<CDir*> fetch_queue;
+  map<inodeno_t,string>::iterator p = pathmap.begin();
+  while (p != pathmap.end()) {
+    CInode *in = get_inode(p->first);
+    if (in) {
+      dout(15) << " have " << *in << endl;
+      pathmap.erase(p++);
+      continue;
     }
-    fin->inode_children.erase(*p);
+
+    // traverse
+    dout(15) << " missing " << p->first << " at " << p->second << endl;
+    filepath path(p->second);
+    CDir *dir = path_traverse_to_dir(path);
+    assert(dir);
+    fetch_queue.insert(dir);
+    p++;
   }
 
-  if (gather->empty()) {
-    dout(10) << " empty gather, we must be done" << endl;
-    c->finish(0);
-    delete c;
+  if (pathmap.empty()) {
+    dout(10) << "parallel_fetch done" << endl;
+    assert(fetch_queue.empty());
+    delete retry;
+    return true;
   }
+
+  // do a parallel fetch
+  C_Gather *gather = new C_Gather(retry);
+  for (set<CDir*>::iterator p = fetch_queue.begin();
+       p != fetch_queue.end();
+       ++p) 
+    (*p)->fetch(gather->new_sub());
+  
+  return false;
 }
+
+
 
 /*
  * rejoin_scour_survivor_replica - remove source from replica list on unmentioned objects
@@ -2232,7 +2207,7 @@ void MDCache::handle_cache_rejoin_strong_rejoin(MMDSCacheRejoin *strong)
     rejoin_gather.erase(from);
     if (rejoin_gather.empty()) {
       dout(7) << "got all rejoins, sending acks!" << endl;
-      send_cache_rejoin_acks();
+      rejoin_gather_finish();
     } else {
       dout(7) << "still need rejoin from " << rejoin_gather << endl;
     }
@@ -2445,21 +2420,81 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
   rejoin_gather.erase(from);
   if (rejoin_gather.empty()) {
     dout(7) << "got all rejoins|fulls, sending acks!" << endl;
-    send_cache_rejoin_acks();
+    rejoin_gather_finish();
   } else {
     dout(7) << "still need rejoin from " << rejoin_gather << endl;
   }
+}
+
+
+class C_MDC_RejoinGatherFinish : public Context {
+  MDCache *cache;
+public:
+  C_MDC_RejoinGatherFinish(MDCache *c) : cache(c) {}
+  void finish(int r) {
+    cache->rejoin_gather_finish();
+  }
+};
+
+void MDCache::rejoin_gather_finish() 
+{
+  dout(10) << "rejoin_gather_finish" << endl;
+  
+  // fetch paths?
+  if (!cap_import_paths.empty() &&
+      !parallel_fetch(cap_import_paths, new C_MDC_RejoinGatherFinish(this)))
+    return;
+  
+  // process cap imports
+  //  ino -> client -> frommds -> capex
+  for (map<inodeno_t,map<int, map<int,inode_caps_reconnect_t> > >::iterator p = cap_imports.begin();
+       p != cap_imports.end();
+       ++p) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    mds->server->add_reconnected_cap_inode(in);
+    for (map<int, map<int,inode_caps_reconnect_t> >::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) 
+      for (map<int,inode_caps_reconnect_t>::iterator r = q->second.begin();
+	   r != q->second.end();
+	   ++r) 
+	if (r->first >= 0)
+	  rejoin_import_cap(in, q->first, r->second, r->first);
+  }
+  
+  // process all reconnected caps (that is, twiddle filelock, before we send acks)
+  mds->server->process_reconnected_caps();
+  
+  send_cache_rejoin_acks();
+}
+
+void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& icr, int frommds)
+{
+  dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
+	   << " on " << *in << endl;
+  
+  // add cap
+  in->reconnect_cap(client, icr);
+  
+  // send REAP
+  // FIXME client session weirdness.
+  MClientFileCaps *reap = new MClientFileCaps(in->inode,
+					      in->client_caps[client].get_last_seq(),
+					      in->client_caps[client].pending(),
+					      in->client_caps[client].wanted(),
+					      MClientFileCaps::OP_REAP);
+  
+  reap->set_mds( frommds ); // reap from whom?
+  mds->messenger->send_message(reap, 
+			       mds->clientmap.get_inst(client),
+			       0, MDS_PORT_CACHE);
 }
 
 void MDCache::send_cache_rejoin_acks()
 {
   dout(7) << "send_cache_rejoin_acks" << endl;
   
-  assert(mds->is_rejoin());
-
-  // process any remaining open files reconnects
-  mds->server->process_rejoined_open_files();
-
   // send acks to everyone in the recovery set
   map<int,MMDSCacheRejoin*> ack;
   for (set<int>::iterator p = recovery_set.begin();
@@ -3819,6 +3854,31 @@ bool MDCache::path_is_mine(filepath& path)
 
   return cur->is_auth();
 }
+
+/**
+ * path_traverse_to_dir -- traverse to deepest dir we have
+ *
+ * @path - path to traverse (as far as we can)
+ *
+ * assumes we _don't_ have the full path.  (if we do, we return NULL.)
+ */
+CDir *MDCache::path_traverse_to_dir(filepath& path)
+{
+  CInode *cur = root;
+  assert(cur);
+  for (unsigned i=0; i<path.depth(); i++) {
+    dout(15) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << endl;
+    frag_t fg = cur->pick_dirfrag(path[i]);
+    CDir *dir = cur->get_or_open_dirfrag(this, fg);
+    CDentry *dn = dir->lookup(path[i]);
+    if (!dn) return dir;
+    assert(dn->is_primary());
+    cur = dn->get_inode();
+  }
+
+  return NULL; // oh, we have the full path.
+}
+
 
 
 void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin) 

@@ -311,7 +311,7 @@ void Journaler::flush(Context *onsync)
     waitfor_flush[write_pos].push_back(onsync);
 
   // write head?
-  if (last_wrote_head.sec() + 30 < g_clock.now().sec()) {
+  if (last_wrote_head.sec() + g_conf.journaler_write_head_interval < g_clock.now().sec()) {
     write_head();
   }
 }

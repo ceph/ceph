@@ -155,6 +155,7 @@ struct md_config_t {
   // journaler
   bool  journaler_allow_split_entries;
   bool  journaler_safe;
+  int   journaler_write_head_interval;
   
   // mds
   int   mds_cache_size;

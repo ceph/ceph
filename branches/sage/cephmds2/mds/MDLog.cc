@@ -257,6 +257,7 @@ void MDLog::_trimmed(LogEvent *le)
     // we trimmed off the front!  
     // we can expire the log a bit.
     journaler->set_expire_pos(le->_end_off);
+    journaler->trim();
   }
 
   trimming.erase(le->_end_off);
