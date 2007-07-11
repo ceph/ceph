@@ -37,8 +37,7 @@ Mutex _dout_lock;
 
 FileLayout g_OSD_FileLayout( 1<<26, 1, 1<<26, 2 );  // stripe over 64M objects, 2x replication
 FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, 2 );  // 8M objects, 2x replication.  (a lie)
-//FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
-FileLayout g_OSD_MDLogLayout( 1<<18, 1, 1<<18, 2 );  // 1M objects, 2x replication
+FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
 
 
 #include <msg/msg_types.h>
@@ -175,7 +174,7 @@ md_config_t g_conf = {
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_flush_on_shutdown: true,
-  mds_log_import_map_interval: 10*1024,  // frequency (in bytes) of EImportMap in log
+  mds_log_import_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
   mds_bal_replicate_threshold: 2000,
