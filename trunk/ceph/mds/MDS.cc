@@ -471,8 +471,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
   set<int> oldcreating;
   mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
-  set<int> oldout;
-  mdsmap->get_mds_set(oldout, MDSMap::STATE_OUT);
 
   // decode and process
   mdsmap->decode(m->get_encoded());
@@ -718,7 +716,7 @@ void MDS::boot()
   else if (is_replay()) 
     boot_replay();    // replay, join
   else 
-    assert(0);
+    assert(is_standby());
 }
 
 
@@ -895,7 +893,7 @@ int MDS::shutdown_start()
 
   // tell everyone to stop.
   set<int> active;
-  mdsmap->get_active_mds_set(active);
+  mdsmap->get_in_mds_set(active);
   for (set<int>::iterator p = active.begin();
        p != active.end();
        p++) {
@@ -933,9 +931,6 @@ int MDS::shutdown_final()
   if (logger2) logger2->flush(true);
   mdlog->flush_logger();
   
-  // send final down:out beacon (it doesn't matter if this arrives)
-  set_want_state(MDSMap::STATE_OUT);
-
   // stop timers
   if (beacon_killer) {
     timer.cancel_event(beacon_killer);
@@ -1125,7 +1120,7 @@ void MDS::my_dispatch(Message *m)
   // shut down?
   if (is_stopping()) {
     if (mdcache->shutdown_pass()) {
-      dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to up:stopped" << endl;
+      dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << endl;
 
       // tell monitor we shut down cleanly.
       set_want_state(MDSMap::STATE_STOPPED);

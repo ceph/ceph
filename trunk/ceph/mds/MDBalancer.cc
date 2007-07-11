@@ -160,7 +160,7 @@ void MDBalancer::send_heartbeat()
 
   
   set<int> up;
-  mds->get_mds_map()->get_up_mds_set(up);
+  mds->get_mds_map()->get_in_mds_set(up);
   for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid()) continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);

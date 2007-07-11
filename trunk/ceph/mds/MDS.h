@@ -120,7 +120,6 @@ class MDS : public Dispatcher {
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
   bool is_dne()      { return state == MDSMap::STATE_DNE; }
-  bool is_out()      { return state == MDSMap::STATE_OUT; }
   bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }

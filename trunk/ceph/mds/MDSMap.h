@@ -26,43 +26,69 @@
 #include <string>
 using namespace std;
 
+
+/*
+
+  beautiful state diagram:
+
+   STOPPED                     DNE         FAILED                    
+  / |  \                      / |            |
+ /  |   \________     _______/  |            |              
+|   v            v   v          v            v
+| STARTING <--> STANDBY <--> CREATING      REPLAY -> RECONNECT -> REJOIN 
+|      \                      /                                     /
+|       \____    ____________/                                    /
+ \           v  v                                               /
+  \         ACTIVE   <----------------------------------------/
+   \          |
+    \         |
+     \        v
+      \--  STOPPING 
+               
+
+
+
+*/
+
+
 class MDSMap {
  public:
   // mds states
-  static const int STATE_DNE =       0;  // down, never existed.
-  static const int STATE_OUT =       1;  // down, once existed, but no subtrees, empty log.
-  static const int STATE_FAILED =    2;  // down, active subtrees; needs to be recovered.
+  static const int STATE_DNE =        0;  // down, never existed.
+  static const int STATE_STOPPED =   -1;  // down, once existed, but no subtrees. empty log.
+  static const int STATE_FAILED =     2;  // down, active subtrees; needs to be recovered.
 
-  static const int STATE_BOOT     =  3;  // up, started, joining cluster.
-  static const int STATE_STANDBY  =  4;  // up, but inactive.  waiting for assignment by monitor.
-  static const int STATE_CREATING  = 5;  // up, creating MDS instance (new journal, idalloc..)
-  static const int STATE_STARTING  = 6;  // up, starting prior out MDS instance.
-  static const int STATE_REPLAY    = 7;  // up, scanning journal, recoverying any shared state
-  static const int STATE_RESOLVE   = 8;  // up, disambiguating partial distributed operations (import/export, ...rename?)
-  static const int STATE_RECONNECT = 9;  // up, reconnect to clients
-  static const int STATE_REJOIN    = 10; // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =    11; // up, active
-  static const int STATE_STOPPING  = 12; // up, exporting metadata (-> standby or out)
-  static const int STATE_STOPPED   = 13; // up, finished stopping.  like standby, but not avail to takeover.
+  static const int STATE_BOOT     =  -3;  // up, boot announcement.  destiny unknown.
+  static const int STATE_STANDBY  =  -4;  // up, idle.  waiting for assignment by monitor.
+  static const int STATE_CREATING  = -5;  // up, creating MDS instance (new journal, idalloc..).
+  static const int STATE_STARTING  = -6;  // up, starting prior stopped MDS instance.
+
+  static const int STATE_REPLAY    =  7;  // up, starting prior failed instance. scanning journal.
+  static const int STATE_RESOLVE   =  8;  // up, disambiguating distributed operations (import, rename, etc.)
+  static const int STATE_RECONNECT =  9;  // up, reconnect to clients
+  static const int STATE_REJOIN    =  10; // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =     11; // up, active
+  static const int STATE_STOPPING  =  12; // up, exporting metadata (-> standby or out)
   
   static const char *get_state_name(int s) {
     switch (s) {
-      // down
+      // down and out
     case STATE_DNE:       return "down:dne";
-    case STATE_OUT:       return "down:out";
+    case STATE_STOPPED:   return "down:stopped";
+      // down and in
     case STATE_FAILED:    return "down:failed";
-      // up
+      // up and out
     case STATE_BOOT:      return "up:boot";
-    case STATE_STANDBY:   return "up:standby";
     case STATE_CREATING:  return "up:creating";
     case STATE_STARTING:  return "up:starting";
+    case STATE_STANDBY:   return "up:standby";
+      // up and in
     case STATE_REPLAY:    return "up:replay";
     case STATE_RESOLVE:   return "up:resolve";
     case STATE_RECONNECT: return "up:reconnect";
     case STATE_REJOIN:    return "up:rejoin";
     case STATE_ACTIVE:    return "up:active";
     case STATE_STOPPING:  return "up:stopping";
-    case STATE_STOPPED:   return "up:stopped";
     default: assert(0);
     }
     return 0;
@@ -73,6 +99,7 @@ class MDSMap {
   utime_t created;
   epoch_t same_inst_since;
 
+  int target_num;
   int anchortable;   // which MDS has anchortable (fixme someday)
   int root;          // which MDS has root directory
 
@@ -97,7 +124,9 @@ class MDSMap {
   int get_root() const { return root; }
 
   // counts
-  int get_num_mds() const { return mds_state.size(); }
+  int get_num_mds() {
+    return get_num_in_mds();
+  }
   int get_num_mds(int state) {
     int n = 0;
     for (map<int,int>::const_iterator p = mds_state.begin();
@@ -106,24 +135,13 @@ class MDSMap {
       if (p->second == state) ++n;
     return n;
   }
-  int get_num_in_mds() {
-    return get_num_up_mds() - get_num_mds(STATE_STANDBY) - get_num_mds(STATE_STOPPED);
-  }
-  int get_num_up_mds() {
+
+  int get_num_in_mds() { 
     int n = 0;
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
-      if (is_up(p->first)) ++n;
-    return n;
-  }
-  int get_num_up_or_failed_mds() {
-    int n = 0;
-    for (map<int,int>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (is_up(p->first) || is_failed(p->first)) 
-	++n;
+      if (p->second > 0) ++n;
     return n;
   }
 
@@ -134,19 +152,24 @@ class MDSMap {
 	 p++)
       s.insert(p->first);
   }
-  void get_up_mds_set(set<int>& s) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (is_up(p->first)) 
-	s.insert(p->first);
-  }
   void get_mds_set(set<int>& s, int state) {
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (p->second == state)
 	s.insert(p->first);
+  } 
+  void get_up_mds_set(set<int>& s) {
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (is_up(p->first)) s.insert(p->first);
+  }
+  void get_in_mds_set(set<int>& s) {
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (is_in(p->first)) s.insert(p->first);
   }
   void get_active_mds_set(set<int>& s) {
     get_mds_set(s, MDSMap::STATE_ACTIVE);
@@ -165,11 +188,12 @@ class MDSMap {
 
 
   // mds states
-  bool is_down(int m) { return is_dne(m) || is_out(m) || is_failed(m); }
+  bool is_down(int m) { return is_dne(m) || is_stopped(m) || is_failed(m); }
   bool is_up(int m) { return !is_down(m); }
+  bool is_in(int m) { return mds_state.count(m) && mds_state[m] > 0; }
+  bool is_out(int m) { return !mds_state.count(m) || mds_state[m] <= 0; }
 
   bool is_dne(int m)      { return mds_state.count(m) == 0 || mds_state[m] == STATE_DNE; }
-  bool is_out(int m)      { return mds_state.count(m) && mds_state[m] == STATE_OUT; }
   bool is_failed(int m)    { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
 
   bool is_boot(int m)  { return mds_state.count(m) && mds_state[m] == STATE_BOOT; }
@@ -188,29 +212,40 @@ class MDSMap {
   bool has_created(int m) { return mds_created.count(m); }
 
   // cluster states
+  bool is_full() {
+    return get_num_in_mds() >= target_num;
+  }
   bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
-    return get_num_mds(STATE_REPLAY) + 
+    return 
+      get_num_mds(STATE_REPLAY) + 
       get_num_mds(STATE_RESOLVE) + 
       get_num_mds(STATE_RECONNECT) + 
       get_num_mds(STATE_REJOIN) + 
       get_num_mds(STATE_FAILED);
   }
-  /*bool is_resolving() {  // nodes are resolving distributed ops
-    return get_num_mds(STATE_RESOLVE);
-    }*/
   bool is_rejoining() {  
     // nodes are rejoining cache state
-    return get_num_mds(STATE_REJOIN) > 0 &&
+    return 
+      get_num_mds(STATE_REJOIN) > 0 &&
+      get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_RECONNECT) == 0 &&
       get_num_mds(STATE_RESOLVE) == 0 &&
-      get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_FAILED) == 0;
+  }
+  bool is_stopped() {
+    return
+      get_num_in_mds() == 0 &&
+      get_num_mds(STATE_CREATING) == 0 &&
+      get_num_mds(STATE_STARTING) == 0 &&
+      get_num_mds(STATE_STANDBY) == 0;
   }
 
 
   int get_state(int m) {
-    if (mds_state.count(m)) return mds_state[m];
-    return STATE_OUT;
+    if (mds_state.count(m)) 
+      return mds_state[m];
+    else
+      return STATE_DNE;
   }
 
   // inst
@@ -260,36 +295,31 @@ class MDSMap {
 
 
   // serialize, unserialize
-  void encode(bufferlist& blist) {
-    blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&created, sizeof(created));
-    blist.append((char*)&same_inst_since, sizeof(same_inst_since));
-    blist.append((char*)&anchortable, sizeof(anchortable));
-    blist.append((char*)&root, sizeof(root));
-    
-    ::_encode(mds_state, blist);
-    ::_encode(mds_state_seq, blist);
-    ::_encode(mds_inst, blist);
-    ::_encode(mds_inc, blist);
+  void encode(bufferlist& bl) {
+    ::_encode(epoch, bl);
+    ::_encode(target_num, bl);
+    ::_encode(created, bl);
+    ::_encode(same_inst_since, bl);
+    ::_encode(anchortable, bl);
+    ::_encode(root, bl);
+    ::_encode(mds_state, bl);
+    ::_encode(mds_state_seq, bl);
+    ::_encode(mds_inst, bl);
+    ::_encode(mds_inc, bl);
   }
   
-  void decode(bufferlist& blist) {
+  void decode(bufferlist& bl) {
     int off = 0;
-    blist.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
-    blist.copy(off, sizeof(created), (char*)&created);
-    off += sizeof(created);
-    blist.copy(off, sizeof(same_inst_since), (char*)&same_inst_since);
-    off += sizeof(same_inst_since);
-    blist.copy(off, sizeof(anchortable), (char*)&anchortable);
-    off += sizeof(anchortable);
-    blist.copy(off, sizeof(root), (char*)&root);
-    off += sizeof(root);
-    
-    ::_decode(mds_state, blist, off);
-    ::_decode(mds_state_seq, blist, off);
-    ::_decode(mds_inst, blist, off);
-    ::_decode(mds_inc, blist, off);
+    ::_decode(epoch, bl, off);
+    ::_decode(target_num, bl, off);
+    ::_decode(created, bl, off);
+    ::_decode(same_inst_since, bl, off);
+    ::_decode(anchortable, bl, off);
+    ::_decode(root, bl, off);
+    ::_decode(mds_state, bl, off);
+    ::_decode(mds_state_seq, bl, off);
+    ::_decode(mds_inst, bl, off);
+    ::_decode(mds_inc, bl, off);
   }
 
 
