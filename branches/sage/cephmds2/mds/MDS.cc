@@ -242,6 +242,13 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
 
 
 
+void MDS::send_message_client(Message *m, int client)
+{
+  version_t seq = clientmap.inc_push_seq(client);
+  dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << endl;
+  messenger->send_message(m, clientmap.get_inst(client));
+}
+
 
 
 int MDS::init(bool standby)

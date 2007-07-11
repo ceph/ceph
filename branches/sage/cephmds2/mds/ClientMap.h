@@ -63,8 +63,10 @@ public:
   }
 
 private:
-  // effects version
+  // affects version
   hash_map<int,entity_inst_t> client_inst;
+
+  // does not affect version
   set<int> sessions;
   set<int> opening;
   set<int> closing;
@@ -100,6 +102,19 @@ public:
     version++;
   }
   
+private:
+  // -- push sequence --
+  hash_map<int,version_t> client_push_seq; // seq # for messages pushed to client.
+
+public:
+  version_t inc_push_seq(int client) {
+    return ++client_push_seq[client];
+  }
+  version_t get_push_seq(int client) {
+    return client_push_seq[client];
+  }
+
+
 private:
   // -- completed requests --
   // client id -> tid -> result code

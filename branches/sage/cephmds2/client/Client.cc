@@ -602,7 +602,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       Cond cond;
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << endl;
-	messenger->send_message(new MClientSession(MClientSession::OP_OPEN),
+	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),
 				mdsmap->get_inst(mds), MDS_PORT_SERVER);
       }
       
@@ -675,11 +675,12 @@ void Client::handle_client_session(MClientSession *m)
   int from = m->get_source().num();
 
   switch (m->op) {
-  case MClientSession::OP_OPEN_ACK:
-    mds_sessions.insert(from);
+  case MClientSession::OP_OPEN:
+    assert(mds_sessions.count(from) == 0);
+    mds_sessions[from] = 0;
     break;
 
-  case MClientSession::OP_CLOSE_ACK:
+  case MClientSession::OP_CLOSE:
     mds_sessions.erase(from);
     // FIXME: kick requests (hard) so that they are redirected.  or fail.
     break;
@@ -991,6 +992,10 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   m->clear_payload();  // for if/when we send back to MDS
 
+  // note push seq increment
+  assert(mds_sessions.count(mds));
+  mds_sessions[mds]++;
+
   // reap?
   if (m->get_special() == MClientFileCaps::OP_REAP) {
     int other = m->get_mds();
@@ -1086,7 +1091,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << endl;
     m->set_caps(0);
     m->set_wanted(0);
-    messenger->send_message(m, m->get_source_inst(), m->get_source_port());
+    messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
     return;
   }
 
@@ -1196,7 +1201,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
     in->file_wr_size = 0;
   }
 
-  messenger->send_message(m, m->get_source_inst(), m->get_source_port());
+  messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
 }
 
 
@@ -1349,12 +1354,13 @@ int Client::unmount()
   }
   
   // send session closes!
-  for (set<int>::iterator p = mds_sessions.begin();
+  for (map<int,version_t>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    dout(2) << "sending client_session close to mds" << *p << endl;
-    messenger->send_message(new MClientSession(MClientSession::OP_CLOSE),
-			    mdsmap->get_inst(*p), MDS_PORT_SERVER);
+    dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << endl;
+    messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_CLOSE,
+					       p->second),
+			    mdsmap->get_inst(p->first), MDS_PORT_SERVER);
   }
 
   // send unmount!

@@ -217,6 +217,8 @@ class MDS : public Dispatcher {
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
   void forward_message_mds(Message *req, int mds, int port=0);
 
+  void send_message_client(Message *m, int client);
+
 
   // start up, shutdown
   int init(bool standby=false);

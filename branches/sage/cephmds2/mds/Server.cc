@@ -116,7 +116,7 @@ void Server::handle_client_session(MClientSession *m)
 {
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << endl;
   int from = m->get_source().num();
-  bool open = m->op == MClientSession::OP_OPEN;
+  bool open = m->op == MClientSession::OP_REQUEST_OPEN;
 
   if (open) {
     if (mds->clientmap.is_opening(from)) {
@@ -131,6 +131,14 @@ void Server::handle_client_session(MClientSession *m)
       delete m;
       return;
     }
+    if (m->seq < mds->clientmap.get_push_seq(from)) {
+      dout(10) << "old push seq " << m->seq << " < " << mds->clientmap.get_push_seq(from) 
+	       << ", dropping" << endl;
+      delete m;
+      return;
+    }
+    assert(m->seq == mds->clientmap.get_push_seq(from));
+
     mds->clientmap.add_closing(from);
   }
 
@@ -164,9 +172,9 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
   
   // reply
   if (open) 
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN_ACK), client_inst);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), client_inst);
   else
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE_ACK), client_inst);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), client_inst);
 }
 
 
