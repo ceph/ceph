@@ -854,6 +854,7 @@ void ESubtreeMap::replay(MDS *mds)
     dout(10) << "ESubtreeMap.replay -- reconstructing (auth) subtree spanning tree" << endl;
     
     // first, stick the spanning tree in my cache
+    //metablob.print(cout);
     metablob.replay(mds);
     
     // restore import/export maps
@@ -979,11 +980,18 @@ void EImportFinish::expire(MDS *mds, Context *c)
 
 void EImportFinish::replay(MDS *mds)
 {
-  dout(10) << "EImportFinish.replay " << base << " success=" << success << endl;
-  if (success) 
-    mds->mdcache->finish_ambiguous_import(base);
-  else
-    mds->mdcache->cancel_ambiguous_import(base);
+  if (mds->mdcache->have_ambiguous_import(base)) {
+    dout(10) << "EImportFinish.replay " << base << " success=" << success << endl;
+    if (success) 
+      mds->mdcache->finish_ambiguous_import(base);
+    else
+      mds->mdcache->cancel_ambiguous_import(base);
+  } else {
+    dout(10) << "EImportFinish.replay " << base << " success=" << success
+	     << ", predates my subtree_map start point, ignoring" 
+	     << endl;
+    // verify that?
+  }
 }
 
 

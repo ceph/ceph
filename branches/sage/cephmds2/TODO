@@ -59,15 +59,13 @@ sage mds
 /  - clean up remove_gather() crap
   - add_strong_* should take the cache object?
 /  - all replicated scatterlocks should start out in scatter state.
-  - parallel_fetch
+/  - parallel_fetch
   - missing/full
   - carefully document rejoin
     - cases
     - confounding factors
 
-- client sessions vs cap migration.  
-  - sessions need incarnation to avoid close races.
-  - mds->client session open on cap import, if needed.
+
 
 
  

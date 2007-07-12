@@ -907,8 +907,9 @@ void MDCache::log_subtree_map(Context *onsync)
     CDir *dir = p->first;
     if (!dir->is_auth()) continue;
 
+    dout(15) << " subtree " << *dir << endl;
     le->subtrees[dir->dirfrag()].clear();
-    le->metablob.add_dir_context(dir, true);
+    le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
 
     // bounds
@@ -916,11 +917,14 @@ void MDCache::log_subtree_map(Context *onsync)
 	 q != p->second.end();
 	 ++q) {
       CDir *bound = *q;
+      dout(15) << " subtree bound " << *bound << endl;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
-      le->metablob.add_dir_context(bound);
+      le->metablob.add_dir_context(bound, EMetaBlob::TO_ROOT);
       le->metablob.add_dir(bound, false);
     }
   }
+
+  //le->metablob.print(cout);
 
   Context *fin = new C_MDS_WroteSubtreeMap(this, mds->mdlog->get_write_pos());
   mds->mdlog->writing_subtree_map = true;

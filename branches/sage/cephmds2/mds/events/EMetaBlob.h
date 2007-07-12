@@ -73,6 +73,11 @@ class EMetaBlob {
       bl.copy(off, sizeof(dirty), (char*)&dirty);
       off += sizeof(dirty);
     }
+    void print(ostream& out) {
+      out << " fullbit dn " << dn << " dnv " << dnv
+	  << " inode " << inode.ino
+	  << " dirty=" << dirty << endl;
+    }
   };
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
@@ -100,6 +105,11 @@ class EMetaBlob {
       bl.copy(off, sizeof(dirty), (char*)&dirty);
       off += sizeof(dirty);
     }
+    void print(ostream& out) {
+      out << " remotebit dn " << dn << " dnv " << dnv
+	  << " ino " << ino
+	  << " dirty=" << dirty << endl;
+    }
   };
 
   /*
@@ -123,6 +133,10 @@ class EMetaBlob {
       bl.copy(off, sizeof(dirty), (char*)&dirty);
       off += sizeof(dirty);
     }
+    void print(ostream& out) {
+      out << " nullbit dn " << dn << " dnv " << dnv
+	  << " dirty=" << dirty << endl;
+    }
   };
 
 
@@ -132,13 +146,12 @@ class EMetaBlob {
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
-    dirfrag_t  dirfrag;
     version_t  dirv;
     int state;
     int nfull, nremote, nnull;
-    bufferlist bfull, bremote, bnull;
 
   private:
+    bufferlist dnbl;
     bool dn_decoded;
     list<fullbit>   dfull;
     list<remotebit> dremote;
@@ -156,52 +169,57 @@ class EMetaBlob {
     list<remotebit> &get_dremote() { return dremote; }
     list<nullbit>   &get_dnull()   { return dnull; }
 
+    void print(dirfrag_t dirfrag, ostream& out) {
+      out << "dirlump " << dirfrag << " dirv " << dirv 
+	  << " state " << state
+	  << " num " << nfull << "/" << nremote << "/" << nnull
+	  << endl;
+      _decode_bits();
+      for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
+	p->print(out);
+      for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
+	p->print(out);
+      for (list<nullbit>::iterator p = dnull.begin(); p != dnull.end(); ++p)
+	p->print(out);
+    }
+
     void _encode_bits() {
       for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
-	p->_encode(bfull);
+	p->_encode(dnbl);
       for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
-	p->_encode(bremote);
+	p->_encode(dnbl);
       for (list<nullbit>::iterator p = dnull.begin(); p != dnull.end(); ++p)
-	p->_encode(bnull);
+	p->_encode(dnbl);
     }
     void _decode_bits() { 
       if (dn_decoded) return;
       int off = 0;
       for (int i=0; i<nfull; i++) 
-	dfull.push_back(fullbit(bfull, off));
-      off = 0;
+	dfull.push_back(fullbit(dnbl, off));
       for (int i=0; i<nremote; i++) 
-	dremote.push_back(remotebit(bremote, off));
-      off = 0;
+	dremote.push_back(remotebit(dnbl, off));
       for (int i=0; i<nnull; i++) 
-	dnull.push_back(nullbit(bnull, off));
+	dnull.push_back(nullbit(dnbl, off));
       dn_decoded = true;
     }
 
     void _encode(bufferlist& bl) {
-      bl.append((char*)&dirfrag, sizeof(dirfrag));
-      bl.append((char*)&dirv, sizeof(dirv));
-      bl.append((char*)&state, sizeof(state));
-      bl.append((char*)&nfull, sizeof(nfull));
-      bl.append((char*)&nremote, sizeof(nremote));
-      bl.append((char*)&nnull, sizeof(nnull));
+      ::_encode(dirv, bl);
+      ::_encode(state, bl);
+      ::_encode(nfull, bl);
+      ::_encode(nremote, bl);
+      ::_encode(nnull, bl);
       _encode_bits();
-      ::_encode(bfull, bl);
-      ::_encode(bremote, bl);
-      ::_encode(bnull, bl);
+      ::_encode(dnbl, bl);
     }
     void _decode(bufferlist& bl, int& off) {
-      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);  off += sizeof(dirfrag);
-      bl.copy(off, sizeof(dirv), (char*)&dirv);  off += sizeof(dirv);
-      bl.copy(off, sizeof(state), (char*)&state);  off += sizeof(state);
-      bl.copy(off, sizeof(nfull), (char*)&nfull);  off += sizeof(nfull);
-      bl.copy(off, sizeof(nremote), (char*)&nremote);  off += sizeof(nremote);
-      bl.copy(off, sizeof(nnull), (char*)&nnull);  off += sizeof(nnull);
-      ::_decode(bfull, bl, off);
-      ::_decode(bremote, bl, off);
-      ::_decode(bnull, bl, off);
-      // don't decode bits unless we need them.
-      dn_decoded = false;
+      ::_decode(dirv, bl, off);
+      ::_decode(state, bl, off);
+      ::_decode(nfull, bl, off);
+      ::_decode(nremote, bl, off);
+      ::_decode(nnull, bl, off);
+      ::_decode(dnbl, bl, off);
+      dn_decoded = false;      // don't decode bits unless we need them.
     }
   };
   
@@ -226,6 +244,13 @@ class EMetaBlob {
   list<metareqid_t> client_reqs;
 
  public:
+  void print(ostream& out) {
+    for (list<dirfrag_t>::iterator p = lump_order.begin();
+	 p != lump_order.end();
+	 ++p) {
+      lump_map[*p].print(*p, out);
+    }
+  }
 
   void add_client_req(metareqid_t r) {
     client_reqs.push_back(r);
@@ -332,20 +357,28 @@ class EMetaBlob {
     if (dirty) l.mark_dirty();
     return l;
   }
-
-  void add_dir_context(CDir *dir, bool toroot=false) {
+  
+  static const int TO_AUTH_SUBTREE_ROOT = 0;  // default.
+  static const int TO_ROOT = 1;
+  
+  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
     // already have this dir?  (we must always add in order)
     if (lump_map.count(dir->dirfrag())) 
       return;
 
+    // stop at subtree root?
+    if (mode == TO_AUTH_SUBTREE_ROOT &&
+	dir->is_subtree_root() && dir->is_auth())
+      return;
+    
+    // stop at root/stray
     CInode *diri = dir->get_inode();
-    if (!toroot && dir->is_subtree_root() && dir->is_auth())
-      return;  // stop at subtree root
-    if (!dir->get_inode()->get_parent_dn())
+    if (!diri->get_parent_dn())
       return;
 
+    // add parent dn
     CDentry *parent = diri->get_parent_dn();
-    add_dir_context(parent->get_dir(), toroot);
+    add_dir_context(parent->get_dir(), mode);
     add_dentry(parent, false);
   }
 
@@ -353,12 +386,13 @@ class EMetaBlob {
   // encoding
 
   void _encode(bufferlist& bl) {
-    int n = lump_map.size();
-    bl.append((char*)&n, sizeof(n));
+    int32_t n = lump_map.size();
+    ::_encode(n, bl);
     for (list<dirfrag_t>::iterator i = lump_order.begin();
 	 i != lump_order.end();
 	 ++i) {
-      bl.append((char*)&(*i), sizeof(*i));
+      dirfrag_t dirfrag = *i;
+      ::_encode(dirfrag, bl);
       lump_map[*i]._encode(bl);
     }
     ::_encode(atids, bl);
@@ -370,13 +404,11 @@ class EMetaBlob {
     ::_encode(client_reqs, bl);
   } 
   void _decode(bufferlist& bl, int& off) {
-    int n;
-    bl.copy(off, sizeof(n), (char*)&n);  
-    off += sizeof(n);
+    int32_t n;
+    ::_decode(n, bl, off);
     for (int i=0; i<n; i++) {
-      dirfrag_t dirfrag;
-      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-      off += sizeof(dirfrag);
+      dirfrag_t dirfrag; 
+      ::_decode(dirfrag, bl, off);
       lump_order.push_back(dirfrag);
       lump_map[dirfrag]._decode(bl, off);
     }

@@ -512,7 +512,7 @@ int Client::choose_target_mds(MClientRequest *req)
   // pick mds
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
-    mds = rand() % mdsmap->get_num_mds();
+    mds = 0;//rand() % mdsmap->get_num_mds();
   } else {
     if (req->auth_is_best()) {
       // pick the actual auth (as best we can)
