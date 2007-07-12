@@ -51,6 +51,9 @@ sage doc
 
 sage mds
 
+- hmm, should we move ESubtreeMap out of the journal?  
+  that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
+
 - fix rejoin
 /  - validate dentry<->inode connectivity
 /  - clean up remove_gather() crap

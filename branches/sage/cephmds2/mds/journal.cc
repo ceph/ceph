@@ -13,9 +13,8 @@
  */
 
 #include "events/EString.h"
-#include "events/EImportMap.h"
+#include "events/ESubtreeMap.h"
 #include "events/ESession.h"
-#include "events/EClientMap.h"
 
 #include "events/EMetaBlob.h"
 
@@ -517,47 +516,6 @@ void EMetaBlob::replay(MDS *mds)
 }
 
 // -----------------------
-// EClientMap
-
-bool EClientMap::has_expired(MDS *mds) 
-{
-  if (mds->clientmap.get_committed() >= cmapv) {
-    dout(10) << "EClientMap.has_expired newer clientmap " << mds->clientmap.get_committed() 
-	     << " >= " << cmapv << " has committed" << endl;
-    return true;
-  } else if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "EClientMap.has_expired newer clientmap " << mds->clientmap.get_committing() 
-	     << " >= " << cmapv << " is still committing" << endl;
-    return false;
-  } else {
-    dout(10) << "EClientMap.has_expired clientmap " << mds->clientmap.get_version() 
-	     << " not empty" << endl;
-    return false;
-  }
-}
-
-void EClientMap::expire(MDS *mds, Context *c)
-{
-  if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "EClientMap.expire logging clientmap" << endl;
-    assert(mds->clientmap.get_committing() > mds->clientmap.get_committed());
-    mds->clientmap.add_commit_waiter(c);
-  } else {
-    dout(10) << "EClientMap.expire logging clientmap" << endl;
-    mds->log_clientmap(c);
-  }
-}
-
-void EClientMap::replay(MDS *mds)
-{
-  dout(10) << "EClientMap.replay v " << cmapv << endl;
-  int off = 0;
-  mds->clientmap.decode(mapbl, off);
-  mds->clientmap.set_committed(mds->clientmap.get_version());
-  mds->clientmap.set_committing(mds->clientmap.get_version());
-}
-
-
 // ESession
 bool ESession::has_expired(MDS *mds) 
 {
@@ -571,31 +529,32 @@ bool ESession::has_expired(MDS *mds)
     return false;
   } else {
     dout(10) << "ESession.has_expired clientmap " << mds->clientmap.get_version() 
-	     << " not empty" << endl;
+	     << " > " << cmapv << ", need to save" << endl;
     return false;
   }
 }
 
 void ESession::expire(MDS *mds, Context *c)
-{
-  if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "ESession.expire logging clientmap" << endl;
-    assert(mds->clientmap.get_committing() > mds->clientmap.get_committed());
-    mds->clientmap.add_commit_waiter(c);
-  } else {
-    dout(10) << "ESession.expire logging clientmap" << endl;
-    mds->log_clientmap(c);
-  }
+{  
+  dout(10) << "ESession.expire saving clientmap" << endl;
+  mds->clientmap.save(c, cmapv);
 }
 
 void ESession::replay(MDS *mds)
 {
-  dout(10) << "ESession.replay" << endl;
-  if (open)
-    mds->clientmap.open_session(client_inst);
-  else
-    mds->clientmap.close_session(client_inst.name.num());
-  mds->clientmap.reset_projected(); // make it follow version.
+  if (mds->clientmap.get_version() >= cmapv) {
+    dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
+	     << " >= " << cmapv << ", noop" << endl;
+  } else {
+    dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
+	     << " < " << cmapv << endl;
+    assert(mds->clientmap.get_version() + 1 == cmapv);
+    if (open)
+      mds->clientmap.open_session(client_inst);
+    else
+      mds->clientmap.close_session(client_inst.name.num());
+    mds->clientmap.reset_projected(); // make it follow version.
+  }
 }
 
 
@@ -863,46 +822,46 @@ void ESlaveUpdate::replay(MDS *mds)
 
 
 // -----------------------
-// EImportMap
+// ESubtreeMap
 
-bool EImportMap::has_expired(MDS *mds)
+bool ESubtreeMap::has_expired(MDS *mds)
 {
-  if (mds->mdlog->get_last_import_map_offset() > get_start_off()) {
-    dout(10) << "EImportMap.has_expired -- there's a newer map" << endl;
+  if (mds->mdlog->get_last_subtree_map_offset() > get_start_off()) {
+    dout(10) << "ESubtreeMap.has_expired -- there's a newer map" << endl;
     return true;
   } else if (mds->mdlog->is_capped()) {
-    dout(10) << "EImportMap.has_expired -- log is capped, allowing map to expire" << endl;
+    dout(10) << "ESubtreeMap.has_expired -- log is capped, allowing map to expire" << endl;
     return true;
   } else {
-    dout(10) << "EImportMap.has_expired -- not until there's a newer map written" 
-	     << " (" << get_start_off() << " >= " << mds->mdlog->get_last_import_map_offset() << ")"
+    dout(10) << "ESubtreeMap.has_expired -- not until there's a newer map written" 
+	     << " (" << get_start_off() << " >= " << mds->mdlog->get_last_subtree_map_offset() << ")"
 	     << endl;
     return false;
   }
 }
 
-void EImportMap::expire(MDS *mds, Context *c)
+void ESubtreeMap::expire(MDS *mds, Context *c)
 {
-  dout(10) << "EImportMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << endl;
-  mds->mdlog->add_import_map_expire_waiter(c);
+  dout(10) << "ESubtreeMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << endl;
+  mds->mdlog->add_subtree_map_expire_waiter(c);
 }
 
-void EImportMap::replay(MDS *mds) 
+void ESubtreeMap::replay(MDS *mds) 
 {
   if (mds->mdcache->is_subtrees()) {
-    dout(10) << "EImportMap.replay -- ignoring, already have import map" << endl;
+    dout(10) << "ESubtreeMap.replay -- ignoring, already have import map" << endl;
   } else {
-    dout(10) << "EImportMap.replay -- reconstructing (auth) subtree spanning tree" << endl;
+    dout(10) << "ESubtreeMap.replay -- reconstructing (auth) subtree spanning tree" << endl;
     
     // first, stick the spanning tree in my cache
     metablob.replay(mds);
     
     // restore import/export maps
-    for (set<dirfrag_t>::iterator p = imports.begin();
-	 p != imports.end();
+    for (map<dirfrag_t, list<dirfrag_t> >::iterator p = subtrees.begin();
+	 p != subtrees.end();
 	 ++p) {
-      CDir *dir = mds->mdcache->get_dirfrag(*p);
-      mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+      CDir *dir = mds->mdcache->get_dirfrag(p->first);
+      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
     }
   }
   mds->mdcache->show_subtrees();

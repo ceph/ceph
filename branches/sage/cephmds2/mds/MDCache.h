@@ -40,7 +40,7 @@ class Logger;
 
 class Message;
 
-class MMDSImportMap;
+class MMDSResolve;
 class MMDSResolveAck;
 class MMDSCacheRejoin;
 class MMDSCacheRejoinAck;
@@ -260,7 +260,7 @@ public:
   
 protected:
   // delayed cache expire
-  map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
+  map<CDir*, map<int, MCacheExpire*> > delayed_expire; // subtree root -> expire msg
 
   // -- discover --
   hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
@@ -310,7 +310,7 @@ protected:
   // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
   map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
-  // from MMDSImportMaps
+  // from MMDSResolves
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;  // for replay.
@@ -318,11 +318,11 @@ protected:
   map<metareqid_t, Context*> waiting_for_slave_update_commit;
   friend class ESlaveUpdate;
 
-  set<int> wants_import_map;   // nodes i need to send my import map to
-  set<int> got_import_map;     // nodes i got import_maps from
+  set<int> wants_resolve;   // nodes i need to send my resolve to
+  set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
   
-  void handle_import_map(MMDSImportMap *m);
+  void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
   void maybe_resolve_finish();
   void disambiguate_imports();
@@ -333,12 +333,12 @@ public:
   void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
   void cancel_ambiguous_import(dirfrag_t dirino);
   void finish_ambiguous_import(dirfrag_t dirino);
-  void send_import_map(int who);
-  void send_import_map_now(int who);
-  void send_import_map_later(int who);
-  void send_pending_import_maps();  // maybe.
-  void log_import_map(Context *onsync=0);
-  void _logged_import_map(off_t off);
+  void send_resolve(int who);
+  void send_resolve_now(int who);
+  void send_resolve_later(int who);
+  void maybe_send_pending_resolves();
+  void log_subtree_map(Context *onsync=0);
+  void _logged_subtree_map(off_t off);
 
 protected:
   // [rejoin]

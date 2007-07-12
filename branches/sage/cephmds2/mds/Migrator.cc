@@ -255,7 +255,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_finish_waiters.erase(dir);
 	
 	// send pending import_maps?  (these need to go out when all exports have finished.)
-	cache->send_pending_import_maps();
+	cache->maybe_send_pending_resolves();
 	
 	cache->show_subtrees();
       }
@@ -377,13 +377,13 @@ void Migrator::show_importing()
        p++) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
     if (dir) {
-      dout(10) << "importing to " << import_peer[p->first]
+      dout(10) << " importing to " << import_peer[p->first]
 	       << ": (" << p->second << ") " << get_import_statename(p->second) 
 	       << " " << p->first
 	       << " " << *dir
 	       << endl;
     } else {
-      dout(10) << "importing to " << import_peer[p->first]
+      dout(10) << " importing to " << import_peer[p->first]
 	       << ": (" << p->second << ") " << get_import_statename(p->second) 
 	       << " " << p->first 
 	       << endl;
@@ -397,7 +397,7 @@ void Migrator::show_exporting()
   for (map<CDir*,int>::iterator p = export_state.begin();
        p != export_state.end();
        p++) 
-    dout(10) << "exporting to " << export_peer[p->first]
+    dout(10) << " exporting to " << export_peer[p->first]
 	     << ": (" << p->second << ") " << get_export_statename(p->second) 
 	     << " " << p->first->dirfrag()
 	     << " " << *p->first
@@ -1195,7 +1195,7 @@ void Migrator::export_finish(CDir *dir)
   audit();
 
   // send pending import_maps?
-  mds->mdcache->send_pending_import_maps();
+  mds->mdcache->maybe_send_pending_resolves();
 }
 
 

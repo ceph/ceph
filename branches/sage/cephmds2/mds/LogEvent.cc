@@ -20,8 +20,7 @@
 #include "events/EString.h"
 
 #include "events/ESession.h"
-#include "events/EClientMap.h"
-#include "events/EImportMap.h"
+#include "events/ESubtreeMap.h"
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
@@ -55,8 +54,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_STRING: le = new EString; break;
 
   case EVENT_SESSION: le = new ESession; break;
-  case EVENT_CLIENTMAP: le = new EClientMap; break;
-  case EVENT_IMPORTMAP: le = new EImportMap; break;
+  case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
   case EVENT_EXPORT: le = new EExport; break;
   case EVENT_IMPORTSTART: le = new EImportStart; break;
   case EVENT_IMPORTFINISH: le = new EImportFinish; break;

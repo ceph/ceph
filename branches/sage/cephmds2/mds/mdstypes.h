@@ -37,7 +37,8 @@ using namespace std;
 #define MDS_INO_ANCHORTABLE       3
 #define MDS_INO_LOG_OFFSET        0x100
 #define MDS_INO_IDS_OFFSET        0x200
-#define MDS_INO_STRAY_OFFSET      0x300
+#define MDS_INO_CLIENTMAP_OFFSET  0x300
+#define MDS_INO_STRAY_OFFSET      0x400
 #define MDS_INO_BASE              0x1000
 
 #define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))

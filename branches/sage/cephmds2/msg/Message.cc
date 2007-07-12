@@ -50,7 +50,7 @@ using namespace std;
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
-#include "messages/MMDSImportMap.h"
+#include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
 //#include "messages/MMDSCacheRejoinAck.h"
@@ -215,8 +215,8 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_BEACON:
 	m = new MMDSBeacon;
 	break;
-  case MSG_MDS_IMPORTMAP:
-	m = new MMDSImportMap;
+  case MSG_MDS_RESOLVE:
+	m = new MMDSResolve;
 	break;
   case MSG_MDS_RESOLVEACK:
 	m = new MMDSResolveAck;

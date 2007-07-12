@@ -12,39 +12,38 @@
  * 
  */
 
-#ifndef __MMDSIMPORTMAP_H
-#define __MMDSIMPORTMAP_H
+#ifndef __MMDSRESOLVE_H
+#define __MMDSRESOLVE_H
 
 #include "msg/Message.h"
 
 #include "include/types.h"
 
-
-class MMDSImportMap : public Message {
+class MMDSResolve : public Message {
  public:
-  map<dirfrag_t, list<dirfrag_t> > imap;
-  map<dirfrag_t, list<dirfrag_t> > ambiguous_imap;
+  map<dirfrag_t, list<dirfrag_t> > subtrees;
+  map<dirfrag_t, list<dirfrag_t> > ambiguous_imports;
   list<metareqid_t> slave_requests;
 
-  MMDSImportMap() : Message(MSG_MDS_IMPORTMAP) {}
+  MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 
-  char *get_type_name() { return "mdsimportmap"; }
+  char *get_type_name() { return "mds_resolve"; }
 
   void print(ostream& out) {
-    out << "mdsimportmap(" << imap.size()
-	<< "+" << ambiguous_imap.size()
-	<< " imports +" << slave_requests.size() << " slave requests)";
+    out << "mds_resolve(" << subtrees.size()
+	<< "+" << ambiguous_imports.size()
+	<< " subtrees +" << slave_requests.size() << " slave requests)";
   }
   
-  void add_import(dirfrag_t im) {
-    imap[im].clear();
+  void add_subtree(dirfrag_t im) {
+    subtrees[im].clear();
   }
-  void add_import_export(dirfrag_t im, dirfrag_t ex) {
-    imap[im].push_back(ex);
+  void add_subtree_bound(dirfrag_t im, dirfrag_t ex) {
+    subtrees[im].push_back(ex);
   }
 
   void add_ambiguous_import(dirfrag_t im, const list<dirfrag_t>& m) {
-    ambiguous_imap[im] = m;
+    ambiguous_imports[im] = m;
   }
 
   void add_slave_request(metareqid_t reqid) {
@@ -52,14 +51,14 @@ class MMDSImportMap : public Message {
   }
 
   void encode_payload() {
-    ::_encode(imap, payload);
-    ::_encode(ambiguous_imap, payload);
+    ::_encode(subtrees, payload);
+    ::_encode(ambiguous_imports, payload);
     ::_encode(slave_requests, payload);
   }
   void decode_payload() {
     int off = 0;
-    ::_decode(imap, payload, off);
-    ::_decode(ambiguous_imap, payload, off);
+    ::_decode(subtrees, payload, off);
+    ::_decode(ambiguous_imports, payload, off);
     ::_decode(slave_requests, payload, off);
   }
 };

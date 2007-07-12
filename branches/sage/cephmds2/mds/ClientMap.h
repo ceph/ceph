@@ -23,6 +23,10 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "include/Context.h"
+#include "mdstypes.h"
+
+class MDS;
 
 /*
  * this structure is used by the MDS purely so that
@@ -35,6 +39,8 @@ using namespace __gnu_cxx;
  */
 class ClientMap {
 private:
+  MDS *mds;
+
   version_t version;
   version_t projected;
   version_t committing;
@@ -42,7 +48,8 @@ private:
   map<version_t, list<Context*> > commit_waiters;
 
 public:
-  ClientMap() : version(0), projected(0), committing(0), committed(0) {}
+  ClientMap(MDS *m) : mds(m),
+		      version(0), projected(0), committing(0), committed(0) {}
 
   version_t get_version() { return version; }
   version_t get_projected() { return projected; }
@@ -53,14 +60,6 @@ public:
   void reset_projected() { projected = version; }
   void set_committing(version_t v) { committing = v; }
   void set_committed(version_t v) { committed = v; }
-
-  void add_commit_waiter(Context *c) { 
-    commit_waiters[committing].push_back(c); 
-  }
-  void take_commit_waiters(version_t v, list<Context*>& ls) { 
-    ls.swap(commit_waiters[v]);
-    commit_waiters.erase(v);
-  }
 
 private:
   // affects version
@@ -174,6 +173,16 @@ public:
 
     projected = committing = committed = version;
   }
+
+  // -- loading, saving --
+  inode_t inode;
+  list<Context*> waiting_for_load;
+
+  void init_inode();
+  void load(Context *onload);
+  void _load_finish(bufferlist &bl);
+  void save(Context *onsave, version_t needv=0);
+  void _save_finish(version_t v);
 };
 
 #endif

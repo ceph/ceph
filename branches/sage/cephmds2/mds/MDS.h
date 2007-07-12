@@ -193,7 +193,7 @@ class MDS : public Dispatcher {
   // -- client map --
   ClientMap    clientmap;
   epoch_t      last_client_mdsmap_bcast;
-  void log_clientmap(Context *c);
+  //void log_clientmap(Context *c);
 
 
   // shutdown crap

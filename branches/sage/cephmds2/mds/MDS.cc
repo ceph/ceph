@@ -43,7 +43,6 @@
 
 #include "common/Timer.h"
 
-#include "events/EClientMap.h"
 #include "events/ESession.h"
 
 #include "messages/MMDSMap.h"
@@ -72,7 +71,9 @@ LogType mds_logtype, mds_cache_logtype;
 
 
 // cons/des
-MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
+MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
+  timer(mds_lock), 
+  clientmap(this) {
   this->whoami = whoami;
 
   monmap = mm;
@@ -595,7 +596,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
 	if (*p == whoami) continue;
 	if (oldresolve.count(*p)) continue;
-	mdcache->send_import_map(*p);  // now or later.
+	mdcache->send_resolve(*p);  // now or later.
       }
     }
   }
@@ -757,13 +758,16 @@ void MDS::boot_create()
   mdlog->reset();
   mdlog->write_head(fin->new_sub());
   
-  // write our first importmap
-  mdcache->log_import_map(fin->new_sub());
+  // write our first subtreemap
+  mdcache->log_subtree_map(fin->new_sub());
 
   // fixme: fake out idalloc (reset, pretend loaded)
   dout(10) << "boot_create creating fresh idalloc table" << endl;
   idalloc->reset();
   idalloc->save(fin->new_sub());
+
+  // write empty clientmap
+  clientmap.save(fin->new_sub());
   
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
@@ -781,6 +785,9 @@ void MDS::boot_start()
   
   dout(2) << "boot_start opening idalloc" << endl;
   idalloc->load(fin->new_sub());
+
+  dout(2) << "boot_start opening clientmap" << endl;
+  clientmap.load(fin->new_sub());
   
   if (mdsmap->get_anchortable() == whoami) {
     dout(2) << "boot_start opening anchor table" << endl;
@@ -829,32 +836,32 @@ void MDS::boot_replay(int step)
     step = 1;  // fall-thru.
 
   case 1:
-    dout(2) << "boot_replay " << step << ": opening idalloc" << endl;
-    idalloc->load(new C_MDS_BootRecover(this, 2));
+    {
+      C_Gather *gather = new C_Gather(new C_MDS_BootRecover(this, 2));
+      dout(2) << "boot_replay " << step << ": opening idalloc" << endl;
+      idalloc->load(gather->new_sub());
+
+      dout(2) << "boot_replay " << step << ": opening clientmap" << endl;
+      clientmap.load(gather->new_sub());
+
+      if (mdsmap->get_anchortable() == whoami) {
+	dout(2) << "boot_replay " << step << ": opening anchor table" << endl;
+	anchortable->load(gather->new_sub());
+      }
+    }
     break;
 
   case 2:
-    if (mdsmap->get_anchortable() == whoami) {
-      dout(2) << "boot_replay " << step << ": opening anchor table" << endl;
-      anchortable->load(new C_MDS_BootRecover(this, 3));
-      break;
-    } else {
-      dout(2) << "boot_replay " << step << ": i have no anchor table" << endl;
-      step++; // fall-thru
-    }
-
-  case 3:
     dout(2) << "boot_replay " << step << ": opening mds log" << endl;
-    mdlog->open(new C_MDS_BootRecover(this, 4));
+    mdlog->open(new C_MDS_BootRecover(this, 3));
     break;
     
-  case 4:
+  case 3:
     dout(2) << "boot_replay " << step << ": replaying mds log" << endl;
-    mdlog->replay(new C_MDS_BootRecover(this, 5));
+    mdlog->replay(new C_MDS_BootRecover(this, 4));
     break;
 
-  case 5:
-    // done with replay!
+  case 4:
     replay_done();
     break;
 
@@ -903,7 +910,7 @@ void MDS::resolve_start()
   mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
   for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
     if (*p == whoami) continue;
-    mdcache->send_import_map(*p);  // now.
+    mdcache->send_resolve(*p);  // now.
   }
 }
 void MDS::resolve_done()
@@ -1314,31 +1321,3 @@ void MDS::handle_ping(MPing *m)
 
 
 
-
-class C_LogClientmap : public Context {
-  ClientMap *clientmap;
-  version_t cmapv;
-public:
-  C_LogClientmap(ClientMap *cm, version_t v) : 
-    clientmap(cm), cmapv(v) {}
-  void finish(int r) {
-    clientmap->set_committed(cmapv);
-    list<Context*> ls;
-    clientmap->take_commit_waiters(cmapv, ls);
-    finish_contexts(ls);
-  }
-};
-
-void MDS::log_clientmap(Context *c)
-{
-  dout(10) << "log_clientmap " << clientmap.get_version() << endl;
-
-  bufferlist bl;
-  clientmap.encode(bl);
-
-  clientmap.set_committing(clientmap.get_version());
-  clientmap.add_commit_waiter(c);
-
-  mdlog->submit_entry(new EClientMap(bl, clientmap.get_version()),
-		      new C_LogClientmap(&clientmap, clientmap.get_version()));
-}

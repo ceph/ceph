@@ -37,7 +37,7 @@
 
 #include "osdc/Filer.h"
 
-#include "events/EImportMap.h"
+#include "events/ESubtreeMap.h"
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/EString.h"
@@ -46,7 +46,7 @@
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MMDSImportMap.h"
+#include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
 
@@ -880,24 +880,24 @@ int MDCache::num_subtrees_fullnonauth()
  * take note of where we write import_maps in the log, as we need
  * to take care not to expire them until an updated map is safely flushed.
  */
-class C_MDS_WroteImportMap : public Context {
+class C_MDS_WroteSubtreeMap : public Context {
   MDCache *mdcache;
   off_t end_off;
 public:
-  C_MDS_WroteImportMap(MDCache *mc, off_t eo) : mdcache(mc), end_off(eo) { }
+  C_MDS_WroteSubtreeMap(MDCache *mc, off_t eo) : mdcache(mc), end_off(eo) { }
   void finish(int r) {
-    mdcache->_logged_import_map(end_off);
+    mdcache->_logged_subtree_map(end_off);
   }
 };
 
 
-void MDCache::log_import_map(Context *onsync)
+void MDCache::log_subtree_map(Context *onsync)
 {
-  dout(10) << "log_import_map " << num_subtrees() << " subtrees, " 
+  dout(10) << "log_subtree_map " << num_subtrees() << " subtrees, " 
 	   << num_subtrees_fullauth() << " fullauth"
 	   << endl;
   
-  EImportMap *le = new EImportMap;
+  ESubtreeMap *le = new ESubtreeMap;
   
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
@@ -907,7 +907,7 @@ void MDCache::log_import_map(Context *onsync)
     CDir *dir = p->first;
     if (!dir->is_auth()) continue;
 
-    le->imports.insert(dir->dirfrag());
+    le->subtrees[dir->dirfrag()].clear();
     le->metablob.add_dir_context(dir, true);
     le->metablob.add_dir(dir, false);
 
@@ -916,81 +916,81 @@ void MDCache::log_import_map(Context *onsync)
 	 q != p->second.end();
 	 ++q) {
       CDir *bound = *q;
-      le->bounds[dir->dirfrag()].insert(bound->dirfrag());
+      le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
       le->metablob.add_dir_context(bound);
       le->metablob.add_dir(bound, false);
     }
   }
 
-  Context *fin = new C_MDS_WroteImportMap(this, mds->mdlog->get_write_pos());
-  mds->mdlog->writing_import_map = true;
+  Context *fin = new C_MDS_WroteSubtreeMap(this, mds->mdlog->get_write_pos());
+  mds->mdlog->writing_subtree_map = true;
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(fin);
   if (onsync)
     mds->mdlog->wait_for_sync(onsync);
 }
 
-void MDCache::_logged_import_map(off_t off)
+void MDCache::_logged_subtree_map(off_t off)
 {
-  dout(10) << "_logged_import_map at " << off << endl;
-  mds->mdlog->last_import_map = off;
-  mds->mdlog->writing_import_map = false;
+  dout(10) << "_logged_subtree_map at " << off << endl;
+  mds->mdlog->last_subtree_map = off;
+  mds->mdlog->writing_subtree_map = false;
 
   list<Context*> ls;
-  mds->mdlog->take_import_map_expire_waiters(ls);
+  mds->mdlog->take_subtree_map_expire_waiters(ls);
   mds->queue_waiters(ls);
 }
 
 
-void MDCache::send_import_map(int who)
+void MDCache::send_resolve(int who)
 {
   if (migrator->is_exporting())
-    send_import_map_later(who);
+    send_resolve_later(who);
   else
-    send_import_map_now(who);
+    send_resolve_now(who);
 }
 
-void MDCache::send_import_map_later(int who)
+void MDCache::send_resolve_later(int who)
 {
-  dout(10) << "send_import_map_later to mds" << who << endl;
-  wants_import_map.insert(who);
+  dout(10) << "send_resolve_later to mds" << who << endl;
+  wants_resolve.insert(who);
 }
 
-void MDCache::send_pending_import_maps()
+void MDCache::maybe_send_pending_resolves()
 {
-  if (wants_import_map.empty())
+  if (wants_resolve.empty())
     return;  // nothing to send.
 
   // only if it's appropriate!
   if (migrator->is_exporting() ||
       migrator->is_importing()) {
-    dout(7) << "send_pending_import_maps waiting, imports/exports still in progress" << endl;
+    dout(7) << "maybe_send_pending_resolves waiting, imports/exports still in progress" << endl;
     return;  // not now
   }
   
   // ok, send them.
-  for (set<int>::iterator p = wants_import_map.begin();
-       p != wants_import_map.end();
+  for (set<int>::iterator p = wants_resolve.begin();
+       p != wants_resolve.end();
        p++) 
-    send_import_map_now(*p);
-  wants_import_map.clear();
+    send_resolve_now(*p);
+  wants_resolve.clear();
 }
 
 
-class C_MDC_SendImportMap : public Context {
+class C_MDC_SendResolve : public Context {
   MDCache *mdc;
   int who;
 public:
-  C_MDC_SendImportMap(MDCache *c, int w) : mdc(c), who(w) { }
+  C_MDC_SendResolve(MDCache *c, int w) : mdc(c), who(w) { }
   void finish(int r) {
-    mdc->send_import_map_now(who);
+    mdc->send_resolve_now(who);
   }
 };
 
-void MDCache::send_import_map_now(int who)
+void MDCache::send_resolve_now(int who)
 {
-  dout(10) << "send_import_map_now to mds" << who << endl;
-  MMDSImportMap *m = new MMDSImportMap;
+  dout(10) << "send_resolve_now to mds" << who << endl;
+  MMDSResolve *m = new MMDSResolve;
 
   show_subtrees();
 
@@ -1010,14 +1010,14 @@ void MDCache::send_import_map_now(int who)
 			      migrator->get_import_bound_inos(dir->dirfrag()));
     } else {
       // not ambiguous.
-      m->add_import(dir->dirfrag());
+      m->add_subtree(dir->dirfrag());
       
       // bounds too
       for (set<CDir*>::iterator q = subtrees[dir].begin();
 	   q != subtrees[dir].end();
 	   ++q) {
 	CDir *bound = *q;
-	m->add_import_export(dir->dirfrag(), bound->dirfrag());
+	m->add_subtree_bound(dir->dirfrag(), bound->dirfrag());
       }
     }
   }
@@ -1066,8 +1066,8 @@ void MDCache::handle_mds_failure(int who)
   dout(1) << "my recovery peers will be " << recovery_set << endl;
 
   // adjust my recovery lists
-  wants_import_map.erase(who);   // MDS will ask again
-  got_import_map.erase(who);     // i'll get another.
+  wants_resolve.erase(who);   // MDS will ask again
+  got_resolve.erase(who);     // i'll get another.
   rejoin_ack_gather.erase(who);  // i'll need/get another.
  
   // adjust subtree auth
@@ -1230,14 +1230,14 @@ void MDCache::set_recovery_set(set<int>& s)
 
 
 /*
- * during resolve state, we share import_maps to determine who
- * is authoritative for which trees.  we expect to get an import_map
+ * during resolve state, we share resolves to determine who
+ * is authoritative for which trees.  we expect to get an resolve
  * from _everyone_ in the recovery_set (the mds cluster at the time of
  * the first failure).
  */
-void MDCache::handle_import_map(MMDSImportMap *m)
+void MDCache::handle_resolve(MMDSResolve *m)
 {
-  dout(7) << "handle_import_map from " << m->get_source() << endl;
+  dout(7) << "handle_resolve from " << m->get_source() << endl;
   int from = m->get_source().num();
 
   // ambiguous slave requests?
@@ -1262,8 +1262,8 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   }
 
   // update my dir_auth values
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->imap.begin();
-       pi != m->imap.end();
+  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->subtrees.begin();
+       pi != m->subtrees.end();
        ++pi) {
     CDir *im = get_dirfrag(pi->first);
     if (im) {
@@ -1277,7 +1277,7 @@ void MDCache::handle_import_map(MMDSImportMap *m)
    * note: it would be cleaner to do this check before updating our own
    * subtree map.. then the import_finish or _reverse could operate on an
    * un-munged subtree map.  but... checking for import completion against
-   * the provided import_map isn't easy.  so, we skip audit checks in these 
+   * the provided resolve isn't easy.  so, we skip audit checks in these 
    * functions.
    */
   if (mds->is_active() || mds->is_stopping()) {
@@ -1312,15 +1312,15 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   // resolving?
   if (mds->is_resolve()) {
     // note ambiguous imports too
-    for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->ambiguous_imap.begin();
-	 pi != m->ambiguous_imap.end();
+    for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
+	 pi != m->ambiguous_imports.end();
 	 ++pi) {
       dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << endl;
       other_ambiguous_imports[from][pi->first].swap( pi->second );
     }
 
     // did i get them all?
-    got_import_map.insert(from);
+    got_resolve.insert(from);
 
     maybe_resolve_finish();
   }
@@ -1330,8 +1330,8 @@ void MDCache::handle_import_map(MMDSImportMap *m)
 
 void MDCache::maybe_resolve_finish()
 {
-  if (got_import_map != recovery_set) {
-    dout(10) << "still waiting for more importmaps, got " << got_import_map 
+  if (got_resolve != recovery_set) {
+    dout(10) << "still waiting for more importmaps, got " << got_resolve 
 	     << ", need " << recovery_set << endl;
   } 
   else if (!need_resolve_ack.empty()) {
@@ -1709,7 +1709,6 @@ void MDCache::send_cache_rejoins()
  * from a rejoining node:
  *  weak dirfrag
  *  weak dentries (w/ connectivity)
- *  strong inodes, if we have open files
  *
  * from a surviving node:
  *  strong dirfrag
@@ -1720,42 +1719,38 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 {
   dout(10) << "cache_rejoin_walk " << *dir << endl;
 
-  // walk dirfrag's dentries.
   list<CDir*> nested;  // finish this dir, then do nested items
   
-  if (mds->is_rejoin())
+  if (mds->is_rejoin()) {
+    // WEAK
     rejoin->add_weak_dirfrag(dir->dirfrag());
-  else
-    rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce());
-  
-  for (map<string,CDentry*>::iterator p = dir->items.begin();
-       p != dir->items.end();
-       ++p) {
-    // dentry
-    CDentry *dn = p->second;
-    if (mds->is_rejoin()) {
-      // weak
-      if (dn->is_null()) {
-	rejoin->add_weak_null_dentry(dir->dirfrag(), p->first);
-      } else if (dn->is_primary()) {
+
+    for (map<string,CDentry*>::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 ++p) {
+      CDentry *dn = p->second;
+      if (dn->is_primary()) 
 	rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
-      } else {
+      else if (dn->is_remote())
 	rejoin->add_weak_remote_dentry(dir->dirfrag(), p->first, dn->get_remote_ino());      
-      }
-    } else {
-      // strong
+      else 
+	assert(0);  // i shouldn't have a non-auth null dentry after journal replay..
+    }
+  } else {
+    // STRONG
+    rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce());
+
+    for (map<string,CDentry*>::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 ++p) {
+      CDentry *dn = p->second;
       rejoin->add_strong_dentry(dir->dirfrag(), p->first,
 				dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
-    }
-
-    if (dn->is_primary()) {
-      CInode *in = dn->get_inode();
-      
-      // strong inode?
-      if (!mds->is_rejoin() || in->get_caps_wanted()) 
+      if (dn->is_primary()) {
+	CInode *in = dn->get_inode();
 	rejoin->add_strong_inode(in->ino(), in->get_replica_nonce(),
 				 in->get_caps_wanted(),
 				 in->authlock.get_state(),
@@ -1763,12 +1758,11 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->dirfragtreelock.get_state(),
 				 in->filelock.get_state(),
 				 in->dirlock.get_state());
-      
-      // dirfrags in this subtree?
-      in->get_nested_dirfrags(nested);
+	in->get_nested_dirfrags(nested);
+      }
     }
   }
-  
+
   // recurse into nested dirs
   for (list<CDir*>::iterator p = nested.begin(); 
        p != nested.end();
@@ -1927,15 +1921,6 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 	CInode *in = dn->get_inode();
 	assert(in);
 
-	// strong inode?  if so, note caps_wanted
-	if (weak->strong_inodes.count(in->ino())) {
-	  assert(weak->strong_inodes[in->ino()].caps_wanted);
-	  in->mds_caps_wanted[from] = weak->strong_inodes[in->ino()].caps_wanted;
-	  weak->strong_inodes.erase(in->ino());
-	} else {
-	  in->mds_caps_wanted.erase(from);
-	}
-
 	if (survivor) inode_remove_replica(in, from);
 	int nonce = in->add_replica(from);
 	dout(10) << " have " << *in << endl;
@@ -1944,7 +1929,7 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 	if (!survivor)
 	  in->dirlock.set_state(LOCK_SCATTER);
 
-	if (ack) {
+	if (ack) 
 	  ack->add_strong_inode(in->ino(), 
 				nonce,
 				0,
@@ -1953,7 +1938,6 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 				in->dirfragtreelock.get_replica_state(), 
 				in->filelock.get_replica_state(),
 				in->dirlock.get_replica_state());
-	}
       }
     }
   }
@@ -3393,9 +3377,9 @@ bool MDCache::shutdown_pass()
 
   // (wait for) flush log?
   if (g_conf.mds_log_flush_on_shutdown) {
-    if (mds->mdlog->get_non_importmap_events()) {
+    if (mds->mdlog->get_non_subtreemap_events()) {
       dout(7) << "waiting for log to flush .. " << mds->mdlog->get_num_events() 
-	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
+	      << " (" << mds->mdlog->get_non_subtreemap_events() << ")" << endl;
       return false;
     } 
   }
@@ -3411,8 +3395,8 @@ bool MDCache::shutdown_pass()
     }
     
     if (mds->mdlog->get_num_events()) {
-      dout(7) << "waiting for log to flush (including import_map, now) .. " << mds->mdlog->get_num_events() 
-	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
+      dout(7) << "waiting for log to flush (including subtree_map, now) .. " << mds->mdlog->get_num_events() 
+	      << " (" << mds->mdlog->get_non_subtreemap_events() << ")" << endl;
       return false;
     }
     
@@ -3463,8 +3447,8 @@ void MDCache::dispatch(Message *m)
   switch (m->get_type()) {
 
     // RESOLVE
-  case MSG_MDS_IMPORTMAP:
-    handle_import_map((MMDSImportMap*)m);
+  case MSG_MDS_RESOLVE:
+    handle_resolve((MMDSResolve*)m);
     break;
   case MSG_MDS_RESOLVEACK:
     handle_resolve_ack((MMDSResolveAck*)m);

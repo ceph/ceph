@@ -392,7 +392,7 @@ class EMetaBlob {
   void print(ostream& out) const {
     out << "[metablob";
     if (!lump_order.empty()) 
-      out << lump_order.front() << ", " << lump_map.size() << " dirs";
+      out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
     if (!atids.empty())
       out << " atids=" << atids;
     if (!allocated_inos.empty())

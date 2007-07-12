@@ -219,7 +219,7 @@ class MMDSCacheRejoin : public Message {
     ::_decode(authpinned_inodes, payload, off);
     ::_decode(xlocked_inodes, payload, off);
     ::_decode(cap_export_bl, payload, off);
-    {
+    if (cap_export_bl.length()) {
       int off = 0;
       ::_decode(cap_exports, cap_export_bl, off);
       ::_decode(cap_export_paths, cap_export_bl, off);
