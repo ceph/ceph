@@ -257,12 +257,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *s = new MClientFileCaps(fake_inode, 
-						 0,
-						 0,                // doesn't matter.
-						 p->second.wanted, // doesn't matter.
-						 MClientFileCaps::OP_STALE);
-	mds->messenger->send_message(s, m->get_source_inst(), 0, MDS_PORT_CACHE);
+	MClientFileCaps *stale = new MClientFileCaps(fake_inode, 
+						     0,
+						     0,                // doesn't matter.
+						     p->second.wanted, // doesn't matter.
+						     MClientFileCaps::OP_STALE);
+	mds->send_message_client(stale, m->get_source_inst());
 
 	// add to cap export list.
 	mdcache->rejoin_export_caps(p->first, m->inode_path[p->first], from, p->second);
@@ -3085,8 +3085,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       if (!srcdn->is_auth() && destdn->is_auth()) {
 	assert(mdr->inode_import.length() > 0);
 	int off = 0;
+	map<int,entity_inst_t> imported_client_map;
+	::_decode(imported_client_map, mdr->inode_import, off);
 	mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
-					       srcdn->authority().first);
+					       srcdn->authority().first,
+					       imported_client_map);
       }
       if (destdn->inode->is_auth())
 	destdn->inode->mark_dirty(mdr->pvmap[destdn]);
@@ -3179,13 +3182,21 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdr->pin(straydn);
   }
 
-  // journal it
-  ESlaveUpdate *le = new ESlaveUpdate("slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
-  
   mdr->now = mdr->slave_request->now;
-  _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
 
-  mds->mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+  // journal it?
+  if (srcdn->is_auth() ||
+      destdn->inode->is_auth() ||
+      srcdn->inode->is_any_caps()) {
+    // journal.
+    ESlaveUpdate *le = new ESlaveUpdate("slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
+    _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
+    mds->mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+  } else {
+    // don't journal.
+    dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << endl;
+    _logged_slave_rename(mdr, srcdn, destdn, straydn);
+  }
 }
 
 void Server::_logged_slave_rename(MDRequest *mdr, 
@@ -3277,7 +3288,14 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
   // reply
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODEACK);
   dout(10) << " replying with inode export info " << *mdr->srcdn->inode << endl;
-  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, reply->inode_export, mdr->slave_to_mds);
+
+  map<int,entity_inst_t> exported_client_map;
+  bufferlist inodebl;
+  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, inodebl, mdr->slave_to_mds, 
+					 exported_client_map);
+  ::_encode(exported_client_map, reply->inode_export);
+  reply->inode_export.claim_append(inodebl);
+  
   reply->inode_export_v = mdr->srcdn->inode->inode.version;
 
   mdr->inode_import = reply->inode_export;   // keep a copy locally, in case we have to rollback

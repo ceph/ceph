@@ -638,15 +638,14 @@ void CDir::_fetched(bufferlist &bl)
       
       // parse out inode
       inode_t inode;
-      bl.copy(off, sizeof(inode), (char*)&inode);
-      off += sizeof(inode);
+      ::_decode(inode, bl, off);
 
       string symlink;
       if (inode.is_symlink())
         ::_decode(symlink, bl, off);
 
       fragtree_t fragtree;
-      fragtree._decode(bl,off);
+      fragtree._decode(bl, off);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -856,8 +855,8 @@ void CDir::_commit(version_t want)
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
-      bl.append( it->first.c_str(), it->first.length() + 1);
-      bl.append((char*)&ino, sizeof(ino));
+      ::_encode(it->first, bl);
+      ::_encode(ino, bl);
     } else {
       // primary link
       CInode *in = dn->get_inode();
@@ -867,13 +866,13 @@ void CDir::_commit(version_t want)
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
-      bl.append( it->first.c_str(), it->first.length() + 1);
-      bl.append( (char*) &in->inode, sizeof(inode_t));
+      ::_encode(it->first, bl);
+      ::_encode(in->inode, bl);
       
       if (in->is_symlink()) {
         // include symlink destination!
         dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
-        bl.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+	::_encode(in->symlink, bl);
       }
 
       in->dirfragtree._encode(bl);

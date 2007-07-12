@@ -218,6 +218,8 @@ class MDS : public Dispatcher {
   void forward_message_mds(Message *req, int mds, int port=0);
 
   void send_message_client(Message *m, int client);
+  void send_message_client(Message *m, entity_inst_t clientinst);
+  void send_message_client_maybe_open(Message *m, entity_inst_t clientinst);
 
 
   // start up, shutdown

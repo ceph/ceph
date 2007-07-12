@@ -867,40 +867,24 @@ void ESlaveUpdate::replay(MDS *mds)
 
 bool EImportMap::has_expired(MDS *mds)
 {
-  if (mds->mdlog->last_import_map > get_end_off()) {
+  if (mds->mdlog->get_last_import_map_offset() > get_start_off()) {
     dout(10) << "EImportMap.has_expired -- there's a newer map" << endl;
     return true;
-  } 
-  else if (mds->mdlog->is_capped()) {
+  } else if (mds->mdlog->is_capped()) {
     dout(10) << "EImportMap.has_expired -- log is capped, allowing map to expire" << endl;
     return true;
   } else {
-    dout(10) << "EImportMap.has_expired -- not until there's a newer map written" << endl;
+    dout(10) << "EImportMap.has_expired -- not until there's a newer map written" 
+	     << " (" << get_start_off() << " >= " << mds->mdlog->get_last_import_map_offset() << ")"
+	     << endl;
     return false;
   }
 }
 
-/*
-class C_MDS_ImportMapFlush : public Context {
-  MDS *mds;
-  off_t end_off;
-public:
-  C_MDS_ImportMapFlush(MDS *m, off_t eo) : mds(m), end_off(eo) { }
-  void finish(int r) {
-    // am i the last thing in the log?
-    if (mds->mdlog->get_write_pos() == end_off) {
-      // yes.  we're good.
-    } else {
-      // no.  submit another import_map so that we can go away.
-    }
-  }
-};
-*/
-
 void EImportMap::expire(MDS *mds, Context *c)
 {
   dout(10) << "EImportMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << endl;
-  mds->mdlog->import_map_expire_waiters.push_back(c);
+  mds->mdlog->add_import_map_expire_waiter(c);
 }
 
 void EImportMap::replay(MDS *mds) 

@@ -687,7 +687,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(in->inode, 
                                              0, 0, 0,
                                              MClientFileCaps::OP_RELEASE);
-    mds->send_message_client(r, client);
+    mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?

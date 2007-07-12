@@ -190,8 +190,14 @@ public:
   void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
 
-  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
+  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
+			   map<int,entity_inst_t>& exported_client_map);
+  int encode_export_dir(list<bufferlist>& dirstatelist,
+			class C_Contexts *fin,
+			CDir *basedir,
+			CDir *dir,
+			int newauth, 
+			map<int,entity_inst_t>& exported_client_map);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);
@@ -203,11 +209,6 @@ public:
   void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
-  int encode_export_dir(list<bufferlist>& dirstatelist,
-                      class C_Contexts *fin,
-                      CDir *basedir,
-                      CDir *dir,
-                      int newauth);
   void export_reverse(CDir *dir);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
@@ -224,11 +225,15 @@ public:
   void import_discovered(CInode *in, dirfrag_t df);
   void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
+
+public:
+  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, 
+			   map<int,entity_inst_t>& imported_client_map);
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
-			EImportStart *le);
-
+			EImportStart *le, 
+			map<int,entity_inst_t>& imported_client_map);
 
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);

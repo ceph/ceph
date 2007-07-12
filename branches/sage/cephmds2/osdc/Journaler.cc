@@ -278,10 +278,10 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 
 void Journaler::flush(Context *onsync)
 {
-  if (write_pos == flush_pos) {
+  // all flushed and acked?
+  if (write_pos == ack_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
-
     if (onsync) {
       onsync->finish(0);
       delete onsync;
@@ -289,22 +289,28 @@ void Journaler::flush(Context *onsync)
     return;
   }
 
-  unsigned len = write_pos - flush_pos;
-  assert(len == write_buf.length());
-  dout(10) << "flush flushing " << flush_pos << "~" << len << endl;
-
-  // submit write for anything pending
-  // flush _start_ pos to _finish_flush
-  filer.write(inode, flush_pos, len, write_buf, 0,
-	      g_conf.journaler_safe ? 0:new C_Flush(this, flush_pos),  // on ACK
-	      g_conf.journaler_safe ?   new C_Flush(this, flush_pos):0); // on COMMIT
-  pending_flush[flush_pos] = g_clock.now();
-  
-  // adjust pointers
-  flush_pos = write_pos;
-  write_buf.clear();  
-
-  dout(10) << "flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+  if (write_pos == flush_pos) {
+    assert(write_buf.length() == 0);
+    dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+  } else {
+    // flush
+    unsigned len = write_pos - flush_pos;
+    assert(len == write_buf.length());
+    dout(10) << "flush flushing " << flush_pos << "~" << len << endl;
+    
+    // submit write for anything pending
+    // flush _start_ pos to _finish_flush
+    filer.write(inode, flush_pos, len, write_buf, 0,
+		g_conf.journaler_safe ? 0:new C_Flush(this, flush_pos),  // on ACK
+		g_conf.journaler_safe ?   new C_Flush(this, flush_pos):0); // on COMMIT
+    pending_flush[flush_pos] = g_clock.now();
+    
+    // adjust pointers
+    flush_pos = write_pos;
+    write_buf.clear();  
+    
+    dout(10) << "flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+  }
 
   // queue waiter (at _new_ write_pos; will go when reached by ack_pos)
   if (onsync) 

@@ -338,6 +338,7 @@ public:
   void send_import_map_later(int who);
   void send_pending_import_maps();  // maybe.
   void log_import_map(Context *onsync=0);
+  void _logged_import_map(off_t off);
 
 protected:
   // [rejoin]

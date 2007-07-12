@@ -881,22 +881,19 @@ int MDCache::num_subtrees_fullnonauth()
  * to take care not to expire them until an updated map is safely flushed.
  */
 class C_MDS_WroteImportMap : public Context {
-  MDLog *mdlog;
+  MDCache *mdcache;
   off_t end_off;
 public:
-  C_MDS_WroteImportMap(MDLog *ml, off_t eo) : mdlog(ml), end_off(eo) { }
+  C_MDS_WroteImportMap(MDCache *mc, off_t eo) : mdcache(mc), end_off(eo) { }
   void finish(int r) {
-    //    cout << "WroteImportMap at " << end_off << endl;
-    if (r >= 0)
-      mdlog->last_import_map = end_off;
-    mdlog->writing_import_map = false;
+    mdcache->_logged_import_map(end_off);
   }
 };
 
 
 void MDCache::log_import_map(Context *onsync)
 {
-  dout(10) << "log_import_map " << num_subtrees() << " subtrees" 
+  dout(10) << "log_import_map " << num_subtrees() << " subtrees, " 
 	   << num_subtrees_fullauth() << " fullauth"
 	   << endl;
   
@@ -925,11 +922,23 @@ void MDCache::log_import_map(Context *onsync)
     }
   }
 
+  Context *fin = new C_MDS_WroteImportMap(this, mds->mdlog->get_write_pos());
   mds->mdlog->writing_import_map = true;
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_MDS_WroteImportMap(mds->mdlog, mds->mdlog->get_write_pos()));
+  mds->mdlog->wait_for_sync(fin);
   if (onsync)
     mds->mdlog->wait_for_sync(onsync);
+}
+
+void MDCache::_logged_import_map(off_t off)
+{
+  dout(10) << "_logged_import_map at " << off << endl;
+  mds->mdlog->last_import_map = off;
+  mds->mdlog->writing_import_map = false;
+
+  list<Context*> ls;
+  mds->mdlog->take_import_map_expire_waiters(ls);
+  mds->queue_waiters(ls);
 }
 
 
@@ -1264,6 +1273,13 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   }
 
   // am i a surviving ambiguous importer?
+  /*
+   * note: it would be cleaner to do this check before updating our own
+   * subtree map.. then the import_finish or _reverse could operate on an
+   * un-munged subtree map.  but... checking for import completion against
+   * the provided import_map isn't easy.  so, we skip audit checks in these 
+   * functions.
+   */
   if (mds->is_active() || mds->is_stopping()) {
     // check for any import success/failure (from this node)
     map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
@@ -1991,7 +2007,7 @@ bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
     }
 
     // traverse
-    dout(15) << " missing " << p->first << " at " << p->second << endl;
+    dout(17) << " missing " << p->first << " at " << p->second << endl;
     filepath path(p->second);
     CDir *dir = path_traverse_to_dir(path);
     assert(dir);
@@ -2010,8 +2026,10 @@ bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
   C_Gather *gather = new C_Gather(retry);
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
-       ++p) 
+       ++p) {
+    dout(10) << "parallel_fetch fetching " << **p << endl;
     (*p)->fetch(gather->new_sub());
+  }
   
   return false;
 }
@@ -3867,7 +3885,7 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
   CInode *cur = root;
   assert(cur);
   for (unsigned i=0; i<path.depth(); i++) {
-    dout(15) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << endl;
+    dout(20) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << endl;
     frag_t fg = cur->pick_dirfrag(path[i]);
     CDir *dir = cur->get_or_open_dirfrag(this, fg);
     CDentry *dn = dir->lookup(path[i]);

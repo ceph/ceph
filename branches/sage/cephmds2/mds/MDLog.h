@@ -98,14 +98,18 @@ class MDLog {
   bool writing_import_map;  // one is being written now
   bool seen_import_map;     // for recovery
 
-  friend class EImportMap;
+  //friend class EImportMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
   void init_journaler();
  public:
+  off_t get_last_import_map_offset() { return last_import_map; }
   void add_import_map_expire_waiter(Context *c) {
     import_map_expire_waiters.push_back(c);
+  }
+  void take_import_map_expire_waiters(list<Context*>& ls) {
+    ls.splice(ls.end(), import_map_expire_waiters);
   }
 
 

@@ -134,29 +134,8 @@ class CInode : public MDSCacheObject {
       return projected_inode.back()->version;
   }
 
-  //inode_t *project_inode();
-  //void pop_and_dirty_projected_inode();
-  inode_t *project_inode() 
-  {
-    if (projected_inode.empty()) {
-      projected_inode.push_back(new inode_t(inode));
-    } else {
-      projected_inode.push_back(new inode_t(*projected_inode.back()));
-    }
-    dout(15) << "project_inode " << projected_inode.back() << endl;
-    return projected_inode.back();
-  }
-  
-  void pop_and_dirty_projected_inode() 
-  {
-    assert(!projected_inode.empty());
-    dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
-	     << " v" << projected_inode.front()->version << endl;
-    mark_dirty(projected_inode.front()->version);
-    inode = *projected_inode.front();
-    delete projected_inode.front();
-    projected_inode.pop_front();
-  }
+  inode_t *project_inode();
+  void pop_and_dirty_projected_inode();
   
 
   // -- cache infrastructure --

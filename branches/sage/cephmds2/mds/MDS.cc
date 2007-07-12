@@ -44,6 +44,7 @@
 #include "common/Timer.h"
 
 #include "events/EClientMap.h"
+#include "events/ESession.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
@@ -247,6 +248,41 @@ void MDS::send_message_client(Message *m, int client)
   version_t seq = clientmap.inc_push_seq(client);
   dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << endl;
   messenger->send_message(m, clientmap.get_inst(client));
+}
+
+void MDS::send_message_client(Message *m, entity_inst_t clientinst)
+{
+  version_t seq = clientmap.inc_push_seq(clientinst.name.num());
+  dout(10) << "send_message_client client" << clientinst.name.num() << " seq " << seq << " " << *m << endl;
+  messenger->send_message(m, clientinst);
+}
+
+
+class C_MDS_SendMessageClientSession : public Context {
+  MDS *mds;
+  Message *msg;
+  entity_inst_t clientinst;
+public:
+  C_MDS_SendMessageClientSession(MDS *md, Message *ms, entity_inst_t& ci) :
+    mds(md), msg(ms), clientinst(ci) {}
+  void finish(int r) {
+    mds->clientmap.open_session(clientinst);
+    mds->send_message_client(msg, clientinst.name.num());
+  }
+};
+
+void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
+{
+  int client = clientinst.name.num();
+  if (!clientmap.have_session(client)) {
+    dout(10) << "send_message_client opening session with " << clientinst << endl;
+    clientmap.add_opening(client);
+    mdlog->submit_entry(new ESession(clientinst, true, clientmap.inc_projected()),
+			new C_MDS_SendMessageClientSession(this, m, clientinst));
+  }
+
+  send_message_client(m, clientinst);
+
 }
 
 
