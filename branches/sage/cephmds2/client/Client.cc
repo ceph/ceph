@@ -512,7 +512,12 @@ int Client::choose_target_mds(MClientRequest *req)
   // pick mds
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
-    mds = 0;//rand() % mdsmap->get_num_mds();
+    mds = rand() % mdsmap->get_num_mds();  // FIXME: this isn't really correct.
+
+    if (0) {
+      dout(0) << "hack: sending all requests to mds0" << endl;
+      mds = 0;
+    }
   } else {
     if (req->auth_is_best()) {
       // pick the actual auth (as best we can)
@@ -996,7 +1001,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   mds_sessions[mds]++;
 
   // reap?
-  if (m->get_special() == MClientFileCaps::OP_REAP) {
+  if (m->get_op() == MClientFileCaps::OP_REAP) {
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
@@ -1025,7 +1030,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_special() == MClientFileCaps::OP_STALE) {
+  if (m->get_op() == MClientFileCaps::OP_STALE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
     
     // move to stale list
@@ -1054,7 +1059,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // release?
-  if (m->get_special() == MClientFileCaps::OP_RELEASE) {
+  if (m->get_op() == MClientFileCaps::OP_RELEASE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
@@ -1221,7 +1226,8 @@ void Client::release_caps(Inode *in,
       // release (some of?) these caps
       it->second.caps = retain & it->second.caps;
       // note: tell mds _full_ wanted; it'll filter/behave based on what it is allowed to do
-      MClientFileCaps *m = new MClientFileCaps(in->inode, 
+      MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+					       in->inode, 
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
@@ -1245,7 +1251,8 @@ void Client::update_caps_wanted(Inode *in)
   for (map<int,InodeCap>::iterator it = in->caps.begin();
        it != in->caps.end();
        it++) {
-    MClientFileCaps *m = new MClientFileCaps(in->inode, 
+    MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+					     in->inode, 
                                              it->second.seq,
                                              it->second.caps,
                                              in->file_caps_wanted());

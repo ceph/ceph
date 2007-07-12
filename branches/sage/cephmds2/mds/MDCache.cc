@@ -2032,7 +2032,7 @@ bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
  */
 void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 {
-  dout(10) << "rejoin_scout_survivor_replicas from mds" << from << endl;
+  dout(10) << "rejoin_scour_survivor_replicas from mds" << from << endl;
 
   // FIXME: what about root and stray inodes.
   
@@ -2485,11 +2485,11 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   
   // send REAP
   // FIXME client session weirdness.
-  MClientFileCaps *reap = new MClientFileCaps(in->inode,
+  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_REAP,
+					      in->inode,
 					      in->client_caps[client].get_last_seq(),
 					      in->client_caps[client].pending(),
-					      in->client_caps[client].wanted(),
-					      MClientFileCaps::OP_REAP);
+					      in->client_caps[client].wanted());
   
   reap->set_mds( frommds ); // reap from whom?
   mds->messenger->send_message(reap, 

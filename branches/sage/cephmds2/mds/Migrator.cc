@@ -769,11 +769,11 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
        it != in->client_caps.end();
        it++) {
     dout(7) << "encode_export_inode " << *in << " telling client" << it->first << " stale caps" << endl;
-    MClientFileCaps *m = new MClientFileCaps(in->inode, 
+    MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_STALE,
+					     in->inode, 
                                              it->second.get_last_seq(), 
                                              it->second.pending(),
-                                             it->second.wanted(),
-                                             MClientFileCaps::OP_STALE);
+                                             it->second.wanted());
     entity_inst_t inst = mds->clientmap.get_inst(it->first);
     exported_client_map[it->first] = inst; 
     mds->send_message_client(m, inst);
@@ -1816,11 +1816,11 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   for (set<int>::iterator it = merged_client_caps.begin();
        it != merged_client_caps.end();
        it++) {
-    MClientFileCaps *caps = new MClientFileCaps(in->inode,
+    MClientFileCaps *caps = new MClientFileCaps(MClientFileCaps::OP_REAP,
+						in->inode,
                                                 in->client_caps[*it].get_last_seq(),
                                                 in->client_caps[*it].pending(),
-                                                in->client_caps[*it].wanted(),
-                                                MClientFileCaps::OP_REAP);
+                                                in->client_caps[*it].wanted());
     caps->set_mds( oldauth ); // reap from whom?
     mds->send_message_client_maybe_open(caps, imported_client_map[*it]);
   }

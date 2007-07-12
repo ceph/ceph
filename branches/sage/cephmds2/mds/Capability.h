@@ -50,6 +50,8 @@ inline string cap_string(int cap)
   return s;
 }
 
+typedef uint32_t capseq_t;
+
 class Capability {
 public:
   struct Export {
@@ -63,13 +65,13 @@ public:
 private:
   int wanted_caps;     // what the client wants (ideally)
   
-  map<long, int>  cap_history;  // seq -> cap
-  long last_sent, last_recv;
+  map<capseq_t, int>  cap_history;  // seq -> cap
+  capseq_t last_sent, last_recv;
   
   bool suppress;
 
 public:
-  Capability(int want=0, long s=0) :
+  Capability(int want=0, capseq_t s=0) :
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
@@ -107,7 +109,7 @@ public:
   // caps potentially issued
   int issued() { 
     int c = 0;
-    for (long seq = last_recv; seq <= last_sent; seq++) {
+    for (capseq_t seq = last_recv; seq <= last_sent; seq++) {
       if (cap_history.count(seq)) {
         c |= cap_history[seq];
         dout(10) << " cap issued: seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(c) << endl;
@@ -143,7 +145,7 @@ public:
   int issued_conflicts() { return conflicts(issued()); }
 
   // issue caps; return seq number.
-  long issue(int c) {
+  capseq_t issue(int c) {
     //int was = pending();
     //no!  if (c == was && last_sent) return -1;  // repeat of previous?
     
@@ -159,7 +161,7 @@ public:
     */
     return last_sent;
   }
-  long get_last_seq() { return last_sent; }
+  capseq_t get_last_seq() { return last_sent; }
 
   Export make_export() {
     return Export(wanted_caps, issued(), pending());
@@ -186,7 +188,7 @@ public:
   }
 
   // confirm receipt of a previous sent/issued seq.
-  int confirm_receipt(long seq, int caps) {
+  int confirm_receipt(capseq_t seq, int caps) {
     int r = 0;
 
     // old seqs

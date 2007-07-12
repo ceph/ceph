@@ -251,17 +251,17 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       if ((in && !in->is_auth()) ||
 	  !mds->mdcache->path_is_mine(path)) {
 	// not mine.
-	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
-		<< " (not mine), will pass off to authority" << endl;
+	dout(0) << "non-auth " << p->first << " " << m->inode_path[p->first]
+		<< ", will pass off to authority" << endl;
 	
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(fake_inode, 
+	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_STALE,
+						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
-						     p->second.wanted, // doesn't matter.
-						     MClientFileCaps::OP_STALE);
+						     p->second.wanted); // doesn't matter.
 	mds->send_message_client(stale, m->get_source_inst());
 
 	// add to cap export list.
