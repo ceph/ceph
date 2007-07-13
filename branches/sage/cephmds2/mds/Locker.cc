@@ -721,9 +721,12 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }  
 
   // reevaluate, waiters
-  if (in->filelock.is_stable())
-    try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
-  in->finish_waiting(CInode::WAIT_CAPS, 0);
+  if (!in->filelock.is_stable())
+    file_eval_gather(&in->filelock);
+  else
+    file_eval(&in->filelock);
+  
+  //in->finish_waiting(CInode::WAIT_CAPS, 0);  // note: any users for this? 
 
   delete m;
 }
@@ -2009,7 +2012,7 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
   mdr->rdlocks.erase(lock);
   mdr->locks.erase(lock);
 
-  if (!lock->is_rdlocked()) 
+  if (!lock->is_rdlocked())
     file_eval_gather(lock);
 }
 
@@ -2129,13 +2132,14 @@ void Locker::file_eval_gather(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   int issued = in->get_caps_issued();
-
-  assert(!lock->is_stable());
-  
+ 
   dout(7) << "file_eval_gather issued " << cap_string(issued)
 	  << " vs " << cap_string(lock->caps_allowed())
 	  << " on " << *lock << " on " << *lock->get_parent()
 	  << endl;
+
+  if (lock->is_stable())
+    return;  // nothing for us to do here!
   
   // [auth] finished gather?
   if (in->is_auth() &&
