@@ -186,6 +186,18 @@ class MDSMap {
 	s.insert(p->first);
   }
 
+  int get_random_in_mds() {
+    vector<int> v;
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (p->second > 0) v.push_back(p->first);
+    if (v.empty())
+      return -1;
+    else 
+      return v[rand() % v.size()];
+  }
+
 
   // mds states
   bool is_down(int m) { return is_dne(m) || is_stopped(m) || is_failed(m); }
