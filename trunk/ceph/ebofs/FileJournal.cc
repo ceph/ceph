@@ -48,6 +48,7 @@ int FileJournal::create()
   dout(1) << "open " << fn << " " << st.st_size << " bytes" << endl;
 
   // write empty header
+  memset(&header, 0, sizeof(header));
   header.clear();
   header.fsid = ebofs->get_fsid();
   header.max_size = st.st_size;
@@ -274,7 +275,7 @@ bool FileJournal::submit_entry(bufferlist& e, Context *oncommit)
 	       << endl;
       full = true;
       print_header();
-      return false;      
+      return false;
     }
   } else {
     // we haven't wrapped.  

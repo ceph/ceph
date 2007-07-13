@@ -1512,7 +1512,7 @@ void Ebofs::alloc_write(Onode *on,
 
 
 
-void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
+void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 {
   ObjectCache *oc = on->get_oc(&bc);
 
@@ -2319,7 +2319,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
 
 
-int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
+int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& bl)
 {
   dout(7) << "_write " << oid << " " << offset << "~" << length << endl;
   assert(bl.length() == length);
@@ -2384,7 +2384,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 
 int Ebofs::write(object_t oid, 
                  off_t off, size_t len,
-                 bufferlist& bl, Context *onsafe)
+                 const bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
   assert(len > 0);
@@ -2399,9 +2399,9 @@ int Ebofs::write(object_t oid,
       if (journal) {
 	Transaction t;
 	t.write(oid, off, len, bl);
-	bufferlist bl;
-	t._encode(bl);
-	if (journal->submit_entry(bl, onsafe)) break;
+	bufferlist tbl;
+	t._encode(tbl);
+	if (journal->submit_entry(tbl, onsafe)) break;
       }
       if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
       break;

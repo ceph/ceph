@@ -188,7 +188,7 @@ protected:
                    block_t start, block_t len, 
                    interval_set<block_t>& alloc,
                    block_t& old_bfirst, block_t& old_blast);
-  void apply_write(Onode *on, off_t off, size_t len, bufferlist& bl);
+  void apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl);
   bool attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
                     Cond *will_wait_on, bool *will_wait_on_bool);
 
@@ -275,7 +275,7 @@ protected:
   int read(object_t, off_t off, size_t len, bufferlist& bl);
   int is_cached(object_t oid, off_t off, size_t len);
 
-  int write(object_t oid, off_t off, size_t len, bufferlist& bl, Context *onsafe);
+  int write(object_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
   void trim_from_cache(object_t oid, off_t off, size_t len);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
   int truncate_front(object_t oid, off_t size, Context *onsafe=0);
@@ -339,7 +339,7 @@ private:
   int _getattrs(object_t oid, map<string,bufferptr> &aset);
 
   bool _write_will_block();
-  int _write(object_t oid, off_t off, size_t len, bufferlist& bl);
+  int _write(object_t oid, off_t off, size_t len, const bufferlist& bl);
   void _trim_from_cache(object_t oid, off_t off, size_t len);
   int _truncate(object_t oid, off_t size);
   int _truncate_front(object_t oid, off_t size);
