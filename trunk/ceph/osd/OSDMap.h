@@ -83,9 +83,9 @@ public:
     list<int>      old_overload;  // no longer overload
     
     void encode(bufferlist& bl) {
-      bl.append((char*)&epoch, sizeof(epoch));
-      bl.append((char*)&mon_epoch, sizeof(mon_epoch));
-      bl.append((char*)&ctime, sizeof(ctime));
+      ::_encode(epoch, bl); 
+      ::_encode(mon_epoch, bl);
+      ::_encode(ctime, bl);
       ::_encode(new_up, bl);
       ::_encode(new_down, bl);
       ::_encode(new_in, bl);
@@ -94,12 +94,9 @@ public:
       ::_encode(fullmap, bl);
     }
     void decode(bufferlist& bl, int& off) {
-      bl.copy(off, sizeof(epoch), (char*)&epoch);
-      off += sizeof(epoch);
-      bl.copy(off, sizeof(mon_epoch), (char*)&mon_epoch);
-      off += sizeof(mon_epoch);
-      bl.copy(off, sizeof(ctime), (char*)&ctime);
-      off += sizeof(ctime);
+      ::_decode(epoch, bl, off);
+      ::_decode(mon_epoch, bl, off);
+      ::_decode(ctime, bl, off);
       ::_decode(new_up, bl, off);
       ::_decode(new_down, bl, off);
       ::_decode(new_in, bl, off);

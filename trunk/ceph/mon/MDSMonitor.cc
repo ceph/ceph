@@ -355,7 +355,7 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
 {
   if (m->get_state() == MDSMap::STATE_BOOT) {
     dout(10) << "_updated (booted) mds" << from << " " << *m << endl;
-    mon->osdmon->send_latest(0, mdsmap.get_inst(from));
+    mon->osdmon->send_latest(mdsmap.get_inst(from));
   } else {
     dout(10) << "_updated mds" << from << " " << *m << endl;
   }

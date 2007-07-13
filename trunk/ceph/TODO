@@ -1,5 +1,11 @@
 
 
+- change same_inst_since to align with "in" set
+- tag MClientRequest with mdsmap v
+- push new mdsmap to clients on send_message_client, based on the tag?
+  - hrm, what about exports and stale caps wonkiness... there's a race with the REAP.  hmm.
+
+
 some smallish projects:
 
 - crush rewrite in C
@@ -231,6 +237,9 @@ osd/rados
 - optimize remove wrt recovery pushes
 - pg_bit/pg_num changes
 - report crashed pgs?
+
+messenger
+- fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
 - close idle connections

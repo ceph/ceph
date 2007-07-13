@@ -894,10 +894,13 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
-      if (m->incremental_maps.count(cur+1))
+      if (m->incremental_maps.count(cur+1)) {
+	dout(10) << " using provided inc map" << endl;
         bl = m->incremental_maps[cur+1];
-      else
+      } else {
+	dout(10) << " using my locally stored inc map" << endl;
         get_inc_map_bl(cur+1, bl);
+      }
 
       OSDMap::Incremental inc;
       int off = 0;

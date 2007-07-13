@@ -76,7 +76,7 @@ void OSDMonitor::fake_osdmap_update()
 
   // tell a random osd
   int osd = rand() % g_conf.num_osd;
-  send_latest(0, osdmap.get_inst(osd));
+  send_latest(osdmap.get_inst(osd));
 }
 
 
@@ -93,7 +93,7 @@ void OSDMonitor::fake_reorg()
   }
 
   propose_pending();
-  send_latest(0, osdmap.get_inst(r));  // after
+  send_latest(osdmap.get_inst(r));  // after
 }
 
 
@@ -464,7 +464,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 void OSDMonitor::_reported_failure(MOSDFailure *m)
 {
   dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_from() << endl;
-  send_latest(m->get_epoch(), m->get_from());
+  send_latest(m->get_from(), m->get_epoch());
 }
 
 
@@ -526,7 +526,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 void OSDMonitor::_booted(MOSDBoot *m)
 {
   dout(7) << "_booted " << m->inst << endl;
-  send_latest(m->sb.current_epoch, m->inst);
+  send_latest(m->inst, m->sb.current_epoch);
   delete m;
 }
 
@@ -576,14 +576,14 @@ void OSDMonitor::send_to_waiting()
   }
 }
 
-void OSDMonitor::send_latest(epoch_t since, entity_inst_t who)
+void OSDMonitor::send_latest(entity_inst_t who, epoch_t since)
 {
   if (paxos->is_readable()) {
     dout(5) << "send_latest to " << who << " now" << endl;
-    if (since)
-      send_incremental(since, who);
-    else
+    if (since == (epoch_t)(-1))
       send_full(who);
+    else
+      send_incremental(since, who);
   } else {
     dout(5) << "send_latest to " << who << " later" << endl;
     awaiting_map[who.name].first = who;
@@ -610,7 +610,7 @@ void OSDMonitor::send_incremental(epoch_t since, entity_inst_t dest)
        e--) {
     bufferlist bl;
     if (mon->store->get_bl_sn(bl, "osdmap", e) > 0) {
-      dout(20) << "send_incremental    inc " << e << endl;
+      dout(20) << "send_incremental    inc " << e << " " << bl.length() << " bytes" << endl;
       m->incremental_maps[e] = bl;
     } 
     else if (mon->store->get_bl_sn(bl, "osdmap_full", e) > 0) {
