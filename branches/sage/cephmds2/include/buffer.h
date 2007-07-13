@@ -954,7 +954,6 @@ inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
 inline void _encode(const bufferlist& s, bufferlist& bl) 
 {
   uint32_t len = s.length();
-  cout << "_encode bufferlist len " << len << endl;
   _encoderaw(len, bl);
   bl.append(s);
 }
