@@ -93,6 +93,7 @@ md_config_t g_conf = {
   debug_ns: 0,
   debug_ms: 0,
   debug_mon: 0,
+  debug_paxos: 0,
   
   debug_after: 0,
   
