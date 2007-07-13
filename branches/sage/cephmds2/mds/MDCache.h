@@ -353,20 +353,24 @@ protected:
 
   map<inodeno_t,map<int, map<int,inode_caps_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,string> cap_import_paths;
+  
+  set<CInode*> rejoin_undef_inodes;
 
-  void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
+  void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *m);
+  CInode* rejoin_invent_inode(inodeno_t ino);
   void handle_cache_rejoin_strong_rejoin(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
   void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
   void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
   void handle_cache_rejoin_full(MMDSCacheRejoin *m);
-  void send_cache_rejoin_acks();
+  void rejoin_send_acks();
+  void rejoin_trim_undef_inodes();
 public:
   void rejoin_gather_finish();
-  void send_cache_rejoins();
+  void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, string& path, int client, inode_caps_reconnect_t& icr) {
     cap_exports[ino][client] = icr;
     cap_export_paths[ino] = path;

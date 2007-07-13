@@ -174,6 +174,10 @@ int main(int argc, char **argv)
     args.swap(nargs);
   }
 
+  // stop on our own (by default)
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
   parse_config_options(args);
   parse_syn_options(args);
 
@@ -187,10 +191,6 @@ int main(int argc, char **argv)
   g_conf.num_mds = intabs(g_conf.num_mds);
   g_conf.num_client = intabs(g_conf.num_client);
   g_conf.num_osd = intabs(g_conf.num_osd);
-
-  // stop on our own
-  g_conf.mon_stop_on_last_unmount = true;
-  g_conf.mon_stop_with_last_mds = true;
 
 
   if (g_conf.kill_after) 

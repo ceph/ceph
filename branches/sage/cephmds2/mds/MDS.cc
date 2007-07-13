@@ -276,14 +276,15 @@ void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
 {
   int client = clientinst.name.num();
   if (!clientmap.have_session(client)) {
+    // no session!
     dout(10) << "send_message_client opening session with " << clientinst << endl;
     clientmap.add_opening(client);
     mdlog->submit_entry(new ESession(clientinst, true, clientmap.inc_projected()),
 			new C_MDS_SendMessageClientSession(this, m, clientinst));
+  } else {
+    // we have a session.
+    send_message_client(m, clientinst);
   }
-
-  send_message_client(m, clientinst);
-
 }
 
 
@@ -937,7 +938,7 @@ void MDS::reconnect_done()
 void MDS::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << endl;
-  mdcache->send_cache_rejoins();
+  mdcache->rejoin_send_rejoins();
 }
 void MDS::rejoin_done()
 {

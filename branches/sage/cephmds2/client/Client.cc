@@ -517,7 +517,7 @@ int Client::choose_target_mds(MClientRequest *req)
     if (mds < 0) mds = 0;
 
     if (0) {
-      mds = 1;
+      mds = 0;
       dout(0) << "hack: sending all requests to mds" << mds << endl;
     }
   } else {
@@ -607,6 +607,7 @@ MClientReply *Client::make_request(MClientRequest *req,
     // open a session?
     if (mds_sessions.count(mds) == 0) {
       Cond cond;
+      
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << endl;
 	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),

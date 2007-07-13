@@ -84,12 +84,12 @@ class CInode : public MDSCacheObject {
   }
 
   // -- state --
-  static const int STATE_ROOT =       (1<<2);
-  //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
-  static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
-  static const int STATE_ANCHORING =  (1<<7);
-  static const int STATE_UNANCHORING = (1<<8);
-  static const int STATE_OPENINGDIR = (1<<9);
+  static const int STATE_ROOT =        (1<<1);
+  static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
+  static const int STATE_ANCHORING =   (1<<3);
+  static const int STATE_UNANCHORING = (1<<4);
+  static const int STATE_OPENINGDIR =  (1<<5);
+  static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
