@@ -127,6 +127,7 @@ int Ebofs::mount()
 
 	if (e < super_epoch) {
 	  dout(-3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << endl;
+	  continue;
 	}
 	if (e == super_epoch+1) {
 	  super_epoch++;
