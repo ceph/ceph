@@ -34,8 +34,10 @@
 #include "include/interval_set.h"
 
 #include "common/Mutex.h"
+#include "common/Timer.h"
 
 #include "FileCache.h"
+
 
 // stl
 #include <set>
@@ -328,6 +330,7 @@ class Client : public Dispatcher {
   MDSMap *mdsmap; 
   OSDMap *osdmap;
 
+  SafeTimer timer;
 
  protected:
   Messenger *messenger;  
@@ -580,6 +583,21 @@ protected:
 
   // ----------------------
   // fs ops.
+private:
+  void _try_mount();
+  void _mount_timeout();
+  Context *mount_timeout_event;
+
+  class C_MountTimeout : public Context {
+    Client *client;
+  public:
+    C_MountTimeout(Client *c) : client(c) { }
+    void finish(int r) {
+      if (r >= 0) client->_mount_timeout();
+    }
+  };
+
+public:
   int mount();
   int unmount();
 

@@ -153,7 +153,7 @@ public:
       pattrsets.push_back(&aset);
     }
 
-    void write(object_t oid, off_t off, size_t len, bufferlist& bl) {
+    void write(object_t oid, off_t off, size_t len, const bufferlist& bl) {
       int op = OP_WRITE;
       ops.push_back(op);
       oids.push_back(oid);
@@ -474,15 +474,9 @@ public:
   virtual int read(object_t oid, 
                    off_t offset, size_t len,
                    bufferlist& bl) = 0;
-
-  /*virtual int write(object_t oid,
-                    off_t offset, size_t len, 
-                    bufferlist& bl,
-                    bool fsync=true) = 0;     
-  */
   virtual int write(object_t oid, 
                     off_t offset, size_t len,
-                    bufferlist& bl, 
+                    const bufferlist& bl, 
                     Context *onsafe) = 0;//{ return -1; }
   virtual void trim_from_cache(object_t oid, 
 			       off_t offset, size_t len) { }

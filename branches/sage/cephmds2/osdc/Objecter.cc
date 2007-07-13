@@ -833,7 +833,7 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", dropping and reporting to mon" << mon 
             << endl;
-    messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()), 
+    messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
                             monmap->get_inst(mon));
     delete m;
   } else {

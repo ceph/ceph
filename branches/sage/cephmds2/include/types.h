@@ -258,7 +258,7 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
-  off_t      size, max_size;
+  off_t      size, max_size, allocated_size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
  

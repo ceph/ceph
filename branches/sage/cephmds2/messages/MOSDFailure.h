@@ -21,30 +21,35 @@
 
 class MOSDFailure : public Message {
  public:
+  entity_inst_t from;
   entity_inst_t failed;
   epoch_t       epoch;
 
   MOSDFailure() {}
-  MOSDFailure(entity_inst_t f, epoch_t e) : 
+  MOSDFailure(entity_inst_t fr, entity_inst_t f, epoch_t e) : 
     Message(MSG_OSD_FAILURE),
-    failed(f), epoch(e) {}
+    from(fr), failed(f), epoch(e) {}
  
+  entity_inst_t get_from() { return from; }
   entity_inst_t get_failed() { return failed; }
   epoch_t get_epoch() { return epoch; }
 
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(failed), (char*)&failed);
-    off += sizeof(failed);
-    payload.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
+    ::_decode(from, payload, off);
+    ::_decode(failed, payload, off);
+    ::_decode(epoch, payload, off);
   }
   void encode_payload() {
-    payload.append((char*)&failed, sizeof(failed));
-    payload.append((char*)&epoch, sizeof(epoch));
+    ::_encode(from, payload);
+    ::_encode(failed, payload);
+    ::_encode(epoch, payload);
   }
 
-  virtual char *get_type_name() { return "osdfail"; }
+  virtual char *get_type_name() { return "osd_failure"; }
+  void print(ostream& out) {
+    out << "osd_failure(" << failed << " e" << epoch << ")";
+  }
 };
 
 #endif

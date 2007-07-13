@@ -267,7 +267,14 @@ public:
     char *c_str() { assert(_raw); return _raw->data + _off; }
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
-    unsigned unused_tail_length() const { return _raw->len - (_off+_len); }
+    unsigned start() const { return _off; }
+    unsigned end() const { return _off + _len; }
+    unsigned unused_tail_length() const { 
+      if (_raw)
+	return _raw->len - (_off+_len); 
+      else
+	return 0;
+    }
     const char& operator[](unsigned n) const { 
       assert(_raw); 
       assert(n < _len);
@@ -332,6 +339,7 @@ public:
     // my private bits
     std::list<ptr> _buffers;
     unsigned _len;
+    ptr append_buffer;  // where i put small appends.
 
   public:
     // cons/des
@@ -352,10 +360,10 @@ public:
     const std::list<ptr>& buffers() const { return _buffers; }
     
     unsigned length() const {
-#if 0
+#if 1
       // DEBUG: verify _len
       unsigned len = 0;
-      for (std::list<ptr>::iterator it = _buffers.begin();
+      for (std::list<ptr>::const_iterator it = _buffers.begin();
 	   it != _buffers.end();
 	   it++) {
 	len += (*it).length();
@@ -508,33 +516,23 @@ public:
 
 
     void append(const char *data, unsigned len) {
-      if (len == 0) return;
-      
-      unsigned alen = 0;
-      
-      // copy into the tail buffer?
-      if (!_buffers.empty()) {
-	unsigned avail = _buffers.back().unused_tail_length();
-	if (avail > 0) {
-	  //std::cout << "copying up to " << len << " into tail " << avail << " bytes of tail buf " << _buffers.back() << std::endl;
-	  if (avail > len) 
-	    avail = len;
-	  _buffers.back().append(data, avail);
-	  _len += avail;
-	  data += avail;
-	  len -= avail;
+      while (len > 0) {
+	// put what we can into the existing append_buffer.
+	if (append_buffer.unused_tail_length() > 0) {
+	  unsigned gap = append_buffer.unused_tail_length();
+	  if (gap > len) gap = len;
+	  append_buffer.append(data, gap);
+	  append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+	  len -= gap;
+	  data += gap;
 	}
-	alen = _buffers.back().length();
+	if (len == 0) break;  // done!
+	
+	// make a new append_buffer!
+	unsigned alen = BUFFER_PAGE_SIZE * (((len-1) / BUFFER_PAGE_SIZE) + 1);
+	append_buffer = create_page_aligned(alen);
+	append_buffer.set_length(0);   // unused, so far.
       }
-      if (len == 0) return;
-      
-      // just add another buffer.
-      // alloc a bit extra, in case we do a bunch of appends.   FIXME be smarter!
-      if (alen < 4096) alen = 4096;
-      ptr bp = create(alen);
-      bp.set_length(len);
-      bp.copy_in(0, len, data);
-      push_back(bp);
     }
     void append(ptr& bp) {
       push_back(bp);
@@ -545,8 +543,11 @@ public:
       push_back(tempbp);
     }
     void append(const list& bl) {
-      list temp(bl);         // copy list
-      claim_append(temp);    // and append
+      _len += bl._len;
+      for (std::list<ptr>::const_iterator p = bl._buffers.begin();
+	   p != bl._buffers.end();
+	   ++p) 
+	_buffers.push_back(*p);
     }
     
     
@@ -586,12 +587,12 @@ public:
       }
     }
 
-    void substr_of(list& other, unsigned off, unsigned len) {
+    void substr_of(const list& other, unsigned off, unsigned len) {
       assert(off + len <= other.length());
       clear();
       
       // skip off
-      std::list<ptr>::iterator curbuf = other._buffers.begin();
+      std::list<ptr>::const_iterator curbuf = other._buffers.begin();
       while (off > 0) {
 	assert(curbuf != _buffers.end());
 	if (off >= (*curbuf).length()) {
@@ -953,6 +954,7 @@ inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
 inline void _encode(const bufferlist& s, bufferlist& bl) 
 {
   uint32_t len = s.length();
+  cout << "_encode bufferlist len " << len << endl;
   _encoderaw(len, bl);
   bl.append(s);
 }

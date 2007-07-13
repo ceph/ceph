@@ -64,8 +64,13 @@ int main(int argc, char **argv, char *envp[]) {
   int r = monmap.read(".ceph_monmap");
   assert(r >= 0);
   
+  // start up network
+  rank.start_rank();
+  messenger = rank.register_entity(entity_name_t(entity_name_t::TYPE_ADMIN));
+  messenger->set_dispatcher(&dispatcher);
+  
   // build command
-  MMonCommand *m = new MMonCommand;
+  MMonCommand *m = new MMonCommand(messenger->get_myinst());
   string cmd;
   for (unsigned i=0; i<args.size(); i++) {
     if (i) cmd += " ";
@@ -76,11 +81,6 @@ int main(int argc, char **argv, char *envp[]) {
 
   dout(0) << "mon" << mon << " <- '" << cmd << "'" << endl;
 
-  // start up network
-  rank.start_rank();
-  messenger = rank.register_entity(entity_name_t(entity_name_t::TYPE_ADMIN));
-  messenger->set_dispatcher(&dispatcher);
-  
   // send it
   messenger->send_message(m, monmap.get_inst(mon));
 

@@ -1,5 +1,11 @@
 
 
+- change same_inst_since to align with "in" set
+- tag MClientRequest with mdsmap v
+- push new mdsmap to clients on send_message_client, based on the tag?
+  - hrm, what about exports and stale caps wonkiness... there's a race with the REAP.  hmm.
+
+
 some smallish projects:
 
 - crush rewrite in C
@@ -36,6 +42,10 @@ general kernel planning
 - soft consistency on lookup?
 - accurate reconstruction of (syscall) path?
 
+software raid layer for EBOFS?
+- actually, we just need software raid _awareness_ in the allocator, so
+  that we can write only full stripes, without fear of clobbering things on
+  failure.  then use MD or similar layer provided by kernel.
 
 
 sage doc
@@ -148,14 +158,10 @@ sage mds
 
 
 osdmon
-- distribute w/ paxos framework
 - allow fresh replacement osds.  add osd_created in osdmap, probably
 - monitor needs to monitor some osds...
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
-
-mdsmon
-- distribute w/ paxos framework
 
 journaler
 - fix up for large events (e.g. imports)
@@ -228,6 +234,9 @@ osd/rados
 - optimize remove wrt recovery pushes
 - pg_bit/pg_num changes
 - report crashed pgs?
+
+messenger
+- fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
 - close idle connections

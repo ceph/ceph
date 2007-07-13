@@ -23,7 +23,6 @@ class MOSDGetMap : public Message {
  public:
   epoch_t since;
 
-  //MOSDGetMap() : since(0) {}
   MOSDGetMap(epoch_t s=0) : 
     Message(MSG_OSD_GETMAP),
     since(s) {
@@ -31,7 +30,10 @@ class MOSDGetMap : public Message {
 
   epoch_t get_since() { return since; }
 
-  char *get_type_name() { return "getomap"; }
+  char *get_type_name() { return "get_osd_map"; }
+  void print(ostream& out) {
+    out << "get_osd_map(since " << since << ")";
+  }
   
   void encode_payload() {
     payload.append((char*)&since, sizeof(since));

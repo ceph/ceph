@@ -3285,7 +3285,7 @@ bool MDCache::shutdown_pass()
 {
   dout(7) << "shutdown_pass" << endl;
 
-  if (mds->is_out()) {
+  if (mds->is_stopped()) {
     dout(7) << " already shut down" << endl;
     show_cache();
     show_subtrees();
