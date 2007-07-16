@@ -1335,11 +1335,11 @@ void MDCache::handle_resolve(MMDSResolve *m)
 void MDCache::maybe_resolve_finish()
 {
   if (got_resolve != recovery_set) {
-    dout(10) << "still waiting for more importmaps, got " << got_resolve 
-	     << ", need " << recovery_set << endl;
+    dout(10) << "still waiting for more resolves, got (" << got_resolve 
+	     << "), need (" << recovery_set << ")" << endl;
   } 
   else if (!need_resolve_ack.empty()) {
-    dout(10) << "still waiting for resolve_ack from " << need_resolve_ack << endl;
+    dout(10) << "still waiting for resolve_ack from (" << need_resolve_ack << ")" << endl;
   } 
   else {
     dout(10) << "got all import maps, resolve_acks, done resolving subtrees" << endl;
@@ -1733,12 +1733,13 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
-      if (dn->is_primary()) 
+      if (dn->is_primary()) {
 	rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
-      else if (dn->is_remote())
+    	dn->get_inode()->get_nested_dirfrags(nested);
+      } else if (dn->is_remote())
 	rejoin->add_weak_remote_dentry(dir->dirfrag(), p->first, dn->get_remote_ino());      
       else 
-	assert(0);  // i shouldn't have a non-auth null dentry after journal replay..
+	assert(0);  // i shouldn't have a non-auth null dentry after replay + trim_non_auth()
     }
   } else {
     // STRONG
@@ -1788,10 +1789,10 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 
   switch (m->op) {
   case MMDSCacheRejoin::OP_WEAK:
-    handle_cache_rejoin_weak_rejoin(m);
+    handle_cache_rejoin_weak(m);
     break;
   case MMDSCacheRejoin::OP_STRONG:
-    handle_cache_rejoin_strong_rejoin(m);
+    handle_cache_rejoin_strong(m);
     break;
 
   case MMDSCacheRejoin::OP_ACK:
@@ -1816,15 +1817,18 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 
 
 /*
- * handle_cache_rejoin_weak_rejoin
+ * handle_cache_rejoin_weak
  *
- * sender 
- *  - is recovering.
+ * the sender 
+ *  - is recovering from their journal.
+ *  - may have incorrect (out of date) inode contents
+ *
+ * if the sender didn't trim_non_auth(), they
  *  - may have incorrect (out of date) dentry/inode linkage
  *  - may have deleted/purged inodes
- * 
+ * and i may have to go to disk to get accurate inode contents.  yuck.
  */
-void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
+void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 {
   int from = weak->get_source().num();
 
@@ -1933,7 +1937,8 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 	if (!survivor)
 	  in->dirlock.set_state(LOCK_SCATTER);
 
-	if (ack) 
+	if (ack) {
+	  ack->add_full_inode(in->inode, in->symlink, in->dirfragtree);
 	  ack->add_strong_inode(in->ino(), 
 				nonce,
 				0,
@@ -1942,6 +1947,7 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 				in->dirfragtreelock.get_replica_state(), 
 				in->filelock.get_replica_state(),
 				in->dirlock.get_replica_state());
+	}
       }
     }
   }
@@ -1951,8 +1957,10 @@ void MDCache::handle_cache_rejoin_weak_rejoin(MMDSCacheRejoin *weak)
 
   // send purge?
   //  (before ack)
-  if (purge) 
+  if (purge) {
+    assert(0);  // not if sender did trim_non_auth().
     mds->send_message_mds(purge, from, MDS_PORT_CACHE);
+  }
 
   if (survivor) {
     // send ack
@@ -2095,7 +2103,7 @@ CInode *MDCache::rejoin_invent_inode(inodeno_t ino)
 }
 
 
-void MDCache::handle_cache_rejoin_strong_rejoin(MMDSCacheRejoin *strong)
+void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 {
   int from = strong->get_source().num();
 
@@ -2250,6 +2258,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   dout(7) << "handle_cache_rejoin_ack from " << ack->get_source() << endl;
   int from = ack->get_source().num();
 
+  bool rejoin = mds->is_rejoin();
+
   list<Context*> waiters;
   
   // dirs
@@ -2257,7 +2267,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        p != ack->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    assert(dir);
+    if (!dir) continue;
 
     dir->set_replica_nonce(p->second.nonce);
     dir->state_clear(CDir::STATE_REJOINING);
@@ -2268,11 +2278,26 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	 q != ack->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
-      assert(dn);
+      if (!dn) continue;
+
       dn->set_replica_nonce(q->second.nonce);
       mds->locker->rejoin_set_state(&dn->lock, q->second.lock, waiters);
       dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << endl;
+    }
+  }
+
+  // full inodes
+  if (rejoin) {
+    for (list<MMDSCacheRejoin::inode_full>::iterator p = ack->full_inodes.begin();
+	 p != ack->full_inodes.end();
+	 ++p) {
+      CInode *in = get_inode(p->inode.ino);
+      if (!in) continue;
+      in->inode = p->inode;
+      in->symlink = p->symlink;
+      in->dirfragtree = p->dirfragtree;
+      dout(10) << " got inode content " << *in << endl;
     }
   }
 
@@ -2281,7 +2306,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        p != ack->strong_inodes.end();
        ++p) {
     CInode *in = get_inode(p->first);
-    assert(in);
+    if (!in) continue;
     in->set_replica_nonce(p->second.nonce);
     mds->locker->rejoin_set_state(&in->authlock, p->second.authlock, waiters);
     mds->locker->rejoin_set_state(&in->linklock, p->second.linklock, waiters);
@@ -2561,10 +2586,13 @@ void MDCache::rejoin_send_acks()
   
   // send acks to everyone in the recovery set
   map<int,MMDSCacheRejoin*> ack;
+  set<int> weak;
   for (set<int>::iterator p = recovery_set.begin();
        p != recovery_set.end();
-       ++p)
+       ++p) {
     ack[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+    if (mds->mdsmap->is_rejoin(*p)) weak.insert(*p);
+  }
   
   // walk subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin(); 
@@ -2607,19 +2635,19 @@ void MDCache::rejoin_send_acks()
 
 	// inode
 	CInode *in = dn->inode;
-	
-	// twiddle filelock at all?
-	// hmm.
 
 	for (map<int,int>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
-	     ++r) 
+	     ++r) {
+	  if (weak.count(r->first))
+	    ack[r->first]->add_full_inode(in->inode, in->symlink, in->dirfragtree);
 	  ack[r->first]->add_strong_inode(in->ino(), r->second, 0,
 					  in->authlock.get_replica_state(),
 					  in->linklock.get_replica_state(),
 					  in->dirfragtreelock.get_replica_state(),
 					  in->filelock.get_replica_state(),
 					  in->dirlock.get_replica_state());
+	}
 	
 	// subdirs in this subtree?
 	in->get_nested_dirfrags(dq);
@@ -3002,14 +3030,11 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 /**
  * trim_non_auth - remove any non-auth items from our cache
  *
- * this is necessary because we can't be sure that these items were
- * in our cache all the way up to our crash, and as a result can't be
- * sure that we would have heard about any subtree migrations that 
- * would affect their authority.  therefore, we must remove!
+ * this reduces the amount of non-auth metadata in our cache, reducing the 
+ * load incurred by the rejoin phase.
  *
  * the only non-auth items that remain are those that are needed to 
- * attach our own subtrees to the root.  those we can be sure we had 
- * at the time of our crash.
+ * attach our own subtrees to the root.  
  */
 void MDCache::trim_non_auth()
 {

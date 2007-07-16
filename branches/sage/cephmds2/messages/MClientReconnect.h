@@ -22,7 +22,7 @@ class MClientReconnect : public Message {
 public:
   map<inodeno_t, inode_caps_reconnect_t>  inode_caps;
   map<inodeno_t, string> inode_path;
-  bool closed;
+  bool closed;  // true if this session was closed by the client.
 
   MClientReconnect() : Message(MSG_CLIENT_RECONNECT),
 		       closed(false) { }

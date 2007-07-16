@@ -206,7 +206,7 @@ void Server::reconnect_clients()
   // reconnect with clients
   if (mds->clientmap.get_session_set().empty()) {
     dout(7) << "reconnect_clients -- no sessions, doing nothing." << endl;
-    reconnect_finish();
+    reconnect_gather_finish();
     return;
   }
   
@@ -278,7 +278,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // remove from gather set
   client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty()) reconnect_finish();
+  if (client_reconnect_gather.empty()) reconnect_gather_finish();
 
   delete m;
 }
@@ -326,12 +326,12 @@ void Server::client_reconnect_failure(int from)
   dout(5) << "client_reconnect_failure on client" << from << endl;
   client_reconnect_gather.erase(from);
   if (client_reconnect_gather.empty()) 
-    reconnect_finish();
+    reconnect_gather_finish();
 }
 
-void Server::reconnect_finish()
+void Server::reconnect_gather_finish()
 {
-  dout(7) << "reconnect_finish" << endl;
+  dout(7) << "reconnect_gather_finish" << endl;
   mds->reconnect_done();
 }
 
