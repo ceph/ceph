@@ -157,16 +157,19 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
- protected:
+protected:
   // contents
   CDir_map_t       items;              // non-null AND null
   size_t           nitems;             // # non-null
   size_t           nnull;              // # null
 
+  int num_dirty;
+
   // state
   version_t       version;
   version_t       committing_version;
   version_t       committed_version;
+  version_t       committed_version_equivalent;  // in case of, e.g., temporary file
   version_t       projected_version; 
 
   // lock nesting, freeze
@@ -211,13 +214,17 @@ class CDir : public MDSCacheObject {
   }
   size_t get_nitems() { return nitems; }
   size_t get_nnull() { return nnull; }
-
-  /*
-  float get_popularity() {
-    return popularity[0].get();
-  }
-  */
   
+  void inc_num_dirty() { num_dirty++; }
+  void dec_num_dirty() { 
+    assert(num_dirty > 0);
+    num_dirty--; 
+  }
+  int get_num_dirty() {
+    return num_dirty;
+  }
+
+  void try_remove_unlinked_dn(CDentry *dn);
 
   // -- dentries and inodes --
  public:
@@ -318,6 +325,7 @@ class CDir : public MDSCacheObject {
   version_t get_projected_version() { return projected_version; }
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
+  version_t get_committed_version_equivalent() { return committed_version_equivalent; }
   void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty(version_t min=0);

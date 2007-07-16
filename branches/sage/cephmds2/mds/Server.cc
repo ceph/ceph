@@ -923,6 +923,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   
   // create
   dn = dir->add_dentry(dname, 0);
+  dn->mark_new();
   dout(10) << "prepare_null_dentry added " << *dn << endl;
 
   return dn;
@@ -2385,6 +2386,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   // clean up?
   if (straydn)
     mdcache->eval_stray(straydn);
+
+  // removing a new dn?
+  dn->dir->try_remove_unlinked_dn(dn);
 }
 
 
@@ -2486,6 +2490,9 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+
+  // removing a new dn?
+  dn->dir->try_remove_unlinked_dn(dn);
 }
 
 
@@ -3102,6 +3109,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   // update subtree map?
   if (destdn->is_primary() && destdn->inode->is_dir()) 
     mdcache->adjust_subtree_after_rename(destdn->inode, srcdn->dir);
+
+  // removing a new dn?
+  srcdn->dir->try_remove_unlinked_dn(srcdn);
 }
 
 

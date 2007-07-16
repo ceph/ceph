@@ -63,6 +63,8 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
   out << " inode=" << dn.get_inode();
 
+  if (dn.is_new()) out << " state=new";
+
   if (dn.get_num_ref()) {
     out << " |";
     dn.print_pin_set(out);
@@ -127,6 +129,7 @@ void CDentry::_mark_dirty()
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
+    dir->inc_num_dirty();
     get(PIN_DIRTY);
   }
 }
@@ -144,19 +147,27 @@ void CDentry::mark_dirty(version_t pv)
   dir->mark_dirty(pv);
 }
 
-void CDentry::mark_clean() {
+
+void CDentry::mark_clean() 
+{
   dout(10) << " mark_clean " << *this << endl;
   assert(is_dirty());
   assert(version <= dir->get_version());
 
-  // this happens on export.
-  //assert(version <= dir->get_last_committed_version());  
-
   // state+pin
   state_clear(STATE_DIRTY);
+  dir->dec_num_dirty();
   put(PIN_DIRTY);
+  
+  if (state_test(STATE_NEW)) 
+    state_clear(STATE_NEW);
 }    
 
+void CDentry::mark_new() 
+{
+  dout(10) << " mark_new " << *this << endl;
+  state_set(STATE_NEW);
+}
 
 void CDentry::make_path(string& s)
 {

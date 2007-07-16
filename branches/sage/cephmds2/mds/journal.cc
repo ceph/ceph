@@ -545,14 +545,21 @@ void ESession::replay(MDS *mds)
   if (mds->clientmap.get_version() >= cmapv) {
     dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
 	     << " >= " << cmapv << ", noop" << endl;
+
+    // hrm, this isn't very pretty.
+    if (!open)
+      mds->clientmap.trim_completed_requests(client_inst.name.num(), 0);
+
   } else {
     dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
 	     << " < " << cmapv << endl;
     assert(mds->clientmap.get_version() + 1 == cmapv);
-    if (open)
+    if (open) {
       mds->clientmap.open_session(client_inst);
-    else
+    } else {
       mds->clientmap.close_session(client_inst.name.num());
+      mds->clientmap.trim_completed_requests(client_inst.name.num(), 0);
+    }
     mds->clientmap.reset_projected(); // make it follow version.
   }
 }

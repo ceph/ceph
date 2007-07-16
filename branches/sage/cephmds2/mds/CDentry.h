@@ -46,6 +46,7 @@ bool operator<(const CDentry& l, const CDentry& r);
 class CDentry : public MDSCacheObject, public LRUObject {
  public:
   // -- state --
+  static const int STATE_NEW = 1;
 
   // -- pins --
   static const int PIN_INODEPIN = 1;   // linked inode is pinned
@@ -176,6 +177,8 @@ public:
   void mark_dirty(version_t projected_dirv);
   void mark_clean();
 
+  void mark_new();
+  bool is_new() { return state_test(STATE_NEW); }
   
   // -- replication
   CDentryDiscover *replicate_to(int rep);

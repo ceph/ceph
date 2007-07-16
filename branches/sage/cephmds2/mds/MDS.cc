@@ -923,6 +923,9 @@ void MDS::reconnect_start()
 void MDS::reconnect_done()
 {
   dout(1) << "reconnect_done" << endl;
+  set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
+
+  /*
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
 
@@ -933,6 +936,7 @@ void MDS::reconnect_done()
   } else {
     set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
   }
+  */
 }
 
 void MDS::rejoin_joint_start()

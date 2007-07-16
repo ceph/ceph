@@ -202,7 +202,7 @@ CInode *MDCache::create_root_inode()
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;
   
-  root->force_auth = pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN);
+  root->force_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
   set_root( root );
   add_inode( root );
@@ -615,6 +615,13 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
     }
     p = n;
   }
+
+  // adjust export pins
+  adjust_export_state(dir);
+  for (set<CDir*>::iterator p = subtrees[dir].begin();
+       p != subtrees[dir].end();
+       ++p) 
+    adjust_export_state(*p);
 
   // bound should now match.
   verify_subtree_bounds(dir, bounds);
@@ -2461,6 +2468,12 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
 
 
 
+/**
+ * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
+ *
+ * FIXME: wait, can this actually happen?  a survivor should generate cache trim
+ * messages that clean these guys up...
+ */
 void MDCache::rejoin_trim_undef_inodes()
 {
   dout(10) << "rejoin_trim_undef_inodes" << endl;
@@ -2506,6 +2519,7 @@ void MDCache::rejoin_trim_undef_inodes()
     }
   }
 
+  assert(rejoin_undef_inodes.empty());  // hmm: this shouldn't ever happen, actually!
   rejoin_undef_inodes.clear();
 }
 
@@ -2736,16 +2750,19 @@ void MDCache::purge_inode(inode_t *inode, off_t newsize)
   purging[inode->ino][newsize] = *inode;
 
   assert(inode->size > newsize);
+  _do_purge_inode(inode, newsize);
+}
 
+void MDCache::_do_purge_inode(inode_t *inode, off_t newsize)
+{
   // remove
-  mds->filer->remove(*inode, newsize, inode->size,
-		     0, new C_MDC_PurgeFinish(this, inode->ino, newsize));
-
-  /*} else {
+  if (inode->size > 0) {
+    mds->filer->remove(*inode, newsize, inode->size,
+		       0, new C_MDC_PurgeFinish(this, inode->ino, newsize));
+  } else {
     // no need, empty file, just log it
     purge_inode_finish(inode->ino, newsize);
   }
-  */
 }
 
 void MDCache::purge_inode_finish(inodeno_t ino, off_t newsize)
@@ -2800,8 +2817,7 @@ void MDCache::start_recovered_purges()
       dout(10) << "start_recovered_purges " << p->first
 	       << " size " << q->second.size
 	       << " to " << q->first << endl;
-      mds->filer->remove(q->second, q->first, q->second.size,
-			 0, new C_MDC_PurgeFinish(this, p->first, q->first));
+      _do_purge_inode(&q->second, q->first);
     }
   }
 }
@@ -4598,7 +4614,7 @@ void MDCache::_purge_stray(CDentry *dn)
   // log removal
   version_t pdv = dn->pre_dirty();
 
-  EUpdate *le = new EUpdate;
+  EUpdate *le = new EUpdate("purge_stray");
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
   le->metablob.add_inode_truncate(dn->inode->inode, 0);
@@ -4616,8 +4632,7 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv)
   dn->dir->remove_dentry(dn);
 
   // purge+remove inode
-  if (in->inode.size > 0)
-    purge_inode(&in->inode, 0);
+  purge_inode(&in->inode, 0);
   remove_inode(in);
 }
 

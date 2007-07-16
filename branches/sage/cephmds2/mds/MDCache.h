@@ -476,6 +476,7 @@ public:
  public:
   // inode purging
   void purge_inode(inode_t *inode, off_t newsize);
+  void _do_purge_inode(inode_t *inode, off_t newsize);
   void purge_inode_finish(inodeno_t ino, off_t newsize);
   void purge_inode_finish_2(inodeno_t ino, off_t newsize);
   bool is_purging(inodeno_t ino, off_t newsize) {

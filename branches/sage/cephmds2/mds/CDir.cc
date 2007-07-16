@@ -51,6 +51,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
+    out << "/" << dir.get_committed_version_equivalent();
   } else {
     out << " rep@" << dir.authority();
     if (dir.get_replica_nonce() > 1)
@@ -78,6 +79,9 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
+  if (dir.get_num_dirty())
+    out << " dirty=" << dir.get_num_dirty();
+
   
   if (dir.get_num_ref()) {
     out << " |";
@@ -119,6 +123,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   
   nitems = 0;
   nnull = 0;
+  num_dirty = 0;
+
   state = STATE_INITIAL;
 
   projected_version = version = 0;
@@ -199,7 +205,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in)
   //assert(null_items.count(dn->name) == 0);
 
   items[dn->name] = dn;
-  
+
   if (in) {
     link_inode_work( dn, in );
   } else {
@@ -237,6 +243,10 @@ void CDir::remove_dentry(CDentry *dn)
   // remove from list
   assert(items.count(dn->name) == 1);
   items.erase(dn->name);
+
+  // adjust dirty counter?
+  if (dn->state_test(CDentry::STATE_DIRTY))
+    num_dirty--;
 
   cache->lru.lru_remove(dn);
   delete dn;
@@ -368,6 +378,28 @@ void CDir::remove_null_dentries() {
   assert(nnull + nitems == items.size());
 }
 
+
+void CDir::try_remove_unlinked_dn(CDentry *dn)
+{
+  assert(dn->dir == this);
+  
+  if (dn->is_new() && dn->is_dirty() &&
+      dn->get_num_ref() == 1) {
+    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
+    dn->mark_clean();
+    remove_dentry(dn);
+
+    if (version == projected_version &&
+	committing_version == committed_version &&
+	num_dirty == 0) {
+      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
+	       << " vs committed " << committed_version
+	       << endl;
+      committed_version_equivalent = committed_version;    
+    }
+  }
+}
+  
 
 
 
