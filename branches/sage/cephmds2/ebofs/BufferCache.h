@@ -264,46 +264,58 @@ class BufferHead : public LRUObject {
     assert(off + len <= EBOFS_BLOCK_SIZE);
 
     // trim any existing that overlaps
-    for (map<off_t, bufferlist>::iterator i = partial.begin();
-         i != partial.end();
-         ) {
-      if (i->first + i->second.length() <= off) {  // before
+    map<off_t, bufferlist>::iterator i = partial.begin();
+    while (i != partial.end()) {
+      // is [off,off+len)...
+      // past i?
+      if (off >= i->first + i->second.length()) {  
         i++; 
         continue; 
       }
-      if (i->first >= off+len) break;   // past affected area.
-
-      // overlap all?
-      if (off <= i->first && i->first + i->second.length() <= off+len) {
+      // before i?
+      if (i->first >= off+len) break;   
+      
+      // does [off,off+len)...
+      // overlap all of i?
+      if (off <= i->first && off+len >= i->first + i->second.length()) {
         // erase it and move on.
-        off_t dead = i->first;
-        i++;
-        partial.erase(dead);  
+	partial.erase(i++);
         continue;
       }
-      // overlap tail?
-      else if (i->first < off && off < i->first + i->second.length()) {
-        // shorten.
-        unsigned newlen = off - i->first;
+      // overlap tail of i?
+      if (off > i->first && off < i->first + i->second.length()) {
+        // shorten i.
         bufferlist o;
         o.claim( i->second );
-        i->second.substr_of(o, 0, newlen);
+        unsigned taillen = off - i->first;
+        i->second.substr_of(o, 0, taillen);
         i++;
         continue;
       }
-      // overlap head?
-      else if (off < i->first && off+len < i->first + i->second.length()) {
-        // move.
-        off_t oldoff = i->first;
-        off_t newoff = off+len;
-        unsigned trim = newoff - oldoff;
-        partial[newoff].substr_of(i->second, trim, i->second.length()-trim);
-        i++;  // should be at newoff!
-        partial.erase( oldoff );
+      // overlap head of i?
+      if (off < i->first && off+len < i->first + i->second.length()) {
+        // move i (make new tail).
+        off_t tailoff = off+len;
+        unsigned trim = tailoff - i->first;
+        partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
+        partial.erase(i++);   // should now be at tailoff
         i++;
         continue;
-      } else
-        assert(0);
+      } 
+      // split i?
+      if (off > i->first && off+len < i->first + i->second.length()) {
+	bufferlist o;
+	o.claim( i->second );
+	// shorten head
+	unsigned headlen = off - i->first;
+	i->second.substr_of(o, 0, headlen);
+	// new tail
+	unsigned tailoff = off+len - i->first;
+	unsigned taillen = o.length() - len - headlen;
+	partial[off+len].substr_of(o, tailoff, taillen);
+	break;
+      }
+      assert(0);
     }
 
     // insert
