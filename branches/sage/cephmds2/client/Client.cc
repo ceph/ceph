@@ -949,7 +949,10 @@ void Client::send_reconnect(int mds)
 	dout(10) << " clearing stale caps on " << p->first << endl;
 	p->second->stale_caps.erase(mds);         // hrm, is this right?
       }
-    }    
+    }
+
+    // reset my cap seq number
+    mds_sessions[mds] = 0;
   } else {
     dout(10) << " i had no session with this mds";
     m->closed = true;
