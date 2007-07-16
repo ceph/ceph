@@ -305,6 +305,9 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     
     // someone (new) has joined the cluster.
     pending_mdsmap.same_inst_since = pending_mdsmap.epoch;
+
+    // reset the beacon timer
+    last_beacon[from] = g_clock.now();
   }
 
   // created?
