@@ -345,6 +345,7 @@ class Client : public Dispatcher {
   // mds sessions
   map<int, version_t> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
+  list<Cond*> waiting_for_mdsmap;
 
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);

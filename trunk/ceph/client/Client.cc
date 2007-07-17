@@ -607,6 +607,21 @@ MClientReply *Client::make_request(MClientRequest *req,
     // open a session?
     if (mds_sessions.count(mds) == 0) {
       Cond cond;
+
+      if (!mdsmap->have_inst(mds)) {
+	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << endl;
+	int mon = monmap->pick_mon();
+	messenger->send_message(new MMDSGetMap(),
+				monmap->get_inst(mon));
+	waiting_for_mdsmap.push_back(&cond);
+	cond.Wait(client_lock);
+
+	if (!mdsmap->have_inst(mds)) {
+	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << endl;
+	  request.resend_mds = mdsmap->get_random_in_mds();
+	  continue;
+	}
+      }	
       
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << endl;
@@ -915,6 +930,12 @@ void Client::handle_mds_map(MMDSMap* m)
     kick_requests(frommds);
     //failed_mds.erase(from);
   }
+
+  // kick any waiting threads
+  list<Cond*> ls;
+  ls.swap(waiting_for_mdsmap);
+  for (list<Cond*>::iterator p = ls.begin(); p != ls.end(); ++p)
+    (*p)->Signal();
 
   delete m;
 }
