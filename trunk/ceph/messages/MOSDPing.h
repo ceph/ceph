@@ -15,6 +15,8 @@
 #ifndef __MOSDPING_H
 #define __MOSDPING_H
 
+#include "common/Clock.h"
+
 #include "msg/Message.h"
 
 
@@ -23,10 +25,12 @@ class MOSDPing : public Message {
   epoch_t map_epoch;
   bool ack;
   float avg_qlen;
+  double read_mean_time;
 
   MOSDPing(epoch_t e, 
 	   float aq,
-	   bool a=false) : Message(MSG_OSD_PING), map_epoch(e), ack(a), avg_qlen(aq) {
+	   double _read_mean_time,
+	   bool a=false) : Message(MSG_OSD_PING), map_epoch(e), ack(a), avg_qlen(aq), read_mean_time(_read_mean_time) {
   }
   MOSDPing() {}
 
@@ -38,11 +42,14 @@ class MOSDPing : public Message {
     off += sizeof(ack);
     payload.copy(off, sizeof(avg_qlen), (char*)&avg_qlen);
     off += sizeof(avg_qlen);
+    payload.copy(off, sizeof(read_mean_time), (char*)&read_mean_time);
+    off += sizeof(read_mean_time);
   }
   virtual void encode_payload() {
     payload.append((char*)&map_epoch, sizeof(map_epoch));
     payload.append((char*)&ack, sizeof(ack));
     payload.append((char*)&avg_qlen, sizeof(avg_qlen));
+    payload.append((char*)&read_mean_time, sizeof(read_mean_time));
   }
 
   virtual char *get_type_name() { return "oping"; }

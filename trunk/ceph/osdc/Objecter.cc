@@ -253,12 +253,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, Context *onfinish,
+tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish,
 					 objectrev_t rev)
 {
   OSDStat *st = new OSDStat(size);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
-  st->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  st->extents.front().layout = ol;
   st->extents.front().rev = rev;
   st->onfinish = onfinish;
 
@@ -269,7 +269,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
 {
   // find OSD
   ObjectExtent &ex = st->extents.front();
-  PG &pg = get_pg( ex.pgid );
+  PG &pg = get_pg( ex.layout.pgid );
 
   // pick tid
   last_tid++;
@@ -282,15 +282,16 @@ tid_t Objecter::stat_submit(OSDStat *st)
   pg.active_tids.insert(last_tid);
 
   // send?
+
   dout(10) << "stat_submit " << st << " tid " << last_tid
            << " oid " << ex.oid
-           << " pg " << ex.pgid
+           << " " << ex.layout
            << " osd" << pg.acker() 
            << endl;
 
   if (pg.acker() >= 0) {
 	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-						   ex.oid, ex.pgid, osdmap->get_epoch(), 
+						   ex.oid, ex.layout, osdmap->get_epoch(), 
 						   OSD_OP_STAT);
 
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
@@ -356,13 +357,13 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
                      Context *onfinish, 
 					 objectrev_t rev)
 {
   OSDRead *rd = new OSDRead(bl);
   rd->extents.push_back(ObjectExtent(oid, off, len));
-  rd->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  rd->extents.front().layout = ol;
   rd->extents.front().rev = rev;
   readx(rd, onfinish);
   return last_tid;
@@ -385,7 +386,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
-  PG &pg = get_pg( ex.pgid );
+  PG &pg = get_pg( ex.layout.pgid );
 
   // pick tid
   last_tid++;
@@ -401,19 +402,26 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
-           << " pg " << ex.pgid
+           << " " << ex.layout
            << " osd" << pg.acker() 
            << endl;
 
   if (pg.acker() >= 0) {
-	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-						   ex.oid, ex.pgid, osdmap->get_epoch(), 
-						   OSD_OP_READ);
-	m->set_length(ex.length);
-	m->set_offset(ex.start);
-	m->set_retry_attempt(retry);
-	
-    messenger->send_message(m, osdmap->get_inst(pg.acker()));
+    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+			   ex.oid, ex.layout, osdmap->get_epoch(), 
+			   OSD_OP_READ);
+    m->set_length(ex.length);
+    m->set_offset(ex.start);
+    m->set_retry_attempt(retry);
+    
+    int who = pg.acker();
+    if (rd->balance_reads) {
+      int replica = messenger->get_myname().num() % pg.acting.size();
+      who = pg.acting[replica];
+      dout(-10) << "readx_submit reading from random replica " << replica
+		<< " = osd" << who <<  endl;
+    }
+    messenger->send_message(m, osdmap->get_inst(who));
   }
     
   return last_tid;
@@ -587,13 +595,13 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
                       Context *onack, Context *oncommit,
 					  objectrev_t rev)
 {
   OSDWrite *wr = new OSDWrite(bl);
   wr->extents.push_back(ObjectExtent(oid, off, len));
-  wr->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
   wr->extents.front().rev = rev;
   modifyx(wr, onack, oncommit);
@@ -603,13 +611,13 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl,
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len,  
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
                      Context *onack, Context *oncommit,
 					 objectrev_t rev)
 {
   OSDModify *z = new OSDModify(OSD_OP_ZERO);
   z->extents.push_back(ObjectExtent(oid, off, len));
-  z->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  z->extents.front().layout = ol;
   z->extents.front().rev = rev;
   modifyx(z, onack, oncommit);
   return last_tid;
@@ -618,12 +626,12 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, 
+tid_t Objecter::lock(int op, object_t oid, ObjectLayout ol, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *l = new OSDModify(op);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
-  l->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
   return last_tid;
 }
@@ -650,7 +658,7 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
-  PG &pg = get_pg( ex.pgid );
+  PG &pg = get_pg( ex.layout.pgid );
     
   // pick tid
   tid_t tid;
@@ -673,12 +681,12 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
            << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
-           << " pg " << ex.pgid 
+           << " " << ex.layout 
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0) {
 	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
-						   ex.oid, ex.pgid, osdmap->get_epoch(),
+						   ex.oid, ex.layout, osdmap->get_epoch(),
 						   wr->op);
 	m->set_length(ex.length);
 	m->set_offset(ex.start);

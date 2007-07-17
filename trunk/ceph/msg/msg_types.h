@@ -16,6 +16,7 @@
 #define __MSG_TYPES_H
 
 #include "include/types.h"
+#include "include/blobhash.h"
 #include "tcp.h"
 
 // new typed msg_addr_t way!

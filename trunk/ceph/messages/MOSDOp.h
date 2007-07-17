@@ -31,6 +31,9 @@
 #define OSD_OP_READ       1
 #define OSD_OP_STAT       2
 
+#define OSD_OP_REPLICATE    3
+#define OSD_OP_UNREPLICATE  4
+
 #define OSD_OP_WRNOOP     10
 #define OSD_OP_WRITE      11
 #define OSD_OP_DELETE     12
@@ -43,9 +46,14 @@
 #define OSD_OP_RDUNLOCK   23
 #define OSD_OP_UPLOCK     24
 #define OSD_OP_DNLOCK     25
+#define OSD_OP_MININCLOCK 26 // minimum incarnation lock
 
 #define OSD_OP_PULL       30
 #define OSD_OP_PUSH       31
+
+#define OSD_OP_BALANCEREADS    101
+#define OSD_OP_UNBALANCEREADS  102
+
 
 
 class MOSDOp : public Message {
@@ -67,6 +75,11 @@ public:
     case OSD_OP_UPLOCK: return "uplock"; 
     case OSD_OP_DNLOCK: return "dnlock"; 
 
+    case OSD_OP_MININCLOCK: return "mininclock";
+
+    case OSD_OP_BALANCEREADS: return "balance-reads";
+    case OSD_OP_UNBALANCEREADS: return "unbalance-reads";
+
     case OSD_OP_PULL: return "pull";
     case OSD_OP_PUSH: return "push";
     default: assert(0);
@@ -85,7 +98,7 @@ private:
     
     object_t oid;
     objectrev_t rev;
-    pg_t pg;
+    ObjectLayout layout;
     
     epoch_t map_epoch;
     
@@ -105,6 +118,8 @@ private:
 
   bufferlist data;
   map<string,bufferptr> attrset;
+  double request_received_time;
+  
 
   friend class MOSDOpReply;
 
@@ -117,6 +132,11 @@ private:
   const entity_inst_t& get_client_inst() { return st.client; }
   void set_client_inst(const entity_inst_t& i) { st.client = i; }
 
+  bool wants_reply() {
+    if (st.op < 100) return true;
+    return false;  // no reply needed for primary-lock, -unlock.
+  }
+
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
@@ -124,7 +144,8 @@ private:
   void set_retry_attempt(bool a) { st.retry_attempt = a; }
 
   const object_t get_oid() { return st.oid; }
-  const pg_t     get_pg() { return st.pg; }
+  const pg_t     get_pg() { return st.layout.pgid; }
+  const ObjectLayout& get_layout() { return st.layout; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
   //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
@@ -139,6 +160,9 @@ private:
   
   const int    get_op() { return st.op; }
   void set_op(int o) { st.op = o; }
+  bool is_read() { 
+    return st.op < 10;
+  }
 
   const size_t get_length() { return st.length; }
   const off_t get_offset() { return st.offset; }
@@ -148,6 +172,13 @@ private:
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
+
+  void set_received_time(double time) {
+    request_received_time = time;
+  }
+  double get_received_time() {
+    return request_received_time;
+  }
 
   
   void set_data(bufferlist &d) {
@@ -160,7 +191,7 @@ private:
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
-         object_t oid, pg_t pg, epoch_t mapepoch, int op) :
+         object_t oid, ObjectLayout ol, epoch_t mapepoch, int op) :
     Message(MSG_OSD_OP) {
     memset(&st, 0, sizeof(st));
     this->st.client = asker;
@@ -169,7 +200,7 @@ private:
     this->st.reqid.tid = tid;
 
     this->st.oid = oid;
-    this->st.pg = pg;
+    this->st.layout = ol;
     this->st.map_epoch = mapepoch;
     this->st.op = op;
 
@@ -182,6 +213,8 @@ private:
 
   //void set_pg_role(int r) { st.pg_role = r; }
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
+
+  void set_layout(const ObjectLayout& l) { st.layout = l; }
 
   void set_length(size_t l) { st.length = l; }
   void set_offset(off_t o) { st.offset = o; }

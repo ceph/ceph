@@ -17,14 +17,12 @@
 
 
 #include "include/types.h"
+#include "osd_types.h"
 #include "include/buffer.h"
 
 #include "OSDMap.h"
 #include "ObjectStore.h"
 #include "msg/Messenger.h"
-#include "messages/MOSDOpReply.h"
-
-#include "include/types.h"
 
 #include <list>
 using namespace std;
@@ -34,7 +32,8 @@ using namespace __gnu_cxx;
 
 
 class OSD;
-
+class MOSDOp;
+class MOSDOpReply;
 
 
 /** PG - Replica Placement Group
@@ -367,51 +366,6 @@ public:
   };
 
 
-  /***
-   */
-
-  class RepOpGather {
-  public:
-    class MOSDOp *op;
-    tid_t rep_tid;
-
-    ObjectStore::Transaction t;
-    bool applied;
-
-    set<int>  waitfor_ack;
-    set<int>  waitfor_commit;
-    
-    utime_t   start;
-
-    bool sent_ack, sent_commit;
-    
-    set<int>         osds;
-    eversion_t       new_version;
-
-    eversion_t       pg_local_last_complete;
-    map<int,eversion_t> pg_complete_thru;
-    
-    RepOpGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
-      op(o), rep_tid(rt),
-      applied(false),
-      sent_ack(false), sent_commit(false),
-      new_version(nv), 
-      pg_local_last_complete(lc) { }
-
-    bool can_send_ack() { 
-      return !sent_ack && !sent_commit &&
-        waitfor_ack.empty(); 
-    }
-    bool can_send_commit() { 
-      return !sent_commit &&
-        waitfor_ack.empty() && waitfor_commit.empty(); 
-    }
-    bool can_delete() { 
-      return waitfor_ack.empty() && waitfor_commit.empty(); 
-    }
-  };
-
-
   /*** PG ****/
 public:
   // any
@@ -426,8 +380,46 @@ public:
   static const int STATE_STRAY =  16; // i must notify the primary i exist.
 
 
- protected:
+protected:
   OSD *osd;
+
+  /** locking and reference counting.
+   * I destroy myself when the reference count hits zero.
+   * lock() should be called before doing anything.
+   * get() should be called on pointer copy (to another thread, etc.).
+   * put() should be called on destruction of some previously copied pointer.
+   * put_unlock() when done with the current pointer (_most common_).
+   */  
+  Mutex _lock;
+  int  ref;
+  bool deleted;
+
+public:
+  void lock() {
+    //cout << info.pgid << " lock" << endl;
+    _lock.Lock();
+  }
+  void get() {
+    //cout << info.pgid << " get " << ref << endl;
+    assert(_lock.is_locked());
+    ++ref; 
+  }
+  void put() { 
+    //cout << info.pgid << " put " << ref << endl;
+    assert(_lock.is_locked());
+    --ref; 
+    assert(ref > 0);  // last put must be a put_unlock.
+  }
+  void put_unlock() { 
+    //cout << info.pgid << " put_unlock " << ref << endl;
+    assert(_lock.is_locked());
+    --ref; 
+    _lock.Unlock();
+    if (ref == 0) delete this;
+  }
+
+  void mark_deleted() { deleted = true; }
+  bool is_deleted() { return deleted; }
 
 public:
   // pg state
@@ -463,23 +455,17 @@ protected:
   friend class OSD;
 
 
-  // [primary|tail]
-  // old way
-  map<tid_t, class OSDReplicaOp*> replica_ops;
-  map<int, set<tid_t> >           replica_tids_by_osd; // osd -> (tid,...)
-
-  // new way
-  map<tid_t, RepOpGather*>          repop_gather;
-  map<tid_t, list<class Message*> > waiting_for_repop;
-
-  
-  // [primary|replica]
   // pg waiters
   list<class Message*>            waiting_for_active;
   hash_map<object_t, 
            list<class Message*> > waiting_for_missing_object;   
   map<eversion_t,class MOSDOp*>   replay_queue;
   
+  hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
+
+  bool block_if_wrlocked(MOSDOp* op);
+
+
   // recovery
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
@@ -525,19 +511,22 @@ public:
 
   void activate(ObjectStore::Transaction& t);
 
-  void cancel_recovery();
-  bool do_recovery();
-  void do_peer_recovery();
+  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
-  void clean_replicas();
+  virtual void cancel_recovery() = 0;
+  virtual bool do_recovery() = 0;
+  virtual void clean_replicas() = 0;
 
   off_t get_log_write_pos() {
     return 0;
   }
 
+  friend class C_OSD_RepModify_Commit;
+
  public:  
   PG(OSD *o, pg_t p) : 
     osd(o), 
+    ref(0), deleted(false),
     info(p),
     role(0),
     state(0),
@@ -546,6 +535,7 @@ public:
     peers_complete_thru(0),
     have_master_log(true)
   { }
+  virtual ~PG() { }
   
   pg_t       get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
@@ -564,7 +554,12 @@ public:
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
-  bool       is_acker() const { return role == PG_ROLE_ACKER; }
+  bool       is_acker() const { 
+    if (g_conf.osd_rep == OSD_REP_PRIMARY)
+      return is_primary();
+    else
+      return role == PG_ROLE_ACKER; 
+  }
   bool       is_head() const { return role == PG_ROLE_HEAD; }
   bool       is_middle() const { return role == PG_ROLE_MIDDLE; }
   bool       is_residual() const { return role == PG_ROLE_STRAY; }
@@ -589,10 +584,6 @@ public:
     return objects_pulling.size();
   }
 
-
-  // pg on-disk content
-  void clean_up_local(ObjectStore::Transaction& t);
-
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction& t, 
@@ -602,7 +593,32 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
 
-  
+  bool is_dup(osdreqid_t rid) {
+    return log.logged_req(rid);
+  }
+
+
+  bool pick_missing_object_rev(object_t& oid);
+  bool pick_object_rev(object_t& oid);
+
+
+
+  // abstract bits
+  virtual bool preprocess_op(MOSDOp *op) { return false; } 
+  virtual void do_op(MOSDOp *op) = 0;
+  virtual void do_op_reply(MOSDOpReply *op) = 0;
+
+  virtual bool same_for_read_since(epoch_t e) = 0;
+  virtual bool same_for_modify_since(epoch_t e) = 0;
+  virtual bool same_for_rep_modify_since(epoch_t e) = 0;
+
+  virtual bool is_missing_object(object_t oid) = 0;
+  virtual void wait_for_missing_object(object_t oid, MOSDOp *op) = 0;
+
+  virtual void note_failed_osd(int osd) = 0;
+
+  virtual void on_acker_change() = 0;
+  virtual void on_role_change() = 0;
 };
 
 
@@ -691,18 +707,6 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
-
-inline ostream& operator<<(ostream& out, PG::RepOpGather& repop)
-{
-  out << "repop(" << &repop << " rep_tid=" << repop.rep_tid 
-      << " wfack=" << repop.waitfor_ack
-      << " wfcommit=" << repop.waitfor_commit;
-  out << " pct=" << repop.pg_complete_thru;
-  out << " op=" << *(repop.op);
-  out << " repop=" << &repop;
-  out << ")";
-  return out;
-}
 
 
 #endif

@@ -20,6 +20,7 @@
 
 #include "common/Timer.h"
 
+#include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
@@ -974,202 +975,7 @@ void PG::activate(ObjectStore::Transaction& t)
   osd->take_waiters(waiting_for_active);
 }
 
-/** clean_up_local
- * remove any objects that we're storing but shouldn't.
- * as determined by log.
- */
-void PG::clean_up_local(ObjectStore::Transaction& t)
-{
-  dout(10) << "clean_up_local" << dendl;
 
-  assert(info.last_update >= log.bottom);  // otherwise we need some help!
-
-  if (log.backlog) {
-    // be thorough.
-    list<object_t> ls;
-    osd->store->collection_list(info.pgid, ls);
-    set<object_t> s;
-    
-    for (list<object_t>::iterator i = ls.begin();
-         i != ls.end();
-         i++) 
-      s.insert(*i);
-
-    set<object_t> did;
-    for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-         p != log.log.rend();
-         p++) {
-      if (did.count(p->oid)) continue;
-      did.insert(p->oid);
-      
-      if (p->is_delete()) {
-        if (s.count(p->oid)) {
-          dout(10) << " deleting " << p->oid
-                   << " when " << p->version << dendl;
-          t.remove(p->oid);
-        }
-        s.erase(p->oid);
-      } else {
-        // just leave old objects.. they're missing or whatever
-        s.erase(p->oid);
-      }
-    }
-
-    for (set<object_t>::iterator i = s.begin(); 
-         i != s.end();
-         i++) {
-      dout(10) << " deleting stray " << *i << dendl;
-      t.remove(*i);
-    }
-
-  } else {
-    // just scan the log.
-    set<object_t> did;
-    for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-         p != log.log.rend();
-         p++) {
-      if (did.count(p->oid)) continue;
-      did.insert(p->oid);
-
-      if (p->is_delete()) {
-        dout(10) << " deleting " << p->oid
-                 << " when " << p->version << dendl;
-        t.remove(p->oid);
-      } else {
-        // keep old(+missing) objects, just for kicks.
-      }
-    }
-  }
-}
-
-
-
-void PG::cancel_recovery()
-{
-  // forget about where missing items are, or anything we're pulling
-  missing.loc.clear();
-  osd->num_pulling -= objects_pulling.size();
-  objects_pulling.clear();
-}
-
-/**
- * do one recovery op.
- * return true if done, false if nothing left to do.
- */
-bool PG::do_recovery()
-{
-  dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
-           << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
-           << dendl;
-  dout(10) << "do_recovery " << missing << dendl;
-
-  // can we slow down on this PG?
-  if (osd->num_pulling >= g_conf.osd_max_pull && !objects_pulling.empty()) {
-    dout(-10) << "do_recovery already pulling max, waiting" << dendl;
-    return true;
-  }
-
-  // look at log!
-  Log::Entry *latest = 0;
-
-  while (log.requested_to != log.log.end()) {
-    assert(log.objects.count(log.requested_to->oid));
-    latest = log.objects[log.requested_to->oid];
-    assert(latest);
-
-    dout(10) << "do_recovery "
-             << *log.requested_to
-             << (objects_pulling.count(latest->oid) ? " (pulling)":"")
-             << dendl;
-
-    if (latest->is_update() &&
-        !objects_pulling.count(latest->oid) &&
-        missing.is_missing(latest->oid)) {
-      osd->pull(this, latest->oid);
-      return true;
-    }
-    
-    log.requested_to++;
-  }
-
-  if (!objects_pulling.empty()) {
-    dout(7) << "do_recovery requested everything, still waiting" << dendl;
-    return false;
-  }
-
-  // done?
-  assert(missing.num_missing() == 0);
-  assert(info.last_complete == info.last_update);
-  
-  if (is_primary()) {
-    // i am primary
-    dout(7) << "do_recovery complete, cleaning strays" << dendl;
-    clean_set.insert(osd->whoami);
-    if (is_all_clean()) {
-      state_set(PG::STATE_CLEAN);
-      clean_replicas();
-    }
-  } else {
-    // tell primary
-    dout(7) << "do_recovery complete, telling primary" << dendl;
-    list<PG::Info> ls;
-    ls.push_back(info);
-    osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
-                                                  ls),
-                                 osd->osdmap->get_inst(get_primary()));
-  }
-
-  return false;
-}
-
-void PG::do_peer_recovery()
-{
-  dout(10) << "do_peer_recovery" << dendl;
-
-  for (unsigned i=0; i<acting.size(); i++) {
-    int peer = acting[i];
-    if (peer_missing.count(peer) == 0 ||
-        peer_missing[peer].num_missing() == 0) 
-      continue;
-    
-    // oldest first!
-    object_t oid = peer_missing[peer].rmissing.begin()->second;
-    eversion_t v = peer_missing[peer].rmissing.begin()->first;
-
-    osd->push(this, oid, peer);
-
-    // do other peers need it too?
-    for (i++; i<acting.size(); i++) {
-      int peer = acting[i];
-      if (peer_missing.count(peer) &&
-          peer_missing[peer].is_missing(oid))
-        osd->push(this, oid, peer);
-    }
-
-    return;
-  }
-  
-  // nothing to do!
-}
-
-
-
-void PG::clean_replicas()
-{
-  dout(10) << "clean_replicas.  strays are " << stray_set << dendl;
-  
-  for (set<int>::iterator p = stray_set.begin();
-       p != stray_set.end();
-       p++) {
-    dout(10) << "sending PGRemove to osd" << *p << dendl;
-    set<pg_t> ls;
-    ls.insert(info.pgid);
-    MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
-    osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
-  }
-
-  stray_set.clear();
-}
 
 
 
@@ -1331,4 +1137,93 @@ void PG::read_log(ObjectStore *store)
       missing.add(i->oid, i->version);
   }
 }
+
+
+
+
+// ==============================
+// Object locking
+
+//
+// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
+// returns true if object was locked, otherwise returns false
+// 
+bool PG::block_if_wrlocked(MOSDOp* op)
+{
+  object_t oid = op->get_oid();
+
+  entity_name_t source;
+  int len = osd->store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
+  //cout << "getattr returns " << len << " on " << oid << dendl;
+  
+  if (len == sizeof(source) &&
+      source != op->get_client()) {
+    //the object is locked for writing by someone else -- add the op to the waiting queue      
+    waiting_for_wr_unlock[oid].push_back(op);
+    return true;
+  }
+  
+  return false; //the object wasn't locked, so the operation can be handled right away
+}
+
+
+
+
+// =======================
+// revisions
+
+
+/*
+int OSD::list_missing_revs(object_t oid, set<object_t>& revs, PG *pg)
+{
+  int c = 0;
+  oid.rev = 0;
+  
+  map<object_t,eversion_t>::iterator p = pg->missing.missing.lower_bound(oid);
+  if (p == pg->missing.missing.end()) 
+    return 0;  // clearly not
+
+  while (p->first.ino == oid.ino &&
+	 p->first.bno == oid.bno) {
+    revs.insert(p->first);
+    c++;
+  }
+  return c;
+}*/
+
+bool PG::pick_missing_object_rev(object_t& oid)
+{
+  map<object_t,eversion_t>::iterator p = missing.missing.upper_bound(oid);
+  if (p == missing.missing.end()) 
+    return false;  // clearly no candidate
+
+  if (p->first.ino == oid.ino && p->first.bno == oid.bno) {
+    oid = p->first;  // yes!  it's an upper bound revision for me.
+    return true;
+  }
+  return false;
+}
+
+bool PG::pick_object_rev(object_t& oid)
+{
+  object_t t = oid;
+
+  if (!osd->store->pick_object_revision_lt(t))
+    return false; // we have no revisions of this object!
+  
+  objectrev_t crev;
+  int r = osd->store->getattr(t, "crev", &crev, sizeof(crev));
+  assert(r >= 0);
+  if (crev <= oid.rev) {
+    dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;
+    oid = t;
+    return true;
+  }
+
+  return false;  
+}
+
+
+
+
 

@@ -37,7 +37,7 @@ class MOSDOpReply : public Message {
     tid_t rep_tid;
     
     object_t oid;
-    pg_t pg;
+    ObjectLayout layout;  // pgid, etc.
     
     int op;
     
@@ -61,7 +61,7 @@ class MOSDOpReply : public Message {
   long     get_tid() { return st.reqid.tid; }
   long     get_rep_tid() { return st.rep_tid; }
   object_t get_oid() { return st.oid; }
-  pg_t     get_pg() { return st.pg; }
+  pg_t     get_pg() { return st.layout.pgid; }
   int      get_op()  { return st.op; }
   bool     get_commit() { return st.commit; }
   
@@ -106,7 +106,7 @@ public:
     this->st.rep_tid = req->st.rep_tid;
 
     this->st.oid = req->st.oid;
-    this->st.pg = req->st.pg;
+    this->st.layout = req->st.layout;
     this->st.result = result;
     this->st.commit = commit;
 
@@ -133,7 +133,7 @@ public:
     ::_encode(data, payload);
   }
 
-  virtual char *get_type_name() { return "oopr"; }
+  virtual char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
     out << "osd_op_reply(" << st.reqid

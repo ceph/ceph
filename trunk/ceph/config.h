@@ -18,6 +18,7 @@
 extern class FileLayout g_OSD_FileLayout;
 extern class FileLayout g_OSD_MDDirLayout;
 extern class FileLayout g_OSD_MDLogLayout;
+extern class FileLayout g_OSD_MDAnchorTableLayout;
 
 #include <vector>
 #include <map>
@@ -138,6 +139,8 @@ struct md_config_t {
 
   double   client_mount_timeout;
 
+  // hack
+  bool client_hack_balance_reads;
   
 
   /*
@@ -213,11 +216,20 @@ struct md_config_t {
 
   // osd
   int   osd_rep;
+
   bool  osd_balance_reads;
+  bool  osd_immediate_read_from_cache;
+  bool  osd_exclusive_caching;
+  int  osd_load_diff_percent;
+  int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
+  double osd_flash_crowd_iat_alpha;
+
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
   int   osd_max_rep;
+  int   osd_min_raid_width;
+  int   osd_max_raid_width;
   int   osd_maxthreads;
   int   osd_max_opq;
   bool  osd_mkfs;

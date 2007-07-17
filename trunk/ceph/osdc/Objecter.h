@@ -48,8 +48,9 @@ class Objecter {
     Context *onfinish;
     map<tid_t, ObjectExtent> ops;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
+    int balance_reads;  // if non-zero, direct reads to a pseudo-random replica
 
-    OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+    OSDRead(bufferlist *b) : bl(b), onfinish(0), balance_reads(0) {
       bl->clear();
     }
   };
@@ -177,19 +178,19 @@ class Objecter {
   //tid_t lockx(OSDLock *l, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
+  tid_t read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
              Context *onfinish, 
 			 objectrev_t rev=0);
-  tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
+  tid_t write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
               Context *onack, Context *oncommit, 
 			  objectrev_t rev=0);
-  tid_t zero(object_t oid, off_t off, size_t len,  
+  tid_t zero(object_t oid, off_t off, size_t len, ObjectLayout ol,  
              Context *onack, Context *oncommit, 
 			 objectrev_t rev=0);
-  tid_t stat(object_t oid, off_t *size, Context *onfinish, 
+  tid_t stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish, 
 			 objectrev_t rev=0);  
 
-  tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
+  tid_t lock(int op, object_t oid, ObjectLayout ol, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

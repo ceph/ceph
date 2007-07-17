@@ -480,6 +480,9 @@ public:
                     Context *onsafe) = 0;//{ return -1; }
   virtual void trim_from_cache(object_t oid, 
 			       off_t offset, size_t len) { }
+  virtual int is_cached(object_t oid, 
+			     off_t offset, 
+                             size_t len) { return -1; }
 
   virtual int setattr(object_t oid, const char *name,
                       const void *value, size_t size,

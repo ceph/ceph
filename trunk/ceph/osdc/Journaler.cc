@@ -240,7 +240,7 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = inode.layout.stripe_size;
+    int p = inode.layout.stripe_unit;
     if (write_pos / p != (write_pos + (off_t)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.

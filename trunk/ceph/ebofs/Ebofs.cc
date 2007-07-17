@@ -1838,7 +1838,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   if (!rx.empty()) {
     BufferHead *wait_on = rx.begin()->second;
     Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
-    dout(1) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << endl;
+    dout(20) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << endl;
     block_t b = MAX(wait_on->start(), bstart);
     wait_on->waitfor_read[b].push_back(c);
     return false;

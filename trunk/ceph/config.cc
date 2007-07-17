@@ -32,13 +32,13 @@
 long buffer_total_alloc = 0;
 Mutex bufferlock;
 
+#include "osd/osd_types.h"
 Mutex _dout_lock;
 
-
-FileLayout g_OSD_FileLayout( 1<<26, 1, 1<<26, 2 );  // stripe over 64M objects, 2x replication
-FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, 2 );  // 8M objects, 2x replication.  (a lie)
-FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects, 2x replication
-
+FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );   // 8M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );  // 8M objects, 2x replication.  (a lie, just object layout policy)
+FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
+FileLayout g_OSD_MDAnchorTableLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects.  (a lie, just object layout policy)
 
 #include <msg/msg_types.h>
 
@@ -153,6 +153,8 @@ md_config_t g_conf = {
 
   client_mount_timeout: 10.0,  // retry every N seconds
 
+  client_hack_balance_reads: false,
+
   client_trace: 0,
   fuse_direct_io: 0,
   
@@ -215,11 +217,21 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
+
   osd_balance_reads: false,
+  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
+  osd_exclusive_caching: true,         // replicas evict replicated writes
+  osd_load_diff_percent: 20, // load diff for read forwarding
+  osd_flash_crowd_iat_threshold: 100,
+  osd_flash_crowd_iat_alpha: 0.125,
+
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
+  osd_min_raid_width: 4,
+  osd_max_raid_width: 6,
+
   osd_maxthreads: 2,    // 0 == no threading
   osd_max_opq: 10,
   osd_mkfs: false,
@@ -693,6 +705,8 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--client_oc_max_dirty") == 0)
       g_conf.client_oc_max_dirty = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--client_hack_balance_reads") == 0)
+      g_conf.client_hack_balance_reads = atoi(args[++i]);
 
     else if (strcmp(args[i], "--ebofs") == 0) 
       g_conf.ebofs = 1;
@@ -744,6 +758,17 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
+      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
+      g_conf.osd_exclusive_caching = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
+      g_conf.osd_load_diff_percent = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0) 
+      g_conf.osd_flash_crowd_iat_threshold = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0) 
+      g_conf.osd_flash_crowd_iat_alpha = atoi(args[++i]);
+
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_rep_chain") == 0) 
@@ -805,31 +830,39 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--tick") == 0) 
       g_conf.tick = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--file_layout_ssize") == 0) 
-      g_OSD_FileLayout.stripe_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_scount") == 0) 
+    else if (strcmp(args[i], "--file_layout_unit") == 0) 
+      g_OSD_FileLayout.stripe_unit = atoi(args[++i]);
+    else if (strcmp(args[i], "--file_layout_count") == 0) 
       g_OSD_FileLayout.stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_osize") == 0) 
       g_OSD_FileLayout.object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_num_rep") == 0) 
-      g_OSD_FileLayout.num_rep = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_ssize") == 0) 
-      g_OSD_MDDirLayout.stripe_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--file_layout_pg_type") == 0) 
+      g_OSD_FileLayout.pg_type = atoi(args[++i]);
+    else if (strcmp(args[i], "--file_layout_pg_size") == 0) 
+      g_OSD_FileLayout.pg_size = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--meta_dir_layout_unit") == 0) 
+      g_OSD_MDDirLayout.stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
       g_OSD_MDDirLayout.stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
       g_OSD_MDDirLayout.object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_num_rep") == 0) 
-      g_OSD_MDDirLayout.num_rep = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_ssize") == 0) 
-      g_OSD_MDLogLayout.stripe_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0) 
+      g_OSD_MDDirLayout.pg_type = atoi(args[++i]);
+    else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0) 
+      g_OSD_MDDirLayout.pg_size = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--meta_log_layout_unit") == 0) 
+      g_OSD_MDLogLayout.stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
       g_OSD_MDLogLayout.stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
       g_OSD_MDLogLayout.object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_num_rep") == 0) {
-      g_OSD_MDLogLayout.num_rep = atoi(args[++i]);
-      if (!g_OSD_MDLogLayout.num_rep)
+    else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0) 
+      g_OSD_MDLogLayout.pg_type = atoi(args[++i]);
+    else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0) {
+      g_OSD_MDLogLayout.pg_size = atoi(args[++i]);
+      if (!g_OSD_MDLogLayout.pg_size)
         g_conf.mds_log = false;
     }
 

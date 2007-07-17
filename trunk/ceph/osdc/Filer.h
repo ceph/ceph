@@ -80,13 +80,20 @@ class Filer {
   }
 
   /*** async file interface ***/
+  Objecter::OSDRead *prepare_read(inode_t& inode,
+				  off_t offset, 
+				  size_t len, 
+				  bufferlist *bl) {
+    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+    file_to_extents(inode, offset, len, rd->extents);
+    return rd;
+  }
   int read(inode_t& inode,
            off_t offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
            Context *onfinish) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-    file_to_extents(inode, offset, len, rd->extents);
+    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 

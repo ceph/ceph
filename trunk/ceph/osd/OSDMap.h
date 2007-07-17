@@ -49,7 +49,7 @@ using namespace std;
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
 
 #define PG_TYPE_RAND     1   // default: distribution randomly
-#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
+#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD
 
 // pg roles
 #define PG_ROLE_STRAY   -1
@@ -57,6 +57,23 @@ using namespace std;
 #define PG_ROLE_ACKER    1
 #define PG_ROLE_MIDDLE   2  // der.. misnomer
 //#define PG_ROLE_TAIL     2
+
+
+inline int stable_mod(int x, int b, int bmask) {
+  if ((x & bmask) < b) 
+    return x & bmask;
+  else
+    return (x & (bmask>>1));
+}
+
+inline int calc_bits_of(int t) {
+  int b = 0;
+  while (t) {
+    t = t >> 1;
+    b++;
+  }
+  return b;
+}
 
 
 
@@ -112,8 +129,10 @@ private:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
-  int       pg_bits;     // placement group bits 
-  int       localized_pg_bits;  // bits for localized pgs
+  int pg_num;       // placement group count
+  int pg_num_mask;  // bitmask for above
+  int localized_pg_num;      // localized place group count
+  int localized_pg_num_mask; // ditto
 
   set<int>  osds;        // all osds
   set<int>  down_osds;   // list of down disks
@@ -128,15 +147,24 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mon_epoch(0), pg_bits(5), localized_pg_bits(3) {}
+  OSDMap() : epoch(0), mon_epoch(0), 
+	     pg_num(1<<5),
+	     localized_pg_num(1<<3) { 
+    calc_pg_masks();
+  }
 
   // map info
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  int get_pg_bits() const { return pg_bits; }
-  void set_pg_bits(int b) { pg_bits = b; }
-  int get_localized_pg_bits() const { return localized_pg_bits; }
+  void calc_pg_masks() {
+    pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
+    localized_pg_num_mask = (1 << calc_bits_of(localized_pg_num-1)) - 1;
+  }
+
+  int get_pg_num() const { return pg_num; }
+  void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
+  int get_localized_pg_num() const { return localized_pg_num; }
 
   const utime_t& get_ctime() const { return ctime; }
 
@@ -241,36 +269,35 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
-    blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&mon_epoch, sizeof(mon_epoch));
-    blist.append((char*)&ctime, sizeof(ctime));
-    blist.append((char*)&pg_bits, sizeof(pg_bits));
+    ::_encode(epoch, blist);
+    ::_encode(mon_epoch, blist);
+    ::_encode(ctime, blist);
+    ::_encode(pg_num, blist);
+    ::_encode(localized_pg_num, blist);
     
-    _encode(osds, blist);
-    _encode(down_osds, blist);
-    _encode(out_osds, blist);
-    _encode(overload_osds, blist);
-    _encode(osd_inst, blist);
+    ::_encode(osds, blist);
+    ::_encode(down_osds, blist);
+    ::_encode(out_osds, blist);
+    ::_encode(overload_osds, blist);
+    ::_encode(osd_inst, blist);
     
     crush._encode(blist);
   }
   
   void decode(bufferlist& blist) {
     int off = 0;
-    blist.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
-    blist.copy(off, sizeof(mon_epoch), (char*)&mon_epoch);
-    off += sizeof(mon_epoch);
-    blist.copy(off, sizeof(ctime), (char*)&ctime);
-    off += sizeof(ctime);
-    blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);
-    off += sizeof(pg_bits);
-    
-    _decode(osds, blist, off);
-    _decode(down_osds, blist, off);
-    _decode(out_osds, blist, off);
-    _decode(overload_osds, blist, off);
-    _decode(osd_inst, blist, off);
+    ::_decode(epoch, blist, off);
+    ::_decode(mon_epoch, blist, off);
+    ::_decode(ctime, blist, off);
+    ::_decode(pg_num, blist, off);
+    ::_decode(localized_pg_num, blist, off);
+    calc_pg_masks();
+
+    ::_decode(osds, blist, off);
+    ::_decode(down_osds, blist, off);
+    ::_decode(out_osds, blist, off);
+    ::_decode(overload_osds, blist, off);
+    ::_decode(osd_inst, blist, off);
     
     crush._decode(blist, off);
   }
@@ -281,123 +308,74 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  pg_t object_to_pg(object_t oid, FileLayout& layout) {
+  ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
+    return make_object_layout(oid, layout.pg_type, layout.pg_size, layout.preferred, layout.object_stripe_unit);
+  }
+
+  ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     static crush::Hash H(777);
-        
-    int policy = layout.object_layout;
-    if (policy == 0) 
-      policy = g_conf.osd_object_layout;
 
-    int type = PG_TYPE_RAND;
+    // calculate ps (placement seed)
     ps_t ps;
-
-    switch (policy) {
+    switch (g_conf.osd_object_layout) {
     case OBJECT_LAYOUT_LINEAR:
-      {
-        //const object_t ono = oid.bno;
-        //const inodeno_t ino = oid >> OID_ONO_BITS;
-        ps = (oid.bno + oid.ino) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(oid.bno + oid.ino, pg_num, pg_num_mask);
       break;
       
     case OBJECT_LAYOUT_HASHINO:
-      {
-        //const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
-        //const inodeno_t ino = oid >> OID_ONO_BITS;
-        ps = (oid.bno + H(oid.ino)) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(oid.bno + H(oid.ino), pg_num, pg_num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
-      {
-        ps = H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ) & PG_PS_MASK;
-        ps &= ((1ULL<<pg_bits)-1ULL);
-      }
+      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), pg_num, pg_num_mask);
       break;
 
-    case OBJECT_LAYOUT_STARTOSD:
-      {
-        ps = layout.osd;
-        type = PG_TYPE_STARTOSD;
-      }
-      break;
-      
     default:
       assert(0);
     }
 
-    // construct final PG
-    /*pg_t pg = type;
-    pg = (pg << PG_REP_BITS) | (pg_t)layout.num_rep;
-    pg = (pg << PG_PS_BITS) | ps;
-    */
-    //cout << "pg " << hex << pg << dec << endl;
-    return pg_t(ps, 0, layout.num_rep);
+    // construct object layout
+    return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
+			object_stripe_unit);
   }
 
-  // (ps, nrep) -> pg
-  pg_t ps_nrep_to_pg(ps_t ps, int nrep) {
-    /*return ((pg_t)ps & ((1ULL<<pg_bits)-1ULL)) 
-      | ((pg_t)nrep << PG_PS_BITS)
-      | ((pg_t)PG_TYPE_RAND << (PG_PS_BITS+PG_REP_BITS));
-    */
-    return pg_t(ps, 0, nrep, 0);
-  }
-  pg_t ps_osd_nrep_to_pg(ps_t ps, int osd, int nrep) {
-    /*return ((pg_t)osd)
-      | ((pg_t)nrep << PG_PS_BITS)
-      | ((pg_t)PG_TYPE_STARTOSD << (PG_PS_BITS+PG_REP_BITS));
-    */
-    return pg_t(ps, osd+1, nrep, 0);
-  }
-
-  // pg -> nrep
-  int pg_to_nrep(pg_t pg) {
-    return pg.u.fields.nrep;
-    //return (pg >> PG_PS_BITS) & ((1ULL << PG_REP_BITS)-1);
-  }
-
-  // pg -> ps
-  int pg_to_ps(pg_t pg) {
-    //return pg & PG_PS_MASK;
-    return pg.u.fields.ps;
-  }
 
   // pg -> (osd list)
   int pg_to_osds(pg_t pg,
                  vector<int>& osds) {       // list of osd addr's
-    pg_t ps = pg_to_ps(pg);
-    int num_rep = pg_to_nrep(pg);
-    assert(num_rep > 0);
-    
     // map to osds[]
     switch (g_conf.osd_pg_layout) {
     case PG_LAYOUT_CRUSH:
       {
+	// what crush rule?
+	int rule;
+	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size());
+	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size());
+	else assert(0);
+
+	// forcefeed?
 	int forcefeed = -1;
-	if (pg.u.fields.preferred > 0 &&
-	    out_osds.count(pg.u.fields.preferred-1) == 0) 
-	  forcefeed = pg.u.fields.preferred-1;
-	crush.do_rule(crush.rules[num_rep],     // FIXME rule thing.
-		      ps, 
-		      osds,
+	if (pg.preferred() >= 0 &&
+	    out_osds.count(pg.preferred()) == 0) 
+	  forcefeed = pg.preferred();
+	crush.do_rule(crush.rules[rule],
+		      pg.ps(),
+		      osds, 
 		      out_osds, overload_osds,
 		      forcefeed);
       }
       break;
       
     case PG_LAYOUT_LINEAR:
-      for (int i=0; i<num_rep; i++) 
-	osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
+      for (int i=0; i<pg.size(); i++) 
+	osds.push_back( (i + pg.ps()*pg.size()) % g_conf.num_osd );
       break;
       
     case PG_LAYOUT_HYBRID:
       {
 	static crush::Hash H(777);
-	int h = H(ps);
-	for (int i=0; i<num_rep; i++) 
+	int h = H(pg.ps());
+	for (int i=0; i<pg.size(); i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
       break;
@@ -405,11 +383,11 @@ private:
     case PG_LAYOUT_HASH:
       {
 	static crush::Hash H(777);
-	for (int i=0; i<num_rep; i++) {
+	for (int i=0; i<pg.size(); i++) {
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = H(i, ps, t) % g_conf.num_osd;
+	    osd = H(i, pg.ps(), t) % g_conf.num_osd;
 	    int j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;
@@ -424,23 +402,24 @@ private:
       assert(0);
     }
   
-    if (pg.u.fields.preferred > 0 &&
+    // no crush, but forcefeeding?
+    if (pg.preferred() >= 0 &&
 	g_conf.osd_pg_layout != PG_LAYOUT_CRUSH) {
-      int osd = pg.u.fields.preferred-1;
-
+      int osd = pg.preferred();
+      
       // already in there?
       if (osds.empty()) {
         osds.push_back(osd);
       } else {
-        assert(num_rep > 0);
-        for (int i=1; i<num_rep; i++)
+        assert(pg.size() > 0);
+        for (int i=1; i<pg.size(); i++)
           if (osds[i] == osd) {
             // swap with position 0
             osds[i] = osds[0];
           }
         osds[0] = osd;
       }
-
+      
       if (is_out(osd))
         osds.erase(osds.begin());  // oops, but it's down!
     }
@@ -454,7 +433,7 @@ private:
     // get rush list
     vector<int> raw;
     pg_to_osds(pg, raw);
-
+    
     osds.clear();
     for (unsigned i=0; i<raw.size(); i++) {
       if (is_down(raw[i])) continue;
@@ -501,7 +480,7 @@ private:
   int calc_pg_role(int osd, vector<int>& acting, int nrep=0) {
     if (!nrep) nrep = acting.size();
     int rank = calc_pg_rank(osd, acting, nrep);
-
+    
     if (rank < 0) return PG_ROLE_STRAY;
     else if (rank == 0) return PG_ROLE_HEAD;
     else if (rank == 1) return PG_ROLE_ACKER;
@@ -513,7 +492,7 @@ private:
     int nrep = pg_to_osds(pg, group);
     return calc_pg_role(osd, group, nrep);
   }
-
+  
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) {
     vector<int> group;

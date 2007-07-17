@@ -593,6 +593,8 @@ void CDir::fetch(Context *c)
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
   cache->mds->objecter->read( get_ondisk_object(), 
 			      0, 0,   // whole object
+			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
+										   g_OSD_MDDirLayout ),
 			      &fin->bl,
 			      fin );
 }
@@ -914,6 +916,8 @@ void CDir::_commit(version_t want)
   // write it.
   cache->mds->objecter->write( get_ondisk_object(),
 			       0, bl.length(),
+			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
+										    g_OSD_MDDirLayout ),
 			       bl,
 			       NULL, new C_Dir_Committed(this, version) );
 }

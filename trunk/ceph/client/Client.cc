@@ -2654,8 +2654,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    r = filer->read(in->inode, offset, size, &blist, onfinish);
-
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, &blist);
+    if (in->hack_balance_reads ||
+	g_conf.client_hack_balance_reads)
+      rd->balance_reads = true;
+    r = objecter->readx(rd, onfinish);
     assert(r >= 0);
 
     // wait!
@@ -3013,14 +3016,14 @@ int Client::get_stripe_unit(int fd)
 {
   FileLayout layout;
   describe_layout(fd, &layout);
-  return layout.stripe_size;
+  return layout.stripe_unit;
 }
 
 int Client::get_stripe_width(int fd)
 {
   FileLayout layout;
   describe_layout(fd, &layout);
-  return layout.stripe_size*layout.stripe_count;
+  return layout.stripe_width();
 }
 
 int Client::get_stripe_period(int fd)

@@ -51,34 +51,6 @@ using namespace __gnu_cxx;
 
 // -- stl crap --
 
-/*
-- this is to make some of the STL types work with 64 bit values, string hash keys, etc.
-- added when i was using an old STL.. maybe try taking these out and see if things 
-  compile now?
-*/
-
-class blobhash {
-public:
-  size_t operator()(const char *p, unsigned len) {
-    static hash<long> H;
-    long acc = 0;
-    while (len >= sizeof(long)) {
-      acc ^= *(long*)p;
-      p += sizeof(long);
-      len -= sizeof(long);
-    }   
-    int sh = 0;
-    while (len) {
-      acc ^= (long)*p << sh;
-      sh += 8;
-      len--;
-      p++;
-    }
-    return H(acc);
-  }
-};
-
-
 namespace __gnu_cxx {
   template<> struct hash< std::string >
   {
@@ -133,19 +105,18 @@ typedef uint64_t version_t;
 typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 
+// object and pg layout
+// specified in g_conf.osd_*
 
 #define O_LAZY 01000000
-
 
 
 /** object layout
  * how objects are mapped into PGs
  */
-#define OBJECT_LAYOUT_DEFAULT  0  // see g_conf
 #define OBJECT_LAYOUT_HASH     1
 #define OBJECT_LAYOUT_LINEAR   2
 #define OBJECT_LAYOUT_HASHINO  3
-#define OBJECT_LAYOUT_STARTOSD 4
 
 /** pg layout
  * how PGs are mapped into (sets of) OSDs
@@ -155,6 +126,11 @@ typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10
 #define PG_LAYOUT_LINEAR 2
 #define PG_LAYOUT_HYBRID 3
 
+
+
+// -----------------------
+// FileLayout
+
 /** FileLayout 
  * specifies a striping and replication strategy
  */
@@ -163,36 +139,43 @@ typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10
 //#define FILE_LAYOUT_LINEAR   1    // stripe linearly across cluster
 
 struct FileLayout {
-  // layout
-  int object_layout;
-
-  // FIXME: make this a union?
-  // rushstripe
-  int stripe_size;     // stripe unit, in bytes
+  // -- file -> object mapping --
+  int stripe_unit;     // stripe unit, in bytes
   int stripe_count;    // over this many objects
-  int object_size;     // until objects are this big, then use a new set of objects.
+  int object_size;     // until objects are this big, then move to new objects
+
+  int stripe_width() { return stripe_unit * stripe_count; }
 
   // period = bytes before i start on a new set of objects.
   int period() { return object_size * stripe_count; }
 
-  int osd;    // osdlocal
+  // -- object -> pg layout --
+  char pg_type;        // pg type (replicated, raid, etc.) (see pg_t::TYPE_*)
+  char pg_size;        // pg size (num replicas, or raid4 stripe width)
+  int  preferred;      // preferred primary osd?
 
-  int num_rep;  // replication
+  // -- pg -> disk layout --
+  int  object_stripe_unit;  // for per-object raid
 
   FileLayout() { }
-  FileLayout(int ss, int sc, int os, int nr=2, int o=-1) :
-    object_layout(o < 0 ? OBJECT_LAYOUT_DEFAULT:OBJECT_LAYOUT_STARTOSD),
-    stripe_size(ss), stripe_count(sc), object_size(os), 
-    osd(o),
-    num_rep(nr) { }
+  FileLayout(int su, int sc, int os, int pgt, int pgs, int o=-1) :
+    stripe_unit(su), stripe_count(sc), object_size(os), 
+    pg_type(pgt), pg_size(pgs), preferred(o),
+    object_stripe_unit(su)   // note: bad default, we pbly want su/(pgs-1)
+  {
+    assert(object_size % stripe_unit == 0);
+  }
 
 };
 
 
 
-// -- inode --
+
+// --------------------------------------
+// inode
 
 typedef uint64_t _inodeno_t;
+
 struct inodeno_t {
   _inodeno_t val;
   inodeno_t() : val(0) {}

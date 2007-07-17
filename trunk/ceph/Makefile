@@ -12,7 +12,7 @@ CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWI
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -61,6 +61,8 @@ MDS_OBJS= \
 
 OSD_OBJS= \
 	osd/PG.o\
+	osd/ReplicatedPG.o\
+	osd/RAID4PG.o\
 	osd/Ager.o\
 	osd/FakeStore.o\
 	osd/OSD.o
@@ -78,6 +80,7 @@ MON_OBJS= \
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\
+	mon/PGMonitor.o\
 	mon/Elector.o\
 	mon/MonitorStore.o
 

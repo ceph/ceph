@@ -39,7 +39,7 @@ code cleanup
   - clean up all encoded structures
 
 general kernel planning
-- soft consistency on lookup?
+- soft consistency on (kernel) lookup?
 - accurate reconstruction of (syscall) path?
 
 software raid layer for EBOFS?
@@ -180,17 +180,14 @@ osd/rados
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
 - read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
-- separate out replication code into a PG class, to pave way for RAID
-
 - efficiently replicate clone() objects
-- pg_num instead of pg_bits
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 - consider implications of nvram writeahead logs
 - fix heartbeat wrt new replication
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- pg_bit/pg_num changes
+- pg_num changes
 - report crashed pgs?
 
 messenger

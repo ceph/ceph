@@ -80,7 +80,7 @@ void Filer::_probe(Probe *probe)
        p++) {
     dout(10) << "_probe  probing " << p->oid << endl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, c);
   }
 }
 
@@ -170,15 +170,15 @@ void Filer::file_to_extents(inode_t inode,
    */
   map< object_t, ObjectExtent > object_extents;
   
-  assert(inode.layout.object_size >= inode.layout.stripe_size);
-  off_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_size;
+  assert(inode.layout.object_size >= inode.layout.stripe_unit);
+  off_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_unit;
   dout(20) << " stripes_per_object " << stripes_per_object << endl;
 
   off_t cur = offset;
   off_t left = len;
   while (left > 0) {
     // layout into objects
-    off_t blockno = cur / inode.layout.stripe_size;          // which block
+    off_t blockno = cur / inode.layout.stripe_unit;          // which block
     off_t stripeno = blockno / inode.layout.stripe_count;    // which horizontal stripe        (Y)
     off_t stripepos = blockno % inode.layout.stripe_count;   // which object in the object set (X)
     off_t objectsetno = stripeno / stripes_per_object;       // which object set
@@ -193,13 +193,13 @@ void Filer::file_to_extents(inode_t inode,
       ex = &object_extents[oid];
       ex->oid = oid;
       ex->rev = rev;
-      ex->pgid = objecter->osdmap->object_to_pg( oid, inode.layout );
+      ex->layout = objecter->osdmap->file_to_object_layout( oid, inode.layout );
     }
     
     // map range into object
-    off_t block_start = (stripeno % stripes_per_object)*inode.layout.stripe_size;
-    off_t block_off = cur % inode.layout.stripe_size;
-    off_t max = inode.layout.stripe_size - block_off;
+    off_t block_start = (stripeno % stripes_per_object)*inode.layout.stripe_unit;
+    off_t block_off = cur % inode.layout.stripe_unit;
+    off_t max = inode.layout.stripe_unit - block_off;
     
     off_t x_offset = block_start + block_off;
     off_t x_len;
@@ -220,7 +220,7 @@ void Filer::file_to_extents(inode_t inode,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << *ex << " in " << ex->pgid << endl;
+    dout(15) << "file_to_extents  " << *ex << " in " << ex->layout << endl;
     //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
     
     left -= x_len;

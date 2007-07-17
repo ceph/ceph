@@ -30,7 +30,7 @@ class MonitorStore;
 class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
-
+class PGMonitor;
 
 class Monitor : public Dispatcher {
 public:
@@ -90,6 +90,7 @@ public:
   Paxos paxos_mdsmap;
   Paxos paxos_osdmap;
   Paxos paxos_clientmap;
+  Paxos paxos_pgmap;
   friend class Paxos;
   
 
@@ -97,10 +98,12 @@ public:
   OSDMonitor *osdmon;
   MDSMonitor *mdsmon;
   ClientMonitor *clientmon;
+  PGMonitor *pgmon;
 
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class ClientMonitor;
+  friend class PGMonitor;
 
 
   // messages
@@ -128,6 +131,7 @@ public:
     paxos_mdsmap(this, w, PAXOS_MDSMAP),
     paxos_osdmap(this, w, PAXOS_OSDMAP),
     paxos_clientmap(this, w, PAXOS_CLIENTMAP),
+    paxos_pgmap(this, w, PAXOS_PGMAP),
 
     osdmon(0), mdsmon(0), clientmon(0)
   {

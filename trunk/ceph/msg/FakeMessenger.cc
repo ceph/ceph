@@ -203,9 +203,9 @@ int fakemessenger_do_loop_2()
       
       if (m) {
         //dout(18) << "got " << m << endl;
-        dout(1) << "---- " << m->get_dest() 
+        dout(1) << "==== " << m->get_dest() 
 		<< " <- " << m->get_source()
-                << " ---- " << *m 
+                << " ==== " << *m 
 		<< " ---- " << m
                 << endl;
         
@@ -379,8 +379,7 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
   // queue
   if (directory.count(inst.addr) &&
       shutdown_set.count(inst.addr) == 0) {
-    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m
-	    << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << endl;
     directory[inst.addr]->queue_incoming(m);
   } else {
     dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m

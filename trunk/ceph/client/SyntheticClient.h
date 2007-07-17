@@ -41,6 +41,9 @@
 #define SYNCLIENT_MODE_READFILE    21
 #define SYNCLIENT_MODE_WRITEBATCH  22
 #define SYNCLIENT_MODE_WRSHARED    23
+#define SYNCLIENT_MODE_READSHARED    24
+#define SYNCLIENT_MODE_RDWRRANDOM    25
+#define SYNCLIENT_MODE_RDWRRANDOM_EX    26
 
 #define SYNCLIENT_MODE_TRACE       30
 
@@ -48,8 +51,10 @@
 #define SYNCLIENT_MODE_OPTEST       41
 
 #define SYNCLIENT_MODE_ONLY        50
-#define SYNCLIENT_MODE_UNTIL       51
-#define SYNCLIENT_MODE_SLEEPUNTIL  52
+#define SYNCLIENT_MODE_EXCLUDE     51
+
+#define SYNCLIENT_MODE_UNTIL       52
+#define SYNCLIENT_MODE_SLEEPUNTIL  53
 
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
@@ -141,7 +146,21 @@ class SyntheticClient {
 
   int run();
 
+  bool exclude_me() {
+    if (exclude < 0) 
+      return false;
+    if (exclude == client->get_nodeid()) {
+      exclude = -1;
+      return true;
+    } else {
+      exclude = -1;
+      return false;
+    }
+  }
   bool run_me() {
+    if (exclude_me())
+      return false;
+
     if (run_only >= 0) {
       if (run_only == client->get_nodeid()) {
         run_only = -1;
@@ -160,7 +179,8 @@ class SyntheticClient {
   utime_t run_start;
   utime_t run_until;
 
-  int     run_only;
+  int run_only;
+  int exclude;
 
   string get_sarg(int seq);
 
@@ -193,7 +213,9 @@ class SyntheticClient {
 
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
-  int read_file(string& fn, int mb, int chunk);
+  int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
+  int read_random(string& fn, int mb, int chunk);
+  int read_random_ex(string& fn, int mb, int chunk);
 
   int clean_dir(string& basedir);
 
