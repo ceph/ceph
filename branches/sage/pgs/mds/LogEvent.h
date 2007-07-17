@@ -18,8 +18,7 @@
 #define EVENT_STRING       1
 
 #define EVENT_SESSION      7
-#define EVENT_CLIENTMAP    8
-#define EVENT_IMPORTMAP    2
+#define EVENT_SUBTREEMAP   2
 #define EVENT_EXPORT       30
 #define EVENT_IMPORTSTART  31
 #define EVENT_IMPORTFINISH 32

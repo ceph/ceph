@@ -45,10 +45,13 @@ using namespace std;
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
+#include "messages/MMDSSlaveRequest.h"
+
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
-#include "messages/MMDSImportMap.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
 //#include "messages/MMDSCacheRejoinAck.h"
 
@@ -69,20 +72,11 @@ using namespace std;
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
 
-#include "messages/MRenameWarning.h"
-#include "messages/MRenameNotify.h"
-#include "messages/MRenameNotifyAck.h"
-#include "messages/MRename.h"
-#include "messages/MRenamePrep.h"
-#include "messages/MRenameReq.h"
-#include "messages/MRenameAck.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MHeartbeat.h"
 
 #include "messages/MAnchor.h"
-#include "messages/MInodeLink.h"
-#include "messages/MInodeLinkAck.h"
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MCacheExpire.h"
@@ -208,6 +202,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
     // mds
+  case MSG_MDS_SLAVE_REQUEST:
+    m = new MMDSSlaveRequest;
+    break;
+
   case MSG_MDS_GETMAP:
 	m = new MMDSGetMap();
 	break;
@@ -217,8 +215,11 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_BEACON:
 	m = new MMDSBeacon;
 	break;
-  case MSG_MDS_IMPORTMAP:
-	m = new MMDSImportMap;
+  case MSG_MDS_RESOLVE:
+	m = new MMDSResolve;
+	break;
+  case MSG_MDS_RESOLVEACK:
+	m = new MMDSResolveAck;
 	break;
   case MSG_MDS_CACHEREJOIN:
 	m = new MMDSCacheRejoin;
@@ -284,27 +285,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
 
-  case MSG_MDS_RENAMEWARNING:
-    m = new MRenameWarning();
-    break;
-  case MSG_MDS_RENAMENOTIFY:
-    m = new MRenameNotify();
-    break;
-  case MSG_MDS_RENAMENOTIFYACK:
-    m = new MRenameNotifyAck();
-    break;
-  case MSG_MDS_RENAME:
-    m = new MRename();
-    break;
-  case MSG_MDS_RENAMEPREP:
-    m = new MRenamePrep();
-    break;
-  case MSG_MDS_RENAMEREQ:
-    m = new MRenameReq();
-    break;
-  case MSG_MDS_RENAMEACK:
-    m = new MRenameAck();
-    break;
 
   case MSG_MDS_DENTRYUNLINK:
     m = new MDentryUnlink();
@@ -320,13 +300,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
   case MSG_MDS_ANCHOR:
     m = new MAnchor();
-    break;
-
-  case MSG_MDS_INODELINK:
-    m = new MInodeLink();
-    break;
-  case MSG_MDS_INODELINKACK:
-    m = new MInodeLinkAck();
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:

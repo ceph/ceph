@@ -460,7 +460,9 @@ void BlockDevice::finish_io(biovec *bio)
 {
   bio->done = true;
   if (bio->cond) {
+    lock.Lock();   // hmm?
     bio->cond->Signal();
+    lock.Unlock();
   }
   else if (bio->cb) {
     bio->cb->finish((ioh_t)bio, bio->rval);

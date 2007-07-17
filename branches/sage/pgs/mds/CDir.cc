@@ -51,6 +51,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
+    out << "/" << dir.get_committed_version_equivalent();
   } else {
     out << " rep@" << dir.authority();
     if (dir.get_replica_nonce() > 1)
@@ -78,6 +79,9 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
+  if (dir.get_num_dirty())
+    out << " dirty=" << dir.get_num_dirty();
+
   
   if (dir.get_num_ref()) {
     out << " |";
@@ -87,6 +91,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << &dir;
   return out << "]";
 }
+
 
 void CDir::print(ostream& out) 
 {
@@ -100,6 +105,13 @@ void CDir::print(ostream& out)
 //#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
 
 
+ostream& CDir::print_db_line_prefix(ostream& out) 
+{
+  return out << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") ";
+}
+
+
+
 // -------------------------------------------------------------------
 // CDir
 
@@ -111,6 +123,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   
   nitems = 0;
   nnull = 0;
+  num_dirty = 0;
+
   state = STATE_INITIAL;
 
   projected_version = version = 0;
@@ -140,14 +154,14 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
  * linking fun
  */
 
-CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth) 
+CDentry* CDir::add_dentry( const string& dname, inodeno_t ino) 
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, ino);
-  if (auth) 
+  if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
 
@@ -172,14 +186,14 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth)
 }
 
 
-CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth ) 
+CDentry* CDir::add_dentry( const string& dname, CInode *in) 
 {
   // primary
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, in);
-  if (auth) 
+  if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
 
@@ -191,7 +205,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth )
   //assert(null_items.count(dn->name) == 0);
 
   items[dn->name] = dn;
-  
+
   if (in) {
     link_inode_work( dn, in );
   } else {
@@ -229,6 +243,10 @@ void CDir::remove_dentry(CDentry *dn)
   // remove from list
   assert(items.count(dn->name) == 1);
   items.erase(dn->name);
+
+  // adjust dirty counter?
+  if (dn->state_test(CDentry::STATE_DIRTY))
+    num_dirty--;
 
   cache->lru.lru_remove(dn);
   delete dn;
@@ -361,6 +379,28 @@ void CDir::remove_null_dentries() {
 }
 
 
+void CDir::try_remove_unlinked_dn(CDentry *dn)
+{
+  assert(dn->dir == this);
+  
+  if (dn->is_new() && dn->is_dirty() &&
+      dn->get_num_ref() == 1) {
+    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
+    dn->mark_clean();
+    remove_dentry(dn);
+
+    if (version == projected_version &&
+	committing_version == committed_version &&
+	num_dirty == 0) {
+      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
+	       << " vs committed " << committed_version
+	       << endl;
+      committed_version_equivalent = committed_version;    
+    }
+  }
+}
+  
+
 
 
 CDirDiscover *CDir::replicate_to(int mds)
@@ -448,7 +488,7 @@ void CDir::take_waiting(int mask, list<Context*>& ls)
 
 void CDir::finish_waiting(int mask, int result) 
 {
-  dout(11) << "finish_waiting mask " << mask << " result " << result << " on " << *this << endl;
+  dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << endl;
 
   list<Context*> finished;
   take_waiting(mask, finished);
@@ -632,15 +672,14 @@ void CDir::_fetched(bufferlist &bl)
       
       // parse out inode
       inode_t inode;
-      bl.copy(off, sizeof(inode), (char*)&inode);
-      off += sizeof(inode);
+      ::_decode(inode, bl, off);
 
       string symlink;
       if (inode.is_symlink())
         ::_decode(symlink, bl, off);
 
       fragtree_t fragtree;
-      fragtree._decode(bl,off);
+      fragtree._decode(bl, off);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -850,8 +889,8 @@ void CDir::_commit(version_t want)
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
-      bl.append( it->first.c_str(), it->first.length() + 1);
-      bl.append((char*)&ino, sizeof(ino));
+      ::_encode(it->first, bl);
+      ::_encode(ino, bl);
     } else {
       // primary link
       CInode *in = dn->get_inode();
@@ -861,13 +900,13 @@ void CDir::_commit(version_t want)
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
-      bl.append( it->first.c_str(), it->first.length() + 1);
-      bl.append( (char*) &in->inode, sizeof(inode_t));
+      ::_encode(it->first, bl);
+      ::_encode(in->inode, bl);
       
       if (in->is_symlink()) {
         // include symlink destination!
         dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
-        bl.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+	::_encode(in->symlink, bl);
       }
 
       in->dirfragtree._encode(bl);

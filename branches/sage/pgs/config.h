@@ -82,6 +82,7 @@ struct md_config_t {
   int debug_ns;
   int debug_ms;
   int debug_mon;
+  int debug_paxos;
 
   int debug_after;
 
@@ -162,6 +163,7 @@ struct md_config_t {
   // journaler
   bool  journaler_allow_split_entries;
   bool  journaler_safe;
+  int   journaler_write_head_interval;
   
   // mds
   int   mds_cache_size;
@@ -178,7 +180,7 @@ struct md_config_t {
   int mds_log_read_inc;
   int mds_log_pad_entry;
   bool  mds_log_flush_on_shutdown;
-  off_t mds_log_import_map_interval;
+  off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
   float mds_bal_replicate_threshold;
@@ -210,6 +212,7 @@ struct md_config_t {
 
   int mds_thrash_exports;
   bool mds_dump_cache_on_map;
+  bool mds_dump_cache_after_rejoin;
 
   // osd
   int   osd_rep;

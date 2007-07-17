@@ -46,6 +46,7 @@ bool operator<(const CDentry& l, const CDentry& r);
 class CDentry : public MDSCacheObject, public LRUObject {
  public:
   // -- state --
+  static const int STATE_NEW = 1;
 
   // -- pins --
   static const int PIN_INODEPIN = 1;   // linked inode is pinned
@@ -59,6 +60,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- wait --
   static const int WAIT_LOCK_OFFSET = 8;
 
+  void add_waiter(int tag, Context *c);
 
   static const int EXPORT_NONCE = 1;
 
@@ -135,6 +137,11 @@ public:
   void last_put() {
     lru_unpin();
   }
+
+  // auth pins
+  bool can_auth_pin();
+  void auth_pin();
+  void auth_unpin();
   
 
   // dentry type is primary || remote || null
@@ -154,6 +161,7 @@ public:
 
   // misc
   void make_path(string& p);
+  void make_path(string& p, inodeno_t tobase);
   void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
 
   // -- version --
@@ -169,6 +177,8 @@ public:
   void mark_dirty(version_t projected_dirv);
   void mark_clean();
 
+  void mark_new();
+  bool is_new() { return state_test(STATE_NEW); }
   
   // -- replication
   CDentryDiscover *replicate_to(int rep);
@@ -219,11 +229,12 @@ public:
     assert(type == LOCK_OTYPE_DN);
     return &lock;
   }
-  void set_mlock_info(MLock *m);
+  void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
   
+  ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 
   friend class CDir;
@@ -238,7 +249,6 @@ class CDentryDiscover {
   int    replica_nonce;
   int    lockstate;
 
-  inodeno_t ino;
   inodeno_t remote_ino;
 
 public:
@@ -246,7 +256,6 @@ public:
   CDentryDiscover(CDentry *dn, int nonce) :
     dname(dn->get_name()), replica_nonce(nonce),
     lockstate(dn->lock.get_replica_state()),
-    ino(dn->get_ino()),
     remote_ino(dn->get_remote_ino()) { }
 
   string& get_dname() { return dname; }
@@ -256,26 +265,23 @@ public:
 
   void update_dentry(CDentry *dn) {
     dn->set_replica_nonce( replica_nonce );
-    if (remote_ino)
-      dn->set_remote_ino(remote_ino);
   }
-  void update_new_dentry(CDentry *dn) {
-    update_dentry(dn);
+  void init_dentry_lock(CDentry *dn) {
     dn->lock.set_state( lockstate );
   }
 
   void _encode(bufferlist& bl) {
     ::_encode(dname, bl);
-    bl.append((char*)&replica_nonce, sizeof(replica_nonce));
-    bl.append((char*)&lockstate, sizeof(lockstate));
+    ::_encode(remote_ino, bl);
+    ::_encode(replica_nonce, bl);
+    ::_encode(lockstate, bl);
   }
   
   void _decode(bufferlist& bl, int& off) {
     ::_decode(dname, bl, off);
-    bl.copy(off, sizeof(replica_nonce), (char*)&replica_nonce);
-    off += sizeof(replica_nonce);
-    bl.copy(off, sizeof(lockstate), (char*)&lockstate);
-    off += sizeof(lockstate);
+    ::_decode(remote_ino, bl, off);
+    ::_decode(replica_nonce, bl, off);
+    ::_decode(lockstate, bl, off);
   }
 
 };

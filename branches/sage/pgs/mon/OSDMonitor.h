@@ -114,7 +114,7 @@ private:
 
   void mark_all_down();
 
-  void send_latest(epoch_t since, entity_inst_t i);
+  void send_latest(entity_inst_t i, epoch_t since=(epoch_t)(-1));
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

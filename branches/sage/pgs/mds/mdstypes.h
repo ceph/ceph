@@ -37,7 +37,8 @@ using namespace std;
 #define MDS_INO_ANCHORTABLE       3
 #define MDS_INO_LOG_OFFSET        0x100
 #define MDS_INO_IDS_OFFSET        0x200
-#define MDS_INO_STRAY_OFFSET      0x300
+#define MDS_INO_CLIENTMAP_OFFSET  0x300
+#define MDS_INO_STRAY_OFFSET      0x400
 #define MDS_INO_BASE              0x1000
 
 #define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
@@ -87,6 +88,19 @@ namespace __gnu_cxx {
 }
 
 
+// inode caps info for client reconnect
+struct inode_caps_reconnect_t {
+  int32_t wanted;
+  int32_t issued;
+  off_t size;
+  utime_t mtime, atime;
+
+  inode_caps_reconnect_t() {}
+  inode_caps_reconnect_t(int w, int i) : 
+    wanted(w), issued(i), size(0) {}
+  inode_caps_reconnect_t(int w, int i, off_t sz, utime_t mt, utime_t at) : 
+    wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
+};
 
 
 // ================================================================
@@ -254,7 +268,7 @@ class MDSCacheObject;
 #define CDIR_AUTH_UNKNOWN  -2
 #define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
 #define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
-#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
+//#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 
 
@@ -268,27 +282,45 @@ ostream& operator<<(ostream& out, mdsco_db_line_prefix o);
 // printer
 ostream& operator<<(ostream& out, MDSCacheObject &o);
 
+class MDSCacheObjectInfo {
+public:
+  inodeno_t ino;
+  dirfrag_t dirfrag;
+  string dname;
+
+  void _encode(bufferlist& bl) const {
+    ::_encode(ino, bl);
+    ::_encode(dirfrag, bl);
+    ::_encode(dname, bl);
+  }
+  void _decode(bufferlist& bl, int& off) {
+    ::_decode(ino, bl, off);
+    ::_decode(dirfrag, bl, off);
+    ::_decode(dname, bl, off);
+  }
+};
+
 
 class MDSCacheObject {
  public:
   // -- pins --
   const static int PIN_REPLICATED =  1000;
   const static int PIN_DIRTY      =  1001;
-  const static int PIN_RDLOCK     = -1002;
-  const static int PIN_XLOCK      =  1003;
-  const static int PIN_REQUEST    = -1004;
-  const static int PIN_WAITER     =  1005;
+  const static int PIN_LOCK       = -1002;
+  const static int PIN_REQUEST    = -1003;
+  const static int PIN_WAITER     =  1004;
+  const static int PIN_DIRTYSCATTERED = 1005;
   
   const char *generic_pin_name(int p) {
     switch (p) {
-	case PIN_REPLICATED: return "replicated";
-	case PIN_DIRTY: return "dirty";
-    case PIN_RDLOCK: return "rdlock";
-    case PIN_XLOCK: return "xlock";
+    case PIN_REPLICATED: return "replicated";
+    case PIN_DIRTY: return "dirty";
+    case PIN_LOCK: return "lock";
     case PIN_REQUEST: return "request";
-	case PIN_WAITER: return "waiter";
-	default: assert(0);
-	}
+    case PIN_WAITER: return "waiter";
+    case PIN_DIRTYSCATTERED: return "dirtyscattered";
+    default: assert(0);
+    }
   }
 
   // -- state --
@@ -297,22 +329,23 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
-  const static int WAIT_SINGLEAUTH = (1<<30);
+  const static int WAIT_SINGLEAUTH  = (1<<30);
+  const static int WAIT_AUTHPINNABLE = (1<<29);
 
 
   // ============================================
   // cons
  public:
   MDSCacheObject() :
-	state(0),
-	ref(0),
-	replica_nonce(0) {}
+    state(0),
+    ref(0),
+    replica_nonce(0) {}
   virtual ~MDSCacheObject() {}
 
   // printing
   virtual void print(ostream& out) = 0;
   virtual ostream& print_db_line_prefix(ostream& out) { 
-	return out << "mdscacheobject(" << this << ") "; 
+    return out << "mdscacheobject(" << this << ") "; 
   }
   
   // --------------------------------------------
@@ -336,7 +369,7 @@ class MDSCacheObject {
   // authority
   virtual pair<int,int> authority() = 0;
   bool is_ambiguous_auth() {
-	return authority().second != CDIR_AUTH_UNKNOWN;
+    return authority().second != CDIR_AUTH_UNKNOWN;
   }
 
   // --------------------------------------------
@@ -353,36 +386,36 @@ protected:
 
   virtual void last_put() {}
   virtual void bad_put(int by) {
-	assert(ref_set.count(by) > 0);
-	assert(ref > 0);
+    assert(ref_set.count(by) > 0);
+    assert(ref > 0);
   }
   void put(int by) {
     if (ref == 0 || ref_set.count(by) == 0) {
-	  bad_put(by);
+      bad_put(by);
     } else {
-	  ref--;
-	  ref_set.erase(ref_set.find(by));
-	  assert(ref == (int)ref_set.size());
-	  if (ref == 0)
-		last_put();
-	}
+      ref--;
+      ref_set.erase(ref_set.find(by));
+      assert(ref == (int)ref_set.size());
+      if (ref == 0)
+	last_put();
+    }
   }
 
   virtual void first_get() {}
   virtual void bad_get(int by) {
-	assert(by < 0 || ref_set.count(by) == 0);
-	assert(0);
+    assert(by < 0 || ref_set.count(by) == 0);
+    assert(0);
   }
   void get(int by) {
     if (by >= 0 && ref_set.count(by)) {
-	  bad_get(by);
+      bad_get(by);
     } else {
-	  if (ref == 0) 
-		first_get();
-	  ref++;
-	  ref_set.insert(by);
-	  assert(ref == (int)ref_set.size());
-	}
+      if (ref == 0) 
+	first_get();
+      ref++;
+      ref_set.insert(by);
+      assert(ref == (int)ref_set.size());
+    }
   }
 
   void print_pin_set(ostream& out) {
@@ -392,13 +425,20 @@ protected:
       int last = *it;
       int c = 1;
       do {
-		it++;
-		if (it == ref_set.end()) break;
+	it++;
+	if (it == ref_set.end()) break;
       } while (*it == last);
       if (c > 1)
-		out << "*" << c;
+	out << "*" << c;
     }
   }
+
+
+  // --------------------------------------------
+  // auth pins
+  virtual bool can_auth_pin() = 0;
+  virtual void auth_pin() = 0;
+  virtual void auth_unpin() = 0;
 
 
   // --------------------------------------------
@@ -412,35 +452,41 @@ protected:
   bool is_replica(int mds) { return replicas.count(mds); }
   int num_replicas() { return replicas.size(); }
   int add_replica(int mds) {
-	if (replicas.count(mds)) 
-	  return ++replicas[mds];  // inc nonce
-	if (replicas.empty()) 
-	  get(PIN_REPLICATED);
-	return replicas[mds] = 1;
+    if (replicas.count(mds)) 
+      return ++replicas[mds];  // inc nonce
+    if (replicas.empty()) 
+      get(PIN_REPLICATED);
+    return replicas[mds] = 1;
   }
   void add_replica(int mds, int nonce) {
-	if (replicas.empty()) 
-	  get(PIN_REPLICATED);
-	replicas[mds] = nonce;
+    if (replicas.empty()) 
+      get(PIN_REPLICATED);
+    replicas[mds] = nonce;
   }
   int get_replica_nonce(int mds) {
-	assert(replicas.count(mds));
-	return replicas[mds];
+    assert(replicas.count(mds));
+    return replicas[mds];
   }
   void remove_replica(int mds) {
-	assert(replicas.count(mds));
-	replicas.erase(mds);
-	if (replicas.empty())
-	  put(PIN_REPLICATED);
+    assert(replicas.count(mds));
+    replicas.erase(mds);
+    if (replicas.empty())
+      put(PIN_REPLICATED);
   }
   void clear_replicas() {
-	if (!replicas.empty())
-	  put(PIN_REPLICATED);
-	replicas.clear();
+    if (!replicas.empty())
+      put(PIN_REPLICATED);
+    replicas.clear();
   }
   map<int,int>::iterator replicas_begin() { return replicas.begin(); }
   map<int,int>::iterator replicas_end() { return replicas.end(); }
   const map<int,int>& get_replicas() { return replicas; }
+  void list_replicas(set<int>& ls) {
+    for (map<int,int>::const_iterator p = replicas.begin();
+	 p != replicas.end();
+	 ++p) 
+      ls.insert(p->first);
+  }
 
   int get_replica_nonce() { return replica_nonce;}
   void set_replica_nonce(int n) { replica_nonce = n; }
@@ -453,45 +499,45 @@ protected:
 
  public:
   bool is_waiter_for(int mask) {
-	return waiting.count(mask) > 0;    // FIXME: not quite right.
+    return waiting.count(mask) > 0;    // FIXME: not quite right.
   }
-  void add_waiter(int mask, Context *c) {
-	if (waiting.empty())
-	  get(PIN_WAITER);
-	waiting.insert(pair<int,Context*>(mask, c));
-	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
-			 << "add_waiter " << mask << " " << c
-			 << " on " << *this
-			 << endl;
-
+  virtual void add_waiter(int mask, Context *c) {
+    if (waiting.empty())
+      get(PIN_WAITER);
+    waiting.insert(pair<int,Context*>(mask, c));
+    pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
+			       << "add_waiter " << hex << mask << dec << " " << c
+			       << " on " << *this
+			       << endl;
+    
   }
-  void take_waiting(int mask, list<Context*>& ls) {
-	if (waiting.empty()) return;
-	multimap<int,Context*>::iterator it = waiting.begin();
-	while (it != waiting.end()) {
-	  if (it->first & mask) {
-		ls.push_back(it->second);
-		pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
-				 << "take_waiting mask " << mask << " took " << it->second
-				 << " tag " << it->first
-				 << " on " << *this
-				 << endl;
-		waiting.erase(it++);
-	  } else {
-		pdout(10,g_conf.debug_mds) << "take_waiting mask " << mask << " SKIPPING " << it->second
-				 << " tag " << it->first
-				 << " on " << *this 
-				 << endl;
-		it++;
-	  }
-	}
-	if (waiting.empty())
-	  put(PIN_WAITER);
+  virtual void take_waiting(int mask, list<Context*>& ls) {
+    if (waiting.empty()) return;
+    multimap<int,Context*>::iterator it = waiting.begin();
+    while (it != waiting.end()) {
+      if (it->first & mask) {
+	ls.push_back(it->second);
+	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
+				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
+				   << " tag " << it->first
+				   << " on " << *this
+				   << endl;
+	waiting.erase(it++);
+      } else {
+	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
+				   << " tag " << it->first
+				   << " on " << *this 
+				   << endl;
+	it++;
+      }
+    }
+    if (waiting.empty())
+      put(PIN_WAITER);
   }
   void finish_waiting(int mask, int result = 0) {
-	list<Context*> finished;
-	take_waiting(mask, finished);
-	finish_contexts(finished, result);
+    list<Context*> finished;
+    take_waiting(mask, finished);
+    finish_contexts(finished, result);
   }
 
 
@@ -499,7 +545,7 @@ protected:
   // locking
   // noop unless overloaded.
   virtual SimpleLock* get_lock(int type) { assert(0); return 0; }
-  virtual void set_mlock_info(MLock *m) { assert(0); }
+  virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void finish_lock_waiters(int type, int mask, int r=0) { assert(0); }
@@ -521,6 +567,12 @@ protected:
 inline ostream& operator<<(ostream& out, MDSCacheObject &o) {
   o.print(out);
   return out;
+}
+
+inline ostream& operator<<(ostream& out, const MDSCacheObjectInfo &info) {
+  if (info.ino) return out << info.ino;
+  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname;
+  return out << info.dirfrag;
 }
 
 inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {

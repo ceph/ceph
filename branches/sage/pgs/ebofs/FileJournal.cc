@@ -23,7 +23,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x) if (true || x <= g_conf.debug_ebofs) cout << "ebofs(" << ebofs->dev.get_device_name() << ").journal "
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << ebofs->dev.get_device_name() << ").journal "
 #define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << ebofs->dev.get_device_name() << ").journal "
 
 
@@ -48,6 +48,7 @@ int FileJournal::create()
   dout(1) << "open " << fn << " " << st.st_size << " bytes" << endl;
 
   // write empty header
+  memset(&header, 0, sizeof(header));
   header.clear();
   header.fsid = ebofs->get_fsid();
   header.max_size = st.st_size;
@@ -274,7 +275,7 @@ bool FileJournal::submit_entry(bufferlist& e, Context *oncommit)
 	       << endl;
       full = true;
       print_header();
-      return false;      
+      return false;
     }
   } else {
     // we haven't wrapped.  

@@ -76,7 +76,8 @@ class MDiscoverReply : public Message {
   bool flag_error_ino;
   bool        flag_error_dir;
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
-  int         dir_auth_hint;
+  int dir_auth_hint;
+  bool wanted_xlocks_hint;
   
   vector<CDirDiscover*>    dirs;      // not inode-aligned if no_base_dir = true.
   vector<CDentryDiscover*> dentries;  // not inode-aligned if no_base_dentry = true
@@ -101,11 +102,9 @@ class MDiscoverReply : public Message {
                 dirs.size() + no_base_dir ));                  // dn/inode + dirs
   }
 
-  bool      has_base_dir() { return !no_base_dir && dirs.size(); }
-  bool      has_base_dentry() { return !no_base_dentry && dentries.size(); }
-  bool has_root() {
-    return (base_ino == MDS_INO_ROOT && no_base_dir && no_base_dentry);
-  }
+  bool has_base_dir() { return !no_base_dir && dirs.size(); }
+  bool has_base_dentry() { return !no_base_dentry && dentries.size(); }
+  bool has_base_inode() { return no_base_dir && no_base_dentry; }
 
   const string& get_path() { return path; }
 
@@ -115,6 +114,9 @@ class MDiscoverReply : public Message {
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
   int get_dir_auth_hint() { return dir_auth_hint; }
+  bool get_wanted_xlocks_hint() { return wanted_xlocks_hint; }
+
+  void set_wanted_xlocks_hint(bool w) { wanted_xlocks_hint = w; }
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
@@ -201,6 +203,7 @@ class MDiscoverReply : public Message {
     ::_decode(flag_error_dir, payload, off);
     ::_decode(error_dentry, payload, off);
     ::_decode(dir_auth_hint, payload, off);
+    ::_decode(wanted_xlocks_hint, payload, off);
     
     // dirs
     int n;
@@ -238,6 +241,7 @@ class MDiscoverReply : public Message {
     ::_encode(flag_error_dir, payload);
     ::_encode(error_dentry, payload);
     ::_encode(dir_auth_hint, payload);
+    ::_encode(wanted_xlocks_hint, payload);
 
     // dirs
     int n = dirs.size();

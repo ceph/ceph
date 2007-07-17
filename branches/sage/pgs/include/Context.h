@@ -117,28 +117,35 @@ public:
     }
   };
 
-  Context *new_sub() {
-    num++;
-    waitfor.insert(num);
-    return new C_GatherSub(this, num);
-  }
-
 private:
   Context *onfinish;
   std::set<int> waitfor;
   int num;
 
 public:
-  C_Gather(Context *f) : onfinish(f), num(0) {
+  C_Gather(Context *f=0) : onfinish(f), num(0) {
     //cout << "C_Gather new " << this << endl;
   }
   ~C_Gather() {
     //cout << "C_Gather delete " << this << endl;
     assert(!onfinish);
   }
+
+  void set_finisher(Context *c) {
+    assert(!onfinish);
+    onfinish = c;
+  }
+  Context *new_sub() {
+    num++;
+    waitfor.insert(num);
+    return new C_GatherSub(this, num);
+  }
+
+  bool empty() { return num == 0; }
+  int get_num() { return num; }
+
   void finish(int r) {
-    // nobody should ever call me.
-    assert(0);
+    assert(0);    // nobody should ever call me.
   }
 
 };

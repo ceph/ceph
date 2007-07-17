@@ -281,7 +281,7 @@ class Inode {
   Dir *open_dir() {
     if (!dir) {
       if (dn) dn->get();      // pin dentry
-      get();
+      get();                  // pin inode
       dir = new Dir(this);
     }
     return dir;
@@ -343,7 +343,7 @@ class Client : public Dispatcher {
   MonMap *monmap;
   
   // mds sessions
-  set<int> mds_sessions;
+  map<int, version_t> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
 
   void handle_client_session(MClientSession *m);
@@ -456,7 +456,7 @@ protected:
     
     delete in->dir;
     in->dir = 0;
-    put_inode(in);
+    put_inode(in);               // unpin inode
   }
 
   int get_cache_size() { return lru.lru_get_size(); }
@@ -476,6 +476,8 @@ protected:
     in->dn = dn;
     in->get();
 
+    if (in->dir) dn->get();  // dir -> dn pin
+
     lru.lru_insert_mid(dn);    // mid or top?
     return dn;
   }
@@ -484,6 +486,7 @@ protected:
     Inode *in = dn->inode;
 
     // unlink from inode
+    if (dn->inode->dir) dn->put();        // dir -> dn pin
     dn->inode = 0;
     in->dn = 0;
     put_inode(in);
@@ -499,29 +502,37 @@ protected:
     delete dn;
   }
 
-  Dentry *relink(Dentry *dn, Dir *dir, const string& name) {
-    // first link new dn to dir
-    /*
-    char *oldname = (char*)dn->name;
-    dn->name = new char[name.length()+1];
-    strcpy((char*)dn->name, name.c_str());
-    dir->dentries[dn->name] = dn;
-    */
-    //cout << "relink dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << dn->inode->inode.ino << endl;
+  Dentry *relink(Dir *dir, const string& name, Inode *in) {
+    Dentry *olddn = in->dn;
+    Dir *olddir = olddn->dir;  // note: might == dir!
 
-    dir->dentries[name] = dn;
+    // newdn, attach to inode.  don't touch inode ref.
+    Dentry *newdn = new Dentry;
+    newdn->name = name;
+    newdn->inode = in;
+    newdn->dir = dir;
+    in->dn = newdn;
 
-    // unlink from old dir
-    dn->dir->dentries.erase(dn->name);
-    //delete[] oldname;
-    if (dn->dir->is_empty()) 
-      close_dir(dn->dir);
+    if (in->dir) { // dir -> dn pin
+      newdn->get();
+      olddn->put();
+    }
 
-    // fix up dn
-    dn->name = name;
-    dn->dir = dir;
+    // unlink old dn from dir
+    olddir->dentries.erase(olddn->name);
+    olddn->inode = 0;
+    olddn->dir = 0;
+    lru.lru_remove(olddn);
+    
+    // link new dn to dir
+    dir->dentries[name] = newdn;
+    lru.lru_insert_mid(newdn);
+    
+    // olddir now empty?  (remember, olddir might == dir)
+    if (olddir->is_empty()) 
+      close_dir(olddir);
 
-    return dn;
+    return newdn;
   }
 
   // move dentry to top of lru

@@ -58,6 +58,10 @@ int main(int argc, char **argv)
   vector<char*> args;
   argv_to_vec(argc, argv, args);
 
+  // stop on our own (by default)
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
   parse_config_options(args);
 
   int start = 0;
@@ -78,6 +82,7 @@ int main(int argc, char **argv)
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
   if (g_conf.clock_tare) g_clock.tare();
+
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;

@@ -27,6 +27,7 @@
 #include "SimpleLock.h"
 #include "FileLock.h"
 #include "ScatterLock.h"
+#include "LocalLock.h"
 #include "Capability.h"
 
 
@@ -64,6 +65,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_OPENINGDIR = 14;
   static const int PIN_REMOTEPARENT = 15;
   static const int PIN_BATCHOPENJOURNAL = 16;
+  static const int PIN_SCATTERED = 17;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -76,31 +78,32 @@ class CInode : public MDSCacheObject {
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
+    case PIN_SCATTERED: return "scattered";
     default: return generic_pin_name(p);
     }
   }
 
   // -- state --
-  static const int STATE_ROOT =       (1<<2);
-  //static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
-  static const int STATE_EXPORTING =  (1<<6);   // on nonauth bystander.
-  static const int STATE_ANCHORING =  (1<<7);
-  static const int STATE_UNANCHORING = (1<<8);
-  static const int STATE_OPENINGDIR = (1<<9);
+  static const int STATE_ROOT =        (1<<1);
+  static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
+  static const int STATE_ANCHORING =   (1<<3);
+  static const int STATE_UNANCHORING = (1<<4);
+  static const int STATE_OPENINGDIR =  (1<<5);
+  static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
 
   // -- waiters --
-  static const int WAIT_SLAVEAGREE  = (1<<0);
-  static const int WAIT_AUTHPINNABLE = (1<<1);
-  static const int WAIT_DIR         = (1<<2);
-  static const int WAIT_ANCHORED    = (1<<3);
-  static const int WAIT_UNANCHORED  = (1<<4);
-  static const int WAIT_CAPS        = (1<<5);
+  //static const int WAIT_SLAVEAGREE  = (1<<0);
+  static const int WAIT_DIR         = (1<<1);
+  static const int WAIT_ANCHORED    = (1<<2);
+  static const int WAIT_UNANCHORED  = (1<<3);
+  static const int WAIT_CAPS        = (1<<4);
   
-  static const int WAIT_AUTHLOCK_OFFSET = 6;
-  static const int WAIT_LINKLOCK_OFFSET = 6 + SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 6 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET = 6 + 3*SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRLOCK_OFFSET = 6 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_AUTHLOCK_OFFSET = 5;
+  static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET = 5 + 3*SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY           = 0xffffffff;
 
@@ -120,10 +123,26 @@ class CInode : public MDSCacheObject {
 
   off_t            last_open_journaled;  // log offset for the last journaled EOpen
 
+  // projected values (only defined while dirty)
+  list<inode_t*>    projected_inode;
+  list<fragtree_t> projected_dirfragtree;
+
+  version_t get_projected_version() {
+    if (projected_inode.empty())
+      return inode.version;
+    else
+      return projected_inode.back()->version;
+  }
+
+  inode_t *project_inode();
+  void pop_and_dirty_projected_inode();
+  
+
   // -- cache infrastructure --
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
   frag_t pick_dirfrag(const string &dn);
+  bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) 
       return dirfrags[fg];
@@ -137,12 +156,14 @@ class CInode : public MDSCacheObject {
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
+  bool has_subtree_root_dirfrag();
 
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
+  pair<int,int> force_auth;
 
   // -- distributed state --
 protected:
@@ -175,9 +196,10 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_open_journaled(0),
-    parent(0),
+    parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     auth_pins(0), nested_auth_pins(0),
+    versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
     linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
@@ -233,8 +255,6 @@ protected:
   void mark_clean();
 
 
-
-
   CInodeDiscover* replicate_to(int rep);
 
 
@@ -244,6 +264,7 @@ protected:
 
   // -- locks --
 public:
+  LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
   SimpleLock dirfragtreelock;
@@ -260,7 +281,7 @@ public:
     default: assert(0);
     }
   }
-  void set_mlock_info(MLock *m);
+  void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
@@ -286,6 +307,19 @@ public:
       return &client_caps[client];
     return 0;
   }
+  void reconnect_cap(int client, inode_caps_reconnect_t& icr) {
+    Capability *cap = get_client_cap(client);
+    if (cap) {
+      cap->merge(icr.wanted, icr.issued);
+    } else {
+      Capability newcap(icr.wanted, 0);
+      newcap.issue(icr.issued);
+      add_client_cap(client, newcap);
+    }
+    inode.size = MAX(inode.size, icr.size);
+    inode.mtime = MAX(inode.mtime, icr.mtime);
+    inode.atime = MAX(inode.atime, icr.atime);
+  }
   /*
   void set_client_caps(map<int,Capability>& cl) {
     if (client_caps.empty() && !cl.empty())
@@ -294,16 +328,21 @@ public:
     client_caps = cl;
   }
   */
-  void take_client_caps(map<int,Capability>& cl) {
+  void take_client_caps(map<int,Capability::Export>& cl) {
     if (!client_caps.empty())
       put(PIN_CAPS);
-    cl = client_caps;
+    for (map<int,Capability>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) {
+      cl[it->first] = it->second.make_export();
+    }
     client_caps.clear();
   }
-  void merge_client_caps(map<int,Capability>& cl, set<int>& new_client_caps) {
+  void merge_client_caps(map<int,Capability::Export>& cl, set<int>& new_client_caps) {
     if (client_caps.empty() && !cl.empty())
       get(PIN_CAPS);
-    for (map<int,Capability>::iterator it = cl.begin();
+    
+    for (map<int,Capability::Export>::iterator it = cl.begin();
          it != cl.end();
          it++) {
       new_client_caps.insert(it->first);
@@ -312,7 +351,7 @@ public:
         client_caps[it->first].merge(it->second);
       } else {
         // new
-        client_caps[it->first] = it->second;
+        client_caps[it->first] = Capability(it->second);
       }
     }      
   }
@@ -382,17 +421,6 @@ public:
 
 
   // -- reference counting --
-  
-  /* these can be pinned any # of times, and are
-     linked to an active_request, so they're automatically cleaned
-     up when a request is finished.  pin at will! */
-  void request_pin_get() {
-    get(PIN_REQUEST);
-  }
-  void request_pin_put() {
-    put(PIN_REQUEST);
-  }
-
   void bad_put(int by) {
     dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
     assert(ref_set.count(by) == 1);
@@ -407,10 +435,6 @@ public:
 
 
   // -- hierarchy stuff --
-private:
-  //void get_parent();
-  //void put_parent();
-
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
@@ -486,8 +510,9 @@ class CInodeDiscover {
     in->inode = inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;
-
     in->replica_nonce = replica_nonce;
+  }
+  void init_inode_locks(CInode *in) {
     in->authlock.set_state(authlock_state);
     in->linklock.set_state(linklock_state);
     in->dirfragtreelock.set_state(dirfragtreelock_state);
@@ -540,7 +565,7 @@ class CInodeExport {
   fragtree_t     dirfragtree;
 
   map<int,int>     replicas;
-  map<int,Capability>  cap_map;
+  map<int,Capability::Export>  cap_map;
 
   bufferlist locks;
 
@@ -575,7 +600,8 @@ public:
   void update_inode(CInode *in, set<int>& new_client_caps) {
     // treat scatterlocked mtime special, since replica may have newer info
     if (in->dirlock.get_state() == LOCK_SCATTER ||
-	in->dirlock.get_state() == LOCK_GSYNCS)
+	in->dirlock.get_state() == LOCK_GLOCKC ||
+	in->dirlock.get_state() == LOCK_GTEMPSYNCC)
       st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
 
     in->inode = st.inode;
@@ -613,14 +639,7 @@ public:
     dirfragtree._encode(bl);
     ::_encode(replicas, bl);
     ::_encode(locks, bl);
-
-    // caps
-    for (map<int,Capability>::iterator it = cap_map.begin();
-         it != cap_map.end();
-         it++) {
-      bl.append((char*)&it->first, sizeof(it->first));
-      it->second._encode(bl);
-    }
+    ::_encode(cap_map, bl);
   }
 
   int _decode(bufferlist& bl, int off = 0) {
@@ -629,14 +648,7 @@ public:
     dirfragtree._decode(bl, off);
     ::_decode(replicas, bl, off);
     ::_decode(locks, bl, off);
-
-    // caps
-    for (int i=0; i<st.num_caps; i++) {
-      int c;
-      bl.copy(off, sizeof(c), (char*)&c);
-      off += sizeof(c);
-      cap_map[c]._decode(bl, off);
-    }
+    ::_decode(cap_map, bl, off);
 
     return off;
   }

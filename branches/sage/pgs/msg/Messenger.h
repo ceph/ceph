@@ -67,6 +67,7 @@ class Messenger {
 
   // shutdown
   virtual int shutdown() = 0;
+  virtual void suicide() = 0;
 
   // send message
   virtual void prepare_dest(const entity_addr_t& addr) {}

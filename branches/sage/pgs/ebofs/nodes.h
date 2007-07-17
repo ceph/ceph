@@ -433,7 +433,7 @@ class NodePool {
       block_t off = nodeid_offset(*i);
       block_t b = region_loc[region].start + off;
 
-      if (1) {  // sanity check debug FIXME
+      if (0) {  // sanity check debug FIXME
         assert(didb.count(b) == 0);
         didb.insert(b);
       }

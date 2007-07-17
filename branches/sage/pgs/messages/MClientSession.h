@@ -19,37 +19,43 @@
 
 class MClientSession : public Message {
 public:
-  const static int OP_OPEN      = 1;
-  const static int OP_OPEN_ACK  = 2;
-  const static int OP_CLOSE     = 3;
-  const static int OP_CLOSE_ACK = 4;
+  const static int OP_REQUEST_OPEN  = 1;
+  const static int OP_OPEN          = 2;
+  const static int OP_REQUEST_CLOSE = 3;
+  const static int OP_CLOSE         = 4;
   static const char *get_opname(int o) {
     switch (o) {
+    case OP_REQUEST_OPEN: return "request_open";
     case OP_OPEN: return "open";
-    case OP_OPEN_ACK: return "open_ack";
+    case OP_REQUEST_CLOSE: return "request_close";
     case OP_CLOSE: return "close";
-    case OP_CLOSE_ACK: return "close_ack";
     default: assert(0);
     }
   }
 
-  __int32_t op;
+  int32_t op;
+  version_t seq;
 
   MClientSession() : Message(MSG_CLIENT_SESSION) { }
-  MClientSession(int o) : Message(MSG_CLIENT_SESSION),
-			  op(o) { }
+  MClientSession(int o, version_t s=0) : 
+    Message(MSG_CLIENT_SESSION),
+    op(o), seq(s) { }
 
   char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
-    out << "client_session " << get_opname(op);
+    out << "client_session(" << get_opname(op);
+    if (seq) out << " seq " << seq;
+    out << ")";
   }
 
   void decode_payload() { 
     int off = 0;
     ::_decode(op, payload, off);
+    ::_decode(seq, payload, off);
   }
   void encode_payload() { 
     ::_encode(op, payload);
+    ::_encode(seq, payload);
   }
 };
 

@@ -211,7 +211,7 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   
   // reply with latest mds, osd maps
   mon->mdsmon->send_latest(to);
-  mon->osdmon->send_latest(0, to);
+  mon->osdmon->send_latest(to);
 
   delete m;
 }

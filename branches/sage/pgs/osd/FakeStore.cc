@@ -298,7 +298,7 @@ int FakeStore::read(object_t oid,
 
 int FakeStore::write(object_t oid, 
                      off_t offset, size_t len,
-                     bufferlist& bl, 
+                     const bufferlist& bl, 
                      Context *onsafe)
 {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;

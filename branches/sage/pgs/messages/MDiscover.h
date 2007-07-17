@@ -29,10 +29,12 @@ class MDiscover : public Message {
   int             asker;
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
-  bool            want_base_dir;
 
   filepath        want;   // ... [/]need/this/stuff
   inodeno_t       want_ino;
+
+  bool want_base_dir;
+  bool want_xlocked;
 
  public:
   int       get_asker() { return asker; }
@@ -41,33 +43,36 @@ class MDiscover : public Message {
   filepath& get_want() { return want; }
   inodeno_t get_want_ino() { return want_ino; }
   const string&   get_dentry(int n) { return want[n]; }
-  bool      wants_base_dir() { return want_base_dir; }
+
+  bool wants_base_dir() { return want_base_dir; }
+  bool wants_xlocked() { return want_xlocked; }
 
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
   MDiscover() { }
-  MDiscover(int asker, 
-            inodeno_t base_ino,
-            filepath& want,
-            bool want_base_dir = true) :
-    Message(MSG_MDS_DISCOVER) {
-    this->asker = asker;
-    this->base_ino = base_ino;
-    this->want = want;
-    want_ino = 0;
-    this->want_base_dir = want_base_dir;
-  }
-  MDiscover(int asker, 
+  MDiscover(int asker_, 
+            inodeno_t base_ino_,
+            filepath& want_,
+            bool want_base_dir_ = true,
+	    bool discover_xlocks_ = false) :
+    Message(MSG_MDS_DISCOVER),
+    asker(asker_),
+    base_ino(base_ino_),
+    want(want_),
+    want_ino(0),
+    want_base_dir(want_base_dir_),
+    want_xlocked(discover_xlocks_) { }
+  MDiscover(int asker_, 
             dirfrag_t base_dirfrag,
-            inodeno_t want_ino,
-            bool want_base_dir = true) :
-    Message(MSG_MDS_DISCOVER) {
-    this->asker = asker;
-    this->base_ino = base_dirfrag.ino;
-    this->base_dir_frag = base_dirfrag.frag;
-    this->want_ino = want_ino;
-    this->want_base_dir = want_base_dir;
-  }
+            inodeno_t want_ino_,
+            bool want_base_dir_ = true) :
+    Message(MSG_MDS_DISCOVER),
+    asker(asker_),
+    base_ino(base_dirfrag.ino),
+    base_dir_frag(base_dirfrag.frag),
+    want_ino(want_ino_),
+    want_base_dir(want_base_dir_),
+    want_xlocked(false) { }
 
   char *get_type_name() { return "Dis"; }
   void print(ostream &out) {
@@ -82,17 +87,19 @@ class MDiscover : public Message {
     ::_decode(asker, payload, off);
     ::_decode(base_ino, payload, off);
     ::_decode(base_dir_frag, payload, off);
-    ::_decode(want_base_dir, payload, off);
     want._decode(payload, off);
     ::_decode(want_ino, payload, off);
+    ::_decode(want_base_dir, payload, off);
+    ::_decode(want_xlocked, payload, off);
   }
   void encode_payload() {
-    payload.append((char*)&asker, sizeof(asker));
-    payload.append((char*)&base_ino, sizeof(base_ino));
-    payload.append((char*)&base_dir_frag, sizeof(base_dir_frag));
-    payload.append((char*)&want_base_dir, sizeof(want_base_dir));
+    ::_encode(asker, payload);
+    ::_encode(base_ino, payload);
+    ::_encode(base_dir_frag, payload);
     want._encode(payload);
     ::_encode(want_ino, payload);
+    ::_encode(want_base_dir, payload);
+    ::_encode(want_xlocked, payload);
   }
 
 };

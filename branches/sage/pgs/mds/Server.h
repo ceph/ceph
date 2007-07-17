@@ -18,8 +18,11 @@
 #include "MDS.h"
 
 class LogEvent;
-class C_MDS_rename_local_finish;
+class C_MDS_rename_finish;
 class MDRequest;
+class EMetaBlob;
+class PVList;
+class MMDSSlaveRequest;
 
 class Server {
   MDS *mds;
@@ -41,28 +44,39 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
-  set<CInode*> reconnected_open_files;
-  
+  set<CInode*> reconnected_caps;
+
   void handle_client_session(class MClientSession *m);
   void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void terminate_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
+  void process_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
+  void add_reconnected_cap_inode(CInode *in) {
+    reconnected_caps.insert(in);
+  }
+  void process_reconnected_caps();
   void client_reconnect_failure(int from);
-  void reconnect_finish();
-  void terminate_sessions();
+  void reconnect_gather_finish();
+
   
   // -- requests --
   void handle_client_request(MClientRequest *m);
 
-  void dispatch_request(MDRequest *mdr);
+  void dispatch_client_request(MDRequest *mdr);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
+
+  void handle_slave_request(MMDSSlaveRequest *m);
+  void dispatch_slave_request(MDRequest *mdr);
+  void handle_slave_auth_pin(MDRequest *mdr);
+  void handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
 
   // some helpers
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
-  CInode* prepare_new_inode(MClientRequest *req, CDir *dir);
+  CInode* prepare_new_inode(MDRequest *mdr, CDir *dir);
 
   CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
@@ -70,8 +84,9 @@ public:
   CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
   //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
 
-  version_t predirty_dn_diri(CDentry *dn, class EMetaBlob *blob, utime_t mtime);
+  version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
   void dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime);
+
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
@@ -111,34 +126,50 @@ public:
   void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_local_finish(MDRequest *mdr,
 			  CDentry *dn, CInode *targeti,
-			  version_t, utime_t, version_t, version_t);
+			  version_t, version_t, version_t);
+
   void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
+			   version_t, version_t);
+
+  void handle_slave_link_prep(MDRequest *mdr);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, 
+			  utime_t old_ctime, version_t old_version, bool inc);
+  void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
   bool _verify_rmdir(MDRequest *mdr, CInode *rmdiri);
-  void _unlink_local(MDRequest *mdr, CDentry *dn);
+  void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, utime_t, version_t, version_t);    
+			    version_t, version_t);    
+
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
+  void _unlink_remote_finish(MDRequest *mdr, 
+			     CDentry *dn, 
+			     version_t, version_t);    
 
   // rename
-  bool _rename_open_dn(CDir *dir, CDentry *dn, bool mustexist, MDRequest *mdr);
   void handle_client_rename(MDRequest *mdr);
-  void handle_client_rename_2(MDRequest *mdr,
-                              CDentry *srcdn,
-                              filepath& destpath,
-                              vector<CDentry*>& trace,
-                              int r);
-  void _rename_local(MDRequest *mdr, CDentry *srcdn, CDentry *destdn);
-  void _rename_local_reanchored(LogEvent *le, C_MDS_rename_local_finish *fin, 
-				version_t atid1, version_t atid2);
-  void _rename_local_finish(MDRequest *mdr,
-			    CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-			    version_t srcpv, version_t destpv, version_t straypv, version_t ipv,
-			    version_t ddirpv, version_t sdirpv, utime_t ictime,
-			    version_t atid1, version_t atid2);
+  void _rename_finish(MDRequest *mdr,
+		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+
+  // helpers
+  void _rename_prepare(MDRequest *mdr,
+		       EMetaBlob *metablob, 
+		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
+
+  // slaving
+  void handle_slave_rename_prep(MDRequest *mdr);
+  void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void handle_slave_rename_get_inode(MDRequest *mdr);
+  void handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+
 };
 
 
