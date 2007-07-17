@@ -12,7 +12,7 @@ CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWI
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -g -fPIC -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
 LDINC = ld -i -o
 endif
 
@@ -56,6 +56,7 @@ MDS_OBJS= \
 	mds/AnchorClient.o\
 	mds/LogEvent.o\
 	mds/IdAllocator.o\
+	mds/ClientMap.o\
 	mds/MDLog.o
 
 OSD_OBJS= \

@@ -677,7 +677,6 @@ void Rank::Pipe::fail(list<Message*>& out)
       } 
       else {
         // oh well.  sending entity musta just shut down?
-        assert(0);
         delete q.front();
       }
       q.pop_front();
@@ -1118,6 +1117,12 @@ int Rank::EntityMessenger::shutdown()
   return 0;
 }
 
+void Rank::EntityMessenger::suicide()
+{
+  dout(10) << "suicide " << get_myaddr() << endl;
+  shutdown();
+  // hmm, or exit(0)?
+}
 
 void Rank::EntityMessenger::prepare_dest(const entity_addr_t& addr)
 {

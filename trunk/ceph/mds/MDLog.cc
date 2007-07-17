@@ -167,10 +167,10 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
 
     // should we log a new import_map?
     // FIXME: should this go elsewhere?
-    if (last_import_map && !writing_import_map &&
-	journaler->get_write_pos() - last_import_map >= g_conf.mds_log_import_map_interval) {
+    if (last_subtree_map && !writing_subtree_map &&
+	journaler->get_write_pos() - last_subtree_map >= g_conf.mds_log_subtree_map_interval) {
       // log import map
-      mds->mdcache->log_import_map();
+      mds->mdcache->log_subtree_map();
     }
 
   } else {
@@ -257,6 +257,7 @@ void MDLog::_trimmed(LogEvent *le)
     // we trimmed off the front!  
     // we can expire the log a bit.
     journaler->set_expire_pos(le->_end_off);
+    journaler->trim();
   }
 
   trimming.erase(le->_end_off);
@@ -279,7 +280,12 @@ void MDLog::trim(Context *c)
   // trim!
   dout(10) << "trim " <<  num_events << " events / " << max_events << " max" << endl;
 
-  while (num_events > max_events) {
+  // hack: only trim for a few seconds at a time
+  utime_t stop = g_clock.now();
+  stop += 2.0;
+
+  while (num_events > max_events &&
+	 stop > g_clock.now()) {
     
     off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
     dout(5) << "trim num_events " << num_events << " > max " << max_events
@@ -432,17 +438,17 @@ void MDLog::_replay_thread()
     num_events++;
 
     // have we seen an import map yet?
-    if (!seen_import_map &&
-	le->get_type() != EVENT_IMPORTMAP) {
+    if (!seen_subtree_map &&
+	le->get_type() != EVENT_SUBTREEMAP) {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " -- waiting for import_map.  (skipping " << *le << ")" << endl;
+	       << " -- waiting for subtree_map.  (skipping " << *le << ")" << endl;
     } else {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
 	       << " : " << *le << endl;
       le->replay(mds);
 
-      if (le->get_type() == EVENT_IMPORTMAP)
-	seen_import_map = true;
+      if (le->get_type() == EVENT_SUBTREEMAP)
+	seen_subtree_map = true;
     }
     delete le;
 
@@ -467,62 +473,5 @@ void MDLog::_replay_thread()
   mds->mds_lock.Unlock();
 }
 
-
-
-void MDLog::_replay()
-{
-  mds->mds_lock.Lock();
-
-  // read what's buffered
-  while (journaler->is_readable() &&
-	 journaler->get_read_pos() < journaler->get_write_pos()) {
-    // read it
-    off_t pos = journaler->get_read_pos();
-    bufferlist bl;
-    bool r = journaler->try_read_entry(bl);
-    assert(r);
-    
-    // unpack event
-    LogEvent *le = LogEvent::decode(bl);
-    num_events++;
-
-    // have we seen an import map yet?
-    if (!seen_import_map &&
-	le->get_type() != EVENT_IMPORTMAP) {
-      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " -- waiting for import_map.  (skipping " << *le << ")" << endl;
-    } else {
-      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " : " << *le << endl;
-      le->replay(mds);
-
-      if (le->get_type() == EVENT_IMPORTMAP)
-	seen_import_map = true;
-    }
-    delete le;
-
-    // drop lock for a second, so other events (e.g. beacon timer!) can go off
-    mds->mds_lock.Unlock();
-    mds->mds_lock.Lock();
-  }
-
-  // wait for read?
-  if (journaler->get_read_pos() < journaler->get_write_pos()) {
-    journaler->wait_for_readable(new C_MDL_Replay(this));
-    return;    
-  }
-
-  // done!
-  assert(journaler->get_read_pos() == journaler->get_write_pos());
-  dout(10) << "_replay - complete" << endl;
-
-  // move read pointer _back_ to expire pos, for eventual trimming
-  journaler->set_read_pos(journaler->get_expire_pos());
-
-  // kick waiter(s)
-  list<Context*> ls;
-  ls.swap(waitfor_replay);
-  finish_contexts(ls,0);  
-}
 
 

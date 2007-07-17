@@ -16,7 +16,7 @@
 #define __UTIME_H
 
 #include <math.h>
-
+#include <time.h>
 
 // --------
 // utime_t
@@ -119,15 +119,28 @@ inline bool operator<(const utime_t& a, const utime_t& b)
 // ostream
 inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 {
-  //return out << t.sec() << "." << t.usec();
-  out << (long)t.sec() << ".";
   out.setf(std::ios::right);
   out.fill('0');
+  if (t.sec() < ((time_t)(60*60*24*365*10))) {
+    // raw seconds.  this looks like a relative time.
+    out << (long)t.sec();
+  } else {
+    // localtime.  this looks like an absolute time.
+    struct tm bdt;
+    time_t tt = t.sec();
+    localtime_r(&tt, &bdt);
+    out << std::setw(2) << (bdt.tm_year-100)  // 2007 -> '07'
+	<< std::setw(2) << bdt.tm_mon
+	<< std::setw(2) << bdt.tm_mday
+	<< "."
+	<< std::setw(2) << bdt.tm_hour
+	<< std::setw(2) << bdt.tm_min
+	<< std::setw(2) << bdt.tm_sec;
+  }
+  out << ".";
   out << std::setw(6) << t.usec();
   out.unsetf(std::ios::right);
   return out;
-  
-  //return out << (long)t.sec << "." << ios::setf(ios::right) << ios::fill('0') << t.usec() << ios::usetf();
 }
 
 #endif

@@ -83,8 +83,10 @@
 #define MSG_MDS_HEARTBEAT          104  // for mds load balancer
 #define MSG_MDS_BEACON             105  // to monitor
 
-#define MSG_MDS_IMPORTMAP          106
-#define MSG_MDS_CACHEREJOIN        107
+#define MSG_MDS_RESOLVE            106
+#define MSG_MDS_RESOLVEACK         107
+
+#define MSG_MDS_CACHEREJOIN        108
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111
@@ -105,11 +107,6 @@
 
 #define MSG_MDS_ANCHOR 130
 
-#define MSG_MDS_INODELINK       140
-#define MSG_MDS_INODELINKACK    141
-#define MSG_MDS_INODEUNLINK     142
-#define MSG_MDS_INODEUNLINKACK  143
-
 #define MSG_MDS_EXPORTDIRDISCOVER     149
 #define MSG_MDS_EXPORTDIRDISCOVERACK  150
 #define MSG_MDS_EXPORTDIRCANCEL       151
@@ -123,35 +120,9 @@
 #define MSG_MDS_EXPORTDIRNOTIFYACK    159
 #define MSG_MDS_EXPORTDIRFINISH       160
 
-
-#define MSG_MDS_HASHDIRDISCOVER    170
-#define MSG_MDS_HASHDIRDISCOVERACK 171
-#define MSG_MDS_HASHDIRPREP        172
-#define MSG_MDS_HASHDIRPREPACK     173
-#define MSG_MDS_HASHDIR            174
-#define MSG_MDS_HASHDIRACK         175
-#define MSG_MDS_HASHDIRNOTIFY      176
-
-#define MSG_MDS_HASHREADDIR        178
-#define MSG_MDS_HASHREADDIRREPLY   179
-
-#define MSG_MDS_UNHASHDIRPREP      180
-#define MSG_MDS_UNHASHDIRPREPACK   181
-#define MSG_MDS_UNHASHDIR          182
-#define MSG_MDS_UNHASHDIRACK       183
-#define MSG_MDS_UNHASHDIRNOTIFY    184
-#define MSG_MDS_UNHASHDIRNOTIFYACK 185
+#define MSG_MDS_SLAVE_REQUEST         170
 
 #define MSG_MDS_DENTRYUNLINK      200
-
-#define MSG_MDS_RENAMEWARNING    300   // sent from src to bystanders
-#define MSG_MDS_RENAMENOTIFY     301   // sent from dest to bystanders
-#define MSG_MDS_RENAMENOTIFYACK  302   // sent back to src
-#define MSG_MDS_RENAMEACK        303   // sent from src to initiator, to xlock_finish
-
-#define MSG_MDS_RENAMEPREP       304   // sent from initiator to dest auth (if dir)
-#define MSG_MDS_RENAMEREQ        305   // sent from initiator (or dest if dir) to src auth
-#define MSG_MDS_RENAME           306   // sent from src to dest, includes inode
 
 #define MSG_MDS_LOCK             500
 

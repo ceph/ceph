@@ -14,6 +14,12 @@ some smallish projects:
  - xml import/export?  
  - ?
 
+- pg monitor service
+ - to support statfs?
+ - general pg health
+ - some sort of (throttled) osd status reporting
+ - dynamic pg creation (eventually!)
+
 - SimpleMessenger
  - clean up/merge Messenger/Dispatcher interfaces
  - auto close idle connections
@@ -23,25 +29,23 @@ some smallish projects:
 - generalize monitor client?
  - throttle message resend attempts
 
-- paxos layer work
- - integrate leasing into paxos framework
- - carefully interface design...
+- ENOSPC on client, OSD
+
 
 
 code cleanup
 - endian portability
 - word size
-  - clean up all encoded structures 
+  - clean up all encoded structures
 
 general kernel planning
 - soft consistency on lookup?
+- accurate reconstruction of (syscall) path?
 
 software raid layer for EBOFS?
 - actually, we just need software raid _awareness_ in the allocator, so
   that we can write only full stripes, without fear of clobbering things on
   failure.  then use MD or similar layer provided by kernel.
-
-
 
 
 sage doc
@@ -56,25 +60,24 @@ sage doc
 
 
 sage mds
-- journal+recovery
-  - local rename
-    - how to notify replicas...
-/  - stray purge
-  - stray reintegration
-  - remote link
-    - impl remote inode xlock
-    - ESlaveUpdate replay, resolution, etc.
-  - remote unlink
-  - remote rename
-  - file capabilities i/o
+
+- hmm, should we move ESubtreeMap out of the journal?  
+  that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
+
+- extend/clean up filepath to allow paths relative to an ino
+  - fix path_traverse
+  - fix reconnect/rejoin open file weirdness
+
+- stray reintegration
+- stray purge on shutdown
+  - need to export stray crap to another mds..
+- verify stray is empty on shutdown
+
 - dirfrag split/merge
   - client readdir for dirfrags
 - consistency points/snapshots
   - dentry versions vs dirfrags...
 - statfs?
-
-- finish multistage rejoin 
-- trim_on_rejoin
 
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
@@ -85,26 +88,17 @@ sage mds
     we break commit()'s preconditions when it fetches an incomplete dir.
 
 - detect and deal with client failure
-
-- recovering open files
-  - recovery will either have inode (from EOpen), or will provide path+cap to reassert open state.
-    - path+cap window will require some fetching of metadata from disk before doing the rejoin
-  - failures during migration.. what about client stale/reap stuff and misplaced WR caps?
+  - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
 
 - inode.max_size
+- inode.allocated_size
 
 - real chdir (directory "open")
   - relative metadata ops
 
-
-
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
-- incremental mdsmaps?
-
 - EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
-- dir version/committed/etc versus migration, log expires.  
-  - DOCUMENT.
 
 - fix rmdir empty exported dirfrag race
   - export all frags <= 1 item?  then we ensure freezing before empty, avoiding any last unlink + export vs rmdir race.
@@ -115,50 +109,11 @@ sage mds
   - need to move state from replicas to auth.  simplelock doesn't currently support that.
     - ScatterLock or something?  hrm.
 
-- test open_remote_ino
-
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 
 
-
-
-
-
-
-foreign rename
-- question: can we generalize foreign and local rename?
-- initiated by dest.
-  - if we get into race with lock acquisition, drop locks and forward to new dest.
-- how to do pre-auth pinning?
-  - is it sufficient to wait on, then grab, all local auth pins, _then_ do foreign locks?
-    - local auth pins can hold subtrees in freezing state, preventing exports, and additional auth_pins.
-    - so, wait, then grab all local auth_pins,
-    - then work on locks in proper order (*),
-      - if we detect we are missing a local auth_pin (i.e. migration race), drop all auth_pins and wait/restart
-  - need to more carefully look at lock dependencies to avoid deadlock...
-    - establish a complete full ordering on locks, based on any lock dependencies?
-  - is it possible to "leak" locks, e.g. get inode_hard lock, work on something else, but inode moves and we dont notice?
-    - pin paths for those locks?
-    - can we pin when we choose order, so that locks are sure to proceed?
-- we can change active_requests to key of reqid (also unique), and use the same key for foreign locks
-  - clean up dentry_xlock_request.. just merge it into destroy_xlock_start, if !is_auth().  
-- renamer will
-  - check preconditions (i.e. i am dest)
-  - grab all locks (avoiding deadlock)
-  - verify preconditions are still true, else forward/retry (actually, this already happens w/ the way we structure the lock acquisition code...)
-  - prepare foreign bits (using foreign request_auth_pins, locks, etc.)
-    - source unlink,
-    - anchortable update (if source is anchored),
-    - dest nlink-- (if dest is remote link on foreign host)
-  - make sure replicas have either both source+dest pinned in cache (or neither...)
-    - use foreign request_pins?
-  - log update
-  - do update locally
-  - async commit + unlock
-- rejoin will need to explicitly resolve uncommitted items.
-  - fully implement link/unlink first, and use that as a model?
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably

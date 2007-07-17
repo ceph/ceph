@@ -134,12 +134,10 @@ class CDir : public MDSCacheObject {
   static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
   static const int WAIT_FREEZEABLE   = (1<<2);  // hard_pins removed
-  static const int WAIT_UNFREEZE     = (1<<3);  // unfreeze
-  static const int WAIT_AUTHPINNABLE = WAIT_UNFREEZE;
-  static const int WAIT_IMPORTED     = (1<<4);  // import finish
-  //static const int WAIT_SINGLEAUTH   = (1<<5); 
+  static const int WAIT_UNFREEZE     = WAIT_AUTHPINNABLE;  // unfreeze
+  static const int WAIT_IMPORTED     = (1<<3);  // import finish
 
-  static const int WAIT_DNLOCK_OFFSET = 6;
+  static const int WAIT_DNLOCK_OFFSET = 4;
 
   static const int WAIT_ANY  = (0xffffffff);
   static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
@@ -159,16 +157,19 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
- protected:
+protected:
   // contents
   CDir_map_t       items;              // non-null AND null
   size_t           nitems;             // # non-null
   size_t           nnull;              // # null
 
+  int num_dirty;
+
   // state
   version_t       version;
   version_t       committing_version;
   version_t       committed_version;
+  version_t       committed_version_equivalent;  // in case of, e.g., temporary file
   version_t       projected_version; 
 
   // lock nesting, freeze
@@ -213,13 +214,17 @@ class CDir : public MDSCacheObject {
   }
   size_t get_nitems() { return nitems; }
   size_t get_nnull() { return nnull; }
-
-  /*
-  float get_popularity() {
-    return popularity[0].get();
-  }
-  */
   
+  void inc_num_dirty() { num_dirty++; }
+  void dec_num_dirty() { 
+    assert(num_dirty > 0);
+    num_dirty--; 
+  }
+  int get_num_dirty() {
+    return num_dirty;
+  }
+
+  void try_remove_unlinked_dn(CDentry *dn);
 
   // -- dentries and inodes --
  public:
@@ -231,8 +236,8 @@ class CDir : public MDSCacheObject {
       return iter->second;
   }
 
-  CDentry* add_dentry( const string& dname, CInode *in=0, bool auth=true );
-  CDentry* add_dentry( const string& dname, inodeno_t ino, bool auth=true );
+  CDentry* add_dentry( const string& dname, CInode *in=0 );
+  CDentry* add_dentry( const string& dname, inodeno_t ino );
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_inode( CDentry *dn, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );
@@ -320,6 +325,7 @@ class CDir : public MDSCacheObject {
   version_t get_projected_version() { return projected_version; }
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
+  version_t get_committed_version_equivalent() { return committed_version_equivalent; }
   void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty(version_t min=0);
@@ -417,6 +423,7 @@ public:
 
 
 
+  ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 };
 

@@ -29,6 +29,11 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") "
 
+ostream& CDentry::print_db_line_prefix(ostream& out) 
+{
+  return out << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+}
+
 
 // CDentry
 
@@ -57,6 +62,8 @@ ostream& operator<<(ostream& out, CDentry& dn)
   out << " pv=" << dn.get_projected_version();
 
   out << " inode=" << dn.get_inode();
+
+  if (dn.is_new()) out << " state=new";
 
   if (dn.get_num_ref()) {
     out << " |";
@@ -98,6 +105,17 @@ pair<int,int> CDentry::authority()
 }
 
 
+void CDentry::add_waiter(int tag, Context *c)
+{
+  // wait on the directory?
+  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+    dir->add_waiter(tag, c);
+    return;
+  }
+  MDSCacheObject::add_waiter(tag, c);
+}
+
+
 version_t CDentry::pre_dirty(version_t min)
 {
   projected_version = dir->pre_dirty(min);
@@ -111,6 +129,7 @@ void CDentry::_mark_dirty()
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
+    dir->inc_num_dirty();
     get(PIN_DIRTY);
   }
 }
@@ -128,19 +147,27 @@ void CDentry::mark_dirty(version_t pv)
   dir->mark_dirty(pv);
 }
 
-void CDentry::mark_clean() {
+
+void CDentry::mark_clean() 
+{
   dout(10) << " mark_clean " << *this << endl;
   assert(is_dirty());
   assert(version <= dir->get_version());
 
-  // this happens on export.
-  //assert(version <= dir->get_last_committed_version());  
-
   // state+pin
   state_clear(STATE_DIRTY);
+  dir->dec_num_dirty();
   put(PIN_DIRTY);
+  
+  if (state_test(STATE_NEW)) 
+    state_clear(STATE_NEW);
 }    
 
+void CDentry::mark_new() 
+{
+  dout(10) << " mark_new " << *this << endl;
+  state_set(STATE_NEW);
+}
 
 void CDentry::make_path(string& s)
 {
@@ -150,6 +177,21 @@ void CDentry::make_path(string& s)
     s = "???";
   }
   s += "/";
+  s += name;
+}
+
+void CDentry::make_path(string& s, inodeno_t tobase)
+{
+  assert(dir);
+  
+  if (dir->inode->is_root()) {
+    s += "/";  // make it an absolute path (no matter what) if we hit the root.
+  } 
+  else if (dir->inode->get_parent_dn() &&
+	   dir->inode->ino() != tobase) {
+    dir->inode->get_parent_dn()->make_path(s, tobase);
+    s += "/";
+  }
   s += name;
 }
 
@@ -196,19 +238,84 @@ CDentryDiscover *CDentry::replicate_to(int who)
 
 
 // ----------------------------
+// auth pins
+
+bool CDentry::can_auth_pin()
+{
+  assert(dir);
+  return dir->can_auth_pin();
+}
+
+void CDentry::auth_pin()
+{
+  assert(dir);
+  dir->auth_pin();
+}
+
+void CDentry::auth_unpin()
+{
+  assert(dir);
+  dir->auth_unpin();
+}
+
+
+// ----------------------------
 // locking
 
-void CDentry::set_mlock_info(MLock *m) 
+void CDentry::set_object_info(MDSCacheObjectInfo &info) 
 {
-  m->set_dn(dir->dirfrag(), name);
+  info.dirfrag = dir->dirfrag();
+  info.dname = name;
 }
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
-  
+  // null, ino, or remote_ino?
+  int c;
+  if (is_primary()) {
+    c = 1;
+    ::_encode(c, bl);
+    ::_encode(inode->inode.ino, bl);
+  }
+  else if (is_remote()) {
+    c = 2;
+    ::_encode(c, bl);
+    ::_encode(remote_ino, bl);
+  }
+  else if (is_null()) {
+    // encode nothing.
+  }
+  else assert(0);  
 }
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
-{
+{  
+  if (bl.length() == 0) {
+    // null
+    assert(is_null());
+    return;
+  }
 
+  int off = 0;
+  char c;
+  inodeno_t ino;
+  ::_decode(c, bl, off);
+
+  switch (c) {
+  case 1:
+  case 2:
+    _decode(ino, bl, off);
+    // newly linked?
+    if (is_null() && !is_auth()) {
+      // force trim from cache!
+      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << endl;
+      //assert(get_num_ref() == 0);
+    } else {
+      // verify?
+      
+    }
+    break;
+  default: 
+    assert(0);
+  }
 }

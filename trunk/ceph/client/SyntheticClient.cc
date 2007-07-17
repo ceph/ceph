@@ -1360,6 +1360,78 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
+  if (1) {
+    // open some files
+    srand(0);
+    for (int i=0; i<20; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      char src[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      int fd = client->open(src, O_RDONLY);
+    }
+
+    return;
+  }
+
+  if (0) {
+    // rename fun
+    for (int i=0; i<100; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      int d = rand() % s;
+      int e = rand() % s;
+      int f = rand() % s;
+      char src[80];
+      char dst[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      sprintf(dst, "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
+      client->rename(src, dst);
+    }
+    return;
+  }
+
+  if (1) {
+    // link fun
+    srand(0);
+    for (int i=0; i<100; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      int d = rand() % s;
+      int e = rand() % s;
+      int f = rand() % s;
+      char src[80];
+      char dst[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      client->link(src, dst);
+    }
+    srand(0);
+    for (int i=0; i<100; i++) {
+      int s = 5;
+      int a = rand() % s;
+      int b = rand() % s;
+      int c = rand() % s;
+      int d = rand() % s;
+      int e = rand() % s;
+      int f = rand() % s;
+      char src[80];
+      char dst[80];
+      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      client->unlink(dst);
+    }
+
+    
+    return;
+  }
+
   // link fun
   client->mknod("one", 0755);
   client->mknod("two", 0755);
@@ -1425,6 +1497,82 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	  << endl;
 
   if (time_to_stop()) return 0;
+
+  for (int k=0; k<n; k++) {
+
+    if (rand() % 10 == 0) {
+      // rename some directories.  whee!
+      int dep = (rand() % depth) + 1;
+      string src = basedir;
+      {
+	char t[80];
+	for (int d=0; d<dep; d++) {
+	  int a = rand() % dirs;
+	  sprintf(t, "/dir.%d", a);
+	  src += t;
+	}
+      }
+      string dst = basedir;
+      {
+	char t[80];
+	for (int d=0; d<dep; d++) {
+	  int a = rand() % dirs;
+	  sprintf(t, "/dir.%d", a);
+	  dst += t;
+	}
+      }
+      
+      if (client->rename(dst.c_str(), "/tmp") == 0) {
+	client->rename(src.c_str(), dst.c_str());
+	client->rename("/tmp", src.c_str());
+      }
+      continue;
+    } 
+
+    // pick a dest dir
+    string src = basedir;
+    {
+      char t[80];
+      for (int d=0; d<depth; d++) {
+	int a = rand() % dirs;
+	sprintf(t, "/dir.%d", a);
+	src += t;
+      }
+      int a = rand() % files;
+      sprintf(t, "/file.%d", a);
+      src += t;
+    }
+    string dst = basedir;
+    {
+      char t[80];
+      for (int d=0; d<depth; d++) {
+	int a = rand() % dirs;
+	sprintf(t, "/dir.%d", a);
+	dst += t;
+      }
+      int a = rand() % files;
+      sprintf(t, "/file.%d", a);
+      dst += t;
+    }
+
+    int o = rand() % 4;
+    switch (o) {
+    case 0: 
+      client->mknod(src.c_str(), 0755); 
+      client->rename(src.c_str(), dst.c_str()); 
+      break;
+    case 1: 
+      client->mknod(src.c_str(), 0755); 
+      client->unlink(dst.c_str());
+      client->link(src.c_str(), dst.c_str()); 
+      break;
+    case 2: client->unlink(src.c_str()); break;
+    case 3: client->unlink(dst.c_str()); break;
+      //case 4: client->mknod(src.c_str(), 0755); break;
+      //case 5: client->mknod(dst.c_str(), 0755); break;
+    }
+  }
+  return 0;
  
   // now link shit up
   for (int i=0; i<n; i++) {

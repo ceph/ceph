@@ -64,11 +64,15 @@ bool      awake = false;
 bool      fm_shutdown = false;
 pthread_t thread_id;
 
-
-
+extern std::map<entity_name_t,float> g_fake_kill_after;  // in config.cc
+utime_t start_time;
+map<utime_t,entity_name_t> fail_queue;
+list<Message*> sent_to_failed_queue;
 
 void *fakemessenger_thread(void *ptr) 
 {
+  start_time = g_clock.now();
+  
   lock.Lock();
   while (1) {
     if (fm_shutdown) break;
@@ -112,6 +116,8 @@ void fakemessenger_wait()
 }
 
 
+// fake failure
+
 
 
 // lame main looper
@@ -136,6 +142,48 @@ int fakemessenger_do_loop_2()
     bool didone = false;
     
     dout(18) << "do_loop top" << endl;
+
+    // fail_queue
+    while (!fail_queue.empty() && 
+	   fail_queue.begin()->first < g_clock.now()) {
+      entity_name_t nm = fail_queue.begin()->second;
+      fail_queue.erase(fail_queue.begin());
+
+      dout(0) << "MUST FAKE KILL " << nm << endl;
+      
+      for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
+	   p != directory.end();
+	   ++p) {
+	if (p->second->get_myname() == nm) {
+	  dout(0) << "FAKING FAILURE of " << nm << " at " << p->first << endl;
+	  directory.erase(p);
+	  p->second->failed = true;
+	  break;
+	}
+      }
+    }
+
+    list<Message*> ls;
+    ls.swap(sent_to_failed_queue);
+    for (list<Message*>::iterator p = ls.begin();
+	 p != ls.end();
+	 ++p) {
+      Message *m = *p;
+      FakeMessenger *mgr = directory[m->get_source_addr()];
+      Dispatcher *dis = 0;
+      if (mgr) dis = mgr->get_dispatcher();
+      if (dis) {
+	dout(1) << "fail on " << *m 
+		<< " to " << m->get_dest() << " from " << m->get_source()
+		<< ", passing back to sender." << endl;
+	dis->ms_handle_failure(m, m->get_dest_inst());
+      } else {
+	dout(1) << "fail on " << *m
+		<< " to " << m->get_dest() << " from " << m->get_source()
+		<< ", sender gone, dropping." << endl;
+	delete m;
+      }
+    }
 
     // messages
     map<entity_addr_t, FakeMessenger*>::iterator it = directory.begin();
@@ -214,6 +262,8 @@ int fakemessenger_do_loop_2()
 
 FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
 {
+  failed = false;
+
   lock.Lock();
   {
     // assign rank
@@ -224,6 +274,14 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
 
     // add to directory
     directory[ _myinst.addr ] = this;
+    
+    // put myself in the fail queue?
+    if (g_fake_kill_after.count(me)) {
+      utime_t w = start_time;
+      w += g_fake_kill_after[me];
+      dout(0) << "will fake failure of " << me << " at " << w << endl;
+      fail_queue[w] = me;
+    }
   }
   lock.Unlock();
 
@@ -284,6 +342,14 @@ void FakeMessenger::reset_myname(entity_name_t m)
   _myinst.name = m;
   directory[_myinst.addr] = this;
   
+  // put myself in the fail queue?
+  if (g_fake_kill_after.count(m)) {
+    utime_t w = start_time;
+    w += g_fake_kill_after[m];
+    dout(0) << "will fake failure of " << m << " at " << w << endl;
+    fail_queue[w] = m;
+  }
+
 }
 
 
@@ -323,10 +389,11 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
     for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
 	 p != directory.end();
 	 ++p) {
-      dout(0) << "** have " << p->first << " to " << p->second << endl;
+      dout(20) << "** have " << p->first << " to " << p->second << endl;
     }
-    //assert(dm);
-    delete m;
+
+    // do the failure callback
+    sent_to_failed_queue.push_back(m);
   }
 
   // wake up loop?

@@ -24,9 +24,6 @@
 #define LOCK_AC_MIXED       -2
 #define LOCK_AC_LOCK        -3
 
-#define LOCK_AC_REQXLOCKACK -4  // req dentry xlock
-#define LOCK_AC_REQXLOCKNAK -5  // req dentry xlock
-
 #define LOCK_AC_SCATTER     -6
 
 // for auth
@@ -34,40 +31,45 @@
 #define LOCK_AC_MIXEDACK     2
 #define LOCK_AC_LOCKACK      3
 
-#define LOCK_AC_REQREAD      4
-#define LOCK_AC_REQWRITE     5
-
-#define LOCK_AC_REQXLOCK     6
-#define LOCK_AC_UNXLOCK      7
-#define LOCK_AC_FINISH       8
-
+#define LOCK_AC_REQSCATTER   7
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
 
 
+static const char *get_lock_action_name(int a) {
+  switch (a) {
+  case LOCK_AC_SYNC: return "sync";
+  case LOCK_AC_MIXED: return "mixed";
+  case LOCK_AC_LOCK: return "lock";
+  case LOCK_AC_SCATTER: return "scatter";
+  case LOCK_AC_SYNCACK: return "syncack";
+  case LOCK_AC_MIXEDACK: return "mixedack";
+  case LOCK_AC_LOCKACK: return "lockack";
+  case LOCK_AC_REQSCATTER: return "reqscatter";
+  default: assert(0); 
+  }
+}
+
+
 class MLock : public Message {
   int       asker;  // who is initiating this request
   int       action;  // action type
-
-  char      otype;  // lock object type
-  inodeno_t ino;    // ino ref, or possibly
-  dirfrag_t dirfrag;
-  string    dn;     // dentry name
-  
   metareqid_t reqid;  // for remote lock requests
+
+  char      lock_type;  // lock object type
+  MDSCacheObjectInfo object_info;  
   
   bufferlist data;  // and possibly some data
 
  public:
-  inodeno_t get_ino() { return ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_dn() { return dn; }
   bufferlist& get_data() { return data; }
   int get_asker() { return asker; }
   int get_action() { return action; }
-  int get_otype() { return otype; }
   metareqid_t get_reqid() { return reqid; }
+
+  int get_lock_type() { return lock_type; }
+  MDSCacheObjectInfo &get_object_info() { return object_info; }
 
   MLock() {}
   MLock(int action, int asker) :
@@ -77,45 +79,27 @@ class MLock : public Message {
   }
   MLock(SimpleLock *lock, int action, int asker) :
     Message(MSG_MDS_LOCK) {
-    this->otype = lock->get_type();
-    lock->get_parent()->set_mlock_info(this);
+    this->lock_type = lock->get_type();
+    lock->get_parent()->set_object_info(object_info);
     this->action = action;
     this->asker = asker;
   }
   MLock(SimpleLock *lock, int action, int asker, bufferlist& bl) :
     Message(MSG_MDS_LOCK) {
-    this->otype = lock->get_type();
-    lock->get_parent()->set_mlock_info(this);
+    this->lock_type = lock->get_type();
+    lock->get_parent()->set_object_info(object_info);
     this->action = action;
     this->asker = asker;
     data.claim(bl);
   }
   virtual char *get_type_name() { return "ILock"; }
   void print(ostream& out) {
-    out << "lock(a=" << action 
-	<< " " << ino
-	<< " " << get_lock_type_name(otype)
+    out << "lock(a=" << get_lock_action_name(action)
+	<< " " << get_lock_type_name(lock_type)
+	<< " " << object_info
 	<< ")";
   }
   
-  void set_ino(inodeno_t ino, char ot) {
-    otype = ot;
-    this->ino = ino;
-  }
-  void set_ino(inodeno_t ino) {
-    this->ino = ino;
-  }
-  /*
-  void set_dirfrag(dirfrag_t df) {
-    otype = LOCK_OTYPE_DIR;
-    this->dirfrag = df;
-  }
-  */
-  void set_dn(dirfrag_t df, const string& dn) {
-    otype = LOCK_OTYPE_DN;
-    this->dirfrag = df;
-    this->dn = dn;
-  }
   void set_reqid(metareqid_t ri) { reqid = ri; }
   void set_data(const bufferlist& data) {
     this->data = data;
@@ -123,23 +107,19 @@ class MLock : public Message {
   
   void decode_payload() {
     int off = 0;
-    ::_decode(action, payload, off);
     ::_decode(asker, payload, off);
-    ::_decode(otype, payload, off);
-    ::_decode(ino, payload, off);
-    ::_decode(dirfrag, payload, off);
+    ::_decode(action, payload, off);
     ::_decode(reqid, payload, off);
-    ::_decode(dn, payload, off);
+    ::_decode(lock_type, payload, off);
+    object_info._decode(payload, off);
     ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
-    ::_encode(action, payload);
     ::_encode(asker, payload);
-    ::_encode(otype, payload);
-    ::_encode(ino, payload);
-    ::_encode(dirfrag, payload);
+    ::_encode(action, payload);
     ::_encode(reqid, payload);
-    ::_encode(dn, payload);
+    ::_encode(lock_type, payload);
+    object_info._encode(payload);
     ::_encode(data, payload);
   }
 

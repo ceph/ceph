@@ -28,7 +28,9 @@ class MDentryUnlink : public Message {
   CDirDiscover *straydir;
   CDentryDiscover *straydn;
 
-  MDentryUnlink() {}
+  MDentryUnlink() :
+    Message(MSG_MDS_DENTRYUNLINK),
+    strayin(0), straydir(0), straydn(0) { }
   MDentryUnlink(dirfrag_t df, string& n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),

@@ -112,12 +112,19 @@ class MDS : public Dispatcher {
   // -- MDS state --
   int state;         // my confirmed state
   int want_state;    // the state i want
-  list<Context*> waitfor_active;
+
+  list<Context*> waiting_for_active;
+  map<int, list<Context*> > waiting_for_active_peer;
 
   map<int,version_t> peer_mdsmap_epoch;
 
  public:
-  void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
+  void wait_for_active(Context *c) { 
+    waiting_for_active.push_back(c); 
+  }
+  void wait_for_active_peer(int who, Context *c) { 
+    waiting_for_active_peer[who].push_back(c);
+  }
 
   bool is_dne()      { return state == MDSMap::STATE_DNE; }
   bool is_failed()   { return state == MDSMap::STATE_FAILED; }
@@ -149,17 +156,43 @@ class MDS : public Dispatcher {
   version_t               beacon_last_seq;          // last seq sent to monitor
   map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
-  Context *beacon_sender;
-  Context *beacon_killer;                           // next scheduled time of death
+
+  class C_MDS_BeaconSender : public Context {
+    MDS *mds;
+  public:
+    C_MDS_BeaconSender(MDS *m) : mds(m) {}
+    void finish(int r) {
+      mds->beacon_sender = 0;
+      mds->beacon_send();
+    }
+  } *beacon_sender;
+  class C_MDS_BeaconKiller : public Context {
+    MDS *mds;
+    utime_t lab;
+  public:
+    C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
+    void finish(int r) {
+      mds->beacon_killer = 0;
+      mds->beacon_kill(lab);
+    }
+  } *beacon_killer;
 
   // tick and other timer fun
-  Context *tick_event;
+  class C_MDS_Tick : public Context {
+    MDS *mds;
+  public:
+    C_MDS_Tick(MDS *m) : mds(m) {}
+    void finish(int r) {
+      mds->tick_event = 0;
+      mds->tick();
+    }
+  } *tick_event;
   void     reset_tick();
 
   // -- client map --
   ClientMap    clientmap;
   epoch_t      last_client_mdsmap_bcast;
-  void log_clientmap(Context *c);
+  //void log_clientmap(Context *c);
 
 
   // shutdown crap
@@ -183,10 +216,16 @@ class MDS : public Dispatcher {
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
   void forward_message_mds(Message *req, int mds, int port=0);
 
+  void send_message_client(Message *m, int client);
+  void send_message_client(Message *m, entity_inst_t clientinst);
+  void send_message_client_maybe_open(Message *m, entity_inst_t clientinst);
+
 
   // start up, shutdown
   int init(bool standby=false);
   void reopen_logger();
+
+  void bcast_mds_map();  // to mounted clients
 
   void boot();
   void boot_create();             // i am new mds.
@@ -194,9 +233,20 @@ class MDS : public Dispatcher {
   void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
   void boot_finish();
 
-  void bcast_mds_map();  // to mounted clients
+  void replay_start();
+  void replay_done();
+  void resolve_start();
+  void resolve_done();
+  void reconnect_start();
+  void reconnect_done();
+  void rejoin_joint_start();
+  void rejoin_done();
+  void recovery_done();
+  void handle_mds_recovery(int who);
 
-  int shutdown_start();
+  void shutdown_start();
+  void stopping_start();
+  void stopping_done();
   int shutdown_final();
 
   void tick();

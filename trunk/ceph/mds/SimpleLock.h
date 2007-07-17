@@ -20,17 +20,19 @@
 // NOTE: this also defines the lock ordering!
 #define LOCK_OTYPE_DN       1
 
-#define LOCK_OTYPE_IFILE    2
-#define LOCK_OTYPE_IAUTH    3
-#define LOCK_OTYPE_ILINK    4
-#define LOCK_OTYPE_IDIRFRAGTREE 5
-#define LOCK_OTYPE_IDIR     6
+#define LOCK_OTYPE_IVERSION 2
+#define LOCK_OTYPE_IFILE    3
+#define LOCK_OTYPE_IAUTH    4
+#define LOCK_OTYPE_ILINK    5
+#define LOCK_OTYPE_IDIRFRAGTREE 6
+#define LOCK_OTYPE_IDIR     7
 
 //#define LOCK_OTYPE_DIR      7  // not used
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
   case LOCK_OTYPE_DN: return "dn";
+  case LOCK_OTYPE_IVERSION: return "iversion";
   case LOCK_OTYPE_IFILE: return "ifile";
   case LOCK_OTYPE_IAUTH: return "iauth";
   case LOCK_OTYPE_ILINK: return "ilink";
@@ -41,6 +43,7 @@ inline const char *get_lock_type_name(int t) {
 }
 
 // -- lock states --
+// sync <-> lock
 #define LOCK_UNDEF    0
 //                               auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
@@ -65,10 +68,11 @@ class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
   static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_SINGLEAUTH  = (1<<2);
-  static const int WAIT_STABLE      = (1<<3);  // for a stable state
-  static const int WAIT_REMOTEXLOCK = (1<<4);  // for a remote xlock
-  static const int WAIT_BITS        = 5;
+  static const int WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const int WAIT_STABLE      = (1<<2);  // for a stable state
+  static const int WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
+  static const int WAIT_BITS        = 4;
+  static const int WAIT_ALL         = ((1<<WAIT_BITS)-1);
 
 protected:
   // parent (what i lock)
@@ -77,11 +81,11 @@ protected:
   int wait_offset;
 
   // lock state
-  int           state;
-  set<__int32_t> gather_set;  // auth
+  int state;
+  set<int32_t> gather_set;  // auth
 
   // local state
-  int        num_rdlock;
+  int num_rdlock;
   MDRequest *xlock_by;
 
 public:
@@ -97,8 +101,16 @@ public:
 
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
-      if (l->type < r->type) return true;
-      if (l->type == r->type) return l->parent->is_lt(r->parent);
+      // first sort by object type (dn < inode)
+      if ((l->type>LOCK_OTYPE_DN) <  (r->type>LOCK_OTYPE_DN)) return true;
+      if ((l->type>LOCK_OTYPE_DN) == (r->type>LOCK_OTYPE_DN)) {
+	// then sort by object
+	if (l->parent->is_lt(r->parent)) return true;
+	if (l->parent == r->parent) {
+	  // then sort by (inode) lock type
+	  if (l->type < r->type) return true;
+	}
+      }
       return false;
     }
   };
@@ -111,6 +123,9 @@ public:
   }
   void finish_waiters(int mask, int r=0) {
     parent->finish_waiting(mask << wait_offset, r);
+  }
+  void take_waiting(int mask, list<Context*>& ls) {
+    parent->take_waiting(mask << wait_offset, ls);
   }
   void add_waiter(int mask, Context *c) {
     parent->add_waiter(mask << wait_offset, c);
@@ -154,22 +169,32 @@ public:
 
   // ref counting
   bool is_rdlocked() { return num_rdlock > 0; }
-  int get_rdlock() { return ++num_rdlock; }
+  int get_rdlock() { 
+    if (!num_rdlock) parent->get(MDSCacheObject::PIN_LOCK);
+    return ++num_rdlock; 
+  }
   int put_rdlock() {
     assert(num_rdlock>0);
-    return --num_rdlock;
+    --num_rdlock;
+    if (num_rdlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+    return num_rdlock;
   }
   int get_num_rdlocks() { return num_rdlock; }
 
   void get_xlock(MDRequest *who) { 
     assert(xlock_by == 0);
+    parent->get(MDSCacheObject::PIN_LOCK);
     xlock_by = who; 
   }
   void put_xlock() {
     assert(xlock_by);
+    parent->put(MDSCacheObject::PIN_LOCK);
     xlock_by = 0;
   }
   bool is_xlocked() { return xlock_by ? true:false; }
+  bool is_xlocked_by_other(MDRequest *mdr) {
+    return is_xlocked() && xlock_by != mdr;
+  }
   MDRequest *get_xlocked_by() { return xlock_by; }
   bool is_used() {
     return is_xlocked() || is_rdlocked();
@@ -199,6 +224,11 @@ public:
     }
     return 0;
   }
+  void export_twiddle() {
+    clear_gather();
+    state = get_replica_state();
+  }
+
   /** replicate_relax
    * called on first replica creation.
    */
@@ -223,21 +253,22 @@ public:
       if (!is_gathering())
 	return true;
     }
+    if (!is_stable() && !is_gathering())
+      return true;
     return false;
   }
 
   bool can_rdlock(MDRequest *mdr) {
-    if (state == LOCK_SYNC)
-      return true;
-    if (state == LOCK_LOCK && mdr && xlock_by == mdr)
-      return true;
-    return false;
+    //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
+    //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
+    return (state == LOCK_SYNC);
   }
   bool can_xlock(MDRequest *mdr) {
-    if (!parent->is_auth()) return false;
-    if (state != LOCK_LOCK) return false;
-    if (xlock_by == 0 || 
-	(mdr && xlock_by == mdr)) return true;
+    if (mdr && xlock_by == mdr) {
+      assert(state == LOCK_LOCK);
+      return true; // auth or replica!  xlocked by me.
+    }
+    if (state == LOCK_LOCK && parent->is_auth() && !xlock_by) return true;
     return false;
   }
   bool can_xlock_soon() {
@@ -255,7 +286,7 @@ public:
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())
-      out << " w=" << get_xlocked_by();
+      out << " x=" << get_xlocked_by();
     out << ")";
   }
 };

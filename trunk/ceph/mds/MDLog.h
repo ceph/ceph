@@ -92,20 +92,23 @@ class MDLog {
 
 
 
-  // -- importmaps --
-  off_t  last_import_map;   // offsets of last committed importmap.  constrains trimming.
-  list<Context*> import_map_expire_waiters;
-  bool writing_import_map;  // one is being written now
-  bool seen_import_map;     // for recovery
+  // -- subtreemaps --
+  off_t  last_subtree_map;   // offsets of last committed subtreemap.  constrains trimming.
+  list<Context*> subtree_map_expire_waiters;
+  bool writing_subtree_map;  // one is being written now
+  bool seen_subtree_map;     // for recovery
 
-  friend class EImportMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
   void init_journaler();
  public:
-  void add_import_map_expire_waiter(Context *c) {
-    import_map_expire_waiters.push_back(c);
+  off_t get_last_subtree_map_offset() { return last_subtree_map; }
+  void add_subtree_map_expire_waiter(Context *c) {
+    subtree_map_expire_waiters.push_back(c);
+  }
+  void take_subtree_map_expire_waiters(list<Context*>& ls) {
+    ls.splice(ls.end(), subtree_map_expire_waiters);
   }
 
 
@@ -124,8 +127,8 @@ class MDLog {
 		  logger(0),
 		  trim_reading(false), waiting_for_read(false),
 		  replay_thread(this),
-		  last_import_map(0),
-		  writing_import_map(false), seen_import_map(false) {
+		  last_subtree_map(0),
+		  writing_subtree_map(false), seen_subtree_map(false) {
   }		  
   ~MDLog();
 
@@ -135,7 +138,7 @@ class MDLog {
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }
   size_t get_num_events() { return num_events + trimming.size(); }
-  size_t get_non_importmap_events() { return num_events + trimming.size() - import_map_expire_waiters.size(); }
+  size_t get_non_subtreemap_events() { return num_events + trimming.size() - subtree_map_expire_waiters.size(); }
 
   off_t get_read_pos();
   off_t get_write_pos();
@@ -147,7 +150,7 @@ class MDLog {
   void cap() { 
     capped = true;
     list<Context*> ls;
-    ls.swap(import_map_expire_waiters);
+    ls.swap(subtree_map_expire_waiters);
     finish_contexts(ls);
   }
 

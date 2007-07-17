@@ -289,12 +289,6 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   pending_inc.mon_epoch = mon->mon_epoch;
   
   // tell me about it
-  for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
-       i != pending_inc.new_up.end(); 
-       i++) { 
-    dout(0) << " osd" << i->first << " UP " << i->second << endl;
-    derr(0) << " osd" << i->first << " UP " << i->second << endl;
-  }
   for (map<int,entity_inst_t>::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
        i++) {
@@ -302,17 +296,23 @@ void OSDMonitor::encode_pending(bufferlist &bl)
     derr(0) << " osd" << i->first << " DOWN " << i->second << endl;
     mon->messenger->mark_down(i->second.addr);
   }
-  for (list<int>::iterator i = pending_inc.new_in.begin();
-       i != pending_inc.new_in.end();
-       i++) {
-    dout(0) << " osd" << *i << " IN" << endl;
-    derr(0) << " osd" << *i << " IN" << endl;
+  for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
+       i != pending_inc.new_up.end(); 
+       i++) { 
+    dout(0) << " osd" << i->first << " UP " << i->second << endl;
+    derr(0) << " osd" << i->first << " UP " << i->second << endl;
   }
   for (list<int>::iterator i = pending_inc.new_out.begin();
        i != pending_inc.new_out.end();
        i++) {
     dout(0) << " osd" << *i << " OUT" << endl;
     derr(0) << " osd" << *i << " OUT" << endl;
+  }
+  for (list<int>::iterator i = pending_inc.new_in.begin();
+       i != pending_inc.new_in.end();
+       i++) {
+    dout(0) << " osd" << *i << " IN" << endl;
+    derr(0) << " osd" << *i << " IN" << endl;
   }
 
   // encode

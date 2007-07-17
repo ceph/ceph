@@ -84,6 +84,7 @@ class MClientRequest : public Message {
 
     int op;
     int caller_uid, caller_gid;
+    inodeno_t cwd_ino;
   } st;
 
   // path arguments
@@ -229,6 +230,8 @@ class MClientRequest : public Message {
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return st.mds_wants_replica_in_dirino; }
 
+  inodeno_t get_cwd_ino() { return st.cwd_ino ? st.cwd_ino:inodeno_t(MDS_INO_ROOT); }
+
   void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(st), (char*)&st);
@@ -250,7 +253,7 @@ class MClientRequest : public Message {
   void print(ostream& out) {
     out << "clientreq(client" << get_client() 
 	<< "." << get_tid() 
-	<< ":";
+	<< " ";
     switch(get_op()) {
     case MDS_OP_STATFS: 
       out << "statfs"; break;
@@ -299,7 +302,7 @@ class MClientRequest : public Message {
       assert(0);
     }
     if (get_path().length()) 
-      out << "=" << get_path();
+      out << " " << get_path();
     if (get_sarg().length())
       out << " " << get_sarg();
     if (st.retry_attempt)

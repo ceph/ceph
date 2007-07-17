@@ -23,9 +23,6 @@
 
 class MDS;
 
-#define IDTYPE_INO 1
-typedef inodeno_t idno_t;
-
 class IdAllocator {
   MDS *mds;
   inode_t inode;
@@ -38,7 +35,7 @@ class IdAllocator {
 
   version_t version, committing_version, committed_version;
 
-  interval_set<idno_t> free;   // unused ids
+  interval_set<inodeno_t> free;   // unused ids
   
   map<version_t, list<Context*> > waitfor_save;
 
@@ -53,8 +50,8 @@ class IdAllocator {
   void init_inode();
 
   // alloc or reclaim ids
-  idno_t alloc_id(bool replay=false);
-  void reclaim_id(idno_t id, bool replay=false);
+  inodeno_t alloc_id();
+  void reclaim_id(inodeno_t ino);
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }

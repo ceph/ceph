@@ -35,6 +35,8 @@ class FakeMessenger : public Messenger {
   entity_inst_t _myinst;
 
  public:
+  bool failed;
+
   FakeMessenger(entity_name_t me);
   ~FakeMessenger();
 
@@ -76,6 +78,12 @@ class FakeMessenger : public Messenger {
   int num_incoming() {
     //return incoming.size();
     return qlen;
+  }
+
+  void suicide() {
+    if (!failed) {
+      failed = true;
+    }
   }
 
 };

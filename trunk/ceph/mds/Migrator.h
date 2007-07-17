@@ -60,6 +60,19 @@ public:
   const static int EXPORT_LOGGINGFINISH = 7;  // logging EExportFinish
   const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
   const static int EXPORT_ABORTING      = 9;  // notifying bystanders of abort
+  static const char *get_export_statename(int s) {
+    switch (s) {
+    case EXPORT_DISCOVERING: return "discovering";
+    case EXPORT_FREEZING: return "freezing";
+    case EXPORT_PREPPING: return "prepping";
+    case EXPORT_WARNING: return "warning";
+    case EXPORT_EXPORTING: return "exporting";
+    case EXPORT_LOGGINGFINISH: return "loggingfinish";
+    case EXPORT_NOTIFYING: return "notifying";
+    case EXPORT_ABORTING: return "aborting";
+    default: assert(0); return 0;
+    }
+  }
 
 protected:
   // export fun
@@ -83,6 +96,18 @@ public:
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
   //const static int IMPORT_LOGGINGFINISH = 7; // logging EImportFinish
   const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
+  static const char *get_import_statename(int s) {
+    switch (s) {
+    case IMPORT_DISCOVERING: return "discovering";
+    case IMPORT_DISCOVERED: return "discovered";
+    case IMPORT_PREPPING: return "prepping";
+    case IMPORT_PREPPED: return "prepped";
+    case IMPORT_LOGGINGSTART: return "loggingstart";
+    case IMPORT_ACKING: return "acking";
+    case IMPORT_ABORTING: return "aborting";
+    default: assert(0); return 0;
+    }
+  }
 
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
@@ -107,6 +132,8 @@ public:
 
   void dispatch(Message*);
 
+  void show_importing();
+  void show_exporting();
   
   // -- status --
   int is_exporting(CDir *dir) {
@@ -153,7 +180,7 @@ public:
 
 
   // -- misc --
-  void handle_mds_failure(int who);
+  void handle_mds_failure_or_stop(int who);
 
   void audit();
 
@@ -163,8 +190,14 @@ public:
   void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
 
-  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
+  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
+			   map<int,entity_inst_t>& exported_client_map);
+  int encode_export_dir(list<bufferlist>& dirstatelist,
+			class C_Contexts *fin,
+			CDir *basedir,
+			CDir *dir,
+			int newauth, 
+			map<int,entity_inst_t>& exported_client_map);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);
@@ -176,11 +209,6 @@ public:
   void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
-  int encode_export_dir(list<bufferlist>& dirstatelist,
-                      class C_Contexts *fin,
-                      CDir *basedir,
-                      CDir *dir,
-                      int newauth);
   void export_reverse(CDir *dir);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
@@ -197,11 +225,15 @@ public:
   void import_discovered(CInode *in, dirfrag_t df);
   void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
+
+public:
+  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, 
+			   map<int,entity_inst_t>& imported_client_map);
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
-			EImportStart *le);
-
+			EImportStart *le, 
+			map<int,entity_inst_t>& imported_client_map);
 
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);

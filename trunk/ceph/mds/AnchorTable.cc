@@ -85,11 +85,10 @@ void AnchorTable::inc(inodeno_t ino)
 void AnchorTable::dec(inodeno_t ino) 
 {
   dout(7) << "dec " << ino << endl;
-
   assert(anchor_map.count(ino));
-  Anchor &anchor = anchor_map[ino];
 
   while (true) {
+    Anchor &anchor = anchor_map[ino];
     anchor.nref--;
       
     if (anchor.nref == 0) {
@@ -104,7 +103,6 @@ void AnchorTable::dec(inodeno_t ino)
     
     if (ino == 0) break;
     if (anchor_map.count(ino) == 0) break;
-    anchor = anchor_map[ino];      
   }
 }
 

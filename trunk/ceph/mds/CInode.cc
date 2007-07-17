@@ -27,7 +27,7 @@
 #include "messages/MLock.h"
 
 #include <string>
-#include <sstream>
+#include <stdio.h>
 
 #include "config.h"
 #undef dout
@@ -97,6 +97,29 @@ void CInode::print(ostream& out)
 }
 
 
+inode_t *CInode::project_inode() 
+{
+  if (projected_inode.empty()) {
+    projected_inode.push_back(new inode_t(inode));
+  } else {
+    projected_inode.push_back(new inode_t(*projected_inode.back()));
+  }
+  dout(15) << "project_inode " << projected_inode.back() << endl;
+  return projected_inode.back();
+}
+  
+void CInode::pop_and_dirty_projected_inode() 
+{
+  assert(!projected_inode.empty());
+  dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
+	   << " v" << projected_inode.front()->version << endl;
+  mark_dirty(projected_inode.front()->version);
+  inode = *projected_inode.front();
+  delete projected_inode.front();
+  projected_inode.pop_front();
+}
+
+
 // ====== CInode =======
 
 // dirfrags
@@ -136,6 +159,70 @@ void CInode::get_subtree_dirfrags(list<CDir*>& ls)
     if (p->second->is_subtree_root())
       ls.push_back(p->second);
 }
+
+
+CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
+{
+  assert(is_dir());
+
+  // have it?
+  CDir *dir = get_dirfrag(fg);
+  if (dir) return dir;
+  
+  // create it.
+  assert(is_auth());
+  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
+  return dir;
+}
+
+CDir *CInode::add_dirfrag(CDir *dir)
+{
+  assert(dirfrags.count(dir->dirfrag().frag) == 0);
+  dirfrags[dir->dirfrag().frag] = dir;
+  return dir;
+}
+
+void CInode::close_dirfrag(frag_t fg)
+{
+  dout(14) << "close_dirfrag " << fg << endl;
+  assert(dirfrags.count(fg));
+  
+  CDir *dir = dirfrags[fg];
+  dir->remove_null_dentries();
+  
+  // clear dirty flag
+  if (dir->is_dirty())
+    dir->mark_clean();
+  
+  // dump any remaining dentries, for debugging purposes
+  for (map<string,CDentry*>::iterator p = dir->items.begin();
+       p != dir->items.end();
+       ++p) 
+    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
+
+  assert(dir->get_num_ref() == 0);
+  delete dir;
+  dirfrags.erase(fg);
+}
+
+void CInode::close_dirfrags()
+{
+  while (!dirfrags.empty()) 
+    close_dirfrag(dirfrags.begin()->first);
+}
+
+bool CInode::has_subtree_root_dirfrag()
+{
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    if (p->second->is_subtree_root())
+      return true;
+  return false;
+}
+
+
+
 
 // pins
 
@@ -198,56 +285,6 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
-{
-  assert(is_dir());
-
-  // have it?
-  CDir *dir = get_dirfrag(fg);
-  if (dir) return dir;
-  
-  // create it.
-  assert(is_auth());
-  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
-  return dir;
-}
-
-CDir *CInode::add_dirfrag(CDir *dir)
-{
-  assert(dirfrags.count(dir->dirfrag().frag) == 0);
-  dirfrags[dir->dirfrag().frag] = dir;
-  return dir;
-}
-
-void CInode::close_dirfrag(frag_t fg)
-{
-  dout(14) << "close_dirfrag " << fg << endl;
-  assert(dirfrags.count(fg));
-  
-  CDir *dir = dirfrags[fg];
-  dir->remove_null_dentries();
-  
-  // clear dirty flag
-  if (dir->is_dirty())
-    dir->mark_clean();
-  
-  // dump any remaining dentries, for debugging purposes
-  for (map<string,CDentry*>::iterator p = dir->items.begin();
-       p != dir->items.end();
-       ++p) 
-    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
-
-  assert(dir->get_num_ref() == 0);
-  delete dir;
-  dirfrags.erase(fg);
-}
-
-void CInode::close_dirfrags()
-{
-  while (!dirfrags.empty()) 
-    close_dirfrag(dirfrags.begin()->first);
-}
-
 
 
 void CInode::make_path(string& s)
@@ -259,7 +296,10 @@ void CInode::make_path(string& s)
     s = "";  // root
   } 
   else if (is_stray()) {
-    s = "~";
+    s = "~stray";
+    char n[10];
+    sprintf(n, "%d", (int)(ino()-MDS_INO_STRAY_OFFSET));
+    s += n;
   }
   else {
     s = "(dangling)";  // dangling
@@ -274,14 +314,14 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
     dout(10) << "make_anchor_trace added " << trace.back() << endl;
   }
   else 
-    assert(is_root());
+    assert(is_root() || is_stray());
 }
 
 void CInode::name_stray_dentry(string& dname)
 {
-  stringstream ss;
-  ss << inode.ino;
-  ss >> dname;
+  char s[20];
+  sprintf(s, "%ld", inode.ino.val);
+  dname = s;
 }
 
 
@@ -339,25 +379,25 @@ void CInode::mark_clean()
 // ------------------
 // locking
 
-void CInode::set_mlock_info(MLock *m)
+void CInode::set_object_info(MDSCacheObjectInfo &info)
 {
-  m->set_ino(ino());
+  info.ino = ino();
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   switch (type) {
   case LOCK_OTYPE_IAUTH:
-    ::_encode(inode.ctime, bl);
-    ::_encode(inode.mode, bl);
-    ::_encode(inode.uid, bl);
-    ::_encode(inode.gid, bl);  
+    _encode(inode.ctime, bl);
+    _encode(inode.mode, bl);
+    _encode(inode.uid, bl);
+    _encode(inode.gid, bl);  
     break;
     
   case LOCK_OTYPE_ILINK:
-    ::_encode(inode.ctime, bl);
-    ::_encode(inode.nlink, bl);
-    ::_encode(inode.anchored, bl);
+    _encode(inode.ctime, bl);
+    _encode(inode.nlink, bl);
+    _encode(inode.anchored, bl);
     break;
     
   case LOCK_OTYPE_IDIRFRAGTREE:
@@ -365,21 +405,21 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case LOCK_OTYPE_IFILE:
-    ::_encode(inode.size, bl);
-    ::_encode(inode.mtime, bl);
-    ::_encode(inode.atime, bl);
+    _encode(inode.size, bl);
+    _encode(inode.mtime, bl);
+    _encode(inode.atime, bl);
     break;
 
   case LOCK_OTYPE_IDIR:
-    ::_encode(inode.mtime, bl);
-    {
+    _encode(inode.mtime, bl);
+    if (0) {
       map<frag_t,int> dfsz;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
 	if (p->second->is_auth())
 	  dfsz[p->first] = p->second->get_nitems();
-      ::_encode(dfsz, bl);
+      _encode(dfsz, bl);
     }
     break;
   
@@ -395,18 +435,18 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   switch (type) {
   case LOCK_OTYPE_IAUTH:
-    ::_decode(tm, bl, off);
+    _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::_decode(inode.mode, bl, off);
-    ::_decode(inode.uid, bl, off);
-    ::_decode(inode.gid, bl, off);
+    _decode(inode.mode, bl, off);
+    _decode(inode.uid, bl, off);
+    _decode(inode.gid, bl, off);
     break;
 
   case LOCK_OTYPE_ILINK:
-    ::_decode(tm, bl, off);
+    _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::_decode(inode.nlink, bl, off);
-    ::_decode(inode.anchored, bl, off);
+    _decode(inode.nlink, bl, off);
+    _decode(inode.anchored, bl, off);
     break;
 
   case LOCK_OTYPE_IDIRFRAGTREE:
@@ -414,16 +454,19 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case LOCK_OTYPE_IFILE:
-    ::_decode(inode.size, bl, off);
-    ::_decode(inode.mtime, bl, off);
-    ::_decode(inode.atime, bl, off);
+    _decode(inode.size, bl, off);
+    _decode(inode.mtime, bl, off);
+    _decode(inode.atime, bl, off);
     break;
 
   case LOCK_OTYPE_IDIR:
     //::_decode(inode.size, bl, off);
-    ::_decode(tm, bl, off);
-    if (inode.mtime < tm) inode.mtime = tm;
-    {
+    _decode(tm, bl, off);
+    if (inode.mtime < tm) {
+      inode.mtime = tm;
+      dirlock.set_updated();
+    }
+    if (0) {
       map<frag_t,int> dfsz;
       ::_decode(dfsz, bl, off);
       // hmm which to keep?
@@ -464,12 +507,8 @@ bool CInode::is_freezing()
 void CInode::add_waiter(int tag, Context *c) 
 {
   // wait on the directory?
-  if (tag & WAIT_AUTHPINNABLE) {
-    parent->dir->add_waiter(CDir::WAIT_AUTHPINNABLE, c);
-    return;
-  }
-  if (tag & WAIT_SINGLEAUTH) {
-    parent->dir->add_waiter(CDir::WAIT_SINGLEAUTH, c);
+  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+    parent->dir->add_waiter(tag, c);
     return;
   }
   MDSCacheObject::add_waiter(tag, c);
@@ -522,8 +561,10 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  if (is_root())
-    return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
+  //if (is_root())
+  //return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
+  if (force_auth.first >= 0) 
+    return force_auth;
 
   if (parent)
     return parent->dir->authority();
