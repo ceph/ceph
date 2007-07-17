@@ -517,23 +517,25 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
+    dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << endl;
     assert(osdmap.get_inst(from) != m->inst);  // preproces should have caught it
     
     // mark previous guy down
     pending_inc.new_down[from] = osdmap.osd_inst[from];
+    
+    paxos->wait_for_commit(new C_RetryMessage(this, m));
+  } else {
+    // mark new guy up.
+    down_pending_out.erase(from);  // if any
+    pending_inc.new_up[from] = m->inst;
+    
+    // mark in?
+    if (osdmap.out_osds.count(from)) 
+      pending_inc.new_in.push_back(from);
+    
+    // wait
+    paxos->wait_for_commit(new C_Booted(this, m));
   }
-  
-  // mark new guy up.
-  down_pending_out.erase(from);  // if any
-  pending_inc.new_up[from] = m->inst;
-  
-  // mark in?
-  if (osdmap.out_osds.count(from)) 
-    pending_inc.new_in.push_back(from);
-  
-  // wait
-  paxos->wait_for_commit(new C_Booted(this, m));
-
   return true;
 }
 
