@@ -61,10 +61,6 @@ sage doc
 
 sage mds
 
-- CDir should avoid a store in response to temporary files (create+unlink)
-  - count+flag new dentries
-  - add last_committed_equivalent?
-
 - hmm, should we move ESubtreeMap out of the journal?  
   that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
 
