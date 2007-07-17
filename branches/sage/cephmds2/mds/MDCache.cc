@@ -1842,19 +1842,30 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   // possible response(s)
   MMDSCacheRejoin *ack = 0;      // if survivor
   MMDSCacheRejoin *purge = 0;    // if i'm missing something, purge it from the (recovering) sender.
-
-  // am i a survivor?
-  bool survivor = false;
+  bool survivor = false;  // am i a survivor?
+  
   if (mds->is_active() || mds->is_stopping()) {
     survivor = true;
-    dout(10) << "i am surivivor; will ack immediately and remove stale replicas" << endl;
+    dout(10) << "i am a surivivor, and will ack immediately" << endl;
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+
+    // check cap exports
+    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
+	 p != weak->cap_exports.end();
+	 ++p) {
+      CInode *in = get_inode(p->first);
+      if (!in || !in->is_auth()) continue;
+      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q) {
+	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << endl;
+	rejoin_import_cap(in, q->first, q->second, from);
+      }
+    }
   } else {
     assert(mds->is_rejoin());
-  }
 
-  // check cap exports.
-  if (mds->is_rejoin()) {
+    // check cap exports.
     for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
@@ -1873,20 +1884,6 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	   ++q) {
 	dout(10) << " claiming cap import " << p->first << " client" << q->first << endl;
 	cap_imports[p->first][q->first][from] = q->second;
-      }
-    }
-  } else {
-    // survivor.
-    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
-	 p != weak->cap_exports.end();
-	 ++p) {
-      CInode *in = get_inode(p->first);
-      if (!in || !in->is_auth()) continue;
-      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
-	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << endl;
-	rejoin_import_cap(in, q->first, q->second, from);
       }
     }
   }
@@ -1941,7 +1938,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dout(10) << " have " << *in << endl;
 
 	// scatter the dirlock, just in case?
-	if (!survivor)
+	if (!survivor && in->is_dir())
 	  in->dirlock.set_state(LOCK_SCATTER);
 
 	if (ack) {
@@ -3051,6 +3048,11 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
  *
  * the only non-auth items that remain are those that are needed to 
  * attach our own subtrees to the root.  
+ *
+ * why we have to do this:
+ *  we may not have accurate linkage for non-auth items.  which means we will 
+ *  know which subtree it falls into, and can not be sure to declare it to the
+ *  correct authority.  
  */
 void MDCache::trim_non_auth()
 {
