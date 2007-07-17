@@ -370,13 +370,8 @@ int OSD::read_superblock()
 // ======================================================
 // PG's
 
-PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
+PG *OSD::_open_lock_pg(pg_t pgid)
 {
-  dout(10) << "_create_lock_pg " << pgid << dendl;
-
-  if (pg_map.count(pgid)) 
-    dout(0) << "_create_lock_pg on " << pgid << ", already have " << *pg_map[pgid] << dendl;
-  
   // create
   PG *pg;
   if (pgid.is_rep())
@@ -395,6 +390,19 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 
   pg->get(); // because it's in pg_map
   pg->get(); // because we're locking it
+
+  return pg;
+}
+
+PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
+{
+  dout(10) << "_create_lock_pg " << pgid << dendl;
+
+  if (pg_map.count(pgid)) 
+    dout(0) << "_create_lock_pg on " << pgid << ", already have " << *pg_map[pgid] << dendl;
+
+  // open
+  PG *pg = _open_lock_pg(pgid);
 
   // create collection
   assert(!store->collection_exists(pgid));
@@ -421,7 +429,7 @@ PG *OSD::_lock_pg(pg_t pgid)
     list<Cond*>& ls = pg_lock_waiters[pgid];   // this is commit, right?
     ls.push_back(&c);
     
-    while (pg_lock.count(pgid) ||
+    while (pg_lock.count(pgid) &&
            ls.front() != &c)
       c.Wait(osd_lock);
 
@@ -457,6 +465,7 @@ void OSD::_unlock_pg(pg_t pgid)
   } else {
     // nobody waiting
     dout(15) << "unlock_pg " << pgid << dendl;
+    pg_lock.erase(pgid);
   }
 }
 
@@ -510,16 +519,7 @@ void OSD::load_pgs()
        it != ls.end();
        it++) {
     pg_t pgid = *it;
-
-    PG *pg = 0;
-    if (pgid.is_rep())
-      new ReplicatedPG(this, pgid);
-    else if (pgid.is_raid4())
-      new RAID4PG(this, pgid);
-    else 
-      assert(0);
-    pg_map[pgid] = pg;
-    pg->get();
+    PG *pg = _open_lock_pg(pgid);
 
     // read pg info
     store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
@@ -533,6 +533,7 @@ void OSD::load_pgs()
     pg->set_role(role);
 
     dout(10) << "load_pgs loaded " << *pg << " " << pg->log << dendl;
+    pg->put_unlock();
   }
 }
  
@@ -999,8 +1000,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    //t.write(oid, 0, p->second.length(), p->second);
-    store->write(oid, 0, p->second.length(), p->second, 0);
+    store->write(oid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1024,8 +1024,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    //t.write(oid, 0, p->second.length(), p->second);
-    store->write(oid, 0, p->second.length(), p->second, 0);
+    store->write(oid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1044,17 +1043,18 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   epoch_t cur = superblock.current_epoch;
   while (cur < superblock.newest_map) {
-    bufferlist bl;
+    dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
+
     if (m->incremental_maps.count(cur+1) ||
         store->exists(get_inc_osdmap_object_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
       if (m->incremental_maps.count(cur+1)) {
-	dout(10) << " using provided inc map" << endl;
+	dout(10) << " using provided inc map" << dendl;
         bl = m->incremental_maps[cur+1];
       } else {
-	dout(10) << " using my locally stored inc map" << endl;
+	dout(10) << " using my locally stored inc map" << dendl;
         get_inc_map_bl(cur+1, bl);
       }
 

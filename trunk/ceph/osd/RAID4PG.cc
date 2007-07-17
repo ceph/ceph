@@ -77,26 +77,26 @@ bool RAID4PG::is_missing_object(object_t oid)
 
 void RAID4PG::wait_for_missing_object(object_t oid, MOSDOp *op)
 {
-  assert(0);
+  //assert(0);
 }
 
 void RAID4PG::note_failed_osd(int o)
 {
   dout(10) << "note_failed_osd osd" << o << dendl;
-  assert(0);
+  //assert(0);
 }
 
 void RAID4PG::on_acker_change()
 {
   dout(10) << "on_acker_change" << dendl;
-  assert(0);
+  //assert(0);
 }
 
 
 void RAID4PG::on_role_change()
 {
   dout(10) << "on_role_change" << dendl;
-  assert(0);
+  //assert(0);
 }
 
 
@@ -106,18 +106,18 @@ void RAID4PG::clean_up_local(ObjectStore::Transaction&)
 
 void RAID4PG::cancel_recovery() 
 {
-  assert(0);
+  //assert(0);
 }
 
 bool RAID4PG::do_recovery() 
 {
-  assert(0);
+  //assert(0);
   return false;
 }
 
 void RAID4PG::clean_replicas() 
 {
-  assert(0);
+  //assert(0);
 }
 
 

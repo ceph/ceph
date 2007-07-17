@@ -247,7 +247,8 @@ private:
   PG   *_lock_pg(pg_t pgid);
   void  _unlock_pg(pg_t pgid);
 
-  PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t);          // create new PG
+  PG   *_open_lock_pg(pg_t pg);  // create new PG (in memory)
+  PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   bool  _have_pg(pg_t pgid);
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
