@@ -64,7 +64,7 @@ class MOSDMap : public Message {
 
   virtual char *get_type_name() { return "omap"; }
   void print(ostream& out) {
-    out << "osdmap(" << get_first() << "," << get_last() << ")";
+    out << "osd_map(" << get_first() << "," << get_last() << ")";
   }
 };
 

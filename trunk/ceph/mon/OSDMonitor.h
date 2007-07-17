@@ -58,7 +58,7 @@ private:
   
   void send_to_waiting();     // send current map to waiters.
   void send_full(entity_inst_t dest);
-  void send_incremental(epoch_t since, entity_inst_t dest);
+  void send_incremental(entity_inst_t dest, epoch_t since);
   void bcast_latest_mds();
   void bcast_latest_osd();
   void bcast_full_osd();
@@ -114,7 +114,7 @@ private:
 
   void mark_all_down();
 
-  void send_latest(entity_inst_t i, epoch_t since=(epoch_t)(-1));
+  void send_latest(entity_inst_t i, epoch_t start=0);
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

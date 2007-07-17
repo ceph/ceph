@@ -501,6 +501,11 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // see who i am
   whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
+  if (whoami < 0) {
+    dout(1) << "handle_mds_map i'm not in the mdsmap, killing myself" << endl;
+    shutdown_final();
+    return;
+  }
   if (oldwhoami != whoami) {
     // update messenger.
     messenger->reset_myname(MSG_ADDR_MDS(whoami));

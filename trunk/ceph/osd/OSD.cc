@@ -950,7 +950,7 @@ void OSD::wait_for_new_map(Message *m)
   // ask 
   if (waiting_for_osdmap.empty()) {
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(osdmap->get_epoch()),
+    messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1),
                             monmap->get_inst(mon));
   }
   
@@ -1111,7 +1111,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
       int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(cur), monmap->get_inst(mon));
+      messenger->send_message(new MOSDGetMap(cur+1), monmap->get_inst(mon));
       break;
     }
 

@@ -74,11 +74,11 @@ bool MDSMonitor::update_from_paxos()
   assert(paxos->is_active());
 
   version_t paxosv = paxos->get_version();
-  dout(10) << "update_from_paxos paxosv " << paxosv 
-	   << ", my e " << mdsmap.epoch << endl;
-
   if (paxosv == mdsmap.epoch) return true;
   assert(paxosv >= mdsmap.epoch);
+
+  dout(10) << "update_from_paxos paxosv " << paxosv 
+	   << ", my e " << mdsmap.epoch << endl;
 
   // read and decode
   mdsmap_bl.clear();

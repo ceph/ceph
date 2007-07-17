@@ -36,11 +36,12 @@ bool ClientMonitor::update_from_paxos()
   assert(paxos->is_active());
   
   version_t paxosv = paxos->get_version();
+  if (paxosv == client_map.version) return true;
+  assert(paxosv >= client_map.version);
+
   dout(10) << "update_from_paxos paxosv " << paxosv 
 	   << ", my v " << client_map.version << endl;
 
-  if (paxosv == client_map.version) return true;
-  assert(paxosv >= client_map.version);
 
   if (client_map.version == 0 && paxosv > 1 &&
       mon->store->exists_bl_ss("clientmap","latest")) {

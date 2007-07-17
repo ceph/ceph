@@ -21,27 +21,26 @@
 
 class MOSDGetMap : public Message {
  public:
-  epoch_t since;
+  epoch_t start;
 
   MOSDGetMap(epoch_t s=0) : 
     Message(MSG_OSD_GETMAP),
-    since(s) {
+    start(s) {
   }
 
-  epoch_t get_since() { return since; }
+  epoch_t get_start_epoch() { return start; }
 
   char *get_type_name() { return "get_osd_map"; }
   void print(ostream& out) {
-    out << "get_osd_map(since " << since << ")";
+    out << "get_osd_map(" << start << ")";
   }
   
   void encode_payload() {
-    payload.append((char*)&since, sizeof(since));
+    ::_encode(start, payload);
   }
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(since), (char*)&since);
-    off += sizeof(since);
+    ::_decode(start, payload, off);
   }
 };
 

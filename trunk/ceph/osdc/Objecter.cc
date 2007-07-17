@@ -83,7 +83,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       else {
         dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << endl;
         int mon = monmap->pick_mon();
-        messenger->send_message(new MOSDGetMap(osdmap->get_epoch()), 
+        messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1), 
                                 monmap->get_inst(mon));
         break;
       }

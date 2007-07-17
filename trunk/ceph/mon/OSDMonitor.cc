@@ -243,11 +243,11 @@ bool OSDMonitor::update_from_paxos()
   assert(paxos->is_active());
 
   version_t paxosv = paxos->get_version();
-  dout(15) << "update_from_paxos paxos e " << paxosv 
-	   << ", my e " << osdmap.epoch << endl;
-
   if (paxosv == osdmap.epoch) return true;
   assert(paxosv >= osdmap.epoch);
+
+  dout(15) << "update_from_paxos paxos e " << paxosv 
+	   << ", my e " << osdmap.epoch << endl;
 
   if (osdmap.epoch == 0 && paxosv > 1) {
     // startup: just load latest full map
@@ -368,7 +368,7 @@ bool OSDMonitor::preprocess_query(Message *m)
 
 bool OSDMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << endl;
+  dout(7) << "prepare_update " << *m << " from " << m->get_source_inst() << endl;
   
   switch (m->get_type()) {
     // damp updates
@@ -411,12 +411,12 @@ bool OSDMonitor::should_propose_now()
 
 void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 {
-  dout(7) << "osd_getmap from " << m->get_source() << " since " << m->get_since() << endl;
+  dout(7) << "handle_osd_getmap from " << m->get_source() << " from " << m->get_start_epoch() << endl;
   
-  //if (m->get_since())
-  send_incremental(m->get_since(), m->get_source_inst());
-  //else
-  //send_full(m->get_source_inst());
+  if (m->get_start_epoch())
+    send_incremental(m->get_source_inst(), m->get_start_epoch());
+  else
+    send_full(m->get_source_inst());
   
   delete m;
 }
@@ -435,19 +435,19 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   // weird?
   if (!osdmap.have_inst(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << endl;
-    send_incremental(m->get_epoch(), m->get_from());
+    send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
   if (osdmap.get_inst(badboy) != m->get_failed()) {
     dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_from() << endl;
-    send_incremental(m->get_epoch(), m->get_from());
+    send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
   // already reported?
   if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << endl;
-    send_incremental(m->get_epoch(), m->get_from());
+    send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
 
@@ -547,31 +547,6 @@ void OSDMonitor::_booted(MOSDBoot *m)
 }
 
 
-// in --
-
-/*
-void OSDMonitor::handle_osd_in(MOSDIn *m)
-{
-  dout(7) << "osd_in from " << m->get_source() << endl;
-  int from = m->get_source().num();
-  
-  if (osdmap.is_out(from)) 
-    pending_inc.new_in.push_back(from);
-  accept_pending();
-  send_incremental(m->map_epoch, m->get_source_inst());
-}
-
-void OSDMonitor::handle_osd_out(MOSDOut *m)
-{
-  dout(7) << "osd_out from " << m->get_source() << endl;
-  int from = m->get_source().num();
-  if (osdmap.is_in(from)) {
-    pending_inc.new_out.push_back(from);
-    accept_pending();
-    send_incremental(m->map_epoch, m->get_source_inst());
-  }
-}
-*/
 
 
 
@@ -586,24 +561,24 @@ void OSDMonitor::send_to_waiting()
        i != awaiting_map.end();
        i++) {
     if (i->second.second)
-      send_incremental(i->second.second, i->second.first);
+      send_incremental(i->second.first, i->second.second);
     else
       send_full(i->second.first);
   }
 }
 
-void OSDMonitor::send_latest(entity_inst_t who, epoch_t since)
+void OSDMonitor::send_latest(entity_inst_t who, epoch_t start)
 {
   if (paxos->is_readable()) {
     dout(5) << "send_latest to " << who << " now" << endl;
-    if (since == (epoch_t)(-1))
+    if (start == 0)
       send_full(who);
     else
-      send_incremental(since, who);
+      send_incremental(who, start);
   } else {
     dout(5) << "send_latest to " << who << " later" << endl;
     awaiting_map[who.name].first = who;
-    awaiting_map[who.name].second = since;
+    awaiting_map[who.name].second = start;
   }
 }
 
@@ -614,15 +589,15 @@ void OSDMonitor::send_full(entity_inst_t who)
   mon->messenger->send_message(new MOSDMap(&osdmap), who);
 }
 
-void OSDMonitor::send_incremental(epoch_t since, entity_inst_t dest)
+void OSDMonitor::send_incremental(entity_inst_t dest, epoch_t from)
 {
-  dout(5) << "send_incremental " << since << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
 	  << " to " << dest << endl;
   
   MOSDMap *m = new MOSDMap;
   
   for (epoch_t e = osdmap.get_epoch();
-       e > since;
+       e >= from;
        e--) {
     bufferlist bl;
     if (mon->store->get_bl_sn(bl, "osdmap", e) > 0) {
@@ -653,7 +628,7 @@ void OSDMonitor::bcast_latest_mds()
   for (set<int>::iterator i = up.begin();
        i != up.end();
        i++) {
-    send_incremental(osdmap.get_epoch()-1, mon->mdsmon->mdsmap.get_inst(*i));
+    send_incremental(mon->mdsmon->mdsmap.get_inst(*i), osdmap.get_epoch());
   }
 }
 
@@ -670,7 +645,7 @@ void OSDMonitor::bcast_latest_osd()
        it++) {
     if (osdmap.is_down(*it)) continue;
     
-    send_incremental(osdmap.get_epoch()-1, osdmap.get_inst(*it));
+    send_incremental(osdmap.get_inst(*it), osdmap.get_epoch());
   }  
 }
 
