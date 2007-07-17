@@ -547,12 +547,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     // contemplate suicide
     if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
       dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << endl;
-      messenger->suicide();
-      return;
-    }
-    if (mdsmap->is_down(whoami)) {
-      dout(1) << "apparently i'm down, committing suicide." << endl;
-      messenger->suicide();
+      shutdown_final();
       return;
     }
 
@@ -578,6 +573,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       assert(oldstate == MDSMap::STATE_STOPPING);
       dout(1) << "now stopped, sending down:out and exiting" << endl;
       shutdown_final();
+      return;
     }
   }
   

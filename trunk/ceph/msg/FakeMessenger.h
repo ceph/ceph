@@ -84,6 +84,7 @@ class FakeMessenger : public Messenger {
     if (!failed) {
       failed = true;
     }
+    shutdown();
   }
 
 };

@@ -95,6 +95,11 @@ int main(int argc, char **argv)
   // wait
   rank.wait();
 
+  // yuck: grab the mds lock, so we can be sure that whoever in *mds 
+  // called shutdown finishes what they were doing.
+  mds->mds_lock.Lock();
+  mds->mds_lock.Unlock();
+
   // done
   delete mds;
 
