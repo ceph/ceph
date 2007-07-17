@@ -37,6 +37,7 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "ClientMonitor.h"
+#include "PGMonitor.h"
 
 #include "config.h"
 #undef dout
@@ -65,12 +66,14 @@ void Monitor::init()
   osdmon = new OSDMonitor(this, &paxos_osdmap);
   mdsmon = new MDSMonitor(this, &paxos_mdsmap);
   clientmon = new ClientMonitor(this, &paxos_clientmap);
+  pgmon = new PGMonitor(this, &paxos_pgmap);
   
   // init paxos
   paxos_test.init();
   paxos_osdmap.init();
   paxos_mdsmap.init();
   paxos_clientmap.init();
+  paxos_pgmap.init();
   
   // i'm ready!
   messenger->set_dispatcher(this);
@@ -130,6 +133,7 @@ void Monitor::shutdown()
   if (osdmon) delete osdmon;
   if (mdsmon) delete mdsmon;
   if (clientmon) delete clientmon;
+  if (pgmon) delete pgmon;
   
   // die.
   messenger->shutdown();
@@ -167,11 +171,13 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   paxos_mdsmap.leader_init();
   paxos_osdmap.leader_init();
   paxos_clientmap.leader_init();
+  paxos_pgmap.leader_init();
   
   // init
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
+  pgmon->election_finished();
 } 
 
 void Monitor::lose_election(epoch_t epoch, int l) 
@@ -186,11 +192,13 @@ void Monitor::lose_election(epoch_t epoch, int l)
   paxos_mdsmap.peon_init();
   paxos_osdmap.peon_init();
   paxos_clientmap.peon_init();
+  paxos_pgmap.peon_init();
   
   // init
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
+  pgmon->election_finished();
 }
 
 

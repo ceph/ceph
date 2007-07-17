@@ -79,6 +79,7 @@ MON_OBJS= \
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\
+	mon/PGMonitor.o\
 	mon/Elector.o\
 	mon/MonitorStore.o
 
