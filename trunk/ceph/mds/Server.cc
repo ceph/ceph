@@ -3724,10 +3724,9 @@ void Server::handle_client_openc(MDRequest *mdr)
   assert(in);
   
   // it's a file.
-  dn->pre_dirty();
   in->inode.mode = req->args.open.mode;
   in->inode.mode |= INODE_MODE_FILE;
-  in->inode.version = dn->get_projected_version();
+  in->inode.version = dn->pre_dirty() - 1;
   
   // prepare finisher
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
