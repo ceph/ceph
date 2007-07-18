@@ -396,27 +396,35 @@ protected:
 
 public:
   void lock() {
-    //cout << info.pgid << " lock" << endl;
+    cout << this << " " << info.pgid << " lock" << endl;
     _lock.Lock();
   }
+  void unlock() {
+    cout << this << " " << info.pgid << " unlock" << endl;
+    _lock.Unlock();
+  }
   void get() {
-    //cout << info.pgid << " get " << ref << endl;
+    cout << this << " " << info.pgid << " get " << ref << endl;
     assert(_lock.is_locked());
     ++ref; 
   }
   void put() { 
-    //cout << info.pgid << " put " << ref << endl;
+    cout << this << " " << info.pgid << " put " << ref << endl;
     assert(_lock.is_locked());
     --ref; 
     assert(ref > 0);  // last put must be a put_unlock.
   }
   void put_unlock() { 
-    //cout << info.pgid << " put_unlock " << ref << endl;
+    cout << this << " " << info.pgid << " put_unlock " << ref << endl;
     assert(_lock.is_locked());
     --ref; 
     _lock.Unlock();
     if (ref == 0) delete this;
   }
+
+
+  list<Message*> op_queue;  // op queue
+
 
   void mark_deleted() { deleted = true; }
   bool is_deleted() { return deleted; }

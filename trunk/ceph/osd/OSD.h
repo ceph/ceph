@@ -190,8 +190,8 @@ private:
   }
   
   // -- op queue --
-  class ThreadPool<class OSD*, pg_t>   *threadpool;
-  hash_map<pg_t, list<Message*> >       op_queue;
+  class ThreadPool<class OSD*, PG*>   *threadpool;
+
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
@@ -199,10 +199,10 @@ private:
   
   void wait_for_no_ops();
 
-  void enqueue_op(pg_t pgid, Message *op);
-  void dequeue_op(pg_t pgid);
-  static void static_dequeueop(OSD *o, pg_t pgid) {
-    o->dequeue_op(pgid);
+  void enqueue_op(PG *pg, Message *op);
+  void dequeue_op(PG *pg);
+  static void static_dequeueop(OSD *o, PG *pg) {
+    o->dequeue_op(pg);
   };
 
 
@@ -240,16 +240,10 @@ private:
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
 
-  // per-pg locking (serializes AND acquired pg lock)
-  hash_set<pg_t>               pg_lock;
-  hash_map<pg_t, list<Cond*> > pg_lock_waiters;  
-  
-  PG   *_lock_pg(pg_t pgid);
-  void  _unlock_pg(pg_t pgid);
-
-  PG   *_open_lock_pg(pg_t pg);  // create new PG (in memory)
-  PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   bool  _have_pg(pg_t pgid);
+  PG   *_lookup_lock_pg(pg_t pgid);
+  PG   *_new_lock_pg(pg_t pg);  // create new PG (in memory)
+  PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
   void load_pgs();
