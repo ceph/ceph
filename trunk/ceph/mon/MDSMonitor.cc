@@ -303,9 +303,6 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     pending_mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
     pending_mdsmap.mds_inc[from]++;
     
-    // someone (new) has joined the cluster.
-    pending_mdsmap.same_inst_since = pending_mdsmap.epoch;
-
     // reset the beacon timer
     last_beacon[from] = g_clock.now();
   }
@@ -333,10 +330,12 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
 	   << " -> " << MDSMap::get_state_name(state)
 	   << endl;
 
-  // did someone leave the cluster?
-  if (state == MDSMap::STATE_STOPPED && 
-      !mdsmap.is_stopped(from))
-    pending_mdsmap.same_inst_since = pending_mdsmap.epoch;
+  // has someone join or leave the cluster?
+  if (state == MDSMap::STATE_REPLAY ||
+      state == MDSMap::STATE_ACTIVE ||
+      state == MDSMap::STATE_STOPPED) {
+    pending_mdsmap.same_in_set_since = pending_mdsmap.epoch;
+  }
   
   // change the state
   pending_mdsmap.mds_state[from] = state;

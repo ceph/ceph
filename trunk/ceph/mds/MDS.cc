@@ -641,10 +641,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
 
-  // inst set changed?
+  // in set set changed?
   /*
   if (state >= MDSMap::STATE_ACTIVE &&   // only if i'm active+.  otherwise they'll get map during reconnect.
-      mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) {
+      mdsmap->get_same_in_set_since() > last_client_mdsmap_bcast) {
     bcast_mds_map();
   }
   */

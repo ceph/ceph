@@ -97,7 +97,7 @@ class MDSMap {
  protected:
   epoch_t epoch;
   utime_t created;
-  epoch_t same_inst_since;
+  epoch_t same_in_set_since;  // note: this does not reflect exit-by-failure.
 
   int target_num;
   int anchortable;   // which MDS has anchortable (fixme someday)
@@ -112,13 +112,13 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), same_inst_since(0), anchortable(0), root(0) {}
+  MDSMap() : epoch(0), same_in_set_since(0), anchortable(0), root(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
   const utime_t& get_create() const { return created; }
-  epoch_t get_same_inst_since() const { return same_inst_since; }
+  epoch_t get_same_in_set_since() const { return same_in_set_since; }
 
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }
@@ -311,7 +311,7 @@ class MDSMap {
     ::_encode(epoch, bl);
     ::_encode(target_num, bl);
     ::_encode(created, bl);
-    ::_encode(same_inst_since, bl);
+    ::_encode(same_in_set_since, bl);
     ::_encode(anchortable, bl);
     ::_encode(root, bl);
     ::_encode(mds_state, bl);
@@ -325,7 +325,7 @@ class MDSMap {
     ::_decode(epoch, bl, off);
     ::_decode(target_num, bl, off);
     ::_decode(created, bl, off);
-    ::_decode(same_inst_since, bl, off);
+    ::_decode(same_in_set_since, bl, off);
     ::_decode(anchortable, bl, off);
     ::_decode(root, bl, off);
     ::_decode(mds_state, bl, off);

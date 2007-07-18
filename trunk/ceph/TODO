@@ -1,11 +1,4 @@
 
-
-- change same_inst_since to align with "in" set
-- tag MClientRequest with mdsmap v
-- push new mdsmap to clients on send_message_client, based on the tag?
-  - hrm, what about exports and stale caps wonkiness... there's a race with the REAP.  hmm.
-
-
 some smallish projects:
 
 - crush rewrite in C
