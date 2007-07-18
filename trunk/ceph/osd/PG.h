@@ -396,26 +396,26 @@ protected:
 
 public:
   void lock() {
-    cout << this << " " << info.pgid << " lock" << endl;
+    //cout << this << " " << info.pgid << " lock" << endl;
     _lock.Lock();
   }
   void unlock() {
-    cout << this << " " << info.pgid << " unlock" << endl;
+    //cout << this << " " << info.pgid << " unlock" << endl;
     _lock.Unlock();
   }
   void get() {
-    cout << this << " " << info.pgid << " get " << ref << endl;
+    //cout << this << " " << info.pgid << " get " << ref << endl;
     assert(_lock.is_locked());
     ++ref; 
   }
   void put() { 
-    cout << this << " " << info.pgid << " put " << ref << endl;
+    //cout << this << " " << info.pgid << " put " << ref << endl;
     assert(_lock.is_locked());
     --ref; 
     assert(ref > 0);  // last put must be a put_unlock.
   }
   void put_unlock() { 
-    cout << this << " " << info.pgid << " put_unlock " << ref << endl;
+    //cout << this << " " << info.pgid << " put_unlock " << ref << endl;
     assert(_lock.is_locked());
     --ref; 
     _lock.Unlock();

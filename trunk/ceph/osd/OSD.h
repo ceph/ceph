@@ -53,6 +53,7 @@ public:
   //current implementation is moving averges.
   class LoadCalculator {
   private:
+    Mutex lock;
     deque<double> m_Data ;
     unsigned m_Size ;
     double  m_Total ;
@@ -61,6 +62,8 @@ public:
     LoadCalculator( unsigned size ) : m_Size(0), m_Total(0) { }
 
     void add( double element ) {
+      Mutex::Locker locker(lock);
+
       // add item
       m_Data.push_back(element);
       m_Total += element;
@@ -73,6 +76,8 @@ public:
     }
     
     double get_average() {
+      Mutex::Locker locker(lock);
+
       if (m_Data.empty())
 	return -1;
       return m_Total / (double)m_Data.size();
@@ -87,6 +92,7 @@ public:
       iat_data() : last_req_stamp(0), average_iat(0) {}
     };
   private:
+    mutable Mutex lock;
     double alpha;
     hash_map<object_t, iat_data> iat_map;
 
@@ -94,6 +100,7 @@ public:
     IATAverager(double a) : alpha(a) {}
     
     void add_sample(object_t oid, double now) {
+      Mutex::Locker locker(lock);
       iat_data &r = iat_map[oid];
       double iat = now - r.last_req_stamp;
       r.last_req_stamp = now;
@@ -101,16 +108,19 @@ public:
     }
     
     bool have(object_t oid) const {
+      Mutex::Locker locker(lock);
       return iat_map.count(oid);
     }
 
     double get_average_iat(object_t oid) const {
+      Mutex::Locker locker(lock);
       hash_map<object_t, iat_data>::const_iterator p = iat_map.find(oid);
       assert(p != iat_map.end());
       return p->second.average_iat;
     }
 
     bool is_flash_crowd_candidate(object_t oid) const {
+      Mutex::Locker locker(lock);
       return get_average_iat(oid) <= g_conf.osd_flash_crowd_iat_threshold;
     }
   };

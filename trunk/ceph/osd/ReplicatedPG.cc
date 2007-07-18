@@ -1084,16 +1084,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   }
 
 
-  // share latest osd map with rest of pg?
-  osd->osd_lock.Lock();
-  {
-    for (unsigned i=1; i<acting.size(); i++) {
-      osd->_share_map_outgoing( osd->osdmap->get_inst(acting[i]) ); 
-    }
-  }
-  osd->osd_lock.Unlock();
-  
-
   // dup op?
   if (is_dup(op->get_reqid())) {
     dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()

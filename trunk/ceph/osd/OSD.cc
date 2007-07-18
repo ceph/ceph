@@ -2160,6 +2160,12 @@ void OSD::dequeue_op(PG *pg)
     dout(10) << "dequeue_op " << *op << " pg " << *pg
 	     << ", " << (pending_ops-1) << " more pending"
 	     << dendl;
+
+    // share map?
+    //  do this preemptively while we hold osd_lock and pg->lock
+    //  to avoid lock ordering issues later.
+    for (unsigned i=1; i<pg->acting.size(); i++) 
+      _share_map_outgoing( osdmap->get_inst(pg->acting[i]) ); 
   }
   osd_lock.Unlock();
 
