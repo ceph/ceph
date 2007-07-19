@@ -41,7 +41,10 @@ class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
 
+class MFragmentDirNotify;
+
 class EImportStart;
+
 
 class Migrator {
 private:
@@ -253,6 +256,15 @@ protected:
   // bystander
   void handle_export_notify(MExportDirNotify *m);
 
+
+  // -- fragmenting --
+  void fragment_dir(CDir *dir, int byn);
+  void fragment_frozen(CDir *dir, int byn);
+  friend class C_MDC_FragmentFreeze;
+  void fragment_logged(CDir *dir, int bits);
+  friend class C_MDC_FragmentLogged;
+
+  void handle_fragment_notify(MFragmentDirNotify *m);
 };
 
 

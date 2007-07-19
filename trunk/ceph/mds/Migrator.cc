@@ -31,6 +31,7 @@
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
+#include "events/EFragment.h"
 
 #include "msg/Messenger.h"
 
@@ -794,7 +795,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   if (in->is_dirty()) in->mark_clean();
   
   // clear/unpin cached_by (we're no longer the authority)
-  in->clear_replicas();
+  in->clear_replica_map();
   
   // twiddle lock states for auth -> replica transition
   in->authlock.export_twiddle();
@@ -836,7 +837,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   dstate._encode( enc_dir );
   
   // release open_by 
-  dir->clear_replicas();
+  dir->clear_replica_map();
 
   // mark
   assert(dir->is_auth());
@@ -969,7 +970,6 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   }
 
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
-  dir->get(CDir::PIN_LOGGINGEXPORTFINISH);
   mds->mdlog->submit_entry(le,
 			   new C_MDS_ExportFinishLogged(this, dir));
   
@@ -1044,7 +1044,6 @@ void Migrator::export_reverse(CDir *dir)
 void Migrator::export_logged_finish(CDir *dir)
 {
   dout(7) << "export_logged_finish " << *dir << endl;
-  dir->put(CDir::PIN_LOGGINGEXPORTFINISH);
 
   cache->verify_subtree_bounds(dir, export_bounds[dir]);
 
@@ -1566,7 +1565,7 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
     // dir
     assert(cur->is_auth());
     cur->state_clear(CDir::STATE_AUTH);
-    cur->clear_replicas();
+    cur->clear_replica_map();
     if (cur->is_dirty())
       cur->mark_clean();
 
@@ -1576,7 +1575,7 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
 
       // dentry
       dn->state_clear(CDentry::STATE_AUTH);
-      dn->clear_replicas();
+      dn->clear_replica_map();
       if (dn->is_dirty()) 
 	dn->mark_clean();
 
@@ -1584,7 +1583,7 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
       if (dn->is_primary()) {
 	CInode *in = dn->get_inode();
 	in->state_clear(CDentry::STATE_AUTH);
-	in->clear_replicas();
+	in->clear_replica_map();
 	if (in->is_dirty()) 
 	  in->mark_clean();
 	in->authlock.clear_gather();
@@ -1986,3 +1985,196 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// FRAGMENT
+
+class C_MDC_FragmentFreeze : public Context {
+  Migrator *mig;
+  CDir *dir;
+  int bits;
+public:
+  C_MDC_FragmentFreeze(Migrator *m, CDir *d, int b) : mig(m), dir(d), bits(b) {}
+  virtual void finish(int r) {
+    if (r >= 0)
+      mig->fragment_frozen(dir, bits);
+  }
+};
+
+void Migrator::fragment_dir(CDir *dir, int bits)
+{
+  dout(7) << "fragment_dir " << *dir << " bits " << bits << endl;
+  assert(dir->is_auth());
+  
+  if (mds->mdsmap->is_degraded()) {
+    dout(7) << "cluster degraded, no fragmenting for now" << endl;
+    return;
+  }
+
+  if (dir->inode->is_root()) {
+    dout(7) << "i won't fragment root" << endl;
+    //assert(0);
+    return;
+  }
+
+  if (dir->is_frozen() ||
+      dir->is_freezing()) {
+    dout(7) << " can't export, freezing|frozen.  wait for other exports to finish first." << endl;
+    return;
+  }
+
+  if (dir->state_test(CDir::STATE_FRAGMENTING)) {
+    dout(7) << "already fragmenting" << endl;
+    return;
+  }
+
+  dir->state_set(CDir::STATE_FRAGMENTING);
+  dir->get(CDir::PIN_FRAGMENTING);
+
+  // first, freeze.
+  dir->freeze_dir(new C_MDC_FragmentFreeze(this, dir, bits));
+}
+
+class C_MDC_FragmentLogged : public Context {
+  Migrator *mig;
+  CDir *dir;
+  int bits;
+public:
+  C_MDC_FragmentLogged(Migrator *m, CDir *d, int b) : mig(m), dir(d), bits(b) {}
+  virtual void finish(int r) {
+    if (r >= 0)
+      mig->fragment_logged(dir, bits);
+  }
+};
+
+void Migrator::fragment_frozen(CDir *dir, int bits)
+{
+  dout(7) << "fragment_frozen " << *dir << " bits " << bits << endl;
+
+  // xlock
+  CInode *diri = dir->get_inode();
+
+  if (!diri->dirfragtreelock.is_stable()) {
+    dout(10) << "fragment_frozen waiting for stable" << endl;
+    diri->dirfragtreelock.add_waiter(SimpleLock::WAIT_STABLE, 
+				     new C_MDC_FragmentFreeze(this, dir, bits));
+    return;
+  }
+  
+  //if (diri->dirfragtreelock.get_state() != LOCK_LOCK) 
+  //mds->locker->simple_lock(&diri->dirfragtreelock);
+
+  if (diri->dirfragtreelock.get_state() != LOCK_LOCK) {
+    dout(10) << "fragment_frozen waiting for lock" << endl;
+    diri->dirfragtreelock.add_waiter(SimpleLock::WAIT_STABLE, 
+				     new C_MDC_FragmentFreeze(this, dir, bits));
+  }
+
+  // lock.  do a manual xlock.
+  diri->dirfragtreelock.get_xlock((MDRequest*)1);
+
+  // journal it.
+  EFragment *le = new EFragment(dir->ino(), dir->get_frag(), bits);
+  
+  // predirty and journal content
+  le->metablob.add_dir_context(dir);
+  for (map<string,CDentry*>::iterator p = dir->items.begin();
+       p != dir->items.end();
+       ++p) {
+    p->second->pre_dirty();
+    le->metablob.add_dentry(p->second, true);
+  }
+
+  // go
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_sync(new C_MDC_FragmentLogged(this, dir, bits));
+}
+
+void Migrator::fragment_logged(CDir *dir, int bits)
+{
+  dout(10) << "fragment_logged " << *dir << " bits " << bits << endl;
+
+  CInode *diri = dir->get_inode();
+  diri->fragment_dir(dir->get_frag(), bits);
+
+  // dirty everything
+  
+  
+  // create fragments
+  
+  frag_t startfrag = dir->get_frag();
+  list<frag_t> frags;
+  startfrag.split(bits, frags);
+
+  vector<CDir*> dirfrags(1 << bits);
+  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+    CDir *f = new CDir(diri, *p, cache, true);
+
+    // propogate flags
+    f->state_set(dir->get_state() &
+		 (CDir::STATE_DIRTY |
+		  CDir::STATE_COMPLETE |
+		  CDir::STATE_FROZENDIR));
+    f->set_version(dir->get_version());
+    f->pre_dirty();
+
+    dout(10) << " new frag " << *p << " " << *f << endl;
+    dirfrags.push_back(f);
+    diri->add_dirfrag(f);
+  }
+  assert(dirfrags.size() == frags.size());
+  
+  // update dirfragtree
+  dir->inode->dirfragtree.split(startfrag, bits);
+  dout(10) << "new inode dirfragtree is " << dir->inode->dirfragtree << endl;
+  
+  // partition dentries
+  while (!dir->items.empty()) {
+    map<string,CDentry*>::iterator p = dir->items.begin();
+
+    CDentry *dn = p->second;
+    frag_t frag = dir->inode->pick_dirfrag(p->first);
+    int n = frag.value() >> startfrag.bits();
+    dout(15) << "frag " << frag << " n=" << n << " for " << p->first << endl;
+    CDir *f = dirfrags[n];
+
+    CDentry *newdn;
+    if (dn->is_primary()) {
+      CInode *in = dn->get_inode();
+      dir->unlink_inode(dn);
+      newdn = f->add_dentry(dn->name, in);
+    } 
+    else if (dn->is_remote()) {
+      inodeno_t ino = dn->get_remote_ino();
+      newdn = f->add_dentry(dn->name, dn->get_remote_ino());
+    } 
+    else if (dn->is_null()) {
+      newdn = f->add_dentry(dn->name);
+    } 
+    else
+      assert(0);
+    
+    dout(15) << " new dn " << *newdn << endl;
+
+    dir->remove_dentry(dn);
+  }
+  
+
+
+
+
+  // remove old dir
+  diri->close_dirfrag(startfrag);
+  
+  
+}

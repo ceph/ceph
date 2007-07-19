@@ -444,46 +444,46 @@ protected:
   // --------------------------------------------
   // replication
  protected:
-  map<int,int> replicas;      // [auth] mds -> nonce
+  map<int,int> replica_map;      // [auth] mds -> nonce
   int          replica_nonce; // [replica] defined on replica
 
  public:
-  bool is_replicated() { return !replicas.empty(); }
-  bool is_replica(int mds) { return replicas.count(mds); }
-  int num_replicas() { return replicas.size(); }
+  bool is_replicated() { return !replica_map.empty(); }
+  bool is_replica(int mds) { return replica_map.count(mds); }
+  int num_replicas() { return replica_map.size(); }
   int add_replica(int mds) {
-    if (replicas.count(mds)) 
-      return ++replicas[mds];  // inc nonce
-    if (replicas.empty()) 
+    if (replica_map.count(mds)) 
+      return ++replica_map[mds];  // inc nonce
+    if (replica_map.empty()) 
       get(PIN_REPLICATED);
-    return replicas[mds] = 1;
+    return replica_map[mds] = 1;
   }
   void add_replica(int mds, int nonce) {
-    if (replicas.empty()) 
+    if (replica_map.empty()) 
       get(PIN_REPLICATED);
-    replicas[mds] = nonce;
+    replica_map[mds] = nonce;
   }
   int get_replica_nonce(int mds) {
-    assert(replicas.count(mds));
-    return replicas[mds];
+    assert(replica_map.count(mds));
+    return replica_map[mds];
   }
   void remove_replica(int mds) {
-    assert(replicas.count(mds));
-    replicas.erase(mds);
-    if (replicas.empty())
+    assert(replica_map.count(mds));
+    replica_map.erase(mds);
+    if (replica_map.empty())
       put(PIN_REPLICATED);
   }
-  void clear_replicas() {
-    if (!replicas.empty())
+  void clear_replica_map() {
+    if (!replica_map.empty())
       put(PIN_REPLICATED);
-    replicas.clear();
+    replica_map.clear();
   }
-  map<int,int>::iterator replicas_begin() { return replicas.begin(); }
-  map<int,int>::iterator replicas_end() { return replicas.end(); }
-  const map<int,int>& get_replicas() { return replicas; }
+  map<int,int>::iterator replicas_begin() { return replica_map.begin(); }
+  map<int,int>::iterator replicas_end() { return replica_map.end(); }
+  const map<int,int>& get_replicas() { return replica_map; }
   void list_replicas(set<int>& ls) {
-    for (map<int,int>::const_iterator p = replicas.begin();
-	 p != replicas.end();
+    for (map<int,int>::const_iterator p = replica_map.begin();
+	 p != replica_map.end();
 	 ++p) 
       ls.insert(p->first);
   }

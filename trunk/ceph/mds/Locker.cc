@@ -1197,8 +1197,6 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
 
 // dentry specific helpers
 
-// trace helpers
-
 /** dentry_can_rdlock_trace
  * see if we can _anonymously_ rdlock an entire trace.  
  * if not, and req is specified, wait and retry that message.

@@ -192,10 +192,10 @@ public:
     bl.append((char*)&version, sizeof(version));
     bl.append((char*)&projected_version, sizeof(projected_version));
     lock._encode(bl);
-    ::_encode(replicas, bl);
+    ::_encode(replica_map, bl);
 
     // twiddle
-    clear_replicas();
+    clear_replica_map();
     replica_nonce = EXPORT_NONCE;
     state_clear(CDentry::STATE_AUTH);
     if (is_dirty())
@@ -210,14 +210,14 @@ public:
     bl.copy(off, sizeof(projected_version), (char*)&projected_version);
     off += sizeof(projected_version);
     lock._decode(bl, off);
-    ::_decode(replicas, bl, off);
+    ::_decode(replica_map, bl, off);
 
     // twiddle
     state = 0;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
       _mark_dirty();
-    if (!replicas.empty())
+    if (!replica_map.empty())
       get(PIN_REPLICATED);
     add_replica(from, EXPORT_NONCE);
     if (is_replica(to))

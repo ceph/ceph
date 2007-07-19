@@ -2478,7 +2478,7 @@ void MDCache::rejoin_trim_undef_inodes()
   set<CInode*>::iterator p = rejoin_undef_inodes.begin();
   while (p != rejoin_undef_inodes.end()) {
     CInode *in = *p;
-    in->clear_replicas();
+    in->clear_replica_map();
     
     // close out dirfrags
     if (in->is_dir()) {
@@ -2488,13 +2488,13 @@ void MDCache::rejoin_trim_undef_inodes()
 	   p != dfls.end();
 	   ++p) {
 	CDir *dir = *p;
-	dir->clear_replicas();
+	dir->clear_replica_map();
 
 	for (map<string,CDentry*>::iterator p = dir->items.begin();
 	     p != dir->items.end();
 	     ++p) {
 	  CDentry *dn = p->second;
-	  dn->clear_replicas();
+	  dn->clear_replica_map();
 
 	  dout(10) << " trimming " << *dn << endl;
 	  dir->remove_dentry(dn);
@@ -2507,7 +2507,7 @@ void MDCache::rejoin_trim_undef_inodes()
     
     CDentry *dn = in->get_parent_dn();
     if (dn) {
-      dn->clear_replicas();
+      dn->clear_replica_map();
       dout(10) << " trimming " << *dn << endl;
       dn->dir->remove_dentry(dn);
     } else {
@@ -3214,7 +3214,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       if (nonce == dir->get_replica_nonce(from)) {
 	// remove from our cached_by
 	dout(7) << " dir expire on " << *dir << " from mds" << from
-		<< " replicas was " << dir->replicas << endl;
+		<< " replicas was " << dir->replica_map << endl;
 	dir->remove_replica(from);
       } 
       else {

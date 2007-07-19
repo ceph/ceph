@@ -356,6 +356,45 @@ void CDir::unlink_inode_work( CDentry *dn )
   nitems--;   // adjust dir size
 }
 
+
+void CDir::steal_dentry(CDentry *dn)
+{
+  dout(15) << "steal_dentry " << *dn << endl;
+
+  items[dn->name] = dn;
+
+  nitems++;
+  if (dn->is_null()) 
+    nnull++;
+  if (dn->is_primary()) 
+    nested_auth_pins += dn->inode->auth_pins + dn->inode->nested_auth_pins;
+  if (dn->is_dirty()) 
+    num_dirty++;
+
+  dn->dir = this;
+}
+
+void CDir::purge_stolen(list<Context*>& waiters)
+{
+  if (!items.empty()) {
+    put(PIN_CHILD);
+    items.clear();
+  }
+
+  if (is_dirty()) mark_clean();
+
+  if (state_test(STATE_EXPORT)) put(PIN_EXPORT);
+  if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
+  if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
+
+  if (auth_pins > 0) put(PIN_AUTHPIN);
+
+  take_waiting(WAIT_ANY, waiters);
+
+  assert(get_num_ref() == 0);
+}
+
+
 void CDir::remove_null_dentries() {
   dout(12) << "remove_null_dentries " << *this << endl;
 
@@ -1228,6 +1267,29 @@ void CDir::freeze_tree(Context *c)
   } 
 }
 
+void CDir::_freeze_tree(Context *c)
+{
+  dout(10) << "_freeze_tree " << *this << endl;
+
+  // there shouldn't be any conflicting auth_pins.
+  assert(is_freezeable_dir());
+
+  // twiddle state
+  state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+  state_set(STATE_FROZENTREE);
+  get(PIN_FROZEN);
+
+  // auth_pin inode for duration of freeze, if we are not a subtree root.
+  if (is_auth() && !is_subtree_root())
+    inode->auth_pin();  
+  
+  // continue to frozen land
+  if (c) {
+    c->finish(0);
+    delete c;
+  }
+}
+
 void CDir::freeze_tree_finish(Context *c)
 {
   // still freezing?  (we may have been canceled)
@@ -1251,28 +1313,6 @@ void CDir::freeze_tree_finish(Context *c)
   _freeze_tree(c);
 }
 
-void CDir::_freeze_tree(Context *c)
-{
-  dout(10) << "_freeze_tree " << *this << endl;
-
-  // there shouldn't be any conflicting auth_pins.
-  assert(is_freezeable_dir());
-
-  // twiddle state
-  state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
-  state_set(STATE_FROZENTREE);
-
-  // auth_pin inode for duration of freeze, if we are not a subtree root.
-  if (is_auth() && !is_subtree_root())
-    inode->auth_pin();  
-  
-  // continue to frozen land
-  if (c) {
-    c->finish(0);
-    delete c;
-  }
-}
-
 void CDir::unfreeze_tree()
 {
   dout(10) << "unfreeze_tree " << *this << endl;
@@ -1280,6 +1320,7 @@ void CDir::unfreeze_tree()
   if (state_test(STATE_FROZENTREE)) {
     // frozen.  unfreeze.
     state_clear(STATE_FROZENTREE);
+    put(PIN_FROZEN);
 
     // unpin  (may => FREEZEABLE)   FIXME: is this order good?
     if (is_auth() && !is_subtree_root())
@@ -1376,7 +1417,11 @@ void CDir::_freeze_dir(Context *c)
 {  
   dout(10) << "_freeze_dir " << *this << endl;
 
+  assert(is_freezeable_dir());
+
+  state_clear(STATE_FREEZINGDIR);
   state_set(STATE_FROZENDIR);
+  get(PIN_FROZEN);
 
   if (is_auth() && !is_subtree_root())
     inode->auth_pin();  // auth_pin for duration of freeze
@@ -1389,29 +1434,50 @@ void CDir::_freeze_dir(Context *c)
 
 void CDir::freeze_dir_finish(Context *c)
 {
+  // still freezing?  (we may have been canceled)
+  if (!is_freezing()) {
+    dout(10) << "freeze_dir_finish no longer freezing, done on " << *this << endl;
+    c->finish(-1);
+    delete c;
+    return;
+  }
+
   // freezeable now?
-  if (is_freezeable_dir()) {
-    // freeze now
-    _freeze_dir(c);
-  } else {
+  if (!is_freezeable_dir()) {
     // wait again!
     dout(10) << "freeze_dir_finish still waiting " << *this << endl;
     state_set(STATE_FREEZINGDIR);
     add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+    return;
   }
+
+  // freeze now
+  _freeze_dir(c);
 }
 
 void CDir::unfreeze_dir()
 {
   dout(10) << "unfreeze_dir " << *this << endl;
-  state_clear(STATE_FROZENDIR);
-  
-  // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-  if (is_auth() && !is_subtree_root())
-    inode->auth_unpin();
 
-  // waiters?
-  finish_waiting(WAIT_UNFREEZE);
+  if (state_test(STATE_FROZENDIR)) {
+    state_clear(STATE_FROZENDIR);
+    put(PIN_FROZEN);
+
+    // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+    if (is_auth() && !is_subtree_root())
+      inode->auth_unpin();
+
+    // waiters?
+    finish_waiting(WAIT_UNFREEZE);
+  } else {
+    // still freezing. stop.
+    assert(state_test(STATE_FREEZINGDIR));
+    state_clear(STATE_FREEZINGDIR);
+    
+    // cancel freeze waiters
+    finish_waiting(WAIT_UNFREEZE);
+    finish_waiting(WAIT_FREEZEABLE, -1);
+  }
 }
 
 

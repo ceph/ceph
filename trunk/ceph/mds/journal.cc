@@ -27,6 +27,7 @@
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
+#include "events/EFragment.h"
 
 #include "events/EAnchor.h"
 #include "events/EAnchorClient.h"
@@ -875,6 +876,31 @@ void ESubtreeMap::replay(MDS *mds)
   mds->mdcache->show_subtrees();
 }
 
+
+
+// -----------------------
+// EFragment
+
+bool EFragment::has_expired(MDS *mds)
+{
+  return metablob.has_expired(mds);
+}
+
+void EFragment::expire(MDS *mds, Context *c)
+{
+  metablob.expire(mds, c);
+}
+
+void EFragment::replay(MDS *mds)
+{
+  dout(10) << "EFragment.replay " << ino << " " << basefrag << " by " << bits << endl;
+  
+  CInode *in = mds->mdcache->get_inode(ino);
+  assert(in);
+
+  in->fragment_dir(basefrag, bits);
+  metablob.replay(mds);
+}
 
 
 

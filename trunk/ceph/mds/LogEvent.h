@@ -22,12 +22,12 @@
 #define EVENT_EXPORT       30
 #define EVENT_IMPORTSTART  31
 #define EVENT_IMPORTFINISH 32
+#define EVENT_FRAGMENT     33
 
 #define EVENT_UPDATE       3
 #define EVENT_SLAVEUPDATE  4
 #define EVENT_OPEN         5
 
-#define EVENT_ALLOC        10
 #define EVENT_PURGEFINISH  22
 
 #define EVENT_ANCHOR       40

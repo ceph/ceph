@@ -158,6 +158,8 @@ class CInode : public MDSCacheObject {
   void close_dirfrags();
   bool has_subtree_root_dirfrag();
 
+  void fragment_dir(frag_t base, int bits);
+
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
@@ -577,7 +579,7 @@ public:
     dirfragtree = in->dirfragtree;
 
     st.is_dirty = in->is_dirty();
-    replicas = in->replicas;
+    replicas = in->replica_map;
 
     in->authlock._encode(locks);
     in->linklock._encode(locks);
@@ -616,7 +618,7 @@ public:
     if (st.is_dirty) 
       in->_mark_dirty();
 
-    in->replicas = replicas;
+    in->replica_map = replicas;
     if (!replicas.empty()) 
       in->get(CInode::PIN_REPLICATED);
 

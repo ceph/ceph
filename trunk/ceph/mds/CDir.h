@@ -53,32 +53,32 @@ ostream& operator<<(ostream& out, class CDir& dir);
 typedef map<string, CDentry*> CDir_map_t;
 
 
-//extern int cdir_pins[CDIR_NUM_PINS];
-
 
 class CDir : public MDSCacheObject {
  public:
   // -- pins --
-  static const int PIN_DNWAITER = 1;
-  static const int PIN_CHILD =    2;
-  static const int PIN_EXPORT =   4;
-  static const int PIN_AUTHPIN =  8;
-  static const int PIN_IMPORTING = 9;
-  static const int PIN_EXPORTING = 10;
-  static const int PIN_IMPORTBOUND = 11;
-  static const int PIN_EXPORTBOUND = 12;
-  static const int PIN_LOGGINGEXPORTFINISH = 17;
+  static const int PIN_DNWAITER =     1;
+  static const int PIN_CHILD =        2;
+  static const int PIN_FROZEN =       3;
+  static const int PIN_FRAGMENTING =  4;
+  static const int PIN_EXPORT =       5;
+  static const int PIN_AUTHPIN =      6;
+  static const int PIN_IMPORTING =    7;
+  static const int PIN_EXPORTING =    8;
+  static const int PIN_IMPORTBOUND =  9;
+  static const int PIN_EXPORTBOUND = 10;
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_CHILD: return "child";
+    case PIN_FROZEN: return "frozen";
+    case PIN_FRAGMENTING: return "fragmenting";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
     case PIN_AUTHPIN: return "authpin";
-    case PIN_LOGGINGEXPORTFINISH: return "loggingexportfinish";
     default: return generic_pin_name(p);
     }
   }
@@ -98,6 +98,7 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_EXPORTBOUND =   (1<<14);
   static const unsigned STATE_EXPORTING =     (1<<15);
   static const unsigned STATE_IMPORTING =     (1<<16);
+  static const unsigned STATE_FRAGMENTING =   (1<<17);
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -202,6 +203,7 @@ protected:
 
   // -- accessors --
   inodeno_t ino()     const { return inode->ino(); }          // deprecate me?
+  frag_t    get_frag()    const { return frag; }
   dirfrag_t dirfrag() const { return dirfrag_t(inode->ino(), frag); }
 
   CInode *get_inode()    { return inode; }
@@ -242,10 +244,11 @@ protected:
   void link_inode( CDentry *dn, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
- private:
+private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
-
+  void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
+  void purge_stolen(list<Context*>& waiters);
   void remove_null_dentries();
 
   // -- authority --
@@ -516,7 +519,7 @@ class CDirExport {
     dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
 
     rep_by = dir->dir_rep_by;
-    replicas = dir->replicas;
+    replicas = dir->replica_map;
   }
 
   dirfrag_t get_dirfrag() { return st.dirfrag; }
@@ -541,12 +544,12 @@ class CDirExport {
 
     dir->replica_nonce = 0;  // no longer defined
 
-    if (!dir->replicas.empty())
-      dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replicas << endl;
+    if (!dir->replica_map.empty())
+      dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << endl;
 
     dir->dir_rep_by = rep_by;
-    dir->replicas = replicas;
-    dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replicas << endl;
+    dir->replica_map = replicas;
+    dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << endl;
     if (!replicas.empty())
       dir->get(CDir::PIN_REPLICATED);
     if (dir->is_dirty()) {

@@ -222,6 +222,93 @@ bool CInode::has_subtree_root_dirfrag()
 }
 
 
+void CInode::fragment_dir(frag_t basefrag, int bits)
+{
+  dout(10) << "fragment_dir " << basefrag << " by " << bits << endl;
+
+  CDir *base = get_or_open_dirfrag(mdcache, basefrag);
+
+  list<frag_t> frags;
+  basefrag.split(bits, frags);
+
+  vector<CDir*> subfrags(1 << bits);
+  
+  list<Context*> waiters;
+ 
+  if (bits > 0) {
+    // split. 
+    // update fragtree
+    dirfragtree.split(basefrag, bits);
+
+    // create subfrag dirs
+    for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+      CDir *f = new CDir(this, *p, mdcache, true);
+      
+      // propogate flags
+      f->state_set(base->get_state() &
+		   (CDir::STATE_DIRTY |
+		    CDir::STATE_COMPLETE |
+		    CDir::STATE_FROZENDIR));
+      f->set_version(base->get_version());
+
+      if (base->state_test(CDir::STATE_EXPORT)) {
+	f->state_set(CDir::STATE_EXPORT);
+	f->get(CDir::PIN_EXPORT);
+      }
+      
+      // dup replica map
+      f->replica_map = base->replica_map;
+      
+      dout(10) << " subfrag " << *p << " " << *f << endl;
+      subfrags.push_back(f);
+      add_dirfrag(f);
+    }
+    assert(subfrags.size() == frags.size());
+
+    // repartition dentries
+    while (!base->items.empty()) {
+      map<string,CDentry*>::iterator p = base->items.begin();
+      
+      CDentry *dn = p->second;
+      frag_t frag = base->inode->pick_dirfrag(p->first);
+      int n = frag.value() >> basefrag.bits();
+      dout(15) << " subfrag " << frag << " n=" << n << " for " << p->first << endl;
+      CDir *f = dirfrags[n];
+
+      f->steal_dentry(dn);
+    }
+
+    // empty.
+    base->purge_stolen(waiters);
+    close_dirfrag(basefrag);
+  } else {
+    // merge.  
+    dirfragtree.merge(basefrag, bits);
+
+    // enumerate subfrags
+    for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+      CDir *dir = get_or_open_dirfrag(mdcache, *p);
+      dout(10) << " subfrag " << *p << " " << *dir << endl;
+
+      // steal dentries
+      while (!dir->items.empty()) 
+	base->steal_dentry(dir->items.begin()->second);
+
+      // merge replica map
+      for (map<int,int>::iterator p = dir->replica_map.begin();
+	   p != dir->replica_map.end();
+	   ++p) 
+	base->replica_map[p->first] = MAX(base->replica_map[p->first], p->second);
+
+      dir->purge_stolen(waiters);
+      close_dirfrag(dir->dirfrag().frag);
+    }
+  }
+  
+  mdcache->mds->queue_waiters(waiters);
+}
+
+
 
 
 // pins
