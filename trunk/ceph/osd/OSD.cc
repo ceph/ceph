@@ -1579,7 +1579,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     pg_t pgid = it->pgid;
     PG *pg;
 
-    if (pg_map.count(pgid) == 0) {
+    if (!_have_pg(pgid)) {
       // same primary?
       PG::Info::History history = it->history;
       project_pg_history(pgid, history, m->get_epoch());
@@ -1610,7 +1610,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       }
     } else {
       // already had it.  am i (still) the primary?
-      pg->lock();
+      pg = _lookup_lock_pg(pgid);
       if (m->get_epoch() < pg->info.history.same_primary_since) {
         dout(10) << *pg << " handle_pg_notify primary changed in "
                  << pg->info.history.same_primary_since
