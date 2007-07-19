@@ -129,7 +129,7 @@ private:
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
-      ::posix_memalign((void**)&data, BUFFER_PAGE_SIZE, len);
+      ::posix_memalign((void**)(void*)&data, BUFFER_PAGE_SIZE, len);
 #endif /* DARWIN */
       inc_total_alloc(len);
     }

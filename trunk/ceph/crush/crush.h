@@ -484,7 +484,7 @@ namespace crush {
 
             // forcefeeding?
 	    bool forcing = false;
-	    int forceval;
+	    int forceval = -1;
 	    if (!force_stack.empty()) {
 	      forceval = force_stack.front();
 	      force_stack.pop_front();
