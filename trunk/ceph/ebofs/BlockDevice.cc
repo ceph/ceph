@@ -269,8 +269,14 @@ block_t BlockDevice::get_num_blocks()
     assert(fd > 0);
 
 #ifdef BLKGETSIZE64
-    // ioctl block device?
+    // ioctl block device
     ioctl(fd, BLKGETSIZE64, &num_blocks);
+#else
+    // hrm, try the 32 bit ioctl?
+    dout(0) << "hrm, no BLKGETSIZE64, falling back to BLKGETSIZE" << endl;
+    long sectors = 0;
+    ioctl(fd, BLKGETSIZE, &sectors);
+    num_blocks = 512*sectors;
 #endif
 
     if (!num_blocks) {
