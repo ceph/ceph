@@ -29,7 +29,9 @@
 #include <cassert>
 #include <errno.h>
 #include <dirent.h>
-#include <sys/xattr.h>
+#ifndef __CYGWIN__
+# include <sys/xattr.h>
+#endif
 //#include <sys/vfs.h>
 
 #ifdef DARWIN
@@ -179,9 +181,12 @@ int FakeStore::mount()
 
   // fake attrs? 
   // let's test to see if they work.
+#ifndef __CYGWIN__
   if (g_conf.fakestore_fake_attrs) {
+#endif
     dout(0) << "faking attrs (in memory)" << endl;
     fake_attrs = true;
+#ifndef __CYGWIN__
   } else {
     char names[1000];
     r = ::listxattr(basedir.c_str(), names, 1000);
@@ -190,6 +195,7 @@ int FakeStore::mount()
       assert(0);
     }
   }
+#endif
 
   // all okay.
   return 0;
@@ -406,9 +412,12 @@ int FakeStore::setattr(object_t oid, const char *name,
 {
   if (fake_attrs) return attrs.setattr(oid, name, value, size, onsafe);
 
+  int r = 0;
+#ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
-  int r = ::setxattr(fn, name, value, size, 0);
+  r = ::setxattr(fn, name, value, size, 0);
+#endif
   return r;
 }
 
@@ -419,12 +428,14 @@ int FakeStore::setattrs(object_t oid, map<string,bufferptr>& aset)
   char fn[100];
   get_oname(oid, fn);
   int r = 0;
+#ifndef __CYGWIN__
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
     if (r < 0) break;
   }
+#endif
   return r;
 }
 
@@ -432,9 +443,12 @@ int FakeStore::getattr(object_t oid, const char *name,
 		       void *value, size_t size) 
 {
   if (fake_attrs) return attrs.getattr(oid, name, value, size);
+  int r = 0;
+#ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
-  int r = ::getxattr(fn, name, value, size);
+  r = ::getxattr(fn, name, value, size);
+#endif
   return r;
 }
 
@@ -442,6 +456,7 @@ int FakeStore::getattrs(object_t oid, map<string,bufferptr>& aset)
 {
   if (fake_attrs) return attrs.getattrs(oid, aset);
 
+#ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
 
@@ -457,16 +472,19 @@ int FakeStore::getattrs(object_t oid, map<string,bufferptr>& aset)
     aset[names].append(val, l);
     name += strlen(name) + 1;
   }
-  
+#endif
   return 0;
 }
 
 int FakeStore::rmattr(object_t oid, const char *name, Context *onsafe) 
 {
   if (fake_attrs) return attrs.rmattr(oid, name, onsafe);
+  int r = 0;
+#ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
-  int r = ::removexattr(fn, name);
+  r = ::removexattr(fn, name);
+#endif
   return r;
 }
 

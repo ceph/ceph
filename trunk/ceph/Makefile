@@ -117,8 +117,6 @@ nofuse: depend ${NO_FUSE}
 
 test: depend ${TEST_TARGETS}
 
-obfs: depend obfstest
-
 
 # real bits
 mkmonmap: mkmonmap.cc common.o
@@ -184,17 +182,6 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
-
-
-# + obfs (old)
-fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
-	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
-
-tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
-
-osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 
 # hadoop

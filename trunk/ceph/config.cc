@@ -267,21 +267,6 @@ md_config_t g_conf = {
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
-  // --- obfs ---
-  uofs: 0,
-  uofs_fake_sync: 2,      // 2 seconds
-  uofs_cache_size:             1 << 28,        //256MB
-  uofs_onode_size:             (int)1024,
-  uofs_small_block_size:       (int)4096,      //4KB
-  uofs_large_block_size:       (int)524288,    //512KB
-  uofs_segment_size:           (int)268435456, //256MB
-  uofs_block_meta_ratio:       (int)10,
-  uofs_sync_write:             (int)0,
-  uofs_nr_hash_buckets:        (int)1023,
-  uofs_flush_interval:         (int)5,         //seconds
-  uofs_min_flush_pages:        (int)1024,      //4096 4k-pages
-  uofs_delay_allocation:       (int)1,         //true
-
   // --- block device ---
   bdev_lock: true,
   bdev_iothreads:    1,         // number of ios to queue with kernel
@@ -749,12 +734,6 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.fakestore_fake_attrs = true;//atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_fake_collections") == 0) 
       g_conf.fakestore_fake_collections = true;//atoi(args[++i]);
-
-    else if (strcmp(args[i], "--obfs") == 0) {
-      g_conf.uofs = 1;
-      g_conf.osd_maxthreads = 1;   // until feng merges joel's fixes
-    }
-
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);

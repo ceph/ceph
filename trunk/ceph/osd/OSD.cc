@@ -19,11 +19,7 @@
 #include "OSD.h"
 #include "OSDMap.h"
 
-#ifdef USE_OBFS
-# include "OBFSStore.h"
-#else
-# include "FakeStore.h"
-#endif
+#include "FakeStore.h"
 
 #include "ebofs/Ebofs.h"
 
@@ -163,11 +159,6 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) :
     store = new Ebofs(dev_path);
     //store->_fake_writes(true);
   }
-#ifdef USE_OBFS
-  else if (g_conf.uofs) {
-    store = new OBFSStore(whoami, NULL, dev_path);
-  }
-#endif
 #ifdef USE_OSBDB
   else if (g_conf.bdbstore) {
     store = new OSBDB(dev_path);
