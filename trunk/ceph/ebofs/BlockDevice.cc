@@ -702,9 +702,12 @@ int BlockDevice::open(kicker *idle)
   }
                
   // figure size
-  uint64_t bsize = get_num_blocks();
-  
-  dout(2) << "open " << bsize << " bytes, " << num_blocks << " blocks" << endl;
+  block_t b = get_num_blocks();
+  if (!b) {
+    dout(0) << "open can't determine size of device" << endl;
+    assert(0);
+  }
+  dout(2) << "open " << b << " blocks, " << b*4096 << " bytes" << endl;
   
   // start thread
   io_threads_started = 0;
