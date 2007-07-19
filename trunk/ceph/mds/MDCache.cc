@@ -2597,13 +2597,10 @@ void MDCache::rejoin_send_acks()
   
   // send acks to everyone in the recovery set
   map<int,MMDSCacheRejoin*> ack;
-  set<int> weak;
   for (set<int>::iterator p = recovery_set.begin();
        p != recovery_set.end();
-       ++p) {
+       ++p) 
     ack[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
-    if (mds->mdsmap->is_rejoin(*p)) weak.insert(*p);
-  }
   
   // walk subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin(); 
@@ -2650,8 +2647,7 @@ void MDCache::rejoin_send_acks()
 	for (map<int,int>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  if (weak.count(r->first))
-	    ack[r->first]->add_full_inode(in->inode, in->symlink, in->dirfragtree);
+	  ack[r->first]->add_full_inode(in->inode, in->symlink, in->dirfragtree);
 	  ack[r->first]->add_strong_inode(in->ino(), r->second, 0,
 					  in->authlock.get_replica_state(),
 					  in->linklock.get_replica_state(),
