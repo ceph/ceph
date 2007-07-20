@@ -177,6 +177,7 @@ class MClientRequest : public Message {
   bool follow_trailing_symlink() {
     switch (st.op) {
     case MDS_OP_LSTAT:
+    case MDS_OP_FSTAT:
     case MDS_OP_LINK:
     case MDS_OP_UNLINK:
     case MDS_OP_RENAME:
@@ -188,6 +189,13 @@ class MClientRequest : public Message {
     case MDS_OP_CHOWN:
     case MDS_OP_READDIR:
     case MDS_OP_OPEN:
+    case MDS_OP_TRUNCATE:
+
+    case MDS_OP_FSYNC:
+    case MDS_OP_MKNOD:
+    case MDS_OP_MKDIR:
+    case MDS_OP_RMDIR:
+    case MDS_OP_SYMLINK:
       return true;
 
     default:
