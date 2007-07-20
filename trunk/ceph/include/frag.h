@@ -33,9 +33,9 @@
  * 
  * this vaguely resembles a btree, in that when a fragment becomes large or small
  * we can split or merge, except that there is no guarantee of being balanced.
+ *
  * presumably we are partitioning the output of a (perhaps specialized) hash 
  * function.
- * 
  */
 
 /**
@@ -51,6 +51,9 @@
  * we write it as v/b, where v is a value and b is the number of bits.
  * 0/0 (bits==0) corresponds to the entire namespace.  if we bisect that,
  * we get 0/1 and 1/1.  quartering gives us 0/2, 1/2, 2/2, 3/2.  and so on.
+ *
+ * this makes the right most bit of v the "most significant", which is the 
+ * opposite of what we usually see.
  */
 
 typedef uint32_t _frag_t;
@@ -64,7 +67,8 @@ class frag_t {
   
  public:
   frag_t() : _enc(0) { }
-  frag_t(unsigned v, unsigned b) : _enc((b << 24) + v) { }
+  frag_t(unsigned v, unsigned b) : _enc((b << 24) + 
+					(v & (0xffffffff >> b))) { }
   frag_t(_frag_t e) : _enc(e) { }
 
   // constructors
@@ -81,7 +85,7 @@ class frag_t {
     return (v & mask()) == value();
   }
   bool contains(frag_t sub) const {
-    return (sub.bits() >= bits() &&             // they are more specific than us,
+    return (sub.bits() >= bits() &&             // they at least as specific as us,
 	    (sub.value() & mask()) == value()); // and they are contained by us.
   }
   bool is_root() const { 
@@ -93,17 +97,33 @@ class frag_t {
   }
 
   // splitting
-  frag_t left_half() const {
-    return frag_t(value(), bits()+1);
-  }
-  frag_t right_half() const {
-    return frag_t(value() | (1<<bits()), bits()+1);
-  }
   void split(int nb, list<frag_t>& fragments) const {
     assert(nb > 0);
     unsigned nway = 1 << (nb-1);
     for (unsigned i=0; i<nway; i++) 
       fragments.push_back( frag_t(value() | (i << (bits()+nb-1)), bits()+nb) );
+  }
+
+  // binary splitting
+  frag_t get_sibling() const {
+    assert(bits() > 0);
+    return frag_t(_enc ^ (1 << (bits()-1)));
+  }
+  bool is_left() const {
+    return 
+      bits() > 0 &&
+      (value() & (1 << (bits()-1)) == 0);
+  }
+  bool is_right() const {
+    return 
+      bits() > 0 &&
+      (value() & (1 << (bits()-1)) == 1);
+  }
+  frag_t left_child() const {
+    return frag_t(value(), bits()+1);
+  }
+  frag_t right_child() const {
+    return frag_t(value() | (1<<bits()), bits()+1);
   }
 };
 
@@ -114,9 +134,7 @@ inline ostream& operator<<(ostream& out, frag_t& hb)
 
 
 /**
- * fragtree_t
- *
- * partition for an entire namespace.
+ * fragtree_t -- partition an entire namespace into one or more frag_t's. 
  */
 class fragtree_t {
   // pairs <f, b>:
@@ -125,6 +143,13 @@ class fragtree_t {
   std::map<frag_t,__int32_t> _splits;  
 
  public:
+  // -------------
+  // basics
+  void swap(fragtree_t& other) {
+    _splits.swap(other._splits);
+  }
+
+  // -------------
   // accessors
   bool empty() { 
     return _splits.empty();
@@ -136,10 +161,28 @@ class fragtree_t {
     else
       return p->second;
   }
-  void get_leaves(list<frag_t>& ls) const {
-    get_leaves(frag_t(), ls);
+
+  
+  bool is_leaf(frag_t x) const {
+    list<frag_t> ls;
+    get_leaves_under_split(x, ls);
+    if (!ls.empty() &&
+	ls.front() == x)
+      return true;
+    return false;
   }
-  void get_leaves(frag_t under, list<frag_t>& ls) const {
+
+  /**
+   * get_leaves -- list all leaves
+   */
+  void get_leaves(list<frag_t>& ls) const {
+    return get_leaves_under_split(frag_t(), ls);
+  }
+
+  /**
+   * get_leaves_under_split -- list all leaves under a known split point (or root)
+   */
+  void get_leaves_under_split(frag_t under, list<frag_t>& ls) const {
     list<frag_t> q;
     q.push_back(under);
     while (!q.empty()) {
@@ -152,23 +195,80 @@ class fragtree_t {
 	ls.push_back(t);  // not spit, it's a leaf.
     }
   }
-  bool contains(frag_t fg) const {
+
+  /**
+   * get_branch -- get branch point for frag @x
+   *  - may be @x itself, if @x is a split
+   *  - may be root (frag_t())
+   */
+  frag_t get_branch(frag_t x) const {
+    while (1) {
+      if (x == frag_t()) return x;  // root
+      if (get_split(x)) return x;   // found it!
+      x = x.parent();
+    }
+  }
+  /**
+   * get_branch_or_leaf -- get branch or leaf point parent for frag @x
+   *  - may be @x itself, if @x is a split or leaf
+   *  - may be root (frag_t())
+   */
+  frag_t get_branch_or_leaf(frag_t x) const {
+    frag_t branch = get_branch(x);
+    int nb = get_split(branch);
+    if (nb > 0 &&                                  // if branch is a split, and
+	branch.bits() + nb <= x.bits())            // one of the children is or contains x
+      return frag_t(branch.bits()+nb, x.value());  // then return that child (it's a leaf)
+    else
+      return branch;
+  }
+
+  /**
+   * get_leaves_under(x, ls) -- search for any leaves fully contained by x
+   */
+  void get_leaves_under(frag_t x, list<frag_t>& ls) const {
     list<frag_t> q;
-    q.push_back(frag_t());
+    q.push_back(get_branch(x));
     while (!q.empty()) {
       frag_t t = q.front();
       q.pop_front();
+      if (t.bits() >= x.bits() &&    // if t is more specific than x, and
+	  !x.contains(t))            // x does not contain t,
+	continue;         // then skip
+      int nb = get_split(t);
+      if (nb) 
+	t.split(nb, q);   // queue up children
+      else 
+	ls.push_back(t);  // not spit, it's a leaf.
+    }
+  }
+
+  /**
+   * contains(fg) -- does fragtree contain the specific frag @x
+   */
+  bool contains(frag_t x) const {
+    list<frag_t> q;
+    q.push_back(get_branch(x));
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      if (t.bits() >= x.bits() &&  // if t is more specific than x, and
+	  !x.contains(t))          // x does not contain t,
+	continue;         // then skip 
       int nb = get_split(t);
       if (nb) {
-	if (t == fg) return false;  // it's split.
+	if (t == x) return false;  // it's split.
 	t.split(nb, q);   // queue up children
       } else {
-	if (t == fg) return true;   // it's there.
+	if (t == x) return true;   // it's there.
       }
     }
     return false;
   }
 
+  /** 
+   * operator[] -- map a (hash?) value to a frag
+   */
   frag_t operator[](unsigned v) const {
     frag_t t;
     while (1) {
@@ -191,18 +291,62 @@ class fragtree_t {
       assert(i < nway);
     }
   }
-  
+
+
+  // ---------------
   // modifiers
-  void swap(fragtree_t& other) {
-    _splits.swap(other._splits);
+  void split(frag_t x, int b) {
+    assert(is_leaf(x));
+    _splits[x] = b;
   }
-  void split(frag_t hb, int b) {
-    assert(_splits.count(hb) == 0);
-    _splits[hb] = b;
+  void merge(frag_t x, int b) {
+    assert(!is_leaf(x));
+    assert(_splits[x] == b);
+    _splits.erase(x);
   }
-  void merge(frag_t hb, int b) {
-    assert(_splits[hb] == b);
-    _splits.erase(hb);
+
+  void force_to_leaf(frag_t x) {
+    assert(!is_leaf(x));
+
+    frag_t parent = get_branch_or_leaf(x);
+    assert(parent.bits() <= x.bits());
+
+    // do we need to split from parent to x?
+    if (parent.bits() < x.bits()) {
+      int spread = x.bits() - parent.bits();
+      int nb = get_split(parent);
+      if (nb == 0) {
+	// easy: split parent (a leaf) by the difference
+	split(parent, spread);
+	return;
+      }
+      assert(nb > spread);
+      
+      // add an intermediary split
+      merge(parent, nb);
+      split(parent, spread);
+
+      list<frag_t> subs;
+      parent.split(spread, subs);
+      for (list<frag_t>::iterator p = subs.begin();
+	   p != subs.end();
+	   ++p) 
+	split(*p, nb - spread);
+    }
+
+    // x is now a leaf or split.  
+    // hoover up any children.
+    list<frag_t> q;
+    q.push_back(x);
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      int nb = get_split(t);
+      if (nb) {
+	merge(t, nb);         // merge this point, and
+	t.split(nb, q);   // queue up children
+      }
+    }    
   }
 
   // verify that we describe a legal partition of the namespace.
@@ -230,13 +374,35 @@ class fragtree_t {
   void _decode(bufferlist& bl, int& off) {
     ::_decode(_splits, bl, off);
   }
+
+  void print(ostream& out) {
+    out << "fragtree_t(";
+    list<frag_t> q;
+    q.push_back(frag_t());
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      // newline + indent?
+      if (t.bits()) {
+	out << endl;
+	for (unsigned i=0; i<t.bits(); i++) out << ' ';
+      }
+      int nb = get_split(t);
+      if (nb) {
+	out << t << " %" << nb;
+	t.split(nb, q);   // queue up children
+      } else {
+	out << t;
+      }
+    }
+    out << ")";
+  }
 };
 
 inline ostream& operator<<(ostream& out, fragtree_t& ft)
 {
   out << "fragtree_t(";
   
-  bool first = true;
   list<frag_t> q;
   q.push_back(frag_t());
   while (!q.empty()) {
@@ -244,15 +410,64 @@ inline ostream& operator<<(ostream& out, fragtree_t& ft)
     q.pop_front();
     int nb = ft.get_split(t);
     if (nb) {
-      if (first) 
-	first = false;
-      else
-	out << ' ';
+      if (t.bits()) out << ' ';
       out << t << '%' << nb;
       t.split(nb, q);   // queue up children
     }
   }
   return out << ")";
+}
+
+
+/**
+ * fragset_t -- a set of fragments
+ */
+class fragset_t {
+  set<frag_t> _set;
+
+public:
+  set<frag_t> &get() { return _set; }
+  set<frag_t>::iterator begin() { return _set.begin(); }
+  set<frag_t>::iterator end() { return _set.end(); }
+
+  bool empty() const { return _set.empty(); }
+
+  bool contains(frag_t f) const {
+    while (1) {
+      if (_set.count(f)) return true;
+      if (f.bits() == 0) return false;
+      f = f.parent();
+    }
+  }
+  
+  void insert(frag_t f) {
+    _set.insert(f);
+    simplify();
+  }
+
+  void simplify() {
+    while (1) {
+      bool clean = true;
+      set<frag_t>::iterator p = _set.begin();
+      while (p != _set.end()) {
+	if (_set.count(p->get_sibling())) {
+	  _set.erase(p->get_sibling());
+	  _set.insert(p->parent());
+	  _set.erase(p++);
+	  clean = false;
+	} else {
+	  p++;
+	}
+      }
+      if (clean)
+	break;
+    }
+  }
+};
+
+inline ostream& operator<<(ostream& out, fragset_t& fs) 
+{
+  return out << "fragset_t(" << fs.get() << ")" << endl;
 }
 
 #endif

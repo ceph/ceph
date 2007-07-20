@@ -81,8 +81,7 @@ public:
   CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
 
-  CDir* try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr);
-  //CDir* try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr);
+  CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
 
   version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
   void dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime);

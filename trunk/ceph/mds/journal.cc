@@ -936,11 +936,11 @@ void EPurgeFinish::replay(MDS *mds)
 bool EExport::has_expired(MDS *mds)
 {
   CDir *dir = mds->mdcache->get_dirfrag(base);
-  if (!dir) return true;
-  if (!mds->mdcache->migrator->is_exporting(dir))
-    return true;
-  dout(10) << "EExport.has_expired still exporting " << *dir << endl;
-  return false;
+  if (dir && mds->mdcache->migrator->is_exporting(dir)) {
+    dout(10) << "EExport.has_expired still exporting " << *dir << endl;
+    return false;
+  }
+  return true;
 }
 
 void EExport::expire(MDS *mds, Context *c)

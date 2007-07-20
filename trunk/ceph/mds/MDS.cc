@@ -1218,26 +1218,6 @@ void MDS::my_dispatch(Message *m)
 
 
 
-  // HACK to force export to test foreign renames
-  if (false && whoami == 0) {
-    /*
-    static bool didit = false;
-    
-    // 7 to 1
-    CInode *in = mdcache->get_inode(1001);
-    if (in && in->is_dir() && !didit) {
-      CDir *dir = in->get_or_open_dir(mdcache);
-      if (dir->is_auth()) {
-        dout(1) << "FORCING EXPORT" << endl;
-        mdcache->migrator->export_dir(dir,1);
-        didit = true;
-      }
-    }
-    */
-  }
-
-
-
   // shut down?
   if (is_stopping()) {
     if (mdcache->shutdown_pass()) {

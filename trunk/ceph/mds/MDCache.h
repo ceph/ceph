@@ -91,6 +91,7 @@ struct MDRequest {
   // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
+  set<CInode*> stickydirs;
 
   // auth pins
   set< MDSCacheObject* > auth_pins;
@@ -155,6 +156,12 @@ struct MDRequest {
       o->get(MDSCacheObject::PIN_REQUEST);
       pins.insert(o);
     }      
+  }
+  void set_stickydirs(CInode *in) {
+    if (stickydirs.count(in) == 0) {
+      in->get_stickydirs();
+      stickydirs.insert(in);
+    }
   }
 
   // auth pins
@@ -438,10 +445,12 @@ public:
     if (!have_inode(df.ino)) return NULL;
     return inode_map[df.ino]->get_dirfrag(df.frag);
   }
-  void get_dirfrags(dirfrag_t df, list<CDir*>& ls) {
+  /*
+  void get_dirfrags_under(dirfrag_t df, list<CDir*>& ls) {
     if (have_inode(df.ino))
-      inode_map[df.ino]->get_dirfrags(df.frag, ls);
+      inode_map[df.ino]->get_dirfrags_under(df.frag, ls);
   }
+  */
 
   MDSCacheObject *get_object(MDSCacheObjectInfo &info);
 
@@ -518,7 +527,7 @@ public:
   }
   CDir *path_traverse_to_dir(filepath& path);
   
-  void open_remote_dir(CInode *diri, frag_t fg, Context *fin);
+  void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
   void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);
   void open_remote_ino_2(inodeno_t ino, MDRequest *mdr,

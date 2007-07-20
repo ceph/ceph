@@ -3989,14 +3989,20 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
 }
 
 
-
-void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin) 
+/**
+ * open_remote_dir -- open up a remote dirfrag
+ *
+ * @diri - base inode
+ * @approxfg - approximate fragment.
+ * @fin - completion callback
+ */
+void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin) 
 {
   dout(10) << "open_remote_dir on " << *diri << endl;
   
   assert(diri->is_dir());
   assert(!diri->is_auth());
-  assert(diri->get_dirfrag(fg) == 0);
+  assert(diri->get_dirfrag(approxfg) == 0);
 
   int auth = diri->authority().first;
 
@@ -4007,13 +4013,13 @@ void MDCache::open_remote_dir(CInode *diri, frag_t fg, Context *fin)
 				   diri->ino(),
 				   want,
 				   true);  // need the base dir open
-    dis->set_base_dir_frag(fg);
+    dis->set_base_dir_frag(approxfg);
     mds->send_message_mds(dis, auth, MDS_PORT_CACHE);
     dir_discovers[diri->ino()].insert(auth);
     diri->add_waiter(CInode::WAIT_DIR, fin);
   } else {
     // mds is down or recovering.  forge a replica!
-    forge_replica_dir(diri, fg, auth);
+    forge_replica_dir(diri, approxfg, auth);
   }
 }
 
@@ -4045,6 +4051,19 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
     return 0;
   }
 }
+
+class C_MDC_RetryOpenRemoteIno : public Context {
+  MDCache *mdcache;
+  inodeno_t ino;
+  MDRequest *mdr;
+  Context *onfinish;
+public:
+  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, MDRequest *r, Context *c) :
+    mdcache(mdc), ino(i), mdr(r), onfinish(c) {}
+  void finish(int r) {
+    mdcache->open_remote_ino(ino, mdr, onfinish);
+  }
+};
 
 
 class C_MDC_OpenRemoteIno : public Context {
@@ -4126,8 +4145,9 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (!in->is_auth()) {
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << endl;
-    open_remote_dir(in, frag,
-		    new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
+    /* FIXME: we re-query the anchortable just to avoid a fragtree update race */
+    open_remote_dirfrag(in, frag,
+			new C_MDC_RetryOpenRemoteIno(this, ino, mdr, onfinish));
     return;
   }
 
@@ -5268,7 +5288,9 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
     // discover it?
     if (m->should_discover()) {
-      m->tried_discover();  // only once!
+      // only try once! 
+      // this is key to avoid a fragtree update race, among other things.
+      m->tried_discover();        
       vector<CDentry*> trace;
       filepath path = m->get_path();
 
@@ -5283,8 +5305,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
       CInode *in = get_inode(m->get_dirfrag().ino);
       assert(in);
-      open_remote_dir(in, m->get_dirfrag().frag, 
-		      new C_MDS_RetryMessage(mds, m));
+      open_remote_dirfrag(in, m->get_dirfrag().frag, 
+			  new C_MDS_RetryMessage(mds, m));
       return;
     }
 

@@ -868,8 +868,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
 
   // which dirfrag?
   frag_t fg = diri->pick_dirfrag(dname);
-
-  CDir *dir = try_open_auth_dir(diri, fg, mdr);
+  CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
   if (!dir)
     return 0;
 
@@ -1161,37 +1160,41 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
 
 
-CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
+/**
+ * try_open_auth_dirfrag -- open dirfrag, or forward to dirfrag auth
+ *
+ * @diri base indoe
+ * @fg the exact frag we want
+ * @mdr request
+ */
+CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 {
   CDir *dir = diri->get_dirfrag(fg);
 
   // not open and inode not mine?
   if (!dir && !diri->is_auth()) {
     int inauth = diri->authority().first;
-    dout(7) << "try_open_auth_dir: not open, not inode auth, fw to mds" << inauth << endl;
+    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds" << inauth << endl;
     mdcache->request_forward(mdr, inauth);
     return 0;
   }
 
   // not open and inode frozen?
   if (!dir && diri->is_frozen_dir()) {
-    dout(10) << "try_open_auth_dir: dir inode is frozen, waiting " << *diri << endl;
+    dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << endl;
     assert(diri->get_parent_dir());
     diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
 
   // invent?
-  if (!dir) {
-    assert(diri->is_auth());
+  if (!dir) 
     dir = diri->get_or_open_dirfrag(mds->mdcache, fg);
-  }
-  assert(dir);
  
   // am i auth for the dirfrag?
   if (!dir->is_auth()) {
     int auth = dir->authority().first;
-    dout(7) << "try_open_auth_dir: not auth for " << *dir
+    dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
 	    << ", fw to mds" << auth << endl;
     mdcache->request_forward(mdr, auth);
     return 0;
@@ -1200,38 +1203,6 @@ CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MDRequest *mdr)
   return dir;
 }
 
-/*
-CDir* Server::try_open_dir(CInode *diri, frag_t fg, MDRequest *mdr)
-{
-  CDir *dir = diri->get_dirfrag(fg);
-  if (dir) 
-    return dir;
-
-  if (diri->is_auth()) {
-    // auth
-    // not open and inode frozen?
-    if (!dir && diri->is_frozen_dir()) {
-      dout(10) << "try_open_dir: dir inode is auth+frozen, waiting " << *diri << endl;
-      assert(diri->get_parent_dir());
-      diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-    
-    // invent?
-    if (!dir) {
-      assert(diri->is_auth());
-      dir = diri->get_or_open_dirfrag(mds->mdcache, fg);
-    }
-    assert(dir);
-    return dir;
-  } else {
-    // not auth
-    mdcache->open_remote_dir(diri, fg,
-			     new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
-}
-*/
 
 
 /** predirty_dn_diri
@@ -1522,14 +1493,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // which frag?
   frag_t fg = req->args.readdir.frag;
 
-  // does it exist?
+  // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
     dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << endl;
     reply_request(mdr, -EAGAIN);
     return;
   }
   
-  CDir *dir = try_open_auth_dir(diri, fg, mdr);
+  CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
   if (!dir) return;
 
   // ok!
@@ -2517,9 +2488,7 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
   for (list<frag_t>::iterator p = frags.begin();
        p != frags.end();
        ++p) {
-    CDir *dir = in->get_dirfrag(*p);
-    if (!dir) 
-      dir = in->get_or_open_dirfrag(mdcache, *p);
+    CDir *dir = in->get_or_open_dirfrag(mdcache, *p);
     assert(dir);
 
     // dir looks empty but incomplete?
@@ -2708,18 +2677,18 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (srcdn->is_primary() && 
       !srcdn->is_auth() && 
       srci->is_dir()) {
-    dout(10) << "srci is remote dir, opening all frags" << endl;
+    dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << endl;
+    mdr->set_stickydirs(srci);
+
     list<frag_t> frags;
     srci->dirfragtree.get_leaves(frags);
     for (list<frag_t>::iterator p = frags.begin();
 	 p != frags.end();
 	 ++p) {
       CDir *dir = srci->get_dirfrag(*p);
-      if (dir) {
-	dout(10) << " opened " << *dir << endl;
-	mdr->pin(dir);
-      } else {
-	mdcache->open_remote_dir(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
+      if (!dir) {
+	dout(10) << " opening " << *dir << endl;
+	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
     }

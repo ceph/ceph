@@ -747,12 +747,19 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   switch (lock_type) {
   case LOCK_OTYPE_DN:
     {
-      CDir *dir = mdcache->get_dirfrag(info.dirfrag);
+      // be careful; info.dirfrag may have incorrect frag; recalculate based on dname.
+      CInode *diri = mdcache->get_inode(info.dirfrag.ino);
+      frag_t fg;
+      CDir *dir = 0;
       CDentry *dn = 0;
-      if (dir) 
-	dn = dir->lookup(info.dname);
+      if (diri) {
+	fg = diri->pick_dirfrag(info.dname);
+	dir = diri->get_dirfrag(fg);
+	if (dir) 
+	  dn = dir->lookup(info.dname);
+      }
       if (!dn) {
-	dout(7) << "get_lock don't have dn " << info.dirfrag << " " << info.dname << endl;
+	dout(7) << "get_lock don't have dn " << info.dirfrag.ino << " " << info.dname << endl;
 	return 0;
       }
       return &dn->lock;

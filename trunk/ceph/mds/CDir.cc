@@ -363,6 +363,8 @@ void CDir::steal_dentry(CDentry *dn)
 
   items[dn->name] = dn;
 
+  if (nitems == 0)
+    get(PIN_CHILD);
   nitems++;
   if (dn->is_null()) 
     nnull++;

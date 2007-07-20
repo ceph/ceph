@@ -120,8 +120,8 @@ class CInode : public MDSCacheObject {
   // inode contents proper
   inode_t          inode;        // the inode itself
   string           symlink;      // symlink dest, if symlink
-  fragtree_t       dirfragtree;  // dir frag tree, if any
-  map<frag_t,int>  dirfrag_size; // size of each dirfrag
+  fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  //map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t            last_open_journaled;  // log offset for the last journaled EOpen
 
@@ -154,7 +154,7 @@ public:
     else
       return 0;
   }
-  void get_dirfrags(frag_t fg, list<CDir*>& ls);
+  void get_dirfrags_under(frag_t fg, list<CDir*>& ls);
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);

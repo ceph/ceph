@@ -215,7 +215,6 @@ public:
   // importer
   void handle_export_discover(MExportDirDiscover *m);
   void handle_export_cancel(MExportDirCancel *m);
-  void import_discovered(CInode *in, dirfrag_t df);
   void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
 
@@ -231,6 +230,7 @@ public:
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
+  void import_remove_pins(CDir *dir);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_unpin(CDir *dir);
   void import_notify_abort(CDir *dir);

@@ -133,10 +133,10 @@ frag_t CInode::pick_dirfrag(const string& dn)
   return dirfragtree[H(dn)];
 }
 
-void CInode::get_dirfrags(frag_t fg, list<CDir*>& ls)
+void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   list<frag_t> fglist;
-  dirfragtree.get_leaves(fg, fglist);
+  dirfragtree.get_leaves_under(fg, fglist);
   for (list<frag_t>::iterator p = fglist.begin();
        p != fglist.end();
        ++p) 
@@ -301,14 +301,21 @@ void CInode::fragment_dir(frag_t basefrag, int bits)
       f->state_set(base->get_state() &
 		   (CDir::STATE_DIRTY |
 		    CDir::STATE_COMPLETE |
-		    CDir::STATE_FROZENDIR));
+		    CDir::STATE_FROZENDIR |
+		    CDir::STATE_EXPORT |
+		    CDir::STATE_EXPORTBOUND |
+		    CDir::STATE_IMPORTBOUND |
+		    CDir::STATE_STICKY |
+		    0));
+      if (f->state_test(CDir::STATE_DIRTY)) f->get(CDir::PIN_DIRTY);
+      if (f->state_test(CDir::STATE_FROZENDIR)) f->get(CDir::PIN_FROZEN);
+      if (f->state_test(CDir::STATE_EXPORT)) f->get(CDir::PIN_EXPORT);
+      if (f->state_test(CDir::STATE_EXPORTBOUND)) f->get(CDir::PIN_EXPORTBOUND);
+      if (f->state_test(CDir::STATE_IMPORTBOUND)) f->get(CDir::PIN_IMPORTBOUND);
+      if (f->state_test(CDir::STATE_STICKY)) f->get(CDir::PIN_STICKY);
+
       f->set_version(base->get_version());
 
-      if (base->state_test(CDir::STATE_EXPORT)) {
-	f->state_set(CDir::STATE_EXPORT);
-	f->get(CDir::PIN_EXPORT);
-      }
-      
       // dup replica map
       f->replica_map = base->replica_map;
       

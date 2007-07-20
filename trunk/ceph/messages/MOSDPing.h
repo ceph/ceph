@@ -36,23 +36,19 @@ class MOSDPing : public Message {
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(map_epoch), (char*)&map_epoch);
-    off += sizeof(map_epoch);
-    payload.copy(off, sizeof(ack), (char*)&ack);
-    off += sizeof(ack);
-    payload.copy(off, sizeof(avg_qlen), (char*)&avg_qlen);
-    off += sizeof(avg_qlen);
-    payload.copy(off, sizeof(read_mean_time), (char*)&read_mean_time);
-    off += sizeof(read_mean_time);
+    ::_decode(map_epoch, payload, off);
+    ::_decode(ack, payload, off);
+    ::_decode(avg_qlen, payload, off);
+    ::_decode(read_mean_time, payload, off);
   }
   virtual void encode_payload() {
-    payload.append((char*)&map_epoch, sizeof(map_epoch));
-    payload.append((char*)&ack, sizeof(ack));
-    payload.append((char*)&avg_qlen, sizeof(avg_qlen));
-    payload.append((char*)&read_mean_time, sizeof(read_mean_time));
+    ::_encode(map_epoch, payload);
+    ::_encode(ack, payload);
+    ::_encode(avg_qlen, payload);
+    ::_encode(read_mean_time, payload);
   }
 
-  virtual char *get_type_name() { return "oping"; }
+  virtual char *get_type_name() { return "osd_ping"; }
 };
 
 #endif
