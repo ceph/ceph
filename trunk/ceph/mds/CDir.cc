@@ -326,6 +326,29 @@ void CDir::unlink_inode( CDentry *dn )
   //assert(nnull == null_items.size());         
 }
 
+void CDir::try_remove_unlinked_dn(CDentry *dn)
+{
+  assert(dn->dir == this);
+  
+  if (dn->is_new() && dn->is_dirty() &&
+      dn->get_num_ref() == 1) {
+    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
+    dn->mark_clean();
+    remove_dentry(dn);
+
+    if (version == projected_version &&
+	committing_version == committed_version &&
+	num_dirty == 0) {
+      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
+	       << " vs committed " << committed_version
+	       << endl;
+      committed_version_equivalent = committed_version;    
+    }
+  }
+}
+  
+
+
 void CDir::unlink_inode_work( CDentry *dn )
 {
   CInode *in = dn->inode;
@@ -354,6 +377,28 @@ void CDir::unlink_inode_work( CDentry *dn )
   }
 
   nitems--;   // adjust dir size
+}
+
+void CDir::remove_null_dentries() {
+  dout(12) << "remove_null_dentries " << *this << endl;
+
+  list<CDentry*> dns;
+  for (CDir_map_t::iterator it = items.begin();
+       it != items.end(); 
+       it++) {
+    if (it->second->is_null())
+      dns.push_back(it->second);
+  }
+  
+  for (list<CDentry*>::iterator it = dns.begin();
+       it != dns.end();
+       it++) {
+    CDentry *dn = *it;
+    remove_dentry(dn);
+  }
+  //assert(null_items.empty());         
+  assert(nnull == 0);
+  assert(nnull + nitems == items.size());
 }
 
 
@@ -388,6 +433,7 @@ void CDir::purge_stolen(list<Context*>& waiters)
   if (state_test(STATE_EXPORT)) put(PIN_EXPORT);
   if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
   if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
+  if (state_test(STATE_FROZENDIR)) put(PIN_FROZEN);
 
   if (auth_pins > 0) put(PIN_AUTHPIN);
 
@@ -396,51 +442,91 @@ void CDir::purge_stolen(list<Context*>& waiters)
   assert(get_num_ref() == 0);
 }
 
-
-void CDir::remove_null_dentries() {
-  dout(12) << "remove_null_dentries " << *this << endl;
-
-  list<CDentry*> dns;
-  for (CDir_map_t::iterator it = items.begin();
-       it != items.end(); 
-       it++) {
-    if (it->second->is_null())
-      dns.push_back(it->second);
-  }
-  
-  for (list<CDentry*>::iterator it = dns.begin();
-       it != dns.end();
-       it++) {
-    CDentry *dn = *it;
-    remove_dentry(dn);
-  }
-  //assert(null_items.empty());         
-  assert(nnull == 0);
-  assert(nnull + nitems == items.size());
-}
-
-
-void CDir::try_remove_unlinked_dn(CDentry *dn)
+void CDir::init_fragment_pins()
 {
-  assert(dn->dir == this);
-  
-  if (dn->is_new() && dn->is_dirty() &&
-      dn->get_num_ref() == 1) {
-    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
-    dn->mark_clean();
-    remove_dentry(dn);
-
-    if (version == projected_version &&
-	committing_version == committed_version &&
-	num_dirty == 0) {
-      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
-	       << " vs committed " << committed_version
-	       << endl;
-      committed_version_equivalent = committed_version;    
-    }
-  }
+  if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
+  if (state_test(STATE_FROZENDIR)) get(PIN_FROZEN);
+  if (state_test(STATE_EXPORT)) get(PIN_EXPORT);
+  if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
+  if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
+  if (state_test(STATE_STICKY)) get(PIN_STICKY);
 }
+
+void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
+{
+  dout(10) << "split by " << bits << " bits" << endl;
   
+  assert(is_complete());
+
+  list<frag_t> frags;
+  frag.split(bits, frags);
+
+  vector<CDir*> subfrags(1 << bits);
+  
+  // create subfrag dirs
+  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+    CDir *f = new CDir(inode, *p, cache, true);
+    f->state_set(state & MASK_STATE_FRAGMENT_KEPT);
+    f->init_fragment_pins();
+    f->set_version(get_version());
+    f->replica_map = replica_map;
+    dout(10) << " subfrag " << *p << " " << *f << endl;
+    subfrags.push_back(f);
+    inode->add_dirfrag(f);
+  }
+  assert(subfrags.size() == frags.size());
+  
+  // repartition dentries
+  while (!items.empty()) {
+    map<string,CDentry*>::iterator p = items.begin();
+    
+    CDentry *dn = p->second;
+    frag_t subfrag = inode->pick_dirfrag(p->first);
+    int n = subfrag.value() >> frag.bits();
+    dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << endl;
+    CDir *f = subfrags[n];
+    f->steal_dentry(dn);
+  }
+
+  purge_stolen(waiters);
+  inode->close_dirfrag(frag); // selft deletion, watch out.
+}
+
+void CDir::merge(int bits, list<Context*>& waiters)
+{
+  dout(10) << "merge by " << bits << " bits" << endl;
+
+  list<frag_t> frags;
+  frag.split(bits, frags);
+  
+  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+    CDir *dir = inode->get_or_open_dirfrag(cache, *p);
+    assert(dir->is_complete());
+    dout(10) << " subfrag " << *p << " " << *dir << endl;
+    
+    // steal dentries
+    while (!dir->items.empty()) 
+      steal_dentry(dir->items.begin()->second);
+    
+    // merge replica map
+    for (map<int,int>::iterator p = dir->replica_map.begin();
+	 p != dir->replica_map.end();
+	 ++p) 
+      replica_map[p->first] = MAX(replica_map[p->first], p->second);
+    
+    // merge state
+    state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
+
+    dir->purge_stolen(waiters);
+    inode->close_dirfrag(dir->get_frag());
+  }
+
+  init_fragment_pins();
+}
+
+
+
+
 
 
 

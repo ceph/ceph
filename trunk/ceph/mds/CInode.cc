@@ -275,99 +275,20 @@ void CInode::put_stickydirs()
 }
 
 
-void CInode::fragment_dir(frag_t basefrag, int bits)
-{
-  dout(10) << "fragment_dir " << basefrag << " by " << bits << endl;
 
+void CInode::fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters)
+{
+  dout(10) << "fragment_dir " << bits << endl;
+  
   CDir *base = get_or_open_dirfrag(mdcache, basefrag);
 
-  list<frag_t> frags;
-  basefrag.split(bits, frags);
-
-  vector<CDir*> subfrags(1 << bits);
-  
-  list<Context*> waiters;
- 
+  dirfragtree.split(basefrag, bits);
   if (bits > 0) {
-    // split. 
-    // update fragtree
-    dirfragtree.split(basefrag, bits);
-
-    // create subfrag dirs
-    for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-      CDir *f = new CDir(this, *p, mdcache, true);
-      
-      // propogate flags
-      f->state_set(base->get_state() &
-		   (CDir::STATE_DIRTY |
-		    CDir::STATE_COMPLETE |
-		    CDir::STATE_FROZENDIR |
-		    CDir::STATE_EXPORT |
-		    CDir::STATE_EXPORTBOUND |
-		    CDir::STATE_IMPORTBOUND |
-		    CDir::STATE_STICKY |
-		    0));
-      if (f->state_test(CDir::STATE_DIRTY)) f->get(CDir::PIN_DIRTY);
-      if (f->state_test(CDir::STATE_FROZENDIR)) f->get(CDir::PIN_FROZEN);
-      if (f->state_test(CDir::STATE_EXPORT)) f->get(CDir::PIN_EXPORT);
-      if (f->state_test(CDir::STATE_EXPORTBOUND)) f->get(CDir::PIN_EXPORTBOUND);
-      if (f->state_test(CDir::STATE_IMPORTBOUND)) f->get(CDir::PIN_IMPORTBOUND);
-      if (f->state_test(CDir::STATE_STICKY)) f->get(CDir::PIN_STICKY);
-
-      f->set_version(base->get_version());
-
-      // dup replica map
-      f->replica_map = base->replica_map;
-      
-      dout(10) << " subfrag " << *p << " " << *f << endl;
-      subfrags.push_back(f);
-      add_dirfrag(f);
-    }
-    assert(subfrags.size() == frags.size());
-
-    // repartition dentries
-    while (!base->items.empty()) {
-      map<string,CDentry*>::iterator p = base->items.begin();
-      
-      CDentry *dn = p->second;
-      frag_t frag = base->inode->pick_dirfrag(p->first);
-      int n = frag.value() >> basefrag.bits();
-      dout(15) << " subfrag " << frag << " n=" << n << " for " << p->first << endl;
-      CDir *f = dirfrags[n];
-
-      f->steal_dentry(dn);
-    }
-
-    // empty.
-    base->purge_stolen(waiters);
-    close_dirfrag(basefrag);
+    base->split(bits, subs, waiters);
   } else {
-    // merge.  
-    dirfragtree.merge(basefrag, bits);
-
-    // enumerate subfrags
-    for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-      CDir *dir = get_or_open_dirfrag(mdcache, *p);
-      dout(10) << " subfrag " << *p << " " << *dir << endl;
-
-      // steal dentries
-      while (!dir->items.empty()) 
-	base->steal_dentry(dir->items.begin()->second);
-
-      // merge replica map
-      for (map<int,int>::iterator p = dir->replica_map.begin();
-	   p != dir->replica_map.end();
-	   ++p) 
-	base->replica_map[p->first] = MAX(base->replica_map[p->first], p->second);
-
-      dir->purge_stolen(waiters);
-      close_dirfrag(dir->dirfrag().frag);
-    }
+    base->merge(bits, waiters);
   }
-  
-  mdcache->mds->queue_waiters(waiters);
 }
-
 
 
 
@@ -383,25 +304,9 @@ void CInode::first_get()
 void CInode::last_put() 
 {
   // unpin my dentry?
-  if (parent) {
+  if (parent) 
     parent->put(CDentry::PIN_INODEPIN);
-  } 
-  //if (num_parents == 0 && get_num_ref() == 0)
-  //mdcache->inode_expire_queue.push_back(this);  // queue myself for garbage collection
 }
-
-/*
-void CInode::get_parent()
-{
-  num_parents++;
-}
-void CInode::put_parent()
-{
-  num_parents--;
-  if (num_parents == 0 && get_num_ref() == 0)
-    mdcache->inode_expire_queue.push_back(this);    // queue myself for garbage collection
-}
-*/
 
 void CInode::add_remote_parent(CDentry *p) 
 {

@@ -898,7 +898,7 @@ void EFragment::replay(MDS *mds)
   CInode *in = mds->mdcache->get_inode(ino);
   assert(in);
 
-  in->fragment_dir(basefrag, bits);
+  //in->fragment_dir(basefrag, bits);
   metablob.replay(mds);
 }
 

@@ -138,7 +138,6 @@ class CInode : public MDSCacheObject {
 
   inode_t *project_inode();
   void pop_and_dirty_projected_inode();
-  
 
   // -- cache infrastructure --
 private:
@@ -167,8 +166,7 @@ public:
   void get_stickydirs();
   void put_stickydirs();  
 
-  void fragment_dir(frag_t base, int bits);
-
+  void fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters);
 
  protected:
   // parent dentries in cache

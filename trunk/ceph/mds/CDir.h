@@ -109,22 +109,28 @@ class CDir : public MDSCacheObject {
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  STATE_COMPLETE|STATE_DIRTY;
+  (STATE_COMPLETE|STATE_DIRTY);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
-  //STATE_IMPORT|
-  STATE_EXPORT
-  |STATE_IMPORTING
-  |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-  |STATE_FROZENTREE
-  |STATE_STICKY;
+  (STATE_EXPORT
+   |STATE_IMPORTING
+   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
+   |STATE_FROZENTREE
+   |STATE_STICKY);
   static const unsigned MASK_STATE_EXPORT_KEPT = 
-  STATE_EXPORTING
-  |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-  |STATE_FROZENTREE
-  |STATE_FROZENDIR
-  |STATE_EXPORT
-  |STATE_STICKY;
-
+  (STATE_EXPORTING
+   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
+   |STATE_FROZENTREE
+   |STATE_FROZENDIR
+   |STATE_EXPORT
+   |STATE_STICKY);
+  static const unsigned MASK_STATE_FRAGMENT_KEPT = 
+  (STATE_DIRTY |
+   STATE_COMPLETE |
+   STATE_FROZENDIR |
+   STATE_EXPORT |
+   STATE_EXPORTBOUND |
+   STATE_IMPORTBOUND |
+   STATE_STICKY);
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -230,7 +236,6 @@ protected:
     return num_dirty;
   }
 
-  void try_remove_unlinked_dn(CDentry *dn);
 
   // -- dentries and inodes --
  public:
@@ -248,12 +253,20 @@ protected:
   void link_inode( CDentry *dn, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
+  void try_remove_unlinked_dn(CDentry *dn);
 private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
+  void remove_null_dentries();
+
+public:
+  void split(int bits, list<CDir*>& subs, list<Context*>& waiters);
+  void merge(int bits, list<Context*>& waiters);
+private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void purge_stolen(list<Context*>& waiters);
-  void remove_null_dentries();
+  void init_fragment_pins();
+
 
   // -- authority --
   /*
