@@ -69,6 +69,19 @@ int Ebofs::mount()
 
   struct ebofs_super *sb1 = (struct ebofs_super*)bp1.c_str();
   struct ebofs_super *sb2 = (struct ebofs_super*)bp2.c_str();
+
+  // valid superblocks?
+  if (sb1->s_magic != EBOFS_MAGIC ||
+      sb2->s_magic != EBOFS_MAGIC) {
+    derr(0) << "mount bad magic, not a valid EBOFS file system" << endl;
+    return -EINVAL;
+  }
+  if (sb1->num_blocks < dev.get_num_blocks() ||
+      sb2->num_blocks < dev.get_num_blocks()) {
+    derr(0) << "mount superblock size exceeds actual device size" << endl;
+    return -EINVAL;
+  }
+
   dout(3) << "mount super @0 epoch " << sb1->epoch << endl;
   dout(3) << "mount super @1 epoch " << sb2->epoch << endl;
 
