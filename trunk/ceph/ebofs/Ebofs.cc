@@ -76,8 +76,8 @@ int Ebofs::mount()
     derr(0) << "mount bad magic, not a valid EBOFS file system" << endl;
     return -EINVAL;
   }
-  if (sb1->num_blocks < dev.get_num_blocks() ||
-      sb2->num_blocks < dev.get_num_blocks()) {
+  if (sb1->num_blocks > dev.get_num_blocks() ||
+      sb2->num_blocks > dev.get_num_blocks()) {
     derr(0) << "mount superblock size exceeds actual device size" << endl;
     return -EINVAL;
   }
