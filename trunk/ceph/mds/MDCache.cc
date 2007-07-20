@@ -2742,7 +2742,7 @@ void MDCache::purge_inode(inode_t *inode, off_t newsize)
   assert(purging[inode->ino].count(newsize) == 0);
   purging[inode->ino][newsize] = *inode;
 
-  assert(inode->size > newsize);
+  assert(inode->size >= newsize);
   _do_purge_inode(inode, newsize);
 }
 
