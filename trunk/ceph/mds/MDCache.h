@@ -434,12 +434,13 @@ public:
       return inode_map[ino];
     return NULL;
   }
-  CDir* get_dir(inodeno_t dirino) {  // deprecated
-    return get_dirfrag(dirfrag_t(dirino, frag_t()));
-  }    
   CDir* get_dirfrag(dirfrag_t df) {
     if (!have_inode(df.ino)) return NULL;
     return inode_map[df.ino]->get_dirfrag(df.frag);
+  }
+  void get_dirfrags(dirfrag_t df, list<CDir*>& ls) {
+    if (have_inode(df.ino))
+      inode_map[df.ino]->get_dirfrags(df.frag, ls);
   }
 
   MDSCacheObject *get_object(MDSCacheObjectInfo &info);

@@ -1017,8 +1017,14 @@ void MDCache::send_resolve_now(int who)
     
     if (migrator->is_importing(dir->dirfrag())) {
       // ambiguous (mid-import)
-      m->add_ambiguous_import(dir->dirfrag(), 
-			      migrator->get_import_bound_inos(dir->dirfrag()));
+      //  NOTE: because we are first authority, import state is at least IMPORT_LOGGINSTART.
+      assert(migrator->get_import_state(dir->dirfrag()) >= Migrator::IMPORT_LOGGINGSTART);
+      set<CDir*> bounds;
+      get_subtree_bounds(dir, bounds);
+      list<dirfrag_t> dfls;
+      for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+	dfls.push_back((*p)->dirfrag());
+      m->add_ambiguous_import(dir->dirfrag(), dfls);
     } else {
       // not ambiguous.
       m->add_subtree(dir->dirfrag());

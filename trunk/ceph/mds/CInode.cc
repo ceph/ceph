@@ -133,6 +133,17 @@ frag_t CInode::pick_dirfrag(const string& dn)
   return dirfragtree[H(dn)];
 }
 
+void CInode::get_dirfrags(frag_t fg, list<CDir*>& ls)
+{
+  list<frag_t> fglist;
+  dirfragtree.get_leaves(fg, fglist);
+  for (list<frag_t>::iterator p = fglist.begin();
+       p != fglist.end();
+       ++p) 
+    if (dirfrags.count(*p))
+      ls.push_back(dirfrags[*p]);
+}
+
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
   // all dirfrags
@@ -167,11 +178,12 @@ CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 
   // have it?
   CDir *dir = get_dirfrag(fg);
-  if (dir) return dir;
-  
-  // create it.
-  assert(is_auth());
-  dir = dirfrags[fg] = new CDir(this, fg, mdcache, true);
+  if (!dir) {
+    // create it.
+    assert(is_auth());
+    dir = new CDir(this, fg, mdcache, true);
+    add_dirfrag(dir);
+  }
   return dir;
 }
 
@@ -179,6 +191,12 @@ CDir *CInode::add_dirfrag(CDir *dir)
 {
   assert(dirfrags.count(dir->dirfrag().frag) == 0);
   dirfrags[dir->dirfrag().frag] = dir;
+
+  if (stickydir_ref > 0) {
+    dir->state_set(CDir::STATE_STICKY);
+    dir->get(CDir::PIN_STICKY);
+  }
+
   return dir;
 }
 
@@ -193,6 +211,11 @@ void CInode::close_dirfrag(frag_t fg)
   // clear dirty flag
   if (dir->is_dirty())
     dir->mark_clean();
+  
+  if (stickydir_ref > 0) {
+    dir->state_clear(CDir::STATE_STICKY);
+    dir->put(CDir::PIN_STICKY);
+  }
   
   // dump any remaining dentries, for debugging purposes
   for (map<string,CDentry*>::iterator p = dir->items.begin();
@@ -219,6 +242,36 @@ bool CInode::has_subtree_root_dirfrag()
     if (p->second->is_subtree_root())
       return true;
   return false;
+}
+
+
+void CInode::get_stickydirs()
+{
+  if (stickydir_ref == 0) {
+    get(PIN_STICKYDIRS);
+    for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	 p != dirfrags.end();
+	 ++p) {
+      p->second->state_set(CDir::STATE_STICKY);
+      p->second->get(CDir::PIN_STICKY);
+    }
+  }
+  stickydir_ref++;
+}
+
+void CInode::put_stickydirs()
+{
+  assert(stickydir_ref > 0);
+  stickydir_ref--;
+  if (stickydir_ref == 0) {
+    put(PIN_STICKYDIRS);
+    for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	 p != dirfrags.end();
+	 ++p) {
+      p->second->state_clear(CDir::STATE_STICKY);
+      p->second->put(CDir::PIN_STICKY);
+    }
+  }
 }
 
 

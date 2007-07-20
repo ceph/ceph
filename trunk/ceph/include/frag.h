@@ -137,8 +137,11 @@ class fragtree_t {
       return p->second;
   }
   void get_leaves(list<frag_t>& ls) const {
+    get_leaves(frag_t(), ls);
+  }
+  void get_leaves(frag_t under, list<frag_t>& ls) const {
     list<frag_t> q;
-    q.push_back(frag_t());
+    q.push_back(under);
     while (!q.empty()) {
       frag_t t = q.front();
       q.pop_front();

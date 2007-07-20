@@ -66,6 +66,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_REMOTEPARENT = 15;
   static const int PIN_BATCHOPENJOURNAL = 16;
   static const int PIN_SCATTERED = 17;
+  static const int PIN_STICKYDIRS = 18;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -79,6 +80,7 @@ class CInode : public MDSCacheObject {
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
+    case PIN_STICKYDIRS: return "stickydirs";
     default: return generic_pin_name(p);
     }
   }
@@ -139,8 +141,11 @@ class CInode : public MDSCacheObject {
   
 
   // -- cache infrastructure --
+private:
   map<frag_t,CDir*> dirfrags; // cached dir fragments
+  int stickydir_ref;
 
+public:
   frag_t pick_dirfrag(const string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
@@ -149,6 +154,7 @@ class CInode : public MDSCacheObject {
     else
       return 0;
   }
+  void get_dirfrags(frag_t fg, list<CDir*>& ls);
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);
@@ -158,7 +164,11 @@ class CInode : public MDSCacheObject {
   void close_dirfrags();
   bool has_subtree_root_dirfrag();
 
+  void get_stickydirs();
+  void put_stickydirs();  
+
   void fragment_dir(frag_t base, int bits);
+
 
  protected:
   // parent dentries in cache
@@ -198,6 +208,7 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_open_journaled(0),
+    stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     auth_pins(0), nested_auth_pins(0),

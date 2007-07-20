@@ -55,10 +55,15 @@ sage doc
 sage mds
 
 - the split/merge plan:
+
+***  - should get_dirfrags(frag_t) return partial matches?  bc we might have the two frags listed separately even tho they've merged..
+
   - dirfragtree is lazily consistent.  no lock.  bcast by primary when it updates.  
   - CDir is never request pinned
     - add a CInode sticky_dir flag to somehow pin all cdirs on the fly.  
     - STICKY dir state and pin?  make sure it's kept across import/export/fragment
+  - pull _bound maps out of Migrator; they are redundant (trust the subtree map!)
+
   - auth journals and applies update in the request update pipeline
   - bcast to dir replicas
   - inode auth will journal inode update separately/lazily

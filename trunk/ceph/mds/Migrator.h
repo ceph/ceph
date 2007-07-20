@@ -81,7 +81,7 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
-  map<CDir*,set<CDir*> >       export_bounds;
+  //map<CDir*,set<CDir*> >       export_bounds;
   map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
@@ -115,8 +115,6 @@ public:
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
   map<dirfrag_t,int>              import_peer;
-  map<dirfrag_t,list<dirfrag_t> > import_bound_inos;
-  map<CDir*,set<CDir*> >          import_bounds;
   map<CDir*,set<int> >            import_bystanders;
 
 
@@ -149,14 +147,6 @@ public:
     return 0;
   }
   bool is_importing() { return !import_state.empty(); }
-  const list<dirfrag_t>& get_import_bound_inos(dirfrag_t base) { 
-    assert(import_bound_inos.count(base));
-    return import_bound_inos[base];
-  }
-  const set<CDir*>& get_import_bounds(CDir *base) { 
-    assert(import_bounds.count(base));
-    return import_bounds[base];
-  }
 
   int get_import_state(dirfrag_t df) {
     assert(import_state.count(df));

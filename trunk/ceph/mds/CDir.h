@@ -67,6 +67,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
   static const int PIN_EXPORTBOUND = 10;
+  static const int PIN_STICKY =      11;
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
@@ -79,6 +80,7 @@ class CDir : public MDSCacheObject {
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
     case PIN_AUTHPIN: return "authpin";
+    case PIN_STICKY: return "sticky";
     default: return generic_pin_name(p);
     }
   }
@@ -92,13 +94,13 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_COMMITTING =    (1<< 8);   // mid-commit
   static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
   static const unsigned STATE_DELETED =       (1<<10);
-  //static const unsigned STATE_IMPORT =        (1<<11);   // flag set if this is an import.
   static const unsigned STATE_EXPORT    =     (1<<12);
   static const unsigned STATE_IMPORTBOUND =   (1<<13);
   static const unsigned STATE_EXPORTBOUND =   (1<<14);
   static const unsigned STATE_EXPORTING =     (1<<15);
   static const unsigned STATE_IMPORTING =     (1<<16);
   static const unsigned STATE_FRAGMENTING =   (1<<17);
+  static const unsigned STATE_STICKY =        (1<<18);  // sticky pin due to inode stickydirs
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -113,13 +115,15 @@ class CDir : public MDSCacheObject {
   STATE_EXPORT
   |STATE_IMPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-  |STATE_FROZENTREE;
+  |STATE_FROZENTREE
+  |STATE_STICKY;
   static const unsigned MASK_STATE_EXPORT_KEPT = 
   STATE_EXPORTING
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
   |STATE_FROZENTREE
   |STATE_FROZENDIR
-  |STATE_EXPORT;
+  |STATE_EXPORT
+  |STATE_STICKY;
 
 
   // -- rep spec --
