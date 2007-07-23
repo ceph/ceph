@@ -56,6 +56,12 @@
  * opposite of what we usually see.
  */
 
+/*
+ * TODO:
+ *  - get_first_child(), next_sibling(int parent_bits) to make (possibly partial) 
+ *    iteration efficient (see, e.g., try_assimilate_children()
+ */
+
 typedef uint32_t _frag_t;
 
 class frag_t {
@@ -197,7 +203,7 @@ class fragtree_t {
   }
 
   /**
-   * get_branch -- get branch point for frag @x
+   * get_branch -- get branch point at OR above frag @x
    *  - may be @x itself, if @x is a split
    *  - may be root (frag_t())
    */
@@ -208,6 +214,21 @@ class fragtree_t {
       x = x.parent();
     }
   }
+
+  /**
+   * get_branch_above -- get a branch point above frag @x
+   *  - may be root (frag_t())
+   *  - may NOT be @x, even if @x is a split.
+   */
+  frag_t get_branch_above(frag_t x) const {
+    while (1) {
+      if (x == frag_t()) return x;  // root
+      x = x.parent();
+      if (get_split(x)) return x;   // found it!
+    }
+  }
+
+
   /**
    * get_branch_or_leaf -- get branch or leaf point parent for frag @x
    *  - may be @x itself, if @x is a split or leaf
@@ -298,11 +319,43 @@ class fragtree_t {
   void split(frag_t x, int b) {
     assert(is_leaf(x));
     _splits[x] = b;
+    
+    // simplify?
+    try_assimilate_children(get_branch_above(x));
   }
   void merge(frag_t x, int b) {
     assert(!is_leaf(x));
     assert(_splits[x] == b);
     _splits.erase(x);
+
+    // simplify?
+    try_assimilate_children(get_branch_above(x));
+  }
+
+  /*
+   * if all of a given split's children are identically split,
+   * then the children can be assimilated.
+   */
+  void try_assimilate_children(frag_t x) {
+    int nb = get_split(x);
+    if (!nb) return;
+    list<frag_t> children;
+    x.split(nb, children);
+    int childbits = 0;
+    for (list<frag_t>::iterator p = children.begin();
+	 p != children.end();
+	 ++p) {
+      int cb = get_split(*p);
+      if (!cb) return;  // nope.
+      if (childbits && cb != childbits) return;  // not the same
+      childbits = cb;
+    }
+    // all children are split with childbits!
+    for (list<frag_t>::iterator p = children.begin();
+	 p != children.end();
+	 ++p)
+      _splits.erase(*p);
+    _splits[x] += childbits;
   }
 
   void force_to_leaf(frag_t x) {

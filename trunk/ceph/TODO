@@ -61,6 +61,7 @@ sage mds
 /  - fragtree_t
 /    - get_leaves(fg, ls) needs to be smarter
 /    - force_to_leaf()
+/    - simplified/normalized form.
 
 /  - CDir is never request pinned
 /    - add a CInode sticky_dir flag to somehow pin all cdirs on the fly.  
