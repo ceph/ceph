@@ -135,8 +135,9 @@ void IdAllocator::reset()
 
   // use generic range. FIXME THIS IS CRAP
   free.clear();
-  free.insert((uint64_t)0x10000000000 * (uint64_t)(mds->get_nodeid()+1),
-	      (uint64_t)0x10000000000 * (uint64_t)(mds->get_nodeid()+2) - (uint64_t)1);
+  uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 40;
+  uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 40) - 1;
+  free.insert(start, end);
 
   state = STATE_ACTIVE;
 }
