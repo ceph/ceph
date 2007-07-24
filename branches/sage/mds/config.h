@@ -185,12 +185,14 @@ struct md_config_t {
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
-  float mds_bal_hash_rd;
-  float mds_bal_unhash_rd;
-  float mds_bal_hash_wr;
-  float mds_bal_unhash_wr;
+  int mds_bal_split_size;
+  float mds_bal_split_rd;
+  float mds_bal_split_wr;
+  int mds_bal_merge_size;
+  float mds_bal_merge_rd;
+  float mds_bal_merge_wr;
   int   mds_bal_interval;
-  int   mds_bal_hash_interval;
+  int   mds_bal_fragment_interval;
   float mds_bal_idle_threshold;
   int   mds_bal_max;
   int   mds_bal_max_until;
@@ -211,6 +213,7 @@ struct md_config_t {
   bool  mds_local_osd;
 
   int mds_thrash_exports;
+  int mds_thrash_fragments;
   bool mds_dump_cache_on_map;
   bool mds_dump_cache_after_rejoin;
 

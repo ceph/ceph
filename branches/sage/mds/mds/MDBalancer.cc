@@ -84,10 +84,9 @@ void MDBalancer::tick()
   
   // hash?
   if (true &&
-      g_conf.num_mds > 1 &&
-      now.sec() - last_hash.sec() > g_conf.mds_bal_hash_interval) {
-    last_hash = now;
-    do_hashing();
+      now.sec() - last_fragment.sec() > g_conf.mds_bal_fragment_interval) {
+    last_fragment = now;
+    do_fragmenting();
   }
 }
 
@@ -250,31 +249,26 @@ double MDBalancer::try_match(int ex, double& maxex,
 
 
 
-void MDBalancer::do_hashing()
+void MDBalancer::do_fragmenting()
 {
-  if (hash_queue.empty()) {
-    dout(20) << "do_hashing has nothing to do" << endl;
+  if (split_queue.empty()) {
+    dout(20) << "do_fragmenting has nothing to do" << endl;
     return;
   }
 
-  dout(0) << "do_hashing " << hash_queue.size() << " dirs marked for possible hashing" << endl;
+  dout(0) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << endl;
   
-  for (set<inodeno_t>::iterator i = hash_queue.begin();
-       i != hash_queue.end();
+  for (set<dirfrag_t>::iterator i = split_queue.begin();
+       i != split_queue.end();
        i++) {
-    inodeno_t dirino = *i;
-    CInode *in = mds->mdcache->get_inode(dirino);
-    if (!in) continue;
-    /*
-    CDir *dir = in->dir;
+    CDir *dir = mds->mdcache->get_dirfrag(*i);
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
-    dout(0) << "do_hashing hashing " << *dir << endl;
-    mds->mdcache->migrator->hash_dir(dir);
-    */
+    dout(0) << "do_fragmenting splitting " << *dir << endl;
+    mds->mdcache->split_dir(dir, 3);
   }
-  hash_queue.clear();
+  split_queue.clear();
 }
 
 
@@ -740,13 +734,15 @@ void MDBalancer::hit_dir(CDir *dir, int type)
     dout(20) << "hit_dir " << type << " pop " << v << " me "
              << *dir << endl;
 
-    // hash this dir?  (later?)
-    if (((v > g_conf.mds_bal_hash_rd && type == META_POP_IRD) ||
-         //(v > g_conf.mds_bal_hash_wr && type == META_POP_IWR) ||
-         (v > g_conf.mds_bal_hash_wr && type == META_POP_DWR)) &&
-        hash_queue.count(dir->ino()) == 0) {
-      dout(0) << "hit_dir " << type << " pop is " << v << ", putting in hash_queue: " << *dir << endl;
-      hash_queue.insert(dir->ino());
+    // fragment this dir?  (later?)
+    if (((g_conf.mds_bal_split_size > 0 &&
+	  dir->get_size() > (unsigned)g_conf.mds_bal_split_size) ||
+	 (v > g_conf.mds_bal_split_rd && type == META_POP_IRD) ||
+         //(v > g_conf.mds_bal_split_wr && type == META_POP_IWR) ||
+         (v > g_conf.mds_bal_split_wr && type == META_POP_DWR)) &&
+        split_queue.count(dir->dirfrag()) == 0) {
+      dout(0) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << endl;
+      split_queue.insert(dir->dirfrag());
     }
 
   }

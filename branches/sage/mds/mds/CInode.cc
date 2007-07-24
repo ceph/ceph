@@ -276,20 +276,6 @@ void CInode::put_stickydirs()
 
 
 
-void CInode::fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters)
-{
-  dout(10) << "fragment_dir " << bits << endl;
-  
-  CDir *base = get_or_open_dirfrag(mdcache, basefrag);
-
-  dirfragtree.split(basefrag, bits);
-  if (bits > 0) {
-    base->split(bits, subs, waiters);
-  } else {
-    base->merge(bits, waiters);
-  }
-}
-
 
 
 // pins
@@ -570,7 +556,7 @@ void CInode::add_waiter(int tag, Context *c)
 // auth_pins
 bool CInode::can_auth_pin() {
   if (parent)
-    return parent->dir->can_auth_pin();
+    return parent->can_auth_pin();
   return true;
 }
 
@@ -583,7 +569,7 @@ void CInode::auth_pin()
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   if (parent)
-    parent->dir->adjust_nested_auth_pins( 1 );
+    parent->adjust_nested_auth_pins( 1 );
 }
 
 void CInode::auth_unpin() 
@@ -597,14 +583,14 @@ void CInode::auth_unpin()
   assert(auth_pins >= 0);
   
   if (parent)
-    parent->dir->adjust_nested_auth_pins( -1 );
+    parent->adjust_nested_auth_pins( -1 );
 }
 
 void CInode::adjust_nested_auth_pins(int a)
 {
   if (!parent) return;
   nested_auth_pins += a;
-  parent->get_dir()->adjust_nested_auth_pins(a);
+  parent->adjust_nested_auth_pins(a);
 }
 
 

@@ -49,10 +49,12 @@ class CDentry : public MDSCacheObject, public LRUObject {
   static const int STATE_NEW = 1;
 
   // -- pins --
-  static const int PIN_INODEPIN = 1;   // linked inode is pinned
+  static const int PIN_INODEPIN =     1;  // linked inode is pinned
+  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
   const char *pin_name(int p) {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
+    case PIN_FRAGMENTING: return "fragmenting";
     default: return generic_pin_name(p);
     }
   };
@@ -78,6 +80,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t       version;  // dir version when last touched.
   version_t       projected_version;  // what it will be when i unlock/commit.
 
+  int auth_pins, nested_auth_pins;
 
   friend class Migrator;
   friend class Locker;
@@ -103,6 +106,7 @@ public:
     remote_ino(0),
     version(0),
     projected_version(0),
+    auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
     name(n),
@@ -111,6 +115,7 @@ public:
     remote_ino(ino),
     version(0),
     projected_version(0),
+    auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, CInode *in) :
     name(n),
@@ -119,6 +124,7 @@ public:
     remote_ino(0),
     version(0),
     projected_version(0),
+    auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
 
   CInode *get_inode() const { return inode; }
@@ -142,6 +148,7 @@ public:
   bool can_auth_pin();
   void auth_pin();
   void auth_unpin();
+  void adjust_nested_auth_pins(int by);
   
 
   // dentry type is primary || remote || null

@@ -68,6 +68,8 @@ sage mds
 /    - STICKY dir state and pin?  make sure it's kept across import/export/fragment
 /  - pull _bound maps out of Migrator; they are redundant (trust the subtree map!)
 
+** fix fetch/commit to avoid carrying a CDir* pointer around
+
   - handle_resolve needs to infer splits/merges
 
   - auth journals and applies update in the request update pipeline

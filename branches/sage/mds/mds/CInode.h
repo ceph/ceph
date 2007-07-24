@@ -55,24 +55,21 @@ ostream& operator<<(ostream& out, CInode& in);
 class CInode : public MDSCacheObject {
  public:
   // -- pins --
-  //static const int PIN_REPLICATED =     1;
-  static const int PIN_DIR =        2;
-  static const int PIN_CAPS =       7;  // client caps
-  static const int PIN_AUTHPIN =    8;
-  static const int PIN_IMPORTING =  -9;  // importing
-  static const int PIN_ANCHORING = 12;
-  static const int PIN_UNANCHORING = 13;
-  static const int PIN_OPENINGDIR = 14;
-  static const int PIN_REMOTEPARENT = 15;
-  static const int PIN_BATCHOPENJOURNAL = 16;
-  static const int PIN_SCATTERED = 17;
-  static const int PIN_STICKYDIRS = 18;
+  static const int PIN_DIRFRAG =         -1; 
+  static const int PIN_CAPS =             2;  // client caps
+  static const int PIN_IMPORTING =       -4;  // importing
+  static const int PIN_ANCHORING =        5;
+  static const int PIN_UNANCHORING =      6;
+  static const int PIN_OPENINGDIR =       7;
+  static const int PIN_REMOTEPARENT =     8;
+  static const int PIN_BATCHOPENJOURNAL = 9;
+  static const int PIN_SCATTERED =        10;
+  static const int PIN_STICKYDIRS =       11;
 
   const char *pin_name(int p) {
     switch (p) {
-    case PIN_DIR: return "dir";
+    case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";
-    case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
     case PIN_ANCHORING: return "anchoring";
     case PIN_UNANCHORING: return "unanchoring";
@@ -165,8 +162,6 @@ public:
 
   void get_stickydirs();
   void put_stickydirs();  
-
-  void fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters);
 
  protected:
   // parent dentries in cache

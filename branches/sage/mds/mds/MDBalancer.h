@@ -43,10 +43,10 @@ class MDBalancer {
   int beat_epoch;
 
   utime_t last_heartbeat;
-  utime_t last_hash;
+  utime_t last_fragment;
 
   // todo
-  set<inodeno_t>   hash_queue;
+  set<dirfrag_t>   split_queue;
 
   // per-epoch scatter/gathered info
   hash_map<int, mds_load_t>  mds_load;
@@ -82,7 +82,7 @@ class MDBalancer {
 
   void tick();
 
-  void do_hashing();
+  void do_fragmenting();
 
   void export_empties();
   void do_rebalance(int beat);

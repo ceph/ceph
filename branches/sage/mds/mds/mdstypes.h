@@ -310,7 +310,8 @@ class MDSCacheObject {
   const static int PIN_REQUEST    = -1003;
   const static int PIN_WAITER     =  1004;
   const static int PIN_DIRTYSCATTERED = 1005;
-  
+  static const int PIN_AUTHPIN    =  1006;
+
   const char *generic_pin_name(int p) {
     switch (p) {
     case PIN_REPLICATED: return "replicated";
@@ -319,6 +320,7 @@ class MDSCacheObject {
     case PIN_REQUEST: return "request";
     case PIN_WAITER: return "waiter";
     case PIN_DIRTYSCATTERED: return "dirtyscattered";
+    case PIN_AUTHPIN: return "authpin";
     default: assert(0);
     }
   }

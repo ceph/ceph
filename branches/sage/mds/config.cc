@@ -186,12 +186,14 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_hash_rd: 10000,
-  mds_bal_unhash_rd: 1000,
-  mds_bal_hash_wr: 10000,
-  mds_bal_unhash_wr: 1000,
+  mds_bal_split_size: 1000,
+  mds_bal_split_rd: 10000,
+  mds_bal_split_wr: 10000,
+  mds_bal_merge_size: 50,
+  mds_bal_merge_rd: 1000,
+  mds_bal_merge_wr: 1000,
   mds_bal_interval: 30,           // seconds
-  mds_bal_hash_interval: 5,      // seconds
+  mds_bal_fragment_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
@@ -212,6 +214,7 @@ md_config_t g_conf = {
   mds_local_osd: false,
 
   mds_thrash_exports: 0,
+  mds_thrash_fragments: 0,
   mds_dump_cache_on_map: false,
   mds_dump_cache_after_rejoin: true,
 
@@ -632,14 +635,18 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
       g_conf.mds_bal_max_until = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_hash_rd") == 0) 
-      g_conf.mds_bal_hash_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_hash_wr") == 0) 
-      g_conf.mds_bal_hash_wr = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_unhash_rd") == 0) 
-      g_conf.mds_bal_unhash_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_unhash_wr") == 0) 
-      g_conf.mds_bal_unhash_wr = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_size") == 0) 
+      g_conf.mds_bal_split_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_rd") == 0) 
+      g_conf.mds_bal_split_rd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_wr") == 0) 
+      g_conf.mds_bal_split_wr = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_size") == 0) 
+      g_conf.mds_bal_merge_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_rd") == 0) 
+      g_conf.mds_bal_merge_rd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_wr") == 0) 
+      g_conf.mds_bal_merge_wr = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_bal_mode") == 0) 
       g_conf.mds_bal_mode = atoi(args[++i]);
@@ -658,6 +665,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_local_osd = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
       g_conf.mds_thrash_exports = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_thrash_fragments") == 0) 
+      g_conf.mds_thrash_fragments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
       g_conf.mds_dump_cache_on_map = true;
     

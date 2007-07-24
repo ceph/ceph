@@ -62,7 +62,6 @@ class CDir : public MDSCacheObject {
   static const int PIN_FROZEN =       3;
   static const int PIN_FRAGMENTING =  4;
   static const int PIN_EXPORT =       5;
-  static const int PIN_AUTHPIN =      6;
   static const int PIN_IMPORTING =    7;
   static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
@@ -79,28 +78,28 @@ class CDir : public MDSCacheObject {
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
-    case PIN_AUTHPIN: return "authpin";
     case PIN_STICKY: return "sticky";
     default: return generic_pin_name(p);
     }
   }
 
   // -- state --
-  static const unsigned STATE_COMPLETE =      (1<< 2);   // the complete contents are in cache
-  static const unsigned STATE_FROZENTREE =    (1<< 4);   // root of tree (bounded by exports)
-  static const unsigned STATE_FREEZINGTREE =  (1<< 5);   // in process of freezing 
-  static const unsigned STATE_FROZENDIR =     (1<< 6);
-  static const unsigned STATE_FREEZINGDIR =   (1<< 7);
-  static const unsigned STATE_COMMITTING =    (1<< 8);   // mid-commit
-  static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
-  static const unsigned STATE_DELETED =       (1<<10);
-  static const unsigned STATE_EXPORT    =     (1<<12);
-  static const unsigned STATE_IMPORTBOUND =   (1<<13);
-  static const unsigned STATE_EXPORTBOUND =   (1<<14);
-  static const unsigned STATE_EXPORTING =     (1<<15);
-  static const unsigned STATE_IMPORTING =     (1<<16);
-  static const unsigned STATE_FRAGMENTING =   (1<<17);
-  static const unsigned STATE_STICKY =        (1<<18);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_COMPLETE =      (1<< 1);   // the complete contents are in cache
+  static const unsigned STATE_FROZENTREE =    (1<< 2);   // root of tree (bounded by exports)
+  static const unsigned STATE_FREEZINGTREE =  (1<< 3);   // in process of freezing 
+  static const unsigned STATE_FROZENDIR =     (1<< 4);
+  static const unsigned STATE_FREEZINGDIR =   (1<< 5);
+  static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
+  static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
+  static const unsigned STATE_DELETED =       (1<< 8);
+  static const unsigned STATE_EXPORT    =     (1<< 9);
+  static const unsigned STATE_IMPORTBOUND =   (1<<10);
+  static const unsigned STATE_EXPORTBOUND =   (1<<11);
+  static const unsigned STATE_EXPORTING =     (1<<12);
+  static const unsigned STATE_IMPORTING =     (1<<13);
+  static const unsigned STATE_FRAGMENTING =   (1<<14);
+  static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -170,9 +169,9 @@ class CDir : public MDSCacheObject {
 
 protected:
   // contents
-  CDir_map_t       items;              // non-null AND null
-  size_t           nitems;             // # non-null
-  size_t           nnull;              // # null
+  CDir_map_t items;       // non-null AND null
+  unsigned nitems;             // # non-null
+  unsigned nnull;              // # null
 
   int num_dirty;
 
@@ -221,11 +220,11 @@ protected:
 
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
-  size_t get_size() { 
+  unsigned get_size() { 
     return nitems; 
   }
-  size_t get_nitems() { return nitems; }
-  size_t get_nnull() { return nnull; }
+  unsigned get_nitems() { return nitems; }
+  unsigned get_nnull() { return nnull; }
   
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 

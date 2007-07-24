@@ -83,7 +83,7 @@ class frag_t {
   // accessors
   unsigned value() const { return _enc & 0xffffff; }
   unsigned bits() const { return _enc >> 24; }
-  unsigned mask() const { return 0xffffffff >> (32-bits()); }
+  unsigned mask() const { return 0xffffffffUL >> (32-bits()); }
   operator _frag_t() const { return _enc; }
 
   // tests
@@ -105,9 +105,10 @@ class frag_t {
   // splitting
   void split(int nb, list<frag_t>& fragments) const {
     assert(nb > 0);
-    unsigned nway = 1 << (nb-1);
+    unsigned nway = 1 << nb;
     for (unsigned i=0; i<nway; i++) 
-      fragments.push_back( frag_t(value() | (i << (bits()+nb-1)), bits()+nb) );
+      fragments.push_back( frag_t(value() | (i << bits()), 
+				  bits()+nb) );
   }
 
   // binary splitting
@@ -300,10 +301,11 @@ class fragtree_t {
       if (nb == 0) return t;  // done.
       
       // pick appropriate child fragment.
-      unsigned nway = 1 << (nb-1);
+      unsigned nway = 1 << nb;
       unsigned i;
       for (i=0; i<nway; i++) {
-	frag_t n(t.value() | (i << (t.bits()+nb-1)), t.bits()+nb);
+	frag_t n(t.value() | (i << t.bits()), 
+		 t.bits()+nb);
 	if (n.contains(v)) {
 	  t = n;
 	  break;

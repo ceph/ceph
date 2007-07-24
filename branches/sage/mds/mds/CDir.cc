@@ -101,7 +101,7 @@ void CDir::print(ostream& out)
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
 //#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
 
 
@@ -304,7 +304,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
   
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
-    adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
+    dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins);
 }
 
 void CDir::unlink_inode( CDentry *dn )
@@ -369,7 +369,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
-      adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
+      dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins));
     
     // detach inode
     in->remove_primary_parent(dn);
@@ -402,19 +402,29 @@ void CDir::remove_null_dentries() {
 }
 
 
+/**
+ * steal_dentry -- semi-violently move a dentry from one CDir to another
+ * (*) violently, in that nitems, most pins, etc. are not correctly maintained 
+ * on the old CDir corpse; must call purge_stolen() when finished.
+ */
 void CDir::steal_dentry(CDentry *dn)
 {
   dout(15) << "steal_dentry " << *dn << endl;
 
   items[dn->name] = dn;
 
+  dn->dir->items.erase(dn->name);
+  if (dn->dir->items.empty())
+    dn->dir->put(PIN_CHILD);
+
   if (nitems == 0)
     get(PIN_CHILD);
-  nitems++;
   if (dn->is_null()) 
     nnull++;
-  if (dn->is_primary()) 
-    nested_auth_pins += dn->inode->auth_pins + dn->inode->nested_auth_pins;
+  else
+    nitems++;
+
+  nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
   if (dn->is_dirty()) 
     num_dirty++;
 
@@ -423,10 +433,7 @@ void CDir::steal_dentry(CDentry *dn)
 
 void CDir::purge_stolen(list<Context*>& waiters)
 {
-  if (!items.empty()) {
-    put(PIN_CHILD);
-    items.clear();
-  }
+  nnull = nitems = 0;
 
   if (is_dirty()) mark_clean();
 
@@ -464,17 +471,19 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   vector<CDir*> subfrags(1 << bits);
   
   // create subfrag dirs
+  int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *f = new CDir(inode, *p, cache, true);
+    CDir *f = new CDir(inode, *p, cache, is_auth());
     f->state_set(state & MASK_STATE_FRAGMENT_KEPT);
     f->init_fragment_pins();
-    f->set_version(get_version());
+    f->version = version;
+    f->projected_version = projected_version;
     f->replica_map = replica_map;
     dout(10) << " subfrag " << *p << " " << *f << endl;
-    subfrags.push_back(f);
+    subfrags[n++] = f;
+    subs.push_back(f);
     inode->add_dirfrag(f);
   }
-  assert(subfrags.size() == frags.size());
   
   // repartition dentries
   while (!items.empty()) {
@@ -488,6 +497,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->steal_dentry(dn);
   }
 
+  put(PIN_FRAGMENTING);
   purge_stolen(waiters);
   inode->close_dirfrag(frag); // selft deletion, watch out.
 }
@@ -517,6 +527,7 @@ void CDir::merge(int bits, list<Context*>& waiters)
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
 
+    dir->put(PIN_FRAGMENTING);
     dir->purge_stolen(waiters);
     inode->close_dirfrag(dir->get_frag());
   }
@@ -668,12 +679,12 @@ void CDir::mark_clean()
 
 void CDir::first_get()
 {
-  inode->get(CInode::PIN_DIR);
+  inode->get(CInode::PIN_DIRFRAG);
 }
 
 void CDir::last_put()
 {
-  inode->put(CInode::PIN_DIR);
+  inode->put(CInode::PIN_DIRFRAG);
 }
 
 
@@ -1252,9 +1263,7 @@ void CDir::auth_pin()
   if (is_subtree_root()) return;  // no.
   //assert(!is_import());
 
-  inode->nested_auth_pins++;
-  if (inode->parent)
-    inode->parent->dir->adjust_nested_auth_pins( 1 );
+  inode->adjust_nested_auth_pins(1);
 }
 
 void CDir::auth_unpin() 
@@ -1274,32 +1283,28 @@ void CDir::auth_unpin()
   if (is_subtree_root()) return;  // no.
   //assert(!is_import());
 
-  inode->nested_auth_pins--;
-  if (inode->parent)
-    inode->parent->dir->adjust_nested_auth_pins( -1 );
+  inode->adjust_nested_auth_pins(-1);
 }
 
 void CDir::adjust_nested_auth_pins(int inc) 
 {
-  CDir *dir = this;
+  nested_auth_pins += inc;
   
-  // dir
-  dir->nested_auth_pins += inc;
-  
-  dout(10) << "adjust_nested_auth_pins " << inc << " on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
-  assert(dir->nested_auth_pins >= 0);
+  dout(10) << "adjust_nested_auth_pins " << inc << " on " << *this
+	   << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  assert(nested_auth_pins >= 0);
   
   // pending freeze?
   if (is_freezeable())
-    dir->on_freezeable();
+    on_freezeable();
   // on freezeable_dir too?  FIXME
   
   // adjust my inode?
-  if (dir->is_subtree_root()) 
+  if (is_subtree_root()) 
     return; // no, stop.
 
   // yes.
-  dir->inode->adjust_nested_auth_pins(inc);
+  inode->adjust_nested_auth_pins(inc);
 }
 
 

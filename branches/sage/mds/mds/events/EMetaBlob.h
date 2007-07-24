@@ -142,6 +142,7 @@ class EMetaBlob {
 
   /* dirlump - contains metadata for any dir we have contents for.
    */
+public:
   struct dirlump {
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
@@ -222,7 +223,8 @@ class EMetaBlob {
       dn_decoded = false;      // don't decode bits unless we need them.
     }
   };
-  
+
+private:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
@@ -274,9 +276,10 @@ class EMetaBlob {
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {
+    add_null_dentry(add_dir(dn->get_dir(), false), dn, dirty);
+  }
+  void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
-    dirlump& lump = add_dir(dn->get_dir(), false);
-
     lump.nnull++;
     if (dirty)
       lump.get_dnull().push_front(nullbit(dn->get_name(), 
@@ -289,11 +292,12 @@ class EMetaBlob {
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino=0) {
+    add_remote_dentry(add_dir(dn->get_dir(), false),
+		      dn, dirty, rino);
+  }
+  void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, inodeno_t rino=0) {
     if (!rino) 
       rino = dn->get_remote_ino();
-
-    dirlump& lump = add_dir(dn->get_dir(), false);
-
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
@@ -308,11 +312,15 @@ class EMetaBlob {
   }
 
   // return remote pointer to to-be-journaled inode
-  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
-    if (!in) in = dn->get_inode();
-
-    dirlump& lump = add_dir(dn->get_dir(), false);
-
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+    return add_primary_dentry(add_dir(dn->get_dir(), false),
+			      dn, dirty, in, pi, pdft);
+  }
+  inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+    if (!in) 
+      in = dn->get_inode();
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
@@ -333,6 +341,10 @@ class EMetaBlob {
 
   // convenience: primary or remote?  figure it out.
   inode_t *add_dentry(CDentry *dn, bool dirty) {
+    dirlump& lump = add_dir(dn->get_dir(), false);
+    return add_dentry(lump, dn, dirty);
+  }
+  inode_t *add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // primary or remote
     if (dn->is_remote()) {
       add_remote_dentry(dn, dirty);
@@ -347,10 +359,12 @@ class EMetaBlob {
 
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
-    dirfrag_t df = dir->dirfrag();
+    return add_dir(dir->dirfrag(), dir->get_projected_version(), dirty, complete);
+  }
+  dirlump& add_dir(dirfrag_t df, version_t pv, bool dirty, bool complete=false) {
     if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
-      lump_map[df].dirv = dir->get_projected_version();
+      lump_map[df].dirv = pv;
     }
     dirlump& l = lump_map[df];
     if (complete) l.mark_complete();

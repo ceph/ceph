@@ -43,6 +43,7 @@
 #include "events/EString.h"
 #include "events/EPurgeFinish.h"
 #include "events/EImportFinish.h"
+#include "events/EFragment.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -66,6 +67,9 @@
 #include "messages/MClientFileCaps.h"
 
 #include "messages/MMDSSlaveRequest.h"
+
+#include "messages/MMDSFragmentNotify.h"
+
 
 #include "IdAllocator.h"
 
@@ -3594,6 +3598,9 @@ void MDCache::dispatch(Message *m)
     break;
 
 
+  case MSG_MDS_FRAGMENTNOTIFY:
+    handle_fragment_notify((MMDSFragmentNotify*)m);
+    break;
     
 
     
@@ -5379,6 +5386,285 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
 
 
+
+
+// ===================================================================
+// FRAGMENT
+
+
+/** 
+ * _refragment_dir -- adjust fragmentation for a directory
+ *
+ * @diri - directory inode
+ * @basefrag - base fragment
+ * @bits - bit adjustment.  positive for split, negative for merge.
+ */
+void MDCache::_refragment_dir(CInode *diri, frag_t basefrag, int bits,
+			      list<CDir*>& resultfrags, 
+			      list<Context*>& waiters)
+{
+  dout(10) << "_refragment_dir " << basefrag << " " << bits 
+	   << " on " << *diri << endl;
+
+  // adjust fragtree
+  diri->dirfragtree.split(basefrag, bits);
+  dout(10) << " new fragtree is " << diri->dirfragtree << endl;
+
+  CDir *base = diri->get_or_open_dirfrag(this, basefrag);
+
+  if (bits > 0) {
+    if (base) 
+      base->split(bits, resultfrags, waiters);
+  } else {
+    assert(base);
+    base->merge(bits, waiters);
+    resultfrags.push_back(base);
+  }
+}
+
+
+
+void MDCache::split_dir(CDir *dir, int bits)
+{
+  dout(7) << "split_dir " << *dir << " bits " << bits << endl;
+  assert(dir->is_auth());
+  
+  if (mds->mdsmap->is_degraded()) {
+    dout(7) << "cluster degraded, no fragmenting for now" << endl;
+    return;
+  }
+  if (dir->inode->is_root()) {
+    dout(7) << "i won't fragment root" << endl;
+    //assert(0);
+    return;
+  }
+  if (dir->state_test(CDir::STATE_FRAGMENTING)) {
+    dout(7) << "already fragmenting" << endl;
+    return;
+  }
+  if (!dir->can_auth_pin()) {
+    dout(7) << "not authpinnable on " << *dir << endl;
+    return;
+  }
+
+  dir->auth_pin();
+  dir->state_set(CDir::STATE_FRAGMENTING);
+  dir->get(CDir::PIN_FRAGMENTING);
+
+  // make complete
+  list<CDir*> startfrags;
+  startfrags.push_back(dir);
+
+  fragment_mark_and_complete(dir->get_inode(), startfrags, dir->get_frag(), bits);
+}
+
+class C_MDC_FragmentMarking : public Context {
+  MDCache *mdcache;
+  CInode *diri;
+  list<CDir*> dirs;
+  frag_t basefrag;
+  int bits;
+public:
+  C_MDC_FragmentMarking(MDCache *m, CInode *di, list<CDir*>& dls, frag_t bf, int b) : 
+    mdcache(m), diri(di), dirs(dls), basefrag(bf), bits(b) { }
+  virtual void finish(int r) {
+    mdcache->fragment_mark_and_complete(diri, dirs, basefrag, bits);
+  }
+};
+
+void MDCache::fragment_mark_and_complete(CInode *diri, 
+					  list<CDir*>& startfrags, 
+					  frag_t basefrag, int bits) 
+{
+  dout(10) << "fragment_mark_and_complete " << basefrag << " by " << bits 
+	   << " on " << *diri << endl;
+  
+  int waiting = 0;
+  for (list<CDir*>::iterator p = startfrags.begin();
+       p != startfrags.end();
+       ++p) {
+    CDir *dir = *p;
+    if (dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
+      dout(15) << " marked " << *dir << endl;
+    } else if (dir->is_complete()) {
+      dout(15) << " marking " << *dir << endl;
+      for (map<string,CDentry*>::iterator p = dir->items.begin();
+	   p != dir->items.end();
+	   ++p) 
+	p->second->get(CDentry::PIN_FRAGMENTING);
+      dir->state_set(CDir::STATE_DNPINNEDFRAG);
+    } else {
+      dout(15) << " fetching incomplete " << *dir << endl;
+      dir->fetch(new C_MDC_FragmentMarking(this, diri, startfrags, basefrag, bits));
+      waiting++;
+    }
+  }
+  
+  if (!waiting) {
+    fragment_go(diri, startfrags, basefrag, bits);
+  }
+}
+
+
+class C_MDC_FragmentLogged : public Context {
+  MDCache *mdcache;
+  CInode *diri;
+  frag_t basefrag;
+  int bits;
+  list<CDir*> resultfrags;
+  version_t maxpv;
+  vector<version_t> pvs;
+public:
+  C_MDC_FragmentLogged(MDCache *m, CInode *di, frag_t bf, int b, 
+		       list<CDir*>& rf, version_t mpv, vector<version_t>& p) : 
+    mdcache(m), diri(di), basefrag(bf), bits(b), maxpv(mpv) {
+    resultfrags.swap(rf);
+    pvs.swap(p);
+  }
+  virtual void finish(int r) {
+    mdcache->fragment_logged(diri, basefrag, bits, 
+			     resultfrags, maxpv, pvs);
+  }
+};
+
+void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits) 
+{
+  dout(10) << "fragment_go " << basefrag << " by " << bits 
+	   << " on " << *diri << endl;
+
+  // journal it.
+  EFragment *le = new EFragment(diri->ino(), basefrag, bits);
+
+  // refragment
+  list<CDir*> resultfrags;
+  list<Context*> waiters;
+  _refragment_dir(diri, basefrag, bits, resultfrags, waiters);
+  mds->queue_waiters(waiters);
+
+  // dirty resulting frags
+  set<int> peers;
+  vector<version_t> pvs;
+  for (list<CDir*>::iterator p = resultfrags.begin();
+       p != resultfrags.end();
+       p++) {
+    CDir *dir = *p;
+    dout(10) << " result frag " << *dir << endl;
+
+    // first time only, 
+    if (p == resultfrags.begin()) {
+      le->metablob.add_dir_context(dir);
+      
+      // note peers
+      // only do this once: all frags have identical replica_maps.
+      if (peers.empty()) 
+	for (map<int,int>::iterator p = dir->replica_map.begin();
+	     p != dir->replica_map.end();
+	     ++p) 
+	  peers.insert(p->first);
+    }
+    
+    dir->state_set(CDir::STATE_FRAGMENTING);
+
+    // add new dirfrag
+    le->metablob.add_dir(dir, true);
+    
+    // add all the dentries, partitioned.
+    pvs.push_back(dir->pre_dirty());
+    for (map<string,CDentry*>::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 ++p) {
+      pvs.push_back(p->second->pre_dirty());
+      le->metablob.add_dentry(p->second, true);
+    }
+  }
+  version_t maxpv = 0;
+  if (!pvs.empty()) maxpv = pvs.back();
+  
+  // journal
+  mds->mdlog->submit_entry(le,
+			   new C_MDC_FragmentLogged(this, diri, basefrag, bits, 
+						    resultfrags, maxpv, pvs));
+
+  // announcelist<CDir*>& resultfrags, 
+  for (set<int>::iterator p = peers.begin();
+       p != peers.end();
+       ++p) {
+    MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
+    if (bits < 0) {
+      // freshly replicate basedir to peer on merge
+      CDir *base = resultfrags.front();
+      CDirDiscover *basedis = base->replicate_to(*p);
+      basedis->_encode(notify->basebl);
+      delete basedis;
+    }
+    mds->send_message_mds(notify, *p, MDS_PORT_CACHE);
+  }
+
+}
+
+void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
+			      list<CDir*>& resultfrags, 
+			      version_t maxpv, vector<version_t>& pvs)
+{
+  dout(10) << "fragment_logged " << basefrag << " bits " << bits 
+	   << " on " << *diri << endl;
+  
+ 
+  // dirty resulting frags
+  set<int> peers;
+  vector<version_t>::iterator pv = pvs.begin();
+  for (list<CDir*>::iterator p = resultfrags.begin();
+       p != resultfrags.end();
+       p++) {
+    CDir *dir = *p;
+    dout(10) << " result frag " << *dir << endl;
+    
+    dir->state_clear(CDir::STATE_FRAGMENTING);  
+
+    // dirty everything
+    dir->mark_dirty(*pv);
+    pv++;
+    for (map<string,CDentry*>::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 ++p) { 
+      CDentry *dn = p->second;
+      if (dn->version >= maxpv) continue;  // skip it; created after the frag event
+      dn->put(CDentry::PIN_FRAGMENTING);
+      dn->mark_dirty(*pv);
+      pv++;
+    }
+  }
+}
+
+
+
+void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
+{
+  dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << endl;
+
+  CInode *diri = get_inode(notify->get_ino());
+  if (diri) {
+    list<Context*> waiters;
+
+    // add replica dir (for merge)?
+    //  (_refragment_dir expects base to already exist, if non-auth)
+    if (notify->get_bits() < 0) {
+      CDirDiscover basedis;
+      int off = 0;
+      basedis._decode(notify->basebl, off);
+      add_replica_dir(diri, notify->get_basefrag(), basedis,
+		      notify->get_source().num(), waiters);
+    }
+
+    // refragment
+    list<CDir*> resultfrags;
+    _refragment_dir(diri, notify->get_basefrag(), notify->get_bits(), 
+		    resultfrags, waiters);
+    mds->queue_waiters(waiters);
+  }
+
+  delete notify;
+}
 
 
 

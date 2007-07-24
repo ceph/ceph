@@ -139,7 +139,7 @@ void CDentry::mark_dirty(version_t pv)
   dout(10) << " mark_dirty " << *this << endl;
 
   // i now live in this new dir version
-  assert(pv == projected_version);
+  assert(pv <= projected_version);
   version = pv;
   _mark_dirty();
 
@@ -248,14 +248,24 @@ bool CDentry::can_auth_pin()
 
 void CDentry::auth_pin()
 {
-  assert(dir);
-  dir->auth_pin();
+  if (auth_pins == 0)
+    get(PIN_AUTHPIN);
+  auth_pins++;
+  dir->adjust_nested_auth_pins(1);
 }
 
 void CDentry::auth_unpin()
 {
-  assert(dir);
-  dir->auth_unpin();
+  auth_pins--;
+  if (auth_pins == 0)
+    put(PIN_AUTHPIN);
+  dir->adjust_nested_auth_pins(-1);
+}
+
+void CDentry::adjust_nested_auth_pins(int by)
+{
+  nested_auth_pins += by;
+  dir->adjust_nested_auth_pins(by);
 }
 
 
