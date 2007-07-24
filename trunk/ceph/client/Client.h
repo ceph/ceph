@@ -24,7 +24,6 @@
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
-#include "msg/SerialMessenger.h"
 
 #include "messages/MClientReply.h"
 
