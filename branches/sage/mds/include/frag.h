@@ -134,7 +134,7 @@ class frag_t {
   }
 };
 
-inline ostream& operator<<(ostream& out, frag_t& hb)
+inline ostream& operator<<(ostream& out, frag_t hb)
 {
   return out << hex << hb.value() << dec << "/" << hb.bits();
 }

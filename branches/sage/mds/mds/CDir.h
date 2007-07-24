@@ -60,7 +60,6 @@ class CDir : public MDSCacheObject {
   static const int PIN_DNWAITER =     1;
   static const int PIN_CHILD =        2;
   static const int PIN_FROZEN =       3;
-  static const int PIN_FRAGMENTING =  4;
   static const int PIN_EXPORT =       5;
   static const int PIN_IMPORTING =    7;
   static const int PIN_EXPORTING =    8;
@@ -72,7 +71,6 @@ class CDir : public MDSCacheObject {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
-    case PIN_FRAGMENTING: return "fragmenting";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
@@ -125,7 +123,6 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_COMPLETE |
-   STATE_FROZENDIR |
    STATE_EXPORT |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
@@ -326,7 +323,7 @@ private:
  
   // -- fetch --
   object_t get_ondisk_object() { return object_t(ino(), frag); }
-  void fetch(Context *c);
+  void fetch(Context *c, bool ignore_authpinnability=false);
   void _fetched(bufferlist &bl);
 
   // -- commit --
@@ -431,8 +428,8 @@ public:
     if (auth_pins > 0) 
       return false;
 
-    // if not subtree root, inode must not be frozen.
-    if (!is_subtree_root() && inode->is_frozen())
+    // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).
+    if (!is_subtree_root() && inode->is_frozen() && !inode->is_frozen_dir())
       return false;
 
     return true;

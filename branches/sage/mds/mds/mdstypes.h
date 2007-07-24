@@ -114,8 +114,8 @@ struct dirfrag_t {
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 };
 
-inline ostream& operator<<(ostream& out, const dirfrag_t& df) {
-  return out << df.ino << "#" << df.frag;
+inline ostream& operator<<(ostream& out, const dirfrag_t df) {
+  return out << df.ino << "_" << df.frag;
 }
 inline bool operator<(dirfrag_t l, dirfrag_t r) {
   if (l.ino < r.ino) return true;

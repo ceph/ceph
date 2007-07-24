@@ -1286,11 +1286,13 @@ void MDCache::handle_resolve(MMDSResolve *m)
   for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
-    CDir *im = get_dirfrag(pi->first);
-    if (im) {
-      adjust_bounded_subtree_auth(im, pi->second, from);
-      try_subtree_merge(im);
-    }
+    CInode *diri = get_inode(pi->first.ino);
+    if (!diri) continue;
+    diri->dirfragtree.force_to_leaf(pi->first.frag);
+    CDir *dir = diri->get_dirfrag(pi->first.frag);
+    if (!dir) continue;
+    adjust_bounded_subtree_auth(dir, pi->second, from);
+    try_subtree_merge(dir);
   }
 
   // am i a surviving ambiguous importer?
@@ -5422,7 +5424,19 @@ void MDCache::_refragment_dir(CInode *diri, frag_t basefrag, int bits,
   }
 }
 
-
+class C_MDC_FragmentGo : public Context {
+  MDCache *mdcache;
+  CInode *diri;
+  list<CDir*> dirs;
+  frag_t basefrag;
+  int bits;
+public:
+  C_MDC_FragmentGo(MDCache *m, CInode *di, list<CDir*>& dls, frag_t bf, int b) : 
+    mdcache(m), diri(di), dirs(dls), basefrag(bf), bits(b) { }
+  virtual void finish(int r) {
+    mdcache->fragment_go(diri, dirs, basefrag, bits);
+  }
+};
 
 void MDCache::split_dir(CDir *dir, int bits)
 {
@@ -5447,15 +5461,29 @@ void MDCache::split_dir(CDir *dir, int bits)
     return;
   }
 
-  dir->auth_pin();
-  dir->state_set(CDir::STATE_FRAGMENTING);
-  dir->get(CDir::PIN_FRAGMENTING);
-
-  // make complete
   list<CDir*> startfrags;
   startfrags.push_back(dir);
-
+  
+  dir->state_set(CDir::STATE_FRAGMENTING);
+  
+  fragment_freeze(dir->get_inode(), startfrags, dir->get_frag(), bits);
   fragment_mark_and_complete(dir->get_inode(), startfrags, dir->get_frag(), bits);
+}
+
+/*
+ * initial the freeze, blocking with an auth_pin.
+ */
+void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag, int bits)
+{
+  C_Gather *gather = new C_Gather(new C_MDC_FragmentGo(this, diri, frags, basefrag, bits));
+
+  for (list<CDir*>::iterator p = frags.begin();
+       p != frags.end();
+       ++p) {
+    CDir *dir = *p;
+    dir->auth_pin(); // this will block the freeze
+    dir->freeze_dir(gather->new_sub());
+  }
 }
 
 class C_MDC_FragmentMarking : public Context {
@@ -5479,29 +5507,33 @@ void MDCache::fragment_mark_and_complete(CInode *diri,
   dout(10) << "fragment_mark_and_complete " << basefrag << " by " << bits 
 	   << " on " << *diri << endl;
   
-  int waiting = 0;
+  C_Gather *gather = 0;
+  
   for (list<CDir*>::iterator p = startfrags.begin();
        p != startfrags.end();
        ++p) {
     CDir *dir = *p;
-    if (dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
-      dout(15) << " marked " << *dir << endl;
-    } else if (dir->is_complete()) {
+    
+    if (!dir->is_complete()) {
+      dout(15) << " fetching incomplete " << *dir << endl;
+      if (!gather) gather = new C_Gather(new C_MDC_FragmentMarking(this, diri, startfrags, basefrag, bits));
+      dir->fetch(gather->new_sub(), 
+		 true);  // ignore authpinnability
+    } 
+    else if (!dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
       dout(15) << " marking " << *dir << endl;
       for (map<string,CDentry*>::iterator p = dir->items.begin();
 	   p != dir->items.end();
-	   ++p) 
+	   ++p) {
 	p->second->get(CDentry::PIN_FRAGMENTING);
+	p->second->state_set(CDentry::STATE_FRAGMENTING);
+      }
       dir->state_set(CDir::STATE_DNPINNEDFRAG);
-    } else {
-      dout(15) << " fetching incomplete " << *dir << endl;
-      dir->fetch(new C_MDC_FragmentMarking(this, diri, startfrags, basefrag, bits));
-      waiting++;
+      dir->auth_unpin();  // allow our freeze to complete
     }
-  }
-  
-  if (!waiting) {
-    fragment_go(diri, startfrags, basefrag, bits);
+    else {
+      dout(15) << " marked " << *dir << endl;
+    }
   }
 }
 
@@ -5512,18 +5544,17 @@ class C_MDC_FragmentLogged : public Context {
   frag_t basefrag;
   int bits;
   list<CDir*> resultfrags;
-  version_t maxpv;
   vector<version_t> pvs;
 public:
   C_MDC_FragmentLogged(MDCache *m, CInode *di, frag_t bf, int b, 
-		       list<CDir*>& rf, version_t mpv, vector<version_t>& p) : 
-    mdcache(m), diri(di), basefrag(bf), bits(b), maxpv(mpv) {
+		       list<CDir*>& rf, vector<version_t>& p) : 
+    mdcache(m), diri(di), basefrag(bf), bits(b) {
     resultfrags.swap(rf);
     pvs.swap(p);
   }
   virtual void finish(int r) {
     mdcache->fragment_logged(diri, basefrag, bits, 
-			     resultfrags, maxpv, pvs);
+			     resultfrags, pvs);
   }
 };
 
@@ -5565,25 +5596,25 @@ void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag
     
     dir->state_set(CDir::STATE_FRAGMENTING);
 
-    // add new dirfrag
+    // new dirfrag
+    pvs.push_back(dir->pre_dirty());
     le->metablob.add_dir(dir, true);
     
-    // add all the dentries, partitioned.
-    pvs.push_back(dir->pre_dirty());
+    // all the dentries
     for (map<string,CDentry*>::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
-      pvs.push_back(p->second->pre_dirty());
-      le->metablob.add_dentry(p->second, true);
+      if (p->second->state_test(CDentry::STATE_FRAGMENTING)) {
+	pvs.push_back(p->second->pre_dirty());
+	le->metablob.add_dentry(p->second, true);
+      }
     }
   }
-  version_t maxpv = 0;
-  if (!pvs.empty()) maxpv = pvs.back();
   
   // journal
   mds->mdlog->submit_entry(le,
 			   new C_MDC_FragmentLogged(this, diri, basefrag, bits, 
-						    resultfrags, maxpv, pvs));
+						    resultfrags, pvs));
 
   // announcelist<CDir*>& resultfrags, 
   for (set<int>::iterator p = peers.begin();
@@ -5604,7 +5635,7 @@ void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag
 
 void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
 			      list<CDir*>& resultfrags, 
-			      version_t maxpv, vector<version_t>& pvs)
+			      vector<version_t>& pvs)
 {
   dout(10) << "fragment_logged " << basefrag << " bits " << bits 
 	   << " on " << *diri << endl;
@@ -5628,11 +5659,14 @@ void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
 	 p != dir->items.end();
 	 ++p) { 
       CDentry *dn = p->second;
-      if (dn->version >= maxpv) continue;  // skip it; created after the frag event
-      dn->put(CDentry::PIN_FRAGMENTING);
-      dn->mark_dirty(*pv);
-      pv++;
+      if (dn->state_test(CDentry::STATE_FRAGMENTING)) {
+	dn->put(CDentry::PIN_FRAGMENTING);
+	dn->mark_dirty(*pv);
+	pv++;
+      }
     }
+
+    dir->unfreeze_dir();
   }
 }
 

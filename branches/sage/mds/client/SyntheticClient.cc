@@ -1723,7 +1723,8 @@ void SyntheticClient::foo()
       int c = rand() % s;
       char src[80];
       sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
-      int fd = client->open(src, O_RDONLY);
+      //int fd = 
+      client->open(src, O_RDONLY);
     }
 
     return;

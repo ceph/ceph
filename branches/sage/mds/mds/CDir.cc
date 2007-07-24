@@ -13,6 +13,7 @@
  */
 
 
+#include "include/types.h"
 
 #include "CDir.h"
 #include "CDentry.h"
@@ -40,7 +41,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   string path;
   dir.get_inode()->make_path(path);
   out << "[dir " << dir.ino();
-  if (!dir.frag.is_root()) out << "%" << dir.frag;
+  if (!dir.frag.is_root()) out << "_" << dir.frag;
   out << " " << path << "/";
   if (dir.is_auth()) {
     out << " auth";
@@ -101,13 +102,13 @@ void CDir::print(ostream& out)
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 //#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
 
 
 ostream& CDir::print_db_line_prefix(ostream& out) 
 {
-  return out << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") ";
+  return out << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }
 
 
@@ -329,9 +330,15 @@ void CDir::unlink_inode( CDentry *dn )
 void CDir::try_remove_unlinked_dn(CDentry *dn)
 {
   assert(dn->dir == this);
+  assert(dn->is_null());
+  assert(dn->is_dirty());
   
-  if (dn->is_new() && dn->is_dirty() &&
-      dn->get_num_ref() == 1) {
+  // no pins (besides dirty)?
+  if (dn->get_num_ref() != 1) 
+    return;
+
+  // was the dn new?  or is the dir complete (i.e. we don't need negatives)? 
+  if (dn->is_new() || is_complete()) {
     dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
     dn->mark_clean();
     remove_dentry(dn);
@@ -433,18 +440,20 @@ void CDir::steal_dentry(CDentry *dn)
 
 void CDir::purge_stolen(list<Context*>& waiters)
 {
+  // take waiters _before_ unfreeze...
+  take_waiting(WAIT_ANY, waiters);
+  
+  assert(is_frozen_dir());
+  unfreeze_dir();
+
   nnull = nitems = 0;
 
   if (is_dirty()) mark_clean();
-
   if (state_test(STATE_EXPORT)) put(PIN_EXPORT);
   if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
   if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
-  if (state_test(STATE_FROZENDIR)) put(PIN_FROZEN);
 
   if (auth_pins > 0) put(PIN_AUTHPIN);
-
-  take_waiting(WAIT_ANY, waiters);
 
   assert(get_num_ref() == 0);
 }
@@ -452,7 +461,6 @@ void CDir::purge_stolen(list<Context*>& waiters)
 void CDir::init_fragment_pins()
 {
   if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
-  if (state_test(STATE_FROZENDIR)) get(PIN_FROZEN);
   if (state_test(STATE_EXPORT)) get(PIN_EXPORT);
   if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
   if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
@@ -479,6 +487,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->version = version;
     f->projected_version = projected_version;
     f->replica_map = replica_map;
+    f->freeze_dir(0);
     dout(10) << " subfrag " << *p << " " << *f << endl;
     subfrags[n++] = f;
     subs.push_back(f);
@@ -497,7 +506,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->steal_dentry(dn);
   }
 
-  put(PIN_FRAGMENTING);
   purge_stolen(waiters);
   inode->close_dirfrag(frag); // selft deletion, watch out.
 }
@@ -527,7 +535,6 @@ void CDir::merge(int bits, list<Context*>& waiters)
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
 
-    dir->put(PIN_FRAGMENTING);
     dir->purge_stolen(waiters);
     inode->close_dirfrag(dir->get_frag());
   }
@@ -708,12 +715,18 @@ class C_Dir_Fetch : public Context {
   }
 };
 
-void CDir::fetch(Context *c)
+void CDir::fetch(Context *c, bool ignore_authpinnability)
 {
   dout(10) << "fetch on " << *this << endl;
   
   assert(is_auth());
   assert(!is_complete());
+
+  if (!can_auth_pin() && !ignore_authpinnability) {
+    dout(7) << "fetch waiting for authpinnable" << endl;
+    add_waiter(WAIT_AUTHPINNABLE, c);
+    return;
+  }
 
   if (c) add_waiter(WAIT_COMPLETE, c);
   
@@ -723,6 +736,7 @@ void CDir::fetch(Context *c)
     return;
   }
 
+  auth_pin();
   state_set(CDir::STATE_FETCHING);
 
   if (cache->mds->logger) cache->mds->logger->inc("fdir");
@@ -739,29 +753,19 @@ void CDir::fetch(Context *c)
 
 void CDir::_fetched(bufferlist &bl)
 {
-  dout(10) << "_fetched " << 0 << "~" << bl.length() 
-	   << " on " << *this
+  dout(10) << "_fetched " << bl.length() 
+	   << " bytes for " << *this
 	   << endl;
   
-  // give up?
-  if (!is_auth() || is_frozen()) {
-    dout(10) << "_fetched canceling (!auth or frozen)" << endl;
-    //ondisk_bl.clear();
-    //ondisk_size = 0;
-    
-    // kick waiters?
-    state_clear(CDir::STATE_FETCHING);
-    finish_waiting(WAIT_COMPLETE, -1);
-    return;
-  }
+  assert(is_auth());
+  assert(!is_frozen());
 
   // decode.
   int len = bl.length();
   int off = 0;
-  version_t  got_version;
+  version_t got_version;
   
-  bl.copy(off, sizeof(got_version), (char*)&got_version);
-  off += sizeof(got_version);
+  ::_decode(got_version, bl, off);
 
   dout(10) << "_fetched version " << got_version
 	   << ", " << len << " bytes"
@@ -917,8 +921,8 @@ void CDir::_fetched(bufferlist &bl)
 /**
  * commit
  *
- * @param want min version i want committed
- * @param c callback for completion
+ * @param want - min version i want committed
+ * @param c - callback for completion
  */
 void CDir::commit(version_t want, Context *c)
 {
@@ -927,7 +931,7 @@ void CDir::commit(version_t want, Context *c)
 
   // preconditions
   assert(want <= version || version == 0);    // can't commit the future
-  assert(committed_version < want); // the caller is stupid
+  assert(want > committed_version); // the caller is stupid
   assert(is_auth());
   assert(can_auth_pin());
 
@@ -1008,9 +1012,10 @@ void CDir::_commit(version_t want)
   
   if (cache->mds->logger) cache->mds->logger->inc("cdir");
 
-  // encode dentries
+  // encode
   bufferlist bl;
-  bl.append((char*)&version, sizeof(version));
+
+  ::_encode(version, bl);
   
   for (CDir_map_t::iterator it = items.begin();
        it != items.end();

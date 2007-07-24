@@ -47,6 +47,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
  public:
   // -- state --
   static const int STATE_NEW = 1;
+  static const int STATE_FRAGMENTING = 2;
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
