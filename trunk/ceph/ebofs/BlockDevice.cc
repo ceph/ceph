@@ -273,32 +273,32 @@ block_t BlockDevice::get_num_blocks()
     // ioctl block device
     uint64_t bytes = 0;
     r = ioctl(fd, BLKGETSIZE64, &bytes);
-    num_blocks = bytes / 4096;
+    num_blocks = bytes / (uint64_t)EBOFS_BLOCK_SIZE;
     if (r == 0) {
       dout(1) << "get_num_blocks ioctl BLKGETSIZE64 reports "
-	      << bytes << " bytes, " 
-	      << num_blocks << " 4k blocks" 
+	      << num_blocks << " 4k blocks, " 
+	      << bytes << " bytes" 
 	      << endl;
 #else
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
     r = ioctl(fd, BLKGETSIZE, &sectors);
-    num_blocks = sectors/8;
+    num_blocks = sectors/8ULL;
+    bytes = sectors*512ULL;
     if (r == 0) {
       dout(1) << "get_num_blocks ioctl BLKGETSIZE reports " << sectors << " sectors, "
-	      << num_blocks << " 4k blocks, " << (num_blocks*4096) << " bytes" << endl;
+	      << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
 #endif
     } else {
       // hmm, try stat!
       dout(10) << "get_num_blocks ioctl(2) failed with " << errno << " " << strerror(errno) << ", using stat(2)" << endl;
       struct stat st;
       fstat(fd, &st);
-      num_blocks = st.st_size;
-      dout(1) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << (num_blocks*4096) << " bytes" << endl;
+      uint64_t bytes = st.st_size;
+      num_blocks = bytes / EBOFS_BLOCK_SIZE;
+      dout(1) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
     }
     
-    num_blocks /= (uint64_t)EBOFS_BLOCK_SIZE;
-
     if (g_conf.bdev_fake_mb) {
       num_blocks = g_conf.bdev_fake_mb * 256;
       dout(0) << "faking dev size " << g_conf.bdev_fake_mb << " mb" << endl;
