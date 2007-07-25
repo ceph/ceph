@@ -115,7 +115,9 @@ struct dirfrag_t {
 };
 
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {
-  return out << df.ino << "_" << df.frag;
+  out << df.ino;
+  if (!df.frag.is_root()) out << "." << df.frag;
+  return out;
 }
 inline bool operator<(dirfrag_t l, dirfrag_t r) {
   if (l.ino < r.ino) return true;

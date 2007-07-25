@@ -360,11 +360,13 @@ class fragtree_t {
     _splits[x] += childbits;
   }
 
-  void force_to_leaf(frag_t x) {
+  bool force_to_leaf(frag_t x) {
     assert(!is_leaf(x));
 
     frag_t parent = get_branch_or_leaf(x);
     assert(parent.bits() <= x.bits());
+
+    bool changed = false;
 
     // do we need to split from parent to x?
     if (parent.bits() < x.bits()) {
@@ -373,11 +375,12 @@ class fragtree_t {
       if (nb == 0) {
 	// easy: split parent (a leaf) by the difference
 	split(parent, spread);
-	return;
+	return true;
       }
       assert(nb > spread);
       
       // add an intermediary split
+      changed = true;
       merge(parent, nb);
       split(parent, spread);
 
@@ -398,10 +401,13 @@ class fragtree_t {
       q.pop_front();
       int nb = get_split(t);
       if (nb) {
+	changed = true;
 	merge(t, nb);         // merge this point, and
 	t.split(nb, q);   // queue up children
       }
-    }    
+    }
+
+    return changed;
   }
 
   // verify that we describe a legal partition of the namespace.

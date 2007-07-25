@@ -28,22 +28,22 @@ public:
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
   EFragment(inodeno_t i, frag_t bf, int b) : 
     LogEvent(EVENT_FRAGMENT),
-	ino(i), basefrag(bf), bits(b) { }
+    ino(i), basefrag(bf), bits(b) { }
   void print(ostream& out) {
     out << "EFragment " << ino << " " << basefrag << " by " << bits << " " << metablob;
   }
 
   void encode_payload(bufferlist& bl) {
-	::_encode(ino, bl);
-	::_encode(basefrag, bl);
+    ::_encode(ino, bl);
+    ::_encode(basefrag, bl);
     ::_encode(bits, bl);
-	metablob._encode(bl);
+    metablob._encode(bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
-	::_decode(ino, bl, off);
-	::_decode(basefrag, bl, off);
+    ::_decode(ino, bl, off);
+    ::_decode(basefrag, bl, off);
     ::_decode(bits, bl, off);
-	metablob._decode(bl, off);
+    metablob._decode(bl, off);
   }
 
   bool has_expired(MDS *mds);

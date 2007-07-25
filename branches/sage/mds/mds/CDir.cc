@@ -40,9 +40,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   string path;
   dir.get_inode()->make_path(path);
-  out << "[dir " << dir.ino();
-  if (!dir.frag.is_root()) out << "_" << dir.frag;
-  out << " " << path << "/";
+  out << "[dir " << dir.dirfrag() << " " << path << "/";
   if (dir.is_auth()) {
     out << " auth";
     if (dir.is_replicated())

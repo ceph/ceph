@@ -1334,8 +1334,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	       << diri->dirfragtree 
 	       << " on " << pi->first << endl;
     }
+
     CDir *dir = diri->get_dirfrag(pi->first.frag);
     if (!dir) continue;
+
     adjust_bounded_subtree_auth(dir, pi->second, from);
     try_subtree_merge(dir);
   }
@@ -5745,6 +5747,14 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     _refragment_dir(diri, notify->get_basefrag(), notify->get_bits(), 
 		    resultfrags, waiters);
     mds->queue_waiters(waiters);
+
+    // writebehind?
+    if (diri->is_auth()) {
+      LogEvent *le = new EFragment(diri->ino(),
+				   notify->get_basefrag(),
+				   notify->get_bits());
+      mds->mdlog->submit_entry(le);
+    }
   }
 
   delete notify;

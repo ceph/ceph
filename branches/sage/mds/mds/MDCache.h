@@ -601,6 +601,7 @@ private:
   void _refragment_dir(CInode *diri, frag_t basefrag, int bits,
 		       list<CDir*>& frags, 
 		       list<Context*>& waiters);
+  friend class EFragment;
 
 public:
   void split_dir(CDir *dir, int byn);
