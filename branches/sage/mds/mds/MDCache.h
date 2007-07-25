@@ -598,9 +598,8 @@ protected:
 
   // -- fragmenting --
 private:
-  void _refragment_dir(CInode *diri, frag_t basefrag, int bits,
-		       list<CDir*>& frags, 
-		       list<Context*>& waiters);
+  void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
+			    list<CDir*>& frags, list<Context*>& waiters);
   friend class EFragment;
 
 public:

@@ -1262,27 +1262,19 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << endl;
       assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
     }
-    
-    CInode *in;
-    if (trace.empty()) {
-      in = cache->get_root();
-      if (!in) {
-	cache->open_root(new C_MDS_RetryMessage(mds, m));
-	return;
-      }
-    } else {
-      in = trace[trace.size()-1]->inode;
-    }
+
+    assert(0); // this shouldn't happen; the get_inode above would have succeeded.
   }
 
   // yay
-  
   dout(7) << "handle_export_discover have " << df << " inode " << *in << endl;
+  
+  import_state[m->get_dirfrag()] = IMPORT_DISCOVERED;
   
   // pin inode in the cache (for now)
   assert(in->is_dir());
   in->get(CInode::PIN_IMPORTING);
-  
+
   // reply
   dout(7) << " sending export_discover_ack on " << *in << endl;
   mds->send_message_mds(new MExportDirDiscoverAck(df),
@@ -1315,7 +1307,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
   // make sure we didn't abort
   if (import_state.count(m->get_dirfrag()) == 0 ||
-      import_state[m->get_dirfrag()] != IMPORT_DISCOVERED ||
+      (import_state[m->get_dirfrag()] != IMPORT_DISCOVERED &&
+       import_state[m->get_dirfrag()] != IMPORT_PREPPING) ||
       import_peer[m->get_dirfrag()] != oldauth) {
     dout(10) << "handle_export_prep import has aborted, dropping" << endl;
     delete m;

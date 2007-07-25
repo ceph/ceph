@@ -144,6 +144,25 @@ void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
       ls.push_back(dirfrags[*p]);
 }
 
+CDir *CInode::get_approx_dirfrag(frag_t fg)
+{
+  CDir *dir = get_dirfrag(fg);
+  if (dir) return dir;
+
+  // find a child?
+  list<CDir*> ls;
+  get_dirfrags_under(fg, ls);
+  if (!ls.empty()) 
+    return ls.front();
+
+  // try parents?
+  while (1) {
+    fg = fg.parent();
+    dir = get_dirfrag(fg);
+    if (dir) return dir;
+  }
+}	
+
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
   // all dirfrags

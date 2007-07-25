@@ -125,8 +125,7 @@ class CDir : public MDSCacheObject {
    STATE_COMPLETE |
    STATE_EXPORT |
    STATE_EXPORTBOUND |
-   STATE_IMPORTBOUND |
-   STATE_STICKY);
+   STATE_IMPORTBOUND);
 
   // -- rep spec --
   static const int REP_NONE =     0;

@@ -3208,8 +3208,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
        ++p) {
     // check container?
     if (p->first.ino > 0) {
-      CDir *con = get_dirfrag(p->first);
-      assert(con);  // we had better have this.
+      CInode *coni = get_inode(p->first.ino);
+      assert(coni);  // we had better have this.
+      CDir *con = coni->get_approx_dirfrag(p->first.frag);
+      assert(con);
       
       if (!con->is_auth() ||
 	  (con->is_auth() && con->is_exporting() &&
@@ -3294,20 +3296,31 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(0) << " dn expires in dir " << pd->first << endl;
-      CDir *dir = get_dirfrag(pd->first);
+      CInode *diri = get_inode(pd->first.ino);
+      assert(diri);
+      CDir *dir = diri->get_dirfrag(pd->first.frag);
       
       if (!dir) {
-	dout(0) << " dn expires on " << pd->first << " from " << from << ", don't have it" << endl;
-	assert(dir);
-      } 
-      assert(dir->is_auth());
+	dout(0) << " dn expires on " << pd->first << " from " << from << ", must have refragmented" << endl;
+      } else {
+	assert(dir->is_auth());
+      }
       
       for (map<string,int>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
 	int nonce = p->second;
+	CDentry *dn;
 	
-	CDentry *dn = dir->lookup(p->first);
+	if (dir) {
+	  dn = dir->lookup(p->first);
+	} else {
+	  // which dirfrag for this dentry?
+	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first));
+	  assert(dir->is_auth());
+	  dn = dir->lookup(p->first);
+	} 
+
 	if (!dn) 
 	  dout(0) << "  missing dentry for " << p->first << " in " << *dir << endl;
 	assert(dn);
@@ -5446,17 +5459,17 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
 
 /** 
- * _refragment_dir -- adjust fragmentation for a directory
+ * adjust_dir_fragments -- adjust fragmentation for a directory
  *
  * @diri - directory inode
  * @basefrag - base fragment
  * @bits - bit adjustment.  positive for split, negative for merge.
  */
-void MDCache::_refragment_dir(CInode *diri, frag_t basefrag, int bits,
-			      list<CDir*>& resultfrags, 
-			      list<Context*>& waiters)
+void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
+				   list<CDir*>& resultfrags, 
+				   list<Context*>& waiters)
 {
-  dout(10) << "_refragment_dir " << basefrag << " " << bits 
+  dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
 	   << " on " << *diri << endl;
 
   // adjust fragtree
@@ -5466,12 +5479,45 @@ void MDCache::_refragment_dir(CInode *diri, frag_t basefrag, int bits,
   CDir *base = diri->get_or_open_dirfrag(this, basefrag);
 
   if (bits > 0) {
-    if (base) 
+    if (base) {
+      CDir *baseparent = base->get_parent_dir();
+
       base->split(bits, resultfrags, waiters);
+
+      // did i change the subtree map?
+      if (base->is_subtree_root()) {
+	// am i a bound?
+	if (baseparent) {
+	  CDir *parent = get_subtree_root(baseparent);
+	  assert(subtrees[parent].count(base));
+	  subtrees[parent].erase(base);
+	  for (list<CDir*>::iterator p = resultfrags.begin();
+	       p != resultfrags.end();
+	       ++p) { 
+	    subtrees[parent].insert(*p);
+	    subtrees[*p].clear();   // new frag is now its own subtree
+	  }
+	}
+
+	// adjust my bounds.
+	set<CDir*> bounds;
+	bounds.swap(subtrees[base]);
+	subtrees.erase(base);
+	for (set<CDir*>::iterator p = bounds.begin();
+	     p != bounds.end();
+	     ++p) {
+	  CDir *frag = get_subtree_root((*p)->get_parent_dir());
+	  subtrees[frag].insert(*p);
+	}
+	
+	show_subtrees(10);
+      }
+    }
   } else {
     assert(base);
     base->merge(bits, waiters);
     resultfrags.push_back(base);
+    assert(0); // FIXME adjust subtree map!  and clean up this code, probably.
   }
 }
 
@@ -5523,6 +5569,11 @@ void MDCache::split_dir(CDir *dir, int bits)
 
 /*
  * initial the freeze, blocking with an auth_pin.
+ * 
+ * some reason(s) we have to freeze:
+ *  - on merge, version/projected version are unified from all fragments;
+ *    concurrent pipelined updates in the directory will have divergent
+ *    versioning... and that's no good.
  */
 void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag, int bits)
 {
@@ -5621,10 +5672,10 @@ void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag
   // refragment
   list<CDir*> resultfrags;
   list<Context*> waiters;
-  _refragment_dir(diri, basefrag, bits, resultfrags, waiters);
+  adjust_dir_fragments(diri, basefrag, bits, resultfrags, waiters);
   mds->queue_waiters(waiters);
 
-  // dirty resulting frags
+  // freeze and dirty resulting frags
   set<int> peers;
   vector<version_t> pvs;
   for (list<CDir*>::iterator p = resultfrags.begin();
@@ -5632,6 +5683,8 @@ void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag
        p++) {
     CDir *dir = *p;
     dout(10) << " result frag " << *dir << endl;
+
+    dir->_freeze_dir();
 
     // first time only, 
     if (p == resultfrags.begin()) {
@@ -5733,7 +5786,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     list<Context*> waiters;
 
     // add replica dir (for merge)?
-    //  (_refragment_dir expects base to already exist, if non-auth)
+    //  (adjust_dir_fragments expects base to already exist, if non-auth)
     if (notify->get_bits() < 0) {
       CDirDiscover basedis;
       int off = 0;
@@ -5744,17 +5797,9 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 
     // refragment
     list<CDir*> resultfrags;
-    _refragment_dir(diri, notify->get_basefrag(), notify->get_bits(), 
-		    resultfrags, waiters);
+    adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
+			 resultfrags, waiters);
     mds->queue_waiters(waiters);
-
-    // writebehind?
-    if (diri->is_auth()) {
-      LogEvent *le = new EFragment(diri->ino(),
-				   notify->get_basefrag(),
-				   notify->get_bits());
-      mds->mdlog->submit_entry(le);
-    }
   }
 
   delete notify;

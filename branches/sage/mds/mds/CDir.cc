@@ -465,11 +465,15 @@ void CDir::purge_stolen(list<Context*>& waiters)
   // take waiters _before_ unfreeze...
   take_waiting(WAIT_ANY, waiters);
   
-  assert(is_frozen_dir());
-  unfreeze_dir();
+  if (is_auth()) {
+    assert(is_frozen_dir());
+    unfreeze_dir();
+  }
 
   nnull = nitems = 0;
 
+  if (is_auth()) 
+    clear_replica_map();
   if (is_dirty()) mark_clean();
   if (state_test(STATE_EXPORT)) put(PIN_EXPORT);
   if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
@@ -477,23 +481,23 @@ void CDir::purge_stolen(list<Context*>& waiters)
 
   if (auth_pins > 0) put(PIN_AUTHPIN);
 
-  assert(get_num_ref() == 0);
+  assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0));
 }
 
 void CDir::init_fragment_pins()
 {
+  if (!replica_map.empty()) get(PIN_REPLICATED);
   if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
   if (state_test(STATE_EXPORT)) get(PIN_EXPORT);
   if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
   if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
-  if (state_test(STATE_STICKY)) get(PIN_STICKY);
 }
 
 void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 {
-  dout(10) << "split by " << bits << " bits" << endl;
+  dout(10) << "split by " << bits << " bits on " << *this << endl;
   
-  assert(is_complete());
+  assert(is_complete() || !is_auth());
 
   list<frag_t> frags;
   frag.split(bits, frags);
@@ -505,11 +509,11 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
     CDir *f = new CDir(inode, *p, cache, is_auth());
     f->state_set(state & MASK_STATE_FRAGMENT_KEPT);
+    f->replica_map = replica_map;
+    f->dir_auth = dir_auth;
     f->init_fragment_pins();
     f->version = version;
     f->projected_version = projected_version;
-    f->replica_map = replica_map;
-    f->freeze_dir(0);
     dout(10) << " subfrag " << *p << " " << *f << endl;
     subfrags[n++] = f;
     subs.push_back(f);
@@ -556,6 +560,7 @@ void CDir::merge(int bits, list<Context*>& waiters)
     
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
+    dir_auth = dir->dir_auth;
 
     dir->purge_stolen(waiters);
     inode->close_dirfrag(dir->get_frag());
@@ -1377,7 +1382,6 @@ void CDir::freeze_tree(Context *c)
   assert(!is_freezing());
   
   if (is_freezeable()) {
-    dout(10) << "freeze_tree " << *this << endl;
     _freeze_tree(c);
   } else {
     state_set(STATE_FREEZINGTREE);
@@ -1523,7 +1527,6 @@ void CDir::freeze_dir(Context *c)
   assert(!is_freezing());
   
   if (is_freezeable_dir()) {
-    dout(10) << "freeze_dir " << *this << endl;
     _freeze_dir(c);
   } else {
     state_set(STATE_FREEZINGDIR);
@@ -1537,8 +1540,6 @@ void CDir::freeze_dir(Context *c)
 void CDir::_freeze_dir(Context *c)
 {  
   dout(10) << "_freeze_dir " << *this << endl;
-
-  assert(is_freezeable_dir());
 
   state_clear(STATE_FREEZINGDIR);
   state_set(STATE_FROZENDIR);

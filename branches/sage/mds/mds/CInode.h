@@ -151,6 +151,7 @@ public:
       return 0;
   }
   void get_dirfrags_under(frag_t fg, list<CDir*>& ls);
+  CDir* get_approx_dirfrag(frag_t fg);
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);

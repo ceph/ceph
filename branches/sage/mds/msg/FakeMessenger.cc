@@ -379,7 +379,8 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
   // queue
   if (directory.count(inst.addr) &&
       shutdown_set.count(inst.addr) == 0) {
-    dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << " -- " << m
+	    << endl;
     directory[inst.addr]->queue_incoming(m);
   } else {
     dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m

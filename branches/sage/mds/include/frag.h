@@ -113,7 +113,7 @@ class frag_t {
 
   // binary splitting
   frag_t get_sibling() const {
-    assert(bits() > 0);
+    assert(!is_root());
     return frag_t(_enc ^ (1 << (bits()-1)));
   }
   bool is_left() const {
@@ -511,7 +511,8 @@ public:
       bool clean = true;
       set<frag_t>::iterator p = _set.begin();
       while (p != _set.end()) {
-	if (_set.count(p->get_sibling())) {
+	if (!p->is_root() &&
+	    _set.count(p->get_sibling())) {
 	  _set.erase(p->get_sibling());
 	  _set.insert(p->parent());
 	  _set.erase(p++);
