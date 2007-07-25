@@ -44,14 +44,6 @@ ostream& operator<<(ostream& out, CDentry& dn)
   
   out << "[dentry " << path;
   
-  switch (dn.get_d_type()) {
-  case DT_UNKNOWN: out << " ?"; break;
-  case DT_REG: out << " reg"; break;
-  case DT_DIR: out << " dir"; break;
-  case DT_LNK: out << " lnk"; break;
-  default: assert(0);
-  }
-
   if (dn.is_auth()) {
     out << " auth";
     if (dn.is_replicated()) 
@@ -63,7 +55,16 @@ ostream& operator<<(ostream& out, CDentry& dn)
   }
 
   if (dn.is_null()) out << " NULL";
-  if (dn.is_remote()) out << " REMOTE";
+  if (dn.is_remote()) {
+    out << " REMOTE(";
+    switch (dn.get_remote_d_type()) {
+    case DT_REG: out << "reg"; break;
+    case DT_DIR: out << "dir"; break;
+    case DT_LNK: out << "lnk"; break;
+    default: assert(0);
+    }
+    out << ")";
+  }
 
   out << " " << dn.lock;
 

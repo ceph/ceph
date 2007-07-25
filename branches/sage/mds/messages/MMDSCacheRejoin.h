@@ -82,25 +82,28 @@ class MMDSCacheRejoin : public Message {
     dirfrag_strong(int n) : nonce(n) {}
   };
   struct dn_strong {
-    unsigned char d_type;
     inodeno_t ino;
     inodeno_t remote_ino;
+    unsigned char remote_d_type;
     int32_t nonce;
     int32_t lock;
-    dn_strong() : d_type(0), ino(0), remote_ino(0), nonce(0), lock(0) {}
-    dn_strong(unsigned char dt, inodeno_t pi, inodeno_t ri, int n, int l) : 
-      d_type(dt), ino(pi), remote_ino(ri), nonce(n), lock(l) {}
+    dn_strong() : 
+      ino(0), remote_ino(0), remote_d_type(0), nonce(0), lock(0) {}
+    dn_strong(inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) : 
+      ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
     bool is_primary() { return ino > 0; }
     bool is_remote() { return remote_ino > 0; }
     bool is_null() { return ino == 0 && remote_ino == 0; }
   };
 
   struct dn_weak {
-    unsigned char d_type;
     inodeno_t ino;
     inodeno_t remote_ino;
-    dn_weak() : d_type(0), ino(0), remote_ino(0) {}
-    dn_weak(unsigned char dt, inodeno_t pi, inodeno_t ri) : d_type(dt), ino(pi), remote_ino(ri) {}
+    unsigned char remote_d_type;
+    dn_weak() : 
+      ino(0), remote_ino(0), remote_d_type(0) {}
+    dn_weak(inodeno_t pi, inodeno_t ri, unsigned char rdt) : 
+      ino(pi), remote_ino(ri), remote_d_type(rdt) {}
     bool is_primary() { return ino > 0; }
     bool is_remote() { return remote_ino > 0; }
     bool is_null() { return ino == 0 && remote_ino == 0; }
@@ -182,14 +185,14 @@ class MMDSCacheRejoin : public Message {
   void add_weak_null_dentry(dirfrag_t df, const string& dname) {
     weak[df][dname] = dn_weak(0, 0, 0);
   }
-  void add_weak_primary_dentry(dirfrag_t df, const string& dname, unsigned char dt, inodeno_t ino) {
-    weak[df][dname] = dn_weak(dt, ino, 0);
+  void add_weak_primary_dentry(dirfrag_t df, const string& dname, inodeno_t ino) {
+    weak[df][dname] = dn_weak(ino, 0, 0);
   }
-  void add_weak_remote_dentry(dirfrag_t df, const string& dname, unsigned char dt, inodeno_t ino) {
-    weak[df][dname] = dn_weak(dt, 0, ino);
+  void add_weak_remote_dentry(dirfrag_t df, const string& dname, inodeno_t ino, unsigned char rdt) {
+    weak[df][dname] = dn_weak(0, ino, rdt);
   }
-  void add_strong_dentry(dirfrag_t df, const string& dname, unsigned char dt, inodeno_t pi, inodeno_t ri, int n, int ls) {
-    strong_dentries[df][dname] = dn_strong(dt, pi, ri, n, ls);
+  void add_strong_dentry(dirfrag_t df, const string& dname, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+    strong_dentries[df][dname] = dn_strong(pi, ri, rdt, n, ls);
   }
   void add_dentry_authpin(dirfrag_t df, const string& dname, const metareqid_t& ri) {
     authpinned_dentries[df][dname] = ri;

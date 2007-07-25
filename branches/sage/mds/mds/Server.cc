@@ -921,7 +921,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   }
   
   // create
-  dn = dir->add_dentry(dname, 0);
+  dn = dir->add_null_dentry(dname);
   dn->mark_new();
   dout(10) << "prepare_null_dentry added " << *dn << endl;
 
@@ -1563,7 +1563,7 @@ public:
     assert(r == 0);
 
     // link the inode
-    dn->get_dir()->link_inode(dn, newi);
+    dn->get_dir()->link_primary_inode(dn, newi);
     
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1);
@@ -1856,7 +1856,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
   // link and unlock the NEW dentry
-  dn->dir->link_inode(dn, targeti->inode.get_d_type(), targeti->ino());
+  dn->dir->link_remote_inode(dn, targeti->ino(), targeti->inode.get_d_type());
   dn->mark_dirty(dnpv);
 
   // target inode
@@ -1939,7 +1939,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << endl;
 
   // link the new dentry
-  dn->dir->link_inode(dn, targeti->inode.get_d_type(), targeti->ino());
+  dn->dir->link_remote_inode(dn, targeti->ino(), targeti->inode.get_d_type());
   dn->mark_dirty(dpv);
 
   // dir inode's mtime
@@ -2320,7 +2320,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->dir->unlink_inode(dn);
 
   // relink as stray?  (i.e. was primary link?)
-  if (straydn) straydn->dir->link_inode(straydn, in);  
+  if (straydn) straydn->dir->link_primary_inode(straydn, in);  
 
   // nlink--, dirty old dentry
   in->pop_and_dirty_projected_inode();
@@ -3005,7 +3005,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // move inode to dest
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->unlink_inode(destdn);
-      destdn->dir->link_inode(destdn, oldin);
+      destdn->dir->link_primary_inode(destdn, oldin);
       
       // nlink--
       destdn->inode->inode.nlink--;
@@ -3028,7 +3028,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
       // relink oldin to stray dir.  destdn was primary.
       assert(oldin);
-      straydn->dir->link_inode(straydn, oldin);
+      straydn->dir->link_primary_inode(straydn, oldin);
       //assert(straypv == ipv);
 
       // nlink-- in stray dir.
@@ -3050,13 +3050,13 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_remote()) {
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_inode(destdn, in->inode.get_d_type(), in->ino());    
+      destdn->dir->link_remote_inode(destdn, in->ino(), in->inode.get_d_type());    
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->pvmap[destdn]);
     } else {
       // srcdn was primary.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_inode(destdn, in);
+      destdn->dir->link_primary_inode(destdn, in);
 
       // srcdn inode import?
       if (!srcdn->is_auth() && destdn->is_auth()) {
@@ -3642,7 +3642,7 @@ public:
     assert(r == 0);
 
     // link the inode
-    dn->get_dir()->link_inode(dn, newi);
+    dn->get_dir()->link_primary_inode(dn, newi);
 
     // dirty inode, dn, dir
     newi->mark_dirty(pv);

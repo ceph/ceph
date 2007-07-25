@@ -243,11 +243,12 @@ protected:
       return iter->second;
   }
 
-  CDentry* add_dentry( const string& dname, unsigned char d_type, CInode *in=0 );
-  CDentry* add_dentry( const string& dname, unsigned char d_type, inodeno_t ino );
+  CDentry* add_null_dentry(const string& dname);
+  CDentry* add_primary_dentry(const string& dname, CInode *in);
+  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type);
   void remove_dentry( CDentry *dn );         // delete dentry
-  void link_inode( CDentry *dn, unsigned char d_type, inodeno_t ino );
-  void link_inode( CDentry *dn, CInode *in );
+  void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
+  void link_primary_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
   void try_remove_unlinked_dn(CDentry *dn);
 private:

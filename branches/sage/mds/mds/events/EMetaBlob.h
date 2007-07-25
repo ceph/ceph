@@ -46,20 +46,18 @@ class EMetaBlob {
    */
   struct fullbit {
     string  dn;         // dentry
-    unsigned char d_type;
     version_t dnv;
     inode_t inode;      // if it's not
     string  symlink;
     bool dirty;
 
-    fullbit(const string& d, unsigned char dt, version_t v, inode_t& i, bool dr) : 
-      dn(d), d_type(dt), dnv(v), inode(i), dirty(dr) { }
-    fullbit(const string& d, unsigned char dt, version_t v, inode_t& i, string& sym, bool dr) :
-      dn(d), d_type(dt), dnv(v), inode(i), symlink(sym), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, bool dr) : 
+      dn(d), dnv(v), inode(i), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) :
+      dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
     fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      ::_encode(d_type, bl);
       ::_encode(dnv, bl);
       ::_encode(inode, bl);
       if (inode.is_symlink())
@@ -68,7 +66,6 @@ class EMetaBlob {
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      ::_decode(d_type, bl, off);
       ::_decode(dnv, bl, off);
       ::_decode(inode, bl, off);
       if (inode.is_symlink())
@@ -86,26 +83,26 @@ class EMetaBlob {
    */
   struct remotebit {
     string dn;
-    unsigned char d_type;
     version_t dnv;
     inodeno_t ino;
+    unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, unsigned char dt, version_t v, inodeno_t i, bool dr) : 
-      dn(d), d_type(dt), dnv(v), ino(i), dirty(dr) { }
+    remotebit(const string& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+      dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      ::_encode(d_type, bl);
       ::_encode(dnv, bl);
       ::_encode(ino, bl);
+      ::_encode(d_type, bl);
       ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      ::_decode(d_type, bl, off);
       ::_decode(dnv, bl, off);
       ::_decode(ino, bl, off);
+      ::_decode(d_type, bl, off);
       ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
@@ -296,21 +293,22 @@ private:
     add_remote_dentry(add_dir(dn->get_dir(), false),
 		      dn, dirty, rino);
   }
-  void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, inodeno_t rino=0) {
-    if (!rino) 
+  void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
+			 inodeno_t rino=0, unsigned char rdt=0) {
+    if (!rino) {
       rino = dn->get_remote_ino();
+      rdt = dn->get_remote_d_type();
+    }
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
-					      dn->get_d_type(),
 					      dn->get_projected_version(), 
-					      rino,
+					      rino, rdt,
 					      dirty));
     else
       lump.get_dremote().push_back(remotebit(dn->get_name(), 
-					     dn->get_d_type(),
 					     dn->get_projected_version(), 
-					     rino,
+					     rino, rdt,
 					     dirty));
   }
 
@@ -327,7 +325,6 @@ private:
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
-					  dn->get_d_type(),
 					  dn->get_projected_version(), 
 					  in->inode, in->symlink, 
 					  dirty));
@@ -335,7 +332,6 @@ private:
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
-					 dn->get_d_type(),
 					 dn->get_projected_version(),
 					 in->inode, in->symlink, 
 					 dirty));

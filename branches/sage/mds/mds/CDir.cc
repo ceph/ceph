@@ -155,13 +155,76 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
  * linking fun
  */
 
-CDentry* CDir::add_dentry(const string& dname, unsigned char d_type, inodeno_t ino) 
+CDentry* CDir::add_null_dentry(const string& dname)
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, d_type, ino);
+  CDentry* dn = new CDentry(dname, 0);
+  if (is_auth()) 
+    dn->state_set(CDentry::STATE_AUTH);
+  cache->lru.lru_insert_mid(dn);
+
+  dn->dir = this;
+  dn->version = projected_version;
+  
+  // add to dir
+  assert(items.count(dn->name) == 0);
+  //assert(null_items.count(dn->name) == 0);
+
+  items[dn->name] = dn;
+  nnull++;
+
+  dout(12) << "add_null_dentry " << *dn << endl;
+
+  // pin?
+  if (nnull + nitems == 1) get(PIN_CHILD);
+  
+  assert(nnull + nitems == items.size());
+  //assert(nnull == null_items.size());         
+  return dn;
+}
+
+
+CDentry* CDir::add_primary_dentry(const string& dname, CInode *in) 
+{
+  // primary
+  assert(lookup(dname) == 0);
+  
+  // create dentry
+  CDentry* dn = new CDentry(dname, in);
+  if (is_auth()) 
+    dn->state_set(CDentry::STATE_AUTH);
+  cache->lru.lru_insert_mid(dn);
+
+  dn->dir = this;
+  dn->version = projected_version;
+  
+  // add to dir
+  assert(items.count(dn->name) == 0);
+  //assert(null_items.count(dn->name) == 0);
+
+  items[dn->name] = dn;
+  link_inode_work( dn, in );
+
+  dout(12) << "add_primary_dentry " << *dn << endl;
+
+  // pin?
+  if (nnull + nitems == 1) get(PIN_CHILD);
+  
+  assert(nnull + nitems == items.size());
+  //assert(nnull == null_items.size());         
+  return dn;
+}
+
+CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type) 
+{
+  // foreign
+  assert(lookup(dname) == 0);
+  
+  // create dentry
+  CDentry* dn = new CDentry(dname, ino, d_type);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -176,46 +239,7 @@ CDentry* CDir::add_dentry(const string& dname, unsigned char d_type, inodeno_t i
   items[dn->name] = dn;
   nitems++;
 
-  dout(12) << "add_dentry " << *dn << endl;
-
-  // pin?
-  if (nnull + nitems == 1) get(PIN_CHILD);
-  
-  assert(nnull + nitems == items.size());
-  //assert(nnull == null_items.size());         
-  return dn;
-}
-
-
-CDentry* CDir::add_dentry(const string& dname, unsigned char d_type, CInode *in) 
-{
-  // primary
-  assert(lookup(dname) == 0);
-  
-  // create dentry
-  CDentry* dn = new CDentry(dname, d_type, in);
-  if (is_auth()) 
-    dn->state_set(CDentry::STATE_AUTH);
-  cache->lru.lru_insert_mid(dn);
-
-  dn->dir = this;
-  dn->version = projected_version;
-  
-  // add to dir
-  assert(items.count(dn->name) == 0);
-  //assert(null_items.count(dn->name) == 0);
-
-  items[dn->name] = dn;
-
-  if (in) {
-    link_inode_work( dn, in );
-  } else {
-    assert(dn->inode == 0);
-    //null_items[dn->name] = dn;
-    nnull++;
-  }
-
-  dout(12) << "add_dentry " << *dn << endl;
+  dout(12) << "add_remote_dentry " << *dn << endl;
 
   // pin?
   if (nnull + nitems == 1) get(PIN_CHILD);
@@ -259,13 +283,12 @@ void CDir::remove_dentry(CDentry *dn)
   //assert(nnull == null_items.size());         
 }
 
-void CDir::link_inode(CDentry *dn, unsigned char d_type, inodeno_t ino)
+void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
   dout(12) << "link_inode " << *dn << " remote " << ino << endl;
 
   assert(dn->is_null());
-  dn->d_type = d_type;
-  dn->set_remote_ino(ino);
+  dn->set_remote(ino, d_type);
   nitems++;
 
   //assert(null_items.count(dn->name) == 1);
@@ -274,9 +297,9 @@ void CDir::link_inode(CDentry *dn, unsigned char d_type, inodeno_t ino)
   assert(nnull + nitems == items.size());
 }
 
-void CDir::link_inode(CDentry *dn, CInode *in )
+void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
-  dout(12) << "link_inode " << *dn << " " << *in << endl;
+  dout(12) << "link_primary_inode " << *dn << " " << *in << endl;
   assert(!dn->is_remote());
 
   link_inode_work(dn,in);
@@ -292,7 +315,6 @@ void CDir::link_inode(CDentry *dn, CInode *in )
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
-  dn->d_type = in->inode.get_d_type();
   dn->inode = in;
   in->set_primary_parent(dn);
 
@@ -367,7 +389,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     if (in) 
       dn->unlink_remote();
 
-    dn->set_remote_ino(0);
+    dn->set_remote(0, 0);
   } else {
     // primary
     assert(dn->is_primary());
@@ -385,7 +407,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     dn->inode = 0;
   }
 
-  dn->d_type = DT_UNKNOWN;
   nitems--;   // adjust dir size
 }
 
@@ -781,19 +802,18 @@ void CDir::_fetched(bufferlist &bl)
 
     // dname
     string dname;
-    unsigned char d_type;
     ::_decode(dname, bl, off);
-    ::_decode(d_type, bl, off);
-    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname
-	     << "' d_type " << d_type << endl;
+    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << endl;
     
     CDentry *dn = lookup(dname);  // existing dentry?
 
     if (type == 'L') {
       // hard link
       inodeno_t ino;
+      unsigned char d_type;
       ::_decode(ino, bl, off);
-      
+      ::_decode(d_type, bl, off);
+
       if (dn) {
         if (dn->get_inode() == 0) {
           dout(12) << "_fetched  had NEG dentry " << *dn << endl;
@@ -802,7 +822,7 @@ void CDir::_fetched(bufferlist &bl)
         }
       } else {
 	// (remote) link
-	CDentry *dn = add_dentry( dname, d_type, ino );
+	CDentry *dn = add_remote_dentry(dname, ino, d_type);
 	
 	// link to inode?
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
@@ -859,7 +879,7 @@ void CDir::_fetched(bufferlist &bl)
 	  cache->add_inode( in );
 	
 	  // link
-	  add_dentry( dname, d_type, in );
+	  add_primary_dentry(dname, in);
 	  dout(12) << "_fetched  got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
       }

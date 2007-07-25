@@ -383,7 +383,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry( p->dn, p->d_type );
+	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -399,7 +399,7 @@ void EMetaBlob::replay(MDS *mds)
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
-	dir->link_inode(dn, in);
+	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *in << endl;
       } else {
@@ -409,7 +409,7 @@ void EMetaBlob::replay(MDS *mds)
 	}
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
-	dir->link_inode(dn, in);
+	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay linked " << *in << endl;
       }
@@ -421,8 +421,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry(p->dn, p->ino);
-	dn->set_remote_ino(p->ino);
+	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -431,7 +430,7 @@ void EMetaBlob::replay(MDS *mds)
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << endl;
 	  dir->unlink_inode(dn);
 	}
-	dn->set_remote_ino(p->ino);
+	dn->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
@@ -444,7 +443,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry(p->dn, DT_UNKNOWN);
+	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;

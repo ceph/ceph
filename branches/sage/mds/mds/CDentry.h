@@ -73,8 +73,9 @@ class CDentry : public MDSCacheObject, public LRUObject {
 
  protected:
   string name;
-  unsigned char d_type;
+
   inodeno_t remote_ino;      // if remote dentry
+  unsigned char remote_d_type;
 
   CInode *inode; // linked inode (if any)
   CDir *dir;     // containing dirfrag
@@ -103,44 +104,37 @@ public:
  public:
   // cons
   CDentry() :
-    d_type(0),
-    remote_ino(0),
-    inode(0),
-    dir(0),
-    version(0),
-    projected_version(0),
+    remote_ino(0), remote_d_type(0),
+    inode(0), dir(0),
+    version(0), projected_version(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const string& n, unsigned char dt, inodeno_t ino, CInode *in=0) :
+  CDentry(const string& n, CInode *in) :
     name(n),
-    d_type(dt),
-    remote_ino(ino),
-    inode(in),
-    dir(0),
-    version(0),
-    projected_version(0),
+    remote_ino(0), remote_d_type(0),
+    inode(in), dir(0),
+    version(0), projected_version(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const string& n, unsigned char dt, CInode *in) :
+  CDentry(const string& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
     name(n),
-    d_type(dt),
-    remote_ino(0),
-    inode(in),
-    dir(0),
-    version(0),
-    projected_version(0),
+    remote_ino(ino), remote_d_type(dt),
+    inode(in), dir(0),
+    version(0), projected_version(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
 
-  unsigned char get_d_type() { return d_type; }
   CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }
   const string& get_name() const { return name; }
   inodeno_t get_ino();
+
   inodeno_t get_remote_ino() { return remote_ino; }
-
-  void set_remote_ino(inodeno_t ino) { remote_ino = ino; }
-
+  unsigned char get_remote_d_type() { return remote_d_type; }
+  void set_remote(inodeno_t ino, unsigned char d_type) { 
+    remote_ino = ino;
+    remote_d_type = d_type;
+  }
 
   // ref counts: pin ourselves in the LRU when we're pinned.
   void first_get() {
@@ -259,24 +253,24 @@ ostream& operator<<(ostream& out, CDentry& dn);
 
 class CDentryDiscover {
   string dname;
-  unsigned char d_type;
   int    replica_nonce;
   int    lockstate;
 
   inodeno_t remote_ino;
+  unsigned char remote_d_type;
 
 public:
   CDentryDiscover() {}
   CDentryDiscover(CDentry *dn, int nonce) :
-    dname(dn->get_name()), d_type(dn->get_d_type()), replica_nonce(nonce),
+    dname(dn->get_name()), replica_nonce(nonce),
     lockstate(dn->lock.get_replica_state()),
-    remote_ino(dn->get_remote_ino()) { }
+    remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
 
   string& get_dname() { return dname; }
-  unsigned char get_d_type() { return d_type; }
   int get_nonce() { return replica_nonce; }
   bool is_remote() { return remote_ino ? true:false; }
   inodeno_t get_remote_ino() { return remote_ino; }
+  unsigned char get_remote_d_type() { return remote_d_type; }
 
   void update_dentry(CDentry *dn) {
     dn->set_replica_nonce(replica_nonce);
@@ -287,16 +281,16 @@ public:
 
   void _encode(bufferlist& bl) {
     ::_encode(dname, bl);
-    ::_encode(d_type, bl);
     ::_encode(remote_ino, bl);
+    ::_encode(remote_d_type, bl);
     ::_encode(replica_nonce, bl);
     ::_encode(lockstate, bl);
   }
   
   void _decode(bufferlist& bl, int& off) {
     ::_decode(dname, bl, off);
-    ::_decode(d_type, bl, off);
     ::_decode(remote_ino, bl, off);
+    ::_decode(remote_d_type, bl, off);
     ::_decode(replica_nonce, bl, off);
     ::_decode(lockstate, bl, off);
   }

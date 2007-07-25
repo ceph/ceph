@@ -881,7 +881,6 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
     
     // name
     ::_encode(it->first, enc_dir);
-    ::_encode(dn->d_type, enc_dir);
     
     // state
     it->second->encode_export_state(enc_dir);
@@ -899,7 +898,9 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
       enc_dir.append("L", 1);  // remote link
       
       inodeno_t ino = dn->get_remote_ino();
-      enc_dir.append((char*)&ino, sizeof(ino));
+      unsigned char d_type = dn->get_remote_d_type();
+      ::_encode(ino, enc_dir);
+      ::_encode(d_type, enc_dir);
       continue;
     }
     
@@ -1384,7 +1385,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	CDir *condir = cache->get_dirfrag( m->get_containing_dirfrag(in->ino()) );
 	assert(condir);
 	cache->add_inode( in );
-        condir->add_dentry( m->get_dentry(in->ino()), in->inode.get_d_type(), in );
+        condir->add_primary_dentry( m->get_dentry(in->ino()), in );
         
         dout(7) << "   added " << *in << endl;
       }
@@ -1809,7 +1810,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   // link before state  -- or not!  -sage
   if (dn->inode != in) {
     assert(!dn->inode);
-    dn->dir->link_inode(dn, in);
+    dn->dir->link_primary_inode(dn, in);
   }
  
   // add inode?
@@ -1922,13 +1923,11 @@ int Migrator::decode_import_dir(bufferlist& bl,
     
     // dentry
     string dname;
-    unsigned char d_type;
     ::_decode(dname, bl, off);
-    ::_decode(d_type, bl, off);
     
     CDentry *dn = dir->lookup(dname);
     if (!dn)
-      dn = dir->add_dentry(dname, d_type);  // null
+      dn = dir->add_null_dentry(dname);
     
     // decode state
     dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
@@ -1948,12 +1947,13 @@ int Migrator::decode_import_dir(bufferlist& bl,
     else if (icode == 'L') {
       // remote link
       inodeno_t ino;
-      bl.copy(off, sizeof(ino), (char*)&ino);
-      off += sizeof(ino);
+      unsigned char d_type;
+      ::_decode(ino, bl, off);
+      ::_decode(d_type, bl, off);
       if (dn->is_remote()) {
 	assert(dn->get_remote_ino() == ino);
       } else {
-	dir->link_inode(dn, d_type, ino);
+	dir->link_remote_inode(dn, ino, d_type);
       }
     }
     else if (icode == 'I') {
