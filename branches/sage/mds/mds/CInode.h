@@ -271,7 +271,7 @@ public:
   LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
-  SimpleLock dirfragtreelock;
+  ScatterLock dirfragtreelock;
   FileLock   filelock;
   ScatterLock dirlock;
 

@@ -468,6 +468,16 @@ void MDCache::try_subtree_merge(CDir *dir)
     try_subtree_merge_at(*p);
 }
 
+class C_MDC_SubtreeMergeWB : public Context {
+  MDCache *mdcache;
+  CInode *in;
+public:
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i) : mdcache(mdc), in(i) {}
+  void finish(int r) { 
+    mdcache->subtree_merge_writebehind_finish(in);
+  }
+};
+
 void MDCache::try_subtree_merge_at(CDir *dir)
 {
   dout(10) << "try_subtree_merge_at " << *dir << endl;
@@ -497,9 +507,38 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     subtrees[parent].erase(dir);
 
     eval_subtree_root(dir);
+
+    // journal inode? 
+    //  (this is a large hammer to ensure that dirfragtree updates will
+    //   hit the disk before the relevant dirfrags ever close)
+    if (dir->inode->is_auth() &&
+	dir->inode->can_auth_pin()) {
+      CInode *in = dir->inode;
+      dout(10) << "try_subtree_merge_at journaling merged bound " << *in << endl;
+      
+      in->auth_pin();
+
+      // journal write-behind.
+      inode_t *pi = in->project_inode();
+      pi->version = in->pre_dirty();
+      
+      EUpdate *le = new EUpdate("subtree merge writebehind");
+      le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
+      le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+      
+      mds->mdlog->submit_entry(le);
+      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in));
+    }
   } 
 
   show_subtrees(15);
+}
+
+void MDCache::subtree_merge_writebehind_finish(CInode *in)
+{
+  dout(10) << "subtree_merge_writebehind_finish on " << in << endl;
+  in->pop_and_dirty_projected_inode();
+  in->auth_unpin();
 }
 
 void MDCache::eval_subtree_root(CDir *dir)
@@ -513,7 +552,8 @@ void MDCache::eval_subtree_root(CDir *dir)
       mds->locker->scatter_eval(&dir->inode->dirlock);
     else
       mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
-  }  
+  }
+  
 }
 
 
@@ -1288,7 +1328,12 @@ void MDCache::handle_resolve(MMDSResolve *m)
        ++pi) {
     CInode *diri = get_inode(pi->first.ino);
     if (!diri) continue;
-    diri->dirfragtree.force_to_leaf(pi->first.frag);
+    bool forced = diri->dirfragtree.force_to_leaf(pi->first.frag);
+    if (forced) {
+      dout(10) << " forced frag " << pi->first.frag << " to leaf in " 
+	       << diri->dirfragtree 
+	       << " on " << pi->first << endl;
+    }
     CDir *dir = diri->get_dirfrag(pi->first.frag);
     if (!dir) continue;
     adjust_bounded_subtree_auth(dir, pi->second, from);
@@ -5480,7 +5525,8 @@ void MDCache::split_dir(CDir *dir, int bits)
 void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag, int bits)
 {
   C_Gather *gather = new C_Gather(new C_MDC_FragmentGo(this, diri, frags, basefrag, bits));
-
+  
+  // freeze the dirs
   for (list<CDir*>::iterator p = frags.begin();
        p != frags.end();
        ++p) {

@@ -448,7 +448,7 @@ void CDir::steal_dentry(CDentry *dn)
   if (dn->dir->items.empty())
     dn->dir->put(PIN_CHILD);
 
-  if (nitems == 0)
+  if (nnull + nitems == 0)
     get(PIN_CHILD);
   if (dn->is_null()) 
     nnull++;

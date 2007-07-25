@@ -439,7 +439,19 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case LOCK_OTYPE_IDIRFRAGTREE:
-    dirfragtree._encode(bl);
+    {
+      // encode the raw tree
+      dirfragtree._encode(bl);
+
+      // also specify which frags are mine
+      set<frag_t> myfrags;
+      list<CDir*> dfls;
+      get_dirfrags(dfls);
+      for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
+	if ((*p)->is_auth())
+	  myfrags.insert((*p)->get_frag());
+      _encode(myfrags, bl);
+    }
     break;
     
   case LOCK_OTYPE_IFILE:
@@ -488,7 +500,20 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case LOCK_OTYPE_IDIRFRAGTREE:
-    dirfragtree._decode(bl, off);
+    {
+      fragtree_t temp;
+      temp._decode(bl, off);
+      set<frag_t> authfrags;
+      _decode(authfrags, bl, off);
+      if (is_auth()) {
+	// auth.  believe replica's auth frags only.
+	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p) 
+	  dirfragtree.force_to_leaf(*p);
+      } else {
+	// replica.  just take the tree.
+	dirfragtree.swap(temp);
+      }
+    }
     break;
 
   case LOCK_OTYPE_IFILE:

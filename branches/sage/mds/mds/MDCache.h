@@ -249,6 +249,7 @@ public:
   void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
+  void subtree_merge_writebehind_finish(CInode *in);
   void eval_subtree_root(CDir *dir);
   CDir *get_subtree_root(CDir *dir);
   void remove_subtree(CDir *dir);

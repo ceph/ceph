@@ -68,25 +68,16 @@ sage mds
 /    - STICKY dir state and pin?  make sure it's kept across import/export/fragment
 /  - pull _bound maps out of Migrator; they are redundant (trust the subtree map!)
 
-  - handle_resolve needs to infer splits/merges
+/  - handle_resolve needs to infer splits/merges
   - rejoin, too!
 
-  - auth journals and applies update in the request update pipeline
+/  - auth journals and applies update in the request update pipeline
 
-  - dirfragtree is lazily consistent.  no lock.  bcast by primary when it updates.  
-   --> this makes it tricky to properly journal dirfragtree on the auth inode.  what about a scatterlock?
-   
+/  - dirfragtree is lazily consistent.  no lock.  bcast by primary when it updates.  
+/  - bcast to dir replicas
 
-  - bcast to dir replicas
-  - inode auth will journal inode update separately/lazily
-    - also on handle_resolve(), if there is a mismatch.
-    - do i need a fragtrace_t something to tell me where the splits for a given frag occurred?  
-    - or something like a fragtree_t simplify()?
-  - is there any reason to freeze the dir?
-    - CDentry objects will be moved to the new frag(s)
-    - Server etc. must take care not to carry CDir pointers around; they're unstable!
-
-  - what about flushing the old dirfrag storage off disk...?
+/  - inode auth will journal inode update separately/lazily
+/    - via subtree_merge_at
 
 
 - journal epoch, or something similar
