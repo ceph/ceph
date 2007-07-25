@@ -313,7 +313,7 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) 
-    straydn = straydir->add_dentry(straydname, 0);
+    straydn = straydir->add_dentry(straydname, DT_UNKNOWN, 0);
   
   return straydn;
 }
@@ -1753,10 +1753,12 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 ++p) {
       CDentry *dn = p->second;
       if (dn->is_primary()) {
-	rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
+	rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, 
+					dn->get_d_type(), dn->get_inode()->ino());
     	dn->get_inode()->get_nested_dirfrags(nested);
       } else if (dn->is_remote())
-	rejoin->add_weak_remote_dentry(dir->dirfrag(), p->first, dn->get_remote_ino());      
+	rejoin->add_weak_remote_dentry(dir->dirfrag(), p->first, 
+				       dn->get_d_type(), dn->get_remote_ino());      
       else 
 	assert(0);  // i shouldn't have a non-auth null dentry after replay + trim_non_auth()
     }
@@ -1768,7 +1770,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
-      rejoin->add_strong_dentry(dir->dirfrag(), p->first,
+      rejoin->add_strong_dentry(dir->dirfrag(), p->first, dn->get_d_type(), 
 				dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 				dn->get_replica_nonce(),
@@ -1934,7 +1936,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       int nonce = dn->add_replica(from);
       dout(10) << " have " << *dn << endl;
       if (ack) 
-	ack->add_strong_dentry(p->first, q->first, 
+	ack->add_strong_dentry(p->first, q->first, dn->get_d_type(),
 			       dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 			       dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 			       nonce, dn->lock.get_replica_state());
@@ -2153,13 +2155,13 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       CDentry *dn = dir->lookup(q->first);
       if (!dn) {
 	if (q->second.is_remote()) {
-	  dn = dir->add_dentry(q->first, q->second.remote_ino);
+	  dn = dir->add_dentry(q->first, q->second.d_type, q->second.remote_ino);
 	} else if (q->second.is_null()) {
-	  dn = dir->add_dentry(q->first);
+	  dn = dir->add_dentry(q->first, q->second.d_type );
 	} else {
 	  CInode *in = get_inode(q->second.ino);
 	  if (!in) in = rejoin_invent_inode(q->second.ino);
-	  dn = dir->add_dentry(q->first, in);
+	  dn = dir->add_dentry(q->first, q->second.d_type, in);
 
 	  dout(10) << " missing " << q->second.ino << endl;
 	  if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
@@ -2645,7 +2647,7 @@ void MDCache::rejoin_send_acks()
 	for (map<int,int>::iterator r = dn->replicas_begin();
 	     r != dn->replicas_end();
 	     ++r) 
-	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, 
+	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, dn->get_d_type(),
 					   dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 					   dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 					   r->second,
@@ -4865,7 +4867,7 @@ void MDCache::handle_discover(MDiscover *dis)
       // send null dentry
       dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
 	      << *curdir << endl;
-      dn = curdir->add_dentry(dis->get_dentry(i), 0);
+      dn = curdir->add_dentry(dis->get_dentry(i), DT_UNKNOWN, 0);
     }
     assert(dn);
 
@@ -5121,7 +5123,7 @@ CDentry *MDCache::add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Conte
     dis.update_dentry(dn);
     dout(7) << "add_replica_dentry had " << *dn << endl;
   } else {
-    dn = dir->add_dentry( dis.get_dname(), 0 );
+    dn = dir->add_dentry( dis.get_dname(), dis.get_d_type(), 0 );
     dis.update_dentry(dn);
     dis.init_dentry_lock(dn);
     dout(7) << "add_replica_dentry added " << *dn << endl;
@@ -5130,7 +5132,7 @@ CDentry *MDCache::add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Conte
   // remote_ino linkage?
   if (dis.get_remote_ino()) {
     if (dn->is_null()) 
-      dir->link_inode(dn, dis.get_remote_ino());
+      dir->link_inode(dn, dis.get_d_type(), dis.get_remote_ino());
     
     // hrm.  yeah.
     assert(dn->is_remote() && dn->get_remote_ino() == dis.get_remote_ino());

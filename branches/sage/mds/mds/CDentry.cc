@@ -43,6 +43,15 @@ ostream& operator<<(ostream& out, CDentry& dn)
   dn.make_path(path);
   
   out << "[dentry " << path;
+  
+  switch (dn.get_d_type()) {
+  case DT_UNKNOWN: out << " ?"; break;
+  case DT_REG: out << " reg"; break;
+  case DT_DIR: out << " dir"; break;
+  case DT_LNK: out << " lnk"; break;
+  default: assert(0);
+  }
+
   if (dn.is_auth()) {
     out << " auth";
     if (dn.is_replicated()) 

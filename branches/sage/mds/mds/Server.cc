@@ -1856,7 +1856,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
   // link and unlock the NEW dentry
-  dn->dir->link_inode(dn, targeti->ino());
+  dn->dir->link_inode(dn, targeti->inode.get_d_type(), targeti->ino());
   dn->mark_dirty(dnpv);
 
   // target inode
@@ -1939,7 +1939,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << endl;
 
   // link the new dentry
-  dn->dir->link_inode(dn, targeti->ino());
+  dn->dir->link_inode(dn, targeti->inode.get_d_type(), targeti->ino());
   dn->mark_dirty(dpv);
 
   // dir inode's mtime
@@ -3050,7 +3050,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_remote()) {
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_inode(destdn, in->ino());    
+      destdn->dir->link_inode(destdn, in->inode.get_d_type(), in->ino());    
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->pvmap[destdn]);
     } else {

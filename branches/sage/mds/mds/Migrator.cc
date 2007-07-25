@@ -880,7 +880,8 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
     dout(7) << "encode_export_dir exporting " << *dn << endl;
     
     // name
-    _encode(it->first, enc_dir);
+    ::_encode(it->first, enc_dir);
+    ::_encode(dn->d_type, enc_dir);
     
     // state
     it->second->encode_export_state(enc_dir);
@@ -1383,7 +1384,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	CDir *condir = cache->get_dirfrag( m->get_containing_dirfrag(in->ino()) );
 	assert(condir);
 	cache->add_inode( in );
-        condir->add_dentry( m->get_dentry(in->ino()), in );
+        condir->add_dentry( m->get_dentry(in->ino()), in->inode.get_d_type(), in );
         
         dout(7) << "   added " << *in << endl;
       }
@@ -1921,11 +1922,13 @@ int Migrator::decode_import_dir(bufferlist& bl,
     
     // dentry
     string dname;
-    _decode(dname, bl, off);
+    unsigned char d_type;
+    ::_decode(dname, bl, off);
+    ::_decode(d_type, bl, off);
     
     CDentry *dn = dir->lookup(dname);
     if (!dn)
-      dn = dir->add_dentry(dname);  // null
+      dn = dir->add_dentry(dname, d_type);  // null
     
     // decode state
     dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
@@ -1950,7 +1953,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
       if (dn->is_remote()) {
 	assert(dn->get_remote_ino() == ino);
       } else {
-	dir->link_inode(dn, ino);
+	dir->link_inode(dn, d_type, ino);
       }
     }
     else if (icode == 'I') {

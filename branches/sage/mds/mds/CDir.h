@@ -243,10 +243,10 @@ protected:
       return iter->second;
   }
 
-  CDentry* add_dentry( const string& dname, CInode *in=0 );
-  CDentry* add_dentry( const string& dname, inodeno_t ino );
+  CDentry* add_dentry( const string& dname, unsigned char d_type, CInode *in=0 );
+  CDentry* add_dentry( const string& dname, unsigned char d_type, inodeno_t ino );
   void remove_dentry( CDentry *dn );         // delete dentry
-  void link_inode( CDentry *dn, inodeno_t ino );
+  void link_inode( CDentry *dn, unsigned char d_type, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
   void try_remove_unlinked_dn(CDentry *dn);
@@ -504,6 +504,7 @@ class CDirExport {
     uint32_t    nden;   // num dentries (including null ones)
     version_t   version;
     version_t   committed_version;
+    version_t   committed_version_equivalent;
     uint32_t    state;
     meta_load_t popularity_justme;
     meta_load_t popularity_curdom;
@@ -523,6 +524,7 @@ class CDirExport {
     st.nden = dir->items.size();
     st.version = dir->version;
     st.committed_version = dir->committed_version;
+    st.committed_version_equivalent = dir->committed_version_equivalent;
     st.state = dir->state;
     st.dir_rep = dir->dir_rep;
 
@@ -542,8 +544,11 @@ class CDirExport {
     assert(dir->dirfrag() == st.dirfrag);
 
     // set committed_version at old version
-    dir->committing_version = dir->committed_version = st.committed_version;
-    dir->projected_version = dir->version = st.version;
+    dir->committing_version = 
+      dir->committed_version = st.committed_version;
+    dir->committed_version_equivalent = st.committed_version_equivalent;
+    dir->projected_version = 
+      dir->version = st.version;
 
     // twiddle state
     dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.

@@ -46,32 +46,34 @@ class EMetaBlob {
    */
   struct fullbit {
     string  dn;         // dentry
+    unsigned char d_type;
     version_t dnv;
     inode_t inode;      // if it's not
     string  symlink;
     bool dirty;
 
-    fullbit(const string& d, version_t v, inode_t& i, bool dr) : dn(d), dnv(v), inode(i), dirty(dr) { }
-    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) : dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
+    fullbit(const string& d, unsigned char dt, version_t v, inode_t& i, bool dr) : 
+      dn(d), d_type(dt), dnv(v), inode(i), dirty(dr) { }
+    fullbit(const string& d, unsigned char dt, version_t v, inode_t& i, string& sym, bool dr) :
+      dn(d), d_type(dt), dnv(v), inode(i), symlink(sym), dirty(dr) { }
     fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&inode, sizeof(inode));
+      ::_encode(d_type, bl);
+      ::_encode(dnv, bl);
+      ::_encode(inode, bl);
       if (inode.is_symlink())
 	::_encode(symlink, bl);
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(inode), (char*)&inode);  
-      off += sizeof(inode);
+      ::_decode(d_type, bl, off);
+      ::_decode(dnv, bl, off);
+      ::_decode(inode, bl, off);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " fullbit dn " << dn << " dnv " << dnv
@@ -84,26 +86,27 @@ class EMetaBlob {
    */
   struct remotebit {
     string dn;
+    unsigned char d_type;
     version_t dnv;
     inodeno_t ino;
     bool dirty;
 
-    remotebit(const string& d, version_t v, inodeno_t i, bool dr) : dn(d), dnv(v), ino(i), dirty(dr) { }
+    remotebit(const string& d, unsigned char dt, version_t v, inodeno_t i, bool dr) : 
+      dn(d), d_type(dt), dnv(v), ino(i), dirty(dr) { }
     remotebit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&ino, sizeof(ino));
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(d_type, bl);
+      ::_encode(dnv, bl);
+      ::_encode(ino, bl);
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(ino), (char*)&ino);
-      off += sizeof(ino);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(d_type, bl, off);
+      ::_decode(dnv, bl, off);
+      ::_decode(ino, bl, off);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " remotebit dn " << dn << " dnv " << dnv
@@ -123,15 +126,13 @@ class EMetaBlob {
     nullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(dnv, bl);
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(dnv, bl, off);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " nullbit dn " << dn << " dnv " << dnv
@@ -301,11 +302,13 @@ private:
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
+					      dn->get_d_type(),
 					      dn->get_projected_version(), 
 					      rino,
 					      dirty));
     else
       lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					     dn->get_d_type(),
 					     dn->get_projected_version(), 
 					     rino,
 					     dirty));
@@ -324,6 +327,7 @@ private:
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					  dn->get_d_type(),
 					  dn->get_projected_version(), 
 					  in->inode, in->symlink, 
 					  dirty));
@@ -331,6 +335,7 @@ private:
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					 dn->get_d_type(),
 					 dn->get_projected_version(),
 					 in->inode, in->symlink, 
 					 dirty));

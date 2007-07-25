@@ -99,7 +99,8 @@ bool EMetaBlob::has_expired(MDS *mds)
 	       << " for " << *dir << endl;
       continue;       // not our problem
     }
-    if (dir->get_committed_version() >= lp->second.dirv) {
+    if (dir->get_committed_version() >= lp->second.dirv ||
+	dir->get_committed_version_equivalent() >= lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
       continue;       // yay
@@ -217,7 +218,8 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	       << " for " << *dir << endl;
       continue;     // not our problem
     }
-    if (dir->get_committed_version() >= lp->second.dirv) {
+    if (dir->get_committed_version() >= lp->second.dirv ||
+	dir->get_committed_version_equivalent() >= lp->second.dirv) {
       dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
 	       << " on " << *dir << endl;
       continue;   // yay
@@ -238,15 +240,12 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	continue;
       }
     }
-    if (dir->get_committed_version() < lp->second.dirv) {
-      dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
-	       << ", committing " << *dir << endl;
-      commit[dir] = MAX(commit[dir], lp->second.dirv);
-      ncommit++;
-      continue;
-    }
-
-    assert(0);  // hrm
+    
+    assert(dir->get_committed_version() < lp->second.dirv);
+    dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
+	     << ", committing " << *dir << endl;
+    commit[dir] = MAX(commit[dir], lp->second.dirv);
+    ncommit++;
   }
 
   // set up gather context
@@ -384,7 +383,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry( p->dn );
+	dn = dir->add_dentry( p->dn, p->d_type );
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -445,7 +444,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry(p->dn);
+	dn = dir->add_dentry(p->dn, DT_UNKNOWN);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;

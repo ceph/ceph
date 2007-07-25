@@ -72,7 +72,10 @@ sage mds
   - rejoin, too!
 
   - auth journals and applies update in the request update pipeline
+
   - dirfragtree is lazily consistent.  no lock.  bcast by primary when it updates.  
+   --> this makes it tricky to properly journal dirfragtree on the auth inode.  what about a scatterlock?
+   
 
   - bcast to dir replicas
   - inode auth will journal inode update separately/lazily

@@ -243,8 +243,6 @@ protected:
     return ino() < ((CInode*)r)->ino();
   }
 
-
-
   // -- misc -- 
   void make_path(string& s);
   void make_anchor_trace(vector<class Anchor>& trace);
