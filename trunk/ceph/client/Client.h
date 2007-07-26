@@ -269,7 +269,8 @@ class Inode {
 
     if (dir_replicated || ino() == 1) {
       //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
-      return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
+      return mdsmap->get_random_in_mds();
+      //return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
     }
     else
       return authority(mdsmap);
