@@ -673,6 +673,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
   show_subtrees();
 }
 
+
 void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
@@ -691,6 +692,34 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs,
   }
   
   adjust_bounded_subtree_auth(dir, bounds, auth);
+}
+
+void MDCache::map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result)
+{
+  // group by inode
+  map<inodeno_t, fragset_t> ino_fragset;
+  for (list<dirfrag_t>::iterator p = dfs.begin(); p != dfs.end(); ++p)
+    ino_fragset[p->ino].insert(p->frag);
+
+  // get frags
+  for (map<inodeno_t, fragset_t>::iterator p = ino_fragset.begin();
+       p != ino_fragset.end();
+       ++p) {
+    CInode *in = get_inode(p->first);
+    if (!in) continue;
+
+    list<frag_t> fglist;
+    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
+      in->dirfragtree.get_leaves_under(*q, fglist);
+
+    dout(15) << "map_dirfrag_set " << p->second << " -> " << fglist
+	     << " on " << *in << endl;
+
+    for (list<frag_t>::iterator q = fglist.begin(); q != fglist.end(); ++q) {
+      CDir *dir = in->get_dirfrag(*q);
+      if (dir) result.insert(dir);
+    }
+  }
 }
 
 
@@ -3759,15 +3788,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         // discover?
         assert(!cur->is_auth());
         if (cur->is_ambiguous_auth()) {
-	  dout(10) << "traverse: need dir, waiting for single auth on " << *cur << endl;
+	  dout(10) << "traverse: need dirfrag " << fg << ", waiting for single auth on " << *cur << endl;
 	  cur->add_waiter(CInode::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
 	  return 1;
 	} else if (dir_discovers.count(cur->ino())) {
-          dout(10) << "traverse: need dir, already doing discover for " << *cur << endl;
+          dout(10) << "traverse: need dirfrag " << fg << ", already doing discover for " << *cur << endl;
 	  assert(cur->is_waiter_for(CInode::WAIT_DIR));
 	} else {
 	  filepath want = path.postfixpath(depth);
-	  dout(10) << "traverse: need dir, doing discover, want " << want.get_path() 
+	  dout(10) << "traverse: need dirfrag " << fg << ", doing discover, want " << want.get_path() 
 		   << " from " << *cur << endl;
 	  mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					      cur->ino(),
@@ -5141,6 +5170,9 @@ CDir *MDCache::add_replica_dir(CInode *diri,
     dis.update_dir(dir);
     dout(7) << "add_replica_dir had " << *dir << " nonce " << dir->replica_nonce << endl;
   } else {
+    // force frag to leaf in the diri tree
+    diri->dirfragtree.force_to_leaf(fg);
+
     // add replica.
     dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
     dis.update_dir(dir);

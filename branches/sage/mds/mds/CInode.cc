@@ -58,7 +58,8 @@ ostream& operator<<(ostream& out, CInode& in)
   }
 
   if (in.is_symlink()) out << " symlink";
-
+  if (in.is_dir() && !in.dirfragtree.empty()) out << " " << in.dirfragtree;
+  
   out << " v" << in.get_version();
 
   // locks
@@ -643,8 +644,6 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  //if (is_root())
-  //return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
   if (force_auth.first >= 0) 
     return force_auth;
 

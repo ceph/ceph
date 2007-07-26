@@ -31,6 +31,7 @@ class MExportDirPrep : public Message {
   list<dirfrag_t>                bounds;
 
   list<CInodeDiscover*>          inodes;
+  list<CDentryDiscover*>         dentries;
   map<inodeno_t,dirfrag_t>       inode_dirfrag;
   map<inodeno_t,string>          inode_dentry;
 
@@ -45,6 +46,7 @@ class MExportDirPrep : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   list<dirfrag_t>& get_bounds() { return bounds; }
   list<CInodeDiscover*>& get_inodes() { return inodes; }
+  list<CDentryDiscover*>& get_dentries() { return dentries; }
   list<frag_t>& get_inode_dirfrags(inodeno_t ino) { 
     return frags_by_ino[ino];
   }
@@ -77,6 +79,10 @@ class MExportDirPrep : public Message {
          iit != inodes.end();
          iit++)
       delete *iit;
+    for (list<CDentryDiscover*>::iterator p = dentries.begin();
+         p != dentries.end();
+         p++)
+      delete *p;
     for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
          dit != dirfrags.end();
          dit++) 
@@ -92,10 +98,11 @@ class MExportDirPrep : public Message {
   void add_export(dirfrag_t df) {
     bounds.push_back( df );
   }
-  void add_inode(dirfrag_t df, const string& dentry, CInodeDiscover *in) {
+  void add_inode(dirfrag_t df, const string& name, CDentryDiscover *dn, CInodeDiscover *in) {
     inodes.push_back(in);
+    dentries.push_back(dn);
     inode_dirfrag[in->get_ino()] = df;
-    inode_dentry[in->get_ino()] = dentry;
+    inode_dentry[in->get_ino()] = name;
   }
   void add_dirfrag(CDirDiscover *dir) {
     dirfrags[dir->get_dirfrag()] = dir;
@@ -121,6 +128,11 @@ class MExportDirPrep : public Message {
       CInodeDiscover *in = new CInodeDiscover;
       in->_decode(payload, off);
       inodes.push_back(in);
+
+      // dentry
+      CDentryDiscover *dn = new CDentryDiscover;
+      dn->_decode(payload, off);
+      dentries.push_back(dn);
       
       // dentry
       string d;
@@ -158,12 +170,13 @@ class MExportDirPrep : public Message {
     // inodes
     int ni = inodes.size();
     payload.append((char*)&ni, sizeof(int));
-    for (list<CInodeDiscover*>::iterator iit = inodes.begin();
-         iit != inodes.end();
-         iit++) {
+    list<CDentryDiscover*>::iterator dit = dentries.begin();
+    list<CInodeDiscover*>::iterator iit = inodes.begin();
+    while (iit != inodes.end()) {
       (*iit)->_encode(payload);
-      
-      // dentry
+      (*dit)->_encode(payload);
+
+      // dentry name
       _encode(inode_dentry[(*iit)->get_ino()], payload);
 
       // dir ino
@@ -172,6 +185,9 @@ class MExportDirPrep : public Message {
 
       // child frags
       ::_encode(frags_by_ino[(*iit)->get_ino()], payload);
+
+      iit++;
+      dit++;
     }
 
     // dirs

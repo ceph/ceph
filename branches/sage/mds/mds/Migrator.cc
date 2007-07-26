@@ -631,7 +631,7 @@ void Migrator::export_frozen(CDir *dir)
       // include the dirfrag?  only if it's not the bounding subtree root.
       if (cur != bound) {
 	assert(cur->is_auth());
-        prep->add_dirfrag( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
+        prep->add_dirfrag( cur->replicate_to(dest) );  // yay!
         dout(7) << "  added " << *cur << endl;
       }
       
@@ -642,9 +642,11 @@ void Migrator::export_frozen(CDir *dir)
          it != inode_trace.end();
          it++) {
       CInode *in = *it;
+      dout(7) << "  added " << *in->parent << endl;
       dout(7) << "  added " << *in << endl;
       prep->add_inode( in->parent->get_dir()->dirfrag(),
-                       in->parent->get_name(),
+		       in->parent->get_name(),
+                       in->parent->replicate_to(dest),
                        in->replicate_to(dest) );
     }
 
@@ -1341,8 +1343,10 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   map<inodeno_t, fragset_t> bound_dirfragset;
   for (list<dirfrag_t>::iterator p = m->get_bounds().begin();
        p != m->get_bounds().end();
-       ++p) 
+       ++p) {
+    dout(10) << " bound " << *p << endl;
     bound_dirfragset[p->ino].insert(p->frag);
+  }
 
   // assimilate contents?
   if (!m->did_assim()) {
@@ -1442,10 +1446,10 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	dout(7) << "  pinning import bound " << *bound << endl;
 	bound->get(CDir::PIN_IMPORTBOUND);
 	bound->state_set(CDir::STATE_IMPORTBOUND);
-	import_bounds.insert(bound);
       } else {
 	dout(7) << "  already pinned import bound " << *bound << endl;
       }
+      import_bounds.insert(bound);
     }
   }
 
@@ -1988,7 +1992,9 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
     dout(7) << "handle_export_notify " << old_auth << " -> " << new_auth
 	    << " on " << *dir << endl;
     // adjust auth
-    cache->adjust_bounded_subtree_auth(dir, m->get_bounds(), new_auth);
+    set<CDir*> have;
+    cache->map_dirfrag_set(m->get_bounds(), have);
+    cache->adjust_bounded_subtree_auth(dir, have, new_auth);
     
     // induce a merge?
     cache->try_subtree_merge(dir);

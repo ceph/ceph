@@ -22,7 +22,7 @@ using namespace std;
 class MMDSFragmentNotify : public Message {
   inodeno_t ino;
   frag_t basefrag;
-  char bits;
+  int8_t bits;
 
  public:
   inodeno_t get_ino() { return ino; }
@@ -39,21 +39,21 @@ class MMDSFragmentNotify : public Message {
   virtual char *get_type_name() { return "fragment_notify"; }
   void print(ostream& o) {
     o << "fragment_notify(" << ino << "#" << basefrag
-	  << " " << bits << ")";
+      << " " << (int)bits << ")";
   }
 
   virtual void decode_payload() {
     int off = 0;
-	::_decode(ino, payload, off);
-	::_decode(basefrag, payload, off);
-	::_decode(bits, payload, off);
-	::_decode(basebl, payload, off);
+    ::_decode(ino, payload, off);
+    ::_decode(basefrag, payload, off);
+    ::_decode(bits, payload, off);
+    ::_decode(basebl, payload, off);
   }
   virtual void encode_payload() {
-	::_encode(ino, payload);
-	::_encode(basefrag, payload);
-	::_encode(bits, payload);
-	::_encode(basebl, payload);
+    ::_encode(ino, payload);
+    ::_encode(basefrag, payload);
+    ::_encode(bits, payload);
+    ::_encode(basebl, payload);
   }
 };
 

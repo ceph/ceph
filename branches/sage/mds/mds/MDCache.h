@@ -246,6 +246,7 @@ public:
   void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, int a) {
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
+  void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
