@@ -1526,9 +1526,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
   int numfiles = encode_dir_contents(dir, inls, dnls);
   
   // . too
-  dnls.push_back(".");
-  inls.push_back(new InodeStat(diri, mds->get_nodeid()));
-  ++numfiles;
+  //dnls.push_back(".");
+  //inls.push_back(new InodeStat(diri, mds->get_nodeid()));
+  //++numfiles;
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
