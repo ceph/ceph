@@ -16,51 +16,51 @@
 #define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
-ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
+ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t off)
 {
-  dout(20) << "split " << *bh << " at " << off << endl;
+  dout(20) << "split " << *left << " at " << off << endl;
   
   // split off right
   ObjectCacher::BufferHead *right = new BufferHead(this);
-  right->last_write_tid = bh->last_write_tid;
-  right->set_state(bh->get_state());
+  right->last_write_tid = left->last_write_tid;
+  right->set_state(left->get_state());
   
-  off_t newleftlen = off - bh->start();
-  right->set_start( off );
-  right->set_length( bh->length() - newleftlen );
+  off_t newleftlen = off - left->start();
+  right->set_start(off);
+  right->set_length(left->length() - newleftlen);
   
   // shorten left
-  oc->bh_stat_sub(bh);
-  bh->set_length( newleftlen );
-  oc->bh_stat_add(bh);
+  oc->bh_stat_sub(left);
+  left->set_length(newleftlen);
+  oc->bh_stat_add(left);
   
   // add right
   oc->bh_add(this, right);
   
   // split buffers too
   bufferlist bl;
-  bl.claim(bh->bl);
+  bl.claim(left->bl);
   if (bl.length()) {
-    assert(bl.length() == (bh->length() + right->length()));
-    right->bl.substr_of(bl, bh->length(), right->length());
-    bh->bl.substr_of(bl, 0, bh->length());
+    assert(bl.length() == (left->length() + right->length()));
+    right->bl.substr_of(bl, left->length(), right->length());
+    left->bl.substr_of(bl, 0, left->length());
   }
   
   // move read waiters
-  if (!bh->waitfor_read.empty()) {
-    map<off_t, list<Context*> >::iterator o, p = bh->waitfor_read.end();
+  if (!left->waitfor_read.empty()) {
+    map<off_t, list<Context*> >::iterator o, p = left->waitfor_read.end();
     p--;
-    while (p != bh->waitfor_read.begin()) {
+    while (p != left->waitfor_read.begin()) {
       if (p->first < right->start()) break;      
       dout(0) << "split  moving waiters at byte " << p->first << " to right bh" << endl;
       right->waitfor_read[p->first].swap( p->second );
       o = p;
       p--;
-      bh->waitfor_read.erase(o);
+      left->waitfor_read.erase(o);
     }
   }
   
-  dout(20) << "split    left is " << *bh << endl;
+  dout(20) << "split    left is " << *left << endl;
   dout(20) << "split   right is " << *right << endl;
   return right;
 }
@@ -850,11 +850,18 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
       size_t bhoff = bh->start() - opos;
       assert(f_it->second <= bh->length() - bhoff);
 
+      // get the frag we're mapping in
       bufferlist frag; 
       frag.substr_of(wr->bl, 
                      f_it->first, f_it->second);
 
-      bh->bl.claim_append(frag);
+      // keep anything left of bhoff
+      bufferlist newbl;
+      if (bhoff)
+	newbl.substr_of(bh->bl, 0, bhoff);
+      newbl.claim_append(frag);
+      bh->bl.swap(newbl);
+
       opos += f_it->second;
     }
 
@@ -866,18 +873,21 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     // recombine with left?
     map<off_t,BufferHead*>::iterator p = o->data.find(bh->start());
     if (p != o->data.begin()) {
+      assert(p->second == bh);
       p--;
       if (p->second->is_dirty()) {
-        o->merge_left(p->second,bh);
+        o->merge_left(p->second, bh);
         bh = p->second;
       }
     }
     // right?
-    p = o->data.find(bh->start());
-    p++;
-    if (p != o->data.end() &&
-        p->second->is_dirty()) 
-      o->merge_left(p->second,bh);
+    while (1) {
+      p = o->data.find(bh->start());
+      assert(p->second == bh);
+      p++;
+      if (p == o->data.end() || !p->second->is_dirty()) break;
+      o->merge_left(bh, p->second);
+    }
   }
 
   delete wr;
