@@ -601,7 +601,12 @@ MClientReply *Client::make_request(MClientRequest *req,
       dout(10) << "target resend_mds specified as mds" << mds << endl;
     } else {
       mds = choose_target_mds(req);
-      dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
+      if (mds >= 0) {
+	dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
+      } else {
+	mds = mdsmap->get_random_in_mds();
+	dout(10) << "chose random target mds" << mds << " for lack of anything better" << endl;
+      }
     }
     
     // open a session?
@@ -1845,7 +1850,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   if (res == 0) {
     assert(in);
     fill_stat(in->inode,stbuf);
-    dout(10) << "stat sez size = " << in->inode.size << " ino = " << stbuf->st_ino << endl;
+    dout(10) << "stat sez size = " << in->inode.size << " mode = " << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << endl;
   }
 
   trim_cache();
@@ -2121,6 +2126,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
 	}
         
         // contents to caller too!
+	dout(15) << "getdir including " << *pdn << " to " << in->inode.ino << endl;
         contents[*pdn] = in->inode;
       }
       if (dir->is_empty())
@@ -2356,8 +2362,6 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   MClientReply *reply = make_request(req);
   
   assert(reply);
-  dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
-  tout << reply->get_result() << endl;
 
   insert_trace(reply);  
   int result = reply->get_result();
