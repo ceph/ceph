@@ -245,6 +245,18 @@ public:
       release();
     }
 
+    void swap(ptr& other) {
+      raw *r = _raw;
+      unsigned o = _off;
+      unsigned l = _len;
+      _raw = other._raw;
+      _off = other._off;
+      _len = other._len;
+      other._raw = r;
+      other._off = o;
+      other._len = l;
+    }
+
     void release() {
       if (_raw) {
 	_raw->lock.Lock();
@@ -359,6 +371,14 @@ public:
 
     const std::list<ptr>& buffers() const { return _buffers; }
     
+    void swap(list& other) {
+      unsigned t = _len;
+      _len = other._len;
+      other._len = t;
+      _buffers.swap(other._buffers);
+      append_buffer.swap(other.append_buffer);
+    }
+
     unsigned length() const {
 #if 1
       // DEBUG: verify _len

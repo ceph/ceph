@@ -1391,7 +1391,9 @@ void Server::handle_client_chmod(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->mode = req->args.chmod.mode & 04777;
+  pi->mode = 
+    (pi->mode & ~04777) | 
+    (req->args.chmod.mode & 04777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
 
@@ -1530,9 +1532,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
   int numfiles = encode_dir_contents(dir, inls, dnls);
   
   // . too
-  dnls.push_back(".");
-  inls.push_back(new InodeStat(diri, mds->get_nodeid()));
-  ++numfiles;
+  //dnls.push_back(".");
+  //inls.push_back(new InodeStat(diri, mds->get_nodeid()));
+  //++numfiles;
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
