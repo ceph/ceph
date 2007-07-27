@@ -319,14 +319,14 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
     dout(12) << " new dentry+node with ino " << st->inode.ino << endl;
   } else {
     // actually update info
-    dout(12) << " stat inode mask is " << st->inode.mask << endl;
+    dout(12) << " stat inode mask is " << st->mask << endl;
     dn->inode->inode = st->inode;
 
     // ...but don't clobber our mtime, size!
-    if ((dn->inode->inode.mask & INODE_MASK_SIZE) == 0 &&
+    if ((dn->inode->mask & INODE_MASK_SIZE) == 0 &&
         dn->inode->file_wr_size > dn->inode->inode.size) 
       dn->inode->inode.size = dn->inode->file_wr_size;
-    if ((dn->inode->inode.mask & INODE_MASK_MTIME) == 0 &&
+    if ((dn->inode->mask & INODE_MASK_MTIME) == 0 &&
         dn->inode->file_wr_mtime > dn->inode->inode.mtime) 
       dn->inode->inode.mtime = dn->inode->file_wr_mtime;
   }
@@ -1746,7 +1746,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
   utime_t now = g_clock.real_now();
   if (dn && 
       now <= dn->inode->valid_until &&
-      ((dn->inode->inode.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
+      ((dn->inode->mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
     inode = dn->inode->inode;
     dout(10) << "lstat cache hit w/ sufficient inode.mask, valid until " << dn->inode->valid_until << endl;
     
@@ -1785,40 +1785,23 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 }
 
 
-void Client::fill_stat(inode_t& inode, struct stat *st) 
+int Client::fill_stat(Inode *in, struct stat *st) 
 {
   memset(st, 0, sizeof(struct stat));
-  st->st_ino = inode.ino;
-  st->st_mode = inode.mode;
-  st->st_nlink = inode.nlink;
-  st->st_uid = inode.uid;
-  st->st_gid = inode.gid;
-  st->st_ctime = MAX(inode.ctime, inode.mtime);
-  st->st_atime = inode.atime;
-  st->st_mtime = inode.mtime;
-  st->st_size = inode.size;
-  st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
+  st->st_ino = in->inode.ino;
+  st->st_mode = in->inode.mode;
+  st->st_nlink = in->inode.nlink;
+  st->st_uid = in->inode.uid;
+  st->st_gid = in->inode.gid;
+  st->st_ctime = MAX(in->inode.ctime, in->inode.mtime);
+  st->st_atime = in->inode.atime;
+  st->st_mtime = in->inode.mtime;
+  st->st_size = in->inode.size;
+  st->st_blocks = in->inode.size ? ((in->inode.size - 1) / 4096 + 1):0;
   st->st_blksize = 4096;
+  return in->mask;
 }
 
-void Client::fill_statlite(inode_t& inode, struct statlite *st) 
-{
-  memset(st, 0, sizeof(struct stat));
-  st->st_ino = inode.ino;
-  st->st_mode = inode.mode;
-  st->st_nlink = inode.nlink;
-  st->st_uid = inode.uid;
-  st->st_gid = inode.gid;
-#ifndef DARWIN
-  // FIXME what's going on here with darwin?
-  st->st_ctime = MAX(inode.ctime, inode.mtime);
-  st->st_atime = inode.atime;
-  st->st_mtime = inode.mtime;
-#endif
-  st->st_size = inode.size;
-  st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
-  st->st_blksize = 4096;
-  
   /*
   S_REQUIREBLKSIZE(st->st_litemask);
   if (inode.mask & INODE_MASK_BASE) S_REQUIRECTIME(st->st_litemask);
@@ -1829,7 +1812,6 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   if (inode.mask & INODE_MASK_MTIME) S_REQUIREMTIME(st->st_litemask);
   if (inode.mask & INODE_MASK_ATIME) S_REQUIREATIME(st->st_litemask);
   */
-}
 
 
 int Client::lstat(const char *relpath, struct stat *stbuf)
@@ -1849,7 +1831,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   int res = _lstat(path, INODE_MASK_ALL_STAT, &in);
   if (res == 0) {
     assert(in);
-    fill_stat(in->inode,stbuf);
+    fill_stat(in, stbuf);
     dout(10) << "stat sez size = " << in->inode.size << " mode = " << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << endl;
   }
 
@@ -1859,6 +1841,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 }
 
 
+/*
 int Client::lstatlite(const char *relpath, struct statlite *stl)
 {
   client_lock.Lock();
@@ -1891,7 +1874,7 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   client_lock.Unlock();
   return res;
 }
-
+*/
 
 
 int Client::chmod(const char *relpath, mode_t mode)
@@ -2046,88 +2029,112 @@ int Client::mknod(const char *relpath, mode_t mode)
 
 
   
-//readdir usually include inode info for each entry except of locked entries
-
-//
-// getdir
-
-// fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
-
-int Client::getdir(const char *relpath, map<string,inode_t>& contents) 
+int Client::getdir(const char *relpath, list<string>& contents)
 {
+  DIR *d;
+  int r = opendir(relpath, &d);
+  if (r < 0) return r;
+
+  struct dirent de;
+  int n = 0;
+  while (readdir_r(d, &de) == 0) {
+    contents.push_back(de.d_name);
+    n++;
+  }
+  closedir(d);
+
+  return n;
+}
+
+
+
+/** POSIX stubs **/
+
+int Client::opendir(const char *name, DIR **dirpp) 
+{
+  *((DirResult**)dirpp) = new DirResult(name);
+  return 0;
+}
+
+bool Client::_readdir_have_next(DirResult *dirp) 
+{
+  return dirp->buffer.count(dirp->frag());
+}
+
+void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
+{
+  frag_t fg = dirp->frag();
+  struct stat st;
+  int stmask;
+  stmask = fill_stat(in, &st);  
+  dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
+}
+
+void Client::_readdir_get_next(DirResult *dirp)
+{
+  // get the current frag.
+  frag_t fg = dirp->frag();
+  assert(dirp->buffer.count(fg) == 0);
+  
   client_lock.Lock();
 
-  string abspath;
-  mkabspath(relpath, abspath);
-  const char *path = abspath.c_str();
-
-  dout(3) << "op: client->getdir(\"" << path << "\", dir_contents);" << endl;
-  tout << "getdir" << endl;
-  tout << path << endl;
-
-
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
-  req->set_path(path); 
+  req->set_path(dirp->path); 
+  req->args.readdir.frag = fg;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
-
-  //FIXME enforce caller uid rights?
-   
+  
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
-
+  
   if (res == 0) {
-
-    // dir contents to cache!
+    // stuff dir contents to cache, DirResult
     inodeno_t ino = reply->get_ino();
     Inode *diri = inode_map[ ino ];
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
 
-    // add . and ..?
-    string dot(".");
-    contents[dot] = diri->inode;
-    if (diri != root) {
+    if (fg.is_leftmost()) {
+      // add . and ..?
+      string dot(".");
       string dotdot("..");
-      contents[dotdot] = diri->dn->dir->parent_inode->inode;
+      _readdir_add_dirent(dirp, dot, diri);
+      if (diri->dn)
+	_readdir_add_dirent(dirp, dotdot, diri->dn->dir->parent_inode);
     }
-
+    
     // the rest?
-    if (!reply->get_dir_in().empty()) {
+    if (!reply->get_dir_dn().empty()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
       utime_t now = g_clock.real_now();
       
-      list<string>::const_iterator pdn = reply->get_dir_dn().begin();
-      for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
-           pin != reply->get_dir_in().end(); 
-           ++pin, ++pdn) {
-	// ignore .
-	if (*pdn == ".") 
-	  continue;
-
+      list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
+      for (list<string>::const_iterator pdn = reply->get_dir_dn().begin();
+	   pdn != reply->get_dir_dn().end(); 
+           ++pdn, ++pin) {
 	// count entries
         res++;
-
-        // put in cache
-        Inode *in = this->insert_inode(dir, *pin, *pdn);
-        
-        if (g_conf.client_cache_stat_ttl) {
-          in->valid_until = now;
+	
+	// put in cache
+	Inode *in = this->insert_inode(dir, *pin, *pdn);
+	
+	if (g_conf.client_cache_stat_ttl) {
+	  in->valid_until = now;
 	  in->valid_until += g_conf.client_cache_stat_ttl;
 	}
-        else if (g_conf.client_cache_readdir_ttl) {
-          in->valid_until = now;
+	else if (g_conf.client_cache_readdir_ttl) {
+	  in->valid_until = now;
 	  in->valid_until += g_conf.client_cache_readdir_ttl;
 	}
-        
-        // contents to caller too!
+	
+	// contents to caller too!
 	dout(15) << "getdir including " << *pdn << " to " << in->inode.ino << endl;
-        contents[*pdn] = in->inode;
+	_readdir_add_dirent(dirp, *pdn, in);
       }
       if (dir->is_empty())
 	close_dir(dir);
@@ -2135,30 +2142,53 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
+  } else {
+    dirp->set_end();
   }
 
-  delete reply;     //fix thing above first
+  delete reply;
 
   client_lock.Unlock();
-  return res;
 }
 
-
-/** POSIX stubs **/
-
-DIR *Client::opendir(const char *name) 
+void Client::_readdir_advance_frag(DirResult *dirp)
 {
-  DirResult *d = new DirResult;
-  d->size = getdir(name, d->contents);
-  d->p = d->contents.begin();
-  d->off = 0;
-  return (DIR*)d;
+  frag_t fg = dirp->frag();
+  dirp->buffer.erase(fg);
+  dirp->next_frag();
 }
 
-int Client::closedir(DIR *dir) 
-{
-  DirResult *d = (DirResult*)dir;
-  delete d;
+int Client::readdir_r(DIR *d, struct dirent *de)
+{  
+  return readdirplus_r(d, de, 0, 0);
+}
+
+int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
+{  
+  DirResult *dirp = (DirResult*)d;
+  
+  // do i have this frag?
+  if (!_readdir_have_next(dirp))
+    _readdir_get_next(dirp);
+
+  if (dirp->is_end())
+    return -1; // end of directory
+
+  frag_t fg = dirp->frag();
+  uint32_t pos = dirp->fragpos();
+  
+  assert(dirp->buffer.count(fg));
+
+  vector<DirEntry> &ent = dirp->buffer[fg];
+  assert(pos < ent.size());
+  _readdir_fill_dirent(de, &ent[pos], dirp->offset);
+  if (st) *st = ent[pos].st;
+  if (stmask) *stmask = ent[pos].stmask;
+  pos++;
+  dirp->offset++;
+  if (pos == ent.size())
+    _readdir_advance_frag(dirp);
+
   return 0;
 }
 
@@ -2169,8 +2199,24 @@ int Client::closedir(DIR *dir)
 //  unsigned char  d_type;      /* type of file */
 //  char           d_name[256]; /* filename */
 //};
+void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
+{
+  de->d_ino = entry->st.st_ino;
+  de->d_off = off + 1;
+  de->d_reclen = 1;
+  de->d_type = MODE_TO_DT(entry->st.st_mode);
+  strncpy(de->d_name, entry->d_name.c_str(), 256);
+}
 
-struct dirent *Client::readdir(DIR *dirp)
+int Client::closedir(DIR *dir) 
+{
+  DirResult *d = (DirResult*)dir;
+  delete d;
+  return 0;
+}
+
+
+/*struct dirent *Client::readdir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
 
@@ -2204,35 +2250,29 @@ struct dirent *Client::readdir(DIR *dirp)
 
   return &d->dp.d_dirent;
 }
+*/
  
 void Client::rewinddir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
-  d->p = d->contents.begin();
-  d->off = 0;
+  d->offset = 0;
+  d->buffer.clear();
 }
  
 off_t Client::telldir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
-  return d->off;
+  return d->offset;
 }
 
 void Client::seekdir(DIR *dirp, off_t offset)
 {
   DirResult *d = (DirResult*)dirp;
-
-  d->p = d->contents.begin();
-  d->off = 0;
-
-  if (offset >= d->size) offset = d->size-1;
-  while (offset > 0) {
-    ++d->p;
-    ++d->off;
-    --offset;
-  }
+  d->offset = offset;
 }
 
+
+/*
 struct dirent_plus *Client::readdirplus(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
@@ -2280,7 +2320,7 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
 
   return &d->dp;
 }
-
+*/
 /*
 struct dirent_lite *Client::readdirlite(DIR *dirp)
 {

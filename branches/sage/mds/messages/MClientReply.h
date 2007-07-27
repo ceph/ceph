@@ -51,11 +51,19 @@ class CInode;
  */
 
 class InodeStat {
-
  public:
+  const static int MASK_INO = 1;
+  const static int MASK_TYPE = 2;
+  const static int MASK_BASE = 4;
+  const static int MASK_AUTH = 8;
+  const static int MASK_LINK = 16;
+  const static int MASK_FILE = 32;
+  const static int MASK_ALL = 0xffff;
+
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
+  uint32_t mask;
 
   // mds distribution hints
   map<frag_t,int>       dirfrag_auth;
@@ -68,10 +76,9 @@ class InodeStat {
     inode(in->inode)
   {
     // inode.mask
-    inode.mask = INODE_MASK_BASE;
-    if (in->authlock.can_rdlock(0)) inode.mask |= INODE_MASK_AUTH;
-    if (in->linklock.can_rdlock(0)) inode.mask |= INODE_MASK_LINK;
-    if (in->filelock.can_rdlock(0)) inode.mask |= INODE_MASK_FILE;
+    if (!in->authlock.can_rdlock(0)) mask &= ~MASK_AUTH;
+    if (!in->linklock.can_rdlock(0)) mask &= ~MASK_LINK;
+    if (!in->filelock.can_rdlock(0)) mask &= ~MASK_FILE;
     
     // symlink content?
     if (in->is_symlink()) 
@@ -96,6 +103,7 @@ class InodeStat {
   }
   
   void _encode(bufferlist &bl) {
+    ::_encode(mask, bl);
     ::_encode(inode, bl);
     ::_encode(dirfrag_auth, bl);
     ::_encode(dirfrag_dist, bl);
@@ -105,6 +113,7 @@ class InodeStat {
   }
   
   void _decode(bufferlist &bl, int& off) {
+    ::_decode(mask, bl, off);    
     ::_decode(inode, bl, off);
     ::_decode(dirfrag_auth, bl, off);
     ::_decode(dirfrag_dist, bl, off);
@@ -133,8 +142,8 @@ class MClientReply : public Message {
   list<InodeStat*> trace_in;
   list<string>     trace_dn;
 
+  list<string> dir_dn;
   list<InodeStat*> dir_in;
-  list<string>     dir_dn;
 
  public:
   long get_tid() { return st.tid; }
@@ -210,13 +219,12 @@ class MClientReply : public Message {
       trace_in.push_back(ci);
     }
 
+    // dir contents
+    ::_decode(dir_dn, payload, off);
     for (int i=0; i<st._dir_size; ++i) {
       InodeStat *ci = new InodeStat;
       ci->_decode(payload, off);
       dir_in.push_back(ci);
-      string dn;
-      ::_decode(dn, payload, off);
-      dir_dn.push_back(dn);
     }
   }
   virtual void encode_payload() {
@@ -237,13 +245,11 @@ class MClientReply : public Message {
     }
 
     // dir contents
-    pdn = dir_dn.begin();
+    ::_encode(dir_dn, payload);    
     for (pin = dir_in.begin();
          pin != dir_in.end();
-         ++pin, ++pdn) {
+         ++pin) 
       (*pin)->_encode(payload);
-      ::_encode(*pdn, payload);
-    }
   }
 
   // builders
@@ -253,13 +259,14 @@ class MClientReply : public Message {
     dir_in.push_back(in);
     ++st._dir_size;
     }*/
-  void take_dir_items(list<InodeStat*>& inls,
-                      list<string>& dnls,
-                      int num) {
-    dir_in.swap(inls);
+  void take_dir_items(list<string>& dnls,
+		      list<InodeStat*>& inls,
+		      int num) {
     dir_dn.swap(dnls);
+    dir_in.swap(inls);
     st._dir_size = num;
   }
+  /*
   void copy_dir_items(const list<InodeStat*>& inls,
                       const list<string>& dnls) {
     list<string>::const_iterator pdn = dnls.begin();
@@ -275,6 +282,7 @@ class MClientReply : public Message {
       ++st._dir_size;
     }
   }
+  */
 
   void set_trace_dist(CInode *in, int whoami) {
     st._num_trace_in = 0;

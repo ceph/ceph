@@ -59,6 +59,10 @@ public:
 int main(int argc, char **argv) {
   cerr << "fakefuse starting" << endl;
 
+  // stop on our own (by default)
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);

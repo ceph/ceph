@@ -132,6 +132,18 @@ class frag_t {
   frag_t right_child() const {
     return frag_t(value() | (1<<bits()), bits()+1);
   }
+
+  // sequencing
+  bool is_leftmost() const {
+    return value() == 0;
+  }
+  bool is_rightmost() const {
+    return value() == mask();
+  }
+  frag_t next() const {
+    assert(!is_rightmost());
+    return frag_t(value() + 1, bits());
+  }
 };
 
 inline ostream& operator<<(ostream& out, frag_t hb)

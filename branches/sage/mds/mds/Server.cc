@@ -1450,8 +1450,8 @@ void Server::handle_client_chown(MDRequest *mdr)
 // READDIR
 
 int Server::encode_dir_contents(CDir *dir, 
-				list<InodeStat*>& inls,
-				list<string>& dnls)
+				list<string>& dnls,
+				list<InodeStat*>& inls)
 {
   int numfiles = 0;
 
@@ -1463,15 +1463,26 @@ int Server::encode_dir_contents(CDir *dir,
     if (dn->is_null()) continue;
 
     CInode *in = dn->inode;
-    if (!in) 
-      continue;  // hmm, fixme!, what about REMOTE links?  
-    
-    dout(12) << "including inode " << *in << endl;
+    InodeStat *st;
+    if (in) {
+      dout(12) << "including inode " << *in << endl;
 
-    // add this item
-    // note: InodeStat makes note of whether inode data is readable.
+      // add this item
+      // note: InodeStat makes note of whether inode data is readable.
+      st = new InodeStat(in, mds->get_nodeid());
+    } else {
+      assert(dn->is_remote());
+      dout(12) << "including inode-less (remote) dentry " << *dn << endl;
+      st = new InodeStat;
+      st->mask = 0;
+      memset(&st->inode, 0, sizeof(st->inode));
+      st->inode.ino = dn->get_remote_ino();
+      st->inode.mode = DT_TO_MODE(dn->get_remote_d_type());
+      st->mask = InodeStat::MASK_INO | InodeStat::MASK_TYPE;
+    }
+
     dnls.push_back( it->first );
-    inls.push_back( new InodeStat(in, mds->get_nodeid()) );
+    inls.push_back(st);
     numfiles++;
   }
   return numfiles;
@@ -1525,7 +1536,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // build dir contents
   list<InodeStat*> inls;
   list<string> dnls;
-  int numfiles = encode_dir_contents(dir, inls, dnls);
+  int numfiles = encode_dir_contents(dir, dnls, inls);
   
   // . too
   //dnls.push_back(".");
@@ -1534,7 +1545,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
-  reply->take_dir_items(inls, dnls, numfiles);
+  reply->take_dir_items(dnls, inls, numfiles);
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(fg);
@@ -1858,7 +1869,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
 
   // link and unlock the NEW dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), targeti->inode.get_d_type());
+  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
   dn->mark_dirty(dnpv);
 
   // target inode
@@ -1941,7 +1952,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << endl;
 
   // link the new dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), targeti->inode.get_d_type());
+  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
   dn->mark_dirty(dpv);
 
   // dir inode's mtime
@@ -3052,7 +3063,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_remote()) {
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_remote_inode(destdn, in->ino(), in->inode.get_d_type());    
+      destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->pvmap[destdn]);
     } else {

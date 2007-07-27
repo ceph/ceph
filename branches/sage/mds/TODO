@@ -80,11 +80,6 @@ sage mds
 /    - via subtree_merge_at
 
 
-- journal epoch, or something similar
-  - reduce size of EMetaBlob by skipping context when inode was already journaled since the last
-    SubtreeMap
-
-
 - hmm, should we move ESubtreeMap out of the journal?  
   that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
 

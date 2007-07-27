@@ -28,7 +28,7 @@
 #define _XOPEN_SOURCE 500
 #endif
 
-#define FUSE_USE_VERSION 25
+#define FUSE_USE_VERSION 26
 
 #include <fuse.h>
 #include <stdio.h>
@@ -74,28 +74,6 @@ static int ceph_readlink(const char *path, char *buf, size_t size)
   
   buf[res] = '\0';
   return 0;
-}
-
-
-static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
-{
-  map<string, inode_t> contents;
-
-  int res = client->getdir(path, contents);
-  if (res < 0) return res;
-
-  // return contents to fuse via callback
-  for (map<string, inode_t>::iterator it = contents.begin();
-       it != contents.end();
-       it++) {
-    // (immutable) inode contents too.
-    res = filler(h,                                    // fuse's handle
-                 it->first.c_str(),                    // dentry as char*
-                 it->second.mode & INODE_TYPE_MASK,   // mask type bits from mode
-                 it->second.ino);                     // ino.. 64->32 bit issue here? FIXME
-    if (res != 0) break;   // fuse has had enough
-  }
-  return res;
 }
 
 static int ceph_mknod(const char *path, mode_t mode, dev_t rdev) 
@@ -154,6 +132,9 @@ static int ceph_utime(const char *path, struct utimbuf *buf)
 }
 
 
+// ------------------
+// file i/o
+
 static int ceph_open(const char *path, struct fuse_file_info *fi)
 {
   int res;
@@ -185,13 +166,10 @@ static int ceph_flush(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
-
 static int ceph_statfs(const char *path, struct statvfs *stbuf)
 {
   return client->statfs(path, stbuf);
 }
-
-
 
 static int ceph_release(const char *path, struct fuse_file_info *fi)
 {
@@ -208,10 +186,54 @@ static int ceph_fsync(const char *path, int isdatasync,
 }
 
 
+// ---------------------
+// directory i/o
+
+static int ceph_opendir(const char *path, struct fuse_file_info *fi)
+{
+  DIR *dirp;
+  int r = client->opendir(path, &dirp);
+  if (r < 0) return r;
+  fi->fh = (uint64_t)(void*)dirp;
+  return 0;
+}
+
+static int ceph_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off, fuse_file_info *fi)
+{
+  DIR *dirp = (DIR*)fi->fh;
+  
+  client->seekdir(dirp, off);
+
+  int res = 0;
+  struct dirent de;
+  struct stat st;
+  int stmask = 0;
+  while (res == 0) {
+    int r = client->readdirplus_r(dirp, &de, &st, &stmask);
+    if (r != 0) break;
+    res = filler(buf,
+                 de.d_name,
+		 &st,
+		 client->telldir(dirp));
+  }
+  return res;
+}
+
+static int ceph_releasedir(const char *path, struct fuse_file_info *fi)
+{
+  DIR *dirp = (DIR*)fi->fh;
+  int r = client->closedir(dirp);  // close the file
+  return r;
+}
+
+
+
+
+
 static struct fuse_operations ceph_oper = {
   getattr: ceph_getattr,
   readlink: ceph_readlink,
-  getdir: ceph_getdir,
+  getdir: 0,
   mknod: ceph_mknod,
   mkdir: ceph_mkdir,
   unlink: ceph_unlink,
@@ -229,7 +251,14 @@ static struct fuse_operations ceph_oper = {
   statfs: ceph_statfs,
   flush: ceph_flush,   
   release: ceph_release,
-  fsync: ceph_fsync
+  fsync: ceph_fsync,
+  setxattr: 0,
+  getxattr: 0,
+  listxattr: 0,
+  removexattr: 0,
+  opendir: ceph_opendir,
+  readdir: ceph_readdir,
+  releasedir: ceph_releasedir  
 };
 
 
@@ -276,6 +305,6 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // go fuse go
   cout << "ok, calling fuse_main" << endl;
-  int r = fuse_main(newargc, newargv, &ceph_oper);
+  int r = fuse_main(newargc, newargv, &ceph_oper, 0);
   return r;
 }

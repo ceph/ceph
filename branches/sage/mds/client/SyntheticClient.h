@@ -80,7 +80,7 @@ class SyntheticClient {
 
   
   filepath             cwd;
-  map<string, inode_t> contents;
+  map<string, struct stat*> contents;
   set<string>          subdirs;
   bool                 did_readdir;
   set<int>             open_files;
@@ -120,7 +120,7 @@ class SyntheticClient {
       r += cwd.last_dentry().c_str()[0];                                         // slightly permuted
     r %= contents.size();
 
-    map<string,inode_t>::iterator it = contents.begin();
+    map<string,struct stat*>::iterator it = contents.begin();
     while (r--) it++;
 
     n2 = cwd;

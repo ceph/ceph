@@ -124,6 +124,7 @@ class Inode {
  public:
   inode_t   inode;    // the actual inode
   utime_t   valid_until;
+  int mask;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -319,15 +320,36 @@ class Client : public Dispatcher {
  public:
   
   /* getdir result */
+  struct DirEntry {
+    string d_name;
+    struct stat st;
+    int stmask;
+    DirEntry(const string &s) : d_name(s), stmask(0) {}
+    DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+  };
+
   struct DirResult {
+    static const int SHIFT = 28;
+    static const int MASK = 0xfffffff;
+    static const off_t END = 1ULL << (SHIFT + 32);
+
     string path;
-    map<string,inode_t> contents;
-    map<string,inode_t>::iterator p;
-    int off;
-    int size;
-    struct dirent_plus dp;
-    struct dirent_lite dl;
-    DirResult() : p(contents.end()), off(-1), size(0) {}
+    off_t offset;   // high bits: frag_t, low bits: an offset
+    map<frag_t, vector<DirEntry> > buffer;
+    DirResult(const char *p) : path(p), offset(0) { }
+
+    frag_t frag() { return frag_t(offset >> SHIFT); }
+    unsigned fragpos() { return offset & MASK; }
+
+    void next_frag() {
+      frag_t fg = offset >> SHIFT;
+      if (fg.is_rightmost())
+	set_end();
+      else 
+	offset = fg.next() << SHIFT;
+    }
+    void set_end() { offset = END; }
+    bool is_end() { return (offset == END); }
   };
 
 
@@ -547,8 +569,7 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
 
-  void fill_stat(inode_t& inode, struct stat *st);
-  void fill_statlite(inode_t& inode, struct statlite *st);
+  int fill_stat(Inode *in, struct stat *st);
 
 
   // friends
@@ -615,15 +636,21 @@ public:
   const string getcwd() { return cwd; }
 
   // namespace ops
-  int getdir(const char *path, list<string>& contents);
-  int getdir(const char *path, map<string,inode_t>& contents);
+  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  DIR *opendir(const char *name);
-  int closedir(DIR *dir);
-  struct dirent *readdir(DIR *dir); 
-  void rewinddir(DIR *dir); 
-  off_t telldir(DIR *dir);
-  void seekdir(DIR *dir, off_t offset);
+  bool _readdir_have_next(DirResult *dirp);
+  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
+  void _readdir_get_next(DirResult *dirp);
+  void _readdir_advance_frag(DirResult *dirp);
+  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+
+  int opendir(const char *name, DIR **dirpp);
+  int closedir(DIR *dirp);
+  int readdir_r(DIR *dirp, struct dirent *de);
+  int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+  void rewinddir(DIR *dirp); 
+  off_t telldir(DIR *dirp);
+  void seekdir(DIR *dirp, off_t offset);
 
   struct dirent_plus *readdirplus(DIR *dirp);
   int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);

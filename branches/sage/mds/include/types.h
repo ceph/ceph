@@ -210,10 +210,12 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_BASE       1  // ino, layout, symlink value
-#define INODE_MASK_AUTH       2  // uid, gid, mode
-#define INODE_MASK_LINK       4  // nlink, anchored
-#define INODE_MASK_FILE       8  // mtime, size.
+#define INODE_MASK_INO        1    // inode
+#define INODE_MASK_TYPE       2   // file type bits of the mode
+#define INODE_MASK_BASE       4   // ino, layout, symlink value
+#define INODE_MASK_AUTH       8   // uid, gid, mode
+#define INODE_MASK_LINK       16   // nlink, anchored
+#define INODE_MASK_FILE       32  // mtime, size.
 // atime?
 
 #define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_AUTH|INODE_MASK_LINK|INODE_MASK_FILE)
@@ -222,6 +224,15 @@ namespace __gnu_cxx {
 #define INODE_MASK_MTIME      INODE_MASK_FILE // mtime
 #define INODE_MASK_ATIME      INODE_MASK_FILE // atime
 #define INODE_MASK_CTIME      (INODE_MASK_FILE|INODE_MASK_AUTH|INODE_MASK_LINK) // ctime
+
+inline int DT_TO_MODE(int dt) {
+  switch (dt) {
+  case DT_REG: return INODE_MODE_FILE;
+  case DT_DIR: return INODE_MODE_DIR;
+  case DT_LNK: return INODE_MODE_SYMLINK;
+  default: assert(0); return 0;
+  }
+}
 
 struct inode_t {
   // base (immutable)
@@ -246,9 +257,8 @@ struct inode_t {
   utime_t    atime;   // file data access time.
  
   // special stuff
-  int           mask;  // used for client stat.  hack.
-  version_t     version;           // auth only
-  version_t     file_data_version; // auth only
+  version_t version;           // auth only
+  version_t file_data_version; // auth only
 
   // file type
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
@@ -259,19 +269,15 @@ struct inode_t {
   static const unsigned char DT_REG = 8;
   static const unsigned char DT_DIR = 4;
   static const unsigned char DT_LNK = 10;
-  
-  unsigned char get_d_type() {
-    if (is_file())
-      return DT_REG;
-    else if (is_dir())
-      return DT_DIR;
-    else if (is_symlink())
-      return DT_LNK;
-    assert(0); 
-    return 0;
-  }
-
 };
+
+inline unsigned char MODE_TO_DT(int mode) {
+  if (S_ISREG(mode)) return inode_t::DT_REG;
+  if (S_ISLNK(mode)) return inode_t::DT_LNK;
+  if (S_ISDIR(mode)) return inode_t::DT_DIR;
+  assert(0);
+  return 0;
+}
 
 
 
