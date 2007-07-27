@@ -1534,9 +1534,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   
-  EUpdate *le = new EUpdate("scatter writebehind");
-  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
-			       in->get_parent_dn()->get_dir());
+  EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
+  le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mds->mdlog->submit_entry(le);

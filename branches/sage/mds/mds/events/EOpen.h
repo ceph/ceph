@@ -24,9 +24,9 @@ public:
   list<inodeno_t> inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
-  EOpen(CInode *in) : LogEvent(EVENT_OPEN) {
-    add_inode(in);
-  }
+  EOpen(MDLog *mdlog) : 
+    LogEvent(EVENT_OPEN), metablob(mdlog) { }
+
   void print(ostream& out) {
     out << "EOpen " << metablob;
   }

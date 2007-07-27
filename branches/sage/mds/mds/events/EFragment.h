@@ -20,14 +20,14 @@
 
 class EFragment : public LogEvent {
 public:
+  EMetaBlob metablob;
   inodeno_t ino;
   frag_t basefrag;
   int bits;         // positive for split (from basefrag), negative for merge (to basefrag)
-  EMetaBlob metablob;
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
-  EFragment(inodeno_t i, frag_t bf, int b) : 
-    LogEvent(EVENT_FRAGMENT),
+  EFragment(MDLog *mdlog, inodeno_t i, frag_t bf, int b) : 
+    LogEvent(EVENT_FRAGMENT), metablob(mdlog), 
     ino(i), basefrag(bf), bits(b) { }
   void print(ostream& out) {
     out << "EFragment " << ino << " " << basefrag << " by " << bits << " " << metablob;

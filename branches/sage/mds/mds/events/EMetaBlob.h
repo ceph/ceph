@@ -24,6 +24,7 @@ using namespace std;
 #include "../CDentry.h"
 
 class MDS;
+class MDLog;
 
 /*
  * a bunch of metadata in the journal
@@ -244,6 +245,13 @@ private:
   list<metareqid_t> client_reqs;
 
  public:
+  // soft state
+  off_t last_subtree_map;
+  off_t my_offset;
+
+  EMetaBlob() : last_subtree_map(0), my_offset(0) { }
+  EMetaBlob(MDLog *mdl);  // defined in journal.cc
+
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
 	 p != lump_order.end();
@@ -323,7 +331,8 @@ private:
     if (!in) 
       in = dn->get_inode();
 
-    // ** FIXME: set in->last_journaled **
+    // make note of where this inode was last journaled
+    in->last_journaled = my_offset;
 
     lump.nfull++;
     if (dirty) {
@@ -379,7 +388,7 @@ private:
   static const int TO_AUTH_SUBTREE_ROOT = 0;  // default.
   static const int TO_ROOT = 1;
   
-  void add_dir_context(off_t subtree_map_offset, CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
+  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
     // already have this dir?  (we must always add in order)
     if (lump_map.count(dir->dirfrag())) 
       return;
@@ -389,10 +398,8 @@ private:
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
       // was the inode journaled since the last subtree_map?
-      if (dir->inode->last_journaled >= subtree_map_offset) {
-	cout << "already journaled " << dir->inode->ino() << endl;
+      if (dir->inode->last_journaled >= last_subtree_map) 
 	return;
-      }
     }
     
     // stop at root/stray
@@ -404,7 +411,7 @@ private:
 
     // add parent dn
     CDentry *parent = diri->get_parent_dn();
-    add_dir_context(subtree_map_offset, parent->get_dir(), mode);
+    add_dir_context(parent->get_dir(), mode);
     add_dentry(parent, false);
   }
 

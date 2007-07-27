@@ -240,8 +240,16 @@ ebofs
 - nonblocking write on missing onodes?
 - fix bug in node rotation on insert (and reenable)
 - fix NEAR_LAST_FWD (?)
-- journaling? in NVRAM?
-- metadata in nvram?  flash?
+
+- rewrite btree code
+  - multithreaded
+  - eliminate nodepools
+  - allow btree sets
+  - allow arbitrary embedded data?
+  - allow arbitrary btrees
+  - allow root node(s?) to be embedded in onode, or whereever.
+
+
 
 
 remaining hard problems

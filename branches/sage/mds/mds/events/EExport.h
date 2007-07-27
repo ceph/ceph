@@ -31,9 +31,10 @@ protected:
   set<dirfrag_t> bounds;
   
 public:
-  EExport(CDir *dir) : LogEvent(EVENT_EXPORT),
-		       base(dir->dirfrag()) { }
   EExport() : LogEvent(EVENT_EXPORT) { }
+  EExport(MDLog *mdlog, CDir *dir) : 
+    LogEvent(EVENT_EXPORT), metablob(mdlog),
+    base(dir->dirfrag()) { }
   
   set<dirfrag_t> &get_bounds() { return bounds; }
   

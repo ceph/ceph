@@ -68,6 +68,13 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
+EMetaBlob::EMetaBlob(MDLog *mdlog) :
+  last_subtree_map(mdlog->get_last_subtree_map_offset()),
+  my_offset(mdlog->get_write_pos()) 
+{
+}
+
+
 /*
  * we need to ensure that a journaled item has either
  * 
