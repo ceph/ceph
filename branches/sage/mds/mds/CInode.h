@@ -283,7 +283,7 @@ public:
     case LOCK_OTYPE_ILINK: return &linklock;
     case LOCK_OTYPE_IDIRFRAGTREE: return &dirfragtreelock;
     case LOCK_OTYPE_IDIR: return &dirlock;
-    default: assert(0);
+    default: assert(0); return 0;
     }
   }
   void set_object_info(MDSCacheObjectInfo &info);

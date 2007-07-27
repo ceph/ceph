@@ -47,7 +47,7 @@ static const char *get_lock_action_name(int a) {
   case LOCK_AC_MIXEDACK: return "mixedack";
   case LOCK_AC_LOCKACK: return "lockack";
   case LOCK_AC_REQSCATTER: return "reqscatter";
-  default: assert(0); 
+  default: assert(0); return 0;
   }
 }
 

@@ -765,6 +765,7 @@ bool ESlaveUpdate::has_expired(MDS *mds)
 
   default:
     assert(0);
+    return false;
   }
 }
 

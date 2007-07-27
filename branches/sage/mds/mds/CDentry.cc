@@ -58,9 +58,9 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_remote()) {
     out << " REMOTE(";
     switch (dn.get_remote_d_type()) {
-    case DT_REG: out << "reg"; break;
-    case DT_DIR: out << "dir"; break;
-    case DT_LNK: out << "lnk"; break;
+    case inode_t::DT_REG: out << "reg"; break;
+    case inode_t::DT_DIR: out << "dir"; break;
+    case inode_t::DT_LNK: out << "lnk"; break;
     default: assert(0);
     }
     out << ")";

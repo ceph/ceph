@@ -58,7 +58,7 @@ inline const char *get_scatterlock_state_name(int s) {
   case LOCK_GLOCKT: return "gLockT";
   case LOCK_TEMPSYNC: return "Tempsync";
     
-  default: assert(0);
+  default: assert(0); return 0;
   }
 }
 
@@ -95,6 +95,7 @@ public:
       return LOCK_LOCK;
     default:
       assert(0);
+      return 0;
     }
   }
 

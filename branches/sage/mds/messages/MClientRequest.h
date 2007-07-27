@@ -200,6 +200,7 @@ class MClientRequest : public Message {
 
     default:
       assert(0);
+      return false;
     }
   }
 

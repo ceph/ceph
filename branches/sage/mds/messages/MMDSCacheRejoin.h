@@ -37,7 +37,7 @@ class MMDSCacheRejoin : public Message {
     case OP_ACK: return "ack";
     case OP_MISSING: return "missing";
     case OP_FULL: return "full";
-    default: assert(0);
+    default: assert(0); return 0;
     }
   }
 

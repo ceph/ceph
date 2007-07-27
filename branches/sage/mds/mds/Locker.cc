@@ -367,7 +367,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
   case LOCK_OTYPE_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
   default:
-    assert(0);
+    assert(0); 
+    return false;
   }
 }
 

@@ -323,7 +323,7 @@ class MDSCacheObject {
     case PIN_WAITER: return "waiter";
     case PIN_DIRTYSCATTERED: return "dirtyscattered";
     case PIN_AUTHPIN: return "authpin";
-    default: assert(0);
+    default: assert(0); return 0;
     }
   }
 

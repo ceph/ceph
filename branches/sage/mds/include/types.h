@@ -21,7 +21,6 @@ extern "C" {
 #include <sys/stat.h>
 #include <assert.h>
 #include "statlite.h"
-#include <dirent.h>
 }
 
 #include <string>
@@ -251,10 +250,16 @@ struct inode_t {
   version_t     version;           // auth only
   version_t     file_data_version; // auth only
 
+  // file type
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
   bool is_dir()     { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
   bool is_file()    { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
 
+  // corresponding d_types
+  static const unsigned char DT_REG = 8;
+  static const unsigned char DT_DIR = 4;
+  static const unsigned char DT_LNK = 10;
+  
   unsigned char get_d_type() {
     if (is_file())
       return DT_REG;
@@ -262,10 +267,9 @@ struct inode_t {
       return DT_DIR;
     else if (is_symlink())
       return DT_LNK;
-    else 
-      assert(0);
+    assert(0); 
+    return 0;
   }
-
 
 };
 

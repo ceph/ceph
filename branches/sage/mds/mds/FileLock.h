@@ -67,7 +67,7 @@ inline const char *get_filelock_state_name(int n) {
   case LOCK_LONER: return "loner";
   case LOCK_GLONERR: return "glonerr";
   case LOCK_GLONERM: return "glonerm";
-  default: assert(0);
+  default: assert(0); return 0;
   }
 }
 

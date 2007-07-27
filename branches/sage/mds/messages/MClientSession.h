@@ -29,7 +29,7 @@ public:
     case OP_OPEN: return "open";
     case OP_REQUEST_CLOSE: return "request_close";
     case OP_CLOSE: return "close";
-    default: assert(0);
+    default: assert(0); return 0;
     }
   }
 
