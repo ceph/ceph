@@ -1226,7 +1226,8 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     inode_t *pi = diri->project_inode();
     if (dirpv) pi->version = dirpv;
     pi->ctime = pi->mtime = mdr->now;
-    blob->add_dir_context(diri->get_parent_dir());
+    blob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(),
+			  diri->get_parent_dir());
     blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
   } else {
     // journal the mtime change anyway.
@@ -1361,7 +1362,8 @@ void Server::handle_client_utime(MDRequest *mdr)
   // log + wait
   EUpdate *le = new EUpdate("utime");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(),
+			       cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le);
@@ -1396,7 +1398,8 @@ void Server::handle_client_chmod(MDRequest *mdr)
   // log + wait
   EUpdate *le = new EUpdate("chmod");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(),
+			       cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
 
   mdlog->submit_entry(le);
@@ -1432,7 +1435,8 @@ void Server::handle_client_chown(MDRequest *mdr)
   // log + wait
   EUpdate *le = new EUpdate("chown");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(),
+			       cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le);
@@ -1604,7 +1608,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
@@ -1645,7 +1649,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
@@ -1694,7 +1698,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
@@ -1841,9 +1845,9 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   EUpdate *le = new EUpdate("link_local");
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
-  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->get_dir());
   le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
-  le->metablob.add_dir_context(targeti->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
   mdlog->submit_entry(le);
@@ -1922,7 +1926,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   EUpdate *le = new EUpdate("link_remote");
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
-  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->get_dir());
   le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
 
   // mark committing (needed for proper recovery)
@@ -2018,7 +2022,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate("slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
-  le->metablob.add_dir_context(targeti->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), targeti->get_parent_dir());
   le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
   mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
 }
@@ -2271,12 +2275,13 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     // primary link.  add stray dentry.
     assert(straydn);
     ipv = straydn->pre_dirty(dn->inode->inode.version);
-    le->metablob.add_dir_context(straydn->dir);
+    le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), straydn->dir);
     ji = le->metablob.add_primary_dentry(straydn, true, dn->inode);
   } else {
     // remote link.  update remote inode.
     ipv = dn->inode->pre_dirty();
-    le->metablob.add_dir_context(dn->inode->get_parent_dir());
+    le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(),
+				 dn->inode->get_parent_dir());
     ji = le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);
   }
   
@@ -2290,7 +2295,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   // the unlinked dentry
   dn->pre_dirty();
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);
-  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
   if (mdr->dst_reanchor_atid)
@@ -2408,7 +2413,7 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   // the unlinked dentry
   dn->pre_dirty();
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);
-  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
   if (mdr->dst_reanchor_atid)
@@ -2874,13 +2879,13 @@ void Server::_rename_prepare(MDRequest *mdr,
     dout(10) << "will merge remote+primary links" << endl;
 
     // destdn -> primary
-    metablob->add_dir_context(destdn->dir);
+    metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), destdn->dir);
     if (destdn->is_auth())
       ipv = mdr->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
     ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
     
     // do src dentry
-    metablob->add_dir_context(srcdn->dir);
+    metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), srcdn->dir);
     if (srcdn->is_auth())
       mdr->pvmap[srcdn] = srcdn->pre_dirty();
     metablob->add_null_dentry(srcdn, true);
@@ -2892,7 +2897,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       assert(straydn);
 
       // link-- inode, move to stray dir.
-      metablob->add_dir_context(straydn->dir);
+      metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), straydn->dir);
       if (straydn->is_auth())
 	ipv = mdr->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
       ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
@@ -2900,7 +2905,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     else if (destdn->is_remote()) {
       // remote.
       // nlink-- targeti
-      metablob->add_dir_context(destdn->inode->get_parent_dir());
+      metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+				destdn->inode->get_parent_dir());
       if (destdn->inode->is_auth())
 	ipv = mdr->pvmap[destdn->inode] = destdn->inode->pre_dirty();
       ji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
@@ -2911,7 +2917,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
 
     // add dest dentry
-    metablob->add_dir_context(destdn->dir);
+    metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), destdn->dir);
     if (srcdn->is_primary()) {
       dout(10) << "src is a primary dentry" << endl;
       if (destdn->is_auth()) {
@@ -2933,7 +2939,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
     
     // remove src dentry
-    metablob->add_dir_context(srcdn->dir);
+    metablob->add_dir_context(mds->mdlog->get_last_subtree_map_offset(), srcdn->dir);
     if (srcdn->is_auth())
       mdr->pvmap[srcdn] = srcdn->pre_dirty();
     metablob->add_null_dentry(srcdn, true);
@@ -3397,7 +3403,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   // log + wait
   EUpdate *le = new EUpdate("truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->inode, req->args.truncate.length);
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = ctime;
@@ -3614,7 +3620,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   // log + wait
   EUpdate *le = new EUpdate("open_truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->inode, 0);
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = ctime;
@@ -3703,7 +3709,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   EUpdate *le = new EUpdate("openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
-  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->dir);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait

@@ -32,9 +32,7 @@ protected:
   
 public:
   EExport(CDir *dir) : LogEvent(EVENT_EXPORT),
-		       base(dir->dirfrag()) { 
-    metablob.add_dir_context(dir);
-  }
+		       base(dir->dirfrag()) { }
   EExport() : LogEvent(EVENT_EXPORT) { }
   
   set<dirfrag_t> &get_bounds() { return bounds; }

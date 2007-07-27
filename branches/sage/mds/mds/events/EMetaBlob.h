@@ -322,6 +322,9 @@ private:
 			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
     if (!in) 
       in = dn->get_inode();
+
+    // ** FIXME: set in->last_journaled **
+
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
@@ -376,24 +379,32 @@ private:
   static const int TO_AUTH_SUBTREE_ROOT = 0;  // default.
   static const int TO_ROOT = 1;
   
-  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
+  void add_dir_context(off_t subtree_map_offset, CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
     // already have this dir?  (we must always add in order)
     if (lump_map.count(dir->dirfrag())) 
       return;
 
-    // stop at subtree root?
-    if (mode == TO_AUTH_SUBTREE_ROOT &&
-	dir->is_subtree_root() && dir->is_auth())
-      return;
+    if (mode == TO_AUTH_SUBTREE_ROOT) {
+      // subtree root?
+      if (dir->is_subtree_root() && dir->is_auth())
+	return;
+      // was the inode journaled since the last subtree_map?
+      if (dir->inode->last_journaled >= subtree_map_offset) {
+	cout << "already journaled " << dir->inode->ino() << endl;
+	return;
+      }
+    }
     
     // stop at root/stray
     CInode *diri = dir->get_inode();
     if (!diri->get_parent_dn())
       return;
 
+    // journaled?
+
     // add parent dn
     CDentry *parent = diri->get_parent_dn();
-    add_dir_context(parent->get_dir(), mode);
+    add_dir_context(subtree_map_offset, parent->get_dir(), mode);
     add_dentry(parent, false);
   }
 

@@ -120,7 +120,8 @@ class CInode : public MDSCacheObject {
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   //map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
-  off_t            last_open_journaled;  // log offset for the last journaled EOpen
+  off_t last_journaled;       // log offset for the last time i was journaled
+  off_t last_open_journaled;  // log offset for the last journaled EOpen
 
   // projected values (only defined while dirty)
   list<inode_t*>    projected_inode;
@@ -201,7 +202,7 @@ protected:
   // ---------------------------
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
-    last_open_journaled(0),
+    last_journaled(0), last_open_journaled(0), 
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),

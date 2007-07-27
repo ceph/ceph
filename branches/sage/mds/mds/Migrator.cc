@@ -977,13 +977,14 @@ void Migrator::handle_export_ack(MExportDirAck *m)
 
   // log completion
   EExport *le = new EExport(dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dir);
   le->metablob.add_dir( dir, false );
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
     CDir *bound = *p;
     le->get_bounds().insert(bound->dirfrag());
-    le->metablob.add_dir_context(bound);
+    le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), bound);
     le->metablob.add_dir(bound, false);
   }
 
@@ -1506,7 +1507,7 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // start the journal entry
   EImportStart *le = new EImportStart(dir->dirfrag(), m->get_bounds());
-  le->metablob.add_dir_context(dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dir);
   
   // adjust auth (list us _first_)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);

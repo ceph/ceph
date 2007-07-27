@@ -523,7 +523,8 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       pi->version = in->pre_dirty();
       
       EUpdate *le = new EUpdate("subtree merge writebehind");
-      le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
+      le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+				   in->get_parent_dn()->get_dir());
       le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
       
       mds->mdlog->submit_entry(le);
@@ -989,7 +990,8 @@ void MDCache::log_subtree_map(Context *onsync)
 
     dout(15) << " subtree " << *dir << endl;
     le->subtrees[dir->dirfrag()].clear();
-    le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+				 dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
 
     // bounds
@@ -999,7 +1001,8 @@ void MDCache::log_subtree_map(Context *onsync)
       CDir *bound = *q;
       dout(15) << " subtree bound " << *bound << endl;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
-      le->metablob.add_dir_context(bound, EMetaBlob::TO_ROOT);
+      le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+				   bound, EMetaBlob::TO_ROOT);
       le->metablob.add_dir(bound, false);
     }
   }
@@ -4543,7 +4546,8 @@ void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
   version_t pdv = in->pre_dirty();
 
   EUpdate *le = new EUpdate("anchor_create");
-  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+			       in->get_parent_dir());
 
   // update the logged inode copy
   inode_t *pi = le->metablob.add_dentry(in->parent, true);
@@ -4650,7 +4654,8 @@ void MDCache::_anchor_destroy_prepared(CInode *in, version_t atid)
   version_t pdv = in->pre_dirty();
 
   EUpdate *le = new EUpdate("anchor_destroy");
-  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), 
+			       in->get_parent_dir());
 
   // update the logged inode copy
   inode_t *pi = le->metablob.add_dentry(in->parent, true);
@@ -4741,7 +4746,7 @@ void MDCache::_purge_stray(CDentry *dn)
   version_t pdv = dn->pre_dirty();
 
   EUpdate *le = new EUpdate("purge_stray");
-  le->metablob.add_dir_context(dn->dir);
+  le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dn->dir);
   le->metablob.add_null_dentry(dn, true);
   le->metablob.add_inode_truncate(dn->inode->inode, 0);
   mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv));
@@ -5720,7 +5725,7 @@ void MDCache::fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag
 
     // first time only, 
     if (p == resultfrags.begin()) {
-      le->metablob.add_dir_context(dir);
+      le->metablob.add_dir_context(mds->mdlog->get_last_subtree_map_offset(), dir);
       
       // note peers
       // only do this once: all frags have identical replica_maps.
