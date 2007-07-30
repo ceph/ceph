@@ -700,21 +700,26 @@ void MDBalancer::find_exports(CDir *dir,
 void MDBalancer::hit_inode(CInode *in, int type)
 {
   // hit me
-  float me = in->popularity[MDS_POP_JUSTME].pop[type].hit();
-  float nested = in->popularity[MDS_POP_NESTED].pop[type].hit();
-  float curdom = 0;
-  float anydom = 0;
+  in->popularity[MDS_POP_JUSTME].pop[type].hit();
+  in->popularity[MDS_POP_NESTED].pop[type].hit();
   if (in->is_auth()) {
-    curdom = in->popularity[MDS_POP_CURDOM].pop[type].hit();
-    anydom = in->popularity[MDS_POP_ANYDOM].pop[type].hit();
-  }
+    in->popularity[MDS_POP_CURDOM].pop[type].hit();
+    in->popularity[MDS_POP_ANYDOM].pop[type].hit();
 
-  dout(20) << "hit_inode " << type << " pop " << me << " me, "
-           << nested << " nested, "
-           << curdom << " curdom, " 
-           << anydom << " anydom" 
-           << " on " << *in
-           << endl;
+    dout(20) << "hit_inode " << type << " pop "
+	     << in->popularity[MDS_POP_JUSTME].pop[type].get() << " me, "
+	     << in->popularity[MDS_POP_NESTED].pop[type].get() << " nested, "
+	     << in->popularity[MDS_POP_CURDOM].pop[type].get() << " curdom, " 
+	     << in->popularity[MDS_POP_CURDOM].pop[type].get() << " anydom" 
+	     << " on " << *in
+	     << endl;
+  } else {
+    dout(20) << "hit_inode " << type << " pop "
+	     << in->popularity[MDS_POP_JUSTME].pop[type].get() << " me, "
+	     << in->popularity[MDS_POP_NESTED].pop[type].get() << " nested, "
+      	     << " on " << *in
+	     << endl;
+  }
 
   // hit auth up to import
   CDir *dir = in->get_parent_dir();
@@ -725,12 +730,14 @@ void MDBalancer::hit_inode(CInode *in, int type)
 void MDBalancer::hit_dir(CDir *dir, int type) 
 {
   // hit me
-  float v = dir->popularity[MDS_POP_JUSTME].pop[type].hit();
+  dir->popularity[MDS_POP_JUSTME].pop[type].hit();
 
   // hit modify counter, if this was a modify
   if (g_conf.num_mds > 2 &&             // FIXME >2 thing
       !dir->inode->is_root() &&        // not root (for now at least)
       dir->is_auth()) {
+    float v = dir->popularity[MDS_POP_JUSTME].pop[type].get();    
+
     dout(20) << "hit_dir " << type << " pop " << v << " me "
              << *dir << endl;
 

@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #ifndef __DECAYCOUNTER_H
 #define __DECAYCOUNTER_H
 
@@ -22,73 +20,100 @@
 
 #include "config.h"
 
+/**
+ *
+ * TODO: normalize value based on some fucntion of half_life, 
+ *  so that it can be interpreted as an approximation of a
+ *  moving average of N seconds.  currently, changing half-life
+ *  skews the scale of the value, even at steady state.  
+ *
+ */
+
 class DecayCounter {
  protected:
-  double val;              // value
-
-  double half_life;        // in seconds
-  double k;                // k = ln(.5)/half_life
-
+public:
+  double half_life;
+  double k;             // k = ln(.5)/half_life
+  double val;           // value
+  double delta;         // delta since last decay
+  double vel;           // recent velocity
   utime_t last_decay;   // time of last decay
 
  public:
-  DecayCounter() : val(0) {
+  DecayCounter() : val(0), delta(0), vel(0) {
     set_halflife( g_conf.mds_decay_halflife );
     reset();
   }
-  /*
-  DecayCounter(double hl) : val(0) {
-    set_halflife(hl);
+  DecayCounter(double hl) : val(0), delta(0), vel(0) {
+    set_halflife( hl );
     reset();
   }
-  */
+
+  /**
+   * reading
+   */
+
+  double get() {
+    return get(g_clock.now());
+  }
+
+  double get(utime_t now) {
+    decay(now);
+    return val;
+  }
+
+  double get_last() {
+    return val;
+  }
   
+  double get_last_vel() {
+    return vel;
+  }
+
+  /**
+   * adjusting
+   */
+
+  void hit(double v = 1.0) {
+    delta += v;
+  }
+
   void adjust(double a) {
-    decay();
-    val += a;
+    delta += a;
   }
-  void adjust_down(const DecayCounter& other) {
-    // assume other has same time stamp as us...
-    val -= other.val;
-  }
+
+  /**
+   * decay etc.
+   */
 
   void set_halflife(double hl) {
     half_life = hl;
     k = log(.5) / hl;
   }
 
-  void take(DecayCounter& other) {
-    *this = other;
-    other.reset();
-  }
-
   void reset() {
-    last_decay.sec_ref() = 0;
-    last_decay.usec_ref() = 0;
-    val = 0;
+    last_decay = g_clock.now();
+    val = delta = 0;
   }
   
-  void decay() {
-    utime_t el = g_clock.recent_now();
+  void decay(utime_t now) {
+    utime_t el = now;
     el -= last_decay;
+
     if (el.sec() >= 1) {
-      val = val * exp((double)el * k);
-      if (val < .01) val = 0;
-      last_decay = g_clock.recent_now();
+      // calculate new value
+      double newval = (val+delta) * exp((double)el * k);
+      if (newval < .01) newval = 0.0;
+      
+      // calculate velocity approx
+      vel += (newval - val) * (double)el;
+      vel *= exp((double)el * k);
+      
+      val = newval;
+      delta = 0;
+      last_decay = now;
     }
   }
-
-  double get() {
-    decay();
-    return val;
-  }
-
-  double hit(double v = 1.0) {
-    decay();
-    val += v;
-    return val;
-  }
-
 };
 
 

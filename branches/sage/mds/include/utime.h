@@ -82,7 +82,7 @@ inline utime_t& operator+=(utime_t& l, const utime_t& r) {
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
-  double us = (f - fs) / (double)1000000.0;
+  double us = (f - fs) * (double)1000000.0;
   l.sec_ref() += (long)fs;
   l.usec_ref() += (long)us;
   l.normalize();
