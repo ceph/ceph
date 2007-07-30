@@ -12,12 +12,12 @@ CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWI
 LDINC = ar -rc
 else
 # For linux
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
+CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D_GNU_SOURCE
 LDINC = ld -i -o
 endif
 
 CC = g++
-LIBS = -lpthread
+LIBS = -L/usr/lib -lccgnu2 -ldl -pthread
 
 ifeq ($(want_bdb),yes)
 CFLAGS += -DUSE_OSBDB
