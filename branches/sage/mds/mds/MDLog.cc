@@ -31,28 +31,6 @@
 
 LogType mdlog_logtype;
 
-/*
-MDLog::MDLog(MDS *m) : replay_thread(this)
-{
-  mds = m;
-  num_events = 0;
-  waiting_for_read = false;
-
-  last_import_map = 0;
-  writing_import_map = false;
-  seen_import_map = false;
-
-  max_events = g_conf.mds_log_max_len;
-
-  capped = false;
-
-  unflushed = 0;
-
-  journaler = 0;
-  logger = 0;
-}
-*/
-
 
 MDLog::~MDLog()
 {

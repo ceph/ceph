@@ -88,6 +88,7 @@ md_config_t g_conf = {
   debug_buffer: 0,
   debug_filer: 0,
   debug_objecter: 0,
+  debug_journaler: 0,
   debug_objectcacher: 0,
   debug_client: 0,
   debug_osd: 0,
@@ -165,6 +166,7 @@ md_config_t g_conf = {
   journaler_allow_split_entries: true,
   journaler_safe: false,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
+  journaler_cache: false, // cache writes for later readback
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -537,6 +539,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_objecter = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_objecter = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_journaler") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_journaler = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_journaler = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_objectcacher") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_objectcacher = atoi(args[++i]);
@@ -597,6 +604,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--journaler_safe") == 0) 
       g_conf.journaler_safe = atoi(args[++i]);
+    else if (strcmp(args[i], "--journaler_cache") == 0) 
+      g_conf.journaler_cache = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);

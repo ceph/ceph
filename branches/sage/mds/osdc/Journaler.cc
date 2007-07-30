@@ -20,8 +20,8 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cerr << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
 
 
 
@@ -263,6 +263,19 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 	
   dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << endl;
   
+  // cache?
+  //  NOTE: this is a dumb thing to do; this is used for a benchmarking
+  //   purposes only.
+  if (g_conf.journaler_cache &&
+      write_pos == read_pos + read_buf.length()) {
+    dout(10) << "append_entry caching in read_buf too" << endl;
+    assert(requested_pos == received_pos);
+    assert(requested_pos == read_pos + read_buf.length());
+    read_buf.append((char*)&s, sizeof(s));
+    read_buf.append(bl);
+    requested_pos = received_pos = write_pos + sizeof(s) + s;
+  }
+
   // append
   write_buf.append((char*)&s, sizeof(s));
   write_buf.claim_append(bl);

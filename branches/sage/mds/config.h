@@ -74,6 +74,7 @@ struct md_config_t {
   int debug_buffer;
   int debug_filer;
   int debug_objecter;
+  int debug_journaler;
   int debug_objectcacher;
   int debug_client;
   int debug_osd;
@@ -164,6 +165,7 @@ struct md_config_t {
   bool  journaler_allow_split_entries;
   bool  journaler_safe;
   int   journaler_write_head_interval;
+  bool  journaler_cache;
   
   // mds
   int   mds_cache_size;
