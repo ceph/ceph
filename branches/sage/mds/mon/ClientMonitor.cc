@@ -119,8 +119,10 @@ bool ClientMonitor::preprocess_query(Message *m)
   case MSG_CLIENT_MOUNT:
     {
       // already mounted?
+      MClientMount *mount = (MClientMount*)m;
       entity_addr_t addr = m->get_source_addr();
-      if (client_map.addr_client.count(addr)) {
+      if (mount->instance == 0 &&                  // only check for addr uniqueness if the client claims to be alone
+	  client_map.addr_client.count(addr)) {
 	int client = client_map.addr_client[addr];
 	dout(7) << " client" << client << " already mounted" << endl;
 	_mounted(client, (MClientMount*)m);

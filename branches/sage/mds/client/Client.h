@@ -409,6 +409,7 @@ class Client : public Dispatcher {
   bool   mounted;
   bool   unmounting;
   Cond   mount_cond;  
+  int client_instance_this_process;
 
   int    unsafe_sync_write;
 public:
