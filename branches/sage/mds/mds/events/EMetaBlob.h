@@ -210,7 +210,7 @@ public:
       ::_encode(nremote, bl);
       ::_encode(nnull, bl);
       _encode_bits();
-      ::_encode(dnbl, bl);
+      ::_encode_destructively(dnbl, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dirv, bl, off);
