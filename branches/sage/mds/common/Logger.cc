@@ -156,7 +156,7 @@ void Logger::flush(bool force)
     //cout << "opening log file " << filename << endl;
   }
   
-  utime_t fromstart = g_clock.now();
+  utime_t fromstart = g_clock.recent_now();
   if (fromstart < start) {
     cerr << "logger time jumped backwards from " << start << " to " << fromstart << endl;
     assert(0);

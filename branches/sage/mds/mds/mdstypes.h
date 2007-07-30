@@ -191,7 +191,6 @@ inline meta_load_t& operator+=(meta_load_t& l, meta_load_t& r)
 #define MDS_POP_NESTED  1   // me + children, auth or not
 #define MDS_POP_CURDOM  2   // me + children in current auth domain
 #define MDS_POP_ANYDOM  3   // me + children in any (nested) auth domain
-//#define MDS_POP_DIRMOD  4   // just this dir, modifications only
 #define MDS_NPOP        4
 
 class mds_load_t {

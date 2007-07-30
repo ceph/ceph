@@ -1326,7 +1326,7 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
       !lock->is_rdlocked() &&
       !lock->is_xlocked() &&
       lock->get_state() == LOCK_SYNC) 
-    scatter_lock(lock);
+    scatter_scatter(lock);
 
   // can wrlock?
   if (lock->can_wrlock()) {

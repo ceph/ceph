@@ -70,6 +70,10 @@ public:
     return vel;
   }
 
+  utime_t get_last_decay() { 
+    return last_decay; 
+  }
+
   /**
    * adjusting
    */

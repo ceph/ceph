@@ -3324,7 +3324,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     for (map<dirfrag_t, map<string,int> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
-      dout(0) << " dn expires in dir " << pd->first << endl;
+      dout(10) << " dn expires in dir " << pd->first << endl;
       CInode *diri = get_inode(pd->first.ino);
       assert(diri);
       CDir *dir = diri->get_dirfrag(pd->first.frag);

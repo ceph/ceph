@@ -190,6 +190,7 @@ protected:
 
   // popularity
   meta_load_t popularity[MDS_NPOP];
+  utime_t last_popularity_sample;
 
   // friends
   friend class Migrator;

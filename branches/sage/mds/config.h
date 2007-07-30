@@ -183,6 +183,7 @@ struct md_config_t {
   off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
+  float mds_bal_sample_interval;  
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
   int mds_bal_split_size;

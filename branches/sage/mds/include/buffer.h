@@ -380,7 +380,7 @@ public:
     }
 
     unsigned length() const {
-#if 1
+#if 0
       // DEBUG: verify _len
       unsigned len = 0;
       for (std::list<ptr>::const_iterator it = _buffers.begin();
@@ -538,8 +538,8 @@ public:
     void append(const char *data, unsigned len) {
       while (len > 0) {
 	// put what we can into the existing append_buffer.
-	if (append_buffer.unused_tail_length() > 0) {
-	  unsigned gap = append_buffer.unused_tail_length();
+	unsigned gap = append_buffer.unused_tail_length();
+	if (gap > 0) {
 	  if (gap > len) gap = len;
 	  append_buffer.append(data, gap);
 	  append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list

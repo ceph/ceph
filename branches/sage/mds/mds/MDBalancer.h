@@ -44,6 +44,8 @@ class MDBalancer {
 
   utime_t last_heartbeat;
   utime_t last_fragment;
+  utime_t last_sample;    
+
 
   // todo
   set<dirfrag_t>   split_queue;
@@ -102,6 +104,7 @@ class MDBalancer {
 
 
   void show_imports(bool external=false);
+  void dump_pop_map();  
 
 };
 

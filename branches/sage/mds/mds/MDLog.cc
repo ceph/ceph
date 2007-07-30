@@ -283,8 +283,11 @@ void MDLog::trim(Context *c)
   utime_t stop = g_clock.now();
   stop += 2.0;
 
-  while (num_events > max_events &&
-	 stop > g_clock.now()) {
+  while (num_events > max_events) {
+    // don't check the clock on _every_ event, here!
+    if (num_events % 100 == 0 &&
+	stop < g_clock.now())
+	break;
     
     off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
     dout(5) << "trim num_events " << num_events << " > max " << max_events

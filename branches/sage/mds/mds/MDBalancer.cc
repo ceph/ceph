@@ -68,6 +68,12 @@ void MDBalancer::tick()
   utime_t elapsed = now;
   elapsed -= first;
 
+  // sample?
+  if ((double)now - (double)last_sample > g_conf.mds_bal_sample_interval) {
+    dout(10) << "tick last_sample now " << now << endl;
+    last_sample = now;
+  }
+
   // balance?
   if (true && 
       mds->get_nodeid() == 0 &&
@@ -210,17 +216,20 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 void MDBalancer::export_empties() 
 {
   dout(5) << "export_empties checking for empty imports" << endl;
-  dout(0) << "IMPLEMENT ME" << endl;
-  /*
-  for (set<CDir*>::iterator it = mds->mdcache->subtrees.begin();
+
+  for (map<CDir*,set<CDir*> >::iterator it = mds->mdcache->subtrees.begin();
        it != mds->mdcache->subtrees.end();
        it++) {
-    CDir *dir = *it;
+    CDir *dir = it->first;
+    if (!dir->is_auth() ||
+	dir->is_ambiguous_auth() ||
+	dir->is_freezing() ||
+	dir->is_frozen()) 
+      continue;
     
     if (!dir->inode->is_root() && dir->get_size() == 0) 
       mds->mdcache->migrator->export_empty_import(dir);
   }
-  */
 }
 
 
@@ -277,6 +286,8 @@ void MDBalancer::do_rebalance(int beat)
 {
   int cluster_size = mds->get_mds_map()->get_num_mds();
   int whoami = mds->get_nodeid();
+
+  dump_pop_map();
 
   // reset
   my_targets.clear();
@@ -767,35 +778,38 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
   float rd_adj = 0.0;
 
   // replicate?
-  float dir_pop = dir->popularity[MDS_POP_CURDOM].pop[type].get();    // hmm??
+  if (dir->last_popularity_sample < last_sample) {
+    float dir_pop = dir->popularity[MDS_POP_CURDOM].pop[type].get();    // hmm??
+    dir->last_popularity_sample = last_sample;
 
-  dout(20) << "hit_recursive " << type << " pop " << dir_pop << " curdom " << *dir << endl;
-
-  if (dir->is_auth()) {
-    if (!dir->is_rep() &&
-        dir_pop >= g_conf.mds_bal_replicate_threshold) {
-      // replicate
-      float rdp = dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].get();
-      rd_adj = rdp / mds->get_mds_map()->get_num_mds() - rdp; 
-      rd_adj /= 2.0;  // temper somewhat
-
-      dout(2) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << endl;
-          
-      dir->dir_rep = CDir::REP_ALL;
-      mds->mdcache->send_dir_updates(dir, true);
-
-      dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].adjust(rd_adj);
-      dir->popularity[MDS_POP_CURDOM].pop[META_POP_IRD].adjust(rd_adj);
-    }
-        
-    if (!dir->ino() != 1 &&
-        dir->is_rep() &&
-        dir_pop < g_conf.mds_bal_unreplicate_threshold) {
-      // unreplicate
-      dout(2) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
+    dout(20) << "hit_recursive " << type << " pop " << dir_pop << " curdom " << *dir << endl;
+    
+    if (dir->is_auth()) {
+      if (!dir->is_rep() &&
+	  dir_pop >= g_conf.mds_bal_replicate_threshold) {
+	// replicate
+	float rdp = dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].get();
+	rd_adj = rdp / mds->get_mds_map()->get_num_mds() - rdp; 
+	rd_adj /= 2.0;  // temper somewhat
+	
+	dout(2) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << endl;
+	
+	dir->dir_rep = CDir::REP_ALL;
+	mds->mdcache->send_dir_updates(dir, true);
+	
+	dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].adjust(rd_adj);
+	dir->popularity[MDS_POP_CURDOM].pop[META_POP_IRD].adjust(rd_adj);
+      }
       
-      dir->dir_rep = CDir::REP_NONE;
-      mds->mdcache->send_dir_updates(dir);
+      if (!dir->ino() != 1 &&
+	  dir->is_rep() &&
+	  dir_pop < g_conf.mds_bal_unreplicate_threshold) {
+	// unreplicate
+	dout(2) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
+	
+	dir->dir_rep = CDir::REP_NONE;
+	mds->mdcache->send_dir_updates(dir);
+      }
     }
   }
 
@@ -882,6 +896,58 @@ void MDBalancer::add_import(CDir *dir)
 void MDBalancer::show_imports(bool external)
 {
   mds->mdcache->show_subtrees();
+}
+
+
+void MDBalancer::dump_pop_map()
+{
+  char fn[20];
+  sprintf(fn, "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
+
+  dout(1) << "dump_pop_map to " << fn << endl;
+
+  ofstream myfile;
+  myfile.open(fn);
+
+  list<CInode*> iq;
+  if (mds->mdcache->root)
+    iq.push_back(mds->mdcache->root);
+
+  utime_t now = g_clock.now();
+  while (!iq.empty()) {
+    CInode *in = iq.front();
+    iq.pop_front();
+    
+    // pop stats
+    for (int a=0; a<MDS_NPOP; a++) 
+      for (int b=0; b<META_NPOP; b++)
+	myfile << in->popularity[a].pop[b].get(now) << "\t";
+
+    // filename last
+    string p;
+    in->make_path(p);
+    myfile << p << endl;
+
+    // recurse, depth-first.
+    if (in->is_dir()) {
+      list<CDir*> dirs;
+      in->get_dirfrags(dirs);
+      for (list<CDir*>::iterator p = dirs.begin();
+	   p != dirs.end();
+	   ++p) {
+	CDir *dir = *p;
+	// add contents
+	for (map<string,CDentry*>::iterator q = dir->items.begin();
+	     q != dir->items.end();
+	     q++) 
+	  if (q->second->is_primary())
+	    iq.push_front(q->second->get_inode());
+      }
+    }
+    
+  }
+
+  myfile.close();
 }
 
 
