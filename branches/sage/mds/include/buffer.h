@@ -209,7 +209,8 @@ public:
 
   static raw* create_page_aligned(unsigned len) {
 #ifndef __CYGWIN__
-    return new raw_mmap_pages(len);
+    //return new raw_mmap_pages(len);
+    return new raw_posix_aligned(len);
 #else
     return new raw_hack_aligned(len);
 #endif
@@ -837,10 +838,22 @@ inline void _decoderaw(T& t, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::list<T>& ls, bufferlist& bl)
 {
-  uint32_t n = ls.size();
-  _encoderaw(n, bl);
-  for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
-    _encode(*p, bl);
+  // should i pre- or post- count?
+  if (!ls.empty()) {
+    unsigned pos = bl.length();
+    uint32_t n = 0;
+    _encoderaw(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      n++;
+      _encode(*p, bl);
+    }
+    bl.copy_in(pos, sizeof(n), (char*)&n);
+  } else {
+    uint32_t n = ls.size();    // FIXME: this is slow on a list.
+    _encoderaw(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+      _encode(*p, bl);
+  }
 }
 template<class T>
 inline void _decode(std::list<T>& ls, bufferlist& bl, int& off)

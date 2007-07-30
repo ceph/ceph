@@ -236,7 +236,7 @@ void Journaler::_finish_flush(int r, off_t start)
 
 off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 {
-  size_t s = bl.length();
+  uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
@@ -261,11 +261,11 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
     }
   }
 	
-  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(size_t)) << endl;
+  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << endl;
   
   // append
   write_buf.append((char*)&s, sizeof(s));
-  write_buf.append(bl);
+  write_buf.claim_append(bl);
   write_pos += sizeof(s) + s;
 
   // flush now?
@@ -482,7 +482,7 @@ bool Journaler::is_readable()
   if (read_pos == write_pos) return false;
 
   // have enough for entry size?
-  size_t s = 0;
+  uint32_t s = 0;
   if (read_buf.length() >= sizeof(s)) 
     read_buf.copy(0, sizeof(s), (char*)&s);
 
@@ -527,7 +527,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
     return false;
   }
   
-  size_t s;
+  uint32_t s;
   assert(read_buf.length() >= sizeof(s));
   read_buf.copy(0, sizeof(s), (char*)&s);
   assert(read_buf.length() >= sizeof(s) + s);

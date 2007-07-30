@@ -141,12 +141,14 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
     dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
 
     // encode it, with event type
-    bufferlist bl;
-    bl.append((char*)&le->_type, sizeof(le->_type));
-    le->encode_payload(bl);
-
-    // journal it.
-    journaler->append_entry(bl);
+    {
+      bufferlist bl;
+      bl.append((char*)&le->_type, sizeof(le->_type));
+      le->encode_payload(bl);
+      
+      // journal it.
+      journaler->append_entry(bl);  // bl is destroyed.
+    }
 
     assert(!capped);
 
@@ -349,17 +351,6 @@ void MDLog::trim(Context *c)
   std::list<Context*> finished;
   finished.swap(trim_waiters);
   finish_contexts(finished, 0);
-
-  // hmm, are we at the end?
-  /*
-  if (journaler->get_read_pos() == journaler->get_write_pos() &&
-      trimming.size() == import_map_expire_waiters.size()) {
-    dout(5) << "trim log is empty, allowing import_map to expire" << endl;
-    list<Context*> ls;
-    ls.swap(import_map_expire_waiters);
-    finish_contexts(ls);
-  }
-  */
 }
 
 
