@@ -128,6 +128,9 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
+
+  static int instance_this_process = 0;
+  client_instance_this_process = instance_this_process++;
 }
 
 
@@ -848,7 +851,7 @@ void Client::dispatch(Message *m)
 
   case MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
-    mount_cond.Signal();
+    if (!mounted) mount_cond.Signal();
     break;
     
     // mounting and mds sessions
@@ -1305,7 +1308,8 @@ void Client::_try_mount()
   dout(10) << "_try_mount" << endl;
   int mon = monmap->pick_mon();
   dout(2) << "sending client_mount to mon" << mon << endl;
-  messenger->send_message(new MClientMount(messenger->get_myaddr()), 
+  messenger->send_message(new MClientMount(messenger->get_myaddr(),
+					   client_instance_this_process), 
 			  monmap->get_inst(mon));
 
   // schedule timeout

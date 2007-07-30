@@ -20,20 +20,23 @@
 class MClientMount : public Message {
 public:
   entity_addr_t addr;
+  int instance;  // on this node
 
   MClientMount() : Message(MSG_CLIENT_MOUNT) { }
-  MClientMount(entity_addr_t a) : 
+  MClientMount(entity_addr_t a, int i = 0) : 
     Message(MSG_CLIENT_MOUNT),
-    addr(a) { }
+    addr(a), instance(i) { }
 
   char *get_type_name() { return "client_mount"; }
 
   void decode_payload() { 
     int off = 0;
     ::_decode(addr, payload, off);
+    ::_decode(instance, payload, off);
   }
   void encode_payload() { 
     ::_encode(addr, payload);
+    ::_encode(instance, payload);
   }
 };
 
