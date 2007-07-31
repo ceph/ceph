@@ -1496,7 +1496,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!diri->is_dir()) {
     // not a dir
     dout(10) << "reply to " << *req << " readdir -ENOTDIR" << endl;
-    reply_request(mdr, -ENOTDIR);
+    reply_request(mdr, -ENOTDIR, diri);
     return;
   }
 
@@ -1506,7 +1506,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
     dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << endl;
-    reply_request(mdr, -EAGAIN);
+    reply_request(mdr, -EAGAIN, diri);
     return;
   }
   
