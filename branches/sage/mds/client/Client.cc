@@ -2036,6 +2036,8 @@ int Client::mknod(const char *relpath, mode_t mode)
   
 int Client::getdir(const char *relpath, list<string>& contents)
 {
+  dout(3) << "getdir " << relpath << endl;
+
   DIR *d;
   int r = opendir(relpath, &d);
   if (r < 0) return r;
@@ -2054,6 +2056,7 @@ int Client::getdir(const char *relpath, list<string>& contents)
 int Client::opendir(const char *name, DIR **dirpp) 
 {
   *((DirResult**)dirpp) = new DirResult(name, 0);
+  dout(3) << "opendir " << name << " = " << *dirpp << endl;
   return 0;
 }
 
@@ -2065,6 +2068,7 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   int stmask;
   stmask = fill_stat(in, &st);  
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
+  dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
 }
 
 void Client::_readdir_get_frag(DirResult *dirp)
@@ -2081,8 +2085,8 @@ void Client::_readdir_get_frag(DirResult *dirp)
   if (dirp->inode) {
     frag_t f = dirp->inode->dirfragtree[fg.value()];
     if (f != fg) {
-      fg = f;
       dout(10) << "_readdir_get_frag frag " << fg << " maps to " << f << endl;
+      fg = f;
       dirp->set_frag(fg);
     }
   }
@@ -2098,9 +2102,24 @@ void Client::_readdir_get_frag(DirResult *dirp)
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
+  inodeno_t ino = reply->get_ino();
   
+  // did i get directory inode?
+  Inode *diri = 0;
+  if ((res == -EAGAIN || res == 0) &&
+      inode_map.count(ino)) {
+    diri = inode_map[ino];
+    assert(diri);
+    assert(diri->inode.mode & INODE_MODE_DIR);
+  }
+  
+  if (!dirp->inode && diri) {
+    dirp->inode = inode_map[ino];
+    diri->get();
+  }
+
   if (res == -EAGAIN) {
-    dout(10) << "got EAGAIN, retrying" << endl;
+    dout(10) << "_readdir_get_frag got EAGAIN, retrying" << endl;
     client_lock.Unlock();
     _readdir_get_frag(dirp);
     return;
@@ -2108,15 +2127,10 @@ void Client::_readdir_get_frag(DirResult *dirp)
 
   if (res == 0) {
     // stuff dir contents to cache, DirResult
-    inodeno_t ino = reply->get_ino();
-    Inode *diri = inode_map[ ino ];
     assert(diri);
-    assert(diri->inode.mode & INODE_MODE_DIR);
-    
-    if (!dirp->inode) {
-      dirp->inode = diri;
-      diri->get();
-    }
+
+    // create empty result vector
+    dirp->buffer[fg].clear();
 
     if (fg.is_leftmost()) {
       // add . and ..?
@@ -2154,28 +2168,34 @@ void Client::_readdir_get_frag(DirResult *dirp)
 	}
 	
 	// contents to caller too!
-	dout(15) << "_readdir_get_frag including " << *pdn << " to " << in->inode.ino << endl;
+	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << endl;
 	_readdir_add_dirent(dirp, *pdn, in);
       }
+
       if (dir->is_empty())
 	close_dir(dir);
     }
 
-    // drop inode ref?
-    if (fg.is_rightmost()) {
-      put_inode(diri);
-      dirp->inode = 0;
-    }      
-
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
   } else {
+    dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << endl;
     dirp->set_end();
   }
 
   delete reply;
 
   client_lock.Unlock();
+}
+
+void Client::_readdir_next_frag(DirResult *dirp)
+{
+  // advance to next frag
+  frag_t fg = dirp->frag();
+  assert(dirp->buffer.count(fg));
+  dirp->buffer.erase(fg);
+  dirp->next_frag();
+  dout(10) << "_readdir_next_frag advance from " << fg << " to " << dirp->frag() << endl;
 }
 
 int Client::readdir_r(DIR *d, struct dirent *de)
@@ -2187,30 +2207,36 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 {  
   DirResult *dirp = (DirResult*)d;
   
-  // do i have this frag?
-  if (dirp->buffer.count(dirp->frag()) == 0) 
-    _readdir_get_frag(dirp);
-  
-  if (dirp->is_end())
-    return -1; // end of directory
+  while (1) {
+    if (dirp->is_end()) return -1;
 
-  frag_t fg = dirp->frag();
-  uint32_t pos = dirp->fragpos();
-  
-  assert(dirp->buffer.count(fg));
+    if (dirp->buffer.count(dirp->frag()) == 0) {
+      _readdir_get_frag(dirp);
+      if (dirp->is_end()) return -1;
+    }
 
-  vector<DirEntry> &ent = dirp->buffer[fg];
-  assert(pos < ent.size());
-  _readdir_fill_dirent(de, &ent[pos], dirp->offset);
-  if (st) *st = ent[pos].st;
-  if (stmask) *stmask = ent[pos].stmask;
-  pos++;
-  dirp->offset++;
-  if (pos == ent.size()) {
-    // advance to next frag
     frag_t fg = dirp->frag();
-    dirp->buffer.erase(fg);
-    dirp->next_frag();
+    uint32_t pos = dirp->fragpos();
+    assert(dirp->buffer.count(fg));   
+    vector<DirEntry> &ent = dirp->buffer[fg];
+
+    if (ent.empty()) {
+      dout(10) << "empty frag " << fg << ", moving on to next" << endl;
+      _readdir_next_frag(dirp);
+      continue;
+    }
+
+    assert(pos < ent.size());
+    _readdir_fill_dirent(de, &ent[pos], dirp->offset);
+    if (st) *st = ent[pos].st;
+    if (stmask) *stmask = ent[pos].stmask;
+    pos++;
+    dirp->offset++;
+
+    if (pos == ent.size()) 
+      _readdir_next_frag(dirp);
+
+    break;
   }
 
   return 0;
@@ -2234,48 +2260,18 @@ void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
 
 int Client::closedir(DIR *dir) 
 {
-  DirResult *d = (DirResult*)dir;
-  delete d;
+  dout(3) << "closedir " << dir << endl;
+
+  DirResult *dirp = (DirResult*)dir;
+  if (dirp->inode) {
+    put_inode(dirp->inode);
+    dirp->inode = 0;
+  }
+  delete dirp;
   return 0;
 }
 
 
-/*struct dirent *Client::readdir(DIR *dirp)
-{
-  DirResult *d = (DirResult*)dirp;
-
-  // end of dir?
-  if (d->p == d->contents.end()) 
-    return 0;
-
-  // fill the dirent
-  d->dp.d_dirent.d_ino = d->p->second.ino;
-#ifndef __CYGWIN__
-#ifndef DARWIN
-  if (d->p->second.is_symlink())
-    d->dp.d_dirent.d_type = DT_LNK;
-  else if (d->p->second.is_dir())
-    d->dp.d_dirent.d_type = DT_DIR;
-  else if (d->p->second.is_file())
-    d->dp.d_dirent.d_type = DT_REG;
-  else
-    d->dp.d_dirent.d_type = DT_UNKNOWN;
-
-  d->dp.d_dirent.d_off = d->off;
-  d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
-#endif // DARWIN
-#endif
-
-  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
-
-  // move up
-  ++d->off;
-  ++d->p;
-
-  return &d->dp.d_dirent;
-}
-*/
- 
 void Client::rewinddir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
@@ -2295,101 +2291,6 @@ void Client::seekdir(DIR *dirp, off_t offset)
   d->offset = offset;
 }
 
-
-/*
-struct dirent_plus *Client::readdirplus(DIR *dirp)
-{
-  DirResult *d = (DirResult*)dirp;
-
-  // end of dir?
-  if (d->p == d->contents.end()) 
-    return 0;
-
-  // fill the dirent
-  d->dp.d_dirent.d_ino = d->p->second.ino;
-#ifndef __CYGWIN__
-#ifndef DARWIN
-  if (d->p->second.is_symlink())
-    d->dp.d_dirent.d_type = DT_LNK;
-  else if (d->p->second.is_dir())
-    d->dp.d_dirent.d_type = DT_DIR;
-  else if (d->p->second.is_file())
-    d->dp.d_dirent.d_type = DT_REG;
-  else
-    d->dp.d_dirent.d_type = DT_UNKNOWN;
-
-  d->dp.d_dirent.d_off = d->off;
-  d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
-#endif // DARWIN
-#endif
-
-  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
-
-  // plus
-  if ((d->p->second.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT) {
-    // have it
-    fill_stat(d->p->second, &d->dp.d_stat);
-    d->dp.d_stat_err = 0;
-  } else {
-    // don't have it, stat it
-    string path = d->path;
-    path += "/";
-    path += d->p->first;
-    d->dp.d_stat_err = lstat(path.c_str(), &d->dp.d_stat);
-  }
-
-  // move up
-  ++d->off;
-  ++d->p;
-
-  return &d->dp;
-}
-*/
-/*
-struct dirent_lite *Client::readdirlite(DIR *dirp)
-{
-  DirResult *d = (DirResult*)dirp;
-
-  // end of dir?
-  if (d->p == d->contents.end()) 
-    return 0;
-
-  // fill the dirent
-  d->dp.d_dirent.d_ino = d->p->second.ino;
-  if (d->p->second.is_symlink())
-    d->dp.d_dirent.d_type = DT_LNK;
-  else if (d->p->second.is_dir())
-    d->dp.d_dirent.d_type = DT_DIR;
-  else if (d->p->second.is_file())
-    d->dp.d_dirent.d_type = DT_REG;
-  else
-    d->dp.d_dirent.d_type = DT_UNKNOWN;
-  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
-
-  d->dp.d_dirent.d_off = d->off;
-  d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
-
-  // plus
-  if ((d->p->second.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT) {
-    // have it
-    fill_statlite(d->p->second,d->dp.d_stat);
-    d->dp.d_stat_err = 0;
-  } else {
-    // don't have it, stat it
-    string path = p->path;
-    path += "/";
-    path += p->first;
-    d->dp.d_statlite
-    d->dp.d_stat_err = lstatlite(path.c_str(), &d->dp.d_statlite);
-  }
-
-  // move up
-  ++d->off;
-  ++d->p;
-
-  return &d->dp;
-}
-*/
 
 
 

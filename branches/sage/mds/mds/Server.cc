@@ -1545,7 +1545,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   reply->take_dir_items(dnls, inls, numfiles);
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
-  reply->set_result(fg);
+  reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(dir, META_POP_IRD);  

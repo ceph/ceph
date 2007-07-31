@@ -352,7 +352,7 @@ class Client : public Dispatcher {
 	set_frag(fg.next());
     }
     void set_frag(frag_t f) {
-      offset = f << SHIFT;
+      offset = (uint64_t)f << SHIFT;
     }
     void set_end() { offset = END; }
     bool is_end() { return (offset == END); }
@@ -648,6 +648,7 @@ public:
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_get_frag(DirResult *dirp);
+  void _readdir_next_frag(DirResult *dirp);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
 
   int opendir(const char *name, DIR **dirpp);
