@@ -143,6 +143,7 @@ class Inode {
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
+  fragtree_t dirfragtree;
 
   // for caching i/o mode
   FileCache fc;
@@ -334,9 +335,11 @@ class Client : public Dispatcher {
     static const off_t END = 1ULL << (SHIFT + 32);
 
     string path;
+    Inode *inode;
     off_t offset;   // high bits: frag_t, low bits: an offset
     map<frag_t, vector<DirEntry> > buffer;
-    DirResult(const char *p) : path(p), offset(0) { }
+
+    DirResult(const char *p, Inode *i) : path(p), inode(i), offset(0) { }
 
     frag_t frag() { return frag_t(offset >> SHIFT); }
     unsigned fragpos() { return offset & MASK; }
@@ -346,7 +349,10 @@ class Client : public Dispatcher {
       if (fg.is_rightmost())
 	set_end();
       else 
-	offset = fg.next() << SHIFT;
+	set_frag(fg.next());
+    }
+    void set_frag(frag_t f) {
+      offset = f << SHIFT;
     }
     void set_end() { offset = END; }
     bool is_end() { return (offset == END); }
@@ -639,10 +645,9 @@ public:
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  bool _readdir_have_next(DirResult *dirp);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_get_next(DirResult *dirp);
-  void _readdir_advance_frag(DirResult *dirp);
+  bool _readdir_have_frag(DirResult *dirp);
+  void _readdir_get_frag(DirResult *dirp);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
 
   int opendir(const char *name, DIR **dirpp);

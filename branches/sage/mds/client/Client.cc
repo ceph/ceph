@@ -324,6 +324,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
     // actually update info
     dout(12) << " stat inode mask is " << st->mask << endl;
     dn->inode->inode = st->inode;
+    dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
 
     // ...but don't clobber our mtime, size!
     if ((dn->inode->mask & INODE_MASK_SIZE) == 0 &&
@@ -2050,20 +2051,12 @@ int Client::getdir(const char *relpath, list<string>& contents)
   return n;
 }
 
-
-
-/** POSIX stubs **/
-
 int Client::opendir(const char *name, DIR **dirpp) 
 {
-  *((DirResult**)dirpp) = new DirResult(name);
+  *((DirResult**)dirpp) = new DirResult(name, 0);
   return 0;
 }
 
-bool Client::_readdir_have_next(DirResult *dirp) 
-{
-  return dirp->buffer.count(dirp->frag());
-}
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 {
@@ -2074,18 +2067,30 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
 }
 
-void Client::_readdir_get_next(DirResult *dirp)
+void Client::_readdir_get_frag(DirResult *dirp)
 {
+  client_lock.Lock();
+
   // get the current frag.
   frag_t fg = dirp->frag();
   assert(dirp->buffer.count(fg) == 0);
   
-  client_lock.Lock();
+  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << endl;
 
+  // adjust choice of frag?
+  if (dirp->inode) {
+    frag_t f = dirp->inode->dirfragtree[fg.value()];
+    if (f != fg) {
+      fg = f;
+      dout(10) << "_readdir_get_frag frag " << fg << " maps to " << f << endl;
+      dirp->set_frag(fg);
+    }
+  }
+  
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(dirp->path); 
   req->args.readdir.frag = fg;
-
+  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
@@ -2094,12 +2099,24 @@ void Client::_readdir_get_next(DirResult *dirp)
   int res = reply->get_result();
   insert_trace(reply);  
   
+  if (res == -EAGAIN) {
+    dout(10) << "got EAGAIN, retrying" << endl;
+    client_lock.Unlock();
+    _readdir_get_frag(dirp);
+    return;
+  }
+
   if (res == 0) {
     // stuff dir contents to cache, DirResult
     inodeno_t ino = reply->get_ino();
     Inode *diri = inode_map[ ino ];
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
+    
+    if (!dirp->inode) {
+      dirp->inode = diri;
+      diri->get();
+    }
 
     if (fg.is_leftmost()) {
       // add . and ..?
@@ -2137,12 +2154,18 @@ void Client::_readdir_get_next(DirResult *dirp)
 	}
 	
 	// contents to caller too!
-	dout(15) << "getdir including " << *pdn << " to " << in->inode.ino << endl;
+	dout(15) << "_readdir_get_frag including " << *pdn << " to " << in->inode.ino << endl;
 	_readdir_add_dirent(dirp, *pdn, in);
       }
       if (dir->is_empty())
 	close_dir(dir);
     }
+
+    // drop inode ref?
+    if (fg.is_rightmost()) {
+      put_inode(diri);
+      dirp->inode = 0;
+    }      
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
@@ -2155,13 +2178,6 @@ void Client::_readdir_get_next(DirResult *dirp)
   client_lock.Unlock();
 }
 
-void Client::_readdir_advance_frag(DirResult *dirp)
-{
-  frag_t fg = dirp->frag();
-  dirp->buffer.erase(fg);
-  dirp->next_frag();
-}
-
 int Client::readdir_r(DIR *d, struct dirent *de)
 {  
   return readdirplus_r(d, de, 0, 0);
@@ -2172,9 +2188,9 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   DirResult *dirp = (DirResult*)d;
   
   // do i have this frag?
-  if (!_readdir_have_next(dirp))
-    _readdir_get_next(dirp);
-
+  if (dirp->buffer.count(dirp->frag()) == 0) 
+    _readdir_get_frag(dirp);
+  
   if (dirp->is_end())
     return -1; // end of directory
 
@@ -2190,8 +2206,12 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   if (stmask) *stmask = ent[pos].stmask;
   pos++;
   dirp->offset++;
-  if (pos == ent.size())
-    _readdir_advance_frag(dirp);
+  if (pos == ent.size()) {
+    // advance to next frag
+    frag_t fg = dirp->frag();
+    dirp->buffer.erase(fg);
+    dirp->next_frag();
+  }
 
   return 0;
 }
