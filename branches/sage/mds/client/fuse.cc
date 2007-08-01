@@ -216,7 +216,7 @@ static int ceph_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 		 &st,
 		 client->telldir(dirp));
   }
-  return res;
+  return 0;
 }
 
 static int ceph_releasedir(const char *path, struct fuse_file_info *fi)
