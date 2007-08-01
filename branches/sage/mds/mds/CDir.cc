@@ -288,6 +288,7 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
   assert(dn->is_null());
   dn->set_remote(ino, d_type);
   nitems++;
+  dn->clear_dir_offset();
 
   //assert(null_items.count(dn->name) == 1);
   //null_items.erase(dn->name);
@@ -301,6 +302,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
   assert(!dn->is_remote());
 
   link_inode_work(dn,in);
+  dn->clear_dir_offset();
   
   // remove from null list
   //assert(null_items.count(dn->name) == 1);
@@ -338,6 +340,7 @@ void CDir::unlink_inode( CDentry *dn )
     dout(12) << "unlink_inode " << *dn << " " << *dn->inode << endl;
   }
 
+  dn->clear_dir_offset();
   unlink_inode_work(dn);
 
   // add to null list
@@ -381,7 +384,7 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
 void CDir::unlink_inode_work( CDentry *dn )
 {
   CInode *in = dn->inode;
- 
+
   if (dn->is_remote()) {
     // remote
     if (in) 
@@ -799,6 +802,8 @@ void CDir::_fetched(bufferlist &bl)
 	   << endl;
   
   while (off < len) {
+    off_t dn_offset = off;
+
     // marker
     char type = bl[off];
     ++off;
@@ -825,7 +830,7 @@ void CDir::_fetched(bufferlist &bl)
         }
       } else {
 	// (remote) link
-	CDentry *dn = add_remote_dentry(dname, ino, d_type);
+	dn = add_remote_dentry(dname, ino, d_type);
 	
 	// link to inode?
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
@@ -882,8 +887,8 @@ void CDir::_fetched(bufferlist &bl)
 	  cache->add_inode( in );
 	
 	  // link
-	  add_primary_dentry(dname, in);
-	  dout(12) << "_fetched  got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+	  dn = add_primary_dentry(dname, in);
+	  dout(12) << "_fetched  got " << *dn << " " << *in << endl;
 	}
       }
     } else {
@@ -891,6 +896,9 @@ void CDir::_fetched(bufferlist &bl)
 	      << " at pos " << off << endl;
       assert(0);
     }
+    
+    // make note of dentry position in the directory
+    dn->dir_offset = dn_offset;
 
     /** clean underwater item?
      * Underwater item is something that is dirty in our cache from

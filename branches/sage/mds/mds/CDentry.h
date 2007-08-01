@@ -83,6 +83,8 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
 
+  off_t dir_offset;   
+
   int auth_pins, nested_auth_pins;
 
   friend class Migrator;
@@ -107,6 +109,7 @@ public:
     remote_ino(0), remote_d_type(0),
     inode(0), dir(0),
     version(0), projected_version(0),
+    dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, CInode *in) :
@@ -114,6 +117,7 @@ public:
     remote_ino(0), remote_d_type(0),
     inode(in), dir(0),
     version(0), projected_version(0),
+    dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
@@ -121,6 +125,7 @@ public:
     remote_ino(ino), remote_d_type(dt),
     inode(in), dir(0),
     version(0), projected_version(0),
+    dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
 
@@ -128,6 +133,10 @@ public:
   CDir *get_dir() const { return dir; }
   const string& get_name() const { return name; }
   inodeno_t get_ino();
+
+  off_t get_dir_offset() { return dir_offset; }
+  void set_dir_offset(off_t o) { dir_offset = o; }
+  void clear_dir_offset() { dir_offset = 0; }
 
   inodeno_t get_remote_ino() { return remote_ino; }
   unsigned char get_remote_d_type() { return remote_d_type; }
@@ -255,7 +264,7 @@ class CDentryDiscover {
   string dname;
   int    replica_nonce;
   int    lockstate;
-
+  off_t  dir_offset;
   inodeno_t remote_ino;
   unsigned char remote_d_type;
 
@@ -264,6 +273,7 @@ public:
   CDentryDiscover(CDentry *dn, int nonce) :
     dname(dn->get_name()), replica_nonce(nonce),
     lockstate(dn->lock.get_replica_state()),
+    dir_offset(dn->get_dir_offset()),
     remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
 
   string& get_dname() { return dname; }
@@ -273,6 +283,7 @@ public:
   unsigned char get_remote_d_type() { return remote_d_type; }
 
   void update_dentry(CDentry *dn) {
+    dn->set_dir_offset(dir_offset);
     dn->set_replica_nonce(replica_nonce);
   }
   void init_dentry_lock(CDentry *dn) {
@@ -281,6 +292,7 @@ public:
 
   void _encode(bufferlist& bl) {
     ::_encode(dname, bl);
+    ::_encode(dir_offset, bl);
     ::_encode(remote_ino, bl);
     ::_encode(remote_d_type, bl);
     ::_encode(replica_nonce, bl);
@@ -289,6 +301,7 @@ public:
   
   void _decode(bufferlist& bl, int& off) {
     ::_decode(dname, bl, off);
+    ::_decode(dir_offset, bl, off);
     ::_decode(remote_ino, bl, off);
     ::_decode(remote_d_type, bl, off);
     ::_decode(replica_nonce, bl, off);
