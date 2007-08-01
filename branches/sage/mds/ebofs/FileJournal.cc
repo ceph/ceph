@@ -82,7 +82,10 @@ int FileJournal::open()
 
   // read header?
   read_header();
-  if (header.num > 0 && header.fsid == ebofs->get_fsid()) {
+  if (header.fsid != ebofs->get_fsid()) {
+    dout(2) << "journal fsid doesn't match, invalid (someone else's?) journal" << endl;
+  } 
+  else if (header.num > 0) {
     // valid header, pick an offset
     for (int i=0; i<header.num; i++) {
       if (header.epoch[i] == ebofs->get_super_epoch()) {

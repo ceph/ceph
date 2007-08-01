@@ -184,8 +184,11 @@ int Ebofs::mkfs()
   block_t num_blocks = dev.get_num_blocks();
 
   // make a super-random fsid
+  srand48(time(0) ^ getpid());
+  super_fsid = ((uint64_t)lrand48() << 32) ^ mrand48();
   srand(time(0) ^ getpid());
-  super_fsid = (lrand48() << 32) ^ mrand48();
+  super_fsid ^= rand();
+  super_fsid ^= (uint64_t)rand() << 32;
 
   free_blocks = 0;
   limbo_blocks = 0;
