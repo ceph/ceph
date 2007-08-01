@@ -145,11 +145,6 @@ cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
 
 
 
-# misc
-gprof-helper.so: test/gprof-helper.c
-	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
-
-
 # fake*
 fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
@@ -161,9 +156,6 @@ fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.
 # mpi startup
 newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
-
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
