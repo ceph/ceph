@@ -2078,7 +2078,7 @@ bool Ebofs::write_will_block()
 unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 {
   ebofs_lock.Lock();
-  dout(7) << "apply_transaction start (" << t.ops.size() << " ops)" << endl;
+  dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << endl;
 
   unsigned r = _apply_transaction(t);
 
@@ -2106,16 +2106,18 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
   // do ops
   unsigned r = 0;  // bit fields indicate which ops failed.
   int bit = 1;
-  for (list<int>::iterator p = t.ops.begin();
-       p != t.ops.end();
-       p++) {
-    switch (*p) {
+  while (t.have_op()) {
+    int op = t.get_op();
+    switch (op) {
     case Transaction::OP_READ:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        off_t offset = t.offsets.front(); t.offsets.pop_front();
-        size_t len = t.lengths.front(); t.lengths.pop_front();
-        bufferlist *pbl = t.pbls.front(); t.pbls.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        off_t offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+        bufferlist *pbl;
+	t.get_pbl(pbl);
         if (_read(oid, offset, len, *pbl) < 0) {
           dout(7) << "apply_transaction fail on _read" << endl;
           r &= bit;
@@ -2125,8 +2127,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_STAT:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        struct stat *st = t.psts.front(); t.psts.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        struct stat *st;
+	t.get_pstat(st);
         if (_stat(oid, st) < 0) {
           dout(7) << "apply_transaction fail on _stat" << endl;
           r &= bit;
@@ -2136,9 +2140,12 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_GETATTR:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-	const char *attrname = t.get_attrname(); t.pop_attrname();
-        pair<void*,int*> pattrval = t.pattrvals.front(); t.pattrvals.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+	const char *attrname;
+	t.get_attrname(attrname);
+        pair<void*,int*> pattrval;
+	t.get_pattrval(pattrval);
         if ((*(pattrval.second) = _getattr(oid, attrname, pattrval.first, *(pattrval.second))) < 0) {
           dout(7) << "apply_transaction fail on _getattr" << endl;
           r &= bit;
@@ -2148,8 +2155,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_GETATTRS:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        map<string,bufferptr> *pset = t.pattrsets.front(); t.pattrsets.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        map<string,bufferptr> *pset;
+	t.get_pattrset(pset);
         if (_getattrs(oid, *pset) < 0) {
           dout(7) << "apply_transaction fail on _getattrs" << endl;
           r &= bit;
@@ -2160,10 +2169,13 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_WRITE:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        off_t offset = t.offsets.front(); t.offsets.pop_front();
-        size_t len = t.lengths.front(); t.lengths.pop_front();
-        bufferlist bl = t.bls.front(); t.bls.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        off_t offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+        bufferlist bl;
+	t.get_bl(bl);
         if (_write(oid, offset, len, bl) < 0) {
           dout(7) << "apply_transaction fail on _write" << endl;
           r &= bit;
@@ -2173,17 +2185,21 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRIMCACHE:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        off_t offset = t.offsets.front(); t.offsets.pop_front();
-        size_t len = t.lengths.front(); t.lengths.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        off_t offset, len;
+	t.get_length(offset);
+	t.get_length(len);
         _trim_from_cache(oid, offset, len);
       }
       break;
 
     case Transaction::OP_TRUNCATE:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        off_t len = t.offsets.front(); t.offsets.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        off_t len;
+	t.get_length(len);
         if (_truncate(oid, len) < 0) {
           dout(7) << "apply_transaction fail on _truncate" << endl;
           r &= bit;
@@ -2193,7 +2209,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_REMOVE:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
+        object_t oid;
+	t.get_oid(oid);
         if (_remove(oid) < 0) {
           dout(7) << "apply_transaction fail on _remove" << endl;
           r &= bit;
@@ -2203,12 +2220,12 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_SETATTR:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-	const char *attrname = t.get_attrname(); t.pop_attrname();
-        //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+	const char *attrname;
+	t.get_attrname(attrname);
         bufferlist bl;
-        bl.claim( t.attrbls.front() );
-        t.attrbls.pop_front();
+	t.get_bl(bl);
         if (_setattr(oid, attrname, bl.c_str(), bl.length()) < 0) {
           dout(7) << "apply_transaction fail on _setattr" << endl;
           r &= bit;
@@ -2218,8 +2235,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_SETATTRS:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        map<string,bufferptr> *pattrset = t.pattrsets.front(); t.pattrsets.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        map<string,bufferptr> *pattrset;
+	t.get_pattrset(pattrset);
         if (_setattrs(oid, *pattrset) < 0) {
           dout(7) << "apply_transaction fail on _setattrs" << endl;
           r &= bit;
@@ -2229,8 +2248,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_RMATTR:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-	const char *attrname = t.get_attrname(); t.pop_attrname();
+        object_t oid;
+	t.get_oid(oid);
+	const char *attrname;
+	t.get_attrname(attrname);
         if (_rmattr(oid, attrname) < 0) {
           dout(7) << "apply_transaction fail on _rmattr" << endl;
           r &= bit;
@@ -2240,8 +2261,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_CLONE:
       {
-        object_t oid = t.oids.front(); t.oids.pop_front();
-        object_t noid = t.oids.front(); t.oids.pop_front();
+        object_t oid;
+	t.get_oid(oid);
+        object_t noid;
+	t.get_oid(noid);
 	if (_clone(oid, noid) < 0) {
 	  dout(7) << "apply_transaction fail on _clone" << endl;
 	  r &= bit;
@@ -2251,7 +2274,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_MKCOLL:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
+        coll_t cid;
+	t.get_cid(cid);
         if (_create_collection(cid) < 0) {
           dout(7) << "apply_transaction fail on _create_collection" << endl;
           r &= bit;
@@ -2261,7 +2285,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_RMCOLL:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
+        coll_t cid;
+	t.get_cid(cid);
         if (_destroy_collection(cid) < 0) {
           dout(7) << "apply_transaction fail on _destroy_collection" << endl;
           r &= bit;
@@ -2271,8 +2296,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_COLL_ADD:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
-        object_t oid = t.oids.front(); t.oids.pop_front();
+        coll_t cid;
+	t.get_cid(cid);
+        object_t oid;
+	t.get_oid(oid);
         if (_collection_add(cid, oid) < 0) {
           //dout(7) << "apply_transaction fail on _collection_add" << endl;
           //r &= bit;
@@ -2282,8 +2309,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_COLL_REMOVE:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
-        object_t oid = t.oids.front(); t.oids.pop_front();
+        coll_t cid;
+	t.get_cid(cid);
+        object_t oid;
+	t.get_oid(oid);
         if (_collection_remove(cid, oid) < 0) {
           dout(7) << "apply_transaction fail on _collection_remove" << endl;
           r &= bit;
@@ -2293,12 +2322,12 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_COLL_SETATTR:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
-	const char *attrname = t.get_attrname(); t.pop_attrname();
-        //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+        coll_t cid;
+	t.get_cid(cid);
+	const char *attrname;
+	t.get_attrname(attrname);
         bufferlist bl;
-        bl.claim( t.attrbls.front() );
-        t.attrbls.pop_front();
+	t.get_bl(bl);
         if (_collection_setattr(cid, attrname, bl.c_str(), bl.length()) < 0) {
           //if (_collection_setattr(cid, attrname, attrval.first, attrval.second) < 0) {
           dout(7) << "apply_transaction fail on _collection_setattr" << endl;
@@ -2309,8 +2338,10 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_COLL_RMATTR:
       {
-        coll_t cid = t.cids.front(); t.cids.pop_front();
-	const char *attrname = t.get_attrname(); t.pop_attrname();
+        coll_t cid;
+	t.get_cid(cid);
+	const char *attrname;
+	t.get_attrname(attrname);
         if (_collection_rmattr(cid, attrname) < 0) {
           dout(7) << "apply_transaction fail on _collection_rmattr" << endl;
           r &= bit;
@@ -2319,7 +2350,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       break;
       
     default:
-      cerr << "bad op " << *p << endl;
+      cerr << "bad op " << op << endl;
       assert(0);
     }
 
