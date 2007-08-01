@@ -270,7 +270,7 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
     _myinst.name = me;
     _myinst.addr.port = nranks++;
     //if (!me.is_mon())
-    //_myinst.addr.nonce = getpid();
+    _myinst.addr.nonce = getpid();
 
     // add to directory
     directory[ _myinst.addr ] = this;
@@ -360,7 +360,8 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
   m->set_source(get_myname(), fromport);
   m->set_source_addr(get_myaddr());
 
-  m->set_dest(inst.name, port);
+  m->set_dest_inst(inst);
+  m->set_dest_port(port);
 
   lock.Lock();
 
@@ -384,7 +385,7 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
     directory[inst.addr]->queue_incoming(m);
   } else {
     dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m
-	    << " *** destination DNE ***" 
+	    << " *** destination " << inst.addr << " DNE ***" 
 	    << endl;
     for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
 	 p != directory.end();

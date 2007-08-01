@@ -86,7 +86,13 @@ int main(int argc, char **argv) {
   if (g_conf.clock_tare) g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
-  
+  entity_addr_t a;
+  a.nonce = getpid();
+  for (int i=0; i<g_conf.num_mon; i++) {
+    a.port = i;
+    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+  }
+
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
     mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
@@ -104,17 +110,13 @@ int main(int argc, char **argv) {
     mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
   }
  
-    // init
-  for (int i=0; i<g_conf.num_mon; i++) {
+  // init
+  for (int i=0; i<g_conf.num_mon; i++) 
     mon[i]->init();
-  }
-  for (int i=0; i<NUMMDS; i++) {
-    mds[i]->init();
-  }
-  
-  for (int i=0; i<NUMOSD; i++) {
+  for (int i=0; i<NUMMDS; i++) 
+    mds[i]->init();  
+  for (int i=0; i<NUMOSD; i++) 
     osd[i]->init();
-  }
 
 
   // create client
