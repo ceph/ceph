@@ -18,12 +18,6 @@ CFLAGS += -DDARWIN -D__FreeBSD__=10
 LDINC = ar -rc
 endif
 
-# bdbstore?
-ifeq ($(want_bdb),yes)
-CFLAGS += -DUSE_OSBDB
-OSBDB_LIBS = -ldb_cxx
-endif
-
 # use Common C++ (for buffer.h)?
 ifeq ($(use_ccpp),yes)
 CFLAGS += -D_GNU_SOURCE -DBUFFER_USE_CCPP
@@ -105,11 +99,13 @@ CLIENT_OBJS= \
 	client/Trace.o
 
 
+# bdbstore?
 ifeq ($(want_bdb),yes)
+CFLAGS += -DUSE_OSBDB
+LIBS = -ldb_cxx
+OSD_OBJS += osbdb/OSBDB.o
 OSBDB_OBJS = \
 	osbdb/OSBDB.o
-
-OSBDB_OBJ = osbdb.o
 endif
 
 TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cmonctl cfuse fakefuse
@@ -135,8 +131,8 @@ cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o ${OSBDB_OBJ} msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
+cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
@@ -155,19 +151,19 @@ gprof-helper.so: test/gprof-helper.c
 
 
 # fake*
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o ${OSBDB_OBJ} client/fuse.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -lfuse $^ -o $@
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
+newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
