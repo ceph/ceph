@@ -870,10 +870,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
   peer_qlen[from] = m->avg_qlen;
   peer_read_time[from] = m->read_mean_time;
 
-  //if (!m->ack)
-  //messenger->send_message(new MOSDPing(osdmap->get_epoch(), true),
-  //m->get_source());
- 
   delete m;
 }
 

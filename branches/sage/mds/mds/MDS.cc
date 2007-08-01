@@ -446,8 +446,7 @@ void MDS::beacon_kill(utime_t lab)
     dout(0) << "beacon_kill last_acked_stamp " << lab 
 	    << ", killing myself."
 	    << endl;
-    messenger->suicide();
-    //exit(0);
+    suicide();
   } else {
     dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
 	     << " != my " << lab 
@@ -503,7 +502,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
   if (whoami < 0) {
     dout(1) << "handle_mds_map i'm not in the mdsmap, killing myself" << endl;
-    shutdown_final();
+    suicide();
     return;
   }
   if (oldwhoami != whoami) {
@@ -552,7 +551,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     // contemplate suicide
     if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
       dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << endl;
-      shutdown_final();
+      suicide();
       return;
     }
 
@@ -577,7 +576,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else if (is_stopped()) {
       assert(oldstate == MDSMap::STATE_STOPPING);
       dout(1) << "now stopped, sending down:out and exiting" << endl;
-      shutdown_final();
+      suicide();
       return;
     }
   }
@@ -1043,9 +1042,9 @@ void MDS::stopping_done()
 
   
 
-int MDS::shutdown_final()
+void MDS::suicide()
 {
-  dout(1) << "shutdown_final" << endl;
+  dout(1) << "suicide" << endl;
 
   // flush loggers
   if (logger) logger->flush(true);
@@ -1073,8 +1072,6 @@ int MDS::shutdown_final()
   
   // shut down messenger
   messenger->shutdown();
-  
-  return 0;
 }
 
 

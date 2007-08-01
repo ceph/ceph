@@ -247,7 +247,7 @@ class MDS : public Dispatcher {
   void shutdown_start();
   void stopping_start();
   void stopping_done();
-  int shutdown_final();
+  void suicide();
 
   void tick();
   
