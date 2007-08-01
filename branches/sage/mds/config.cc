@@ -137,6 +137,7 @@ md_config_t g_conf = {
   mon_accept_timeout: 10.0,    // on leader, if paxos update isn't accepted
   mon_stop_on_last_unmount: false,
   mon_stop_with_last_mds: false,
+  mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
 
   // --- client ---
   client_cache_size: 300,

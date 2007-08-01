@@ -248,7 +248,8 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     // assign a name.
     if (from >= 0) {
       // wants to be (or already is) a specific MDS. 
-      if (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst()) {
+      if (!g_conf.mon_allow_mds_bully &&
+	  (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst())) {
 	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << endl;
 	from = -1;
       } else {

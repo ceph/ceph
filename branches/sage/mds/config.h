@@ -123,6 +123,7 @@ struct md_config_t {
   float mon_accept_timeout;
   bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
+  bool mon_allow_mds_bully;
 
   // client
   int      client_cache_size;
