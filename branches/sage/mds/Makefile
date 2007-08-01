@@ -6,23 +6,30 @@
 # Hook for extra -I options, etc.
 EXTRA_CFLAGS = 
 
-ifeq ($(target),darwin)
-# For Darwin
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
-LDINC = ar -rc
-else
-# For linux
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D_GNU_SOURCE
+# base
+CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
+CC = g++
+LIBS = -pthread
+
+# darwin?
+ifeq ($(target),darwin)
+CFLAGS += -DDARWIN -D__FreeBSD__=10
+LDINC = ar -rc
 endif
 
-CC = g++
-LIBS = -L/usr/lib -lccgnu2 -ldl -pthread
-
+# bdbstore?
 ifeq ($(want_bdb),yes)
 CFLAGS += -DUSE_OSBDB
 OSBDB_LIBS = -ldb_cxx
 endif
+
+# use Common C++ (for buffer.h)?
+ifeq ($(use_ccpp),yes)
+CFLAGS += -D_GNU_SOURCE -DBUFFER_USE_CCPP
+LIBS += -lccgnu2 -ldl
+endif
+
 
 #for normal mpich2 machines
 MPICC = mpicxx

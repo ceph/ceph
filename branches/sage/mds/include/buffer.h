@@ -20,7 +20,7 @@
 #include "common/Mutex.h"
 
 
-#define BUFFER_USE_CCPP
+//#define BUFFER_USE_CCPP
 
 #ifdef BUFFER_USE_CCPP
 # include "cc++/thread.h"
@@ -265,9 +265,9 @@ public:
 #ifdef BUFFER_USE_CCPP
 	++p._raw->nref;                              // inc new
 #else
-	_raw->lock.Lock();
+	p._raw->lock.Lock();
 	++p._raw->nref;                              // inc new
-	_raw->lock.Unlock();
+	p._raw->lock.Unlock();
 #endif
       }
       release();                                 // dec (+ dealloc) old (if any)
