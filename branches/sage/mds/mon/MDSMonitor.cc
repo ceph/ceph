@@ -248,15 +248,29 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     // assign a name.
     if (from >= 0) {
       // wants to be (or already is) a specific MDS. 
-      if (mdsmap.is_failed(from)) {
-	dout(10) << "mds_beacon boot: mds" << from << " was failed, replaying" << endl;
-	state = MDSMap::STATE_REPLAY;
-      } else if (mdsmap.is_stopped(from)) {
-	dout(10) << "mds_beacon boot: mds" << from << " was stopped, starting" << endl;
-	state = MDSMap::STATE_STARTING;
-      } else if (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst()) {
+      if (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst()) {
 	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << endl;
 	from = -1;
+      } else {
+	switch (mdsmap.get_state(from)) {
+	case MDSMap::STATE_STOPPED:
+	case MDSMap::STATE_STARTING:
+	case MDSMap::STATE_STANDBY:
+	  state = MDSMap::STATE_STARTING;
+	  break;
+	case MDSMap::STATE_DNE:
+	case MDSMap::STATE_CREATING:
+	  state = MDSMap::STATE_CREATING;
+	  break;
+	case MDSMap::STATE_FAILED:
+	default:
+	  state = MDSMap::STATE_REPLAY;
+	  break;
+	}
+	dout(10) << "mds_beacon boot: mds" << from
+		 << " was " << MDSMap::get_state_name(mdsmap.get_state(from))
+		 << ", " << MDSMap::get_state_name(state) 
+		 << endl;
       }
     }
     if (from < 0) {
