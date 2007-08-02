@@ -173,6 +173,11 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_TRUNCATE );
 	syn_sargs.push_back(args[++i]);
         syn_iargs.push_back(atoi(args[++i]));
+      } else if (strcmp(args[i],"importfind") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_IMPORTFIND);
+	syn_sargs.push_back(args[++i]);
+	syn_sargs.push_back(args[++i]);
+	syn_iargs.push_back(atoi(args[++i]));
       } else {
         cerr << "unknown syn arg " << args[i] << endl;
         assert(0);
@@ -603,6 +608,17 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();  iargs.pop_front();
 	if (run_me()) 
 	  client->truncate(file.c_str(), iarg1);
+      }
+      break;
+
+
+    case SYNCLIENT_MODE_IMPORTFIND:
+      {
+	string base = get_sarg(0);
+	string find = get_sarg(0);
+	int data = get_iarg();
+	if (run_me())
+	  import_find(base.c_str(), find.c_str(), data);
       }
       break;
       
@@ -1970,3 +1986,100 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 }
 
 
+
+
+void SyntheticClient::import_find(const char *base, const char *find, bool data)
+{
+  dout(1) << "import_find " << base << " from " << find << " data=" << data << endl;
+
+  /* use this to gather the trace:
+   * find . -exec ls -dilsn --time-style=+%s \{\} \;
+   */
+
+  client->mkdir(base, 0755);
+
+  ifstream f(find);
+  assert(f.is_open());
+
+  while (!f.eof()) {
+    uint64_t ino;
+    int dunno, nlink;
+    string modestring;
+    int uid, gid;
+    off_t size;
+    time_t mtime;
+    string filename;
+    f >> ino;
+    if (f.eof()) break;
+    f >> dunno;
+    f >> modestring;
+    f >> nlink;
+    f >> uid;
+    f >> gid;
+    f >> size;
+    f >> mtime;
+    f.seekg(1, ios::cur);
+    getline(f, filename);
+    
+    // parse the mode
+    assert(modestring.length() == 10);
+    mode_t mode = 0;
+    switch (modestring[0]) {
+    case 'd': mode |= INODE_MODE_DIR; break;
+    case 'l': mode |= INODE_MODE_SYMLINK; break;
+    default:
+    case '-': mode |= INODE_MODE_FILE; break;
+    }
+    if (modestring[1] == 'r') mode |= 0400;
+    if (modestring[2] == 'w') mode |= 0200;
+    if (modestring[3] == 'x') mode |= 0100;
+    if (modestring[4] == 'r') mode |= 040;
+    if (modestring[5] == 'w') mode |= 020;
+    if (modestring[6] == 'x') mode |= 010;
+    if (modestring[7] == 'r') mode |= 04;
+    if (modestring[8] == 'w') mode |= 02;
+    if (modestring[9] == 'x') mode |= 01;
+
+    dout(20) << " mode " << modestring << " to " << oct << mode << dec << endl;
+
+    if (S_ISLNK(mode)) {
+      // target vs destination
+      int pos = filename.find(" -> ");
+      assert(pos > 0);
+      string link = base;
+      link += "/";
+      link += filename.substr(0, pos);
+      string target;
+      if (filename[pos+4] == '/') {
+	target = base;
+	target += filename.substr(pos + 4);
+      } else {
+	target = filename.substr(pos + 4);
+      }
+      dout(10) << "symlink from '" << link << "' -> '" << target << "'" << endl;
+      client->symlink(target.c_str(), link.c_str());
+    } else {
+      string f = base;
+      f += "/";
+      f += filename;
+      if (S_ISDIR(mode)) {
+	client->mkdir(f.c_str(), mode);
+      } else {
+	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT);
+	assert(fd > 0);	
+	client->write(fd, " ", 1, size-1);
+	client->close(fd);
+
+	client->chmod(f.c_str(), mode & 0777);
+	client->chown(f.c_str(), uid, gid);
+
+	struct utimbuf ut;
+	ut.modtime = mtime;
+	ut.actime = mtime;
+	client->utime(f.c_str(), &ut);
+      }
+    }
+  }
+  
+
+}

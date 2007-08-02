@@ -211,9 +211,10 @@ static int ceph_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
   while (res == 0) {
     int r = client->readdirplus_r(dirp, &de, &st, &stmask);
     if (r != 0) break;
+    int stneed = InodeStat::MASK_INO | InodeStat::MASK_TYPE;
     res = filler(buf,
                  de.d_name,
-		 &st,
+		 ((stmask & stneed) == stneed) ? &st:0,
 		 client->telldir(dirp));
   }
   return 0;

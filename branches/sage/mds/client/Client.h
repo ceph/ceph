@@ -646,6 +646,7 @@ public:
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
+  void _readdir_add_dirent(DirResult *dirp, const string& name);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_get_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
@@ -693,6 +694,7 @@ public:
   off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
+  int fake_write_size(fh_t fh, off_t size);
   int truncate(const char *file, off_t size);
     //int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);

@@ -64,6 +64,8 @@
 #define SYNCLIENT_MODE_FOO        100
 #define SYNCLIENT_MODE_THRASHLINKS  101
 
+#define SYNCLIENT_MODE_IMPORTFIND 300
+
 
 
 void parse_syn_options(vector<char*>& args);
@@ -183,6 +185,11 @@ class SyntheticClient {
   int exclude;
 
   string get_sarg(int seq);
+  int get_iarg() {
+    int i = iargs.front();
+    iargs.pop_front();
+    return i;
+  }
 
   bool time_to_stop() {
     utime_t now = g_clock.now();
@@ -225,6 +232,8 @@ class SyntheticClient {
   void foo();
 
   int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
+
+  void import_find(const char *basedir, const char *find, bool writedata);
 
 };
 

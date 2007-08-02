@@ -2071,6 +2071,15 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
 }
 
+void Client::_readdir_add_dirent(DirResult *dirp, const string& name)
+{
+  frag_t fg = dirp->frag();
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  dirp->buffer[fg].push_back(DirEntry(name, st, 0));
+  dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
+}
+
 void Client::_readdir_get_frag(DirResult *dirp)
 {
   client_lock.Lock();
@@ -2139,6 +2148,8 @@ void Client::_readdir_get_frag(DirResult *dirp)
       _readdir_add_dirent(dirp, dot, diri);
       if (diri->dn)
 	_readdir_add_dirent(dirp, dotdot, diri->dn->dir->parent_inode);
+      else
+	_readdir_add_dirent(dirp, dotdot);
     }
     
     // the rest?
@@ -2251,10 +2262,16 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 //};
 void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
 {
-  de->d_ino = entry->st.st_ino;
+  if (entry->stmask) 
+    de->d_ino = entry->st.st_ino;
+  else
+    de->d_ino = 0;
   de->d_off = off + 1;
   de->d_reclen = 1;
-  de->d_type = MODE_TO_DT(entry->st.st_mode);
+  if (entry->stmask) 
+    de->d_type = MODE_TO_DT(entry->st.st_mode);
+  else 
+    de->d_type = DT_UNKNOWN;
   strncpy(de->d_name, entry->d_name.c_str(), 256);
 }
 
