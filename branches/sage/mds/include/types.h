@@ -140,9 +140,9 @@ typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10
 
 struct FileLayout {
   // -- file -> object mapping --
-  int stripe_unit;     // stripe unit, in bytes
-  int stripe_count;    // over this many objects
-  int object_size;     // until objects are this big, then move to new objects
+  int32_t stripe_unit;     // stripe unit, in bytes
+  int32_t stripe_count;    // over this many objects
+  int32_t object_size;     // until objects are this big, then move to new objects
 
   int stripe_width() { return stripe_unit * stripe_count; }
 
@@ -152,10 +152,10 @@ struct FileLayout {
   // -- object -> pg layout --
   char pg_type;        // pg type (replicated, raid, etc.) (see pg_t::TYPE_*)
   char pg_size;        // pg size (num replicas, or raid4 stripe width)
-  int  preferred;      // preferred primary osd?
+  int32_t  preferred;  // preferred primary osd?
 
   // -- pg -> disk layout --
-  int  object_stripe_unit;  // for per-object raid
+  int32_t  object_stripe_unit;  // for per-object raid
 
   FileLayout() { }
   FileLayout(int su, int sc, int os, int pgt, int pgs, int o=-1) :
@@ -248,7 +248,7 @@ struct inode_t {
   gid_t      gid;
 
   // nlink
-  int        nlink;  
+  int32_t    nlink;  
   bool       anchored;          // auth only?
 
   // file (data access)

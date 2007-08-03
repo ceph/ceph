@@ -21,8 +21,8 @@
 
 // new typed msg_addr_t way!
 class entity_name_t {
-  int _type;
-  int _num;
+  int32_t _type;
+  int32_t _num;
 
 public:
   static const int TYPE_MON = 1;

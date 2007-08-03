@@ -156,10 +156,10 @@ using std::list;
 
 
 typedef struct {
-  int type;
+  int32_t type;
   entity_inst_t src, dst;
-  int source_port, dest_port;
-  int nchunks;
+  int32_t source_port, dest_port;
+  int32_t nchunks;
 } msg_envelope_t;
 
 #define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)

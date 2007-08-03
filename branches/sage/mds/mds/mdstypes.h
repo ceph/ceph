@@ -51,7 +51,7 @@ using namespace std;
 
 
 struct metareqid_t {
-  int client;
+  int32_t client;
   tid_t tid;
   metareqid_t() : client(-1), tid(0) {}
   metareqid_t(int c, tid_t t) : client(c), tid(t) {}

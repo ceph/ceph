@@ -92,12 +92,12 @@ public:
     bufferlist fullmap;  // in leiu of below.
 
     // incremental
-    map<int,entity_inst_t> new_up;
-    map<int,entity_inst_t> new_down;
-    list<int> new_in;
-    list<int> new_out;
-    map<int,float> new_overload;  // updated overload value
-    list<int>      old_overload;  // no longer overload
+    map<int32_t,entity_inst_t> new_up;
+    map<int32_t,entity_inst_t> new_down;
+    list<int32_t> new_in;
+    list<int32_t> new_out;
+    map<int32_t,float> new_overload;  // updated overload value
+    list<int32_t>      old_overload;  // no longer overload
     
     void encode(bufferlist& bl) {
       ::_encode(epoch, bl); 
@@ -129,16 +129,16 @@ private:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
-  int pg_num;       // placement group count
-  int pg_num_mask;  // bitmask for above
-  int localized_pg_num;      // localized place group count
-  int localized_pg_num_mask; // ditto
+  int32_t pg_num;       // placement group count
+  int32_t pg_num_mask;  // bitmask for above
+  int32_t localized_pg_num;      // localized place group count
+  int32_t localized_pg_num_mask; // ditto
 
-  set<int>  osds;        // all osds
-  set<int>  down_osds;   // list of down disks
-  set<int>  out_osds;    // list of unmapped disks
-  map<int,float> overload_osds; 
-  map<int,entity_inst_t> osd_inst;
+  set<int32_t>  osds;        // all osds
+  set<int32_t>  down_osds;   // list of down disks
+  set<int32_t>  out_osds;    // list of unmapped disks
+  map<int32_t,float> overload_osds; 
+  map<int32_t,entity_inst_t> osd_inst;
 
  public:
   Crush     crush;       // hierarchical map
@@ -220,7 +220,7 @@ private:
     }
 
     // nope, incremental.
-    for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
+    for (map<int32_t,entity_inst_t>::iterator i = inc.new_down.begin();
          i != inc.new_down.end();
          i++) {
       assert(down_osds.count(i->first) == 0);
@@ -230,21 +230,21 @@ private:
       osd_inst.erase(i->first);
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (list<int>::iterator i = inc.new_out.begin();
+    for (list<int32_t>::iterator i = inc.new_out.begin();
          i != inc.new_out.end();
          i++) {
       assert(out_osds.count(*i) == 0);
       out_osds.insert(*i);
       //cout << "epoch " << epoch << " out osd" << *i << endl;
     }
-    for (list<int>::iterator i = inc.old_overload.begin();
+    for (list<int32_t>::iterator i = inc.old_overload.begin();
          i != inc.old_overload.end();
          i++) {
       assert(overload_osds.count(*i));
       overload_osds.erase(*i);
     }
 
-    for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+    for (map<int32_t,entity_inst_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end(); 
          i++) {
       assert(down_osds.count(i->first));
@@ -253,14 +253,14 @@ private:
       osd_inst[i->first] = i->second;
       //cout << "epoch " << epoch << " up osd" << i->first << endl;
     }
-    for (list<int>::iterator i = inc.new_in.begin();
+    for (list<int32_t>::iterator i = inc.new_in.begin();
          i != inc.new_in.end();
          i++) {
       assert(out_osds.count(*i));
       out_osds.erase(*i);
       //cout << "epoch " << epoch << " in osd" << *i << endl;
     }
-    for (map<int,float>::iterator i = inc.new_overload.begin();
+    for (map<int32_t,float>::iterator i = inc.new_overload.begin();
          i != inc.new_overload.end();
          i++) {
       overload_osds[i->first] = i->second;
