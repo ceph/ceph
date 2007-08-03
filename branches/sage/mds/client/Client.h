@@ -636,6 +636,34 @@ private:
     }
   };
 
+  // internal interface
+  //   call these with client_lock held!
+  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
+  void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
+  bool _readdir_have_frag(DirResult *dirp);
+  void _readdir_next_frag(DirResult *dirp);
+  void _readdir_rechoose_frag(DirResult *dirp);
+  int _readdir_get_frag(DirResult *dirp);
+  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+  int _link(const char *existing, const char *newname);
+  int _unlink(const char *path);
+  int _rename(const char *from, const char *to);
+  int _mkdir(const char *path, mode_t mode);
+  int _rmdir(const char *path);
+  int _readlink(const char *path, char *buf, off_t size);
+  int _symlink(const char *existing, const char *newname);
+  int _lstat(const char *path, int mask, Inode **in);
+  int _chmod(const char *relpath, mode_t mode);
+  int _chown(const char *relpath, uid_t uid, gid_t gid);
+  int _utime(const char *relpath, utime_t mtime, utime_t atime);
+  int _mknod(const char *path, mode_t mode, dev_t rdev);
+  int _open(const char *path, int flags, mode_t mode, Fh **fhp);
+  int _release(Fh *fh);
+  int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
+  int _write(Fh *fh, off_t offset, off_t size, const char *buf);
+  int _truncate(const char *file, off_t length);
+
+
 public:
   int mount();
   int unmount();
@@ -650,14 +678,6 @@ public:
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
-  bool _readdir_have_frag(DirResult *dirp);
-  void _readdir_next_frag(DirResult *dirp);
-  void _readdir_rechoose_frag(DirResult *dirp);
-  int _readdir_get_frag(DirResult *dirp);
-  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
-
   int opendir(const char *name, DIR **dirpp);
   int closedir(DIR *dirp);
   int readdir_r(DIR *dirp, struct dirent *de);
@@ -671,36 +691,28 @@ public:
   struct dirent_lite *readdirlite(DIR *dirp);
   int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
  
-
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int _mkdir(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks
   int readlink(const char *path, char *buf, off_t size);
   int symlink(const char *existing, const char *newname);
-  int _symlink(const char *existing, const char *newname);
 
   // inode stuff
-  int _lstat(const char *path, int mask, Inode **in);
   int lstat(const char *path, struct stat *stbuf);
   int lstatlite(const char *path, struct statlite *buf);
 
   int chmod(const char *path, mode_t mode);
-  int _chmod(const char *relpath, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
-  int _chown(const char *relpath, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
-  int _utime(const char *relpath, utime_t mtime, utime_t atime);
 
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
-  int _mknod(const char *path, mode_t mode, dev_t rdev);
   int open(const char *path, int flags, mode_t mode=0);
   int close(fh_t fh);
   off_t lseek(fh_t fh, off_t offset, int whence);
@@ -708,9 +720,7 @@ public:
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int fake_write_size(fh_t fh, off_t size);
   int truncate(const char *file, off_t size);
-  int _truncate(const char *file, off_t length);
   int fsync(fh_t fh, bool syncdataonly);
-
 
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
@@ -736,6 +746,15 @@ public:
   int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr);
   int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr);
   int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr);
+  int ll_unlink(inodeno_t ino, const char *name);
+  int ll_rmdir(inodeno_t ino, const char *name);
+  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname);
+  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr);
+  int ll_open(inodeno_t ino, int flags, Fh **fh);
+  int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
+  int ll_write(Fh *fh, off_t off, off_t len, const char *data);
+  int ll_release(Fh *fh);
+  
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

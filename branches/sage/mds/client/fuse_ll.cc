@@ -128,6 +128,18 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
+static void ceph_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+  int r = client->ll_unlink(parent, name);
+  fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+  int r = client->ll_rmdir(parent, name);
+  fuse_reply_err(req, -r);
+}
+
 static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
 {
   struct fuse_entry_param fe;
@@ -140,6 +152,81 @@ static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
   } else {
     fuse_reply_err(req, -r);
   }
+}
+
+static void ceph_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+			   fuse_ino_t newparent, const char *newname)
+{
+  int r = client->ll_rename(parent, name, newparent, newname);
+  fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
+			 const char *newname)
+{
+  struct fuse_entry_param fe;
+  memset(&fe, 0, sizeof(fe));
+  
+  int r = client->ll_link(ino, newparent, newname, &fe.attr);
+  if (r == 0) {
+    fe.ino = fe.attr.st_ino;
+    fuse_reply_entry(req, &fe);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
+static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+  Fh *fh;
+  int r = client->ll_open(ino, fi->flags, &fh);
+  if (r > 0) {
+    fi->fh = (long)fh;
+    fuse_reply_open(req, fi);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+static void ceph_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
+			 struct fuse_file_info *fi)
+{
+  Fh *fh = (Fh*)fi->fh;
+  bufferlist bl;
+  int r = client->ll_read(fh, off, size, &bl);
+  if (r >= 0)
+    fuse_reply_buf(req, bl.c_str(), bl.length());
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+			   size_t size, off_t off, struct fuse_file_info *fi)
+{
+  Fh *fh = (Fh*)fi->fh;
+  int r = client->ll_write(fh, off, size, buf);
+  if (r >= 0)
+    fuse_reply_write(req, r);
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+  // NOOP
+  fuse_reply_err(req, 0);
+}
+
+static void ceph_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+  Fh *fh = (Fh*)fi->fh;
+  int r = client->ll_release(fh);
+  fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+			  struct fuse_file_info *fi)
+{
+
 }
 
 static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
@@ -157,14 +244,12 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     return;
   }
   
-  // readdir
+  DIR *dirp = (DIR*)fi->fh;
+  client->seekdir(dirp, off);
+
   struct dirent de;
   struct stat st;
   memset(&st, 0, sizeof(st));
-
-  DIR *dirp = (DIR*)fi->fh;
-
-  client->seekdir(dirp, off);
 
   while (1) {
     int r = client->readdir_r(dirp, &de);
@@ -176,8 +261,10 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
 					 de.d_name, &st, off);
 
-    cout << "ceph_ll_readdir added " << de.d_name << " at " << buf + pos << " len " << entrysize
-	 << " (buffer size is " << size << ")" << endl;
+    cout << "ceph_ll_readdir added " << de.d_name << " at " << pos << " len " << entrysize
+	 << " (buffer size is " << size << ")" 
+	 << " .. off = " << off
+	 << endl;
     
     if (entrysize > size - pos) 
       break;  // didn't fit, done for now.
@@ -206,17 +293,17 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  readlink: ceph_ll_readlink,
  mknod: ceph_ll_mknod,
  mkdir: ceph_ll_mkdir,
- unlink: 0,
- rmdir: 0,
+ unlink: ceph_ll_unlink,
+ rmdir: ceph_ll_rmdir,
  symlink: ceph_ll_symlink,
- rename: 0,
- link: 0,
- open: 0,
- read: 0,
- write: 0,
- flush: 0,
- release: 0,
- fsync: 0,
+ rename: ceph_ll_rename,
+ link: ceph_ll_link,
+ open: ceph_ll_open,
+ read: ceph_ll_read,
+ write: ceph_ll_write,
+ flush: ceph_ll_flush,
+ release: ceph_ll_release,
+ fsync: ceph_ll_fsync,
  opendir: ceph_ll_opendir,
  readdir: ceph_ll_readdir,
  releasedir: ceph_ll_releasedir,
