@@ -1792,6 +1792,7 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 
 int Client::fill_stat(Inode *in, struct stat *st) 
 {
+  dout(10) << "fill_stat on " << in->inode.ino << " mode " << oct << in->inode.mode << dec << endl;
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
   st->st_mode = in->inode.mode;
@@ -2055,7 +2056,33 @@ int Client::getdir(const char *relpath, list<string>& contents)
 
 int Client::opendir(const char *name, DIR **dirpp) 
 {
-  *((DirResult**)dirpp) = new DirResult(name, 0);
+  Mutex::Locker lock(client_lock);
+
+  DirResult *dirp = new DirResult(name);
+
+  // do we have the inode in our cache?  
+  // if so, should be we ask for a different dirfrag?
+  filepath path(name);
+  Dentry *dn = lookup(path);
+  if (dn && dn->inode) {
+    dirp->inode = dn->inode;
+    dirp->inode->get();
+    dout(10) << "got inode " << dn->inode->inode.ino << " ref now " << dn->inode->ref << endl;
+    dirp->set_frag(dn->inode->dirfragtree[0]);
+    dout(10) << "opendir " << name << ", our cache says the first dirfrag is " << dirp->frag() << endl;
+  }
+
+  // get the first frag
+  int r = _readdir_get_frag(dirp);
+  if (r < 0) {
+    dout(3) << "opendir " << name << " err = " << r << endl;
+    delete dirp;
+    return r;
+  }
+  
+  // yay!
+  *((DirResult**)dirpp) = dirp;
+  
   dout(3) << "opendir " << name << " = " << *dirpp << endl;
   return 0;
 }
@@ -2063,43 +2090,61 @@ int Client::opendir(const char *name, DIR **dirpp)
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 {
-  frag_t fg = dirp->frag();
   struct stat st;
-  int stmask;
-  stmask = fill_stat(in, &st);  
+  int stmask = fill_stat(in, &st);  
+  frag_t fg = dirp->frag();
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
   dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
 }
 
-void Client::_readdir_add_dirent(DirResult *dirp, const string& name)
+void Client::_readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type)
 {
-  frag_t fg = dirp->frag();
   struct stat st;
   memset(&st, 0, sizeof(st));
-  dirp->buffer[fg].push_back(DirEntry(name, st, 0));
+  st.st_mode = DT_TO_MODE(d_type);
+  int stmask = InodeStat::MASK_TYPE;
+  frag_t fg = dirp->frag();
+  dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
   dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
 }
 
-void Client::_readdir_get_frag(DirResult *dirp)
+void Client::_readdir_next_frag(DirResult *dirp)
 {
-  client_lock.Lock();
+  frag_t fg = dirp->frag();
 
+  // hose old data
+  assert(dirp->buffer.count(fg));
+  dirp->buffer.erase(fg);
+
+  // advance
+  dirp->next_frag();
+  if (dirp->at_end()) {
+    dout(10) << "_readdir_next_frag advance from " << fg << " to END" << endl;
+  } else {
+    dout(10) << "_readdir_next_frag advance from " << fg << " to " << dirp->frag() << endl;
+    _readdir_rechoose_frag(dirp);
+  }
+}
+
+void Client::_readdir_rechoose_frag(DirResult *dirp)
+{
+  assert(dirp->inode);
+  frag_t cur = dirp->frag();
+  frag_t f = dirp->inode->dirfragtree[cur.value()];
+  if (f != cur) {
+    dout(10) << "_readdir_rechoose_frag frag " << cur << " maps to " << f << endl;
+    dirp->set_frag(f);
+  }
+}
+
+int Client::_readdir_get_frag(DirResult *dirp)
+{
   // get the current frag.
   frag_t fg = dirp->frag();
   assert(dirp->buffer.count(fg) == 0);
   
   dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << endl;
 
-  // adjust choice of frag?
-  if (dirp->inode) {
-    frag_t f = dirp->inode->dirfragtree[fg.value()];
-    if (f != fg) {
-      dout(10) << "_readdir_get_frag frag " << fg << " maps to " << f << endl;
-      fg = f;
-      dirp->set_frag(fg);
-    }
-  }
-  
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(dirp->path); 
   req->args.readdir.frag = fg;
@@ -2129,9 +2174,8 @@ void Client::_readdir_get_frag(DirResult *dirp)
 
   if (res == -EAGAIN) {
     dout(10) << "_readdir_get_frag got EAGAIN, retrying" << endl;
-    client_lock.Unlock();
-    _readdir_get_frag(dirp);
-    return;
+    _readdir_rechoose_frag(dirp);
+    return _readdir_get_frag(dirp);
   }
 
   if (res == 0) {
@@ -2144,12 +2188,12 @@ void Client::_readdir_get_frag(DirResult *dirp)
     if (fg.is_leftmost()) {
       // add . and ..?
       string dot(".");
-      string dotdot("..");
       _readdir_add_dirent(dirp, dot, diri);
+      string dotdot("..");
       if (diri->dn)
 	_readdir_add_dirent(dirp, dotdot, diri->dn->dir->parent_inode);
-      else
-	_readdir_add_dirent(dirp, dotdot);
+      //else
+      //_readdir_add_dirent(dirp, dotdot, DT_DIR);
     }
     
     // the rest?
@@ -2196,17 +2240,7 @@ void Client::_readdir_get_frag(DirResult *dirp)
 
   delete reply;
 
-  client_lock.Unlock();
-}
-
-void Client::_readdir_next_frag(DirResult *dirp)
-{
-  // advance to next frag
-  frag_t fg = dirp->frag();
-  assert(dirp->buffer.count(fg));
-  dirp->buffer.erase(fg);
-  dirp->next_frag();
-  dout(10) << "_readdir_next_frag advance from " << fg << " to " << dirp->frag() << endl;
+  return res;
 }
 
 int Client::readdir_r(DIR *d, struct dirent *de)
@@ -2219,11 +2253,12 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   DirResult *dirp = (DirResult*)d;
   
   while (1) {
-    if (dirp->is_end()) return -1;
+    if (dirp->at_end()) return -1;
 
     if (dirp->buffer.count(dirp->frag()) == 0) {
+      Mutex::Locker lock(client_lock);
       _readdir_get_frag(dirp);
-      if (dirp->is_end()) return -1;
+      if (dirp->at_end()) return -1;
     }
 
     frag_t fg = dirp->frag();
@@ -2268,10 +2303,7 @@ void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
     de->d_ino = 0;
   de->d_off = off + 1;
   de->d_reclen = 1;
-  if (entry->stmask) 
-    de->d_type = MODE_TO_DT(entry->st.st_mode);
-  else 
-    de->d_type = DT_UNKNOWN;
+  de->d_type = MODE_TO_DT(entry->st.st_mode);
   strncpy(de->d_name, entry->d_name.c_str(), 256);
 }
 
@@ -2281,6 +2313,7 @@ int Client::closedir(DIR *dir)
 
   DirResult *dirp = (DirResult*)dir;
   if (dirp->inode) {
+    Mutex::Locker lock(client_lock);
     put_inode(dirp->inode);
     dirp->inode = 0;
   }
@@ -2998,6 +3031,118 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   client_lock.Unlock();
   return 0;
 }
+
+
+
+
+// =========================================
+// low level
+
+int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr,
+		      double *attr_timeout, double *entry_timeout)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_lookp " << parent << " " << name << endl;
+
+  if (inode_map.count(parent) == 0) return -ENOENT;
+  Inode *diri = inode_map[parent];
+  if (!diri->inode.is_dir()) return -ENOTDIR;
+
+  string dname = name;
+
+  // refresh the dir?
+  //  FIXME: this is the hackish way.
+  if (!diri->dir ||
+      diri->dir->dentries.count(dname) == 0) {
+    string path;
+    diri->make_path(path);
+    DirResult *dirp = new DirResult(path, diri);
+
+    while (1) {
+      hash<string> H;
+      dirp->set_frag(diri->dirfragtree[H(dname)]);
+
+      dout(10) << "ll_lookup fetching frag " << dirp->frag() << " for " << name << endl;
+      int r = _readdir_get_frag(dirp);
+      if (r < 0) return r;
+
+      if (dirp->buffer.count(diri->dirfragtree[H(dname)])) break;
+      dirp->buffer.clear();
+    }
+
+    put_inode(diri);
+    dirp->inode = 0;
+    delete dirp;
+  }
+
+  // do we have it?
+  if (diri->dir &&
+      diri->dir->dentries.count(dname)) {
+    Inode *in = diri->dir->dentries[dname]->inode;
+    attr->st_ino = in->inode.ino;
+    attr->st_mode = in->inode.mode;
+    attr_timeout = 0;
+    entry_timeout = 0;
+    in->get();
+    dout(3) << "ll_lookup " << parent << " " << name << " -> " << in->inode.ino << endl;
+    return 0;
+  } else {
+    return -ENOENT;
+  }
+}
+
+void Client::ll_forget(inodeno_t ino, int num)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_forget " << ino << " " << num << endl;
+  if (inode_map.count(ino) == 0) {
+    dout(1) << "WARNING: ll_forget on " << ino << " " << num 
+	    << ", which I don't have" << endl;
+  } else {
+    Inode *in = inode_map[ino];
+    assert(in);
+    put_inode(in, num);
+  }
+}
+
+int Client::ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_getattr " << ino << endl;
+  Inode *in;
+  if (inode_map.count(ino) == 0) {
+    assert(ino == 1);  // must be the root inode.
+    int r = _lstat("/", 0, &in);
+    if (r < 0) return r;
+  } else {
+    in = inode_map[ino];
+  }
+  assert(in);
+  fill_stat(in, st);
+  return 0;
+}
+
+int Client::ll_opendir(inodeno_t ino, void **dirpp)
+{
+  string path;
+  {
+    Mutex::Locker lock(client_lock);
+    dout(3) << "ll_opendir " << ino << endl;
+    Inode *diri = inode_map[ino];
+    assert(diri);
+    diri->make_path(path);
+  }
+  DIR *dir;
+  int r = opendir(path.c_str(), &dir);
+  if (r < 0) return r;
+  *dirpp = (void*)dir;
+  return 0;
+}
+
+
+
+
+
 
 
 // =========================================

@@ -227,8 +227,9 @@ reliability
 - osdmonitor, filter
 
 ebofs
+- allow holes
+
 - verify proper behavior of conflicting/overlapping reads of clones
-- test(fix) sync() 
 - combine inodes and/or cnodes into same blocks
 - allow btree sets instead of maps
 - eliminate nodepools

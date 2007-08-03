@@ -21,6 +21,7 @@ using namespace std;
 
 #include "client/Client.h"
 #include "client/fuse.h"
+#include "client/fuse_ll.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -67,7 +68,10 @@ int main(int argc, char **argv, char *envp[]) {
   client->mount();
   
   cerr << "starting fuse on pid " << getpid() << endl;
-  ceph_fuse_main(client, argc, argv);
+  if (g_conf.fuse_ll)
+    ceph_fuse_ll_main(client, argc, argv);
+  else
+    ceph_fuse_main(client, argc, argv);
   cerr << "fuse finished on pid " << getpid() << endl;
   
   client->unmount();

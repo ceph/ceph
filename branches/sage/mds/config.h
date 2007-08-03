@@ -158,6 +158,7 @@ struct md_config_t {
 
   int      client_trace;
   int      fuse_direct_io;
+  bool fuse_ll;
 
   // objecter
   bool  objecter_buffer_uncommitted;

@@ -27,6 +27,7 @@ using namespace std;
 #include "osd/OSD.h"
 #include "client/Client.h"
 #include "client/fuse.h"
+#include "client/fuse_ll.h"
 
 #include "common/Timer.h"
 
@@ -132,7 +133,10 @@ int main(int argc, char **argv) {
     client[i]->mount();
 
     char *oldcwd = get_current_dir_name();  // note previous wd
-    ceph_fuse_main(client[i], argc, argv);
+    if (g_conf.fuse_ll)
+      ceph_fuse_ll_main(client[i], argc, argv);
+    else
+      ceph_fuse_main(client[i], argc, argv);
     ::chdir(oldcwd);                        // return to previous wd
 
     client[i]->unmount();

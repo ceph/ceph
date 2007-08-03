@@ -140,13 +140,13 @@ cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
+cfuse: cfuse.cc client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
 
 # fake*
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o

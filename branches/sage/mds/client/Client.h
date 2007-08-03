@@ -174,8 +174,8 @@ class Inode {
     ref++; 
     //cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
   }
-  void put() { 
-    ref--; assert(ref >= 0); 
+  void put(int n=1) { 
+    ref -= n; assert(ref >= 0); 
     //cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
   }
 
@@ -339,7 +339,12 @@ class Client : public Dispatcher {
     off_t offset;   // high bits: frag_t, low bits: an offset
     map<frag_t, vector<DirEntry> > buffer;
 
-    DirResult(const char *p, Inode *i) : path(p), inode(i), offset(0) { }
+    DirResult(const char *p, Inode *in=0) : path(p), inode(in), offset(0) { 
+      if (inode) inode->get();
+    }
+    DirResult(const string &p, Inode *in=0) : path(p), inode(in), offset(0) { 
+      if (inode) inode->get();
+    }
 
     frag_t frag() { return frag_t(offset >> SHIFT); }
     unsigned fragpos() { return offset & MASK; }
@@ -355,7 +360,7 @@ class Client : public Dispatcher {
       offset = (uint64_t)f << SHIFT;
     }
     void set_end() { offset = END; }
-    bool is_end() { return (offset == END); }
+    bool at_end() { return (offset == END); }
   };
 
 
@@ -469,8 +474,8 @@ protected:
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
-  void put_inode(Inode *in) {
-    in->put();
+  void put_inode(Inode *in, int n=1) {
+    in->put(n);
     if (in->ref == 0) {
       inode_map.erase(in->inode.ino);
       if (in == root) root = 0;
@@ -646,10 +651,11 @@ public:
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_add_dirent(DirResult *dirp, const string& name);
+  void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
   bool _readdir_have_frag(DirResult *dirp);
-  void _readdir_get_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
+  void _readdir_rechoose_frag(DirResult *dirp);
+  int _readdir_get_frag(DirResult *dirp);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
 
   int opendir(const char *name, DIR **dirpp);
@@ -711,6 +717,13 @@ public:
   int get_stripe_period(int fd);
   int enumerate_layout(int fd, list<ObjectExtent>& result,
 		       off_t length, off_t offset);
+
+  // low-level interface
+  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, 
+		double *attr_timeout, double *entry_timeout);
+  void ll_forget(inodeno_t ino, int count);
+  int ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout);
+  int ll_opendir(inodeno_t ino, void **dirpp);
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

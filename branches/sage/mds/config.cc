@@ -159,6 +159,7 @@ md_config_t g_conf = {
 
   client_trace: 0,
   fuse_direct_io: 0,
+  fuse_ll: false,
   
   // --- objecter ---
   objecter_buffer_uncommitted: true,
@@ -691,8 +692,11 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.client_cache_readdir_ttl = atoi(args[++i]);
     else if (strcmp(args[i], "--client_trace") == 0)
       g_conf.client_trace = atoi(args[++i]);
+
     else if (strcmp(args[i], "--fuse_direct_io") == 0)
       g_conf.fuse_direct_io = atoi(args[++i]);
+    else if (strcmp(args[i], "--fuse_ll") == 0)
+      g_conf.fuse_ll = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);

@@ -47,13 +47,8 @@
 
 #include "config.h"
 
-// stl
-#include <map>
-using namespace std;
-
-
 // globals
-Client *client;     // the ceph client
+static Client *client;     // the ceph client
 
 
 

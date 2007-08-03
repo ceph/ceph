@@ -1992,8 +1992,12 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 {
   dout(1) << "import_find " << base << " from " << find << " data=" << data << endl;
 
-  /* use this to gather the trace:
-   * find . -exec ls -dilsn --time-style=+%s \{\} \;
+  /* use this to gather the static trace:
+   *
+   *  find . -exec ls -dilsn --time-style=+%s \{\} \;
+   * or if it's wafl,
+   *  find . -path ./.snapshot -prune -o -exec ls -dilsn --time-style=+%s \{\} \;
+   *
    */
 
   client->mkdir(base, 0755);
