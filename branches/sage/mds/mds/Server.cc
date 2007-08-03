@@ -1602,6 +1602,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   assert(newi);
 
   // it's a file.
+  newi->inode.rdev = req->args.mknod.rdev;
   newi->inode.mode = req->args.mknod.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;

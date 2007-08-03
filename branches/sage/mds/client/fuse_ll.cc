@@ -66,6 +66,16 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
     fuse_reply_err(req, ENOENT);
 }
 
+static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
+			    int to_set, struct fuse_file_info *fi)
+{
+  int r = client->ll_setattr(ino, attr, to_set);
+  if (r == 0)
+    fuse_reply_attr(req, attr, 0);
+  else
+    fuse_reply_err(req, -r);
+}
+
 static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   void *dirp;
@@ -73,6 +83,60 @@ static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
   if (r >= 0) {
     fi->fh = (long)dirp;
     fuse_reply_open(req, fi);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
+static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
+{
+  const char *value;
+  int r = client->ll_readlink(ino, &value);
+  if (r == 0) 
+    fuse_reply_readlink(req, value);
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+			  mode_t mode, dev_t rdev)
+{
+  struct fuse_entry_param fe;
+  memset(&fe, 0, sizeof(fe));
+
+  int r = client->ll_mknod(parent, name, mode, rdev, &fe.attr);
+  if (r == 0) {
+    fe.ino = fe.attr.st_ino;
+    fuse_reply_entry(req, &fe);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
+static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
+			  mode_t mode)
+{
+  struct fuse_entry_param fe;
+  memset(&fe, 0, sizeof(fe));
+
+  int r = client->ll_mkdir(parent, name, mode, &fe.attr);
+  if (r == 0) {
+    fe.ino = fe.attr.st_ino;
+    fuse_reply_entry(req, &fe);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
+static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
+{
+  struct fuse_entry_param fe;
+  memset(&fe, 0, sizeof(fe));
+
+  int r = client->ll_symlink(parent, name, existing, &fe.attr);
+  if (r == 0) {
+    fe.ino = fe.attr.st_ino;
+    fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
   }
@@ -107,10 +171,14 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     if (r < 0) break;
     st.st_ino = de.d_ino;
     st.st_mode = DT_TO_MODE(de.d_type);
-    
+
     off_t off = client->telldir(dirp);
     size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
 					 de.d_name, &st, off);
+
+    cout << "ceph_ll_readdir added " << de.d_name << " at " << buf + pos << " len " << entrysize
+	 << " (buffer size is " << size << ")" << endl;
+    
     if (entrysize > size - pos) 
       break;  // didn't fit, done for now.
     pos += entrysize;
@@ -134,13 +202,13 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  lookup: ceph_ll_lookup,
  forget: ceph_ll_forget,
  getattr: ceph_ll_getattr,
- setattr: 0,
- readlink: 0,
- mknod: 0,
- mkdir: 0,
+ setattr: ceph_ll_setattr,
+ readlink: ceph_ll_readlink,
+ mknod: ceph_ll_mknod,
+ mkdir: ceph_ll_mkdir,
  unlink: 0,
  rmdir: 0,
- symlink: 0,
+ symlink: ceph_ll_symlink,
  rename: 0,
  link: 0,
  open: 0,

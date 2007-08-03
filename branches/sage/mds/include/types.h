@@ -238,6 +238,7 @@ struct inode_t {
   // base (immutable)
   inodeno_t ino;
   FileLayout layout;  // ?immutable?
+  dev_t      rdev;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time

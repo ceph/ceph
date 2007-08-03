@@ -55,6 +55,7 @@ using namespace std;
 #include "common/Logger.h"
 
 
+
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami << "." << pthread_self() << " "
@@ -1584,8 +1585,12 @@ int Client::rename(const char *relfrom, const char *relto)
 
 int Client::mkdir(const char *relpath, mode_t mode)
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _mkdir(relpath, mode);
+}
 
+int Client::_mkdir(const char *relpath, mode_t mode)
+{
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
@@ -1613,7 +1618,6 @@ int Client::mkdir(const char *relpath, mode_t mode)
   dout(10) << "mkdir result is " << res << endl;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
@@ -1664,8 +1668,12 @@ int Client::rmdir(const char *relpath)
   
 int Client::symlink(const char *reltarget, const char *rellink)
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _symlink(reltarget, rellink);
+}
 
+int Client::_symlink(const char *reltarget, const char *rellink)
+{
   string abstarget;
   mkabspath(reltarget, abstarget);
   const char *target = abstarget.c_str();
@@ -1696,7 +1704,6 @@ int Client::symlink(const char *reltarget, const char *rellink)
   dout(10) << "symlink result is " << res << endl;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
@@ -1796,6 +1803,7 @@ int Client::fill_stat(Inode *in, struct stat *st)
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
   st->st_mode = in->inode.mode;
+  st->st_rdev = in->inode.rdev;
   st->st_nlink = in->inode.nlink;
   st->st_uid = in->inode.uid;
   st->st_gid = in->inode.gid;
@@ -1885,8 +1893,12 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
 
 int Client::chmod(const char *relpath, mode_t mode)
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _chmod(relpath, mode);
+}
 
+int Client::_chmod(const char *relpath, mode_t mode) 
+{
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
@@ -1912,14 +1924,17 @@ int Client::chmod(const char *relpath, mode_t mode)
   dout(10) << "chmod result is " << res << endl;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
 int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _chown(relpath, uid, gid);
+}
 
+int Client::_chown(const char *relpath, uid_t uid, gid_t gid)
+{
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
@@ -1929,7 +1944,6 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << path << endl;
   tout << uid << endl;
   tout << gid << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
@@ -1949,32 +1963,32 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   dout(10) << "chown result is " << res << endl;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
 int Client::utime(const char *relpath, struct utimbuf *buf)
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _utime(relpath, utime_t(buf->modtime,0), utime_t(buf->actime,0));
+}
 
+int Client::_utime(const char *relpath, utime_t mtime, utime_t atime)
+{
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
 
-  dout(3) << "op: utim.actime = " << buf->actime << "; utim.modtime = " << buf->modtime << ";" << endl;
+  dout(3) << "op: utim.actime = " << mtime << "; utim.modtime = " << atime << ";" << endl;
   dout(3) << "op: client->utime(\"" << path << "\", &utim);" << endl;
   tout << "utime" << endl;
   tout << path << endl;
-  tout << buf->actime << endl;
-  tout << buf->modtime << endl;
-
+  tout << mtime.sec() << endl;
+  tout << atime.sec() << endl;
 
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->args.utime.mtime.tv_sec = buf->modtime;
-  req->args.utime.mtime.tv_usec = 0;
-  req->args.utime.atime.tv_sec = buf->actime;
-  req->args.utime.atime.tv_usec = 0;
+  req->args.utime.mtime = mtime.tv_ref();
+  req->args.utime.atime = atime.tv_ref();
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1989,16 +2003,19 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   dout(10) << "utime result is " << res << endl;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
 
 
-int Client::mknod(const char *relpath, mode_t mode) 
+int Client::mknod(const char *relpath, mode_t mode, dev_t rdev) 
 { 
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _mknod(relpath, mode, rdev);
+}
 
+int Client::_mknod(const char *relpath, mode_t mode, dev_t rdev) 
+{ 
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
@@ -2008,10 +2025,10 @@ int Client::mknod(const char *relpath, mode_t mode)
   tout << path << endl;
   tout << mode << endl;
 
-
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
   req->args.mknod.mode = mode;
+  req->args.mknod.rdev = rdev;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2028,7 +2045,6 @@ int Client::mknod(const char *relpath, mode_t mode)
   delete reply;
 
   trim_cache();
-  client_lock.Unlock();
   return res;
 }
 
@@ -2873,12 +2889,16 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 
 int Client::truncate(const char *file, off_t length) 
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
+  return _truncate(file, length);
+}
+
+int Client::_truncate(const char *file, off_t length) 
+{
   dout(3) << "op: client->truncate(\"" << file << "\", " << length << ");" << endl;
   tout << "truncate" << endl;
   tout << file << endl;
   tout << length << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
   req->set_path(file); 
@@ -2895,7 +2915,6 @@ int Client::truncate(const char *file, off_t length)
 
   dout(10) << " truncate result is " << res << endl;
 
-  client_lock.Unlock();
   return res;
 }
 
@@ -3038,11 +3057,19 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 // =========================================
 // low level
 
+// ugly hack for ll
+#define FUSE_SET_ATTR_MODE	(1 << 0)
+#define FUSE_SET_ATTR_UID	(1 << 1)
+#define FUSE_SET_ATTR_GID	(1 << 2)
+#define FUSE_SET_ATTR_SIZE	(1 << 3)
+#define FUSE_SET_ATTR_ATIME	(1 << 4)
+#define FUSE_SET_ATTR_MTIME	(1 << 5)
+
 int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr,
 		      double *attr_timeout, double *entry_timeout)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_lookp " << parent << " " << name << endl;
+  dout(3) << "ll_lookup " << parent << " " << name << endl;
 
   if (inode_map.count(parent) == 0) return -ENOENT;
   Inode *diri = inode_map[parent];
@@ -3095,6 +3122,9 @@ void Client::ll_forget(inodeno_t ino, int num)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_forget " << ino << " " << num << endl;
+
+  if (ino == 1) return;  // ignore forget on root.
+
   if (inode_map.count(ino) == 0) {
     dout(1) << "WARNING: ll_forget on " << ino << " " << num 
 	    << ", which I don't have" << endl;
@@ -3105,22 +3135,125 @@ void Client::ll_forget(inodeno_t ino, int num)
   }
 }
 
+Inode *Client::_ll_get_inode(inodeno_t ino)
+{
+  if (inode_map.count(ino) == 0) {
+    assert(ino == 1);  // must be the root inode.
+    Inode *in;
+    int r = _lstat("/", 0, &in);
+    assert(r >= 0);
+    return in;
+  } else {
+    return inode_map[ino];
+  }
+}
+
+
 int Client::ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_getattr " << ino << endl;
-  Inode *in;
-  if (inode_map.count(ino) == 0) {
-    assert(ino == 1);  // must be the root inode.
-    int r = _lstat("/", 0, &in);
-    if (r < 0) return r;
-  } else {
-    in = inode_map[ino];
-  }
-  assert(in);
+  Inode *in = _ll_get_inode(ino);
   fill_stat(in, st);
   return 0;
 }
+
+int Client::ll_setattr(inodeno_t ino, struct stat *st, int mask)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_setattr " << ino << endl;
+  Inode *in = _ll_get_inode(ino);
+
+  string path;
+  in->make_path(path);
+
+  int r;
+  if ((mask & FUSE_SET_ATTR_MODE) &&
+      (r = _chmod(path.c_str(), st->st_mode) < 0)) return r;
+  if ((mask & FUSE_SET_ATTR_UID) &&
+      (r = _chown(path.c_str(), st->st_uid, st->st_gid) < 0)) return r;
+  //if ((mask & FUSE_SET_ATTR_GID) &&
+  //(r = client->_chgrp(path.c_str(), st->st_gid) < 0)) return r;
+  if ((mask & FUSE_SET_ATTR_SIZE) &&
+      (r = _truncate(path.c_str(), st->st_size) < 0)) return r;
+  if ((mask & FUSE_SET_ATTR_MTIME) &&
+      (r = _utime(path.c_str(), utime_t(st->st_mtime,0), utime_t()) < 0)) return r;
+  if ((mask & FUSE_SET_ATTR_ATIME) &&
+      (r = _utime(path.c_str(), utime_t(), utime_t(st->st_atime,0)) < 0)) return r;
+  
+  return 0;
+}
+
+int Client::ll_readlink(inodeno_t ino, const char **value)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_readlink " << ino << endl;
+  Inode *in = _ll_get_inode(ino);
+  if (in->inode.is_symlink()) {
+    *value = in->symlink->c_str();
+    return 0;
+  } else {
+    return -EINVAL;
+  }
+}
+
+int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, struct stat *attr)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_mknod " << parent << " " << name << " -> " << value << endl;
+  Inode *diri = _ll_get_inode(parent);
+
+  string path;
+  diri->make_path(path);
+  path += "/";
+  path += name;
+  int r = _symlink(value, path.c_str());
+  if (r < 0) return r;
+
+  string dname(name);
+  Inode *in = diri->dir->dentries[dname]->inode;
+  fill_stat(in, attr);
+  return 0;
+}
+
+int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev, struct stat *attr)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_mknod " << parent << " " << name << endl;
+  Inode *diri = _ll_get_inode(parent);
+
+  string path;
+  diri->make_path(path);
+  path += "/";
+  path += name;
+  int r = _mknod(path.c_str(), mode, rdev);
+  if (r < 0) return r;
+
+  string dname(name);
+  Inode *in = diri->dir->dentries[dname]->inode;
+  fill_stat(in, attr);
+  return 0;
+}
+
+int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct stat *attr)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_mkdir " << parent << " " << name << endl;
+  Inode *diri = _ll_get_inode(parent);
+
+  string path;
+  diri->make_path(path);
+  path += "/";
+  path += name;
+  int r = _mkdir(path.c_str(), mode);
+  if (r < 0) return r;
+
+  string dname(name);
+  Inode *in = diri->dir->dentries[dname]->inode;
+  fill_stat(in, attr);
+  return 0;
+}
+
 
 int Client::ll_opendir(inodeno_t ino, void **dirpp)
 {

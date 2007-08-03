@@ -591,7 +591,7 @@ int SyntheticClient::run()
       {
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {
-	  client->mknod("test",0777);
+	  client->mknod("test", 0777);
 	  struct stat st;
 	  for (int i=0; i<count; i++) {
 	    client->lstat("test", &st);

@@ -63,6 +63,8 @@ class utime_t {
   // is just casting it to long& OK? 
   long&           usec_ref() { return (long&) tv.tv_usec; }
 
+  struct timeval& tv_ref() { return tv; }
+
   // cast to double
   operator double() {
     return (double)sec() + ((double)usec() / 1000000.0L);

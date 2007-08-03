@@ -678,11 +678,13 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
+  int _mkdir(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks
   int readlink(const char *path, char *buf, off_t size);
   int symlink(const char *existing, const char *newname);
+  int _symlink(const char *existing, const char *newname);
 
   // inode stuff
   int _lstat(const char *path, int mask, Inode **in);
@@ -690,11 +692,15 @@ public:
   int lstatlite(const char *path, struct statlite *buf);
 
   int chmod(const char *path, mode_t mode);
+  int _chmod(const char *relpath, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
+  int _chown(const char *relpath, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
-  
+  int _utime(const char *relpath, utime_t mtime, utime_t atime);
+
   // file ops
-  int mknod(const char *path, mode_t mode);
+  int mknod(const char *path, mode_t mode, dev_t rdev=0);
+  int _mknod(const char *path, mode_t mode, dev_t rdev);
   int open(const char *path, int flags, mode_t mode=0);
   int close(fh_t fh);
   off_t lseek(fh_t fh, off_t offset, int whence);
@@ -702,7 +708,7 @@ public:
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int fake_write_size(fh_t fh, off_t size);
   int truncate(const char *file, off_t size);
-    //int truncate(fh_t fh, long long size);
+  int _truncate(const char *file, off_t length);
   int fsync(fh_t fh, bool syncdataonly);
 
 
@@ -722,8 +728,14 @@ public:
   int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, 
 		double *attr_timeout, double *entry_timeout);
   void ll_forget(inodeno_t ino, int count);
+  Inode *_ll_get_inode(inodeno_t ino);
   int ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout);
+  int ll_setattr(inodeno_t ino, struct stat *st, int mask);
   int ll_opendir(inodeno_t ino, void **dirpp);
+  int ll_readlink(inodeno_t ino, const char **value);
+  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr);
+  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr);
+  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr);
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);
