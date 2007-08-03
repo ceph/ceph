@@ -1,3 +1,12 @@
+#
+# until autoconf is set up, here are the options i understand:
+#
+#  darwin=yes    -- build on darwin
+#  fuse=no       -- don't build anything requiring FUSE
+#  mpi=no        -- don't build newsyn (require MPI)
+#  use_ccpp=yes  -- use Common C++ for buffer.h reference counting
+#  want_bdb=yes  -- build berkelydb objectstore
+# 
 
 # mpicxx must be on your path to build newsyn.  
 #  on googoo, this means that /usr/local/mpich2-1.0.2/bin must be on your path.
@@ -108,15 +117,20 @@ OSBDB_OBJS = \
 	osbdb/OSBDB.o
 endif
 
-TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cmonctl cfuse fakefuse
-NO_FUSE = cmon cosd cmds csyn newsyn fakesyn mkmonmap
 
-
+# targets
+TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
-all: depend ${TARGETS}
+ifneq ($(fuse),no)
+TARGETS += cfuse fakefuse
+endif
 
-nofuse: depend ${NO_FUSE}
+ifneq ($(mpi),no)
+TARGETS += newsyn
+endif
+
+all: depend ${TARGETS}
 
 test: depend ${TEST_TARGETS}
 
@@ -174,6 +188,7 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleM
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
 	${LDINC} $^ -o $@
 
+# some benchmarking tools
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
 
@@ -183,19 +198,11 @@ mdtest: bench/mdtest/mdtest.o
 mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-# OSD test
-
 testos: test/testos.o ebofs.o osbdb.o common.o
 	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
 
-#
 
-%.so: %.cc
-	${CC} -shared -fPIC ${CFLAGS} $< -o $@
-
-clean:
-	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
-
+# bits
 common.o: ${COMMON_OBJS}
 	${LDINC} $@ $^
 
@@ -220,11 +227,21 @@ mon.o: ${MON_OBJS}
 osbdb.o: ${OSBDB_OBJS}
 	${LDINC} $@ $^
 
+
+# generic rules
+%.so: %.cc
+	${CC} -shared -fPIC ${CFLAGS} $< -o $@
+
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
+
+
+# handy
+clean:
+	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 count:
 	cat ${SRCS} | wc -l
@@ -239,6 +256,7 @@ TAGS:
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
+
 
 # now add a line to include the dependency list.
 include .depend
