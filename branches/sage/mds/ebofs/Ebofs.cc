@@ -30,8 +30,8 @@
 // *******************
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << dev.get_device_name() << ")."
-#define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << dev.get_device_name() << ")."
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
+#define derr(x) if (x <= g_conf.debug_ebofs) cerr << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
 
 
 char *nice_blocks(block_t b) 
@@ -124,31 +124,31 @@ int Ebofs::mount()
   if (journalfn) {
     journal = new FileJournal(this, journalfn);
     if (journal->open() < 0) {
-      dout(-3) << "mount journal " << journalfn << " open failed" << endl;
+      dout(3) << "mount journal " << journalfn << " open failed" << endl;
       delete journal;
       journal = 0;
     } else {
-      dout(-3) << "mount journal " << journalfn << " opened, replaying" << endl;
+      dout(3) << "mount journal " << journalfn << " opened, replaying" << endl;
       
       while (1) {
 	bufferlist bl;
 	epoch_t e;
 	if (!journal->read_entry(bl, e)) {
-	  dout(-3) << "mount replay: end of journal, done." << endl;
+	  dout(3) << "mount replay: end of journal, done." << endl;
 	  break;
 	}
 
 	if (e < super_epoch) {
-	  dout(-3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << endl;
+	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << endl;
 	  continue;
 	}
 	if (e == super_epoch+1) {
 	  super_epoch++;
-	  dout(-3) << "mount replay: jumped to next epoch " << super_epoch << endl;
+	  dout(3) << "mount replay: jumped to next epoch " << super_epoch << endl;
 	}
 	assert(e == super_epoch);
 	
-	dout(-3) << "mount replay: applying transaction in epoch " << e << endl;
+	dout(3) << "mount replay: applying transaction in epoch " << e << endl;
 	Transaction t;
 	int off = 0;
 	t._decode(bl, off);
@@ -161,7 +161,9 @@ int Ebofs::mount()
   commit_thread.create();
   finisher_thread.create();
 
-  dout(1) << "mounted " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(1) << "mounted " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks())
+	  << (journal ? ", with journal":", no journal")
+	  << endl;
   mounted = true;
 
 

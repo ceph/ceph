@@ -23,18 +23,18 @@
 
 #include "config.h"
 #undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << ebofs->dev.get_device_name() << ").journal "
-#define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << ebofs->dev.get_device_name() << ").journal "
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
+#define derr(x) if (x <= g_conf.debug_ebofs) cerr << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
 
 
 int FileJournal::create()
 {
-  dout(1) << "create " << fn << endl;
+  dout(2) << "create " << fn << endl;
 
   // open/create
   fd = ::open(fn.c_str(), O_RDWR|O_SYNC);
   if (fd < 0) {
-    dout(1) << "create failed " << errno << " " << strerror(errno) << endl;
+    dout(2) << "create failed " << errno << " " << strerror(errno) << endl;
     return -errno;
   }
   assert(fd > 0);
@@ -45,7 +45,7 @@ int FileJournal::create()
   // get size
   struct stat st;
   ::fstat(fd, &st);
-  dout(1) << "open " << fn << " " << st.st_size << " bytes" << endl;
+  dout(2) << "create " << fn << " " << st.st_size << " bytes" << endl;
 
   // write empty header
   memset(&header, 0, sizeof(header));
@@ -71,7 +71,7 @@ int FileJournal::open()
   assert(fd == 0);
   fd = ::open(fn.c_str(), O_RDWR|O_SYNC);
   if (fd < 0) {
-    dout(1) << "open failed " << errno << " " << strerror(errno) << endl;
+    dout(2) << "open failed " << errno << " " << strerror(errno) << endl;
     return -errno;
   }
   assert(fd > 0);
@@ -83,7 +83,7 @@ int FileJournal::open()
   // read header?
   read_header();
   if (header.fsid != ebofs->get_fsid()) {
-    dout(2) << "journal fsid doesn't match, invalid (someone else's?) journal" << endl;
+    dout(2) << "open journal fsid doesn't match, invalid (someone else's?) journal" << endl;
   } 
   else if (header.num > 0) {
     // valid header, pick an offset

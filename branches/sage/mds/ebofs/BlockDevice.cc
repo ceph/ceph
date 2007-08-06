@@ -62,8 +62,8 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
  */
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ").elevatorq."
-#define derr(x) if (x <= g_conf.debug_bdev) cerr << "bdev(" << dev << ").elevatorq."
+#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ").elevatorq."
+#define derr(x) if (x <= g_conf.debug_bdev) cerr << g_clock.now() << " bdev(" << dev << ").elevatorq."
 
 
 int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
@@ -211,7 +211,7 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
  * BarrierQueue
  */
 #undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ").barrierq."
+#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ").barrierq."
 
 void BlockDevice::BarrierQueue::barrier()
 {
@@ -259,7 +259,7 @@ int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols,
  */
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ")."
+#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ")."
 
 
 
@@ -275,10 +275,10 @@ block_t BlockDevice::get_num_blocks()
     r = ioctl(fd, BLKGETSIZE64, &bytes);
     num_blocks = bytes / (uint64_t)EBOFS_BLOCK_SIZE;
     if (r == 0) {
-      dout(1) << "get_num_blocks ioctl BLKGETSIZE64 reports "
-	      << num_blocks << " 4k blocks, " 
-	      << bytes << " bytes" 
-	      << endl;
+      dout(10) << "get_num_blocks ioctl BLKGETSIZE64 reports "
+	       << num_blocks << " 4k blocks, " 
+	       << bytes << " bytes" 
+	       << endl;
 #else
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
@@ -286,8 +286,8 @@ block_t BlockDevice::get_num_blocks()
     num_blocks = sectors/8ULL;
     bytes = sectors*512ULL;
     if (r == 0) {
-      dout(1) << "get_num_blocks ioctl BLKGETSIZE reports " << sectors << " sectors, "
-	      << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
+      dout(10) << "get_num_blocks ioctl BLKGETSIZE reports " << sectors << " sectors, "
+	       << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
 #endif
     } else {
       // hmm, try stat!
@@ -296,7 +296,7 @@ block_t BlockDevice::get_num_blocks()
       fstat(fd, &st);
       uint64_t bytes = st.st_size;
       num_blocks = bytes / EBOFS_BLOCK_SIZE;
-      dout(1) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
+      dout(10) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
     }
     
     if (g_conf.bdev_fake_mb) {
