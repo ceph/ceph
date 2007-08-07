@@ -2024,6 +2024,10 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     f >> mtime;
     f.seekg(1, ios::cur);
     getline(f, filename);
+
+    // remove leading ./
+    if (filename[0] == '.' && filename[1] == '/')
+      filename = filename.substr(2);
     
     // parse the mode
     assert(modestring.length() == 10);

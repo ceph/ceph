@@ -378,7 +378,11 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
 void CInode::name_stray_dentry(string& dname)
 {
   char s[20];
+#ifdef __LP64__
   sprintf(s, "%ld", inode.ino.val);
+#else
+  sprintf(s, "%lld", inode.ino.val);
+#endif
   dname = s;
 }
 

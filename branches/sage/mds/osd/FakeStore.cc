@@ -307,10 +307,11 @@ int FakeStore::write(object_t oid,
                      const bufferlist& bl, 
                      Context *onsafe)
 {
-  dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
-
   char fn[200];
   get_oname(oid,fn);
+
+  dout(20) << "write " << fn << " len " << len << " off " << offset << endl;
+
   
   ::mknod(fn, 0644, 0);  // in case it doesn't exist yet.
 
@@ -547,10 +548,9 @@ int FakeStore::list_collections(list<coll_t>& ls)
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
+    errno = 0;
     coll_t c = strtoll(de->d_name, 0, 16);
-    dout(0) << " got " << c << " errno " << errno << " on " << de->d_name << endl;
-    if (errno) continue;
-    ls.push_back(c);
+    if (c) ls.push_back(c);
   }
   
   ::closedir(dir);

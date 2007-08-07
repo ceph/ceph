@@ -1288,7 +1288,7 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Lock();
   dout(10) << "handle_ms_failure to " << inst << " on " << *m << endl;
   
-  if (m->get_type() == MSG_CLIENT_RECONNECT) 
+  if (m->get_type() == MSG_MDS_MAP && m->get_dest().is_client()) 
     server->client_reconnect_failure(m->get_dest().num());
 
   delete m;

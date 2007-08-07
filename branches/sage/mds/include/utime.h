@@ -133,7 +133,7 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
     time_t tt = t.sec();
     localtime_r(&tt, &bdt);
     out << std::setw(2) << (bdt.tm_year-100)  // 2007 -> '07'
-	<< std::setw(2) << bdt.tm_mon
+	<< std::setw(2) << (bdt.tm_mon+1)
 	<< std::setw(2) << bdt.tm_mday
 	<< "."
 	<< std::setw(2) << bdt.tm_hour

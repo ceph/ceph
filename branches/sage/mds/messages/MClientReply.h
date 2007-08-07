@@ -52,14 +52,6 @@ class CInode;
 
 class InodeStat {
  public:
-  const static int MASK_INO = 1;
-  const static int MASK_TYPE = 2;
-  const static int MASK_BASE = 4;
-  const static int MASK_AUTH = 8;
-  const static int MASK_LINK = 16;
-  const static int MASK_FILE = 32;
-  const static int MASK_ALL = 0xffff;
-
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
@@ -73,12 +65,13 @@ class InodeStat {
  public:
   InodeStat() {}
   InodeStat(CInode *in, int whoami) :
-    inode(in->inode)
+    inode(in->inode),
+    mask(STAT_MASK_INO|STAT_MASK_TYPE|STAT_MASK_BASE)
   {
-    // inode.mask
-    if (!in->authlock.can_rdlock(0)) mask &= ~MASK_AUTH;
-    if (!in->linklock.can_rdlock(0)) mask &= ~MASK_LINK;
-    if (!in->filelock.can_rdlock(0)) mask &= ~MASK_FILE;
+    // mask
+    if (in->authlock.can_rdlock(0)) mask |= STAT_MASK_AUTH;
+    if (in->linklock.can_rdlock(0)) mask |= STAT_MASK_LINK;
+    if (in->filelock.can_rdlock(0)) mask |= STAT_MASK_FILE;
     
     // symlink content?
     if (in->is_symlink()) 

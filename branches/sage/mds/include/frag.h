@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <map>
 #include <list>
+#include <iostream>
 #include "buffer.h"
 
 /*
@@ -83,7 +84,8 @@ class frag_t {
   // accessors
   unsigned value() const { return _enc & 0xffffff; }
   unsigned bits() const { return _enc >> 24; }
-  unsigned mask() const { return 0xffffffffUL >> (32-bits()); }
+  unsigned mask() const { return 0xffffffffULL >> (32-bits()); }
+
   operator _frag_t() const { return _enc; }
 
   // tests
@@ -103,7 +105,7 @@ class frag_t {
   }
 
   // splitting
-  void split(int nb, list<frag_t>& fragments) const {
+  void split(int nb, std::list<frag_t>& fragments) const {
     assert(nb > 0);
     unsigned nway = 1 << nb;
     for (unsigned i=0; i<nway; i++) 
@@ -146,9 +148,9 @@ class frag_t {
   }
 };
 
-inline ostream& operator<<(ostream& out, frag_t hb)
+inline std::ostream& operator<<(std::ostream& out, frag_t hb)
 {
-  return out << hex << hb.value() << dec << "/" << hb.bits();
+  return out << std::hex << hb.value() << std::dec << "/" << hb.bits();
 }
 
 
@@ -183,7 +185,7 @@ class fragtree_t {
 
   
   bool is_leaf(frag_t x) const {
-    list<frag_t> ls;
+    std::list<frag_t> ls;
     get_leaves_under_split(x, ls);
     if (!ls.empty() &&
 	ls.front() == x)
@@ -194,15 +196,15 @@ class fragtree_t {
   /**
    * get_leaves -- list all leaves
    */
-  void get_leaves(list<frag_t>& ls) const {
+  void get_leaves(std::list<frag_t>& ls) const {
     return get_leaves_under_split(frag_t(), ls);
   }
 
   /**
    * get_leaves_under_split -- list all leaves under a known split point (or root)
    */
-  void get_leaves_under_split(frag_t under, list<frag_t>& ls) const {
-    list<frag_t> q;
+  void get_leaves_under_split(frag_t under, std::list<frag_t>& ls) const {
+    std::list<frag_t> q;
     q.push_back(under);
     while (!q.empty()) {
       frag_t t = q.front();
@@ -260,8 +262,8 @@ class fragtree_t {
   /**
    * get_leaves_under(x, ls) -- search for any leaves fully contained by x
    */
-  void get_leaves_under(frag_t x, list<frag_t>& ls) const {
-    list<frag_t> q;
+  void get_leaves_under(frag_t x, std::list<frag_t>& ls) const {
+    std::list<frag_t> q;
     q.push_back(get_branch(x));
     while (!q.empty()) {
       frag_t t = q.front();
@@ -281,7 +283,7 @@ class fragtree_t {
    * contains(fg) -- does fragtree contain the specific frag @x
    */
   bool contains(frag_t x) const {
-    list<frag_t> q;
+    std::list<frag_t> q;
     q.push_back(get_branch(x));
     while (!q.empty()) {
       frag_t t = q.front();
@@ -353,10 +355,10 @@ class fragtree_t {
   void try_assimilate_children(frag_t x) {
     int nb = get_split(x);
     if (!nb) return;
-    list<frag_t> children;
+    std::list<frag_t> children;
     x.split(nb, children);
     int childbits = 0;
-    for (list<frag_t>::iterator p = children.begin();
+    for (std::list<frag_t>::iterator p = children.begin();
 	 p != children.end();
 	 ++p) {
       int cb = get_split(*p);
@@ -365,7 +367,7 @@ class fragtree_t {
       childbits = cb;
     }
     // all children are split with childbits!
-    for (list<frag_t>::iterator p = children.begin();
+    for (std::list<frag_t>::iterator p = children.begin();
 	 p != children.end();
 	 ++p)
       _splits.erase(*p);
@@ -393,9 +395,9 @@ class fragtree_t {
       merge(parent, nb);
       split(parent, spread);
 
-      list<frag_t> subs;
+      std::list<frag_t> subs;
       parent.split(spread, subs);
-      for (list<frag_t>::iterator p = subs.begin();
+      for (std::list<frag_t>::iterator p = subs.begin();
 	   p != subs.end();
 	   ++p) 
 	split(*p, nb - spread);
@@ -403,7 +405,7 @@ class fragtree_t {
 
     // x is now a leaf or split.  
     // hoover up any children.
-    list<frag_t> q;
+    std::list<frag_t> q;
     q.push_back(x);
     while (!q.empty()) {
       frag_t t = q.front();
@@ -444,9 +446,9 @@ class fragtree_t {
     ::_decode(_splits, bl, off);
   }
 
-  void print(ostream& out) {
+  void print(std::ostream& out) {
     out << "fragtree_t(";
-    list<frag_t> q;
+    std::list<frag_t> q;
     q.push_back(frag_t());
     while (!q.empty()) {
       frag_t t = q.front();
@@ -468,11 +470,11 @@ class fragtree_t {
   }
 };
 
-inline ostream& operator<<(ostream& out, fragtree_t& ft)
+inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {
   out << "fragtree_t(";
   
-  list<frag_t> q;
+  std::list<frag_t> q;
   q.push_back(frag_t());
   while (!q.empty()) {
     frag_t t = q.front();
@@ -492,12 +494,12 @@ inline ostream& operator<<(ostream& out, fragtree_t& ft)
  * fragset_t -- a set of fragments
  */
 class fragset_t {
-  set<frag_t> _set;
+  std::set<frag_t> _set;
 
 public:
-  set<frag_t> &get() { return _set; }
-  set<frag_t>::iterator begin() { return _set.begin(); }
-  set<frag_t>::iterator end() { return _set.end(); }
+  std::set<frag_t> &get() { return _set; }
+  std::set<frag_t>::iterator begin() { return _set.begin(); }
+  std::set<frag_t>::iterator end() { return _set.end(); }
 
   bool empty() const { return _set.empty(); }
 
@@ -517,7 +519,7 @@ public:
   void simplify() {
     while (1) {
       bool clean = true;
-      set<frag_t>::iterator p = _set.begin();
+      std::set<frag_t>::iterator p = _set.begin();
       while (p != _set.end()) {
 	if (!p->is_root() &&
 	    _set.count(p->get_sibling())) {
@@ -535,7 +537,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, fragset_t& fs) 
+inline std::ostream& operator<<(std::ostream& out, fragset_t& fs) 
 {
   return out << "fragset_t(" << fs.get() << ")";
 }

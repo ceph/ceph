@@ -210,20 +210,21 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_INO        1    // inode
-#define INODE_MASK_TYPE       2   // file type bits of the mode
-#define INODE_MASK_BASE       4   // ino, layout, symlink value
-#define INODE_MASK_AUTH       8   // uid, gid, mode
-#define INODE_MASK_LINK       16   // nlink, anchored
-#define INODE_MASK_FILE       32  // mtime, size.
-// atime?
+/** stat masks
+ */
+#define STAT_MASK_INO        1   // inode nmber
+#define STAT_MASK_TYPE       2   // file type bits of the mode
+#define STAT_MASK_BASE       4   // layout, symlink value
+#define STAT_MASK_AUTH       8   // uid, gid, mode
+#define STAT_MASK_LINK       16   // nlink, anchored
+#define STAT_MASK_FILE       32  // mtime, size.
 
-#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_AUTH|INODE_MASK_LINK|INODE_MASK_FILE)
+#define STAT_MASK_ALL        63
 
-#define INODE_MASK_SIZE       INODE_MASK_FILE // size, blksize, blocks
-#define INODE_MASK_MTIME      INODE_MASK_FILE // mtime
-#define INODE_MASK_ATIME      INODE_MASK_FILE // atime
-#define INODE_MASK_CTIME      (INODE_MASK_FILE|INODE_MASK_AUTH|INODE_MASK_LINK) // ctime
+#define STAT_MASK_SIZE       STAT_MASK_FILE // size, blksize, blocks
+#define STAT_MASK_MTIME      STAT_MASK_FILE // mtime
+#define STAT_MASK_ATIME      STAT_MASK_FILE // atime
+#define STAT_MASK_CTIME      (STAT_MASK_FILE|STAT_MASK_AUTH|STAT_MASK_LINK) // ctime
 
 inline int DT_TO_MODE(int dt) {
   switch (dt) {

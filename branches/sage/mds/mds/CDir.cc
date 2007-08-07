@@ -801,7 +801,10 @@ void CDir::_fetched(bufferlist &bl)
 	   << ", " << len << " bytes"
 	   << endl;
   
-  while (off < len) {
+  int32_t n;
+  ::_decode(n, bl, off);
+
+  for (int i=0; i<n; i++) {
     off_t dn_offset = off;
 
     // marker
@@ -1052,7 +1055,9 @@ void CDir::_commit(version_t want)
   bufferlist bl;
 
   ::_encode(version, bl);
-  
+  int32_t n = nitems;
+  ::_encode(n, bl);
+
   for (CDir_map_t::iterator it = items.begin();
        it != items.end();
        it++) {
@@ -1061,6 +1066,8 @@ void CDir::_commit(version_t want)
     if (dn->is_null()) 
       continue;  // skip negative entries
     
+    n--;
+
     // primary or remote?
     if (dn->is_remote()) {
       inodeno_t ino = dn->get_remote_ino();
@@ -1091,6 +1098,7 @@ void CDir::_commit(version_t want)
       in->dirfragtree._encode(bl);
     }
   }
+  assert(n == 0);
 
   // write it.
   cache->mds->objecter->write( get_ondisk_object(),

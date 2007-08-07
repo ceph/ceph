@@ -35,6 +35,7 @@ using namespace std;
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2
 #define MDS_INO_ANCHORTABLE       3
+#define MDS_INO_PG                4       // this should match osd/osd_types.h PG_INO
 #define MDS_INO_LOG_OFFSET        0x100
 #define MDS_INO_IDS_OFFSET        0x200
 #define MDS_INO_CLIENTMAP_OFFSET  0x300

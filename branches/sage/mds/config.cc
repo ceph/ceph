@@ -140,7 +140,7 @@ md_config_t g_conf = {
   mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
 
   // --- client ---
-  client_cache_size: 300,
+  client_cache_size: 1000,
   client_cache_mid: .5,
   client_cache_stat_ttl: 0, // seconds until cached stat results become invalid
   client_cache_readdir_ttl: 1,  // 1 second only

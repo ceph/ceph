@@ -67,7 +67,7 @@ typedef uint64_t coll_t;        // collection id
 
 // pg stuff
 
-#define PG_INO 1
+#define PG_INO 4    // this should match mds/mdstypes.h MDS_INO_PG
 
 typedef uint16_t ps_t;
 typedef uint8_t pruleset_t;

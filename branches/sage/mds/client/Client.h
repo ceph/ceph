@@ -331,12 +331,12 @@ class Client : public Dispatcher {
 
   struct DirResult {
     static const int SHIFT = 28;
-    static const int MASK = 0xfffffff;
+    static const int64_t MASK = (1 << SHIFT) - 1;
     static const off_t END = 1ULL << (SHIFT + 32);
 
     string path;
     Inode *inode;
-    off_t offset;   // high bits: frag_t, low bits: an offset
+    int64_t offset;   // high bits: frag_t, low bits: an offset
     map<frag_t, vector<DirEntry> > buffer;
 
     DirResult(const char *p, Inode *in=0) : path(p), inode(in), offset(0) { 
@@ -358,6 +358,7 @@ class Client : public Dispatcher {
     }
     void set_frag(frag_t f) {
       offset = (uint64_t)f << SHIFT;
+      assert(sizeof(offset) == 8);
     }
     void set_end() { offset = END; }
     bool at_end() { return (offset == END); }
@@ -494,8 +495,8 @@ protected:
     put_inode(in);               // unpin inode
   }
 
-  int get_cache_size() { return lru.lru_get_size(); }
-  void set_cache_size(int m) { lru.lru_set_max(m); }
+  //int get_cache_size() { return lru.lru_get_size(); }
+  //void set_cache_size(int m) { lru.lru_set_max(m); }
 
   Dentry* link(Dir *dir, const string& name, Inode *in) {
     Dentry *dn = new Dentry;

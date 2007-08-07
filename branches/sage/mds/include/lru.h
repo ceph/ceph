@@ -129,7 +129,7 @@ class LRU {
   LRU(int max = 0) {
     lru_num = 0;
     lru_num_pinned = 0;
-    lru_midpoint = .9;
+    lru_midpoint = .6;
     lru_max = max;
   }
 

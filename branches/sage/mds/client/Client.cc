@@ -114,7 +114,7 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   // 
   root = 0;
 
-  set_cache_size(g_conf.client_cache_size);
+  lru.lru_set_max(g_conf.client_cache_size);
 
   // file handles
   free_fh_set.insert(10, 1<<30);
@@ -254,7 +254,9 @@ void Client::trim_cache()
     Dentry *dn = (Dentry*)lru.lru_expire();
     if (!dn) break;  // done
     
-    //dout(10) << "trim_cache unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << endl;
+    dout(15) << "trim_cache unlinking dn " << dn->name 
+	     << " in dir " << hex << dn->dir->parent_inode->inode.ino 
+	     << endl;
     unlink(dn);
   }
 
@@ -279,6 +281,8 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dout(12) << "insert_inode " << dname << " ino " << st->inode.ino 
            << "  size " << st->inode.size
            << "  mtime " << st->inode.mtime
+	   << "  mask " << st->mask
+	   << " in dir " << dir->parent_inode->inode.ino
            << endl;
   
   if (dn) {
@@ -324,20 +328,27 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   } else {
     // actually update info
     dout(12) << " stat inode mask is " << st->mask << endl;
-    dn->inode->inode = st->inode;
-    dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+    if (st->mask & STAT_MASK_BASE) {
+      dn->inode->inode = st->inode;
+      dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+    }
 
     // ...but don't clobber our mtime, size!
-    if ((dn->inode->mask & INODE_MASK_SIZE) == 0 &&
+    /* isn't this handled below?
+    if ((dn->inode->mask & STAT_MASK_SIZE) == 0 &&
         dn->inode->file_wr_size > dn->inode->inode.size) 
       dn->inode->inode.size = dn->inode->file_wr_size;
-    if ((dn->inode->mask & INODE_MASK_MTIME) == 0 &&
+    if ((dn->inode->mask & STAT_MASK_MTIME) == 0 &&
         dn->inode->file_wr_mtime > dn->inode->inode.mtime) 
       dn->inode->inode.mtime = dn->inode->file_wr_mtime;
+    */
   }
 
   // OK, we found it!
   assert(dn && dn->inode);
+
+  // save the mask
+  dn->inode->mask = st->mask;
   
   // or do we have newer size/mtime from writing?
   if (dn->inode->file_caps() & CAP_FILE_WR) {
@@ -348,7 +359,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   }
 
   // symlink?
-  if ((dn->inode->inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) {
+  if (dn->inode->inode.is_symlink()) {
     if (!dn->inode->symlink) 
       dn->inode->symlink = new string;
     *(dn->inode->symlink) = st->symlink;
@@ -1475,7 +1486,6 @@ int Client::link(const char *existing, const char *newname)
 
 int Client::_link(const char *existing, const char *newname) 
 {
-  dout(3) << "op: client->link(\"" << existing << "\", \"" << newname << "\");" << endl;
   tout << "link" << endl;
   tout << existing << endl;
   tout << newname << endl;
@@ -1501,6 +1511,7 @@ int Client::_link(const char *existing, const char *newname)
   dout(10) << "link result is " << res << endl;
 
   trim_cache();
+  dout(3) << "link(\"" << existing << "\", \"" << newname << "\") = " << res << endl;
   return res;
 }
 
@@ -1515,10 +1526,8 @@ int Client::unlink(const char *relpath)
 
 int Client::_unlink(const char *path)
 {
-  dout(3) << "op: client->unlink\(\"" << path << "\");" << endl;
   tout << "unlink" << endl;
   tout << path << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, messenger->get_myinst());
   req->set_path(path);
@@ -1545,6 +1554,7 @@ int Client::_unlink(const char *path)
   dout(10) << "unlink result is " << res << endl;
 
   trim_cache();
+  dout(3) << "unlink(\"" << path << "\") = " << res << endl;
   return res;
 }
 
@@ -1559,12 +1569,9 @@ int Client::rename(const char *relfrom, const char *relto)
 
 int Client::_rename(const char *from, const char *to)
 {
-
-  dout(3) << "op: client->rename(\"" << from << "\", \"" << to << "\");" << endl;
   tout << "rename" << endl;
   tout << from << endl;
   tout << to << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_RENAME, messenger->get_myinst());
   req->set_path(from);
@@ -1583,6 +1590,7 @@ int Client::_rename(const char *from, const char *to)
   dout(10) << "rename result is " << res << endl;
 
   trim_cache();
+  dout(3) << "rename(\"" << from << "\", \"" << to << "\") = " << res << endl;
   return res;
 }
 
@@ -1598,11 +1606,9 @@ int Client::mkdir(const char *relpath, mode_t mode)
 
 int Client::_mkdir(const char *path, mode_t mode)
 {
-  dout(3) << "op: client->mkdir(\"" << path << "\", " << mode << ");" << endl;
   tout << "mkdir" << endl;
   tout << path << endl;
   tout << mode << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, messenger->get_myinst());
   req->set_path(path);
@@ -1621,6 +1627,8 @@ int Client::_mkdir(const char *path, mode_t mode)
   dout(10) << "mkdir result is " << res << endl;
 
   trim_cache();
+
+  dout(3) << "mkdir(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << endl;
   return res;
 }
 
@@ -1634,10 +1642,8 @@ int Client::rmdir(const char *relpath)
 
 int Client::_rmdir(const char *path)
 {
-  dout(3) << "op: client->rmdir(\"" << path << "\");" << endl;
   tout << "rmdir" << endl;
   tout << path << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, messenger->get_myinst());
   req->set_path(path);
@@ -1662,9 +1668,9 @@ int Client::_rmdir(const char *path)
   }
   insert_trace(reply);  
   delete reply;
-  dout(10) << "rmdir result is " << res << endl;
 
   trim_cache();
+  dout(3) << "rmdir(\"" << path << "\") = " << res << endl;
   return res;
 }
 
@@ -1681,11 +1687,9 @@ int Client::symlink(const char *reltarget, const char *rellink)
 
 int Client::_symlink(const char *target, const char *link)
 {
-  dout(3) << "op: client->symlink(\"" << target << "\", \"" << link << "\");" << endl;
   tout << "symlink" << endl;
   tout << target << endl;
   tout << link << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, messenger->get_myinst());
   req->set_path(link);
@@ -1701,9 +1705,9 @@ int Client::_symlink(const char *target, const char *link)
   int res = reply->get_result();
   insert_trace(reply);  //FIXME assuming trace of link, not of target
   delete reply;
-  dout(10) << "symlink result is " << res << endl;
 
   trim_cache();
+  dout(3) << "symlink(\"" << target << "\", \"" << link << "\") = " << res << endl;
   return res;
 }
 
@@ -1717,21 +1721,24 @@ int Client::readlink(const char *path, char *buf, off_t size)
 
 int Client::_readlink(const char *path, char *buf, off_t size) 
 { 
-  dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
   tout << "readlink" << endl;
   tout << path << endl;
 
   Inode *in;
-  int r = _lstat(path, INODE_MASK_ALL_STAT, &in);
-  if (r != 0) return r;
-  
-  // copy into buf (at most size bytes)
-  unsigned res = in->symlink->length();
-  if (res > size) res = size;
-  memcpy(buf, in->symlink->c_str(), res);
-
+  int r = _lstat(path, STAT_MASK_BASE, &in);
+  if (r == 0 && !in->inode.is_symlink()) r = -EINVAL;
+  if (r == 0) {
+    // copy into buf (at most size bytes)
+    r = in->symlink->length();
+    if (r > size) r = size;
+    memcpy(buf, in->symlink->c_str(), r);
+  } else {
+    buf[0] = 0;
+  }
   trim_cache();
-  return res;  // return length in bytes (to mimic the system call)
+
+  dout(3) << "readlink(\"" << path << "\", \"" << buf << "\", " << size << ") = " << r << endl;
+  return r;
 }
 
 
@@ -1749,11 +1756,16 @@ int Client::_lstat(const char *path, int mask, Inode **in)
   Dentry *dn = lookup(fpath);
   inode_t inode;
   utime_t now = g_clock.real_now();
+
   if (dn && 
-      now <= dn->inode->valid_until &&
-      ((dn->inode->mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT)) {
+      now <= dn->inode->valid_until)
+    dout(10) << "_lstat has inode " << path << " with mask " << dn->inode->mask << ", want " << mask << endl;
+
+  if (dn && dn->inode &&
+      ((mask & ~STAT_MASK_BASE) || now <= dn->inode->valid_until) &&
+      ((dn->inode->mask & mask) == mask)) {
     inode = dn->inode->inode;
-    dout(10) << "lstat cache hit w/ sufficient inode.mask, valid until " << dn->inode->valid_until << endl;
+    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->valid_until << endl;
     
     if (g_conf.client_cache_stat_ttl == 0)
       dn->inode->valid_until = utime_t();           // only one stat allowed after each readdir
@@ -1825,17 +1837,15 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 {
   client_lock.Lock();
 
+  tout << "lstat" << endl;
+  tout << relpath << endl;
+
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
 
-  dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
-  tout << "lstat" << endl;
-  tout << path << endl;
-
   Inode *in = 0;
-
-  int res = _lstat(path, INODE_MASK_ALL_STAT, &in);
+  int res = _lstat(path, STAT_MASK_ALL, &in);
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
@@ -1843,6 +1853,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   }
 
   trim_cache();
+  dout(3) << "lstat(\"" << relpath << "\", " << stbuf << ") = " << res << endl;
   client_lock.Unlock();
   return res;
 }
@@ -1894,11 +1905,9 @@ int Client::chmod(const char *relpath, mode_t mode)
 
 int Client::_chmod(const char *path, mode_t mode) 
 {
-  dout(3) << "op: client->chmod(\"" << path << "\", " << mode << ");" << endl;
   tout << "chmod" << endl;
   tout << path << endl;
   tout << mode << endl;
-
 
   MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
@@ -1915,6 +1924,7 @@ int Client::_chmod(const char *path, mode_t mode)
   dout(10) << "chmod result is " << res << endl;
 
   trim_cache();
+  dout(3) << "chmod(\"" << path << "\", " << mode << ") = " << res << endl;
   return res;
 }
 
@@ -1928,7 +1938,6 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 
 int Client::_chown(const char *path, uid_t uid, gid_t gid)
 {
-  dout(3) << "op: client->chown(\"" << path << "\", " << uid << ", " << gid << ");" << endl;
   tout << "chown" << endl;
   tout << path << endl;
   tout << uid << endl;
@@ -1952,6 +1961,7 @@ int Client::_chown(const char *path, uid_t uid, gid_t gid)
   dout(10) << "chown result is " << res << endl;
 
   trim_cache();
+  dout(3) << "chown(\"" << path << "\", " << uid << ", " << gid << ") = " << res << endl;
   return res;
 }
 
@@ -1965,8 +1975,6 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
 int Client::_utime(const char *path, utime_t mtime, utime_t atime)
 {
-  dout(3) << "op: utim.actime = " << mtime << "; utim.modtime = " << atime << ";" << endl;
-  dout(3) << "op: client->utime(\"" << path << "\", &utim);" << endl;
   tout << "utime" << endl;
   tout << path << endl;
   tout << mtime.sec() << endl;
@@ -1981,14 +1989,12 @@ int Client::_utime(const char *path, utime_t mtime, utime_t atime)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
 
-  //FIXME enforce caller uid rights?
-   
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
-  dout(10) << "utime result is " << res << endl;
 
+  dout(3) << "utime(\"" << path << "\", " << mtime << ", " << atime << ") = " << res << endl;
   trim_cache();
   return res;
 }
@@ -2005,7 +2011,6 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
 
 int Client::_mknod(const char *path, mode_t mode, dev_t rdev) 
 { 
-  dout(3) << "op: client->mknod(\"" << path << "\", " << mode << ");" << endl;
   tout << "mknod" << endl;
   tout << path << endl;
   tout << mode << endl;
@@ -2025,11 +2030,11 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
   int res = reply->get_result();
   insert_trace(reply);  
 
-  dout(10) << "mknod result is " << res << endl;
-
   delete reply;
 
   trim_cache();
+
+  dout(3) << "mknod(\"" << path << "\", " << mode << ") = " << res << endl;
   return res;
 }
 
@@ -2038,7 +2043,7 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
   
 int Client::getdir(const char *relpath, list<string>& contents)
 {
-  dout(3) << "getdir " << relpath << endl;
+  dout(3) << "getdir(" << relpath << ")" << endl;
 
   DIR *d;
   int r = opendir(relpath, &d);
@@ -2078,16 +2083,13 @@ int Client::opendir(const char *name, DIR **dirpp)
   if (r < 0) {
     dout(3) << "opendir " << name << " err = " << r << endl;
     delete dirp;
-    return r;
+  } else {
+    // yay!
+    *((DirResult**)dirpp) = dirp;
+    dout(3) << "opendir(" << name << ") = " << dirp << endl;
   }
-  
-  // yay!
-  *((DirResult**)dirpp) = dirp;
-  
-  dout(3) << "opendir " << name << " = " << *dirpp << endl;
-  return 0;
+  return r;
 }
-
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 {
@@ -2103,7 +2105,7 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, unsigned c
   struct stat st;
   memset(&st, 0, sizeof(st));
   st.st_mode = DT_TO_MODE(d_type);
-  int stmask = InodeStat::MASK_TYPE;
+  int stmask = STAT_MASK_TYPE;
   frag_t fg = dirp->frag();
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
   dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
@@ -2306,11 +2308,13 @@ void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
   de->d_reclen = 1;
   de->d_type = MODE_TO_DT(entry->st.st_mode);
   strncpy(de->d_name, entry->d_name.c_str(), 256);
+  dout(10) << "_readdir_fill_dirent " << de->d_name << " " << de->d_ino
+	   << " type " << (int)de->d_type << " at off " << off << endl;
 }
 
 int Client::closedir(DIR *dir) 
 {
-  dout(3) << "closedir " << dir << endl;
+  dout(3) << "closedir(" << dir << ") = 0" << endl;
 
   DirResult *dirp = (DirResult*)dir;
   if (dirp->inode) {
@@ -2325,6 +2329,7 @@ int Client::closedir(DIR *dir)
 
 void Client::rewinddir(DIR *dirp)
 {
+  dout(3) << "rewinddir(" << dirp << ")" << endl;
   DirResult *d = (DirResult*)dirp;
   d->offset = 0;
   d->buffer.clear();
@@ -2333,11 +2338,13 @@ void Client::rewinddir(DIR *dirp)
 off_t Client::telldir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
+  dout(3) << "telldir(" << dirp << ") = " << d->offset << endl;
   return d->offset;
 }
 
 void Client::seekdir(DIR *dirp, off_t offset)
 {
+  dout(3) << "seekdir(" << dirp << ", " << offset << ")" << endl;
   DirResult *d = (DirResult*)dirp;
   d->offset = offset;
 }
@@ -2358,20 +2365,19 @@ int Client::open(const char *relpath, int flags, mode_t mode)
 
   Fh *fh;
   int r = _open(abspath.c_str(), flags, mode, &fh);
-  if (r < 0) return r;  // error
-
-  // allocate a integer file descriptor
-  assert(fh);
-  int fd = get_fh();
-  assert(fh_map.count(fd) == 0);
-  fh_map[fd] = fh;
-  dout(3) << "open allocated fd " << fd << " -> " << fh << endl;
-  return fd;
+  if (r >= 0) {
+    // allocate a integer file descriptor
+    assert(fh);
+    r = get_fh();
+    assert(fh_map.count(r) == 0);
+    fh_map[r] = fh;
+  } 
+  dout(3) << "open(" << relpath << ", " << flags << ") = " << r << endl;
+  return r;
 }
 
 int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp) 
 {
-  dout(3) << "op: fh = client->open(\"" << path << "\", " << flags << ");" << endl;
   tout << "open" << endl;
   tout << path << endl;
   tout << flags << endl;
@@ -2400,6 +2406,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     Fh *f = new Fh;
     if (fhp) *fhp = f;
     f->mode = cmode;
+
+    tout << (long)f << endl;
 
     // inode
     f->inode = inode_map[reply->get_ino()];
@@ -2452,6 +2460,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     dout(3) << "open success, fh is " << f << " combined caps " << cap_string(f->inode->file_caps()) << endl;
   } else {
     dout(0) << "open failure result " << result << endl;
+    tout << 0 << endl;
   }
 
   delete reply;
@@ -2493,6 +2502,7 @@ void Client::close_safe(Inode *in)
 int Client::close(fh_t fd)
 {
   Mutex::Locker lock(client_lock);
+  dout(3) << "close(" << fd << ")" << endl;
   assert(fh_map.count(fd));
   Fh *fh = fh_map[fd];
   _release(fh);
@@ -2504,7 +2514,7 @@ int Client::_release(Fh *f)
 {
   //dout(3) << "op: client->close(open_files[ " << fh << " ]);" << endl;
   //dout(3) << "op: open_files.erase( " << fh << " );" << endl;
-  dout(3) << "_release " << f << endl;
+  dout(5) << "_release " << f << endl;
   tout << "close" << endl;
   tout << f << endl;
 
@@ -2564,8 +2574,7 @@ int Client::_release(Fh *f)
 
 off_t Client::lseek(fh_t fh, off_t offset, int whence)
 {
-  client_lock.Lock();
-  dout(3) << "op: client->lseek(" << fh << ", " << offset << ", " << whence << ");" << endl;
+  Mutex::Locker lock(client_lock);
 
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
@@ -2589,8 +2598,8 @@ off_t Client::lseek(fh_t fh, off_t offset, int whence)
   }
   
   off_t pos = f->pos;
-  client_lock.Unlock();
 
+  dout(3) << "lseek(" << fh << ", " << offset << ", " << whence << ") = " << pos << endl;
   return pos;
 }
 
@@ -2662,7 +2671,6 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     dout(10) << "file size: " << in->inode.size << endl;
     if (offset > 0 && offset >= in->inode.size) {
       if (movepos) unlock_fh_pos(f);
-      client_lock.Unlock();
       return 0;
     }
     if (offset + size > (off_t)in->inode.size) 
@@ -2671,7 +2679,6 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     if (size == 0) {
       dout(10) << "read is size=0, returning 0" << endl;
       if (movepos) unlock_fh_pos(f);
-      client_lock.Unlock();
       return 0;
     }
   } else {

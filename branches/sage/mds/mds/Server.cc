@@ -1282,12 +1282,12 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> xlocks = mdr->xlocks;
   
   int mask = req->args.stat.mask;
-  if (mask & INODE_MASK_LINK) rdlocks.insert(&ref->linklock);
-  if (mask & INODE_MASK_AUTH) rdlocks.insert(&ref->authlock);
+  if (mask & STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
+  if (mask & STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
-      mask & INODE_MASK_FILE) rdlocks.insert(&ref->filelock);
+      mask & STAT_MASK_FILE) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
-      mask & INODE_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+      mask & STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -1470,11 +1470,10 @@ int Server::encode_dir_contents(CDir *dir,
       assert(dn->is_remote());
       dout(12) << "including inode-less (remote) dentry " << *dn << endl;
       st = new InodeStat;
-      st->mask = 0;
+      st->mask = STAT_MASK_INO | STAT_MASK_TYPE;
       memset(&st->inode, 0, sizeof(st->inode));
       st->inode.ino = dn->get_remote_ino();
       st->inode.mode = DT_TO_MODE(dn->get_remote_d_type());
-      st->mask = InodeStat::MASK_INO | InodeStat::MASK_TYPE;
     }
 
     dnls.push_back( it->first );
