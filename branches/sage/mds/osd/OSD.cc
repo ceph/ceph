@@ -74,7 +74,7 @@
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./dev";
 
-object_t SUPERBLOCK_OBJECT(0,0);
+static const object_t SUPERBLOCK_OBJECT(0,0);
 
 
 // <hack> force remount hack for performance testing FakeStore

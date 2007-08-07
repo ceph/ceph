@@ -162,7 +162,7 @@ md_config_t g_conf = {
   fuse_ll: false,
   
   // --- objecter ---
-  objecter_buffer_uncommitted: true,
+  objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
 
   // --- journaler ---
   journaler_allow_split_entries: true,
@@ -245,7 +245,7 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 5,   // shut up while i'm debugging
+  osd_heartbeat_interval: 15,   // shut up while i'm debugging
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,

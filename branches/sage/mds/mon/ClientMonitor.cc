@@ -102,7 +102,6 @@ void ClientMonitor::encode_pending(bufferlist &bl)
   dout(10) << "encode_pending v " << pending_inc.version 
 	   << ", next is " << pending_inc.next_client
 	   << endl;
-  
   assert(paxos->get_version() + 1 == pending_inc.version);
   pending_inc._encode(bl);
 }

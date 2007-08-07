@@ -162,6 +162,9 @@ namespace __gnu_cxx {
 }
 
 
+
+
+
 /** ObjectLayout
  *
  * describes an object's placement and layout in the storage cluster.  
@@ -217,6 +220,24 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 }
 
 
+
+/** pg_stat
+ * aggregate stats for a single PG.
+ */
+struct pg_stat_t {
+  const static int STATE_UNKNOWN =    0;
+  const static int STATE_OK =         1;
+  const static int STATE_RECOVERING = 2;
+  const static int STATE_OFFLINE =    3;
+  
+  eversion_t reported;
+  
+  int32_t state;
+  int64_t size;         // in bytes
+  int64_t num_blocks;   // in 4k blocks
+  
+  pg_stat_t() : state(0), size(0), num_blocks(0) {}
+};
 
 
 

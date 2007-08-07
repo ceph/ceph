@@ -508,8 +508,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // funky.
   case MDS_OP_OPEN:
-    if ((req->args.open.flags & O_CREAT) &&
-	!mdr->ref) 
+    if (req->args.open.flags & O_CREAT)
       handle_client_openc(mdr);
     else 
       handle_client_open(mdr);
