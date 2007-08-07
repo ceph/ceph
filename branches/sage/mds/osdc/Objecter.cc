@@ -179,13 +179,13 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
               !g_conf.objecter_buffer_uncommitted) {
             dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << endl;
           } else {
-            dout(0) << "kick_requests missing commit, replay write " << tid
+            dout(3) << "kick_requests missing commit, replay write " << tid
                     << " v " << wr->tid_version[tid] << endl;
             modifyx_submit(wr, wr->waitfor_commit[tid], tid);
           }
         } 
         else if (wr->waitfor_ack.count(tid)) {
-          dout(0) << "kick_requests missing ack, resub write " << tid << endl;
+          dout(3) << "kick_requests missing ack, resub write " << tid << endl;
           modifyx_submit(wr, wr->waitfor_ack[tid], tid);
         }
       }
@@ -194,22 +194,22 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         // READ
         OSDRead *rd = op_read[tid];
         op_read.erase(tid);
-        dout(0) << "kick_requests resub read " << tid << endl;
+        dout(3) << "kick_requests resub read " << tid << endl;
 
         // resubmit
         readx_submit(rd, rd->ops[tid], true);
         rd->ops.erase(tid);
       }
 
-	  else if (op_stat.count(tid)) {
-		OSDStat *st = op_stat[tid];
-		op_stat.erase(tid);
-		
-		dout(0) << "kick_requests resub stat " << tid << endl;
+      else if (op_stat.count(tid)) {
+	OSDStat *st = op_stat[tid];
+	op_stat.erase(tid);
+	
+	dout(3) << "kick_requests resub stat " << tid << endl;
 		
         // resubmit
         stat_submit(st);
-	  }
+      }
 	  
       else 
         assert(0);

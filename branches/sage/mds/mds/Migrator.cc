@@ -49,7 +49,7 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
 
 
 
@@ -725,8 +725,12 @@ void Migrator::export_go(CDir *dir)
 
   // set ambiguous auth
   cache->adjust_subtree_auth(dir, dest, mds->get_nodeid());
+
+  // take away the popularity we're sending.
+  mds->balancer->subtract_export(dir);
   
   // fill export message with cache data
+  utime_t now = g_clock.now();
   C_Contexts *fin = new C_Contexts;       // collect all the waiters
   map<int,entity_inst_t> exported_client_map;
   int num_exported_inodes = encode_export_dir( export_data[dir], 
@@ -734,7 +738,8 @@ void Migrator::export_go(CDir *dir)
 					       dir,   // base
 					       dir,   // recur start point
 					       dest,
-					       exported_client_map );
+					       exported_client_map,
+					       now );
   bufferlist bl;
   ::_encode(exported_client_map, bl);
   export_data[dir].push_front(bl);
@@ -759,9 +764,6 @@ void Migrator::export_go(CDir *dir)
   // queue up the finisher
   dir->add_waiter( CDir::WAIT_UNFREEZE, fin );
 
-  // take away the popularity we're sending.   FIXME: do this later?
-  mds->balancer->subtract_export(dir);
-
   // stats
   if (mds->logger) mds->logger->inc("ex");
   if (mds->logger) mds->logger->inc("iex", num_exported_inodes);
@@ -776,7 +778,8 @@ void Migrator::export_go(CDir *dir)
  * used by: encode_export_dir, file_rename (if foreign)
  */
 void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_auth, 
-				   map<int,entity_inst_t>& exported_client_map)
+				   map<int,entity_inst_t>& exported_client_map,
+				   utime_t now)
 {
   // tell (all) clients about migrating caps.. mark STALE
   for (map<int, Capability>::iterator it = in->client_caps.begin();
@@ -799,7 +802,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
 
   // add inode
   assert(!in->is_replica(mds->get_nodeid()));
-  CInodeExport istate( in );
+  CInodeExport istate(in, now);
   istate._encode( enc_state );
 
   // we're export this inode; fix inode state
@@ -835,7 +838,8 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
 				CDir *basedir,
 				CDir *dir,
 				int newauth, 
-				map<int,entity_inst_t>& exported_client_map)
+				map<int,entity_inst_t>& exported_client_map,
+				utime_t now)
 {
   int num_exported = 0;
 
@@ -846,7 +850,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   // dir 
   bufferlist enc_dir;
   
-  CDirExport dstate(dir);
+  CDirExport dstate(dir, now);
   dstate._encode( enc_dir );
   
   // release open_by 
@@ -910,7 +914,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
     // -- inode
     enc_dir.append("I", 1);    // inode dentry
     
-    encode_export_inode(in, enc_dir, newauth, exported_client_map);  // encode, and (update state for) export
+    encode_export_inode(in, enc_dir, newauth, exported_client_map, now);  // encode, and (update state for) export
     
     // directory?
     list<CDir*> dfs;
@@ -938,7 +942,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
     num_exported += encode_export_dir(dirstatelist, fin, basedir, *it, newauth, 
-				      exported_client_map);
+				      exported_client_map, now);
 
   return num_exported;
 }
@@ -1152,7 +1156,7 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 
 void Migrator::export_finish(CDir *dir)
 {
-  dout(7) << "export_finish " << *dir << endl;
+  dout(5) << "export_finish " << *dir << endl;
 
   if (export_state.count(dir) == 0) {
     dout(7) << "target must have failed, not sending final commit message.  export succeeded anyway." << endl;
@@ -1768,7 +1772,7 @@ void Migrator::import_finish(CDir *dir, bool now)
   cache->process_delayed_expire(dir);
 
   // ok now finish contexts
-  dout(5) << "finishing any waiters on imported data" << endl;
+  dout(10) << "finishing any waiters on imported data" << endl;
   dir->finish_waiting(CDir::WAIT_IMPORTED);
 
   cache->show_subtrees();

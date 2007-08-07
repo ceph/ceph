@@ -189,7 +189,11 @@ protected:
   set<int>         dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
-  meta_load_t popularity[MDS_NPOP];
+  dirfrag_load_vec_t pop_me;
+  dirfrag_load_vec_t pop_nested;
+  dirfrag_load_vec_t pop_auth_subtree;
+  dirfrag_load_vec_t pop_auth_subtree_nested;
+  
   utime_t last_popularity_sample;
 
   // friends
@@ -297,7 +301,7 @@ private:
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > 
+    if (( pop_auth_subtree.get(META_POP_IRD).get() > 
 	  g_conf.mds_bal_replicate_threshold)) {
       //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
       for (map<int,int>::iterator p = replicas_begin();
@@ -507,8 +511,8 @@ class CDirExport {
     version_t   committed_version;
     version_t   committed_version_equivalent;
     uint32_t    state;
-    meta_load_t popularity_justme;
-    meta_load_t popularity_curdom;
+    dirfrag_load_vec_t pop_me;
+    dirfrag_load_vec_t pop_auth_subtree;
     int32_t     dir_rep;
   } st;
   map<int,int> replicas;
@@ -516,7 +520,7 @@ class CDirExport {
 
  public:
   CDirExport() {}
-  CDirExport(CDir *dir) {
+  CDirExport(CDir *dir, utime_t now) {
     memset(&st, 0, sizeof(st));
 
     assert(dir->get_version() == dir->get_projected_version());
@@ -528,11 +532,12 @@ class CDirExport {
     st.committed_version_equivalent = dir->committed_version_equivalent;
     st.state = dir->state;
     st.dir_rep = dir->dir_rep;
-
-    st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
-    st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
-    dir->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-    dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    
+    st.pop_me = dir->pop_me;
+    st.pop_auth_subtree = dir->pop_auth_subtree;
+    dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
+    dir->pop_me.zero(now);
+    dir->pop_auth_subtree.zero(now);
 
     rep_by = dir->dir_rep_by;
     replicas = dir->replica_map;
@@ -556,10 +561,9 @@ class CDirExport {
       (st.state & CDir::MASK_STATE_EXPORTED);
     dir->dir_rep = st.dir_rep;
 
-    dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-    dir->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-    dir->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-    dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    dir->pop_me = st.pop_me;
+    dir->pop_auth_subtree = st.pop_auth_subtree;
+    dir->pop_auth_subtree_nested += dir->pop_auth_subtree;
 
     dir->replica_nonce = 0;  // no longer defined
 

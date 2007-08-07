@@ -71,6 +71,7 @@ struct md_config_t {
   int debug_mds;
   int debug_mds_balancer;
   int debug_mds_log;
+  int debug_mds_migrator;
   int debug_buffer;
   int debug_filer;
   int debug_objecter;
@@ -203,6 +204,7 @@ struct md_config_t {
   int   mds_bal_max_until;
 
   int   mds_bal_mode;
+  float mds_bal_min_rebalance;
   float mds_bal_min_start;
   float mds_bal_need_min;
   float mds_bal_need_max;

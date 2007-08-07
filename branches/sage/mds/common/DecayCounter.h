@@ -78,12 +78,17 @@ public:
    * adjusting
    */
 
-  void hit(double v = 1.0) {
+  void hit(utime_t now, double v = 1.0) {
+    decay(now);
     delta += v;
   }
 
   void adjust(double a) {
-    delta += a;
+    val += a;
+  }
+  void adjust(utime_t now, double a) {
+    decay(now);
+    val += a;
   }
 
   /**
@@ -96,6 +101,9 @@ public:
   }
 
   void reset() {
+    reset(g_clock.now());
+  }
+  void reset(utime_t now) {
     last_decay = g_clock.now();
     val = delta = 0;
   }

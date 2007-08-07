@@ -114,8 +114,9 @@ MDCache::~MDCache()
 void MDCache::log_stat(Logger *logger)
 {
   if (get_root()) {
-    logger->set("popanyd", (int)get_root()->popularity[MDS_POP_ANYDOM].meta_load());
-    logger->set("popnest", (int)get_root()->popularity[MDS_POP_NESTED].meta_load());
+    utime_t now = g_clock.now();
+    //logger->set("pop", (int)get_root()->pop_nested.meta_load(now));
+    //logger->set("popauth", (int)get_root()->pop_auth_subtree_nested.meta_load(now));
   }
   logger->set("c", lru.lru_get_size());
   logger->set("cpin", lru.lru_get_num_pinned());
@@ -406,6 +407,16 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
     // i am now the subtree root.
     root = dir;
 
+    // adjust recursive pop counters
+    if (dir->is_auth()) {
+      CDir *p = dir->get_parent_dir();
+      while (p) {
+	p->pop_auth_subtree -= dir->pop_auth_subtree;
+	if (p->is_subtree_root()) break;
+	p = p->inode->get_parent_dir();
+      }
+    }
+
     eval_subtree_root(dir);
   }
 
@@ -505,6 +516,16 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     // we are no longer a subtree or bound
     subtrees.erase(dir);
     subtrees[parent].erase(dir);
+
+    // adjust popularity?
+    if (dir->is_auth()) {
+      CDir *p = dir->get_parent_dir();
+      while (p) {
+	p->pop_auth_subtree += dir->pop_auth_subtree;
+	if (p->is_subtree_root()) break;
+	p = p->inode->get_parent_dir();
+      }
+    }
 
     eval_subtree_root(dir);
 
@@ -3633,7 +3654,7 @@ bool MDCache::shutdown_pass()
   } 
   
   // done!
-  dout(1) << "shutdown done." << endl;
+  dout(2) << "shutdown done." << endl;
   return true;
 }
 

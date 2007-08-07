@@ -187,7 +187,7 @@ protected:
   int nested_auth_pins;
 
  public:
-  meta_load_t popularity[MDS_NPOP];
+  inode_load_vec_t pop;
 
   // friends
   friend class Server;
@@ -560,8 +560,8 @@ class CInodeExport {
   struct st_ {
     inode_t        inode;
 
-    meta_load_t    popularity_justme;
-    meta_load_t    popularity_curdom;
+    inode_load_vec_t pop;
+
     bool           is_dirty;       // dirty inode?
     
     int            num_caps;
@@ -577,7 +577,7 @@ class CInodeExport {
 
 public:
   CInodeExport() {}
-  CInodeExport(CInode *in) {
+  CInodeExport(CInode *in, utime_t now) {
     st.inode = in->inode;
     symlink = in->symlink;
     dirfragtree = in->dirfragtree;
@@ -591,10 +591,8 @@ public:
     in->filelock._encode(locks);
     in->dirlock._encode(locks);
     
-    st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
-    st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
-    in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-    in->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    st.pop = in->pop;
+    in->pop.zero(now);
     
     // steal WRITER caps from inode
     in->take_client_caps(cap_map);
@@ -614,10 +612,7 @@ public:
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;
 
-    in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-    in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-    in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-    in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    in->pop = st.pop;
 
     if (st.is_dirty) 
       in->_mark_dirty();

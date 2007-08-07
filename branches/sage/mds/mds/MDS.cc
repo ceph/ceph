@@ -331,7 +331,7 @@ void MDS::tick()
   if (logger) {
     req_rate = logger->get("req");
     
-    logger->set("l", (int)load.mds_load());
+    logger->set("l", (int)load.mds_load(g_clock.now()));
     logger->set("q", messenger->get_dispatch_queue_len());
     logger->set("buf", buffer_total_alloc);
     
@@ -561,8 +561,6 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (oldstate == MDSMap::STATE_REJOIN ||
 	  oldstate == MDSMap::STATE_RECONNECT) 
 	recovery_done();
-
-      dout(1) << "now active" << endl;
       finish_contexts(waiting_for_active);  // kick waiters
     } else if (is_replay()) {
       replay_start();

@@ -132,23 +132,85 @@ inline bool operator==(dirfrag_t l, dirfrag_t r) {
 
 // ================================================================
 
+#define META_POP_IRD     0
+#define META_POP_IWR     1
+#define META_POP_READDIR 2
+#define META_POP_FETCH   3
+#define META_POP_STORE   4
+#define META_NPOP        5
+
+class inode_load_vec_t {
+  static const int NUM = 2;
+  DecayCounter vec[NUM];
+public:
+  DecayCounter &get(int t) { 
+    assert(t < NUM);
+    return vec[t]; 
+  }
+  void zero(utime_t now) {
+    for (int i=0; i<NUM; i++) 
+      vec[i].reset(now);
+  }
+};
+
+class dirfrag_load_vec_t {
+public:
+  static const int NUM = 5;
+  DecayCounter vec[NUM];
+  DecayCounter &get(int t) { 
+    assert(t < NUM);
+    return vec[t]; 
+  }
+  void adjust(utime_t now, double d) {
+    for (int i=0; i<NUM; i++) 
+      vec[i].adjust(now, d);
+  }
+  void zero(utime_t now) {
+    for (int i=0; i<NUM; i++) 
+      vec[i].reset(now);
+  }
+  double meta_load(utime_t now) {
+    return 
+      1*vec[META_POP_IRD].get(now) + 
+      2*vec[META_POP_IWR].get(now) +
+      1*vec[META_POP_READDIR].get(now) +
+      2*vec[META_POP_FETCH].get(now) +
+      4*vec[META_POP_STORE].get(now);
+  }
+};
+
+inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
+{
+  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+    l.vec[i].adjust(r.vec[i].get_last());
+  return l;
+}
+
+inline dirfrag_load_vec_t& operator-=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
+{
+  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+    l.vec[i].adjust(-r.vec[i].get_last());
+  return l;
+}
+
+inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
+{
+  return out << "[" << dl.vec[0].get() << "," << dl.vec[1].get() << "]";
+}
+
+
 /* meta_load_t
  * hierarchical load for an inode/dir and it's children
  */
-#define META_POP_IRD    0
-#define META_POP_IWR    1
-#define META_POP_DWR    2
-//#define META_POP_LOG   3
-//#define META_POP_FDIR  4
-//#define META_POP_CDIR  4
-#define META_NPOP      3
-
+/*
 class meta_load_t {
  public:
   DecayCounter pop[META_NPOP];
 
-  double meta_load() {
-    return pop[META_POP_IRD].get() + 2*pop[META_POP_IWR].get();
+  double meta_load(utime_t now) {
+    return 
+      pop[META_POP_IRD].get(now) + 
+      2*(pop[META_POP_IWR].get(now));
   }
 
   void take(meta_load_t& other) {
@@ -161,9 +223,13 @@ class meta_load_t {
 
 inline ostream& operator<<( ostream& out, meta_load_t& load )
 {
-  return out << "<rd " << load.pop[META_POP_IRD].get()
-             << ", wr " << load.pop[META_POP_IWR].get()
-             << ">";
+  return out << "<rwd " 
+	     << load.pop[META_POP_IRD].get() << "/"
+             << load.pop[META_POP_IWR].get() 
+	     << " "
+	     << load.pop[META_POP_IRD].get_last_vel() << "/"
+             << load.pop[META_POP_IWR].get_last_vel() 
+	     << ">";
 }
 
 
@@ -180,7 +246,7 @@ inline meta_load_t& operator+=(meta_load_t& l, meta_load_t& r)
     l.pop[i].adjust(r.pop[i].get());
   return l;
 }
-
+*/
 
 
 /* mds_load_t
@@ -190,13 +256,14 @@ inline meta_load_t& operator+=(meta_load_t& l, meta_load_t& r)
 // popularity classes
 #define MDS_POP_JUSTME  0   // just me (this dir or inode)
 #define MDS_POP_NESTED  1   // me + children, auth or not
-#define MDS_POP_CURDOM  2   // me + children in current auth domain
-#define MDS_POP_ANYDOM  3   // me + children in any (nested) auth domain
+#define MDS_POP_CURDOM  2   // (if auth) me + children in current auth domain
+#define MDS_POP_ANYDOM  3   // (if auth) me + children in any (nested) auth domain
 #define MDS_NPOP        4
 
 class mds_load_t {
  public:
-  meta_load_t root;
+  dirfrag_load_vec_t auth;
+  dirfrag_load_vec_t all;
 
   double req_rate;
   double cache_hit_rate;
@@ -205,12 +272,14 @@ class mds_load_t {
   mds_load_t() : 
     req_rate(0), cache_hit_rate(0), queue_len(0) { }    
 
-  double mds_load() {
+  double mds_load(utime_t now) {
     switch(g_conf.mds_bal_mode) {
     case 0: 
-      return root.meta_load()
-        + req_rate
-        + 10.0*queue_len;
+      return 
+	.8 * auth.meta_load(now) +
+	.2 * all.meta_load(now) +
+        req_rate +
+        10.0 * queue_len;
 
     case 1:
       return req_rate + 10.0*queue_len;
@@ -224,7 +293,7 @@ class mds_load_t {
 
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {
-  return out << "mdsload<" << load.root
+  return out << "mdsload<" << load.auth << "/" << load.all
              << ", req " << load.req_rate 
              << ", hr " << load.cache_hit_rate
              << ", qlen " << load.queue_len

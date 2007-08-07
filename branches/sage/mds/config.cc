@@ -85,6 +85,7 @@ md_config_t g_conf = {
   debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
+  debug_mds_migrator: 1,
   debug_buffer: 0,
   debug_filer: 0,
   debug_objecter: 0,
@@ -174,10 +175,10 @@ md_config_t g_conf = {
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
-  mds_decay_halflife: 30,
+  mds_decay_halflife: 10,
 
   mds_beacon_interval: 5, //30.0,
-  mds_beacon_grace: 15, //60*60.0,
+  mds_beacon_grace: 30, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -204,6 +205,7 @@ md_config_t g_conf = {
   mds_bal_max_until: -1,
 
   mds_bal_mode: 0,
+  mds_bal_min_rebalance: .2,  // must be this much above average before we export anything
   mds_bal_min_start: .2,      // if we need less than this, we don't do anything
   mds_bal_need_min: .8,       // take within this range of what we need
   mds_bal_need_max: 1.2,
@@ -526,6 +528,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_mds_log = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_log = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_mds_migrator") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_mds_migrator = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_mds_migrator = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_buffer") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_buffer = atoi(args[++i]);

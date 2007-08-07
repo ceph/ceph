@@ -1321,6 +1321,8 @@ public:
     // apply
     in->pop_and_dirty_projected_inode();
 
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
@@ -1360,8 +1362,6 @@ void Server::handle_client_utime(MDRequest *mdr)
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
-
-  mds->balancer->hit_inode(cur, META_POP_IWR);   
 }
 
 
@@ -1397,8 +1397,6 @@ void Server::handle_client_chmod(MDRequest *mdr)
 
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
-
-  mds->balancer->hit_inode(cur, META_POP_IWR);
 }
 
 
@@ -1433,8 +1431,6 @@ void Server::handle_client_chown(MDRequest *mdr)
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
-
-  mds->balancer->hit_inode(cur, META_POP_IWR);
 }
 
 
@@ -1546,7 +1542,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_IRD);  
+  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, numfiles);  
   
   // reply
   reply_request(mdr, reply, diri);
@@ -1580,6 +1576,10 @@ public:
     // dir inode's mtime
     mds->server->dirty_dn_diri(dn, dirpv, newi->inode.ctime);
     
+    // hit pop
+    mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
+    //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
@@ -1617,10 +1617,6 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
-
-  // hit pop
-  mds->balancer->hit_inode(newi, META_POP_IWR);
-  mds->balancer->hit_dir(dn->get_dir(), META_POP_DWR);
 }
 
 
@@ -1663,11 +1659,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
-
-  // hit pop
-  mds->balancer->hit_inode(newi, META_POP_IWR);
-  mds->balancer->hit_dir(dn->get_dir(), META_POP_DWR);
-
 
   /* old export heuristic.  pbly need to reimplement this at some point.    
   if (
@@ -1715,10 +1706,6 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
-
-  // hit pop
-  mds->balancer->hit_inode(newi, META_POP_IWR);
-  mds->balancer->hit_dir(dn->get_dir(), META_POP_DWR);
 }
 
 
@@ -1867,10 +1854,6 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv, dirpv));
-
-  // bump target popularity
-  mds->balancer->hit_inode(targeti, META_POP_IWR);
-  mds->balancer->hit_dir(dn->get_dir(), META_POP_DWR);
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
@@ -1888,6 +1871,10 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   // new dentry dir mtime
   dirty_dn_diri(dn, dirpv, mdr->now);
   
+  // bump target popularity
+  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
+  //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
@@ -1951,10 +1938,6 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_link_remote_finish(mds, mdr, dn, targeti, dirpv));
-
-  // bump target popularity
-  mds->balancer->hit_inode(targeti, META_POP_IWR);
-  mds->balancer->hit_dir(dn->get_dir(), META_POP_DWR);
 }
 
 void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
@@ -1969,6 +1952,10 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   // dir inode's mtime
   dirty_dn_diri(dn, dirpv, mdr->now);
   
+  // bump target popularity
+  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
+  //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
@@ -2042,8 +2029,6 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
   mds->mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
-
-  mds->balancer->hit_inode(targeti, META_POP_IWR);
 }
 
 class C_MDS_SlaveLinkCommit : public Context {
@@ -2072,6 +2057,9 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
 
   // update the target
   targeti->pop_and_dirty_projected_inode();
+
+  // hit pop
+  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
@@ -2324,9 +2312,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
 						     dirpv));
-
-  // bump pop
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 }
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
@@ -2366,6 +2351,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->dst_reanchor_atid);
+
+  // bump pop
+  //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -2442,8 +2430,6 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
-  
-  mds->balancer->hit_dir(dn->dir, META_POP_DWR);
 }
 
 void Server::_unlink_remote_finish(MDRequest *mdr, 
@@ -2471,6 +2457,8 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->dst_reanchor_atid);
+
+  //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -2838,14 +2826,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   // log + wait
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
-
-  // bump popularity
-  if (srcdn->is_auth())
-    mds->balancer->hit_dir(srcdn->get_dir(), META_POP_DWR);
-  mds->balancer->hit_dir(destdn->get_dir(), META_POP_DWR);
-  if (destdn->is_remote() &&
-      destdn->inode->is_auth())
-    mds->balancer->hit_inode(destdn->get_inode(), META_POP_IWR);
 }
 
 
@@ -2859,6 +2839,14 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   // commit anchor updates?
   if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid);
   if (mdr->dst_reanchor_atid) mds->anchorclient->commit(mdr->dst_reanchor_atid);
+
+  // bump popularity
+  //if (srcdn->is_auth())
+  //mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
+  //  mds->balancer->hit_dir(mdr->now, destdn->get_dir(), META_POP_DWR);
+  if (destdn->is_remote() &&
+      destdn->inode->is_auth())
+    mds->balancer->hit_inode(mdr->now, destdn->get_inode(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -3194,13 +3182,6 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
     _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
     mds->mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
-
-    // bump popularity
-    if (srcdn->is_auth())
-      mds->balancer->hit_dir(srcdn->get_dir(), META_POP_DWR);
-    if (destdn->inode->is_auth())
-      mds->balancer->hit_inode(destdn->inode, META_POP_IWR);
-
   } else {
     // don't journal.
     dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << endl;
@@ -3227,6 +3208,12 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   
   // set up commit waiter
   mdr->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
+
+  // bump popularity
+  //if (srcdn->is_auth())
+    //mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
+  if (destdn->inode->is_auth())
+    mds->balancer->hit_inode(mdr->now, destdn->inode, META_POP_IWR);
 
   // done.
   delete mdr->slave_request;
@@ -3301,7 +3288,8 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
   map<int,entity_inst_t> exported_client_map;
   bufferlist inodebl;
   mdcache->migrator->encode_export_inode(mdr->srcdn->inode, inodebl, mdr->slave_to_mds, 
-					 exported_client_map);
+					 exported_client_map, 
+					 mdr->now);
   ::_encode(exported_client_map, reply->inode_export);
   reply->inode_export.claim_append(inodebl);
   
@@ -3433,9 +3421,6 @@ void Server::handle_client_truncate(MDRequest *mdr)
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
-
-  // hit pop
-  mds->balancer->hit_inode(cur, META_POP_IWR);   
 }
 
 
@@ -3505,11 +3490,12 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 	   << " on " << *cur << endl;
   
   // hit pop
+  mdr->now = g_clock.now();
   if (cmode == FILE_MODE_RW ||
       cmode == FILE_MODE_W) 
-    mds->balancer->hit_inode(cur, META_POP_IWR);
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(cur, META_POP_IRD);
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -3617,6 +3603,9 @@ public:
     ctime(ct) { }
   void finish(int r) {
     assert(r == 0);
+
+    // hit pop
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
     // purge also...
     mds->mdcache->purge_inode(&in->inode, 0);
