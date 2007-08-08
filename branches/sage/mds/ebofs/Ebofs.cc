@@ -269,13 +269,13 @@ int Ebofs::mkfs()
 
   // create journal?
   if (journalfn) {
-    journal = new FileJournal(this, journalfn);
+    Journal *journal = new FileJournal(this, journalfn);
     if (journal->create() < 0) {
       dout(3) << "mount journal " << journalfn << " created failed" << endl;
-      delete journal;
     } else {
       dout(3) << "mount journal " << journalfn << " created" << endl;
     }
+    delete journal;
   }
 
   dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;

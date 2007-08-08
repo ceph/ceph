@@ -34,6 +34,7 @@ public:
   virtual void close() = 0;
 
   // writes
+  virtual void make_writeable() = 0;
   virtual bool submit_entry(bufferlist& e, Context *oncommit) = 0;// submit an item
   virtual void commit_epoch_start() = 0;  // mark epoch boundary
   virtual void commit_epoch_finish() = 0; // mark prior epoch as committed (we can expire)
