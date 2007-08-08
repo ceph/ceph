@@ -181,6 +181,8 @@ void MDS::reopen_logger()
     mds_logtype.add_set("nim");
   }
  
+  if (whoami < 0) return;
+
   // flush+close old log
   if (logger) {
     logger->flush(true);
@@ -398,7 +400,8 @@ void MDS::beacon_send()
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), want_state, beacon_last_seq),
+  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), mdsmap->get_epoch(), 
+					 want_state, beacon_last_seq),
 			  monmap->get_inst(mon));
 
   // schedule next sender

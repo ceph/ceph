@@ -190,14 +190,20 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // reply to beacon?
   if (state != MDSMap::STATE_STOPPED) {
     last_beacon[from] = g_clock.now();  // note time
-    mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), state, seq), 
+    mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), mdsmap.get_epoch(), state, seq), 
 				 m->get_mds_inst());
   }
   
   // is there a state change here?
-  if (mdsmap.mds_state.count(from) == 0 ||
-      mdsmap.mds_state[from] != state)
-    return false;  // yep, need to update map.
+  if (mdsmap.mds_state.count(from) == 0 &&
+      state == MDSMap::STATE_BOOT) 
+    return false;   // need to add to update map
+
+  if (mdsmap.mds_state[from] != state) {
+    if (mdsmap.get_epoch() == m->get_last_epoch_seen()) 
+      return false;
+    dout(10) << "mds_beacon " << *m << " ignoring requested state, because mds hasn't seen latest map" << endl;
+  }
   
   // we're done.
   delete m;
