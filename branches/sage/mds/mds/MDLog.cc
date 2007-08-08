@@ -48,6 +48,7 @@ void MDLog::init_journaler()
 
   static bool didit = false;
   if (!didit) {
+    didit = true;
     mdlog_logtype.add_inc("add");
     mdlog_logtype.add_inc("expire");    
     mdlog_logtype.add_inc("obs");    

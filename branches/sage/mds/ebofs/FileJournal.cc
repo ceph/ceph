@@ -400,8 +400,7 @@ void FileJournal::make_writeable()
 bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
 {
   if (!read_pos) {
-    dout(1) << "read_entry -- not readable" << endl;
-    make_writeable();
+    dout(2) << "read_entry -- not readable" << endl;
     return false;
   }
 
@@ -423,8 +422,7 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
   ::lseek(fd, read_pos, SEEK_SET);
   ::read(fd, &h, sizeof(h));
   if (!h.check_magic(read_pos, header.fsid)) {
-    dout(1) << "read_entry " << read_pos << " : bad header magic, end of journal" << endl;
-    make_writeable();
+    dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << endl;
     return false;
   }
 
@@ -438,8 +436,7 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
   if (!f.check_magic(read_pos, header.fsid) ||
       h.epoch != f.epoch ||
       h.len != f.len) {
-    dout(1) << "read_entry " << read_pos << " : bad footer magic, partially entry, end of journal" << endl;
-    make_writeable();
+    dout(2) << "read_entry " << read_pos << " : bad footer magic, partially entry, end of journal" << endl;
     return false;
   }
 

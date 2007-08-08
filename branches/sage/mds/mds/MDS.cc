@@ -59,8 +59,6 @@
 #include "messages/MClientRequestForward.h"
 
 
-LogType mds_logtype, mds_cache_logtype;
-
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << " "
@@ -96,7 +94,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
-
 
   // clients
   last_client_mdsmap_bcast = 0;
@@ -144,6 +141,46 @@ MDS::~MDS() {
 
 void MDS::reopen_logger()
 {
+  static LogType mds_logtype, mds_cache_logtype;
+  static bool didit = false;
+  if (!didit) {
+    didit = true;
+    
+    mds_logtype.add_inc("req");
+    mds_logtype.add_inc("reply");
+    mds_logtype.add_inc("fw");
+    mds_logtype.add_inc("cfw");
+    
+    mds_logtype.add_set("l");
+    mds_logtype.add_set("q");
+    mds_logtype.add_set("popanyd");
+    mds_logtype.add_set("popnest");
+    
+    mds_logtype.add_inc("lih");
+    mds_logtype.add_inc("lif");
+    
+    mds_logtype.add_set("c");
+    mds_logtype.add_set("ctop");
+    mds_logtype.add_set("cbot");
+    mds_logtype.add_set("cptail");  
+    mds_logtype.add_set("cpin");
+    mds_logtype.add_inc("cex");
+    mds_logtype.add_inc("dis");
+    mds_logtype.add_inc("cmiss");
+    
+    mds_logtype.add_set("buf");
+    mds_logtype.add_inc("cdir");
+    mds_logtype.add_inc("fdir");
+    
+    mds_logtype.add_inc("iex");
+    mds_logtype.add_inc("iim");
+    mds_logtype.add_inc("ex");
+    mds_logtype.add_inc("im");
+    mds_logtype.add_inc("imex");  
+    mds_logtype.add_set("nex");
+    mds_logtype.add_set("nim");
+  }
+ 
   // flush+close old log
   if (logger) {
     logger->flush(true);
@@ -153,7 +190,6 @@ void MDS::reopen_logger()
     logger2->flush(true);
     delete logger2;
   }
-
 
   // log
   string name;
@@ -166,44 +202,11 @@ void MDS::reopen_logger()
 
   logger = new Logger(name, (LogType*)&mds_logtype);
 
-  mds_logtype.add_inc("req");
-  mds_logtype.add_inc("reply");
-  mds_logtype.add_inc("fw");
-  mds_logtype.add_inc("cfw");
-
-  mds_logtype.add_set("l");
-  mds_logtype.add_set("q");
-  mds_logtype.add_set("popanyd");
-  mds_logtype.add_set("popnest");
-
-  mds_logtype.add_inc("lih");
-  mds_logtype.add_inc("lif");
-
-  mds_logtype.add_set("c");
-  mds_logtype.add_set("ctop");
-  mds_logtype.add_set("cbot");
-  mds_logtype.add_set("cptail");  
-  mds_logtype.add_set("cpin");
-  mds_logtype.add_inc("cex");
-  mds_logtype.add_inc("dis");
-  mds_logtype.add_inc("cmiss");
-
-  mds_logtype.add_set("buf");
-  mds_logtype.add_inc("cdir");
-  mds_logtype.add_inc("fdir");
-
-  mds_logtype.add_inc("iex");
-  mds_logtype.add_inc("iim");
-  mds_logtype.add_inc("ex");
-  mds_logtype.add_inc("im");
-  mds_logtype.add_inc("imex");  
-  mds_logtype.add_set("nex");
-  mds_logtype.add_set("nim");
-
-  
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
   logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
+
+  server->reopen_logger();
 }
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)

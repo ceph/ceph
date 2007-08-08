@@ -60,6 +60,31 @@ using namespace std;
 #define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
 
 
+void Server::reopen_logger()
+{
+  static LogType mdserver_logtype;
+  static bool didit = false;
+  if (!didit) {
+    didit = true;
+    mdserver_logtype.add_inc("hcreq"); // handle client req
+    mdserver_logtype.add_inc("hsreq"); // slave
+    mdserver_logtype.add_inc("hcsess");    // client session
+    mdserver_logtype.add_inc("dcreq"); // dispatch client req
+    mdserver_logtype.add_inc("dsreq"); // slave
+  }
+
+  if (logger) {
+    logger->flush();
+    delete logger;
+  }
+
+  // logger
+  char name[80];
+  sprintf(name, "mds%d.server", mds->get_nodeid());
+  logger = new Logger(name, &mdserver_logtype);
+}
+
+
 void Server::dispatch(Message *m) 
 {
   switch (m->get_type()) {
@@ -152,6 +177,8 @@ void Server::handle_client_session(MClientSession *m)
   mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
 		      new C_MDS_session_finish(mds, m->get_source_inst(), open, cmapv));
   delete m;
+
+  if (logger) logger->inc("hcsess");
 }
 
 void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cmapv)
@@ -391,6 +418,8 @@ void Server::handle_client_request(MClientRequest *req)
   dout(4) << "handle_client_request " << *req << endl;
   int client = req->get_client();
 
+  if (logger) logger->inc("hcreq");
+
   if (!mds->is_active()) {
     dout(5) << " not active, discarding client request." << endl;
     delete req;
@@ -470,6 +499,8 @@ void Server::handle_client_request(MClientRequest *req)
 void Server::dispatch_client_request(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+
+  if (logger) logger->inc("dcreq");
 
   if (mdr->ref) {
     dout(7) << "dispatch_client_request " << *req << " ref " << *mdr->ref << endl;
@@ -551,6 +582,8 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 {
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << endl;
   int from = m->get_source().num();
+
+  if (logger) logger->inc("hsreq");
 
   // reply?
   if (m->is_reply()) {
@@ -645,6 +678,8 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     mdcache->request_finish(mdr);
     return;
   }
+
+  if (logger) logger->inc("dsreq");
 
   switch (mdr->slave_request->get_op()) {
   case MMDSSlaveRequest::OP_XLOCK:

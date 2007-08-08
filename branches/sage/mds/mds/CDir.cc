@@ -499,7 +499,9 @@ void CDir::init_fragment_pins()
 void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 {
   dout(10) << "split by " << bits << " bits on " << *this << endl;
-  
+
+  if (cache->mds->logger) cache->mds->logger->inc("dir_sp");
+
   assert(is_complete() || !is_auth());
 
   list<frag_t> frags;
@@ -769,7 +771,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   auth_pin();
   state_set(CDir::STATE_FETCHING);
 
-  if (cache->mds->logger) cache->mds->logger->inc("fdir");
+  if (cache->mds->logger) cache->mds->logger->inc("dir_f");
 
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
@@ -1036,6 +1038,7 @@ void CDir::_commit(version_t want)
   // complete?
   if (!is_complete()) {
     dout(7) << "commit not complete, fetching first" << endl;
+    if (cache->mds->logger) cache->mds->logger->inc("dir_ffc");
     fetch(new C_Dir_RetryCommit(this, want));
     return;
   }
@@ -1049,7 +1052,7 @@ void CDir::_commit(version_t want)
     state_set(STATE_COMMITTING);
   }
   
-  if (cache->mds->logger) cache->mds->logger->inc("cdir");
+  if (cache->mds->logger) cache->mds->logger->inc("dir_c");
 
   // encode
   bufferlist bl;
@@ -1234,14 +1237,8 @@ bool CDir::is_subtree_root()
 
 
 /** set_dir_auth
- *
- * always list ourselves first.
- *
- * accept 'iamauth' param so that i can intelligently adjust freeze auth_pins
- * even when the auth bit isn't correct.  
- * as when calling MDCache::import_subtree(...).
  */
-void CDir::set_dir_auth(pair<int,int> a, bool iamauth) 
+void CDir::set_dir_auth(pair<int,int> a)
 { 
   dout(10) << "setting dir_auth=" << a
 	   << " from " << dir_auth

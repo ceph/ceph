@@ -106,8 +106,6 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  void make_writeable();
-
   class Writer : public Thread {
     FileJournal *journal;
   public:
@@ -130,6 +128,8 @@ private:
   int create();
   int open();
   void close();
+
+  void make_writeable();
 
   // writes
   bool submit_entry(bufferlist& e, Context *oncommit);  // submit an item

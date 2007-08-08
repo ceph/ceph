@@ -281,10 +281,8 @@ private:
  public:
   pair<int,int> authority();
   pair<int,int> get_dir_auth() { return dir_auth; }
-  void set_dir_auth(pair<int,int> a, bool iamauth=false);
-  void set_dir_auth(int a) { 
-    set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN), false); 
-  }
+  void set_dir_auth(pair<int,int> a);
+  void set_dir_auth(int a) { set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }

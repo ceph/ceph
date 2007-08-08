@@ -157,14 +157,18 @@ osd/rados
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
 - read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
-- efficiently replicate clone() objects
-- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
+
 - consider implications of nvram writeahead logs
+- clean shutdown?
+- pgmonitor should supplement failure detection
+
+- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
+
+- efficiently replicate clone() objects
 - fix heartbeat wrt new replication
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- pg_num changes
 - report crashed pgs?
 
 messenger

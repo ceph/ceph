@@ -17,6 +17,7 @@
 
 #include "MDS.h"
 
+class Logger;
 class LogEvent;
 class C_MDS_rename_finish;
 class MDRequest;
@@ -29,13 +30,20 @@ class Server {
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
+  Logger *logger;
 
 public:
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger) {
+    messenger(mds->messenger),
+    logger(0) {
   }
+  ~Server() {
+    delete logger;
+  }
+
+  void reopen_logger();
 
   // message handler
   void dispatch(Message *m);

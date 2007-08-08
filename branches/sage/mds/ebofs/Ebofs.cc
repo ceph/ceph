@@ -154,6 +154,9 @@ int Ebofs::mount()
 	t._decode(bl, off);
 	_apply_transaction(t);
       }
+
+      // done reading, make writeable.
+      journal->make_writeable();
     }
   }
 
