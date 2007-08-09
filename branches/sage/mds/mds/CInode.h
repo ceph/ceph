@@ -146,9 +146,10 @@ public:
   frag_t pick_dirfrag(const string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
-    if (dirfrags.count(fg)) 
+    if (dirfrags.count(fg)) {
+      assert(dirfragtree.is_leaf(fg));
       return dirfrags[fg];
-    else
+    } else
       return 0;
   }
   void get_dirfrags_under(frag_t fg, list<CDir*>& ls);

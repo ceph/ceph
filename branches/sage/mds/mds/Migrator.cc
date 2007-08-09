@@ -307,7 +307,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
     CDir *dir = mds->mdcache->get_dirfrag(df);
 
     if (import_peer[df] == who) {
-      switch (import_state[df]) {
+      switch (q->second) {
       case IMPORT_DISCOVERING:
 	dout(10) << "import state=discovering : clearing state" << endl;
 	import_state.erase(df);
@@ -324,7 +324,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
 
       case IMPORT_PREPPING:
-	if (import_state[df] == IMPORT_PREPPING) {
+	if (q->second == IMPORT_PREPPING) {
 	  dout(10) << "import state=prepping : unpinning base+bounds " << *dir << endl;
 	}
 	assert(dir);

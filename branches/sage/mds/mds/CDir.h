@@ -172,21 +172,21 @@ protected:
   int num_dirty;
 
   // state
-  version_t       version;
-  version_t       committing_version;
-  version_t       committed_version;
-  version_t       committed_version_equivalent;  // in case of, e.g., temporary file
-  version_t       projected_version; 
+  version_t version;
+  version_t committing_version;
+  version_t committed_version;
+  version_t committed_version_equivalent;  // in case of, e.g., temporary file
+  version_t projected_version; 
 
   // lock nesting, freeze
-  int        auth_pins;
-  int        nested_auth_pins;
-  int        request_pins;
+  int auth_pins;
+  int nested_auth_pins;
+  int request_pins;
 
 
   // cache control  (defined for authority; hints for replicas)
-  int              dir_rep;
-  set<int>         dir_rep_by;      // if dir_rep == REP_LIST
+  int      dir_rep;
+  set<int> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -393,17 +393,16 @@ public:
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int inc);
-  void on_freezeable();
 
   // -- freezing --
   void freeze_tree(Context *c);
   void freeze_tree_finish(Context *c);
   void unfreeze_tree();
-  void _freeze_tree(Context *c=0);
+  void _freeze_tree();
 
   void freeze_dir(Context *c);
   void freeze_dir_finish(Context *c);
-  void _freeze_dir(Context *c=0);
+  void _freeze_dir();
   void unfreeze_dir();
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
@@ -416,9 +415,9 @@ public:
   bool is_frozen_tree_root() { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() { return state & STATE_FROZENDIR; }
   
-  bool is_freezeable() {
+  bool is_freezeable(bool freezing=false) {
     // no nested auth pins.
-    if (auth_pins > 0 || nested_auth_pins > 0) 
+    if ((auth_pins-freezing) > 0 || nested_auth_pins > 0) 
       return false;
 
     // inode must not be frozen.
@@ -427,8 +426,8 @@ public:
 
     return true;
   }
-  bool is_freezeable_dir() {
-    if (auth_pins > 0) 
+  bool is_freezeable_dir(bool freezing=false) {
+    if ((auth_pins-freezing) > 0) 
       return false;
 
     // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).

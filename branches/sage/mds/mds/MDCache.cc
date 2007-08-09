@@ -5528,11 +5528,15 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
   dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
 	   << " on " << *diri << endl;
 
+  // yuck.  we may have discovered the inode while it was being fragmented.
+  if (!diri->dirfragtree.is_leaf(basefrag))
+    diri->dirfragtree.force_to_leaf(basefrag);
+
+  CDir *base = diri->get_or_open_dirfrag(this, basefrag);
+
   // adjust fragtree
   diri->dirfragtree.split(basefrag, bits);
   dout(10) << " new fragtree is " << diri->dirfragtree << endl;
-
-  CDir *base = diri->get_or_open_dirfrag(this, basefrag);
 
   if (bits > 0) {
     if (base) {
