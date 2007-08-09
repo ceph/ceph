@@ -61,6 +61,9 @@
  * TODO:
  *  - get_first_child(), next_sibling(int parent_bits) to make (possibly partial) 
  *    iteration efficient (see, e.g., try_assimilate_children()
+ *  - rework frag_t so that we mask the left-most (most significant) bits instead of
+ *    the right-most (least significant) bits.  just because it's more intutive, and
+ *    matches the network/netmask concept.
  */
 
 typedef uint32_t _frag_t;
@@ -75,7 +78,7 @@ class frag_t {
  public:
   frag_t() : _enc(0) { }
   frag_t(unsigned v, unsigned b) : _enc((b << 24) + 
-					(v & (0xffffffff >> b))) { }
+					(v & (0xffffffffULL >> (32-b)))) { }
   frag_t(_frag_t e) : _enc(e) { }
 
   // constructors
@@ -186,9 +189,11 @@ class fragtree_t {
   
   bool is_leaf(frag_t x) const {
     std::list<frag_t> ls;
-    get_leaves_under_split(x, ls);
+    get_leaves_under(x, ls);
+    cout << "is_leaf(" << x << ") -> " << ls << endl;
     if (!ls.empty() &&
-	ls.front() == x)
+	ls.front() == x &&
+	ls.size() == 1)
       return true;
     return false;
   }
@@ -253,8 +258,8 @@ class fragtree_t {
     frag_t branch = get_branch(x);
     int nb = get_split(branch);
     if (nb > 0 &&                                  // if branch is a split, and
-	branch.bits() + nb <= x.bits())            // one of the children is or contains x
-      return frag_t(branch.bits()+nb, x.value());  // then return that child (it's a leaf)
+	branch.bits() + nb <= x.bits())            // one of the children is or contains x 
+      return frag_t(x.value(), branch.bits()+nb);  // then return that child (it's a leaf)
     else
       return branch;
   }
@@ -378,16 +383,24 @@ class fragtree_t {
     if (is_leaf(x))
       return false;
 
+    cout << "force_to_leaf " << x << " on " << _splits << endl;
+
     frag_t parent = get_branch_or_leaf(x);
     assert(parent.bits() <= x.bits());
+    cout << "parent is " << parent << endl;
 
     // do we need to split from parent to x?
     if (parent.bits() < x.bits()) {
       int spread = x.bits() - parent.bits();
       int nb = get_split(parent);
+      cout << "spread " << spread << ", parent splits by " << nb << endl;
       if (nb == 0) {
 	// easy: split parent (a leaf) by the difference
+	cout << "splitting parent " << parent << " by spread " << spread << endl;
 	split(parent, spread);
+	cout << "force_to_leaf done" << endl;
+	assert(is_leaf(x));
+	return true;
       }
       assert(nb > spread);
       
@@ -399,8 +412,10 @@ class fragtree_t {
       parent.split(spread, subs);
       for (std::list<frag_t>::iterator p = subs.begin();
 	   p != subs.end();
-	   ++p) 
+	   ++p) {
+	cout << "splitting intermediate " << *p << " by " << (nb-spread) << endl;
 	split(*p, nb - spread);
+      }
     }
 
     // x is now a leaf or split.  
@@ -412,11 +427,14 @@ class fragtree_t {
       q.pop_front();
       int nb = get_split(t);
       if (nb) {
+	cout << "merging child " << t << " by " << nb << endl;
 	merge(t, nb);         // merge this point, and
 	t.split(nb, q);   // queue up children
       }
     }
 
+    cout << "force_to_leaf done" << endl;
+    assert(is_leaf(x));
     return true;
   }
 
@@ -474,17 +492,24 @@ inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {
   out << "fragtree_t(";
   
-  std::list<frag_t> q;
-  q.push_back(frag_t());
-  while (!q.empty()) {
-    frag_t t = q.front();
-    q.pop_front();
-    int nb = ft.get_split(t);
-    if (nb) {
-      if (t.bits()) out << ' ';
-      out << t << '%' << nb;
-      t.split(nb, q);   // queue up children
+  if (0) {
+    std::list<frag_t> q;
+    q.push_back(frag_t());
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      int nb = ft.get_split(t);
+      if (nb) {
+	if (t.bits()) out << ' ';
+	out << t << '%' << nb;
+	t.split(nb, q);   // queue up children
+      }
     }
+  }
+  if (1) {
+    std::list<frag_t> leaves;
+    ft.get_leaves(leaves);
+    out << leaves;
   }
   return out << ")";
 }
