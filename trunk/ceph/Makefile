@@ -141,6 +141,26 @@ cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
+# code shipping experiments
+activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+echotestclient: active/echotestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+msgtestclient: active/msgtestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+#libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
+#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+
 
 # misc
 gprof-helper.so: test/gprof-helper.c
@@ -226,7 +246,7 @@ osbdb.o: ${OSBDB_OBJS}
 	${LDINC} $@ $^
 
 %.o: %.cc
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} -fPIC ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
