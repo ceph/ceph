@@ -4893,14 +4893,13 @@ void MDCache::handle_discover(MDiscover *dis)
     }
     CDir *curdir = cur->get_dirfrag(fg);
 
-    // am i dir auth (or if no dir, at least the inode auth)
     if ((!curdir && !cur->is_auth()) ||
 	(curdir && !curdir->is_auth())) {
       if (curdir) {
-	dout(7) << *curdir << " not dirfrag auth, setting dir_auth_hint" << endl;
+	dout(7) << " not dirfrag auth, setting dir_auth_hint for " << *curdir << endl;
 	reply->set_dir_auth_hint(curdir->authority().first);
       } else {
-	dout(7) << *cur << " dirfrag not open, not inode auth, setting dir_auth_hint" << endl;
+	dout(7) << " dirfrag not open, not inode auth, setting dir_auth_hint for " << *cur << endl;
 	reply->set_dir_auth_hint(cur->authority().first);
       }
       reply->set_wanted_xlocks_hint(dis->wants_xlocked());
@@ -5193,7 +5192,8 @@ CDir *MDCache::add_replica_dir(CInode *diri,
   } else {
     // force frag to leaf in the diri tree
     if (!diri->dirfragtree.is_leaf(fg)) {
-      dout(7) << "add_replica_dir forcing frag " << fg << " to leaf in the fragtree" << endl;
+      dout(7) << "add_replica_dir forcing frag " << fg << " to leaf in the fragtree "
+	      << diri->dirfragtree << endl;
       diri->dirfragtree.force_to_leaf(fg);
     }
 

@@ -1830,18 +1830,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   if (in->is_replica(mds->get_nodeid()))
     in->remove_replica(mds->get_nodeid());
   
-  // twiddle locks
-  /*
-  if (in->authlock.do_import(oldauth, mds->get_nodeid()))
-    mds->locker->simple_eval(&in->authlock);
-  if (in->linklock.do_import(oldauth, mds->get_nodeid()))
-    mds->locker->simple_eval(&in->linklock);
-  if (in->dirfragtreelock.do_import(oldauth, mds->get_nodeid()))
-    mds->locker->simple_eval(&in->dirfragtreelock);
-  if (in->dirlock.do_import(oldauth, mds->get_nodeid()))
-    mds->locker->scatter_eval(&in->dirlock);
-  */
-
   // caps
   for (set<int>::iterator it = merged_client_caps.begin();
        it != merged_client_caps.end();
@@ -1854,12 +1842,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     caps->set_mds( oldauth ); // reap from whom?
     mds->send_message_client_maybe_open(caps, imported_client_map[*it]);
   }
-
-  // filelock
-  /*
-  if (in->filelock.do_import(oldauth, mds->get_nodeid()))
-    mds->locker->simple_eval(&in->filelock);
-  */
 }
 
 
@@ -1920,7 +1902,6 @@ int Migrator::decode_import_dir(bufferlist& bl,
   long nden = dstate.get_nden();
   
   for (; nden>0; nden--) {
-    
     num_imported++;
     
     // dentry
