@@ -190,7 +190,7 @@ class fragtree_t {
   bool is_leaf(frag_t x) const {
     std::list<frag_t> ls;
     get_leaves_under(x, ls);
-    cout << "is_leaf(" << x << ") -> " << ls << endl;
+    //cout << "is_leaf(" << x << ") -> " << ls << endl;
     if (!ls.empty() &&
 	ls.front() == x &&
 	ls.size() == 1)
@@ -398,7 +398,6 @@ class fragtree_t {
 	// easy: split parent (a leaf) by the difference
 	cout << "splitting parent " << parent << " by spread " << spread << endl;
 	split(parent, spread);
-	cout << "force_to_leaf done" << endl;
 	assert(is_leaf(x));
 	return true;
       }
