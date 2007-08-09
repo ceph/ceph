@@ -195,13 +195,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   }
   
   // is there a state change here?
-  if (mdsmap.mds_state.count(from) == 0 &&
-      state == MDSMap::STATE_BOOT) 
-    return false;   // need to add to update map
-
-  if (mdsmap.mds_state[from] != state) {
+  if (mdsmap.mds_state.count(from) == 0) { 
+    if (state == MDSMap::STATE_BOOT)
+      return false;  // need to add to map
+    dout(1) << "mds_beacon " << *m << " announcing non-boot state, ignoring" << endl;
+  } else if (mdsmap.mds_state[from] != state) {
     if (mdsmap.get_epoch() == m->get_last_epoch_seen()) 
-      return false;
+      return false;  // need to update map
     dout(10) << "mds_beacon " << *m << " ignoring requested state, because mds hasn't seen latest map" << endl;
   }
   
