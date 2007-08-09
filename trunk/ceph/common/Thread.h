@@ -17,6 +17,7 @@
 #define __THREAD_H
 
 #include <pthread.h>
+#include <signal.h>
 #include <errno.h>
 
 class Thread {
@@ -40,6 +41,9 @@ class Thread {
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
 
+  int kill(int signal) {
+    return pthread_kill(thread_id, signal);
+  }
   int create() {
     return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }

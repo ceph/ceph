@@ -36,7 +36,6 @@ using namespace __gnu_cxx;
 
 
 
-
 /* Rank - per-process
  */
 class Rank {
@@ -57,11 +56,7 @@ private:
     Accepter() : done(false) {}
     
     void *entry();
-    void stop() {
-      done = true;
-      ::close(listen_sd);
-      join();
-    }
+    void stop();
     int start();
   } accepter;
 
