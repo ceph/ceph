@@ -898,9 +898,7 @@ void MDBalancer::show_imports(bool external)
 void MDBalancer::dump_pop_map()
 {
   char fn[20];
-  static int x = 0;
-  sprintf(fn, "popdump.%d.mds%d.%d", beat_epoch, mds->get_nodeid(), x);
-  x++;
+  sprintf(fn, "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
 
   dout(1) << "dump_pop_map to " << fn << endl;
 
@@ -922,19 +920,29 @@ void MDBalancer::dump_pop_map()
 	myfile << in->popularity[a].pop[b].get(now) << "\t";
     */
 
-    // filename last
-    string p;
-    in->make_path(p);
-    myfile << p << endl;
-
     // recurse, depth-first.
     if (in->is_dir()) {
+
       list<CDir*> dirs;
       in->get_dirfrags(dirs);
       for (list<CDir*>::iterator p = dirs.begin();
 	   p != dirs.end();
 	   ++p) {
 	CDir *dir = *p;
+
+	myfile << (int)dir->pop_me.meta_load(now) << "\t";
+	myfile << (int)dir->pop_nested.meta_load(now) << "\t";
+	myfile << (int)dir->pop_auth_subtree.meta_load(now) << "\t";
+	myfile << (int)dir->pop_auth_subtree_nested.meta_load(now) << "\t";
+
+	// filename last
+	string p;
+	in->make_path(p);
+	myfile << "." << p;
+	if (dir->get_frag() != frag_t()) 
+	  myfile << "___" << (unsigned)dir->get_frag();
+	myfile << endl; //"/" << dir->get_frag() << endl;
+	
 	// add contents
 	for (map<string,CDentry*>::iterator q = dir->items.begin();
 	     q != dir->items.end();
