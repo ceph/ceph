@@ -607,16 +607,14 @@ public:
   void split_dir(CDir *dir, int byn);
 
 private:
-  void fragment_freeze(CInode *diri, list<CDir*>& startfrags, 
-		       frag_t basefrag, int bits);
-  void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, 
-				  frag_t basefrag, int bits);
-  void fragment_go(CInode *diri, list<CDir*>& startfrags, 
-		   frag_t basefrag, int bits);
-  void fragment_logged(CInode *diri, frag_t basefrag, int bits, 
-		       list<CDir*>& resultfrags, vector<version_t>& pvs);
+  void fragment_freeze(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
+  void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
+  void fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
+  void fragment_stored(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags);
+  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs);
   friend class C_MDC_FragmentGo;
   friend class C_MDC_FragmentMarking;
+  friend class C_MDC_FragmentStored;
   friend class C_MDC_FragmentLogged;
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
