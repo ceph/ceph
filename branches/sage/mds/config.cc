@@ -698,7 +698,7 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--client_cache_readdir_ttl") == 0)
       g_conf.client_cache_readdir_ttl = atoi(args[++i]);
     else if (strcmp(args[i], "--client_trace") == 0)
-      g_conf.client_trace = atoi(args[++i]);
+      g_conf.client_trace = args[++i];
 
     else if (strcmp(args[i], "--fuse_direct_io") == 0)
       g_conf.fuse_direct_io = atoi(args[++i]);

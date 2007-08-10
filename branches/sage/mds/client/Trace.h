@@ -30,11 +30,13 @@ using namespace std;
 
 class Trace {
   class TokenList *tl;
-  
+  int _line;
+
  public:
   Trace(const char* filename);
   ~Trace();
-  
+
+  int get_line() { return _line; }
   list<const char*>& get_list();
 
   list<const char*>::iterator _cur;
@@ -43,30 +45,27 @@ class Trace {
   void start() {
     _cur = get_list().begin();
     _end = get_list().end();
-    ns = 0;
+    _line = 1;
   }
 
-  char strings[10][200];
-  int ns;
-  const char *get_string(const char *prefix = 0) {
+  const char *get_string(char *buf, const char *prefix) {
     assert(_cur != _end);
     const char *s = *_cur;
-    _cur++;
+    _cur++; _line++;
     if (prefix) {
       if (strstr(s, "/prefix") == s ||
           strstr(s, "/prefix") == s+1) {
-        strcpy(strings[ns], prefix);
-        strcpy(strings[ns] + strlen(prefix),
+        strcpy(buf, prefix);
+        strcpy(buf + strlen(prefix),
                s + strlen("/prefix"));
-        s = (const char*)strings[ns];
-        ns++;
-        if (ns == 10) ns = 0;
+        s = (const char*)buf;
       }
     } 
     return s;
   }
   __int64_t get_int() {
-    return atoll(get_string());
+    char buf[20];
+    return atoll(get_string(buf, 0));
   }
   bool end() {
     return _cur == _end;

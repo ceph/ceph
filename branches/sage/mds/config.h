@@ -157,7 +157,7 @@ struct md_config_t {
   size_t   client_bcache_align;
   */
 
-  int      client_trace;
+  char *client_trace;
   int      fuse_direct_io;
   bool fuse_ll;
 

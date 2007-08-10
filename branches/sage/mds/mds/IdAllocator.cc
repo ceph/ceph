@@ -135,8 +135,14 @@ void IdAllocator::reset()
 
   // use generic range. FIXME THIS IS CRAP
   free.clear();
+#ifdef __LP64__
   uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 40;
   uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 40) - 1;
+#else
+# warning this looks like a 32-bit system, using small inode numbers.
+  uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 25;
+  uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 25) - 1;
+#endif
   free.insert(start, end);
 
   state = STATE_ACTIVE;

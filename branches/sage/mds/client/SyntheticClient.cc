@@ -30,6 +30,7 @@ using namespace std;
 #include <sys/types.h>
 #include <utime.h>
 #include <math.h>
+#include <sys/statvfs.h>
 
 #include "config.h"
 #undef dout
@@ -697,60 +698,71 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   dout(4) << "play trace" << endl;
   t.start();
 
+  char buf[1024];
+
   utime_t start = g_clock.now();
 
   const char *p = prefix.c_str();
 
   map<int64_t, int64_t> open_files;
+  map<int64_t, DIR*>    open_dirs;
+
+  map<int64_t, Fh*> ll_files;
+  map<int64_t, void*> ll_dirs;
+  map<uint64_t, int64_t> ll_inos;
+
+  ll_inos[1] = 1; // root inode is known.
 
   while (!t.end()) {
     
     if (time_to_stop()) break;
     
     // op
-    const char *op = t.get_string();
-    dout(4) << "trace op " << op << endl;
+    const char *op = t.get_string(buf, 0);
+    dout(4) << (t.get_line()-1) << ": trace op " << op << endl;
+    
+    // high level ops ---------------------
     if (strcmp(op, "link") == 0) {
-      const char *a = t.get_string(p);
-      const char *b = t.get_string(p);
+      const char *a = t.get_string(buf, p);
+      const char *b = t.get_string(buf, p);
       client->link(a,b);      
     } else if (strcmp(op, "unlink") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       client->unlink(a);
     } else if (strcmp(op, "rename") == 0) {
-      const char *a = t.get_string(p);
-      const char *b = t.get_string(p);
+      const char *a = t.get_string(buf, p);
+      const char *b = t.get_string(buf, p);
       client->rename(a,b);      
     } else if (strcmp(op, "mkdir") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       client->mkdir(a, b);
     } else if (strcmp(op, "rmdir") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       client->rmdir(a);
     } else if (strcmp(op, "symlink") == 0) {
-      const char *a = t.get_string(p);
-      const char *b = t.get_string(p);
+      const char *a = t.get_string(buf, p);
+      const char *b = t.get_string(buf, p);
       client->symlink(a,b);      
     } else if (strcmp(op, "readlink") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       char buf[100];
       client->readlink(a, buf, 100);
     } else if (strcmp(op, "lstat") == 0) {
       struct stat st;
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       client->lstat(a, &st);
     } else if (strcmp(op, "chmod") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       client->chmod(a, b);
     } else if (strcmp(op, "chown") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       int64_t c = t.get_int();
       client->chown(a, b, c);
     } else if (strcmp(op, "utime") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       int64_t c = t.get_int();
       struct utimbuf u;
@@ -758,55 +770,222 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       u.modtime = c;
       client->utime(a, &u);
     } else if (strcmp(op, "mknod") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
-      client->mknod(a, b);
+      int64_t c = t.get_int();
+      client->mknod(a, b, c);
     } else if (strcmp(op, "getdir") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       list<string> contents;
       client->getdir(a, contents);
+    } else if (strcmp(op, "getdir") == 0) {
+      const char *a = t.get_string(buf, p);
+      list<string> contents;
+      client->getdir(a, contents);
+    } else if (strcmp(op, "opendir") == 0) {
+      const char *a = t.get_string(buf, p);
+      int64_t b = t.get_int();
+      DIR *dirp;
+      client->opendir(a, &dirp);
+      if (dirp) open_dirs[b] = dirp;
+    } else if (strcmp(op, "closedir") == 0) {
+      int64_t a = t.get_int();
+      client->closedir(open_dirs[a]);
+      open_dirs.erase(a);
     } else if (strcmp(op, "open") == 0) {
-      const char *a = t.get_string(p);
+      const char *a = t.get_string(buf, p);
       int64_t b = t.get_int(); 
-      int64_t id = t.get_int();
-      int64_t fh = client->open(a, b);
-      open_files[id] = fh;
+      int64_t c = t.get_int(); 
+      int64_t d = t.get_int();
+      int64_t fd = client->open(a, b, c);
+      if (fd > 0) open_files[d] = fd;
     } else if (strcmp(op, "close") == 0) {
       int64_t id = t.get_int();
       int64_t fh = open_files[id];
       if (fh > 0) client->close(fh);
       open_files.erase(id);
-    } else if (strcmp(op, "truncate") == 0) {
-      const char *a = t.get_string(p);
-      int64_t b = t.get_int();
-      client->truncate(a,b);
-    } else if (strcmp(op, "read") == 0) {
-      int64_t id = t.get_int();
-      int64_t fh = open_files[id];
-      int size = t.get_int();
-      int off = t.get_int();
-      char *buf = new char[size];
-      client->read(fh, buf, size, off);
-      delete[] buf;
     } else if (strcmp(op, "lseek") == 0) {
-      int64_t id = t.get_int();
-      int64_t fh = open_files[id];
-      int off = t.get_int();
-      int whence = t.get_int();
-      client->lseek(fh, off, whence);
+      int64_t f = t.get_int();
+      int fd = open_files[f];
+      int64_t off = t.get_int();
+      int64_t whence = t.get_int();
+      client->lseek(fd, off, whence);
+    } else if (strcmp(op, "read") == 0) {
+      int64_t f = t.get_int();
+      int64_t size = t.get_int();
+      int64_t off = t.get_int();
+      int64_t fd = open_files[f];
+      char *b = new char[size];
+      client->read(fd, b, size, off);
+      delete[] b;
     } else if (strcmp(op, "write") == 0) {
-      int64_t id = t.get_int();
-      int64_t fh = open_files[id];
-      int size = t.get_int();
-      int off = t.get_int();
-      char *buf = new char[size];
-      memset(buf, 1, size);            // let's write 1's!
-      client->write(fh, buf, size, off);
-      delete[] buf;
+      int64_t f = t.get_int();
+      int64_t fd = open_files[f];
+      int64_t size = t.get_int();
+      int64_t off = t.get_int();
+      char *b = new char[size];
+      memset(b, 1, size);            // let's write 1's!
+      client->write(fd, b, size, off);
+      delete[] b;
+    } else if (strcmp(op, "truncate") == 0) {
+      const char *a = t.get_string(buf, p);
+      int64_t l = t.get_int();
+      client->truncate(a, l);
+    } else if (strcmp(op, "ftruncate") == 0) {
+      int64_t f = t.get_int();
+      int fd = open_files[f];
+      int64_t l = t.get_int();
+      client->ftruncate(fd, l);
     } else if (strcmp(op, "fsync") == 0) {
+      int64_t f = t.get_int();
+      int64_t b = t.get_int();
+      int fd = open_files[f];
+      client->fsync(fd, b);
+    } else if (strcmp(op, "chdir") == 0) {
+      const char *a = t.get_string(buf, p);
+      client->chdir(a);
+    } else if (strcmp(op, "statfs") == 0) {
+      struct statvfs stbuf;
+      client->statfs("/", &stbuf);
+    }
+
+    // low level ops ---------------------
+    else if (strcmp(op, "ll_lookup") == 0) {
+      int64_t i = t.get_int();
+      const char *name = t.get_string(buf, p);
+      int64_t r = t.get_int();
+      struct stat attr;
+      if (client->ll_lookup(i, name, &attr) == 0)
+	ll_inos[r] = attr.st_ino;
+    } else if (strcmp(op, "ll_forget") == 0) {
+      int64_t i = t.get_int();
+      int64_t n = t.get_int();
+      if (client->ll_forget(ll_inos[i], n))
+	ll_inos.erase(i);
+    } else if (strcmp(op, "ll_getattr") == 0) {
+      int64_t i = t.get_int();
+      struct stat attr;
+      client->ll_getattr(ll_inos[i], &attr);
+    } else if (strcmp(op, "ll_setattr") == 0) {
+      int64_t i = t.get_int();
+      struct stat attr;
+      memset(&attr, 0, sizeof(attr));
+      attr.st_mode = t.get_int();
+      attr.st_uid = t.get_int();
+      attr.st_gid = t.get_int();
+      attr.st_size = t.get_int();
+      attr.st_mtime = t.get_int();
+      attr.st_atime = t.get_int();
+      int mask = t.get_int();
+      client->ll_setattr(ll_inos[i], &attr, mask);
+    } else if (strcmp(op, "ll_readlink") == 0) {
+      int64_t i = t.get_int();
+      const char *value;
+      client->ll_readlink(ll_inos[i], &value);
+    } else if (strcmp(op, "ll_mknod") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      int m = t.get_int();
+      int r = t.get_int();
+      int64_t ri = t.get_int();
+      struct stat attr;
+      if (client->ll_mknod(ll_inos[i], n, m, r, &attr) == 0)
+	ll_inos[ri] = attr.st_ino;
+    } else if (strcmp(op, "ll_mkdir") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      int m = t.get_int();
+      int64_t ri = t.get_int();
+      struct stat attr;
+      if (client->ll_mkdir(ll_inos[i], n, m, &attr) == 0)
+	ll_inos[ri] = attr.st_ino;
+    } else if (strcmp(op, "ll_symlink") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      const char *v = t.get_string(buf, p);
+      int64_t ri = t.get_int();
+      struct stat attr;
+      if (client->ll_symlink(i, n, v, &attr) == 0)
+	ll_inos[ri] = attr.st_ino;
+    } else if (strcmp(op, "ll_unlink") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      client->ll_unlink(ll_inos[i], n);
+    } else if (strcmp(op, "ll_rmdir") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      client->ll_rmdir(ll_inos[i], n);
+    } else if (strcmp(op, "ll_rename") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      int64_t ni = t.get_int();
+      const char *nn = t.get_string(buf, p);
+      client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
+    } else if (strcmp(op, "ll_link") == 0) {
+      int64_t i = t.get_int();
+      int64_t ni = t.get_int();
+      const char *nn = t.get_string(buf, p);
+      struct stat attr;
+      client->ll_link(ll_inos[i], ni, nn, &attr);
+    } else if (strcmp(op, "ll_opendir") == 0) {
+      int64_t i = t.get_int();
+      int64_t r = t.get_int();
+      void *dirp;
+      client->ll_opendir(ll_inos[i], &dirp);
+      ll_dirs[r] = dirp;
+    } else if (strcmp(op, "ll_releasedir") == 0) {
+      int64_t f = t.get_int();
+      void *dirp = ll_dirs[f];
+      client->ll_releasedir(dirp);
+      ll_dirs.erase(f);
+    } else if (strcmp(op, "ll_open") == 0) {
+      int64_t i = t.get_int();
+      int64_t f = t.get_int();
+      int64_t r = t.get_int();
+      Fh *fhp;
+      client->ll_open(ll_inos[i], f, &fhp);
+      ll_files[r] = fhp;
+    } else if (strcmp(op, "ll_create") == 0) {
+      int64_t i = t.get_int();
+      const char *n = t.get_string(buf, p);
+      int64_t m = t.get_int();
+      int64_t f = t.get_int();
+      int64_t r = t.get_int();
+      int64_t ri = t.get_int();
+      Fh *fhp;
+      struct stat attr;
+      if (client->ll_create(ll_inos[i], n, m, f, &attr, &fhp) == 0) {
+	ll_inos[ri] = attr.st_ino;
+	ll_files[r] = fhp;
+      }
+    } else if (strcmp(op, "ll_read") == 0) {
+      int64_t f = t.get_int();
+      int64_t off = t.get_int();
+      int64_t size = t.get_int();
+      Fh *fh = ll_files[f];
+      bufferlist bl;
+      client->ll_read(fh, off, size, &bl);
+    } else if (strcmp(op, "ll_write") == 0) {
+      int64_t f = t.get_int();
+      int64_t off = t.get_int();
+      int64_t size = t.get_int();
+      Fh *fh = ll_files[f];
+      bufferlist bl;
+      bufferptr bp(size);
+      bl.push_back(bp);
+      bp.zero();
+      client->ll_write(fh, off, size, bl.c_str());
+    } else if (strcmp(op, "ll_release") == 0) {
+      int64_t f = t.get_int();
+      Fh *fh = ll_files[f];
+      client->ll_release(fh);
+      ll_files.erase(f);
+    } 
+
+    else {
+      cout << (t.get_line()-1) << ": *** trace hit unrecognized symbol '" << op << "' " << endl;
       assert(0);
-    } else 
-      assert(0);
+    }
   }
 
   // close open files
@@ -819,6 +998,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   
   return 0;
 }
+
 
 
 int SyntheticClient::clean_dir(string& basedir)
@@ -2091,3 +2271,4 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
   
 
 }
+

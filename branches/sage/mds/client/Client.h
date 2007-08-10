@@ -41,6 +41,7 @@
 // stl
 #include <set>
 #include <map>
+#include <fstream>
 using namespace std;
 
 #include <ext/hash_map>
@@ -594,6 +595,10 @@ protected:
 
   int fill_stat(Inode *in, struct stat *st);
 
+  
+  // trace generation
+  ofstream traceout;
+
 
   // friends
   friend class SyntheticClient;
@@ -649,6 +654,7 @@ private:
 
   // some helpers
   int _do_lstat(const char *path, int mask, Inode **in);
+  int _opendir(const char *name, DirResult **dirpp);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
   bool _readdir_have_frag(DirResult *dirp);
@@ -658,7 +664,7 @@ private:
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
   void _closedir(DirResult *dirp);
   void _ll_get(Inode *in);
-  void _ll_put(Inode *in, int num);
+  int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
 
   // internal interface
@@ -757,11 +763,12 @@ public:
 
   // low-level interface
   int ll_lookup(inodeno_t parent, const char *name, struct stat *attr);
-  void ll_forget(inodeno_t ino, int count);
+  bool ll_forget(inodeno_t ino, int count);
   Inode *_ll_get_inode(inodeno_t ino);
   int ll_getattr(inodeno_t ino, struct stat *st);
   int ll_setattr(inodeno_t ino, struct stat *st, int mask);
   int ll_opendir(inodeno_t ino, void **dirpp);
+  void ll_releasedir(void *dirp);
   int ll_readlink(inodeno_t ino, const char **value);
   int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr);
   int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr);

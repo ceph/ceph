@@ -227,12 +227,15 @@ namespace __gnu_cxx {
 #define STAT_MASK_CTIME      (STAT_MASK_FILE|STAT_MASK_AUTH|STAT_MASK_LINK) // ctime
 
 inline int DT_TO_MODE(int dt) {
+  return dt << 12;
+  /*
   switch (dt) {
   case DT_REG: return INODE_MODE_FILE;
   case DT_DIR: return INODE_MODE_DIR;
   case DT_LNK: return INODE_MODE_SYMLINK;
   default: assert(0); return 0;
   }
+  */
 }
 
 struct inode_t {
@@ -274,11 +277,14 @@ struct inode_t {
 };
 
 inline unsigned char MODE_TO_DT(int mode) {
+  return mode >> 12;
+  /*
   if (S_ISREG(mode)) return inode_t::DT_REG;
   if (S_ISLNK(mode)) return inode_t::DT_LNK;
   if (S_ISDIR(mode)) return inode_t::DT_DIR;
   assert(0);
   return 0;
+  */
 }
 
 

@@ -279,7 +279,7 @@ static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 			       struct fuse_file_info *fi)
 {
   DIR *dirp = (DIR*)fi->fh;
-  client->closedir(dirp);
+  client->ll_releasedir(dirp);
   fuse_reply_err(req, 0);
 }
 
@@ -330,7 +330,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: ceph_ll_create,
+ create: 0, //ceph_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0
@@ -347,6 +347,10 @@ int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
   char **newargv = (char **) malloc((argc + 10) * sizeof(char *));
   newargv[newargc++] = argv[0];
   newargv[newargc++] = "-f";  // stay in foreground
+
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "allow_other";
+
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 
   // go go gadget fuse
