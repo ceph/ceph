@@ -663,6 +663,7 @@ private:
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
   int _truncate(const char *file, off_t length);
+  int _fsync(Fh *fh, bool syncdataonly);
 
 
 public:

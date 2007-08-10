@@ -2407,8 +2407,6 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     if (fhp) *fhp = f;
     f->mode = cmode;
 
-    tout << (long)f << endl;
-
     // inode
     f->inode = inode_map[reply->get_ino()];
     assert(f->inode);
@@ -2457,9 +2455,9 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
 	      << endl;
     }
     
-    dout(3) << "open success, fh is " << f << " combined caps " << cap_string(f->inode->file_caps()) << endl;
+    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(f->inode->file_caps()) << endl;
+    tout << (long)fh << endl;
   } else {
-    dout(0) << "open failure result " << result << endl;
     tout << 0 << endl;
   }
 
@@ -2774,13 +2772,14 @@ int Client::write(fh_t fd, const char *buf, off_t size, off_t offset)
   Mutex::Locker lock(client_lock);
   assert(fh_map.count(fd));
   Fh *fh = fh_map[fd];
-  return _write(fh, offset, size, buf);
+  int r = _write(fh, offset, size, buf);
+  dout(3) << "write(" << f << ", \"...\", " << size << ", " << offset << ") = " << r << endl;
+  return r;
 }
 
 int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 {
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
-  dout(3) << "op: client->write(" << f << ", buf, " << size << ", " << offset << ");" << endl;
   tout << "write" << endl;
   tout << f << endl;
   tout << size << endl;
@@ -2902,7 +2901,6 @@ int Client::truncate(const char *relpath, off_t length)
 
 int Client::_truncate(const char *file, off_t length) 
 {
-  dout(3) << "op: client->truncate(\"" << file << "\", " << length << ");" << endl;
   tout << "truncate" << endl;
   tout << file << endl;
   tout << length << endl;
@@ -2920,27 +2918,30 @@ int Client::_truncate(const char *file, off_t length)
   insert_trace(reply);  
   delete reply;
 
-  dout(10) << " truncate result is " << res << endl;
-
+  dout(3) << "truncate(\"" << file << "\", " << length << ") = " << res << endl;
   return res;
 }
 
 
-int Client::fsync(fh_t fh, bool syncdataonly) 
+int Client::fsync(fh_t fd, bool syncdataonly) 
 {
-  client_lock.Lock();
-  dout(3) << "op: client->fsync(open_files[ " << fh << " ], " << syncdataonly << ");" << endl;
+  Mutex::Locker lock(client_lock);
+  assert(fh_map.count(fd));
+  Fh *f = fh_map[fd];
+  int r = _fsync(f, syncdataonly);
+  dout(3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << endl;
+  return r;
+}
+
+int Client::_fsync(Fh *f, bool syncdataonly)
+{
   tout << "fsync" << endl;
   tout << fh << endl;
   tout << syncdataonly << endl;
 
   int r = 0;
 
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
   Inode *in = f->inode;
-
-  dout(3) << "fsync fh " << fh << " ino " << in->inode.ino << " syncdataonly " << syncdataonly << endl;
 
   // metadata?
   if (!syncdataonly) {
@@ -2955,8 +2956,6 @@ int Client::fsync(fh_t fh, bool syncdataonly)
     // wait for callback
     while (!done) cond.Wait(client_lock);
   }
-
-  client_lock.Unlock();
   return r;
 }
 
