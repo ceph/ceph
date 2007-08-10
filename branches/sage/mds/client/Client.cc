@@ -2456,7 +2456,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     }
     
     dout(5) << "open success, fh is " << f << " combined caps " << cap_string(f->inode->file_caps()) << endl;
-    tout << (long)fh << endl;
+    tout << (long)f << endl;
   } else {
     tout << 0 << endl;
   }
@@ -2514,7 +2514,7 @@ int Client::_release(Fh *f)
   //dout(3) << "op: open_files.erase( " << fh << " );" << endl;
   dout(5) << "_release " << f << endl;
   tout << "close" << endl;
-  tout << f << endl;
+  tout << (long)f << endl;
 
   Inode *in = f->inode;
 
@@ -2637,16 +2637,18 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   Fh *f = fh_map[fh];
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
-  if (r < 0) return r;
-  bl.copy(0, bl.length(), buf);
-  return bl.length();
+  dout(3) << "read(" << fh << ", " << buf << ", " << size << ", " << offset << ") = " << r << endl;
+  if (r >= 0) {
+    bl.copy(0, bl.length(), buf);
+    r = bl.length();
+  }
+  return r;
 }
 
 int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
 {
-  dout(3) << "op: client->read(" << f << ", buf, " << size << ", " << offset << ");   // that's " << offset << "~" << size << endl;
   tout << "read" << endl;
-  tout << f << endl;
+  tout << (long)f << endl;
   tout << size << endl;
   tout << offset << endl;
 
@@ -2732,9 +2734,6 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     unlock_fh_pos(f);
   }
 
-  //dout(10) << "i read '" << bl.c_str() << "'" << endl;
-  dout(10) << "read rvalue " << rvalue << ", r " << r << endl;
-
   // done!
   return rvalue;
 }
@@ -2773,7 +2772,7 @@ int Client::write(fh_t fd, const char *buf, off_t size, off_t offset)
   assert(fh_map.count(fd));
   Fh *fh = fh_map[fd];
   int r = _write(fh, offset, size, buf);
-  dout(3) << "write(" << f << ", \"...\", " << size << ", " << offset << ") = " << r << endl;
+  dout(3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << endl;
   return r;
 }
 
@@ -2936,7 +2935,7 @@ int Client::fsync(fh_t fd, bool syncdataonly)
 int Client::_fsync(Fh *f, bool syncdataonly)
 {
   tout << "fsync" << endl;
-  tout << fh << endl;
+  tout << (long)f << endl;
   tout << syncdataonly << endl;
 
   int r = 0;
