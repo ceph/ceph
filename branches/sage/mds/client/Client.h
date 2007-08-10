@@ -72,8 +72,6 @@ extern class Logger  *client_logger;
  
 */
 
-typedef int fh_t;
-
 class Dir;
 class Inode;
 
@@ -444,16 +442,16 @@ protected:
 
   // file handles, etc.
   string                 cwd;
-  interval_set<fh_t>     free_fh_set;  // unused fh's
-  hash_map<fh_t, Fh*>    fh_map;
+  interval_set<int> free_fd_set;  // unused fds
+  hash_map<int, Fh*> fd_map;
   
-  fh_t get_fh() {
-    fh_t fh = free_fh_set.start();
-    free_fh_set.erase(fh, 1);
-    return fh;
+  int get_fd() {
+    int fd = free_fd_set.start();
+    free_fd_set.erase(fd, 1);
+    return fd;
   }
-  void put_fh(fh_t fh) {
-    free_fh_set.insert(fh, 1);
+  void put_fd(int fd) {
+    free_fd_set.insert(fd, 1);
   }
 
   void mkabspath(const char *rel, string& abs) {
@@ -637,8 +635,8 @@ private:
     }
   };
 
-  // internal interface
-  //   call these with client_lock held!
+  // some helpers
+  int _do_lstat(const char *path, int mask, Inode **in);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
   bool _readdir_have_frag(DirResult *dirp);
@@ -646,6 +644,9 @@ private:
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+
+  // internal interface
+  //   call these with client_lock held!
   int _link(const char *existing, const char *newname);
   int _unlink(const char *path);
   int _rename(const char *from, const char *to);
@@ -653,7 +654,7 @@ private:
   int _rmdir(const char *path);
   int _readlink(const char *path, char *buf, off_t size);
   int _symlink(const char *existing, const char *newname);
-  int _lstat(const char *path, int mask, Inode **in);
+  int _lstat(const char *path, struct stat *stbuf);
   int _chmod(const char *relpath, mode_t mode);
   int _chown(const char *relpath, uid_t uid, gid_t gid);
   int _utime(const char *relpath, utime_t mtime, utime_t atime);
@@ -663,6 +664,7 @@ private:
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
   int _truncate(const char *file, off_t length);
+  int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
 
 
@@ -716,13 +718,14 @@ public:
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
   int open(const char *path, int flags, mode_t mode=0);
-  int close(fh_t fh);
-  off_t lseek(fh_t fh, off_t offset, int whence);
-  int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
-  int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
-  int fake_write_size(fh_t fh, off_t size);
+  int close(int fd);
+  off_t lseek(int fd, off_t offset, int whence);
+  int read(int fd, char *buf, off_t size, off_t offset=-1);
+  int write(int fd, const char *buf, off_t size, off_t offset=-1);
+  int fake_write_size(int fd, off_t size);
   int truncate(const char *file, off_t size);
-  int fsync(fh_t fh, bool syncdataonly);
+  int ftruncate(int fd, off_t size);
+  int fsync(int fd, bool syncdataonly);
 
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
@@ -737,11 +740,10 @@ public:
 		       off_t length, off_t offset);
 
   // low-level interface
-  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, 
-		double *attr_timeout, double *entry_timeout);
+  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr);
   void ll_forget(inodeno_t ino, int count);
   Inode *_ll_get_inode(inodeno_t ino);
-  int ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout);
+  int ll_getattr(inodeno_t ino, struct stat *st);
   int ll_setattr(inodeno_t ino, struct stat *st, int mask);
   int ll_opendir(inodeno_t ino, void **dirpp);
   int ll_readlink(inodeno_t ino, const char **value);
@@ -753,6 +755,7 @@ public:
   int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname);
   int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr);
   int ll_open(inodeno_t ino, int flags, Fh **fh);
+  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh);
   int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
   int ll_write(Fh *fh, off_t off, off_t len, const char *data);
   int ll_release(Fh *fh);

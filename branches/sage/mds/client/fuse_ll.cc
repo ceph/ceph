@@ -37,7 +37,7 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   int stmask;
 
   memset(&fe, 0, sizeof(fe));
-  stmask = client->ll_lookup(parent, name, &fe.attr, &fe.attr_timeout, &fe.entry_timeout);
+  stmask = client->ll_lookup(parent, name, &fe.attr);
   if (stmask >= 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -59,9 +59,8 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   
   (void) fi;
 
-  double attr_timeout;
-  if (client->ll_getattr(ino, &stbuf, &attr_timeout) == 0) 
-    fuse_reply_attr(req, &stbuf, attr_timeout);
+  if (client->ll_getattr(ino, &stbuf) == 0) 
+    fuse_reply_attr(req, &stbuf, 0);
   else
     fuse_reply_err(req, ENOENT);
 }
@@ -180,13 +179,14 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
 {
   Fh *fh;
   int r = client->ll_open(ino, fi->flags, &fh);
-  if (r > 0) {
+  if (r == 0) {
     fi->fh = (long)fh;
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, -r);
   }
 }
+
 static void ceph_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 			 struct fuse_file_info *fi)
 {
@@ -283,6 +283,23 @@ static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
   fuse_reply_err(req, 0);
 }
 
+static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
+			   mode_t mode, struct fuse_file_info *fi)
+{
+  struct fuse_entry_param fe;
+  memset(&fe, 0, sizeof(fe));
+  Fh *fh;
+  int r = client->ll_create(parent, name, mode, fi->flags, &fe.attr, &fh);
+  if (r == 0) {
+    fi->fh = (long)fh;
+    fe.ino = fe.attr.st_ino;
+    cout << "ino is " << fe.ino << endl;
+    fuse_reply_create(req, &fe, fi);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
 static struct fuse_lowlevel_ops ceph_ll_oper = {
  init: 0,
  destroy: 0,
@@ -314,7 +331,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: 0,
+ create: 0, //ceph_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0

@@ -117,7 +117,7 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   lru.lru_set_max(g_conf.client_cache_size);
 
   // file handles
-  free_fh_set.insert(10, 1<<30);
+  free_fd_set.insert(10, 1<<30);
 
   // set up messengers
   messenger = m;
@@ -155,16 +155,16 @@ Client::~Client()
 
 void Client::tear_down_cache()
 {
-  // fh's
-  for (hash_map<fh_t, Fh*>::iterator it = fh_map.begin();
-       it != fh_map.end();
+  // fd's
+  for (hash_map<int, Fh*>::iterator it = fd_map.begin();
+       it != fd_map.end();
        it++) {
     Fh *fh = it->second;
     dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
     put_inode(fh->inode);
     delete fh;
   }
-  fh_map.clear();
+  fd_map.clear();
 
   // caps!
   // *** FIXME ***
@@ -621,6 +621,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 	dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
       } else {
 	mds = mdsmap->get_random_in_mds();
+	if (mds < 0) mds = 0;  // hrm.
 	dout(10) << "chose random target mds" << mds << " for lack of anything better" << endl;
       }
     }
@@ -1369,8 +1370,8 @@ int Client::mount()
   dout(3) << "op: int readlinkbuf_len = 1000;" << endl;
   dout(3) << "op: char readlinkbuf[readlinkbuf_len];" << endl;
   dout(3) << "op: map<string, inode_t*> dir_contents;" << endl;
-  dout(3) << "op: map<fh_t, fh_t> open_files;" << endl;
-  dout(3) << "op: fh_t fh;" << endl;
+  dout(3) << "op: map<int, int> open_files;" << endl;
+  dout(3) << "op: int fd;" << endl;
   */
   return 0;
 }
@@ -1389,7 +1390,7 @@ int Client::unmount()
   unmounting = true;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
-  assert(fh_map.empty());
+  assert(fd_map.empty());
   
   // empty lru cache
   lru.lru_set_max(0);
@@ -1725,7 +1726,7 @@ int Client::_readlink(const char *path, char *buf, off_t size)
   tout << path << endl;
 
   Inode *in;
-  int r = _lstat(path, STAT_MASK_BASE, &in);
+  int r = _do_lstat(path, STAT_MASK_BASE, &in);
   if (r == 0 && !in->inode.is_symlink()) r = -EINVAL;
   if (r == 0) {
     // copy into buf (at most size bytes)
@@ -1745,7 +1746,7 @@ int Client::_readlink(const char *path, char *buf, off_t size)
 
 // inode stuff
 
-int Client::_lstat(const char *path, int mask, Inode **in)
+int Client::_do_lstat(const char *path, int mask, Inode **in)
 {  
   MClientRequest *req = 0;
   filepath fpath(path);
@@ -1804,7 +1805,8 @@ int Client::_lstat(const char *path, int mask, Inode **in)
 
 int Client::fill_stat(Inode *in, struct stat *st) 
 {
-  dout(10) << "fill_stat on " << in->inode.ino << " mode " << oct << in->inode.mode << dec << endl;
+  dout(10) << "fill_stat on " << in->inode.ino << " mode " << oct << in->inode.mode << dec
+	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << endl;
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
   st->st_mode = in->inode.mode;
@@ -1835,17 +1837,19 @@ int Client::fill_stat(Inode *in, struct stat *st)
 
 int Client::lstat(const char *relpath, struct stat *stbuf)
 {
-  client_lock.Lock();
-
-  tout << "lstat" << endl;
-  tout << relpath << endl;
-
+  Mutex::Locker lock(client_lock);
   string abspath;
   mkabspath(relpath, abspath);
-  const char *path = abspath.c_str();
+  return _lstat(abspath.c_str(), stbuf);
+}
+
+int Client::_lstat(const char *path, struct stat *stbuf)
+{
+  tout << "lstat" << endl;
+  tout << path << endl;
 
   Inode *in = 0;
-  int res = _lstat(path, STAT_MASK_ALL, &in);
+  int res = _do_lstat(path, STAT_MASK_ALL, &in);
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
@@ -1853,8 +1857,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   }
 
   trim_cache();
-  dout(3) << "lstat(\"" << relpath << "\", " << stbuf << ") = " << res << endl;
-  client_lock.Unlock();
+  dout(3) << "lstat(\"" << path << "\", " << stbuf << ") = " << res << endl;
   return res;
 }
 
@@ -2073,7 +2076,7 @@ int Client::opendir(const char *name, DIR **dirpp)
   if (dn && dn->inode) {
     dirp->inode = dn->inode;
     dirp->inode->get();
-    dout(10) << "got inode " << dn->inode->inode.ino << " ref now " << dn->inode->ref << endl;
+    dout(10) << "had inode " << dn->inode->inode.ino << " ref now " << dn->inode->ref << endl;
     dirp->set_frag(dn->inode->dirfragtree[0]);
     dout(10) << "opendir " << name << ", our cache says the first dirfrag is " << dirp->frag() << endl;
   }
@@ -2314,11 +2317,12 @@ void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
 
 int Client::closedir(DIR *dir) 
 {
+  Mutex::Locker lock(client_lock);
+
   dout(3) << "closedir(" << dir << ") = 0" << endl;
 
   DirResult *dirp = (DirResult*)dir;
   if (dirp->inode) {
-    Mutex::Locker lock(client_lock);
     put_inode(dirp->inode);
     dirp->inode = 0;
   }
@@ -2368,9 +2372,9 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
-    r = get_fh();
-    assert(fh_map.count(r) == 0);
-    fh_map[r] = fh;
+    r = get_fd();
+    assert(fd_map.count(r) == 0);
+    fd_map[r] = fh;
   } 
   dout(3) << "open(" << relpath << ", " << flags << ") = " << r << endl;
   return r;
@@ -2497,14 +2501,14 @@ void Client::close_safe(Inode *in)
 }
 
 
-int Client::close(fh_t fd)
+int Client::close(int fd)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "close(" << fd << ")" << endl;
-  assert(fh_map.count(fd));
-  Fh *fh = fh_map[fd];
+  assert(fd_map.count(fd));
+  Fh *fh = fd_map[fd];
   _release(fh);
-  fh_map.erase(fd);
+  fd_map.erase(fd);
   return 0;
 }
 
@@ -2570,12 +2574,12 @@ int Client::_release(Fh *f)
 // read, write
 
 
-off_t Client::lseek(fh_t fh, off_t offset, int whence)
+off_t Client::lseek(int fd, off_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
 
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
   switch (whence) {
@@ -2597,7 +2601,7 @@ off_t Client::lseek(fh_t fh, off_t offset, int whence)
   
   off_t pos = f->pos;
 
-  dout(3) << "lseek(" << fh << ", " << offset << ", " << whence << ") = " << pos << endl;
+  dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << endl;
   return pos;
 }
 
@@ -2630,14 +2634,14 @@ void Client::unlock_fh_pos(Fh *f)
 
 // blocking osd interface
 
-int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
+int Client::read(int fd, char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
-  dout(3) << "read(" << fh << ", " << buf << ", " << size << ", " << offset << ") = " << r << endl;
+  dout(3) << "read(" << fd << ", " << buf << ", " << size << ", " << offset << ") = " << r << endl;
   if (r >= 0) {
     bl.copy(0, bl.length(), buf);
     r = bl.length();
@@ -2766,11 +2770,11 @@ void Client::hack_sync_write_safe()
   client_lock.Unlock();
 }
 
-int Client::write(fh_t fd, const char *buf, off_t size, off_t offset) 
+int Client::write(int fd, const char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  assert(fh_map.count(fd));
-  Fh *fh = fh_map[fd];
+  assert(fd_map.count(fd));
+  Fh *fh = fd_map[fd];
   int r = _write(fh, offset, size, buf);
   dout(3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << endl;
   return r;
@@ -2921,12 +2925,43 @@ int Client::_truncate(const char *file, off_t length)
   return res;
 }
 
-
-int Client::fsync(fh_t fd, bool syncdataonly) 
+int Client::ftruncate(int fd, off_t length) 
 {
   Mutex::Locker lock(client_lock);
-  assert(fh_map.count(fd));
-  Fh *f = fh_map[fd];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  return _ftruncate(f, length);
+}
+
+int Client::_ftruncate(Fh *fh, off_t length) 
+{
+  tout << "ftruncate" << endl;
+  tout << (long)fh << endl;
+  tout << length << endl;
+
+  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
+  req->args.truncate.ino = fh->inode->inode.ino;
+  req->args.truncate.length = length;
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  MClientReply *reply = make_request(req);
+  int res = reply->get_result();
+  insert_trace(reply);  
+  delete reply;
+
+  dout(3) << "ftruncate(\"" << fh << "\", " << length << ") = " << res << endl;
+  return res;
+}
+
+
+int Client::fsync(int fd, bool syncdataonly) 
+{
+  Mutex::Locker lock(client_lock);
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   int r = _fsync(f, syncdataonly);
   dout(3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << endl;
   return r;
@@ -2995,8 +3030,8 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   dout(3) << "op: client->lazyio_propogate(" << fd
           << ", " << offset << ", " << count << ")" << endl;
   
-  assert(fh_map.count(fd));
-  Fh *f = fh_map[fd];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
   if (f->mode & FILE_MODE_LAZY) {
@@ -3031,8 +3066,8 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   dout(3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << endl;
   
-  assert(fh_map.count(fd));
-  Fh *f = fh_map[fd];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   Inode *in = f->inode;
   
   if (f->mode & FILE_MODE_LAZY) {
@@ -3070,8 +3105,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 #define FUSE_SET_ATTR_ATIME	(1 << 4)
 #define FUSE_SET_ATTR_MTIME	(1 << 5)
 
-int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr,
-		      double *attr_timeout, double *entry_timeout)
+int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_lookup " << parent << " " << name << endl;
@@ -3111,10 +3145,7 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr,
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
     Inode *in = diri->dir->dentries[dname]->inode;
-    attr->st_ino = in->inode.ino;
-    attr->st_mode = in->inode.mode;
-    attr_timeout = 0;
-    entry_timeout = 0;
+    fill_stat(in, attr);
     in->get();
     dout(3) << "ll_lookup " << parent << " " << name << " -> " << in->inode.ino << endl;
     return 0;
@@ -3145,7 +3176,7 @@ Inode *Client::_ll_get_inode(inodeno_t ino)
   if (inode_map.count(ino) == 0) {
     assert(ino == 1);  // must be the root inode.
     Inode *in;
-    int r = _lstat("/", 0, &in);
+    int r = _do_lstat("/", 0, &in);
     assert(r >= 0);
     return in;
   } else {
@@ -3154,7 +3185,7 @@ Inode *Client::_ll_get_inode(inodeno_t ino)
 }
 
 
-int Client::ll_getattr(inodeno_t ino, struct stat *st, double *attr_timeout)
+int Client::ll_getattr(inodeno_t ino, struct stat *st)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_getattr " << ino << endl;
@@ -3175,17 +3206,24 @@ int Client::ll_setattr(inodeno_t ino, struct stat *st, int mask)
   int r;
   if ((mask & FUSE_SET_ATTR_MODE) &&
       (r = _chmod(path.c_str(), st->st_mode) < 0)) return r;
+
   if ((mask & FUSE_SET_ATTR_UID) &&
       (r = _chown(path.c_str(), st->st_uid, st->st_gid) < 0)) return r;
   //if ((mask & FUSE_SET_ATTR_GID) &&
   //(r = client->_chgrp(path.c_str(), st->st_gid) < 0)) return r;
+
   if ((mask & FUSE_SET_ATTR_SIZE) &&
       (r = _truncate(path.c_str(), st->st_size) < 0)) return r;
+  
   if ((mask & FUSE_SET_ATTR_MTIME) &&
+      (mask & FUSE_SET_ATTR_ATIME) &&
+      (r = _utime(path.c_str(), utime_t(st->st_mtime,0), utime_t(st->st_atime,0)) < 0)) return r;
+  else if ((mask & FUSE_SET_ATTR_MTIME) &&
       (r = _utime(path.c_str(), utime_t(st->st_mtime,0), utime_t()) < 0)) return r;
-  if ((mask & FUSE_SET_ATTR_ATIME) &&
+  else if ((mask & FUSE_SET_ATTR_ATIME) &&
       (r = _utime(path.c_str(), utime_t(), utime_t(st->st_atime,0)) < 0)) return r;
   
+  dout(3) << "ll_setattr " << ino << " = " << r << endl;
   return 0;
 }
 
@@ -3213,12 +3251,14 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
   path += "/";
   path += name;
   int r = _mknod(path.c_str(), mode, rdev);
-  if (r < 0) return r;
-
-  string dname(name);
-  Inode *in = diri->dir->dentries[dname]->inode;
-  fill_stat(in, attr);
-  return 0;
+  if (r == 0) {
+    string dname(name);
+    Inode *in = diri->dir->dentries[dname]->inode;
+    in->get();
+    fill_stat(in, attr);
+  }
+  dout(3) << "ll_mknod " << parent << " " << name << " = " << r << endl;
+  return r;
 }
 
 int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct stat *attr)
@@ -3232,12 +3272,14 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
   path += "/";
   path += name;
   int r = _mkdir(path.c_str(), mode);
-  if (r < 0) return r;
-
-  string dname(name);
-  Inode *in = diri->dir->dentries[dname]->inode;
-  fill_stat(in, attr);
-  return 0;
+  if (r == 0) {
+    string dname(name);
+    Inode *in = diri->dir->dentries[dname]->inode;
+    in->get();
+    fill_stat(in, attr);
+  }
+  dout(3) << "ll_mkdir " << parent << " " << name << " = " << r << endl;
+  return r;
 }
 
 int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, struct stat *attr)
@@ -3251,12 +3293,13 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
   path += "/";
   path += name;
   int r = _symlink(value, path.c_str());
-  if (r < 0) return r;
-
-  string dname(name);
-  Inode *in = diri->dir->dentries[dname]->inode;
-  fill_stat(in, attr);
-  return 0;
+  if (r == 0) {
+    string dname(name);
+    Inode *in = diri->dir->dentries[dname]->inode;
+    in->get();
+    fill_stat(in, attr);
+  }
+  return r;
 }
 
 int Client::ll_unlink(inodeno_t ino, const char *name)
@@ -3322,12 +3365,13 @@ int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, str
   newpath += newname;
 
   int r = _link(path.c_str(), newpath.c_str());
-  if (r < 0) return r;
-
-  string dname(newname);
-  Inode *in = diri->dir->dentries[dname]->inode;
-  fill_stat(in, attr);
-  return 0;
+  if (r == 0) {
+    string dname(newname);
+    Inode *in = diri->dir->dentries[dname]->inode;
+    in->get();
+    fill_stat(in, attr);
+  }
+  return r;
 }
 
 int Client::ll_opendir(inodeno_t ino, void **dirpp)
@@ -3342,6 +3386,7 @@ int Client::ll_opendir(inodeno_t ino, void **dirpp)
   }
   DIR *dir;
   int r = opendir(path.c_str(), &dir);
+  dout(3) << "ll_opendir " << ino << " = " << r << endl;
   if (r < 0) return r;
   *dirpp = (void*)dir;
   return 0;
@@ -3356,10 +3401,31 @@ int Client::ll_open(inodeno_t ino, int flags, Fh **fhp)
   string path;
   in->make_path(path);
 
-  Fh *fh;
-  int r = _open(path.c_str(), flags, 0, &fh);
+  int r = _open(path.c_str(), flags, 0, fhp);
   if (r < 0) return r;
-  dout(3) << "ll_open " << ino << " " << flags << " = " << fh << endl;
+  dout(3) << "ll_open " << ino << " " << flags << " = " << r << " (" << *fhp << ")" << endl;
+  return 0;
+}
+
+int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, 
+		      struct stat *attr, Fh **fhp)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_create " << parent << " " << name << " " << mode << " " << flags << endl;
+
+  Inode *pin = _ll_get_inode(parent);
+  string path;
+  pin->make_path(path);
+  path += "/";
+  path += name;
+
+  int r = _open(path.c_str(), flags|O_CREAT, mode, fhp);
+  if (r >= 0) {
+    (*fhp)->inode->get();  // this counts as a reference
+    fill_stat((*fhp)->inode, attr);
+  }
+  dout(3) << "ll_create " << parent << " " << name << " " << mode 
+	  << " " << flags << " = " << r << " (" << *fhp << ")" << endl;
   return 0;
 }
 
@@ -3394,18 +3460,17 @@ int Client::ll_release(Fh *fh)
 // layout
 
 
-int Client::describe_layout(int fh, FileLayout *lp)
+int Client::describe_layout(int fd, FileLayout *lp)
 {
-  client_lock.Lock();
-  dout(3) << "op: client->describe_layout(" << fh << ");" << endl;
+  Mutex::Locker lock(client_lock);
 
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
   *lp = in->inode.layout;
 
-  client_lock.Unlock();
+  dout(3) << "describe_layout(" << fd << ") = 0" << endl;
   return 0;
 }
 
@@ -3430,20 +3495,19 @@ int Client::get_stripe_period(int fd)
   return layout.period();
 }
 
-int Client::enumerate_layout(int fh, list<ObjectExtent>& result,
+int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
 			     off_t length, off_t offset)
 {
-  client_lock.Lock();
-  dout(3) << "op: client->enumerate_layout(" << fh << ", " << length << ", " << offset << ");" << endl;
+  Mutex::Locker lock(client_lock);
 
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
   // map to a list of extents
   filer->file_to_extents(in->inode, offset, length, result);
 
-  client_lock.Unlock();
+  dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << endl;
   return 0;
 }
 

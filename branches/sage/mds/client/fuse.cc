@@ -143,20 +143,20 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
 static int ceph_read(const char *path, char *buf, size_t size, off_t offset,
                      struct fuse_file_info *fi)
 {
-  fh_t fh = fi->fh;
-  return client->read(fh, buf, size, offset);
+  int fd = fi->fh;
+  return client->read(fd, buf, size, offset);
 }
 
 static int ceph_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
 {
-  fh_t fh = fi->fh;
-  return client->write(fh, buf, size, offset);
+  int fd = fi->fh;
+  return client->write(fd, buf, size, offset);
 }
 
 static int ceph_flush(const char *path, struct fuse_file_info *fi)
 {
-//fh_t fh = fi->fh;
+  //int fh = fi->fh;
   //return client->flush(fh);
   return 0;
 }
@@ -168,16 +168,16 @@ static int ceph_statfs(const char *path, struct statvfs *stbuf)
 
 static int ceph_release(const char *path, struct fuse_file_info *fi)
 {
-  fh_t fh = fi->fh;
-  int r = client->close(fh);  // close the file
+  int fd = fi->fh;
+  int r = client->close(fd);  // close the file
   return r;
 }
 
 static int ceph_fsync(const char *path, int isdatasync,
                      struct fuse_file_info *fi)
 {
-  fh_t fh = fi->fh;
-  return client->fsync(fh, isdatasync ? true:false);
+  int fd = fi->fh;
+  return client->fsync(fd, isdatasync ? true:false);
 }
 
 
