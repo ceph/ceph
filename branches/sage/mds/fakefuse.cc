@@ -138,6 +138,7 @@ int main(int argc, char **argv) {
     else
       ceph_fuse_main(client[i], argc, argv);
     ::chdir(oldcwd);                        // return to previous wd
+    free(oldcwd);
 
     client[i]->unmount();
     cout << "fuse finished on pid " << getpid() << endl;

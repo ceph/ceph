@@ -293,7 +293,6 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   if (r == 0) {
     fi->fh = (long)fh;
     fe.ino = fe.attr.st_ino;
-    cout << "ino is " << fe.ino << endl;
     fuse_reply_create(req, &fe, fi);
   } else {
     fuse_reply_err(req, -r);
@@ -331,7 +330,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: 0, //ceph_ll_create,
+ create: ceph_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0

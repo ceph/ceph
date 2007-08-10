@@ -42,7 +42,7 @@ void MonitorStore::mount()
     string old = dir;
     char *cwd = get_current_dir_name();
     dir = cwd;
-    delete cwd;
+    free(cwd);
     dir += "/";
     dir += old;
   }

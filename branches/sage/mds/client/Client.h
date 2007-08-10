@@ -138,6 +138,7 @@ class Inode {
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
+  int       ll_ref;   // separate ref count for ll client
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
@@ -170,11 +171,19 @@ class Inode {
 
   void get() { 
     ref++; 
-    //cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
+    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
   }
   void put(int n=1) { 
     ref -= n; assert(ref >= 0); 
-    //cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
+    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
+  }
+
+  void ll_get() {
+    ll_ref++;
+  }
+  void ll_put(int n=1) {
+    assert(ll_ref >= n);
+    ll_ref -= n;
   }
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
@@ -183,7 +192,8 @@ class Inode {
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
-    ref(0), dir(0), dn(0), symlink(0),
+    ref(0), ll_ref(0), 
+    dir(0), dn(0), symlink(0),
     fc(_oc, _inode),
     sync_reads(0), sync_writes(0),
     hack_balance_reads(false)
@@ -474,8 +484,10 @@ protected:
 
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in, int n=1) {
+    //cout << "put_inode on " << in << " " << in->inode.ino << endl;
     in->put(n);
     if (in->ref == 0) {
+      //cout << "put_inode deleting " << in->inode.ino << endl;
       inode_map.erase(in->inode.ino);
       if (in == root) root = 0;
       delete in;
@@ -644,6 +656,10 @@ private:
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+  void _closedir(DirResult *dirp);
+  void _ll_get(Inode *in);
+  void _ll_put(Inode *in, int num);
+  void _ll_drop_pins();
 
   // internal interface
   //   call these with client_lock held!
@@ -657,7 +673,7 @@ private:
   int _lstat(const char *path, struct stat *stbuf);
   int _chmod(const char *relpath, mode_t mode);
   int _chown(const char *relpath, uid_t uid, gid_t gid);
-  int _utime(const char *relpath, utime_t mtime, utime_t atime);
+  int _utimes(const char *relpath, utime_t mtime, utime_t atime);
   int _mknod(const char *path, mode_t mode, dev_t rdev);
   int _open(const char *path, int flags, mode_t mode, Fh **fhp);
   int _release(Fh *fh);

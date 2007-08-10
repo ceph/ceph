@@ -160,7 +160,7 @@ md_config_t g_conf = {
 
   client_trace: 0,
   fuse_direct_io: 0,
-  fuse_ll: false,
+  fuse_ll: true,
   
   // --- objecter ---
   objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
