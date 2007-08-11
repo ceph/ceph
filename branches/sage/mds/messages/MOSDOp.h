@@ -242,6 +242,7 @@ private:
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)
 	<< " " << st.oid;
+    if (st.length) out << " " << st.offset << "~" << st.length;
     if (st.retry_attempt) out << " RETRY";
     out << ")";
   }

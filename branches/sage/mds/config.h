@@ -250,7 +250,7 @@ struct md_config_t {
   int   osd_max_pull;
   bool  osd_pad_pg_log;
 
-  int   fakestore_fake_sync;
+  double   fakestore_fake_sync;
   bool  fakestore_fsync;
   bool  fakestore_writesync;
   int   fakestore_syncthreads;   // such crap

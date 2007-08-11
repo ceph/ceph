@@ -253,7 +253,7 @@ md_config_t g_conf = {
   osd_pad_pg_log: false,
   
   // --- fakestore ---
-  fakestore_fake_sync: 2,    // 2 seconds
+  fakestore_fake_sync: .5,    // seconds
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,

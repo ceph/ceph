@@ -1558,9 +1558,12 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   if (bl.length() == 0) {
     zleft += len;
     left = 0;
+  } else {
+    assert(bl.length() == len);
   }
   if (zleft)
-    dout(10) << "apply_write zeroing first " << zleft << " bytes of " << *on << endl;
+    dout(10) << "apply_write zeroing " << zleft << " bytes before " << off << "~" << len 
+	      << " in " << *on << endl;
 
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
@@ -1648,7 +1651,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
           bufferlist zb;
           zb.push_back(zp);
           bh->add_partial(off_in_bh, zb);
-           zleft -= z;
+	  zleft -= z;
           opos += z;
         }
 

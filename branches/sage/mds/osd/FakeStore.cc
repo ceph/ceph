@@ -392,7 +392,7 @@ void FakeStore::sync()
 
 void FakeStore::sync(Context *onsafe)
 {
-  if (g_conf.fakestore_fake_sync) {
+  if (g_conf.fakestore_fake_sync > 0.0) {
     g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
                             new C_FakeSync(onsafe, &unsync, &synclock, &synccond));
     

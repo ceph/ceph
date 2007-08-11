@@ -76,7 +76,6 @@ public:
     last_sent(s),
     last_recv(s),
     suppress(false) { 
-    //cap_history[last_sent] = 0;
   }
   Capability(Export& other) : 
     wanted_caps(other.wanted),

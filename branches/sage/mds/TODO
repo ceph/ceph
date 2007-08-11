@@ -181,6 +181,7 @@ simplemessenger
 - exponential backoff on monitor resend attempts (actually, this should go outside the messenger!)
 
 objectcacher
+- merge clean bh's
 - ocacher caps transitions vs locks
 - test read locks
 

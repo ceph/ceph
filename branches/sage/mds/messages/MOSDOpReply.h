@@ -139,6 +139,7 @@ public:
     out << "osd_op_reply(" << st.reqid
 	<< " " << MOSDOp::get_opname(st.op)
 	<< " " << st.oid;
+    if (st.length) out << " " << st.offset << "~" << st.length;
     if (st.commit)
       out << " commit";
     else

@@ -2701,6 +2701,10 @@ void Client::unlock_fh_pos(Fh *f)
 }
 
 
+
+//char *hackbuf = 0;
+
+
 // blocking osd interface
 
 int Client::read(int fd, char *buf, off_t size, off_t offset) 
@@ -2766,6 +2770,19 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   if (g_conf.client_oc) {
     // object cache ON
     rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
+
+    /*
+    if (in->inode.ino == 0x10000000075 && hackbuf) {
+      int s = MIN(size, bl->length());
+      char *v = bl->c_str();
+      for (int a=0; a<s; a++) 
+	if (v[a] != hackbuf[offset+a]) 
+	  dout(1) << "** hackbuf differs from read value at offset " << a 
+		  << " hackbuf[a] = " << (int)hackbuf[a] << ", read got " << (int)v[a]
+		  << endl;
+    }
+    */
+
   } else {
     // object cache OFF -- legacy inconsistent way.
 
@@ -2854,6 +2871,7 @@ int Client::write(int fd, const char *buf, off_t size, off_t offset)
   return r;
 }
 
+
 int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 {
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
@@ -2882,9 +2900,23 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   if (g_conf.client_oc) { // buffer cache ON?
     assert(objectcacher);
 
+    /*
+    if (f->inode->inode.ino == 0x10000000075) {
+      if (!hackbuf) {
+	dout(7) << "alloc and zero new hackbuf" << endl;
+	hackbuf = new char[16384];
+	memset(hackbuf, 0, 16384);
+      }
+      dout(7) << "hackbuf copying " << offset << "~" << size << " first is " << (int)buf[0] << endl;
+      memcpy(hackbuf+offset, buf, size);
+      for (int a=0; a<size; a++) 
+	dout(10) << "hackbuf[" << (a+offset) << " = " << (int)hackbuf[a+offset] << " = " << (int)buf[a] << endl;
+    }
+    */
+
     // write (this may block!)
     in->fc.write(offset, size, blist, client_lock);
-    
+
   } else {
     // legacy, inconsistent synchronous write.
     dout(7) << "synchronous write" << endl;
