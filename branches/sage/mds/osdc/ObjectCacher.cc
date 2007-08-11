@@ -394,7 +394,14 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
   dout(7) << "bh_read_finish " 
           << oid 
           << " " << start << "~" << length
+	  << " (bl is " << bl.length() << ")"
           << endl;
+
+  if (bl.length() < length) {
+    bufferptr bp(length - bl.length());
+    dout(7) << "bh_read_finish padding with " << bp.length() << " bytes of zeroes" << endl;
+    bl.push_back(bp);
+  }
   
   if (objects.count(oid) == 0) {
     dout(7) << "bh_read_finish no object cache" << endl;
@@ -870,24 +877,25 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     touch_bh(bh);
     bh->last_write = now;
 
-    // recombine with left?
+    // combine with left?
     map<off_t,BufferHead*>::iterator p = o->data.find(bh->start());
+    assert(p->second == bh);
     if (p != o->data.begin()) {
-      assert(p->second == bh);
       p--;
-      if (p->second->is_dirty()) {
+      if (p->second->is_dirty() &&
+	  p->second->end() == bh->start()) {
         o->merge_left(p->second, bh);
         bh = p->second;
-      }
+      } else 
+	p++;
     }
-    // right?
-    while (1) {
-      p = o->data.find(bh->start());
-      assert(p->second == bh);
-      p++;
-      if (p == o->data.end() || !p->second->is_dirty()) break;
+    // combine to the right?
+    assert(p->second == bh);
+    p++;
+    if (p != o->data.end() &&
+	!p->second->is_dirty() &&
+	p->second->start() > bh->end()) 
       o->merge_left(bh, p->second);
-    }
   }
 
   delete wr;
