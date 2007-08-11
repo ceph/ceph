@@ -555,7 +555,7 @@ int SyntheticClient::run()
             utime_t start = g_clock.now();
             
             if (time_to_stop()) break;
-            play_trace(t, prefix);
+            play_trace(t, prefix, false);
             if (time_to_stop()) break;
             clean_dir(prefix);
             
@@ -693,7 +693,7 @@ void SyntheticClient::up()
 }
 
 
-int SyntheticClient::play_trace(Trace& t, string& prefix)
+int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 {
   dout(4) << "play trace" << endl;
   t.start();
@@ -815,18 +815,22 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       int64_t size = t.get_int();
       int64_t off = t.get_int();
       int64_t fd = open_files[f];
-      char *b = new char[size];
-      client->read(fd, b, size, off);
-      delete[] b;
+      if (!metadata_only) {
+	char *b = new char[size];
+	client->read(fd, b, size, off);
+	delete[] b;
+      }
     } else if (strcmp(op, "write") == 0) {
       int64_t f = t.get_int();
       int64_t fd = open_files[f];
       int64_t size = t.get_int();
       int64_t off = t.get_int();
-      char *b = new char[size];
-      memset(b, 1, size);            // let's write 1's!
-      client->write(fd, b, size, off);
-      delete[] b;
+      if (!metadata_only) {
+	char *b = new char[size];
+	memset(b, 1, size);            // let's write 1's!
+	client->write(fd, b, size, off);
+	delete[] b;
+      }
     } else if (strcmp(op, "truncate") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t l = t.get_int();
@@ -963,18 +967,22 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       int64_t off = t.get_int();
       int64_t size = t.get_int();
       Fh *fh = ll_files[f];
-      bufferlist bl;
-      client->ll_read(fh, off, size, &bl);
+      if (!metadata_only) {
+	bufferlist bl;
+	client->ll_read(fh, off, size, &bl);
+      }
     } else if (strcmp(op, "ll_write") == 0) {
       int64_t f = t.get_int();
       int64_t off = t.get_int();
       int64_t size = t.get_int();
       Fh *fh = ll_files[f];
-      bufferlist bl;
-      bufferptr bp(size);
-      bl.push_back(bp);
-      bp.zero();
-      client->ll_write(fh, off, size, bl.c_str());
+      if (!metadata_only) {
+	bufferlist bl;
+	bufferptr bp(size);
+	bl.push_back(bp);
+	bp.zero();
+	client->ll_write(fh, off, size, bl.c_str());
+      }
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
       Fh *fh = ll_files[f];

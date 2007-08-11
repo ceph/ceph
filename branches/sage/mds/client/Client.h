@@ -232,6 +232,17 @@ class Inode {
     return w;
   }
 
+  void add_open(int cmode) {
+    if (cmode & FILE_MODE_R) num_open_rd++;
+    if (cmode & FILE_MODE_W) num_open_wr++;
+    if (cmode & FILE_MODE_LAZY) num_open_lazy++;
+  }
+  void sub_open(int cmode) {
+    if (cmode & FILE_MODE_R) num_open_rd--;
+    if (cmode & FILE_MODE_W) num_open_wr--;
+    if (cmode & FILE_MODE_LAZY) num_open_lazy--;
+  }
+
   int authority(MDSMap *mdsmap) {
     //cout << "authority on " << inode.ino << " .. dir_auth is " << dir_auth<< endl;
     // parent?

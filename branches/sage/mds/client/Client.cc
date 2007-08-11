@@ -58,7 +58,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami /*<< "." << pthread_self() */ << " "
 
 #define  tout       if (g_conf.client_trace) traceout
 
@@ -2459,6 +2459,14 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
+
+  // do i have the inode?
+  Dentry *dn = lookup(req->get_filepath());
+  Inode *in = 0;
+  if (dn) {
+    in = dn->inode;
+    in->add_open(cmode);  // make note of pending open, since it effects _wanted_ caps.
+  }
   
   MClientReply *reply = make_request(req);
   assert(reply);
@@ -2478,50 +2486,51 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     assert(f->inode);
     f->inode->get();
 
-    if (cmode & FILE_MODE_R) f->inode->num_open_rd++;
-    if (cmode & FILE_MODE_W) f->inode->num_open_wr++;
-    if (cmode & FILE_MODE_LAZY) f->inode->num_open_lazy++;
+    if (!in) {
+      in = f->inode;
+      in->add_open(f->mode);
+    }
 
     // caps included?
     int mds = reply->get_source().num();
 
-    if (f->inode->caps.empty()) {// first caps?
-      dout(7) << " first caps on " << f->inode->inode.ino << endl;
-      f->inode->get();
+    if (in->caps.empty()) {// first caps?
+      dout(7) << " first caps on " << in->inode.ino << endl;
+      in->get();
     }
 
     int new_caps = reply->get_file_caps();
 
-    assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
-    if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
-      int old_caps = f->inode->caps[mds].caps;
+    assert(reply->get_file_caps_seq() >= in->caps[mds].seq);
+    if (reply->get_file_caps_seq() > in->caps[mds].seq) {   
+      int old_caps = in->caps[mds].caps;
 
       dout(7) << "open got caps " << cap_string(new_caps)
 	      << " (had " << cap_string(old_caps) << ")"
-              << " for " << f->inode->ino() 
+              << " for " << in->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
 	      << endl;
 
-      f->inode->caps[mds].caps = new_caps;
-      f->inode->caps[mds].seq = reply->get_file_caps_seq();
+      in->caps[mds].caps = new_caps;
+      in->caps[mds].seq = reply->get_file_caps_seq();
 
       // we shouldn't ever lose caps at this point.
       // actually, we might...?
-      assert((old_caps & ~f->inode->caps[mds].caps) == 0);
+      assert((old_caps & ~in->caps[mds].caps) == 0);
 
       if (g_conf.client_oc)
-        f->inode->fc.set_caps(new_caps);
+        in->fc.set_caps(new_caps);
 
     } else {
       dout(7) << "open got SAME caps " << cap_string(new_caps) 
-              << " for " << f->inode->ino() 
+              << " for " << in->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
 	      << endl;
     }
     
-    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(f->inode->file_caps()) << endl;
+    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->file_caps()) << endl;
   }
 
   delete reply;
@@ -2583,10 +2592,7 @@ int Client::_release(Fh *f)
 
   // update inode rd/wr counts
   int before = in->file_caps_wanted();
-  if (f->mode & FILE_MODE_R)     
-    in->num_open_rd--;
-  if (f->mode & FILE_MODE_W)
-    in->num_open_wr--;
+  in->sub_open(f->mode);
   int after = in->file_caps_wanted();
 
   // does this change what caps we want?
@@ -3183,19 +3189,24 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   tout << parent.val << endl;
   tout << name << endl;
 
+  string dname = name;
+  Inode *diri = 0;
+  int r = 0;
+
   if (inode_map.count(parent) == 0) {
     tout << 0 << endl;
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << endl;
-    return -ENOENT;
+    r = -ENOENT;
+    goto out;
   }
-  Inode *diri = inode_map[parent];
+  diri = inode_map[parent];
   if (!diri->inode.is_dir()) {
     tout << 0 << endl;
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOTDIR (parent not a dir... WTF)" << endl;
-    return -ENOTDIR;
+    r = -ENOTDIR;
+    goto out;
   }
 
-  string dname = name;
 
   // refresh the dir?
   //  FIXME: this is the hackish way.
@@ -3229,13 +3240,15 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
     dout(3) << "ll_lookup " << parent << " " << name << " -> " << in->inode.ino
 	    << " (" << in << ")" << endl;
     assert(inode_map[in->inode.ino] == in);
-    tout << in->inode.ino << endl;
-    return 0;
   } else {
-    dout(3) << "ll_lookup " << parent << " " << name << " -> ENOENT" << endl;
-    tout << 0 << endl;
-    return -ENOENT;
+    r = -ENOENT;
   }
+
+ out:
+  dout(3) << "ll_lookup " << parent << " " << name
+	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
+  tout << attr->st_ino << endl;
+  return r;
 }
 
 void Client::_ll_get(Inode *in)

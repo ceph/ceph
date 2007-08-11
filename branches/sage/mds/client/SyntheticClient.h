@@ -226,7 +226,7 @@ class SyntheticClient {
 
   int clean_dir(string& basedir);
 
-  int play_trace(Trace& t, string& prefix);
+  int play_trace(Trace& t, string& prefix, bool metadata_only=false);
 
   void make_dir_mess(const char *basedir, int n);
   void foo();
