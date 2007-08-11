@@ -100,8 +100,8 @@ class ObjectCacher {
     ObjectCacher *oc;
     object_t  oid;   // this _always_ is oid.rev=0
     inodeno_t ino;
-	objectrev_t rev; // last rev we're written
-	ObjectLayout layout;
+    objectrev_t rev; // last rev we're written
+    ObjectLayout layout;
     
   public:
     map<off_t, BufferHead*>     data;
@@ -538,6 +538,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.is_dirty()) out << " dirty";
   if (bh.is_clean()) out << " clean";
   if (bh.is_missing()) out << " missing";
+  if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
   out << "]";
   return out;
 }
