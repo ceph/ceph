@@ -3408,7 +3408,8 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
     _ll_get(in);
   }
   tout << attr->st_ino << endl;
-  dout(3) << "ll_mknod " << parent << " " << name << " = " << r << endl;
+  dout(3) << "ll_mknod " << parent << " " << name
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
   return r;
 }
 
@@ -3435,7 +3436,8 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
     _ll_get(in);
   }
   tout << attr->st_ino << endl;
-  dout(3) << "ll_mkdir " << parent << " " << name << " = " << r << endl;
+  dout(3) << "ll_mkdir " << parent << " " << name
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
   return r;
 }
 
@@ -3462,6 +3464,8 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
     _ll_get(in);
   }
   tout << attr->st_ino << endl;
+  dout(3) << "ll_symlink " << parent << " " << name
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
   return r;
 }
 
@@ -3628,8 +3632,8 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
   }
   tout << (unsigned long)*fhp << endl;
   tout << attr->st_ino << endl;
-  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec
-	  << " " << flags << " = " << r << " (" << *fhp << ")" << endl;
+  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags
+	  << " = " << r << " (" << *fhp << " " << hex << attr->st_ino << dec << ")" << endl;
   return 0;
 }
 

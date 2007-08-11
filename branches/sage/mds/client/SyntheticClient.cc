@@ -704,12 +704,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 
   const char *p = prefix.c_str();
 
-  map<int64_t, int64_t> open_files;
-  map<int64_t, DIR*>    open_dirs;
+  hash_map<int64_t, int64_t> open_files;
+  hash_map<int64_t, DIR*>    open_dirs;
 
-  map<int64_t, Fh*> ll_files;
-  map<int64_t, void*> ll_dirs;
-  map<uint64_t, int64_t> ll_inos;
+  hash_map<int64_t, Fh*> ll_files;
+  hash_map<int64_t, void*> ll_dirs;
+  hash_map<uint64_t, int64_t> ll_inos;
 
   ll_inos[1] = 1; // root inode is known.
 
@@ -855,7 +855,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
       const char *name = t.get_string(buf, p);
       int64_t r = t.get_int();
       struct stat attr;
-      if (client->ll_lookup(i, name, &attr) == 0)
+      if (client->ll_lookup(ll_inos[i], name, &attr) == 0)
 	ll_inos[r] = attr.st_ino;
     } else if (strcmp(op, "ll_forget") == 0) {
       int64_t i = t.get_int();
@@ -989,11 +989,29 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   }
 
   // close open files
-  for (map<int64_t, int64_t>::iterator fi = open_files.begin();
+  for (hash_map<int64_t, int64_t>::iterator fi = open_files.begin();
        fi != open_files.end();
        fi++) {
     dout(1) << "leftover close " << fi->second << endl;
     if (fi->second > 0) client->close(fi->second);
+  }
+  for (hash_map<int64_t, DIR*>::iterator fi = open_dirs.begin();
+       fi != open_dirs.end();
+       fi++) {
+    dout(1) << "leftover closedir " << fi->second << endl;
+    if (fi->second != 0) client->closedir(fi->second);
+  }
+  for (hash_map<int64_t,Fh*>::iterator fi = ll_files.begin();
+       fi != ll_files.end();
+       fi++) {
+    dout(1) << "leftover ll_release " << fi->second << endl;
+    if (fi->second > 0) client->ll_release(fi->second);
+  }
+  for (hash_map<int64_t,void*>::iterator fi = ll_dirs.begin();
+       fi != ll_dirs.end();
+       fi++) {
+    dout(1) << "leftover ll_releasedir " << fi->second << endl;
+    if (fi->second > 0) client->ll_releasedir(fi->second);
   }
   
   return 0;
