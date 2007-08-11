@@ -78,7 +78,7 @@ void *fakemessenger_thread(void *ptr)
     if (fm_shutdown) break;
     fakemessenger_do_loop_2();
     
-    if (directory.empty()) break;
+    if (directory.empty() && nranks > 0) break;
     
     dout(20) << "thread waiting" << endl;
     if (fm_shutdown) break;
@@ -137,7 +137,7 @@ int fakemessenger_do_loop_2()
 {
   //lock.Lock();
   dout(18) << "do_loop begin." << endl;
-
+  
   while (1) {
     bool didone = false;
     
