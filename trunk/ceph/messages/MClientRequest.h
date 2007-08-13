@@ -119,6 +119,7 @@ class MClientRequest : public Message {
     } chown;
     struct {
       mode_t mode;
+      dev_t rdev;
     } mknod; 
     struct {
       mode_t mode;
@@ -200,6 +201,7 @@ class MClientRequest : public Message {
 
     default:
       assert(0);
+      return false;
     }
   }
 

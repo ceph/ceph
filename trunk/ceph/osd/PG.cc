@@ -1033,6 +1033,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   off_t trim = p->first;
   dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 
+  assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
   
   // adjust block_map
@@ -1082,9 +1083,9 @@ void PG::read_log(ObjectStore *store)
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
   r = store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  assert(r == sizeof(ondisklog.bottom));
+  //assert(r == sizeof(ondisklog.bottom));
   r = store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  assert(r == sizeof(ondisklog.top));
+  //assert(r == sizeof(ondisklog.top));
 
   dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 
@@ -1095,6 +1096,10 @@ void PG::read_log(ObjectStore *store)
     // read
     bufferlist bl;
     store->read(info.pgid.to_object(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    if (bl.length() < ondisklog.top-ondisklog.bottom) {
+      dout(0) << "read_log data doesn't match attrs" << dendl;
+      assert(0);
+    }
     
     PG::Log::Entry e;
     off_t pos = ondisklog.bottom;

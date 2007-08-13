@@ -63,6 +63,8 @@ class utime_t {
   // is just casting it to long& OK? 
   long&           usec_ref() { return (long&) tv.tv_usec; }
 
+  struct timeval& tv_ref() { return tv; }
+
   // cast to double
   operator double() {
     return (double)sec() + ((double)usec() / 1000000.0L);
@@ -82,7 +84,7 @@ inline utime_t& operator+=(utime_t& l, const utime_t& r) {
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
-  double us = (f - fs) / (double)1000000.0;
+  double us = (f - fs) * (double)1000000.0;
   l.sec_ref() += (long)fs;
   l.usec_ref() += (long)us;
   l.normalize();
@@ -131,7 +133,7 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
     time_t tt = t.sec();
     localtime_r(&tt, &bdt);
     out << std::setw(2) << (bdt.tm_year-100)  // 2007 -> '07'
-	<< std::setw(2) << bdt.tm_mon
+	<< std::setw(2) << (bdt.tm_mon+1)
 	<< std::setw(2) << bdt.tm_mday
 	<< "."
 	<< std::setw(2) << bdt.tm_hour

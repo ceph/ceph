@@ -42,6 +42,9 @@ public:
   }
   
   char *get_type_name() { return "PGsum"; }
+  void print(ostream& out) {
+    out << "pg_summary(" << pgid << " e" << epoch << ")";
+  }
 
   void encode_payload() {
     payload.append((char*)&epoch, sizeof(epoch));

@@ -31,28 +31,6 @@
 
 LogType mdlog_logtype;
 
-/*
-MDLog::MDLog(MDS *m) : replay_thread(this)
-{
-  mds = m;
-  num_events = 0;
-  waiting_for_read = false;
-
-  last_import_map = 0;
-  writing_import_map = false;
-  seen_import_map = false;
-
-  max_events = g_conf.mds_log_max_len;
-
-  capped = false;
-
-  unflushed = 0;
-
-  journaler = 0;
-  logger = 0;
-}
-*/
-
 
 MDLog::~MDLog()
 {
@@ -70,6 +48,7 @@ void MDLog::init_journaler()
 
   static bool didit = false;
   if (!didit) {
+    didit = true;
     mdlog_logtype.add_inc("add");
     mdlog_logtype.add_inc("expire");    
     mdlog_logtype.add_inc("obs");    
@@ -141,12 +120,14 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
     dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
 
     // encode it, with event type
-    bufferlist bl;
-    bl.append((char*)&le->_type, sizeof(le->_type));
-    le->encode_payload(bl);
-
-    // journal it.
-    journaler->append_entry(bl);
+    {
+      bufferlist bl;
+      bl.append((char*)&le->_type, sizeof(le->_type));
+      le->encode_payload(bl);
+      
+      // journal it.
+      journaler->append_entry(bl);  // bl is destroyed.
+    }
 
     assert(!capped);
 
@@ -283,8 +264,11 @@ void MDLog::trim(Context *c)
   utime_t stop = g_clock.now();
   stop += 2.0;
 
-  while (num_events > max_events &&
-	 stop > g_clock.now()) {
+  while (num_events > max_events) {
+    // don't check the clock on _every_ event, here!
+    if (num_events % 100 == 0 &&
+	stop < g_clock.now())
+	break;
     
     off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
     dout(5) << "trim num_events " << num_events << " > max " << max_events
@@ -346,17 +330,6 @@ void MDLog::trim(Context *c)
   std::list<Context*> finished;
   finished.swap(trim_waiters);
   finish_contexts(finished, 0);
-
-  // hmm, are we at the end?
-  /*
-  if (journaler->get_read_pos() == journaler->get_write_pos() &&
-      trimming.size() == import_map_expire_waiters.size()) {
-    dout(5) << "trim log is empty, allowing import_map to expire" << endl;
-    list<Context*> ls;
-    ls.swap(import_map_expire_waiters);
-    finish_contexts(ls);
-  }
-  */
 }
 
 

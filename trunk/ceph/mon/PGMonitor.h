@@ -25,9 +25,11 @@ using namespace std;
 
 #include "PGMap.h"
 
+class MPGStats;
+class MStatfs;
+
 class PGMonitor : public PaxosService {
 public:
-
 
 private:
   PGMap pg_map;
@@ -41,7 +43,9 @@ private:
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 
-  
+  void handle_statfs(MStatfs *statfs);
+  bool handle_pg_stats(MPGStats *stats);
+
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   

@@ -24,6 +24,7 @@ using namespace std;
 #include "../CDentry.h"
 
 class MDS;
+class MDLog;
 
 /*
  * a bunch of metadata in the journal
@@ -51,27 +52,26 @@ class EMetaBlob {
     string  symlink;
     bool dirty;
 
-    fullbit(const string& d, version_t v, inode_t& i, bool dr) : dn(d), dnv(v), inode(i), dirty(dr) { }
-    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) : dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, bool dr) : 
+      dn(d), dnv(v), inode(i), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) :
+      dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
     fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&inode, sizeof(inode));
+      ::_encode(dnv, bl);
+      ::_encode(inode, bl);
       if (inode.is_symlink())
 	::_encode(symlink, bl);
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(inode), (char*)&inode);  
-      off += sizeof(inode);
+      ::_decode(dnv, bl, off);
+      ::_decode(inode, bl, off);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " fullbit dn " << dn << " dnv " << dnv
@@ -86,24 +86,25 @@ class EMetaBlob {
     string dn;
     version_t dnv;
     inodeno_t ino;
+    unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, version_t v, inodeno_t i, bool dr) : dn(d), dnv(v), ino(i), dirty(dr) { }
+    remotebit(const string& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+      dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&ino, sizeof(ino));
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(dnv, bl);
+      ::_encode(ino, bl);
+      ::_encode(d_type, bl);
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(ino), (char*)&ino);
-      off += sizeof(ino);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(dnv, bl, off);
+      ::_decode(ino, bl, off);
+      ::_decode(d_type, bl, off);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " remotebit dn " << dn << " dnv " << dnv
@@ -123,15 +124,13 @@ class EMetaBlob {
     nullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
-      bl.append((char*)&dnv, sizeof(dnv));
-      bl.append((char*)&dirty, sizeof(dirty));
+      ::_encode(dnv, bl);
+      ::_encode(dirty, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
-      bl.copy(off, sizeof(dnv), (char*)&dnv);
-      off += sizeof(dnv);
-      bl.copy(off, sizeof(dirty), (char*)&dirty);
-      off += sizeof(dirty);
+      ::_decode(dnv, bl, off);
+      ::_decode(dirty, bl, off);
     }
     void print(ostream& out) {
       out << " nullbit dn " << dn << " dnv " << dnv
@@ -142,6 +141,7 @@ class EMetaBlob {
 
   /* dirlump - contains metadata for any dir we have contents for.
    */
+public:
   struct dirlump {
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
@@ -210,7 +210,7 @@ class EMetaBlob {
       ::_encode(nremote, bl);
       ::_encode(nnull, bl);
       _encode_bits();
-      ::_encode(dnbl, bl);
+      ::_encode_destructively(dnbl, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dirv, bl, off);
@@ -222,7 +222,8 @@ class EMetaBlob {
       dn_decoded = false;      // don't decode bits unless we need them.
     }
   };
-  
+
+private:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
@@ -244,6 +245,13 @@ class EMetaBlob {
   list<metareqid_t> client_reqs;
 
  public:
+  // soft state
+  off_t last_subtree_map;
+  off_t my_offset;
+
+  EMetaBlob() : last_subtree_map(0), my_offset(0) { }
+  EMetaBlob(MDLog *mdl);  // defined in journal.cc
+
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
 	 p != lump_order.end();
@@ -274,9 +282,10 @@ class EMetaBlob {
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {
+    add_null_dentry(add_dir(dn->get_dir(), false), dn, dirty);
+  }
+  void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
-    dirlump& lump = add_dir(dn->get_dir(), false);
-
     lump.nnull++;
     if (dirty)
       lump.get_dnull().push_front(nullbit(dn->get_name(), 
@@ -289,29 +298,41 @@ class EMetaBlob {
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino=0) {
-    if (!rino) 
+    add_remote_dentry(add_dir(dn->get_dir(), false),
+		      dn, dirty, rino);
+  }
+  void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
+			 inodeno_t rino=0, unsigned char rdt=0) {
+    if (!rino) {
       rino = dn->get_remote_ino();
-
-    dirlump& lump = add_dir(dn->get_dir(), false);
-
+      rdt = dn->get_remote_d_type();
+    }
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
 					      dn->get_projected_version(), 
-					      rino,
+					      rino, rdt,
 					      dirty));
     else
       lump.get_dremote().push_back(remotebit(dn->get_name(), 
 					     dn->get_projected_version(), 
-					     rino,
+					     rino, rdt,
 					     dirty));
   }
 
   // return remote pointer to to-be-journaled inode
-  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
-    if (!in) in = dn->get_inode();
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+    return add_primary_dentry(add_dir(dn->get_dir(), false),
+			      dn, dirty, in, pi, pdft);
+  }
+  inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+    if (!in) 
+      in = dn->get_inode();
 
-    dirlump& lump = add_dir(dn->get_dir(), false);
+    // make note of where this inode was last journaled
+    in->last_journaled = my_offset;
 
     lump.nfull++;
     if (dirty) {
@@ -333,6 +354,10 @@ class EMetaBlob {
 
   // convenience: primary or remote?  figure it out.
   inode_t *add_dentry(CDentry *dn, bool dirty) {
+    dirlump& lump = add_dir(dn->get_dir(), false);
+    return add_dentry(lump, dn, dirty);
+  }
+  inode_t *add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // primary or remote
     if (dn->is_remote()) {
       add_remote_dentry(dn, dirty);
@@ -347,10 +372,12 @@ class EMetaBlob {
 
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
-    dirfrag_t df = dir->dirfrag();
+    return add_dir(dir->dirfrag(), dir->get_projected_version(), dirty, complete);
+  }
+  dirlump& add_dir(dirfrag_t df, version_t pv, bool dirty, bool complete=false) {
     if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
-      lump_map[df].dirv = dir->get_projected_version();
+      lump_map[df].dirv = pv;
     }
     dirlump& l = lump_map[df];
     if (complete) l.mark_complete();
@@ -366,15 +393,21 @@ class EMetaBlob {
     if (lump_map.count(dir->dirfrag())) 
       return;
 
-    // stop at subtree root?
-    if (mode == TO_AUTH_SUBTREE_ROOT &&
-	dir->is_subtree_root() && dir->is_auth())
-      return;
+    if (mode == TO_AUTH_SUBTREE_ROOT) {
+      // subtree root?
+      if (dir->is_subtree_root() && dir->is_auth())
+	return;
+      // was the inode journaled since the last subtree_map?
+      if (dir->inode->last_journaled >= last_subtree_map) 
+	return;
+    }
     
     // stop at root/stray
     CInode *diri = dir->get_inode();
     if (!diri->get_parent_dn())
       return;
+
+    // journaled?
 
     // add parent dn
     CDentry *parent = diri->get_parent_dn();

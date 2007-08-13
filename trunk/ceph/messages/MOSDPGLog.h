@@ -38,6 +38,9 @@ public:
   }
 
   char *get_type_name() { return "PGlog"; }
+  void print(ostream& out) {
+    out << "pg_log(" << pgid << " e" << epoch << ")";
+  }
 
   void encode_payload() {
     payload.append((char*)&epoch, sizeof(epoch));

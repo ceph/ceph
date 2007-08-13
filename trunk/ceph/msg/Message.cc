@@ -11,6 +11,9 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
+#include "messages/MPGStats.h"
+#include "messages/MStatfs.h"
+
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
@@ -59,6 +62,8 @@ using namespace std;
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
 
+#include "messages/MMDSFragmentNotify.h"
+
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
 #include "messages/MExportDirCancel.h"
@@ -103,6 +108,13 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   switch(env.type) {
 
     // -- with payload --
+
+  case MSG_PGSTATS:
+    m = new MPGStats;
+    break;
+  case MSG_STATFS:
+    m = new MStatfs;
+    break;
 
   case MSG_MON_COMMAND:
     m = new MMonCommand;
@@ -239,6 +251,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_MDS_DISCOVERREPLY:
     m = new MDiscoverReply();
+    break;
+
+  case MSG_MDS_FRAGMENTNOTIFY:
+    m = new MMDSFragmentNotify;
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

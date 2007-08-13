@@ -41,8 +41,6 @@ class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
 
-class MFragmentDirNotify;
-
 class EImportStart;
 
 
@@ -184,13 +182,15 @@ public:
   void export_empty_import(CDir *dir);
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
-			   map<int,entity_inst_t>& exported_client_map);
+			   map<int,entity_inst_t>& exported_client_map,
+			   utime_t now);
   int encode_export_dir(list<bufferlist>& dirstatelist,
 			class C_Contexts *fin,
 			CDir *basedir,
 			CDir *dir,
 			int newauth, 
-			map<int,entity_inst_t>& exported_client_map);
+			map<int,entity_inst_t>& exported_client_map,
+			utime_t now);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);
@@ -247,14 +247,6 @@ protected:
   void handle_export_notify(MExportDirNotify *m);
 
 
-  // -- fragmenting --
-  void fragment_dir(CDir *dir, int byn);
-  void fragment_frozen(CDir *dir, int byn);
-  friend class C_MDC_FragmentFreeze;
-  void fragment_logged(list<CDir*>& dirs, int bits, version_t pv);
-  friend class C_MDC_FragmentLogged;
-
-  void handle_fragment_notify(MFragmentDirNotify *m);
 };
 
 

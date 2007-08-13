@@ -57,7 +57,7 @@ inline const char* get_anchor_opname(int o) {
   case ANCHOR_OP_COMMIT: return "commit";
   case ANCHOR_OP_ACK: return "ack";
   case ANCHOR_OP_ROLLBACK: return "rollback";
-  default: assert(0); 
+  default: assert(0); return 0;
   }
 }
 

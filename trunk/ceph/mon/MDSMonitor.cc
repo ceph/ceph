@@ -190,14 +190,20 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // reply to beacon?
   if (state != MDSMap::STATE_STOPPED) {
     last_beacon[from] = g_clock.now();  // note time
-    mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), state, seq), 
+    mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), mdsmap.get_epoch(), state, seq), 
 				 m->get_mds_inst());
   }
   
   // is there a state change here?
-  if (mdsmap.mds_state.count(from) == 0 ||
-      mdsmap.mds_state[from] != state)
-    return false;  // yep, need to update map.
+  if (mdsmap.mds_state.count(from) == 0) { 
+    if (state == MDSMap::STATE_BOOT)
+      return false;  // need to add to map
+    dout(1) << "mds_beacon " << *m << " announcing non-boot state, ignoring" << endl;
+  } else if (mdsmap.mds_state[from] != state) {
+    if (mdsmap.get_epoch() == m->get_last_epoch_seen()) 
+      return false;  // need to update map
+    dout(10) << "mds_beacon " << *m << " ignoring requested state, because mds hasn't seen latest map" << endl;
+  }
   
   // we're done.
   delete m;
@@ -248,15 +254,30 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     // assign a name.
     if (from >= 0) {
       // wants to be (or already is) a specific MDS. 
-      if (mdsmap.is_failed(from)) {
-	dout(10) << "mds_beacon boot: mds" << from << " was failed, replaying" << endl;
-	state = MDSMap::STATE_REPLAY;
-      } else if (mdsmap.is_stopped(from)) {
-	dout(10) << "mds_beacon boot: mds" << from << " was stopped, starting" << endl;
-	state = MDSMap::STATE_STARTING;
-      } else if (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst()) {
+      if (!g_conf.mon_allow_mds_bully &&
+	  (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst())) {
 	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << endl;
 	from = -1;
+      } else {
+	switch (mdsmap.get_state(from)) {
+	case MDSMap::STATE_STOPPED:
+	case MDSMap::STATE_STARTING:
+	case MDSMap::STATE_STANDBY:
+	  state = MDSMap::STATE_STARTING;
+	  break;
+	case MDSMap::STATE_DNE:
+	case MDSMap::STATE_CREATING:
+	  state = MDSMap::STATE_CREATING;
+	  break;
+	case MDSMap::STATE_FAILED:
+	default:
+	  state = MDSMap::STATE_REPLAY;
+	  break;
+	}
+	dout(10) << "mds_beacon boot: mds" << from
+		 << " was " << MDSMap::get_state_name(mdsmap.get_state(from))
+		 << ", " << MDSMap::get_state_name(state) 
+		 << endl;
       }
     }
     if (from < 0) {
@@ -535,9 +556,28 @@ void MDSMonitor::do_stop()
   print_map(mdsmap);
   for (map<int,int>::iterator p = mdsmap.mds_state.begin();
        p != mdsmap.mds_state.end();
-       ++p) 
-    if (mdsmap.is_active(p->first))
+       ++p) {
+    switch (p->second) {
+    case MDSMap::STATE_ACTIVE:
+    case MDSMap::STATE_STOPPING:
       pending_mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPING;
+      break;
+    case MDSMap::STATE_CREATING:
+    case MDSMap::STATE_STANDBY:
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_DNE;
+      break;
+    case MDSMap::STATE_STARTING:
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPED;
+      break;
+    case MDSMap::STATE_REPLAY:
+    case MDSMap::STATE_RESOLVE:
+    case MDSMap::STATE_RECONNECT:
+    case MDSMap::STATE_REJOIN:
+      // BUG: hrm, if this is the case, the STOPPING gusy won't be able to stop, will they?
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_FAILED;
+      break;
+    }
+  }
 
   propose_pending();
 }

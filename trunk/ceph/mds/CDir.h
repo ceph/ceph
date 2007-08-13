@@ -60,9 +60,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_DNWAITER =     1;
   static const int PIN_CHILD =        2;
   static const int PIN_FROZEN =       3;
-  static const int PIN_FRAGMENTING =  4;
   static const int PIN_EXPORT =       5;
-  static const int PIN_AUTHPIN =      6;
   static const int PIN_IMPORTING =    7;
   static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
@@ -73,34 +71,33 @@ class CDir : public MDSCacheObject {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
-    case PIN_FRAGMENTING: return "fragmenting";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
-    case PIN_AUTHPIN: return "authpin";
     case PIN_STICKY: return "sticky";
     default: return generic_pin_name(p);
     }
   }
 
   // -- state --
-  static const unsigned STATE_COMPLETE =      (1<< 2);   // the complete contents are in cache
-  static const unsigned STATE_FROZENTREE =    (1<< 4);   // root of tree (bounded by exports)
-  static const unsigned STATE_FREEZINGTREE =  (1<< 5);   // in process of freezing 
-  static const unsigned STATE_FROZENDIR =     (1<< 6);
-  static const unsigned STATE_FREEZINGDIR =   (1<< 7);
-  static const unsigned STATE_COMMITTING =    (1<< 8);   // mid-commit
-  static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
-  static const unsigned STATE_DELETED =       (1<<10);
-  static const unsigned STATE_EXPORT    =     (1<<12);
-  static const unsigned STATE_IMPORTBOUND =   (1<<13);
-  static const unsigned STATE_EXPORTBOUND =   (1<<14);
-  static const unsigned STATE_EXPORTING =     (1<<15);
-  static const unsigned STATE_IMPORTING =     (1<<16);
-  static const unsigned STATE_FRAGMENTING =   (1<<17);
-  static const unsigned STATE_STICKY =        (1<<18);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_COMPLETE =      (1<< 1);   // the complete contents are in cache
+  static const unsigned STATE_FROZENTREE =    (1<< 2);   // root of tree (bounded by exports)
+  static const unsigned STATE_FREEZINGTREE =  (1<< 3);   // in process of freezing 
+  static const unsigned STATE_FROZENDIR =     (1<< 4);
+  static const unsigned STATE_FREEZINGDIR =   (1<< 5);
+  static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
+  static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
+  static const unsigned STATE_DELETED =       (1<< 8);
+  static const unsigned STATE_EXPORT    =     (1<< 9);
+  static const unsigned STATE_IMPORTBOUND =   (1<<10);
+  static const unsigned STATE_EXPORTBOUND =   (1<<11);
+  static const unsigned STATE_EXPORTING =     (1<<12);
+  static const unsigned STATE_IMPORTING =     (1<<13);
+  static const unsigned STATE_FRAGMENTING =   (1<<14);
+  static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -126,11 +123,9 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_COMPLETE |
-   STATE_FROZENDIR |
    STATE_EXPORT |
    STATE_EXPORTBOUND |
-   STATE_IMPORTBOUND |
-   STATE_STICKY);
+   STATE_IMPORTBOUND);
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -170,31 +165,36 @@ class CDir : public MDSCacheObject {
 
 protected:
   // contents
-  CDir_map_t       items;              // non-null AND null
-  size_t           nitems;             // # non-null
-  size_t           nnull;              // # null
+  CDir_map_t items;       // non-null AND null
+  unsigned nitems;             // # non-null
+  unsigned nnull;              // # null
 
   int num_dirty;
 
   // state
-  version_t       version;
-  version_t       committing_version;
-  version_t       committed_version;
-  version_t       committed_version_equivalent;  // in case of, e.g., temporary file
-  version_t       projected_version; 
+  version_t version;
+  version_t committing_version;
+  version_t committed_version;
+  version_t committed_version_equivalent;  // in case of, e.g., temporary file
+  version_t projected_version; 
 
   // lock nesting, freeze
-  int        auth_pins;
-  int        nested_auth_pins;
-  int        request_pins;
+  int auth_pins;
+  int nested_auth_pins;
+  int request_pins;
 
 
   // cache control  (defined for authority; hints for replicas)
-  int              dir_rep;
-  set<int>         dir_rep_by;      // if dir_rep == REP_LIST
+  int      dir_rep;
+  set<int> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
-  meta_load_t popularity[MDS_NPOP];
+  dirfrag_load_vec_t pop_me;
+  dirfrag_load_vec_t pop_nested;
+  dirfrag_load_vec_t pop_auth_subtree;
+  dirfrag_load_vec_t pop_auth_subtree_nested;
+  
+  utime_t last_popularity_sample;
 
   // friends
   friend class Migrator;
@@ -221,11 +221,11 @@ protected:
 
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
-  size_t get_size() { 
+  unsigned get_size() { 
     return nitems; 
   }
-  size_t get_nitems() { return nitems; }
-  size_t get_nnull() { return nnull; }
+  unsigned get_nitems() { return nitems; }
+  unsigned get_nnull() { return nnull; }
   
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
@@ -247,11 +247,12 @@ protected:
       return iter->second;
   }
 
-  CDentry* add_dentry( const string& dname, CInode *in=0 );
-  CDentry* add_dentry( const string& dname, inodeno_t ino );
+  CDentry* add_null_dentry(const string& dname);
+  CDentry* add_primary_dentry(const string& dname, CInode *in);
+  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type);
   void remove_dentry( CDentry *dn );         // delete dentry
-  void link_inode( CDentry *dn, inodeno_t ino );
-  void link_inode( CDentry *dn, CInode *in );
+  void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
+  void link_primary_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
   void try_remove_unlinked_dn(CDentry *dn);
 private:
@@ -280,10 +281,8 @@ private:
  public:
   pair<int,int> authority();
   pair<int,int> get_dir_auth() { return dir_auth; }
-  void set_dir_auth(pair<int,int> a, bool iamauth=false);
-  void set_dir_auth(int a) { 
-    set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN), false); 
-  }
+  void set_dir_auth(pair<int,int> a);
+  void set_dir_auth(int a) { set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }
@@ -300,7 +299,7 @@ private:
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > 
+    if (( pop_auth_subtree.get(META_POP_IRD).get() > 
 	  g_conf.mds_bal_replicate_threshold)) {
       //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
       for (map<int,int>::iterator p = replicas_begin();
@@ -327,7 +326,7 @@ private:
  
   // -- fetch --
   object_t get_ondisk_object() { return object_t(ino(), frag); }
-  void fetch(Context *c);
+  void fetch(Context *c, bool ignore_authpinnability=false);
   void _fetched(bufferlist &bl);
 
   // -- commit --
@@ -394,17 +393,16 @@ public:
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int inc);
-  void on_freezeable();
 
   // -- freezing --
   void freeze_tree(Context *c);
   void freeze_tree_finish(Context *c);
   void unfreeze_tree();
-  void _freeze_tree(Context *c=0);
+  void _freeze_tree();
 
   void freeze_dir(Context *c);
   void freeze_dir_finish(Context *c);
-  void _freeze_dir(Context *c=0);
+  void _freeze_dir();
   void unfreeze_dir();
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
@@ -417,9 +415,9 @@ public:
   bool is_frozen_tree_root() { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() { return state & STATE_FROZENDIR; }
   
-  bool is_freezeable() {
+  bool is_freezeable(bool freezing=false) {
     // no nested auth pins.
-    if (auth_pins > 0 || nested_auth_pins > 0) 
+    if ((auth_pins-freezing) > 0 || nested_auth_pins > 0) 
       return false;
 
     // inode must not be frozen.
@@ -428,12 +426,12 @@ public:
 
     return true;
   }
-  bool is_freezeable_dir() {
-    if (auth_pins > 0) 
+  bool is_freezeable_dir(bool freezing=false) {
+    if ((auth_pins-freezing) > 0) 
       return false;
 
-    // if not subtree root, inode must not be frozen.
-    if (!is_subtree_root() && inode->is_frozen())
+    // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).
+    if (!is_subtree_root() && inode->is_frozen() && !inode->is_frozen_dir())
       return false;
 
     return true;
@@ -508,9 +506,10 @@ class CDirExport {
     uint32_t    nden;   // num dentries (including null ones)
     version_t   version;
     version_t   committed_version;
+    version_t   committed_version_equivalent;
     uint32_t    state;
-    meta_load_t popularity_justme;
-    meta_load_t popularity_curdom;
+    dirfrag_load_vec_t pop_me;
+    dirfrag_load_vec_t pop_auth_subtree;
     int32_t     dir_rep;
   } st;
   map<int,int> replicas;
@@ -518,7 +517,7 @@ class CDirExport {
 
  public:
   CDirExport() {}
-  CDirExport(CDir *dir) {
+  CDirExport(CDir *dir, utime_t now) {
     memset(&st, 0, sizeof(st));
 
     assert(dir->get_version() == dir->get_projected_version());
@@ -527,13 +526,15 @@ class CDirExport {
     st.nden = dir->items.size();
     st.version = dir->version;
     st.committed_version = dir->committed_version;
+    st.committed_version_equivalent = dir->committed_version_equivalent;
     st.state = dir->state;
     st.dir_rep = dir->dir_rep;
-
-    st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
-    st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
-    dir->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-    dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    
+    st.pop_me = dir->pop_me;
+    st.pop_auth_subtree = dir->pop_auth_subtree;
+    dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
+    dir->pop_me.zero(now);
+    dir->pop_auth_subtree.zero(now);
 
     rep_by = dir->dir_rep_by;
     replicas = dir->replica_map;
@@ -546,18 +547,20 @@ class CDirExport {
     assert(dir->dirfrag() == st.dirfrag);
 
     // set committed_version at old version
-    dir->committing_version = dir->committed_version = st.committed_version;
-    dir->projected_version = dir->version = st.version;
+    dir->committing_version = 
+      dir->committed_version = st.committed_version;
+    dir->committed_version_equivalent = st.committed_version_equivalent;
+    dir->projected_version = 
+      dir->version = st.version;
 
     // twiddle state
     dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
       (st.state & CDir::MASK_STATE_EXPORTED);
     dir->dir_rep = st.dir_rep;
 
-    dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-    dir->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-    dir->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-    dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    dir->pop_me = st.pop_me;
+    dir->pop_auth_subtree = st.pop_auth_subtree;
+    dir->pop_auth_subtree_nested += dir->pop_auth_subtree;
 
     dir->replica_nonce = 0;  // no longer defined
 

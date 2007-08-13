@@ -71,6 +71,12 @@ class LRUList {
     return tail;
   }
 
+  void clear() {
+    while (len > 0) {
+      remove(get_head());
+    }
+  }
+
   void insert_head(LRUObject *o) {
     o->lru_next = head;
     o->lru_prev = NULL;
@@ -129,7 +135,7 @@ class LRU {
   LRU(int max = 0) {
     lru_num = 0;
     lru_num_pinned = 0;
-    lru_midpoint = .9;
+    lru_midpoint = .6;
     lru_max = max;
   }
 
@@ -143,6 +149,11 @@ class LRU {
   void lru_set_max(uint32_t m) { lru_max = m; }
   void lru_set_midpoint(float f) { lru_midpoint = f; }
   
+  void lru_clear() {
+    lru_top.clear();
+    lru_bot.clear();
+    lru_pintail.clear();
+  }
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {

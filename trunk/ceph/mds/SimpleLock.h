@@ -38,7 +38,7 @@ inline const char *get_lock_type_name(int t) {
   case LOCK_OTYPE_ILINK: return "ilink";
   case LOCK_OTYPE_IDIRFRAGTREE: return "idft";
   case LOCK_OTYPE_IDIR: return "idir";
-  default: assert(0);
+  default: assert(0); return 0;
   }
 }
 
@@ -58,7 +58,7 @@ inline const char *get_simplelock_state_name(int n) {
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
   case LOCK_REMOTEXLOCK: return "remote_xlock";
-  default: assert(0);
+  default: assert(0); return 0;
   }
 }
 
@@ -82,7 +82,7 @@ protected:
 
   // lock state
   int state;
-  set<int32_t> gather_set;  // auth
+  set<int> gather_set;  // auth
 
   // local state
   int num_rdlock;

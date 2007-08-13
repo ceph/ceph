@@ -55,24 +55,21 @@ ostream& operator<<(ostream& out, CInode& in);
 class CInode : public MDSCacheObject {
  public:
   // -- pins --
-  //static const int PIN_REPLICATED =     1;
-  static const int PIN_DIR =        2;
-  static const int PIN_CAPS =       7;  // client caps
-  static const int PIN_AUTHPIN =    8;
-  static const int PIN_IMPORTING =  -9;  // importing
-  static const int PIN_ANCHORING = 12;
-  static const int PIN_UNANCHORING = 13;
-  static const int PIN_OPENINGDIR = 14;
-  static const int PIN_REMOTEPARENT = 15;
-  static const int PIN_BATCHOPENJOURNAL = 16;
-  static const int PIN_SCATTERED = 17;
-  static const int PIN_STICKYDIRS = 18;
+  static const int PIN_DIRFRAG =         -1; 
+  static const int PIN_CAPS =             2;  // client caps
+  static const int PIN_IMPORTING =       -4;  // importing
+  static const int PIN_ANCHORING =        5;
+  static const int PIN_UNANCHORING =      6;
+  static const int PIN_OPENINGDIR =       7;
+  static const int PIN_REMOTEPARENT =     8;
+  static const int PIN_BATCHOPENJOURNAL = 9;
+  static const int PIN_SCATTERED =        10;
+  static const int PIN_STICKYDIRS =       11;
 
   const char *pin_name(int p) {
     switch (p) {
-    case PIN_DIR: return "dir";
+    case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";
-    case PIN_AUTHPIN: return "authpin";
     case PIN_IMPORTING: return "importing";
     case PIN_ANCHORING: return "anchoring";
     case PIN_UNANCHORING: return "unanchoring";
@@ -123,7 +120,8 @@ class CInode : public MDSCacheObject {
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   //map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
-  off_t            last_open_journaled;  // log offset for the last journaled EOpen
+  off_t last_journaled;       // log offset for the last time i was journaled
+  off_t last_open_journaled;  // log offset for the last journaled EOpen
 
   // projected values (only defined while dirty)
   list<inode_t*>    projected_inode;
@@ -148,12 +146,14 @@ public:
   frag_t pick_dirfrag(const string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
-    if (dirfrags.count(fg)) 
+    if (dirfrags.count(fg)) {
+      assert(dirfragtree.is_leaf(fg));
       return dirfrags[fg];
-    else
+    } else
       return 0;
   }
   void get_dirfrags_under(frag_t fg, list<CDir*>& ls);
+  CDir* get_approx_dirfrag(frag_t fg);
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);
@@ -165,8 +165,6 @@ public:
 
   void get_stickydirs();
   void put_stickydirs();  
-
-  void fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters);
 
  protected:
   // parent dentries in cache
@@ -190,7 +188,7 @@ protected:
   int nested_auth_pins;
 
  public:
-  meta_load_t popularity[MDS_NPOP];
+  inode_load_vec_t pop;
 
   // friends
   friend class Server;
@@ -205,7 +203,7 @@ protected:
   // ---------------------------
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
-    last_open_journaled(0),
+    last_journaled(0), last_open_journaled(0), 
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
@@ -248,8 +246,6 @@ protected:
     return ino() < ((CInode*)r)->ino();
   }
 
-
-
   // -- misc -- 
   void make_path(string& s);
   void make_anchor_trace(vector<class Anchor>& trace);
@@ -278,7 +274,7 @@ public:
   LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
-  SimpleLock dirfragtreelock;
+  ScatterLock dirfragtreelock;
   FileLock   filelock;
   ScatterLock dirlock;
 
@@ -289,7 +285,7 @@ public:
     case LOCK_OTYPE_ILINK: return &linklock;
     case LOCK_OTYPE_IDIRFRAGTREE: return &dirfragtreelock;
     case LOCK_OTYPE_IDIR: return &dirlock;
-    default: assert(0);
+    default: assert(0); return 0;
     }
   }
   void set_object_info(MDSCacheObjectInfo &info);
@@ -565,8 +561,8 @@ class CInodeExport {
   struct st_ {
     inode_t        inode;
 
-    meta_load_t    popularity_justme;
-    meta_load_t    popularity_curdom;
+    inode_load_vec_t pop;
+
     bool           is_dirty;       // dirty inode?
     
     int            num_caps;
@@ -582,7 +578,7 @@ class CInodeExport {
 
 public:
   CInodeExport() {}
-  CInodeExport(CInode *in) {
+  CInodeExport(CInode *in, utime_t now) {
     st.inode = in->inode;
     symlink = in->symlink;
     dirfragtree = in->dirfragtree;
@@ -596,10 +592,8 @@ public:
     in->filelock._encode(locks);
     in->dirlock._encode(locks);
     
-    st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
-    st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
-    in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-    in->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    st.pop = in->pop;
+    in->pop.zero(now);
     
     // steal WRITER caps from inode
     in->take_client_caps(cap_map);
@@ -619,10 +613,7 @@ public:
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;
 
-    in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-    in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-    in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-    in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    in->pop = st.pop;
 
     if (st.is_dirty) 
       in->_mark_dirty();

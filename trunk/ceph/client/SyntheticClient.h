@@ -64,6 +64,8 @@
 #define SYNCLIENT_MODE_FOO        100
 #define SYNCLIENT_MODE_THRASHLINKS  101
 
+#define SYNCLIENT_MODE_IMPORTFIND 300
+
 
 
 void parse_syn_options(vector<char*>& args);
@@ -80,7 +82,7 @@ class SyntheticClient {
 
   
   filepath             cwd;
-  map<string, inode_t> contents;
+  map<string, struct stat*> contents;
   set<string>          subdirs;
   bool                 did_readdir;
   set<int>             open_files;
@@ -120,7 +122,7 @@ class SyntheticClient {
       r += cwd.last_dentry().c_str()[0];                                         // slightly permuted
     r %= contents.size();
 
-    map<string,inode_t>::iterator it = contents.begin();
+    map<string,struct stat*>::iterator it = contents.begin();
     while (r--) it++;
 
     n2 = cwd;
@@ -183,6 +185,11 @@ class SyntheticClient {
   int exclude;
 
   string get_sarg(int seq);
+  int get_iarg() {
+    int i = iargs.front();
+    iargs.pop_front();
+    return i;
+  }
 
   bool time_to_stop() {
     utime_t now = g_clock.now();
@@ -219,12 +226,14 @@ class SyntheticClient {
 
   int clean_dir(string& basedir);
 
-  int play_trace(Trace& t, string& prefix);
+  int play_trace(Trace& t, string& prefix, bool metadata_only=false);
 
   void make_dir_mess(const char *basedir, int n);
   void foo();
 
   int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
+
+  void import_find(const char *basedir, const char *find, bool writedata);
 
 };
 

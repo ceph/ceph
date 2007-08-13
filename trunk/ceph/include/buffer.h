@@ -19,6 +19,13 @@
 
 #include "common/Mutex.h"
 
+
+//#define BUFFER_USE_CCPP
+
+#ifdef BUFFER_USE_CCPP
+# include "cc++/thread.h"
+#endif
+
 #include <iostream>
 #include <list>
 
@@ -36,6 +43,9 @@ using std::endl;
 extern Mutex bufferlock;
 extern long buffer_total_alloc;
 // </hack>
+
+
+
 
 class buffer {
 private:
@@ -59,11 +69,23 @@ private:
   public:
     char *data;
     unsigned len;
+#ifdef BUFFER_USE_CCPP
+    mutable ost::AtomicCounter nref;    // mutable for const-ness of operator<<
+#else
     int nref;
     Mutex lock;  // we'll make it non-recursive.
+#endif
 
-    raw(unsigned l) : len(l), nref(0), lock(false) {}
-    raw(char *c, unsigned l) : data(c), len(l), nref(0), lock(false) {}
+    raw(unsigned l) : len(l), nref(0)
+#ifndef BUFFER_USE_CCPP
+		      , lock(false)
+#endif
+    { }
+    raw(char *c, unsigned l) : data(c), len(l), nref(0)
+#ifndef BUFFER_USE_CCPP
+			       , lock(false)
+#endif
+    { }
     virtual ~raw() {};
 
     // no copying.
@@ -187,7 +209,8 @@ public:
 
   static raw* create_page_aligned(unsigned len) {
 #ifndef __CYGWIN__
-    return new raw_mmap_pages(len);
+    //return new raw_mmap_pages(len);
+    return new raw_posix_aligned(len);
 #else
     return new raw_hack_aligned(len);
 #endif
@@ -216,24 +239,36 @@ public:
     }
     ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len) {
       if (_raw) {
-	_raw->lock.Lock();
+#ifdef BUFFER_USE_CCPP
 	++_raw->nref;
-	_raw->lock.Unlock();
+#else
+	_raw->lock.Lock();
+        ++_raw->nref;
+       _raw->lock.Unlock();
+#endif
       }
     }
     ptr(const ptr& p, unsigned o, unsigned l) : _raw(p._raw), _off(p._off + o), _len(l) {
       assert(o+l <= p._len);
       assert(_raw);
+#ifdef BUFFER_USE_CCPP
+      ++_raw->nref;
+#else
       _raw->lock.Lock();
       ++_raw->nref;
       _raw->lock.Unlock();
+#endif
     }
     ptr& operator= (const ptr& p) {
       // be careful -- we need to properly handle self-assignment.
       if (p._raw) {
+#ifdef BUFFER_USE_CCPP
+	++p._raw->nref;                              // inc new
+#else
 	p._raw->lock.Lock();
 	++p._raw->nref;                              // inc new
 	p._raw->lock.Unlock();
+#endif
       }
       release();                                 // dec (+ dealloc) old (if any)
       _raw = p._raw;                               // change my ref
@@ -259,13 +294,20 @@ public:
 
     void release() {
       if (_raw) {
+#ifndef BUFFER_USE_CCPP
 	_raw->lock.Lock();
-	if (--_raw->nref == 0) {
-	  //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-	  _raw->lock.Unlock();	  
-	  delete _raw;  // dealloc old (if any)
-	} else
-	  _raw->lock.Unlock();	  
+#endif
+        if (--_raw->nref == 0) {
+          //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
+#ifndef BUFFER_USE_CCPP
+	  _raw->lock.Unlock();    
+#endif
+          delete _raw;  // dealloc old (if any)
+	} else {
+#ifndef BUFFER_USE_CCPP
+	  _raw->lock.Unlock();    
+#endif
+	}
 	_raw = 0;
       }
     }
@@ -380,7 +422,7 @@ public:
     }
 
     unsigned length() const {
-#if 1
+#if 0
       // DEBUG: verify _len
       unsigned len = 0;
       for (std::list<ptr>::const_iterator it = _buffers.begin();
@@ -538,8 +580,8 @@ public:
     void append(const char *data, unsigned len) {
       while (len > 0) {
 	// put what we can into the existing append_buffer.
-	if (append_buffer.unused_tail_length() > 0) {
-	  unsigned gap = append_buffer.unused_tail_length();
+	unsigned gap = append_buffer.unused_tail_length();
+	if (gap > 0) {
 	  if (gap > len) gap = len;
 	  append_buffer.append(data, gap);
 	  append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
@@ -796,10 +838,22 @@ inline void _decoderaw(T& t, bufferlist& bl, int& off)
 template<class T>
 inline void _encode(const std::list<T>& ls, bufferlist& bl)
 {
-  uint32_t n = ls.size();
-  _encoderaw(n, bl);
-  for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
-    _encode(*p, bl);
+  // should i pre- or post- count?
+  if (!ls.empty()) {
+    unsigned pos = bl.length();
+    uint32_t n = 0;
+    _encoderaw(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      n++;
+      _encode(*p, bl);
+    }
+    bl.copy_in(pos, sizeof(n), (char*)&n);
+  } else {
+    uint32_t n = ls.size();    // FIXME: this is slow on a list.
+    _encoderaw(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+      _encode(*p, bl);
+  }
 }
 template<class T>
 inline void _decode(std::list<T>& ls, bufferlist& bl, int& off)
@@ -976,6 +1030,12 @@ inline void _encode(const bufferlist& s, bufferlist& bl)
   uint32_t len = s.length();
   _encoderaw(len, bl);
   bl.append(s);
+}
+inline void _encode_destructively(bufferlist& s, bufferlist& bl) 
+{
+  uint32_t len = s.length();
+  _encoderaw(len, bl);
+  bl.claim_append(s);
 }
 inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 {

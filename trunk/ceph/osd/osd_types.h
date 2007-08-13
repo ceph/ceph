@@ -24,7 +24,7 @@
 class osdreqid_t {
 public:
   entity_name_t name; // who
-  int           inc;  // incarnation
+  int32_t       inc;  // incarnation
   tid_t         tid;
   osdreqid_t() : inc(0), tid(0) {}
   osdreqid_t(const entity_name_t& a, int i, tid_t t) : name(a), inc(i), tid(t) {}
@@ -67,7 +67,7 @@ typedef uint64_t coll_t;        // collection id
 
 // pg stuff
 
-#define PG_INO 1
+#define PG_INO 4    // this should match mds/mdstypes.h MDS_INO_PG
 
 typedef uint16_t ps_t;
 typedef uint8_t pruleset_t;
@@ -162,6 +162,9 @@ namespace __gnu_cxx {
 }
 
 
+
+
+
 /** ObjectLayout
  *
  * describes an object's placement and layout in the storage cluster.  
@@ -170,7 +173,7 @@ namespace __gnu_cxx {
  */
 struct ObjectLayout {
   pg_t pgid;            // what pg do i belong to
-  int  stripe_unit;     // for object raid in raid pgs
+  int32_t stripe_unit;     // for object raid in raid pgs
 
   ObjectLayout() : pgid(0), stripe_unit(0) { }
   ObjectLayout(pg_t p, int su=0) : pgid(p), stripe_unit(su) { }
@@ -218,6 +221,24 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 
 
 
+/** pg_stat
+ * aggregate stats for a single PG.
+ */
+struct pg_stat_t {
+  const static int STATE_UNKNOWN =    0;
+  const static int STATE_OK =         1;
+  const static int STATE_RECOVERING = 2;
+  const static int STATE_OFFLINE =    3;
+  
+  eversion_t reported;
+  
+  int32_t state;
+  int64_t size;         // in bytes
+  int64_t num_blocks;   // in 4k blocks
+  
+  pg_stat_t() : state(0), size(0), num_blocks(0) {}
+};
+
 
 
 // -----------------------------------------
@@ -255,7 +276,7 @@ public:
   const static uint64_t MAGIC = 0xeb0f505dULL;
   uint64_t magic;
   uint64_t fsid;      // unique fs id (random number)
-  int        whoami;    // my role in this fs.
+  int32_t    whoami;    // my role in this fs.
   epoch_t    current_epoch;             // most recent epoch
   epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
   OSDSuperblock(uint64_t f=0, int w=0) : 

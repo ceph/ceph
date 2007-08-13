@@ -20,8 +20,8 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cerr << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
 
 
 
@@ -236,7 +236,7 @@ void Journaler::_finish_flush(int r, off_t start)
 
 off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 {
-  size_t s = bl.length();
+  uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
@@ -261,11 +261,24 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
     }
   }
 	
-  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(size_t)) << endl;
+  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << endl;
   
+  // cache?
+  //  NOTE: this is a dumb thing to do; this is used for a benchmarking
+  //   purposes only.
+  if (g_conf.journaler_cache &&
+      write_pos == read_pos + read_buf.length()) {
+    dout(10) << "append_entry caching in read_buf too" << endl;
+    assert(requested_pos == received_pos);
+    assert(requested_pos == read_pos + read_buf.length());
+    read_buf.append((char*)&s, sizeof(s));
+    read_buf.append(bl);
+    requested_pos = received_pos = write_pos + sizeof(s) + s;
+  }
+
   // append
   write_buf.append((char*)&s, sizeof(s));
-  write_buf.append(bl);
+  write_buf.claim_append(bl);
   write_pos += sizeof(s) + s;
 
   // flush now?
@@ -482,7 +495,7 @@ bool Journaler::is_readable()
   if (read_pos == write_pos) return false;
 
   // have enough for entry size?
-  size_t s = 0;
+  uint32_t s = 0;
   if (read_buf.length() >= sizeof(s)) 
     read_buf.copy(0, sizeof(s), (char*)&s);
 
@@ -527,7 +540,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
     return false;
   }
   
-  size_t s;
+  uint32_t s;
   assert(read_buf.length() >= sizeof(s));
   read_buf.copy(0, sizeof(s), (char*)&s);
   assert(read_buf.length() >= sizeof(s) + s);

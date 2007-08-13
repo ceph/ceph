@@ -7,6 +7,10 @@
  * tcp crap
  */
 
+/*
+inlined, see tcp.h
+
+
 bool tcp_read(int sd, char *buf, int len)
 {
   while (len > 0) {
@@ -45,7 +49,7 @@ int tcp_write(int sd, char *buf, int len)
   }
   return 0;
 }
-
+*/
 
 int tcp_hostlookup(char *str, tcpaddr_t& ta)
 {

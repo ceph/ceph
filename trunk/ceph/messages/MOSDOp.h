@@ -104,9 +104,8 @@ private:
     
     eversion_t pg_trim_to;   // primary->replica: trim to here
     
-    int op;
-    size_t length;
-    off_t offset;
+    int32_t op;
+    off_t offset, length;
 
     eversion_t version;
     eversion_t old_version;
@@ -164,7 +163,7 @@ private:
     return st.op < 10;
   }
 
-  const size_t get_length() { return st.length; }
+  const off_t get_length() { return st.length; }
   const off_t get_offset() { return st.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
@@ -187,7 +186,7 @@ private:
   bufferlist& get_data() {
     return data;
   }
-  size_t get_data_len() { return data.length(); }
+  off_t get_data_len() { return data.length(); }
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
@@ -216,7 +215,7 @@ private:
 
   void set_layout(const ObjectLayout& l) { st.layout = l; }
 
-  void set_length(size_t l) { st.length = l; }
+  void set_length(off_t l) { st.length = l; }
   void set_offset(off_t o) { st.offset = o; }
   void set_version(eversion_t v) { st.version = v; }
   void set_old_version(eversion_t ov) { st.old_version = ov; }
@@ -243,6 +242,7 @@ private:
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)
 	<< " " << st.oid;
+    if (st.length) out << " " << st.offset << "~" << st.length;
     if (st.retry_attempt) out << " RETRY";
     out << ")";
   }

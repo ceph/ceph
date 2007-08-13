@@ -551,7 +551,7 @@ Message *Rank::Pipe::read_message()
   // payload
   bufferlist blist;
   for (int i=0; i<env.nchunks; i++) {
-    int size;
+    int32_t size;
     if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
       need_to_send_close = false;
       return 0;
@@ -618,7 +618,7 @@ int Rank::Pipe::write_message(Message *m)
        it != blist.buffers().end();
        it++) {
     dout(10) << "pipe(" << peer_addr << ' ' << this << ").writer tcp_sending frag " << i << " len " << (*it).length() << endl;
-    int size = (*it).length();
+    int32_t size = (*it).length();
     r = tcp_write( sd, (char*)&size, sizeof(size) );
     if (r < 0) { 
       derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending chunk len for " << *m << " to " << m->get_dest() << endl; 
@@ -635,7 +635,7 @@ int Rank::Pipe::write_message(Message *m)
   }
 #else
   // one big chunk
-  int size = blist.length();
+  int32_t size = blist.length();
   r = tcp_write( sd, (char*)&size, sizeof(size) );
   if (r < 0) { 
     derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data len for " << *m << " to " << m->get_dest() << endl; 

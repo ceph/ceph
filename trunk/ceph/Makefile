@@ -1,28 +1,38 @@
+#
+# until autoconf is set up, here are the options i understand:
+#
+#  darwin=yes    -- build on darwin
+#  fuse=no       -- don't build anything requiring FUSE
+#  mpi=no        -- don't build newsyn (require MPI)
+#  use_ccpp=yes  -- use Common C++ for buffer.h reference counting
+#  want_bdb=yes  -- build berkelydb objectstore
+# 
 
 # mpicxx must be on your path to build newsyn.  
 #  on googoo, this means that /usr/local/mpich2-1.0.2/bin must be on your path.
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = 
+EXTRA_CFLAGS = -I${HOME}/include -L${HOME}/lib
 
-ifeq ($(target),darwin)
-# For Darwin
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
-LDINC = ar -rc
-else
-# For linux
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
+# base
+CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
-endif
-
 CC = g++
-LIBS = -lpthread
+LIBS = -pthread
 
-ifeq ($(want_bdb),yes)
-CFLAGS += -DUSE_OSBDB
-OSBDB_LIBS = -ldb_cxx
+# darwin?
+ifeq ($(target),darwin)
+CFLAGS += -DDARWIN -D__FreeBSD__=10
+LDINC = ar -rc
 endif
+
+# use Common C++ (for buffer.h)?
+ifeq ($(use_ccpp),yes)
+CFLAGS += -D_GNU_SOURCE -DBUFFER_USE_CCPP
+LIBS += -lccgnu2 -ldl
+endif
+
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -98,22 +108,29 @@ CLIENT_OBJS= \
 	client/Trace.o
 
 
+# bdbstore?
 ifeq ($(want_bdb),yes)
+CFLAGS += -DUSE_OSBDB
+LIBS = -ldb_cxx
+OSD_OBJS += osbdb/OSBDB.o
 OSBDB_OBJS = \
 	osbdb/OSBDB.o
-
-OSBDB_OBJ = osbdb.o
 endif
 
-TARGETS = cmon cosd cmds csyn newsyn fakesyn mkmonmap cmonctl cfuse fakefuse
-NO_FUSE = cmon cosd cmds csyn newsyn fakesyn mkmonmap
 
-
+# targets
+TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
-all: depend ${TARGETS}
+ifneq ($(fuse),no)
+TARGETS += cfuse fakefuse
+endif
 
-nofuse: depend ${NO_FUSE}
+ifneq ($(mpi),no)
+TARGETS += newsyn
+endif
+
+all: depend ${TARGETS}
 
 test: depend ${TEST_TARGETS}
 
@@ -128,8 +145,8 @@ cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o ${OSBDB_OBJ} msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
+cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
@@ -137,7 +154,7 @@ cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
+cfuse: cfuse.cc client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -162,25 +179,17 @@ libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o 
 
 
 
-# misc
-gprof-helper.so: test/gprof-helper.c
-	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
-
-
 # fake*
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o ${OSBDB_OBJ} client/fuse.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -lfuse $^ -o $@
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
-
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
@@ -199,6 +208,7 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleM
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
 	${LDINC} $^ -o $@
 
+# some benchmarking tools
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
 
@@ -208,19 +218,11 @@ mdtest: bench/mdtest/mdtest.o
 mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-# OSD test
-
 testos: test/testos.o ebofs.o osbdb.o common.o
 	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
 
-#
 
-%.so: %.cc
-	${CC} -shared -fPIC ${CFLAGS} $< -o $@
-
-clean:
-	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
-
+# bits
 common.o: ${COMMON_OBJS}
 	${LDINC} $@ $^
 
@@ -245,11 +247,21 @@ mon.o: ${MON_OBJS}
 osbdb.o: ${OSBDB_OBJS}
 	${LDINC} $@ $^
 
+
+# generic rules
+%.so: %.cc
+	${CC} -shared -fPIC ${CFLAGS} $< -o $@
+
 %.o: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
+
+
+# handy
+clean:
+	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 count:
 	cat ${SRCS} | wc -l
@@ -264,6 +276,7 @@ TAGS:
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
+
 
 # now add a line to include the dependency list.
 include .depend

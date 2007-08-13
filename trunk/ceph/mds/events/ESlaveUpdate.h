@@ -24,15 +24,15 @@ public:
   const static int OP_COMMIT = 2;
   const static int OP_ROLLBACK = 3;
   
+  EMetaBlob metablob;
   string type;
   metareqid_t reqid;
   int master;
   int op;  // prepare, commit, abort
-  EMetaBlob metablob;
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
-  ESlaveUpdate(const char *s, metareqid_t ri, int mastermds, int o) : 
-    LogEvent(EVENT_SLAVEUPDATE),
+  ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o) : 
+    LogEvent(EVENT_SLAVEUPDATE), metablob(mdlog),
     type(s),
     reqid(ri),
     master(mastermds),

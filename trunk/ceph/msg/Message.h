@@ -17,6 +17,9 @@
  
 #define MSG_CLOSE 0
 
+#define MSG_STATFS      1
+#define MSG_PGSTATS     2
+
 #define MSG_PING        10
 #define MSG_PING_ACK    11
 
@@ -107,6 +110,8 @@
 
 #define MSG_MDS_ANCHOR 130
 
+#define MSG_MDS_FRAGMENTNOTIFY 140
+
 #define MSG_MDS_EXPORTDIRDISCOVER     149
 #define MSG_MDS_EXPORTDIRDISCOVERACK  150
 #define MSG_MDS_EXPORTDIRCANCEL       151
@@ -154,10 +159,10 @@ using std::list;
 
 
 typedef struct {
-  int type;
+  int32_t type;
   entity_inst_t src, dst;
-  int source_port, dest_port;
-  int nchunks;
+  int32_t source_port, dest_port;
+  int32_t nchunks;
 } msg_envelope_t;
 
 #define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)

@@ -59,8 +59,6 @@
 #include "messages/MClientRequestForward.h"
 
 
-LogType mds_logtype, mds_cache_logtype;
-
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << " "
@@ -96,7 +94,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
-
 
   // clients
   last_client_mdsmap_bcast = 0;
@@ -144,6 +141,48 @@ MDS::~MDS() {
 
 void MDS::reopen_logger()
 {
+  static LogType mds_logtype, mds_cache_logtype;
+  static bool didit = false;
+  if (!didit) {
+    didit = true;
+    
+    mds_logtype.add_inc("req");
+    mds_logtype.add_inc("reply");
+    mds_logtype.add_inc("fw");
+    mds_logtype.add_inc("cfw");
+    
+    mds_logtype.add_set("l");
+    mds_logtype.add_set("q");
+    mds_logtype.add_set("popanyd");
+    mds_logtype.add_set("popnest");
+    
+    mds_logtype.add_inc("lih");
+    mds_logtype.add_inc("lif");
+    
+    mds_logtype.add_set("c");
+    mds_logtype.add_set("ctop");
+    mds_logtype.add_set("cbot");
+    mds_logtype.add_set("cptail");  
+    mds_logtype.add_set("cpin");
+    mds_logtype.add_inc("cex");
+    mds_logtype.add_inc("dis");
+    mds_logtype.add_inc("cmiss");
+    
+    mds_logtype.add_set("buf");
+    mds_logtype.add_inc("cdir");
+    mds_logtype.add_inc("fdir");
+    
+    mds_logtype.add_inc("iex");
+    mds_logtype.add_inc("iim");
+    mds_logtype.add_inc("ex");
+    mds_logtype.add_inc("im");
+    mds_logtype.add_inc("imex");  
+    mds_logtype.add_set("nex");
+    mds_logtype.add_set("nim");
+  }
+ 
+  if (whoami < 0) return;
+
   // flush+close old log
   if (logger) {
     logger->flush(true);
@@ -153,7 +192,6 @@ void MDS::reopen_logger()
     logger2->flush(true);
     delete logger2;
   }
-
 
   // log
   string name;
@@ -166,44 +204,11 @@ void MDS::reopen_logger()
 
   logger = new Logger(name, (LogType*)&mds_logtype);
 
-  mds_logtype.add_inc("req");
-  mds_logtype.add_inc("reply");
-  mds_logtype.add_inc("fw");
-  mds_logtype.add_inc("cfw");
-
-  mds_logtype.add_set("l");
-  mds_logtype.add_set("q");
-  mds_logtype.add_set("popanyd");
-  mds_logtype.add_set("popnest");
-
-  mds_logtype.add_inc("lih");
-  mds_logtype.add_inc("lif");
-
-  mds_logtype.add_set("c");
-  mds_logtype.add_set("ctop");
-  mds_logtype.add_set("cbot");
-  mds_logtype.add_set("cptail");  
-  mds_logtype.add_set("cpin");
-  mds_logtype.add_inc("cex");
-  mds_logtype.add_inc("dis");
-  mds_logtype.add_inc("cmiss");
-
-  mds_logtype.add_set("buf");
-  mds_logtype.add_inc("cdir");
-  mds_logtype.add_inc("fdir");
-
-  mds_logtype.add_inc("iex");
-  mds_logtype.add_inc("iim");
-  mds_logtype.add_inc("ex");
-  mds_logtype.add_inc("im");
-  mds_logtype.add_inc("imex");  
-  mds_logtype.add_set("nex");
-  mds_logtype.add_set("nim");
-
-  
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
   logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
+
+  server->reopen_logger();
 }
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
@@ -331,7 +336,7 @@ void MDS::tick()
   if (logger) {
     req_rate = logger->get("req");
     
-    logger->set("l", (int)load.mds_load());
+    logger->set("l", (int)load.mds_load(g_clock.now()));
     logger->set("q", messenger->get_dispatch_queue_len());
     logger->set("buf", buffer_total_alloc);
     
@@ -395,7 +400,8 @@ void MDS::beacon_send()
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), want_state, beacon_last_seq),
+  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), mdsmap->get_epoch(), 
+					 want_state, beacon_last_seq),
 			  monmap->get_inst(mon));
 
   // schedule next sender
@@ -446,8 +452,7 @@ void MDS::beacon_kill(utime_t lab)
     dout(0) << "beacon_kill last_acked_stamp " << lab 
 	    << ", killing myself."
 	    << endl;
-    messenger->suicide();
-    //exit(0);
+    suicide();
   } else {
     dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
 	     << " != my " << lab 
@@ -503,7 +508,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
   if (whoami < 0) {
     dout(1) << "handle_mds_map i'm not in the mdsmap, killing myself" << endl;
-    shutdown_final();
+    suicide();
     return;
   }
   if (oldwhoami != whoami) {
@@ -552,7 +557,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     // contemplate suicide
     if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
       dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << endl;
-      shutdown_final();
+      suicide();
       return;
     }
 
@@ -562,8 +567,6 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (oldstate == MDSMap::STATE_REJOIN ||
 	  oldstate == MDSMap::STATE_RECONNECT) 
 	recovery_done();
-
-      dout(1) << "now active" << endl;
       finish_contexts(waiting_for_active);  // kick waiters
     } else if (is_replay()) {
       replay_start();
@@ -577,7 +580,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else if (is_stopped()) {
       assert(oldstate == MDSMap::STATE_STOPPING);
       dout(1) << "now stopped, sending down:out and exiting" << endl;
-      shutdown_final();
+      suicide();
       return;
     }
   }
@@ -1043,9 +1046,9 @@ void MDS::stopping_done()
 
   
 
-int MDS::shutdown_final()
+void MDS::suicide()
 {
-  dout(1) << "shutdown_final" << endl;
+  dout(1) << "suicide" << endl;
 
   // flush loggers
   if (logger) logger->flush(true);
@@ -1073,8 +1076,6 @@ int MDS::shutdown_final()
   
   // shut down messenger
   messenger->shutdown();
-  
-  return 0;
 }
 
 
@@ -1202,7 +1203,22 @@ void MDS::my_dispatch(Message *m)
     } while (dest == whoami);
     mdcache->migrator->export_dir(dir,dest);
   }
+  // hack: thrash exports
+  for (int i=0; i<g_conf.mds_thrash_fragments; i++) {
+    if (!is_active()) break;
+    dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf.mds_thrash_fragments << endl;
+    
+    // pick a random dir inode
+    CInode *in = mdcache->hack_pick_random_inode();
 
+    list<CDir*> ls;
+    in->get_dirfrags(ls);
+    if (ls.empty()) continue;                // must be an open dir.
+    CDir *dir = ls.front();
+    if (!dir->get_parent_dir()) continue;    // must be linked.
+    if (!dir->is_auth()) continue;           // must be auth.
+    mdcache->split_dir(dir, 1);// + (rand() % 3));
+  }
 
   // hack: force hash root?
   /*
@@ -1276,7 +1292,7 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Lock();
   dout(10) << "handle_ms_failure to " << inst << " on " << *m << endl;
   
-  if (m->get_type() == MSG_CLIENT_RECONNECT) 
+  if (m->get_type() == MSG_MDS_MAP && m->get_dest().is_client()) 
     server->client_reconnect_failure(m->get_dest().num());
 
   delete m;

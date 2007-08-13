@@ -396,8 +396,15 @@ int main(int argc, char **argv)
 
   if (started) cerr << "newsyn finishing" << endl;
 
-  return 0;  // whatever, cleanup hangs sometimes (stopping ebofs threads?).
+  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
+  char s[20];
+  sprintf(s, "gmon/%d", myrank);
+  mkdir(s, 0755);
+  chdir(s);
 
+
+
+  return 0;  // whatever, cleanup hangs sometimes (stopping ebofs threads?).
 
   // cleanup
   for (map<int,MDS*>::iterator i = mds.begin(); i != mds.end(); i++)
@@ -426,6 +433,8 @@ int main(int argc, char **argv)
     delete client[i];
   }
   */
+
+
 
   
   return 0;

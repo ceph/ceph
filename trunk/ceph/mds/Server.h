@@ -17,6 +17,7 @@
 
 #include "MDS.h"
 
+class Logger;
 class LogEvent;
 class C_MDS_rename_finish;
 class MDRequest;
@@ -29,13 +30,20 @@ class Server {
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
+  Logger *logger;
 
 public:
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger) {
+    messenger(mds->messenger),
+    logger(0) {
   }
+  ~Server() {
+    delete logger;
+  }
+
+  void reopen_logger();
 
   // message handler
   void dispatch(Message *m);
@@ -93,7 +101,9 @@ public:
   void handle_client_chmod(MDRequest *mdr);
   void handle_client_chown(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
-  int encode_dir_contents(CDir *dir, list<class InodeStat*>& inls, list<string>& dnls);
+  int encode_dir_contents(CDir *dir, 
+			  list<string>& dnls,
+			  list<class InodeStat*>& inls);
   void handle_client_truncate(MDRequest *mdr);
   void handle_client_fsync(MDRequest *mdr);
 

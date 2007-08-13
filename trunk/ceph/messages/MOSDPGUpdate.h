@@ -42,6 +42,12 @@ class MOSDPGUpdate : public Message {
   }
   
   char *get_type_name() { return "PGUp"; }
+  void print(ostream& out) {
+    out << "pg_update(" << pgid << " e" << map_version;
+    if (complete) out << " complete";
+    out << " lac=" << last_any_complete;
+    out << ")";
+  }
 
   void encode_payload() {
     payload.append((char*)&map_version, sizeof(map_version));

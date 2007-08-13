@@ -24,8 +24,9 @@ public:
   string type;
 
   EUpdate() : LogEvent(EVENT_UPDATE) { }
-  EUpdate(const char *s) : LogEvent(EVENT_UPDATE),
-			   type(s) { }
+  EUpdate(MDLog *mdlog, const char *s) : 
+    LogEvent(EVENT_UPDATE), metablob(mdlog),
+    type(s) { }
   
   void print(ostream& out) {
     if (type.length())

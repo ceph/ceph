@@ -39,7 +39,7 @@ Logger::Logger(string fn, LogType *type)
     if (g_conf.use_abspaths) {
       char *cwd = get_current_dir_name(); 
       filename = cwd;
-      delete cwd;
+      free(cwd);
       filename += "/";
     }
 
@@ -156,7 +156,7 @@ void Logger::flush(bool force)
     //cout << "opening log file " << filename << endl;
   }
   
-  utime_t fromstart = g_clock.now();
+  utime_t fromstart = g_clock.recent_now();
   if (fromstart < start) {
     cerr << "logger time jumped backwards from " << start << " to " << fromstart << endl;
     assert(0);

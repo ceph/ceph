@@ -58,7 +58,8 @@ ostream& operator<<(ostream& out, CInode& in)
   }
 
   if (in.is_symlink()) out << " symlink";
-
+  if (in.is_dir() && !in.dirfragtree.empty()) out << " " << in.dirfragtree;
+  
   out << " v" << in.get_version();
 
   // locks
@@ -143,6 +144,25 @@ void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
     if (dirfrags.count(*p))
       ls.push_back(dirfrags[*p]);
 }
+
+CDir *CInode::get_approx_dirfrag(frag_t fg)
+{
+  CDir *dir = get_dirfrag(fg);
+  if (dir) return dir;
+
+  // find a child?
+  list<CDir*> ls;
+  get_dirfrags_under(fg, ls);
+  if (!ls.empty()) 
+    return ls.front();
+
+  // try parents?
+  while (1) {
+    fg = fg.parent();
+    dir = get_dirfrag(fg);
+    if (dir) return dir;
+  }
+}	
 
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
@@ -276,20 +296,6 @@ void CInode::put_stickydirs()
 
 
 
-void CInode::fragment_dir(frag_t basefrag, int bits, list<CDir*>& subs, list<Context*>& waiters)
-{
-  dout(10) << "fragment_dir " << bits << endl;
-  
-  CDir *base = get_or_open_dirfrag(mdcache, basefrag);
-
-  dirfragtree.split(basefrag, bits);
-  if (bits > 0) {
-    base->split(bits, subs, waiters);
-  } else {
-    base->merge(bits, waiters);
-  }
-}
-
 
 
 // pins
@@ -372,7 +378,11 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
 void CInode::name_stray_dentry(string& dname)
 {
   char s[20];
+#ifdef __LP64__
   sprintf(s, "%ld", inode.ino.val);
+#else
+  sprintf(s, "%lld", inode.ino.val);
+#endif
   dname = s;
 }
 
@@ -453,7 +463,19 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case LOCK_OTYPE_IDIRFRAGTREE:
-    dirfragtree._encode(bl);
+    {
+      // encode the raw tree
+      dirfragtree._encode(bl);
+
+      // also specify which frags are mine
+      set<frag_t> myfrags;
+      list<CDir*> dfls;
+      get_dirfrags(dfls);
+      for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
+	if ((*p)->is_auth())
+	  myfrags.insert((*p)->get_frag());
+      _encode(myfrags, bl);
+    }
     break;
     
   case LOCK_OTYPE_IFILE:
@@ -502,7 +524,20 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case LOCK_OTYPE_IDIRFRAGTREE:
-    dirfragtree._decode(bl, off);
+    {
+      fragtree_t temp;
+      temp._decode(bl, off);
+      set<frag_t> authfrags;
+      _decode(authfrags, bl, off);
+      if (is_auth()) {
+	// auth.  believe replica's auth frags only.
+	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p) 
+	  dirfragtree.force_to_leaf(*p);
+      } else {
+	// replica.  just take the tree.
+	dirfragtree.swap(temp);
+      }
+    }
     break;
 
   case LOCK_OTYPE_IFILE:
@@ -570,7 +605,7 @@ void CInode::add_waiter(int tag, Context *c)
 // auth_pins
 bool CInode::can_auth_pin() {
   if (parent)
-    return parent->dir->can_auth_pin();
+    return parent->can_auth_pin();
   return true;
 }
 
@@ -583,7 +618,7 @@ void CInode::auth_pin()
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   if (parent)
-    parent->dir->adjust_nested_auth_pins( 1 );
+    parent->adjust_nested_auth_pins( 1 );
 }
 
 void CInode::auth_unpin() 
@@ -597,14 +632,14 @@ void CInode::auth_unpin()
   assert(auth_pins >= 0);
   
   if (parent)
-    parent->dir->adjust_nested_auth_pins( -1 );
+    parent->adjust_nested_auth_pins( -1 );
 }
 
 void CInode::adjust_nested_auth_pins(int a)
 {
   if (!parent) return;
   nested_auth_pins += a;
-  parent->get_dir()->adjust_nested_auth_pins(a);
+  parent->adjust_nested_auth_pins(a);
 }
 
 
@@ -613,8 +648,6 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  //if (is_root())
-  //return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
   if (force_auth.first >= 0) 
     return force_auth;
 

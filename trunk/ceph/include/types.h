@@ -140,9 +140,9 @@ typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10
 
 struct FileLayout {
   // -- file -> object mapping --
-  int stripe_unit;     // stripe unit, in bytes
-  int stripe_count;    // over this many objects
-  int object_size;     // until objects are this big, then move to new objects
+  int32_t stripe_unit;     // stripe unit, in bytes
+  int32_t stripe_count;    // over this many objects
+  int32_t object_size;     // until objects are this big, then move to new objects
 
   int stripe_width() { return stripe_unit * stripe_count; }
 
@@ -152,10 +152,10 @@ struct FileLayout {
   // -- object -> pg layout --
   char pg_type;        // pg type (replicated, raid, etc.) (see pg_t::TYPE_*)
   char pg_size;        // pg size (num replicas, or raid4 stripe width)
-  int  preferred;      // preferred primary osd?
+  int32_t  preferred;  // preferred primary osd?
 
   // -- pg -> disk layout --
-  int  object_stripe_unit;  // for per-object raid
+  int32_t  object_stripe_unit;  // for per-object raid
 
   FileLayout() { }
   FileLayout(int su, int sc, int os, int pgt, int pgs, int o=-1) :
@@ -210,23 +210,39 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_BASE       1  // ino, layout, symlink value
-#define INODE_MASK_AUTH       2  // uid, gid, mode
-#define INODE_MASK_LINK       4  // nlink, anchored
-#define INODE_MASK_FILE       8  // mtime, size.
-// atime?
+/** stat masks
+ */
+#define STAT_MASK_INO        1   // inode nmber
+#define STAT_MASK_TYPE       2   // file type bits of the mode
+#define STAT_MASK_BASE       4   // layout, symlink value
+#define STAT_MASK_AUTH       8   // uid, gid, mode
+#define STAT_MASK_LINK       16   // nlink, anchored
+#define STAT_MASK_FILE       32  // mtime, size.
 
-#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_AUTH|INODE_MASK_LINK|INODE_MASK_FILE)
+#define STAT_MASK_ALL        63
 
-#define INODE_MASK_SIZE       INODE_MASK_FILE // size, blksize, blocks
-#define INODE_MASK_MTIME      INODE_MASK_FILE // mtime
-#define INODE_MASK_ATIME      INODE_MASK_FILE // atime
-#define INODE_MASK_CTIME      (INODE_MASK_FILE|INODE_MASK_AUTH|INODE_MASK_LINK) // ctime
+#define STAT_MASK_SIZE       STAT_MASK_FILE // size, blksize, blocks
+#define STAT_MASK_MTIME      STAT_MASK_FILE // mtime
+#define STAT_MASK_ATIME      STAT_MASK_FILE // atime
+#define STAT_MASK_CTIME      (STAT_MASK_FILE|STAT_MASK_AUTH|STAT_MASK_LINK) // ctime
+
+inline int DT_TO_MODE(int dt) {
+  return dt << 12;
+  /*
+  switch (dt) {
+  case DT_REG: return INODE_MODE_FILE;
+  case DT_DIR: return INODE_MODE_DIR;
+  case DT_LNK: return INODE_MODE_SYMLINK;
+  default: assert(0); return 0;
+  }
+  */
+}
 
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
   FileLayout layout;  // ?immutable?
+  dev_t      rdev;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
@@ -237,7 +253,7 @@ struct inode_t {
   gid_t      gid;
 
   // nlink
-  int        nlink;  
+  int32_t    nlink;  
   bool       anchored;          // auth only?
 
   // file (data access)
@@ -246,14 +262,30 @@ struct inode_t {
   utime_t    atime;   // file data access time.
  
   // special stuff
-  int           mask;  // used for client stat.  hack.
-  version_t     version;           // auth only
-  version_t     file_data_version; // auth only
+  version_t version;           // auth only
+  version_t file_data_version; // auth only
 
+  // file type
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
   bool is_dir()     { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
   bool is_file()    { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
+
+  // corresponding d_types
+  static const unsigned char DT_REG = 8;
+  static const unsigned char DT_DIR = 4;
+  static const unsigned char DT_LNK = 10;
 };
+
+inline unsigned char MODE_TO_DT(int mode) {
+  return mode >> 12;
+  /*
+  if (S_ISREG(mode)) return inode_t::DT_REG;
+  if (S_ISLNK(mode)) return inode_t::DT_LNK;
+  if (S_ISDIR(mode)) return inode_t::DT_DIR;
+  assert(0);
+  return 0;
+  */
+}
 
 
 

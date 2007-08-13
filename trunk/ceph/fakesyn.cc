@@ -86,6 +86,7 @@ int main(int argc, char **argv)
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
+  a.nonce = getpid();
   for (int i=0; i<g_conf.num_mon; i++) {
     a.port = i;
     monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
   OSD *mdsosd[g_conf.num_mds];
   for (int i=0; i<g_conf.num_mds; i++) {
     //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-    mds[i] = new MDS(-1, new FakeMessenger(MSG_ADDR_MDS_NEW), monmap);
+    mds[i] = new MDS(-1, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
     if (g_conf.mds_local_osd)
       mdsosd[i] = new OSD(i+10000, new FakeMessenger(MSG_ADDR_OSD(i+10000)), monmap);
     start++;

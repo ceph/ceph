@@ -95,16 +95,14 @@ public:
     static const int OP_COLL_SETATTR = 24;  // cid, attrname, attrval
     static const int OP_COLL_RMATTR =  25;  // cid, attrname
 
-    list<int> ops;
+  private:
+    list<int8_t> ops;
     list<bufferlist> bls;
     list<object_t> oids;
-    list<coll_t>   cids;
-    list<off_t>    offsets;
-    list<size_t>   lengths;
+    list<coll_t> cids;
+    list<int64_t> lengths;
     list<const char*> attrnames;
     list<string> attrnames2;
-    //list< pair<const void*,int> > attrvals;
-    list<bufferlist>  attrbls;
 
     // for reads only (not encoded)
     list<bufferlist*> pbls;
@@ -112,24 +110,59 @@ public:
     list< pair<void*,int*> > pattrvals;
     list< map<string,bufferptr>* > pattrsets;
 
-    const char *get_attrname() {
-      if (attrnames.empty()) 
-	return attrnames2.front().c_str();
-      else
-	return attrnames.front();
+  public:
+    bool have_op() {
+      return !ops.empty();
     }
-    void pop_attrname() {
-      if (attrnames.empty()) 
-	attrnames2.pop_front();
-      else
-	attrnames.pop_front();
+    int get_num_ops() { return ops.size(); }
+    int get_op() {
+      int op = ops.front();
+      ops.pop_front();
+      return op;
     }
+    void get_bl(bufferlist& bl) {
+      bl.claim(bls.front());
+      bls.pop_front();
+    }
+    void get_oid(object_t& oid) {
+      oid = oids.front();
+      oids.pop_front();
+    }
+    void get_cid(coll_t& cid) {
+      cid = cids.front();
+      cids.pop_front();
+    }
+    void get_length(off_t& len) {
+      len = lengths.front();
+      lengths.pop_front();
+    }
+    void get_attrname(const char * &p) {
+      p = attrnames.front();
+      attrnames.pop_front();
+    }
+    void get_pbl(bufferlist* &pbl) {
+      pbl = pbls.front();
+      pbls.pop_front();
+    }
+    void get_pstat(struct stat* &pst) {
+      pst = psts.front();
+      psts.pop_front();
+    }
+    void get_pattrval(pair<void*,int*>& p) {
+      p = pattrvals.front();
+      pattrvals.pop_front();
+    }
+    void get_pattrset(map<string,bufferptr>* &ps) {
+      ps = pattrsets.front();
+      pattrsets.pop_front();
+    }
+      
 
     void read(object_t oid, off_t off, size_t len, bufferlist *pbl) {
       int op = OP_READ;
       ops.push_back(op);
       oids.push_back(oid);
-      offsets.push_back(off);
+      lengths.push_back(off);
       lengths.push_back(len);
       pbls.push_back(pbl);
     }
@@ -157,7 +190,7 @@ public:
       int op = OP_WRITE;
       ops.push_back(op);
       oids.push_back(oid);
-      offsets.push_back(off);
+      lengths.push_back(off);
       lengths.push_back(len);
       bls.push_back(bl);
     }
@@ -165,14 +198,14 @@ public:
       int op = OP_TRIMCACHE;
       ops.push_back(op);
       oids.push_back(oid);
-      offsets.push_back(off);
+      lengths.push_back(off);
       lengths.push_back(len);
     }
     void truncate(object_t oid, off_t off) {
       int op = OP_TRUNCATE;
       ops.push_back(op);
       oids.push_back(oid);
-      offsets.push_back(off);
+      lengths.push_back(off);
     }
     void remove(object_t oid) {
       int op = OP_REMOVE;
@@ -187,7 +220,7 @@ public:
       //attrvals.push_back(pair<const void*,int>(val,len));
       bufferlist bl;
       bl.append((char*)val,len);
-      attrbls.push_back(bl);
+      bls.push_back(bl);
     }
     void setattrs(object_t oid, map<string,bufferptr>& attrset) {
       int op = OP_SETATTRS;
@@ -234,10 +267,9 @@ public:
       ops.push_back(op);
       cids.push_back(cid);
       attrnames.push_back(name);
-      //attrvals.push_back(pair<const void*,int>(val,len));
       bufferlist bl;
       bl.append((char*)val, len);
-      attrbls.push_back(bl);
+      bls.push_back(bl);
     }
     void collection_rmattr(coll_t cid, const char* name) {
       int op = OP_COLL_RMATTR;
@@ -253,20 +285,20 @@ public:
       ::_encode(bls, bl);
       ::_encode(oids, bl);
       ::_encode(cids, bl);
-      ::_encode(offsets, bl);
       ::_encode(lengths, bl);
       ::_encode(attrnames, bl);
-      ::_encode(attrbls, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(ops, bl, off);
       ::_decode(bls, bl, off);
       ::_decode(oids, bl, off);
       ::_decode(cids, bl, off);
-      ::_decode(offsets, bl, off);
       ::_decode(lengths, bl, off);
       ::_decode(attrnames2, bl, off);
-      ::_decode(attrbls, bl, off);      
+      for (list<string>::iterator p = attrnames2.begin();
+	   p != attrnames2.end();
+	   ++p)
+	attrnames.push_back((*p).c_str());
     }
   };
 
@@ -277,164 +309,195 @@ public:
    */
   virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
     // non-atomic implementation
-    for (list<int>::iterator p = t.ops.begin();
-         p != t.ops.end();
-         p++) {
-      switch (*p) {
+    while (t.have_op()) {
+      int op = t.get_op();
+      switch (op) {
       case Transaction::OP_READ:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          off_t offset = t.offsets.front(); t.offsets.pop_front();
-          size_t len = t.lengths.front(); t.lengths.pop_front();
-          bufferlist *pbl = t.pbls.front(); t.pbls.pop_front();
+          object_t oid;
+          off_t offset, len;
+	  t.get_oid(oid);
+	  t.get_length(offset);
+	  t.get_length(len);
+          bufferlist *pbl;
+	  t.get_pbl(pbl);
           read(oid, offset, len, *pbl);
         }
         break;
       case Transaction::OP_STAT:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          struct stat *st = t.psts.front(); t.psts.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          struct stat *st;
+	  t.get_pstat(st);
           stat(oid, st);
         }
         break;
       case Transaction::OP_GETATTR:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.get_attrname(); t.pop_attrname();
-          pair<void*,int*> pattrval = t.pattrvals.front(); t.pattrvals.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          const char *attrname;
+	  t.get_attrname(attrname);
+          pair<void*,int*> pattrval;
+	  t.get_pattrval(pattrval);
           *pattrval.second = getattr(oid, attrname, pattrval.first, *pattrval.second);
         }
         break;
       case Transaction::OP_GETATTRS:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          map<string,bufferptr> *pset = t.pattrsets.front(); t.pattrsets.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          map<string,bufferptr> *pset;
+	  t.get_pattrset(pset);
           getattrs(oid, *pset);
         }
         break;
 
       case Transaction::OP_WRITE:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          off_t offset = t.offsets.front(); t.offsets.pop_front();
-          size_t len = t.lengths.front(); t.lengths.pop_front();
-          bufferlist bl = t.bls.front(); t.bls.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          off_t offset, len;
+	  t.get_length(offset);
+	  t.get_length(len);
+          bufferlist bl;
+	  t.get_bl(bl);
           write(oid, offset, len, bl, 0);
         }
         break;
 
       case Transaction::OP_TRIMCACHE:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          off_t offset = t.offsets.front(); t.offsets.pop_front();
-          size_t len = t.lengths.front(); t.lengths.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          off_t offset, len;
+	  t.get_length(offset);
+	  t.get_length(len);
           trim_from_cache(oid, offset, len);
         }
         break;
 
       case Transaction::OP_TRUNCATE:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          off_t len = t.offsets.front(); t.offsets.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          off_t len;
+	  t.get_length(len);
           truncate(oid, len, 0);
         }
         break;
 
       case Transaction::OP_REMOVE:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
           remove(oid, 0);
         }
         break;
 
       case Transaction::OP_SETATTR:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.get_attrname(); t.pop_attrname();
-          //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          const char *attrname;
+	  t.get_attrname(attrname);
           bufferlist bl;
-          bl.claim( t.attrbls.front() );
-          t.attrbls.pop_front();
+	  t.get_bl(bl);
           setattr(oid, attrname, bl.c_str(), bl.length(), 0);
         }
         break;
       case Transaction::OP_SETATTRS:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          map<string,bufferptr> *pattrset = t.pattrsets.front(); t.pattrsets.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          map<string,bufferptr> *pattrset;
+	  t.get_pattrset(pattrset);
           setattrs(oid, *pattrset, 0);
         }
         break;
 
       case Transaction::OP_RMATTR:
         {
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          const char *attrname = t.get_attrname(); t.pop_attrname();
+          object_t oid;
+	  t.get_oid(oid);
+          const char *attrname;
+	  t.get_attrname(attrname);
           rmattr(oid, attrname, 0);
         }
         break;
 
       case Transaction::OP_CLONE:
 	{
-          object_t oid = t.oids.front(); t.oids.pop_front();
-          object_t noid = t.oids.front(); t.oids.pop_front();
+          object_t oid;
+	  t.get_oid(oid);
+          object_t noid;
+	  t.get_oid(noid);
 	  clone(oid, noid);
 	}
 	break;
 
       case Transaction::OP_MKCOLL:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
+          coll_t cid;
+	  t.get_cid(cid);
           create_collection(cid, 0);
         }
         break;
 
       case Transaction::OP_RMCOLL:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
+          coll_t cid;
+	  t.get_cid(cid);
           destroy_collection(cid, 0);
         }
         break;
 
       case Transaction::OP_COLL_ADD:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
-          object_t oid = t.oids.front(); t.oids.pop_front();
+          coll_t cid;
+	  t.get_cid(cid);
+          object_t oid;
+	  t.get_oid(oid);
           collection_add(cid, oid, 0);
         }
         break;
 
       case Transaction::OP_COLL_REMOVE:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
-          object_t oid = t.oids.front(); t.oids.pop_front();
+          coll_t cid;
+	  t.get_cid(cid);
+          object_t oid;
+	  t.get_oid(oid);
           collection_remove(cid, oid, 0);
         }
         break;
 
       case Transaction::OP_COLL_SETATTR:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
-          const char *attrname = t.get_attrname(); t.pop_attrname();
-          //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+          coll_t cid;
+	  t.get_cid(cid);
+          const char *attrname;
+	  t.get_attrname(attrname);
           bufferlist bl;
-          bl.claim( t.attrbls.front() );
-          t.attrbls.pop_front();
+	  t.get_bl(bl);
           collection_setattr(cid, attrname, bl.c_str(), bl.length(), 0);
         }
         break;
 
       case Transaction::OP_COLL_RMATTR:
         {
-          coll_t cid = t.cids.front(); t.cids.pop_front();
-          const char *attrname = t.get_attrname(); t.pop_attrname();
+          coll_t cid;
+	  t.get_cid(cid);
+          const char *attrname;
+	  t.get_attrname(attrname);
           collection_rmattr(cid, attrname, 0);
         }
         break;
 
 
       default:
-        cerr << "bad op " << *p << endl;
+        cerr << "bad op " << op << endl;
         assert(0);
       }
     }

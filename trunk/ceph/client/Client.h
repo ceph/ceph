@@ -41,6 +41,7 @@
 // stl
 #include <set>
 #include <map>
+#include <fstream>
 using namespace std;
 
 #include <ext/hash_map>
@@ -71,8 +72,6 @@ extern class Logger  *client_logger;
  - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
-
-typedef int fh_t;
 
 class Dir;
 class Inode;
@@ -124,6 +123,7 @@ class Inode {
  public:
   inode_t   inode;    // the actual inode
   utime_t   valid_until;
+  int mask;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -139,9 +139,11 @@ class Inode {
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
+  int       ll_ref;   // separate ref count for ll client
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
+  fragtree_t dirfragtree;
 
   // for caching i/o mode
   FileCache fc;
@@ -170,11 +172,19 @@ class Inode {
 
   void get() { 
     ref++; 
-    //cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
+    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
   }
-  void put() { 
-    ref--; assert(ref >= 0); 
-    //cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
+  void put(int n=1) { 
+    ref -= n; assert(ref >= 0); 
+    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
+  }
+
+  void ll_get() {
+    ll_ref++;
+  }
+  void ll_put(int n=1) {
+    assert(ll_ref >= n);
+    ll_ref -= n;
   }
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
@@ -183,7 +193,8 @@ class Inode {
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
-    ref(0), dir(0), dn(0), symlink(0),
+    ref(0), ll_ref(0), 
+    dir(0), dn(0), symlink(0),
     fc(_oc, _inode),
     sync_reads(0), sync_writes(0),
     hack_balance_reads(false)
@@ -219,6 +230,17 @@ class Inode {
     if (fc.is_dirty()) w |= CAP_FILE_WRBUFFER;
     if (fc.is_cached()) w |= CAP_FILE_RDCACHE;
     return w;
+  }
+
+  void add_open(int cmode) {
+    if (cmode & FILE_MODE_R) num_open_rd++;
+    if (cmode & FILE_MODE_W) num_open_wr++;
+    if (cmode & FILE_MODE_LAZY) num_open_lazy++;
+  }
+  void sub_open(int cmode) {
+    if (cmode & FILE_MODE_R) num_open_rd--;
+    if (cmode & FILE_MODE_W) num_open_wr--;
+    if (cmode & FILE_MODE_LAZY) num_open_lazy--;
   }
 
   int authority(MDSMap *mdsmap) {
@@ -319,15 +341,47 @@ class Client : public Dispatcher {
  public:
   
   /* getdir result */
+  struct DirEntry {
+    string d_name;
+    struct stat st;
+    int stmask;
+    DirEntry(const string &s) : d_name(s), stmask(0) {}
+    DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+  };
+
   struct DirResult {
+    static const int SHIFT = 28;
+    static const int64_t MASK = (1 << SHIFT) - 1;
+    static const off_t END = 1ULL << (SHIFT + 32);
+
     string path;
-    map<string,inode_t> contents;
-    map<string,inode_t>::iterator p;
-    int off;
-    int size;
-    struct dirent_plus dp;
-    struct dirent_lite dl;
-    DirResult() : p(contents.end()), off(-1), size(0) {}
+    Inode *inode;
+    int64_t offset;   // high bits: frag_t, low bits: an offset
+    map<frag_t, vector<DirEntry> > buffer;
+
+    DirResult(const char *p, Inode *in=0) : path(p), inode(in), offset(0) { 
+      if (inode) inode->get();
+    }
+    DirResult(const string &p, Inode *in=0) : path(p), inode(in), offset(0) { 
+      if (inode) inode->get();
+    }
+
+    frag_t frag() { return frag_t(offset >> SHIFT); }
+    unsigned fragpos() { return offset & MASK; }
+
+    void next_frag() {
+      frag_t fg = offset >> SHIFT;
+      if (fg.is_rightmost())
+	set_end();
+      else 
+	set_frag(fg.next());
+    }
+    void set_frag(frag_t f) {
+      offset = (uint64_t)f << SHIFT;
+      assert(sizeof(offset) == 8);
+    }
+    void set_end() { offset = END; }
+    bool at_end() { return (offset == END); }
   };
 
 
@@ -410,16 +464,16 @@ protected:
 
   // file handles, etc.
   string                 cwd;
-  interval_set<fh_t>     free_fh_set;  // unused fh's
-  hash_map<fh_t, Fh*>    fh_map;
+  interval_set<int> free_fd_set;  // unused fds
+  hash_map<int, Fh*> fd_map;
   
-  fh_t get_fh() {
-    fh_t fh = free_fh_set.start();
-    free_fh_set.erase(fh, 1);
-    return fh;
+  int get_fd() {
+    int fd = free_fd_set.start();
+    free_fd_set.erase(fd, 1);
+    return fd;
   }
-  void put_fh(fh_t fh) {
-    free_fh_set.insert(fh, 1);
+  void put_fd(int fd) {
+    free_fd_set.insert(fd, 1);
   }
 
   void mkabspath(const char *rel, string& abs) {
@@ -441,9 +495,11 @@ protected:
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
-  void put_inode(Inode *in) {
-    in->put();
+  void put_inode(Inode *in, int n=1) {
+    //cout << "put_inode on " << in << " " << in->inode.ino << endl;
+    in->put(n);
     if (in->ref == 0) {
+      //cout << "put_inode deleting " << in->inode.ino << endl;
       inode_map.erase(in->inode.ino);
       if (in == root) root = 0;
       delete in;
@@ -461,8 +517,8 @@ protected:
     put_inode(in);               // unpin inode
   }
 
-  int get_cache_size() { return lru.lru_get_size(); }
-  void set_cache_size(int m) { lru.lru_set_max(m); }
+  //int get_cache_size() { return lru.lru_get_size(); }
+  //void set_cache_size(int m) { lru.lru_set_max(m); }
 
   Dentry* link(Dir *dir, const string& name, Inode *in) {
     Dentry *dn = new Dentry;
@@ -548,8 +604,11 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
 
-  void fill_stat(inode_t& inode, struct stat *st);
-  void fill_statlite(inode_t& inode, struct statlite *st);
+  int fill_stat(Inode *in, struct stat *st);
+
+  
+  // trace generation
+  ofstream traceout;
 
 
   // friends
@@ -604,6 +663,44 @@ private:
     }
   };
 
+  // some helpers
+  int _do_lstat(const char *path, int mask, Inode **in);
+  int _opendir(const char *name, DirResult **dirpp);
+  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
+  void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
+  bool _readdir_have_frag(DirResult *dirp);
+  void _readdir_next_frag(DirResult *dirp);
+  void _readdir_rechoose_frag(DirResult *dirp);
+  int _readdir_get_frag(DirResult *dirp);
+  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+  void _closedir(DirResult *dirp);
+  void _ll_get(Inode *in);
+  int _ll_put(Inode *in, int num);
+  void _ll_drop_pins();
+
+  // internal interface
+  //   call these with client_lock held!
+  int _link(const char *existing, const char *newname);
+  int _unlink(const char *path);
+  int _rename(const char *from, const char *to);
+  int _mkdir(const char *path, mode_t mode);
+  int _rmdir(const char *path);
+  int _readlink(const char *path, char *buf, off_t size);
+  int _symlink(const char *existing, const char *newname);
+  int _lstat(const char *path, struct stat *stbuf);
+  int _chmod(const char *relpath, mode_t mode);
+  int _chown(const char *relpath, uid_t uid, gid_t gid);
+  int _utimes(const char *relpath, utime_t mtime, utime_t atime);
+  int _mknod(const char *path, mode_t mode, dev_t rdev);
+  int _open(const char *path, int flags, mode_t mode, Fh **fhp);
+  int _release(Fh *fh);
+  int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
+  int _write(Fh *fh, off_t offset, off_t size, const char *buf);
+  int _truncate(const char *file, off_t length);
+  int _ftruncate(Fh *fh, off_t length);
+  int _fsync(Fh *fh, bool syncdataonly);
+
+
 public:
   int mount();
   int unmount();
@@ -616,22 +713,21 @@ public:
   const string getcwd() { return cwd; }
 
   // namespace ops
-  int getdir(const char *path, list<string>& contents);
-  int getdir(const char *path, map<string,inode_t>& contents);
+  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  DIR *opendir(const char *name);
-  int closedir(DIR *dir);
-  struct dirent *readdir(DIR *dir); 
-  void rewinddir(DIR *dir); 
-  off_t telldir(DIR *dir);
-  void seekdir(DIR *dir, off_t offset);
+  int opendir(const char *name, DIR **dirpp);
+  int closedir(DIR *dirp);
+  int readdir_r(DIR *dirp, struct dirent *de);
+  int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+  void rewinddir(DIR *dirp); 
+  off_t telldir(DIR *dirp);
+  void seekdir(DIR *dirp, off_t offset);
 
   struct dirent_plus *readdirplus(DIR *dirp);
   int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
   struct dirent_lite *readdirlite(DIR *dirp);
   int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
  
-
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
@@ -645,25 +741,24 @@ public:
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
-  int _lstat(const char *path, int mask, Inode **in);
   int lstat(const char *path, struct stat *stbuf);
   int lstatlite(const char *path, struct statlite *buf);
 
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
-  
-  // file ops
-  int mknod(const char *path, mode_t mode);
-  int open(const char *path, int flags, mode_t mode=0);
-  int close(fh_t fh);
-  off_t lseek(fh_t fh, off_t offset, int whence);
-  int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
-  int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
-  int truncate(const char *file, off_t size);
-    //int truncate(fh_t fh, long long size);
-  int fsync(fh_t fh, bool syncdataonly);
 
+  // file ops
+  int mknod(const char *path, mode_t mode, dev_t rdev=0);
+  int open(const char *path, int flags, mode_t mode=0);
+  int close(int fd);
+  off_t lseek(int fd, off_t offset, int whence);
+  int read(int fd, char *buf, off_t size, off_t offset=-1);
+  int write(int fd, const char *buf, off_t size, off_t offset=-1);
+  int fake_write_size(int fd, off_t size);
+  int truncate(const char *file, off_t size);
+  int ftruncate(int fd, off_t size);
+  int fsync(int fd, bool syncdataonly);
 
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
@@ -676,6 +771,29 @@ public:
   int get_stripe_period(int fd);
   int enumerate_layout(int fd, list<ObjectExtent>& result,
 		       off_t length, off_t offset);
+
+  // low-level interface
+  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr);
+  bool ll_forget(inodeno_t ino, int count);
+  Inode *_ll_get_inode(inodeno_t ino);
+  int ll_getattr(inodeno_t ino, struct stat *st);
+  int ll_setattr(inodeno_t ino, struct stat *st, int mask);
+  int ll_opendir(inodeno_t ino, void **dirpp);
+  void ll_releasedir(void *dirp);
+  int ll_readlink(inodeno_t ino, const char **value);
+  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr);
+  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr);
+  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr);
+  int ll_unlink(inodeno_t ino, const char *name);
+  int ll_rmdir(inodeno_t ino, const char *name);
+  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname);
+  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr);
+  int ll_open(inodeno_t ino, int flags, Fh **fh);
+  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh);
+  int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
+  int ll_write(Fh *fh, off_t off, off_t len, const char *data);
+  int ll_release(Fh *fh);
+  
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

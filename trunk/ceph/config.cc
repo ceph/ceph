@@ -85,9 +85,11 @@ md_config_t g_conf = {
   debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
+  debug_mds_migrator: 1,
   debug_buffer: 0,
   debug_filer: 0,
   debug_objecter: 0,
+  debug_journaler: 0,
   debug_objectcacher: 0,
   debug_client: 0,
   debug_osd: 0,
@@ -136,9 +138,10 @@ md_config_t g_conf = {
   mon_accept_timeout: 10.0,    // on leader, if paxos update isn't accepted
   mon_stop_on_last_unmount: false,
   mon_stop_with_last_mds: false,
+  mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
 
   // --- client ---
-  client_cache_size: 300,
+  client_cache_size: 1000,
   client_cache_mid: .5,
   client_cache_stat_ttl: 0, // seconds until cached stat results become invalid
   client_cache_readdir_ttl: 1,  // 1 second only
@@ -157,23 +160,25 @@ md_config_t g_conf = {
 
   client_trace: 0,
   fuse_direct_io: 0,
+  fuse_ll: true,
   
   // --- objecter ---
-  objecter_buffer_uncommitted: true,
+  objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
 
   // --- journaler ---
   journaler_allow_split_entries: true,
   journaler_safe: false,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
+  journaler_cache: false, // cache writes for later readback
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
-  mds_decay_halflife: 30,
+  mds_decay_halflife: 10,
 
   mds_beacon_interval: 5, //30.0,
-  mds_beacon_grace: 15, //60*60.0,
+  mds_beacon_grace: 30, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -184,19 +189,23 @@ md_config_t g_conf = {
   mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
+  mds_bal_sample_interval: 5.0,  // every 5 seconds
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_hash_rd: 10000,
-  mds_bal_unhash_rd: 1000,
-  mds_bal_hash_wr: 10000,
-  mds_bal_unhash_wr: 1000,
+  mds_bal_split_size: 1000,
+  mds_bal_split_rd: 10000,
+  mds_bal_split_wr: 10000,
+  mds_bal_merge_size: 50,
+  mds_bal_merge_rd: 1000,
+  mds_bal_merge_wr: 1000,
   mds_bal_interval: 30,           // seconds
-  mds_bal_hash_interval: 5,      // seconds
+  mds_bal_fragment_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
 
   mds_bal_mode: 0,
+  mds_bal_min_rebalance: .2,  // must be this much above average before we export anything
   mds_bal_min_start: .2,      // if we need less than this, we don't do anything
   mds_bal_need_min: .8,       // take within this range of what we need
   mds_bal_need_max: 1.2,
@@ -212,6 +221,7 @@ md_config_t g_conf = {
   mds_local_osd: false,
 
   mds_thrash_exports: 0,
+  mds_thrash_fragments: 0,
   mds_dump_cache_on_map: false,
   mds_dump_cache_after_rejoin: true,
 
@@ -237,13 +247,13 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 5,   // shut up while i'm debugging
+  osd_heartbeat_interval: 15,   // shut up while i'm debugging
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
   
   // --- fakestore ---
-  fakestore_fake_sync: 2,    // 2 seconds
+  fakestore_fake_sync: .5,    // seconds
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
@@ -518,6 +528,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_mds_log = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_log = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_mds_migrator") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_mds_migrator = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_mds_migrator = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_buffer") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_buffer = atoi(args[++i]);
@@ -533,6 +548,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_objecter = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_objecter = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_journaler") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_journaler = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_journaler = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_objectcacher") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_objectcacher = atoi(args[++i]);
@@ -593,6 +613,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--journaler_safe") == 0) 
       g_conf.journaler_safe = atoi(args[++i]);
+    else if (strcmp(args[i], "--journaler_cache") == 0) 
+      g_conf.journaler_cache = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
@@ -632,14 +654,18 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
       g_conf.mds_bal_max_until = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_hash_rd") == 0) 
-      g_conf.mds_bal_hash_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_hash_wr") == 0) 
-      g_conf.mds_bal_hash_wr = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_unhash_rd") == 0) 
-      g_conf.mds_bal_unhash_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_unhash_wr") == 0) 
-      g_conf.mds_bal_unhash_wr = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_size") == 0) 
+      g_conf.mds_bal_split_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_rd") == 0) 
+      g_conf.mds_bal_split_rd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_split_wr") == 0) 
+      g_conf.mds_bal_split_wr = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_size") == 0) 
+      g_conf.mds_bal_merge_size = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_rd") == 0) 
+      g_conf.mds_bal_merge_rd = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_bal_merge_wr") == 0) 
+      g_conf.mds_bal_merge_wr = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_bal_mode") == 0) 
       g_conf.mds_bal_mode = atoi(args[++i]);
@@ -658,6 +684,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_local_osd = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
       g_conf.mds_thrash_exports = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_thrash_fragments") == 0) 
+      g_conf.mds_thrash_fragments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
       g_conf.mds_dump_cache_on_map = true;
     
@@ -670,9 +698,12 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--client_cache_readdir_ttl") == 0)
       g_conf.client_cache_readdir_ttl = atoi(args[++i]);
     else if (strcmp(args[i], "--client_trace") == 0)
-      g_conf.client_trace = atoi(args[++i]);
+      g_conf.client_trace = args[++i];
+
     else if (strcmp(args[i], "--fuse_direct_io") == 0)
       g_conf.fuse_direct_io = atoi(args[++i]);
+    else if (strcmp(args[i], "--fuse_ll") == 0)
+      g_conf.fuse_ll = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);

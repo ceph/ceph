@@ -43,10 +43,12 @@ class MDBalancer {
   int beat_epoch;
 
   utime_t last_heartbeat;
-  utime_t last_hash;
+  utime_t last_fragment;
+  utime_t last_sample;    
+
 
   // todo
-  set<inodeno_t>   hash_queue;
+  set<dirfrag_t>   split_queue;
 
   // per-epoch scatter/gathered info
   hash_map<int, mds_load_t>  mds_load;
@@ -82,7 +84,7 @@ class MDBalancer {
 
   void tick();
 
-  void do_hashing();
+  void do_fragmenting();
 
   void export_empties();
   void do_rebalance(int beat);
@@ -90,18 +92,20 @@ class MDBalancer {
                     double amount, 
                     list<CDir*>& exports, 
                     double& have,
-                    set<CDir*>& already_exporting);
+                    set<CDir*>& already_exporting,
+		    utime_t now);
 
 
   void subtract_export(class CDir *ex);
   void add_import(class CDir *im);
 
-  void hit_inode(class CInode *in, int type=0);
-  void hit_dir(class CDir *dir, int type=0);
-  void hit_recursive(class CDir *dir, int type=0);
+  void hit_inode(utime_t now, class CInode *in, int type);
+  void hit_dir(utime_t now, class CDir *dir, int type, double amount=1.0);
+  void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
 
 
   void show_imports(bool external=false);
+  void dump_pop_map();  
 
 };
 

@@ -71,9 +71,11 @@ struct md_config_t {
   int debug_mds;
   int debug_mds_balancer;
   int debug_mds_log;
+  int debug_mds_migrator;
   int debug_buffer;
   int debug_filer;
   int debug_objecter;
+  int debug_journaler;
   int debug_objectcacher;
   int debug_client;
   int debug_osd;
@@ -122,6 +124,7 @@ struct md_config_t {
   float mon_accept_timeout;
   bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
+  bool mon_allow_mds_bully;
 
   // client
   int      client_cache_size;
@@ -154,8 +157,9 @@ struct md_config_t {
   size_t   client_bcache_align;
   */
 
-  int      client_trace;
+  char *client_trace;
   int      fuse_direct_io;
+  bool fuse_ll;
 
   // objecter
   bool  objecter_buffer_uncommitted;
@@ -164,6 +168,7 @@ struct md_config_t {
   bool  journaler_allow_split_entries;
   bool  journaler_safe;
   int   journaler_write_head_interval;
+  bool  journaler_cache;
   
   // mds
   int   mds_cache_size;
@@ -183,19 +188,23 @@ struct md_config_t {
   off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
+  float mds_bal_sample_interval;  
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
-  float mds_bal_hash_rd;
-  float mds_bal_unhash_rd;
-  float mds_bal_hash_wr;
-  float mds_bal_unhash_wr;
+  int mds_bal_split_size;
+  float mds_bal_split_rd;
+  float mds_bal_split_wr;
+  int mds_bal_merge_size;
+  float mds_bal_merge_rd;
+  float mds_bal_merge_wr;
   int   mds_bal_interval;
-  int   mds_bal_hash_interval;
+  int   mds_bal_fragment_interval;
   float mds_bal_idle_threshold;
   int   mds_bal_max;
   int   mds_bal_max_until;
 
   int   mds_bal_mode;
+  float mds_bal_min_rebalance;
   float mds_bal_min_start;
   float mds_bal_need_min;
   float mds_bal_need_max;
@@ -211,6 +220,7 @@ struct md_config_t {
   bool  mds_local_osd;
 
   int mds_thrash_exports;
+  int mds_thrash_fragments;
   bool mds_dump_cache_on_map;
   bool mds_dump_cache_after_rejoin;
 
@@ -240,7 +250,7 @@ struct md_config_t {
   int   osd_max_pull;
   bool  osd_pad_pg_log;
 
-  int   fakestore_fake_sync;
+  double   fakestore_fake_sync;
   bool  fakestore_fsync;
   bool  fakestore_writesync;
   int   fakestore_syncthreads;   // such crap

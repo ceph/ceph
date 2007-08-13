@@ -27,7 +27,7 @@
 #include <cassert>
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 ostream& CDentry::print_db_line_prefix(ostream& out) 
 {
@@ -43,6 +43,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   dn.make_path(path);
   
   out << "[dentry " << path;
+  
   if (dn.is_auth()) {
     out << " auth";
     if (dn.is_replicated()) 
@@ -54,7 +55,16 @@ ostream& operator<<(ostream& out, CDentry& dn)
   }
 
   if (dn.is_null()) out << " NULL";
-  if (dn.is_remote()) out << " REMOTE";
+  if (dn.is_remote()) {
+    out << " REMOTE(";
+    switch (dn.get_remote_d_type()) {
+    case inode_t::DT_REG: out << "reg"; break;
+    case inode_t::DT_DIR: out << "dir"; break;
+    case inode_t::DT_LNK: out << "lnk"; break;
+    default: assert(0);
+    }
+    out << ")";
+  }
 
   out << " " << dn.lock;
 
@@ -139,7 +149,7 @@ void CDentry::mark_dirty(version_t pv)
   dout(10) << " mark_dirty " << *this << endl;
 
   // i now live in this new dir version
-  assert(pv == projected_version);
+  assert(pv <= projected_version);
   version = pv;
   _mark_dirty();
 
@@ -248,14 +258,24 @@ bool CDentry::can_auth_pin()
 
 void CDentry::auth_pin()
 {
-  assert(dir);
-  dir->auth_pin();
+  if (auth_pins == 0)
+    get(PIN_AUTHPIN);
+  auth_pins++;
+  dir->adjust_nested_auth_pins(1);
 }
 
 void CDentry::auth_unpin()
 {
-  assert(dir);
-  dir->auth_unpin();
+  auth_pins--;
+  if (auth_pins == 0)
+    put(PIN_AUTHPIN);
+  dir->adjust_nested_auth_pins(-1);
+}
+
+void CDentry::adjust_nested_auth_pins(int by)
+{
+  nested_auth_pins += by;
+  dir->adjust_nested_auth_pins(by);
 }
 
 

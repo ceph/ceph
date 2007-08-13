@@ -337,6 +337,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IFILE:
     return file_rdlock_start((FileLock*)lock, mdr);
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     return scatter_rdlock_start((ScatterLock*)lock, mdr);
   default:
@@ -349,6 +350,7 @@ void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case LOCK_OTYPE_IFILE:
     return file_rdlock_finish((FileLock*)lock, mdr);
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     return scatter_rdlock_finish((ScatterLock*)lock, mdr);
   default:
@@ -359,18 +361,21 @@ void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
   case LOCK_OTYPE_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
   default:
-    assert(0);
+    assert(0); 
+    return false;
   }
 }
 
 void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     return scatter_wrlock_finish((ScatterLock*)lock, mdr);
   case LOCK_OTYPE_IVERSION:
@@ -387,6 +392,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
     return file_xlock_start((FileLock*)lock, mdr);
   case LOCK_OTYPE_IVERSION:
     return local_xlock_start((LocalLock*)lock, mdr);
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     assert(0);
   default:
@@ -401,6 +407,7 @@ void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
     return file_xlock_finish((FileLock*)lock, mdr);
   case LOCK_OTYPE_IVERSION:
     return local_xlock_finish((LocalLock*)lock, mdr);
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     assert(0);
   default:
@@ -462,7 +469,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     cap->set_suppress(true);
   } else {
     // make sure it has sufficient caps
-    if (cap->wanted() & ~my_want) {
+    if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
       cap->set_wanted( cap->wanted() | my_want );
     }
@@ -672,8 +679,21 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
           << endl;  
   
   // update wanted
-  if (cap->wanted() != wanted)
-    cap->set_wanted(wanted);
+  if (cap->wanted() != wanted) {
+    if (m->get_seq() < cap->get_last_seq()) {
+      /* this is awkward.
+	 client may be trying to release caps (i.e. inode closed, etc.) by setting reducing wanted
+	 set.
+	 but it may also be opening the same filename, not sure that it'll map to the same inode.
+	 so, we don't want wanted reductions to clobber mds's notion of wanted unless we're
+	 sure the client has seen all the latest caps.
+      */
+      dout(-10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
+		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << endl;
+    } else {
+      cap->set_wanted(wanted);
+    }
+  }
 
   // confirm caps
   int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
@@ -811,7 +831,6 @@ void Locker::handle_lock(MLock *m)
   case LOCK_OTYPE_DN:
   case LOCK_OTYPE_IAUTH:
   case LOCK_OTYPE_ILINK:
-  case LOCK_OTYPE_IDIRFRAGTREE:
     handle_simple_lock(lock, m);
     break;
     
@@ -819,6 +838,7 @@ void Locker::handle_lock(MLock *m)
     handle_file_lock((FileLock*)lock, m);
     break;
     
+  case LOCK_OTYPE_IDIRFRAGTREE:
   case LOCK_OTYPE_IDIR:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
@@ -1319,7 +1339,8 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
       !lock->is_rdlocked() &&
       !lock->is_xlocked() &&
       lock->get_state() == LOCK_SYNC) 
-    scatter_lock(lock);
+    lock->set_state(LOCK_SCATTER);
+  //scatter_scatter(lock);
 
   // can wrlock?
   if (lock->can_wrlock()) {
@@ -1330,7 +1351,8 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
   }
 
   // wait for write.
-  lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+  lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, 
+		   new C_MDS_RetryRequest(mdcache, mdr));
   
   // initiate scatter or lock?
   if (lock->is_stable()) {
@@ -1526,7 +1548,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   
-  EUpdate *le = new EUpdate("dir.mtime writebehind");
+  EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
   le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   

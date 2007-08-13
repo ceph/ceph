@@ -74,7 +74,7 @@
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./dev";
 
-object_t SUPERBLOCK_OBJECT(0,0);
+static const object_t SUPERBLOCK_OBJECT(0,0);
 
 
 // <hack> force remount hack for performance testing FakeStore
@@ -870,10 +870,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
   peer_qlen[from] = m->avg_qlen;
   peer_read_time[from] = m->read_mean_time;
 
-  //if (!m->ack)
-  //messenger->send_message(new MOSDPing(osdmap->get_epoch(), true),
-  //m->get_source());
- 
   delete m;
 }
 

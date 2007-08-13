@@ -27,6 +27,7 @@ using namespace std;
 #include "osd/OSD.h"
 #include "client/Client.h"
 #include "client/fuse.h"
+#include "client/fuse_ll.h"
 
 #include "common/Timer.h"
 
@@ -59,6 +60,10 @@ public:
 int main(int argc, char **argv) {
   cerr << "fakefuse starting" << endl;
 
+  // stop on our own (by default)
+  g_conf.mon_stop_on_last_unmount = true;
+  g_conf.mon_stop_with_last_mds = true;
+
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
@@ -82,7 +87,13 @@ int main(int argc, char **argv) {
   if (g_conf.clock_tare) g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
-  
+  entity_addr_t a;
+  a.nonce = getpid();
+  for (int i=0; i<g_conf.num_mon; i++) {
+    a.port = i;
+    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+  }
+
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
     mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
@@ -100,17 +111,13 @@ int main(int argc, char **argv) {
     mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
   }
  
-    // init
-  for (int i=0; i<g_conf.num_mon; i++) {
+  // init
+  for (int i=0; i<g_conf.num_mon; i++) 
     mon[i]->init();
-  }
-  for (int i=0; i<NUMMDS; i++) {
-    mds[i]->init();
-  }
-  
-  for (int i=0; i<NUMOSD; i++) {
+  for (int i=0; i<NUMMDS; i++) 
+    mds[i]->init();  
+  for (int i=0; i<NUMOSD; i++) 
     osd[i]->init();
-  }
 
 
   // create client
@@ -122,15 +129,19 @@ int main(int argc, char **argv) {
 
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    cout << "starting fuse on pid " << getpid() << endl;
     client[i]->mount();
 
     char *oldcwd = get_current_dir_name();  // note previous wd
-    ceph_fuse_main(client[i], argc, argv);
+    cout << "starting fuse on pid " << getpid() << endl;
+    if (g_conf.fuse_ll)
+      ceph_fuse_ll_main(client[i], argc, argv);
+    else
+      ceph_fuse_main(client[i], argc, argv);
+    cout << "fuse finished on pid " << getpid() << endl;
     ::chdir(oldcwd);                        // return to previous wd
+    free(oldcwd);
 
     client[i]->unmount();
-    cout << "fuse finished on pid " << getpid() << endl;
     client[i]->shutdown();
   }
   

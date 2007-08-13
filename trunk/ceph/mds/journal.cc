@@ -68,6 +68,13 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
+EMetaBlob::EMetaBlob(MDLog *mdlog) :
+  last_subtree_map(mdlog->get_last_subtree_map_offset()),
+  my_offset(mdlog->get_write_pos()) 
+{
+}
+
+
 /*
  * we need to ensure that a journaled item has either
  * 
@@ -99,7 +106,8 @@ bool EMetaBlob::has_expired(MDS *mds)
 	       << " for " << *dir << endl;
       continue;       // not our problem
     }
-    if (dir->get_committed_version() >= lp->second.dirv) {
+    if (dir->get_committed_version() >= lp->second.dirv ||
+	dir->get_committed_version_equivalent() >= lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
       continue;       // yay
@@ -217,7 +225,8 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	       << " for " << *dir << endl;
       continue;     // not our problem
     }
-    if (dir->get_committed_version() >= lp->second.dirv) {
+    if (dir->get_committed_version() >= lp->second.dirv ||
+	dir->get_committed_version_equivalent() >= lp->second.dirv) {
       dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
 	       << " on " << *dir << endl;
       continue;   // yay
@@ -238,15 +247,12 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	continue;
       }
     }
-    if (dir->get_committed_version() < lp->second.dirv) {
-      dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
-	       << ", committing " << *dir << endl;
-      commit[dir] = MAX(commit[dir], lp->second.dirv);
-      ncommit++;
-      continue;
-    }
-
-    assert(0);  // hrm
+    
+    assert(dir->get_committed_version() < lp->second.dirv);
+    dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
+	     << ", committing " << *dir << endl;
+    commit[dir] = MAX(commit[dir], lp->second.dirv);
+    ncommit++;
   }
 
   // set up gather context
@@ -384,7 +390,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry( p->dn );
+	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -400,7 +406,7 @@ void EMetaBlob::replay(MDS *mds)
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
-	dir->link_inode(dn, in);
+	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *in << endl;
       } else {
@@ -410,7 +416,7 @@ void EMetaBlob::replay(MDS *mds)
 	}
 	in->inode = p->inode;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
-	dir->link_inode(dn, in);
+	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay linked " << *in << endl;
       }
@@ -422,8 +428,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry(p->dn, p->ino);
-	dn->set_remote_ino(p->ino);
+	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -432,7 +437,7 @@ void EMetaBlob::replay(MDS *mds)
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << endl;
 	  dir->unlink_inode(dn);
 	}
-	dn->set_remote_ino(p->ino);
+	dn->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
@@ -445,7 +450,7 @@ void EMetaBlob::replay(MDS *mds)
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
-	dn = dir->add_dentry(p->dn);
+	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
@@ -767,6 +772,7 @@ bool ESlaveUpdate::has_expired(MDS *mds)
 
   default:
     assert(0);
+    return false;
   }
 }
 
@@ -898,7 +904,10 @@ void EFragment::replay(MDS *mds)
   CInode *in = mds->mdcache->get_inode(ino);
   assert(in);
 
-  //in->fragment_dir(basefrag, bits);
+  list<CDir*> resultfrags;
+  list<Context*> waiters;
+  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters);
+
   metablob.replay(mds);
 }
 

@@ -255,11 +255,6 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
         BufferHead *bh = p->second;
         dout(10) << "map_write bh " << *bh << " intersected" << endl;
         
-        /*if (bh->is_dirty()) {
-          // already dirty, let's use it.
-          final = bh;
-        } else {
-        */
         if (p->first < cur) {
           assert(final == 0);
           if (cur + max >= p->first + p->second->length()) {
@@ -275,10 +270,6 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
             split(final, cur+max);
           }
         } else if (p->first == cur) {
-          /*if (bh->is_dirty()) {
-              // already dirty, use it.
-            } 
-            else*/
           if (p->second->length() <= max) {
             // whole bufferhead, piece of cake.
           } else {
@@ -286,7 +277,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
             split(bh, cur + max);        // just split
           }
           if (final) 
-            merge_left(final,bh);
+            merge_left(final, bh);
           else
             final = bh;
         }
@@ -394,7 +385,16 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
   dout(7) << "bh_read_finish " 
           << oid 
           << " " << start << "~" << length
+	  << " (bl is " << bl.length() << ")"
           << endl;
+
+  if (bl.length() < length) {
+    bufferptr bp(length - bl.length());
+    bp.zero();
+    dout(7) << "bh_read_finish " << oid << " padding " << start << "~" << length 
+	    << " with " << bp.length() << " bytes of zeroes" << endl;
+    bl.push_back(bp);
+  }
   
   if (objects.count(oid) == 0) {
     dout(7) << "bh_read_finish no object cache" << endl;
@@ -743,9 +743,9 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       for (map<off_t, BufferHead*>::iterator bh_it = hits.begin();
            bh_it != hits.end();
            bh_it++) {
-		dout(10) << "readx hit bh " << *bh_it->second << endl;
+	dout(10) << "readx hit bh " << *bh_it->second << endl;
         hit_ls.push_back(bh_it->second);
-	  }
+      }
 
       // create reverse map of buffer offset -> object for the eventual result.
       // this is over a single ObjectExtent, so we know that
@@ -753,7 +753,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       //  - the buffer frags need not be (and almost certainly aren't)
       off_t opos = ex_it->start;
       map<off_t, BufferHead*>::iterator bh_it = hits.begin();
-	  assert(bh_it->second->start() <= opos);
+      assert(bh_it->second->start() <= opos);
       size_t bhoff = opos - bh_it->second->start();
       map<size_t,size_t>::iterator f_it = ex_it->buffer_extents.begin();
       size_t foff = 0;
@@ -768,9 +768,13 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 
         size_t len = MIN(f_it->second - foff,
                          bh->length() - bhoff);
-        stripe_map[f_it->first].substr_of(bh->bl,
-                                          opos - bh->start(),
-                                          len);
+	bufferlist bit;  // put substr here first, since substr_of clobbers, and
+	                 // we may get multiple bh's at this stripe_map position
+	bit.substr_of(bh->bl,
+		      opos - bh->start(),
+		      len);
+        stripe_map[f_it->first].claim_append(bit);
+
         opos += len;
         bhoff += len;
         foff += len;
@@ -812,6 +816,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
     dout(10) << "readx  adding buffer len " << i->second.length() << " at " << pos << endl;
     pos += i->second.length();
     rd->bl->claim_append(i->second);
+    assert(rd->bl->length() == pos);
   }
   dout(10) << "readx  result is " << rd->bl->length() << endl;
 
@@ -870,24 +875,25 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     touch_bh(bh);
     bh->last_write = now;
 
-    // recombine with left?
+    // combine with left?
     map<off_t,BufferHead*>::iterator p = o->data.find(bh->start());
+    assert(p->second == bh);
     if (p != o->data.begin()) {
-      assert(p->second == bh);
       p--;
-      if (p->second->is_dirty()) {
+      if (p->second->is_dirty() &&
+	  p->second->end() == bh->start()) {
         o->merge_left(p->second, bh);
         bh = p->second;
-      }
+      } else 
+	p++;
     }
-    // right?
-    while (1) {
-      p = o->data.find(bh->start());
-      assert(p->second == bh);
-      p++;
-      if (p == o->data.end() || !p->second->is_dirty()) break;
+    // combine to the right?
+    assert(p->second == bh);
+    p++;
+    if (p != o->data.end() &&
+	!p->second->is_dirty() &&
+	p->second->start() > bh->end()) 
       o->merge_left(bh, p->second);
-    }
   }
 
   delete wr;

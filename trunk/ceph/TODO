@@ -26,6 +26,7 @@ some smallish projects:
 
 
 
+
 code cleanup
 - endian portability
 - word size
@@ -56,38 +57,6 @@ sage mds
 
 - the split/merge plan:
 
-/  - fragset_t to describe bounds; we need to tolerate concurrent merge/splits
-
-/  - fragtree_t
-/    - get_leaves(fg, ls) needs to be smarter
-/    - force_to_leaf()
-/    - simplified/normalized form.
-
-/  - CDir is never request pinned
-/    - add a CInode sticky_dir flag to somehow pin all cdirs on the fly.  
-/    - STICKY dir state and pin?  make sure it's kept across import/export/fragment
-/  - pull _bound maps out of Migrator; they are redundant (trust the subtree map!)
-
-  - handle_resolve needs to infer splits/merges
-
-  - auth journals and applies update in the request update pipeline
-  - dirfragtree is lazily consistent.  no lock.  bcast by primary when it updates.  
-
-  - bcast to dir replicas
-  - inode auth will journal inode update separately/lazily
-    - also on handle_resolve(), if there is a mismatch.
-    - do i need a fragtrace_t something to tell me where the splits for a given frag occurred?  
-    - or something like a fragtree_t simplify()?
-  - is there any reason to freeze the dir?
-    - CDentry objects will be moved to the new frag(s)
-    - Server etc. must take care not to carry CDir pointers around; they're unstable!
-
-
-- journal epoch, or something similar
-  - reduce size of EMetaBlob by skipping context when inode was already journaled since the last
-    SubtreeMap
-
-
 - hmm, should we move ESubtreeMap out of the journal?  
   that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
 
@@ -100,19 +69,12 @@ sage mds
   - need to export stray crap to another mds..
 - verify stray is empty on shutdown
 
-- dirfrag split/merge
-  - client readdir for dirfrags
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-- statfs?
 
 - more testing of failures + thrashing.
   - is export prep dir open deadlock properly fixed by forge_replica_dir()?
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
-
-- dirfrag split
-  - make sure we are freezing _before_ we fetch to complete the dirfrag, else 
-    we break commit()'s preconditions when it fetches an incomplete dir.
 
 - detect and deal with client failure
   - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
@@ -162,18 +124,6 @@ crush
 - crush tools
 
 
-rados+ebofs
-- purge replicated writes from cache.  (with exception of partial tail blocks.)
-
-rados paper todo?
-- better experiments
-  - berkeleydb objectstore?
-- flush log only in response to subsequent read or write?
-- better behaving recovery
-- justify use of splay.
-  - dynamic replication
-- snapshots
-
 rados snapshots
 - integrate revisions into ObjectCacher
 - clean up oid.rev vs op.rev in osd+osdc
@@ -207,14 +157,18 @@ osd/rados
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
 - read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
-- efficiently replicate clone() objects
-- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
+
 - consider implications of nvram writeahead logs
+- clean shutdown?
+- pgmonitor should supplement failure detection
+
+- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
+
+- efficiently replicate clone() objects
 - fix heartbeat wrt new replication
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- pg_num changes
 - report crashed pgs?
 
 messenger
@@ -227,6 +181,7 @@ simplemessenger
 - exponential backoff on monitor resend attempts (actually, this should go outside the messenger!)
 
 objectcacher
+- merge clean bh's
 - ocacher caps transitions vs locks
 - test read locks
 
@@ -235,16 +190,47 @@ reliability
 - osdmonitor, filter
 
 ebofs
+- allow holes
+
 - verify proper behavior of conflicting/overlapping reads of clones
-- test(fix) sync() 
 - combine inodes and/or cnodes into same blocks
 - allow btree sets instead of maps
 - eliminate nodepools
 - nonblocking write on missing onodes?
 - fix bug in node rotation on insert (and reenable)
 - fix NEAR_LAST_FWD (?)
-- journaling? in NVRAM?
-- metadata in nvram?  flash?
+
+- awareness of underlying software/hardware raid in allocator so that we
+  write full stripes _only_.
+  - hmm, that's basically just a large block size.
+
+- rewrite the btree code!
+  - multithreaded
+  - eliminate nodepools
+  - allow btree sets
+  - allow arbitrary embedded data?
+  - allow arbitrary btrees
+  - allow root node(s?) to be embedded in onode, or whereever.
+  - keys and values can be uniform (fixed-size) or non-uniform.  
+    - fixed size (if any) is a value in the btree struct.  
+      - negative indicates bytes of length value?  (1 -> 255bytes, 2 -> 65535 bytes, etc.?)
+    - non-uniform records preceeded by length.  
+    - keys sorted via a comparator defined in btree root.  
+      - lexicographically, by default.
+
+- goal
+  - object btree key->value payload, not just a data blob payload.
+  - better threading behavior.
+    - with transactional goodness!
+
+- onode
+  - object attributes.. as a btree?
+  - blob stream
+  - map stream.
+    - allow blob values.
+
+  - 
+
 
 
 remaining hard problems
@@ -258,12 +244,6 @@ crush
 
 mds
 - distributed client management
-- anchormgr
-  - 2pc
-  - independent journal?
-  - distributed?
-- link count management
-  - also 2pc
 - chdir (directory opens!)
 - rewrite logstream
   - clean up
