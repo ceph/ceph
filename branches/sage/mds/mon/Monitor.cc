@@ -282,6 +282,12 @@ void Monitor::dispatch(Message *m)
       clientmon->dispatch(m);
       break;
 
+      // pg
+    case MSG_STATFS:
+    case MSG_PGSTATS:
+      pgmon->dispatch(m);
+      break;
+
 
       // paxos
     case MSG_MON_PAXOS:

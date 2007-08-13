@@ -20,7 +20,9 @@
 #include "MonitorStore.h"
 
 #include "messages/MPGStats.h"
+
 #include "messages/MStatfs.h"
+#include "messages/MStatfsReply.h"
 
 #include "common/Timer.h"
 
@@ -142,13 +144,22 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_source() << endl;
 
   // fill out stfs
-  memset(&statfs->stfs, 0, sizeof(statfs->stfs));
-  statfs->stfs.f_blocks = pg_map.total_num_blocks;
-  statfs->stfs.f_fsid = 0; // hmm.
-  statfs->stfs.f_flag = ST_NOATIME|ST_NODIRATIME;  // for now.
+  MStatfsReply *reply = new MStatfsReply(statfs->tid);
+  memset(&reply->stfs, 0, sizeof(reply->stfs));
+  reply->stfs.f_bsize   = 1024;
+  reply->stfs.f_frsize  = 1024;
+  reply->stfs.f_blocks  = 1024 * 1024; //pg_map.total_num_blocks;
+  reply->stfs.f_bfree   = 1024 * 1024;
+  reply->stfs.f_bavail  = 1024 * 1024;
+  reply->stfs.f_files   = 1024 * 1024;
+  reply->stfs.f_ffree   = 1024 * 1024;
+  reply->stfs.f_favail  = 1024 * 1024;
+  reply->stfs.f_namemax = 1024;
+  reply->stfs.f_flag = ST_NOATIME|ST_NODIRATIME;  // for now.
 
   // reply
-  mon->messenger->send_message(statfs, statfs->get_source_inst());
+  mon->messenger->send_message(reply, statfs->get_source_inst());
+  delete statfs;
 }
 
 bool PGMonitor::handle_pg_stats(MPGStats *stats) 

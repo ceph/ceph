@@ -32,6 +32,9 @@ using namespace std;
 // ceph stuff
 #include "Client.h"
 
+#include "messages/MStatfs.h"
+#include "messages/MStatfsReply.h"
+
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
@@ -895,7 +898,9 @@ void Client::dispatch(Message *m)
     handle_file_caps((MClientFileCaps*)m);
     break;
 
-
+  case MSG_STATFS_REPLY:
+    handle_statfs_reply((MStatfsReply*)m);
+    break;
 
   default:
     cout << "dispatch doesn't recognize message type " << m->get_type() << endl;
@@ -2142,6 +2147,8 @@ int Client::_opendir(const char *name, DirResult **dirpp)
   if (r < 0) {
     _closedir(*dirpp);
     *dirpp = 0;
+  } else {
+    r = 0;
   }
   dout(3) << "_opendir(" << name << ") = " << r << " (" << *dirpp << ")" << endl;
 
@@ -2154,18 +2161,26 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   int stmask = fill_stat(in, &st);  
   frag_t fg = dirp->frag();
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
-  dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
+  dout(10) << "_readdir_add_dirent " << dirp << " added '" << name << "' -> " << in->inode.ino
+	   << ", size now " << dirp->buffer[fg].size() << endl;
 }
 
-void Client::_readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type)
+//struct dirent {
+//  ino_t          d_ino;       /* inode number */
+//  off_t          d_off;       /* offset to the next dirent */
+//  unsigned short d_reclen;    /* length of this record */
+//  unsigned char  d_type;      /* type of file */
+//  char           d_name[256]; /* filename */
+//};
+void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
 {
-  struct stat st;
-  memset(&st, 0, sizeof(st));
-  st.st_mode = DT_TO_MODE(d_type);
-  int stmask = STAT_MASK_TYPE;
-  frag_t fg = dirp->frag();
-  dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
-  dout(10) << "_readdir_add_dirent added " << name << ", size now " << dirp->buffer[fg].size() << endl;
+  de->d_ino = entry->st.st_ino;
+  de->d_off = off + 1;
+  de->d_reclen = 1;
+  de->d_type = MODE_TO_DT(entry->st.st_mode);
+  strncpy(de->d_name, entry->d_name.c_str(), 256);
+  dout(10) << "_readdir_fill_dirent '" << de->d_name << "' -> " << de->d_ino
+	   << " type " << (int)de->d_type << " at off " << off << endl;
 }
 
 void Client::_readdir_next_frag(DirResult *dirp)
@@ -2350,26 +2365,6 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   return 0;
 }
 
-//struct dirent {
-//  ino_t          d_ino;       /* inode number */
-//  off_t          d_off;       /* offset to the next dirent */
-//  unsigned short d_reclen;    /* length of this record */
-//  unsigned char  d_type;      /* type of file */
-//  char           d_name[256]; /* filename */
-//};
-void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
-{
-  if (entry->stmask) 
-    de->d_ino = entry->st.st_ino;
-  else
-    de->d_ino = 0;
-  de->d_off = off + 1;
-  de->d_reclen = 1;
-  de->d_type = MODE_TO_DT(entry->st.st_mode);
-  strncpy(de->d_name, entry->d_name.c_str(), 256);
-  dout(10) << "_readdir_fill_dirent " << de->d_name << " " << de->d_ino
-	   << " type " << (int)de->d_type << " at off " << off << endl;
-}
 
 int Client::closedir(DIR *dir) 
 {
@@ -3117,20 +3112,54 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
   tout << "statfs" << endl;
+  return _statfs(stbuf);
+}
 
-  bzero (stbuf, sizeof (struct statvfs));
-  // FIXME
-  stbuf->f_bsize   = 1024;
-  stbuf->f_frsize  = 1024;
-  stbuf->f_blocks  = 1024 * 1024;
-  stbuf->f_bfree   = 1024 * 1024;
-  stbuf->f_bavail  = 1024 * 1024;
-  stbuf->f_files   = 1024 * 1024;
-  stbuf->f_ffree   = 1024 * 1024;
-  stbuf->f_favail  = 1024 * 1024;
-  stbuf->f_namemax = 1024;
+int Client::ll_statfs(inodeno_t ino, struct statvfs *stbuf)
+{
+  Mutex::Locker lock(client_lock);
+  tout << "ll_statfs" << endl;
+  return _statfs(stbuf);
+}
 
-  return 0;
+int Client::_statfs(struct statvfs *stbuf)
+{
+  dout(3) << "_statfs" << endl;
+
+  Cond cond;
+  tid_t tid = ++last_tid;
+  StatfsRequest *req = new StatfsRequest(tid, &cond);
+  statfs_requests[tid] = req;
+
+  int mon = monmap->pick_mon();
+  messenger->send_message(new MStatfs(req->tid), monmap->get_inst(mon));
+
+  while (req->reply == 0)
+    cond.Wait(client_lock);
+
+  // yay
+  memcpy(stbuf, &req->reply->stfs, sizeof(*stbuf));
+
+  statfs_requests.erase(req->tid);
+  delete req->reply;
+  delete req;
+
+  int r = 0;
+  dout(3) << "_statfs = " << r << endl;
+  return r;
+}
+
+void Client::handle_statfs_reply(MStatfsReply *reply)
+{
+  if (statfs_requests.count(reply->tid) &&
+      statfs_requests[reply->tid]->reply == 0) {
+    dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << endl;
+    statfs_requests[reply->tid]->reply = reply;
+    statfs_requests[reply->tid]->caller_cond->Signal();
+  } else {
+    dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << endl;
+    delete reply;
+  }
 }
 
 
@@ -3676,7 +3705,7 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
   if (r >= 0) {
     Inode *in = (*fhp)->inode;
     fill_stat(in, attr);
-    //_ll_get(in);
+    _ll_get(in);
   }
   tout << (unsigned long)*fhp << endl;
   tout << attr->st_ino << endl;

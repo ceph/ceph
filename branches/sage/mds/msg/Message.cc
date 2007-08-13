@@ -12,7 +12,9 @@ using namespace std;
 #include "messages/MGenericMessage.h"
 
 #include "messages/MPGStats.h"
+
 #include "messages/MStatfs.h"
+#include "messages/MStatfsReply.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
@@ -112,8 +114,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_PGSTATS:
     m = new MPGStats;
     break;
+
   case MSG_STATFS:
     m = new MStatfs;
+    break;
+  case MSG_STATFS_REPLY:
+    m = new MStatfsReply;
     break;
 
   case MSG_MON_COMMAND:

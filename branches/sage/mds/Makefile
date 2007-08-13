@@ -174,9 +174,6 @@ msgtestclient: active/msgtestclient.cc client.o osdc.o msg/SimpleMessenger.o com
 libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
-#libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
-#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
-
 
 
 # fake*
