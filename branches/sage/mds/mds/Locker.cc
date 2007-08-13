@@ -469,7 +469,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     cap->set_suppress(true);
   } else {
     // make sure it has sufficient caps
-    if (cap->wanted() & ~my_want) {
+    if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
       cap->set_wanted( cap->wanted() | my_want );
     }
@@ -679,8 +679,21 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
           << endl;  
   
   // update wanted
-  if (cap->wanted() != wanted)
-    cap->set_wanted(wanted);
+  if (cap->wanted() != wanted) {
+    if (m->get_seq() < cap->get_last_seq()) {
+      /* this is awkward.
+	 client may be trying to release caps (i.e. inode closed, etc.) by setting reducing wanted
+	 set.
+	 but it may also be opening the same filename, not sure that it'll map to the same inode.
+	 so, we don't want wanted reductions to clobber mds's notion of wanted unless we're
+	 sure the client has seen all the latest caps.
+      */
+      dout(-10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
+		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << endl;
+    } else {
+      cap->set_wanted(wanted);
+    }
+  }
 
   // confirm caps
   int had = cap->confirm_receipt(m->get_seq(), m->get_caps());

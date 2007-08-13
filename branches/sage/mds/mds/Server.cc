@@ -2885,7 +2885,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, destdn->dir->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, destdn->get_inode());  // FIXME: imprecise ref
   
   // clean up?
   if (straydn) 

@@ -1625,6 +1625,8 @@ int Client::_rename(const char *from, const char *to)
   delete reply;
   dout(10) << "rename result is " << res << endl;
 
+  // renamed item from our cache
+
   trim_cache();
   dout(3) << "rename(\"" << from << "\", \"" << to << "\") = " << res << endl;
   return res;
@@ -3269,8 +3271,6 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
     Inode *in = diri->dir->dentries[dname]->inode;
     fill_stat(in, attr);
     _ll_get(in);
-    dout(3) << "ll_lookup " << parent << " " << name << " -> " << in->inode.ino
-	    << " (" << in << ")" << endl;
     assert(inode_map[in->inode.ino] == in);
   } else {
     r = -ENOENT;
@@ -3421,12 +3421,15 @@ int Client::ll_readlink(inodeno_t ino, const char **value)
   tout << ino.val << endl;
 
   Inode *in = _ll_get_inode(ino);
+  int r = 0;
   if (in->inode.is_symlink()) {
     *value = in->symlink->c_str();
-    return 0;
   } else {
-    return -EINVAL;
+    *value = "";
+    r = -EINVAL;
   }
+  dout(3) << "ll_readlink " << ino << " = " << r << " (" << *value << ")" << endl;
+  return r;
 }
 
 int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev, struct stat *attr)

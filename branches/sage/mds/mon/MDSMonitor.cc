@@ -556,9 +556,28 @@ void MDSMonitor::do_stop()
   print_map(mdsmap);
   for (map<int,int>::iterator p = mdsmap.mds_state.begin();
        p != mdsmap.mds_state.end();
-       ++p) 
-    if (mdsmap.is_active(p->first))
+       ++p) {
+    switch (p->second) {
+    case MDSMap::STATE_ACTIVE:
+    case MDSMap::STATE_STOPPING:
       pending_mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPING;
+      break;
+    case MDSMap::STATE_CREATING:
+    case MDSMap::STATE_STANDBY:
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_DNE;
+      break;
+    case MDSMap::STATE_STARTING:
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPED;
+      break;
+    case MDSMap::STATE_REPLAY:
+    case MDSMap::STATE_RESOLVE:
+    case MDSMap::STATE_RECONNECT:
+    case MDSMap::STATE_REJOIN:
+      // BUG: hrm, if this is the case, the STOPPING gusy won't be able to stop, will they?
+      pending_mdsmap.mds_state[p->first] = MDSMap::STATE_FAILED;
+      break;
+    }
+  }
 
   propose_pending();
 }
