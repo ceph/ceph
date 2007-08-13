@@ -158,6 +158,26 @@ cfuse: cfuse.cc client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMesseng
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
+# code shipping experiments
+activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+echotestclient: active/echotestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+msgtestclient: active/msgtestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+#libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
+#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+
 
 # fake*
 fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
@@ -233,7 +253,7 @@ osbdb.o: ${OSBDB_OBJS}
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
 %.o: %.cc
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} -fPIC ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@

@@ -73,6 +73,10 @@ void Rank::sigint()
 
 
 
+void noop_signal_handler(int s)
+{
+  //cout << "blah_handler got " << s << endl;
+}
 
 int Rank::Accepter::start()
 {
@@ -131,6 +135,12 @@ int Rank::Accepter::start()
   // set up signal handler
   old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
 
+  // set a harmless handle for SIGUSR1 (we'll use it to stop the accepter)
+  struct sigaction sa;
+  sa.sa_handler = noop_signal_handler;
+  sa.sa_flags = 0;
+  sigaction(SIGUSR1, &sa, NULL);
+
   // start thread
   create();
 
@@ -140,12 +150,21 @@ int Rank::Accepter::start()
 void *Rank::Accepter::entry()
 {
   dout(10) << "accepter starting" << endl;
-
+  
+  fd_set fds;
   while (!done) {
+    FD_ZERO(&fds);
+    FD_SET(listen_sd, &fds);
+    dout(20) << "accepter calling select" << endl;
+    int r = ::select(listen_sd+1, &fds, 0, &fds, 0);
+    dout(20) << "accepter select got " << r << endl;
+    
+    if (done) break;
+
     // accept
     struct sockaddr_in addr;
     socklen_t slen = sizeof(addr);
-    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
+    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);  // FIXME: make this non-blocking.
     if (sd > 0) {
       dout(10) << "accepted incoming on sd " << sd << endl;
       
@@ -157,13 +176,20 @@ void *Rank::Accepter::entry()
       rank.lock.Unlock();
     } else {
       dout(10) << "no incoming connection?" << endl;
-      break;
     }
   }
+
+  ::close(listen_sd);
 
   return 0;
 }
 
+void Rank::Accepter::stop()
+{
+  done = true;
+  this->kill(SIGUSR1);
+  join();
+}
 
 
 /**************************************
@@ -980,9 +1006,9 @@ void Rank::wait()
   lock.Unlock();
   
   // done!  clean up.
-
-  //dout(10) << "wait: stopping accepter thread" << endl;
-  //accepter.stop();
+  dout(-10) << "wait: stopping accepter thread" << endl;
+  accepter.stop();
+  dout(-10) << "wait: stopped accepter thread" << endl;
 
   // stop dispatch thread
   if (g_conf.ms_single_dispatch) {

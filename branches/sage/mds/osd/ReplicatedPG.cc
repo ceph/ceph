@@ -273,7 +273,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       }
 
       // do it now
-      dout(-10) << "preprocess_op data is in cache, reading from cache" << *op <<  dendl;
+      dout(10) << "preprocess_op data is in cache, reading from cache" << *op <<  dendl;
       do_op(op);
       return true;
     }

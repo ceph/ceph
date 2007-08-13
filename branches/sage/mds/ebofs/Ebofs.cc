@@ -906,7 +906,7 @@ void Ebofs::remove_onode(Onode *on)
     dirty_onodes.erase(on);
   }
 
-  if (on->get_ref_count() > 1) cout << "remove_onode **** will survive " << *on << endl;
+  if (on->get_ref_count() > 1) dout(10) << "remove_onode **** will survive " << *on << endl;
   put_onode(on);
 
   dirty = true;
