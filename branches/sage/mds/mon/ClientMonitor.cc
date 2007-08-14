@@ -164,13 +164,16 @@ bool ClientMonitor::prepare_update(Message *m)
 	client = mount->get_source().num();
 
       // choose a client id
-      if (client < 0 || 
-	  (client_map.client_addr.count(client) && 
-	   client_map.client_addr[client] != addr)) {
+      if (client < 0) {
 	client = pending_inc.next_client;
 	dout(10) << "mount: assigned client" << client << " to " << addr << endl;
       } else {
 	dout(10) << "mount: client" << client << " requested by " << addr << endl;
+	if (client_map.client_addr.count(client)) {
+	  assert(client_map.client_addr[client] != addr);
+	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
+		  << ", which used to be " << client_map.client_addr[client] << endl;
+	}
       }
       
       pending_inc.add_mount(client, addr);

@@ -63,6 +63,7 @@
 #define MSG_OSD_PG_SUMMARY     52
 #define MSG_OSD_PG_LOG         53
 #define MSG_OSD_PG_REMOVE      54
+#define MSG_OSD_PG_ACTIVATE_SET 55
 
 // -- client --
 // to monitor

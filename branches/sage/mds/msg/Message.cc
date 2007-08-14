@@ -36,10 +36,12 @@ using namespace std;
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
+
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
+#include "messages/MOSDPGActivateSet.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
@@ -191,6 +193,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_OSD_PG_REMOVE:
     m = new MOSDPGRemove();
+    break;
+  case MSG_OSD_PG_ACTIVATE_SET:
+    m = new MOSDPGActivateSet();
     break;
 
     // clients

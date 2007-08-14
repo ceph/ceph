@@ -87,6 +87,7 @@ md_config_t g_conf = {
   debug_mds_log: 1,
   debug_mds_migrator: 1,
   debug_buffer: 0,
+  debug_timer: 0,
   debug_filer: 0,
   debug_objecter: 0,
   debug_journaler: 0,
@@ -538,6 +539,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_buffer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_buffer = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_timer") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_timer = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_timer = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_filer") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_filer = atoi(args[++i]);

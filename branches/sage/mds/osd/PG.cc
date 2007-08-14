@@ -24,6 +24,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
+#include "messages/MOSDPGActivateSet.h"
 
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
@@ -575,7 +576,8 @@ void PG::clear_primary_state()
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
-              map< int, map<pg_t,Query> >& query_map)
+              map< int, map<pg_t,Query> >& query_map,
+	      map<int, MOSDPGActivateSet*> *activator_map)
 {
   dout(10) << "peer.  acting is " << acting 
            << ", prior_set is " << prior_set << dendl;
@@ -619,6 +621,7 @@ void PG::peer(ObjectStore::Transaction& t,
     // start with the last active set of replicas
     set<int> last_started;
     vector<int> acting;
+    bool cleanly_down = true;
     omap.pg_to_acting_osds(get_pgid(), acting);
     for (unsigned i=0; i<acting.size(); i++)
       last_started.insert(acting[i]);
@@ -638,6 +641,8 @@ void PG::peer(ObjectStore::Transaction& t,
         //dout(10) << " down in epoch " << e << " is " << omap.get_down_osds() << dendl;
         if (omap.is_up(*i))
           still_up.insert(*i);
+	else if (!omap.is_down_clean(*i))
+	  cleanly_down = false;	   
       }
 
       last_started.swap(still_up);
@@ -645,8 +650,12 @@ void PG::peer(ObjectStore::Transaction& t,
     }
     
     if (last_started.empty()) {
-      dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-      state_set(STATE_CRASHED);
+      if (cleanly_down) {
+	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
+      } else {
+	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
+	state_set(STATE_CRASHED);
+      }
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
@@ -815,12 +824,13 @@ void PG::peer(ObjectStore::Transaction& t,
   } 
   else if (!is_active()) {
     // -- ok, activate!
-    activate(t);
+    activate(t, activator_map);
   }
 }
 
 
-void PG::activate(ObjectStore::Transaction& t)
+void PG::activate(ObjectStore::Transaction& t,
+		  map<int, MOSDPGActivateSet*> *activator_map)
 {
   assert(!is_active());
 
@@ -873,7 +883,6 @@ void PG::activate(ObjectStore::Transaction& t)
     dout(10) << "activate - not complete, " << missing << dendl;
   }
 
-
   // if primary..
   if (role == 0 &&
       osd->osdmap->post_mkfs()) {
@@ -887,26 +896,35 @@ void PG::activate(ObjectStore::Transaction& t)
       int peer = acting[i];
       assert(peer_info.count(peer));
       
-      MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
-                                   info.pgid);
-      m->info = info;
+      MOSDPGLog *m = 0;
       
       if (peer_info[peer].last_update == info.last_update) {
         // empty log
-      } 
-      else if (peer_info[peer].last_update < log.bottom) {
-        // summary/backlog
-        assert(log.backlog);
-        m->log = log;
+	if (activator_map) {
+	  dout(10) << "activate - peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
+	  if (activator_map->count(peer) == 0)
+	    (*activator_map)[peer] = new MOSDPGActivateSet(osd->osdmap->get_epoch());
+	  (*activator_map)[peer]->pg_info.push_back(info);
+	} else {
+	  dout(10) << "activate - peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;
+	  m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
+	}
       } 
       else {
-        // incremental log
-        assert(peer_info[peer].last_update < info.last_update);
-        m->log.copy_after(log, peer_info[peer].last_update);
+	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
+	if (peer_info[peer].last_update < log.bottom) {
+	  // summary/backlog
+	  assert(log.backlog);
+	  m->log = log;
+	} else {
+	  // incremental log
+	  assert(peer_info[peer].last_update < info.last_update);
+	  m->log.copy_after(log, peer_info[peer].last_update);
+	}
       }
 
       // update local version of peer's missing list!
-      {
+      if (m) {
         eversion_t plu = peer_info[peer].last_update;
         Missing& pm = peer_missing[peer];
         for (list<Log::Entry>::iterator p = m->log.log.begin();
@@ -916,10 +934,12 @@ void PG::activate(ObjectStore::Transaction& t)
             pm.add(p->oid, p->version);
       }
       
-      dout(10) << "activate sending " << m->log << " " << m->missing
-               << " to osd" << peer << dendl;
-      //m->log.print(cout);
-      osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
+      if (m) {
+	dout(10) << "activate sending " << m->log << " " << m->missing
+		 << " to osd" << peer << dendl;
+	//m->log.print(cout);
+	osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
+      }
 
       // update our missing
       if (peer_missing[peer].num_missing() == 0) {
@@ -974,8 +994,6 @@ void PG::activate(ObjectStore::Transaction& t)
   // waiters
   osd->take_waiters(waiting_for_active);
 }
-
-
 
 
 
@@ -1083,9 +1101,9 @@ void PG::read_log(ObjectStore *store)
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
   r = store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  //assert(r == sizeof(ondisklog.bottom));
+  assert(r == sizeof(ondisklog.bottom));
   r = store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  //assert(r == sizeof(ondisklog.top));
+  assert(r == sizeof(ondisklog.top));
 
   dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 

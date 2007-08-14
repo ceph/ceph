@@ -73,6 +73,7 @@ struct md_config_t {
   int debug_mds_log;
   int debug_mds_migrator;
   int debug_buffer;
+  int debug_timer;
   int debug_filer;
   int debug_objecter;
   int debug_journaler;

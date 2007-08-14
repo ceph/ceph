@@ -2281,7 +2281,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       } else {
 	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT);
 	assert(fd > 0);	
-	client->write(fd, " ", 1, size-1);
+	client->write(fd, "", 0, size);
 	client->close(fd);
 
 	client->chmod(f.c_str(), mode & 0777);

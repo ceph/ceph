@@ -36,10 +36,6 @@ general kernel planning
 - soft consistency on (kernel) lookup?
 - accurate reconstruction of (syscall) path?
 
-software raid layer for EBOFS?
-- actually, we just need software raid _awareness_ in the allocator, so
-  that we can write only full stripes, without fear of clobbering things on
-  failure.  then use MD or similar layer provided by kernel.
 
 
 sage doc

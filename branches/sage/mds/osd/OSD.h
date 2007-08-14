@@ -257,7 +257,8 @@ private:
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
   void load_pgs();
-  void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from);
+  void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
+			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
 
   class C_Activate : public Context {
@@ -291,6 +292,7 @@ private:
 
   void do_notifies(map< int, list<PG::Info> >& notify_list);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
+  void do_activators(map<int, MOSDPGActivateSet*>& activator_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
 
   bool require_current_map(Message *m, epoch_t v);
@@ -299,7 +301,15 @@ private:
   void handle_pg_query(class MOSDPGQuery *m);
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_log(class MOSDPGLog *m);
+  void handle_pg_activate_set(class MOSDPGActivateSet *m);
   void handle_pg_remove(class MOSDPGRemove *m);
+
+  // helper for handle_pg_log and handle_pg_activate_set
+  void _process_pg_info(epoch_t epoch, int from,
+			PG::Info &info, 
+			PG::Log &log, 
+			PG::Missing &missing,
+			map<int, MOSDPGActivateSet*>* activator_map);
 
 
  public:

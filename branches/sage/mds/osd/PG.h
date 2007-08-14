@@ -34,7 +34,7 @@ using namespace __gnu_cxx;
 class OSD;
 class MOSDOp;
 class MOSDOpReply;
-
+class MOSDPGActivateSet;
 
 /** PG - Replica Placement Group
  *
@@ -515,9 +515,11 @@ public:
   
   void trim_write_ahead();
 
-  void peer(ObjectStore::Transaction& t, map< int, map<pg_t,Query> >& query_map);
-
-  void activate(ObjectStore::Transaction& t);
+  void peer(ObjectStore::Transaction& t, 
+	    map< int, map<pg_t,Query> >& query_map,
+	    map<int, MOSDPGActivateSet*> *activator_map=0);
+  void activate(ObjectStore::Transaction& t, 
+		map<int, MOSDPGActivateSet*> *activator_map=0);
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
@@ -638,7 +640,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
-  out << "pginfo(" << pgi.pgid;
+  out << pgi.pgid << "(";
   if (pgi.is_empty())
     out << " empty";
   else
