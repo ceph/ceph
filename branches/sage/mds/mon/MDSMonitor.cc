@@ -95,14 +95,6 @@ bool MDSMonitor::update_from_paxos()
     bcast_latest_mds();
   send_to_waiting();
 
-  // hackish: did all mds's shut down?
-  if (mon->is_leader() &&
-      g_conf.mon_stop_with_last_mds &&
-      mdsmap.get_epoch() > 1 &&
-      mdsmap.is_stopped()) 
-    mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-				 mon->monmap->get_inst(mon->whoami));
-
   return true;
 }
 
@@ -386,6 +378,15 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
     // send the map manually (they're out of the map, so they won't get it automatic)
     send_latest(m->get_mds_inst());
   }
+
+  // hackish: did all mds's shut down?
+  if (mon->is_leader() &&
+      g_conf.mon_stop_with_last_mds &&
+      mdsmap.get_epoch() > 1 &&
+      mdsmap.is_stopped()) 
+    mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+				 mon->monmap->get_inst(mon->whoami));
+
   delete m;
 }
 
