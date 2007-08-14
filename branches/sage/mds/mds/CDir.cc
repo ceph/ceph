@@ -944,6 +944,7 @@ void CDir::_fetched(bufferlist &bl)
   // mark complete, !fetching
   state_set(STATE_COMPLETE);
   state_clear(STATE_FETCHING);
+  auth_unpin();
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
