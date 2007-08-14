@@ -830,6 +830,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	memset(b, 1, size);            // let's write 1's!
 	client->write(fd, b, size, off);
 	delete[] b;
+      } else {
+	client->write(fd, NULL, 0, size+off);
       }
     } else if (strcmp(op, "truncate") == 0) {
       const char *a = t.get_string(buf, p);
@@ -982,6 +984,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	bl.push_back(bp);
 	bp.zero();
 	client->ll_write(fh, off, size, bl.c_str());
+      } else {
+	client->ll_write(fh, off+size, 0, NULL);
       }
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();

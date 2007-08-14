@@ -1370,12 +1370,11 @@ int Client::mount()
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << endl;
 
-  /*
-  // hack: get+pin root inode
+  // hack: get+pin root inode.
+  //  fuse assumes it's always there.
   Inode *root;
   _do_lstat("/", STAT_MASK_ALL, &root);
   _ll_get(root);
-  */
 
   // trace?
   if (g_conf.client_trace) {
@@ -2890,7 +2889,8 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   utime_t start = g_clock.real_now();
     
   // copy into fresh buffer (since our write may be resub, async)
-  bufferptr bp = buffer::copy(buf, size);
+  bufferptr bp;
+  if (size > 0) bp = buffer::copy(buf, size);
   bufferlist blist;
   blist.push_back( bp );
 
@@ -3254,55 +3254,40 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
 
   string dname = name;
   Inode *diri = 0;
+  Inode *in = 0;
   int r = 0;
 
   if (inode_map.count(parent) == 0) {
-    tout << 0 << endl;
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << endl;
     r = -ENOENT;
+    attr->st_ino = 0;
     goto out;
   }
   diri = inode_map[parent];
   if (!diri->inode.is_dir()) {
-    tout << 0 << endl;
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOTDIR (parent not a dir... WTF)" << endl;
     r = -ENOTDIR;
+    attr->st_ino = 0;
     goto out;
   }
 
-
-  // refresh the dir?
-  //  FIXME: this is the hackish way.
-  if (!diri->dir ||
-      diri->dir->dentries.count(dname) == 0) {
-    string path;
-    diri->make_path(path);
-    DirResult *dirp = new DirResult(path, diri);
-
-    while (1) {
-      hash<string> H;
-      dirp->set_frag(diri->dirfragtree[H(dname)]);
-
-      dout(10) << "ll_lookup fetching frag " << dirp->frag() << " for " << name << endl;
-      int r = _readdir_get_frag(dirp);
-      if (r < 0) return r;
-
-      if (dirp->buffer.count(diri->dirfragtree[H(dname)])) break;
-      dirp->buffer.clear();
-    }
-
-    _closedir(dirp);
-  }
-
-  // do we have it?
+  // get the inode
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
-    Inode *in = diri->dir->dentries[dname]->inode;
+    in = diri->dir->dentries[dname]->inode;
+  } else {
+    string path;
+    diri->make_path(path);
+    path += "/";
+    path += name;
+    _do_lstat(path.c_str(), 0, &in);
+  }
+  if (in) {
     fill_stat(in, attr);
     _ll_get(in);
-    assert(inode_map[in->inode.ino] == in);
   } else {
     r = -ENOENT;
+    attr->st_ino = 0;
   }
 
  out:
@@ -3706,6 +3691,8 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
     Inode *in = (*fhp)->inode;
     fill_stat(in, attr);
     _ll_get(in);
+  } else {
+    attr->st_ino = 0;
   }
   tout << (unsigned long)*fhp << endl;
   tout << attr->st_ino << endl;

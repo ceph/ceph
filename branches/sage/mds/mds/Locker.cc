@@ -688,7 +688,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	 so, we don't want wanted reductions to clobber mds's notion of wanted unless we're
 	 sure the client has seen all the latest caps.
       */
-      dout(-10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
+      dout(10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
 		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << endl;
     } else {
       cap->set_wanted(wanted);

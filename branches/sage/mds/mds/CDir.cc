@@ -931,7 +931,7 @@ void CDir::_fetched(bufferlist &bl)
       }
     }
   }
-  assert(off == len);
+  //assert(off == len);   no, directories may shrink.  add this back in when we properly truncate objects on write.
 
   // take the loaded version?
   // only if we are a fresh CDir* with no prior state.

@@ -232,16 +232,18 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
   // inc writing counter
   num_writing++;
 
-  if (latest_caps & CAP_FILE_WRBUFFER) {   // caps buffered write?
-    // wait? (this may block!)
-    oc->wait_for_write(size, client_lock);
-
-    // async, caching, non-blocking.
-    oc->file_write(inode, offset, size, blist);
-  } else {
-    // atomic, synchronous, blocking.
-    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
-  }    
+  if (size > 0) {
+    if (latest_caps & CAP_FILE_WRBUFFER) {   // caps buffered write?
+      // wait? (this may block!)
+      oc->wait_for_write(size, client_lock);
+      
+      // async, caching, non-blocking.
+      oc->file_write(inode, offset, size, blist);
+    } else {
+      // atomic, synchronous, blocking.
+      oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
+    }    
+  }
     
   // dec writing counter
   num_writing--;
