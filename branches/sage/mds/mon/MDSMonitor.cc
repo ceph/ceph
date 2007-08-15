@@ -88,6 +88,7 @@ bool MDSMonitor::update_from_paxos()
   mdsmap.decode(mdsmap_bl);
 
   // new map
+  dout(7) << "new map:" << endl;
   print_map(mdsmap);
 
   // bcast map to mds, waiters
@@ -109,7 +110,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << endl;
   
-  print_map(pending_mdsmap);
+  //print_map(pending_mdsmap);
 
   // apply to paxos
   assert(paxos->get_version() + 1 == pending_mdsmap.epoch);
@@ -205,7 +206,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << endl;
+  dout(7) << "prepare_update " << *m << endl;
 
   switch (m->get_type()) {
     
@@ -552,9 +553,9 @@ void MDSMonitor::do_stop()
     return;
   }
 
-  dout(10) << "do_stop stopping active mds nodes" << endl;
-  
+  dout(7) << "do_stop stopping active mds nodes" << endl;
   print_map(mdsmap);
+
   for (map<int,int>::iterator p = mdsmap.mds_state.begin();
        p != mdsmap.mds_state.end();
        ++p) {

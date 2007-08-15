@@ -27,7 +27,7 @@ class MMDSCacheRejoin : public Message {
   static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
-  static const int OP_PURGE   = 4;  // auth -> replica, remove these items, they are old/obsolete.
+  //static const int OP_PURGE   = 4;  // auth -> replica, remove these items, they are old/obsolete.
   static const int OP_MISSING = 5;  // auth -> replica, i am missing these items
   static const int OP_FULL    = 6;  // replica -> auth, here is the full object.
   static const char *get_opname(int op) {
@@ -98,15 +98,8 @@ class MMDSCacheRejoin : public Message {
 
   struct dn_weak {
     inodeno_t ino;
-    inodeno_t remote_ino;
-    unsigned char remote_d_type;
-    dn_weak() : 
-      ino(0), remote_ino(0), remote_d_type(0) {}
-    dn_weak(inodeno_t pi, inodeno_t ri, unsigned char rdt) : 
-      ino(pi), remote_ino(ri), remote_d_type(rdt) {}
-    bool is_primary() { return ino > 0; }
-    bool is_remote() { return remote_ino > 0; }
-    bool is_null() { return ino == 0 && remote_ino == 0; }
+    dn_weak() : ino(0) {}
+    dn_weak(inodeno_t pi) : ino(pi) {}
   };
 
   // -- data --
@@ -182,14 +175,8 @@ class MMDSCacheRejoin : public Message {
   void add_weak_dentry(dirfrag_t df, const string& dname, dn_weak& dnw) {
     weak[df][dname] = dnw;
   }
-  void add_weak_null_dentry(dirfrag_t df, const string& dname) {
-    weak[df][dname] = dn_weak(0, 0, 0);
-  }
   void add_weak_primary_dentry(dirfrag_t df, const string& dname, inodeno_t ino) {
-    weak[df][dname] = dn_weak(ino, 0, 0);
-  }
-  void add_weak_remote_dentry(dirfrag_t df, const string& dname, inodeno_t ino, unsigned char rdt) {
-    weak[df][dname] = dn_weak(0, ino, rdt);
+    weak[df][dname] = dn_weak(ino);
   }
   void add_strong_dentry(dirfrag_t df, const string& dname, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][dname] = dn_strong(pi, ri, rdt, n, ls);

@@ -179,7 +179,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 10,
 
   mds_beacon_interval: 5, //30.0,
-  mds_beacon_grace: 30, //60*60.0,
+  mds_beacon_grace: 10, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -199,7 +199,7 @@ md_config_t g_conf = {
   mds_bal_merge_size: 50,
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
-  mds_bal_interval: 30,           // seconds
+  mds_bal_interval: 3000,           // seconds
   mds_bal_fragment_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,

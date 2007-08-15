@@ -139,9 +139,7 @@ class CDir : public MDSCacheObject {
   // -- wait masks --
   static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const int WAIT_FREEZEABLE   = (1<<2);  // hard_pins removed
-  static const int WAIT_UNFREEZE     = WAIT_AUTHPINNABLE;  // unfreeze
-  static const int WAIT_IMPORTED     = (1<<3);  // import finish
+  static const int WAIT_FREEZEABLE   = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 

@@ -54,7 +54,6 @@ public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
   const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
-  //const static int EXPORT_LOGGINGSTART  = 3;  // we're logging EExportStart
   const static int EXPORT_PREPPING      = 4;  // sending dest spanning tree to export bounds
   const static int EXPORT_WARNING       = 5;  // warning bystanders of dir_auth_pending
   const static int EXPORT_EXPORTING     = 6;  // sent actual export, waiting for ack
@@ -79,7 +78,6 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
-  //map<CDir*,set<CDir*> >       export_bounds;
   map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
@@ -95,7 +93,6 @@ public:
   const static int IMPORT_PREPPED       = 4; // opened bounds, waiting for import
   const static int IMPORT_LOGGINGSTART  = 5; // got import, logging EImportStart
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
-  //const static int IMPORT_LOGGINGFINISH = 7; // logging EImportFinish
   const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
   static const char *get_import_statename(int s) {
     switch (s) {

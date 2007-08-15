@@ -2743,6 +2743,15 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // -- prepare witnesses --
+  /*
+   * NOTE: we use _all_ replicas as witnesses.
+   * this probably isn't totally necessary (esp for file renames),
+   * but if/when we change that, we have to make sure rejoin is
+   * sufficiently robust to handle strong rejoins from survivors
+   * with totally wrong dentry->inode linkage.
+   * (currently, it can ignore rename effects, because the resolve
+   * stage will sort them out.)
+   */
   set<int> witnesses = mdr->extra_witnesses;
   if (srcdn->is_auth())
     srcdn->list_replicas(witnesses);

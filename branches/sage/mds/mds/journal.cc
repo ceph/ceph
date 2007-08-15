@@ -276,7 +276,7 @@ void EMetaBlob::expire(MDS *mds, Context *c)
   for (list<CDir*>::iterator p = waitfor_import.begin();
        p != waitfor_import.end();
        ++p) 
-    (*p)->add_waiter(CDir::WAIT_IMPORTED, gather->new_sub());
+    (*p)->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());
   
 
   // have my anchortable ops committed?
@@ -404,21 +404,27 @@ void EMetaBlob::replay(MDS *mds)
       if (!in) {
 	in = new CInode(mds->mdcache);
 	in->inode = p->inode;
+	in->dirfragtree = p->dirfragtree;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *in << endl;
       } else {
-	if (in->get_parent_dn()) {
+	if (dn->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << endl;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
 	in->inode = p->inode;
+	in->dirfragtree = p->dirfragtree;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
-	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
-	dout(10) << "EMetaBlob.replay linked " << *in << endl;
+	if (dn->get_inode() != in) {
+	  dir->link_primary_inode(dn, in);
+	  dout(10) << "EMetaBlob.replay linked " << *in << endl;
+	} else {
+	  dout(10) << "EMetaBlob.replay had " << *in << endl;
+	}
       }
     }
 

@@ -407,13 +407,13 @@ void Migrator::show_importing()
        p++) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
     if (dir) {
-      dout(10) << " importing to " << import_peer[p->first]
+      dout(10) << " importing from " << import_peer[p->first]
 	       << ": (" << p->second << ") " << get_import_statename(p->second) 
 	       << " " << p->first
 	       << " " << *dir
 	       << endl;
     } else {
-      dout(10) << " importing to " << import_peer[p->first]
+      dout(10) << " importing from " << import_peer[p->first]
 	       << ": (" << p->second << ") " << get_import_statename(p->second) 
 	       << " " << p->first 
 	       << endl;
@@ -1067,13 +1067,13 @@ void Migrator::export_reverse(CDir *dir)
   // process delayed expires
   cache->process_delayed_expire(dir);
   
-  // unfreeze
-  dir->unfreeze_tree();
-
   // some clean up
   export_data.erase(dir);
   export_warning_ack_waiting.erase(dir);
   export_notify_ack_waiting.erase(dir);
+
+  // unfreeze
+  dir->unfreeze_tree();
 
   cache->show_cache();
 }
@@ -1732,6 +1732,9 @@ void Migrator::import_reverse_final(CDir *dir)
   import_bystanders.erase(dir);
   import_bound_ls.erase(dir);
 
+  // send pending import_maps?
+  mds->mdcache->maybe_send_pending_resolves();
+
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 }
@@ -1774,9 +1777,6 @@ void Migrator::import_finish(CDir *dir)
   cache->get_subtree_bounds(dir, bounds);
   import_remove_pins(dir, bounds);
 
-  // unfreeze
-  dir->unfreeze_tree();
-
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
   cache->try_subtree_merge(dir);
@@ -1790,13 +1790,14 @@ void Migrator::import_finish(CDir *dir)
   // process delayed expires
   cache->process_delayed_expire(dir);
 
-  // ok now finish contexts
-  dout(10) << "finishing any waiters on imported data" << endl;
-  dir->finish_waiting(CDir::WAIT_IMPORTED);
+  // ok now unfreeze (and thus kick waiters)
+  dir->unfreeze_tree();
 
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
+  // send pending import_maps?
+  mds->mdcache->maybe_send_pending_resolves();
 
   // is it empty?
   if (dir->get_size() == 0 &&
@@ -1913,7 +1914,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
   for (list<Context*>::iterator it = waiters.begin();
        it != waiters.end();
        it++) 
-    import_root->add_waiter(CDir::WAIT_IMPORTED, *it);
+    import_root->add_waiter(CDir::WAIT_UNFREEZE, *it);  // UNFREEZE will get kicked both on success or failure
   
   dout(15) << "doing contents" << endl;
   

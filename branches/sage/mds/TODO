@@ -51,6 +51,8 @@ sage doc
 
 sage mds
 
+- fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
+
 - the split/merge plan:
 
 - hmm, should we move ESubtreeMap out of the journal?  
