@@ -328,24 +328,34 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	  dout(10) << "import state=prepping : unpinning base+bounds " << *dir << endl;
 	}
 	assert(dir);
-	import_reverse_unpin(dir);    // unpin
+	{
+	  set<CDir*> bounds;
+	  cache->map_dirfrag_set(import_bound_ls[dir], bounds);
+	  import_remove_pins(dir, bounds);
+	  import_reverse_final(dir);
+	}
 	break;
 
       case IMPORT_PREPPED:
-	dout(10) << "import state=prepping : unpinning base+bounds, unfreezing " << *dir << endl;
+	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << endl;
 	assert(dir);
-	
-	// adjust auth back to me
-	cache->adjust_subtree_auth(dir, import_peer[df]);
-	cache->try_subtree_merge(dir);
-	
-	// bystanders?
-	if (import_bystanders[dir].empty()) {
-	  import_reverse_unfreeze(dir);
-	} else {
-	  // notify them; wait in aborting state
-	  import_notify_abort(dir);
-	  import_state[df] = IMPORT_ABORTING;
+	{
+	  set<CDir*> bounds;
+	  cache->get_subtree_bounds(dir, bounds);
+	  import_remove_pins(dir, bounds);
+	  
+	  // adjust auth back to me
+	  cache->adjust_subtree_auth(dir, import_peer[df]);
+	  cache->try_subtree_merge(dir);
+	  
+	  // bystanders?
+	  if (import_bystanders[dir].empty()) {
+	    import_reverse_unfreeze(dir);
+	  } else {
+	    // notify them; wait in aborting state
+	    import_notify_abort(dir, bounds);
+	    import_state[df] = IMPORT_ABORTING;
+	  }
 	}
 	break;
 
@@ -363,10 +373,22 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	  cache->add_ambiguous_import(dir, bounds);
 	}
 	break;
-
+	
       case IMPORT_ABORTING:
 	dout(10) << "import state=aborting : ignoring repeat failure " << *dir << endl;
 	break;
+      }
+    } else {
+      if (q->second == IMPORT_ABORTING &&
+	  import_bystanders[dir].count(who)) {
+	dout(10) << "faking export_notify_ack from mds" << who
+		 << " on aborting import " << *dir << " from mds" << import_peer[df] 
+		 << endl;
+	import_bystanders[dir].erase(who);
+	if (import_bystanders[dir].empty()) {
+	  import_bystanders.erase(dir);
+	  import_reverse_unfreeze(dir);
+	}
       }
     }
 
@@ -589,11 +611,12 @@ void Migrator::export_frozen(CDir *dir)
     }
   }
 
-  // include spanning tree for all nested exports.
-  // these need to be on the destination _before_ the final export so that
-  // dir_auth updates on any nested exports are properly absorbed.
-  // this includes inodes and dirfrags included in the subtree, but
-  // only the inodes at the bounds.
+  /* include spanning tree for all nested exports.
+   * these need to be on the destination _before_ the final export so that
+   * dir_auth updates on any nested exports are properly absorbed.
+   * this includes inodes and dirfrags included in the subtree, but
+   * only the inodes at the bounds.
+   */
   set<inodeno_t> inodes_added;
 
   // include base dirfrag
@@ -720,7 +743,6 @@ void Migrator::export_go(CDir *dir)
   export_state[dir] = EXPORT_EXPORTING;
 
   assert(export_data.count(dir) == 0);
-
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
@@ -746,9 +768,7 @@ void Migrator::export_go(CDir *dir)
 
   // send the export data!
   MExportDir *req = new MExportDir(dir->dirfrag());
-
-  // export state
-  req->set_dirstate( export_data[dir] );
+  req->set_dirstate(export_data[dir]);
 
   // add bounds to message
   set<CDir*> bounds;
@@ -1013,13 +1033,14 @@ void Migrator::export_reverse(CDir *dir)
   assert(export_state[dir] == EXPORT_EXPORTING);
   assert(export_data.count(dir));
   
+  set<CDir*> bounds;
+  cache->get_subtree_bounds(dir, bounds);
+
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
   cache->try_subtree_merge(dir);
 
   // unpin bounds
-  set<CDir*> bounds;
-  cache->get_subtree_bounds(dir, bounds);
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
@@ -1344,13 +1365,13 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
   cache->show_subtrees();
 
-  // build bound map
-  map<inodeno_t, fragset_t> bound_dirfragset;
+  // build import bound map
+  map<inodeno_t, fragset_t> import_bound_fragset;
   for (list<dirfrag_t>::iterator p = m->get_bounds().begin();
        p != m->get_bounds().end();
        ++p) {
     dout(10) << " bound " << *p << endl;
-    bound_dirfragset[p->ino].insert(p->frag);
+    import_bound_fragset[p->ino].insert(p->frag);
   }
 
   // assimilate contents?
@@ -1365,6 +1386,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
     // change import state
     import_state[dir->dirfrag()] = IMPORT_PREPPING;
+    import_bound_ls[dir] = m->get_bounds();
     
     // bystander list
     import_bystanders[dir] = m->get_bystanders();
@@ -1405,8 +1427,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     }
 
     // make bound sticky
-    for (map<inodeno_t,fragset_t>::iterator p = bound_dirfragset.begin();
-	 p != bound_dirfragset.end();
+    for (map<inodeno_t,fragset_t>::iterator p = import_bound_fragset.begin();
+	 p != import_bound_fragset.end();
 	 ++p) {
       CInode *in = cache->get_inode(p->first);
       assert(in);
@@ -1424,8 +1446,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
   // open all bounds
   set<CDir*> import_bounds;
-  for (map<inodeno_t,fragset_t>::iterator p = bound_dirfragset.begin();
-       p != bound_dirfragset.end();
+  for (map<inodeno_t,fragset_t>::iterator p = import_bound_fragset.begin();
+       p != import_bound_fragset.end();
        ++p) {
     CInode *in = cache->get_inode(p->first);
     assert(in);
@@ -1539,12 +1561,8 @@ void Migrator::handle_export_dir(MExportDir *m)
   cache->get_subtree_bounds(dir, import_bounds);
   for (set<CDir*>::iterator it = import_bounds.begin();
        it != import_bounds.end();
-       it++) {
-    CDir *bd = *it;
-    // include bounding dirs in EImportStart
-    // (now that the interior metadata is already in the event)
-    le->metablob.add_dir(bd, false);
-  }
+       it++) 
+    le->metablob.add_dir(*it, false);  // note that parent metadata is already in the event
 
   // adjust popularity
   mds->balancer->add_import(dir);
@@ -1570,21 +1588,52 @@ void Migrator::handle_export_dir(MExportDir *m)
 
 
 /*
+ * this is an import helper
+ *  called by import_finish, and import_reverse and friends.
+ */
+void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
+{
+  // root
+  dir->put(CDir::PIN_IMPORTING);
+  dir->state_clear(CDir::STATE_IMPORTING);
+
+  // bounds
+  set<CInode*> didinodes;
+  for (set<CDir*>::iterator it = bounds.begin();
+       it != bounds.end();
+       it++) {
+    CDir *bd = *it;
+    bd->put(CDir::PIN_IMPORTBOUND);
+    bd->state_clear(CDir::STATE_IMPORTBOUND);
+    CInode *bdi = bd->get_inode();
+    if (didinodes.count(bdi) == 0) {
+      bdi->put_stickydirs();
+      didinodes.insert(bdi);
+    }
+  }
+}
+
+
+/*
  * note: this does teh full work of reversing and import and cleaning up
  *  state.  
- * called by both handle_mds_failure and by handle_import_map (if we are
+ * called by both handle_mds_failure and by handle_resolve (if we are
  *  a survivor coping with an exporter failure+recovery).
  */
-void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
+void Migrator::import_reverse(CDir *dir)
 {
   dout(7) << "import_reverse " << *dir << endl;
 
+  set<CDir*> bounds;
+  cache->get_subtree_bounds(dir, bounds);
+
+  // remove pins
+  import_remove_pins(dir, bounds);
+
   // update auth, with possible subtree merge.
-  if (fix_dir_auth) {
-    assert(dir->is_subtree_root());
-    cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
-    cache->try_subtree_merge(dir);
-  }
+  assert(dir->is_subtree_root());
+  cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
+  cache->try_subtree_merge(dir);
 
   // adjust auth bits.
   list<CDir*> q;
@@ -1626,14 +1675,14 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
 	list<CDir*> dfs;
 	in->get_dirfrags(dfs);
 	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p)
-	  if (!(*p)->state_test(CDir::STATE_IMPORTBOUND))
+	  if (bounds.count(*p) == 0)
 	    q.push_back(*p);
       }
     }
   }
 
   // log our failure
-  mds->mdlog->submit_entry(new EImportFinish(dir,false));	// log failure
+  mds->mdlog->submit_entry(new EImportFinish(dir, false));	// log failure
 
   // bystanders?
   if (import_bystanders[dir].empty()) {
@@ -1642,18 +1691,15 @@ void Migrator::import_reverse(CDir *dir, bool fix_dir_auth)
   } else {
     // notify them; wait in aborting state
     dout(7) << "notifying bystanders of abort" << endl;
-    import_notify_abort(dir);
+    import_notify_abort(dir, bounds);
     import_state[dir->dirfrag()] = IMPORT_ABORTING;
   }
 }
 
-void Migrator::import_notify_abort(CDir *dir)
+void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
 {
   dout(7) << "import_notify_abort " << *dir << endl;
   
-  set<CDir*> import_bounds;
-  cache->get_subtree_bounds(dir, import_bounds);
-
   for (set<int>::iterator p = import_bystanders[dir].begin();
        p != import_bystanders[dir].end();
        ++p) {
@@ -1663,7 +1709,7 @@ void Migrator::import_notify_abort(CDir *dir)
       new MExportDirNotify(dir->dirfrag(), true,
 			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 			   pair<int,int>(import_peer[dir->dirfrag()], CDIR_AUTH_UNKNOWN));
-    notify->copy_bounds(import_bounds);
+    notify->copy_bounds(bounds);
     mds->send_message_mds(notify, *p, MDS_PORT_MIGRATOR);
   }
 }
@@ -1671,50 +1717,20 @@ void Migrator::import_notify_abort(CDir *dir)
 void Migrator::import_reverse_unfreeze(CDir *dir)
 {
   dout(7) << "import_reverse_unfreeze " << *dir << endl;
-
-  // unfreeze
   dir->unfreeze_tree();
-
-  // discard expire crap
   cache->discard_delayed_expire(dir);
-  
-  import_reverse_unpin(dir);
+  import_reverse_final(dir);
 }
 
-void Migrator::import_remove_pins(CDir *dir)
+void Migrator::import_reverse_final(CDir *dir) 
 {
-  // root
-  dir->put(CDir::PIN_IMPORTING);
-  dir->state_clear(CDir::STATE_IMPORTING);
-
-  // bounds
-  set<CDir*> bounds;
-  cache->get_subtree_bounds(dir, bounds);
-  set<CInode*> didinodes;
-  for (set<CDir*>::iterator it = bounds.begin();
-       it != bounds.end();
-       it++) {
-    CDir *bd = *it;
-    bd->put(CDir::PIN_IMPORTBOUND);
-    bd->state_clear(CDir::STATE_IMPORTBOUND);
-    CInode *bdi = bd->get_inode();
-    if (didinodes.count(bdi) == 0) {
-      bdi->put_stickydirs();
-      didinodes.insert(bdi);
-    }
-  }
-}
-
-void Migrator::import_reverse_unpin(CDir *dir) 
-{
-  dout(7) << "import_reverse_unpin " << *dir << endl;
-
-  import_remove_pins(dir);
+  dout(7) << "import_reverse_final " << *dir << endl;
 
   // clean up
   import_state.erase(dir->dirfrag());
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
+  import_bound_ls.erase(dir);
 
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
@@ -1746,7 +1762,7 @@ void Migrator::handle_export_finish(MExportDirFinish *m)
   delete m;
 }
 
-void Migrator::import_finish(CDir *dir, bool now) 
+void Migrator::import_finish(CDir *dir) 
 {
   dout(7) << "import_finish on " << *dir << endl;
 
@@ -1754,7 +1770,9 @@ void Migrator::import_finish(CDir *dir, bool now)
   mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
   // remove pins
-  import_remove_pins(dir);
+  set<CDir*> bounds;
+  cache->get_subtree_bounds(dir, bounds);
+  import_remove_pins(dir, bounds);
 
   // unfreeze
   dir->unfreeze_tree();
@@ -1767,6 +1785,7 @@ void Migrator::import_finish(CDir *dir, bool now)
   import_state.erase(dir->dirfrag());
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
+  import_bound_ls.erase(dir);
 
   // process delayed expires
   cache->process_delayed_expire(dir);

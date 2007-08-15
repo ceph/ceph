@@ -126,6 +126,7 @@ class MDS : public Dispatcher {
     waiting_for_active_peer[who].push_back(c);
   }
 
+  int get_state() { return state; } 
   bool is_dne()      { return state == MDSMap::STATE_DNE; }
   bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }

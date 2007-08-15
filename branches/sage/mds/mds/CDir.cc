@@ -1234,6 +1234,17 @@ bool CDir::is_subtree_root()
   }
 }
 
+/** contains(x)
+ * true if we are x, or an ancestor of x
+ */
+bool CDir::contains(CDir *x)
+{
+  while (1) {
+    if (x == this) return true;
+    x = x->get_parent_dir();
+    if (x == 0) return false;    
+  }
+}
 
 
 

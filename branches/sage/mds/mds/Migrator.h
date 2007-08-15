@@ -114,6 +114,7 @@ protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
   map<dirfrag_t,int>              import_peer;
   map<CDir*,set<int> >            import_bystanders;
+  map<CDir*,list<dirfrag_t> >     import_bound_ls;
 
 
   /*
@@ -228,16 +229,16 @@ public:
 			map<int,entity_inst_t>& imported_client_map);
 
 public:
-  void import_reverse(CDir *dir, bool fix_dir_auth=true);
+  void import_reverse(CDir *dir);
 protected:
-  void import_remove_pins(CDir *dir);
+  void import_remove_pins(CDir *dir, set<CDir*>& bounds);
   void import_reverse_unfreeze(CDir *dir);
-  void import_reverse_unpin(CDir *dir);
-  void import_notify_abort(CDir *dir);
+  void import_reverse_final(CDir *dir);
+  void import_notify_abort(CDir *dir, set<CDir*>& bounds);
   void import_logged_start(CDir *dir, int from);
   void handle_export_finish(MExportDirFinish *m);
 public:
-  void import_finish(CDir *dir, bool now=false);
+  void import_finish(CDir *dir);
 protected:
 
   friend class C_MDS_ImportDirLoggedStart;

@@ -295,7 +295,8 @@ private:
   
   bool is_subtree_root();
 
- 
+  bool contains(CDir *x);  // true if we are x or an ancestor of x 
+
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {

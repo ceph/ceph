@@ -533,7 +533,8 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     //  (this is a large hammer to ensure that dirfragtree updates will
     //   hit the disk before the relevant dirfrags ever close)
     if (dir->inode->is_auth() &&
-	dir->inode->can_auth_pin()) {
+	dir->inode->can_auth_pin() &&
+	(mds->is_active() || mds->is_stopping())) {
       CInode *in = dir->inode;
       dout(10) << "try_subtree_merge_at journaling merged bound " << *in << endl;
       
@@ -1372,6 +1373,55 @@ void MDCache::handle_resolve(MMDSResolve *m)
     mds->send_message_mds(ack, from, MDS_PORT_CACHE);
   }
 
+  // am i a surviving ambiguous importer?
+  if (mds->is_active() || mds->is_stopping()) {
+    // check for any import success/failure (from this node)
+    map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
+    while (p != my_ambiguous_imports.end()) {
+      map<dirfrag_t, list<dirfrag_t> >::iterator next = p;
+      next++;
+      CDir *dir = get_dirfrag(p->first);
+      assert(dir);
+      dout(10) << "checking ambiguous import " << *dir << endl;
+      if (migrator->is_importing(dir->dirfrag()) &&
+	  migrator->get_import_peer(dir->dirfrag()) == from) {
+	assert(migrator->get_import_state(dir->dirfrag()) == Migrator::IMPORT_ACKING);
+	
+	// check if sender claims the subtree
+	bool claimed_by_sender = false;
+	for (map<dirfrag_t, list<dirfrag_t> >::iterator q = m->subtrees.begin();
+	     q != m->subtrees.end();
+	     ++q) {
+	  CDir *base = get_dirfrag(q->first);
+	  if (!base || !base->contains(dir)) 
+	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
+
+	  bool inside = true;
+	  for (list<dirfrag_t>::iterator r = q->second.begin();
+	       r != q->second.end();
+	       ++r) {
+	    CDir *bound = get_dirfrag(*r);
+	    if (bound && bound->contains(dir)) {
+	      inside = false;  // nope, bound is dir or parent of dir, not inside.
+	      break;
+	    }
+	  }
+	  if (inside)
+	    claimed_by_sender = true;
+	}
+
+	if (claimed_by_sender) {
+	  dout(7) << "ambiguous import failed on " << *dir << endl;
+	  migrator->import_reverse(dir);
+	} else {
+	  dout(7) << "ambiguous import succeeded on " << *dir << endl;
+	  migrator->import_finish(dir);
+	}
+      }
+      p = next;
+    }
+  }    
+
   // update my dir_auth values
   for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
@@ -1390,40 +1440,6 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
     adjust_bounded_subtree_auth(dir, pi->second, from);
     try_subtree_merge(dir);
-  }
-
-  // am i a surviving ambiguous importer?
-  /*
-   * note: it would be cleaner to do this check before updating our own
-   * subtree map.. then the import_finish or _reverse could operate on an
-   * un-munged subtree map.  but... checking for import completion against
-   * the provided resolve isn't easy.  so, we skip audit checks in these 
-   * functions.
-   */
-  if (mds->is_active() || mds->is_stopping()) {
-    // check for any import success/failure (from this node)
-    map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
-    while (p != my_ambiguous_imports.end()) {
-      map<dirfrag_t, list<dirfrag_t> >::iterator n = p;
-      n++;
-      CDir *dir = get_dirfrag(p->first);
-      assert(dir);
-      dout(10) << "checking ambiguous import " << *dir << endl;
-      if (migrator->is_importing(dir->dirfrag())) {
-	assert(migrator->get_import_state(dir->dirfrag()) == Migrator::IMPORT_ACKING);
-	if (migrator->get_import_peer(dir->dirfrag()) == from) {
-	  if (dir->is_ambiguous_dir_auth()) {
-	    dout(7) << "ambiguous import succeeded on " << *dir << endl;
-	    migrator->import_finish(dir, true);	// don't wait for log flush
-	  } else {
-	    dout(7) << "ambiguous import failed on " << *dir << endl;
-	    migrator->import_reverse(dir, false);  // don't adjust dir_auth.
-	  }
-	  my_ambiguous_imports.erase(p);
-	}
-      }
-      p = n;
-    }
   }
 
   show_subtrees();
@@ -1613,18 +1629,18 @@ void MDCache::cancel_ambiguous_import(dirfrag_t df)
 void MDCache::finish_ambiguous_import(dirfrag_t df)
 {
   assert(my_ambiguous_imports.count(df));
-  list<dirfrag_t> bound_inos;
-  bound_inos.swap(my_ambiguous_imports[df]);
+  list<dirfrag_t> bounds;
+  bounds.swap(my_ambiguous_imports[df]);
   my_ambiguous_imports.erase(df);
   
   dout(10) << "finish_ambiguous_import " << df
-	   << " bounds " << bound_inos
+	   << " bounds " << bounds
 	   << endl;
   CDir *dir = get_dirfrag(df);
   assert(dir);
   
   // adjust dir_auth, import maps
-  adjust_bounded_subtree_auth(dir, bound_inos, mds->get_nodeid());
+  adjust_bounded_subtree_auth(dir, bounds, mds->get_nodeid());
   try_subtree_merge(dir);
 }
 
