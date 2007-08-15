@@ -398,7 +398,8 @@ private:
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
       // was the inode journaled since the last subtree_map?
-      if (dir->inode->last_journaled >= last_subtree_map) 
+      if (last_subtree_map &&
+	  dir->inode->last_journaled >= last_subtree_map) 
 	return;
     }
     

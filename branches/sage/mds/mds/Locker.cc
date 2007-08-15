@@ -1863,7 +1863,8 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKACK:
     assert(lock->get_state() == LOCK_GLOCKS ||
 	   lock->get_state() == LOCK_GLOCKC ||
-	   lock->get_state() == LOCK_GSCATTERS);
+	   lock->get_state() == LOCK_GSCATTERS ||
+	   lock->get_state() == LOCK_GTEMPSYNCC);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     lock->decode_locked_state(m->get_data());
