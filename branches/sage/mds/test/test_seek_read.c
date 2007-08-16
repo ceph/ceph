@@ -11,7 +11,7 @@
 int main(int argc, char **argv)
 {
   char *fn = argv[1];
-  int numblocks = atoi(argv[2]) / 4096;
+  uint64_t numblocks = atoll(argv[2]) / 4096;
   int count = 400;
   
   cout << "fn " << fn << endl;
