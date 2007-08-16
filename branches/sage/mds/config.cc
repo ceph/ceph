@@ -412,10 +412,6 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       cerr << "should period at " << off << endl;
       return false;   // should have 3 periods
     }
-    if (count == 3 && *s != ':') {
-      cerr << "expected : at " << off << endl;
-      return false;  // then a colon
-    }
     s++; off++;
 
     if (count <= 3)
@@ -424,6 +420,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       a.port = val;
     
     count++;
+    if (count == 4 && *s != ':') break;
     if (count == 5) break;  
   }
   
