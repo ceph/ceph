@@ -212,10 +212,11 @@ void OSDMonitor::create_initial()
   }
   
   if (g_conf.mds_local_osd) {
-    // add mds osds, but don't put them in the crush mapping func
+    // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<g_conf.num_mds; i++) {
-      newmap.osds.insert(i+10000);
-      newmap.down_osds[i+10000] = true;
+      int o = i+g_conf.mds_local_osd_offset;
+      newmap.osds.insert(o);
+      newmap.down_osds[o] = true;
     }
   }
   

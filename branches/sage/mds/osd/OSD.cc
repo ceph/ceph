@@ -188,7 +188,7 @@ int OSD::init()
   {
     // mkfs?
     if (g_conf.osd_mkfs) {
-      dout(2) << "mkfs" << dendl;
+      dout(2) << "mkfs on local store" << dendl;
       store->mkfs();
 
       // make up a superblock
@@ -714,6 +714,7 @@ void OSD::dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
+  dout(20) << "dispatch " << m << dendl;
 
   switch (m->get_type()) {
 
@@ -809,10 +810,10 @@ void OSD::dispatch(Message *m)
     finished_lock.Unlock();
     osd_lock.Unlock();
     
-    for (list<Message*>::iterator it = waiting.begin();
-         it != waiting.end();
-         it++) {
-      dispatch(*it);
+    while (!waiting.empty()) {
+      dout(20) << "doing finished " << waiting.front() << dendl;
+      dispatch(waiting.front());
+      waiting.pop_front();
     }
     return;
   }
@@ -1131,7 +1132,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_primary_since = 
 	    pg->info.history.same_acker_since = osdmap->get_epoch();
 	pg->write_log(t);
-	pg->activate(t);
+	//pg->activate(t);
 
 	dout(7) << "created " << *pg << dendl;
 	pg->unlock();
@@ -1153,7 +1154,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_acker_since = 
 	  pg->info.history.same_since = osdmap->get_epoch();
 	pg->write_log(t);
-	pg->activate(t);
+	//pg->activate(t);
 	
 	dout(7) << "created " << *pg << dendl;
 	pg->unlock();
@@ -1180,7 +1181,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_primary_since = 
 	    pg->info.history.same_acker_since = osdmap->get_epoch();
 	pg->write_log(t);
-	pg->activate(t);
+	//pg->activate(t);
 
 	dout(7) << "created " << *pg << dendl;
 	pg->unlock();
@@ -1202,7 +1203,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_acker_since = 
 	  pg->info.history.same_since = osdmap->get_epoch();
 	pg->write_log(t);
-	pg->activate(t);
+	//pg->activate(t);
 	
 	dout(7) << "created " << *pg << dendl;
 	pg->unlock();
@@ -1374,8 +1375,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     }
   }  
 
-  if (osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
-    return;
+  //if (osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
+  //return;
 
   do_notifies(notify_list);  // notify? (residual|replica)
   do_queries(query_map);
@@ -1490,11 +1491,11 @@ bool OSD::require_current_map(Message *m, epoch_t ep)
  */
 bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 {
-  dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ")" << dendl;
+  dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
   // newer map?
   if (epoch > osdmap->get_epoch()) {
-    dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << dendl;
+    dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << " with " << m << dendl;
     wait_for_new_map(m);
     return false;
   }

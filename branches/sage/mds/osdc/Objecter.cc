@@ -685,38 +685,38 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0) {
-	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
-						   ex.oid, ex.layout, osdmap->get_epoch(),
-						   wr->op);
-	m->set_length(ex.length);
-	m->set_offset(ex.start);
-	m->set_rev(ex.rev);
-	if (usetid > 0)
-	  m->set_retry_attempt(true);
-	
-	if (wr->tid_version.count(tid)) 
-	  m->set_version(wr->tid_version[tid]);  // we're replaying this op!
+    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
+			   ex.oid, ex.layout, osdmap->get_epoch(),
+			   wr->op);
+    m->set_length(ex.length);
+    m->set_offset(ex.start);
+    m->set_rev(ex.rev);
+    if (usetid > 0)
+      m->set_retry_attempt(true);
     
-	// what type of op?
-	switch (wr->op) {
-	case OSD_OP_WRITE:
-	  {
-		// map buffer segments into this extent
-		// (may be fragmented bc of striping)
-		bufferlist cur;
-		for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
-			 bit != ex.buffer_extents.end();
-			 bit++) {
-		  bufferlist thisbit;
-		  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
-		  cur.claim_append(thisbit);
-      }
-		assert(cur.length() == ex.length);
-		m->set_data(cur);//.claim(cur);
-	  }
-	  break;
+    if (wr->tid_version.count(tid)) 
+      m->set_version(wr->tid_version[tid]);  // we're replaying this op!
+    
+    // what type of op?
+    switch (wr->op) {
+    case OSD_OP_WRITE:
+      {
+	// map buffer segments into this extent
+	// (may be fragmented bc of striping)
+	bufferlist cur;
+	for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
+	     bit != ex.buffer_extents.end();
+	     bit++) {
+	  bufferlist thisbit;
+	  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
+	  cur.claim_append(thisbit);
 	}
-	
+	assert(cur.length() == ex.length);
+	m->set_data(cur);//.claim(cur);
+      }
+      break;
+    }
+    
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   }
   

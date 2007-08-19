@@ -16,6 +16,8 @@ my $nhardlinks = 0;
 my %nlinks;
 my %names;
 my %dirsize;
+my %fnlen;  
+my $fnchars;
 
 my $mask = 00170000;
 my $ifdir = 0040000;
@@ -39,6 +41,10 @@ while (@q) {
 
 	$nfiles++; 
 	my ($ino, $mode, $nlink) = (lstat($file))[1, 2,3];
+
+	my $fnlen = length($f);
+	$fnlen{$fnlen}++;
+	$fnchars += $fnlen;
 
 	if (($mode & $mask) == $ifdir) {
 	    $ndirs++;
@@ -89,6 +95,10 @@ for my $ds (sort {$a <=> $b} keys %dirsize) {
     }
 }
 close DSLOG;
+
+# avg, median file name len
+my $avgfnlen = sprintf("%.2f",$nfiles/$nfnchars);
+
 
 # stat fs
 my $df = `df $base`;

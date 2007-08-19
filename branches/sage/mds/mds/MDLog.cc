@@ -65,9 +65,8 @@ void MDLog::init_journaler()
   log_inode.ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   log_inode.layout = g_OSD_MDLogLayout;
   
-  if (g_conf.mds_local_osd) {
-    log_inode.layout.preferred = mds->get_nodeid() + 10000;   // hack
-  }
+  if (g_conf.mds_local_osd) 
+    log_inode.layout.preferred = mds->get_nodeid() + g_conf.mds_local_osd_offset;  // hack
   
   // log streamer
   if (journaler) delete journaler;

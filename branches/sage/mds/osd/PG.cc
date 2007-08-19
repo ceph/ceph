@@ -884,8 +884,8 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // if primary..
-  if (role == 0 &&
-      osd->osdmap->post_mkfs()) {
+  if (role == 0) {
+    //&&      osd->osdmap->post_mkfs()) {
     // who is clean?
     clean_set.clear();
     if (info.is_clean()) 

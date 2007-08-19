@@ -316,24 +316,29 @@ private:
   ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     static crush::Hash H(777);
 
+    int num = preferred >= 0 ? localized_pg_num:pg_num;
+    int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
+
     // calculate ps (placement seed)
     ps_t ps;
     switch (g_conf.osd_object_layout) {
     case OBJECT_LAYOUT_LINEAR:
-      ps = stable_mod(oid.bno + oid.ino, pg_num, pg_num_mask);
+      ps = stable_mod(oid.bno + oid.ino, num, num_mask);
       break;
       
     case OBJECT_LAYOUT_HASHINO:
-      ps = stable_mod(oid.bno + H(oid.ino), pg_num, pg_num_mask);
+      ps = stable_mod(oid.bno + H(oid.ino), num, num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
-      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), pg_num, pg_num_mask);
+      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       break;
 
     default:
       assert(0);
     }
+
+    //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
     return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
@@ -422,7 +427,7 @@ private:
       }
       
       if (is_out(osd))
-        osds.erase(osds.begin());  // oops, but it's down!
+        osds.erase(osds.begin());  // oops, but it's out
     }
     
     return osds.size();
