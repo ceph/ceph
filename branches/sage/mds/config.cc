@@ -187,7 +187,7 @@ md_config_t g_conf = {
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_flush_on_shutdown: true,
-  mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
+  //mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
   mds_bal_sample_interval: 5.0,  // every 5 seconds

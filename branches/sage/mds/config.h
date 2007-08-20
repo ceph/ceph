@@ -186,7 +186,7 @@ struct md_config_t {
   int mds_log_read_inc;
   int mds_log_pad_entry;
   bool  mds_log_flush_on_shutdown;
-  off_t mds_log_subtree_map_interval;
+  //off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
