@@ -17,7 +17,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 
 #include <fuse.h>
 #include <ulockmgr.h>
@@ -38,15 +37,25 @@ using namespace __gnu_cxx;
 
 #include <iostream>
 #include <fstream>
+#include <map>
 using namespace std;
 
-#include "../ceph/common/Mutex.h"
+#include "common/Mutex.h"
 
 Mutex trace_lock;
 fstream traceout;
 
 const char *basedir = 0;
 
+struct Inode;
+struct Dir {
+    Inode *inode;
+    map<string,Inode*> dentries;
+};
+struct Inode {
+    Dir *parent_dir;
+    Dir *dir;
+};
 
 hash_map<ino_t, Inode*> inode_map;
 
@@ -352,8 +361,8 @@ static int ft_utimens(const char *path, const struct timespec ts[2])
 
     trace_lock.Lock();
     traceout << "utimens" << endl << path
-	     << tv[0].tv_sec << endl << tv[0].tv_nsec << endl
-	     << tv[1].tv_sec << endl << tv[1].tv_nsec << endl;
+	     << tv[0].tv_sec << endl << tv[0].tv_usec << endl
+	     << tv[1].tv_sec << endl << tv[1].tv_usec << endl;
     trace_lock.Unlock();
 
     tv[0].tv_sec = ts[0].tv_sec;
@@ -559,7 +568,43 @@ static int ft_lock(const char *path, struct fuse_file_info *fi, int cmd,
                        sizeof(fi->lock_owner));
 }
 
-static struct fuse_operations ft_oper = {
+static struct fuse_lowlevel_ops ft_oper = {
+ init: 0,
+ destroy: 0,
+ lookup: ft_ll_lookup,
+ forget: ft_ll_forget,
+ getattr: ft_ll_getattr,
+ setattr: ft_ll_setattr,
+ readlink: ft_ll_readlink,
+ mknod: ft_ll_mknod,
+ mkdir: ft_ll_mkdir,
+ unlink: ft_ll_unlink,
+ rmdir: ft_ll_rmdir,
+ symlink: ft_ll_symlink,
+ rename: ft_ll_rename,
+ link: ft_ll_link,
+ open: ft_ll_open,
+ read: ft_ll_read,
+ write: ft_ll_write,
+ flush: ft_ll_flush,
+ release: ft_ll_release,
+ fsync: ft_ll_fsync,
+ opendir: ft_ll_opendir,
+ readdir: ft_ll_readdir,
+ releasedir: ft_ll_releasedir,
+ fsyncdir: 0,
+ statfs: ft_ll_statfs,
+ setxattr: 0,
+ getxattr: 0,
+ listxattr: 0,
+ removexattr: 0,
+ access: 0,
+ create: ft_ll_create,
+ getlk: 0,
+ setlk: 0,
+ bmap: 0
+};
+/*static struct fuse_operations ft_oper = {
     .getattr	= ft_getattr,
     .fgetattr	= ft_fgetattr,
     //.access	= ft_access,
@@ -594,7 +639,7 @@ static struct fuse_operations ft_oper = {
     .removexattr= ft_removexattr,
 #endif
     .lock	= ft_lock,
-};
+    };*/
 
 int main(int argc, char *argv[])
 {

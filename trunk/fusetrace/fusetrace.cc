@@ -40,7 +40,7 @@ using namespace __gnu_cxx;
 #include <fstream>
 using namespace std;
 
-#include "../ceph/common/Mutex.h"
+#include "common/Mutex.h"
 
 Mutex trace_lock;
 fstream traceout;
@@ -347,8 +347,8 @@ static int ft_utimens(const char *path, const struct timespec ts[2])
 
     trace_lock.Lock();
     traceout << "utimens" << endl << path
-	     << tv[0].tv_sec << endl << tv[0].tv_nsec << endl
-	     << tv[1].tv_sec << endl << tv[1].tv_nsec << endl;
+	     << tv[0].tv_sec << endl << tv[0].tv_usec << endl
+	     << tv[1].tv_sec << endl << tv[1].tv_usec << endl;
     trace_lock.Unlock();
 
     tv[0].tv_sec = ts[0].tv_sec;
