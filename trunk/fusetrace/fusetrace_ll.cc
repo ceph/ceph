@@ -18,7 +18,7 @@
 #endif
 
 
-#include <fuse.h>
+#include <fuse/fuse_lowlevel.h>
 #include <ulockmgr.h>
 #include <stdio.h>
 #include <string.h>
@@ -43,532 +43,662 @@ using namespace std;
 #include "common/Mutex.h"
 
 Mutex trace_lock;
-fstream traceout;
+ofstream tracefile;
 
-const char *basedir = 0;
+#define traceout (tracefile.is_open() ? tracefile : cout)
 
+char *basedir = 0;
+
+Mutex lock;
 struct Inode;
 struct Dir {
     Inode *inode;
     map<string,Inode*> dentries;
+    Dir(Inode *p) : inode(p) {}
 };
 struct Inode {
+    struct stat stbuf;
     Dir *parent_dir;
+    string parent_dn;
     Dir *dir;
+    int ref;
+    Inode() : parent_dir(0), dir(0), ref(0) {}
 };
 
 hash_map<ino_t, Inode*> inode_map;
 
-
-
-
-static int ft_getattr(const char *path, struct stat *stbuf)
+void make_inode_path(string &buf, Inode *in)
 {
-    int res;
+    if (in->parent_dir) 
+	make_inode_path(buf, in->parent_dir->inode);
+    else
+	buf = basedir;
+    buf += "/";
+    buf += in->parent_dn;
+    //cout << "path: " << in->stbuf.st_ino << " -> " << buf << endl;
+}
+
+void make_inode_path(string &buf, Inode *in, const char *name)
+{
+    make_inode_path(buf, in);
+    buf += "/";
+    buf += name;
+}
+
+void make_ino_path(string &buf, ino_t ino)
+{
+    Inode *in = inode_map[ino];
+    assert(in);
+    make_inode_path(buf, in);
+}
+
+void make_ino_path(string &buf, ino_t ino, const char *name)
+{
+    Inode *in = inode_map[ino];
+    assert(in);
+    make_inode_path(buf, in);
+    buf += "/";
+    buf += name;
+}
+
+void remove_inode(Inode *in)
+{
+    //cout << "remove_inode " << in->stbuf.st_ino << endl;
+    if (in->parent_dir)
+	in->parent_dir->dentries.erase(in->parent_dn);
+    inode_map.erase(in->stbuf.st_ino);
+    if (in->dir) {
+	while (!in->dir->dentries.empty()) 
+	    remove_inode(in->dir->dentries.begin()->second);
+	delete in->dir;
+    }
+    delete in;
+}
+
+Inode *add_inode(Inode *parent, const char *name, struct stat *attr)
+{
+    Inode *in = new Inode;
+    memcpy(&in->stbuf, attr, sizeof(*attr));
+
+    if (!parent->dir) parent->dir = new Dir(parent);
+
+    string dname(name);
+    parent->dir->dentries[dname] = in;
+    inode_map[in->stbuf.st_ino] = in;
+
+    in->parent_dn = dname;
+    in->parent_dir = parent->dir;
+
+    return in;
+}
+
+
+
+static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
+{
+    int res = 0;
+
+    //cout << "lookup " << pino << " " << name << endl;
+
+    lock.Lock();
+    Inode *parent = inode_map[pino];
+    assert(parent);
+    if (!parent->dir) parent->dir = new Dir(parent);
+    parent->ref++;
+
+    string dname(name);
+    Inode *in = 0;
+    if (parent->dir->dentries.count(dname)) {
+	in = parent->dir->dentries[dname];
+	//cout << "have " << in->stbuf.st_ino << endl;
+    } else {
+	string path;
+	make_inode_path(path, parent, name);
+	in = new Inode;
+	res = lstat(path.c_str(), &in->stbuf);
+	//cout << "stat " << path << " res = " << res << endl;
+	if (res == 0) {
+	    parent->dir->dentries[dname] = in;
+	    inode_map[in->stbuf.st_ino] = in;
+	    in->parent_dn = dname;
+	    in->parent_dir = parent->dir;
+	} else {
+	    delete in;
+	    in = 0;
+	    res = errno;
+	}
+    }
+
+    lock.Unlock();
 
     trace_lock.Lock();
-    traceout << "getattr" << endl << path << endl;
+    traceout << "ll_lookup" << endl << pino << endl << name << endl << (in ? in->stbuf.st_ino:0) << endl;
     trace_lock.Unlock();
 
-    res = lstat(path, stbuf);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    if (in) {
+	struct fuse_entry_param fe;
+	memset(&fe, 0, sizeof(fe));
+	fe.ino = in->stbuf.st_ino;
+	memcpy(&fe.attr, &in->stbuf, sizeof(in->stbuf));
+	fuse_reply_entry(req, &fe);
+    } else {
+	fuse_reply_err(req, res);
+    }
 }
 
-static int ft_fgetattr(const char *path, struct stat *stbuf,
-                        struct fuse_file_info *fi)
+static void ft_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 {
-    int res;
-
-    (void) path;
-
-    trace_lock.Lock();
-    traceout << "fgetattr" << endl << fi->fh << endl;
-    trace_lock.Unlock();
-
-    res = fstat(fi->fh, stbuf);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_access(const char *path, int mask)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "access" << endl << path << endl;
-    trace_lock.Unlock();
-
-    res = access(path, mask);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_readlink(const char *path, char *buf, size_t size)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "readlink" << endl << path << endl;
-    trace_lock.Unlock();
-
-    res = readlink(path, buf, size - 1);
-    if (res == -1)
-        return -errno;
-
-    buf[res] = '\0';
-    return 0;
-}
-
-static int ft_opendir(const char *path, struct fuse_file_info *fi)
-{
-    DIR *dp = opendir(path);
-    if (dp == NULL)
-        return -errno;
-
-    fi->fh = (unsigned long) dp;
-
-    trace_lock.Lock();
-    traceout << "opendir" << endl << path << endl << fi->fh << endl;
-    trace_lock.Unlock();
-
-    return 0;
-}
-
-static inline DIR *get_dirp(struct fuse_file_info *fi)
-{
-    return (DIR *) (uintptr_t) fi->fh;
-}
-
-static int ft_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                       off_t offset, struct fuse_file_info *fi)
-{
-    DIR *dp = get_dirp(fi);
-    struct dirent *de;
-
-    (void) path;
-    seekdir(dp, offset);
-    while ((de = readdir(dp)) != NULL) {
-        struct stat st;
-        memset(&st, 0, sizeof(st));
-        st.st_ino = de->d_ino;
-        st.st_mode = de->d_type << 12;
-        if (filler(buf, de->d_name, &st, telldir(dp)))
-            break;
+    if (ino != 1) {
+	lock.Lock();
+	Inode *in = inode_map[ino];
+	if (in) {
+	    in->ref -= nlookup;
+	    if (in->ref == 0) {
+		remove_inode(in);
+	    }
+	} else {
+	    cout << "weird, don't have inode " << ino << endl;
+	}
+	lock.Unlock();
     }
 
     trace_lock.Lock();
-    traceout << "readdir" << endl << fi->fh << endl;
+    traceout << "ll_forget" << endl << ino << endl << nlookup << endl;
     trace_lock.Unlock();
 
-    return 0;
+    fuse_reply_none(req);
 }
 
-static int ft_releasedir(const char *path, struct fuse_file_info *fi)
-{
-    DIR *dp = get_dirp(fi);
-    (void) path;
-    closedir(dp);
-
-    trace_lock.Lock();
-    traceout << "releasedir" << endl << fi->fh << endl;
-    trace_lock.Unlock();
-
-    return 0;
-}
-
-static int ft_mknod(const char *path, mode_t mode, dev_t rdev)
+static void ft_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int res;
+    string path;
 
+    Inode *in = 0;
+
+    lock.Lock();
+    in = inode_map[ino];
+    make_inode_path(path, in);
+    lock.Unlock();
+
+    res = ::lstat(path.c_str(), &in->stbuf);
+    //cout << "getattr stat on " << path << " res " << res << endl;
+    if (ino == 1)
+	in->stbuf.st_ino = 1;
+    
     trace_lock.Lock();
-    traceout << "mknod" << endl << path << endl << mode << endl << rdev << endl;
+    traceout << "ll_getattr" << endl << ino << endl;
     trace_lock.Unlock();
 
-    if (S_ISFIFO(mode))
-        res = mkfifo(path, mode);
+    if (res == 0) 
+	fuse_reply_attr(req, &in->stbuf, 0);
+    else 
+	fuse_reply_err(req, -errno);
+}
+
+static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
+			  int to_set, struct fuse_file_info *fi)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_setattr" << endl << ino << endl;
+    traceout << attr->st_mode << endl;
+    traceout << attr->st_uid << endl << attr->st_gid << endl;
+    traceout << attr->st_size << endl;
+    traceout << attr->st_mtime << endl;
+    traceout << attr->st_atime << endl;
+    traceout << to_set << endl;
+    trace_lock.Unlock();
+
+    int res = 0;
+    if (to_set & FUSE_SET_ATTR_MODE)
+	res = ::chmod(path.c_str(), attr->st_mode);
+    if (!res && to_set & FUSE_SET_ATTR_UID)
+	res = ::chown(path.c_str(), attr->st_uid, attr->st_gid);
+    if (!res && to_set & FUSE_SET_ATTR_SIZE)
+	res = ::truncate(path.c_str(), attr->st_size);
+    if (!res && to_set & FUSE_SET_ATTR_MTIME) {
+	struct utimbuf ut;
+	ut.actime = attr->st_atime;
+	ut.modtime = attr->st_mtime;
+	res = ::utime(path.c_str(), &ut);
+    }
+
+    if (res == 0) {
+	::lstat(path.c_str(), attr);
+	fuse_reply_attr(req, attr, 0);
+    } else
+	fuse_reply_err(req, errno);    
+}
+
+
+static void ft_ll_readlink(fuse_req_t req, fuse_ino_t ino)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_readlink" << endl << ino << endl;
+    trace_lock.Unlock();
+
+    char buf[256];
+    int res = readlink(path.c_str(), buf, 255);
+    if (res >= 0) {
+	buf[res] = 0;
+	fuse_reply_readlink(req, buf);
+    } else {
+	fuse_reply_err(req, errno);
+    }
+}
+
+
+static void ft_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+    
+    DIR *dir = opendir(path.c_str());
+
+    trace_lock.Lock();
+    traceout << "ll_opendir" << endl << ino << endl << (long)dir << endl;
+    trace_lock.Unlock();
+    
+    if (dir) {
+	fi->fh = (long)dir;
+	fuse_reply_open(req, fi);
+    } else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+			    off_t off, struct fuse_file_info *fi)
+{
+    struct dirent *de;
+    DIR *dp = (DIR*)fi->fh;
+
+    // buffer
+    char *buf;
+    size_t pos = 0;
+    
+    buf = new char[size];
+    if (!buf) {
+	fuse_reply_err(req, ENOMEM);
+	return;
+    }
+
+    seekdir(dp, off);
+    while ((de = readdir(dp)) != NULL) {
+	struct stat st;
+	memset(&st, 0, sizeof(st));
+        st.st_ino = de->d_ino;
+        st.st_mode = de->d_type << 12;
+	
+	size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
+					     de->d_name, &st, telldir(dp));
+	if (entrysize > size - pos) 
+	    break;  // didn't fit, done for now.
+	pos += entrysize;
+    }
+
+    fuse_reply_buf(req, buf, pos);
+    delete[] buf;
+}
+
+static void ft_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
+			     struct fuse_file_info *fi)
+{
+  DIR *dir = (DIR*)fi->fh;
+
+  trace_lock.Lock();
+  traceout << "ll_releasedir" << endl << (long)dir << endl;
+  trace_lock.Unlock();
+
+  closedir(dir);
+  fuse_reply_err(req, 0);
+}
+
+
+
+static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+			mode_t mode, dev_t rdev)
+{
+    string path;
+    Inode *pin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    lock.Unlock();
+
+    int res = ::mknod(path.c_str(), mode, rdev);
+
+    struct fuse_entry_param fe;
+    if (res == 0) {
+	memset(&fe, 0, sizeof(fe));
+	::lstat(path.c_str(), &fe.attr);
+	fe.ino = fe.attr.st_ino;
+	add_inode(pin, name, &fe.attr);
+    }
+
+    trace_lock.Lock();
+    traceout << "ll_mknod" << endl << parent << endl << name << endl << mode << endl << rdev << endl;
+    traceout << (res == 0 ? fe.ino:0) << endl;
+    trace_lock.Unlock();
+
+    if (res == 0)
+	fuse_reply_entry(req, &fe);
+    else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
+			mode_t mode)
+{
+    string path;
+    Inode *pin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    lock.Unlock();
+
+    int res = ::mkdir(path.c_str(), mode);
+
+    struct fuse_entry_param fe;
+    if (res == 0) {
+	memset(&fe, 0, sizeof(fe));
+	::lstat(path.c_str(), &fe.attr);
+	fe.ino = fe.attr.st_ino;
+  	add_inode(pin, name, &fe.attr);
+    }
+
+    trace_lock.Lock();
+    traceout << "ll_mkdir" << endl << parent << endl << name << endl << mode << endl;
+    traceout << (res == 0 ? fe.ino:0) << endl;
+    trace_lock.Unlock();
+
+    if (res == 0)
+	fuse_reply_entry(req, &fe);
+    else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, const char *name)
+{
+    string path;
+    Inode *pin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    lock.Unlock();
+
+    int res = ::symlink(value, path.c_str());
+
+    struct fuse_entry_param fe;
+    if (res == 0) {
+	memset(&fe, 0, sizeof(fe));
+	::lstat(path.c_str(), &fe.attr);
+	fe.ino = fe.attr.st_ino;
+    	add_inode(pin, name, &fe.attr);
+    }
+
+    trace_lock.Lock();
+    traceout << "ll_symlink" << endl << parent << endl << name << endl << value << endl;
+    traceout << (res == 0 ? fe.ino:0) << endl;
+    trace_lock.Unlock();
+
+    if (res == 0)
+	fuse_reply_entry(req, &fe);
+    else 
+	fuse_reply_err(req, errno);
+}
+
+
+
+
+static void ft_ll_statfs(fuse_req_t req, fuse_ino_t ino)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+    
+    trace_lock.Lock();
+    traceout << "ll_statfs" << endl << ino << endl;
+    trace_lock.Unlock();
+    
+    struct statvfs stbuf;
+    int res = statvfs(path.c_str(), &stbuf);
+    if (res == 0) 
+	fuse_reply_statfs(req, &stbuf);
+    else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    string path;
+    Inode *pin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_unlink" << endl << parent << endl << name << endl;
+    trace_lock.Unlock();
+
+    int res = ::unlink(path.c_str());
+
+    if (res == 0) {
+	// remove from out cache
+	string dname(name);
+	if (pin->dir &&
+	    pin->dir->dentries.count(dname))
+	    remove_inode(pin->dir->dentries[dname]);
+	fuse_reply_err(req, 0);
+    } else
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    string path;
+    Inode *pin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_rmdir" << endl << parent << endl << name << endl;
+    trace_lock.Unlock();
+
+    int res = ::rmdir(path.c_str());
+
+    if (res == 0) {
+	// remove from out cache
+	string dname(name);
+	if (pin->dir &&
+	    pin->dir->dentries.count(dname))
+	    remove_inode(pin->dir->dentries[dname]);
+	fuse_reply_err(req, 0);
+    } else
+	fuse_reply_err(req, errno);
+}
+
+
+static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+			 fuse_ino_t newparent, const char *newname)
+{
+    string path;
+    string newpath;
+    Inode *pin = 0;
+    Inode *newpin = 0;
+    lock.Lock();
+    pin = inode_map[parent];
+    make_inode_path(path, pin, name);
+    newpin = inode_map[newparent];
+    make_inode_path(newpath, newpin, newname);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_rename" << endl << parent << endl << name << endl << newparent << endl << newname << endl;
+    trace_lock.Unlock();
+
+    int res = ::rename(path.c_str(), newpath.c_str());
+    
+    if (res == 0) {
+	string dname(name);
+	string newdname(newname);
+	if (pin->dir &&
+	    pin->dir->dentries.count(dname)) {
+	    Inode *in = pin->dir->dentries[dname];
+	    pin->dir->dentries.erase(dname);
+	    
+	    if (!newpin->dir) newpin->dir = new Dir(newpin);
+	    newpin->dir->dentries[newdname] = in;
+	    in->parent_dir = newpin->dir;
+	    in->parent_dn = newdname;
+	}
+	fuse_reply_err(req, 0);
+    } else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
+		       const char *newname)
+{
+    string path;
+    string newpath;
+    Inode *newpin = 0;
+    lock.Lock();
+    make_ino_path(path, ino);
+    newpin = inode_map[newparent];
+    make_inode_path(path, newpin, newname);
+    lock.Unlock();
+
+    trace_lock.Lock();
+    traceout << "ll_link" << endl << ino << endl << newparent << endl << newname << endl;
+    trace_lock.Unlock();
+    
+    int res = ::link(path.c_str(), newpath.c_str());
+    
+    if (res == 0) {
+	fuse_reply_err(req, 0);
+    } else 
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+    
+    int fd = ::open(path.c_str(), fi->flags);
+
+    trace_lock.Lock();
+    traceout << "ll_open" << endl << ino << endl << (fd > 0 ? fd:0) << endl;;
+    trace_lock.Unlock();
+
+    if (fd > 0) {
+	fi->fh = fd;
+	fuse_reply_open(req, fi);
+    } else
+	fuse_reply_err(req, errno);
+}
+
+static void ft_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
+		       struct fuse_file_info *fi)
+{
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+    
+    char *buf = new char[size];
+    int res = ::pread(fi->fh, buf, size, off);
+
+    trace_lock.Lock();
+    traceout << "ll_read" << endl << fi->fh << endl << off << endl << size << endl;
+    trace_lock.Unlock();
+
+    if (res >= 0) 
+	fuse_reply_buf(req, buf, res);
     else
-        res = mknod(path, mode, rdev);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+	fuse_reply_err(req, errno);
+    delete[] buf;
 }
 
-static int ft_mkdir(const char *path, mode_t mode)
+static void ft_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+			   size_t size, off_t off, struct fuse_file_info *fi)
 {
-    int res;
+    string path;
+    lock.Lock();
+    make_ino_path(path, ino);
+    lock.Unlock();
+
+    int res = ::pwrite(fi->fh, buf, size, off);
 
     trace_lock.Lock();
-    traceout << "mkdir" << endl << path << endl << mode << endl;
+    traceout << "ll_write" << endl << fi->fh << endl << off << endl << size << endl;
     trace_lock.Unlock();
 
-    res = mkdir(path, mode);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_unlink(const char *path)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "unlink" << endl << path << endl;
-    trace_lock.Unlock();
-
-    res = unlink(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_rmdir(const char *path)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "rmdir" << endl << path << endl;
-    trace_lock.Unlock();
-
-    res = rmdir(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_symlink(const char *from, const char *to)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "symlink" << endl << from << endl << to << endl;
-    trace_lock.Unlock();
-
-    res = symlink(from, to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_rename(const char *from, const char *to)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "rename" << endl << from << endl << to << endl;
-    trace_lock.Unlock();
-
-    res = rename(from, to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_link(const char *from, const char *to)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "link" << endl << from << endl << to << endl;
-    trace_lock.Unlock();
-
-    res = link(from, to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_chmod(const char *path, mode_t mode)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "chmod" << endl << path << endl << mode << endl;
-    trace_lock.Unlock();
-
-    res = chmod(path, mode);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_chown(const char *path, uid_t uid, gid_t gid)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "chown" << endl << path << endl << uid << endl << gid << endl;
-    trace_lock.Unlock();
-
-    res = lchown(path, uid, gid);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_truncate(const char *path, off_t size)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "truncate" << endl << path << endl << size << endl;
-    trace_lock.Unlock();
-
-    res = truncate(path, size);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_ftruncate(const char *path, off_t size,
-                         struct fuse_file_info *fi)
-{
-    int res;
-
-    (void) path;
-
-    trace_lock.Lock();
-    traceout << "ftruncate" << endl << fi->fh << endl << size << endl;
-    trace_lock.Unlock();
-
-    res = ftruncate(fi->fh, size);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_utimens(const char *path, const struct timespec ts[2])
-{
-    int res;
-    struct timeval tv[2];
-
-    trace_lock.Lock();
-    traceout << "utimens" << endl << path
-	     << tv[0].tv_sec << endl << tv[0].tv_usec << endl
-	     << tv[1].tv_sec << endl << tv[1].tv_usec << endl;
-    trace_lock.Unlock();
-
-    tv[0].tv_sec = ts[0].tv_sec;
-    tv[0].tv_usec = ts[0].tv_nsec / 1000;
-    tv[1].tv_sec = ts[1].tv_sec;
-    tv[1].tv_usec = ts[1].tv_nsec / 1000;
-
-    res = utimes(path, tv);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_create(const char *path, mode_t mode, struct fuse_file_info *fi)
-{
-    int fd;
-
-    trace_lock.Lock();
-    traceout << "create" << endl << path << endl << mode << endl << fi->flags << endl;
-    trace_lock.Unlock();
-
-    fd = open(path, fi->flags, mode);
-    if (fd == -1)
-        return -errno;
-
-    fi->fh = fd;
-    return 0;
-}
-
-static int ft_open(const char *path, struct fuse_file_info *fi)
-{
-    int fd;
-
-    fd = open(path, fi->flags);
-
-    trace_lock.Lock();
-    traceout << "open" << endl << path << endl << fi->flags << endl << (fd > 0 ? fd:0) << endl;
-    trace_lock.Unlock();
-
-    if (fd == -1)
-        return -errno;
-
-    fi->fh = fd;
-    return 0;
-}
-
-static int ft_read(const char *path, char *buf, size_t size, off_t offset,
-                    struct fuse_file_info *fi)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "read" << endl << fi->fh << endl << offset << endl << size << endl;
-    trace_lock.Unlock();
-
-    (void) path;
-    res = pread(fi->fh, buf, size, offset);
-    if (res == -1)
-        res = -errno;
-
-    return res;
-}
-
-static int ft_write(const char *path, const char *buf, size_t size,
-                     off_t offset, struct fuse_file_info *fi)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "write" << endl << fi->fh << endl << offset << endl << size << endl;
-    trace_lock.Unlock();
-
-    (void) path;
-    res = pwrite(fi->fh, buf, size, offset);
-    if (res == -1)
-        res = -errno;
-
-    return res;
-}
-
-static int ft_statfs(const char *path, struct statvfs *stbuf)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "statfs" << endl << path << endl;
-    trace_lock.Unlock();
-
-    res = statvfs(path, stbuf);
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_flush(const char *path, struct fuse_file_info *fi)
-{
-    int res;
-
-    trace_lock.Lock();
-    traceout << "flush" << endl << fi->fh << endl;
-    trace_lock.Unlock();
-
-    (void) path;
-    /* This is called from every close on an open file, so call the
-       close on the underlying filesystem.  But since flush may be
-       called multiple times for an open file, this must not really
-       close the file.  This is important if used on a network
-       filesystem like NFS which flush the data/metadata on close() */
-    res = close(dup(fi->fh));
-    if (res == -1)
-        return -errno;
-
-    return 0;
-}
-
-static int ft_release(const char *path, struct fuse_file_info *fi)
-{
-    (void) path;
-    close(fi->fh);
-
-    trace_lock.Lock();
-    traceout << "release" << endl << fi->fh << endl;
-    trace_lock.Unlock();
-
-    return 0;
-}
-
-static int ft_fsync(const char *path, int isdatasync,
-                     struct fuse_file_info *fi)
-{
-    int res;
-    (void) path;
-
-#ifndef HAVE_FDATASYNC
-    (void) isdatasync;
-#else
-    if (isdatasync)
-        res = fdatasync(fi->fh);
+    if (res >= 0) 
+	fuse_reply_write(req, res);
     else
-#endif
-        res = fsync(fi->fh);
+	fuse_reply_err(req, errno);
+}
 
+static void ft_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
     trace_lock.Lock();
-    traceout << "fsync" << endl << fi->fh << endl << isdatasync << endl;
+    traceout << "ll_flush" << endl << fi->fh << endl;
     trace_lock.Unlock();
 
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    int res = close(dup(fi->fh));
+    if (res >= 0)
+	fuse_reply_err(req, 0);
+    else
+	fuse_reply_err(req, errno);
 }
 
-#ifdef HAVE_SETXATTR
-/* xattr operations are optional and can safely be left unimplemented */
-static int ft_setxattr(const char *path, const char *name, const char *value,
-                        size_t size, int flags)
+static void ft_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
-    int res = lsetxattr(path, name, value, size, flags);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-
-static int ft_getxattr(const char *path, const char *name, char *value,
-                    size_t size)
-{
-    int res = lgetxattr(path, name, value, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int ft_listxattr(const char *path, char *list, size_t size)
-{
-    int res = llistxattr(path, list, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int ft_removexattr(const char *path, const char *name)
-{
-    int res = lremovexattr(path, name);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-#endif /* HAVE_SETXATTR */
-
-static int ft_lock(const char *path, struct fuse_file_info *fi, int cmd,
-                    struct flock *lock)
-{
-    (void) path;
-
-    /*
     trace_lock.Lock();
-    traceout << "fsync" << endl << fi->fh << endl << isdatasync << endl;
+    traceout << "ll_release" << endl << fi->fh << endl;
     trace_lock.Unlock();
-    */
-    return ulockmgr_op(fi->fh, cmd, lock, &fi->lock_owner,
-                       sizeof(fi->lock_owner));
+
+    int res = ::close(fi->fh);
+    if (res >= 0)
+	fuse_reply_err(req, 0);
+    else
+	fuse_reply_err(req, errno);
 }
 
-static struct fuse_lowlevel_ops ft_oper = {
+static void ft_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+			  struct fuse_file_info *fi)
+{
+    trace_lock.Lock();
+    traceout << "ll_fsync" << endl << fi->fh << endl;
+    trace_lock.Unlock();
+
+    int res = ::fsync(fi->fh);
+    if (res >= 0)
+	fuse_reply_err(req, 0);
+    else
+	fuse_reply_err(req, errno);
+}
+
+static struct fuse_lowlevel_ops ft_ll_oper = {
  init: 0,
  destroy: 0,
  lookup: ft_ll_lookup,
@@ -599,53 +729,66 @@ static struct fuse_lowlevel_ops ft_oper = {
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: ft_ll_create,
+ create: 0,//ft_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0
 };
-/*static struct fuse_operations ft_oper = {
-    .getattr	= ft_getattr,
-    .fgetattr	= ft_fgetattr,
-    //.access	= ft_access,
-    .readlink	= ft_readlink,
-    .opendir	= ft_opendir,
-    .readdir	= ft_readdir,
-    .releasedir	= ft_releasedir,
-    .mknod	= ft_mknod,
-    .mkdir	= ft_mkdir,
-    .symlink	= ft_symlink,
-    .unlink	= ft_unlink,
-    .rmdir	= ft_rmdir,
-    .rename	= ft_rename,
-    .link	= ft_link,
-    .chmod	= ft_chmod,
-    .chown	= ft_chown,
-    .truncate	= ft_truncate,
-    .ftruncate	= ft_ftruncate,
-    .utimens	= ft_utimens,
-    .create	= ft_create,
-    .open	= ft_open,
-    .read	= ft_read,
-    .write	= ft_write,
-    .statfs	= ft_statfs,
-    .flush	= ft_flush,
-    .release	= ft_release,
-    .fsync	= ft_fsync,
-#ifdef HAVE_SETXATTR
-    .setxattr	= ft_setxattr,
-    .getxattr	= ft_getxattr,
-    .listxattr	= ft_listxattr,
-    .removexattr= ft_removexattr,
-#endif
-    .lock	= ft_lock,
-    };*/
 
 int main(int argc, char *argv[])
 {
     // open trace
-    
 
-    umask(0);
-    return fuse_main(argc, argv, &ft_oper, NULL);
+    // figure base dir
+    char *newargv[100];
+    int newargc = 0;
+    for (int i=0; i<argc; i++) {
+	if (strcmp(argv[i], "--basedir") == 0) {
+	    basedir = argv[++i];
+	} else if (strcmp(argv[i], "--trace") == 0) {
+	    tracefile.open(argv[++i], ios::out|ios::trunc);
+	    if (!tracefile.is_open())
+		cerr << "** couldn't open trace file " << argv[i] << endl;
+	} else {
+	    cout << "arg: " << newargc << " " << argv[i] << endl;
+	    newargv[newargc++] = argv[i];
+	}
+    }
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "allow_other";
+    if (!basedir) return 1;
+    cout << "basedir is " << basedir << endl;
+
+    // create root ino
+    Inode *root = new Inode;
+    lstat(basedir, &root->stbuf);
+    root->stbuf.st_ino = 1;
+    inode_map[1] = root;
+    root->ref++;
+    
+    // go go gadget fuse
+    struct fuse_args args = FUSE_ARGS_INIT(newargc, newargv);
+    struct fuse_chan *ch;
+    char *mountpoint;
+    int err = -1;
+    
+    if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
+	(ch = fuse_mount(mountpoint, &args)) != NULL) {
+	struct fuse_session *se;
+
+	// init fuse
+	se = fuse_lowlevel_new(&args, &ft_ll_oper, sizeof(ft_ll_oper),
+			       NULL);
+	if (se != NULL) {
+	    if (fuse_set_signal_handlers(se) != -1) {
+		fuse_session_add_chan(se, ch);
+		err = fuse_session_loop(se);
+		fuse_remove_signal_handlers(se);
+		fuse_session_remove_chan(ch);
+	    }
+	    fuse_session_destroy(se);
+	}
+	fuse_unmount(mountpoint, ch);
+    }
+    fuse_opt_free_args(&args);
 }
