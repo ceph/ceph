@@ -2991,6 +2991,12 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   return totalwritten;  
 }
 
+int Client::_flush(Fh *f)
+{
+  // no-op, for now.  hrm.
+  return 0;
+}
+
 
 int Client::truncate(const char *relpath, off_t length) 
 {
@@ -3723,6 +3729,16 @@ int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
   tout << len << endl;
 
   return _write(fh, off, len, data);
+}
+
+int Client::ll_flush(Fh *fh)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_flush " << fh << endl;
+  tout << "ll_flush" << endl;
+  tout << (unsigned long)fh << endl;
+
+  return _flush(fh);
 }
 
 int Client::ll_release(Fh *fh)

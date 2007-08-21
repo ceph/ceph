@@ -911,7 +911,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *v = t.get_string(buf, p);
       int64_t ri = t.get_int();
       struct stat attr;
-      if (client->ll_symlink(i, n, v, &attr) == 0)
+      if (client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
@@ -987,6 +987,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       } else {
 	client->ll_write(fh, off+size, 0, NULL);
       }
+    } else if (strcmp(op, "ll_flush") == 0) {
+      int64_t f = t.get_int();
+      Fh *fh = ll_files[f];
+      client->ll_flush(fh);
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
       Fh *fh = ll_files[f];

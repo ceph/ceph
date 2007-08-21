@@ -706,6 +706,7 @@ private:
   int _release(Fh *fh);
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
+  int _flush(Fh *fh);
   int _truncate(const char *file, off_t length);
   int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
@@ -803,6 +804,7 @@ public:
   int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh);
   int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
   int ll_write(Fh *fh, off_t off, off_t len, const char *data);
+  int ll_flush(Fh *fh);
   int ll_release(Fh *fh);
   int ll_statfs(inodeno_t, struct statvfs *stbuf);
 
