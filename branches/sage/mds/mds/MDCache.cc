@@ -1539,11 +1539,11 @@ void MDCache::disambiguate_imports()
       
       if (dir->authority().first == CDIR_AUTH_UNKNOWN ||   // if i am resolving
 	  dir->is_ambiguous_auth()) {                      // if i am a surviving bystander
-	dout(10) << "mds" << who << " did import " << *dir << endl;
+	dout(10) << "  mds" << who << " did import " << *dir << endl;
 	adjust_bounded_subtree_auth(dir, q->second, who);
 	try_subtree_merge(dir);
       } else {
-	dout(10) << "mds" << who << " did not import " << *dir << endl;
+	dout(10) << "  mds" << who << " did not import " << *dir << endl;
       }
     }
   }
@@ -2949,6 +2949,13 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
       expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->get_replica_nonce());
     }
   }
+
+  // adjust the dir state
+  // NOTE: we can safely remove a clean, null dentry without effecting
+  //       directory completeness.
+  // (do this _before_ we unlink the inode, below!)
+  if (!(dn->is_null() && dn->is_clean())) 
+    dir->state_clear(CDir::STATE_COMPLETE); 
   
   // unlink the dentry
   if (dn->is_remote()) {
@@ -2964,21 +2971,15 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   else {
     assert(dn->is_null());
   }
-  
-  // adjust the dir state
-    // NOTE: we can safely remove a clean, null dentry without effecting
-    //       directory completeness.
-    if (!(dn->is_null() && dn->is_clean())) 
-      dir->state_clear(CDir::STATE_COMPLETE); 
-
-    // remove dentry
-    dir->remove_dentry(dn);
-
-    // reexport?
-    if (dir->get_size() == 0 && dir->is_subtree_root())
-      migrator->export_empty_import(dir);
     
-    if (mds->logger) mds->logger->inc("cex");
+  // remove dentry
+  dir->remove_dentry(dn);
+  
+  // reexport?
+  if (dir->get_size() == 0 && dir->is_subtree_root())
+    migrator->export_empty_import(dir);
+  
+  if (mds->logger) mds->logger->inc("cex");
 }
 
 
