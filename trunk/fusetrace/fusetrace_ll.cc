@@ -60,6 +60,9 @@ ofstream tracefile;
 #define traceout (tracefile.is_open() ? tracefile : cout)
 
 char *basedir = 0;
+int debug = 0;
+
+#define dout if (debug) cout
 
 Mutex lock;
 struct Inode;
@@ -114,40 +117,49 @@ void make_ino_path(string &buf, ino_t ino, const char *name)
     buf += name;
 }
 
-void remove_inode(Inode *in);
-
-void remove_dentry(Dir *dir, const string& dname)
+void add_dentry(Inode *parent, const string& dname, Inode *in)
 {
-    cout << "remove_dentry " << dir->inode->stbuf.st_ino << " " << dname << endl;
+    if (!parent->dir) parent->dir = new Dir(parent);
+    parent->dir->dentries[dname] = in;
+    in->parents[dname] = parent->dir;
+}
 
-    map<string,Inode*>::iterator p = dir->dentries.find(dname);
-    if (p == dir->dentries.end()) 
-	return; // dne
+void remove_dentry(Inode *pin, const string& dname)
+{
+    dout << "remove_dentry " << pin->stbuf.st_ino << " " << dname << endl;
 
-    Inode *in = p->second;
-    assert(in->parents.count(dname));
+    if (!pin->dir) return;
+    if (pin->dir->dentries.count(dname) == 0) return;  // dne;
+
+    Inode *in = pin->dir->dentries[dname];
+    pin->dir->dentries.erase(dname);
     in->parents.erase(dname);
 
-    if (in->ref == 0 && in->parents.empty())
-	remove_inode(in);
-
-    dir->dentries.erase(p);
+    dout << "remove_dentry " << pin->stbuf.st_ino << " " << dname 
+	 << " ... inode " << in->stbuf.st_ino << " ref " << in->ref
+	 << endl;  
 }
 
 void remove_inode(Inode *in)
 {
-    cout << "remove_inode " << in->stbuf.st_ino << endl;
-    for (map<string,Dir*>::iterator p = in->parents.begin();
-	 p != in->parents.end();
-	 ++p) 
-	p->second->dentries.erase(p->first);
-    
-    inode_map.erase(in->stbuf.st_ino);
+    dout << "remove_inode " << in->stbuf.st_ino << " ref " << in->ref << endl;
+
+    // remove parent links
+    while (!in->parents.empty()) {
+	Inode *parent = in->parents.begin()->second->inode;
+	string dname = in->parents.begin()->first;
+	remove_dentry(parent, dname);
+    }
+
+    // remove children
     if (in->dir) {
 	while (!in->dir->dentries.empty()) 
-	    remove_dentry(in->dir, in->dir->dentries.begin()->first);
+	    remove_dentry(in, in->dir->dentries.begin()->first);
 	delete in->dir;
     }
+
+    inode_map.erase(in->stbuf.st_ino);
+    //cout << "remove_inode " << in->stbuf.st_ino << " done" << endl;
     delete in;
 }
 
@@ -156,13 +168,10 @@ Inode *add_inode(Inode *parent, const char *name, struct stat *attr)
     Inode *in = new Inode;
     memcpy(&in->stbuf, attr, sizeof(*attr));
 
-    if (!parent->dir) parent->dir = new Dir(parent);
-
-    string dname(name);
-    parent->dir->dentries[dname] = in;
     inode_map[in->stbuf.st_ino] = in;
 
-    in->parents[dname] = parent->dir;
+    string dname(name);
+    add_dentry(parent, dname, in);
 
     return in;
 }
@@ -173,7 +182,7 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 {
     int res = 0;
 
-    //cout << "lookup " << pino << " " << name << endl;
+    //dout << "lookup " << pino << " " << name << endl;
 
     struct fuse_entry_param fe;
     memset(&fe, 0, sizeof(fe));
@@ -182,7 +191,7 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
     Inode *parent = inode_map[pino];
     assert(parent);
     if (!parent->dir) parent->dir = new Dir(parent);
-    parent->ref++;
+    //parent->ref++;
 
     string dname(name);
     Inode *in = 0;
@@ -196,9 +205,8 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 	res = lstat(path.c_str(), &in->stbuf);
 	//cout << "stat " << path << " res = " << res << endl;
 	if (res == 0) {
-	    parent->dir->dentries[dname] = in;
 	    inode_map[in->stbuf.st_ino] = in;
-	    in->parents[dname] = parent->dir;
+	    add_dentry(parent, dname, in);
 	} else {
 	    delete in;
 	    in = 0;
@@ -206,6 +214,7 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 	}
     }
     if (in) {
+	in->ref++;
 	fe.ino = in->stbuf.st_ino;
 	memcpy(&fe.attr, &in->stbuf, sizeof(in->stbuf));
     }
@@ -227,11 +236,15 @@ static void ft_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 	lock.Lock();
 	Inode *in = inode_map[ino];
 	if (in) {
+	    dout << "forget on " << ino << " ref " << in->ref << ", forget " << nlookup << endl;
+	    if (in->ref < nlookup)
+		dout << "**** BAD **** forget on " << ino << " ref " << in->ref << ", forget " << nlookup << endl;
+	    
 	    in->ref -= nlookup;
-	    if (in->ref == 0) 
+	    if (in->ref <= 0) 
 		remove_inode(in);
 	} else {
-	    //cout << "weird, don't have inode " << ino << endl;
+	    dout << "**** BAD **** forget on nonexistent inode " << ino << endl;
 	}
 	lock.Unlock();
     }
@@ -428,7 +441,8 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 	::lstat(path.c_str(), &fe.attr);
 	fe.ino = fe.attr.st_ino;
 	lock.Lock();
-	add_inode(pin, name, &fe.attr);
+	Inode *in = add_inode(pin, name, &fe.attr);
+	in->ref++;
 	lock.Unlock();
     }
 
@@ -461,7 +475,8 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 	::lstat(path.c_str(), &fe.attr);
 	fe.ino = fe.attr.st_ino;
   	lock.Lock();
-	add_inode(pin, name, &fe.attr);
+	Inode *in = add_inode(pin, name, &fe.attr);
+	in->ref++;
   	lock.Unlock();
     }
 
@@ -493,7 +508,8 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
 	::lstat(path.c_str(), &fe.attr);
 	fe.ino = fe.attr.st_ino;
       	lock.Lock();
-	add_inode(pin, name, &fe.attr);
+	Inode *in = add_inode(pin, name, &fe.attr);
+	in->ref++;
     	lock.Unlock();
     }
 
@@ -550,9 +566,7 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 	// remove from out cache
   	lock.Lock();
 	string dname(name);
-	if (pin->dir &&
-	    pin->dir->dentries.count(dname))
-	    remove_dentry(pin->dir, dname);
+	remove_dentry(pin, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -578,9 +592,7 @@ static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 	// remove from out cache
 	lock.Lock();
 	string dname(name);
-	if (pin->dir &&
-	    pin->dir->dentries.count(dname))
-	    remove_dentry(pin->dir, dname);
+	remove_dentry(pin, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -619,11 +631,10 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	if (pin->dir &&
 	    pin->dir->dentries.count(dname)) {
 	    Inode *in = pin->dir->dentries[dname];
-	    pin->dir->dentries.erase(dname);
-	    
-	    if (!newpin->dir) newpin->dir = new Dir(newpin);
-	    newpin->dir->dentries[newdname] = in;
-	    in->parents[dname] = newpin->dir;
+	    add_dentry(newpin, newdname, in);
+	    remove_dentry(pin, dname);
+	} else {
+	    dout << "hrm, rename didn't have renamed inode.. " << path << " to " << newpath << endl;
 	}
 	lock.Unlock();
 	fuse_reply_err(req, 0);
@@ -659,9 +670,8 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     if (res == 0) {
 	lock.Lock();
 	string newdname(newname);
-	if (!newpin->dir) newpin->dir = new Dir(newpin);
-	newpin->dir->dentries[newdname] = in;
-	in->parents[newdname] = newpin->dir;
+	add_dentry(newpin, newdname, in);
+	in->ref++;
 	lock.Unlock();
 
 	struct fuse_entry_param fe;
@@ -835,6 +845,8 @@ int main(int argc, char *argv[])
 	    tracefile.open(argv[++i], ios::out|ios::trunc);
 	    if (!tracefile.is_open())
 		cerr << "** couldn't open trace file " << argv[i] << endl;
+	} else if (strcmp(argv[i], "--debug") == 0) {
+	    debug = 1;
 	} else {
 	    cout << "arg: " << newargc << " " << argv[i] << endl;
 	    newargv[newargc++] = argv[i];
