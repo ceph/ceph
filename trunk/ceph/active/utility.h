@@ -9,24 +9,17 @@
 #include "config.h"
 #include "common/Timer.h"
 #include "msg/SimpleMessenger.h"
-
+#include "socket_utility.h"
 
 Client* startCephClient();
 void kill_client(Client* client);
 
 
-int readline(int fd, char *ptr, int maxlen);
-int writen(int fd, const char *ptr, int nbytes);
 int send_msg_header(int fd, int header_ID);
 int readmsgtype(int fd);
 bool check_footer(int fd);
 int send_msg_header(int fd, int header_ID);
 int send_msg_footer(int fd);
-int read_positive_int(int fd);
-long read_long(int fd);
-string read_string(int fd, string *buf);
-bool write_positive_int(int fd, int value);
-off_t read_off_t(int fd);
 
 /*
  * Fires up a Ceph client and returns a pointer to it.
@@ -47,8 +40,8 @@ Client* startCephClient()
   g_conf.use_abspaths = true;
 
   // load monmap
-  MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
+  MonMap* monmap = new MonMap();
+  int r = monmap->read(".ceph_monmap");
   if (r < 0) {
     dout(0) << "ActiveMaster: could not find .ceph_monmap" << endl; 
     return 0;
@@ -60,7 +53,7 @@ Client* startCephClient()
 
   // start client
   Client *client;
-  client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
+  client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), monmap);
   client->init();
     
   // mount
@@ -77,78 +70,6 @@ void kill_client (Client * client)
   
   // wait for messenger to finish
   rank.wait();
-}
-
-
-// Read n bytes from a descriptor.
-int readn(int fd, char * ptr, int nbytes)
-{
-  int nleft, nread;
-
-  nleft = nbytes;
-  while (nleft > 0) {
-    nread = read(fd, ptr, nleft);
-    if (nread < 0)
-      return nread; // error
-    else if (nread == 0)
-      break;
-
-    nleft -= nread;
-    ptr += nread;
-  }
-  return (nbytes - nleft);
-}
-
-// Read a line from the socket. This is horrifically slow, as
-// it goes one character at a time to catch the newline.
-
-int readline(int fd, char *ptr, int maxlen) {
-
-  int n, rc;
-  char c;
-
-  for (n = 1; n < maxlen; ++n) {
-    if ( (rc = read(fd, &c, 1)) == 1) {
-      *ptr++ = c;
-      if (c == '\n')
-	break;
-    } 
-    else if (rc == 0) {
-      if (n == 1)
-	return 0; // EOF, no data
-      else
-	break; // EOF, data read
-    }
-    else
-      return -1; // error
-
-  }
-
-  // null-terminate the string and return the number of bytes read
-  *ptr = 0;
-  return n;
-}
-
-// write n bytes to a stream file descriptor.
-
-int writen(int fd, const char *ptr, int nbytes) {
-  int nleft, nwritten;
-
-  nleft = nbytes;
-
-  // write until everything's sent
-  while (nleft > 0) {
-    nwritten = write(fd, ptr, nleft);
-    if (nwritten <= 0) {
-      cerr << "writen: error writing " << nbytes << 
-	"bytes to file descriptor " << fd << endl;
-      return nwritten; //error
-    }
-    nleft -= nwritten;
-    ptr += nwritten;
-  }
-  assert (0 == nleft);
-  return (nbytes - nleft);
 }
 
 
@@ -211,143 +132,6 @@ bool check_footer(int fd) {
 }
 
 
-// Attempt to read a positive signed integer off the given stream.
-// This function assumes that the sender and receiver use the same
-// integer size. If this is false, weird stuff will happen.
-int read_positive_int(int fd) {
-
-  char buf[sizeof(int)];
-  int rc = read(fd, &buf, sizeof(int));
-  if (rc != sizeof(int)) {
-    cerr << "in read_positive_int: read error: result is " << rc <<
-	 ". Exiting process. " << endl;
-    exit(-1);
-  }
-  return *((int*)buf);
-}
-
-long read_long(int fd) {
-  char buf[sizeof(long)];
-  int rc = read(fd, &buf, sizeof(long));
-  if (rc != sizeof(long)) {
-    cerr << "in read_long: read error: result is " << rc <<
-	 ". Exiting process. " << endl;
-    exit(-1);
-  }
-  return *((long*)buf);
-}
-
-
-off_t read_off_t(int fd) {
-  char buf[sizeof(off_t)];
-  int rc = read(fd, &buf, sizeof(off_t));
-  if (rc != sizeof(off_t)) {
-    cerr << "in read_off_t: read error: result is " << rc <<
-	 ". Exiting process. " << endl;
-    exit(-1);
-  }
-  return *((off_t*)buf);
-}
-
-size_t read_size_t(int fd) {
-  char buf[sizeof(size_t)];
-  int rc = read(fd, &buf, sizeof(size_t));
-  if (rc != sizeof(size_t)) {
-    cerr << "in read_size_t: read error: result is " << rc <<
-	 ". Exiting process. " << endl;
-    exit(-1);
-  }
-  return *((size_t*)buf);
-}
-
-
-
-
-// attempt to write an integer to the given
-// file descriptor.
-bool write_positive_int(int fd, int value) {
-  
-  char* buf = (char*)(&(value));
-  int rc = writen(fd, buf, sizeof(int));
-  
-  if (rc != sizeof(int)) {
-    cerr << "in write_positive_int: write failed, result is " << rc <<
-      ", sizeof(int) is " << sizeof(int) << ". Exiting process." << endl;
-    exit(-1);
-  }
-
-  return true;
-}
-
-// attempt to write a long integer to the given
-// file descriptor.
-bool write_long(int fd, long value) {
-  
-  char* buf = (char*)(&(value));
-  int rc = writen(fd, buf, sizeof(long));
-  
-  if (rc != sizeof(long)) {
-    cerr << "in write_long: write failed, result is " << rc <<
-      ", sizeof(long) is " << sizeof(long) << ". Exiting process." << endl;
-    exit(-1);
-  }
-
-  return true;
-}
-
-
-// attempt to write a long integer to the given
-// file descriptor.
-bool write_off_t(int fd, off_t value) {
-  
-  char* buf = (char*)(&(value));
-  int rc = writen(fd, buf, sizeof(off_t));
-  
-  if (rc != sizeof(off_t)) {
-    cerr << "in writeoff_t: write failed, result is " << rc <<
-      ", sizeof(off_t) is " << sizeof(off_t) << ". Exiting process." << endl;
-    exit(-1);
-  }
-
-  return true;
-}
-
-
-
-
-// read a string from the given file descriptor.
-// The expected format is an int n denoting the
-// length of the string, followed by a series of n
-// bytes, not null-terminated.
-void read_string(int fd, char* buf) {  
-
-  // get the size of the string
-  int size = read_positive_int(fd);
-  if (size < 1) {
-    cerr << "Error in read_string: invalid string size of " << size << endl;
-    exit(-1);
-      }
-  if (size > MAX_STRING_SIZE) {
-    cerr << "Error in read_string: string size of " << size << "is more than maximum of"
-	 << MAX_STRING_SIZE << endl;
-    exit(-1);
-  }
-
-  // read the string
-  int result = readn(fd, buf, size);
-  if (result != size) {
-    cerr << "Error in read_string: attempted read size was " << size << 
-      ", result was " << result << endl;
-    exit(-1);
-  }
-  // null-terminate
-  buf[size] = 0;
-
-  cerr << "in read_string: read string \"" << buf << "\" of size " << size << endl;
-
-}
-
-
 // send a fixed-length message header
 // given the header's ID.
 int send_msg_header(int fd, int header_ID) {
@@ -382,22 +166,6 @@ int send_msg_footer(int fd) {
   return 0;
 }
 
-
-// Writes a string to a stream file descriptor.
-// Dies loudly and horribly on any error.
-bool write_string(int fd, const char* buf) {
-
-  int length = strlen(buf);
-  assert (length >= 0);
-  int result = writen(fd, buf, length);
-  if (result != length) {
-    cerr << "Error in write_string: string length is " << length << 
-      ", result is " << result << endl;
-    exit(-1);
-  }
-
-  return true;
-}
 
 
 // Copy a given extent of a Ceph file to the local disk.

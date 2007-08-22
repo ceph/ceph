@@ -3,7 +3,6 @@
  *
  * Code is based off examples in Stevens' "Unix Network Programming".
  */
-
 #include "msgtestclient.h"
 #define REQUIRED_ARGS 2
 
@@ -53,10 +52,11 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  // retrieve all the object extents
+  // retrieve all the object extents and close the file
   list<ObjectExtent> extents;
   off_t offset = 0;
   client->enumerate_layout(fh, extents, filesize, offset);
+  client->close(fh);
 
   list<ObjectExtent>::iterator i;
   map<size_t, size_t>::iterator j;
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
   }
 
   // close the client - we're done with it
-  client->shutdown();
+  kill_client(client);
 
   // sanity check: display the splits
   cerr << "Listing original splits:" << endl;
@@ -154,6 +154,7 @@ int main(int argc, char* argv[]) {
     ++pending_tasks;
   }
 
+  cerr << "Waiting for " << pending_tasks << " tasks to return..." << endl;
 
   // wait for all the tasks to finish
   while (pending_tasks > 0) {

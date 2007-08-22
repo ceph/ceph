@@ -165,10 +165,10 @@ activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o commo
 activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-echotestclient: active/echotestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+echotestclient: active/echotestclient.cc
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-msgtestclient: active/msgtestclient.cc client.o osdc.o msg/SimpleMessenger.o common.o
+msgtestclient: active/msgtestclient.o client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
@@ -177,6 +177,18 @@ libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o 
 #libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
 #	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
+
+# IPC interface
+ipc_server: ceph_ipc/ipc_server.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+
+# misc
+gprof-helper.so: test/gprof-helper.c
+	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
 
 # fake*
