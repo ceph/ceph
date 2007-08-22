@@ -619,7 +619,7 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     lock.Lock();
     make_ino_path(path, ino);
     newpin = inode_map[newparent];
-    make_inode_path(path, newpin, newname);
+    make_inode_path(newpath, newpin, newname);
     lock.Unlock();
 
     trace_lock.Lock();
@@ -629,10 +629,15 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 	     << newname << endl;
     trace_lock.Unlock();
     
+    cout << "link " << path << " newpath " << newpath << endl;
     int res = ::link(path.c_str(), newpath.c_str());
     
     if (res == 0) {
-	fuse_reply_err(req, 0);
+	struct fuse_entry_param fe;
+	memset(&fe, 0, sizeof(fe));
+	::lstat(newpath.c_str(), &fe.attr);
+	fe.ino = fe.attr.st_ino;
+	fuse_reply_entry(req, &fe);
     } else 
 	fuse_reply_err(req, errno);
 }
