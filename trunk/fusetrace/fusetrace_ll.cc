@@ -70,23 +70,24 @@ struct Dir {
 };
 struct Inode {
     struct stat stbuf;
-    Dir *parent_dir;
-    string parent_dn;
+    map<string,Dir*> parents;
     Dir *dir;
     int ref;
-    Inode() : parent_dir(0), dir(0), ref(0) {}
+    Inode() : dir(0), ref(0) {}
 };
 
 hash_map<ino_t, Inode*> inode_map;
 
 void make_inode_path(string &buf, Inode *in)
 {
-    if (in->parent_dir) 
-	make_inode_path(buf, in->parent_dir->inode);
-    else
+    if (!in->parents.empty()) {
+	make_inode_path(buf, in->parents.begin()->second->inode);
+	buf += "/";
+	buf += in->parents.begin()->first;
+    } else {
 	buf = basedir;
-    buf += "/";
-    buf += in->parent_dn;
+	buf += "/";
+    }
     //cout << "path: " << in->stbuf.st_ino << " -> " << buf << endl;
 }
 
@@ -113,15 +114,38 @@ void make_ino_path(string &buf, ino_t ino, const char *name)
     buf += name;
 }
 
+void remove_inode(Inode *in);
+
+void remove_dentry(Dir *dir, const string& dname)
+{
+    cout << "remove_dentry " << dir->inode->stbuf.st_ino << " " << dname << endl;
+
+    map<string,Inode*>::iterator p = dir->dentries.find(dname);
+    if (p == dir->dentries.end()) 
+	return; // dne
+
+    Inode *in = p->second;
+    assert(in->parents.count(dname));
+    in->parents.erase(dname);
+
+    if (in->ref == 0 && in->parents.empty())
+	remove_inode(in);
+
+    dir->dentries.erase(p);
+}
+
 void remove_inode(Inode *in)
 {
-    //cout << "remove_inode " << in->stbuf.st_ino << endl;
-    if (in->parent_dir)
-	in->parent_dir->dentries.erase(in->parent_dn);
+    cout << "remove_inode " << in->stbuf.st_ino << endl;
+    for (map<string,Dir*>::iterator p = in->parents.begin();
+	 p != in->parents.end();
+	 ++p) 
+	p->second->dentries.erase(p->first);
+    
     inode_map.erase(in->stbuf.st_ino);
     if (in->dir) {
 	while (!in->dir->dentries.empty()) 
-	    remove_inode(in->dir->dentries.begin()->second);
+	    remove_dentry(in->dir, in->dir->dentries.begin()->first);
 	delete in->dir;
     }
     delete in;
@@ -138,8 +162,7 @@ Inode *add_inode(Inode *parent, const char *name, struct stat *attr)
     parent->dir->dentries[dname] = in;
     inode_map[in->stbuf.st_ino] = in;
 
-    in->parent_dn = dname;
-    in->parent_dir = parent->dir;
+    in->parents[dname] = parent->dir;
 
     return in;
 }
@@ -175,8 +198,7 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 	if (res == 0) {
 	    parent->dir->dentries[dname] = in;
 	    inode_map[in->stbuf.st_ino] = in;
-	    in->parent_dn = dname;
-	    in->parent_dir = parent->dir;
+	    in->parents[dname] = parent->dir;
 	} else {
 	    delete in;
 	    in = 0;
@@ -530,7 +552,7 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 	string dname(name);
 	if (pin->dir &&
 	    pin->dir->dentries.count(dname))
-	    remove_inode(pin->dir->dentries[dname]);
+	    remove_dentry(pin->dir, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -558,7 +580,7 @@ static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 	string dname(name);
 	if (pin->dir &&
 	    pin->dir->dentries.count(dname))
-	    remove_inode(pin->dir->dentries[dname]);
+	    remove_dentry(pin->dir, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -601,8 +623,7 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	    
 	    if (!newpin->dir) newpin->dir = new Dir(newpin);
 	    newpin->dir->dentries[newdname] = in;
-	    in->parent_dir = newpin->dir;
-	    in->parent_dn = newdname;
+	    in->parents[dname] = newpin->dir;
 	}
 	lock.Unlock();
 	fuse_reply_err(req, 0);
@@ -615,9 +636,12 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 {
     string path;
     string newpath;
+    Inode *in = 0;
     Inode *newpin = 0;
     lock.Lock();
-    make_ino_path(path, ino);
+    in = inode_map[ino];
+    make_inode_path(path, in);
+
     newpin = inode_map[newparent];
     make_inode_path(newpath, newpin, newname);
     lock.Unlock();
@@ -633,6 +657,13 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     int res = ::link(path.c_str(), newpath.c_str());
     
     if (res == 0) {
+	lock.Lock();
+	string newdname(newname);
+	if (!newpin->dir) newpin->dir = new Dir(newpin);
+	newpin->dir->dentries[newdname] = in;
+	in->parents[newdname] = newpin->dir;
+	lock.Unlock();
+
 	struct fuse_entry_param fe;
 	memset(&fe, 0, sizeof(fe));
 	::lstat(newpath.c_str(), &fe.attr);
