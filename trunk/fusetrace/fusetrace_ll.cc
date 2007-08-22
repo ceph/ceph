@@ -777,7 +777,8 @@ static void ft_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *f
     traceout << "ll_flush" << endl << fi->fh << endl;
     trace_lock.Unlock();
 
-    int res = close(dup(fi->fh));
+    int res = ::fdatasync(fi->fh);
+    //int res = ::close(dup(fi->fh));
     if (res >= 0)
 	fuse_reply_err(req, 0);
     else
