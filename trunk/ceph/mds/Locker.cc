@@ -688,7 +688,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	 so, we don't want wanted reductions to clobber mds's notion of wanted unless we're
 	 sure the client has seen all the latest caps.
       */
-      dout(-10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
+      dout(10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
 		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << endl;
     } else {
       cap->set_wanted(wanted);
@@ -1863,7 +1863,8 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKACK:
     assert(lock->get_state() == LOCK_GLOCKS ||
 	   lock->get_state() == LOCK_GLOCKC ||
-	   lock->get_state() == LOCK_GSCATTERS);
+	   lock->get_state() == LOCK_GSCATTERS ||
+	   lock->get_state() == LOCK_GTEMPSYNCC);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     lock->decode_locked_state(m->get_data());

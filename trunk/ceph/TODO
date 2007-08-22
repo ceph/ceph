@@ -36,10 +36,6 @@ general kernel planning
 - soft consistency on (kernel) lookup?
 - accurate reconstruction of (syscall) path?
 
-software raid layer for EBOFS?
-- actually, we just need software raid _awareness_ in the allocator, so
-  that we can write only full stripes, without fear of clobbering things on
-  failure.  then use MD or similar layer provided by kernel.
 
 
 sage doc
@@ -54,6 +50,14 @@ sage doc
 
 
 sage mds
+
+- fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
+
+/- .ceph_hosts file, so we can use the infiniband addresses
+
+- look at mds osds
+
+
 
 - the split/merge plan:
 
@@ -88,6 +92,8 @@ sage mds
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
 - EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
+
+- could mark dir complete in EMetaBlob by counting how many dentries are dirtied in teh current log epoch in CDir...
 
 - fix rmdir empty exported dirfrag race
   - export all frags <= 1 item?  then we ensure freezing before empty, avoiding any last unlink + export vs rmdir race.

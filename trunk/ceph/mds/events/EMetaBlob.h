@@ -49,18 +49,20 @@ class EMetaBlob {
     string  dn;         // dentry
     version_t dnv;
     inode_t inode;      // if it's not
+    fragtree_t dirfragtree;
     string  symlink;
     bool dirty;
 
-    fullbit(const string& d, version_t v, inode_t& i, bool dr) : 
-      dn(d), dnv(v), inode(i), dirty(dr) { }
-    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) :
-      dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, fragtree_t dft, bool dr) : 
+      dn(d), dnv(v), inode(i), dirfragtree(dft), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, fragtree_t dft, string& sym, bool dr) :
+      dn(d), dnv(v), inode(i), dirfragtree(dft), symlink(sym), dirty(dr) { }
     fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
       ::_encode(dnv, bl);
       ::_encode(inode, bl);
+      ::_encode(dirfragtree, bl);
       if (inode.is_symlink())
 	::_encode(symlink, bl);
       ::_encode(dirty, bl);
@@ -69,6 +71,7 @@ class EMetaBlob {
       ::_decode(dn, bl, off);
       ::_decode(dnv, bl, off);
       ::_decode(inode, bl, off);
+      ::_decode(dirfragtree, bl, off);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
       ::_decode(dirty, bl, off);
@@ -338,14 +341,14 @@ private:
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
 					  dn->get_projected_version(), 
-					  in->inode, in->symlink, 
+					  in->inode, in->dirfragtree, in->symlink, 
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->get_projected_version(),
-					 in->inode, in->symlink, 
+					 in->inode, in->dirfragtree, in->symlink, 
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;
@@ -398,7 +401,8 @@ private:
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
       // was the inode journaled since the last subtree_map?
-      if (dir->inode->last_journaled >= last_subtree_map) 
+      if (last_subtree_map &&
+	  dir->inode->last_journaled >= last_subtree_map) 
 	return;
     }
     

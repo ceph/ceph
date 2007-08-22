@@ -425,16 +425,17 @@ namespace crush {
 
     void do_rule(Rule& rule, int x, vector<int>& result,
                  set<int>& outset, map<int,float>& overloadmap,
-				 int forcefeed=-1) {
+		 int forcefeed=-1) {
       //int numresult = 0;
       result.clear();
 
-      // determine hierarchical context for first.
+      // determine hierarchical context for forcefeed (if any)
       list<int> force_stack;
-      if (forcefeed >= 0) {
+      if (forcefeed >= 0 && parent_map.count(forcefeed)) {
 	int t = forcefeed;
 	while (1) {
 	  force_stack.push_front(t);
+	  //cout << "push " << t << " onto force_stack" << endl;
 	  if (parent_map.count(t) == 0) break;  // reached root, presumably.
 	  //cout << " " << t << " parent is " << parent_map[t] << endl;
 	  t = parent_map[t];
@@ -453,18 +454,17 @@ namespace crush {
         // do it
         switch (pc->cmd) {
         case CRUSH_RULE_TAKE:
-          {
-            const int arg = pc->args[0];
-            //cout << "take " << arg << endl;
+          {    
+	    const int arg = pc->args[0];
+	    //cout << "take " << arg << endl;	      
 	    
 	    if (!force_stack.empty()) {
-	      int forceval = force_stack.front();
+	      assert(force_stack.front() == arg);
 	      force_stack.pop_front();
-	      assert(arg == forceval);
 	    }
 	    
-            w.clear();
-            w.push_back(arg);
+	    w.clear();
+	    w.push_back(arg);
           }
           break;
           
@@ -489,6 +489,11 @@ namespace crush {
 	      forceval = force_stack.front();
 	      force_stack.pop_front();
 	      //cout << "priming out with " << forceval << endl;
+	      forcing = true;
+	    } else if (forcefeed >= 0 && type == 0) {
+	      //cout << "forcing context-less " << forcefeed << endl;
+	      forceval = forcefeed;
+	      forcefeed = -1;
 	      forcing = true;
 	    }
 	    

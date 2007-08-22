@@ -655,8 +655,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   // just got mdsmap+osdmap?
   if (hadepoch == 0 && 
       mdsmap->get_epoch() > 0 &&
-      osdmap->get_epoch() > 0)
+      osdmap->get_epoch() > 0) {
     boot();
+  } else if (want_state != state) {
+    // resend beacon.
+    beacon_send();
+  }
 
   delete m;
 }

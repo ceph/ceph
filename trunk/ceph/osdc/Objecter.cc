@@ -70,10 +70,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
         osdmap->apply_incremental(inc);
     
         // notify messenger
-        for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
+        for (map<int,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
              i != inc.new_down.end();
              i++) 
-          messenger->mark_down(i->second.addr);
+          messenger->mark_down(i->second.first.addr);
         
       }
       else if (m->maps.count(e)) {
@@ -685,38 +685,38 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0) {
-	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
-						   ex.oid, ex.layout, osdmap->get_epoch(),
-						   wr->op);
-	m->set_length(ex.length);
-	m->set_offset(ex.start);
-	m->set_rev(ex.rev);
-	if (usetid > 0)
-	  m->set_retry_attempt(true);
-	
-	if (wr->tid_version.count(tid)) 
-	  m->set_version(wr->tid_version[tid]);  // we're replaying this op!
+    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
+			   ex.oid, ex.layout, osdmap->get_epoch(),
+			   wr->op);
+    m->set_length(ex.length);
+    m->set_offset(ex.start);
+    m->set_rev(ex.rev);
+    if (usetid > 0)
+      m->set_retry_attempt(true);
     
-	// what type of op?
-	switch (wr->op) {
-	case OSD_OP_WRITE:
-	  {
-		// map buffer segments into this extent
-		// (may be fragmented bc of striping)
-		bufferlist cur;
-		for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
-			 bit != ex.buffer_extents.end();
-			 bit++) {
-		  bufferlist thisbit;
-		  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
-		  cur.claim_append(thisbit);
-      }
-		assert(cur.length() == ex.length);
-		m->set_data(cur);//.claim(cur);
-	  }
-	  break;
+    if (wr->tid_version.count(tid)) 
+      m->set_version(wr->tid_version[tid]);  // we're replaying this op!
+    
+    // what type of op?
+    switch (wr->op) {
+    case OSD_OP_WRITE:
+      {
+	// map buffer segments into this extent
+	// (may be fragmented bc of striping)
+	bufferlist cur;
+	for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
+	     bit != ex.buffer_extents.end();
+	     bit++) {
+	  bufferlist thisbit;
+	  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
+	  cur.claim_append(thisbit);
 	}
-	
+	assert(cur.length() == ex.length);
+	m->set_data(cur);//.claim(cur);
+      }
+      break;
+    }
+    
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   }
   

@@ -48,6 +48,8 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+
+class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
@@ -430,6 +432,14 @@ class Client : public Dispatcher {
   tid_t last_tid;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
+
+  struct StatfsRequest {
+    tid_t tid;
+    MStatfsReply *reply;
+    Cond *caller_cond;
+    StatfsRequest(tid_t t, Cond *cc) : tid(t), reply(0), caller_cond(cc) {}
+  };
+  map<tid_t,StatfsRequest*> statfs_requests;
   
   MClientReply *make_request(MClientRequest *req, int use_auth=-1);
   int choose_target_mds(MClientRequest *req);
@@ -437,6 +447,7 @@ class Client : public Dispatcher {
   void kick_requests(int mds);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
+  void handle_statfs_reply(MStatfsReply *reply);
 
   bool   mounted;
   bool   unmounting;
@@ -667,12 +678,11 @@ private:
   int _do_lstat(const char *path, int mask, Inode **in);
   int _opendir(const char *name, DirResult **dirpp);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_add_dirent(DirResult *dirp, const string& name, unsigned char d_type);
+  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
-  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
   void _closedir(DirResult *dirp);
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
@@ -696,9 +706,11 @@ private:
   int _release(Fh *fh);
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
+  int _flush(Fh *fh);
   int _truncate(const char *file, off_t length);
   int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
+  int _statfs(struct statvfs *stbuf);
 
 
 public:
@@ -792,8 +804,10 @@ public:
   int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh);
   int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
   int ll_write(Fh *fh, off_t off, off_t len, const char *data);
+  int ll_flush(Fh *fh);
   int ll_release(Fh *fh);
-  
+  int ll_statfs(inodeno_t, struct statvfs *stbuf);
+
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

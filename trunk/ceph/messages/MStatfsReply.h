@@ -13,29 +13,32 @@
  */
 
 
-#ifndef __MSTATFS_H
-#define __MSTATFS_H
+#ifndef __MSTATFSREPLY_H
+#define __MSTATFSREPLY_H
 
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
 
-class MStatfs : public Message {
+class MStatfsReply : public Message {
 public:
   tid_t tid;
+  struct statvfs stfs;
 
-  MStatfs() : Message(MSG_STATFS) {}
-  MStatfs(tid_t t) : Message(MSG_STATFS), tid(t) {}
+  MStatfsReply() : Message(MSG_STATFS_REPLY) {}
+  MStatfsReply(tid_t t) : Message(MSG_STATFS_REPLY), tid(t) {}
 
-  char *get_type_name() { return "statfs"; }
+  char *get_type_name() { return "statfs_reply"; }
   void print(ostream& out) {
-    out << "statfs(" << tid << ")";
+    out << "statfs_reply(" << tid << ")";
   }
 
   void encode_payload() {
     ::_encode(tid, payload);
+    ::_encode(stfs, payload);
   }
   void decode_payload() {
     int off = 0;
     ::_decode(tid, payload, off);
+    ::_decode(stfs, payload, off);
   }
 };
 

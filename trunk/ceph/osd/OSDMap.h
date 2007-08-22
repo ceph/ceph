@@ -93,7 +93,7 @@ public:
 
     // incremental
     map<int32_t,entity_inst_t> new_up;
-    map<int32_t,entity_inst_t> new_down;
+    map<int32_t,pair<entity_inst_t,bool> > new_down;
     list<int32_t> new_in;
     list<int32_t> new_out;
     map<int32_t,float> new_overload;  // updated overload value
@@ -135,7 +135,7 @@ private:
   int32_t localized_pg_num_mask; // ditto
 
   set<int32_t>  osds;        // all osds
-  set<int32_t>  down_osds;   // list of down disks
+  map<int32_t, bool> down_osds;   // list of down disks, -> clean shutdown (true/false)
   set<int32_t>  out_osds;    // list of unmapped disks
   map<int32_t,float> overload_osds; 
   map<int32_t,entity_inst_t> osd_inst;
@@ -176,12 +176,13 @@ private:
   void get_all_osds(set<int>& ls) { ls = osds; }
 
   const set<int>& get_osds() { return osds; }
-  const set<int>& get_down_osds() { return down_osds; }
+  const map<int,bool>& get_down_osds() { return down_osds; }
   const set<int>& get_out_osds() { return out_osds; }
   const map<int,float>& get_overload_osds() { return overload_osds; }
   
   bool exists(int osd) { return osds.count(osd); }
   bool is_down(int osd) { return down_osds.count(osd); }
+  bool is_down_clean(int osd) { return down_osds.count(osd) && down_osds[osd]; }
   bool is_up(int osd) { return exists(osd) && !is_down(osd); }
   bool is_out(int osd) { return out_osds.count(osd); }
   bool is_in(int osd) { return exists(osd) && !is_out(osd); }
@@ -201,7 +202,7 @@ private:
     return false;
   }
   
-  void mark_down(int o) { down_osds.insert(o); }
+  void mark_down(int o, bool clean) { down_osds[o] = clean; }
   void mark_up(int o) { down_osds.erase(o); }
   void mark_out(int o) { out_osds.insert(o); }
   void mark_in(int o) { out_osds.erase(o); }
@@ -220,13 +221,13 @@ private:
     }
 
     // nope, incremental.
-    for (map<int32_t,entity_inst_t>::iterator i = inc.new_down.begin();
+    for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
          i != inc.new_down.end();
          i++) {
       assert(down_osds.count(i->first) == 0);
-      down_osds.insert(i->first);
+      down_osds[i->first] = i->second.second;
       assert(osd_inst.count(i->first) == 0 ||
-             osd_inst[i->first] == i->second);
+             osd_inst[i->first] == i->second.first);
       osd_inst.erase(i->first);
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
@@ -315,24 +316,29 @@ private:
   ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     static crush::Hash H(777);
 
+    int num = preferred >= 0 ? localized_pg_num:pg_num;
+    int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
+
     // calculate ps (placement seed)
     ps_t ps;
     switch (g_conf.osd_object_layout) {
     case OBJECT_LAYOUT_LINEAR:
-      ps = stable_mod(oid.bno + oid.ino, pg_num, pg_num_mask);
+      ps = stable_mod(oid.bno + oid.ino, num, num_mask);
       break;
       
     case OBJECT_LAYOUT_HASHINO:
-      ps = stable_mod(oid.bno + H(oid.ino), pg_num, pg_num_mask);
+      ps = stable_mod(oid.bno + H(oid.ino), num, num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
-      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), pg_num, pg_num_mask);
+      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       break;
 
     default:
       assert(0);
     }
+
+    //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
     return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
@@ -421,7 +427,7 @@ private:
       }
       
       if (is_out(osd))
-        osds.erase(osds.begin());  // oops, but it's down!
+        osds.erase(osds.begin());  // oops, but it's out
     }
     
     return osds.size();

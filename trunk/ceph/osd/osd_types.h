@@ -142,9 +142,10 @@ inline ostream& operator<<(ostream& out, pg_t pg)
   //if (pg.ruleset())
   //out << (int)pg.ruleset() << 's';
   
-  if (pg.preferred() >= 0)
-    out << pg.preferred() << 'p';
   out << hex << pg.ps() << dec;
+
+  if (pg.preferred() >= 0)
+    out << 'p' << pg.preferred();
 
   //out << "=" << hex << (__uint64_t)pg << dec;
   return out;

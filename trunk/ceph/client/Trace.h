@@ -19,6 +19,7 @@
 #include <cassert>
 #include <list>
 #include <string>
+#include <fstream>
 using namespace std;
 
 /*
@@ -29,46 +30,27 @@ using namespace std;
  */
 
 class Trace {
-  class TokenList *tl;
   int _line;
+  ifstream fs;
+  string line;
 
  public:
   Trace(const char* filename);
   ~Trace();
 
   int get_line() { return _line; }
-  list<const char*>& get_list();
 
-  list<const char*>::iterator _cur;
-  list<const char*>::iterator _end;
+  void start();
 
-  void start() {
-    _cur = get_list().begin();
-    _end = get_list().end();
-    _line = 1;
-  }
+  const char *get_string(char *buf, const char *prefix);
 
-  const char *get_string(char *buf, const char *prefix) {
-    assert(_cur != _end);
-    const char *s = *_cur;
-    _cur++; _line++;
-    if (prefix) {
-      if (strstr(s, "/prefix") == s ||
-          strstr(s, "/prefix") == s+1) {
-        strcpy(buf, prefix);
-        strcpy(buf + strlen(prefix),
-               s + strlen("/prefix"));
-        s = (const char*)buf;
-      }
-    } 
-    return s;
-  }
   __int64_t get_int() {
     char buf[20];
     return atoll(get_string(buf, 0));
   }
   bool end() {
-    return _cur == _end;
+    return fs.eof();
+    //return _cur == _end;
   }
 };
 

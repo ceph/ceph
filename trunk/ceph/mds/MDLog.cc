@@ -65,9 +65,8 @@ void MDLog::init_journaler()
   log_inode.ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   log_inode.layout = g_OSD_MDLogLayout;
   
-  if (g_conf.mds_local_osd) {
-    log_inode.layout.preferred = mds->get_nodeid() + 10000;   // hack
-  }
+  if (g_conf.mds_local_osd) 
+    log_inode.layout.preferred = mds->get_nodeid() + g_conf.mds_local_osd_offset;  // hack
   
   // log streamer
   if (journaler) delete journaler;
@@ -148,8 +147,12 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
     // should we log a new import_map?
     // FIXME: should this go elsewhere?
     if (last_subtree_map && !writing_subtree_map &&
-	journaler->get_write_pos() - last_subtree_map >= g_conf.mds_log_subtree_map_interval) {
+	(journaler->get_write_pos() / log_inode.layout.period()) !=
+	(last_subtree_map / log_inode.layout.period()) &&
+	(journaler->get_write_pos() - last_subtree_map > log_inode.layout.period()/2)) {
       // log import map
+      dout(10) << "submit_entry also logging subtree map: last = " << last_subtree_map
+	       << ", cur pos = " << journaler->get_write_pos() << endl;
       mds->mdcache->log_subtree_map();
     }
 

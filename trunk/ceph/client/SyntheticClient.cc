@@ -830,6 +830,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	memset(b, 1, size);            // let's write 1's!
 	client->write(fd, b, size, off);
 	delete[] b;
+      } else {
+	client->write(fd, NULL, 0, size+off);
       }
     } else if (strcmp(op, "truncate") == 0) {
       const char *a = t.get_string(buf, p);
@@ -909,7 +911,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *v = t.get_string(buf, p);
       int64_t ri = t.get_int();
       struct stat attr;
-      if (client->ll_symlink(i, n, v, &attr) == 0)
+      if (client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
@@ -982,7 +984,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	bl.push_back(bp);
 	bp.zero();
 	client->ll_write(fh, off, size, bl.c_str());
+      } else {
+	client->ll_write(fh, off+size, 0, NULL);
       }
+    } else if (strcmp(op, "ll_flush") == 0) {
+      int64_t f = t.get_int();
+      Fh *fh = ll_files[f];
+      client->ll_flush(fh);
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
       Fh *fh = ll_files[f];
@@ -2281,7 +2289,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       } else {
 	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT);
 	assert(fd > 0);	
-	client->write(fd, " ", 1, size-1);
+	client->write(fd, "", 0, size);
 	client->close(fd);
 
 	client->chmod(f.c_str(), mode & 0777);

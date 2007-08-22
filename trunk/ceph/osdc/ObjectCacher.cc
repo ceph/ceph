@@ -98,6 +98,30 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   dout(10) << "merge_left result " << *left << endl;
 }
 
+void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
+{
+  dout(10) << "try_merge_bh " << *bh << endl;
+
+  // to the left?
+  map<off_t,BufferHead*>::iterator p = data.find(bh->start());
+  assert(p->second == bh);
+  if (p != data.begin()) {
+    p--;
+    if (p->second->end() == bh->start() &&
+	p->second->get_state() == bh->get_state()) {
+      merge_left(p->second, bh);
+      bh = p->second;
+    } else 
+      p++;
+  }
+  // to the right?
+  assert(p->second == bh);
+  p++;
+  if (p != data.end() &&
+      p->second->start() == bh->end() &&
+      p->second->get_state() == bh->get_state()) 
+    merge_left(bh, p->second);
+}
 
 
 /*
@@ -340,6 +364,9 @@ void ObjectCacher::Object::truncate(off_t s)
 }
 
 
+
+
+
 /*** ObjectCacher ***/
 
 #undef dout
@@ -436,7 +463,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
       
       opos = bh->end();
       p++;
-      
+
       // finishers?
       // called with lock held.
       list<Context*> ls;
@@ -446,6 +473,9 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
         ls.splice(ls.end(), p->second);
       bh->waitfor_read.clear();
       finish_contexts(ls);
+
+      // clean up?
+      ob->try_merge_bh(bh);
     }
   }
   //lock.Unlock();
@@ -870,30 +900,12 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
       opos += f_it->second;
     }
 
-    // it's dirty.
+    // ok, now bh is dirty.
     mark_dirty(bh);
     touch_bh(bh);
     bh->last_write = now;
 
-    // combine with left?
-    map<off_t,BufferHead*>::iterator p = o->data.find(bh->start());
-    assert(p->second == bh);
-    if (p != o->data.begin()) {
-      p--;
-      if (p->second->is_dirty() &&
-	  p->second->end() == bh->start()) {
-        o->merge_left(p->second, bh);
-        bh = p->second;
-      } else 
-	p++;
-    }
-    // combine to the right?
-    assert(p->second == bh);
-    p++;
-    if (p != o->data.end() &&
-	!p->second->is_dirty() &&
-	p->second->start() > bh->end()) 
-      o->merge_left(bh, p->second);
+    o->try_merge_bh(bh);
   }
 
   delete wr;

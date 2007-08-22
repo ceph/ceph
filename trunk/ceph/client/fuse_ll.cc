@@ -261,10 +261,12 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
 					 de.d_name, &st, off);
 
+    /*
     cout << "ceph_ll_readdir added " << de.d_name << " at " << pos << " len " << entrysize
 	 << " (buffer size is " << size << ")" 
 	 << " .. off = " << off
 	 << endl;
+    */
     
     if (entrysize > size - pos) 
       break;  // didn't fit, done for now.
@@ -299,6 +301,16 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
+static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
+{
+  struct statvfs stbuf;
+  int r = client->ll_statfs(ino, &stbuf);
+  if (r == 0)
+    fuse_reply_statfs(req, &stbuf);
+  else
+    fuse_reply_err(req, -r);
+}
+
 static struct fuse_lowlevel_ops ceph_ll_oper = {
  init: 0,
  destroy: 0,
@@ -324,13 +336,13 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  readdir: ceph_ll_readdir,
  releasedir: ceph_ll_releasedir,
  fsyncdir: 0,
- statfs: 0,
+ statfs: ceph_ll_statfs,
  setxattr: 0,
  getxattr: 0,
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: 0, //ceph_ll_create,
+ create: ceph_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0

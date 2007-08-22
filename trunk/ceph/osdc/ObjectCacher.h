@@ -185,7 +185,7 @@ class ObjectCacher {
     // mid-level
     BufferHead *split(BufferHead *bh, off_t off);
     void merge_left(BufferHead *left, BufferHead *right);
-    void merge_right(BufferHead *left, BufferHead *right);
+    void try_merge_bh(BufferHead *bh);
 
     int map_read(Objecter::OSDRead *rd,
                  map<off_t, BufferHead*>& hits,
@@ -193,7 +193,8 @@ class ObjectCacher {
                  map<off_t, BufferHead*>& rx);
     BufferHead *map_write(Objecter::OSDWrite *wr);
     
-	void truncate(off_t s);
+    void truncate(off_t s);
+
   };
   
   // ******* ObjectCacher *********

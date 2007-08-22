@@ -404,6 +404,7 @@ class MDSCacheObject {
   // -- wait --
   const static int WAIT_SINGLEAUTH  = (1<<30);
   const static int WAIT_AUTHPINNABLE = (1<<29);
+  const static int WAIT_UNFREEZE = WAIT_AUTHPINNABLE;
 
 
   // ============================================

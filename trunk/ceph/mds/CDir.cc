@@ -931,7 +931,7 @@ void CDir::_fetched(bufferlist &bl)
       }
     }
   }
-  assert(off == len);
+  //assert(off == len);   no, directories may shrink.  add this back in when we properly truncate objects on write.
 
   // take the loaded version?
   // only if we are a fresh CDir* with no prior state.
@@ -944,6 +944,7 @@ void CDir::_fetched(bufferlist &bl)
   // mark complete, !fetching
   state_set(STATE_COMPLETE);
   state_clear(STATE_FETCHING);
+  auth_unpin();
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
@@ -1233,6 +1234,17 @@ bool CDir::is_subtree_root()
   }
 }
 
+/** contains(x)
+ * true if we are x, or an ancestor of x
+ */
+bool CDir::contains(CDir *x)
+{
+  while (1) {
+    if (x == this) return true;
+    x = x->get_parent_dir();
+    if (x == 0) return false;    
+  }
+}
 
 
 

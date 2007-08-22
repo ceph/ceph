@@ -31,96 +31,50 @@ using namespace __gnu_cxx;
 #include <fcntl.h>
 
 
-Mutex trace_lock;
-
-class TokenList {
-public:
-  string filename;
-  char *data;
-  int len;
-  list<const char *> tokens;
- 
-  int ref;
-
-  TokenList() : data(0), ref(0) {}
-  ~TokenList() {
-    delete[] data;
-  }
-};
-
-map<string, TokenList*> traces;
-
 
 //
 Trace::Trace(const char* f)
 {
-  string filename = f;
-
-  trace_lock.Lock();
-  
-  if (traces.count(filename))
-    tl = traces[filename];
-  else {
-    tl = new TokenList;
-    tl->filename = filename;
-
-    // open file
-    crope cr;
-    int fd = open(filename.c_str(), O_RDONLY);
-    assert(fd > 0);
-    char buf[100];
-    while (1) {
-      int r = read(fd, buf, 100);
-      if (r == 0) break;
-      assert(r > 0);
-      cr.append(buf, r);
-    }
-    close(fd);
-    
-    // copy
-    tl->len = cr.length()+1;
-    tl->data = new char[tl->len];
-    memcpy(tl->data, cr.c_str(), cr.length());
-    tl->data[tl->len-1] = '\n';
-
-    // index!
-    int o = 0;
-    while (o < tl->len) {
-      char *n = tl->data + o;
-      
-      // find newline
-      while (tl->data[o] != '\n') o++;
-      assert(tl->data[o] == '\n');
-      tl->data[o] = 0;
-      
-      if (tl->data + o > n) tl->tokens.push_back(n);
-      o++;
-    }
-
-    dout(1) << "trace " << filename << " loaded with " << tl->tokens.size() << " tokens" << endl;
-    traces[filename] = tl;
+  fs.open(f);
+  if (!fs.is_open()) {
+    dout(0) << "** unable to open trace file " << f << endl;
+    assert(0);
   }
-
-  tl->ref++;
-
-  trace_lock.Unlock();
+  dout(2) << "opened traced file '" << f << "'" << endl;
 }
 
 Trace::~Trace()
 {
-  trace_lock.Lock();
-  
-  tl->ref--;
-  if (tl->ref == 0) {
-    traces.erase(tl->filename);
-    delete tl;
-  }
-
-  trace_lock.Unlock();
+  fs.close();
 }
 
 
-list<const char*>& Trace::get_list() 
+void Trace::start()
 {
-  return tl->tokens;
+  //cout << "start" << endl;
+  fs.seekg(0);
+  
+  // read first line
+  getline(fs, line);
+  
+  _line = 1;
+}
+
+const char *Trace::get_string(char *buf, const char *prefix)
+{
+  if (prefix &&
+      strstr(buf, "/prefix") == buf) {
+    strcpy(buf, prefix);
+    strcpy(buf + strlen(prefix),
+	   line.c_str() + strlen("/prefix"));
+  } else {
+    strcpy(buf, line.c_str());
+  }
+  //cout << "get_string got " << buf << endl;
+
+  // read next line (and detect eof early)
+  _line++;
+  getline(fs, line);
+  //cout << "next line is " << line << endl;
+  return buf;
 }

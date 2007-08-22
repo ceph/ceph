@@ -20,7 +20,6 @@
 
 class MOSDPGLog : public Message {
   epoch_t epoch;
-  pg_t    pgid;
 
 public:
   PG::Info info;
@@ -28,23 +27,20 @@ public:
   PG::Missing missing;
 
   epoch_t get_epoch() { return epoch; }
-  pg_t get_pgid() { return pgid; }
+  pg_t get_pgid() { return info.pgid; }
 
   MOSDPGLog() {}
-  MOSDPGLog(version_t mv, pg_t pgid) :
-    Message(MSG_OSD_PG_LOG) {
-    this->epoch = mv;
-    this->pgid = pgid;
-  }
+  MOSDPGLog(version_t mv, PG::Info& i) :
+    Message(MSG_OSD_PG_LOG),
+    epoch(mv), info(i) { }
 
   char *get_type_name() { return "PGlog"; }
   void print(ostream& out) {
-    out << "pg_log(" << pgid << " e" << epoch << ")";
+    out << "pg_log(" << info.pgid << " e" << epoch << ")";
   }
 
   void encode_payload() {
     payload.append((char*)&epoch, sizeof(epoch));
-    payload.append((char*)&pgid, sizeof(pgid));
     payload.append((char*)&info, sizeof(info));
     log._encode(payload);
     missing._encode(payload);
@@ -53,8 +49,6 @@ public:
     int off = 0;
     payload.copy(off, sizeof(epoch), (char*)&epoch);
     off += sizeof(epoch);
-    payload.copy(off, sizeof(pgid), (char*)&pgid);
-    off += sizeof(pgid);
     payload.copy(off, sizeof(info), (char*)&info);
     off += sizeof(info);
     log._decode(payload, off);

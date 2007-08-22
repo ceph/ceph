@@ -275,7 +275,8 @@ int main(int argc, char **argv)
     started++;
 
     if (g_conf.mds_local_osd) {
-      mdsosd[i] = new OSD(i+10000, rank.register_entity(MSG_ADDR_OSD(i+10000)), monmap);
+      int n = i+g_conf.mds_local_osd_offset;
+      mdsosd[i] = new OSD(n, rank.register_entity(MSG_ADDR_OSD(n)), monmap);
       mdsosd[i]->init();                                                    
     }
   }

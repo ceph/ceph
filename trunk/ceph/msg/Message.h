@@ -17,8 +17,9 @@
  
 #define MSG_CLOSE 0
 
-#define MSG_STATFS      1
-#define MSG_PGSTATS     2
+#define MSG_STATFS       1
+#define MSG_STATFS_REPLY 2
+#define MSG_PGSTATS      3
 
 #define MSG_PING        10
 #define MSG_PING_ACK    11
@@ -62,6 +63,7 @@
 #define MSG_OSD_PG_SUMMARY     52
 #define MSG_OSD_PG_LOG         53
 #define MSG_OSD_PG_REMOVE      54
+#define MSG_OSD_PG_ACTIVATE_SET 55
 
 // -- client --
 // to monitor

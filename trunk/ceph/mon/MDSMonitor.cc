@@ -88,20 +88,13 @@ bool MDSMonitor::update_from_paxos()
   mdsmap.decode(mdsmap_bl);
 
   // new map
+  dout(7) << "new map:" << endl;
   print_map(mdsmap);
 
   // bcast map to mds, waiters
   if (mon->is_leader())
     bcast_latest_mds();
   send_to_waiting();
-
-  // hackish: did all mds's shut down?
-  if (mon->is_leader() &&
-      g_conf.mon_stop_with_last_mds &&
-      mdsmap.get_epoch() > 1 &&
-      mdsmap.is_stopped()) 
-    mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-				 mon->monmap->get_inst(mon->whoami));
 
   return true;
 }
@@ -117,7 +110,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << endl;
   
-  print_map(pending_mdsmap);
+  //print_map(pending_mdsmap);
 
   // apply to paxos
   assert(paxos->get_version() + 1 == pending_mdsmap.epoch);
@@ -213,7 +206,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << endl;
+  dout(7) << "prepare_update " << *m << endl;
 
   switch (m->get_type()) {
     
@@ -386,6 +379,15 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
     // send the map manually (they're out of the map, so they won't get it automatic)
     send_latest(m->get_mds_inst());
   }
+
+  // hackish: did all mds's shut down?
+  if (mon->is_leader() &&
+      g_conf.mon_stop_with_last_mds &&
+      mdsmap.get_epoch() > 1 &&
+      mdsmap.is_stopped()) 
+    mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+				 mon->monmap->get_inst(mon->whoami));
+
   delete m;
 }
 
@@ -551,9 +553,9 @@ void MDSMonitor::do_stop()
     return;
   }
 
-  dout(10) << "do_stop stopping active mds nodes" << endl;
-  
+  dout(7) << "do_stop stopping active mds nodes" << endl;
   print_map(mdsmap);
+
   for (map<int,int>::iterator p = mdsmap.mds_state.begin();
        p != mdsmap.mds_state.end();
        ++p) {

@@ -28,6 +28,8 @@
 
 #include <netdb.h>
 
+#include <iostream>
+#include <fstream>
 
 #undef dout
 #define dout(l)  if (l<=g_conf.debug_ms) cout << g_clock.now() << " -- " << rank.my_addr << " "
@@ -81,9 +83,39 @@ void noop_signal_handler(int s)
 int Rank::Accepter::start()
 {
   // bind to a socket
-  dout(10) << "accepter.start binding to listen " << endl;
+  dout(10) << "accepter.start" << endl;
   
-  // use whatever user specified..
+  char hostname[100];
+  gethostname(hostname, 100);
+  dout(1) << "accepter.start my hostname is " << hostname << endl;
+
+  // is there a .ceph_hosts file?
+  {
+    ifstream fh;
+    fh.open(".ceph_hosts");
+    if (fh.is_open()) {
+      while (1) {
+	string line;
+	getline(fh, line);
+	if (fh.eof()) break;
+	if (line[0] == '#' || line[0] == ';') continue;
+	int ospace = line.find(" ");
+	if (!ospace) continue;
+	string host = line.substr(0, ospace);
+	string addr = line.substr(ospace+1);
+	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << endl;
+	if (host == hostname) {
+	  parse_ip_port(addr.c_str(), g_my_addr);
+	  g_my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << endl;
+	  break;
+	}
+      }
+      fh.close();
+    }
+  }
+
+  // use whatever user specified (if anything)
   g_my_addr.make_addr(rank.listen_addr);
 
   /* socket creation */
@@ -106,22 +138,16 @@ int Rank::Accepter::start()
   rc = ::listen(listen_sd, 1000);
   assert(rc >= 0);
   
-  // my address is...  HELP HELP HELP!
-  char host[100];
-  bzero(host, 100);
-  gethostname(host, 100);
-  //dout(10) << "accepter.start my hostname is " << host << endl;
-
-  struct hostent *myhostname = gethostbyname( host ); 
-
   // figure out my_addr
-  if (g_my_addr.port > 0) {
+  if (g_my_addr != entity_addr_t()) {
     // user specified it, easy peasy.
     rank.my_addr = g_my_addr;
   } else {
-    // look up my hostname.  blech!  this sucks.
+    // my address is...  HELP HELP HELP!    
+    struct hostent *myhostname = gethostbyname(hostname); 
+    
     rank.listen_addr.sin_family = myhostname->h_addrtype;
-    memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
+    memcpy((char*)&rank.listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
 

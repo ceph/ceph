@@ -87,6 +87,7 @@ md_config_t g_conf = {
   debug_mds_log: 1,
   debug_mds_migrator: 1,
   debug_buffer: 0,
+  debug_timer: 0,
   debug_filer: 0,
   debug_objecter: 0,
   debug_journaler: 0,
@@ -178,7 +179,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 10,
 
   mds_beacon_interval: 5, //30.0,
-  mds_beacon_grace: 30, //60*60.0,
+  mds_beacon_grace: 10, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -186,7 +187,7 @@ md_config_t g_conf = {
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_flush_on_shutdown: true,
-  mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
+  //mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
   mds_bal_sample_interval: 5.0,  // every 5 seconds
@@ -198,7 +199,7 @@ md_config_t g_conf = {
   mds_bal_merge_size: 50,
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
-  mds_bal_interval: 30,           // seconds
+  mds_bal_interval: 3000,           // seconds
   mds_bal_fragment_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
@@ -219,6 +220,7 @@ md_config_t g_conf = {
   mds_verify_export_dirauth: true,
 
   mds_local_osd: false,
+  mds_local_osd_offset: 1000,
 
   mds_thrash_exports: 0,
   mds_thrash_fragments: 0,
@@ -411,10 +413,6 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       cerr << "should period at " << off << endl;
       return false;   // should have 3 periods
     }
-    if (count == 3 && *s != ':') {
-      cerr << "expected : at " << off << endl;
-      return false;  // then a colon
-    }
     s++; off++;
 
     if (count <= 3)
@@ -423,6 +421,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       a.port = val;
     
     count++;
+    if (count == 4 && *s != ':') break;
     if (count == 5) break;  
   }
   
@@ -538,6 +537,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_buffer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_buffer = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_timer") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_timer = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_timer = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_filer") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_filer = atoi(args[++i]);

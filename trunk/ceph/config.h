@@ -73,6 +73,7 @@ struct md_config_t {
   int debug_mds_log;
   int debug_mds_migrator;
   int debug_buffer;
+  int debug_timer;
   int debug_filer;
   int debug_objecter;
   int debug_journaler;
@@ -185,7 +186,7 @@ struct md_config_t {
   int mds_log_read_inc;
   int mds_log_pad_entry;
   bool  mds_log_flush_on_shutdown;
-  off_t mds_log_subtree_map_interval;
+  //off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
@@ -218,6 +219,7 @@ struct md_config_t {
   bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;
+  int  mds_local_osd_offset;
 
   int mds_thrash_exports;
   int mds_thrash_fragments;

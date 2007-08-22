@@ -57,7 +57,8 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
 {
   if (down) {
     dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-    pending_inc.new_down[osd] = osdmap.osd_inst[osd];
+    pending_inc.new_down[osd].first = osdmap.osd_inst[osd];
+    pending_inc.new_down[osd].second = false;
   } else {
     dout(1) << "fake_osd_failure OUT osd" << osd << endl;
     pending_inc.new_out.push_back(osd);
@@ -139,7 +140,7 @@ void OSDMonitor::create_initial()
     for (int dom=0; dom<ndom; dom++) {
       for (int j=0; j<nper; j++) {
 	newmap.osds.insert(i);
-	newmap.down_osds.insert(i); // initially DOWN
+	newmap.down_osds[i] = true; // initially DOWN
 	domain[dom]->add_item(i, 1.0);
 	//cerr << "osd" << i << " in domain " << dom << endl;
 	i++;
@@ -189,7 +190,7 @@ void OSDMonitor::create_initial()
     int root = newmap.crush.add_bucket(b);
     for (int i=0; i<g_conf.num_osd; i++) {
       newmap.osds.insert(i);
-      newmap.down_osds.insert(i);
+      newmap.down_osds[i] = true;
       b->add_item(i, 1.0);
     }
     
@@ -211,10 +212,11 @@ void OSDMonitor::create_initial()
   }
   
   if (g_conf.mds_local_osd) {
-    // add mds osds, but don't put them in the crush mapping func
+    // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<g_conf.num_mds; i++) {
-      newmap.osds.insert(i+10000);
-      newmap.down_osds.insert(i+10000);
+      int o = i+g_conf.mds_local_osd_offset;
+      newmap.osds.insert(o);
+      newmap.down_osds[o] = true;
     }
   }
   
@@ -303,12 +305,12 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   pending_inc.mon_epoch = mon->mon_epoch;
   
   // tell me about it
-  for (map<int,entity_inst_t>::iterator i = pending_inc.new_down.begin();
+  for (map<int,pair<entity_inst_t,bool> >::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
        i++) {
-    dout(0) << " osd" << i->first << " DOWN " << i->second << endl;
-    derr(0) << " osd" << i->first << " DOWN " << i->second << endl;
-    mon->messenger->mark_down(i->second.addr);
+    dout(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << endl;
+    derr(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << endl;
+    mon->messenger->mark_down(i->second.first.addr);
   }
   for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
@@ -465,7 +467,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   assert(osdmap.is_up(badboy));
   assert(osdmap.osd_inst[badboy] == m->get_failed());
   
-  pending_inc.new_down[badboy] = m->get_failed();
+  pending_inc.new_down[badboy].first = m->get_failed();
+  pending_inc.new_down[badboy].second = false;
   
   if (osdmap.is_in(badboy))
     down_pending_out[badboy] = g_clock.now();
@@ -521,7 +524,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     assert(osdmap.get_inst(from) != m->inst);  // preproces should have caught it
     
     // mark previous guy down
-    pending_inc.new_down[from] = osdmap.osd_inst[from];
+    pending_inc.new_down[from].first = osdmap.osd_inst[from];
+    pending_inc.new_down[from].second = false;
     
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
@@ -731,7 +735,8 @@ void OSDMonitor::mark_all_down()
        it != osdmap.get_osds().end();
        it++) {
     if (osdmap.is_down(*it)) continue;
-    pending_inc.new_down[*it] = osdmap.get_inst(*it);
+    pending_inc.new_down[*it].first = osdmap.get_inst(*it);
+    pending_inc.new_down[*it].second = true;   // FIXME: am i sure it's clean? we need a proper osd shutdown sequence!
   }
 
   propose_pending();
