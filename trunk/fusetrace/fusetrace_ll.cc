@@ -35,6 +35,18 @@
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#ifndef __LP64__
+namespace __gnu_cxx {
+  template<> struct hash<uint64_t> {
+    size_t operator()(uint64_t __x) const { 
+      static hash<uint32_t> H;
+      return H((__x >> 32) ^ (__x & 0xffffffff)); 
+    }
+  };
+}
+#endif
+
+
 #include <iostream>
 #include <fstream>
 #include <map>
