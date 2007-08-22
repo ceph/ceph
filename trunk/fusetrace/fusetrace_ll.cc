@@ -629,7 +629,7 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 	     << newname << endl;
     trace_lock.Unlock();
     
-    cout << "link " << path << " newpath " << newpath << endl;
+    //cout << "link " << path << " newpath " << newpath << endl;
     int res = ::link(path.c_str(), newpath.c_str());
     
     if (res == 0) {
