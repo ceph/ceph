@@ -489,10 +489,14 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
 static void ft_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
     string path;
-    lock.Lock();
-    make_ino_path(path, ino);
-    lock.Unlock();
-    
+    if (ino) {
+	lock.Lock();
+	make_ino_path(path, ino);
+	lock.Unlock();
+    } else {
+	path = basedir;
+    }
+
     trace_lock.Lock();
     traceout << "ll_statfs" << endl << ino << endl;
     trace_lock.Unlock();
