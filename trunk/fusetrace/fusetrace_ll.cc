@@ -66,17 +66,22 @@ int debug = 0;
 
 Mutex lock;
 struct Inode;
-struct Dir {
-    Inode *inode;
-    map<string,Inode*> dentries;
-    Dir(Inode *p) : inode(p) {}
-};
 struct Inode {
     struct stat stbuf;
-    map<pair<string,ino_t>,Dir*> parents;
-    Dir *dir;
     int ref;
-    Inode() : dir(0), ref(0) {}
+
+    map<pair<string,ino_t>,Inode*> parents;
+
+    // if dir,
+    map<string,Inode*> dentries;
+
+    Inode() : ref(0) {}
+
+    Inode *lookup(const string& dname) { 
+	if (dentries.count(dname))
+	    return dentries[dname];
+	return 0;
+    }
 };
 
 Inode *root = 0;
@@ -85,7 +90,7 @@ hash_map<ino_t, Inode*> inode_map;
 void make_inode_path(string &buf, Inode *in)
 {
     if (!in->parents.empty()) {
-	make_inode_path(buf, in->parents.begin()->second->inode);
+	make_inode_path(buf, in->parents.begin()->second);
 	buf += "/";
 	buf += in->parents.begin()->first.first;
     } else {
@@ -124,20 +129,17 @@ void add_dentry(Inode *parent, const string& dname, Inode *in)
 {
     dout << "add_dentry " << parent->stbuf.st_ino << " " << dname << " to " << in->stbuf.st_ino << endl;
 
-    if (!parent->dir) parent->dir = new Dir(parent);
-    parent->dir->dentries[dname] = in;
-    in->parents[pair<string,ino_t>(dname,parent->stbuf.st_ino)] = parent->dir;
+    parent->dentries[dname] = in;
+    in->parents[pair<string,ino_t>(dname,parent->stbuf.st_ino)] = parent;
 }
 
 void remove_dentry(Inode *pin, const string& dname)
 {
     dout << "remove_dentry " << pin->stbuf.st_ino << " " << dname << endl;
 
-    if (!pin->dir) return;
-    if (pin->dir->dentries.count(dname) == 0) return;  // dne;
-
-    Inode *in = pin->dir->dentries[dname];
-    pin->dir->dentries.erase(dname);
+    Inode *in = pin->lookup(dname);
+    assert(in);
+    pin->dentries.erase(dname);
     in->parents.erase(pair<string,ino_t>(dname,pin->stbuf.st_ino));
 
     dout << "remove_dentry " << pin->stbuf.st_ino << " " << dname 
@@ -151,17 +153,14 @@ void remove_inode(Inode *in)
 
     // remove parent links
     while (!in->parents.empty()) {
-	Inode *parent = in->parents.begin()->second->inode;
+	Inode *parent = in->parents.begin()->second;
 	string dname = in->parents.begin()->first.first;
 	remove_dentry(parent, dname);
     }
 
     // remove children
-    if (in->dir) {
-	while (!in->dir->dentries.empty()) 
-	    remove_dentry(in, in->dir->dentries.begin()->first);
-	delete in->dir;
-    }
+    while (!in->dentries.empty()) 
+	remove_dentry(in, in->dentries.begin()->first);
 
     inode_map.erase(in->stbuf.st_ino);
     dout << "remove_inode " << in->stbuf.st_ino << " done" << endl;
@@ -196,17 +195,13 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
     lock.Lock();
     Inode *parent = inode_map[pino];
     assert(parent);
-    if (!parent->dir) parent->dir = new Dir(parent);
-    //parent->ref++;
 
     string dname(name);
     string path;
     make_inode_path(path, parent, name);
 
-    Inode *in = 0;
-    if (parent->dir->dentries.count(dname)) {
-	in = parent->dir->dentries[dname];
-
+    Inode *in = parent->lookup(dname);
+    if (in) {
 	// re-stat, for good measure
 	res = ::lstat(path.c_str(), &in->stbuf);
 
@@ -584,7 +579,8 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 	// remove from out cache
   	lock.Lock();
 	string dname(name);
-	remove_dentry(pin, dname);
+	if (pin->lookup(dname))
+	    remove_dentry(pin, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -610,7 +606,8 @@ static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 	// remove from out cache
 	lock.Lock();
 	string dname(name);
-	remove_dentry(pin, dname);
+	if (pin->lookup(dname))
+	    remove_dentry(pin, dname);
 	lock.Unlock();
 	fuse_reply_err(req, 0);
     } else
@@ -646,9 +643,8 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	string dname(name);
 	string newdname(newname);
 	lock.Lock();
-	if (pin->dir &&
-	    pin->dir->dentries.count(dname)) {
-	    Inode *in = pin->dir->dentries[dname];
+	Inode *in = pin->lookup(dname);
+	if (in) {
 	    add_dentry(newpin, newdname, in);
 	    remove_dentry(pin, dname);
 	} else {
