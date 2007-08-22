@@ -329,7 +329,7 @@ static void ft_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     DIR *dir = opendir(path.c_str());
 
     trace_lock.Lock();
-    traceout << "ll_opendir" << endl << ino << endl << (long)dir << endl;
+    traceout << "ll_opendir" << endl << ino << endl << (unsigned long)dir << endl;
     trace_lock.Unlock();
     
     if (dir) {
@@ -379,7 +379,7 @@ static void ft_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
   DIR *dir = (DIR*)fi->fh;
 
   trace_lock.Lock();
-  traceout << "ll_releasedir" << endl << (long)dir << endl;
+  traceout << "ll_releasedir" << endl << (unsigned long)dir << endl;
   trace_lock.Unlock();
 
   closedir(dir);
