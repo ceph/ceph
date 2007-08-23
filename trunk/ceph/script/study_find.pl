@@ -2,10 +2,7 @@
 
 use strict;
 
-my $name = shift @ARGV;
-my $dsfn = shift @ARGV;
-my $fnlenfn = shift @ARGV;
-my $logfn = shift @ARGV;
+my $name = shift @ARGV || die;
 
 my $nfiles = 0;
 my $ndirs = 0;
@@ -14,8 +11,10 @@ my $nhardlinks = 0;
 my %nlinks;
 my %names;
 my %dirsize;
+
 my %fnlen;  
-my $nfnchars;
+
+my %hdepth;
 
 my $bytes;
 my $ebytes;
@@ -45,20 +44,21 @@ my %numindir;
 
 sub finish_dir {
     my $curdir = shift @_;
-    #print "finish_dir $curdir\n";
+    #print "finish_dir $numindir{$curdir} in $curdir\n";
     $dirsize{$numindir{$curdir}}++;
+    $ndirs++;
     delete $numindir{$curdir};
 }
 
 my $curdir;
-$ndirs = 1;
 while (<>) {
     #print;
     chomp;
     my ($ino, $blah, $mode, $blah, $nlink, $uid, $gid, $size, $mtime, @path) = split(/ /,$_);
     my $file = join(' ',@path);
-    ($file) = split(/ \-\> /, $file);
+    ($file) = split(/ \-\> /, $file); # ignore symlink dest
     my @bits = split(/\//, $file);
+    my $depth = scalar(@bits);
     my $f = pop @bits;
     my $dir = join('/', @bits);
     #print "file = '$file', dir = '$dir', curdir = '$curdir'\n";
@@ -80,12 +80,12 @@ while (<>) {
     $nfiles++; 
     $numindir{$dir}++;
 
+    $hdepth{$depth}++;
+
     my $fnlen = length($f);
     $fnlen{$fnlen}++;
-    $nfnchars += $fnlen;
     
     if ($mode =~ /^d/) {
-	$ndirs++;
 	# find does depth-first search, so assume we descend, so that on empty dir we "back out" above and &finish_dir.
 	$numindir{$file} = 0;
 	$curdir = $file;
@@ -106,7 +106,7 @@ for my $d (keys %numindir) {
 
 
 my $nsamedir = 0;
-open(LOG, ">$logfn") if $logfn;
+open(LOG, ">$name.log");
 for my $ino (keys %names) {
     print LOG "# $ino\n";
     my @dirs = keys %{$names{$ino}};
@@ -124,21 +124,26 @@ close LOG;
 sub do_cdf {
     my $hash = shift @_;
     my $num = shift @_;
-    my $sum = shift @_;
     my $fn = shift @_;
 
     open(CDF, ">$fn") if $fn;
-    print CDF "# $name\n# val\tnum\n";
+    print CDF "# $name\n";
 
     my $median;
+    my $sum = 0;
     my $p = 0;
+    my $lastv = 0;
     for my $v (sort {$a <=> $b} keys %$hash) {
 	print CDF "$v\t$hash->{$v}\n";
-	$p += $hash->{$v} * $v;
+	$p += $hash->{$v};
+	$sum += $hash->{$v} * $v;
 	if (!(defined $median) &&
-	    $p >= ($sum/2)) {
+	    $p >= ($num/2)) {
 	    $median = $v;
 	}
+    }
+    if ($p != $num) {
+	warn "uh oh, BUG, $p != $num in cdf/median calculation\n";
     }
     my $avg = sprintf("%.2f", $sum/$num);
     print CDF "# avg $avg, median $median, sum $sum, num $num\n";
@@ -147,8 +152,10 @@ sub do_cdf {
 close DSLOG;
 
 
-my ($avgdirsize, $mediandirsize) = &do_cdf(\%dirsize, $ndirs, $nfiles, $dsfn);
-my ($avgfnlen, $medianfnlen) = &do_cdf(\%fnlen, $nfiles, $nfnchars, $fnlenfn);
+# do cdfs
+my ($avgdirsize, $mediandirsize) = &do_cdf(\%dirsize, $ndirs, "$name.ds");
+my ($avgfnlen, $medianfnlen) = &do_cdf(\%fnlen, $nfiles, "$name.fnlen");
+my ($avgdepth, $mediandepth) = &do_cdf(\%hdepth, $nfiles, "$name.hdepth");
 
 
 # stat fs
@@ -157,16 +164,20 @@ my ($avgfnlen, $medianfnlen) = &do_cdf(\%fnlen, $nfiles, $nfnchars, $fnlenfn);
 #my ($kb) = $df =~ /\s+\d+\s+(\d+)/;
 my $gb = sprintf("%.1f",($ebytes / 1024 / 1024 / 1024));
 
+open(O, ">$name.sum");
+
 # final line
 my $pad = '# ' . (' ' x (length($name)-2));
-print "$pad\tgb\tfiles\tdirs\tdsavg\tdsmed\tfnavg\tfnmed\treg\tnl>1\tsmdr\tnlink=2\t=3\t=4\t...\n";
-print "$name\t$gb\t$nfiles\t$ndirs\t$avgdirsize\t$mediandirsize\t$avgfnlen\t$medianfnlen\t$nreg\t$nhardlinks\t$nsamedir";
+print O "$pad\tgb\tfiles\tdirs\tdsavg\tdsmed\tfnavg\tfnmed\treg\tnl>1\tsmdr\tnlink=2\t=3\t=4\t...\n";
+print O "$name\t$gb\t$nfiles\t$ndirs\t$avgdirsize\t$mediandirsize\t$avgfnlen\t$medianfnlen\t$nreg\t$nhardlinks\t$nsamedir";
 my $i = 2;
 for (sort {$a <=> $b} keys %nlinks) {
     while ($_ < $i) {
-	print "\t0";
+	print O "\t0";
     }
-    print "\t$nlinks{$_}";
+    print O "\t$nlinks{$_}";
     $i = $_ + 1;
 }
 print "\n";
+
+close O;
