@@ -50,6 +50,7 @@ namespace __gnu_cxx {
 #include <iostream>
 #include <fstream>
 #include <map>
+#include <set>
 using namespace std;
 
 #include "common/Mutex.h"
@@ -65,10 +66,11 @@ int debug = 0;
 #define dout if (debug) cout
 
 Mutex lock;
-struct Inode;
+
 struct Inode {
     struct stat stbuf;
     int ref;
+    set<int> fds;
 
     map<pair<string,ino_t>,Inode*> parents;
 
@@ -162,6 +164,13 @@ void remove_inode(Inode *in)
     while (!in->dentries.empty()) 
 	remove_dentry(in, in->dentries.begin()->first);
 
+    while (!in->fds.empty()) {
+	int fd = *in->fds.begin();
+	::close(fd);
+	in->fds.erase(in->fds.begin());
+	dout << "remove_inode closeing stray fd " << fd << endl;
+    }
+
     inode_map.erase(in->stbuf.st_ino);
     dout << "remove_inode " << in->stbuf.st_ino << " done" << endl;
     delete in;
@@ -212,11 +221,11 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 	    res = errno;
 	}
 
-	//cout << "have " << in->stbuf.st_ino << endl;
+	//dout << "have " << in->stbuf.st_ino << endl;
     } else {
 	in = new Inode;
 	res = ::lstat(path.c_str(), &in->stbuf);
-	//cout << "stat " << path << " res = " << res << endl;
+	//dout << "stat " << path << " res = " << res << endl;
 	if (res == 0) {
 	    inode_map[in->stbuf.st_ino] = in;
 	    add_dentry(parent, dname, in);
@@ -273,17 +282,26 @@ static void ft_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 {
     int res;
     string path;
+    int fd = 0;
 
     Inode *in = 0;
     struct stat attr;
 
     lock.Lock();
     in = inode_map[ino];
-    make_inode_path(path, in);
+    if (in->fds.empty())
+	make_inode_path(path, in);
+    else
+	fd = *in->fds.begin();
     lock.Unlock();
 
-    res = ::lstat(path.c_str(), &attr);
-    //cout << "getattr stat on " << path << " res " << res << endl;
+    if (fd > 0) {
+	res = ::fstat(fd, &attr);
+	dout << "getattr fstat on fd " << fd << " res " << res << endl;
+    } else {
+	res = ::lstat(path.c_str(), &attr);
+	dout << "getattr lstat on " << path << " res " << res << endl;
+    }
     if (ino == 1) attr.st_ino = 1;
     
     trace_lock.Lock();
@@ -304,9 +322,13 @@ static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 {
     string path;
     Inode *in = 0;
+    int fd = 0;
     lock.Lock();
     in = inode_map[ino];
-    make_inode_path(path, in);
+    if (in->fds.empty() || (to_set & FUSE_SET_ATTR_MTIME))
+	make_inode_path(path, in);
+    else
+	fd = *in->fds.begin();
     lock.Unlock();
 
     trace_lock.Lock();
@@ -320,12 +342,24 @@ static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     trace_lock.Unlock();
 
     int res = 0;
-    if (to_set & FUSE_SET_ATTR_MODE)
-	res = ::chmod(path.c_str(), attr->st_mode);
-    if (!res && to_set & FUSE_SET_ATTR_UID)
-	res = ::chown(path.c_str(), attr->st_uid, attr->st_gid);
-    if (!res && to_set & FUSE_SET_ATTR_SIZE)
-	res = ::truncate(path.c_str(), attr->st_size);
+    if (to_set & FUSE_SET_ATTR_MODE) {
+	if (fd > 0)
+	    res = ::fchmod(fd, attr->st_mode);
+	else
+	    res = ::chmod(path.c_str(), attr->st_mode);
+    }
+    if (!res && to_set & FUSE_SET_ATTR_UID) {
+	if (fd > 0) 
+	    res = ::fchown(fd, attr->st_uid, attr->st_gid);
+	else
+	    res = ::chown(path.c_str(), attr->st_uid, attr->st_gid);
+    }
+    if (!res && to_set & FUSE_SET_ATTR_SIZE) {
+	if (fd > 0) 
+	    res = ::ftruncate(fd, attr->st_size);
+	else
+	    res = ::truncate(path.c_str(), attr->st_size);
+    }
     if (!res && to_set & FUSE_SET_ATTR_MTIME) {
 	struct utimbuf ut;
 	ut.actime = attr->st_atime;
@@ -446,6 +480,7 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
     make_inode_path(path, pin, name);
     lock.Unlock();
 
+    dout << "mknod " << path << endl;
     int res = ::mknod(path.c_str(), mode, rdev);
 
     struct fuse_entry_param fe;
@@ -564,15 +599,24 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     string path;
     Inode *pin = 0;
+    Inode *in = 0;
+    string dname(name);
     lock.Lock();
     pin = inode_map[parent];
+    in = pin->lookup(dname);
     make_inode_path(path, pin, name);
     lock.Unlock();
 
     trace_lock.Lock();
     traceout << "ll_unlink" << endl << parent << endl << name << endl;
     trace_lock.Unlock();
-
+    
+    if (in && in->fds.empty()) {
+	int fd = ::open(path.c_str(), O_RDONLY);
+	if (fd > 0)
+	    in->fds.insert(fd);  // for slow getattrs.. wtf
+	dout << "unlink opening paranoia fd " << fd << endl;
+    }
     int res = ::unlink(path.c_str());
 
     if (res == 0) {
@@ -702,8 +746,10 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     string path;
+    Inode *in = 0;
     lock.Lock();
-    make_ino_path(path, ino);
+    in = inode_map[ino];
+    make_inode_path(path, in);
     lock.Unlock();
     
     int fd = ::open(path.c_str(), fi->flags);
@@ -716,6 +762,9 @@ static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
     trace_lock.Unlock();
 
     if (fd > 0) {
+	lock.Lock();
+	in->fds.insert(fd);
+	lock.Unlock();
 	fi->fh = fd;
 	fuse_reply_open(req, fi);
     } else
@@ -725,11 +774,7 @@ static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 static void ft_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 		       struct fuse_file_info *fi)
 {
-    string path;
-    lock.Lock();
-    make_ino_path(path, ino);
-    lock.Unlock();
-    
+   
     char *buf = new char[size];
     int res = ::pread(fi->fh, buf, size, off);
 
@@ -751,11 +796,6 @@ static void ft_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 static void ft_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 			   size_t size, off_t off, struct fuse_file_info *fi)
 {
-    string path;
-    lock.Lock();
-    make_ino_path(path, ino);
-    lock.Unlock();
-
     int res = ::pwrite(fi->fh, buf, size, off);
 
     trace_lock.Lock();
@@ -790,6 +830,11 @@ static void ft_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     trace_lock.Lock();
     traceout << "ll_release" << endl << fi->fh << endl;
     trace_lock.Unlock();
+
+    lock.Lock();
+    Inode *in = inode_map[ino];
+    in->fds.erase(fi->fh);
+    lock.Unlock();
 
     int res = ::close(fi->fh);
     if (res >= 0)
