@@ -30,6 +30,8 @@
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
+#include <sys/time.h>
+#include <time.h>
 
 
 #include <ext/hash_map>
@@ -62,6 +64,7 @@ ofstream tracefile;
 
 char *basedir = 0;
 int debug = 0;
+bool do_timestamps = true;
 
 #define dout if (debug) cout
 
@@ -213,6 +216,17 @@ Inode *add_inode(Inode *parent, const char *name, struct stat *attr)
 }
 
 
+void print_time()
+{
+    if (do_timestamps) {
+	struct timeval tv;
+	gettimeofday(&tv, 0);
+	traceout << "@" << endl
+		 << tv.tv_sec << endl
+		 << tv.tv_usec << endl;
+    }
+}
+
 
 static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 {
@@ -268,6 +282,7 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_lookup" << endl << pino << endl << name << endl << fe.attr.st_ino << endl;
     trace_lock.Unlock();
 
@@ -297,6 +312,7 @@ static void ft_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_forget" << endl << ino << endl << nlookup << endl;
     trace_lock.Unlock();
 
@@ -332,6 +348,7 @@ static void ft_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     if (ino == 1) attr.st_ino = 1;
     
     trace_lock.Lock();
+    print_time();
     traceout << "ll_getattr" << endl << ino << endl;
     trace_lock.Unlock();
 
@@ -362,6 +379,7 @@ static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_setattr" << endl << ino << endl;
     traceout << attr->st_mode << endl;
     traceout << attr->st_uid << endl << attr->st_gid << endl;
@@ -422,6 +440,7 @@ static void ft_ll_readlink(fuse_req_t req, fuse_ino_t ino)
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_readlink" << endl << ino << endl;
     trace_lock.Unlock();
 
@@ -452,6 +471,7 @@ static void ft_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     if (res < 0) res = errno;
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_opendir" << endl << ino << endl << (unsigned long)dir << endl;
     trace_lock.Unlock();
     
@@ -499,14 +519,15 @@ static void ft_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 static void ft_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 			     struct fuse_file_info *fi)
 {
-  DIR *dir = (DIR*)fi->fh;
-
-  trace_lock.Lock();
-  traceout << "ll_releasedir" << endl << (unsigned long)dir << endl;
-  trace_lock.Unlock();
-
-  closedir(dir);
-  fuse_reply_err(req, 0);
+    DIR *dir = (DIR*)fi->fh;
+    
+    trace_lock.Lock();
+    print_time();
+    traceout << "ll_releasedir" << endl << (unsigned long)dir << endl;
+    trace_lock.Unlock();
+    
+    closedir(dir);
+    fuse_reply_err(req, 0);
 }
 
 
@@ -539,6 +560,7 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_mknod" << endl << parent << endl << name << endl << mode << endl << rdev << endl;
     traceout << (res == 0 ? fe.ino:0) << endl;
     trace_lock.Unlock();
@@ -576,6 +598,7 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_mkdir" << endl << parent << endl << name << endl << mode << endl;
     traceout << (res == 0 ? fe.ino:0) << endl;
     trace_lock.Unlock();
@@ -613,6 +636,7 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_symlink" << endl << parent << endl << name << endl << value << endl;
     traceout << (res == 0 ? fe.ino:0) << endl;
     trace_lock.Unlock();
@@ -622,6 +646,58 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
     else 
 	fuse_reply_err(req, res);
 }
+
+static void ft_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
+			 mode_t mode, struct fuse_file_info *fi)
+{
+    string path;
+    Inode *pin = 0;
+    int res = 0;
+
+    lock.Lock();
+    pin = inode_map[parent];
+    if (!make_inode_path(path, pin, name))
+	res = ENOENT;
+    lock.Unlock();
+
+    dout << "create " << path << endl;
+    int fd = 0;
+    if (res == 0) {
+	fd = ::open(path.c_str(), fi->flags|O_CREAT, mode);
+	if (fd < 0) res = errno;
+    }
+
+    struct fuse_entry_param fe;
+    memset(&fe, 0, sizeof(fe));
+    if (res == 0) {
+	::lstat(path.c_str(), &fe.attr);
+	fe.ino = fe.attr.st_ino;
+	lock.Lock();
+	Inode *in = add_inode(pin, name, &fe.attr);
+	in->ref++;
+	in->fds.insert(fd);
+	lock.Unlock();
+	fi->fh = fd;
+    }
+
+    trace_lock.Lock();
+    print_time();
+    traceout << "ll_create" << endl
+	     << parent << endl
+	     << name << endl 
+	     << mode << endl
+	     << fi->flags << endl
+	     << (res == 0 ? fd:0) << endl
+	     << fe.ino << endl;
+    trace_lock.Unlock();
+
+    if (res == 0)
+	fuse_reply_create(req, &fe, fi);
+    else 
+	fuse_reply_err(req, res);
+
+}
+
 
 static void ft_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
@@ -637,6 +713,7 @@ static void ft_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_statfs" << endl << ino << endl;
     trace_lock.Unlock();
     
@@ -665,6 +742,7 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_unlink" << endl << parent << endl << name << endl;
     trace_lock.Unlock();
     
@@ -704,6 +782,7 @@ static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_rmdir" << endl << parent << endl << name << endl;
     trace_lock.Unlock();
 
@@ -741,6 +820,7 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_rename" << endl
 	     << parent << endl 
 	     << name << endl
@@ -787,6 +867,7 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     lock.Unlock();
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_link" << endl
 	     << ino << endl
 	     << newparent << endl
@@ -834,6 +915,7 @@ static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
     }
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_open" << endl
 	     << ino << endl
 	     << fi->flags << endl
@@ -859,6 +941,7 @@ static void ft_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 
     //cout << "read " << path << " " << off << "~" << size << endl;
     trace_lock.Lock();
+    print_time();
     traceout << "ll_read" << endl 
 	     << fi->fh << endl
 	     << off << endl
@@ -878,6 +961,7 @@ static void ft_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
     int res = ::pwrite(fi->fh, buf, size, off);
 
     trace_lock.Lock();
+    print_time();
     traceout << "ll_write" << endl
 	     << fi->fh << endl
 	     << off << endl
@@ -893,6 +977,7 @@ static void ft_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 static void ft_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     trace_lock.Lock();
+    print_time();
     traceout << "ll_flush" << endl << fi->fh << endl;
     trace_lock.Unlock();
 
@@ -907,6 +992,7 @@ static void ft_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *f
 static void ft_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     trace_lock.Lock();
+    print_time();
     traceout << "ll_release" << endl << fi->fh << endl;
     trace_lock.Unlock();
 
@@ -926,6 +1012,7 @@ static void ft_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 			  struct fuse_file_info *fi)
 {
     trace_lock.Lock();
+    print_time();
     traceout << "ll_fsync" << endl << fi->fh << endl;
     trace_lock.Unlock();
 
@@ -967,7 +1054,7 @@ static struct fuse_lowlevel_ops ft_ll_oper = {
  listxattr: 0,
  removexattr: 0,
  access: 0,
- create: 0,//ft_ll_create,
+ create: ft_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0
@@ -983,6 +1070,8 @@ int main(int argc, char *argv[])
     for (int i=0; i<argc; i++) {
 	if (strcmp(argv[i], "--basedir") == 0) {
 	    basedir = argv[++i];
+	} else if (strcmp(argv[i], "--timestamps") == 0) {
+	    do_timestamps = atoi(argv[++i]);
 	} else if (strcmp(argv[i], "--trace") == 0) {
 	    tracefile.open(argv[++i], ios::out|ios::trunc);
 	    if (!tracefile.is_open())
