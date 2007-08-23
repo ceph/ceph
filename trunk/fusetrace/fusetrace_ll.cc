@@ -922,7 +922,7 @@ static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 	     << (fd > 0 ? fd:0) << endl;;
     trace_lock.Unlock();
 
-    if (fd > 0) {
+    if (res == 0) {
 	lock.Lock();
 	in->fds.insert(fd);
 	lock.Unlock();
