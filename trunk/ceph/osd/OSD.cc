@@ -1539,7 +1539,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       // same primary?
       vector<int> acting;
       int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-      int role = osdmap->calc_pg_role(whoami, pg->acting, nrep);
+      int role = osdmap->calc_pg_role(whoami, acting, nrep);
 
       PG::Info::History history = it->history;
       project_pg_history(pgid, history, m->get_epoch(), acting);
