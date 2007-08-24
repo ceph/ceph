@@ -1682,6 +1682,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newdir->mark_complete();
   newdir->mark_dirty(newdir->pre_dirty());
 
+  if (mds->logger) mds->logger->inc("mkdir");
+
   // prepare finisher
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
@@ -2921,7 +2923,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdr->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
   }
 
-  inode_t *ji; // journaled inode getting nlink--
+  inode_t *ji = 0;     // journaled inode getting nlink--
   version_t ipv = 0;   // it's version
   
   if (linkmerge) {

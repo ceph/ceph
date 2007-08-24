@@ -106,7 +106,10 @@ bool EMetaBlob::has_expired(MDS *mds)
 	       << " for " << *dir << endl;
       continue;       // not our problem
     }
+    // FIXME HACK: this makes logger stats more accurage, for journal stats, 
+    //             but is not perfectly safe.  for benchmarking ONLY!
     if (dir->get_committed_version() >= lp->second.dirv ||
+	//if (dir->get_committing_version() >= lp->second.dirv ||  
 	dir->get_committed_version_equivalent() >= lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
@@ -336,6 +339,8 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       mds->clientmap.add_trim_waiter(*p, gather->new_sub());
     }
   }
+
+  dout(10) << "my gather finsher is " << gather << " with " << gather->get_num() << endl;
 
 }
 

@@ -173,8 +173,11 @@ class MDS : public Dispatcher {
   public:
     C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
     void finish(int r) {
-      mds->beacon_killer = 0;
-      mds->beacon_kill(lab);
+      if (mds->beacon_killer) {
+	mds->beacon_killer = 0;
+	mds->beacon_kill(lab);
+      } 
+      // else mds is pbly already shutting down
     }
   } *beacon_killer;
 

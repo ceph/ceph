@@ -151,13 +151,9 @@ void MDS::reopen_logger()
     mds_logtype.add_inc("fw");
     mds_logtype.add_inc("cfw");
     
-    mds_logtype.add_set("l");
-    mds_logtype.add_set("q");
-    mds_logtype.add_set("popanyd");
-    mds_logtype.add_set("popnest");
-    
-    mds_logtype.add_inc("lih");
-    mds_logtype.add_inc("lif");
+    mds_logtype.add_inc("dir_f");
+    mds_logtype.add_inc("dir_c");
+    mds_logtype.add_inc("mkdir");
     
     mds_logtype.add_set("c");
     mds_logtype.add_set("ctop");
@@ -168,9 +164,12 @@ void MDS::reopen_logger()
     mds_logtype.add_inc("dis");
     mds_logtype.add_inc("cmiss");
     
+    mds_logtype.add_set("l");
+    mds_logtype.add_set("q");
+    mds_logtype.add_set("popanyd");
+    mds_logtype.add_set("popnest");
+    
     mds_logtype.add_set("buf");
-    mds_logtype.add_inc("cdir");
-    mds_logtype.add_inc("fdir");
     
     mds_logtype.add_inc("iex");
     mds_logtype.add_inc("iim");

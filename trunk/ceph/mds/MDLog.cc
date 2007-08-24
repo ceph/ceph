@@ -50,14 +50,15 @@ void MDLog::init_journaler()
   if (!didit) {
     didit = true;
     mdlog_logtype.add_inc("add");
-    mdlog_logtype.add_inc("expire");    
     mdlog_logtype.add_inc("obs");    
-    mdlog_logtype.add_inc("trim");    
+    mdlog_logtype.add_inc("trims");
+    mdlog_logtype.add_inc("trimf");
+    mdlog_logtype.add_inc("trimng");    
     mdlog_logtype.add_set("size");
-    mdlog_logtype.add_set("read");
-    mdlog_logtype.add_set("append");
-    mdlog_logtype.add_inc("lsum");
-    mdlog_logtype.add_inc("lnum");
+    mdlog_logtype.add_set("rdpos");
+    mdlog_logtype.add_set("wrpos");
+    mdlog_logtype.add_inc("jlsum");
+    mdlog_logtype.add_inc("jlnum");
   }
 
   // inode
@@ -135,7 +136,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
 
     logger->inc("add");
     logger->set("size", num_events);
-    logger->set("append", journaler->get_write_pos());
+    logger->set("wrpos", journaler->get_write_pos());
 
     if (c) {
       unflushed = 0;
@@ -246,8 +247,9 @@ void MDLog::_trimmed(LogEvent *le)
   trimming.erase(le->_end_off);
   delete le;
  
-  logger->set("trim", trimming.size());
-  logger->set("read", journaler->get_read_pos());
+  logger->inc("trimf");
+  logger->set("trimng", trimming.size());
+  logger->set("rdpos", journaler->get_read_pos());
  
   trim(0);
 }
@@ -306,10 +308,10 @@ void MDLog::trim(Context *c)
 	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << endl;
         trimming[le->_end_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
-        logger->inc("expire");
-        logger->set("trim", trimming.size());
+        logger->inc("trims");
+        logger->set("trimng", trimming.size());
       }
-      logger->set("read", journaler->get_read_pos());
+      logger->set("rdpos", journaler->get_read_pos());
       logger->set("size", num_events);
     } else {
       // need to read!
@@ -324,7 +326,7 @@ void MDLog::trim(Context *c)
     }
   }
 
-  dout(5) << "trim num_events " << num_events << " <= max " << max_events
+  dout(10) << "trim num_events " << num_events << " <= max " << max_events
 	  << ", trimming " << trimming.size()
 	  << ", done for now."
 	  << endl;

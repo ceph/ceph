@@ -397,11 +397,14 @@ private:
       return;
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
+      //return;  // hack: for comparison purposes.. what if NO context?
+
       // subtree root?
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
       // was the inode journaled since the last subtree_map?
-      if (last_subtree_map &&
+      if (//false &&  // for benchmarking
+	  last_subtree_map &&
 	  dir->inode->last_journaled >= last_subtree_map) 
 	return;
     }

@@ -2637,8 +2637,6 @@ void Locker::file_loner(FileLock *lock)
 
 void Locker::handle_file_lock(FileLock *lock, MLock *m)
 {
-  if (mds->logger) mds->logger->inc("lif");
-
   CInode *in = (CInode*)lock->get_parent();
   int from = m->get_asker();
 
