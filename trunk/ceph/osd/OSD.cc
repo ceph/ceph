@@ -68,7 +68,8 @@
 
 
 #include "config.h"
-#undef dout
+
+#include "debug.h"
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cerr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
@@ -381,6 +382,7 @@ PG *OSD::_new_lock_pg(pg_t pgid)
   return pg;
 }
 
+
 PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
   dout(10) << "_create_lock_pg " << pgid << dendl;
@@ -444,6 +446,28 @@ void OSD::_remove_unlock_pg(PG *pg)
 }
 
 
+void OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
+{
+  vector<int> acting;
+  int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+  int role = osdmap->calc_pg_role(whoami, acting, nrep);
+  if (role < 0) return;
+  
+  PG *pg = _create_lock_pg(pgid, t);
+  pg->set_role(role);
+  pg->acting.swap(acting);
+  pg->last_epoch_started_any = 
+    pg->info.last_epoch_started = 
+    pg->info.history.same_since = 
+    pg->info.history.same_primary_since = 
+    pg->info.history.same_acker_since = osdmap->get_epoch();
+  pg->write_log(t);
+  if (g_conf.osd_hack_fast_startup)
+    pg->activate(t);
+  
+  dout(7) << "created " << *pg << dendl;
+  pg->unlock();
+}
 
 void OSD::load_pgs()
 {
@@ -1113,101 +1137,19 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     // create PGs
     //  replicated
-    for (int nrep = 1; 
-         nrep <= maxrep;    // for low osd counts..  hackish bleh
-         nrep++) {
-      for (ps_t ps = 0; ps < numps; ++ps) {
-	vector<int> acting;
-	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
-	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-	int role = osdmap->calc_pg_role(whoami, acting, nrep);
-	if (role < 0) continue;
-	
-	PG *pg = _create_lock_pg(pgid, t);
-	pg->set_role(role);
-	pg->acting.swap(acting);
-	pg->last_epoch_started_any = 
-	  pg->info.last_epoch_started = 
-	  pg->info.history.same_since = 
-	  pg->info.history.same_primary_since = 
-	    pg->info.history.same_acker_since = osdmap->get_epoch();
-	pg->write_log(t);
-	//pg->activate(t);
-
-	dout(7) << "created " << *pg << dendl;
-	pg->unlock();
-      }
-
-      for (ps_t ps = 0; ps < numlps; ++ps) {
-	// local PG too
-	vector<int> acting;
-	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, whoami);
-	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-	int role = osdmap->calc_pg_role(whoami, acting, nrep);
-	
-	PG *pg = _create_lock_pg(pgid, t);
-	pg->acting.swap(acting);
-	pg->set_role(role);
-	pg->last_epoch_started_any = 
-	  pg->info.last_epoch_started = 
-	  pg->info.history.same_primary_since = 
-	  pg->info.history.same_acker_since = 
-	  pg->info.history.same_since = osdmap->get_epoch();
-	pg->write_log(t);
-	//pg->activate(t);
-	
-	dout(7) << "created " << *pg << dendl;
-	pg->unlock();
-      }
+    for (int nrep = 1; nrep <= maxrep; nrep++) {
+      for (ps_t ps = 0; ps < numps; ++ps)
+	try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, -1), t);
+      for (ps_t ps = 0; ps < numlps; ++ps) 
+	try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, whoami), t);
     }
 
     // raided
-    for (int size = minraid;
-	 size <= maxraid;
-	 size++) {
-      for (ps_t ps = 0; ps < numps; ++ps) {
-	vector<int> acting;
-	pg_t pgid = pg_t(pg_t::TYPE_RAID4, size, ps, -1);
-	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-	int role = osdmap->calc_pg_role(whoami, acting, nrep);
-	if (role < 0) continue;
-	
-	PG *pg = _create_lock_pg(pgid, t);
-	pg->set_role(role);
-	pg->acting.swap(acting);
-	pg->last_epoch_started_any = 
-	  pg->info.last_epoch_started = 
-	  pg->info.history.same_since = 
-	  pg->info.history.same_primary_since = 
-	    pg->info.history.same_acker_since = osdmap->get_epoch();
-	pg->write_log(t);
-	//pg->activate(t);
-
-	dout(7) << "created " << *pg << dendl;
-	pg->unlock();
-      }
-
-      for (ps_t ps = 0; ps < numlps; ++ps) {
-	// local PG too
-	vector<int> acting;
-	pg_t pgid = pg_t(pg_t::TYPE_RAID4, size, ps, whoami);
-	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-	int role = osdmap->calc_pg_role(whoami, acting, nrep);
-	
-	PG *pg = _create_lock_pg(pgid, t);
-	pg->acting.swap(acting);
-	pg->set_role(role);
-	pg->last_epoch_started_any = 
-	  pg->info.last_epoch_started = 
-	  pg->info.history.same_primary_since = 
-	  pg->info.history.same_acker_since = 
-	  pg->info.history.same_since = osdmap->get_epoch();
-	pg->write_log(t);
-	//pg->activate(t);
-	
-	dout(7) << "created " << *pg << dendl;
-	pg->unlock();
-      }
+    for (int size = minraid; size <= maxraid; size++) {
+      for (ps_t ps = 0; ps < numps; ++ps) 
+	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, -1), t);
+      for (ps_t ps = 0; ps < numlps; ++ps) 
+	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, whoami), t);
     }
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << dendl;
 
@@ -1375,8 +1317,9 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     }
   }  
 
-  //if (osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
-  //return;
+  if (g_conf.osd_hack_fast_startup &&
+      osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
+    return;
 
   do_notifies(notify_list);  // notify? (residual|replica)
   do_queries(query_map);

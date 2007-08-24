@@ -25,7 +25,8 @@
 
 #include "config.h"
 
-#undef dout
+#include "debug.h"
+
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 #include <errno.h>

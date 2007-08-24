@@ -256,6 +256,8 @@ private:
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
+  void try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
+
   void load_pgs();
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
