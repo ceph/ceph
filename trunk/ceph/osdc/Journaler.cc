@@ -208,8 +208,8 @@ void Journaler::_finish_flush(int r, off_t start)
   if (logger) {
     utime_t lat = g_clock.now();
     lat -= pending_flush[start];
-    logger->finc("lsum", lat);
-    logger->inc("lnum");
+    logger->finc("jlsum", lat);
+    logger->inc("jlnum");
   }
 
   pending_flush.erase(start);
@@ -592,6 +592,12 @@ void Journaler::trim()
 	   << endl;
   if (trim_to == 0 || trim_to == trimming_pos) {
     dout(10) << "trim already trimmed/trimming to " 
+	     << trimmed_pos << "/" << trimming_pos << endl;
+    return;
+  }
+
+  if (trimming_pos > trimmed_pos) {
+    dout(10) << "trim already trimming atm, try again later.  trimmed/trimming is " 
 	     << trimmed_pos << "/" << trimming_pos << endl;
     return;
   }
