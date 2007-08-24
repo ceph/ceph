@@ -397,7 +397,8 @@ void* BlockDevice::io_thread_entry()
 	}
 
 	// should i _still_ be sleeping?
-	if (root_queue.empty() && io_threads_running == 0) {
+	if (!io_stop && 
+	    root_queue.empty() && io_threads_running == 0) {
 	  dout(20) << "io_thread" << whoami << " did the kick, now waiting for signal" << dendl;
 	  io_wakeup.Wait(lock);          // and wait (if condition still holds)
 	} else {
