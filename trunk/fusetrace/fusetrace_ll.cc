@@ -546,7 +546,10 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 
     dout << "mknod " << path << endl;
     if (res == 0) res = ::mknod(path.c_str(), mode, rdev);
-    if (res < 0) res = errno;
+    if (res < 0) 
+	res = errno;
+    else
+	::chown(path.c_str(), fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid);
 
     struct fuse_entry_param fe;
     if (res == 0) {
@@ -584,7 +587,10 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     lock.Unlock();
 
     if (res == 0) res = ::mkdir(path.c_str(), mode);
-    if (res < 0) res = errno;
+    if (res < 0)
+	res = errno;
+    else
+	::chown(path.c_str(), fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid);
 
     struct fuse_entry_param fe;
     if (res == 0) {
@@ -622,7 +628,10 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
     lock.Unlock();
 
     if (res == 0) res = ::symlink(value, path.c_str());
-    if (res < 0) res = errno;
+    if (res < 0) 
+	res = errno;
+    else
+	::chown(path.c_str(), fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid);
 
     struct fuse_entry_param fe;
     if (res == 0) {
@@ -664,7 +673,11 @@ static void ft_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     int fd = 0;
     if (res == 0) {
 	fd = ::open(path.c_str(), fi->flags|O_CREAT, mode);
-	if (fd < 0) res = errno;
+	if (fd < 0) {
+	    res = errno;
+	} else {
+	    ::fchown(fd, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid);
+	}
     }
 
     struct fuse_entry_param fe;
@@ -1085,6 +1098,8 @@ int main(int argc, char *argv[])
     }
     newargv[newargc++] = "-o";
     newargv[newargc++] = "allow_other";
+    //    newargv[newargc++] = "-o";
+    //    newargv[newargc++] = "default_permissions";
     if (!basedir) return 1;
     cout << "basedir is " << basedir << endl;
 
