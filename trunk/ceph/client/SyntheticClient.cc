@@ -699,6 +699,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   t.start();
 
   char buf[1024];
+  char buf2[1024];
 
   utime_t start = g_clock.now();
 
@@ -713,7 +714,20 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
   ll_inos[1] = 1; // root inode is known.
 
+  utime_t last_status = start;
+  
+  int n = 0;
+
   while (!t.end()) {
+
+    if (++n == 100) {
+      n = 00;
+      utime_t now = last_status;
+      if (now - last_status > 1.0) {
+	last_status = now;
+	dout(1) << "play_trace at line " << t.get_line() << endl;
+      }
+    }
     
     if (time_to_stop()) break;
     
@@ -721,17 +735,24 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     const char *op = t.get_string(buf, 0);
     dout(4) << (t.get_line()-1) << ": trace op " << op << endl;
     
+    if (op[0] == '@') {
+      // timestamp... ignore it!
+      t.get_int(); // sec
+      t.get_int(); // usec
+      op = t.get_string(buf, 0);
+    }
+
     // high level ops ---------------------
     if (strcmp(op, "link") == 0) {
       const char *a = t.get_string(buf, p);
-      const char *b = t.get_string(buf, p);
+      const char *b = t.get_string(buf2, p);
       client->link(a,b);      
     } else if (strcmp(op, "unlink") == 0) {
       const char *a = t.get_string(buf, p);
       client->unlink(a);
     } else if (strcmp(op, "rename") == 0) {
       const char *a = t.get_string(buf, p);
-      const char *b = t.get_string(buf, p);
+      const char *b = t.get_string(buf2, p);
       client->rename(a,b);      
     } else if (strcmp(op, "mkdir") == 0) {
       const char *a = t.get_string(buf, p);
@@ -742,7 +763,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->rmdir(a);
     } else if (strcmp(op, "symlink") == 0) {
       const char *a = t.get_string(buf, p);
-      const char *b = t.get_string(buf, p);
+      const char *b = t.get_string(buf2, p);
       client->symlink(a,b);      
     } else if (strcmp(op, "readlink") == 0) {
       const char *a = t.get_string(buf, p);
@@ -908,11 +929,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_symlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
-      const char *v = t.get_string(buf, p);
+      const char *v = t.get_string(buf2, p);
       int64_t ri = t.get_int();
       struct stat attr;
       if (client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
+      else
+	cout << "**** symlink returned an error ****" << endl;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -925,7 +948,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       int64_t ni = t.get_int();
-      const char *nn = t.get_string(buf, p);
+      const char *nn = t.get_string(buf2, p);
       client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
     } else if (strcmp(op, "ll_link") == 0) {
       int64_t i = t.get_int();
@@ -1553,159 +1576,160 @@ int normdist(int min, int max, int stdev) /* specifies input values */;
 
 int normdist(int min, int max, int stdev) /* specifies input values */
 {
-/* min: Minimum value; max: Maximum value; stdev: degree of deviation */
- 
-//int min, max, stdev; {
-    time_t seconds;
-    time( &seconds);
-    srand(seconds);
- 
-    int range, iterate, result;
-/* declare range, iterate and result as integers, to avoid the need for
-floating point math*/
- 
-    result = 0;
-/* ensure result is initialized to 0 */
- 
-    range = max -min;
-/* calculate range of possible values between the max and min values */
- 
-    iterate = range / stdev;
-/* this number of iterations ensures the proper shape of the resulting
-curve */
- 
-    stdev += 1; /* compensation for integer vs. floating point math */
-    for (int c = iterate; c != 0; c--) /* loop through iterations */
+  /* min: Minimum value; max: Maximum value; stdev: degree of deviation */
+  
+  //int min, max, stdev; {
+  time_t seconds;
+  time( &seconds);
+  srand(seconds);
+  
+  int range, iterate, result;
+  /* declare range, iterate and result as integers, to avoid the need for
+     floating point math*/
+  
+  result = 0;
+  /* ensure result is initialized to 0 */
+  
+  range = max -min;
+  /* calculate range of possible values between the max and min values */
+  
+  iterate = range / stdev;
+  /* this number of iterations ensures the proper shape of the resulting
+     curve */
+  
+  stdev += 1; /* compensation for integer vs. floating point math */
+  for (int c = iterate; c != 0; c--) /* loop through iterations */
     {
       //  result += (uniform (1, 100) * stdev) / 100; /* calculate and
-        result += ( (rand()%100 + 1)  * stdev) / 100;
-       // printf("result=%d\n", result );
+      result += ( (rand()%100 + 1)  * stdev) / 100;
+      // printf("result=%d\n", result );
     }
-        printf("\n final result=%d\n", result );
-    return result + min; /* send final result back */
+  printf("\n final result=%d\n", result );
+  return result + min; /* send final result back */
 }
+
 int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
   __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)rdsize;
-
+  
   int fd = client->open(fn.c_str(), O_RDWR);
   dout(5) << "reading from " << fn << " fd " << fd << endl;
-   
- // cout << "READING FROM  " << fn << " fd " << fd << endl;
-
- // cout << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  endl;
-
+  
+  // cout << "READING FROM  " << fn << " fd " << fd << endl;
+  
+  // cout << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  endl;
+  
   if (fd < 0) return fd;
   int offset;
   char * buf = NULL;
-
+  
   for (unsigned i=0; i<2000; i++) {
     if (time_to_stop()) break;
-
+    
     bool read=false;
-
+    
     time_t seconds;
     time( &seconds);
     srand(seconds);
-
+    
     // use rand instead ??
     double x = drand48();
-
+    
     //cout << "RANDOM NUMBER RETURN |" << x << "|" << endl;
-
+    
     if ( x < 0.5) 
-    {
+      {
         //cout << "DECIDED TO READ " << x << endl;
         buf = new char[rdsize]; 
         memset(buf, 1, rdsize);
         read=true;
-    }
+      }
     else
-    {
-       // cout << "DECIDED TO WRITE " << x << endl;
+      {
+	// cout << "DECIDED TO WRITE " << x << endl;
         buf = new char[rdsize+100];   // 1 MB
         memset(buf, 7, rdsize);
-    }
-
+      }
+    
     //double  y  = drand48() ;
-
+    
     //cout << "OFFSET is |" << offset << "| chunks |" << chunks<<  endl;
     
     if ( read)
-    {
-        //offset=(rand())%(chunks+1);
-
-    /*    if ( chunks > 10000 ) 
-        offset= normdist( 0 , chunks/1000 , 5  )*1000;
-        else if ( chunks > 1000 )
-                offset= normdist( 0 , chunks/100 , 5  )*100;
-        else if ( chunks > 100 )
-                offset= normdist( 0 , chunks/20 , 5  )*20;*/
-
-
-        dout(2) << "reading block " << offset << "/" << chunks << endl;
-
-        int r = client->read(fd, buf, rdsize,
-                        offset*rdsize);
-        if (r < rdsize) {
-                  dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
-    }
-    }
-    else
-    {
-        dout(2) << "writing block " << offset << "/" << chunks << endl;
-
-    // fill buf with a 16 byte fingerprint
-    // 64 bits : file offset
-    // 64 bits : client id
-    // = 128 bits (16 bytes)
-
-      //if (true )
-      //{
-      int count = rand()%10;
-
-      for ( int j=0;j<count; j++ )
       {
-
-      offset=(rand())%(chunks+1);
-    __uint64_t *p = (__uint64_t*)buf;
-    while ((char*)p < buf + rdsize) {
-      *p = offset*rdsize + (char*)p - buf;      
-      p++;
-      *p = client->get_nodeid();
-      p++;
-    }
-
-      client->write(fd, buf, rdsize,
-                        offset*rdsize);
+        //offset=(rand())%(chunks+1);
+	
+	/*    if ( chunks > 10000 ) 
+	      offset= normdist( 0 , chunks/1000 , 5  )*1000;
+	      else if ( chunks > 1000 )
+	      offset= normdist( 0 , chunks/100 , 5  )*100;
+	      else if ( chunks > 100 )
+	      offset= normdist( 0 , chunks/20 , 5  )*20;*/
+	
+	
+        dout(2) << "reading block " << offset << "/" << chunks << endl;
+	
+        int r = client->read(fd, buf, rdsize,
+			     offset*rdsize);
+        if (r < rdsize) {
+	  dout(1) << "read_file got r = " << r << ", probably end of file" << endl;
+	}
       }
-      //}
-    }
-
+    else
+      {
+        dout(2) << "writing block " << offset << "/" << chunks << endl;
+	
+	// fill buf with a 16 byte fingerprint
+	// 64 bits : file offset
+	// 64 bits : client id
+	// = 128 bits (16 bytes)
+	
+	//if (true )
+	//{
+	int count = rand()%10;
+	
+	for ( int j=0;j<count; j++ )
+	  {
+	    
+	    offset=(rand())%(chunks+1);
+	    __uint64_t *p = (__uint64_t*)buf;
+	    while ((char*)p < buf + rdsize) {
+	      *p = offset*rdsize + (char*)p - buf;      
+	      p++;
+	      *p = client->get_nodeid();
+	      p++;
+	    }
+	    
+	    client->write(fd, buf, rdsize,
+			  offset*rdsize);
+	  }
+	//}
+      }
+    
     // verify fingerprint
     if ( read )
-    {
-    int bad = 0;
-    __int64_t *p = (__int64_t*)buf;
-    __int64_t readoff, readclient;
-    while ((char*)p + 32 < buf + rdsize) {
-      readoff = *p;
-      __int64_t wantoff = offset*rdsize + (__int64_t)((char*)p - buf);
-      p++;
-      readclient = *p;
-      p++;
-      if (readoff != wantoff ||
-	  readclient != client->get_nodeid()) {
-        if (!bad)
-          dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
-		  << endl;
-        bad++;
+      {
+	int bad = 0;
+	__int64_t *p = (__int64_t*)buf;
+	__int64_t readoff, readclient;
+	while ((char*)p + 32 < buf + rdsize) {
+	  readoff = *p;
+	  __int64_t wantoff = offset*rdsize + (__int64_t)((char*)p - buf);
+	  p++;
+	  readclient = *p;
+	  p++;
+	  if (readoff != wantoff ||
+	      readclient != client->get_nodeid()) {
+	    if (!bad)
+	      dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		      << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		      << endl;
+	    bad++;
+	  }
+	}
+	if (bad) 
+	  dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
       }
-    }
-    if (bad) 
-      dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
-  }
   }
   
   client->close(fd);

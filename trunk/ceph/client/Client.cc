@@ -3406,7 +3406,7 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)
   string path;
   in->make_path(path);
 
-  int r;
+  int r = 0;
   if ((mask & FUSE_SET_ATTR_MODE) &&
       ((r = _chmod(path.c_str(), attr->st_mode)) < 0)) return r;
 
