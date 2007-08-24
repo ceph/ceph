@@ -41,9 +41,9 @@ class Admin : public Dispatcher {
   void dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
-      generc_dout(0) << m->get_source() << " -> '"
-		     << ((MMonCommandAck*)m)->rs << "' (" << ((MMonCommandAck*)m)->r << ")"
-		     << dendl;
+      generic_dout(0) << m->get_source() << " -> '"
+		      << ((MMonCommandAck*)m)->rs << "' (" << ((MMonCommandAck*)m)->r << ")"
+		      << dendl;
       messenger->shutdown();
       break;      
     }

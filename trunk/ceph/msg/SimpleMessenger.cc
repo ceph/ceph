@@ -24,15 +24,11 @@
 
 #include "messages/MGenericMessage.h"
 
-//#include "messages/MFailure.h"
-
 #include <netdb.h>
 
 #include <iostream>
 #include <fstream>
 
-#include "debug.h"
-#undef dout
 #define dout(l)  if (l<=g_conf.debug_ms) cout << dbeginl << g_clock.now() << " -- " << rank.my_addr << " "
 #define derr(l)  if (l<=g_conf.debug_ms) cerr << dbeginl << g_clock.now() << " -- " << rank.my_addr << " "
 
@@ -191,7 +187,7 @@ void *Rank::Accepter::entry()
     // accept
     struct sockaddr_in addr;
     socklen_t slen = sizeof(addr);
-    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);  // FIXME: make this non-blocking.
+    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
     if (sd > 0) {
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
