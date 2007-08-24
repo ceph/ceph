@@ -69,7 +69,6 @@
 
 #include "config.h"
 
-#include "debug.h"
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cerr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 

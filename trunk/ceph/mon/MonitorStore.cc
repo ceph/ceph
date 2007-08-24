@@ -16,9 +16,9 @@
 #include "common/Clock.h"
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " store(" << dir <<") "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " store(" << dir <<") "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << dbeginl << g_clock.now() << " store(" << dir <<") "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << dbeginl << g_clock.now() << " store(" << dir <<") "
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -28,11 +28,11 @@
 
 void MonitorStore::mount()
 {
-  dout(1) << "mount" << endl;
+  dout(1) << "mount" << dendl;
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
   if (!d) {
-    derr(1) << "basedir " << dir << " dne" << endl;
+    derr(1) << "basedir " << dir << " dne" << dendl;
     assert(0);
   }
   ::closedir(d);
@@ -51,11 +51,11 @@ void MonitorStore::mount()
 
 void MonitorStore::mkfs()
 {
-  dout(1) << "mkfs" << endl;
+  dout(1) << "mkfs" << dendl;
 
   char cmd[200];
   sprintf(cmd, "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
-  dout(1) << cmd << endl;
+  dout(1) << cmd << dendl;
   system(cmd);
 }
 
@@ -79,9 +79,9 @@ version_t MonitorStore::get_int(const char *a, const char *b)
   version_t val = atoi(buf);
   
   if (b) {
-    dout(15) << "get_int " << a << "/" << b << " = " << val << endl;
+    dout(15) << "get_int " << a << "/" << b << " = " << val << dendl;
   } else {
-    dout(15) << "get_int " << a << " = " << val << endl;
+    dout(15) << "get_int " << a << " = " << val << dendl;
   }
   return val;
 }
@@ -93,10 +93,10 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   sprintf(fn, "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
-    dout(15) << "set_int " << a << "/" << b << " = " << val << endl;
+    dout(15) << "set_int " << a << "/" << b << " = " << val << dendl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(15) << "set_int " << a << " = " << val << endl;
+    dout(15) << "set_int " << a << " = " << val << dendl;
   }
   
   char vs[30];
@@ -125,16 +125,16 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
 {
   char fn[200];
   if (b) {
-    dout(15) << "exists_bl " << a << "/" << b << endl;
+    dout(15) << "exists_bl " << a << "/" << b << dendl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(15) << "exists_bl " << a << endl;
+    dout(15) << "exists_bl " << a << dendl;
     sprintf(fn, "%s/%s", dir.c_str(), a);
   }
   
   struct stat st;
   int r = ::stat(fn, &st);
-  //dout(15) << "exists_bl stat " << fn << " r=" << r << " errno " << errno << " " << strerror(errno) << endl;
+  //dout(15) << "exists_bl stat " << fn << " r=" << r << " errno " << errno << " " << strerror(errno) << dendl;
   return r == 0;
 }
 
@@ -151,9 +151,9 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   int fd = ::open(fn, O_RDONLY);
   if (!fd) {
     if (b) {
-      dout(15) << "get_bl " << a << "/" << b << " DNE" << endl;
+      dout(15) << "get_bl " << a << "/" << b << " DNE" << dendl;
     } else {
-      dout(15) << "get_bl " << a << " DNE" << endl;
+      dout(15) << "get_bl " << a << " DNE" << dendl;
     }
     return 0;
   }
@@ -169,9 +169,9 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   bufferptr bp(len);
   int off = 0;
   while (off < len) {
-    dout(20) << "reading at off " << off << " of " << len << endl;
+    dout(20) << "reading at off " << off << " of " << len << dendl;
     int r = ::read(fd, bp.c_str()+off, len-off);
-    if (r < 0) derr(0) << "errno on read " << strerror(errno) << endl;
+    if (r < 0) derr(0) << "errno on read " << strerror(errno) << dendl;
     assert(r>0);
     off += r;
   }
@@ -179,9 +179,9 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   ::close(fd);
 
   if (b) {
-    dout(15) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << dendl;
   } else {
-    dout(15) << "get_bl " << a << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "get_bl " << a << " = " << bl.length() << " bytes" << dendl;
   }
 
   return len;
@@ -193,10 +193,10 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
   sprintf(fn, "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
-    dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << dendl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(15) << "put_bl " << a << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "put_bl " << a << " = " << bl.length() << " bytes" << dendl;
   }
   
   char tfn[200];
@@ -213,9 +213,9 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
        it++)  {
     int r = ::write(fd, it->c_str(), it->length());
     if (r != (int)it->length())
-      derr(0) << "put_bl_ss ::write() returned " << r << " not " << it->length() << endl;
+      derr(0) << "put_bl_ss ::write() returned " << r << " not " << it->length() << dendl;
     if (r < 0) 
-      derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror(errno) << endl;
+      derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror(errno) << dendl;
   }
 
   ::fsync(fd);

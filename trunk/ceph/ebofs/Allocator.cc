@@ -17,7 +17,6 @@
 #include "Allocator.h"
 #include "Ebofs.h"
 
-#include "debug.h"
 
 #undef dout
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs(" << fs->dev.get_device_name() << ").allocator."
@@ -56,7 +55,7 @@ void Allocator::dump_freelist()
           if (cursor.move_right() <= 0) break;
         }
       } else {
-        //cout << "  empty" << dendl;
+        //dout(0) << "  empty" << dendl;
       }
     }
     

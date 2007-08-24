@@ -29,7 +29,6 @@
 
 // *******************
 
-#include "debug.h"
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
 #define derr(x) if (x <= g_conf.debug_ebofs) cerr << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
 
@@ -673,7 +672,7 @@ Onode* Ebofs::get_onode(object_t oid)
       // yay
       Onode *on = onode_map[oid];
       on->get();
-      //cout << "get_onode " << *on << dendl;
+      //dout(0) << "get_onode " << *on << dendl;
       return on;   
     }
     
@@ -771,7 +770,7 @@ Onode* Ebofs::get_onode(object_t oid)
     waitfor_onode.erase(oid);   // remove Cond list
     
     on->get();
-    //cout << "get_onode " << *on << " (loaded)" << dendl;
+    //dout(0) << "get_onode " << *on << " (loaded)" << dendl;
     return on;
   }
 }
@@ -925,10 +924,10 @@ void Ebofs::remove_onode(Onode *on)
 void Ebofs::put_onode(Onode *on)
 {
   on->put();
-  //cout << "put_onode " << *on << dendl;
+  //dout(0) << "put_onode " << *on << dendl;
   
   if (on->get_ref_count() == 0 && on->dangling) {
-    //cout << " *** hosing on " << *on << dendl;
+    //dot(0) << " *** hosing on " << *on << dendl;
     delete on;
   }
 }
@@ -1507,12 +1506,12 @@ void Ebofs::alloc_write(Onode *on,
     // verify
     interval_set<block_t> ta;
     ta.intersection_of(on->uncommitted, alloc);
-    cout << " ta " << ta << dendl;
+    dout(0) << " ta " << ta << dendl;
     assert(alloc == ta);
 
     interval_set<block_t> tb;
     tb.intersection_of(on->uncommitted, old);
-    cout << " tb " << tb << dendl;
+    dout(0) << " tb " << tb << dendl;
     assert(old == tb);
   }
 

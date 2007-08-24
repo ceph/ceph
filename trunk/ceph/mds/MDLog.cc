@@ -23,9 +23,9 @@
 #include "common/Logger.h"
 
 #include "config.h"
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 
@@ -84,14 +84,14 @@ void MDLog::flush_logger()
 
 void MDLog::reset()
 {
-  dout(5) << "reset to empty log" << endl;
+  dout(5) << "reset to empty log" << dendl;
   init_journaler();
   journaler->reset();
 }
 
 void MDLog::open(Context *c)
 {
-  dout(5) << "open discovering log bounds" << endl;
+  dout(5) << "open discovering log bounds" << dendl;
   init_journaler();
   journaler->recover(c);
 }
@@ -117,7 +117,7 @@ off_t MDLog::get_write_pos()
 void MDLog::submit_entry( LogEvent *le, Context *c ) 
 {
   if (g_conf.mds_log) {
-    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
+    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << dendl;
 
     // encode it, with event type
     {
@@ -153,7 +153,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
 	(journaler->get_write_pos() - last_subtree_map > log_inode.layout.period()/2)) {
       // log import map
       dout(10) << "submit_entry also logging subtree map: last = " << last_subtree_map
-	       << ", cur pos = " << journaler->get_write_pos() << endl;
+	       << ", cur pos = " << journaler->get_write_pos() << dendl;
       mds->mdcache->log_subtree_map();
     }
 
@@ -221,7 +221,7 @@ public:
 
 void MDLog::_did_read() 
 {
-  dout(5) << "_did_read()" << endl;
+  dout(5) << "_did_read()" << dendl;
   waiting_for_read = false;
   trim(0);
 }
@@ -230,12 +230,12 @@ void MDLog::_trimmed(LogEvent *le)
 {
   // successful trim?
   if (!le->has_expired(mds)) {
-    dout(7) << "retrimming : " << le->get_start_off() << " : " << *le << endl;
+    dout(7) << "retrimming : " << le->get_start_off() << " : " << *le << dendl;
     le->expire(mds, new C_MDL_Trimmed(this, le));
     return;
   }
 
-  dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << endl;
+  dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << dendl;
 
   if (trimming.begin()->first == le->_end_off) {
     // we trimmed off the front!  
@@ -263,7 +263,7 @@ void MDLog::trim(Context *c)
     trim_waiters.push_back(c);
 
   // trim!
-  dout(10) << "trim " <<  num_events << " events / " << max_events << " max" << endl;
+  dout(10) << "trim " <<  num_events << " events / " << max_events << " max" << dendl;
 
   // hack: only trim for a few seconds at a time
   utime_t stop = g_clock.now();
@@ -279,10 +279,10 @@ void MDLog::trim(Context *c)
     dout(5) << "trim num_events " << num_events << " > max " << max_events
 	    << ", trimming " << trimming.size()
 	    << ", byte gap " << gap
-	    << endl;
+	    << dendl;
 
     if ((int)trimming.size() >= g_conf.mds_log_max_trimming) {
-      dout(7) << "trim  already trimming max, waiting" << endl;
+      dout(7) << "trim  already trimming max, waiting" << dendl;
       return;
     }
     
@@ -298,14 +298,14 @@ void MDLog::trim(Context *c)
       // we just read an event.
       if (le->has_expired(mds)) {
         // obsolete
- 	dout(7) << "trim  obsolete : " << le->get_start_off() << " : " << *le << endl;
+ 	dout(7) << "trim  obsolete : " << le->get_start_off() << " : " << *le << dendl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << endl;
+	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << dendl;
         trimming[le->_end_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("trims");
@@ -317,10 +317,10 @@ void MDLog::trim(Context *c)
       // need to read!
       if (!waiting_for_read) {
         waiting_for_read = true;
-        dout(7) << "trim  waiting for read" << endl;
+        dout(7) << "trim  waiting for read" << dendl;
         journaler->wait_for_readable(new C_MDL_Reading(this));
       } else {
-        dout(7) << "trim  already waiting for read" << endl;
+        dout(7) << "trim  already waiting for read" << dendl;
       }
       return;
     }
@@ -329,7 +329,7 @@ void MDLog::trim(Context *c)
   dout(10) << "trim num_events " << num_events << " <= max " << max_events
 	  << ", trimming " << trimming.size()
 	  << ", done for now."
-	  << endl;
+	  << dendl;
   
   // trimmed!
   std::list<Context*> finished;
@@ -349,7 +349,7 @@ void MDLog::replay(Context *c)
 
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
-    dout(10) << "replay - journal empty, done." << endl;
+    dout(10) << "replay - journal empty, done." << dendl;
     if (c) {
       c->finish(0);
       delete c;
@@ -363,7 +363,7 @@ void MDLog::replay(Context *c)
 
   // go!
   dout(10) << "replay start, from " << journaler->get_read_pos()
-	   << " to " << journaler->get_write_pos() << endl;
+	   << " to " << journaler->get_write_pos() << dendl;
 
   assert(num_events == 0);
 
@@ -387,7 +387,7 @@ public:
 void MDLog::_replay_thread()
 {
   mds->mds_lock.Lock();
-  dout(10) << "_replay_thread start" << endl;
+  dout(10) << "_replay_thread start" << dendl;
 
   // loop
   while (1) {
@@ -418,10 +418,10 @@ void MDLog::_replay_thread()
     if (!seen_subtree_map &&
 	le->get_type() != EVENT_SUBTREEMAP) {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " -- waiting for subtree_map.  (skipping " << *le << ")" << endl;
+	       << " -- waiting for subtree_map.  (skipping " << *le << ")" << dendl;
     } else {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " : " << *le << endl;
+	       << " : " << *le << dendl;
       le->replay(mds);
 
       if (le->get_type() == EVENT_SUBTREEMAP)
@@ -436,7 +436,7 @@ void MDLog::_replay_thread()
 
   // done!
   assert(journaler->get_read_pos() == journaler->get_write_pos());
-  dout(10) << "_replay - complete" << endl;
+  dout(10) << "_replay - complete" << dendl;
   
   // move read pointer _back_ to expire pos, for eventual trimming
   journaler->set_read_pos(journaler->get_expire_pos());
@@ -446,7 +446,7 @@ void MDLog::_replay_thread()
   ls.swap(waitfor_replay);
   finish_contexts(ls,0);  
   
-  dout(10) << "_replay_thread finish" << endl;
+  dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();
 }
 

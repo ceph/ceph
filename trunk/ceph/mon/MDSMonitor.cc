@@ -33,9 +33,9 @@
 #include <sstream>
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << mdsmap.get_epoch() << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << mdsmap.get_epoch() << " "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << mdsmap.get_epoch() << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << mdsmap.get_epoch() << " "
 
 
 
@@ -43,7 +43,7 @@
 
 void MDSMonitor::print_map(MDSMap &m)
 {
-  dout(7) << "print_map epoch " << m.get_epoch() << " target_num " << m.target_num << endl;
+  dout(7) << "print_map epoch " << m.get_epoch() << " target_num " << m.target_num << dendl;
   entity_inst_t blank;
   set<int> all;
   m.get_mds_set(all);
@@ -53,7 +53,7 @@ void MDSMonitor::print_map(MDSMap &m)
     dout(7) << " mds" << *p << "." << m.mds_inc[*p]
 	    << " : " << MDSMap::get_state_name(m.get_state(*p))
 	    << " : " << (m.have_inst(*p) ? m.get_inst(*p) : blank)
-	    << endl;
+	    << dendl;
   }
 }
 
@@ -63,7 +63,7 @@ void MDSMonitor::print_map(MDSMap &m)
 
 void MDSMonitor::create_initial()
 {
-  dout(10) << "create_initial" << endl;
+  dout(10) << "create_initial" << dendl;
   pending_mdsmap.target_num = g_conf.num_mds;
   pending_mdsmap.created = g_clock.now();
   print_map(pending_mdsmap);
@@ -78,17 +78,17 @@ bool MDSMonitor::update_from_paxos()
   assert(paxosv >= mdsmap.epoch);
 
   dout(10) << "update_from_paxos paxosv " << paxosv 
-	   << ", my e " << mdsmap.epoch << endl;
+	   << ", my e " << mdsmap.epoch << dendl;
 
   // read and decode
   mdsmap_bl.clear();
   bool success = paxos->read(paxosv, mdsmap_bl);
   assert(success);
-  dout(10) << "update_from_paxos  got " << paxosv << endl;
+  dout(10) << "update_from_paxos  got " << paxosv << dendl;
   mdsmap.decode(mdsmap_bl);
 
   // new map
-  dout(7) << "new map:" << endl;
+  dout(7) << "new map:" << dendl;
   print_map(mdsmap);
 
   // bcast map to mds, waiters
@@ -103,12 +103,12 @@ void MDSMonitor::create_pending()
 {
   pending_mdsmap = mdsmap;
   pending_mdsmap.epoch++;
-  dout(10) << "create_pending e" << pending_mdsmap.epoch << endl;
+  dout(10) << "create_pending e" << pending_mdsmap.epoch << dendl;
 }
 
 void MDSMonitor::encode_pending(bufferlist &bl)
 {
-  dout(10) << "encode_pending e" << pending_mdsmap.epoch << endl;
+  dout(10) << "encode_pending e" << pending_mdsmap.epoch << dendl;
   
   //print_map(pending_mdsmap);
 
@@ -120,7 +120,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 
 bool MDSMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
 
   switch (m->get_type()) {
     
@@ -146,11 +146,11 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
   dout(12) << "preprocess_beacon " << *m
 	   << " from " << m->get_mds_inst()
-	   << endl;
+	   << dendl;
 
   // fw to leader?
   if (!mon->is_leader()) {
-    dout(10) << "fw to leader" << endl;
+    dout(10) << "fw to leader" << dendl;
     mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
     return true;
   }
@@ -175,7 +175,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
   // reply to beacon
   if (mdsmap.mds_state_seq[from] > seq) {
-    dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << endl;
+    dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << dendl;
     delete m;
     return true;
   }
@@ -191,11 +191,11 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   if (mdsmap.mds_state.count(from) == 0) { 
     if (state == MDSMap::STATE_BOOT)
       return false;  // need to add to map
-    dout(1) << "mds_beacon " << *m << " announcing non-boot state, ignoring" << endl;
+    dout(1) << "mds_beacon " << *m << " announcing non-boot state, ignoring" << dendl;
   } else if (mdsmap.mds_state[from] != state) {
     if (mdsmap.get_epoch() == m->get_last_epoch_seen()) 
       return false;  // need to update map
-    dout(10) << "mds_beacon " << *m << " ignoring requested state, because mds hasn't seen latest map" << endl;
+    dout(10) << "mds_beacon " << *m << " ignoring requested state, because mds hasn't seen latest map" << dendl;
   }
   
   // we're done.
@@ -206,7 +206,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_update(Message *m)
 {
-  dout(7) << "prepare_update " << *m << endl;
+  dout(7) << "prepare_update " << *m << dendl;
 
   switch (m->get_type()) {
     
@@ -235,7 +235,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
   // -- this is an update --
   dout(12) << "handle_beacon " << *m
 	   << " from " << m->get_mds_inst()
-	   << endl;
+	   << dendl;
   int from = m->get_mds_inst().name.num();
   int state = m->get_state();
   version_t seq = m->get_seq();
@@ -249,7 +249,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
       // wants to be (or already is) a specific MDS. 
       if (!g_conf.mon_allow_mds_bully &&
 	  (!mdsmap.have_inst(from) || mdsmap.get_inst(from) != m->get_mds_inst())) {
-	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << endl;
+	dout(10) << "mds_beacon boot: mds" << from << " is someone else" << dendl;
 	from = -1;
       } else {
 	switch (mdsmap.get_state(from)) {
@@ -270,7 +270,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
 	dout(10) << "mds_beacon boot: mds" << from
 		 << " was " << MDSMap::get_state_name(mdsmap.get_state(from))
 		 << ", " << MDSMap::get_state_name(state) 
-		 << endl;
+		 << dendl;
       }
     }
     if (from < 0) {
@@ -278,7 +278,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
       if (from >= 0) {
 	state = pending_mdsmap.mds_state[from];
 	dout(10) << "mds_beacon boot: already pending mds" << from
-		 << " " << MDSMap::get_state_name(state) << endl;
+		 << " " << MDSMap::get_state_name(state) << dendl;
 	delete m;
 	return false;
       }
@@ -289,7 +289,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
       pending_mdsmap.get_failed_mds_set(failed);
       if (!failed.empty()) {
 	from = *failed.begin();
-	dout(10) << "mds_beacon boot: assigned failed mds" << from << endl;
+	dout(10) << "mds_beacon boot: assigned failed mds" << from << dendl;
 	state = MDSMap::STATE_REPLAY;
       }
     }
@@ -297,11 +297,11 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
       // ok, just pick any unused mds id.
       for (from=0; ; ++from) {
 	if (pending_mdsmap.is_dne(from)) {
-	  dout(10) << "mds_beacon boot: assigned new mds" << from << endl;
+	  dout(10) << "mds_beacon boot: assigned new mds" << from << dendl;
 	  state = MDSMap::STATE_CREATING;
 	  break;
 	} else if (pending_mdsmap.is_stopped(from)) {
-	  dout(10) << "mds_beacon boot: assigned stopped mds" << from << endl;
+	  dout(10) << "mds_beacon boot: assigned stopped mds" << from << dendl;
 	  state = MDSMap::STATE_STARTING;
 	  break;
 	}
@@ -325,7 +325,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
   if (state == MDSMap::STATE_ACTIVE && 
       mdsmap.is_creating(from)) {
     pending_mdsmap.mds_created.insert(from);
-    dout(10) << "mds_beacon created mds" << from << endl;
+    dout(10) << "mds_beacon created mds" << from << dendl;
   }
   
   // if starting|creating and degraded|full, go to standby
@@ -335,14 +335,14 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
        mdsmap.is_creating(from)) &&
       (pending_mdsmap.is_degraded() || 
        pending_mdsmap.is_full())) {
-    dout(10) << "mds_beacon cluster degraded|full, mds" << from << " will be standby" << endl;
+    dout(10) << "mds_beacon cluster degraded|full, mds" << from << " will be standby" << dendl;
     state = MDSMap::STATE_STANDBY;
   }
 
   // update the map
   dout(10) << "mds_beacon mds" << from << " " << MDSMap::get_state_name(mdsmap.mds_state[from])
 	   << " -> " << MDSMap::get_state_name(state)
-	   << endl;
+	   << dendl;
 
   // has someone join or leave the cluster?
   if (state == MDSMap::STATE_REPLAY ||
@@ -358,7 +358,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
   else
     pending_mdsmap.mds_state_seq.erase(from);
   
-  dout(7) << "pending map now:" << endl;
+  dout(7) << "pending map now:" << dendl;
   print_map(pending_mdsmap);
 
   paxos->wait_for_commit(new C_Updated(this, from, m));
@@ -370,10 +370,10 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
 void MDSMonitor::_updated(int from, MMDSBeacon *m)
 {
   if (m->get_state() == MDSMap::STATE_BOOT) {
-    dout(10) << "_updated (booted) mds" << from << " " << *m << endl;
+    dout(10) << "_updated (booted) mds" << from << " " << *m << dendl;
     mon->osdmon->send_latest(mdsmap.get_inst(from));
   } else {
-    dout(10) << "_updated mds" << from << " " << *m << endl;
+    dout(10) << "_updated mds" << from << " " << *m << dendl;
   }
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
@@ -413,7 +413,7 @@ bool MDSMonitor::handle_command(MMonCommand *m)
     else if (m->cmd[1] == "set_target_num" && m->cmd.size() > 2) {
       pending_mdsmap.target_num = atoi(m->cmd[2].c_str());
       r = 0;
-      ss << "target_num = " << pending_mdsmap.target_num << endl;
+      ss << "target_num = " << pending_mdsmap.target_num << dendl;
     }
   }
   if (r == -EINVAL) {
@@ -432,7 +432,7 @@ bool MDSMonitor::handle_command(MMonCommand *m)
 
 void MDSMonitor::bcast_latest_mds()
 {
-  dout(10) << "bcast_latest_mds " << mdsmap.get_epoch() << endl;
+  dout(10) << "bcast_latest_mds " << mdsmap.get_epoch() << dendl;
   
   // tell mds
   set<int> up;
@@ -445,13 +445,13 @@ void MDSMonitor::bcast_latest_mds()
 
 void MDSMonitor::send_full(entity_inst_t dest)
 {
-  dout(11) << "send_full to " << dest << endl;
+  dout(11) << "send_full to " << dest << dendl;
   mon->messenger->send_message(new MMDSMap(&mdsmap), dest);
 }
 
 void MDSMonitor::send_to_waiting()
 {
-  dout(10) << "send_to_waiting " << mdsmap.get_epoch() << endl;
+  dout(10) << "send_to_waiting " << mdsmap.get_epoch() << dendl;
   for (list<entity_inst_t>::iterator i = waiting_for_map.begin();
        i != waiting_for_map.end();
        i++) 
@@ -525,7 +525,7 @@ void MDSMonitor::tick()
 	  
 	  dout(10) << "no beacon from mds" << *p << " since " << last_beacon[*p]
 		   << ", marking " << mdsmap.get_state_name(newstate)
-		   << endl;
+		   << dendl;
 	  
 	  // update map
 	  pending_mdsmap.mds_state[*p] = newstate;
@@ -533,7 +533,7 @@ void MDSMonitor::tick()
 	  changed = true;
 	}
       } else {
-	dout(10) << "no beacons from mds" << *p << ", assuming one " << now << endl;
+	dout(10) << "no beacons from mds" << *p << ", assuming one " << now << dendl;
 	last_beacon[*p] = now;
       }
     }
@@ -549,11 +549,11 @@ void MDSMonitor::do_stop()
   // hrm...
   if (!mon->is_leader() ||
       !paxos->is_active()) {
-    dout(-10) << "do_stop can't stop right now, mdsmap not writeable" << endl;
+    dout(-10) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
     return;
   }
 
-  dout(7) << "do_stop stopping active mds nodes" << endl;
+  dout(7) << "do_stop stopping active mds nodes" << dendl;
   print_map(mdsmap);
 
   for (map<int,int>::iterator p = mdsmap.mds_state.begin();

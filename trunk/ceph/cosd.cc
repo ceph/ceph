@@ -46,7 +46,7 @@ class C_Debug : public Context {
   void finish(int) {
     int size = &g_conf.debug_after - &g_conf.debug;
     memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    dout(0) << "debug_after flipping debug settings" << endl;
+    cout << "debug_after flipping debug settings" << endl;
   }
 };
 

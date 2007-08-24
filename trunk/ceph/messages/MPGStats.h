@@ -26,7 +26,7 @@ public:
 
   char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
-    out << "pg_stats" << endl;
+    out << "pg_stats";
   }
 
   void encode_payload() {

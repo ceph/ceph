@@ -32,15 +32,16 @@ using namespace __gnu_cxx;
 
 
 
+
 //
 Trace::Trace(const char* f)
 {
   fs.open(f);
   if (!fs.is_open()) {
-    dout(0) << "** unable to open trace file " << f << endl;
+    generic_dout(0) << "** unable to open trace file " << f << dendl;
     assert(0);
   }
-  dout(2) << "opened traced file '" << f << "'" << endl;
+  generic_dout(2) << "opened traced file '" << f << "'" << dendl;
 }
 
 Trace::~Trace()

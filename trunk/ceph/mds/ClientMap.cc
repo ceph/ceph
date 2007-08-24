@@ -24,8 +24,8 @@
 #include "osdc/Filer.h"
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".clientmap "
+
+#define dout(x)  if (x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".clientmap "
 
 
 
@@ -52,7 +52,7 @@ public:
 
 void ClientMap::load(Context *onload)
 {
-  dout(10) << "load" << endl;
+  dout(10) << "load" << dendl;
 
   init_inode();
 
@@ -74,7 +74,7 @@ void ClientMap::_load_finish(bufferlist &bl)
   dout(10) << "_load_finish v " << version 
 		   << ", " << client_inst.size() << " clients, "
 		   << bl.length() << " bytes"
-		   << endl;
+		   << dendl;
   projected = committing = committed = version;
   finish_contexts(waiting_for_load);
 }
@@ -95,7 +95,7 @@ public:
 
 void ClientMap::save(Context *onsave, version_t needv)
 {
-  dout(10) << "save needv " << needv << ", v " << version << endl;
+  dout(10) << "save needv " << needv << ", v " << version << dendl;
   commit_waiters[version].push_back(onsave);
   
   if (needv && committing >= needv) return;
@@ -113,7 +113,7 @@ void ClientMap::save(Context *onsave, version_t needv)
 
 void ClientMap::_save_finish(version_t v)
 {
-  dout(10) << "_save_finish v" << v << endl;
+  dout(10) << "_save_finish v" << v << dendl;
   committed = v;
 
   finish_contexts(commit_waiters[v]);

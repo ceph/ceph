@@ -403,13 +403,13 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-    dout(20) << "ebofs.nodepool.commit_start start" << endl;
+    generic_dout(20) << "ebofs.nodepool.commit_start start" << dendl;
 
     assert(flushing == 0);
     /*if (0)
       for (unsigned i=0; i<region_loc.size(); i++) {
         int c = dev.count_io(region_loc[i].start, region_loc[i].length);
-        dout(20) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << endl;
+        generic_dout(20) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << dendl;
         assert(c == 0);
       }
     */
@@ -457,13 +457,13 @@ class NodePool {
     }
     limbo.clear();
 
-    dout(20) << "ebofs.nodepool.commit_start finish" << endl;
+    generic_dout(20) << "ebofs.nodepool.commit_start finish" << dendl;
   }
 
   void commit_wait() {
     while (flushing > 0) 
       commit_cond.Wait(ebofs_lock);
-    dout(20) << "ebofs.nodepool.commit_wait finish" << endl;
+    generic_dout(20) << "ebofs.nodepool.commit_wait finish" << dendl;
   }
 
 

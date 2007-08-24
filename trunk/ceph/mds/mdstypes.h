@@ -582,7 +582,7 @@ protected:
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
-			       << endl;
+			       << dendl;
     
   }
   virtual void take_waiting(int mask, list<Context*>& ls) {
@@ -595,13 +595,13 @@ protected:
 				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 				   << " tag " << it->first
 				   << " on " << *this
-				   << endl;
+				   << dendl;
 	waiting.erase(it++);
       } else {
 	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 				   << " tag " << it->first
 				   << " on " << *this 
-				   << endl;
+				   << dendl;
 	it++;
       }
     }

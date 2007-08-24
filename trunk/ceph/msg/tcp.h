@@ -28,29 +28,29 @@ inline bool tcp_read(int sd, char *buf, int len) {
   while (len > 0) {
     int got = ::recv( sd, buf, len, 0 );
     if (got <= 0) {
-      //dout(18) << "tcp_read socket " << sd << " closed" << endl;
+      //generic_dout(18) << "tcp_read socket " << sd << " closed" << dendl;
       return false;
     }
     len -= got;
     buf += got;
-    //dout(DBL) << "tcp_read got " << got << ", " << len << " left" << endl;
+    //generic_dout(DBL) << "tcp_read got " << got << ", " << len << " left" << dendl;
   }
   return true;
 }
 
 inline int tcp_write(int sd, char *buf, int len) {
-  //dout(DBL) << "tcp_write writing " << len << endl;
+  //generic_dout(DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
   while (len > 0) {
     int did = ::send( sd, buf, len, 0 );
     if (did < 0) {
-      //dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
-      //cerr << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
+      //generic_dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
+      //cerr << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
       return did;
     }
     len -= did;
     buf += did;
-    //dout(DBL) << "tcp_write did " << did << ", " << len << " left" << endl;
+    //generic_dout(DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
   }
   return 0;
 }

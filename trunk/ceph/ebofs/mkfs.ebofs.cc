@@ -200,10 +200,10 @@ int main(int argc, char **argv)
       utime_t end = g_clock.now();
       end -= start;
 
-      dout(1) << "elapsed " << end << endl;
+      cout << "elapsed " << end << endl;
       
       float mbs = (float)megs / (float)end;
-      dout(1) << "mb/s " << mbs << endl;
+      cout << "mb/s " << mbs << endl;
     }
     
     if (0) {  // test

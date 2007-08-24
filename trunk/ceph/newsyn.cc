@@ -127,7 +127,7 @@ class C_Tick : public Context {
 public:
   void finish(int) {
     utime_t now = g_clock.now() - tick_start;
-    dout(0) << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
+    cout << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
     tick_count += g_conf.tick;
     utime_t next = tick_start;
     next.sec_ref() += tick_count;
@@ -148,7 +148,7 @@ class C_Debug : public Context {
   void finish(int) {
     int size = &g_conf.debug_after - &g_conf.debug;
     memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    dout(0) << "debug_after flipping debug settings" << endl;
+    cout << "debug_after flipping debug settings" << endl;
   }
 };
 
@@ -354,7 +354,7 @@ int main(int argc, char **argv)
     nclients++;
   }
 
-  if (!clientlist.empty()) dout(2) << "i have " << clientlist << endl;
+  if (!clientlist.empty()) generic_dout(2) << "i have " << clientlist << dendl;
 
   for (set<int>::iterator it = clientlist.begin();
        it != clientlist.end();
@@ -387,7 +387,7 @@ int main(int argc, char **argv)
   
 
   if (myrank && !started) {
-    //dout(1) << "IDLE" << endl;
+    //dout(1) << "IDLE" << dendl;
     cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << endl; 
     //rank.stop_rank();
   } 

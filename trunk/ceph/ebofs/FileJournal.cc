@@ -22,9 +22,7 @@
 
 
 #include "config.h"
-#include "debug.h"
 
-#undef dout
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
 #define derr(x) if (x <= g_conf.debug_ebofs) cerr << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
 

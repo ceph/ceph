@@ -33,6 +33,8 @@ long buffer_total_alloc = 0;
 Mutex bufferlock;
 
 #include "osd/osd_types.h"
+
+// debug output lock
 Mutex _dout_lock;
 
 FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );   // 8M objects, 2x replication

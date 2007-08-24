@@ -25,8 +25,6 @@
 
 #include "config.h"
 
-#include "debug.h"
-#undef dout
 #define dout(x) if ((x) <= g_conf.debug_ms) cout << dbeginl << g_clock.now() << " "
 
 

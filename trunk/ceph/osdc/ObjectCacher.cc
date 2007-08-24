@@ -12,13 +12,12 @@
 
 /*** ObjectCacher::Object ***/
 
-#undef dout
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t off)
 {
-  dout(20) << "split " << *left << " at " << off << endl;
+  dout(20) << "split " << *left << " at " << off << dendl;
   
   // split off right
   ObjectCacher::BufferHead *right = new BufferHead(this);
@@ -52,7 +51,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t of
     p--;
     while (p != left->waitfor_read.begin()) {
       if (p->first < right->start()) break;      
-      dout(0) << "split  moving waiters at byte " << p->first << " to right bh" << endl;
+      dout(0) << "split  moving waiters at byte " << p->first << " to right bh" << dendl;
       right->waitfor_read[p->first].swap( p->second );
       o = p;
       p--;
@@ -60,8 +59,8 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t of
     }
   }
   
-  dout(20) << "split    left is " << *left << endl;
-  dout(20) << "split   right is " << *right << endl;
+  dout(20) << "split    left is " << *left << dendl;
+  dout(20) << "split   right is " << *right << dendl;
   return right;
 }
 
@@ -71,7 +70,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   assert(left->end() == right->start());
   assert(left->get_state() == right->get_state());
 
-  dout(10) << "merge_left " << *left << " + " << *right << endl;
+  dout(10) << "merge_left " << *left << " + " << *right << dendl;
   oc->bh_remove(this, right);
   oc->bh_stat_sub(left);
   left->set_length( left->length() + right->length());
@@ -95,12 +94,12 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   // hose right
   delete right;
 
-  dout(10) << "merge_left result " << *left << endl;
+  dout(10) << "merge_left result " << *left << dendl;
 }
 
 void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 {
-  dout(10) << "try_merge_bh " << *bh << endl;
+  dout(10) << "try_merge_bh " << *bh << dendl;
 
   // to the left?
   map<off_t,BufferHead*>::iterator p = data.find(bh->start());
@@ -140,7 +139,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
     if (ex_it->oid != oid) continue;
     
     dout(10) << "map_read " << ex_it->oid 
-             << " " << ex_it->start << "~" << ex_it->length << endl;
+             << " " << ex_it->start << "~" << ex_it->length << dendl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
     // p->first >= start
@@ -164,7 +163,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
         n->set_length( left );
         oc->bh_add(this, n);
         missing[cur] = n;
-        dout(20) << "map_read miss " << left << " left, " << *n << endl;
+        dout(20) << "map_read miss " << left << " left, " << *n << dendl;
         cur += left;
         left -= left;
         assert(left == 0);
@@ -180,11 +179,11 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
             e->is_dirty() ||
             e->is_tx()) {
           hits[cur] = e;     // readable!
-          dout(20) << "map_read hit " << *e << endl;
+          dout(20) << "map_read hit " << *e << dendl;
         } 
         else if (e->is_rx()) {
           rx[cur] = e;       // missing, not readable.
-          dout(20) << "map_read rx " << *e << endl;
+          dout(20) << "map_read rx " << *e << dendl;
         }
         else assert(0);
         
@@ -204,7 +203,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
         missing[cur] = n;
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
-        dout(20) << "map_read gap " << *n << endl;
+        dout(20) << "map_read gap " << *n << dendl;
         continue;    // more?
       }
       else 
@@ -231,7 +230,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
     if (ex_it->oid != oid) continue;
     
     dout(10) << "map_write oex " << ex_it->oid
-             << " " << ex_it->start << "~" << ex_it->length << endl;
+             << " " << ex_it->start << "~" << ex_it->length << dendl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
     // p->first >= start
@@ -246,7 +245,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
       /*// dirty and butts up?
       if (p->first + p->second->length() == cur &&
           p->second->is_dirty()) {
-        dout(10) << "map_write will append to tail of " << *p->second << endl;
+        dout(10) << "map_write will append to tail of " << *p->second << dendl;
         final = p->second;
       }
       */
@@ -264,7 +263,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
           final->set_start( cur );
           final->set_length( max );
           oc->bh_add(this, final);
-          dout(10) << "map_write adding trailing bh " << *final << endl;
+          dout(10) << "map_write adding trailing bh " << *final << dendl;
         } else {
           final->set_length( final->length() + max );
         }
@@ -273,11 +272,11 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
         continue;
       }
       
-      dout(10) << "p is " << *p->second << endl;
+      dout(10) << "p is " << *p->second << dendl;
 
       if (p->first <= cur) {
         BufferHead *bh = p->second;
-        dout(10) << "map_write bh " << *bh << " intersected" << endl;
+        dout(10) << "map_write bh " << *bh << " intersected" << dendl;
         
         if (p->first < cur) {
           assert(final == 0);
@@ -316,7 +315,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
         // gap!
         off_t next = p->first;
         off_t glen = MIN(next - cur, max);
-        dout(10) << "map_write gap " << cur << "~" << glen << endl;
+        dout(10) << "map_write gap " << cur << "~" << glen << dendl;
         if (final) {
           final->set_length( final->length() + glen );
         } else {
@@ -335,7 +334,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
   
   // set versoin
   assert(final);
-  dout(10) << "map_write final is " << *final << endl;
+  dout(10) << "map_write final is " << *final << dendl;
 
   return final;
 }
@@ -343,7 +342,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 
 void ObjectCacher::Object::truncate(off_t s)
 {
-  dout(10) << "truncate to " << s << endl;
+  dout(10) << "truncate to " << s << dendl;
   
   while (!data.empty()) {
 	BufferHead *bh = data.rbegin()->second;
@@ -370,7 +369,7 @@ void ObjectCacher::Object::truncate(off_t s)
 /*** ObjectCacher ***/
 
 #undef dout
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
 
 
 
@@ -378,7 +377,7 @@ void ObjectCacher::Object::truncate(off_t s)
 
 void ObjectCacher::close_object(Object *ob) 
 {
-  dout(10) << "close_object " << *ob << endl;
+  dout(10) << "close_object " << *ob << dendl;
   assert(ob->can_close());
   
   // ok!
@@ -394,7 +393,7 @@ void ObjectCacher::close_object(Object *ob)
 
 void ObjectCacher::bh_read(BufferHead *bh)
 {
-  dout(7) << "bh_read on " << *bh << endl;
+  dout(7) << "bh_read on " << *bh << dendl;
 
   mark_rx(bh);
 
@@ -413,18 +412,18 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
           << oid 
           << " " << start << "~" << length
 	  << " (bl is " << bl.length() << ")"
-          << endl;
+          << dendl;
 
   if (bl.length() < length) {
     bufferptr bp(length - bl.length());
     bp.zero();
     dout(7) << "bh_read_finish " << oid << " padding " << start << "~" << length 
-	    << " with " << bp.length() << " bytes of zeroes" << endl;
+	    << " with " << bp.length() << " bytes of zeroes" << dendl;
     bl.push_back(bp);
   }
   
   if (objects.count(oid) == 0) {
-    dout(7) << "bh_read_finish no object cache" << endl;
+    dout(7) << "bh_read_finish no object cache" << dendl;
   } else {
     Object *ob = objects[oid];
     
@@ -439,13 +438,13 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
       if (bh->start() > opos) {
         dout(1) << "weirdness: gap when applying read results, " 
                 << opos << "~" << bh->start() - opos 
-                << endl;
+                << dendl;
         opos = bh->start();
         continue;
       }
       
       if (!bh->is_rx()) {
-        dout(10) << "bh_read_finish skipping non-rx " << *bh << endl;
+        dout(10) << "bh_read_finish skipping non-rx " << *bh << dendl;
         opos = bh->end();
         p++;
         continue;
@@ -459,7 +458,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
                        opos-bh->start(),
                        bh->length());
       mark_clean(bh);
-      dout(10) << "bh_read_finish read " << *bh << endl;
+      dout(10) << "bh_read_finish read " << *bh << dendl;
       
       opos = bh->end();
       p++;
@@ -484,7 +483,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 
 void ObjectCacher::bh_write(BufferHead *bh)
 {
-  dout(7) << "bh_write " << *bh << endl;
+  dout(7) << "bh_write " << *bh << dendl;
   
   // finishers
   C_WriteAck *onack = new C_WriteAck(this, bh->ob->get_oid(), bh->start(), bh->length());
@@ -511,7 +510,7 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
     object_t oid = *i;
 
     if (objects.count(oid) == 0) {
-      dout(7) << "lock_ack no object cache" << endl;
+      dout(7) << "lock_ack no object cache" << dendl;
       assert(0);
     } 
     
@@ -522,7 +521,7 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
     assert(tid <= ob->last_write_tid);
     if (ob->last_write_tid == tid) {
       dout(10) << "lock_ack " << *ob
-               << " tid " << tid << endl;
+               << " tid " << tid << dendl;
 
       switch (ob->lock_state) {
       case Object::LOCK_RDUNLOCKING: 
@@ -551,7 +550,7 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
         close_object(ob);
     } else {
       dout(10) << "lock_ack " << *ob 
-               << " tid " << tid << " obsolete" << endl;
+               << " tid " << tid << " obsolete" << dendl;
     }
 
     // waiters?
@@ -573,9 +572,9 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
           << oid 
           << " tid " << tid
           << " " << start << "~" << length
-          << endl;
+          << dendl;
   if (objects.count(oid) == 0) {
-    dout(7) << "bh_write_ack no object cache" << endl;
+    dout(7) << "bh_write_ack no object cache" << dendl;
     assert(0);
   } else {
     Object *ob = objects[oid];
@@ -590,26 +589,26 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
 
       if (bh->start() < start &&
           bh->end() > start+(off_t)length) {
-        dout(20) << "bh_write_ack skipping " << *bh << endl;
+        dout(20) << "bh_write_ack skipping " << *bh << dendl;
         continue;
       }
       
       // make sure bh is tx
       if (!bh->is_tx()) {
-        dout(10) << "bh_write_ack skipping non-tx " << *bh << endl;
+        dout(10) << "bh_write_ack skipping non-tx " << *bh << dendl;
         continue;
       }
       
       // make sure bh tid matches
       if (bh->last_write_tid != tid) {
         assert(bh->last_write_tid > tid);
-        dout(10) << "bh_write_ack newer tid on " << *bh << endl;
+        dout(10) << "bh_write_ack newer tid on " << *bh << dendl;
         continue;
       }
       
       // ok!  mark bh clean.
       mark_clean(bh);
-      dout(10) << "bh_write_ack clean " << *bh << endl;
+      dout(10) << "bh_write_ack clean " << *bh << dendl;
     }
     
     // update object last_ack.
@@ -636,9 +635,9 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
           << oid 
           << " tid " << tid
           << " " << start << "~" << length
-          << endl;
+          << dendl;
   if (objects.count(oid) == 0) {
-    dout(7) << "bh_write_commit no object cache" << endl;
+    dout(7) << "bh_write_commit no object cache" << dendl;
     //assert(0);
   } else {
     Object *ob = objects[oid];
@@ -664,7 +663,7 @@ void ObjectCacher::flush(off_t amount)
   utime_t cutoff = g_clock.now();
   //cutoff.sec_ref() -= g_conf.client_oc_max_dirty_age;
 
-  dout(10) << "flush " << amount << endl;
+  dout(10) << "flush " << amount << dendl;
   
   /*
    * NOTE: we aren't actually pulling things off the LRU here, just looking at the
@@ -690,13 +689,13 @@ void ObjectCacher::trim(off_t max)
   
   dout(10) << "trim  start: max " << max 
            << "  clean " << get_stat_clean()
-           << endl;
+           << dendl;
 
   while (get_stat_clean() > max) {
     BufferHead *bh = (BufferHead*) lru_rest.lru_expire();
     if (!bh) break;
     
-    dout(10) << "trim trimming " << *bh << endl;
+    dout(10) << "trim trimming " << *bh << dendl;
     assert(bh->is_clean());
     
     Object *ob = bh->ob;
@@ -704,14 +703,14 @@ void ObjectCacher::trim(off_t max)
     delete bh;
     
     if (ob->can_close()) {
-      dout(10) << "trim trimming " << *ob << endl;
+      dout(10) << "trim trimming " << *ob << dendl;
       close_object(ob);
     }
   }
   
   dout(10) << "trim finish: max " << max 
            << "  clean " << get_stat_clean()
-           << endl;
+           << dendl;
 }
 
 
@@ -731,7 +730,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
   for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ex_it++) {
-    dout(10) << "readx " << *ex_it << endl;
+    dout(10) << "readx " << *ex_it << dendl;
 
     // get Object cache
     Object *o = get_object(ex_it->oid, ino, ex_it->layout);
@@ -748,7 +747,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
         bh_read(bh_it->second);
         if (success) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
-                   << " off " << bh_it->first << endl;
+                   << " off " << bh_it->first << dendl;
           success = false;
           bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
         }
@@ -761,7 +760,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
         touch_bh(bh_it->second);        // bump in lru, so we don't lose it.
         if (success) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
-                   << " off " << bh_it->first << endl;
+                   << " off " << bh_it->first << dendl;
           success = false;
           bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
         }
@@ -773,7 +772,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       for (map<off_t, BufferHead*>::iterator bh_it = hits.begin();
            bh_it != hits.end();
            bh_it++) {
-	dout(10) << "readx hit bh " << *bh_it->second << endl;
+	dout(10) << "readx hit bh " << *bh_it->second << dendl;
         hit_ls.push_back(bh_it->second);
       }
 
@@ -794,7 +793,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
         dout(10) << "readx rmap opos " << opos
                  << ": " << *bh << " +" << bhoff
                  << " frag " << f_it->first << "~" << f_it->second << " +" << foff
-                 << endl;
+                 << dendl;
 
         size_t len = MIN(f_it->second - foff,
                          bh->length() - bhoff);
@@ -834,7 +833,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 
   // no misses... success!  do the read.
   assert(!hit_ls.empty());
-  dout(10) << "readx has all buffers" << endl;
+  dout(10) << "readx has all buffers" << dendl;
   
   // ok, assemble into result buffer.
   rd->bl->clear();
@@ -843,12 +842,12 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
        i != stripe_map.end();
        i++) {
     assert(pos == i->first);
-    dout(10) << "readx  adding buffer len " << i->second.length() << " at " << pos << endl;
+    dout(10) << "readx  adding buffer len " << i->second.length() << " at " << pos << dendl;
     pos += i->second.length();
     rd->bl->claim_append(i->second);
     assert(rd->bl->length() == pos);
   }
-  dout(10) << "readx  result is " << rd->bl->length() << endl;
+  dout(10) << "readx  result is " << rd->bl->length() << dendl;
 
   // done with read.
   delete rd;
@@ -881,7 +880,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     for (map<size_t,size_t>::iterator f_it = ex_it->buffer_extents.begin();
          f_it != ex_it->buffer_extents.end();
          f_it++) {
-      dout(10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << endl;
+      dout(10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;
       size_t bhoff = bh->start() - opos;
       assert(f_it->second <= bh->length() - bhoff);
 
@@ -919,18 +918,18 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 void ObjectCacher::wait_for_write(size_t len, Mutex& lock)
 {
   while (get_stat_dirty() > g_conf.client_oc_max_dirty) {
-    dout(10) << "wait_for_write waiting" << endl;
+    dout(10) << "wait_for_write waiting" << dendl;
     flusher_cond.Signal();
     stat_waiter++;
     stat_cond.Wait(lock);
     stat_waiter--;
-    dout(10) << "wait_for_write woke up" << endl;
+    dout(10) << "wait_for_write woke up" << dendl;
   }
 }
 
 void ObjectCacher::flusher_entry()
 {
-  dout(10) << "flusher start" << endl;
+  dout(10) << "flusher start" << dendl;
   lock.Lock();
   while (!flusher_stop) {
     while (!flusher_stop) {
@@ -941,12 +940,12 @@ void ObjectCacher::flusher_entry()
                << get_stat_rx() << " rx, "
                << get_stat_clean() << " clean, "
                << get_stat_dirty() << " / " << g_conf.client_oc_max_dirty << " dirty"
-               << endl;
+               << dendl;
       if (get_stat_dirty() > g_conf.client_oc_max_dirty) {
         // flush some dirty pages
         dout(10) << "flusher " 
                  << get_stat_dirty() << " / " << g_conf.client_oc_max_dirty << " dirty,"
-                 << " flushing some dirty bhs" << endl;
+                 << " flushing some dirty bhs" << dendl;
         flush(get_stat_dirty() - g_conf.client_oc_max_dirty);
       }
       else {
@@ -956,7 +955,7 @@ void ObjectCacher::flusher_entry()
         BufferHead *bh = 0;
         while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
                bh->last_write < cutoff) {
-          dout(10) << "flusher flushing aged dirty bh " << *bh << endl;
+          dout(10) << "flusher flushing aged dirty bh " << *bh << dendl;
           bh_write(bh);
         }
         break;
@@ -966,7 +965,7 @@ void ObjectCacher::flusher_entry()
     flusher_cond.WaitInterval(lock, utime_t(1,0));
   }
   lock.Unlock();
-  dout(10) << "flusher finish" << endl;
+  dout(10) << "flusher finish" << dendl;
 }
 
 
@@ -976,7 +975,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 {
   dout(10) << "atomic_sync_readx " << rd
            << " in " << ino
-           << endl;
+           << dendl;
 
   if (rd->extents.size() == 1) {
     // single object.
@@ -1033,7 +1032,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 {
   dout(10) << "atomic_sync_writex " << wr
            << " in " << ino
-           << endl;
+           << dendl;
 
   if (wr->extents.size() == 1 &&
       wr->extents.front().length <= g_conf.client_oc_max_sync_write) {
@@ -1051,7 +1050,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
       dout(10) << "atomic_sync_writex " << wr
                << " in " << ino
                << " doing sync write"
-               << endl;
+               << dendl;
 
       Cond cond;
       bool done = false;
@@ -1109,7 +1108,7 @@ void ObjectCacher::rdlock(Object *o)
   if (o->lock_state == Object::LOCK_NONE ||
       o->lock_state == Object::LOCK_RDUNLOCKING ||
       o->lock_state == Object::LOCK_WRUNLOCKING) {
-    dout(10) << "rdlock rdlock " << *o << endl;
+    dout(10) << "rdlock rdlock " << *o << dendl;
     
     o->lock_state = Object::LOCK_RDLOCKING;
     
@@ -1128,7 +1127,7 @@ void ObjectCacher::rdlock(Object *o)
   // wait?
   if (o->lock_state == Object::LOCK_RDLOCKING ||
       o->lock_state == Object::LOCK_WRLOCKING) {
-    dout(10) << "rdlock waiting for rdlock|wrlock on " << *o << endl;
+    dout(10) << "rdlock waiting for rdlock|wrlock on " << *o << dendl;
     Cond cond;
     bool done = false;
     o->waitfor_rd.push_back(new C_SafeCond(&lock, &cond, &done));
@@ -1146,7 +1145,7 @@ void ObjectCacher::wrlock(Object *o)
   if (o->lock_state != Object::LOCK_WRLOCK &&
       o->lock_state != Object::LOCK_WRLOCKING &&
       o->lock_state != Object::LOCK_UPGRADING) {
-    dout(10) << "wrlock wrlock " << *o << endl;
+    dout(10) << "wrlock wrlock " << *o << dendl;
     
     int op = 0;
     if (o->lock_state == Object::LOCK_RDLOCK) {
@@ -1172,7 +1171,7 @@ void ObjectCacher::wrlock(Object *o)
   // wait?
   if (o->lock_state == Object::LOCK_WRLOCKING ||
       o->lock_state == Object::LOCK_UPGRADING) {
-    dout(10) << "wrlock waiting for wrlock on " << *o << endl;
+    dout(10) << "wrlock waiting for wrlock on " << *o << dendl;
     Cond cond;
     bool done = false;
     o->waitfor_wr.push_back(new C_SafeCond(&lock, &cond, &done));
@@ -1184,7 +1183,7 @@ void ObjectCacher::wrlock(Object *o)
 
 void ObjectCacher::rdunlock(Object *o)
 {
-  dout(10) << "rdunlock " << *o << endl;
+  dout(10) << "rdunlock " << *o << dendl;
   assert(o->lock_state == Object::LOCK_RDLOCK ||
          o->lock_state == Object::LOCK_WRLOCK ||
          o->lock_state == Object::LOCK_UPGRADING ||
@@ -1194,7 +1193,7 @@ void ObjectCacher::rdunlock(Object *o)
   o->rdlock_ref--;
   if (o->rdlock_ref > 0 ||
       o->wrlock_ref > 0) {
-    dout(10) << "rdunlock " << *o << " still has rdlock|wrlock refs" << endl;
+    dout(10) << "rdunlock " << *o << " still has rdlock|wrlock refs" << dendl;
     return;
   }
 
@@ -1212,13 +1211,13 @@ void ObjectCacher::rdunlock(Object *o)
 
 void ObjectCacher::wrunlock(Object *o)
 {
-  dout(10) << "wrunlock " << *o << endl;
+  dout(10) << "wrunlock " << *o << dendl;
   assert(o->lock_state == Object::LOCK_WRLOCK);
 
   assert(o->wrlock_ref > 0);
   o->wrlock_ref--;
   if (o->wrlock_ref > 0) {
-    dout(10) << "wrunlock " << *o << " still has wrlock refs" << endl;
+    dout(10) << "wrunlock " << *o << " still has wrlock refs" << dendl;
     return;
   }
 
@@ -1226,11 +1225,11 @@ void ObjectCacher::wrunlock(Object *o)
 
   int op = 0;
   if (o->rdlock_ref > 0) {
-    dout(10) << "wrunlock rdlock " << *o << endl;
+    dout(10) << "wrunlock rdlock " << *o << dendl;
     op = OSD_OP_DNLOCK;
     o->lock_state = Object::LOCK_DOWNGRADING;
   } else {
-    dout(10) << "wrunlock wrunlock " << *o << endl;
+    dout(10) << "wrunlock wrunlock " << *o << dendl;
     op = OSD_OP_WRUNLOCK;
     o->lock_state = Object::LOCK_WRUNLOCKING;
   }
@@ -1290,20 +1289,20 @@ bool ObjectCacher::set_is_dirty_or_committing(inodeno_t ino)
 // purge.  non-blocking.  violently removes dirty buffers from cache.
 void ObjectCacher::purge(Object *ob)
 {
-  dout(10) << "purge " << *ob << endl;
+  dout(10) << "purge " << *ob << dendl;
 
   for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
        p != ob->data.end();
        p++) {
     BufferHead *bh = p->second;
 	if (!bh->is_clean())
-	  dout(0) << "purge forcibly removing " << *ob << " " << *bh << endl;
+	  dout(0) << "purge forcibly removing " << *ob << " " << *bh << dendl;
 	bh_remove(ob, bh);
 	delete bh;
   }
 
   if (ob->can_close()) {
-	dout(10) << "trim trimming " << *ob << endl;
+	dout(10) << "trim trimming " << *ob << dendl;
 	close_object(ob);
   }
 }
@@ -1335,11 +1334,11 @@ bool ObjectCacher::flush(Object *ob)
 bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "flush_set on " << ino << " dne" << endl;
+    dout(10) << "flush_set on " << ino << " dne" << dendl;
     return true;
   }
 
-  dout(10) << "flush_set " << ino << endl;
+  dout(10) << "flush_set " << ino << dendl;
 
   C_Gather *gather = 0; // we'll need to wait for all objects to flush!
 
@@ -1359,14 +1358,14 @@ bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
       dout(10) << "flush_set " << ino << " will wait for ack tid " 
                << ob->last_write_tid 
                << " on " << *ob
-               << endl;
+               << dendl;
       if (gather)
         ob->waitfor_ack[ob->last_write_tid].push_back(gather->new_sub());
     }
   }
   
   if (safe) {
-    dout(10) << "flush_set " << ino << " has no dirty|tx bhs" << endl;
+    dout(10) << "flush_set " << ino << " has no dirty|tx bhs" << dendl;
     return true;
   }
   return false;
@@ -1380,11 +1379,11 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   assert(onfinish);  // doesn't make any sense otherwise.
 
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "commit_set on " << ino << " dne" << endl;
+    dout(10) << "commit_set on " << ino << " dne" << dendl;
     return true;
   }
 
-  dout(10) << "commit_set " << ino << endl;
+  dout(10) << "commit_set " << ino << dendl;
 
   C_Gather *gather = 0; // we'll need to wait for all objects to commit
 
@@ -1401,7 +1400,7 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
     if (ob->last_write_tid > ob->last_commit_tid) {
       dout(10) << "commit_set " << ino << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
-               << endl;
+               << dendl;
       if (!gather && onfinish) gather = new C_Gather(onfinish);
       safe = false;
       if (gather)
@@ -1410,7 +1409,7 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   }
 
   if (safe) {
-    dout(10) << "commit_set " << ino << " all committed" << endl;
+    dout(10) << "commit_set " << ino << " all committed" << dendl;
     return true;
   }
   return false;
@@ -1419,11 +1418,11 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 void ObjectCacher::purge_set(inodeno_t ino)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "purge_set on " << ino << " dne" << endl;
+    dout(10) << "purge_set on " << ino << " dne" << dendl;
     return;
   }
 
-  dout(10) << "purge_set " << ino << endl;
+  dout(10) << "purge_set " << ino << dendl;
 
   set<Object*>& s = objects_by_ino[ino];
   for (set<Object*>::iterator i = s.begin();
@@ -1458,7 +1457,7 @@ off_t ObjectCacher::release(Object *ob)
   }
 
   if (ob->can_close()) {
-	dout(10) << "trim trimming " << *ob << endl;
+	dout(10) << "trim trimming " << *ob << dendl;
 	close_object(ob);
   }
 
@@ -1471,11 +1470,11 @@ off_t ObjectCacher::release_set(inodeno_t ino)
   off_t unclean = 0;
 
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "release_set on " << ino << " dne" << endl;
+    dout(10) << "release_set on " << ino << " dne" << dendl;
     return 0;
   }
 
-  dout(10) << "release_set " << ino << endl;
+  dout(10) << "release_set " << ino << dendl;
 
   set<Object*> s = objects_by_ino[ino];
   for (set<Object*>::iterator i = s.begin();
@@ -1489,13 +1488,13 @@ off_t ObjectCacher::release_set(inodeno_t ino)
     if (o_unclean) 
       dout(10) << "release_set " << ino << " " << *ob 
                << " has " << o_unclean << " bytes left"
-               << endl;
+               << dendl;
     
   }
 
   if (unclean) {
     dout(10) << "release_set " << ino
-             << ", " << unclean << " bytes left" << endl;
+             << ", " << unclean << " bytes left" << dendl;
   }
 
   return unclean;
@@ -1504,11 +1503,11 @@ off_t ObjectCacher::release_set(inodeno_t ino)
 void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "truncate_set on " << ino << " dne" << endl;
+    dout(10) << "truncate_set on " << ino << " dne" << dendl;
     return;
   }
   
-  dout(10) << "truncate_set " << ino << endl;
+  dout(10) << "truncate_set " << ino << dendl;
 
   for (list<ObjectExtent>::iterator p = exls.begin();
 	   p != exls.end();
@@ -1519,15 +1518,15 @@ void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
 
 	// purge or truncate?
 	if (ex.start == 0) {
-	  dout(10) << "truncate_set purging " << *ob << endl;
+	  dout(10) << "truncate_set purging " << *ob << dendl;
 	  purge(ob);
 	} else {
 	  // hrm, truncate object
-	  dout(10) << "truncate_set truncating " << *ob << " at " << ex.start << endl;
+	  dout(10) << "truncate_set truncating " << *ob << " at " << ex.start << dendl;
 	  ob->truncate(ex.start);
 
 	  if (ob->can_close()) {
-		dout(10) << "truncate_set trimming " << *ob << endl;
+		dout(10) << "truncate_set trimming " << *ob << dendl;
 		close_object(ob);
 	  }
 	}
@@ -1538,11 +1537,11 @@ void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
 void ObjectCacher::kick_sync_writers(inodeno_t ino)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "kick_sync_writers on " << ino << " dne" << endl;
+    dout(10) << "kick_sync_writers on " << ino << " dne" << dendl;
     return;
   }
 
-  dout(10) << "kick_sync_writers on " << ino << endl;
+  dout(10) << "kick_sync_writers on " << ino << dendl;
 
   list<Context*> ls;
 
@@ -1561,11 +1560,11 @@ void ObjectCacher::kick_sync_writers(inodeno_t ino)
 void ObjectCacher::kick_sync_readers(inodeno_t ino)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "kick_sync_readers on " << ino << " dne" << endl;
+    dout(10) << "kick_sync_readers on " << ino << " dne" << dendl;
     return;
   }
 
-  dout(10) << "kick_sync_readers on " << ino << endl;
+  dout(10) << "kick_sync_readers on " << ino << dendl;
 
   list<Context*> ls;
 

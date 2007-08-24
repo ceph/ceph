@@ -26,8 +26,9 @@
 
 #include <cassert>
 
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
+
+
 
 ostream& CDentry::print_db_line_prefix(ostream& out) 
 {
@@ -129,7 +130,7 @@ void CDentry::add_waiter(int tag, Context *c)
 version_t CDentry::pre_dirty(version_t min)
 {
   projected_version = dir->pre_dirty(min);
-  dout(10) << " pre_dirty " << *this << endl;
+  dout(10) << " pre_dirty " << *this << dendl;
   return projected_version;
 }
 
@@ -146,7 +147,7 @@ void CDentry::_mark_dirty()
 
 void CDentry::mark_dirty(version_t pv) 
 {
-  dout(10) << " mark_dirty " << *this << endl;
+  dout(10) << " mark_dirty " << *this << dendl;
 
   // i now live in this new dir version
   assert(pv <= projected_version);
@@ -160,7 +161,7 @@ void CDentry::mark_dirty(version_t pv)
 
 void CDentry::mark_clean() 
 {
-  dout(10) << " mark_clean " << *this << endl;
+  dout(10) << " mark_clean " << *this << dendl;
   assert(is_dirty());
   assert(version <= dir->get_version());
 
@@ -175,7 +176,7 @@ void CDentry::mark_clean()
 
 void CDentry::mark_new() 
 {
-  dout(10) << " mark_new " << *this << endl;
+  dout(10) << " mark_new " << *this << dendl;
   state_set(STATE_NEW);
 }
 
@@ -216,7 +217,7 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
 
   // add this inode (in my dirfrag) to the end
   trace.push_back(Anchor(in->ino(), dir->dirfrag()));
-  dout(10) << "make_anchor_trace added " << trace.back() << endl;
+  dout(10) << "make_anchor_trace added " << trace.back() << dendl;
 }
 
 
@@ -328,7 +329,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
     // newly linked?
     if (is_null() && !is_auth()) {
       // force trim from cache!
-      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << endl;
+      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << dendl;
       //assert(get_num_ref() == 0);
     } else {
       // verify?

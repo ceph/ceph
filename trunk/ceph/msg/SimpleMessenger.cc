@@ -31,9 +31,10 @@
 #include <iostream>
 #include <fstream>
 
+#include "debug.h"
 #undef dout
-#define dout(l)  if (l<=g_conf.debug_ms) cout << g_clock.now() << " -- " << rank.my_addr << " "
-#define derr(l)  if (l<=g_conf.debug_ms) cerr << g_clock.now() << " -- " << rank.my_addr << " "
+#define dout(l)  if (l<=g_conf.debug_ms) cout << dbeginl << g_clock.now() << " -- " << rank.my_addr << " "
+#define derr(l)  if (l<=g_conf.debug_ms) cerr << dbeginl << g_clock.now() << " -- " << rank.my_addr << " "
 
 
 
@@ -59,7 +60,7 @@ void simplemessenger_sigint(int r)
 void Rank::sigint()
 {
   lock.Lock();
-  derr(0) << "got control-c, exiting" << endl;
+  derr(0) << "got control-c, exiting" << dendl;
   
   // force close listener socket
   ::close(accepter.listen_sd);
@@ -77,17 +78,17 @@ void Rank::sigint()
 
 void noop_signal_handler(int s)
 {
-  //cout << "blah_handler got " << s << endl;
+  //dout(0) << "blah_handler got " << s << dendl;
 }
 
 int Rank::Accepter::start()
 {
   // bind to a socket
-  dout(10) << "accepter.start" << endl;
+  dout(10) << "accepter.start" << dendl;
   
   char hostname[100];
   gethostname(hostname, 100);
-  dout(1) << "accepter.start my hostname is " << hostname << endl;
+  dout(1) << "accepter.start my hostname is " << hostname << dendl;
 
   // is there a .ceph_hosts file?
   {
@@ -103,11 +104,11 @@ int Rank::Accepter::start()
 	if (!ospace) continue;
 	string host = line.substr(0, ospace);
 	string addr = line.substr(ospace+1);
-	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << endl;
+	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << dendl;
 	if (host == hostname) {
 	  parse_ip_port(addr.c_str(), g_my_addr);
 	  g_my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
-	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << endl;
+	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
 	  break;
 	}
       }
@@ -125,14 +126,14 @@ int Rank::Accepter::start()
   /* bind to port */
   int rc = bind(listen_sd, (struct sockaddr *) &rank.listen_addr, sizeof(rank.listen_addr));
   if (rc < 0) 
-    derr(0) << "accepter.start unable to bind to " << rank.listen_addr << endl;
+    derr(0) << "accepter.start unable to bind to " << rank.listen_addr << dendl;
   assert(rc >= 0);
 
   // what port did we get?
   socklen_t llen = sizeof(rank.listen_addr);
   getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  dout(10) << "accepter.start bound to " << rank.listen_addr << endl;
+  dout(10) << "accepter.start bound to " << rank.listen_addr << dendl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
@@ -156,7 +157,7 @@ int Rank::Accepter::start()
     rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
 
-  dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
+  dout(10) << "accepter.start my addr is " << rank.my_addr << dendl;
 
   // set up signal handler
   old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
@@ -175,15 +176,15 @@ int Rank::Accepter::start()
 
 void *Rank::Accepter::entry()
 {
-  dout(10) << "accepter starting" << endl;
+  dout(10) << "accepter starting" << dendl;
   
   fd_set fds;
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
-    dout(20) << "accepter calling select" << endl;
+    dout(20) << "accepter calling select" << dendl;
     int r = ::select(listen_sd+1, &fds, 0, &fds, 0);
-    dout(20) << "accepter select got " << r << endl;
+    dout(20) << "accepter select got " << r << dendl;
     
     if (done) break;
 
@@ -192,7 +193,7 @@ void *Rank::Accepter::entry()
     socklen_t slen = sizeof(addr);
     int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);  // FIXME: make this non-blocking.
     if (sd > 0) {
-      dout(10) << "accepted incoming on sd " << sd << endl;
+      dout(10) << "accepted incoming on sd " << sd << dendl;
       
       rank.lock.Lock();
       if (!rank.local.empty()) {
@@ -201,7 +202,7 @@ void *Rank::Accepter::entry()
       }
       rank.lock.Unlock();
     } else {
-      dout(10) << "no incoming connection?" << endl;
+      dout(10) << "no incoming connection?" << dendl;
     }
   }
 
@@ -237,7 +238,7 @@ int Rank::Pipe::accept()
   // identify peer
   rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
   if (rc < 0) {
-    dout(10) << "pipe(? " << this << ").accept couldn't read peer inst" << endl;
+    dout(10) << "pipe(? " << this << ").accept couldn't read peer inst" << dendl;
     ::close(sd);
     done = true;
     return -1;
@@ -252,19 +253,19 @@ int Rank::Pipe::accept()
   {
     if (rank.rank_pipe.count(peer_addr) == 0) {
       // install a pipe!
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr << endl;
+      dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr << dendl;
       rank.rank_pipe[peer_addr] = this;
     } else {
       // low ranks' Pipes "win"
       if (peer_addr < rank.my_addr) {
 	dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr 
-		 << ", already had pipe, but switching to this new one" << endl;
+		 << ", already had pipe, but switching to this new one" << dendl;
 	// switch to this new Pipe
 	rank.rank_pipe[peer_addr]->close();  // close old one
 	rank.rank_pipe[peer_addr] = this;
       } else {
 	dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr 
-		 << ", already had pipe, sticking with it" << endl;
+		 << ", already had pipe, sticking with it" << dendl;
       }
     }
   }
@@ -275,7 +276,7 @@ int Rank::Pipe::accept()
 
 int Rank::Pipe::connect()
 {
-  dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect" << endl;
+  dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect" << dendl;
 
   // create socket?
   sd = socket(AF_INET,SOCK_STREAM,0);
@@ -296,7 +297,7 @@ int Rank::Pipe::connect()
   rc = ::connect(sd, (sockaddr*)&tcpaddr, sizeof(myAddr));
   if (rc < 0) {
     dout(10) << "connect error " << peer_addr
-	     << ", " << errno << ": " << strerror(errno) << endl;
+	     << ", " << errno << ": " << strerror(errno) << dendl;
     return rc;
   }
 
@@ -304,11 +305,11 @@ int Rank::Pipe::connect()
   entity_addr_t paddr;
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (!rc) { // bool
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << endl;
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << dendl;
     return -1;
   }
   if (peer_addr != paddr) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << endl;
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << dendl;
     ::close(sd);
     sd = 0;
     return -1;
@@ -323,11 +324,11 @@ int Rank::Pipe::connect()
   rank.lock.Lock();
   {
     if (rank.rank_pipe.count(peer_addr) == 0) {
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect registering pipe" << endl;
+      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect registering pipe" << dendl;
       rank.rank_pipe[peer_addr] = this;
     } else {
       // this is normal.
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect pipe already registered." << endl;
+      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect pipe already registered." << dendl;
     }
   }
   rank.lock.Unlock();
@@ -342,7 +343,7 @@ int Rank::Pipe::connect()
 
 void Rank::Pipe::close()
 {
-  dout(10) << "pipe(" << peer_addr << ' ' << this << ").close" << endl;
+  dout(10) << "pipe(" << peer_addr << ' ' << this << ").close" << dendl;
 
   // unreg ourselves
   rank.lock.Lock();
@@ -350,7 +351,7 @@ void Rank::Pipe::close()
     if (rank.rank_pipe.count(peer_addr) &&
         rank.rank_pipe[peer_addr] == this) {
       dout(10) << "pipe(" << peer_addr << ' ' << this
-	       << ").close unregistering pipe" << endl;
+	       << ").close unregistering pipe" << dendl;
       rank.rank_pipe.erase(peer_addr);
     }
   }
@@ -359,16 +360,16 @@ void Rank::Pipe::close()
   // queue close message?
   if (!need_to_send_close) {
     dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close already closing/closed" << endl;
+	     << ").close already closing/closed" << dendl;
     return;
   }
   
   if (!writer_running) {
     dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close not queueing MSG_CLOSE, no writer running" << endl;  
+	     << ").close not queueing MSG_CLOSE, no writer running" << dendl;  
   } else {
     dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close queueing MSG_CLOSE" << endl;
+	     << ").close queueing MSG_CLOSE" << dendl;
     lock.Lock();
     q.push_back(new MGenericMessage(MSG_CLOSE));
     cond.Signal();
@@ -393,10 +394,10 @@ void Rank::Pipe::reader()
     if (!m || m->get_type() == 0) {
       if (m) {
 	delete m;
-	dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader read MSG_CLOSE message" << endl;
+	dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader read MSG_CLOSE message" << dendl;
 	need_to_send_close = false;
       } else {
-	derr(10) << "pipe(" << peer_addr << ' ' << this << ").reader read null message" << endl;
+	derr(10) << "pipe(" << peer_addr << ' ' << this << ").reader read null message" << dendl;
       }
 
       close();
@@ -406,7 +407,7 @@ void Rank::Pipe::reader()
       break;
     }
 
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader got message for " << m->get_dest() << endl;
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader got message for " << m->get_dest() << dendl;
 
     EntityMessenger *entity = 0;
 
@@ -425,7 +426,7 @@ void Rank::Pipe::reader()
 	    if (rank.stopped.count(m->get_dest())) {
 	      // ignore it
 	    } else {
-	      derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
+	      derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
 	      assert(0);  // FIXME do this differently
 	    }
 	  }
@@ -449,7 +450,7 @@ void Rank::Pipe::reader()
   lock.Unlock();
 
   if (reap) {
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader queueing for reap" << endl;
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader queueing for reap" << dendl;
     ::close(sd);
     rank.lock.Lock();
     {
@@ -471,7 +472,7 @@ void Rank::Pipe::writer()
     if (rc < 0) {
       derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error connecting, " 
 	      << errno << ": " << strerror(errno)
-	      << endl;
+	      << dendl;
       done = true;
       list<Message*> out;
       fail(out);
@@ -483,7 +484,7 @@ void Rank::Pipe::writer()
   while (!q.empty() || !done) {
     
     if (!q.empty()) {
-      dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer grabbing message(s)" << endl;
+      dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer grabbing message(s)" << dendl;
       
       // grab outgoing list
       list<Message*> out;
@@ -496,7 +497,7 @@ void Rank::Pipe::writer()
         Message *m = out.front();
         out.pop_front();
 
-        dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sending " << *m << endl;
+        dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sending " << *m << dendl;
 
         // stamp.
         m->set_source_addr(rank.my_addr);
@@ -509,7 +510,7 @@ void Rank::Pipe::writer()
           // failed!
           derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest()
 		  << ", " << errno << ": " << strerror(errno)
-		  << endl;
+		  << dendl;
           out.push_front(m);
           fail(out);
           done = true;
@@ -529,12 +530,12 @@ void Rank::Pipe::writer()
     }
     
     // wait
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sleeping" << endl;
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sleeping" << dendl;
     cond.Wait(lock);
   }
   lock.Unlock(); 
   
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer finishing" << endl;
+  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer finishing" << dendl;
 
   // reap?
   bool reap = false;
@@ -546,7 +547,7 @@ void Rank::Pipe::writer()
   lock.Unlock();
   
   if (reap) {
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer queueing for reap" << endl;
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer queueing for reap" << dendl;
     ::close(sd);
     rank.lock.Lock();
     {
@@ -561,7 +562,7 @@ void Rank::Pipe::writer()
 Message *Rank::Pipe::read_message()
 {
   // envelope
-  //dout(10) << "receiver.read_message from sd " << sd  << endl;
+  //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
   msg_envelope_t env; 
   if (!tcp_read( sd, (char*)&env, sizeof(env) )) {
@@ -572,7 +573,7 @@ Message *Rank::Pipe::read_message()
   dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got envelope type=" << env.type 
            << " src " << env.src << " dst " << env.dst
            << " nchunks=" << env.nchunks
-           << endl;
+           << dendl;
   
   // payload
   bufferlist blist;
@@ -595,7 +596,7 @@ Message *Rank::Pipe::read_message()
     blist.push_back(bp);
     
     dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got frag " << i << " of " << env.nchunks 
-             << " len " << bp.length() << endl;
+             << " len " << bp.length() << dendl;
   }
   
   // unmarshall message
@@ -603,7 +604,7 @@ Message *Rank::Pipe::read_message()
   Message *m = decode_message(env, blist);
   
   dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got " << s << " byte message from " 
-           << m->get_source() << endl;
+           << m->get_source() << dendl;
   
   return m;
 }
@@ -625,13 +626,13 @@ int Rank::Pipe::write_message(Message *m)
 
   dout(20)  << "pipe(" << peer_addr << ' ' << this << ").writer sending " << m << " " << *m 
             << " to " << m->get_dest()
-            << endl;
+            << dendl;
   
   // send envelope
   int r = tcp_write( sd, (char*)env, sizeof(*env) );
   if (r < 0) { 
     derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending envelope for " << *m
-             << " to " << m->get_dest() << endl; 
+             << " to " << m->get_dest() << dendl; 
     need_to_send_close = false;
     return -1;
   }
@@ -643,17 +644,17 @@ int Rank::Pipe::write_message(Message *m)
   for (list<bufferptr>::const_iterator it = blist.buffers().begin();
        it != blist.buffers().end();
        it++) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").writer tcp_sending frag " << i << " len " << (*it).length() << endl;
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").writer tcp_sending frag " << i << " len " << (*it).length() << dendl;
     int32_t size = (*it).length();
     r = tcp_write( sd, (char*)&size, sizeof(size) );
     if (r < 0) { 
-      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending chunk len for " << *m << " to " << m->get_dest() << endl; 
+      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending chunk len for " << *m << " to " << m->get_dest() << dendl; 
       need_to_send_close = false;
       return -1;
     }
     r = tcp_write( sd, (*it).c_str(), size );
     if (r < 0) { 
-      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data chunk for " << *m << " to " << m->get_dest() << endl; 
+      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data chunk for " << *m << " to " << m->get_dest() << dendl; 
       need_to_send_close = false;
       return -1;
     }
@@ -664,11 +665,11 @@ int Rank::Pipe::write_message(Message *m)
   int32_t size = blist.length();
   r = tcp_write( sd, (char*)&size, sizeof(size) );
   if (r < 0) { 
-    derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data len for " << *m << " to " << m->get_dest() << endl; 
+    derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data len for " << *m << " to " << m->get_dest() << dendl; 
     need_to_send_close = false;
     return -1;
   }
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << endl;
+  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << dendl;
 
   for (list<bufferptr>::const_iterator it = blist.buffers().begin();
        it != blist.buffers().end();
@@ -676,7 +677,7 @@ int Rank::Pipe::write_message(Message *m)
     if ((*it).length() == 0) continue;  // blank buffer.
     r = tcp_write( sd, (char*)(*it).c_str(), (*it).length() );
     if (r < 0) { 
-      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
+      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << dendl; 
       need_to_send_close = false;
       return -1;
     }
@@ -689,7 +690,7 @@ int Rank::Pipe::write_message(Message *m)
 
 void Rank::Pipe::fail(list<Message*>& out)
 {
-  derr(10) << "pipe(" << peer_addr << ' ' << this << ").fail" << endl;
+  derr(10) << "pipe(" << peer_addr << ' ' << this << ").fail" << dendl;
 
   // FIXME: possible race before i reclaim lock here?
   
@@ -721,7 +722,7 @@ void Rank::Pipe::fail(list<Message*>& out)
         Dispatcher *dis = mgr->get_dispatcher();
 	if (mgr->is_stopped()) {
 	  // ignore.
-	  dout(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << *q.front() << ", dispatcher stopping, ignoring." << endl;
+	  dout(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << *q.front() << ", dispatcher stopping, ignoring." << dendl;
 	  delete q.front();
 	} else {
 	  by_dis[dis][q.front()->get_dest()].push_back(q.front());
@@ -746,7 +747,7 @@ void Rank::Pipe::fail(list<Message*>& out)
       for (list<Message*>::iterator k = j->second.begin();
            k != j->second.end();
            ++k) {
-	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << endl;
+	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << dendl;
 	if (i->first)
 	  i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
       }
@@ -777,7 +778,7 @@ Rank::~Rank()
 /*
 void Rank::set_listen_addr(tcpaddr_t& a)
 {
-  dout(10) << "set_listen_addr " << a << endl;
+  dout(10) << "set_listen_addr " << a << dendl;
   memcpy((char*)&listen_addr.sin_addr.s_addr, (char*)&a.sin_addr.s_addr, 4);
   listen_addr.sin_port = a.sin_port;
 }
@@ -815,7 +816,7 @@ void Rank::single_dispatcher_entry()
 		  << " <-- " << m->get_source_inst()
 		  << " ---- " << *m
                   << " -- " << m 
-                  << endl;
+                  << dendl;
           
 	  assert(local.count(m->get_dest()));
 	  local[m->get_dest()]->dispatch(m);
@@ -835,17 +836,17 @@ void Rank::single_dispatcher_entry()
  */
 void Rank::reaper()
 {
-  dout(10) << "reaper" << endl;
+  dout(10) << "reaper" << dendl;
   assert(lock.is_locked());
 
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
-    dout(10) << "reaper reaping pipe " << p->get_peer_addr() << endl;
+    dout(10) << "reaper reaping pipe " << p->get_peer_addr() << dendl;
     pipe_reap_queue.pop_front();
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
-    dout(10) << "reaper reaped pipe " << p->get_peer_addr() << endl;
+    dout(10) << "reaper reaped pipe " << p->get_peer_addr() << dendl;
     delete p;
   }
 }
@@ -855,11 +856,11 @@ int Rank::start_rank()
 {
   lock.Lock();
   if (started) {
-    dout(10) << "start_rank already started" << endl;
+    dout(10) << "start_rank already started" << dendl;
     lock.Unlock();
     return 0;
   }
-  dout(10) << "start_rank" << endl;
+  dout(10) << "start_rank" << dendl;
   lock.Unlock();
 
   // bind to a socket
@@ -874,7 +875,7 @@ int Rank::start_rank()
 
   lock.Lock();
 
-  dout(1) << "start_rank at " << listen_addr << endl;
+  dout(1) << "start_rank at " << listen_addr << dendl;
   started = true;
   lock.Unlock();
   return 0;
@@ -890,7 +891,7 @@ Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
   assert(rank.lock.is_locked());
   assert(addr != rank.my_addr);
   
-  dout(10) << "connect_rank to " << addr << endl;
+  dout(10) << "connect_rank to " << addr << dendl;
   
   // create pipe
   Pipe *pipe = new Pipe(addr);
@@ -924,7 +925,7 @@ Rank::EntityMessenger *Rank::find_unnamed(entity_name_t a)
  */
 Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
 {
-  dout(10) << "register_entity " << name << endl;
+  dout(10) << "register_entity " << name << dendl;
   lock.Lock();
   
   // create messenger
@@ -942,7 +943,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
 void Rank::unregister_entity(EntityMessenger *msgr)
 {
   lock.Lock();
-  dout(10) << "unregister_entity " << msgr->get_myname() << endl;
+  dout(10) << "unregister_entity " << msgr->get_myname() << dendl;
   
   // remove from local directory.
   entity_name_t name = msgr->get_myname();
@@ -970,25 +971,25 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
     if (dest_addr == my_addr) {
       if (local.count(dest)) {
         // local
-        dout(20) << "submit_message " << *m << " dest " << dest << " local" << endl;
+        dout(20) << "submit_message " << *m << " dest " << dest << " local" << dendl;
         if (g_conf.ms_single_dispatch) {
           _submit_single_dispatch(m);
         } else {
           entity = local[dest];
         }
       } else {
-        derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << endl;
+        derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
       }
     }
     else {
       // remote.
       if (rank_pipe.count( dest_addr )) {
-        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", already connected." << endl;
+        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", already connected." << dendl;
         // connected.
         pipe = rank_pipe[ dest_addr ];
       } else {
-        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", connecting." << endl;
+        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", connecting." << dendl;
         // not connected.
         pipe = connect_rank( dest_addr );
       }
@@ -999,12 +1000,12 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
   // do it
   if (entity) {  
     // local!
-    dout(20) << "submit_message " << *m << " dest " << dest << " local, queueing" << endl;
+    dout(20) << "submit_message " << *m << " dest " << dest << " local, queueing" << dendl;
     entity->queue_message(m);
   } 
   else if (pipe) {
     // remote!
-    dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << endl;
+    dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << dendl;
     pipe->send(m);
   } 
 }
@@ -1021,10 +1022,10 @@ void Rank::wait()
     reaper();
 
     if (local.empty()) {
-      dout(10) << "wait: everything stopped" << endl;
+      dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
     } else {
-      dout(10) << "wait: local still has " << local.size() << " items, waiting" << endl;
+      dout(10) << "wait: local still has " << local.size() << " items, waiting" << dendl;
     }
     
     wait_cond.Wait(lock);
@@ -1032,13 +1033,13 @@ void Rank::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(-10) << "wait: stopping accepter thread" << endl;
+  dout(-10) << "wait: stopping accepter thread" << dendl;
   accepter.stop();
-  dout(-10) << "wait: stopped accepter thread" << endl;
+  dout(-10) << "wait: stopped accepter thread" << dendl;
 
   // stop dispatch thread
   if (g_conf.ms_single_dispatch) {
-    dout(10) << "wait: stopping dispatch thread" << endl;
+    dout(10) << "wait: stopping dispatch thread" << dendl;
     lock.Lock();
     single_dispatch_stop = true;
     single_dispatch_cond.Signal();
@@ -1049,7 +1050,7 @@ void Rank::wait()
   // reap pipes
   lock.Lock();
   {
-    dout(10) << "wait: closing pipes" << endl;
+    dout(10) << "wait: closing pipes" << dendl;
     list<Pipe*> toclose;
     for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
          i != rank_pipe.end();
@@ -1060,7 +1061,7 @@ void Rank::wait()
 	 i++)
       (*i)->close();
 
-    dout(10) << "wait: waiting for pipes " << pipes << " to close" << endl;
+    dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
       wait_cond.Wait(lock);
       reaper();
@@ -1068,8 +1069,8 @@ void Rank::wait()
   }
   lock.Unlock();
 
-  dout(10) << "wait: done." << endl;
-  dout(1) << "shutdown complete." << endl;
+  dout(10) << "wait: done." << dendl;
+  dout(1) << "shutdown complete." << dendl;
 }
 
 
@@ -1105,7 +1106,7 @@ void Rank::EntityMessenger::dispatch_entry()
         while (!ls.empty()) {
 	  if (stop) {
 	    dout(1) << "dispatch: stop=true, discarding " << ls.size() 
-		    << " messages in dispatch queue" << endl;
+		    << " messages in dispatch queue" << dendl;
 	    break;
 	  }
           Message *m = ls.front();
@@ -1114,7 +1115,7 @@ void Rank::EntityMessenger::dispatch_entry()
 		  << " <-- " << m->get_source_inst()
 		  << " ---- " << *m
                   << " -- " << m 
-                  << endl;
+                  << dendl;
           dispatch(m);
         }
       }
@@ -1131,7 +1132,7 @@ void Rank::EntityMessenger::dispatch_entry()
 
 void Rank::EntityMessenger::ready()
 {
-  dout(10) << "ready " << get_myaddr() << endl;
+  dout(10) << "ready " << get_myaddr() << dendl;
 
   if (g_conf.ms_single_dispatch) {
     rank.lock.Lock();
@@ -1151,14 +1152,14 @@ void Rank::EntityMessenger::ready()
 
 int Rank::EntityMessenger::shutdown()
 {
-  dout(10) << "shutdown " << get_myaddr() << endl;
+  dout(10) << "shutdown " << get_myaddr() << dendl;
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
-    dout(10) << "shutdown i am dispatch, setting stop flag" << endl;
+    dout(10) << "shutdown i am dispatch, setting stop flag" << dendl;
     stop = true;
   } else {
-    dout(10) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
+    dout(10) << "shutdown i am not dispatch, setting stop flag and joining thread." << dendl;
     lock.Lock();
     stop = true;
     cond.Signal();
@@ -1171,7 +1172,7 @@ int Rank::EntityMessenger::shutdown()
 
 void Rank::EntityMessenger::suicide()
 {
-  dout(10) << "suicide " << get_myaddr() << endl;
+  dout(10) << "suicide " << get_myaddr() << dendl;
   shutdown();
   // hmm, or exit(0)?
 }
@@ -1199,7 +1200,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
 	  << " -- " << m
-          << endl;
+          << dendl;
 
   rank.submit_message(m, dest.addr);
 
@@ -1219,7 +1220,7 @@ void Rank::EntityMessenger::reset_myname(entity_name_t newname)
   rank.lock.Lock();
   {
     entity_name_t oldname = get_myname();
-    dout(10) << "reset_myname " << oldname << " to " << newname << endl;
+    dout(10) << "reset_myname " << oldname << " to " << newname << dendl;
     
     rank.local.erase(oldname);
     rank.local[newname] = this;
@@ -1244,19 +1245,19 @@ void Rank::mark_down(entity_addr_t addr)
   /*
   if (entity_map.count(a) &&
       entity_map[a] > inst) {
-    dout(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
-    derr(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
+    dout(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << dendl;
+    derr(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << dendl;
     // do nothing!
   } else {
     if (entity_map.count(a) == 0) {
       // don't know it
-      dout(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
-      derr(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
+      dout(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << dendl;
+      derr(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << dendl;
     } else {
       // know it
       assert(entity_map[a] <= inst);
-      dout(10) << "mark_down " << a << " inst " << inst << endl;
-      derr(10) << "mark_down " << a << " inst " << inst << endl;
+      dout(10) << "mark_down " << a << " inst " << inst << dendl;
+      derr(10) << "mark_down " << a << " inst " << inst << dendl;
       
       entity_map.erase(a);
       

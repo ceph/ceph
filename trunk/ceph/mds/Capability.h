@@ -111,7 +111,7 @@ public:
     for (capseq_t seq = last_recv; seq <= last_sent; seq++) {
       if (cap_history.count(seq)) {
         c |= cap_history[seq];
-        dout(10) << " cap issued: seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(c) << endl;
+        generic_dout(10) << " cap issued: seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(c) << dendl;
       }
     }
     return c;
@@ -192,7 +192,7 @@ public:
 
     // old seqs
     while (last_recv < seq) {
-      dout(10) << " cap.confirm_receipt forgetting seq " << last_recv << " " << cap_string(cap_history[last_recv]) << endl;
+      generic_dout(10) << " cap.confirm_receipt forgetting seq " << last_recv << " " << cap_string(cap_history[last_recv]) << dendl;
       r |= cap_history[last_recv];
       cap_history.erase(last_recv);
       ++last_recv;
@@ -201,7 +201,7 @@ public:
     // release current?
     if (cap_history.count(seq) &&
         cap_history[seq] != caps) {
-      dout(10) << " cap.confirm_receipt revising seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) << endl;
+      generic_dout(10) << " cap.confirm_receipt revising seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) << dendl;
       // note what we're releasing..
       assert(cap_history[seq] & ~caps);
       r |= cap_history[seq] & ~caps; 

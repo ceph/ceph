@@ -30,8 +30,8 @@
 #include <stdio.h>
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
+
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
@@ -105,7 +105,7 @@ inode_t *CInode::project_inode()
   } else {
     projected_inode.push_back(new inode_t(*projected_inode.back()));
   }
-  dout(15) << "project_inode " << projected_inode.back() << endl;
+  dout(15) << "project_inode " << projected_inode.back() << dendl;
   return projected_inode.back();
 }
   
@@ -113,7 +113,7 @@ void CInode::pop_and_dirty_projected_inode()
 {
   assert(!projected_inode.empty());
   dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
-	   << " v" << projected_inode.front()->version << endl;
+	   << " v" << projected_inode.front()->version << dendl;
   mark_dirty(projected_inode.front()->version);
   inode = *projected_inode.front();
   delete projected_inode.front();
@@ -222,7 +222,7 @@ CDir *CInode::add_dirfrag(CDir *dir)
 
 void CInode::close_dirfrag(frag_t fg)
 {
-  dout(14) << "close_dirfrag " << fg << endl;
+  dout(14) << "close_dirfrag " << fg << dendl;
   assert(dirfrags.count(fg));
   
   CDir *dir = dirfrags[fg];
@@ -241,7 +241,7 @@ void CInode::close_dirfrag(frag_t fg)
   for (map<string,CDentry*>::iterator p = dir->items.begin();
        p != dir->items.end();
        ++p) 
-    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << endl;
+    dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << dendl;
 
   assert(dir->get_num_ref() == 0);
   delete dir;
@@ -369,7 +369,7 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
   if (parent) {
     parent->dir->inode->make_anchor_trace(trace);
     trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
-    dout(10) << "make_anchor_trace added " << trace.back() << endl;
+    dout(10) << "make_anchor_trace added " << trace.back() << dendl;
   }
   else 
     assert(is_root() || is_stray());
@@ -403,7 +403,7 @@ void CInode::_mark_dirty()
 
 void CInode::mark_dirty(version_t pv) {
   
-  dout(10) << "mark_dirty " << *this << endl;
+  dout(10) << "mark_dirty " << *this << dendl;
 
   assert(parent);
 
@@ -429,7 +429,7 @@ void CInode::mark_dirty(version_t pv) {
 
 void CInode::mark_clean()
 {
-  dout(10) << " mark_clean " << *this << endl;
+  dout(10) << " mark_clean " << *this << dendl;
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
@@ -615,7 +615,7 @@ void CInode::auth_pin()
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   
   if (parent)
     parent->adjust_nested_auth_pins( 1 );
@@ -627,7 +627,7 @@ void CInode::auth_unpin()
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   
   assert(auth_pins >= 0);
   

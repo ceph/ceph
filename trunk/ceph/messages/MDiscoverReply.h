@@ -213,7 +213,6 @@ class MDiscoverReply : public Message {
       dirs.push_back( new CDirDiscover() );
       dirs[i]->_decode(payload, off);
     }
-    //dout(12) << n << " dirs out" << endl;
 
     // inodes
     payload.copy(off, sizeof(int), (char*)&n);
@@ -222,7 +221,6 @@ class MDiscoverReply : public Message {
       inodes.push_back( new CInodeDiscover() );
       inodes[i]->_decode(payload, off);
     }
-    //dout(12) << n << " inodes out" << endl;
 
     // dentries
     payload.copy(off, sizeof(int), (char*)&n);
@@ -250,7 +248,6 @@ class MDiscoverReply : public Message {
          it != dirs.end();
          it++) 
       (*it)->_encode( payload );
-    //dout(12) << n << " dirs in" << endl;
     
     // inodes
     n = inodes.size();
@@ -259,7 +256,6 @@ class MDiscoverReply : public Message {
          it != inodes.end();
          it++) 
        (*it)->_encode( payload );
-    //dout(12) << n << " inodes in" << endl;
 
     // dentries
     n = dentries.size();
@@ -268,7 +264,6 @@ class MDiscoverReply : public Message {
          it != dentries.end();
          it++) 
        (*it)->_encode( payload );
-    //dout(12) << n << " dentries in" << endl;
   }
 
 };

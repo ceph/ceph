@@ -392,7 +392,7 @@ public:
 
 
   void replicate_relax_locks() {
-    dout(10) << " relaxing locks on " << *this << endl;
+    //dout(10) << " relaxing locks on " << *this << dendl;
     assert(is_auth());
     assert(!is_replicated());
 
@@ -429,12 +429,12 @@ public:
 
   // -- reference counting --
   void bad_put(int by) {
-    dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    generic_dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
     assert(ref_set.count(by) == 1);
     assert(ref > 0);
   }
   void bad_get(int by) {
-    dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    generic_dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
     assert(ref_set.count(by) == 0);
   }
   void first_get();
@@ -463,7 +463,7 @@ public:
   void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
     if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
         (!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << dendl;
       ls = cached_by;
     }
   }

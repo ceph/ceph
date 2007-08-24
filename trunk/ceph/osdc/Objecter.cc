@@ -18,9 +18,9 @@
 #include <errno.h>
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << messenger->get_myname() << ".objecter "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
 
 
 // messages ------------------------------
@@ -37,7 +37,7 @@ void Objecter::dispatch(Message *m)
     break;
 
   default:
-    dout(1) << "don't know message type " << m->get_type() << endl;
+    dout(1) << "don't know message type " << m->get_type() << dendl;
     assert(0);
   }
 }
@@ -49,13 +49,13 @@ void Objecter::handle_osd_map(MOSDMap *m)
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
-            << "] <= " << osdmap->get_epoch() << endl;
+            << "] <= " << osdmap->get_epoch() << dendl;
   } 
   else {
     dout(3) << "handle_osd_map got epochs [" 
             << m->get_first() << "," << m->get_last() 
             << "] > " << osdmap->get_epoch()
-            << endl;
+            << dendl;
 
     set<pg_t> changed_pgs;
 
@@ -63,7 +63,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
          e <= m->get_last();
          e++) {
       if (m->incremental_maps.count(e)) {
-        dout(3) << "handle_osd_map decoding incremental epoch " << e << endl;
+        dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
         OSDMap::Incremental inc;
         int off = 0;
         inc.decode(m->incremental_maps[e], off);
@@ -77,11 +77,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
         
       }
       else if (m->maps.count(e)) {
-        dout(3) << "handle_osd_map decoding full epoch " << e << endl;
+        dout(3) << "handle_osd_map decoding full epoch " << e << dendl;
         osdmap->decode(m->maps[e]);
       }
       else {
-        dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << endl;
+        dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
         int mon = monmap->pick_mon();
         messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1), 
                                 monmap->get_inst(mon));
@@ -104,7 +104,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 {
-  dout(10) << "scan_pgs" << endl;
+  dout(10) << "scan_pgs" << dendl;
 
   for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
        i != pg_map.end();
@@ -144,14 +144,14 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     dout(10) << "scan_pgs pg " << pgid 
              << " (" << pg.active_tids << ")"
              << " " << other << " -> " << pg.acting
-             << endl;
+             << dendl;
     changed_pgs.insert(pgid);
   }
 }
 
 void Objecter::kick_requests(set<pg_t>& changed_pgs) 
 {
-  dout(10) << "kick_requests in pgs " << changed_pgs << endl;
+  dout(10) << "kick_requests in pgs " << changed_pgs << dendl;
 
   for (set<pg_t>::iterator i = changed_pgs.begin();
        i != changed_pgs.end();
@@ -177,15 +177,15 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         if (wr->tid_version.count(tid)) {
           if (wr->op == OSD_OP_WRITE &&
               !g_conf.objecter_buffer_uncommitted) {
-            dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << endl;
+            dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
           } else {
             dout(3) << "kick_requests missing commit, replay write " << tid
-                    << " v " << wr->tid_version[tid] << endl;
+                    << " v " << wr->tid_version[tid] << dendl;
             modifyx_submit(wr, wr->waitfor_commit[tid], tid);
           }
         } 
         else if (wr->waitfor_ack.count(tid)) {
-          dout(3) << "kick_requests missing ack, resub write " << tid << endl;
+          dout(3) << "kick_requests missing ack, resub write " << tid << dendl;
           modifyx_submit(wr, wr->waitfor_ack[tid], tid);
         }
       }
@@ -194,7 +194,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         // READ
         OSDRead *rd = op_read[tid];
         op_read.erase(tid);
-        dout(3) << "kick_requests resub read " << tid << endl;
+        dout(3) << "kick_requests resub read " << tid << dendl;
 
         // resubmit
         readx_submit(rd, rd->ops[tid], true);
@@ -205,7 +205,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	OSDStat *st = op_stat[tid];
 	op_stat.erase(tid);
 	
-	dout(3) << "kick_requests resub stat " << tid << endl;
+	dout(3) << "kick_requests resub stat " << tid << dendl;
 		
         // resubmit
         stat_submit(st);
@@ -287,7 +287,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
            << " oid " << ex.oid
            << " " << ex.layout
            << " osd" << pg.acker() 
-           << endl;
+           << dendl;
 
   if (pg.acker() >= 0) {
 	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
@@ -306,7 +306,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   tid_t tid = m->get_tid();
 
   if (op_stat.count(tid) == 0) {
-    dout(7) << "handle_osd_stat_reply " << tid << " ... stray" << endl;
+    dout(7) << "handle_osd_stat_reply " << tid << " ... stray" << dendl;
     delete m;
     return;
   }
@@ -314,7 +314,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   dout(7) << "handle_osd_stat_reply " << tid 
 		  << " r=" << m->get_result()
 		  << " size=" << m->get_object_size()
-		  << endl;
+		  << dendl;
   OSDStat *st = op_stat[ tid ];
   op_stat.erase( tid );
 
@@ -326,7 +326,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   
   // success?
   if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN, resubmitting" << endl;
+    dout(7) << " got -EAGAIN, resubmitting" << dendl;
     stat_submit(st);
     delete m;
     return;
@@ -404,7 +404,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
            << " " << ex.layout
            << " osd" << pg.acker() 
-           << endl;
+           << dendl;
 
   if (pg.acker() >= 0) {
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
@@ -419,7 +419,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
       int replica = messenger->get_myname().num() % pg.acting.size();
       who = pg.acting[replica];
       dout(-10) << "readx_submit reading from random replica " << replica
-		<< " = osd" << who <<  endl;
+		<< " = osd" << who <<  dendl;
     }
     messenger->send_message(m, osdmap->get_inst(who));
   }
@@ -434,12 +434,12 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   tid_t tid = m->get_tid();
 
   if (op_read.count(tid) == 0) {
-    dout(7) << "handle_osd_read_reply " << tid << " ... stray" << endl;
+    dout(7) << "handle_osd_read_reply " << tid << " ... stray" << dendl;
     delete m;
     return;
   }
 
-  dout(7) << "handle_osd_read_reply " << tid << endl;
+  dout(7) << "handle_osd_read_reply " << tid << dendl;
   OSDRead *rd = op_read[ tid ];
   op_read.erase( tid );
 
@@ -454,7 +454,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
   // success?
   if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN, resubmitting" << endl;
+    dout(7) << " got -EAGAIN, resubmitting" << dendl;
     readx_submit(rd, rd->ops[tid], true);
     delete m;
     return;
@@ -464,14 +464,14 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // what buffer offset are we?
   dout(7) << " got frag from " << m->get_oid() << " "
           << m->get_offset() << "~" << m->get_length()
-          << ", still have " << rd->ops.size() << " more ops" << endl;
+          << ", still have " << rd->ops.size() << " more ops" << dendl;
   
   if (rd->ops.empty()) {
     // all done
     size_t bytes_read = 0;
     
     if (rd->read_data.size()) {
-      dout(15) << " assembling frags" << endl;
+      dout(15) << " assembling frags" << dendl;
 
       /** FIXME This doesn't handle holes efficiently.
        * It allocates zero buffers to fill whole buffer, and
@@ -501,7 +501,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
         for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
              bit != eit->buffer_extents.end();
              bit++) {
-          dout(21) << " object " << eit->oid << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << endl;
+          dout(21) << " object " << eit->oid << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << dendl;
           by_off[bit->first] = new bufferlist;
 
           if (ox_off + bit->second <= ox_len) {
@@ -516,14 +516,14 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
               bytes_read = bit->first + ox_len-ox_off;
 
             // zero end of bx
-            dout(21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << endl;
+            dout(21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << dendl;
             bufferptr z(ox_off + bit->second - ox_len);
 			z.zero();
             by_off[bit->first]->append( z );
           } else {
             // we got none of this bx.  zero whole thing.
             assert(ox_off >= ox_len);
-            dout(21) << "  adding all zeros for this bit " << bit->second << endl;
+            dout(21) << "  adding all zeros for this bit " << bit->second << dendl;
             bufferptr z(bit->second);
 			z.zero();
             by_off[bit->first]->append( z );
@@ -539,10 +539,10 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
            it++) {
         assert(it->second->length());
         if (it->first < (off_t)bytes_read) {
-          dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
+          dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << dendl;
           rd->bl->claim_append(*(it->second));
         } else {
-          dout(21) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << endl;          
+          dout(21) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << dendl;          
         }
         delete it->second;
       }
@@ -550,7 +550,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
       // trim trailing zeros?
       if (rd->bl->length() > bytes_read) {
         dout(10) << " trimming off trailing zeros . bytes_read=" << bytes_read 
-                 << " len=" << rd->bl->length() << endl;
+                 << " len=" << rd->bl->length() << dendl;
         rd->bl->splice(bytes_read, rd->bl->length() - bytes_read);
         assert(bytes_read == rd->bl->length());
       }
@@ -562,7 +562,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
         delete it->second;
       }
     } else {
-      dout(15) << "  only one frag" << endl;
+      dout(15) << "  only one frag" << dendl;
 
       // only one fragment, easy
       rd->bl->claim( m->get_data() );
@@ -574,7 +574,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
     dout(7) << " " << bytes_read << " bytes " 
             << rd->bl->length()
-            << endl;
+            << dendl;
     
     // done
     delete rd;
@@ -683,7 +683,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " " << ex.start << "~" << ex.length 
            << " " << ex.layout 
            << " osd" << pg.primary()
-           << endl;
+           << dendl;
   if (pg.primary() >= 0) {
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
@@ -720,7 +720,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   }
   
-  dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << endl;
+  dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   
   return tid;
 }
@@ -735,7 +735,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   if (op_modify.count(tid) == 0) {
     dout(7) << "handle_osd_modify_reply " << tid 
             << (m->get_commit() ? " commit":" ack")
-            << " ... stray" << endl;
+            << " ... stray" << dendl;
     delete m;
     return;
   }
@@ -743,7 +743,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   dout(7) << "handle_osd_modify_reply " << tid 
           << (m->get_commit() ? " commit":" ack")
           << " v " << m->get_version()
-          << endl;
+          << dendl;
   OSDModify *wr = op_modify[ tid ];
 
   Context *onack = 0;
@@ -753,7 +753,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   // ignore?
   if (pg.acker() != m->get_source().num()) {
-    dout(7) << " ignoring ack|commit from non-acker" << endl;
+    dout(7) << " ignoring ack|commit from non-acker" << dendl;
     delete m;
     return;
   }
@@ -762,7 +762,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   // ack or commit?
   if (m->get_commit()) {
-    //dout(15) << " handle_osd_write_reply commit on " << tid << endl;
+    //dout(15) << " handle_osd_write_reply commit on " << tid << dendl;
     assert(wr->tid_version.count(tid) == 0 ||
            m->get_version() == wr->tid_version[tid]);
 
@@ -785,7 +785,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     }
   } else {
     // ack.
-    //dout(15) << " handle_osd_write_reply ack on " << tid << endl;
+    //dout(15) << " handle_osd_write_reply ack on " << tid << dendl;
     assert(wr->waitfor_ack.count(tid));
     wr->waitfor_ack.erase(tid);
     
@@ -794,7 +794,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     if (wr->tid_version.count(tid) &&
         wr->tid_version[tid].version != m->get_version().version) {
       dout(-10) << "handle_osd_modify_reply WARNING: replay of tid " << tid 
-                << " did not achieve previous ordering" << endl;
+                << " did not achieve previous ordering" << dendl;
     }
     wr->tid_version[tid] = m->get_version();
     
@@ -833,20 +833,20 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
     int mon = monmap->pick_mon(true);
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", resending to mon" << mon 
-            << endl;
+            << dendl;
     messenger->send_message(m, monmap->get_inst(mon));
   } 
   else if (dest.is_osd()) {
     int mon = monmap->pick_mon();
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", dropping and reporting to mon" << mon 
-            << endl;
+            << dendl;
     messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
                             monmap->get_inst(mon));
     delete m;
   } else {
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping" << endl;
+            << ", dropping" << dendl;
     delete m;
   }
 }

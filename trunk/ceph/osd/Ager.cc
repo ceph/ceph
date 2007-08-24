@@ -66,9 +66,9 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
     float free = 1.0 - ((float)(st.f_bfree) / (float)st.f_blocks);
     float avail = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);  // to write to
     //float a = (float)(st.f_bfree) / (float)st.f_blocks;
-    //dout(10) << "age_fill at " << a << " / " << pc << " .. " << st.f_blocks << " " << st.f_bavail << endl;
+    //dout(10) << "age_fill at " << a << " / " << pc << " .. " << st.f_blocks << " " << st.f_bavail << dendl;
     if (free >= pc) {
-      dout(2) << "age_fill at " << free << " / " << avail << " / " << " / " << pc << " stopping" << endl;
+      generic_dout(2) << "age_fill at " << free << " / " << avail << " / " << " / " << pc << " stopping" << dendl;
       break;
     }
 
@@ -88,7 +88,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
 
 
 
-    dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << oid << dec << " sz " << s << endl;
+    generic_dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << oid << dec << " sz " << s << dendl;
     
 
     if (false && !g_conf.ebofs_verify && start_debug && wrote > 1000000ULL) { 
@@ -137,16 +137,16 @@ void Ager::age_empty(float pc) {
     store->statfs(&st);
     float free = 1.0 - ((float)(st.f_bfree) / (float)st.f_blocks);
     float avail = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);  // to write to
-    dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << endl;//" stopping" << endl;
+    generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << dendl;//" stopping" << dendl;
     if (free <= pc) {
-      dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " stopping" << endl;
+      generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " stopping" << dendl;
       break;
     }
     
     int b = myrand() % 10;
     n--;
     if (n == 0 || age_objects[b].empty()) {
-      dout(2) << "age_empty sync" << endl;
+      generic_dout(2) << "age_empty sync" << dendl;
       //sync();
       //sync();
       n = nper;
@@ -155,7 +155,7 @@ void Ager::age_empty(float pc) {
     object_t oid = age_objects[b].front();
     age_objects[b].pop_front();
     
-    dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << oid << dec << endl;
+    generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << oid << dec << dendl;
     
     store->remove(oid);
     age_free_oids.push_back(oid);
@@ -219,7 +219,7 @@ void Ager::age(int time,
     high_water = (float)high_water * f;
     low_water = (float)low_water * f;
     final_water = (float)final_water * f;
-    dout(2) << "fake " << fake_bl << " / " << st.f_blocks << " is " << f << ", high " << high_water << " low " << low_water << " final " << final_water << endl;
+    generic_dout(2) << "fake " << fake_bl << " / " << st.f_blocks << " is " << f << ", high " << high_water << " low " << low_water << " final " << final_water << dendl;
   }
   
   // init size distn (once)
@@ -253,9 +253,9 @@ void Ager::age(int time,
     
     //if (c == 7) start_debug = true;
     
-    dout(1) << "#age " << c << "/" << count << " filling to " << high_water << endl;
+    generic_dout(1) << "#age " << c << "/" << count << " filling to " << high_water << dendl;
     uint64_t w = age_fill(high_water, until);
-    //dout(1) << "age wrote " << w << endl;
+    //dout(1) << "age wrote " << w << dendl;
     wrote += w;
     //store->sync();
     //store->_get_frag_stat(st);
@@ -263,10 +263,10 @@ void Ager::age(int time,
 
 
     if (c == count) {
-      dout(1) << "#age final empty to " << final_water << endl;
+      generic_dout(1) << "#age final empty to " << final_water << dendl;
       age_empty(final_water);    
     } else {
-      dout(1) << "#age " << c << "/" << count << " emptying to " << low_water << endl;
+      generic_dout(1) << "#age " << c << "/" << count << " emptying to " << low_water << dendl;
       age_empty(low_water);
     }
     //store->sync();
@@ -293,13 +293,13 @@ void Ager::age(int time,
   store->_fake_writes(false);
   store->sync();
   store->sync();
-  dout(1) << "age finished" << endl;
+  generic_dout(1) << "age finished" << dendl;
 }  
 
 
 void Ager::load_freelist()
 {
-  dout(1) << "load_freelist" << endl;
+  generic_dout(1) << "load_freelist" << dendl;
 
   struct stat st;
   
@@ -320,7 +320,7 @@ void Ager::load_freelist()
 
 void Ager::save_freelist(int el)
 {
-  dout(1) << "save_freelist " << el << endl;
+  generic_dout(1) << "save_freelist " << el << dendl;
   char s[100];
   sprintf(s, "ebofs.freelist.%d", el);
   bufferlist bl;

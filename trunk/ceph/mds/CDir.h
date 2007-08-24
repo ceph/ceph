@@ -300,7 +300,7 @@ private:
   void get_dist_spec(set<int>& ls, int auth) {
     if (( pop_auth_subtree.get(META_POP_IRD).get() > 
 	  g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+      //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
@@ -564,11 +564,11 @@ class CDirExport {
     dir->replica_nonce = 0;  // no longer defined
 
     if (!dir->replica_map.empty())
-      dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << endl;
+      generic_dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << dendl;
 
     dir->dir_rep_by = rep_by;
     dir->replica_map = replicas;
-    dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << endl;
+    generic_dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << dendl;
     if (!replicas.empty())
       dir->get(CDir::PIN_REPLICATED);
     if (dir->is_dirty()) {

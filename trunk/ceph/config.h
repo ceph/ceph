@@ -340,15 +340,6 @@ extern md_config_t g_debug_after_conf;
 
 
 /**
- * debug output framework
- */
-#define dout(x)  if ((x) <= g_conf.debug) std::cout
-#define dout2(x) if ((x) <= g_conf.debug) std::cout
-
-#define pdout(x,p)  if ((x) <= (p)) std::cout
-
-
-/**
  * command line / environment argument parsing
  */
 void env_to_vec(std::vector<char*>& args);
@@ -362,5 +353,34 @@ void parse_config_options(std::vector<char*>& args);
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
 
 
+/**
+ * for cleaner output, bracket each line with
+ * dbeginl (in the dout macro) and dendl (in place of endl).
+ */
+extern Mutex _dout_lock;
+struct _dbeginl_t {
+  _dbeginl_t(int) {}
+};
+struct _dendl_t {
+  _dendl_t(int) {}
+};
+static const _dbeginl_t dbeginl = 0;
+static const _dendl_t dendl = 0;
+
+inline ostream& operator<<(ostream& out, _dbeginl_t) {
+  _dout_lock.Lock();
+  return out;
+}
+inline ostream& operator<<(ostream& out, _dendl_t) {
+  out << endl;
+  _dout_lock.Unlock();
+  return out;
+}
+
+// generic macros
+#define generic_dout(x) if ((x) <= g_conf.debug) std::cout << dbeginl
+#define generic_derr(x) if ((x) <= g_conf.debug) std::cerr << dbeginl
+
+#define pdout(x,p) if ((x) <= (p)) std::cout << dbeginl
 
 #endif

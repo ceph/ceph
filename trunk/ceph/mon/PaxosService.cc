@@ -19,20 +19,20 @@
 
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxosservice(" << get_paxos_name(paxos->machine_id) << ") "
-//#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << "." << get_paxos_name(paxos->machine_id) << " "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) cout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxosservice(" << get_paxos_name(paxos->machine_id) << ") "
+//#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << "." << get_paxos_name(paxos->machine_id) << " "
 
 
 
 
 void PaxosService::dispatch(Message *m)
 {
-  dout(10) << "dispatch " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "dispatch " << *m << " from " << m->get_source_inst() << dendl;
   
   // make sure our map is readable and up to date
   if (!paxos->is_readable()) {
-    dout(10) << " waiting for paxos -> readable" << endl;
+    dout(10) << " waiting for paxos -> readable" << dendl;
     paxos->wait_for_readable(new C_RetryMessage(this, m));
     return;
   }
@@ -47,14 +47,14 @@ void PaxosService::dispatch(Message *m)
   // leader?
   if (!mon->is_leader()) {
     // fw to leader
-    dout(10) << " fw to leader mon" << mon->get_leader() << endl;
+    dout(10) << " fw to leader mon" << mon->get_leader() << dendl;
     mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
     return;
   }
   
   // writeable?
   if (!paxos->is_writeable()) {
-    dout(10) << " waiting for paxos -> writeable" << endl;
+    dout(10) << " waiting for paxos -> writeable" << dendl;
     paxos->wait_for_writeable(new C_RetryMessage(this, m));
     return;
   }
@@ -67,11 +67,11 @@ void PaxosService::dispatch(Message *m)
 
 void PaxosService::_commit()
 {
-  dout(7) << "_commit" << endl;
+  dout(7) << "_commit" << dendl;
   update_from_paxos();   // notify service of new paxos state
 
   if (mon->is_leader()) {
-    dout(7) << "_commit creating new pending" << endl;
+    dout(7) << "_commit creating new pending" << dendl;
     assert(have_pending == false);
     create_pending();
     have_pending = true;
@@ -81,7 +81,7 @@ void PaxosService::_commit()
 
 void PaxosService::propose_pending()
 {
-  dout(10) << "propose_pending" << endl;
+  dout(10) << "propose_pending" << dendl;
   assert(have_pending);
 
   // finish and encode
@@ -97,7 +97,7 @@ void PaxosService::propose_pending()
 
 void PaxosService::election_finished()
 {
-  dout(10) << "election_finished" << endl;
+  dout(10) << "election_finished" << dendl;
 
   if (have_pending && 
       !mon->is_leader()) {
@@ -114,7 +114,7 @@ void PaxosService::election_finished()
 
 void PaxosService::_active()
 {
-  dout(10) << "_active" << endl;
+  dout(10) << "_active" << dendl;
   assert(paxos->is_active());
 
   // pull latest from paxos

@@ -26,7 +26,6 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGActivateSet.h"
 
-#include "debug.h"
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 
@@ -228,9 +227,9 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
 
-  //cout << "log" << dendl;
+  //dout(0) << "log" << dendl;
   //log.print(cout);
-  //cout << "olog" << dendl;
+  //dout(0) << "olog" << dendl;
   //olog.print(cout);
   
   if (log.empty() ||
@@ -1177,7 +1176,7 @@ bool PG::block_if_wrlocked(MOSDOp* op)
 
   entity_name_t source;
   int len = osd->store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
-  //cout << "getattr returns " << len << " on " << oid << dendl;
+  //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
       source != op->get_client()) {

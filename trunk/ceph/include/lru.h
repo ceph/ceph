@@ -307,7 +307,7 @@ class LRU {
 
 
   void lru_status() {
-    dout(10) << "lru: " << lru_num << " items, " << lru_top.get_length() << " top, " << lru_bot.get_length() << " bot, " << lru_pintail.get_length() << " pintail" << endl;
+    generic_dout(10) << "lru: " << lru_num << " items, " << lru_top.get_length() << " top, " << lru_bot.get_length() << " bot, " << lru_pintail.get_length() << " pintail" << dendl;
   }
 
 };

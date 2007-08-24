@@ -60,8 +60,8 @@ using namespace std;
 
 
 #include "config.h"
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami /*<< "." << pthread_self() */ << " "
+
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << dbeginl << g_clock.now() << " client" << whoami /*<< "." << pthread_self() */ << " "
 
 #define  tout       if (g_conf.client_trace) traceout
 
@@ -163,7 +163,7 @@ void Client::tear_down_cache()
        it != fd_map.end();
        it++) {
     Fh *fh = it->second;
-    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
+    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << dendl;
     put_inode(fh->inode);
     delete fh;
   }
@@ -194,15 +194,15 @@ void Client::tear_down_cache()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  dout(1) << "dump_inode: inode " << in->ino() << " ref " << in->ref << " dir " << in->dir << endl;
+  dout(1) << "dump_inode: inode " << in->ino() << " ref " << in->ref << " dir " << in->dir << dendl;
 
   if (in->dir) {
-    dout(1) << "  dir size " << in->dir->dentries.size() << endl;
+    dout(1) << "  dir size " << in->dir->dentries.size() << dendl;
     //for (hash_map<const char*, Dentry*, hash<const char*>, eqstr>::iterator it = in->dir->dentries.begin();
     for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          it++) {
-      dout(1) << "    dn " << it->first << " ref " << it->second->ref << endl;
+      dout(1) << "    dn " << it->first << " ref " << it->second->ref << dendl;
       dump_inode(it->second->inode, did);
     }
   }
@@ -221,9 +221,9 @@ void Client::dump_cache()
     
     dout(1) << "dump_cache: inode " << it->first
             << " ref " << it->second->ref 
-            << " dir " << it->second->dir << endl;
+            << " dir " << it->second->dir << dendl;
     if (it->second->dir) {
-      dout(1) << "  dir size " << it->second->dir->dentries.size() << endl;
+      dout(1) << "  dir size " << it->second->dir->dentries.size() << dendl;
     }
   }
  
@@ -237,7 +237,7 @@ void Client::init()
 }
 
 void Client::shutdown() {
-  dout(1) << "shutdown" << endl;
+  dout(1) << "shutdown" << dendl;
   messenger->shutdown();
 }
 
@@ -261,13 +261,13 @@ void Client::trim_cache()
     
     dout(15) << "trim_cache unlinking dn " << dn->name 
 	     << " in dir " << hex << dn->dir->parent_inode->inode.ino 
-	     << endl;
+	     << dendl;
     unlink(dn);
   }
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->ref == 0 && inode_map.size() == 1) {
-    dout(15) << "trim_cache trimmed root " << root << endl;
+    dout(15) << "trim_cache trimmed root " << root << dendl;
     delete root;
     root = 0;
     inode_map.clear();
@@ -289,18 +289,18 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
            << "  mtime " << st->inode.mtime
 	   << "  mask " << st->mask
 	   << " in dir " << dir->parent_inode->inode.ino
-           << endl;
+           << dendl;
   
   if (dn) {
     if (dn->inode->inode.ino == st->inode.ino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
                << " with correct ino " << dn->inode->inode.ino
-               << endl;
+               << dendl;
     } else {
       dout(12) << " had dentry " << dname
                << " with WRONG ino " << dn->inode->inode.ino
-               << endl;
+               << dendl;
       unlink(dn);
       dn = NULL;
     }
@@ -315,12 +315,12 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
       if (in->dn) {
         dout(12) << " had ino " << in->inode.ino
                  << " not linked or linked at the right position, relinking"
-                 << endl;
+                 << dendl;
         dn = relink(dir, dname, in);
       } else {
         // link
         dout(12) << " had ino " << in->inode.ino
-                 << " unlinked, linking" << endl;
+                 << " unlinked, linking" << dendl;
         dn = link(dir, dname, in);
       }
     }
@@ -330,10 +330,10 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
     Inode *in = new Inode(st->inode, objectcacher);
     inode_map[st->inode.ino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << st->inode.ino << endl;
+    dout(12) << " new dentry+node with ino " << st->inode.ino << dendl;
   } else {
     // actually update info
-    dout(12) << " stat inode mask is " << st->mask << endl;
+    dout(12) << " stat inode mask is " << st->mask << dendl;
     if (st->mask & STAT_MASK_BASE) {
       dn->inode->inode = st->inode;
       dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
@@ -396,10 +396,10 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
     set<int> dist = st->dirfrag_dist.begin()->second;
     if (dist.empty() && !in->dir_contacts.empty())
       dout(9) << "lost dist spec for " << in->inode.ino 
-              << " " << dist << endl;
+              << " " << dist << dendl;
     if (!dist.empty() && in->dir_contacts.empty()) 
       dout(9) << "got dist spec for " << in->inode.ino 
-              << " " << dist << endl;
+              << " " << dist << dendl;
     in->dir_contacts = dist;
   }
 }
@@ -414,7 +414,7 @@ Inode* Client::insert_trace(MClientReply *reply)
   Inode *cur = root;
   utime_t now = g_clock.real_now();
 
-  dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << endl;
+  dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
 
   list<string>::const_iterator pdn = reply->get_trace_dn().begin();
 
@@ -424,18 +424,18 @@ Inode* Client::insert_trace(MClientReply *reply)
     
     if (pin == reply->get_trace_in().begin()) {
       // root
-      dout(10) << "insert_trace root" << endl;
+      dout(10) << "insert_trace root" << dendl;
       if (!root) {
         // create
         cur = root = new Inode((*pin)->inode, objectcacher);
-	dout(10) << "insert_trace new root is " << root << endl;
+	dout(10) << "insert_trace new root is " << root << dendl;
         inode_map[root->inode.ino] = root;
       }
     } else {
       // not root.
       Dir *dir = cur->open_dir();
       cur = this->insert_inode(dir, *pin, *pdn);
-      dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << endl;
+      dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
       ++pdn;      
 
       // move to top of lru!
@@ -461,23 +461,23 @@ Inode* Client::insert_trace(MClientReply *reply)
 
 Dentry *Client::lookup(filepath& path)
 {
-  dout(14) << "lookup " << path << endl;
+  dout(14) << "lookup " << path << dendl;
 
   Inode *cur = root;
   if (!cur) return NULL;
 
   Dentry *dn = 0;
   for (unsigned i=0; i<path.depth(); i++) {
-    dout(14) << " seg " << i << " = " << path[i] << endl;
+    dout(14) << " seg " << i << " = " << path[i] << dendl;
     if (cur->inode.mode & INODE_MODE_DIR &&
         cur->dir) {
       // dir, we can descend
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
         dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " valid_until " << dn->inode->valid_until << endl;
+        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " valid_until " << dn->inode->valid_until << dendl;
       } else {
-        dout(14) << " dentry " << path[i] << " dne" << endl;
+        dout(14) << " dentry " << path[i] << " dne" << dendl;
         return NULL;
       }
       cur = dn->inode;
@@ -488,7 +488,7 @@ Dentry *Client::lookup(filepath& path)
   }
   
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " valid_until " << dn->inode->valid_until<< endl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " valid_until " << dn->inode->valid_until<< dendl;
   }
 
   return dn;
@@ -517,7 +517,7 @@ int Client::choose_target_mds(MClientRequest *req)
 	break;
       }
       
-      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
+      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << dendl;
       
       if (i == depth-1) {  // last one!
 	item = dir->dentries[ req->get_filepath()[i] ]->inode;
@@ -541,7 +541,7 @@ int Client::choose_target_mds(MClientRequest *req)
 
     if (0) {
       mds = 0;
-      dout(0) << "hack: sending all requests to mds" << mds << endl;
+      dout(0) << "hack: sending all requests to mds" << mds << dendl;
     }
   } else {
     if (req->auth_is_best()) {
@@ -563,7 +563,7 @@ int Client::choose_target_mds(MClientRequest *req)
 	mds = diri->pick_replica(mdsmap);
     }
   }
-  dout(20) << "mds is " << mds << endl;
+  dout(20) << "mds is " << mds << dendl;
   
   return mds;
 }
@@ -621,15 +621,15 @@ MClientReply *Client::make_request(MClientRequest *req,
     if (request.resend_mds >= 0) {
       mds = request.resend_mds;
       request.resend_mds = -1;
-      dout(10) << "target resend_mds specified as mds" << mds << endl;
+      dout(10) << "target resend_mds specified as mds" << mds << dendl;
     } else {
       mds = choose_target_mds(req);
       if (mds >= 0) {
-	dout(10) << "chose target mds" << mds << " based on hierarchy" << endl;
+	dout(10) << "chose target mds" << mds << " based on hierarchy" << dendl;
       } else {
 	mds = mdsmap->get_random_in_mds();
 	if (mds < 0) mds = 0;  // hrm.
-	dout(10) << "chose random target mds" << mds << " for lack of anything better" << endl;
+	dout(10) << "chose random target mds" << mds << " for lack of anything better" << dendl;
       }
     }
     
@@ -638,7 +638,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       Cond cond;
 
       if (!mdsmap->have_inst(mds)) {
-	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << endl;
+	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
 	int mon = monmap->pick_mon();
 	messenger->send_message(new MMDSGetMap(),
 				monmap->get_inst(mon));
@@ -646,14 +646,14 @@ MClientReply *Client::make_request(MClientRequest *req,
 	cond.Wait(client_lock);
 
 	if (!mdsmap->have_inst(mds)) {
-	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << endl;
+	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << dendl;
 	  request.resend_mds = mdsmap->get_random_in_mds();
 	  continue;
 	}
       }	
       
       if (waiting_for_session.count(mds) == 0) {
-	dout(10) << "opening session to mds" << mds << endl;
+	dout(10) << "opening session to mds" << mds << dendl;
 	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),
 				mdsmap->get_inst(mds), MDS_PORT_SERVER);
       }
@@ -661,7 +661,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       // wait
       waiting_for_session[mds].push_back(&cond);
       while (waiting_for_session.count(mds)) {
-	dout(10) << "waiting for session to mds" << mds << " to open" << endl;
+	dout(10) << "waiting for session to mds" << mds << " to open" << dendl;
 	cond.Wait(client_lock);
       }
     }
@@ -670,7 +670,7 @@ MClientReply *Client::make_request(MClientRequest *req,
     send_request(&request, mds);
 
     // wait for signal
-    dout(20) << "awaiting kick on " << &cond << endl;
+    dout(20) << "awaiting kick on " << &cond << dendl;
     cond.Wait(client_lock);
     
     // did we get a reply?
@@ -684,7 +684,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   // kick dispatcher (we've got it!)
   assert(request.dispatch_cond);
   request.dispatch_cond->Signal();
-  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << endl;
+  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << dendl;
   
   // clean up.
   mds_requests.erase(tid);
@@ -694,7 +694,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (client_logger) {
     utime_t lat = g_clock.real_now();
     lat -= start;
-    dout(20) << "lat " << lat << endl;
+    dout(20) << "lat " << lat << dendl;
     client_logger->finc("lsum",(double)lat);
     client_logger->inc("lnum");
 
@@ -723,7 +723,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 void Client::handle_client_session(MClientSession *m) 
 {
-  dout(10) << "handle_client_session " << *m << endl;
+  dout(10) << "handle_client_session " << *m << dendl;
   int from = m->get_source().num();
 
   switch (m->op) {
@@ -758,7 +758,7 @@ void Client::send_request(MetaRequest *request, int mds)
   if (!r) {
     // make a new one
     dout(10) << "send_request rebuilding request " << request->tid
-	     << " for mds" << mds << endl;
+	     << " for mds" << mds << dendl;
     r = new MClientRequest;
     r->copy_payload(request->request_payload);
     r->decode_payload();
@@ -766,7 +766,7 @@ void Client::send_request(MetaRequest *request, int mds)
   }
   request->request = 0;
 
-  dout(10) << "send_request " << *r << " to mds" << mds << endl;
+  dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds), MDS_PORT_SERVER);
   
   request->mds.insert(mds);
@@ -777,7 +777,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   tid_t tid = fwd->get_tid();
 
   if (mds_requests.count(tid) == 0) {
-    dout(10) << "handle_client_request_forward no pending request on tid " << tid << endl;
+    dout(10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
     delete fwd;
     return;
   }
@@ -804,12 +804,12 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 	       << " fwd " << fwd->get_num_fwd() 
 	       << " to mds" << fwd->get_dest_mds() 
 	       << ", mds set now " << request->mds
-	       << endl;
+	       << dendl;
     } else {
       dout(10) << "handle_client_request tid " << tid
 	       << " previously forwarded to mds" << fwd->get_dest_mds() 
 	       << ", mds still " << request->mds
-		 << endl;
+		 << dendl;
     }
   } else {
     // request not forwarded, or dest mds has no session.
@@ -818,7 +818,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 	     << " fwd " << fwd->get_num_fwd() 
 	     << " to mds" << fwd->get_dest_mds() 
 	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
-	     << endl;
+	     << dendl;
 
     request->mds.clear();
     request->num_fwd = fwd->get_num_fwd();
@@ -834,7 +834,7 @@ void Client::handle_client_reply(MClientReply *reply)
   tid_t tid = reply->get_tid();
 
   if (mds_requests.count(tid) == 0) {
-    dout(10) << "handle_client_reply no pending request on tid " << tid << endl;
+    dout(10) << "handle_client_reply no pending request on tid " << tid << dendl;
     delete reply;
     return;
   }
@@ -851,7 +851,7 @@ void Client::handle_client_reply(MClientReply *reply)
   Cond cond;
   request->dispatch_cond = &cond;
   while (mds_requests.count(tid)) {
-    dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << endl;
+    dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
     cond.Wait(client_lock);
   }
 }
@@ -903,7 +903,7 @@ void Client::dispatch(Message *m)
     break;
 
   default:
-    cout << "dispatch doesn't recognize message type " << m->get_type() << endl;
+    dout(10) << "dispatch doesn't recognize message type " << m->get_type() << dendl;
     assert(0);  // fail loudly
     break;
   }
@@ -911,14 +911,14 @@ void Client::dispatch(Message *m)
   // unmounting?
   if (unmounting) {
     dout(10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
-             << "+" << inode_map.size() << endl;
+             << "+" << inode_map.size() << dendl;
     trim_cache();
     if (lru.lru_get_size() == 0 && inode_map.empty()) {
-      dout(10) << "unmounting: trim pass, cache now empty, waking unmount()" << endl;
+      dout(10) << "unmounting: trim pass, cache now empty, waking unmount()" << dendl;
       mount_cond.Signal();
     } else {
       dout(10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
-               << "+" << inode_map.size() << endl;
+               << "+" << inode_map.size() << dendl;
       dump_cache();      
     }
   }
@@ -938,13 +938,13 @@ void Client::handle_mds_map(MMDSMap* m)
 
     assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
-    dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
+    dout(1) << "handle_mds_map i am now " << m->get_dest() << dendl;
     messenger->reset_myname(m->get_dest());
     
     mount_cond.Signal();  // mount might be waiting for this.
   } 
 
-  dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
   epoch_t was = mdsmap->get_epoch();
   mdsmap->decode(m->get_encoded());
   assert(mdsmap->get_epoch() >= was);
@@ -973,7 +973,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
 void Client::send_reconnect(int mds)
 {
-  dout(10) << "send_reconnect to mds" << mds << endl;
+  dout(10) << "send_reconnect to mds" << mds << dendl;
 
   MClientReconnect *m = new MClientReconnect;
 
@@ -986,7 +986,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << " caps on " << p->first
 		 << " " << cap_string(p->second->caps[mds].caps)
 		 << " wants " << cap_string(p->second->file_caps_wanted())
-		 << endl;
+		 << dendl;
 	p->second->caps[mds].seq = 0;  // reset seq.
 	m->add_inode_caps(p->first,    // ino
 			  p->second->file_caps_wanted(), // wanted
@@ -994,11 +994,11 @@ void Client::send_reconnect(int mds)
 			  p->second->inode.size, p->second->inode.mtime, p->second->inode.atime);
 	string path;
 	p->second->make_path(path);
-	dout(10) << " path on " << p->first << " is " << path << endl;
+	dout(10) << " path on " << p->first << " is " << path << dendl;
 	m->add_inode_path(p->first, path);
       }
       if (p->second->stale_caps.count(mds)) {
-	dout(10) << " clearing stale caps on " << p->first << endl;
+	dout(10) << " clearing stale caps on " << p->first << dendl;
 	p->second->stale_caps.erase(mds);         // hrm, is this right?
       }
     }
@@ -1016,7 +1016,7 @@ void Client::send_reconnect(int mds)
 
 void Client::kick_requests(int mds)
 {
-  dout(10) << "kick_requests for mds" << mds << endl;
+  dout(10) << "kick_requests for mds" << mds << dendl;
 
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
@@ -1065,7 +1065,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << dendl;
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
@@ -1080,7 +1080,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       
       // fall-thru!
     } else {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << dendl;
       // delay!
       cap_reap_queue[in->ino()][other] = m;
       return;
@@ -1091,7 +1091,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   // stale?
   if (m->get_op() == MClientFileCaps::OP_STALE) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
+    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << dendl;
     
     // move to stale list
     assert(in->caps.count(mds));
@@ -1105,7 +1105,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // delayed reap?
     if (cap_reap_queue.count(in->ino()) &&
         cap_reap_queue[in->ino()].count(mds)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << dendl;
       
       // process delayed reap
       handle_file_caps( cap_reap_queue[in->ino()][mds] );
@@ -1120,7 +1120,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   // release?
   if (m->get_op() == MClientFileCaps::OP_RELEASE) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
+    dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
     for (map<int,InodeCap>::iterator p = in->caps.begin();
@@ -1128,19 +1128,19 @@ void Client::handle_file_caps(MClientFileCaps *m)
          p++)
       dout(20) << " left cap " << p->first << " " 
               << cap_string(p->second.caps) << " " 
-              << p->second.seq << endl;
+              << p->second.seq << dendl;
     for (map<int,InodeCap>::iterator p = in->stale_caps.begin();
          p != in->stale_caps.end();
          p++)
       dout(20) << " left stale cap " << p->first << " " 
               << cap_string(p->second.caps) << " " 
-              << p->second.seq << endl;
+              << p->second.seq << dendl;
 
     if (in->caps.empty()) {
-      //dout(0) << "did put_inode" << endl;
+      //dout(0) << "did put_inode" << dendl;
       put_inode(in);
     } else {
-      //dout(0) << "didn't put_inode" << endl;
+      //dout(0) << "didn't put_inode" << dendl;
     }
     delete m;
     return;
@@ -1152,7 +1152,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
-            << ", which we don't want caps for, releasing." << endl;
+            << ", which we don't want caps for, releasing." << dendl;
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
@@ -1169,13 +1169,13 @@ void Client::handle_file_caps(MClientFileCaps *m)
   dout(5) << "handle_file_caps on in " << m->get_ino() 
           << " mds" << mds << " seq " << m->get_seq() 
           << " caps now " << cap_string(new_caps) 
-          << " was " << cap_string(old_caps) << endl;
+          << " was " << cap_string(old_caps) << dendl;
   
   // did file size decrease?
   if ((old_caps & (CAP_FILE_RD|CAP_FILE_WR)) == 0 &&
       (new_caps & (CAP_FILE_RD|CAP_FILE_WR)) != 0 &&
       in->inode.size > m->get_inode().size) {
-    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << endl;
+    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << dendl;
     
     // trim filecache?
     if (g_conf.client_oc)
@@ -1214,7 +1214,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       for (list<Cond*>::iterator it = in->waitfor_read.begin();
            it != in->waitfor_read.end();
            it++) {
-        dout(5) << "signaling read waiter " << *it << endl;
+        dout(5) << "signaling read waiter " << *it << dendl;
         (*it)->Signal();
       }
       in->waitfor_read.clear();
@@ -1223,7 +1223,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       for (list<Cond*>::iterator it = in->waitfor_write.begin();
            it != in->waitfor_write.end();
            it++) {
-        dout(5) << "signaling write waiter " << *it << endl;
+        dout(5) << "signaling write waiter " << *it << dendl;
         (*it)->Signal();
       }
       in->waitfor_write.clear();
@@ -1232,7 +1232,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       for (list<Cond*>::iterator it = in->waitfor_lazy.begin();
            it != in->waitfor_lazy.end();
            it++) {
-        dout(5) << "signaling lazy waiter " << *it << endl;
+        dout(5) << "signaling lazy waiter " << *it << dendl;
         (*it)->Signal();
       }
       in->waitfor_lazy.clear();
@@ -1242,7 +1242,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     if (old_caps & ~new_caps) {
       if (in->sync_writes) {
         // wait for sync writes to finish
-        dout(5) << "sync writes in progress, will ack on finish" << endl;
+        dout(5) << "sync writes in progress, will ack on finish" << dendl;
         in->waitfor_no_write.push_back(new C_Client_ImplementedCaps(this, m, in));
       } else {
         // ok now
@@ -1258,7 +1258,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 void Client::implemented_caps(MClientFileCaps *m, Inode *in)
 {
   dout(5) << "implemented_caps " << cap_string(m->get_caps()) 
-          << ", acking to " << m->get_source() << endl;
+          << ", acking to " << m->get_source() << dendl;
 
   if (in->file_caps() == 0) {
     in->file_wr_mtime = utime_t();
@@ -1276,7 +1276,7 @@ void Client::release_caps(Inode *in,
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
 	  << " want " << cap_string(in->file_caps_wanted())
-          << endl;
+          << dendl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
        it != in->caps.end();
@@ -1305,7 +1305,7 @@ void Client::update_caps_wanted(Inode *in)
 {
   dout(5) << "updating caps wanted on ino " << in->inode.ino 
           << " to " << cap_string(in->file_caps_wanted())
-          << endl;
+          << dendl;
   
   // FIXME: pick a single mds and let the others off the hook..
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -1328,9 +1328,9 @@ void Client::update_caps_wanted(Inode *in)
 
 void Client::_try_mount()
 {
-  dout(10) << "_try_mount" << endl;
+  dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << endl;
+  dout(2) << "sending client_mount to mon" << mon << dendl;
   messenger->send_message(new MClientMount(messenger->get_myaddr(),
 					   client_instance_this_process), 
 			  monmap->get_inst(mon));
@@ -1343,7 +1343,7 @@ void Client::_try_mount()
 
 void Client::_mount_timeout()
 {
-  dout(10) << "_mount_timeout" << endl;
+  dout(10) << "_mount_timeout" << dendl;
   mount_timeout_event = 0;
   _try_mount();
 }
@@ -1368,7 +1368,7 @@ int Client::mount()
 
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
-	  << endl;
+	  << dendl;
 
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
@@ -1380,23 +1380,23 @@ int Client::mount()
   if (g_conf.client_trace) {
     traceout.open(g_conf.client_trace);
     if (traceout.is_open()) {
-      dout(1) << "opened trace file '" << g_conf.client_trace << "'" << endl;
+      dout(1) << "opened trace file '" << g_conf.client_trace << "'" << dendl;
     } else {
-      dout(1) << "FAILED to open trace file '" << g_conf.client_trace << "'" << endl;
+      dout(1) << "FAILED to open trace file '" << g_conf.client_trace << "'" << dendl;
     }
   }
 
   client_lock.Unlock();
 
   /*
-  dout(3) << "op: // client trace data structs" << endl;
-  dout(3) << "op: struct stat st;" << endl;
-  dout(3) << "op: struct utimbuf utim;" << endl;
-  dout(3) << "op: int readlinkbuf_len = 1000;" << endl;
-  dout(3) << "op: char readlinkbuf[readlinkbuf_len];" << endl;
-  dout(3) << "op: map<string, inode_t*> dir_contents;" << endl;
-  dout(3) << "op: map<int, int> open_files;" << endl;
-  dout(3) << "op: int fd;" << endl;
+  dout(3) << "op: // client trace data structs" << dendl;
+  dout(3) << "op: struct stat st;" << dendl;
+  dout(3) << "op: struct utimbuf utim;" << dendl;
+  dout(3) << "op: int readlinkbuf_len = 1000;" << dendl;
+  dout(3) << "op: char readlinkbuf[readlinkbuf_len];" << dendl;
+  dout(3) << "op: map<string, inode_t*> dir_contents;" << dendl;
+  dout(3) << "op: map<int, int> open_files;" << dendl;
+  dout(3) << "op: int fd;" << dendl;
   */
   return 0;
 }
@@ -1411,17 +1411,17 @@ int Client::unmount()
 
   assert(mounted);  // caller is confused?
 
-  dout(2) << "unmounting" << endl;
+  dout(2) << "unmounting" << dendl;
   unmounting = true;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fd_map.empty());
 
-  dout(10) << "a" << endl;
+  dout(10) << "a" << dendl;
 
   _ll_drop_pins();
   
-  dout(10) << "b" << endl;
+  dout(10) << "b" << dendl;
 
   // empty lru cache
   lru.lru_set_max(0);
@@ -1436,10 +1436,10 @@ int Client::unmount()
       if (!in->caps.empty()) {
         in->fc.release_clean();
         if (in->fc.is_dirty()) {
-          dout(10) << "unmount residual caps on " << in->ino() << ", flushing" << endl;
+          dout(10) << "unmount residual caps on " << in->ino() << ", flushing" << dendl;
           in->fc.empty(new C_Client_CloseRelease(this, in));
         } else {
-          dout(10) << "unmount residual caps on " << in->ino()  << ", releasing" << endl;
+          dout(10) << "unmount residual caps on " << in->ino()  << ", releasing" << dendl;
           release_caps(in);
         }
       }
@@ -1451,7 +1451,7 @@ int Client::unmount()
     dout(2) << "cache still has " << lru.lru_get_size() 
             << "+" << inode_map.size() << " items" 
 	    << ", waiting (for caps to release?)"
-            << endl;
+            << dendl;
     dump_cache();
     mount_cond.Wait(client_lock);
   }
@@ -1462,14 +1462,14 @@ int Client::unmount()
   if (!g_conf.client_oc) {
     while (unsafe_sync_write > 0) {
       dout(0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
-              << endl;
+              << dendl;
       mount_cond.Wait(client_lock);
     }
   }
 
   // stop tracing
   if (g_conf.client_trace) {
-    dout(1) << "closing trace file '" << g_conf.client_trace << "'" << endl;
+    dout(1) << "closing trace file '" << g_conf.client_trace << "'" << dendl;
     traceout.close();
   }
 
@@ -1478,7 +1478,7 @@ int Client::unmount()
   for (map<int,version_t>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << endl;
+    dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
     messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_CLOSE,
 					       p->second),
 			    mdsmap->get_inst(p->first), MDS_PORT_SERVER);
@@ -1486,14 +1486,14 @@ int Client::unmount()
 
   // send unmount!
   int mon = monmap->pick_mon();
-  dout(2) << "sending client_unmount to mon" << mon << endl;
+  dout(2) << "sending client_unmount to mon" << mon << dendl;
   messenger->send_message(new MClientUnmount(messenger->get_myinst()), 
 			  monmap->get_inst(mon));
   
   while (mounted)
     mount_cond.Wait(client_lock);
 
-  dout(2) << "unmounted." << endl;
+  dout(2) << "unmounted." << dendl;
 
   client_lock.Unlock();
   return 0;
@@ -1501,7 +1501,7 @@ int Client::unmount()
 
 void Client::handle_unmount(Message* m)
 {
-  dout(1) << "handle_unmount got ack" << endl;
+  dout(1) << "handle_unmount got ack" << dendl;
 
   mounted = false;
 
@@ -1523,9 +1523,9 @@ void Client::handle_unmount(Message* m)
 int Client::link(const char *existing, const char *newname) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "link" << endl;
-  tout << existing << endl;
-  tout << newname << endl;
+  tout << "link" << dendl;
+  tout << existing << dendl;
+  tout << newname << dendl;
   return _link(existing, newname);
 }
 
@@ -1547,10 +1547,10 @@ int Client::_link(const char *existing, const char *newname)
   
   insert_trace(reply);
   delete reply;
-  dout(10) << "link result is " << res << endl;
+  dout(10) << "link result is " << res << dendl;
 
   trim_cache();
-  dout(3) << "link(\"" << existing << "\", \"" << newname << "\") = " << res << endl;
+  dout(3) << "link(\"" << existing << "\", \"" << newname << "\") = " << res << dendl;
   return res;
 }
 
@@ -1558,8 +1558,8 @@ int Client::_link(const char *existing, const char *newname)
 int Client::unlink(const char *relpath)
 {
   Mutex::Locker lock(client_lock);
-  tout << "unlink" << endl;
-  tout << relpath << endl;
+  tout << "unlink" << dendl;
+  tout << relpath << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1591,19 +1591,19 @@ int Client::_unlink(const char *path)
   }
   insert_trace(reply);
   delete reply;
-  dout(10) << "unlink result is " << res << endl;
+  dout(10) << "unlink result is " << res << dendl;
 
   trim_cache();
-  dout(3) << "unlink(\"" << path << "\") = " << res << endl;
+  dout(3) << "unlink(\"" << path << "\") = " << res << dendl;
   return res;
 }
 
 int Client::rename(const char *relfrom, const char *relto)
 {
   Mutex::Locker lock(client_lock);
-  tout << "rename" << endl;
-  tout << relfrom << endl;
-  tout << relto << endl;
+  tout << "rename" << dendl;
+  tout << relfrom << dendl;
+  tout << relto << dendl;
 
   string absfrom, absto;
   mkabspath(relfrom, absfrom);
@@ -1627,12 +1627,12 @@ int Client::_rename(const char *from, const char *to)
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
-  dout(10) << "rename result is " << res << endl;
+  dout(10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
 
   trim_cache();
-  dout(3) << "rename(\"" << from << "\", \"" << to << "\") = " << res << endl;
+  dout(3) << "rename(\"" << from << "\", \"" << to << "\") = " << res << dendl;
   return res;
 }
 
@@ -1641,9 +1641,9 @@ int Client::_rename(const char *from, const char *to)
 int Client::mkdir(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
-  tout << "mkdir" << endl;
-  tout << relpath << endl;
-  tout << mode << endl;
+  tout << "mkdir" << dendl;
+  tout << relpath << dendl;
+  tout << mode << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1666,19 +1666,19 @@ int Client::_mkdir(const char *path, mode_t mode)
   int res = reply->get_result();
   insert_trace(reply);
   delete reply;
-  dout(10) << "mkdir result is " << res << endl;
+  dout(10) << "mkdir result is " << res << dendl;
 
   trim_cache();
 
-  dout(3) << "mkdir(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << endl;
+  dout(3) << "mkdir(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << dendl;
   return res;
 }
 
 int Client::rmdir(const char *relpath)
 {
   Mutex::Locker lock(client_lock);
-  tout << "rmdir" << endl;
-  tout << relpath << endl;
+  tout << "rmdir" << dendl;
+  tout << relpath << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1712,7 +1712,7 @@ int Client::_rmdir(const char *path)
   delete reply;
 
   trim_cache();
-  dout(3) << "rmdir(\"" << path << "\") = " << res << endl;
+  dout(3) << "rmdir(\"" << path << "\") = " << res << dendl;
   return res;
 }
 
@@ -1721,9 +1721,9 @@ int Client::_rmdir(const char *path)
 int Client::symlink(const char *reltarget, const char *rellink)
 {
   Mutex::Locker lock(client_lock);
-  tout << "symlink" << endl;
-  tout << reltarget << endl;
-  tout << rellink << endl;
+  tout << "symlink" << dendl;
+  tout << reltarget << dendl;
+  tout << rellink << dendl;
 
   string target, link;
   mkabspath(reltarget, target);
@@ -1749,15 +1749,15 @@ int Client::_symlink(const char *target, const char *link)
   delete reply;
 
   trim_cache();
-  dout(3) << "symlink(\"" << target << "\", \"" << link << "\") = " << res << endl;
+  dout(3) << "symlink(\"" << target << "\", \"" << link << "\") = " << res << dendl;
   return res;
 }
 
 int Client::readlink(const char *path, char *buf, off_t size) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "readlink" << endl;
-  tout << path << endl;
+  tout << "readlink" << dendl;
+  tout << path << dendl;
 
   string abspath;
   mkabspath(path, abspath);
@@ -1779,7 +1779,7 @@ int Client::_readlink(const char *path, char *buf, off_t size)
   }
   trim_cache();
 
-  dout(3) << "readlink(\"" << path << "\", \"" << buf << "\", " << size << ") = " << r << endl;
+  dout(3) << "readlink(\"" << path << "\", \"" << buf << "\", " << size << ") = " << r << dendl;
   return r;
 }
 
@@ -1801,13 +1801,13 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
 
   if (dn && 
       now <= dn->inode->valid_until)
-    dout(10) << "_lstat has inode " << path << " with mask " << dn->inode->mask << ", want " << mask << endl;
+    dout(10) << "_lstat has inode " << path << " with mask " << dn->inode->mask << ", want " << mask << dendl;
 
   if (dn && dn->inode &&
       ((mask & ~STAT_MASK_BASE) || now <= dn->inode->valid_until) &&
       ((dn->inode->mask & mask) == mask)) {
     inode = dn->inode->inode;
-    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->valid_until << endl;
+    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->valid_until << dendl;
     
     if (g_conf.client_cache_stat_ttl == 0)
       dn->inode->valid_until = utime_t();           // only one stat allowed after each readdir
@@ -1825,7 +1825,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
 
     MClientReply *reply = make_request(req);
     res = reply->get_result();
-    dout(10) << "lstat res is " << res << endl;
+    dout(10) << "lstat res is " << res << dendl;
     if (res == 0) {
       //Transfer information from reply to stbuf
       inode = reply->get_inode();
@@ -1847,7 +1847,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
 int Client::fill_stat(Inode *in, struct stat *st) 
 {
   dout(10) << "fill_stat on " << in->inode.ino << " mode 0" << oct << in->inode.mode << dec
-	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << endl;
+	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
   st->st_mode = in->inode.mode;
@@ -1879,8 +1879,8 @@ int Client::fill_stat(Inode *in, struct stat *st)
 int Client::lstat(const char *relpath, struct stat *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "lstat" << endl;
-  tout << relpath << endl;
+  tout << "lstat" << dendl;
+  tout << relpath << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1894,11 +1894,11 @@ int Client::_lstat(const char *path, struct stat *stbuf)
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
-    dout(10) << "stat sez size = " << in->inode.size << " mode = 0" << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << endl;
+    dout(10) << "stat sez size = " << in->inode.size << " mode = 0" << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << dendl;
   }
 
   trim_cache();
-  dout(3) << "lstat(\"" << path << "\", " << stbuf << ") = " << res << endl;
+  dout(3) << "lstat(\"" << path << "\", " << stbuf << ") = " << res << dendl;
   return res;
 }
 
@@ -1912,9 +1912,9 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
 
-  dout(3) << "op: client->lstatlite(\"" << path << "\", &st);" << endl;
-  tout << "lstatlite" << endl;
-  tout << path << endl;
+  dout(3) << "op: client->lstatlite(\"" << path << "\", &st);" << dendl;
+  tout << "lstatlite" << dendl;
+  tout << path << dendl;
 
   // make mask
   // FIXME.
@@ -1929,7 +1929,7 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   
   if (res == 0) {
     fill_statlite(in->inode,stl);
-    dout(10) << "stat sez size = " << in->inode.size << " ino = " << in->inode.ino << endl;
+    dout(10) << "stat sez size = " << in->inode.size << " ino = " << in->inode.ino << dendl;
   }
 
   trim_cache();
@@ -1942,9 +1942,9 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
 int Client::chmod(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chmod" << endl;
-  tout << relpath << endl;
-  tout << mode << endl;
+  tout << "chmod" << dendl;
+  tout << relpath << dendl;
+  tout << mode << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1953,7 +1953,7 @@ int Client::chmod(const char *relpath, mode_t mode)
 
 int Client::_chmod(const char *path, mode_t mode) 
 {
-  dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << endl;
+  dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
   req->args.chmod.mode = mode;
@@ -1968,17 +1968,17 @@ int Client::_chmod(const char *path, mode_t mode)
   delete reply;
 
   trim_cache();
-  dout(3) << "_chmod(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << endl;
+  dout(3) << "_chmod(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << dendl;
   return res;
 }
 
 int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chown" << endl;
-  tout << relpath << endl;
-  tout << uid << endl;
-  tout << gid << endl;
+  tout << "chown" << dendl;
+  tout << relpath << dendl;
+  tout << uid << dendl;
+  tout << gid << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1987,7 +1987,7 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 
 int Client::_chown(const char *path, uid_t uid, gid_t gid)
 {
-  dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << endl;
+  dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
   req->args.chown.uid = uid;
@@ -2003,20 +2003,20 @@ int Client::_chown(const char *path, uid_t uid, gid_t gid)
   int res = reply->get_result();
   insert_trace(reply);  
   delete reply;
-  dout(10) << "chown result is " << res << endl;
+  dout(10) << "chown result is " << res << dendl;
 
   trim_cache();
-  dout(3) << "chown(\"" << path << "\", " << uid << ", " << gid << ") = " << res << endl;
+  dout(3) << "chown(\"" << path << "\", " << uid << ", " << gid << ") = " << res << dendl;
   return res;
 }
 
 int Client::utime(const char *relpath, struct utimbuf *buf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "utime" << endl;
-  tout << relpath << endl;
-  tout << buf->modtime << endl;
-  tout << buf->actime << endl;
+  tout << "utime" << dendl;
+  tout << relpath << dendl;
+  tout << buf->modtime << dendl;
+  tout << buf->actime << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2025,7 +2025,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
 int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 {
-  dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << endl;
+  dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
   req->args.utime.mtime = mtime.tv_ref();
@@ -2040,7 +2040,7 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   insert_trace(reply);  
   delete reply;
 
-  dout(3) << "utimes(\"" << path << "\", " << mtime << ", " << atime << ") = " << res << endl;
+  dout(3) << "utimes(\"" << path << "\", " << mtime << ", " << atime << ") = " << res << dendl;
   trim_cache();
   return res;
 }
@@ -2050,10 +2050,10 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 int Client::mknod(const char *relpath, mode_t mode, dev_t rdev) 
 { 
   Mutex::Locker lock(client_lock);
-  tout << "mknod" << endl;
-  tout << relpath << endl;
-  tout << mode << endl;
-  tout << rdev << endl;
+  tout << "mknod" << dendl;
+  tout << relpath << dendl;
+  tout << mode << dendl;
+  tout << rdev << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2062,7 +2062,7 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
 
 int Client::_mknod(const char *path, mode_t mode, dev_t rdev) 
 { 
-  dout(3) << "_mknod(" << path << ", 0" << oct << mode << dec << ", " << rdev << ")" << endl;
+  dout(3) << "_mknod(" << path << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
@@ -2083,7 +2083,7 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
 
   trim_cache();
 
-  dout(3) << "mknod(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << endl;
+  dout(3) << "mknod(\"" << path << "\", 0" << oct << mode << dec << ") = " << res << dendl;
   return res;
 }
 
@@ -2092,11 +2092,11 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
   
 int Client::getdir(const char *relpath, list<string>& contents)
 {
-  dout(3) << "getdir(" << relpath << ")" << endl;
+  dout(3) << "getdir(" << relpath << ")" << dendl;
   {
     Mutex::Locker lock(client_lock);
-    tout << "getdir" << endl;
-    tout << relpath << endl;
+    tout << "getdir" << dendl;
+    tout << relpath << dendl;
   }
 
   DIR *d;
@@ -2117,8 +2117,8 @@ int Client::getdir(const char *relpath, list<string>& contents)
 int Client::opendir(const char *name, DIR **dirpp) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "opendir" << endl;
-  tout << name << endl;
+  tout << "opendir" << dendl;
+  tout << name << dendl;
 
   int r = _opendir(name, (DirResult**)dirpp);
   tout << (unsigned long)*dirpp;
@@ -2136,9 +2136,9 @@ int Client::_opendir(const char *name, DirResult **dirpp)
   if (dn && dn->inode) {
     (*dirpp)->inode = dn->inode;
     (*dirpp)->inode->get();
-    dout(10) << "had inode " << dn->inode << " " << dn->inode->inode.ino << " ref now " << dn->inode->ref << endl;
+    dout(10) << "had inode " << dn->inode << " " << dn->inode->inode.ino << " ref now " << dn->inode->ref << dendl;
     (*dirpp)->set_frag(dn->inode->dirfragtree[0]);
-    dout(10) << "_opendir " << name << ", our cache says the first dirfrag is " << (*dirpp)->frag() << endl;
+    dout(10) << "_opendir " << name << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
   }
 
   // get the first frag
@@ -2149,7 +2149,7 @@ int Client::_opendir(const char *name, DirResult **dirpp)
   } else {
     r = 0;
   }
-  dout(3) << "_opendir(" << name << ") = " << r << " (" << *dirpp << ")" << endl;
+  dout(3) << "_opendir(" << name << ") = " << r << " (" << *dirpp << ")" << dendl;
 
   return r;
 }
@@ -2161,7 +2161,7 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   frag_t fg = dirp->frag();
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
   dout(10) << "_readdir_add_dirent " << dirp << " added '" << name << "' -> " << in->inode.ino
-	   << ", size now " << dirp->buffer[fg].size() << endl;
+	   << ", size now " << dirp->buffer[fg].size() << dendl;
 }
 
 //struct dirent {
@@ -2179,7 +2179,7 @@ void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
   de->d_type = MODE_TO_DT(entry->st.st_mode);
   strncpy(de->d_name, entry->d_name.c_str(), 256);
   dout(10) << "_readdir_fill_dirent '" << de->d_name << "' -> " << de->d_ino
-	   << " type " << (int)de->d_type << " at off " << off << endl;
+	   << " type " << (int)de->d_type << " at off " << off << dendl;
 }
 
 void Client::_readdir_next_frag(DirResult *dirp)
@@ -2193,9 +2193,9 @@ void Client::_readdir_next_frag(DirResult *dirp)
   // advance
   dirp->next_frag();
   if (dirp->at_end()) {
-    dout(10) << "_readdir_next_frag advance from " << fg << " to END" << endl;
+    dout(10) << "_readdir_next_frag advance from " << fg << " to END" << dendl;
   } else {
-    dout(10) << "_readdir_next_frag advance from " << fg << " to " << dirp->frag() << endl;
+    dout(10) << "_readdir_next_frag advance from " << fg << " to " << dirp->frag() << dendl;
     _readdir_rechoose_frag(dirp);
   }
 }
@@ -2206,7 +2206,7 @@ void Client::_readdir_rechoose_frag(DirResult *dirp)
   frag_t cur = dirp->frag();
   frag_t f = dirp->inode->dirfragtree[cur.value()];
   if (f != cur) {
-    dout(10) << "_readdir_rechoose_frag frag " << cur << " maps to " << f << endl;
+    dout(10) << "_readdir_rechoose_frag frag " << cur << " maps to " << f << dendl;
     dirp->set_frag(f);
   }
 }
@@ -2217,7 +2217,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   frag_t fg = dirp->frag();
   assert(dirp->buffer.count(fg) == 0);
   
-  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << endl;
+  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << dendl;
 
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(dirp->path); 
@@ -2237,19 +2237,19 @@ int Client::_readdir_get_frag(DirResult *dirp)
   if ((res == -EAGAIN || res == 0) &&
       inode_map.count(ino)) {
     diri = inode_map[ino];
-    dout(10) << "_readdir_get_frag got diri " << diri << " " << diri->inode.ino << endl;
+    dout(10) << "_readdir_get_frag got diri " << diri << " " << diri->inode.ino << dendl;
     assert(diri);
     assert(diri->inode.mode & INODE_MODE_DIR);
   }
   
   if (!dirp->inode && diri) {
-    dout(10) << "_readdir_get_frag attaching inode" << endl;
+    dout(10) << "_readdir_get_frag attaching inode" << dendl;
     dirp->inode = inode_map[ino];
     diri->get();
   }
 
   if (res == -EAGAIN) {
-    dout(10) << "_readdir_get_frag got EAGAIN, retrying" << endl;
+    dout(10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
     _readdir_rechoose_frag(dirp);
     return _readdir_get_frag(dirp);
   }
@@ -2299,7 +2299,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 	}
 	
 	// contents to caller too!
-	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << endl;
+	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << dendl;
 	_readdir_add_dirent(dirp, *pdn, in);
       }
 
@@ -2310,7 +2310,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
     // FIXME: remove items in cache that weren't in my readdir?
     // ***
   } else {
-    dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << endl;
+    dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
     dirp->set_end();
   }
 
@@ -2343,7 +2343,7 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
     vector<DirEntry> &ent = dirp->buffer[fg];
 
     if (ent.empty()) {
-      dout(10) << "empty frag " << fg << ", moving on to next" << endl;
+      dout(10) << "empty frag " << fg << ", moving on to next" << dendl;
       _readdir_next_frag(dirp);
       continue;
     }
@@ -2368,19 +2368,19 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 int Client::closedir(DIR *dir) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "closedir" << endl;
-  tout << (unsigned long)dir << endl;
+  tout << "closedir" << dendl;
+  tout << (unsigned long)dir << dendl;
 
-  dout(3) << "closedir(" << dir << ") = 0" << endl;
+  dout(3) << "closedir(" << dir << ") = 0" << dendl;
   _closedir((DirResult*)dir);
   return 0;
 }
 
 void Client::_closedir(DirResult *dirp)
 {
-  dout(10) << "_closedir(" << dirp << ")" << endl;
+  dout(10) << "_closedir(" << dirp << ")" << dendl;
   if (dirp->inode) {
-    dout(10) << "_closedir detaching inode " << dirp->inode << endl;
+    dout(10) << "_closedir detaching inode " << dirp->inode << dendl;
     put_inode(dirp->inode);
     dirp->inode = 0;
   }
@@ -2389,7 +2389,7 @@ void Client::_closedir(DirResult *dirp)
 
 void Client::rewinddir(DIR *dirp)
 {
-  dout(3) << "rewinddir(" << dirp << ")" << endl;
+  dout(3) << "rewinddir(" << dirp << ")" << dendl;
   DirResult *d = (DirResult*)dirp;
   d->offset = 0;
   d->buffer.clear();
@@ -2398,13 +2398,13 @@ void Client::rewinddir(DIR *dirp)
 off_t Client::telldir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
-  dout(3) << "telldir(" << dirp << ") = " << d->offset << endl;
+  dout(3) << "telldir(" << dirp << ") = " << d->offset << dendl;
   return d->offset;
 }
 
 void Client::seekdir(DIR *dirp, off_t offset)
 {
-  dout(3) << "seekdir(" << dirp << ", " << offset << ")" << endl;
+  dout(3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
   DirResult *d = (DirResult*)dirp;
   d->offset = offset;
 }
@@ -2420,9 +2420,9 @@ void Client::seekdir(DIR *dirp, off_t offset)
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "open" << endl;
-  tout << relpath << endl;
-  tout << flags << endl;
+  tout << "open" << dendl;
+  tout << relpath << dendl;
+  tout << flags << dendl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2437,8 +2437,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     fd_map[r] = fh;
   }
   
-  tout << r << endl;
-  dout(3) << "open(" << relpath << ", " << flags << ") = " << r << endl;
+  tout << r << dendl;
+  dout(3) << "open(" << relpath << ", " << flags << ") = " << r << dendl;
   return r;
 }
 
@@ -2491,7 +2491,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     int mds = reply->get_source().num();
 
     if (in->caps.empty()) {// first caps?
-      dout(7) << " first caps on " << in->inode.ino << endl;
+      dout(7) << " first caps on " << in->inode.ino << dendl;
       in->get();
     }
 
@@ -2506,7 +2506,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
               << " for " << in->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
-	      << endl;
+	      << dendl;
 
       in->caps[mds].caps = new_caps;
       in->caps[mds].seq = reply->get_file_caps_seq();
@@ -2523,10 +2523,10 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
               << " for " << in->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds 
-	      << endl;
+	      << dendl;
     }
     
-    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->file_caps()) << endl;
+    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->file_caps()) << dendl;
   }
 
   delete reply;
@@ -2542,9 +2542,9 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
 
 void Client::close_release(Inode *in)
 {
-  dout(10) << "close_release on " << in->ino() << endl;
+  dout(10) << "close_release on " << in->ino() << dendl;
   dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
-	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << endl;
+	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
   if (!in->num_open_rd) 
     in->fc.release_clean();
@@ -2558,7 +2558,7 @@ void Client::close_release(Inode *in)
 
 void Client::close_safe(Inode *in)
 {
-  dout(10) << "close_safe on " << in->ino() << endl;
+  dout(10) << "close_safe on " << in->ino() << dendl;
   put_inode(in);
   if (unmounting) 
     mount_cond.Signal();
@@ -2568,10 +2568,10 @@ void Client::close_safe(Inode *in)
 int Client::close(int fd)
 {
   Mutex::Locker lock(client_lock);
-  tout << "close" << endl;
-  tout << fd << endl;
+  tout << "close" << dendl;
+  tout << fd << dendl;
 
-  dout(3) << "close(" << fd << ")" << endl;
+  dout(3) << "close(" << fd << ")" << dendl;
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
   _release(fh);
@@ -2581,9 +2581,9 @@ int Client::close(int fd)
 
 int Client::_release(Fh *f)
 {
-  //dout(3) << "op: client->close(open_files[ " << fh << " ]);" << endl;
-  //dout(3) << "op: open_files.erase( " << fh << " );" << endl;
-  dout(5) << "_release " << f << endl;
+  //dout(3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
+  //dout(3) << "op: open_files.erase( " << fh << " );" << dendl;
+  dout(5) << "_release " << f << dendl;
   Inode *in = f->inode;
 
   // update inode rd/wr counts
@@ -2596,7 +2596,7 @@ int Client::_release(Fh *f)
     update_caps_wanted(in);
 
   // release caps right away?
-  dout(10) << "num_open_rd " << in->num_open_rd << "  num_open_wr " << in->num_open_wr << endl;
+  dout(10) << "num_open_rd " << in->num_open_rd << "  num_open_wr " << in->num_open_wr << dendl;
 
   if (g_conf.client_oc) {
     // caching on.
@@ -2613,14 +2613,14 @@ int Client::_release(Fh *f)
 
     // pin until safe?
     if (in->num_open_wr == 0 && !in->fc.all_safe()) {
-      dout(10) << "pinning ino " << in->ino() << " until safe" << endl;
+      dout(10) << "pinning ino " << in->ino() << " until safe" << dendl;
       in->get();
       in->fc.add_safe_waiter(new C_Client_CloseSafe(this, in));
     }
   } else {
     // caching off.
     if (in->num_open_rd == 0 && in->num_open_wr == 0) {
-      dout(10) << "  releasing caps on " << in->ino() << endl;
+      dout(10) << "  releasing caps on " << in->ino() << dendl;
       release_caps(in);              // release caps now.
     }
   }
@@ -2638,10 +2638,10 @@ int Client::_release(Fh *f)
 off_t Client::lseek(int fd, off_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
-  tout << "lseek" << endl;
-  tout << fd << endl;
-  tout << offset << endl;
-  tout << whence << endl;
+  tout << "lseek" << dendl;
+  tout << fd << dendl;
+  tout << offset << dendl;
+  tout << whence << dendl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -2666,7 +2666,7 @@ off_t Client::lseek(int fd, off_t offset, int whence)
   
   off_t pos = f->pos;
 
-  dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << endl;
+  dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << dendl;
   return pos;
 }
 
@@ -2674,15 +2674,15 @@ off_t Client::lseek(int fd, off_t offset, int whence)
 
 void Client::lock_fh_pos(Fh *f)
 {
-  dout(10) << "lock_fh_pos " << f << endl;
+  dout(10) << "lock_fh_pos " << f << dendl;
 
   if (f->pos_locked || !f->pos_waiters.empty()) {
     Cond cond;
     f->pos_waiters.push_back(&cond);
-    dout(10) << "lock_fh_pos BLOCKING on " << f << endl;
+    dout(10) << "lock_fh_pos BLOCKING on " << f << dendl;
     while (f->pos_locked || f->pos_waiters.front() != &cond)
       cond.Wait(client_lock);
-    dout(10) << "lock_fh_pos UNBLOCKING on " << f << endl;
+    dout(10) << "lock_fh_pos UNBLOCKING on " << f << dendl;
     assert(f->pos_waiters.front() == &cond);
     f->pos_waiters.pop_front();
   }
@@ -2692,7 +2692,7 @@ void Client::lock_fh_pos(Fh *f)
 
 void Client::unlock_fh_pos(Fh *f)
 {
-  dout(10) << "unlock_fh_pos " << f << endl;
+  dout(10) << "unlock_fh_pos " << f << dendl;
   f->pos_locked = false;
 }
 
@@ -2706,16 +2706,16 @@ void Client::unlock_fh_pos(Fh *f)
 int Client::read(int fd, char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "read" << endl;
-  tout << fd << endl;
-  tout << size << endl;
-  tout << offset << endl;
+  tout << "read" << dendl;
+  tout << fd << dendl;
+  tout << size << dendl;
+  tout << offset << dendl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
-  dout(3) << "read(" << fd << ", " << buf << ", " << size << ", " << offset << ") = " << r << endl;
+  dout(3) << "read(" << fd << ", " << buf << ", " << size << ", " << offset << ") = " << r << dendl;
   if (r >= 0) {
     bl.copy(0, bl.length(), buf);
     r = bl.length();
@@ -2741,7 +2741,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(10) << "file size: " << in->inode.size << endl;
+    dout(10) << "file size: " << in->inode.size << dendl;
     if (offset > 0 && offset >= in->inode.size) {
       if (movepos) unlock_fh_pos(f);
       return 0;
@@ -2750,7 +2750,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
       size = (off_t)in->inode.size - offset;
     
     if (size == 0) {
-      dout(10) << "read is size=0, returning 0" << endl;
+      dout(10) << "read is size=0, returning 0" << dendl;
       if (movepos) unlock_fh_pos(f);
       return 0;
     }
@@ -2775,7 +2775,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
 	if (v[a] != hackbuf[offset+a]) 
 	  dout(1) << "** hackbuf differs from read value at offset " << a 
 		  << " hackbuf[a] = " << (int)hackbuf[a] << ", read got " << (int)v[a]
-		  << endl;
+		  << dendl;
     }
     */
 
@@ -2784,14 +2784,14 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
 
     // do we have read file cap?
     while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
-      dout(7) << " don't have read cap, waiting" << endl;
+      dout(7) << " don't have read cap, waiting" << dendl;
       Cond cond;
       in->waitfor_read.push_back(&cond);
       cond.Wait(client_lock);
     }  
     // lazy cap?
     while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << endl;
+      dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
       cond.Wait(client_lock);
@@ -2846,7 +2846,7 @@ void Client::hack_sync_write_safe()
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
   if (unsafe_sync_write == 0 && unmounting) {
-    dout(10) << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << endl;
+    dout(10) << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();
   }
   client_lock.Unlock();
@@ -2855,22 +2855,22 @@ void Client::hack_sync_write_safe()
 int Client::write(int fd, const char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "write" << endl;
-  tout << fd << endl;
-  tout << size << endl;
-  tout << offset << endl;
+  tout << "write" << dendl;
+  tout << fd << dendl;
+  tout << size << dendl;
+  tout << offset << dendl;
 
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
   int r = _write(fh, offset, size, buf);
-  dout(3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << endl;
+  dout(3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
 }
 
 
 int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 {
-  //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
+  //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
 
   // use/adjust fd pos?
@@ -2883,7 +2883,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 
   bool lazy = f->mode == FILE_MODE_LAZY;
 
-  dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
+  dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << dendl;
 
   // time it.
   utime_t start = g_clock.real_now();
@@ -2900,14 +2900,14 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
     /*
     if (f->inode->inode.ino == 0x10000000075) {
       if (!hackbuf) {
-	dout(7) << "alloc and zero new hackbuf" << endl;
+	dout(7) << "alloc and zero new hackbuf" << dendl;
 	hackbuf = new char[16384];
 	memset(hackbuf, 0, 16384);
       }
-      dout(7) << "hackbuf copying " << offset << "~" << size << " first is " << (int)buf[0] << endl;
+      dout(7) << "hackbuf copying " << offset << "~" << size << " first is " << (int)buf[0] << dendl;
       memcpy(hackbuf+offset, buf, size);
       for (int a=0; a<size; a++) 
-	dout(10) << "hackbuf[" << (a+offset) << " = " << (int)hackbuf[a+offset] << " = " << (int)buf[a] << endl;
+	dout(10) << "hackbuf[" << (a+offset) << " = " << (int)hackbuf[a+offset] << " = " << (int)buf[a] << dendl;
     }
     */
 
@@ -2916,17 +2916,17 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 
   } else {
     // legacy, inconsistent synchronous write.
-    dout(7) << "synchronous write" << endl;
+    dout(7) << "synchronous write" << dendl;
 
     // do we have write file cap?
     while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
-      dout(7) << " don't have write cap, waiting" << endl;
+      dout(7) << " don't have write cap, waiting" << dendl;
       Cond cond;
       in->waitfor_write.push_back(&cond);
       cond.Wait(client_lock);
     }
     while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << endl;
+      dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
       cond.Wait(client_lock);
@@ -2940,7 +2940,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
     unsafe_sync_write++;
     in->sync_writes++;
     
-    dout(20) << " sync write start " << onfinish << endl;
+    dout(20) << " sync write start " << onfinish << dendl;
     
     filer->write(in->inode, offset, size, blist, 0, 
                  onfinish, onsafe
@@ -2949,7 +2949,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
     
     while (!done) {
       cond.Wait(client_lock);
-      dout(20) << " sync write bump " << onfinish << endl;
+      dout(20) << " sync write bump " << onfinish << dendl;
     }
 
     in->sync_writes--;
@@ -2962,7 +2962,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
       in->waitfor_no_write.clear();
     }
 
-    dout(20) << " sync write done " << onfinish << endl;
+    dout(20) << " sync write done " << onfinish << dendl;
   }
 
   // time
@@ -2979,9 +2979,9 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   // extend file?
   if (totalwritten + offset > in->inode.size) {
     in->inode.size = in->file_wr_size = totalwritten + offset;
-    dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << endl;
+    dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
-    dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->inode.size << endl;
+    dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->inode.size << dendl;
   }
 
   // mtime
@@ -3001,9 +3001,9 @@ int Client::_flush(Fh *f)
 int Client::truncate(const char *relpath, off_t length) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "truncate" << endl;
-  tout << relpath << endl;
-  tout << length << endl;
+  tout << "truncate" << dendl;
+  tout << relpath << dendl;
+  tout << length << dendl;
 
   string path;
   mkabspath(relpath, path);
@@ -3025,16 +3025,16 @@ int Client::_truncate(const char *file, off_t length)
   insert_trace(reply);  
   delete reply;
 
-  dout(3) << "truncate(\"" << file << "\", " << length << ") = " << res << endl;
+  dout(3) << "truncate(\"" << file << "\", " << length << ") = " << res << dendl;
   return res;
 }
 
 int Client::ftruncate(int fd, off_t length) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "ftruncate" << endl;
-  tout << fd << endl;
-  tout << length << endl;
+  tout << "ftruncate" << dendl;
+  tout << fd << dendl;
+  tout << length << dendl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -3056,7 +3056,7 @@ int Client::_ftruncate(Fh *fh, off_t length)
   insert_trace(reply);  
   delete reply;
 
-  dout(3) << "ftruncate(\"" << fh << "\", " << length << ") = " << res << endl;
+  dout(3) << "ftruncate(\"" << fh << "\", " << length << ") = " << res << dendl;
   return res;
 }
 
@@ -3064,14 +3064,14 @@ int Client::_ftruncate(Fh *fh, off_t length)
 int Client::fsync(int fd, bool syncdataonly) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "fsync" << endl;
-  tout << fd << endl;
-  tout << syncdataonly << endl;
+  tout << "fsync" << dendl;
+  tout << fd << dendl;
+  tout << syncdataonly << dendl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
   int r = _fsync(f, syncdataonly);
-  dout(3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << endl;
+  dout(3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << dendl;
   return r;
 }
 
@@ -3083,7 +3083,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   // metadata?
   if (!syncdataonly) {
-    dout(0) << "fsync - not syncing metadata yet.. implement me" << endl;
+    dout(0) << "fsync - not syncing metadata yet.. implement me" << dendl;
   }
 
   // data?
@@ -3103,13 +3103,13 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 int Client::chdir(const char *path)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chdir" << endl;
-  tout << path << endl;
+  tout << "chdir" << dendl;
+  tout << path << dendl;
   
   // fake it for now!
   string abs;
   mkabspath(path, abs);
-  dout(3) << "chdir " << path << " -> cwd now " << abs << endl;
+  dout(3) << "chdir " << path << " -> cwd now " << abs << dendl;
   cwd = abs;
   return 0;
 }
@@ -3117,20 +3117,20 @@ int Client::chdir(const char *path)
 int Client::statfs(const char *path, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "statfs" << endl;
+  tout << "statfs" << dendl;
   return _statfs(stbuf);
 }
 
 int Client::ll_statfs(inodeno_t ino, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "ll_statfs" << endl;
+  tout << "ll_statfs" << dendl;
   return _statfs(stbuf);
 }
 
 int Client::_statfs(struct statvfs *stbuf)
 {
-  dout(3) << "_statfs" << endl;
+  dout(3) << "_statfs" << dendl;
 
   Cond cond;
   tid_t tid = ++last_tid;
@@ -3151,7 +3151,7 @@ int Client::_statfs(struct statvfs *stbuf)
   delete req;
 
   int r = 0;
-  dout(3) << "_statfs = " << r << endl;
+  dout(3) << "_statfs = " << r << dendl;
   return r;
 }
 
@@ -3159,11 +3159,11 @@ void Client::handle_statfs_reply(MStatfsReply *reply)
 {
   if (statfs_requests.count(reply->tid) &&
       statfs_requests[reply->tid]->reply == 0) {
-    dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << endl;
+    dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << dendl;
     statfs_requests[reply->tid]->reply = reply;
     statfs_requests[reply->tid]->caller_cond->Signal();
   } else {
-    dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << endl;
+    dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << dendl;
     delete reply;
   }
 }
@@ -3173,7 +3173,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_propogate(" << fd
-          << ", " << offset << ", " << count << ")" << endl;
+          << ", " << offset << ", " << count << ")" << dendl;
   
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -3182,7 +3182,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   if (f->mode & FILE_MODE_LAZY) {
     // wait for lazy cap
     while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << endl;
+      dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
       cond.Wait(client_lock);
@@ -3209,7 +3209,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_synchronize(" << fd
-          << ", " << offset << ", " << count << ")" << endl;
+          << ", " << offset << ", " << count << ")" << dendl;
   
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -3218,7 +3218,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   if (f->mode & FILE_MODE_LAZY) {
     // wait for lazy cap
     while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << endl;
+      dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
       cond.Wait(client_lock);
@@ -3253,10 +3253,10 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_lookup " << parent << " " << name << endl;
-  tout << "ll_lookup" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
+  dout(3) << "ll_lookup " << parent << " " << name << dendl;
+  tout << "ll_lookup" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
 
   string dname = name;
   Inode *diri = 0;
@@ -3264,14 +3264,14 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   int r = 0;
 
   if (inode_map.count(parent) == 0) {
-    dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << endl;
+    dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << dendl;
     r = -ENOENT;
     attr->st_ino = 0;
     goto out;
   }
   diri = inode_map[parent];
   if (!diri->inode.is_dir()) {
-    dout(1) << "ll_lookup " << parent << " " << name << " -> ENOTDIR (parent not a dir... WTF)" << endl;
+    dout(1) << "ll_lookup " << parent << " " << name << " -> ENOTDIR (parent not a dir... WTF)" << dendl;
     r = -ENOTDIR;
     attr->st_ino = 0;
     goto out;
@@ -3298,8 +3298,8 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
 
  out:
   dout(3) << "ll_lookup " << parent << " " << name
-	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
-  tout << attr->st_ino << endl;
+	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
+  tout << attr->st_ino << dendl;
   return r;
 }
 
@@ -3308,13 +3308,13 @@ void Client::_ll_get(Inode *in)
   if (in->ll_ref == 0) 
     in->get();
   in->ll_get();
-  dout(20) << "_ll_get " << in << " " << in->inode.ino << " -> " << in->ll_ref << endl;
+  dout(20) << "_ll_get " << in << " " << in->inode.ino << " -> " << in->ll_ref << dendl;
 }
 
 int Client::_ll_put(Inode *in, int num)
 {
   in->ll_put(num);
-  dout(20) << "_ll_put " << in << " " << in->inode.ino << " " << num << " -> " << in->ll_ref << endl;
+  dout(20) << "_ll_put " << in << " " << in->inode.ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
     put_inode(in);
     return 0;
@@ -3325,7 +3325,7 @@ int Client::_ll_put(Inode *in, int num)
 
 void Client::_ll_drop_pins()
 {
-  dout(10) << "_ll_drop_pins" << endl;
+  dout(10) << "_ll_drop_pins" << dendl;
   hash_map<inodeno_t, Inode*>::iterator next;
   for (hash_map<inodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
@@ -3341,17 +3341,17 @@ void Client::_ll_drop_pins()
 bool Client::ll_forget(inodeno_t ino, int num)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_forget " << ino << " " << num << endl;
-  tout << "ll_forget" << endl;
-  tout << ino.val << endl;
-  tout << num << endl;
+  dout(3) << "ll_forget " << ino << " " << num << dendl;
+  tout << "ll_forget" << dendl;
+  tout << ino.val << dendl;
+  tout << num << dendl;
 
   if (ino == 1) return true;  // ignore forget on root.
 
   bool last = false;
   if (inode_map.count(ino) == 0) {
     dout(1) << "WARNING: ll_forget on " << ino << " " << num 
-	    << ", which I don't have" << endl;
+	    << ", which I don't have" << dendl;
   } else {
     Inode *in = inode_map[ino];
     assert(in);
@@ -3378,9 +3378,9 @@ Inode *Client::_ll_get_inode(inodeno_t ino)
 int Client::ll_getattr(inodeno_t ino, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_getattr " << ino << endl;
-  tout << "ll_getattr" << endl;
-  tout << ino.val << endl;
+  dout(3) << "ll_getattr " << ino << dendl;
+  tout << "ll_getattr" << dendl;
+  tout << ino.val << dendl;
 
   Inode *in = _ll_get_inode(ino);
   fill_stat(in, attr);
@@ -3390,16 +3390,16 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr)
 int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_setattr " << ino << " mask " << hex << mask << dec << endl;
-  tout << "ll_setattr" << endl;
-  tout << ino.val << endl;
-  tout << attr->st_mode << endl;
-  tout << attr->st_uid << endl;
-  tout << attr->st_gid << endl;
-  tout << attr->st_size << endl;
-  tout << attr->st_mtime << endl;
-  tout << attr->st_atime << endl;
-  tout << mask << endl;
+  dout(3) << "ll_setattr " << ino << " mask " << hex << mask << dec << dendl;
+  tout << "ll_setattr" << dendl;
+  tout << ino.val << dendl;
+  tout << attr->st_mode << dendl;
+  tout << attr->st_uid << dendl;
+  tout << attr->st_gid << dendl;
+  tout << attr->st_size << dendl;
+  tout << attr->st_mtime << dendl;
+  tout << attr->st_atime << dendl;
+  tout << mask << dendl;
 
   Inode *in = _ll_get_inode(ino);
 
@@ -3429,16 +3429,16 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)
   assert(r == 0);
   fill_stat(in, attr);
 
-  dout(3) << "ll_setattr " << ino << " = " << r << endl;
+  dout(3) << "ll_setattr " << ino << " = " << r << dendl;
   return 0;
 }
 
 int Client::ll_readlink(inodeno_t ino, const char **value)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_readlink " << ino << endl;
-  tout << "ll_readlink" << endl;
-  tout << ino.val << endl;
+  dout(3) << "ll_readlink " << ino << dendl;
+  tout << "ll_readlink" << dendl;
+  tout << ino.val << dendl;
 
   Inode *in = _ll_get_inode(ino);
   int r = 0;
@@ -3448,19 +3448,19 @@ int Client::ll_readlink(inodeno_t ino, const char **value)
     *value = "";
     r = -EINVAL;
   }
-  dout(3) << "ll_readlink " << ino << " = " << r << " (" << *value << ")" << endl;
+  dout(3) << "ll_readlink " << ino << " = " << r << " (" << *value << ")" << dendl;
   return r;
 }
 
 int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_mknod " << parent << " " << name << endl;
-  tout << "ll_mknod" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
-  tout << mode << endl;
-  tout << rdev << endl;
+  dout(3) << "ll_mknod " << parent << " " << name << dendl;
+  tout << "ll_mknod" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
+  tout << mode << dendl;
+  tout << rdev << dendl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3475,20 +3475,20 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << endl;
+  tout << attr->st_ino << dendl;
   dout(3) << "ll_mknod " << parent << " " << name
-	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
 }
 
 int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_mkdir " << parent << " " << name << endl;
-  tout << "ll_mkdir" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
-  tout << mode << endl;
+  dout(3) << "ll_mkdir " << parent << " " << name << dendl;
+  tout << "ll_mkdir" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
+  tout << mode << dendl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3503,20 +3503,20 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << endl;
+  tout << attr->st_ino << dendl;
   dout(3) << "ll_mkdir " << parent << " " << name
-	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
 }
 
 int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_symlink " << parent << " " << name << " -> " << value << endl;
-  tout << "ll_symlink" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
-  tout << value << endl;
+  dout(3) << "ll_symlink " << parent << " " << name << " -> " << value << dendl;
+  tout << "ll_symlink" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
+  tout << value << dendl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3531,19 +3531,19 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << endl;
+  tout << attr->st_ino << dendl;
   dout(3) << "ll_symlink " << parent << " " << name
-	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << endl;
+	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
 }
 
 int Client::ll_unlink(inodeno_t ino, const char *name)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_unlink " << ino << " " << name << endl;
-  tout << "ll_unlink" << endl;
-  tout << ino.val << endl;
-  tout << name << endl;
+  dout(3) << "ll_unlink " << ino << " " << name << dendl;
+  tout << "ll_unlink" << dendl;
+  tout << ino.val << dendl;
+  tout << name << dendl;
 
   Inode *diri = _ll_get_inode(ino);
 
@@ -3557,10 +3557,10 @@ int Client::ll_unlink(inodeno_t ino, const char *name)
 int Client::ll_rmdir(inodeno_t ino, const char *name)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_rmdir " << ino << " " << name << endl;
-  tout << "ll_rmdir" << endl;
-  tout << ino.val << endl;
-  tout << name << endl;
+  dout(3) << "ll_rmdir " << ino << " " << name << dendl;
+  tout << "ll_rmdir" << dendl;
+  tout << ino.val << dendl;
+  tout << name << dendl;
 
   Inode *diri = _ll_get_inode(ino);
 
@@ -3575,12 +3575,12 @@ int Client::ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, c
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_rename " << parent << " " << name << " to "
-	  << newparent << " " << newname << endl;
-  tout << "ll_rename" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
-  tout << newparent.val << endl;
-  tout << newname << endl;
+	  << newparent << " " << newname << dendl;
+  tout << "ll_rename" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
+  tout << newparent.val << dendl;
+  tout << newname << dendl;
 
   Inode *diri = _ll_get_inode(parent);
   string path;
@@ -3600,11 +3600,11 @@ int Client::ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, c
 int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_link " << ino << " to " << newparent << " " << newname << endl;
-  tout << "ll_link" << endl;
-  tout << ino.val << endl;
-  tout << newparent << endl;
-  tout << newname << endl;
+  dout(3) << "ll_link " << ino << " to " << newparent << " " << newname << dendl;
+  tout << "ll_link" << dendl;
+  tout << ino.val << dendl;
+  tout << newparent << dendl;
+  tout << newname << dendl;
 
   Inode *old = _ll_get_inode(ino);
   Inode *diri = _ll_get_inode(newparent);
@@ -3630,9 +3630,9 @@ int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, str
 int Client::ll_opendir(inodeno_t ino, void **dirpp)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_opendir " << ino << endl;
-  tout << "ll_opendir" << endl;
-  tout << ino.val << endl;
+  dout(3) << "ll_opendir " << ino << dendl;
+  tout << "ll_opendir" << dendl;
+  tout << ino.val << dendl;
   
   Inode *diri = inode_map[ino];
   assert(diri);
@@ -3641,28 +3641,28 @@ int Client::ll_opendir(inodeno_t ino, void **dirpp)
 
   int r = _opendir(path.c_str(), (DirResult**)dirpp);
 
-  tout << (unsigned long)*dirpp << endl;
+  tout << (unsigned long)*dirpp << dendl;
 
-  dout(3) << "ll_opendir " << ino << " = " << r << " (" << *dirpp << ")" << endl;
+  dout(3) << "ll_opendir " << ino << " = " << r << " (" << *dirpp << ")" << dendl;
   return r;
 }
 
 void Client::ll_releasedir(void *dirp)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_releasedir " << dirp << endl;
-  tout << "ll_releasedir" << endl;
-  tout << (unsigned long)dirp << endl;
+  dout(3) << "ll_releasedir " << dirp << dendl;
+  tout << "ll_releasedir" << dendl;
+  tout << (unsigned long)dirp << dendl;
   _closedir((DirResult*)dirp);
 }
 
 int Client::ll_open(inodeno_t ino, int flags, Fh **fhp)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_open " << ino << " " << flags << endl;
-  tout << "ll_open" << endl;
-  tout << ino.val << endl;
-  tout << flags << endl;
+  dout(3) << "ll_open " << ino << " " << flags << dendl;
+  tout << "ll_open" << dendl;
+  tout << ino.val << dendl;
+  tout << flags << dendl;
 
   Inode *in = _ll_get_inode(ino);
   string path;
@@ -3670,8 +3670,8 @@ int Client::ll_open(inodeno_t ino, int flags, Fh **fhp)
 
   int r = _open(path.c_str(), flags, 0, fhp);
 
-  tout << (unsigned long)*fhp << endl;
-  dout(3) << "ll_open " << ino << " " << flags << " = " << r << " (" << *fhp << ")" << endl;
+  tout << (unsigned long)*fhp << dendl;
+  dout(3) << "ll_open " << ino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
   return r;
 }
 
@@ -3679,12 +3679,12 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
 		      struct stat *attr, Fh **fhp)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << endl;
-  tout << "ll_create" << endl;
-  tout << parent.val << endl;
-  tout << name << endl;
-  tout << mode << endl;
-  tout << flags << endl;
+  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << dendl;
+  tout << "ll_create" << dendl;
+  tout << parent.val << dendl;
+  tout << name << dendl;
+  tout << mode << dendl;
+  tout << flags << dendl;
 
   Inode *pin = _ll_get_inode(parent);
   string path;
@@ -3700,21 +3700,21 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
   } else {
     attr->st_ino = 0;
   }
-  tout << (unsigned long)*fhp << endl;
-  tout << attr->st_ino << endl;
+  tout << (unsigned long)*fhp << dendl;
+  tout << attr->st_ino << dendl;
   dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags
-	  << " = " << r << " (" << *fhp << " " << hex << attr->st_ino << dec << ")" << endl;
+	  << " = " << r << " (" << *fhp << " " << hex << attr->st_ino << dec << ")" << dendl;
   return 0;
 }
 
 int Client::ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_read " << fh << " " << off << "~" << len << endl;
-  tout << "ll_read" << endl;
-  tout << (unsigned long)fh << endl;
-  tout << off << endl;
-  tout << len << endl;
+  dout(3) << "ll_read " << fh << " " << off << "~" << len << dendl;
+  tout << "ll_read" << dendl;
+  tout << (unsigned long)fh << dendl;
+  tout << off << dendl;
+  tout << len << dendl;
 
   return _read(fh, off, len, bl);
 }
@@ -3722,11 +3722,11 @@ int Client::ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl)
 int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_write " << fh << " " << off << "~" << len << endl;
-  tout << "ll_write" << endl;
-  tout << (unsigned long)fh << endl;
-  tout << off << endl;
-  tout << len << endl;
+  dout(3) << "ll_write " << fh << " " << off << "~" << len << dendl;
+  tout << "ll_write" << dendl;
+  tout << (unsigned long)fh << dendl;
+  tout << off << dendl;
+  tout << len << dendl;
 
   return _write(fh, off, len, data);
 }
@@ -3734,9 +3734,9 @@ int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
 int Client::ll_flush(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_flush " << fh << endl;
-  tout << "ll_flush" << endl;
-  tout << (unsigned long)fh << endl;
+  dout(3) << "ll_flush " << fh << dendl;
+  tout << "ll_flush" << dendl;
+  tout << (unsigned long)fh << dendl;
 
   return _flush(fh);
 }
@@ -3744,9 +3744,9 @@ int Client::ll_flush(Fh *fh)
 int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_release " << fh << endl;
-  tout << "ll_release" << endl;
-  tout << (unsigned long)fh << endl;
+  dout(3) << "ll_release " << fh << dendl;
+  tout << "ll_release" << dendl;
+  tout << (unsigned long)fh << dendl;
 
   _release(fh);
   return 0;
@@ -3771,7 +3771,7 @@ int Client::describe_layout(int fd, FileLayout *lp)
 
   *lp = in->inode.layout;
 
-  dout(3) << "describe_layout(" << fd << ") = 0" << endl;
+  dout(3) << "describe_layout(" << fd << ") = 0" << dendl;
   return 0;
 }
 
@@ -3808,7 +3808,7 @@ int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
   // map to a list of extents
   filer->file_to_extents(in->inode, offset, length, result);
 
-  dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << endl;
+  dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;
 }
 
@@ -3822,19 +3822,19 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
     int mon = monmap->pick_mon(true);
     dout(0) << "ms_handle_failure " << *m << " to " << inst 
             << ", resending to mon" << mon 
-            << endl;
+            << dendl;
     messenger->send_message(m, monmap->get_inst(mon));
   }
   else if (dest.is_osd()) {
     objecter->ms_handle_failure(m, dest, inst);
   } 
   else if (dest.is_mds()) {
-    dout(0) << "ms_handle_failure " << *m << " to " << inst << endl;
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
     //failed_mds.insert(dest.num());
   }
   else {
     // client?
-    dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << endl;
+    dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
     delete m;
   }
 }

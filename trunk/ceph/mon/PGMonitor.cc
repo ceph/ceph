@@ -27,15 +27,15 @@
 #include "common/Timer.h"
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
 
 
 
 void PGMonitor::create_initial()
 {
-  dout(1) << "create_initial -- creating initial map" << endl;
+  dout(1) << "create_initial -- creating initial map" << dendl;
 }
 
 bool PGMonitor::update_from_paxos()
@@ -47,7 +47,7 @@ bool PGMonitor::update_from_paxos()
   if (pg_map.version == 0 && paxosv > 1 &&
       mon->store->exists_bl_ss("pgmap","latest")) {
     // starting up: load latest
-    dout(7) << "update_from_paxos startup: loading latest full pgmap" << endl;
+    dout(7) << "update_from_paxos startup: loading latest full pgmap" << dendl;
     bufferlist bl;
     mon->store->get_bl_ss(bl, "pgmap", "latest");
     int off = 0;
@@ -59,14 +59,14 @@ bool PGMonitor::update_from_paxos()
     bufferlist bl;
     bool success = paxos->read(pg_map.version+1, bl);
     if (success) {
-      dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << endl;
+      dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
       PGMap::Incremental inc;
       int off = 0;
       inc._decode(bl, off);
       pg_map.apply_incremental(inc);
       
     } else {
-      dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << endl;
+      dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << dendl;
       return false;
     }
   }
@@ -83,20 +83,20 @@ void PGMonitor::create_pending()
 {
   pending_inc = PGMap::Incremental();
   pending_inc.version = pg_map.version + 1;
-  dout(10) << "create_pending v " << pending_inc.version << endl;
+  dout(10) << "create_pending v " << pending_inc.version << dendl;
 }
 
 void PGMonitor::encode_pending(bufferlist &bl)
 {
   assert(mon->is_leader());
-  dout(10) << "encode_pending v " << pending_inc.version << endl;
+  dout(10) << "encode_pending v " << pending_inc.version << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
   pending_inc._encode(bl);
 }
 
 bool PGMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
 
   switch (m->get_type()) {
   case MSG_STATFS:
@@ -113,7 +113,7 @@ bool PGMonitor::preprocess_query(Message *m)
 	    pg_map.pg_stat[p->first].reported < p->second.reported)
 	  return false;
       }
-      dout(10) << " message contains no new pg stats" << endl;
+      dout(10) << " message contains no new pg stats" << dendl;
       return true;
     }
 
@@ -126,7 +126,7 @@ bool PGMonitor::preprocess_query(Message *m)
 
 bool PGMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
     return handle_pg_stats((MPGStats*)m);
@@ -141,7 +141,7 @@ bool PGMonitor::prepare_update(Message *m)
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
-  dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_source() << endl;
+  dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_source() << dendl;
 
   // fill out stfs
   MStatfsReply *reply = new MStatfsReply(statfs->tid);
@@ -164,7 +164,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 
 bool PGMonitor::handle_pg_stats(MPGStats *stats) 
 {
-  dout(10) << "handle_pg_stats " << *stats << " from " << stats->get_source() << endl;
+  dout(10) << "handle_pg_stats " << *stats << " from " << stats->get_source() << dendl;
   
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
@@ -172,17 +172,17 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
     pg_t pgid;
     if ((pg_map.pg_stat.count(pgid) && 
 	 pg_map.pg_stat[pgid].reported >= p->second.reported)) {
-      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << endl;
+      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << dendl;
       continue;
     }
     if (pending_inc.pg_stat_updates.count(pgid) && 
 	pending_inc.pg_stat_updates[pgid].reported >= p->second.reported) {
       dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported
-	       << " (pending)" << endl;
+	       << " (pending)" << dendl;
       continue;
     }
 
-    dout(15) << " got " << pgid << " reported at " << p->second.reported << endl;
+    dout(15) << " got " << pgid << " reported at " << p->second.reported << dendl;
     pending_inc.pg_stat_updates[pgid] = p->second;
 
     // we don't care about consistency; apply to live map.

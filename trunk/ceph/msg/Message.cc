@@ -94,8 +94,8 @@ using namespace std;
 #include "messages/MLock.h"
 
 #include "config.h"
-#undef  dout
-#define dout(l)    if (l<=g_conf.debug) cout << "messenger: "
+
+#define dout(l)    if (l<=g_conf.debug) cout << dbeginl << g_clock.now() << " MESSENGER: "
 #define DEBUGLVL  10    // debug level of output
 
 
@@ -354,7 +354,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
   default:
-    dout(1) << "can't decode unknown message type " << env.type << endl;
+    dout(1) << "can't decode unknown message type " << env.type << dendl;
     assert(0);
   }
   

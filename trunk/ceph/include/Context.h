@@ -49,12 +49,12 @@ inline void finish_contexts(std::list<Context*>& finished,
 
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  dout(10) << ls.size() << " contexts to finish with " << result << endl;
+  generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    dout(10) << "---- " << c << endl;
+    generic_dout(10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
