@@ -106,14 +106,24 @@ bool EMetaBlob::has_expired(MDS *mds)
 	       << " for " << *dir << endl;
       continue;       // not our problem
     }
-    // FIXME HACK: this makes logger stats more accurage, for journal stats, 
-    //             but is not perfectly safe.  for benchmarking ONLY!
-    if (dir->get_committed_version() >= lp->second.dirv ||
-	//if (dir->get_committing_version() >= lp->second.dirv ||  
-	dir->get_committed_version_equivalent() >= lp->second.dirv) {
-      dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
-	       << " for " << *dir << endl;
-      continue;       // yay
+
+    if (g_conf.mds_hack_log_expire_for_better_stats) {
+      // FIXME HACK: this makes logger stats more accurage, for journal stats, 
+      //             but is not perfectly safe.  for benchmarking ONLY!
+      if (dir->get_committing_version() >= lp->second.dirv ||   // committING, not committED.
+	  dir->get_committed_version_equivalent() >= lp->second.dirv) {
+	dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
+		 << " for " << *dir << endl;
+	continue;       // yay
+      }
+    } else {
+      // this is the proper (safe) way
+      if (dir->get_committed_version() >= lp->second.dirv ||
+	  dir->get_committed_version_equivalent() >= lp->second.dirv) {
+	dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
+		 << " for " << *dir << endl;
+	continue;       // yay
+      }
     }
     
     if (dir->is_ambiguous_dir_auth()) {

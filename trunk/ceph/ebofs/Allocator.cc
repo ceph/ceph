@@ -17,9 +17,10 @@
 #include "Allocator.h"
 #include "Ebofs.h"
 
+#include "debug.h"
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs(" << fs->dev.get_device_name() << ").allocator."
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs(" << fs->dev.get_device_name() << ").allocator."
 
 
 void Allocator::dump_freelist()
@@ -32,35 +33,35 @@ void Allocator::dump_freelist()
       Table<block_t,block_t> *tab;
       if (b < EBOFS_NUM_FREE_BUCKETS) {
         tab = fs->free_tab[b];
-        dout(0) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
+        dout(0) << "dump bucket " << b << "  " << tab->get_num_keys() << dendl;
       } else {
         tab = fs->limbo_tab;
-        dout(0) << "dump limbo  " << tab->get_num_keys() << endl;;
+        dout(0) << "dump limbo  " << tab->get_num_keys() << dendl;;
       }
 
       if (tab->get_num_keys() > 0) {
         Table<block_t,block_t>::Cursor cursor(tab);
         assert(tab->find(0, cursor) >= 0);
         while (1) {
-          dout(0) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+          dout(0) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << dendl;
           assert(cursor.current().value > 0);
 
           if (b < EBOFS_NUM_FREE_BUCKETS)
             n += cursor.current().value;
 
           if (free.contains( cursor.current().key, cursor.current().value )) 
-            dout(0) << "dump   bad " << cursor.current().key << "~" << cursor.current().value << endl;
+            dout(0) << "dump   bad " << cursor.current().key << "~" << cursor.current().value << dendl;
           assert(!free.contains( cursor.current().key, cursor.current().value ));
           free.insert( cursor.current().key, cursor.current().value );
           if (cursor.move_right() <= 0) break;
         }
       } else {
-        //cout << "  empty" << endl;
+        //cout << "  empty" << dendl;
       }
     }
     
     assert(n == fs->free_blocks);
-    dout(0) << "dump combined freelist is " << free << endl;
+    dout(0) << "dump combined freelist is " << free << dendl;
 
     
     // alloc_tab
@@ -70,7 +71,7 @@ void Allocator::dump_freelist()
       while (1) {
 	dout(0) << "alloc  ex " << cursor.current().key << "~" << cursor.current().value.first << " ref "
 		<< cursor.current().value.second
-		<< endl;
+		<< dendl;
 	assert(cursor.current().value.first > 0);
 	
 	if (cursor.move_right() <= 0) break;
@@ -173,7 +174,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
           }
         }
         
-        dout(20) << "allocate " << ex << " near " << near << endl;
+        dout(20) << "allocate " << ex << " near " << near << dendl;
         last_pos = ex.end();
         //dump_freelist();
 	if (g_conf.ebofs_cloneable)
@@ -196,7 +197,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
       fs->free_tab[bucket]->remove(ex.start);
       fs->free_blocks -= ex.length;
       last_pos = ex.end();
-      dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
+      dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << dendl;
       //dump_freelist();
       if (g_conf.ebofs_cloneable)
 	alloc_inc(ex);
@@ -204,7 +205,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
     }    
   }
 
-  dout(1) << "allocate failed, fs completely full!  " << fs->free_blocks << endl;
+  dout(1) << "allocate failed, fs completely full!  " << fs->free_blocks << dendl;
   assert(0);
   //dump_freelist();
   return -1;
@@ -212,8 +213,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
 int Allocator::_release_into_limbo(Extent& ex)
 {
-  dout(10) << "_release_into_limbo " << ex << endl;
-  dout(10) << "limbo is " << limbo << endl;
+  dout(10) << "_release_into_limbo " << ex << dendl;
+  dout(10) << "limbo is " << limbo << dendl;
   assert(ex.length > 0);
   limbo.insert(ex.start, ex.length);
   fs->limbo_blocks += ex.length;
@@ -231,7 +232,7 @@ int Allocator::release(Extent& ex)
 
 int Allocator::commit_limbo()
 {
-  dout(20) << "commit_limbo" << endl;
+  dout(20) << "commit_limbo" << dendl;
   for (map<block_t,block_t>::iterator i = limbo.m.begin();
        i != limbo.m.end();
        i++) {
@@ -252,7 +253,7 @@ int Allocator::release_limbo()
     fs->limbo_tab->find(0, cursor);
     while (1) {
       Extent ex(cursor.current().key, cursor.current().value);
-      dout(20) << "release_limbo  ex " << ex << endl;
+      dout(20) << "release_limbo  ex " << ex << dendl;
 
       fs->limbo_blocks -= ex.length;
       _release_merge(ex);
@@ -279,11 +280,11 @@ int Allocator::_alloc_loner_inc(Extent& ex)
     v.second++;
     dout(10) << "_alloc_loner_inc " << ex << " "
              << (v.second-1) << " -> " << v.second 
-             << endl;
+             << dendl;
   } else {
     // insert it, @1
     fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
-    dout(10) << "_alloc_loner_inc " << ex << " 0 -> 1" << endl;
+    dout(10) << "_alloc_loner_inc " << ex << " 0 -> 1" << dendl;
   }
   return 0;
 }
@@ -296,14 +297,14 @@ int Allocator::_alloc_loner_dec(Extent& ex)
       == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
     assert(cursor.current().value.first == ex.length);
     if (cursor.current().value.second == 1) {
-      dout(10) << "_alloc_loner_dec " << ex << " 1 -> 0" << endl;
+      dout(10) << "_alloc_loner_dec " << ex << " 1 -> 0" << dendl;
       fs->alloc_tab->remove( cursor.current().key );
     } else {
       pair<block_t,int>& v = cursor.dirty_current_value();
       --v.second;
       dout(10) << "_alloc_loner_dec " << ex << " "
                << (v.second+1) << " -> " << v.second 
-               << endl;
+               << dendl;
     }
   } else {
     assert(0);
@@ -315,13 +316,13 @@ int Allocator::_alloc_loner_dec(Extent& ex)
 
 int Allocator::alloc_inc(Extent ex)
 {
-  dout(10) << "alloc_inc " << ex << endl;
+  dout(10) << "alloc_inc " << ex << dendl;
 
   // empty table?
   if (fs->alloc_tab->get_num_keys() == 0) {
     // easy.
     fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
-    dout(10) << "alloc_inc + " << ex << " 0 -> 1 (first entry)" << endl;
+    dout(10) << "alloc_inc + " << ex << " 0 -> 1 (first entry)" << dendl;
     return 0;
   }
 
@@ -332,14 +333,14 @@ int Allocator::alloc_inc(Extent ex)
   if (r == Table<block_t,pair<block_t,int> >::Cursor::OOB ||
       cursor.current().key > ex.start) {
     r = cursor.move_left();
-    dout(10) << "alloc_inc move_left r = " << r << endl;
+    dout(10) << "alloc_inc move_left r = " << r << dendl;
   }
   
   while (1) {
     dout(10) << "alloc_inc loop at " << cursor.current().key 
 	     << "~" << cursor.current().value.first
 	     << " ref " << cursor.current().value.second
-	     << endl;
+	     << dendl;
 
     // too far left?
     if (cursor.current().key < ex.start &&
@@ -352,7 +353,7 @@ int Allocator::alloc_inc(Extent ex)
 
       // no overlap.
       r = cursor.move_right();
-      dout(10) << "alloc_inc move_right r = " << r << endl;
+      dout(10) << "alloc_inc move_right r = " << r << dendl;
       
       // at end?
       if (r <= 0) {
@@ -362,11 +363,11 @@ int Allocator::alloc_inc(Extent ex)
 	  cursor.move_left();
 	  pair<block_t,int> &v = cursor.dirty_current_value();
 	  v.first += ex.length; // yay!
-	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (adjust at end)" << endl;
+	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (adjust at end)" << dendl;
 	} else {
 	  // insert at end, finish.
 	  int r = fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
-	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (at end) .. r = " << r << endl;
+	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (at end) .. r = " << r << dendl;
 	  //dump_freelist();
 	}
 	return 0;
@@ -380,7 +381,7 @@ int Allocator::alloc_inc(Extent ex)
       block_t l = MIN(ex.length, cursor.current().key - ex.start);
       
       fs->alloc_tab->insert(ex.start, pair<block_t,int>(l,1));
-      dout(10) << "alloc_inc + " << ex.start << "~" << l << " 0 -> 1" << endl;
+      dout(10) << "alloc_inc + " << ex.start << "~" << l << " 0 -> 1" << dendl;
       ex.start += l;
       ex.length -= l;
       if (ex.length == 0) break;
@@ -402,7 +403,7 @@ int Allocator::alloc_inc(Extent ex)
 	
 	dout(10) << "alloc_inc   " << ex.start << "~" << l 
 		 << " " << ref << " -> " << ref+1
-		 << " (right split)" << endl;
+		 << " (right split)" << dendl;
 	
 	ex.start += l;
 	ex.length -= l;
@@ -425,7 +426,7 @@ int Allocator::alloc_inc(Extent ex)
 	dout(10) << "alloc_inc   " << ex
 		 << " " << ref << " -> " << ref+1
 		 << " (double split finish)"
-		 << endl;
+		 << dendl;
 
 	break;
       }
@@ -442,7 +443,7 @@ int Allocator::alloc_inc(Extent ex)
 	dout(10) << "alloc_inc   " << ex.start << "~" << cursor.current().value.first 
 		 << " " << cursor.current().value.second-1 << " -> "
 		 << cursor.current().value.second 
-		 << " (left split)" << endl;
+		 << " (left split)" << dendl;
 	ex.start += v.first;
 	ex.length -= v.first;
 	if (ex.length == 0) break;
@@ -463,7 +464,7 @@ int Allocator::alloc_inc(Extent ex)
 	dout(10) << "alloc_inc   " << ex
 		 << " " << ref << " -> " << ref+1
 		 << " (left split finish)"
-		 << endl;
+		 << dendl;
 	
 	break;
       }
@@ -476,7 +477,7 @@ int Allocator::alloc_inc(Extent ex)
 
 int Allocator::alloc_dec(Extent ex)
 {
-  dout(10) << "alloc_dec " << ex << endl;
+  dout(10) << "alloc_dec " << ex << dendl;
 
   assert(fs->alloc_tab->get_num_keys() >= 0);
   
@@ -484,12 +485,12 @@ int Allocator::alloc_dec(Extent ex)
 
   // try to move to left (to check for overlap)
   int r = fs->alloc_tab->find( ex.start, cursor );
-  dout(10) << "alloc_dec find r = " << r << endl;
+  dout(10) << "alloc_dec find r = " << r << dendl;
 
   if (r == Table<block_t,pair<block_t,int> >::Cursor::OOB ||
       cursor.current().key > ex.start) {
     r = cursor.move_left();
-    dout(10) << "alloc_dec move_left r = " << r << endl;
+    dout(10) << "alloc_dec move_left r = " << r << dendl;
 
     // too far left?
     if (cursor.current().key < ex.start &&
@@ -505,7 +506,7 @@ int Allocator::alloc_dec(Extent ex)
 	     << "~" << cursor.current().value.first
 	     << " " << cursor.current().value.second
 	     << ", ex is " << ex
-	     << endl;
+	     << dendl;
     
     assert(cursor.current().key <= ex.start);  // no gap allowed.
     
@@ -521,14 +522,14 @@ int Allocator::alloc_dec(Extent ex)
 	int ref = v.second;
 	dout(10) << "alloc_dec s " << cursor.current().key << "~" << cursor.current().value.first 
 		 << " " << ref
-		 << " shortened left bit of single" << endl;
+		 << " shortened left bit of single" << dendl;
 
 	block_t l = end - ex.start;
 	if (ref > 1) {
 	  fs->alloc_tab->insert(ex.start, pair<block_t,int>(l, ref-1));
 	  dout(10) << "alloc_dec . " << ex.start << "~" << l 
 		   << " " << ref << " -> " << ref-1
-		   << endl;
+		   << dendl;
 	} else {
 	  Extent r(ex.start, l);
 	  _release_into_limbo(r);
@@ -548,14 +549,14 @@ int Allocator::alloc_dec(Extent ex)
 	int ref = v.second;
 	dout(10) << "alloc_dec s " << cursor.current().key << "~" << cursor.current().value.first
 		 << " " << ref 
-		 << " shorted left bit of double split" << endl;
+		 << " shorted left bit of double split" << dendl;
 
 	if (ref > 1) {
 	  fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length, ref-1));
 	  dout(10) << "alloc_inc s " << ex
 		   << " " << ref << " -> " << ref-1
 		   << " reinserted middle bit of double split"
-		   << endl;
+		   << dendl;
 	} else {
 	  _release_into_limbo(ex);
 	}
@@ -564,7 +565,7 @@ int Allocator::alloc_dec(Extent ex)
 	fs->alloc_tab->insert(ex.end(), pair<block_t,int>(rl, ref));
 	dout(10) << "alloc_dec s " << ex.end() << "~" << rl
 		 << " " << ref 
-		 << " reinserted right bit of double split" << endl;
+		 << " reinserted right bit of double split" << dendl;
 	break;
       }
     } 
@@ -580,7 +581,7 @@ int Allocator::alloc_dec(Extent ex)
 	  v.second--;
 	  dout(10) << "alloc_dec s " << ex.start << "~" << cursor.current().value.first 
 		   << " " << cursor.current().value.second+1 << " -> " << cursor.current().value.second 
-		   << endl;
+		   << dendl;
 	  ex.start += v.first;
 	  ex.length -= v.first;
 	  if (ex.length == 0) break;
@@ -609,7 +610,7 @@ int Allocator::alloc_dec(Extent ex)
 	  v.second--;
 	  dout(10) << "alloc_inc . " << ex
 		   << " " << ref << " -> " << ref-1
-		   << endl;
+		   << dendl;
 	} else {
 	  _release_into_limbo(ex);
 	  cursor.remove();
@@ -617,7 +618,7 @@ int Allocator::alloc_dec(Extent ex)
 	
 	dout(10) << "alloc_dec s " << ex.end() << "~" << l
 		 << " " << ref 
-		 << " reinserted right bit of single split" << endl;
+		 << " reinserted right bit of single split" << dendl;
 	fs->alloc_tab->insert(ex.end(), pair<block_t,int>(l, ref));
 	break;
       }
@@ -649,7 +650,7 @@ int Allocator::_release_loner(Extent& ex)
  */
 int Allocator::_release_merge(Extent& orig) 
 {
-  dout(15) << "_release_merge " << orig << endl;
+  dout(15) << "_release_merge " << orig << dendl;
   assert(orig.length > 0);
 
   Extent newex = orig;

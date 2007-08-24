@@ -187,7 +187,6 @@ md_config_t g_conf = {
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_flush_on_shutdown: true,
-  //mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
   mds_bal_sample_interval: 5.0,  // every 5 seconds
@@ -227,6 +226,8 @@ md_config_t g_conf = {
   mds_dump_cache_on_map: false,
   mds_dump_cache_after_rejoin: true,
 
+  mds_hack_log_expire_for_better_stats: false,
+
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
 
@@ -253,9 +254,12 @@ md_config_t g_conf = {
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
+
+  osd_hack_fast_startup: false,  // this breaks localized pgs.
+
   
   // --- fakestore ---
-  fakestore_fake_sync: .5,    // seconds
+  fakestore_fake_sync: .2,    // seconds
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
@@ -267,25 +271,25 @@ md_config_t g_conf = {
   ebofs: 1,
   ebofs_cloneable: false,
   ebofs_verify: false,
-  ebofs_commit_ms:      2000,       // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 20,         // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_commit_ms:      500,       // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (80 *256), // 4k blocks, *256 for MB
   ebofs_bc_max_dirty:   (60 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
-  ebofs_realloc: true,
+  ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
   // --- block device ---
   bdev_lock: true,
-  bdev_iothreads:    1,         // number of ios to queue with kernel
-  bdev_idle_kick_after_ms: 0,//100, // ms   ** FIXME ** this seems to break things, not sure why yet **
+  bdev_iothreads:    2,         // number of ios to queue with kernel
+  bdev_idle_kick_after_ms: 100,   // ms   ** FIXME ** this seems to break things, not sure why yet **
   bdev_el_fw_max_ms: 10000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 3000,       // restart elevator at least once every 300 ms
-  bdev_el_bidir: true,          // bidirectional elevator?
+  bdev_el_bidir: false,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
   bdev_fake_mb: 0,
@@ -692,6 +696,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_thrash_fragments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
       g_conf.mds_dump_cache_on_map = true;
+
+    else if (strcmp(args[i], "--mds_hack_log_expire_for_better_stats") == 0) 
+      g_conf.mds_hack_log_expire_for_better_stats = atoi(args[++i]);
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;
@@ -807,6 +814,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_max_pull = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_pad_pg_log") == 0) 
       g_conf.osd_pad_pg_log = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--osd_hack_fast_startup") == 0) 
+      g_conf.osd_hack_fast_startup = atoi(args[++i]);
 
 
     else if (strcmp(args[i], "--bdev_lock") == 0) 

@@ -186,7 +186,6 @@ struct md_config_t {
   int mds_log_read_inc;
   int mds_log_pad_entry;
   bool  mds_log_flush_on_shutdown;
-  //off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
@@ -226,6 +225,8 @@ struct md_config_t {
   bool mds_dump_cache_on_map;
   bool mds_dump_cache_after_rejoin;
 
+  bool mds_hack_log_expire_for_better_stats;
+
   // osd
   int   osd_rep;
 
@@ -251,6 +252,8 @@ struct md_config_t {
   int   osd_replay_window;
   int   osd_max_pull;
   bool  osd_pad_pg_log;
+
+  bool osd_hack_fast_startup;
 
   double   fakestore_fake_sync;
   bool  fakestore_fsync;
@@ -343,30 +346,6 @@ extern md_config_t g_debug_after_conf;
 #define dout2(x) if ((x) <= g_conf.debug) std::cout
 
 #define pdout(x,p)  if ((x) <= (p)) std::cout
-
-/**
- * for cleaner output, bracket each line with
- * dbeginl (in the dout macro) and dendl (in place of endl).
- */
-extern Mutex _dout_lock;
-struct _dbeginl_t {
-  _dbeginl_t(int) {}
-};
-struct _dendl_t {
-  _dendl_t(int) {}
-};
-static const _dbeginl_t dbeginl = 0;
-static const _dendl_t dendl = 0;
-
-inline ostream& operator<<(ostream& out, _dbeginl_t) {
-  _dout_lock.Lock();
-  return out;
-}
-inline ostream& operator<<(ostream& out, _dendl_t) {
-  out << endl;
-  _dout_lock.Unlock();
-  return out;
-}
 
 
 /**

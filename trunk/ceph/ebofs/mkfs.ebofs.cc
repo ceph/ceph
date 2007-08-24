@@ -41,6 +41,31 @@ int main(int argc, char **argv)
     Ebofs fs(filename);
     fs.mount();
     
+    if (1) {
+      char crap[1024*1024];
+      memset(crap, 0, 1024*1024);
+      
+
+      object_t oid(1,2);
+      off_t pos = 0;
+      off_t sz = 16;
+
+      bufferlist bl;
+      bl.append(crap, sz);
+
+      struct timespec ts;
+      ts.tv_sec = 0;
+      ts.tv_nsec = 1000*1000*40;  // ms -> nsec
+
+      while (1) {
+	cout << g_clock.now() << " writing " << pos << "~" << sz << endl;
+	fs.write(oid, pos, sz, bl, (Context*)0);
+	pos += sz;
+	nanosleep(&ts, 0);
+      }
+
+    }
+
     /*
     if (1) {
       // partial write tests

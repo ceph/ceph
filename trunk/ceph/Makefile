@@ -16,7 +16,7 @@
 EXTRA_CFLAGS = -I${HOME}/include -L${HOME}/lib
 
 # base
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
+CFLAGS = -O3 -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
 CC = g++
 LIBS = -pthread

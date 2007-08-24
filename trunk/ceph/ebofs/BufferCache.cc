@@ -17,12 +17,13 @@
 #include "BufferCache.h"
 #include "Onode.h"
 
+#include "debug.h"
 
 /*********** BufferHead **************/
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs.bh."
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.bh."
 
 
 
@@ -33,7 +34,7 @@
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs.oc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.oc."
 
 
 
@@ -41,12 +42,12 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 {
   list<Context*> waiters;
 
-  dout(10) << "rx_finish " << start << "~" << length << endl;
+  dout(10) << "rx_finish " << start << "~" << length << dendl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
        p != data.end(); 
        p++) {
     BufferHead *bh = p->second;
-    dout(10) << "rx_finish ?" << *bh << endl;
+    dout(10) << "rx_finish ?" << *bh << dendl;
     assert(p->first == bh->start());
 
     // past?
@@ -56,7 +57,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
     assert(p->first >= start);
     assert(bh->end() <= start+length);
 
-    dout(10) << "rx_finish !" << *bh << endl;
+    dout(10) << "rx_finish !" << *bh << dendl;
 
     if (bh->rx_ioh == ioh)
       bh->rx_ioh = 0;
@@ -65,12 +66,12 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       assert(bh->get_version() == 0);
       assert(bh->end() <= start+length);
       assert(bh->start() >= start);
-      dout(10) << "rx_finish  rx -> clean on " << *bh << endl;
+      dout(10) << "rx_finish  rx -> clean on " << *bh << dendl;
       bh->data.substr_of(bl, (bh->start()-start)*EBOFS_BLOCK_SIZE, bh->length()*EBOFS_BLOCK_SIZE);
       bc->mark_clean(bh);
     }
     else if (bh->is_partial()) {
-      dout(10) << "rx_finish  partial -> tx on " << *bh << endl;      
+      dout(10) << "rx_finish  partial -> tx on " << *bh << dendl;      
 
       if (1) {
         // double-check what block i am
@@ -101,7 +102,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       bh->partial.clear();
     }
     else {
-      dout(10) << "rx_finish  ignoring status on (dirty|tx|clean) " << *bh << endl;
+      dout(10) << "rx_finish  ignoring status on (dirty|tx|clean) " << *bh << dendl;
       assert(bh->is_dirty() ||  // was overwritten
              bh->is_tx() ||     // was overwritten and queued
              bh->is_clean());   // was overwritten, queued, _and_ flushed to disk
@@ -124,12 +125,12 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, 
                             version_t version, version_t epoch)
 {
-  dout(10) << "tx_finish " << start << "~" << length << " v" << version << endl;
+  dout(10) << "tx_finish " << start << "~" << length << " v" << version << dendl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
        p != data.end(); 
        p++) {
     BufferHead *bh = p->second;
-    dout(30) << "tx_finish ?bh " << *bh << endl;
+    dout(30) << "tx_finish ?bh " << *bh << dendl;
     assert(p->first == bh->start());
 
     // past?
@@ -139,19 +140,19 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
       bh->tx_ioh = 0;
 
     if (!bh->is_tx()) {
-      dout(10) << "tx_finish  bh not marked tx, skipping" << endl;
+      dout(10) << "tx_finish  bh not marked tx, skipping" << dendl;
       continue;
     }
     assert(bh->is_tx());
     
     if (version == bh->version) {
-      dout(10) << "tx_finish  tx -> clean on " << *bh << endl;
+      dout(10) << "tx_finish  tx -> clean on " << *bh << dendl;
       assert(bh->end() <= start+length);
       bh->set_last_flushed(version);
       bc->mark_clean(bh);
     } else {
       dout(10) << "tx_finish  leaving tx, " << bh->version << " > " << version 
-               << " on " << *bh << endl;
+               << " on " << *bh << dendl;
       assert(bh->version > version);
     }
   }    
@@ -252,18 +253,18 @@ int ObjectCache::try_map_read(block_t start, block_t len)
       if (e->is_clean() ||
           e->is_dirty() ||
           e->is_tx()) {
-        dout(20) << "try_map_read hit " << *e << endl;
+        dout(20) << "try_map_read hit " << *e << dendl;
       } 
       else if (e->is_rx()) {
-        dout(20) << "try_map_read rx " << *e << endl;
+        dout(20) << "try_map_read rx " << *e << dendl;
 	num_missing++;
       }
       else if (e->is_partial()) {
-        dout(-20) << "try_map_read partial " << *e << endl;
+        dout(-20) << "try_map_read partial " << *e << dendl;
 	num_missing++;
       }
       else {
-	dout(0) << "try_map_read got unexpected " << *e << endl;
+	dout(0) << "try_map_read got unexpected " << *e << dendl;
 	assert(0);
       }
       
@@ -280,8 +281,8 @@ int ObjectCache::try_map_read(block_t start, block_t len)
                       MIN(next-cur, left),   // no prefetch
                       exv);
 
-      dout(-20) << "try_map_read gap of " << p->first-cur << " blocks, " 
-		<< exv.size() << " extents" << endl;
+      dout(20) << "try_map_read gap of " << p->first-cur << " blocks, " 
+		<< exv.size() << " extents" << dendl;
       num_missing += exv.size();
       left -= (p->first - cur);
       cur = p->first;
@@ -340,7 +341,7 @@ int ObjectCache::map_read(block_t start, block_t len,
         n->set_length( exv[i].length );
         bc->add_bh(n);
         missing[cur] = n;
-        dout(20) << "map_read miss " << left << " left, " << *n << endl;
+        dout(20) << "map_read miss " << left << " left, " << *n << dendl;
         cur += MIN(left,exv[i].length);
         left -= MIN(left,exv[i].length);
       }
@@ -357,19 +358,19 @@ int ObjectCache::map_read(block_t start, block_t len,
           e->is_dirty() ||
           e->is_tx()) {
         hits[cur] = e;     // readable!
-        dout(20) << "map_read hit " << *e << endl;
+        dout(20) << "map_read hit " << *e << dendl;
         bc->touch(e);
       } 
       else if (e->is_rx()) {
         rx[cur] = e;       // missing, not readable.
-        dout(20) << "map_read rx " << *e << endl;
+        dout(20) << "map_read rx " << *e << dendl;
       }
       else if (e->is_partial()) {
         partial[cur] = e;
-        dout(20) << "map_read partial " << *e << endl;
+        dout(20) << "map_read partial " << *e << dendl;
       }
       else {
-	dout(0) << "map_read ??? got unexpected " << *e << endl;
+	dout(0) << "map_read ??? got unexpected " << *e << dendl;
 	assert(0);
       }
       
@@ -396,7 +397,7 @@ int ObjectCache::map_read(block_t start, block_t len,
         missing[cur] = n;
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
-        dout(20) << "map_read gap " << *n << endl;
+        dout(20) << "map_read gap " << *n << dendl;
       }
       continue;    // more?
     }
@@ -427,7 +428,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 {
   map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 
-  dout(10) << "map_write " << *on << " " << start << "~" << len << " ... alloc " << alloc << endl;
+  dout(10) << "map_write " << *on << " " << start << "~" << len << " ... alloc " << alloc << dendl;
   // p->first >= start
   
   block_t cur = start;
@@ -468,9 +469,9 @@ int ObjectCache::map_write(block_t start, block_t len,
       max = exv[0].length;
 
     if (newalloc) {
-      dout(10) << "map_write " << cur << "~" << max << " is new alloc on disk" << endl;
+      dout(10) << "map_write " << cur << "~" << max << " is new alloc on disk" << dendl;
     } else {
-      dout(10) << "map_write " << cur << "~" << max << " keeps old alloc on disk" << endl;
+      dout(10) << "map_write " << cur << "~" << max << " keeps old alloc on disk" << dendl;
     }
     
     // at end?
@@ -485,12 +486,12 @@ int ObjectCache::map_write(block_t start, block_t len,
       continue;
     }
     
-    dout(10) << "p is " << *p->second << endl;
+    dout(10) << "p is " << *p->second << dendl;
 
 
     if (p->first <= cur) {
       BufferHead *bh = p->second;
-      dout(10) << "map_write bh " << *bh << " intersected" << endl;
+      dout(10) << "map_write bh " << *bh << " intersected" << dendl;
 
       if (p->first < cur) {
         if (cur+max >= p->first+p->second->length()) {
@@ -567,7 +568,7 @@ int ObjectCache::map_write(block_t start, block_t len,
       // gap!
       block_t next = p->first;
       block_t glen = MIN(next-cur, max);
-      dout(10) << "map_write gap " << cur << "~" << glen << endl;
+      dout(10) << "map_write gap " << cur << "~" << glen << dendl;
       BufferHead *n = new BufferHead(this);
       n->set_start( cur );
       n->set_length( glen );
@@ -627,7 +628,7 @@ void ObjectCache::touch_bottom(block_t bstart, block_t blast)
     if (bh->start() < bstart) continue;
     if (bh->end() > blast) break;     
     
-    dout(12) << "moving " << *bh << " to bottom of lru" << endl;
+    dout(12) << "moving " << *bh << " to bottom of lru" << dendl;
     bc->touch_bottom(bh);  // move to bottom of lru list
   }
 }  
@@ -637,7 +638,7 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
   dout(7) << "truncate " << object_id 
            << " " << blocks << " blocks"
-           <<  endl;
+           << dendl;
 
   while (!data.empty()) {
     block_t bhoff = data.rbegin()->first;
@@ -648,7 +649,7 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
     bool uncom = on->uncommitted.contains(bh->start(), bh->length());
     dout(10) << "truncate " << *bh << " uncom " << uncom 
              << " of " << on->uncommitted
-             << endl;
+             << dendl;
     
     if (bhoff < blocks) {
       // we want right bit (one splice)
@@ -672,7 +673,7 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
       if (bh->is_tx() && uncom) 
         bc->bh_cancel_write(bh, super_epoch);
       if (bh->shadow_of) {
-	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << endl;
+	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
 	// shadow
 	bh->shadow_of->remove_shadow(bh);
 	if (bh->is_partial()) 
@@ -704,7 +705,7 @@ void ObjectCache::clone_to(Onode *other)
        p != data.end();
        p++) {
     BufferHead *bh = p->second;
-    dout(10) << "clone_to ? " << *bh << endl;
+    dout(10) << "clone_to ? " << *bh << dendl;
     if (bh->is_dirty() || bh->is_tx() || bh->is_partial()) {
       // dup dirty or tx bh's
       if (!ton)
@@ -716,7 +717,7 @@ void ObjectCache::clone_to(Onode *other)
       bc->add_bh(nbh);
 
       if (bh->is_partial()) {
-	dout(0) << "clone_to PARTIAL FIXME NOT FULLY IMPLEMENTED ******" << endl;
+	dout(0) << "clone_to PARTIAL FIXME NOT FULLY IMPLEMENTED ******" << dendl;
 	nbh->partial = bh->partial;
 	bc->mark_partial(nbh);
 	// register as shadow_partial
@@ -727,7 +728,7 @@ void ObjectCache::clone_to(Onode *other)
 	bc->mark_clean(nbh);
       }
 
-      dout(10) << "clone_to dup " << *bh << " -> " << *nbh << endl;
+      dout(10) << "clone_to dup " << *bh << " -> " << *nbh << dendl;
     } 
   }
 }
@@ -737,13 +738,13 @@ void ObjectCache::clone_to(Onode *other)
 /************** BufferCache ***************/
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs.bc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.bc."
 
 
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 
 {
-  dout(20) << "split " << *orig << " at " << after << endl;
+  dout(20) << "split " << *orig << " at " << after << dendl;
 
   // split off right
   BufferHead *right = new BufferHead(orig->get_oc());
@@ -793,7 +794,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
     p--;
     while (p != orig->waitfor_read.begin()) {
       if (p->first < right->start()) break;      
-      dout(0) << "split  moving waiters at block " << p->first << " to right bh" << endl;
+      dout(0) << "split  moving waiters at block " << p->first << " to right bh" << dendl;
       right->waitfor_read[p->first].swap( p->second );
       o = p;
       p--;
@@ -801,15 +802,15 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
     }
   }
   
-  dout(20) << "split    left is " << *orig << endl;
-  dout(20) << "split   right is " << *right << endl;
+  dout(20) << "split    left is " << *orig << dendl;
+  dout(20) << "split   right is " << *right << dendl;
   return right;
 }
 
 
 void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
 {
-  dout(10) << "bh_read " << *on << " on " << *bh << endl;
+  dout(10) << "bh_read " << *on << " on " << *bh << dendl;
 
   if (bh->is_missing()) {
     mark_rx(bh);
@@ -824,7 +825,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   Extent ex = exv[0];
 
   if (from) {  // force behavior, used for reading partials
-    dout(10) << "bh_read  forcing read from block " << from << " (for a partial)" << endl;
+    dout(10) << "bh_read  forcing read from block " << from << " (for a partial)" << dendl;
     ex.start = from;
     ex.length = 1;
   }
@@ -832,7 +833,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   // this should be empty!!
   assert(bh->rx_ioh == 0);
   
-  dout(20) << "bh_read  " << *on << " " << *bh << " from " << ex << endl;
+  dout(20) << "bh_read  " << *on << " " << *bh << " from " << ex << dendl;
   
   C_OC_RxFinish *fin = new C_OC_RxFinish(ebofs_lock, on->oc, 
                                          bh->start(), bh->length(),
@@ -851,7 +852,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
 bool BufferCache::bh_cancel_read(BufferHead *bh)
 {
   if (bh->rx_ioh && dev.cancel_io(bh->rx_ioh) >= 0) {
-    dout(10) << "bh_cancel_read on " << *bh << endl;
+    dout(10) << "bh_cancel_read on " << *bh << dendl;
     bh->rx_ioh = 0;
     mark_missing(bh);
     int l = bh->oc->put();
@@ -863,7 +864,7 @@ bool BufferCache::bh_cancel_read(BufferHead *bh)
 
 void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 {
-  dout(10) << "bh_write " << *on << " on " << *bh << " in epoch " << bh->epoch_modified << endl;
+  dout(10) << "bh_write " << *on << " on " << *bh << " in epoch " << bh->epoch_modified << dendl;
   assert(bh->get_version() > 0);
 
   assert(bh->is_dirty());
@@ -878,7 +879,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   if (shouldbe)
     assert(ex.length == 1 && ex.start == shouldbe);
 
-  dout(20) << "bh_write  " << *on << " " << *bh << " to " << ex << endl;
+  dout(20) << "bh_write  " << *on << " " << *bh << " to " << ex << dendl;
 
   //assert(bh->tx_ioh == 0);
 
@@ -899,7 +900,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   // assert: no partials on the same block
   // hose any partial on the same block
   if (bh->partial_write.count(ex.start)) {
-    dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << endl;
+    dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << dendl;
     dec_unflushed( bh->partial_write[ex.start].epoch );
     bh->partial_write.erase(ex.start);
   }
@@ -910,7 +911,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 bool BufferCache::bh_cancel_write(BufferHead *bh, version_t cur_epoch)
 {
   if (bh->tx_ioh && dev.cancel_io(bh->tx_ioh) >= 0) {
-    dout(10) << "bh_cancel_write on " << *bh << endl;
+    dout(10) << "bh_cancel_write on " << *bh << dendl;
     bh->tx_ioh = 0;
     mark_dirty(bh);
 
@@ -951,7 +952,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
 {
   ebofs_lock.Lock();
   dout(10) << "rx_finish ioh " << ioh << " on " << start << "~" << length
-            << ", at device block " << diskstart << endl;
+            << ", at device block " << diskstart << dendl;
 
   // oc
   if (oc->put() == 0) 
@@ -981,7 +982,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
       dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
                 << " for epoch " << p->second.epoch
         //<< " (bh.epoch_modified is now " << bh->epoch_modified << ")"
-                << endl;
+                << dendl;
       // this had better be a past epoch
       //assert(p->epoch == epoch_modified - 1);  // ??
       
@@ -1020,7 +1021,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	   ++p) {
 	BufferHead *bh = *p;
 	dout(10) << "rx_finish applying shadow_partial for " << pblock
-		 << " to " << *bh << endl;
+		 << " to " << *bh << dendl;
 	bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
 	bh->data.clear();
 	bh->data.push_back( bp );
@@ -1053,7 +1054,7 @@ void BufferCache::partial_tx_finish(version_t epoch)
 {
   ebofs_lock.Lock();
 
-  dout(10) << "partial_tx_finish in epoch " << epoch << endl;
+  dout(10) << "partial_tx_finish in epoch " << epoch << dendl;
 
   // update unflushed counter
   assert(get_unflushed(EBOFS_BC_FLUSH_PARTIAL, epoch) > 0);
@@ -1081,7 +1082,7 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   bh->partial_tx_to = exv[0].start;
   bh->partial_tx_epoch = bh->epoch_modified;
 
-  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
+  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << dendl;
 
 
   // copy map state, queue for this block
@@ -1103,7 +1104,7 @@ void BufferCache::queue_partial(block_t from, block_t to,
 {
   dout(10) << "queue_partial " << from << " -> " << to
            << " in epoch " << epoch 
-           << endl;
+           << dendl;
   
   if (partial_write[from].count(to)) {
     // this should be in the same epoch.
@@ -1125,7 +1126,7 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
 
   dout(10) << "cancel_partial " << from << " -> " << to 
            << "  (was epoch " << partial_write[from][to].epoch << ")"
-           << endl;
+           << dendl;
 
   partial_write[from].erase(to);
   if (partial_write[from].empty())
@@ -1137,12 +1138,12 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
 
 void BufferCache::add_shadow_partial(block_t from, BufferHead *bh)
 {
-  dout(10) << "add_shadow_partial from " << from << " " << *bh << endl;
+  dout(10) << "add_shadow_partial from " << from << " " << *bh << dendl;
   shadow_partials[from].insert(bh);
 }
 
 void BufferCache::cancel_shadow_partial(block_t from, BufferHead *bh)
 {
-  dout(10) << "cancel_shadow_partial from " << from << " " << *bh << endl;
+  dout(10) << "cancel_shadow_partial from " << from << " " << *bh << dendl;
   shadow_partials[from].erase(bh);
 }

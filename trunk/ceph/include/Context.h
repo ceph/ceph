@@ -93,7 +93,7 @@ public:
 class C_Gather : public Context {
 public:
   bool sub_finish(int r) {
-    //cout << "C_Gather sub_finish " << this << endl;
+    //cout << "C_Gather sub_finish " << this << " got " << r << " of " << waitfor << endl;
     assert(waitfor.count(r));
     waitfor.erase(r);
     if (!waitfor.empty()) 
