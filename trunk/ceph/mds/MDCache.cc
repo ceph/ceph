@@ -3418,7 +3418,7 @@ void MDCache::shutdown_check()
 
 void MDCache::shutdown_start()
 {
-  dout(1) << "shutdown_start" << dendl;
+  dout(2) << "shutdown_start" << dendl;
 
   if (g_conf.mds_shutdown_check)
     mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));

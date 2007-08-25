@@ -315,11 +315,13 @@ void SafeTimer::join()
   assert(lock.is_locked());
   assert(scheduled.empty());
 
-  while (!canceled.empty()) {
-    // wait
-    dout(-10) << "SafeTimer.join waiting for " << canceled.size() << " to join" << dendl;
-    dout(-10) << canceled << dendl;
-    cond.Wait(lock);
+  if (!canceled.empty()) {
+    while (!canceled.empty()) {
+      // wait
+      dout(2) << "SafeTimer.join waiting for " << canceled.size() << " to join: " << canceled << dendl;
+      cond.Wait(lock);
+    }
+    dout(2) << "SafeTimer.join done" << dendl;
   }
 }
 

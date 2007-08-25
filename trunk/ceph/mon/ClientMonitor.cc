@@ -63,6 +63,11 @@ bool ClientMonitor::update_from_paxos()
       int off = 0;
       inc._decode(bl, off);
       client_map.apply_incremental(inc);
+
+      dout(2) << "v" << client_map.version << ": " 
+	      << client_map.client_addr.size() << " clients (+" 
+	      << inc.mount.size() << " -" << inc.unmount.size() << ")" 
+	      << dendl;
       
     } else {
       dout(7) << "update_from_paxos  couldn't read incremental " << client_map.version+1 << dendl;

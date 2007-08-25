@@ -301,7 +301,7 @@ int Ebofs::umount()
   ebofs_lock.Lock();
   
   // mark unmounting
-  dout(1) << "umount start" << dendl;
+  dout(2) << "umount start" << dendl;
   readonly = true;
   unmounting = true;
   

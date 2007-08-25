@@ -546,7 +546,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state) << dendl;
     } else {
       dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state)
-	      << ", although i wanted " << mdsmap->get_state_name(want_state)
+	//	      << ", although i wanted " << mdsmap->get_state_name(want_state)
 	      << dendl;
       want_state = state;
     }    
@@ -576,7 +576,6 @@ void MDS::handle_mds_map(MMDSMap *m)
       stopping_start();
     } else if (is_stopped()) {
       assert(oldstate == MDSMap::STATE_STOPPING);
-      dout(1) << "now stopped, sending down:out and exiting" << dendl;
       suicide();
       return;
     }
@@ -990,42 +989,9 @@ void MDS::handle_mds_recovery(int who)
   waiting_for_active_peer.erase(who);
 }
 
-
-void MDS::shutdown_start()
-{
-  dout(1) << "shutdown_start" << dendl;
-  derr(0) << "mds shutdown start" << dendl;
-
-  // tell everyone to stop.
-  set<int> active;
-  mdsmap->get_in_mds_set(active);
-  for (set<int>::iterator p = active.begin();
-       p != active.end();
-       p++) {
-    if (mdsmap->is_up(*p)) {
-      dout(1) << "sending MShutdownStart to mds" << *p << dendl;
-      send_message_mds(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
-		       *p, MDS_PORT_MAIN);
-    }
-  }
-
-  // go
-  set_want_state(MDSMap::STATE_STOPPING);
-}
-
-void MDS::handle_shutdown_start(Message *m)
-{
-  dout(1) << " handle_shutdown_start" << dendl;
-
-  set_want_state(MDSMap::STATE_STOPPING);
-  delete m;
-}
-
-
-
 void MDS::stopping_start()
 {
-  dout(1) << "stopping_start" << dendl;
+  dout(2) << "stopping_start" << dendl;
 
   // start cache shutdown
   mdcache->shutdown_start();
@@ -1039,7 +1005,7 @@ void MDS::stopping_start()
 }
 void MDS::stopping_done()
 {
-  dout(1) << "stopping_done" << dendl;
+  dout(2) << "stopping_done" << dendl;
 
   // tell monitor we shut down cleanly.
   set_want_state(MDSMap::STATE_STOPPED);
@@ -1249,12 +1215,8 @@ void MDS::my_dispatch(Message *m)
 void MDS::proc_message(Message *m)
 {
   switch (m->get_type()) {
-    // OSD ===============
-    /*
-  case MSG_OSD_MKFS_ACK:
-    handle_osd_mkfs_ack(m);
-    return;
-    */
+
+    // OSD
   case MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((class MOSDOpReply*)m);
     return;
@@ -1267,17 +1229,8 @@ void MDS::proc_message(Message *m)
   case MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
     return;
-
   case MSG_MDS_BEACON:
     handle_mds_beacon((MMDSBeacon*)m);
-    return;
-
-  case MSG_MDS_SHUTDOWNSTART:    // mds0 -> mds1+
-    handle_shutdown_start(m);
-    return;
-
-  case MSG_PING:
-    handle_ping((MPing*)m);
     return;
 
   default:
@@ -1299,20 +1252,4 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   delete m;
   mds_lock.Unlock();
 }
-
-
-
-
-
-void MDS::handle_ping(MPing *m)
-{
-  dout(10) << " received ping from " << m->get_source() << " with seq " << m->seq << dendl;
-
-  messenger->send_message(new MPingAck(m),
-                          m->get_source_inst());
-  
-  delete m;
-}
-
-
 

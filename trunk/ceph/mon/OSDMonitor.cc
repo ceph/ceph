@@ -279,6 +279,12 @@ bool OSDMonitor::update_from_paxos()
     bl.clear();
     osdmap.encode(bl);
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
+
+    // share
+    dout(2) << osdmap.osds.size() << " osds, "
+	    << osdmap.down_osds.size() << " down, " 
+	    << osdmap.out_osds.size() << " out" 
+	    << dendl;
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
@@ -310,26 +316,26 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   for (map<int,pair<entity_inst_t,bool> >::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
        i++) {
-    dout(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
+    dout(2) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
     derr(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
     mon->messenger->mark_down(i->second.first.addr);
   }
   for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
        i++) { 
-    dout(0) << " osd" << i->first << " UP " << i->second << dendl;
+    dout(2) << " osd" << i->first << " UP " << i->second << dendl;
     derr(0) << " osd" << i->first << " UP " << i->second << dendl;
   }
   for (list<int>::iterator i = pending_inc.new_out.begin();
        i != pending_inc.new_out.end();
        i++) {
-    dout(0) << " osd" << *i << " OUT" << dendl;
+    dout(2) << " osd" << *i << " OUT" << dendl;
     derr(0) << " osd" << *i << " OUT" << dendl;
   }
   for (list<int>::iterator i = pending_inc.new_in.begin();
        i != pending_inc.new_in.end();
        i++) {
-    dout(0) << " osd" << *i << " IN" << dendl;
+    dout(2) << " osd" << *i << " IN" << dendl;
     derr(0) << " osd" << *i << " IN" << dendl;
   }
 

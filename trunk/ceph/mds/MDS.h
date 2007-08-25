@@ -248,7 +248,6 @@ class MDS : public Dispatcher {
   void recovery_done();
   void handle_mds_recovery(int who);
 
-  void shutdown_start();
   void stopping_start();
   void stopping_done();
   void suicide();
@@ -269,14 +268,10 @@ class MDS : public Dispatcher {
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
   // special message types
-  void handle_ping(class MPing *m);
   void handle_mds_map(class MMDSMap *m);
-  void handle_shutdown_start(Message *m);
 
   // osds
-  void handle_osd_getmap(Message *m);
   void handle_osd_map(class MOSDMap *m);
-
 };
 
 
