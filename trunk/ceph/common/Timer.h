@@ -26,7 +26,8 @@
 
 #include <map>
 #include <set>
-using namespace std;
+using std::map;
+using std::set;
 
 #include <ext/hash_map>
 using namespace __gnu_cxx;

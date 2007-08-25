@@ -158,7 +158,7 @@ void Logger::flush(bool force)
   
   utime_t fromstart = g_clock.recent_now();
   if (fromstart < start) {
-    cerr << "logger time jumped backwards from " << start << " to " << fromstart << endl;
+    cerr << "logger time jumped backwards from " << start << " to " << fromstart << std::endl;
     assert(0);
     start = fromstart;
   }
@@ -185,7 +185,7 @@ void Logger::flush(bool force)
       out << "#" << type->keymap.size();
       for (unsigned i=0; i<type->keys.size(); i++) 
         out << "\t" << type->keys[i];
-      out << endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
+      out << std::endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
       wrote_header = type->version;
       wrote_header_last = 0;
     }
@@ -198,7 +198,7 @@ void Logger::flush(bool force)
       else
         out << "\t" << vals[i];
     }
-    out << endl;
+    out << std::endl;
     
     // reset the counters
     for (unsigned i=0; i<type->keys.size(); i++) {

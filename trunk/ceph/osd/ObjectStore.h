@@ -32,7 +32,7 @@
 #endif /* DARWIN */
 
 #include <list>
-using namespace std;
+using std::list;
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -497,7 +497,7 @@ public:
 
 
       default:
-        cerr << "bad op " << op << endl;
+        cerr << "bad op " << op << std::endl;
         assert(0);
       }
     }

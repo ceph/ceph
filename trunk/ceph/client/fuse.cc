@@ -300,7 +300,7 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
   
   // go fuse go
-  cout << "ok, calling fuse_main" << endl;
+  cout << "ok, calling fuse_main" << std::endl;
   int r = fuse_main(newargc, newargv, &ceph_oper, 0);
   return r;
 }

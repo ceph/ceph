@@ -546,11 +546,11 @@ void* BlockDevice::kicker_thread_entry()
   while (!io_stop) {
     
     if (io_threads_running == 0 && idle_kicker) {
-      dout(25) << "kicker_thread kicking ebofs" << endl;
+      dout(25) << "kicker_thread kicking ebofs" << dendl;
       lock.Unlock();
       idle_kicker->kick();
       lock.Lock();
-      dout(25) << "kicker_thread done kicking ebofs" << endl;
+      dout(25) << "kicker_thread done kicking ebofs" << dendl;
     }
     if (io_stop) break;
 

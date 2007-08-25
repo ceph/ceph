@@ -64,22 +64,22 @@ int tcp_hostlookup(char *str, tcpaddr_t& ta)
     }
   }
   if (!port) {
-    cerr << "addr '" << str << "' doesn't look like 'host:port'" << endl;
+    cerr << "addr '" << str << "' doesn't look like 'host:port'" << std::endl;
     return -1;
   } 
-  //cout << "host '" << host << "' port '" << port << "'" << endl;
+  //cout << "host '" << host << "' port '" << port << "'" << std::endl;
 
   int iport = atoi(port);
   
   struct hostent *myhostname = gethostbyname( host ); 
   if (!myhostname) {
-    cerr << "host " << host << " not found" << endl;
+    cerr << "host " << host << " not found" << std::endl;
     return -1;
   }
 
   memset(&ta, 0, sizeof(ta));
 
-  //cout << "addrtype " << myhostname->h_addrtype << " len " << myhostname->h_length << endl;
+  //cout << "addrtype " << myhostname->h_addrtype << " len " << myhostname->h_length << std::endl;
 
   ta.sin_family = myhostname->h_addrtype;
   memcpy((char *)&ta.sin_addr,
@@ -87,7 +87,7 @@ int tcp_hostlookup(char *str, tcpaddr_t& ta)
          myhostname->h_length);
   ta.sin_port = iport;
     
-  cout << "lookup '" << host << ":" << port << "' -> " << ta << endl;
+  cout << "lookup '" << host << ":" << port << "' -> " << ta << std::endl;
 
   return 0;
 }

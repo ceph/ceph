@@ -34,7 +34,7 @@ using namespace std;
 class C_Die : public Context {
 public:
   void finish(int) {
-    cerr << "die" << endl;
+    cerr << "die" << std::endl;
     exit(1);
   }
 };
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     else if (strcmp(args[i], "--mds") == 0) 
       whoami = atoi(args[++i]);
     else {
-      cerr << "unrecognized arg " << args[i] << endl;
+      cerr << "unrecognized arg " << args[i] << std::endl;
       return -1;
     }
   }

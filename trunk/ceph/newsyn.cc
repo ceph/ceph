@@ -36,7 +36,7 @@ using namespace std;
 class C_Test : public Context {
 public:
   void finish(int r) {
-    cout << "C_Test->finish(" << r << ")" << endl;
+    cout << "C_Test->finish(" << r << ")" << std::endl;
   }
 };
 
@@ -67,7 +67,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
       utime_t z = g_clock.now();
       MPI_Bcast( &z, sizeof(z), MPI_CHAR,
 		 0, MPI_COMM_WORLD);
-      cout << "z is " << z << endl;
+      cout << "z is " << z << std::endl;
       g_clock.tare(z);
     }
   }
@@ -81,7 +81,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
     moninst[mpi_rank].addr = rank.my_addr;
     moninst[mpi_rank].name = MSG_ADDR_MON(mpi_rank);
 
-    //cerr << mpi_rank << " at " << rank.get_listen_addr() << endl;
+    //cerr << mpi_rank << " at " << rank.get_listen_addr() << std::endl;
   } 
 
   MPI_Gather( &moninst[mpi_rank], sizeof(entity_inst_t), MPI_CHAR,
@@ -90,7 +90,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   
   if (mpi_rank == 0) {
     for (int i=0; i<g_conf.num_mon; i++) {
-      cerr << "mon" << i << " is at " << moninst[i] << endl;
+      cerr << "mon" << i << " is at " << moninst[i] << std::endl;
       monmap->mon_inst[i] = moninst[i];
     }
   }
@@ -127,7 +127,7 @@ class C_Tick : public Context {
 public:
   void finish(int) {
     utime_t now = g_clock.now() - tick_start;
-    cout << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
+    cout << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << std::endl;
     tick_count += g_conf.tick;
     utime_t next = tick_start;
     next.sec_ref() += tick_count;
@@ -138,7 +138,7 @@ public:
 class C_Die : public Context {
 public:
   void finish(int) {
-    cerr << "die" << endl;
+    cerr << "die" << std::endl;
     exit(1);
   }
 };
@@ -148,7 +148,7 @@ class C_Debug : public Context {
   void finish(int) {
     int size = &g_conf.debug_after - &g_conf.debug;
     memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    cout << "debug_after flipping debug settings" << endl;
+    cout << "debug_after flipping debug settings" << std::endl;
   }
 };
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
-    //cout << "a " << args[i] << endl;
+    //cout << "a " << args[i] << std::endl;
     // unknown arg, pass it on.
     nargs.push_back(args[i]);
   }
@@ -213,7 +213,7 @@ int main(int argc, char **argv)
   args = nargs;
   if (!args.empty()) {
     for (unsigned i=0; i<args.size(); i++)
-      cerr << "stray arg " << args[i] << endl;
+      cerr << "stray arg " << args[i] << std::endl;
   }
   assert(args.empty());
 
@@ -238,7 +238,7 @@ int main(int argc, char **argv)
   assert(need <= world);
 
   if (myrank == 0)
-    cerr << "nummds " << start_mds << "  numosd " << start_osd << "  numclient " << start_client << " .. need " << need << ", have " << world << endl;
+    cerr << "nummds " << start_mds << "  numosd " << start_osd << "  numclient " << start_client << " .. need " << need << ", have " << world << std::endl;
   
 
   char hostname[100];
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
   for (int i=0; i<start_mds; i++) {
     if (myrank != g_conf.ms_skip_rank0+i) continue;
     Messenger *m = rank.register_entity(MSG_ADDR_MDS(i));
-    cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << endl;
+    cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
     mds[i] = new MDS(i, m, monmap);
     mds[i]->init();
     started++;
@@ -296,7 +296,7 @@ int main(int argc, char **argv)
       g_timer.add_event_after(kill_osd_after[i], new C_Die);
 
     Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
-    cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << endl;
+    cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << std::endl;
     osd[i] = new OSD(i, m, monmap);
     osd[i]->init();
     started++;
@@ -319,7 +319,8 @@ int main(int argc, char **argv)
     //if (myrank != start_mds + start_osd + i % client_nodes) continue;
     if (myrank != g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node) continue;
     clientlist.insert(i);
-    client[i] = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), monmap);
+    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)), //MSG_ADDR_CLIENT_NEW), 
+			   monmap);
 
     // logger?
     if (client_logger == 0) {
@@ -350,7 +351,7 @@ int main(int argc, char **argv)
 
     syn[i] = new SyntheticClient(client[i]);
 
-    client[i]->mount();
+    //client[i]->mount();
     nclients++;
   }
 
@@ -361,12 +362,11 @@ int main(int argc, char **argv)
        it++) {
     int i = *it;
 
-    //cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
+    //cerr << "starting synthetic client" << i << " on rank " << myrank << std::endl;
     syn[i]->start_thread();
-    
   }
   if (nclients) {
-    cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << endl;
+    cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
@@ -374,12 +374,12 @@ int main(int argc, char **argv)
        it++) {
     int i = *it;
 
-    //      cout << "waiting for synthetic client" << i << " to finish" << endl;
+    //      cout << "waiting for synthetic client" << i << " to finish" << std::endl;
     syn[i]->join_thread();
     delete syn[i];
     
-    client[i]->unmount();
-    //cout << "client" << i << " unmounted" << endl;
+    //client[i]->unmount();
+    //cout << "client" << i << " unmounted" << std::endl;
     client[i]->shutdown();
 
     delete client[i];
@@ -388,14 +388,14 @@ int main(int argc, char **argv)
 
   if (myrank && !started) {
     //dout(1) << "IDLE" << dendl;
-    cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << endl; 
+    cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << std::endl; 
     //rank.stop_rank();
   } 
 
   // wait for everything to finish
   rank.wait();
 
-  if (started) cerr << "newsyn finishing" << endl;
+  if (started) cerr << "newsyn finishing" << std::endl;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

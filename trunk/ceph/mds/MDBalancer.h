@@ -17,11 +17,11 @@
 #ifndef __MDBALANCER_H
 #define __MDBALANCER_H
 
-#include <ostream>
 #include <list>
-using namespace std;
-
 #include <map>
+using std::list;
+using std::map;
+
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 

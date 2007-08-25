@@ -30,7 +30,6 @@
 #include <list>
 
 using std::cout;
-using std::endl;
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
@@ -179,7 +178,7 @@ private:
       inc_total_alloc(len+4095);
       //cout << "hack aligned " << (unsigned)data 
       //<< " in raw " << (unsigned)realdata
-      //<< " off " << off << endl;
+      //<< " off " << off << std::endl;
       assert(((unsigned)data & 4095) == 0);
     }
     ~raw_hack_aligned() {
@@ -659,12 +658,12 @@ public:
 	assert(curbuf != _buffers.end());
 	if (off >= (*curbuf).length()) {
 	  // skip this buffer
-	  //cout << "skipping over " << *curbuf << endl;
+	  //cout << "skipping over " << *curbuf << std::endl;
 	  off -= (*curbuf).length();
 	  curbuf++;
 	} else {
 	  // somewhere in this buffer!
-	  //cout << "somewhere in " << *curbuf << endl;
+	  //cout << "somewhere in " << *curbuf << std::endl;
 	  break;
 	}
       }
@@ -672,14 +671,14 @@ public:
       while (len > 0) {
 	// partial?
 	if (off + len < (*curbuf).length()) {
-	  //cout << "copying partial of " << *curbuf << endl;
+	  //cout << "copying partial of " << *curbuf << std::endl;
 	  _buffers.push_back( ptr( *curbuf, off, len ) );
 	  _len += len;
 	  break;
 	}
 	
 	// through end
-	//cout << "copying end (all?) of " << *curbuf << endl;
+	//cout << "copying end (all?) of " << *curbuf << std::endl;
 	unsigned howmuch = (*curbuf).length() - off;
 	_buffers.push_back( ptr( *curbuf, off, howmuch ) );
 	_len += howmuch;
@@ -694,7 +693,7 @@ public:
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
       assert(off < length()); 
       assert(len > 0);
-      //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << endl;
+      //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
       // skip off
       std::list<ptr>::iterator curbuf = _buffers.begin();
@@ -702,12 +701,12 @@ public:
 	assert(curbuf != _buffers.end());
 	if (off >= (*curbuf).length()) {
 	  // skip this buffer
-	  //cout << "off = " << off << " skipping over " << *curbuf << endl;
+	  //cout << "off = " << off << " skipping over " << *curbuf << std::endl;
 	  off -= (*curbuf).length();
 	  curbuf++;
 	} else {
 	  // somewhere in this buffer!
-	  //cout << "off = " << off << " somewhere in " << *curbuf << endl;
+	  //cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
 	  break;
 	}
       }
@@ -716,7 +715,7 @@ public:
       if (off) {
 	// add a reference to the front bit
 	//  insert it before curbuf (which we'll hose)
-	//cout << "keeping front " << off << " of " << *curbuf << endl;
+	//cout << "keeping front " << off << " of " << *curbuf << std::endl;
 	_buffers.insert( curbuf, ptr( *curbuf, 0, off ) );
 	_len += off;
       }
@@ -724,19 +723,19 @@ public:
       while (len > 0) {
 	// partial?
 	if (off + len < (*curbuf).length()) {
-	  //cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
+	  //cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
 	  if (claim_by) 
 	    claim_by->append( *curbuf, off, len );
 	  (*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
 	  (*curbuf).set_length( (*curbuf).length() - (len+off) );
 	  _len -= off+len;
-	  //cout << " now " << *curbuf << endl;
+	  //cout << " now " << *curbuf << std::endl;
 	  break;
 	}
 	
 	// hose though the end
 	unsigned howmuch = (*curbuf).length() - off;
-	//cout << "discarding " << howmuch << " of " << *curbuf << endl;
+	//cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
 	if (claim_by) 
 	  claim_by->append( *curbuf, off, howmuch );
 	_len -= (*curbuf).length();

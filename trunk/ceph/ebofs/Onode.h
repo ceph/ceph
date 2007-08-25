@@ -82,12 +82,12 @@ public:
   void get() {
     if (ref == 0) lru_pin();
     ref++;
-    //cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
+    //cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << std::endl;
   }
   void put() {
     ref--;
     if (ref == 0) lru_unpin();
-    //cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
+    //cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << std::endl;
   }
 
   void mark_dirty() {
@@ -120,10 +120,10 @@ public:
   }
   void close_oc() {
     if (oc) {
-      //cout << "close_oc on " << object_id << endl;
+      //cout << "close_oc on " << object_id << std::endl;
       assert(oc->is_empty());
       if (oc->put() == 0){
-        //cout << "************************* hosing oc" << endl;
+        //cout << "************************* hosing oc" << std::endl;
         delete oc;
       }
       oc = 0;
@@ -139,12 +139,12 @@ public:
       interval_set<block_t> is;    
           
       set<block_t> s;
-      cout << "verifying" << endl;
+      cout << "verifying" << std::endl;
 
       for (map<block_t,Extent>::iterator p = extent_map.begin();
            p != extent_map.end();
            p++) {
-        cout << " " << p->first << ": " << p->second << endl;
+        cout << " " << p->first << ": " << p->second << std::endl;
         assert(count == p->first);
         count += p->second.length;
         for (unsigned j=0;j<p->second.length;j++) {
@@ -158,15 +158,15 @@ public:
     }
   }
   void set_extent(block_t offset, Extent ex) {
-    //cout << "set_extent " << offset << " -> " << ex << " ... " << object_blocks << endl;
+    //cout << "set_extent " << offset << " -> " << ex << " ... " << object_blocks << std::endl;
     assert(offset <= object_blocks);
     verify_extents();
 
     // at the end?
     if (offset == object_blocks) {
-      //cout << " appending " << ex << endl;
+      //cout << " appending " << ex << std::endl;
       if (!extent_map.empty() && extent_map.rbegin()->second.end() == ex.start) {
-        //cout << "appending " << ex << " to " << extent_map.rbegin()->second << endl;
+        //cout << "appending " << ex << " to " << extent_map.rbegin()->second << std::endl;
         extent_map.rbegin()->second.length += ex.length;
       } else
         extent_map[object_blocks] = ex;
@@ -181,16 +181,16 @@ public:
       if (p != extent_map.begin()) {
         p--;
         if (p->first + p->second.length > offset) {
-          //cout << " preceeding was " << p->second << endl;
+          //cout << " preceeding was " << p->second << std::endl;
           if (p->first + p->second.length > offset+ex.length) {
             // cutting chunk out of middle, add last bit
             Extent &n = extent_map[offset+ex.length] = p->second;
             n.start += offset+ex.length - p->first;
             n.length -= offset+ex.length - p->first;
-            //cout << " tail frag is " << n << endl;
+            //cout << " tail frag is " << n << std::endl;
           } 
           p->second.length = offset - p->first;     // cut tail off preceeding extent
-          //cout << " preceeding now " << p->second << endl;
+          //cout << " preceeding now " << p->second << std::endl;
         }
         p++;
       }      
@@ -203,7 +203,7 @@ public:
 
         // completely subsumed?
         if (p->first + p->second.length <= offset+ex.length) {
-          //cout << " erasing " << p->second << endl;
+          //cout << " erasing " << p->second << std::endl;
           extent_map.erase(p);
           p = next;
           continue;
@@ -215,7 +215,7 @@ public:
         n.start += offset+ex.length - p->first;
         n.length -= offset+ex.length - p->first;
         extent_map.erase(p);
-        //cout << ", now " << n << endl;
+        //cout << ", now " << n << std::endl;
         break;
       }
     }
@@ -234,7 +234,7 @@ public:
    *  map teh given page range into extents on disk.
    */
   int map_extents(block_t start, block_t len, vector<Extent>& ls) {
-    //cout << "map_extents " << start << " " << len << endl;
+    //cout << "map_extents " << start << " " << len << std::endl;
     verify_extents();
 
     //assert(start+len <= object_blocks);
@@ -249,7 +249,7 @@ public:
         ex.length = MIN(len, p->second.length - (start - p->first));
         ls.push_back(ex);
         
-        //cout << " got (tail of?) " << p->second << " : " << ex << endl;
+        //cout << " got (tail of?) " << p->second << " : " << ex << std::endl;
         
         start += ex.length;
         len -= ex.length;
@@ -263,7 +263,7 @@ public:
       Extent ex = p->second;
       ex.length = MIN(len, ex.length);
       ls.push_back(ex);
-      //cout << " got (head of?) " << p->second << " : " << ex << endl;
+      //cout << " got (head of?) " << p->second << " : " << ex << std::endl;
       start += ex.length;
       len -= ex.length;
       p++;
@@ -288,7 +288,7 @@ public:
         p->second.length = len - p->first;
         assert(p->second.length > 0);
         
-        //cout << " got (tail of?) " << p->second << " : " << ex << endl;
+        //cout << " got (tail of?) " << p->second << " : " << ex << std::endl;
       }
       p++;
     }

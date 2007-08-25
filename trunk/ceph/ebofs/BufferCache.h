@@ -115,7 +115,7 @@ class BufferHead : public LRUObject {
   void set_version(version_t v) { version = v; }
   version_t get_last_flushed() { return last_flushed; }
   void set_last_flushed(version_t v) { 
-    if (v <= last_flushed) cout << "last_flushed begin set to " << v << ", was " << last_flushed << endl;
+    if (v <= last_flushed) cout << "last_flushed begin set to " << v << ", was " << last_flushed << std::endl;
     assert(v > last_flushed);
     last_flushed = v; 
   }
@@ -161,7 +161,7 @@ class BufferHead : public LRUObject {
     for (set<BufferHead*>::iterator p = shadows.begin();
 	 p != shadows.end();
 	 ++p) {
-      //cout << "unpin shadow " << *p << endl;
+      //cout << "unpin shadow " << *p << std::endl;
       (*p)->shadow_of = 0;
       (*p)->put();
     }
@@ -245,12 +245,12 @@ class BufferHead : public LRUObject {
   static void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
     assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
     //assert(partial_is_complete());
-    //cout << "apply_partial" << endl;
+    //cout << "apply_partial" << std::endl;
     for (map<off_t, bufferlist>::iterator i = pm.begin();
          i != pm.end();
          i++) {
       int pos = i->first;
-      //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << endl;
+      //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << std::endl;
       bl.copy_in(pos, i->second.length(), i->second);
     }
     pm.clear();
@@ -367,13 +367,13 @@ class ObjectCache {
 
   int get() { 
     ++ref;
-    //cout << "oc.get " << object_id << " " << ref << endl;
+    //cout << "oc.get " << object_id << " " << ref << std::endl;
     return ref; 
   }
   int put() { 
     assert(ref > 0); 
     --ref;
-    //cout << "oc.put " << object_id << " " << ref << endl;
+    //cout << "oc.put " << object_id << " " << ref << std::endl;
     return ref; 
   }
   
@@ -384,18 +384,18 @@ class ObjectCache {
     assert(data.count(bh->start()) == 0);
 
     if (0) {  // sanity check     FIXME DEBUG
-      //cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
+      //cout << "add_bh " << bh->start() << "~" << bh->length() << std::endl;
       map<block_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
       if (p != data.end()) {
-        //cout << " after " << *p->second << endl;
-        //cout << " after starts at " << p->first << endl;
+        //cout << " after " << *p->second << std::endl;
+        //cout << " after starts at " << p->first << std::endl;
         assert(p->first >= bh->end());
       }
       if (p != data.begin()) {
         p--;
         //cout << " before starts at " << p->second->start() 
-        //<< " and ends at " << p->second->end() << endl;
-        //cout << " before " << *p->second << endl;
+        //<< " and ends at " << p->second->end() << std::endl;
+        //cout << " before " << *p->second << std::endl;
         assert(p->second->end() <= bh->start());
       }
     }
@@ -443,7 +443,7 @@ class ObjectCache {
     for (map<block_t,BufferHead*>::iterator i = data.begin();
          i != data.end();
          i++)
-      cout << "dump: " << i->first << ": " << *i->second << endl;
+      cout << "dump: " << i->first << ": " << *i->second << std::endl;
   }
 
 };
@@ -583,11 +583,11 @@ class BufferCache {
   }
   void inc_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]++;
-    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
   }
   void dec_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]--;
-    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
     if (epoch_unflushed[what][epoch] == 0) 
       flush_cond.Signal();
   }

@@ -180,7 +180,7 @@ void parse_syn_options(vector<char*>& args)
 	syn_sargs.push_back(args[++i]);
 	syn_iargs.push_back(atoi(args[++i]));
       } else {
-        cerr << "unknown syn arg " << args[i] << endl;
+        cerr << "unknown syn arg " << args[i] << std::endl;
         assert(0);
       }
     }
@@ -240,6 +240,8 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 { 
+  client->mount();
+
   //run_start = g_clock.now();
   run_until = utime_t(0,0);
   dout(5) << "run" << dendl;
@@ -626,6 +628,8 @@ int SyntheticClient::run()
       assert(0);
     }
   }
+
+  client->unmount();
   return 0;
 }
 

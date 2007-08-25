@@ -20,7 +20,9 @@
 #include <list>
 #include <string>
 #include <fstream>
-using namespace std;
+using std::list;
+using std::string;
+using std::ifstream;
 
 /*
 

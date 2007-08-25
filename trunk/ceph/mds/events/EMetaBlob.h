@@ -17,7 +17,7 @@
 
 #include <stdlib.h>
 #include <string>
-using namespace std;
+using std::string;
 
 #include "../CInode.h"
 #include "../CDir.h"
@@ -79,7 +79,7 @@ class EMetaBlob {
     void print(ostream& out) {
       out << " fullbit dn " << dn << " dnv " << dnv
 	  << " inode " << inode.ino
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
   
@@ -112,7 +112,7 @@ class EMetaBlob {
     void print(ostream& out) {
       out << " remotebit dn " << dn << " dnv " << dnv
 	  << " ino " << ino
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
 
@@ -137,7 +137,7 @@ class EMetaBlob {
     }
     void print(ostream& out) {
       out << " nullbit dn " << dn << " dnv " << dnv
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
 
@@ -176,7 +176,7 @@ public:
       out << "dirlump " << dirfrag << " dirv " << dirv 
 	  << " state " << state
 	  << " num " << nfull << "/" << nremote << "/" << nnull
-	  << endl;
+	  << std::endl;
       _decode_bits();
       for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
 	p->print(out);

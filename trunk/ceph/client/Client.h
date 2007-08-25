@@ -42,7 +42,9 @@
 #include <set>
 #include <map>
 #include <fstream>
-using namespace std;
+using std::set;
+using std::map;
+using std::fstream;
 
 #include <ext/hash_map>
 using namespace __gnu_cxx;

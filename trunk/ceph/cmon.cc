@@ -34,7 +34,7 @@ using namespace std;
 class C_Die : public Context {
 public:
   void finish(int) {
-    cerr << "die" << endl;
+    cerr << "die" << std::endl;
     exit(1);
   }
 };
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     else if (strcmp(args[i], "--monmap") == 0) 
       monmap_fn = args[++i];
     else {
-      cerr << "unrecognized arg " << args[i] << endl;
+      cerr << "unrecognized arg " << args[i] << std::endl;
       return -1;
     }
   }
@@ -81,12 +81,12 @@ int main(int argc, char **argv)
 
   if (whoami < 0) {
     // let's assume a standalone monitor
-    cout << "starting standalone mon0" << endl;
+    cout << "starting standalone mon0" << std::endl;
     whoami = 0;
 
     // start messenger
     rank.start_rank();
-    cout << "bound to " << rank.get_listen_addr() << endl;
+    cout << "bound to " << rank.get_listen_addr() << std::endl;
 
     // add single mon0
     entity_inst_t inst;
@@ -95,19 +95,19 @@ int main(int argc, char **argv)
     monmap.add_mon(inst);
     
     // write monmap
-    cout << "writing monmap to " << monmap_fn << endl;;
+    cout << "writing monmap to " << monmap_fn << std::endl;;
     int r = monmap.write(monmap_fn);
     assert(r >= 0);
   } else {
     // i am specific monitor.
 
     // read monmap
-    cout << "reading monmap from .ceph_monmap" << endl;
+    cout << "reading monmap from .ceph_monmap" << std::endl;
     int r = monmap.read(monmap_fn);
     assert(r >= 0);
 
     // bind to a specific port
-    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << std::endl;
     g_my_addr = monmap.get_inst(whoami).addr;
     rank.start_rank();
   }
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
   mon->init();
 
   // wait
-  cout << "waiting for shutdown ..." << endl;
+  cout << "waiting for shutdown ..." << std::endl;
   rank.wait();
 
   // done

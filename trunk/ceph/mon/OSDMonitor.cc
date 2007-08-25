@@ -576,7 +576,7 @@ void OSDMonitor::send_to_waiting()
 	dout(10) << "send_to_waiting skipping " << i->first
 		 << " has " << i->second.first
 		 << " wants " << i->second.second
-		 << endl;
+		 << dendl;
 	i++;
 	continue;
       }

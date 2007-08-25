@@ -20,7 +20,10 @@
 #include <vector>
 #include <set>
 #include <map>
-using namespace std;
+using std::set;
+using std::map;
+using std::vector;
+using std::list;
 #include <ext/hash_map>
 #include <ext/hash_set>
 using namespace __gnu_cxx;
@@ -224,7 +227,7 @@ namespace crush {
       b->get_items(items);
 
       if (buckets.count(items[0])) {
-        out << endl;
+        out << std::endl;
         for (unsigned i=0; i<items.size(); i++)
           print(out, items[i], indent+1);
       } else {
@@ -435,9 +438,9 @@ namespace crush {
 	int t = forcefeed;
 	while (1) {
 	  force_stack.push_front(t);
-	  //cout << "push " << t << " onto force_stack" << endl;
+	  //cout << "push " << t << " onto force_stack" << std::endl;
 	  if (parent_map.count(t) == 0) break;  // reached root, presumably.
-	  //cout << " " << t << " parent is " << parent_map[t] << endl;
+	  //cout << " " << t << " parent is " << parent_map[t] << std::endl;
 	  t = parent_map[t];
 	}
       }
@@ -456,7 +459,7 @@ namespace crush {
         case CRUSH_RULE_TAKE:
           {    
 	    const int arg = pc->args[0];
-	    //cout << "take " << arg << endl;	      
+	    //cout << "take " << arg << std::endl;	      
 	    
 	    if (!force_stack.empty()) {
 	      assert(force_stack.front() == arg);
@@ -475,7 +478,7 @@ namespace crush {
             const int numrep = pc->args[0];
             const int type = pc->args[1];
 
-            //cout << "choose " << numrep << " of type " << type << endl;
+            //cout << "choose " << numrep << " of type " << type << std::endl;
 
             assert(!w.empty());
 
@@ -488,10 +491,10 @@ namespace crush {
 	    if (!force_stack.empty()) {
 	      forceval = force_stack.front();
 	      force_stack.pop_front();
-	      //cout << "priming out with " << forceval << endl;
+	      //cout << "priming out with " << forceval << std::endl;
 	      forcing = true;
 	    } else if (forcefeed >= 0 && type == 0) {
-	      //cout << "forcing context-less " << forcefeed << endl;
+	      //cout << "forcing context-less " << forcefeed << std::endl;
 	      forceval = forcefeed;
 	      forcefeed = -1;
 	      forcing = true;

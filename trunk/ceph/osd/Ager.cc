@@ -167,7 +167,7 @@ void Ager::age_empty(float pc) {
 void pfrag(uint64_t written, ObjectStore::FragmentationStat &st)
 {
   cout << "#gb wr\ttotal\tn x\tavg x\tavg per\tavg j\tfree\tn fr\tavg fr\tnum<2\tsum<2\tnum<4\tsum<4\t..." 
-       << endl;
+       << std::endl;
   cout << written
        << "\t" << st.total
        << "\t" << st.num_extent
@@ -186,7 +186,7 @@ void pfrag(uint64_t written, ObjectStore::FragmentationStat &st)
     n -= st.extent_dist[i];
     if (n == 0) break;
   }
-  cout << endl;
+  cout << std::endl;
 }
 
 

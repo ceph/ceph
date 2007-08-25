@@ -164,6 +164,7 @@ private:
   public:
     C_LeaseRenew(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      std::cout << "HI MOM" << std::endl;
       paxos->lease_renew_timeout();
     }
   };

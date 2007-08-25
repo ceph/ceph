@@ -22,10 +22,11 @@
 
 #include <string>
 #include <fstream>
-using namespace std;
+using std::string;
+using std::ofstream;
 
 #include <ext/hash_map>
-using namespace __gnu_cxx;
+using __gnu_cxx::hash_map;
 
 #include "LogType.h"
 

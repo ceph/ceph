@@ -50,7 +50,7 @@ public:
     }    
   }
 
-  bool is_new() const { return num() == NEW; }
+  bool is_new() const { return num() < 0; }
 
   bool is_client() const { return type() == TYPE_CLIENT; }
   bool is_mds() const { return type() == TYPE_MDS; }

@@ -143,6 +143,8 @@ md_config_t g_conf = {
   mon_stop_with_last_mds: false,
   mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
 
+  paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
+
   // --- client ---
   client_cache_size: 1000,
   client_cache_mid: .5,
@@ -413,11 +415,11 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     //cout << "val " << val << endl;
     
     if (numdigits == 0) {
-      cerr << "no digits at off " << off << endl;
+      cerr << "no digits at off " << off << std::endl;
       return false;           // no digits
     }
     if (count < 3 && *s != '.') {
-      cerr << "should period at " << off << endl;
+      cerr << "should period at " << off << std::endl;
       return false;   // should have 3 periods
     }
     s++; off++;

@@ -127,6 +127,8 @@ struct md_config_t {
   bool mon_stop_with_last_mds;
   bool mon_allow_mds_bully;
 
+  double paxos_propose_interval;
+
   // client
   int      client_cache_size;
   float    client_cache_mid;
@@ -359,22 +361,26 @@ extern bool parse_ip_port(const char *s, entity_addr_t& addr);
  * dbeginl (in the dout macro) and dendl (in place of endl).
  */
 extern Mutex _dout_lock;
-struct _dbeginl_t {
-  _dbeginl_t(int) {}
-};
-struct _dendl_t {
-  _dendl_t(int) {}
-};
+struct _dbeginl_t { _dbeginl_t(int) {} };
+struct _dendl_t { _dendl_t(int) {} };
 static const _dbeginl_t dbeginl = 0;
 static const _dendl_t dendl = 0;
+
+// intentionally conflict with std::endl
+class _bad_endl_t { public: _bad_endl_t(int) {} };
+static const _bad_endl_t endl = 0;   // hrm ......... FIXME ..........
 
 inline ostream& operator<<(ostream& out, _dbeginl_t) {
   _dout_lock.Lock();
   return out;
 }
 inline ostream& operator<<(ostream& out, _dendl_t) {
-  out << endl;
+  out << std::endl;
   _dout_lock.Unlock();
+  return out;
+}
+inline ostream& operator<<(ostream& out, _bad_endl_t) {
+  assert(0 && "you are using the wrong endl.. use std::endl or dendl");
   return out;
 }
 
@@ -383,5 +389,6 @@ inline ostream& operator<<(ostream& out, _dendl_t) {
 #define generic_derr(x) if ((x) <= g_conf.debug) std::cerr << dbeginl
 
 #define pdout(x,p) if ((x) <= (p)) std::cout << dbeginl
+
 
 #endif

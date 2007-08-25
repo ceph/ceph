@@ -60,9 +60,29 @@ void PaxosService::dispatch(Message *m)
   }
 
   // update
-  if (prepare_update(m) &&
-      should_propose_now()) 
-    propose_pending();
+  if (prepare_update(m)) {
+    if (should_propose_now()) 
+      propose_pending();
+    else {
+      // delay a bit
+      if (!proposal_timer_set) {
+	dout(10) << " will propose shortly" << dendl;
+	proposal_timer_set = true;
+	mon->timer.add_event_after(g_conf.paxos_propose_interval, new C_Propose(this));
+      } else { 
+	dout(10) << " propose timer already set" << dendl;
+      }
+    } 
+  }     
+}
+
+bool PaxosService::should_propose_now()
+{
+  // simple default policy: quick startup, then some damping.
+  if (paxos->last_committed < 3) 
+    return true;
+  else
+    return false;
 }
 
 void PaxosService::_commit()
@@ -93,6 +113,8 @@ void PaxosService::propose_pending()
   paxos->wait_for_commit_front(new C_Commit(this));
   paxos->propose_new_value(bl);
 }
+
+
 
 
 void PaxosService::election_finished()
@@ -134,3 +156,5 @@ void PaxosService::_active()
     }
   }
 }
+
+

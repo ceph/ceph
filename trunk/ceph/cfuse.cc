@@ -37,7 +37,7 @@ using namespace std;
 
 int main(int argc, char **argv, char *envp[]) {
 
-  //cerr << "cfuse starting " << myrank << "/" << world << endl;
+  //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
@@ -64,18 +64,18 @@ int main(int argc, char **argv, char *envp[]) {
     
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting" << endl;
+  cout << "mounting" << std::endl;
   client->mount();
   
-  cerr << "starting fuse on pid " << getpid() << endl;
+  cerr << "starting fuse on pid " << getpid() << std::endl;
   if (g_conf.fuse_ll)
     ceph_fuse_ll_main(client, argc, argv);
   else
     ceph_fuse_main(client, argc, argv);
-  cerr << "fuse finished on pid " << getpid() << endl;
+  cerr << "fuse finished on pid " << getpid() << std::endl;
   
   client->unmount();
-  cout << "unmounted" << endl;
+  cout << "unmounted" << std::endl;
   client->shutdown();
   
   delete client;
