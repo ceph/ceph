@@ -332,14 +332,8 @@ void* BlockDevice::io_thread_entry()
   assert(fd > 0);
 
   while (!io_stop) {
-    bool do_sleep = false;
-    
-    // queue empty?
-    if (root_queue.empty()) {
-      // sleep
-      do_sleep = true;
-    } else {
-      dout(20) << "io_thread" << whoami << " going" << dendl;
+    if (!root_queue.empty()) {
+      dout(20) << "io_thread" << whoami << "/" << io_threads_running << " going" << dendl;
 
       block_t start, length;
       list<biovec*> biols;
@@ -347,9 +341,8 @@ void* BlockDevice::io_thread_entry()
 
       if (n == 0) {
         // failed to dequeue a do-able op, sleep for now
-        dout(20) << "io_thread" << whoami << " couldn't dequeue doable op, sleeping" << dendl;
+        dout(20) << "io_thread" << whoami << "/" << io_threads_running << " couldn't dequeue doable op, sleeping" << dendl;
         assert(io_threads_running > 1);   // there must be someone else, if we couldn't dequeue something doable.
-        do_sleep = true;
       } 
       else {
         // lock blocks
@@ -368,50 +361,45 @@ void* BlockDevice::io_thread_entry()
         if (io_threads_running < g_conf.bdev_iothreads &&
             (int)root_queue.size() > io_threads_running)   
           io_wakeup.SignalAll();
+	
+	// loop again (don't sleep)
+	continue; 
       }
     }
 
-    if (do_sleep) {
-      do_sleep = false;
-      
-      // sleep
-      io_threads_running--;
-      dout(20) << "io_thread" << whoami << " sleeping, "
-	       << io_threads_running << " threads now running," 
-               << " queue has " << root_queue.size() 
-	       << dendl;
+    // sleep
+    io_threads_running--;
+    dout(20) << "io_thread" << whoami << " sleeping, "
+	     << io_threads_running << " threads now running," 
+	     << " queue has " << root_queue.size() 
+	     << dendl;
+    
+    // first wait for signal | timeout?
+    if (g_conf.bdev_idle_kick_after_ms > 0 &&
+	idle_kicker &&
+	io_threads_running == 0 && !is_idle_waiting) {  // only the last thread asleep needs to kick.
+      // sleep, but just briefly.
+      dout(20) << "io_thread" << whoami << " doing short wait, to see if i stay idle" << dendl;
+      is_idle_waiting = true;
+      int r = io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));
+      is_idle_waiting = false;
 
-      // first wait for signal | timeout?
-      if (g_conf.bdev_idle_kick_after_ms > 0 &&
-          io_threads_running == 0 &&   // only the last thread asleep needs to kick.
-          idle_kicker) {
-	dout(20) << "io_thread" << whoami << " doing short wait, to see if i stay idle" << dendl;
-	if (io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000)) == ETIMEDOUT) {
-	  // timer expired.  kick ebofs.
-	  dout(20) << "io_thread" << whoami << " timeout expired, kicking ebofs" << dendl;
-
-	  lock.Unlock();
-	  idle_kicker->kick();           // kick
-	  lock.Lock();
-	}
-
-	// should i _still_ be sleeping?
-	if (!io_stop && 
-	    root_queue.empty() && io_threads_running == 0) {
-	  dout(20) << "io_thread" << whoami << " did the kick, now waiting for signal" << dendl;
-	  io_wakeup.Wait(lock);          // and wait (if condition still holds)
-	} else {
-	  dout(20) << "io_thread" << whoami << " not waiting, must not be idle anymore?" << dendl;
-	}
+      if (r == ETIMEDOUT) {
+	dout(20) << "io_thread" << whoami << " timeout expired, kicking ebofs" << dendl;
+	kicker_cond.Signal(); // signal kicker thread
       } else {
-	// just sleep, like normal.
-	io_wakeup.Wait(lock);          // and wait (if condition still holds)
+ 	dout(20) << "io_thread" << whoami << " signaled during short sleep, waking up" << dendl;
+	goto wake_up;
       }
-
-      io_threads_running++;
-      assert(io_threads_running <= g_conf.bdev_iothreads);
-      dout(20) << "io_thread" << whoami << " woke up, " << io_threads_running << " threads now running" << dendl;
     }
+
+    // sleeeep
+    io_wakeup.Wait(lock);          // and wait (if condition still holds)
+    
+  wake_up:
+    io_threads_running++;
+    assert(io_threads_running <= g_conf.bdev_iothreads);
+    dout(20) << "io_thread" << whoami << "/" << io_threads_running << " woke up, " << io_threads_running << " threads now running" << dendl;
   }
 
   // clean up
@@ -473,6 +461,9 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
     complete_queue_len += numbio;
     complete_wakeup.Signal();
     complete_lock.Unlock();
+    dout(20) << "do_io kicked completer on " << (type==biovec::IO_WRITE?"write":"read") 
+	     << " " << start << "~" << length << dendl;
+
   } else {
     // be slow and finish synchronously
     for (p = biols.begin(); p != biols.end(); p++)
@@ -532,22 +523,43 @@ void* BlockDevice::complete_thread_entry()
     }
     if (io_stop) break;
     
-    /*
-    if (io_threads_running == 0 && idle_kicker) {
-      complete_lock.Unlock();
-      idle_kicker->kick();
-      complete_lock.Lock();
-      if (!complete_queue.empty() || io_stop) 
-        continue;
-    }
-    */
-
     dout(25) << "complete_thread sleeping" << dendl;
     complete_wakeup.Wait(complete_lock);
   }
 
   dout(10) << "complete_thread finish" << dendl;
   complete_lock.Unlock();
+  return 0;
+}
+
+
+/*** idle kicker thread
+ * kick ebofs when we're idle.  we're a separate thread (yuck)
+ * because ebofs may be holding it's lock _and_ waiting for us 
+ * to do useful work.  that rules out io_thread and complete_thread!
+ */
+void* BlockDevice::kicker_thread_entry()
+{
+  lock.Lock();
+  dout(10) << "kicker_thread start" << dendl;
+
+  while (!io_stop) {
+    
+    if (io_threads_running == 0 && idle_kicker) {
+      dout(25) << "kicker_thread kicking ebofs" << endl;
+      lock.Unlock();
+      idle_kicker->kick();
+      lock.Lock();
+      dout(25) << "kicker_thread done kicking ebofs" << endl;
+    }
+    if (io_stop) break;
+
+    dout(25) << "kicker_thread sleeping" << dendl;
+    kicker_cond.Wait(lock);
+  }
+
+  dout(10) << "kicker_thread finish" << dendl;
+  lock.Unlock();
   return 0;
 }
 
@@ -747,7 +759,8 @@ int BlockDevice::open(kicker *idle)
     io_threads.back()->create();
   }
   complete_thread.create();
- 
+  kicker_thread.create();
+
   // idle kicker?
   idle_kicker = idle;
 
@@ -755,6 +768,10 @@ int BlockDevice::open(kicker *idle)
 }
 
 
+/*
+ * warning: ebofs shoudl drop it's lock before calling close(),
+ * or else deadlock against the idle kicker
+ */
 int BlockDevice::close() 
 {
   assert(fd>0);
@@ -768,10 +785,10 @@ int BlockDevice::close()
   io_stop = true;
   io_wakeup.SignalAll();
   complete_wakeup.SignalAll();
+  kicker_cond.Signal();
   complete_lock.Unlock();
   lock.Unlock();    
-  
-  
+    
   for (int i=0; i<g_conf.bdev_iothreads; i++) {
     io_threads[i]->join();
     delete io_threads[i];
@@ -779,6 +796,7 @@ int BlockDevice::close()
   io_threads.clear();
 
   complete_thread.join();
+  kicker_thread.join();
 
   io_stop = false;   // in case we start again
 

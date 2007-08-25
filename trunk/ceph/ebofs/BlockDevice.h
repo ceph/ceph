@@ -185,8 +185,6 @@ class BlockDevice {
    */
   BarrierQueue root_queue;
 
-  kicker *idle_kicker;  // not used..
-
   /* io_block_lock - block ranges current dispatched to kernel
    *  once a bio is dispatched, it cannot be canceled, so an overlapping
    *  io and be submitted.  the overlapping io cannot be dispatched 
@@ -196,10 +194,11 @@ class BlockDevice {
   interval_set<block_t>      io_block_lock;    // blocks currently dispatched to kernel
 
   // io threads
-  Cond                       io_wakeup;
-  bool                       io_stop;
-  int                        io_threads_started, io_threads_running;
-  
+  Cond io_wakeup;
+  bool io_stop;
+  int  io_threads_started, io_threads_running;
+  bool is_idle_waiting;
+
   void *io_thread_entry();
 
   class IOThread : public Thread {
@@ -240,15 +239,28 @@ class BlockDevice {
     void *entry() { return (void*)dev->complete_thread_entry(); }
   } complete_thread;
 
+  // kicker
+  kicker *idle_kicker;  // not used..
+  Mutex kicker_lock;
+  Cond kicker_cond;
+  void *kicker_thread_entry();
+  class KickerThread : public Thread {
+    BlockDevice *dev;
+  public:
+    KickerThread(BlockDevice *d) : dev(d) {}
+    void *entry() { return (void*)dev->complete_thread_entry(); }
+  } kicker_thread;
+
+
 
  public:
   BlockDevice(const char *d) : 
     dev(d), fd(0), num_blocks(0),
     root_queue(this, dev.c_str()),
-    idle_kicker(0),
-    io_stop(false), io_threads_started(0), io_threads_running(0),
+    io_stop(false), io_threads_started(0), io_threads_running(0), is_idle_waiting(false),
     complete_queue_len(0),
-    complete_thread(this) { }
+    complete_thread(this),
+    idle_kicker(0), kicker_thread(this) { }
   ~BlockDevice() {
     if (fd > 0) close();
   }
