@@ -45,7 +45,7 @@ inline int tcp_write(int sd, char *buf, int len) {
     int did = ::send( sd, buf, len, 0 );
     if (did < 0) {
       //generic_dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
-      //cerr << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
+      //generic_derr(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
       return did;
     }
     len -= did;

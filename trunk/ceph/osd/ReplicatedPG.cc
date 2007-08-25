@@ -26,6 +26,7 @@
 #include "config.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cerr << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -1172,7 +1173,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     unsigned r = osd->store->apply_transaction(t, oncommit);
     if (r != 0 &&   // no errors
         r != 2) {   // or error on collection_add
-      cerr << "error applying transaction: r = " << r << dendl;
+      derr(0) << "error applying transaction: r = " << r << dendl;
       assert(r == 0);
     }
 
@@ -1281,7 +1282,7 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
     unsigned tr = osd->store->apply_transaction(t, oncommit);
     if (tr != 0 &&   // no errors
         tr != 2) {   // or error on collection_add
-      cerr << "error applying transaction: r = " << tr << dendl;
+      derr(0) << "error applying transaction: r = " << tr << dendl;
       assert(tr == 0);
     }
   }

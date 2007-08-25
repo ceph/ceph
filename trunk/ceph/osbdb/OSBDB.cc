@@ -102,7 +102,7 @@ DbEnv *OSBDB::getenv ()
                    | DB_PRIVATE);
   if (envp->open (NULL, env_flags, 0) != 0)
     {
-      std::cerr << "failed to open environment " << std::dendl;
+      std::cerr << "failed to open environment " << std::endl;
       assert(0);
     }
   return envp;

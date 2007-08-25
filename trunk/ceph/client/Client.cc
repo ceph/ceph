@@ -1523,9 +1523,9 @@ void Client::handle_unmount(Message* m)
 int Client::link(const char *existing, const char *newname) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "link" << dendl;
-  tout << existing << dendl;
-  tout << newname << dendl;
+  tout << "link" << endl;
+  tout << existing << endl;
+  tout << newname << endl;
   return _link(existing, newname);
 }
 
@@ -1558,8 +1558,8 @@ int Client::_link(const char *existing, const char *newname)
 int Client::unlink(const char *relpath)
 {
   Mutex::Locker lock(client_lock);
-  tout << "unlink" << dendl;
-  tout << relpath << dendl;
+  tout << "unlink" << endl;
+  tout << relpath << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1601,9 +1601,9 @@ int Client::_unlink(const char *path)
 int Client::rename(const char *relfrom, const char *relto)
 {
   Mutex::Locker lock(client_lock);
-  tout << "rename" << dendl;
-  tout << relfrom << dendl;
-  tout << relto << dendl;
+  tout << "rename" << endl;
+  tout << relfrom << endl;
+  tout << relto << endl;
 
   string absfrom, absto;
   mkabspath(relfrom, absfrom);
@@ -1641,9 +1641,9 @@ int Client::_rename(const char *from, const char *to)
 int Client::mkdir(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
-  tout << "mkdir" << dendl;
-  tout << relpath << dendl;
-  tout << mode << dendl;
+  tout << "mkdir" << endl;
+  tout << relpath << endl;
+  tout << mode << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1677,8 +1677,8 @@ int Client::_mkdir(const char *path, mode_t mode)
 int Client::rmdir(const char *relpath)
 {
   Mutex::Locker lock(client_lock);
-  tout << "rmdir" << dendl;
-  tout << relpath << dendl;
+  tout << "rmdir" << endl;
+  tout << relpath << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1721,9 +1721,9 @@ int Client::_rmdir(const char *path)
 int Client::symlink(const char *reltarget, const char *rellink)
 {
   Mutex::Locker lock(client_lock);
-  tout << "symlink" << dendl;
-  tout << reltarget << dendl;
-  tout << rellink << dendl;
+  tout << "symlink" << endl;
+  tout << reltarget << endl;
+  tout << rellink << endl;
 
   string target, link;
   mkabspath(reltarget, target);
@@ -1756,8 +1756,8 @@ int Client::_symlink(const char *target, const char *link)
 int Client::readlink(const char *path, char *buf, off_t size) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "readlink" << dendl;
-  tout << path << dendl;
+  tout << "readlink" << endl;
+  tout << path << endl;
 
   string abspath;
   mkabspath(path, abspath);
@@ -1879,8 +1879,8 @@ int Client::fill_stat(Inode *in, struct stat *st)
 int Client::lstat(const char *relpath, struct stat *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "lstat" << dendl;
-  tout << relpath << dendl;
+  tout << "lstat" << endl;
+  tout << relpath << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1913,8 +1913,8 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   const char *path = abspath.c_str();
 
   dout(3) << "op: client->lstatlite(\"" << path << "\", &st);" << dendl;
-  tout << "lstatlite" << dendl;
-  tout << path << dendl;
+  tout << "lstatlite" << endl;
+  tout << path << endl;
 
   // make mask
   // FIXME.
@@ -1942,9 +1942,9 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
 int Client::chmod(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chmod" << dendl;
-  tout << relpath << dendl;
-  tout << mode << dendl;
+  tout << "chmod" << endl;
+  tout << relpath << endl;
+  tout << mode << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -1975,10 +1975,10 @@ int Client::_chmod(const char *path, mode_t mode)
 int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chown" << dendl;
-  tout << relpath << dendl;
-  tout << uid << dendl;
-  tout << gid << dendl;
+  tout << "chown" << endl;
+  tout << relpath << endl;
+  tout << uid << endl;
+  tout << gid << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2013,10 +2013,10 @@ int Client::_chown(const char *path, uid_t uid, gid_t gid)
 int Client::utime(const char *relpath, struct utimbuf *buf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "utime" << dendl;
-  tout << relpath << dendl;
-  tout << buf->modtime << dendl;
-  tout << buf->actime << dendl;
+  tout << "utime" << endl;
+  tout << relpath << endl;
+  tout << buf->modtime << endl;
+  tout << buf->actime << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2050,10 +2050,10 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 int Client::mknod(const char *relpath, mode_t mode, dev_t rdev) 
 { 
   Mutex::Locker lock(client_lock);
-  tout << "mknod" << dendl;
-  tout << relpath << dendl;
-  tout << mode << dendl;
-  tout << rdev << dendl;
+  tout << "mknod" << endl;
+  tout << relpath << endl;
+  tout << mode << endl;
+  tout << rdev << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2095,8 +2095,8 @@ int Client::getdir(const char *relpath, list<string>& contents)
   dout(3) << "getdir(" << relpath << ")" << dendl;
   {
     Mutex::Locker lock(client_lock);
-    tout << "getdir" << dendl;
-    tout << relpath << dendl;
+    tout << "getdir" << endl;
+    tout << relpath << endl;
   }
 
   DIR *d;
@@ -2117,11 +2117,11 @@ int Client::getdir(const char *relpath, list<string>& contents)
 int Client::opendir(const char *name, DIR **dirpp) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "opendir" << dendl;
-  tout << name << dendl;
+  tout << "opendir" << endl;
+  tout << name << endl;
 
   int r = _opendir(name, (DirResult**)dirpp);
-  tout << (unsigned long)*dirpp;
+  tout << (unsigned long)*dirpp << endl;
   return r;
 }
 
@@ -2368,8 +2368,8 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 int Client::closedir(DIR *dir) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "closedir" << dendl;
-  tout << (unsigned long)dir << dendl;
+  tout << "closedir" << endl;
+  tout << (unsigned long)dir << endl;
 
   dout(3) << "closedir(" << dir << ") = 0" << dendl;
   _closedir((DirResult*)dir);
@@ -2420,9 +2420,9 @@ void Client::seekdir(DIR *dirp, off_t offset)
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "open" << dendl;
-  tout << relpath << dendl;
-  tout << flags << dendl;
+  tout << "open" << endl;
+  tout << relpath << endl;
+  tout << flags << endl;
 
   string abspath;
   mkabspath(relpath, abspath);
@@ -2437,7 +2437,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     fd_map[r] = fh;
   }
   
-  tout << r << dendl;
+  tout << r << endl;
   dout(3) << "open(" << relpath << ", " << flags << ") = " << r << dendl;
   return r;
 }
@@ -2568,8 +2568,8 @@ void Client::close_safe(Inode *in)
 int Client::close(int fd)
 {
   Mutex::Locker lock(client_lock);
-  tout << "close" << dendl;
-  tout << fd << dendl;
+  tout << "close" << endl;
+  tout << fd << endl;
 
   dout(3) << "close(" << fd << ")" << dendl;
   assert(fd_map.count(fd));
@@ -2638,10 +2638,10 @@ int Client::_release(Fh *f)
 off_t Client::lseek(int fd, off_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
-  tout << "lseek" << dendl;
-  tout << fd << dendl;
-  tout << offset << dendl;
-  tout << whence << dendl;
+  tout << "lseek" << endl;
+  tout << fd << endl;
+  tout << offset << endl;
+  tout << whence << endl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -2706,10 +2706,10 @@ void Client::unlock_fh_pos(Fh *f)
 int Client::read(int fd, char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "read" << dendl;
-  tout << fd << dendl;
-  tout << size << dendl;
-  tout << offset << dendl;
+  tout << "read" << endl;
+  tout << fd << endl;
+  tout << size << endl;
+  tout << offset << endl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -2855,10 +2855,10 @@ void Client::hack_sync_write_safe()
 int Client::write(int fd, const char *buf, off_t size, off_t offset) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "write" << dendl;
-  tout << fd << dendl;
-  tout << size << dendl;
-  tout << offset << dendl;
+  tout << "write" << endl;
+  tout << fd << endl;
+  tout << size << endl;
+  tout << offset << endl;
 
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
@@ -3001,9 +3001,9 @@ int Client::_flush(Fh *f)
 int Client::truncate(const char *relpath, off_t length) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "truncate" << dendl;
-  tout << relpath << dendl;
-  tout << length << dendl;
+  tout << "truncate" << endl;
+  tout << relpath << endl;
+  tout << length << endl;
 
   string path;
   mkabspath(relpath, path);
@@ -3032,9 +3032,9 @@ int Client::_truncate(const char *file, off_t length)
 int Client::ftruncate(int fd, off_t length) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "ftruncate" << dendl;
-  tout << fd << dendl;
-  tout << length << dendl;
+  tout << "ftruncate" << endl;
+  tout << fd << endl;
+  tout << length << endl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -3064,9 +3064,9 @@ int Client::_ftruncate(Fh *fh, off_t length)
 int Client::fsync(int fd, bool syncdataonly) 
 {
   Mutex::Locker lock(client_lock);
-  tout << "fsync" << dendl;
-  tout << fd << dendl;
-  tout << syncdataonly << dendl;
+  tout << "fsync" << endl;
+  tout << fd << endl;
+  tout << syncdataonly << endl;
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
@@ -3103,8 +3103,8 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 int Client::chdir(const char *path)
 {
   Mutex::Locker lock(client_lock);
-  tout << "chdir" << dendl;
-  tout << path << dendl;
+  tout << "chdir" << endl;
+  tout << path << endl;
   
   // fake it for now!
   string abs;
@@ -3117,14 +3117,14 @@ int Client::chdir(const char *path)
 int Client::statfs(const char *path, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "statfs" << dendl;
+  tout << "statfs" << endl;
   return _statfs(stbuf);
 }
 
 int Client::ll_statfs(inodeno_t ino, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
-  tout << "ll_statfs" << dendl;
+  tout << "ll_statfs" << endl;
   return _statfs(stbuf);
 }
 
@@ -3254,9 +3254,9 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_lookup " << parent << " " << name << dendl;
-  tout << "ll_lookup" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
+  tout << "ll_lookup" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
 
   string dname = name;
   Inode *diri = 0;
@@ -3299,7 +3299,7 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
  out:
   dout(3) << "ll_lookup " << parent << " " << name
 	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
-  tout << attr->st_ino << dendl;
+  tout << attr->st_ino << endl;
   return r;
 }
 
@@ -3342,9 +3342,9 @@ bool Client::ll_forget(inodeno_t ino, int num)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_forget " << ino << " " << num << dendl;
-  tout << "ll_forget" << dendl;
-  tout << ino.val << dendl;
-  tout << num << dendl;
+  tout << "ll_forget" << endl;
+  tout << ino.val << endl;
+  tout << num << endl;
 
   if (ino == 1) return true;  // ignore forget on root.
 
@@ -3379,8 +3379,8 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_getattr " << ino << dendl;
-  tout << "ll_getattr" << dendl;
-  tout << ino.val << dendl;
+  tout << "ll_getattr" << endl;
+  tout << ino.val << endl;
 
   Inode *in = _ll_get_inode(ino);
   fill_stat(in, attr);
@@ -3391,15 +3391,15 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_setattr " << ino << " mask " << hex << mask << dec << dendl;
-  tout << "ll_setattr" << dendl;
-  tout << ino.val << dendl;
-  tout << attr->st_mode << dendl;
-  tout << attr->st_uid << dendl;
-  tout << attr->st_gid << dendl;
-  tout << attr->st_size << dendl;
-  tout << attr->st_mtime << dendl;
-  tout << attr->st_atime << dendl;
-  tout << mask << dendl;
+  tout << "ll_setattr" << endl;
+  tout << ino.val << endl;
+  tout << attr->st_mode << endl;
+  tout << attr->st_uid << endl;
+  tout << attr->st_gid << endl;
+  tout << attr->st_size << endl;
+  tout << attr->st_mtime << endl;
+  tout << attr->st_atime << endl;
+  tout << mask << endl;
 
   Inode *in = _ll_get_inode(ino);
 
@@ -3437,8 +3437,8 @@ int Client::ll_readlink(inodeno_t ino, const char **value)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_readlink " << ino << dendl;
-  tout << "ll_readlink" << dendl;
-  tout << ino.val << dendl;
+  tout << "ll_readlink" << endl;
+  tout << ino.val << endl;
 
   Inode *in = _ll_get_inode(ino);
   int r = 0;
@@ -3456,11 +3456,11 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_mknod " << parent << " " << name << dendl;
-  tout << "ll_mknod" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
-  tout << mode << dendl;
-  tout << rdev << dendl;
+  tout << "ll_mknod" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
+  tout << mode << endl;
+  tout << rdev << endl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3475,7 +3475,7 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << dendl;
+  tout << attr->st_ino << endl;
   dout(3) << "ll_mknod " << parent << " " << name
 	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
@@ -3485,10 +3485,10 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_mkdir " << parent << " " << name << dendl;
-  tout << "ll_mkdir" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
-  tout << mode << dendl;
+  tout << "ll_mkdir" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
+  tout << mode << endl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3503,7 +3503,7 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << dendl;
+  tout << attr->st_ino << endl;
   dout(3) << "ll_mkdir " << parent << " " << name
 	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
@@ -3513,10 +3513,10 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_symlink " << parent << " " << name << " -> " << value << dendl;
-  tout << "ll_symlink" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
-  tout << value << dendl;
+  tout << "ll_symlink" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
+  tout << value << endl;
 
   Inode *diri = _ll_get_inode(parent);
 
@@ -3531,7 +3531,7 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
     fill_stat(in, attr);
     _ll_get(in);
   }
-  tout << attr->st_ino << dendl;
+  tout << attr->st_ino << endl;
   dout(3) << "ll_symlink " << parent << " " << name
 	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
@@ -3541,9 +3541,9 @@ int Client::ll_unlink(inodeno_t ino, const char *name)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_unlink " << ino << " " << name << dendl;
-  tout << "ll_unlink" << dendl;
-  tout << ino.val << dendl;
-  tout << name << dendl;
+  tout << "ll_unlink" << endl;
+  tout << ino.val << endl;
+  tout << name << endl;
 
   Inode *diri = _ll_get_inode(ino);
 
@@ -3558,9 +3558,9 @@ int Client::ll_rmdir(inodeno_t ino, const char *name)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_rmdir " << ino << " " << name << dendl;
-  tout << "ll_rmdir" << dendl;
-  tout << ino.val << dendl;
-  tout << name << dendl;
+  tout << "ll_rmdir" << endl;
+  tout << ino.val << endl;
+  tout << name << endl;
 
   Inode *diri = _ll_get_inode(ino);
 
@@ -3576,11 +3576,11 @@ int Client::ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, c
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_rename " << parent << " " << name << " to "
 	  << newparent << " " << newname << dendl;
-  tout << "ll_rename" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
-  tout << newparent.val << dendl;
-  tout << newname << dendl;
+  tout << "ll_rename" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
+  tout << newparent.val << endl;
+  tout << newname << endl;
 
   Inode *diri = _ll_get_inode(parent);
   string path;
@@ -3601,10 +3601,10 @@ int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, str
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_link " << ino << " to " << newparent << " " << newname << dendl;
-  tout << "ll_link" << dendl;
-  tout << ino.val << dendl;
-  tout << newparent << dendl;
-  tout << newname << dendl;
+  tout << "ll_link" << endl;
+  tout << ino.val << endl;
+  tout << newparent << endl;
+  tout << newname << endl;
 
   Inode *old = _ll_get_inode(ino);
   Inode *diri = _ll_get_inode(newparent);
@@ -3631,8 +3631,8 @@ int Client::ll_opendir(inodeno_t ino, void **dirpp)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_opendir " << ino << dendl;
-  tout << "ll_opendir" << dendl;
-  tout << ino.val << dendl;
+  tout << "ll_opendir" << endl;
+  tout << ino.val << endl;
   
   Inode *diri = inode_map[ino];
   assert(diri);
@@ -3641,7 +3641,7 @@ int Client::ll_opendir(inodeno_t ino, void **dirpp)
 
   int r = _opendir(path.c_str(), (DirResult**)dirpp);
 
-  tout << (unsigned long)*dirpp << dendl;
+  tout << (unsigned long)*dirpp << endl;
 
   dout(3) << "ll_opendir " << ino << " = " << r << " (" << *dirpp << ")" << dendl;
   return r;
@@ -3651,8 +3651,8 @@ void Client::ll_releasedir(void *dirp)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_releasedir " << dirp << dendl;
-  tout << "ll_releasedir" << dendl;
-  tout << (unsigned long)dirp << dendl;
+  tout << "ll_releasedir" << endl;
+  tout << (unsigned long)dirp << endl;
   _closedir((DirResult*)dirp);
 }
 
@@ -3660,9 +3660,9 @@ int Client::ll_open(inodeno_t ino, int flags, Fh **fhp)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_open " << ino << " " << flags << dendl;
-  tout << "ll_open" << dendl;
-  tout << ino.val << dendl;
-  tout << flags << dendl;
+  tout << "ll_open" << endl;
+  tout << ino.val << endl;
+  tout << flags << endl;
 
   Inode *in = _ll_get_inode(ino);
   string path;
@@ -3670,7 +3670,7 @@ int Client::ll_open(inodeno_t ino, int flags, Fh **fhp)
 
   int r = _open(path.c_str(), flags, 0, fhp);
 
-  tout << (unsigned long)*fhp << dendl;
+  tout << (unsigned long)*fhp << endl;
   dout(3) << "ll_open " << ino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
   return r;
 }
@@ -3680,11 +3680,11 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << dendl;
-  tout << "ll_create" << dendl;
-  tout << parent.val << dendl;
-  tout << name << dendl;
-  tout << mode << dendl;
-  tout << flags << dendl;
+  tout << "ll_create" << endl;
+  tout << parent.val << endl;
+  tout << name << endl;
+  tout << mode << endl;
+  tout << flags << endl;
 
   Inode *pin = _ll_get_inode(parent);
   string path;
@@ -3700,8 +3700,8 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
   } else {
     attr->st_ino = 0;
   }
-  tout << (unsigned long)*fhp << dendl;
-  tout << attr->st_ino << dendl;
+  tout << (unsigned long)*fhp << endl;
+  tout << attr->st_ino << endl;
   dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags
 	  << " = " << r << " (" << *fhp << " " << hex << attr->st_ino << dec << ")" << dendl;
   return 0;
@@ -3711,10 +3711,10 @@ int Client::ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_read " << fh << " " << off << "~" << len << dendl;
-  tout << "ll_read" << dendl;
-  tout << (unsigned long)fh << dendl;
-  tout << off << dendl;
-  tout << len << dendl;
+  tout << "ll_read" << endl;
+  tout << (unsigned long)fh << endl;
+  tout << off << endl;
+  tout << len << endl;
 
   return _read(fh, off, len, bl);
 }
@@ -3723,10 +3723,10 @@ int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_write " << fh << " " << off << "~" << len << dendl;
-  tout << "ll_write" << dendl;
-  tout << (unsigned long)fh << dendl;
-  tout << off << dendl;
-  tout << len << dendl;
+  tout << "ll_write" << endl;
+  tout << (unsigned long)fh << endl;
+  tout << off << endl;
+  tout << len << endl;
 
   return _write(fh, off, len, data);
 }
@@ -3735,8 +3735,8 @@ int Client::ll_flush(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_flush " << fh << dendl;
-  tout << "ll_flush" << dendl;
-  tout << (unsigned long)fh << dendl;
+  tout << "ll_flush" << endl;
+  tout << (unsigned long)fh << endl;
 
   return _flush(fh);
 }
@@ -3745,8 +3745,8 @@ int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_release " << fh << dendl;
-  tout << "ll_release" << dendl;
-  tout << (unsigned long)fh << dendl;
+  tout << "ll_release" << endl;
+  tout << (unsigned long)fh << endl;
 
   _release(fh);
   return 0;

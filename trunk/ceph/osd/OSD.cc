@@ -1129,7 +1129,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     dout(1) << "mkfs    " << minrep << ".." << maxrep << " replicas, " 
 	    << minraid << ".." << maxraid << " osd raid groups" << dendl;
 
-    //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
+    //derr(0) << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
     logger->set_start( osdmap->get_ctime() );
 
     assert(g_conf.osd_mkfs);  // make sure we did a mkfs!

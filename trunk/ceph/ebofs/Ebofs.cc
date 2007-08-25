@@ -715,13 +715,13 @@ Onode* Ebofs::get_onode(object_t oid)
     // parse data block
     struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
     if (eo->object_id != oid) {
-      cerr << " wrong oid in onode block: " << eo->object_id << " != " << oid << dendl;
-      cerr << " onode_loc is " << eo->onode_loc << dendl;
-      cerr << " object_size " << eo->object_size << dendl;
-      cerr << " object_blocks " << eo->object_blocks << dendl;
-      cerr << " " << eo->num_collections << " coll + " 
-           << eo->num_attr << " attr + " 
-           << eo->num_extents << " extents" << dendl;
+      dout(0) << " wrong oid in onode block: " << eo->object_id << " != " << oid << dendl;
+      dout(0) << " onode_loc is " << eo->onode_loc << dendl;
+      dout(0) << " object_size " << eo->object_size << dendl;
+      dout(0) << " object_blocks " << eo->object_blocks << dendl;
+      dout(0) << " " << eo->num_collections << " coll + " 
+	      << eo->num_attr << " attr + " 
+	      << eo->num_extents << " extents" << dendl;
       assert(eo->object_id == oid);
     }
     on->readonly = eo->readonly;
@@ -2368,7 +2368,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       break;
       
     default:
-      cerr << "bad op " << op << dendl;
+      dout(0) << "bad op " << op << dendl;
       assert(0);
     }
 

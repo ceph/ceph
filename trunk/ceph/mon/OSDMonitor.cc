@@ -136,14 +136,14 @@ void OSDMonitor::create_initial()
     
     // add osds
     int nper = ((g_conf.num_osd - 1) / ndom) + 1;
-    cerr << ndom << " failure domains, " << nper << " osds each" << dendl;
+    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
     int i = 0;
     for (int dom=0; dom<ndom; dom++) {
       for (int j=0; j<nper; j++) {
 	newmap.osds.insert(i);
 	newmap.down_osds[i] = true; // initially DOWN
 	domain[dom]->add_item(i, 1.0);
-	//cerr << "osd" << i << " in domain " << dom << dendl;
+	//derr(0) << "osd" << i << " in domain " << dom << dendl;
 	i++;
 	if (i == g_conf.num_osd) break;
       }
@@ -152,7 +152,7 @@ void OSDMonitor::create_initial()
     // root
     Bucket *root = new ListBucket(2);
     for (int i=0; i<ndom; i++) {
-      //cerr << "dom " << i << " w " << domain[i]->get_weight() << dendl;
+      //derr(0) << "dom " << i << " w " << domain[i]->get_weight() << dendl;
       root->add_item(domid[i], domain[i]->get_weight());
     }
     int nroot = newmap.crush.add_bucket(root);    

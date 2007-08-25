@@ -180,7 +180,7 @@ void parse_syn_options(vector<char*>& args)
 	syn_sargs.push_back(args[++i]);
 	syn_iargs.push_back(atoi(args[++i]));
       } else {
-        cerr << "unknown syn arg " << args[i] << dendl;
+        derr(0) << "unknown syn arg " << args[i] << dendl;
         assert(0);
       }
     }
