@@ -941,7 +941,7 @@ void MDBalancer::dump_pop_map()
 	myfile << "." << p;
 	if (dir->get_frag() != frag_t()) 
 	  myfile << "___" << (unsigned)dir->get_frag();
-	myfile << dendl; //"/" << dir->get_frag() << dendl;
+	myfile << endl; //"/" << dir->get_frag() << dendl;
 	
 	// add contents
 	for (map<string,CDentry*>::iterator q = dir->items.begin();
