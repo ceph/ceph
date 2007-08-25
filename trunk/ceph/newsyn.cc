@@ -346,7 +346,7 @@ int main(int argc, char **argv)
       client_logtype.add_inc("stat");
     }
 
-    client[i]->init();
+    //client[i]->init();
     started++;
 
     syn[i] = new SyntheticClient(client[i]);

@@ -281,7 +281,7 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(2) << osdmap.osds.size() << " osds, "
+    dout(1) << osdmap.osds.size() << " osds, "
 	    << osdmap.down_osds.size() << " down, " 
 	    << osdmap.out_osds.size() << " out" 
 	    << dendl;

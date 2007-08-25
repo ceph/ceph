@@ -61,15 +61,9 @@ int main(int argc, char **argv, char *envp[]) {
 
   cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
-    // start client
+    // start syn client
     Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
-    client->init();
-    
-    // start syntheticclient
     SyntheticClient *syn = new SyntheticClient(client);
-
-    client->mount();
-    
     syn->start_thread();
 
     clients.push_back(client);
@@ -83,11 +77,7 @@ int main(int argc, char **argv, char *envp[]) {
     clients.pop_front();
     synclients.pop_front();
     
-    // wait
     syn->join_thread();
-
-    // unmount
-    client->unmount();
     client->shutdown();
 
     delete syn;

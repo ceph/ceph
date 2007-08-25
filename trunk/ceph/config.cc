@@ -100,7 +100,7 @@ md_config_t g_conf = {
   debug_bdev: 1,         // block device
   debug_ns: 0,
   debug_ms: 0,
-  debug_mon: 0,
+  debug_mon: 1,
   debug_paxos: 0,
   
   debug_after: 0,

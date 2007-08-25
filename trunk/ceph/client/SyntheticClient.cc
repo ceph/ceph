@@ -240,6 +240,7 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 { 
+  client->init();
   client->mount();
 
   //run_start = g_clock.now();
