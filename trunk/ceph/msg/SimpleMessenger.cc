@@ -1029,9 +1029,9 @@ void Rank::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(-10) << "wait: stopping accepter thread" << dendl;
+  dout(20) << "wait: stopping accepter thread" << dendl;
   accepter.stop();
-  dout(-10) << "wait: stopped accepter thread" << dendl;
+  dout(20) << "wait: stopped accepter thread" << dendl;
 
   // stop dispatch thread
   if (g_conf.ms_single_dispatch) {
