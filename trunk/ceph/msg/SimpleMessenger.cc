@@ -202,8 +202,9 @@ void *Rank::Accepter::entry()
     }
   }
 
+  dout(20) << "accepter closing" << dendl;
   ::close(listen_sd);
-
+  dout(10) << "accepter stopping" << dendl;
   return 0;
 }
 
@@ -1108,11 +1109,12 @@ void Rank::EntityMessenger::dispatch_entry()
           Message *m = ls.front();
           ls.pop_front();
           dout(1) << m->get_dest() 
-		  << " <-- " << m->get_source_inst()
-		  << " ---- " << *m
-                  << " -- " << m 
+		  << " <== " << m->get_source_inst()
+		  << " ==== " << *m
+                  << " ==== " << m 
                   << dendl;
           dispatch(m);
+	  dout(20) << "done calling dispatch on " << m << dendl;
         }
       }
       lock.Lock();
