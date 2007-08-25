@@ -181,7 +181,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 10,
 
   mds_beacon_interval: 10, //30.0,
-  mds_beacon_grace: 30, //60*60.0,
+  mds_beacon_grace: 90, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -598,6 +598,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_mon = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mon = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_paxos") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_paxos = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_paxos = atoi(args[++i]);
 
     else if (strcmp(args[i], "--debug_after") == 0) {
       g_conf.debug_after = atoi(args[++i]);
