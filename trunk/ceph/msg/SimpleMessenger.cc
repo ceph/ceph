@@ -419,7 +419,10 @@ void Rank::Pipe::reader()
 	  entity = rank.local[m->get_dest()];
 	} else {
 	  entity = rank.find_unnamed(m->get_dest());
-	  if (!entity) {
+	  if (entity) {
+	    dout(3) << "pipe(" << peer_addr << ' ' << this << ").reader blessing " << m->get_dest() << dendl;
+	    entity->reset_myname(m->get_dest());
+	  } else {
 	    if (rank.stopped.count(m->get_dest())) {
 	      // ignore it
 	    } else {
@@ -432,7 +435,7 @@ void Rank::Pipe::reader()
     }
     rank.lock.Unlock();
     
-    if (entity) 
+    if (entity)
       entity->queue_message(m);        // queue
   }
 

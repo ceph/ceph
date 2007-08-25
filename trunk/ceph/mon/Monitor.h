@@ -58,11 +58,13 @@ private:
   const static int STATE_LEADER =   1;
   const static int STATE_PEON =     2;
   int state;
+  bool stopping;
 
 public:
   bool is_starting() { return state == STATE_STARTING; }
   bool is_leader() { return state == STATE_LEADER; }
   bool is_peon() { return state == STATE_PEON; }
+  bool is_stopping() { return stopping; }
 
 
   // -- elector --
@@ -121,7 +123,7 @@ public:
     timer(lock), tick_timer(0),
     store(0),
 
-    state(STATE_STARTING),
+    state(STATE_STARTING), stopping(false),
 
     elector(this, w),
     mon_epoch(0), 

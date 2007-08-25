@@ -512,8 +512,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   if (oldwhoami != whoami) {
     // update messenger.
-    messenger->reset_myname(MSG_ADDR_MDS(whoami));
-
     reopen_logger();
     dout(1) << "handle_mds_map i am now mds" << whoami
 	    << " incarnation " << mdsmap->get_inc(whoami)

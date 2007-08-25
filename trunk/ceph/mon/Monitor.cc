@@ -232,6 +232,7 @@ void Monitor::handle_command(MMonCommand *m)
 void Monitor::do_stop()
 {
   dout(0) << "do_stop -- shutting down" << dendl;
+  stopping = true;
   mdsmon->do_stop();
 }
 

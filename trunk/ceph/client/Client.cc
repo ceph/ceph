@@ -939,7 +939,6 @@ void Client::handle_mds_map(MMDSMap* m)
     assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << dendl;
-    messenger->reset_myname(m->get_dest());
     
     mount_cond.Signal();  // mount might be waiting for this.
   } 
@@ -1335,10 +1334,12 @@ void Client::_try_mount()
 					   client_instance_this_process), 
 			  monmap->get_inst(mon));
 
-  // schedule timeout
-  assert(mount_timeout_event == 0);
-  mount_timeout_event = new C_MountTimeout(this);
-  timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
+  // schedule timeout?
+  if (g_conf.num_client <= 1) {  // don't do this if we have multiple instances in our process!
+    assert(mount_timeout_event == 0);
+    mount_timeout_event = new C_MountTimeout(this);
+    timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
+  }
 }
 
 void Client::_mount_timeout()
@@ -1360,9 +1361,11 @@ int Client::mount()
 	 !osdmap || 
 	 osdmap->get_epoch() == 0)
     mount_cond.Wait(client_lock);
-
-  timer.cancel_event(mount_timeout_event);
-  mount_timeout_event = 0;
+  
+  if (mount_timeout_event) {  // will be false if g_conf.num_client > 1.. see _try_mount above
+    timer.cancel_event(mount_timeout_event);
+    mount_timeout_event = 0;
+  }
   
   mounted = true;
 

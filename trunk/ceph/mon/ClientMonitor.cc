@@ -233,7 +233,8 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   if (mon->is_leader() &&
       client_map.version > 1 &&
       client_map.client_addr.empty() && 
-      g_conf.mon_stop_on_last_unmount) {
+      g_conf.mon_stop_on_last_unmount &&
+      !mon->is_stopping()) {
     dout(1) << "last client unmounted" << dendl;
     mon->do_stop();
   }
