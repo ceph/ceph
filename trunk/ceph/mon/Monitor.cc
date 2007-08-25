@@ -137,7 +137,6 @@ void Monitor::shutdown()
   
   // die.
   messenger->shutdown();
-  delete messenger;
 }
 
 

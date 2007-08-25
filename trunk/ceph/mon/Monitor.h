@@ -136,6 +136,9 @@ public:
     osdmon(0), mdsmon(0), clientmon(0)
   {
   }
+  ~Monitor() {
+    delete messenger;
+  }
 
   void init();
   void shutdown();
