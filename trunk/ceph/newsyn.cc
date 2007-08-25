@@ -321,13 +321,10 @@ int main(int argc, char **argv)
     clientlist.insert(i);
     client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)), //MSG_ADDR_CLIENT_NEW), 
 			   monmap);
-
+    syn[i] = new SyntheticClient(client[i]);
+    
     // logger?
     if (client_logger == 0) {
-      char s[80];
-      sprintf(s,"clnode.%d", myrank);
-      client_logger = new Logger(s, &client_logtype);
-
       client_logtype.add_inc("lsum");
       client_logtype.add_inc("lnum");
       client_logtype.add_inc("lwsum");
@@ -344,14 +341,13 @@ int main(int argc, char **argv)
       client_logtype.add_inc("ldirnum");
       client_logtype.add_inc("readdir");
       client_logtype.add_inc("stat");
+
+      char s[80];
+      sprintf(s,"clnode.%d", myrank);
+      client_logger = new Logger(s, &client_logtype);
     }
 
-    //client[i]->init();
     started++;
-
-    syn[i] = new SyntheticClient(client[i]);
-
-    //client[i]->mount();
     nclients++;
   }
 

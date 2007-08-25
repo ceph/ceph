@@ -209,6 +209,9 @@ private:
     void prepare_dest(const entity_addr_t& addr);
     int send_message(Message *m, entity_inst_t dest,
 		     int port=0, int fromport=0);
+    int send_first_message(Dispatcher *d,
+			   Message *m, entity_inst_t dest,
+			   int port=0, int fromport=0);
     
     void mark_down(entity_addr_t a);
     void mark_up(entity_name_t a, entity_addr_t& i);

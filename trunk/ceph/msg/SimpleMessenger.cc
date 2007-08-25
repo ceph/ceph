@@ -908,11 +908,12 @@ Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
 
 Rank::EntityMessenger *Rank::find_unnamed(entity_name_t a)
 {
-  // find an unnamed local entity of the right type
+  // find an unnamed (and _ready_) local entity of the right type
   for (map<entity_name_t, EntityMessenger*>::iterator p = local.begin();
        p != local.end();
        ++p) {
-    if (p->first.type() == a.type() && p->first.is_new()) 
+    if (p->first.type() == a.type() && p->first.is_new() &&
+	p->second->is_ready()) 
       return p->second;
   }
   return 0;
@@ -1208,6 +1209,36 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
   return 0;
 }
 
+int Rank::EntityMessenger::send_first_message(Dispatcher *d,
+					      Message *m, entity_inst_t dest,
+					      int port, int fromport)
+{
+  /* hacky thing for csyn and newsyn:
+   * set dispatcher (go active) AND set sender for this 
+   * message while holding rank.lock.  this prevents any
+   * races against incoming unnamed messages naming us before
+   * we fire off our first message.  
+   */
+  rank.lock.Lock();
+  set_dispatcher(d);
+
+  // set envelope
+  m->set_source(get_myname(), fromport);
+  m->set_source_addr(rank.my_addr);
+  m->set_dest_inst(dest);
+  m->set_dest_port(port);
+  rank.lock.Unlock();
+ 
+  dout(1) << m->get_source()
+          << " --> " << dest.name << " " << dest.addr
+          << " -- " << *m
+	  << " -- " << m
+          << dendl;
+
+  rank.submit_message(m, dest.addr);
+
+  return 0;
+}
 
 
 const entity_addr_t &Rank::EntityMessenger::get_myaddr()

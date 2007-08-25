@@ -73,6 +73,12 @@ class Messenger {
   virtual void prepare_dest(const entity_addr_t& addr) {}
   virtual int send_message(Message *m, entity_inst_t dest,
 			   int port=0, int fromport=0) = 0;
+  virtual int send_first_message(Dispatcher *d,
+				 Message *m, entity_inst_t dest,
+				 int port=0, int fromport=0) {
+    set_dispatcher(d);
+    return send_message(m, dest, port, fromport);
+  }
 
   // make a procedure call
   //virtual Message* sendrecv(Message *m, msg_name_t dest, int port=0);

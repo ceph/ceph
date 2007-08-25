@@ -155,6 +155,7 @@ rados snapshots
 
 
 objecter
+- maybe_request_map should set a timer event to periodically re-request.
 - transaction prepare/commit
 - read+floor_lockout
 

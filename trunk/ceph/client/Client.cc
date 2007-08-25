@@ -124,7 +124,6 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
 
   // set up messengers
   messenger = m;
-  messenger->set_dispatcher(this);
 
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
@@ -232,8 +231,6 @@ void Client::dump_cache()
 
 void Client::init() 
 {
-
-  
 }
 
 void Client::shutdown() {
@@ -1330,9 +1327,10 @@ void Client::_try_mount()
   dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
   dout(2) << "sending client_mount to mon" << mon << dendl;
-  messenger->send_message(new MClientMount(messenger->get_myaddr(),
-					   client_instance_this_process), 
-			  monmap->get_inst(mon));
+  messenger->send_first_message(this,  // simultaneously go active (if we haven't already)
+				new MClientMount(messenger->get_myaddr(),
+						 client_instance_this_process), 
+				monmap->get_inst(mon));
 
   // schedule timeout?
   if (g_conf.num_client <= 1) {  // don't do this if we have multiple instances in our process!
@@ -1353,9 +1351,9 @@ int Client::mount()
 {
   client_lock.Lock();
   assert(!mounted);  // caller is confused?
-  assert(!mdsmap);
-
+    
   _try_mount();
+  //messenger->set_dispatcher(this);   // FIXME: there is still a race condition here!
   
   while (!mdsmap ||
 	 !osdmap || 
@@ -2604,13 +2602,16 @@ int Client::_release(Fh *f)
   if (g_conf.client_oc) {
     // caching on.
     if (in->num_open_rd == 0 && in->num_open_wr == 0) {
+      dout(20) << "calling empty" << dendl;
       in->fc.empty(new C_Client_CloseRelease(this, in));
     } 
     else if (in->num_open_rd == 0) {
+      dout(20) << "calling release" << dendl;
       in->fc.release_clean();
       close_release(in);
     } 
     else if (in->num_open_wr == 0) {
+      dout(20) << "calling flush dirty" << dendl;
       in->fc.flush_dirty(new C_Client_CloseRelease(this,in));
     }
 
