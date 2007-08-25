@@ -434,7 +434,7 @@ void Server::handle_client_request(MClientRequest *req)
 
   // active session?
   if (!mds->clientmap.have_session(client)) {
-    dout(1) << "no session for client" << client << ", dropping" << dendl;
+    dout(5) << "no session for client" << client << ", dropping" << dendl;
     delete req;
     return;
   }
