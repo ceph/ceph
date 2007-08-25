@@ -1,5 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
 
 #include "Objecter.h"
 #include "osd/OSDMap.h"
@@ -101,6 +112,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
   
   delete m;
 }
+
+
+void Objecter::maybe_request_map()
+{
+  utime_t now;
+
+  if (last_epoch_requested <= osdmap->get_epoch() ||
+      (now = g_clock.now()) - last_epoch_requested_stamp > g_conf.objecter_map_request_interval) {
+    dout(10) << "maybe_request_map requesting next osd map" << dendl;
+    last_epoch_requested_stamp = now;
+    last_epoch_requested = osdmap->get_epoch()+1;
+    messenger->send_message(new MOSDGetMap(osdmap->get_epoch(), last_epoch_requested),
+			    monmap->get_inst(monmap->pick_mon()));
+  }
+}
+
+
 
 void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 {
@@ -422,7 +450,8 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
 		<< " = osd" << who <<  dendl;
     }
     messenger->send_message(m, osdmap->get_inst(who));
-  }
+  } else 
+    maybe_request_map();
     
   return last_tid;
 }
@@ -718,7 +747,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     }
     
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
-  }
+  } else 
+    maybe_request_map();
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   

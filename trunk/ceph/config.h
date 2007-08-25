@@ -164,6 +164,7 @@ struct md_config_t {
 
   // objecter
   bool  objecter_buffer_uncommitted;
+  double objecter_map_request_interval;
 
   // journaler
   bool  journaler_allow_split_entries;

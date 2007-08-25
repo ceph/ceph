@@ -35,7 +35,7 @@ public:
   OSDMap osdmap;
 
 private:
-  map<entity_name_t, pair<entity_inst_t, epoch_t> > awaiting_map;
+  map<entity_inst_t, pair<epoch_t,epoch_t> > waiting_for_map;  // who -> (has, wants)
 
   // [leader]
   OSDMap::Incremental pending_inc;

@@ -167,6 +167,7 @@ md_config_t g_conf = {
   
   // --- objecter ---
   objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
+  objecter_map_request_interval: 15.0, // request a new map every N seconds, if we have pending io
 
   // --- journaler ---
   journaler_allow_split_entries: true,
