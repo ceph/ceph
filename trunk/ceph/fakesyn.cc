@@ -89,7 +89,7 @@ int main(int argc, char **argv)
   a.nonce = getpid();
   for (int i=0; i<g_conf.num_mon; i++) {
     a.port = i;
-    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+    monmap->mon_inst[i] = entity_inst_t(entity_name_t::MON(i), a);  // hack ; see FakeMessenger.cc
   }
   
   char hostname[100];
@@ -99,16 +99,16 @@ int main(int argc, char **argv)
   // create mon
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) 
-    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
+    mon[i] = new Monitor(i, new FakeMessenger(entity_name_t::MON(i)), monmap);
 
   // create mds
   MDS *mds[g_conf.num_mds];
   OSD *mdsosd[g_conf.num_mds];
   for (int i=0; i<g_conf.num_mds; i++) {
     //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << std::endl;
-    mds[i] = new MDS(-1, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
+    mds[i] = new MDS(-1, new FakeMessenger(entity_name_t::MDS(i)), monmap);
     if (g_conf.mds_local_osd)
-      mdsosd[i] = new OSD(i+g_conf.mds_local_osd_offset, new FakeMessenger(MSG_ADDR_OSD(i+g_conf.mds_local_osd_offset)), monmap);
+      mdsosd[i] = new OSD(i+g_conf.mds_local_osd_offset, new FakeMessenger(entity_name_t::OSD(i+g_conf.mds_local_osd_offset)), monmap);
     start++;
   }
   
@@ -116,18 +116,10 @@ int main(int argc, char **argv)
   OSD *osd[g_conf.num_osd];
   for (int i=0; i<g_conf.num_osd; i++) {
     //cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << std::endl;
-    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
+    osd[i] = new OSD(i, new FakeMessenger(entity_name_t::OSD(i)), monmap);
     start++;
   }
   
-  // create client
-  Client *client[g_conf.num_client];
-  SyntheticClient *syn[g_conf.num_client];
-  for (int i=0; i<g_conf.num_client; i++) {
-    //cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << std::endl;
-    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(i)), monmap);
-    start++;
-  }
 
 
   // start message loop
@@ -146,32 +138,23 @@ int main(int argc, char **argv)
   for (int i=0; i<g_conf.num_osd; i++) {
     osd[i]->init();
   }
-
   
   // create client(s)
+  Client *client[g_conf.num_client];
+  SyntheticClient *syn[g_conf.num_client];
   for (int i=0; i<g_conf.num_client; i++) {
-    client[i]->init();
-    
-    // use my argc, argv (make sure you pass a mount point!)
-    //cout << "mounting" << std::endl;
-    client[i]->mount();
-    
     //cout << "starting synthetic client  " << std::endl;
+    client[i] = new Client(new FakeMessenger(entity_name_t::CLIENT(i)), monmap);
     syn[i] = new SyntheticClient(client[i]);
-
     syn[i]->start_thread();
+    start++;
   }
 
 
   for (int i=0; i<g_conf.num_client; i++) {
-    
     cout << "waiting for synthetic client " << i << " to finish" << std::endl;
     syn[i]->join_thread();
     delete syn[i];
-    
-    client[i]->unmount();
-    //cout << "unmounted" << std::endl;
-    client[i]->shutdown();
   }
   
         

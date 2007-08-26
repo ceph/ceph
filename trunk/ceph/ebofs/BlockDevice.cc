@@ -738,7 +738,6 @@ int BlockDevice::open(kicker *idle)
     int r = ::flock(fd, LOCK_EX|LOCK_NB);
     if (r < 0) {
       derr(1) << "open " << dev << " failed to get LOCK_EX" << dendl;
-      assert(0);
       return -1;
     }
   }

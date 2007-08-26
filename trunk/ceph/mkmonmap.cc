@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	cerr << "mkmonmap: invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
-      inst.name = MSG_ADDR_MON(monmap.num_mon);
+      inst.name = entity_name_t::MON(monmap.num_mon);
       cout << "mkmonmap: adding " << inst << std::endl;
       monmap.add_mon(inst);
     }

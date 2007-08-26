@@ -176,6 +176,7 @@ class Message {
  protected:
   msg_envelope_t  env;    // envelope
   bufferlist      payload;        // payload
+  list<int> chunk_payload_at;
   
   friend class Messenger;
 public:
@@ -206,9 +207,10 @@ public:
   void set_payload(bufferlist& bl) {
     payload.claim(bl);
   }
-  void copy_payload(bufferlist& bl) {
+  void copy_payload(const bufferlist& bl) {
     payload = bl;
   }
+  const list<int>& get_chunk_payload_at() const { return chunk_payload_at; }
   msg_envelope_t& get_envelope() {
     return env;
   }

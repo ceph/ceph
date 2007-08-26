@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 
     // add single mon0
     entity_inst_t inst;
-    inst.name = MSG_ADDR_MON(0);
+    inst.name = entity_name_t::MON(0);
     inst.addr = rank.my_addr;
     monmap.add_mon(inst);
     
@@ -113,7 +113,7 @@ int main(int argc, char **argv)
   }
 
   // start monitor
-  Messenger *m = rank.register_entity(MSG_ADDR_MON(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);
   mon->init();
 

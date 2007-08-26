@@ -66,7 +66,7 @@ int main(int argc, char **argv, char *envp[]) {
   
   // start up network
   rank.start_rank();
-  messenger = rank.register_entity(entity_name_t(entity_name_t::TYPE_ADMIN));
+  messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
   
   // build command

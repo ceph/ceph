@@ -329,7 +329,7 @@ void Monitor::dispatch(Message *m)
 
       
     default:
-      dout(0) << "unknown message " << *m << dendl;
+      dout(0) << "unknown message " << m << " " << *m << " from " << m->get_source_inst() << dendl;
       assert(0);
     }
   }

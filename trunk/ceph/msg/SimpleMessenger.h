@@ -131,6 +131,7 @@ private:
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
+    void unregister();
     void close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();

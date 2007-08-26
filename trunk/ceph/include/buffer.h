@@ -35,7 +35,7 @@ using std::cout;
 # include <sys/mman.h>
 #endif
 
-#define BUFFER_PAGE_SIZE 4096  // fixme.
+#define BUFFER_PAGE_SIZE 4096  // FIXME
 
 // <hack>
 //  these are in config.o
@@ -96,6 +96,10 @@ private:
       raw *c = clone_empty();
       memcpy(c->data, data, len);
       return c;
+    }
+
+    bool is_page_aligned() {
+      return (long)data % BUFFER_PAGE_SIZE == 0;
     }
   };
 
@@ -169,21 +173,21 @@ private:
     char *realdata;
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
-      realdata = new char[len+4095];
-      unsigned off = ((unsigned)realdata) % 4096;
+      realdata = new char[len+BUFFER_PAGE_SIZE-1];
+      unsigned off = ((unsigned)realdata) % BUFFER_PAGE_SIZE;
       if (off) 
-	data = realdata + 4096 - off;
+	data = realdata + BUFFER_PAGE_SIZE - off;
       else
 	data = realdata;
-      inc_total_alloc(len+4095);
+      inc_total_alloc(len+BUFFER_PAGE_SIZE-1);
       //cout << "hack aligned " << (unsigned)data 
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      assert(((unsigned)data & 4095) == 0);
+      assert(((unsigned)data & (BUFFER_PAGE_SIZE-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-      dec_total_alloc(len+4095);
+      dec_total_alloc(len+BUFFER_PAGE_SIZE-1);
     }
     raw* clone_empty() {
       return new raw_hack_aligned(len);
@@ -315,6 +319,8 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const { return _off + _len == _raw->len; }
 
+    bool is_page_aligned() const { return (long)c_str() % BUFFER_PAGE_SIZE == 0; }
+
     // accessors
     const char *c_str() const { assert(_raw); return _raw->data + _off; }
     char *c_str() { assert(_raw); return _raw->data + _off; }
@@ -434,6 +440,16 @@ public:
       return _len;
     }
 
+    bool is_page_aligned() const {
+      for (std::list<ptr>::const_iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) 
+	if (!it->is_page_aligned()) return false;
+      return true;
+    }
+    bool is_n_page_sized() const {
+      return length() % BUFFER_PAGE_SIZE == 0;
+    }
 
     // modifiers
     void clear() {

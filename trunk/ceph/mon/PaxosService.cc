@@ -65,10 +65,10 @@ void PaxosService::dispatch(Message *m)
       propose_pending();
     else {
       // delay a bit
-      if (!proposal_timer_set) {
+      if (!proposal_timer) {
 	dout(10) << " will propose shortly" << dendl;
-	proposal_timer_set = true;
-	mon->timer.add_event_after(g_conf.paxos_propose_interval, new C_Propose(this));
+	proposal_timer = new C_Propose(this);
+	mon->timer.add_event_after(g_conf.paxos_propose_interval, proposal_timer);
       } else { 
 	dout(10) << " propose timer already set" << dendl;
       }
@@ -103,6 +103,11 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
+
+  if (proposal_timer) {
+    mon->timer.cancel_event(proposal_timer);
+    proposal_timer = 0;
+  }
 
   // finish and encode
   bufferlist bl;

@@ -119,7 +119,7 @@ int main(int argc, char **argv)
   rank.start_rank();
 
   // start osd
-  Messenger *m = rank.register_entity(MSG_ADDR_OSD(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
   assert(m);
   OSD *osd = new OSD(whoami, m, &monmap, dev);
   osd->init();

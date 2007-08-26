@@ -314,7 +314,7 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     
     // put it in the map.
     pending_mdsmap.mds_inst[from].addr = m->get_mds_inst().addr;
-    pending_mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
+    pending_mdsmap.mds_inst[from].name = entity_name_t::MDS(from);
     pending_mdsmap.mds_inc[from]++;
     
     // reset the beacon timer

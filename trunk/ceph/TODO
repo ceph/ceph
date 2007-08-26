@@ -25,6 +25,8 @@ some smallish projects:
 - ENOSPC on client, OSD
 
 
+- buffer.h needs to do COW
+
 
 
 code cleanup

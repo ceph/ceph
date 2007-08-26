@@ -60,7 +60,7 @@ protected:
   public:
     C_Propose(PaxosService *p) : ps(p) { }
     void finish(int r) { 
-      ps->proposal_timer_set = false;
+      ps->proposal_timer = 0;
       ps->propose_pending(); 
     }
   };	
@@ -68,12 +68,12 @@ protected:
   
 
 private:
-  bool proposal_timer_set;
+  Context *proposal_timer;
   bool have_pending;
 
 public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
-					proposal_timer_set(false),
+					proposal_timer(0),
 					have_pending(false) { }
   
   // i implement and you ignore

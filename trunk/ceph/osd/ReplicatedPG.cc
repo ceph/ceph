@@ -299,6 +299,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
   case OSD_OP_READ:
   case OSD_OP_STAT:
     op_read(op);
+    if (op->get_op() == OSD_OP_READ) {
+      osd->logger->inc("c_rd");
+      osd->logger->inc("c_rdb", op->get_length());
+    }
     break;
     
     // rep stuff

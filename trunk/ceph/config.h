@@ -138,11 +138,6 @@ struct md_config_t {
 
   bool     client_sync_writes;
 
-  bool     client_oc;
-  int      client_oc_size;
-  int      client_oc_max_dirty;
-  size_t   client_oc_max_sync_write;
-
   double   client_mount_timeout;
 
   // hack
@@ -163,6 +158,12 @@ struct md_config_t {
   char *client_trace;
   int      fuse_direct_io;
   bool fuse_ll;
+
+  // objectcacher
+  bool     client_oc;
+  int      client_oc_size;
+  int      client_oc_max_dirty;
+  size_t   client_oc_max_sync_write;
 
   // objecter
   bool  objecter_buffer_uncommitted;
@@ -366,9 +367,9 @@ struct _dendl_t { _dendl_t(int) {} };
 static const _dbeginl_t dbeginl = 0;
 static const _dendl_t dendl = 0;
 
-// intentionally conflict with std::endl
-class _bad_endl_t { public: _bad_endl_t(int) {} };
-static const _bad_endl_t endl = 0;   // hrm ......... FIXME ..........
+// intentionally conflict with endl.. users should
+class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
+static const _bad_endl_use_dendl_t endl = 0;
 
 inline ostream& operator<<(ostream& out, _dbeginl_t) {
   _dout_lock.Lock();
@@ -379,7 +380,7 @@ inline ostream& operator<<(ostream& out, _dendl_t) {
   _dout_lock.Unlock();
   return out;
 }
-inline ostream& operator<<(ostream& out, _bad_endl_t) {
+inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
   assert(0 && "you are using the wrong endl.. use std::endl or dendl");
   return out;
 }

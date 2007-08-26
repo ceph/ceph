@@ -59,7 +59,7 @@ int main(int argc, char **argv, char *envp[]) {
   rank.start_rank();
 
   // start client
-  Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
+  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);
   client->init();
     
   // start up fuse

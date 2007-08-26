@@ -231,9 +231,38 @@ private:
     ::_decode(attrset, payload, off);
     ::_decode(data, payload, off);
   }
+
+  static void add_payload_chunk_breaks(int from, int off, int len,
+				       list<int>& breaks) {
+    if (len > 0 &&
+	len & 4095 == 0 && 
+	off & 4095 == 0) {
+      // page-sized and aligned data?  easy.
+      breaks.push_back(from);
+    } else if (len > 8192) {
+      // there is at least 1 full page in there.  somewhere.
+      int p = 0;
+
+      // leading partial page?
+      if (off & 4095 != 0) 
+	p = 4096 - (off & 4095);  
+
+      // full page(s)
+      breaks.push_back(from + p);
+      p += (len - p) & (~4095);
+
+      // tail bit?
+      if (p != len)
+	breaks.push_back(from + p);
+    }
+  }
+
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
+    add_payload_chunk_breaks(payload.length() + 4, 
+			     st.offset, data.length(),
+			     chunk_payload_at);
     ::_encode(data, payload);
   }
 

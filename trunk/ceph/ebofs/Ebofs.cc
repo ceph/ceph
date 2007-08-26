@@ -1718,30 +1718,31 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
                  << " len_in_bh " << len_in_bh
                  << dendl;
 
-        // copy data into new buffers first (copy on write!)
-        //  FIXME: only do the modified pages?  this might be a big bh!
-        bufferlist temp;
-        temp.claim(bh->data);
-        //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+	// copy data into new buffers first (copy on write!)
+	//  FIXME: only do the modified pages?  this might be a big bh!
+	bufferlist temp;
+	temp.claim(bh->data);
+	//bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
 	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-        bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
-
-        unsigned z = MIN( zleft, len_in_bh );
-        if (z) {
+	bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+	
+	unsigned z = MIN( zleft, len_in_bh );
+	if (z) {
 	  bufferptr zp(z);
 	  zp.zero();
-          bufferlist zb;
-          zb.push_back(zp);
-          bh->data.copy_in(off_in_bh, z, zb);
-          zleft -= z;
-          opos += z;
-        }
+	  bufferlist zb;
+	  zb.push_back(zp);
+	  bh->data.copy_in(off_in_bh, z, zb);
+	  zleft -= z;
+	  opos += z;
+	}
+	
+	bufferlist sub;
+	sub.substr_of(bl, blpos, len_in_bh-z);
+	bh->data.copy_in(off_in_bh+z, len_in_bh-z, sub);
 
-        bufferlist sub;
-        sub.substr_of(bl, blpos, len_in_bh-z);
-        bh->data.copy_in(off_in_bh+z, len_in_bh-z, sub);
-        blpos += len_in_bh-z;
-        left -= len_in_bh-z;
+	blpos += len_in_bh-z;
+	left -= len_in_bh-z;
         opos += len_in_bh-z;
 
         if (!bh->is_dirty())
@@ -1757,32 +1758,43 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     assert((off_t)(zleft+left) >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
            opos+(off_t)(zleft+left) == on->object_size);
 
-    // alloc new buffers.
-    //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
-    bh->data.clear();
-    bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-    
-    // copy!
     unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, zleft+left);
     assert(len_in_bh <= zleft+left);
-    
+
     dout(10) << "apply_write writing into " << *bh << ":"
-             << " len_in_bh " << len_in_bh
-             << dendl;
-    
+	     << " len_in_bh " << len_in_bh
+	     << dendl;
+
+    // i will write:
     unsigned z = MIN(len_in_bh, zleft);
-    if (z) {
-      bufferptr zp(z);
-      zp.zero();
-      bufferlist zb;
-      zb.push_back(zp);
-      bh->data.copy_in(0, z, zb);
-      zleft -= z;
-    }
-    
     bufferlist sub;
     sub.substr_of(bl, blpos, len_in_bh-z);
-    bh->data.copy_in(z, len_in_bh-z, sub);
+
+    if (!z && 
+	sub.is_page_aligned() &&
+	sub.is_n_page_sized()) {
+      // assume caller isn't going to modify written buffers.
+      // just refrence them!
+      dout(10) << "apply_write yippee, written buffer already page aligned" << dendl;
+      bh->data.claim(sub);
+    } else {
+      // alloc new buffers.
+      bh->data.clear();
+      bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
+      
+      if (z) {
+	bufferptr zp(z);
+	zp.zero();
+	bufferlist zb;
+	zb.push_back(zp);
+	bh->data.copy_in(0, z, zb);
+	zleft -= z;
+      }
+      
+      bufferlist sub;
+      sub.substr_of(bl, blpos, len_in_bh-z);
+      bh->data.copy_in(z, len_in_bh-z, sub);
+    }
 
     blpos += len_in_bh-z;
     left -= len_in_bh-z;

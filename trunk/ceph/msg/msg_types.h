@@ -36,6 +36,13 @@ public:
   // cons
   entity_name_t() : _type(0), _num(0) {}
   entity_name_t(int t, int n=NEW) : _type(t), _num(n) {}
+
+  // static cons
+  static entity_name_t MON(int i=NEW) { return entity_name_t(TYPE_MON, i); }
+  static entity_name_t MDS(int i=NEW) { return entity_name_t(TYPE_MDS, i); }
+  static entity_name_t OSD(int i=NEW) { return entity_name_t(TYPE_OSD, i); }
+  static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
+  static entity_name_t ADMIN(int i=NEW) { return entity_name_t(TYPE_ADMIN, i); }
   
   int num() const { return _num; }
   int type() const { return _type; }
@@ -86,16 +93,10 @@ namespace __gnu_cxx {
 }
 
 // get rid of these
-#define MSG_ADDR_MDS(x)     entity_name_t(entity_name_t::TYPE_MDS,x)
-#define MSG_ADDR_OSD(x)     entity_name_t(entity_name_t::TYPE_OSD,x)
-#define MSG_ADDR_MON(x)     entity_name_t(entity_name_t::TYPE_MON,x)
-#define MSG_ADDR_CLIENT(x)  entity_name_t(entity_name_t::TYPE_CLIENT,x)
-
-#define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(entity_name_t::NEW)
-#define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(entity_name_t::NEW)
-#define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(entity_name_t::NEW)
-#define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(entity_name_t::NEW)
-
+//#define MSG_ADDR_MDS(x)     entity_name_t(entity_name_t::TYPE_MDS,x)
+//#define MSG_ADDR_OSD(x)     entity_name_t(entity_name_t::TYPE_OSD,x)
+//#define MSG_ADDR_MON(x)     entity_name_t(entity_name_t::TYPE_MON,x)
+//#define MSG_ADDR_CLIENT(x)  entity_name_t(entity_name_t::TYPE_CLIENT,x)
 
 /*
  * an entity's network address.

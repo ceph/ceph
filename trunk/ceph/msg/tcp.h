@@ -38,7 +38,7 @@ inline bool tcp_read(int sd, char *buf, int len) {
   return true;
 }
 
-inline int tcp_write(int sd, char *buf, int len) {
+inline int tcp_write(int sd, const char *buf, int len) {
   //generic_dout(DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
   while (len > 0) {

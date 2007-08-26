@@ -631,6 +631,7 @@ int SyntheticClient::run()
   }
 
   client->unmount();
+  client->shutdown();
   return 0;
 }
 

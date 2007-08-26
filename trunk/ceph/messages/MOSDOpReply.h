@@ -130,6 +130,9 @@ public:
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
+    MOSDOp::add_payload_chunk_breaks(payload.length() + 4, 
+				     st.offset, data.length(),
+				     chunk_payload_at);
     ::_encode(data, payload);
   }
 

@@ -125,9 +125,9 @@ bool ClientMonitor::preprocess_query(Message *m)
       // already mounted?
       MClientMount *mount = (MClientMount*)m;
       entity_addr_t addr = m->get_source_addr();
-      if (mount->instance == 0 &&                  // only check for addr uniqueness if the client claims to be alone
-	  client_map.addr_client.count(addr)) {
-	int client = client_map.addr_client[addr];
+      pair<entity_addr_t,int> addrinst(addr, mount->instance);
+      if (client_map.addr_client.count(addrinst)) {
+	int client = client_map.addr_client[addrinst];
 	dout(7) << " client" << client << " already mounted" << dendl;
 	_mounted(client, (MClientMount*)m);
 	return true;
@@ -163,7 +163,7 @@ bool ClientMonitor::prepare_update(Message *m)
   case MSG_CLIENT_MOUNT:
     {
       MClientMount *mount = (MClientMount*)m;
-      entity_addr_t addr = mount->addr;
+      pair<entity_addr_t,int> addrinst(mount->addr, mount->instance);
       int client = -1;
       if (mount->get_source().is_client())
 	client = mount->get_source().num();
@@ -171,17 +171,22 @@ bool ClientMonitor::prepare_update(Message *m)
       // choose a client id
       if (client < 0) {
 	client = pending_inc.next_client;
-	dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
+	dout(10) << "mount: assigned client" << client << " to " << mount->addr << dendl;
       } else {
-	dout(10) << "mount: client" << client << " requested by " << addr << dendl;
+	dout(10) << "mount: client" << client << " requested by " 
+		 << mount->addr << "i" << mount->instance
+		 << dendl;
 	if (client_map.client_addr.count(client)) {
-	  assert(client_map.client_addr[client] != addr);
-	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
-		  << ", which used to be " << client_map.client_addr[client] << dendl;
+	  assert(client_map.client_addr[client] != addrinst);
+	  dout(0) << "mount: WARNING: client" << client << " requested by " 
+		  << mount->addr << "." << mount->instance
+		  << ", which used to be " 
+		  << client_map.client_addr[client].first << "i" << client_map.client_addr[client].second
+		  << dendl;
 	}
       }
       
-      pending_inc.add_mount(client, addr);
+      pending_inc.add_mount(client, mount->addr, mount->instance);
       paxos->wait_for_commit(new C_Mounted(this, client, mount));
     }
     return true;
@@ -215,7 +220,7 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 {
   entity_inst_t to;
   to.addr = m->addr;
-  to.name = MSG_ADDR_CLIENT(client);
+  to.name = entity_name_t::CLIENT(client);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
   

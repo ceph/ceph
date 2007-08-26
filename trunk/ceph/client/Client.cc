@@ -99,12 +99,13 @@ public:
 
 // cons/des
 
-Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
+Client::Client(Messenger *m, MonMap *mm, int in) : timer(client_lock)
 {
   // which client am i?
   whoami = m->get_myname().num();
+  my_instance = in;
   monmap = mm;
-
+  
   mounted = false;
   mount_timeout_event = 0;
   unmounting = false;
@@ -131,9 +132,6 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
-
-  static int instance_this_process = 0;
-  client_instance_this_process = instance_this_process++;
 }
 
 
@@ -1326,18 +1324,15 @@ void Client::_try_mount()
 {
   dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << dendl;
+  dout(-2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
   messenger->send_first_message(this,  // simultaneously go active (if we haven't already)
-				new MClientMount(messenger->get_myaddr(),
-						 client_instance_this_process), 
+				new MClientMount(messenger->get_myaddr(), my_instance),
 				monmap->get_inst(mon));
 
   // schedule timeout?
-  if (g_conf.num_client <= 1) {  // don't do this if we have multiple instances in our process!
-    assert(mount_timeout_event == 0);
-    mount_timeout_event = new C_MountTimeout(this);
-    timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
-  }
+  assert(mount_timeout_event == 0);
+  mount_timeout_event = new C_MountTimeout(this);
+  timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
 }
 
 void Client::_mount_timeout()
@@ -1360,10 +1355,8 @@ int Client::mount()
 	 osdmap->get_epoch() == 0)
     mount_cond.Wait(client_lock);
   
-  if (mount_timeout_event) {  // will be false if g_conf.num_client > 1.. see _try_mount above
-    timer.cancel_event(mount_timeout_event);
-    mount_timeout_event = 0;
-  }
+  timer.cancel_event(mount_timeout_event);
+  mount_timeout_event = 0;
   
   mounted = true;
 
@@ -2900,20 +2893,6 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 
   if (g_conf.client_oc) { // buffer cache ON?
     assert(objectcacher);
-
-    /*
-    if (f->inode->inode.ino == 0x10000000075) {
-      if (!hackbuf) {
-	dout(7) << "alloc and zero new hackbuf" << dendl;
-	hackbuf = new char[16384];
-	memset(hackbuf, 0, 16384);
-      }
-      dout(7) << "hackbuf copying " << offset << "~" << size << " first is " << (int)buf[0] << dendl;
-      memcpy(hackbuf+offset, buf, size);
-      for (int a=0; a<size; a++) 
-	dout(10) << "hackbuf[" << (a+offset) << " = " << (int)hackbuf[a+offset] << " = " << (int)buf[a] << dendl;
-    }
-    */
 
     // write (this may block!)
     in->fc.write(offset, size, blist, client_lock);

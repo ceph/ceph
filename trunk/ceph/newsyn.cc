@@ -79,7 +79,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
 
   if (mpi_rank < g_conf.num_mon) {
     moninst[mpi_rank].addr = rank.my_addr;
-    moninst[mpi_rank].name = MSG_ADDR_MON(mpi_rank);
+    moninst[mpi_rank].name = entity_name_t(entity_name_t::TYPE_MON, mpi_rank);
 
     //cerr << mpi_rank << " at " << rank.get_listen_addr() << std::endl;
   } 
@@ -251,7 +251,7 @@ int main(int argc, char **argv)
   
   // create mon
   if (myrank < g_conf.num_mon) {
-    Monitor *mon = new Monitor(myrank, rank.register_entity(MSG_ADDR_MON(myrank)), monmap);
+    Monitor *mon = new Monitor(myrank, rank.register_entity(entity_name_t(entity_name_t::TYPE_MON, myrank)), monmap);
     mon->init();
   }
 
@@ -268,7 +268,7 @@ int main(int argc, char **argv)
   map<int,OSD*> mdsosd;
   for (int i=0; i<start_mds; i++) {
     if (myrank != g_conf.ms_skip_rank0+i) continue;
-    Messenger *m = rank.register_entity(MSG_ADDR_MDS(i));
+    Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_MDS, i));
     cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
     mds[i] = new MDS(i, m, monmap);
     mds[i]->init();
@@ -276,7 +276,7 @@ int main(int argc, char **argv)
 
     if (g_conf.mds_local_osd) {
       int n = i+g_conf.mds_local_osd_offset;
-      mdsosd[i] = new OSD(n, rank.register_entity(MSG_ADDR_OSD(n)), monmap);
+      mdsosd[i] = new OSD(n, rank.register_entity(entity_name_t(entity_name_t::TYPE_OSD, n)), monmap);
       mdsosd[i]->init();                                                    
     }
   }
@@ -295,10 +295,11 @@ int main(int argc, char **argv)
     if (kill_osd_after.count(i))
       g_timer.add_event_after(kill_osd_after[i], new C_Die);
 
-    Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
+    Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_OSD, i));
     cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << std::endl;
     osd[i] = new OSD(i, m, monmap);
-    osd[i]->init();
+    if (osd[i]->init() < 0)
+      return 1;
     started++;
   }
   
@@ -319,8 +320,9 @@ int main(int argc, char **argv)
     //if (myrank != start_mds + start_osd + i % client_nodes) continue;
     if (myrank != g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node) continue;
     clientlist.insert(i);
-    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)), //MSG_ADDR_CLIENT_NEW), 
-			   monmap);
+    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)),
+			   monmap, 
+			   i+1);
     syn[i] = new SyntheticClient(client[i]);
     
     // logger?
@@ -369,15 +371,9 @@ int main(int argc, char **argv)
        it != clientlist.end();
        it++) {
     int i = *it;
-
     //      cout << "waiting for synthetic client" << i << " to finish" << std::endl;
     syn[i]->join_thread();
     delete syn[i];
-    
-    //client[i]->unmount();
-    //cout << "client" << i << " unmounted" << std::endl;
-    client[i]->shutdown();
-
     delete client[i];
   }
   
@@ -385,7 +381,6 @@ int main(int argc, char **argv)
   if (myrank && !started) {
     //dout(1) << "IDLE" << dendl;
     cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << std::endl; 
-    //rank.stop_rank();
   } 
 
   // wait for everything to finish

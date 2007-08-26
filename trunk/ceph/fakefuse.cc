@@ -91,24 +91,24 @@ int main(int argc, char **argv) {
   a.nonce = getpid();
   for (int i=0; i<g_conf.num_mon; i++) {
     a.port = i;
-    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+    monmap->mon_inst[i] = entity_inst_t(entity_name_t::MON(i), a);  // hack ; see FakeMessenger.cc
   }
 
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
+    mon[i] = new Monitor(i, new FakeMessenger(entity_name_t::MON(i)), monmap);
   }
 
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
+    osd[i] = new OSD(i, new FakeMessenger(entity_name_t::OSD(i)), monmap);
   }
 
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-    mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
+    mds[i] = new MDS(i, new FakeMessenger(entity_name_t::MDS(i)), monmap);
   }
  
   // init
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(0)), monmap);
+    client[i] = new Client(new FakeMessenger(entity_name_t::CLIENT(0)), monmap);
     client[i]->init();
 
 

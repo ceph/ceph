@@ -37,8 +37,8 @@ Mutex bufferlock;
 // debug output lock
 Mutex _dout_lock;
 
-FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );   // 8M objects, 2x replication
-FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );  // 8M objects, 2x replication.  (a lie, just object layout policy)
+FileLayout g_OSD_FileLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );   // 4M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );  // 4M objects, 2x replication.  (a lie, just object layout policy)
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
 FileLayout g_OSD_MDAnchorTableLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects.  (a lie, just object layout policy)
 
@@ -154,11 +154,6 @@ md_config_t g_conf = {
 
   client_sync_writes: 0,
 
-  client_oc: true,
-  client_oc_size:      1024*1024* 5,    // MB * n
-  client_oc_max_dirty: 1024*1024* 5,    // MB * n
-  client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
-
   client_mount_timeout: 10.0,  // retry every N seconds
 
   client_hack_balance_reads: false,
@@ -167,6 +162,12 @@ md_config_t g_conf = {
   fuse_direct_io: 0,
   fuse_ll: true,
   
+  // --- objectcacher ---
+  client_oc: true,
+  client_oc_size:      1024*1024* 10,    // MB * n
+  client_oc_max_dirty: 1024*1024* 10,    // MB * n  (dirty OR tx)
+  client_oc_max_sync_write: 128*1024,   // synx writes >= this use wrlock
+
   // --- objecter ---
   objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
   objecter_map_request_interval: 15.0, // request a new map every N seconds, if we have pending io

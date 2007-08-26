@@ -86,7 +86,7 @@ int main(int argc, char **argv)
   rank.start_rank();
 
   // start mds
-  Messenger *m = rank.register_entity(MSG_ADDR_MDS(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
   assert(m);
   
   MDS *mds = new MDS(whoami, m, &monmap);

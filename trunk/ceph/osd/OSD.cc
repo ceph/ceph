@@ -184,104 +184,103 @@ OSD::~OSD()
 
 int OSD::init()
 {
-  osd_lock.Lock();
-  {
-    // mkfs?
-    if (g_conf.osd_mkfs) {
-      dout(2) << "mkfs on local store" << dendl;
-      store->mkfs();
+  Mutex::Locker lock(osd_lock);
 
-      // make up a superblock
-      //superblock.fsid = ???;
-      superblock.whoami = whoami;
-    }
+  // mkfs?
+  if (g_conf.osd_mkfs) {
+    dout(2) << "mkfs on local store" << dendl;
+    if (store->mkfs() < 0)
+      return -1;
     
-    // mount.
-    dout(2) << "mounting " << dev_path << dendl;
-    int r = store->mount();
-    assert(r>=0);
-
-    if (g_conf.osd_mkfs) {
-      // age?
-      if (g_conf.osd_age_time != 0) {
-        dout(2) << "age" << dendl;
-        Ager ager(store);
-        if (g_conf.osd_age_time < 0) 
-          ager.load_freelist();
-        else 
-          ager.age(g_conf.osd_age_time, 
-                   g_conf.osd_age, 
-                   g_conf.osd_age - .05, 
-                   50000, 
-                   g_conf.osd_age - .05);
-      }
-    }
-    else {
-      dout(2) << "boot" << dendl;
-      
-      // read superblock
-      read_superblock();
-
-      // load up pgs (as they previously existed)
-      load_pgs();
-
-      dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
-      assert(whoami == superblock.whoami);
-    }
-
-    
-    // log
-    char name[80];
-    sprintf(name, "osd%02d", whoami);
-    logger = new Logger(name, (LogType*)&osd_logtype);
-    osd_logtype.add_set("opq");
-    osd_logtype.add_inc("op");
-    osd_logtype.add_inc("c_rd");
-    osd_logtype.add_inc("c_rdb");
-    osd_logtype.add_inc("c_wr");
-    osd_logtype.add_inc("c_wrb");
-    
-    osd_logtype.add_inc("r_push");
-    osd_logtype.add_inc("r_pushb");
-    osd_logtype.add_inc("r_wr");
-    osd_logtype.add_inc("r_wrb");
-    
-    osd_logtype.add_inc("rlnum");
-
-    osd_logtype.add_set("numpg");
-    osd_logtype.add_set("pingset");
-
-    osd_logtype.add_set("buf");
-
-    osd_logtype.add_inc("map");
-    osd_logtype.add_inc("mapi");
-    osd_logtype.add_inc("mapidup");
-    osd_logtype.add_inc("mapf");
-    osd_logtype.add_inc("mapfdup");
-    
-    // request thread pool
-    {
-      char name[80];
-      sprintf(name,"osd%d.threadpool", whoami);
-      threadpool = new ThreadPool<OSD*, PG*>(name, g_conf.osd_maxthreads, 
-					     static_dequeueop,
-					     this);
-    }
-    
-    // i'm ready!
-    messenger->set_dispatcher(this);
-    
-    // announce to monitor i exist and have booted.
-    int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), monmap->get_inst(mon));
-    
-    // start the heart
-    timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
+    // make up a superblock
+    //superblock.fsid = ???;
+    superblock.whoami = whoami;
   }
-  osd_lock.Unlock();
+  
+  // mount.
+  dout(2) << "mounting " << dev_path << dendl;
+  int r = store->mount();
+  if (r < 0) return -1;
+  
+  if (g_conf.osd_mkfs) {
+    // age?
+    if (g_conf.osd_age_time != 0) {
+      dout(2) << "age" << dendl;
+      Ager ager(store);
+      if (g_conf.osd_age_time < 0) 
+	ager.load_freelist();
+      else 
+	ager.age(g_conf.osd_age_time, 
+		 g_conf.osd_age, 
+		 g_conf.osd_age - .05, 
+		 50000, 
+		 g_conf.osd_age - .05);
+    }
+  }
+  else {
+    dout(2) << "boot" << dendl;
+    
+    // read superblock
+    read_superblock();
+    
+    // load up pgs (as they previously existed)
+    load_pgs();
+    
+    dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
+    assert(whoami == superblock.whoami);
+  }
+  
+  
+  // log
+  char name[80];
+  sprintf(name, "osd%02d", whoami);
+  logger = new Logger(name, (LogType*)&osd_logtype);
+  osd_logtype.add_set("opq");
+  osd_logtype.add_inc("op");
+  osd_logtype.add_inc("c_rd");
+  osd_logtype.add_inc("c_rdb");
+  osd_logtype.add_inc("c_wr");
+  osd_logtype.add_inc("c_wrb");
+  
+  osd_logtype.add_inc("r_push");
+  osd_logtype.add_inc("r_pushb");
+  osd_logtype.add_inc("r_wr");
+  osd_logtype.add_inc("r_wrb");
+  
+  osd_logtype.add_inc("rlnum");
+  
+  osd_logtype.add_set("numpg");
+  osd_logtype.add_set("pingset");
+  
+  osd_logtype.add_set("buf");
+  
+  osd_logtype.add_inc("map");
+  osd_logtype.add_inc("mapi");
+  osd_logtype.add_inc("mapidup");
+  osd_logtype.add_inc("mapf");
+  osd_logtype.add_inc("mapfdup");
+  
+  // request thread pool
+  {
+    char name[80];
+    sprintf(name,"osd%d.threadpool", whoami);
+    threadpool = new ThreadPool<OSD*, PG*>(name, g_conf.osd_maxthreads, 
+					   static_dequeueop,
+					   this);
+  }
+  
+  // i'm ready!
+  messenger->set_dispatcher(this);
+  
+  // announce to monitor i exist and have booted.
+  int mon = monmap->pick_mon();
+  messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), monmap->get_inst(mon));
+  
+  // start the heart
+  timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
 
   //dout(0) << "osd_rep " << g_conf.osd_rep << dendl;
-
+  
   return 0;
 }
 
@@ -1035,7 +1034,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         int osd = i->first;
         if (osd == whoami) continue;
         messenger->mark_down(i->second.first.addr);
-        peer_map_epoch.erase(MSG_ADDR_OSD(osd));
+        peer_map_epoch.erase(i->second.first.name);
       
         // kick any replica ops
         for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -1052,7 +1051,7 @@ void OSD::handle_osd_map(MOSDMap *m)
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;
-        peer_map_epoch.erase(MSG_ADDR_OSD(i->first));
+        peer_map_epoch.erase(i->second.name);
       }
     }
     else if (m->maps.count(cur+1) ||
