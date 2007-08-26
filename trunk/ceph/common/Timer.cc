@@ -21,8 +21,8 @@
 #include "config.h"
 #include "include/Context.h"
 
-#define dout(x)  if (x <= g_conf.debug_timer) cout << dbeginl << g_clock.now() << " TIMER "
-#define derr(x)  if (x <= g_conf.debug_timer) cerr << dbeginl << g_clock.now() << " TIMER "
+#define dout(x)  if (x <= g_conf.debug_timer) *_dout << dbeginl << g_clock.now() << " TIMER "
+#define derr(x)  if (x <= g_conf.debug_timer) *_derr << dbeginl << g_clock.now() << " TIMER "
 
 #define DBL 10
 

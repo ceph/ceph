@@ -29,8 +29,8 @@
 #include <iostream>
 #include <fstream>
 
-#define dout(l)  if (l<=g_conf.debug_ms) cout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
-#define derr(l)  if (l<=g_conf.debug_ms) cerr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
+#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
+#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
 
 
 

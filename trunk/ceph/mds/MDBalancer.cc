@@ -33,7 +33,7 @@ using std::vector;
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l<=g_conf.debug_mds_balancer) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
+#define  dout(l)    if (l<=g_conf.debug_mds || l<=g_conf.debug_mds_balancer) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport

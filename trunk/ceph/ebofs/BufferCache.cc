@@ -22,7 +22,7 @@
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.bh."
+#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.bh."
 
 
 
@@ -33,7 +33,7 @@
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.oc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.oc."
 
 
 
@@ -737,7 +737,7 @@ void ObjectCache::clone_to(Onode *other)
 /************** BufferCache ***************/
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs.bc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.bc."
 
 
 

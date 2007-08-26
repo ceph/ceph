@@ -28,7 +28,7 @@ using std::list;
 
 // debug output
 #include "config.h"
-#define tpdout(x) if (x <= g_conf.debug) cout << myname 
+#define tpdout(x) if (x <= g_conf.debug) *_dout << myname 
 #define DBLVL 15
 
 

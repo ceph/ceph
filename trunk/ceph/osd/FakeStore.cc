@@ -41,8 +41,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug) cout << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
-#define  derr(l)    if (l<=g_conf.debug) cerr << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
+#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
+#define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
 
 #include "include/buffer.h"
 

@@ -15,6 +15,7 @@
 
 #include "config.h"
 #include "include/types.h"
+#include <fstream>
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb
@@ -34,9 +35,12 @@ Mutex bufferlock;
 
 #include "osd/osd_types.h"
 
-// debug output lock
+// debug output
 Mutex _dout_lock;
+ostream *_dout = &std::cout;
+ostream *_derr = &std::cerr;
 
+// file layouts
 FileLayout g_OSD_FileLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );   // 4M objects, 2x replication
 FileLayout g_OSD_MDDirLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );  // 4M objects, 2x replication.  (a lie, just object layout policy)
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
@@ -444,6 +448,8 @@ void parse_config_options(std::vector<char*>& args)
 {
   std::vector<char*> nargs;
 
+  char *doutdir = 0;
+
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--bind") == 0) 
       assert(parse_ip_port(args[++i], g_my_addr));
@@ -516,6 +522,11 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_remount_at = atoi(args[++i]);
     //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
     //g_conf.fake_osd_sync = atoi(args[++i]);
+
+    
+    else if (strcmp(args[i], "--doutdir") == 0) {
+      doutdir = args[++i];
+    }
 
     else if (strcmp(args[i], "--debug") == 0) 
       if (!g_conf.debug_after) 
@@ -931,6 +942,21 @@ void parse_config_options(std::vector<char*>& args)
 
     else {
       nargs.push_back(args[i]);
+    }
+  }
+
+  // redirect dout?
+  if (doutdir) {
+    char fn[80];
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(fn, "%s/%s.%d", doutdir, hostname, getpid());
+    std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
+    if (!out->is_open()) {
+      std::cerr << "error opening output file " << fn << std::endl;
+      delete out;
+    } else {
+      _dout = out;
     }
   }
 

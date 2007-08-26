@@ -20,8 +20,8 @@
 #include "msg/Messenger.h"
 
 #include "config.h"
-#define dout(x)  if (x <= g_conf.debug_client) cout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
-#define derr(x)  if (x <= g_conf.debug_client) cout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
+#define dout(x)  if (x <= g_conf.debug_client) *_dout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
+#define derr(x)  if (x <= g_conf.debug_client) *_derr << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".filecache "
 
 
 

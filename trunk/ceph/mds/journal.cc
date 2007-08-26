@@ -43,8 +43,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------

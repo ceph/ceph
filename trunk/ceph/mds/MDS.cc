@@ -61,8 +61,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << whoami << " "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << whoami << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << whoami << " "
+#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << whoami << " "
 
 
 

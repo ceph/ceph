@@ -49,7 +49,7 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
 
 
 

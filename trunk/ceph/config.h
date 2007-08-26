@@ -367,7 +367,7 @@ struct _dendl_t { _dendl_t(int) {} };
 static const _dbeginl_t dbeginl = 0;
 static const _dendl_t dendl = 0;
 
-// intentionally conflict with endl.. users should
+// intentionally conflict with endl
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
 
@@ -385,11 +385,15 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
-// generic macros
-#define generic_dout(x) if ((x) <= g_conf.debug) std::cout << dbeginl
-#define generic_derr(x) if ((x) <= g_conf.debug) std::cerr << dbeginl
+// the streams
+extern ostream *_dout;
+extern ostream *_derr;
 
-#define pdout(x,p) if ((x) <= (p)) std::cout << dbeginl
+// generic macros
+#define generic_dout(x) if ((x) <= g_conf.debug) *_dout << dbeginl
+#define generic_derr(x) if ((x) <= g_conf.debug) *_derr << dbeginl
+
+#define pdout(x,p) if ((x) <= (p)) *_dout << dbeginl
 
 
 #endif

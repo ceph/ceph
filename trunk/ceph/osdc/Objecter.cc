@@ -30,8 +30,8 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) *_dout << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) *_derr << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
 
 
 // messages ------------------------------

@@ -12,7 +12,7 @@
 
 /*** ObjectCacher::Object ***/
 
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) *_dout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t off)
@@ -369,7 +369,7 @@ void ObjectCacher::Object::truncate(off_t s)
 /*** ObjectCacher ***/
 
 #undef dout
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
+#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
 
 
 

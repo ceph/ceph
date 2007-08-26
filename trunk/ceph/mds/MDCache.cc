@@ -84,7 +84,7 @@ using namespace std;
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".cache "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".cache "
 
 
 

@@ -31,7 +31,7 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts

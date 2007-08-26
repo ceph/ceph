@@ -19,7 +19,7 @@
 
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << dbeginl << g_clock.now() << " ebofs(" << fs->dev.get_device_name() << ").allocator."
+#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs(" << fs->dev.get_device_name() << ").allocator."
 
 
 void Allocator::dump_freelist()

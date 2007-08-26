@@ -24,8 +24,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 

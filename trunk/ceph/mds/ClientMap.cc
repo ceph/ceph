@@ -25,7 +25,7 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".clientmap "
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".clientmap "
 
 
 

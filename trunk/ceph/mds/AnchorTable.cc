@@ -27,8 +27,8 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) cout << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
-#define derr(x)  if (x <= g_conf.debug_mds) cerr << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
+#define derr(x)  if (x <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
 
 
 void AnchorTable::dump()
