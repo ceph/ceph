@@ -1324,7 +1324,7 @@ void Client::_try_mount()
 {
   dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
-  dout(-2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
+  dout(2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
   messenger->send_first_message(this,  // simultaneously go active (if we haven't already)
 				new MClientMount(messenger->get_myaddr(), my_instance),
 				monmap->get_inst(mon));

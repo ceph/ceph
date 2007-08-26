@@ -364,7 +364,7 @@ int main(int argc, char **argv)
     syn[i]->start_thread();
   }
   if (nclients) {
-    cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
+    cerr << nclients << " clients at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
