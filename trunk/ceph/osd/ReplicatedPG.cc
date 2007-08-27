@@ -598,12 +598,12 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
     
   case OSD_OP_ZERO:
     {
-      assert(0);  // are you sure this is what you want?
       // zero, remove, or truncate?
       struct stat st;
       int r = osd->store->stat(oid, &st);
       if (r >= 0) {
-	if (op->get_offset() + (off_t)op->get_length() >= (off_t)st.st_size) {
+	if (op->get_length() == 0 ||
+	    op->get_offset() + (off_t)op->get_length() >= (off_t)st.st_size) {
 	  if (op->get_offset()) 
 	    t.truncate(oid, op->get_length() + op->get_offset());
 	  else

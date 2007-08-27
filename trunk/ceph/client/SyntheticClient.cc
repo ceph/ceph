@@ -19,6 +19,7 @@ using namespace std;
 
 
 #include "SyntheticClient.h"
+#include "osdc/Objecter.h"
 
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
@@ -1025,6 +1026,78 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->ll_release(fh);
       ll_files.erase(f);
     } 
+
+
+    // object-level traces
+
+    else if (strcmp(op, "o_stat") == 0) {
+      int64_t oh = t.get_int();
+      int64_t ol = t.get_int();
+      object_t oid(oh, ol);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      Cond cond;
+      Mutex lock;
+      bool done = false;
+      off_t size;
+      C_SafeCond *fin = new C_SafeCond(&lock, &cond, &done);
+      lock.Lock();
+      client->objecter->stat(oid, &size, layout, fin);
+      while (!done) cond.Wait(lock);
+      lock.Unlock();
+    }
+    else if (strcmp(op, "o_read") == 0) {
+      int64_t oh = t.get_int();
+      int64_t ol = t.get_int();
+      int64_t off = t.get_int();
+      int64_t len = t.get_int();
+      object_t oid(oh, ol);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      bufferlist bl;
+      Cond cond;
+      Mutex lock;
+      bool done = false;
+      C_SafeCond *fin = new C_SafeCond(&lock, &cond, &done);
+      lock.Lock();
+      client->objecter->read(oid, off, len, layout, &bl, fin);
+      while (!done) cond.Wait(lock);
+      lock.Unlock();
+    }
+    else if (strcmp(op, "o_write") == 0) {
+      int64_t oh = t.get_int();
+      int64_t ol = t.get_int();
+      int64_t off = t.get_int();
+      int64_t len = t.get_int();
+      object_t oid(oh, ol);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      bufferptr bp(len);
+      bufferlist bl;
+      bl.push_back(bp);
+      Cond cond;
+      Mutex lock;
+      bool done = false;
+      C_SafeCond *onack = new C_SafeCond(&lock, &cond, &done);
+      lock.Lock();
+      client->objecter->write(oid, off, len, layout, bl, onack, 0);
+      while (!done) cond.Wait(lock);
+      lock.Unlock();
+    }
+    else if (strcmp(op, "o_zero") == 0) {
+      int64_t oh = t.get_int();
+      int64_t ol = t.get_int();
+      int64_t off = t.get_int();
+      int64_t len = t.get_int();
+      object_t oid(oh, ol);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      Cond cond;
+      Mutex lock;
+      bool done = false;
+      C_SafeCond *onack = new C_SafeCond(&lock, &cond, &done);
+      lock.Lock();
+      client->objecter->zero(oid, off, len, layout, onack, 0);
+      while (!done) cond.Wait(lock);
+      lock.Unlock();
+    }
+
 
     else {
       dout(0) << (t.get_line()-1) << ": *** trace hit unrecognized symbol '" << op << "' " << dendl;
