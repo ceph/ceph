@@ -76,6 +76,7 @@ void MDBalancer::tick()
   }
 
   // balance?
+  if (last_heartbeat == utime_t()) last_heartbeat = now;
   if (true && 
       mds->get_nodeid() == 0 &&
       g_conf.mds_bal_interval > 0 &&

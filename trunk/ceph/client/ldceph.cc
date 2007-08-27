@@ -20,7 +20,7 @@ using namespace std;
 // ceph stuff
 #include "config.h"
 #include "client/Client.h"
-#include "msg/TCPMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 // syscall fun
 #include <sys/syscall.h>

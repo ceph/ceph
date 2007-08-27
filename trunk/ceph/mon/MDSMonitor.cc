@@ -224,10 +224,6 @@ bool MDSMonitor::prepare_update(Message *m)
   return true;
 }
 
-bool MDSMonitor::should_propose_now()
-{
-  return true;
-}
 
 
 bool MDSMonitor::handle_beacon(MMDSBeacon *m)

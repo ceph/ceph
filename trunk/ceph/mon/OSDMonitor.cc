@@ -241,6 +241,8 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap);
 }
 
+
+
 bool OSDMonitor::update_from_paxos()
 {
   assert(paxos->is_active());
@@ -402,16 +404,16 @@ bool OSDMonitor::prepare_update(Message *m)
   return false;
 }
 
-bool OSDMonitor::should_propose_now()
+bool OSDMonitor::should_propose(double& delay)
 {
-  // don't propose initial map until _all_ osds boot.
-  //dout(10) << "should_propose_now " << pending_inc.new_up.size() << " vs " << osdmap.get_osds().size() << dendl;
-  if (osdmap.epoch == 1 &&
-      pending_inc.new_up.size() < osdmap.get_osds().size())
-    return false;  // not all up (yet)
-
-  // FIXME do somethihng smart here.
-  return true;      
+  if (osdmap.epoch == 1) {
+    if (pending_inc.new_up.size() == osdmap.get_osds().size()) {
+      delay = 0.0;
+      return true;
+    } else 
+      return false;
+  }
+  return PaxosService::should_propose(delay);
 }
 
 

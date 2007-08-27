@@ -336,7 +336,7 @@ int Ebofs::umount()
   dev.close();
   readonly = unmounting = mounted = false;
 
-  dout(1) << "umount done on " << dev.get_device_name() << dendl;
+  dout(2) << "umount done on " << dev.get_device_name() << dendl;
   ebofs_lock.Unlock();
   return 0;
 }

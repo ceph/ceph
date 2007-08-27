@@ -84,7 +84,7 @@ int Rank::Accepter::start()
   
   char hostname[100];
   gethostname(hostname, 100);
-  dout(1) << "accepter.start my hostname is " << hostname << dendl;
+  dout(2) << "accepter.start my hostname is " << hostname << dendl;
 
   // is there a .ceph_hosts file?
   {
@@ -103,7 +103,6 @@ int Rank::Accepter::start()
 	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << dendl;
 	if (host == hostname) {
 	  parse_ip_port(addr.c_str(), g_my_addr);
-	  g_my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
 	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
 	  break;
 	}
@@ -113,23 +112,24 @@ int Rank::Accepter::start()
   }
 
   // use whatever user specified (if anything)
-  g_my_addr.make_addr(rank.listen_addr);
+  tcpaddr_t listen_addr;
+  g_my_addr.make_addr(listen_addr);
 
   /* socket creation */
   listen_sd = socket(AF_INET,SOCK_STREAM,0);
   assert(listen_sd > 0);
   
   /* bind to port */
-  int rc = bind(listen_sd, (struct sockaddr *) &rank.listen_addr, sizeof(rank.listen_addr));
+  int rc = bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
   if (rc < 0) 
-    derr(0) << "accepter.start unable to bind to " << rank.listen_addr << dendl;
+    derr(0) << "accepter.start unable to bind to " << listen_addr << dendl;
   assert(rc >= 0);
 
   // what port did we get?
-  socklen_t llen = sizeof(rank.listen_addr);
-  getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
+  socklen_t llen = sizeof(listen_addr);
+  getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
   
-  dout(10) << "accepter.start bound to " << rank.listen_addr << dendl;
+  dout(-10) << "accepter.start bound to " << listen_addr << dendl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
@@ -140,20 +140,25 @@ int Rank::Accepter::start()
     // user specified it, easy peasy.
     rank.my_addr = g_my_addr;
   } else {
-    // my address is...  HELP HELP HELP!    
+    // my IP is... HELP!
     struct hostent *myhostname = gethostbyname(hostname); 
     
-    rank.listen_addr.sin_family = myhostname->h_addrtype;
-    memcpy((char*)&rank.listen_addr.sin_addr.s_addr, 
+    // look up my hostname.
+    listen_addr.sin_family = myhostname->h_addrtype;
+    memcpy((char*)&listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-
-    // set up my_addr with a nonce
-    rank.my_addr.set_addr(rank.listen_addr);
+    rank.my_addr.set_addr(listen_addr);
+    rank.my_addr.port = 0;  // see below
+  }
+  if (rank.my_addr.port == 0) {
+    entity_addr_t tmp;
+    tmp.set_addr(listen_addr);
+    rank.my_addr.port = tmp.port;
     rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
 
-  dout(10) << "accepter.start my addr is " << rank.my_addr << dendl;
+  dout(1) << "accepter.start my_addr is " << rank.my_addr << dendl;
 
   // set up signal handler
   old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
@@ -802,11 +807,6 @@ void Rank::Pipe::fail(list<Message*>& out)
 Rank::Rank() : 
   single_dispatcher(this),
   started(false) {
-  // default to any listen_addr
-  memset((char*)&listen_addr, 0, sizeof(listen_addr));
-  listen_addr.sin_family = AF_INET;
-  listen_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  listen_addr.sin_port = 0;
 }
 Rank::~Rank()
 {
@@ -912,7 +912,7 @@ int Rank::start_rank()
 
   lock.Lock();
 
-  dout(1) << "start_rank at " << listen_addr << dendl;
+  dout(1) << "start_rank at " << my_addr << dendl;
   started = true;
   lock.Unlock();
   return 0;

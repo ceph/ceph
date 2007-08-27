@@ -50,7 +50,7 @@ private:
   void handle_query(Message *m);
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
-  bool should_propose_now();
+  bool should_propose(double &delay);
 
   // ...
   bool get_map_bl(epoch_t epoch, bufferlist &bl);

@@ -60,28 +60,34 @@ void PaxosService::dispatch(Message *m)
 
   // update
   if (prepare_update(m)) {
-    if (should_propose_now()) 
-      propose_pending();
-    else {
-      // delay a bit
-      if (!proposal_timer) {
-	dout(10) << " will propose shortly" << dendl;
-	proposal_timer = new C_Propose(this);
-	mon->timer.add_event_after(g_conf.paxos_propose_interval, proposal_timer);
-      } else { 
-	dout(10) << " propose timer already set" << dendl;
+    double delay;
+    if (should_propose(delay)) {
+      if (delay == 0.0) {
+	propose_pending();
+      } else {
+	// delay a bit
+	if (!proposal_timer) {
+	  dout(10) << " setting propose timer with dealy of " << delay << dendl;
+	  proposal_timer = new C_Propose(this);
+	  mon->timer.add_event_after(delay, proposal_timer);
+	} else { 
+	  dout(10) << " propose timer already set" << dendl;
+	}
       }
-    } 
+    } else {
+      dout(10) << " not proposing" << dendl;
+    }
   }     
 }
 
-bool PaxosService::should_propose_now()
+bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
-  if (paxos->last_committed < 3) 
-    return true;
+  if (paxos->last_committed <= 1)
+    delay = 0.0;
   else
-    return false;
+    delay = g_conf.paxos_propose_interval;
+  return true;
 }
 
 void PaxosService::_commit()

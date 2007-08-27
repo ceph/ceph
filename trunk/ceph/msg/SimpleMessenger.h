@@ -246,7 +246,6 @@ private:
   bool started;
 
   // where i listen
-  tcpaddr_t listen_addr;
   entity_addr_t my_addr;
   
   // local
@@ -265,7 +264,7 @@ private:
   void mark_down(entity_addr_t addr);
   //void mark_up(entity_name_t addr, entity_addr_t& i);
 
-  tcpaddr_t get_listen_addr() { return listen_addr; }
+  //tcpaddr_t get_listen_addr() { return listen_addr; }
 
   void reaper();
 

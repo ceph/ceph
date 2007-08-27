@@ -281,6 +281,7 @@ TAGS:
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
+#	for f in $(SRCS) ; do cpp -MM $(CFLAGS) $$f >> .depend ; done
 
 
 # now add a line to include the dependency list.

@@ -97,7 +97,7 @@ public:
 
   virtual bool preprocess_query(Message *m) = 0;  // true if processed (e.g., read-only)
   virtual bool prepare_update(Message *m) = 0;
-  virtual bool should_propose_now();
+  virtual bool should_propose(double &delay);
 
 };
 
