@@ -291,7 +291,9 @@ private:
     return !is_auth() && !is_ambiguous_dir_auth();
   }
   
-  bool is_subtree_root();
+  bool is_subtree_root() {
+    return dir_auth != CDIR_AUTH_DEFAULT;
+  }
 
   bool contains(CDir *x);  // true if we are x or an ancestor of x 
 

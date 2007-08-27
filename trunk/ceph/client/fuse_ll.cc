@@ -350,7 +350,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
 
 int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
 {
-  cout << "ceph_fuse_ll_main starting fuse" << std::endl;
+  cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
 
   client = c;
 

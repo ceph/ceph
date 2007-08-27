@@ -67,12 +67,12 @@ int main(int argc, char **argv, char *envp[]) {
   cout << "mounting" << std::endl;
   client->mount();
   
-  cerr << "starting fuse on pid " << getpid() << std::endl;
+  //cerr << "starting fuse on pid " << getpid() << std::endl;
   if (g_conf.fuse_ll)
     ceph_fuse_ll_main(client, argc, argv);
   else
     ceph_fuse_main(client, argc, argv);
-  cerr << "fuse finished on pid " << getpid() << std::endl;
+  //cerr << "fuse finished on pid " << getpid() << std::endl;
   
   client->unmount();
   cout << "unmounted" << std::endl;

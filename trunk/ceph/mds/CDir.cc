@@ -1223,6 +1223,7 @@ pair<int,int> CDir::authority()
  *
  * note that this DOES heed dir_auth.pending
  */
+/*
 bool CDir::is_subtree_root()
 {
   if (dir_auth == CDIR_AUTH_DEFAULT) {
@@ -1235,6 +1236,7 @@ bool CDir::is_subtree_root()
     return true;
   }
 }
+*/
 
 /** contains(x)
  * true if we are x, or an ancestor of x

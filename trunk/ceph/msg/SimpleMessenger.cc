@@ -129,7 +129,7 @@ int Rank::Accepter::start()
   socklen_t llen = sizeof(listen_addr);
   getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
   
-  dout(-10) << "accepter.start bound to " << listen_addr << dendl;
+  dout(10) << "accepter.start bound to " << listen_addr << dendl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);

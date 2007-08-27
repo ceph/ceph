@@ -165,7 +165,7 @@ void MDBalancer::send_heartbeat()
   mds_import_map[ mds->get_nodeid() ] = import_map;
   
   
-  dout(5) << "mds" << mds->get_nodeid() << " sending heartbeat " << beat_epoch << " " << load << dendl;
+  dout(5) << "mds" << mds->get_nodeid() << " epoch " << beat_epoch << " load " << load << dendl;
   for (map<int, float>::iterator it = import_map.begin();
        it != import_map.end();
        it++) {
