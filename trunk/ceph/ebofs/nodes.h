@@ -20,7 +20,8 @@
 
 #include "types.h"
 #include "BlockDevice.h"
-
+#include "include/xlist.h"
+#include "include/bitmapper.h"
 
 /*
 
@@ -71,7 +72,9 @@ class Node {
   int         *nrecs;
 
  public:
-  Node(nodeid_t i, bufferptr& b, int s) : id(i), state(s), bptr(b)  {
+  xlist<Node*>::item xlist;
+
+  Node(nodeid_t i, bufferptr& b, int s) : id(i), state(s), bptr(b), xlist(this)  {
     nrecs = (int*)(bptr.c_str());
     type = (int*)(bptr.c_str() + sizeof(*nrecs));
   }
@@ -126,7 +129,7 @@ class Node {
 
 class NodePool {
  protected:
-  map<nodeid_t, Node*>  node_map;      // open node map
+  hash_map<nodeid_t, Node*>  node_map;      // open node map
   
  public:
   vector<Extent> region_loc;    // region locations
@@ -137,10 +140,10 @@ class NodePool {
   // on-disk block states
   int num_nodes;
   set<nodeid_t> free;
+  set<nodeid_t> clean;
+  set<nodeid_t> limbo;
   set<nodeid_t> dirty;
   set<nodeid_t> tx;
-  set<nodeid_t> clean;       // aka used
-  set<nodeid_t> limbo;
   
   Mutex        &ebofs_lock;
   Cond          commit_cond;
@@ -416,7 +419,7 @@ class NodePool {
 
     // write map
     flushing++;
-    write_usemap(dev,version & 1);
+    write_usemap(dev, version & 1);
 
     // dirty -> tx  (write to disk)
     assert(tx.empty());
@@ -542,7 +545,7 @@ class NodePool {
 
   void release_all() {
     while (!node_map.empty()) {
-      map<nodeid_t,Node*>::iterator i = node_map.begin();
+      hash_map<nodeid_t,Node*>::iterator i = node_map.begin();
       debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << std::endl;
       release( i->second );
     }
