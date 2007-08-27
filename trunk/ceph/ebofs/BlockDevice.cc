@@ -162,7 +162,7 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
     
     // add to biols
     int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
-    if (num_iovs + nv >= g_conf.bdev_iov_max) break;  // too many!
+    if (num_iovs + nv >= IOV_MAX) break; // to many   //g_conf.bdev_iov_max) break;  // too many!
     num_iovs += nv;
     
     start = MIN(start, bio->start);
@@ -663,46 +663,60 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 
   assert(fd > 0);
   
-  off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
-  assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
-  off_t actual = lseek(fd, offset, SEEK_SET);
-  assert(actual == offset);
-  
-  // write buffers
-  size_t len = num*EBOFS_BLOCK_SIZE;
-
-  struct iovec iov[ bl.buffers().size() ];
-
-  int n = 0;
-  size_t left = len;
-  for (list<bufferptr>::const_iterator i = bl.buffers().begin();
-       i != bl.buffers().end();
-       i++) {
-    assert(i->length() % EBOFS_BLOCK_SIZE == 0);
-
-    iov[n].iov_base = (void*)i->c_str();
-    iov[n].iov_len = MIN(left, i->length());
-
-    assert((((intptr_t)iov[n].iov_base) & ((intptr_t)4095ULL)) == 0);
-    assert((iov[n].iov_len & 4095) == 0);
+  while (1) {
+    off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
+    assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
+    off_t actual = lseek(fd, offset, SEEK_SET);
+    assert(actual == offset);
     
-    left -= iov[n].iov_len;
-    n++;
-    if (left == 0) break;
+    // write buffers
+    size_t len = num*EBOFS_BLOCK_SIZE;
+    
+    struct iovec iov[ bl.buffers().size() ];
+    
+    int n = 0;
+    size_t left = len;
+    for (list<bufferptr>::const_iterator i = bl.buffers().begin();
+	 i != bl.buffers().end();
+	 i++) {
+      assert(i->length() % EBOFS_BLOCK_SIZE == 0);
+      
+      iov[n].iov_base = (void*)i->c_str();
+      iov[n].iov_len = MIN(left, i->length());
+      
+      assert((((intptr_t)iov[n].iov_base) & ((intptr_t)4095ULL)) == 0);
+      assert((iov[n].iov_len & 4095) == 0);
+      
+      left -= iov[n].iov_len;
+      n++;
+      if (left == 0) break;
+    }
+    
+    int r = ::writev(fd, iov, n);
+    
+    if (r < 0) {
+      dout(1) << "couldn't write bno " << bno << " num " << num 
+	      << " (" << len << " bytes) in " << n << " iovs,  r=" << r 
+	      << " errno " << errno << " " << strerror(errno) << dendl;
+      dout(1) << "bl is " << bl << dendl;
+      assert(0);
+    } else if (r < (int)len) {
+      // hrm, we didn't write _all_ of our data.  WTF kind of FS is this?
+      dout(-1) << "bloody hell, writev only wrote " << r << " of " << len << " bytes, looping" << dendl;
+      assert(r % 4096 == 0);
+      int wrote = r / 4096;
+      bno += wrote;
+      num -= wrote;
+      bufferlist tail;
+      tail.substr_of(bl, r, len-r);
+      bl.claim(tail);
+      continue;
+    } else {
+      // yay
+      assert(r == (int)len);
+      break;
+    }
   }
-
-  int r = ::writev(fd, iov, n);
-
-  if (r < 0) {
-    dout(1) << "couldn't write bno " << bno << " num " << num 
-            << " (" << len << " bytes) in " << n << " iovs,  r=" << r 
-            << " errno " << errno << " " << strerror(errno) << dendl;
-    dout(1) << "bl is " << bl << dendl;
-    assert(0);
-  } else {
-    assert(r == (int)len);
-  }
-  
   return 0;
 }
 

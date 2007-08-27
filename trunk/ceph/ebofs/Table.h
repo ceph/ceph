@@ -77,9 +77,17 @@ class Table {
 
     Nodeptr() : node(0) {}
     Nodeptr(Node *n) : node(n) {}
+    Nodeptr(NodePool& pool, nodeid_t nid) {
+      open(pool, nid);
+    }
     Nodeptr& operator=(Node *n) {
       node = n;
       return *this;
+    }
+
+    void open(NodePool& pool, nodeid_t nid) {
+      node = pool.get_node(nid);
+      if (is_index() && node->children.empty()) init_index(pool);
     }
     
     LeafItem&  leaf_item(int i)  { return (( LeafItem*)(node->item_ptr()))[i]; }
@@ -90,7 +98,7 @@ class Table {
       else
         return leaf_item(i).key;
     }
-    
+
     bool is_leaf() { return node->is_leaf(); }
     bool is_index() { return node->is_index(); }
     void set_type(int t) { node->set_type(t); }
@@ -108,10 +116,24 @@ class Table {
     int size() { return node->size(); }
     void set_size(int s) { node->set_size(s); }
 
+    void init_index(NodePool& nodepool) {
+      /*
+      node->children = vector<Node*>(max_items());
+      for (int i=0; i<max_items(); i++)
+	if (i < size())
+	  node->children[i] = nodepool.get_node(index_item(i).node);
+	else
+	  node->children[i] = 0;
+      */
+    }
+    
+
     void remove_at_pos(int p) {
       if (node->is_index()) {
-        for (int i=p; i<size()-1; i++)
+        for (int i=p; i<size()-1; i++) {
           index_item(i) = index_item(i+1);
+	  //node->children[i] = node->children[i+1];
+	}
       } else {
         for (int i=p; i<size()-1; i++)
           leaf_item(i) = leaf_item(i+1);
@@ -126,12 +148,14 @@ class Table {
       leaf_item(p).value = value;
       set_size(size() + 1);
     }
-    void insert_at_index_pos(int p, K key, nodeid_t node) {
+    void insert_at_index_pos(int p, K key, nodeid_t nid) {
       assert(is_index());
-      for (int i=size(); i>p; i--)
+      for (int i=size(); i>p; i--) {
         index_item(i) = index_item(i-1);
+	//node->children[i] = node->children[i-1];
+      }
       index_item(p).key = key;
-      index_item(p).node = node;
+      index_item(p).node = nid;
       set_size(size() + 1);
     }
 
@@ -213,7 +237,7 @@ class Table {
       
       // work back down right side
       for (; l<level; l++) {
-        open[l+1] = table->pool.get_node( open[l].index_item(pos[l]).node );
+        open[l+1].open(table->pool, open[l].index_item(pos[l]).node);
         pos[l+1] = open[l+1].size() - 1;
       }
       return 1;
@@ -240,7 +264,7 @@ class Table {
       
       /* work back down */
       for (; l<level; l++) {
-        open[l+1] = table->pool.get_node( open[l].index_item(pos[l]).node );
+        open[l+1].open(table->pool, open[l].index_item(pos[l]).node );
         pos[l+1] = 0;  // furthest left
       }
       return 1;
@@ -303,7 +327,7 @@ class Table {
       
       Nodeptr here = open[level];
       Nodeptr parent = open[level-1];
-      Nodeptr left = table->pool.get_node( parent.index_item(pos[level-1] - 1).node );
+      Nodeptr left(table->pool, parent.index_item(pos[level-1] - 1).node );
       if (left.size() == left.max_items()) return -1;  // it's full
 
       // make both dirty
@@ -342,7 +366,7 @@ class Table {
       
       Nodeptr here = open[level];
       Nodeptr parent = open[level-1];
-      Nodeptr right = table->pool.get_node( parent.index_item( pos[level-1] + 1 ).node );
+      Nodeptr right(table->pool, parent.index_item( pos[level-1] + 1 ).node );
       if (right.size() == right.max_items()) return -1;  // it's full
       
       // make both dirty
@@ -389,7 +413,7 @@ class Table {
 
  public:
   bool almost_full() {
-    if (2*(depth+1) > pool.num_free())     // worst case, plus some.
+    if (2*(depth+1) > pool.get_num_free())     // worst case, plus some.
       return true;
     return false;
   }
@@ -404,7 +428,7 @@ class Table {
     cursor.level = 0;
     
     // start at root
-    Nodeptr curnode( pool.get_node(root) );
+    Nodeptr curnode(pool, root);
     cursor.open[0] = curnode;
 
     if (curnode.size() == 0) return -1;  // empty!
@@ -443,7 +467,7 @@ class Table {
       cursor.pos[cursor.level] = i;   
       
       /* get child node */
-      curnode = pool.get_node( cursor.open[cursor.level].index_item(i).node );
+      curnode.open(pool, cursor.open[cursor.level].index_item(i).node );
       cursor.open[cursor.level+1] = curnode;
     }
 
@@ -687,7 +711,7 @@ class Table {
       // left?
       if (cursor.pos[cursor.level-1] > 0) {
         int left_loc = cursor.open[cursor.level-1].index_item( cursor.pos[cursor.level-1] - 1).node;
-        left = pool.get_node( left_loc );
+        left.open(pool, left_loc);
 
         if (left.size() > left.min_items()) {
           /* move cursor left, shift right */
@@ -705,7 +729,7 @@ class Table {
       else {
         assert(cursor.pos[cursor.level-1] < cursor.open[cursor.level-1].size() - 1);
         int right_loc = cursor.open[cursor.level-1].index_item( cursor.pos[cursor.level-1] + 1 ).node;
-        right = pool.get_node( right_loc );
+        right.open(pool, right_loc );
         
         if (right.size() > right.min_items()) {
           /* move cursor right, shift an item left */
@@ -749,7 +773,7 @@ class Table {
   void clear(Cursor& cursor, int node_loc, int level) {
     dbtout << "clear" << std::endl;
 
-    Nodeptr node = pool.get_node( node_loc );
+    Nodeptr node(pool, node_loc);
     cursor.open[level] = node;
     
     // hose children?
@@ -778,7 +802,7 @@ class Table {
   int verify_sub(Cursor& cursor, int node_loc, int level, int& count, K& last, const char *on) {
     int err = 0;
 
-    Nodeptr node = pool.get_node( node_loc );
+    Nodeptr node(pool, node_loc);
     cursor.open[level] = node;
     
     // identify max, min, and validate key range

@@ -15,63 +15,6 @@
 #ifndef __XLIST_H
 #define __XLIST_H
 
-/*
-class xlist_head;
-
-class xlist_item {
- private:
-  xlist_item *_prev, *_next;
-  xlist_head *_head;
-  friend class xlist_head;
-
- public:
-  xlist_item() : _prev(0), _next(0), _head(0) {}
-  xlist_head* _get_containing_xlist() { return _head; }
-};
-
-class xlist_head {
- private:
-  xlist_item *_front, *_back;
-  int _size;
-
-  friend class xlist_item;
-
- public:
-  int size() { return _size; }
-  bool empty() { return _front == 0; }
-
-  void push_back(xlist_item *item) {
-    if (item->_head) item->_head->remove(item);
-
-    item->_head = this;
-    item->_next = 0;
-    item->_prev = _back;
-    if (_back) _back->_next = item;
-    _back = item;
-    _size++;
-  }
-  void remove(xlist_item *item) {
-    assert(item->_head == this);
-
-    if (item->_prev)
-      item->_prev->_next = item->_next;
-    else
-      _front = item->_next;
-    if (item->_next)
-      item->_next->_prev = item->_prev;
-    else
-      _back = item->_prev;
-    _size--;
-
-    item->_head = 0;
-    item->_next = item->_prev = 0;
-  }
-
-};
-*/
-
-
-
 template<typename T>
 class xlist {
 public:
@@ -95,6 +38,8 @@ private:
   int _size;
 
 public:
+  xlist() : _front(0), _back(0), _size(0) {}
+
   int size() { return _size; }
   bool empty() { return _front == 0; }
 

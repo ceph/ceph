@@ -102,8 +102,7 @@ int Ebofs::mount()
   // init node pools
   dout(3) << "mount nodepool" << dendl;
   nodepool.init( &sb->nodepool );
-  nodepool.read_usemap( dev, super_epoch );
-  nodepool.read_clean_nodes( dev );
+  nodepool.read_usemap_and_clean_nodes( dev, super_epoch );
   
   // open tables
   dout(3) << "mount opening tables" << dendl;
@@ -213,6 +212,7 @@ int Ebofs::mkfs()
   nodepool.usemap_odd.length = usemap_len;
   dout(10) << "mkfs: even usemap at " << nodepool.usemap_even << dendl;
   dout(10) << "mkfs:  odd usemap at " << nodepool.usemap_odd << dendl;
+  nodepool.init_usemap();
 
   // init tables
   struct ebofs_table empty;
@@ -247,18 +247,14 @@ int Ebofs::mkfs()
   // write nodes, super, 2x
   dout(10) << "mkfs: flushing nodepool and superblocks (2x)" << dendl;
 
-  nodepool.commit_start( dev, 0 );
-  nodepool.commit_wait();
-  bufferptr superbp0;
-  prepare_super(0, superbp0);
-  write_super(0, superbp0);
-  
-  nodepool.commit_start( dev, 1 );
-  nodepool.commit_wait();
-  bufferptr superbp1;
-  prepare_super(1, superbp1);
-  write_super(1, superbp1);
-  
+  for (epoch_t e=0; e<2; e++) {
+    nodepool.commit_start(dev, e);
+    nodepool.commit_wait();
+    bufferptr superbp;
+    prepare_super(e, superbp);
+    write_super(e, superbp);
+  }
+
   // free memory
   dout(10) << "mkfs: cleaning up" << dendl;
   close_tables();
@@ -487,10 +483,10 @@ int Ebofs::commit_thread_entry()
               << "%) limbo in " << get_limbo_extents() 
               << dendl;
       dout(2) << "commit_thread  nodes: " 
-              << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
-              << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
-              << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
-              << nodepool.num_total() << " total." << dendl;
+              << 100*nodepool.get_num_used()/nodepool.get_num_total() << "% used, "
+              << nodepool.get_num_free() << " (" << 100*nodepool.get_num_free()/nodepool.get_num_total() << "%) free, " 
+              << nodepool.get_num_limbo() << " (" << 100*nodepool.get_num_limbo()/nodepool.get_num_total() << "%) limbo, " 
+              << nodepool.get_num_total() << " total." << dendl;
       dout(2) << "commit_thread    bc: " 
               << "size " << bc.get_size() 
               << ", trimmable " << bc.get_trimmable()
@@ -540,7 +536,7 @@ int Ebofs::commit_thread_entry()
       allocator.release_limbo();   // limbo_tab -> free_tabs
       
       // do we need more node space?
-      if (nodepool.num_free() < nodepool.num_total() / 3) {
+      if (nodepool.get_num_free() < nodepool.get_num_total() / 3) {
         dout(2) << "commit_thread running low on node space, allocating more." << dendl;
         alloc_more_node_space();
       }
@@ -574,17 +570,17 @@ int Ebofs::commit_thread_entry()
 
 void Ebofs::alloc_more_node_space()
 {
-  dout(1) << "alloc_more_node_space free " << nodepool.num_free() << "/" << nodepool.num_total() << dendl;
+  dout(1) << "alloc_more_node_space free " << nodepool.get_num_free() << "/" << nodepool.get_num_total() << dendl;
   
   if (nodepool.num_regions() < EBOFS_MAX_NODE_REGIONS) {
-    int want = nodepool.num_total();
+    int want = nodepool.get_num_total();
 
     Extent ex;
     allocator.allocate(ex, want, 2);
     dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << dendl;
 
     Extent even, odd;
-    unsigned ulen = nodepool.get_usemap_len(nodepool.num_total() + ex.length);
+    unsigned ulen = nodepool.get_usemap_len(nodepool.get_num_total() + ex.length);
     allocator.allocate(even, ulen, 2);
     allocator.allocate(odd, ulen, 2);
     dout(1) << "alloc_more_node_space maps need " << ulen << " x2, got " << even << " " << odd << dendl;
@@ -594,8 +590,11 @@ void Ebofs::alloc_more_node_space()
       allocator.release(nodepool.usemap_even);
       allocator.release(nodepool.usemap_odd);
       nodepool.add_region(ex);
+
+      // expand usemap?
       nodepool.usemap_even = even;
       nodepool.usemap_odd = odd;
+      nodepool.expand_usemap();
     } else {
       dout (1) << "alloc_more_node_space failed to get space for new usemaps" << dendl;
       allocator.release(ex);
@@ -1384,8 +1383,8 @@ int Ebofs::statfs(struct statfs *buf)
   buf->f_bfree = get_free_blocks() 
     + get_limbo_blocks();                /* free blocks in fs */
   buf->f_bavail = get_free_blocks();     /* free blocks avail to non-superuser -- actually, for writing. */
-  buf->f_files = nodepool.num_total();   /* total file nodes in file system */
-  buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
+  buf->f_files = nodepool.get_num_total();   /* total file nodes in file system */
+  buf->f_ffree = nodepool.get_num_free();    /* free file nodes in fs */
   //buf->f_fsid = 0;                       /* file system id */
 #ifndef DARWIN
   buf->f_namelen = 8;                    /* maximum length of filenames */
@@ -1589,7 +1588,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
-  oc->map_write(bstart, blen, alloc, hits, super_epoch);
+  oc->map_write(bstart, blen, hits, super_epoch);
   
   // get current versions
   //version_t lowv, highv;

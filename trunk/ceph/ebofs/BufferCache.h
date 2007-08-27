@@ -335,6 +335,11 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
+
+  // include epoch modified?
+  if (bh.is_dirty() || bh.is_tx() || bh.is_partial()) 
+    out << "(e" << bh.epoch_modified << ")";
+
   //out << " " << bh.data.length();
   out << " " << &bh;
   out << ")";
@@ -420,7 +425,6 @@ class ObjectCache {
 
   
   int map_write(block_t start, block_t len,
-                interval_set<block_t>& alloc,
                 map<block_t, BufferHead*>& hits,
                 version_t super_epoch);   // can write to these.
   void touch_bottom(block_t bstart, block_t blast);

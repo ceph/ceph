@@ -45,12 +45,12 @@ public:
       case 0:
         {
 	  oid.rev = rand() % 10;
-          cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << endl;
+          cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << std::endl;
           bufferlist bl;
           fs.read(oid, off, len, bl);
           int l = MIN(len,bl.length());
           if (l) {
-            cout << t << " got " << l << endl;
+            cout << t << " got " << l << std::endl;
             bl.copy(0, l, b);
             char *p = b;
             while (l--) {
@@ -65,7 +65,7 @@ public:
 
       case 1:
         {
-          cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << endl;
+          cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << std::endl;
           for (int j=0;j<len;j++) 
             b[j] = (char)(oid.ino^(off+j));
 	  bufferptr wp(b, len);
@@ -76,34 +76,34 @@ public:
         break;
 
       case 2:
-        cout << t << " remove " << hex << oid << dec <<  endl;
+        cout << t << " remove " << hex << oid << dec <<  std::endl;
         fs.remove(oid);
         break;
 
       case 3:
-        cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << endl;
+        cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << std::endl;
         fs.collection_add(cid, oid, 0);
         break;
 
       case 4:
-        cout << t << " collection_remove " << hex << oid << dec <<  " from " << cid << endl;
+        cout << t << " collection_remove " << hex << oid << dec <<  " from " << cid << std::endl;
         fs.collection_remove(cid, oid, 0);
         break;
 
       case 5:
-        cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << endl;
+        cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << std::endl;
         fs.setattr(oid, a, (void*)a, l, 0);
         break;
         
       case 6:
-        cout << t << " rmattr " << hex << oid << dec <<  " " << a << endl;
+        cout << t << " rmattr " << hex << oid << dec <<  " " << a << std::endl;
         fs.rmattr(oid,a);
         break;
 
       case 7:
         {
           char v[4];
-          cout << t << " getattr " << hex << oid << dec <<  " " << a << endl;
+          cout << t << " getattr " << hex << oid << dec <<  " " << a << std::endl;
           if (fs.getattr(oid,a,(void*)v,3) == 0) {
             v[3] = 0;
             assert(strcmp(v,a) == 0);
@@ -113,7 +113,7 @@ public:
         
       case 8:
         {
-          cout << t << " truncate " << hex << oid << dec <<  " " << off << endl;
+          cout << t << " truncate " << hex << oid << dec <<  " " << off << std::endl;
           fs.truncate(oid, 0);
         }
         break;
@@ -122,14 +122,14 @@ public:
 	{
 	  object_t newoid = oid;
 	  newoid.rev = rand() % 10;
-	  cout << t << " clone " << oid << " to " << newoid << endl;
+	  cout << t << " clone " << oid << " to " << newoid << std::endl;
 	  fs.clone(oid, newoid, 0);
 	}
       }
 
 
     }
-    cout << t << " done" << endl;
+    cout << t << " done" << std::endl;
     return 0;
   }
 };
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
   int threads = atoi(args[2]);
   if (!threads) threads = 1;
 
-  cout << "dev " << filename << " .. " << threads << " threads .. " << seconds << " seconds" << endl;
+  cout << "dev " << filename << " .. " << threads << " threads .. " << seconds << " seconds" << std::endl;
 
   Ebofs fs(filename);
   if (fs.mount() < 0) return -1;
@@ -203,14 +203,14 @@ int main(int argc, char **argv)
   utime_t now = g_clock.now();
   utime_t dur(seconds,0);
   utime_t end = now + dur;
-  cout << "stop at " << end << endl;
+  cout << "stop at " << end << std::endl;
   while (now < end) {
     sleep(1);
     now = g_clock.now();
-    cout << now << endl;
+    cout << now << std::endl;
   }
 
-  cout << "stopping" << endl;
+  cout << "stopping" << std::endl;
   stop = true;
   
   while (!ls.empty()) {

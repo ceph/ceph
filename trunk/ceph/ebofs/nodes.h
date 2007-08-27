@@ -30,7 +30,7 @@
      free             free    -> free             can alloc
      free             used    -> dirty            can modify
 
-     free     used    used    -> tx
+     free     used    used    -> clean
      free     used    free    -> limbo 
 
      used             used    -> clean
@@ -53,7 +53,6 @@ class Node {
   // bit fields
   static const int STATE_CLEAN = 1;   
   static const int STATE_DIRTY = 2; 
-  static const int STATE_TX = 3;
 
   static const int ITEM_LEN = EBOFS_NODE_BYTES - sizeof(int) - sizeof(int) - sizeof(int);
 
@@ -62,27 +61,37 @@ class Node {
 
  protected:
   nodeid_t    id;
+  int         pos_in_bitmap;  // position in bitmap
   int         state;     // use bit fields above!
 
   bufferptr   bptr;
-  bufferptr   shadow_bptr;
 
   // in disk buffer
   int         *type;
   int         *nrecs;
 
  public:
-  xlist<Node*>::item xlist;
+  xlist<Node*>::item xlist;  // dirty
 
-  Node(nodeid_t i, bufferptr& b, int s) : id(i), state(s), bptr(b), xlist(this)  {
+  vector<Node*> children;
+
+  Node(nodeid_t i, int pib, bufferptr& b, int s) : 
+    id(i), pos_in_bitmap(pib), 
+    state(s), bptr(b), xlist(this)  {
     nrecs = (int*)(bptr.c_str());
     type = (int*)(bptr.c_str() + sizeof(*nrecs));
   }
 
-  
+  void do_cow() {
+    bptr.do_cow();
+  }
+
+
   // id
   nodeid_t get_id() const { return id; }
   void set_id(nodeid_t n) { id = n; }
+  int get_pos_in_bitmap() const { return pos_in_bitmap; }
+  void set_pos_in_bitmap(int i) { pos_in_bitmap = i; }
 
   // buffer
   bufferptr& get_buffer() { return bptr; }
@@ -102,25 +111,10 @@ class Node {
 
   // state
   bool is_dirty() { return state == STATE_DIRTY; }
-  bool is_tx() { return state == STATE_TX; }
   bool is_clean() { return state == STATE_CLEAN; }
 
   void set_state(int s) { state = s; }
-
-  void make_shadow() {
-    assert(is_tx());
-    
-    shadow_bptr = bptr;
-    
-    // new buffer
-    bptr = buffer::create_page_aligned(EBOFS_NODE_BYTES);
-    nrecs = (int*)(bptr.c_str());
-    type = (int*)(bptr.c_str() + sizeof(*nrecs));
-    
-    // copy contents!
-    memcpy(bptr.c_str(), shadow_bptr.c_str(), EBOFS_NODE_BYTES);
-  }
-
+  
 };
 
 
@@ -135,34 +129,48 @@ class NodePool {
   vector<Extent> region_loc;    // region locations
   Extent         usemap_even;
   Extent         usemap_odd;
+
+  buffer::ptr usemap_data;
+  bitmapper  usemap_bits;
   
  protected:
   // on-disk block states
   int num_nodes;
-  set<nodeid_t> free;
-  set<nodeid_t> clean;
-  set<nodeid_t> limbo;
-  set<nodeid_t> dirty;
-  set<nodeid_t> tx;
+  int num_dirty;
+  int num_clean;
+  int num_free;
+  int num_limbo;
+
+  xlist<Node*> dirty_ls;
+  interval_set<nodeid_t> free;
+  interval_set<nodeid_t> limbo;
   
   Mutex        &ebofs_lock;
   Cond          commit_cond;
   int           flushing;
 
-  static int make_nodeid(int region, int offset) {
-    return (region << 24) | offset;
+  nodeid_t make_nodeid(int region, int offset) {
+    return region_loc[region].start + (block_t)offset;
   }
-  static int nodeid_region(nodeid_t nid) {
-    return nid >> 24;
-  }
-  static int nodeid_offset(nodeid_t nid) {
-    return nid & ((1 << 24) - 1);
+  int nodeid_pos_in_bitmap(nodeid_t nid) {
+    unsigned region;
+    int num = 0;
+    for (region = 0; 
+	 (block_t)nid < region_loc[region].start || (block_t)nid > region_loc[region].end(); 
+	 region++) {
+      //generic_dout(-20) << "node " << nid << " not in " << region << " " << region_loc[region] << dendl;
+      num += region_loc[region].length;
+    }
+    num += nid - region_loc[region].start;
+    //generic_dout(-20) << "node " << nid << " is in " << region << ", overall bitmap pos is " << num << dendl;
+    return num;
   }
 
 
  public:
   NodePool(Mutex &el) : 
-    num_nodes(0),
+    num_nodes(0), 
+    num_dirty(0), num_clean(0), num_free(0), num_limbo(0),
     ebofs_lock(el),
     flushing(0) {}
   ~NodePool() {
@@ -170,32 +178,52 @@ class NodePool {
     release_all();
   }
 
-  int num_free() { return free.size(); }
-  int num_dirty() { return dirty.size(); }
-  int num_limbo() { return limbo.size(); }
-  int num_tx() { return tx.size(); }
-  int num_clean() { return clean.size(); }
-  int num_total() { return num_nodes; }
-  int num_used() { return num_clean() + num_dirty() + num_tx(); }
+  int get_num_free() { return num_free; }
+  int get_num_dirty() { return num_dirty; }
+  int get_num_limbo() { return num_limbo; }
+  int get_num_clean() { return num_clean; }
+  int get_num_total() { return num_nodes; }
+  int get_num_used() { return num_clean + num_dirty; }
 
   int get_usemap_len(int n=0) {
     if (n == 0) n = num_nodes;
     return ((n-1) / 8 / EBOFS_BLOCK_SIZE) + 1;
   }
 
-  int num_regions() { return region_loc.size(); }
+  unsigned num_regions() { return region_loc.size(); }
 
   // the caller had better adjust usemap locations...
   void add_region(Extent ex) {
-    int region = region_loc.size();
-    assert(ex.length <= (1 << 24));
+    assert(region_loc.size() < EBOFS_MAX_NODE_REGIONS);
     region_loc.push_back(ex);
-    for (unsigned o = 0; o < ex.length; o++) {
-      free.insert( make_nodeid(region, o) );
-    }
+    free.insert(ex.start, ex.length);
+    num_free += ex.length;
     num_nodes += ex.length;
   }
   
+  void init_usemap() {
+    usemap_data = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*usemap_even.length);
+    usemap_data.zero();
+    usemap_bits.set_data(usemap_data.c_str(), usemap_data.length());
+  }
+  
+  void expand_usemap() {
+    block_t have = usemap_data.length() / EBOFS_BLOCK_SIZE;
+    if (have < usemap_even.length) {
+      // use bufferlist to copy/merge two chunks
+      bufferlist bl;
+      bl.push_back(usemap_data);
+      bufferptr newbit = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*(usemap_even.length - have));
+      newbit.zero();
+      bl.push_back(newbit);
+      assert(bl.buffers().size() == 1);
+      usemap_data = bl.buffers().front();
+      usemap_bits.set_data(usemap_data.c_str(), usemap_data.length());
+    }
+  }
+
+
+
   int init(struct ebofs_nodepool *np) {
     // regions
     assert(region_loc.empty());
@@ -212,6 +240,7 @@ class NodePool {
     debofs(3) << "init even map at " << usemap_even << std::endl;
     debofs(3) << "init  odd map at " << usemap_odd << std::endl;
 
+    init_usemap();
     return 0;
   }
 
@@ -219,11 +248,16 @@ class NodePool {
     release_all();
     
     region_loc.clear();
+
+    num_free = 0;
+    num_dirty = 0;
+    num_clean = 0;
+    num_limbo = 0;
+    dirty_ls.clear();
+
     free.clear();
-    dirty.clear();
-    tx.clear();
-    clean.clear();
     limbo.clear();
+
     flushing = 0;
     node_map.clear();
   }
@@ -231,7 +265,7 @@ class NodePool {
 
   // *** blocking i/o routines ***
 
-  int read_usemap(BlockDevice& dev, version_t epoch) {
+  int read_usemap_and_clean_nodes(BlockDevice& dev, version_t epoch) {
     // read map
     Extent loc;
     if (epoch & 1) 
@@ -239,64 +273,42 @@ class NodePool {
     else 
       loc = usemap_even;
 
-    bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*loc.length);
-    dev.read(loc.start, loc.length, bp);
+    // usemap
+    dev.read(loc.start, loc.length, usemap_data);
     
-    // parse
-    unsigned region = 0;  // current region
-    unsigned roff = 0;    // offset in region
-    for (unsigned byte = 0; byte<bp.length(); byte++) {   // each byte
-      // get byte
-      int x = *(unsigned char*)(bp.c_str() + byte);
-      int mask = 0x80;  // left-most bit
-      for (unsigned bit=0; bit<8; bit++) {
-        nodeid_t nid = make_nodeid(region, roff);
-        
-        if (x & mask)
-          clean.insert(nid);
-        else
-          free.insert(nid);
-
-        mask = mask >> 1;  // move one bit right.
-        roff++;
-        if (roff == region_loc[region].length) {
-          // next region!
-          roff = 0;
-          region++;
-          break;
-        }
-      }     
-      if (region == region_loc.size()) break;
-    }    
-    return 0;
-  }
-
-  int read_clean_nodes(BlockDevice& dev) {
-    /*
-      this relies on the clean set begin defined so that we know which nodes
-      to read.  so it only really works when called from mount()!
-    */
-    for (unsigned r=0; r<region_loc.size(); r++) {
-      debofs(3) << "ebofs.nodepool.read region " << r << " at " << region_loc[r] << std::endl;
+    // nodes
+    unsigned region = 0;
+    unsigned region_pos = 0;
+    for (int i=0; i<num_nodes; i++) {
+      nodeid_t nid = make_nodeid(region, region_pos);
+      region_pos++;
+      if (region_pos == region_loc[region].length) {
+	region_pos = 0;
+	region++;
+      }
       
-      for (block_t boff = 0; boff < region_loc[r].length; boff++) {
-        nodeid_t nid = make_nodeid(r, boff);
-        
-        if (!clean.count(nid)) continue;  
-        debofs(20) << "ebofs.nodepool.read  node " << nid << std::endl;
-
+      if (usemap_bits[i]) {
+	num_clean++;
         bufferptr bp = buffer::create_page_aligned(EBOFS_NODE_BYTES);
-        dev.read(region_loc[r].start + (block_t)boff, EBOFS_NODE_BLOCKS, 
-                 bp);
+        dev.read((block_t)nid, EBOFS_NODE_BLOCKS, bp);
         
-        Node *n = new Node(nid, bp, Node::STATE_CLEAN);
+        Node *n = new Node(nid, i, bp, Node::STATE_CLEAN);
         node_map[nid] = n;
-        debofs(10) << "ebofs.nodepool.read  node " << n << " at " << (void*)n << std::endl;
+        debofs(10) << "ebofs.nodepool.read node " << nid << " at " << (void*)n << std::endl;
+
+      } else {
+        //debofs(-10) << "ebofs.nodepool.read  node " << nid << " is free" << std::endl;
+	free.insert(nid);
+	num_free++;
       }
     }
+    debofs(10) << "ebofs.nodepool.read free is " << free.m << std::endl;
+    assert(num_dirty == 0);
+    assert(num_limbo == 0);
+    assert(num_clean + num_free == num_nodes);
+
     return 0;
   }
-
 
 
   // **** non-blocking i/o ****
@@ -329,38 +341,9 @@ class NodePool {
     else 
       loc = usemap_even;
     
-    bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*loc.length);
-
-    // fill in
-    unsigned region = 0;  // current region
-    unsigned roff = 0;    // offset in region
-    for (unsigned byte = 0; byte<bp.length(); byte++) {   // each byte
-      int x = 0;        // start with empty byte
-      int mask = 0x80;  // left-most bit
-      for (unsigned bit=0; bit<8; bit++) {
-        nodeid_t nid = make_nodeid(region, roff);
-        
-        if (clean.count(nid) ||
-            dirty.count(nid))
-          x |= mask;
-
-        roff++;
-        mask = mask >> 1;
-        if (roff == region_loc[region].length) {
-          // next region!
-          roff = 0;
-          region++;
-          break;
-        }
-      }
-
-      *(unsigned char*)(bp.c_str() + byte) = x;
-      if (region == region_loc.size()) break;
-    }
-
-
     // write
     bufferlist bl;
+    bufferptr bp = usemap_data.clone();
     bl.append(bp);
     dev.write(loc.start, loc.length, bl,
               new C_NP_FlushUsemap(this), "usemap");
@@ -385,19 +368,6 @@ class NodePool {
 
   void flushed_node(nodeid_t nid) {
     ebofs_lock.Lock();
-    
-    // mark nid clean|limbo
-    if (tx.count(nid)) {  // tx -> clean
-      tx.erase(nid);
-      clean.insert(nid);
-
-      // make node itself clean
-      node_map[nid]->set_state(Node::STATE_CLEAN);
-    }
-    else {  // already limbo  (was dirtied, or released)
-      assert(limbo.count(nid));
-    }
-
     flushing--;
     if (flushing == 0) 
       commit_cond.Signal();
@@ -406,7 +376,7 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-    generic_dout(20) << "ebofs.nodepool.commit_start start" << dendl;
+    debofs(20) << "ebofs.nodepool.commit_start start" << std::endl;
 
     assert(flushing == 0);
     /*if (0)
@@ -421,42 +391,33 @@ class NodePool {
     flushing++;
     write_usemap(dev, version & 1);
 
-    // dirty -> tx  (write to disk)
-    assert(tx.empty());
-    set<block_t> didb;
-    for (set<nodeid_t>::iterator i = dirty.begin();
-         i != dirty.end();
-         i++) {
-      Node *n = get_node(*i);
+    // dirty -> clean  (write to disk)
+    while (!dirty_ls.empty()) {
+      Node *n = dirty_ls.front();
       assert(n);
       assert(n->is_dirty());
-      n->set_state(Node::STATE_TX);
+      n->set_state(Node::STATE_CLEAN);
+      dirty_ls.remove(&n->xlist);
+      num_dirty--;
+      num_clean++;
 
-      unsigned region = nodeid_region(*i);
-      block_t off = nodeid_offset(*i);
-      block_t b = region_loc[region].start + off;
-
-      if (0) {  // sanity check debug FIXME
-        assert(didb.count(b) == 0);
-        didb.insert(b);
-      }
-
+      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << std::endl;
+      
       bufferlist bl;
       bl.append(n->get_buffer());
-      dev.write(b, EBOFS_NODE_BLOCKS, 
+      dev.write(n->get_id(), EBOFS_NODE_BLOCKS, 
                 bl,
-                new C_NP_FlushNode(this, *i), "node");
+                new C_NP_FlushNode(this, n->get_id()), "node");
       flushing++;
-
-      tx.insert(*i);
     }
-    dirty.clear();
 
     // limbo -> free
-    for (set<nodeid_t>::iterator i = limbo.begin();
-         i != limbo.end();
+    for (map<nodeid_t,nodeid_t>::iterator i = limbo.m.begin();
+         i != limbo.m.end();
          i++) {
-      free.insert(*i);
+      num_free += i->second;
+      num_limbo -= i->second;
+      free.insert(i->first, i->second);
     }
     limbo.clear();
 
@@ -485,23 +446,13 @@ class NodePool {
     return node_map[nid];
   }
   
-  // unopened node
-  /*  not implemented yet!!
-  Node* open_node(nodeid_t nid) {
-    Node *n = node_regions[ NodeRegion::nodeid_region(nid) ]->open_node(nid);
-    dbtout << "pool.open_node " << n->get_id() << std::endl;
-    node_map[n->get_id()] = n;
-    return n;
-  }
-  */
-  
   // allocate id/block on disk.  always free -> dirty.
   nodeid_t alloc_id() {
     // pick node id
     assert(!free.empty());
-    nodeid_t nid = *(free.begin());
+    nodeid_t nid = free.start();
     free.erase(nid);
-    dirty.insert(nid);
+    num_free--;
     return nid;
   }
   
@@ -512,12 +463,20 @@ class NodePool {
     
     // alloc node
     bufferptr bp = buffer::create_page_aligned(EBOFS_NODE_BYTES);
-    Node *n = new Node(nid, bp, Node::STATE_DIRTY);
+    bp.zero();
+    Node *n = new Node(nid, nodeid_pos_in_bitmap(nid), bp, Node::STATE_DIRTY);
     n->set_type(type);
     n->set_size(0);
 
+    usemap_bits.set(n->get_pos_in_bitmap());
+
+    n->set_state(Node::STATE_DIRTY);
+    dirty_ls.push_back(&n->xlist);
+    num_dirty++;
+
     assert(node_map.count(nid) == 0);
     node_map[nid] = n;
+
     return n;
   }
 
@@ -527,20 +486,20 @@ class NodePool {
     node_map.erase(nid);
 
     if (n->is_dirty()) {
-      assert(dirty.count(nid));
-      dirty.erase(nid);
+      dirty_ls.remove(&n->xlist);
+      num_dirty--;
       free.insert(nid);
+      num_free++;
+      usemap_bits.clear(n->get_pos_in_bitmap());
     } else if (n->is_clean()) {
-      assert(clean.count(nid));
-      clean.erase(nid);
       limbo.insert(nid);
-    } else if (n->is_tx()) {
-      assert(tx.count(nid));      // i guess htis happens? -sage
-      tx.erase(nid);
-      limbo.insert(nid);
+      num_limbo++;
+      num_clean--;
+      usemap_bits.clear(n->get_pos_in_bitmap());
     }
 
     delete n;
+    assert(num_clean + num_dirty + num_limbo + num_free == num_nodes);
   }
 
   void release_all() {
@@ -557,29 +516,33 @@ class NodePool {
     nodeid_t oldid = n->get_id();
     nodeid_t newid = alloc_id();
     debofs(15) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << std::endl;
+
+    // dup data?
+    //  this only does a memcpy if there are multiple references.. 
+    //  i.e. if we are still writing the old data
+    n->do_cow();
     
     // release old block
-    if (n->is_clean()) {
-      assert(clean.count(oldid));
-      clean.erase(oldid);
-    } else {
-      assert(n->is_tx());
-      assert(tx.count(oldid));
-      tx.erase(oldid);
-      
-      // move/copy current -> shadow buffer as necessary
-      n->make_shadow();   
-    }
+    assert(n->is_clean());
+    num_clean--;
     limbo.insert(oldid);
+    num_limbo++;
+    usemap_bits.clear(n->get_pos_in_bitmap());
+
+    // rename node
     node_map.erase(oldid);
-    
-    n->set_state(Node::STATE_DIRTY);
-    
-    // move to new one!
     n->set_id(newid);
+    n->set_pos_in_bitmap(nodeid_pos_in_bitmap(newid));
     node_map[newid] = n;
-  }
-  
+
+    // new block
+    n->set_state(Node::STATE_DIRTY);
+    dirty_ls.push_back(&n->xlist);
+    num_dirty++;
+    usemap_bits.set(n->get_pos_in_bitmap());
+
+    assert(num_clean + num_dirty + num_limbo + num_free == num_nodes);
+  }  
   
   
 };

@@ -421,13 +421,12 @@ int ObjectCache::map_read(block_t start, block_t len,
  * - don't worry about disk extent boundaries (yet)
  */
 int ObjectCache::map_write(block_t start, block_t len,
-                           interval_set<block_t>& alloc,
                            map<block_t, BufferHead*>& hits,
                            version_t super_epoch)
 {
   map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 
-  dout(10) << "map_write " << *on << " " << start << "~" << len << " ... alloc " << alloc << dendl;
+  dout(10) << "map_write " << *on << " " << start << "~" << len << dendl;
   // p->first >= start
   
   block_t cur = start;
@@ -445,21 +444,6 @@ int ObjectCache::map_write(block_t start, block_t len,
   while (left > 0) {
     // max for this bh (bc of (re)alloc on disk)
     block_t max = left;
-    bool newalloc = false;
-
-    // based on alloc/no-alloc boundary ...
-    if (alloc.contains(cur, left)) {
-      if (alloc.contains(cur)) {
-        block_t ends = alloc.end_after(cur);
-        max = MIN(left, ends-cur);
-        newalloc = true;
-      } else {
-        if (alloc.starts_after(cur)) {
-          block_t st = alloc.start_after(cur);
-          max = MIN(left, st-cur);
-        } 
-      }
-    } 
 
     // based on disk extent boundary ...
     vector<Extent> exv;
@@ -467,11 +451,7 @@ int ObjectCache::map_write(block_t start, block_t len,
     if (exv.size() > 1) 
       max = exv[0].length;
 
-    if (newalloc) {
-      dout(10) << "map_write " << cur << "~" << max << " is new alloc on disk" << dendl;
-    } else {
-      dout(10) << "map_write " << cur << "~" << max << " keeps old alloc on disk" << dendl;
-    }
+    dout(10) << "map_write " << cur << "~" << max << dendl;
     
     // at end?
     if (p == data.end()) {
@@ -499,7 +479,7 @@ int ObjectCache::map_write(block_t start, block_t len,
             BufferHead *right = bc->split(bh, cur);
             bc->bh_read(on, bh);          // reread left bit
             bh = right;
-          } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
+          } else if (bh->is_tx() && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
             BufferHead *right = bc->split(bh, cur);
             bc->bh_write(on, bh);          // rewrite left bit
             bh = right;
@@ -518,7 +498,7 @@ int ObjectCache::map_write(block_t start, block_t len,
             BufferHead *right = bc->split(middle, cur+max);
             bc->bh_read(on, right);                    // reread right
             bh = middle;
-          } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
+          } else if (bh->is_tx() && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
             BufferHead *middle = bc->split(bh, cur);
             bc->bh_write(on, bh);                       // redo left
             p++;
@@ -542,7 +522,7 @@ int ObjectCache::map_write(block_t start, block_t len,
           if (bh->is_rx() && bc->bh_cancel_read(bh)) {
             BufferHead *right = bc->split(bh, cur+max);
             bc->bh_read(on, right);              // re-rx the right bit
-          } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
+          } else if (bh->is_tx() && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
             BufferHead *right = bc->split(bh, cur+max);
             bc->bh_write(on, right);              // re-tx the right bit
           } else {
@@ -552,7 +532,7 @@ int ObjectCache::map_write(block_t start, block_t len,
       }
       
       // try to cancel tx?
-      if (bh->is_tx() && !newalloc) bc->bh_cancel_write(bh, super_epoch);
+      if (bh->is_tx() && bh->epoch_modified == super_epoch) bc->bh_cancel_write(bh, super_epoch);
             
       // put in our map
       hits[cur] = bh;
@@ -656,7 +636,7 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
         BufferHead *right = bc->split(bh, blocks);
         bc->bh_read(on, bh);          // reread left bit
         bh = right;
-      } else if (bh->is_tx() && uncom && bc->bh_cancel_write(bh, super_epoch)) {
+      } else if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
         BufferHead *right = bc->split(bh, blocks);
         bc->bh_write(on, bh);          // rewrite left bit
         bh = right;
@@ -669,7 +649,7 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
       // cancel any pending/queued io, if possible.
       if (bh->is_rx())
         bc->bh_cancel_read(bh);
-      if (bh->is_tx() && uncom) 
+      if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch) 
         bc->bh_cancel_write(bh, super_epoch);
       if (bh->shadow_of) {
 	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
@@ -909,13 +889,14 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 
 bool BufferCache::bh_cancel_write(BufferHead *bh, version_t cur_epoch)
 {
+  assert(bh->is_tx());
+  assert(bh->epoch_modified == cur_epoch);
+  assert(bh->epoch_modified > 0);
   if (bh->tx_ioh && dev.cancel_io(bh->tx_ioh) >= 0) {
     dout(10) << "bh_cancel_write on " << *bh << dendl;
     bh->tx_ioh = 0;
     mark_dirty(bh);
 
-    assert(bh->epoch_modified == cur_epoch);
-    assert(bh->epoch_modified > 0);
     dec_unflushed( EBOFS_BC_FLUSH_BHWRITE, bh->epoch_modified );   // assert.. this should be the same epoch!
 
     int l = bh->oc->put();
