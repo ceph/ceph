@@ -98,6 +98,10 @@ public:
   int size() { return _size; }
   bool empty() { return _front == 0; }
 
+  void clear() {
+    while (_front) remove(_front);
+  }
+
   void push_back(item *item) {
     if (item->_head) 
       item->_head->remove(item);

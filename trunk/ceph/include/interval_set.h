@@ -33,6 +33,7 @@ template<typename T>
 class interval_set {
  public:
   map<T,T> m;   // map start -> len  
+  int _size;
 
   // helpers
  private:
@@ -85,8 +86,13 @@ class interval_set {
     return m == other.m;
   }
 
+  int size() {
+    return _size;
+  }
+
   void clear() {
     m.clear();
+    _size = 0;
   }
 
   bool contains(T i) const {
@@ -158,6 +164,7 @@ class interval_set {
   void insert(T start, T len) {
     //cout << "insert " << start << "~" << len << endl;
     assert(len > 0);
+    _size += len;
     typename map<T,T>::iterator p = find_adj_m(start);
     if (p == m.end()) {
       m[start] = len;                  // new interval
@@ -197,6 +204,8 @@ class interval_set {
 
   void erase(T start, T len) {
     typename map<T,T>::iterator p = find_inc_m(start);
+
+    _size -= len;
 
     assert(p != m.end());
     assert(p->first <= start);
