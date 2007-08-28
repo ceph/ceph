@@ -41,7 +41,10 @@ public:
   xlist() : _front(0), _back(0), _size(0) {}
 
   int size() { return _size; }
-  bool empty() { return _front == 0; }
+  bool empty() { 
+    assert((bool)_front == (bool)_size);
+    return _front == 0; 
+  }
 
   void clear() {
     while (_front) remove(_front);
@@ -54,7 +57,10 @@ public:
     item->_head = this;
     item->_next = 0;
     item->_prev = _back;
-    if (_back) _back->_next = item;
+    if (_back) 
+      _back->_next = item;
+    else
+      _front = item;
     _back = item;
     _size++;
   }
