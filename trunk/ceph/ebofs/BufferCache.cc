@@ -720,7 +720,7 @@ void ObjectCache::clone_to(Onode *other)
 
 BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
 {
-  dout(-10) << "merge_bh_left " << *left << " " << *right << dendl;
+  dout(10) << "merge_bh_left " << *left << " " << *right << dendl;
   assert(left->end() == right->start());
   assert(left->is_clean());
   assert(right->is_clean());
@@ -737,7 +737,7 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
   remove_bh(right);
   bc->lru_rest.lru_remove(right);
   delete right;  
-  dout(-10) << "merge_bh_left result " << *left << dendl;
+  dout(10) << "merge_bh_left result " << *left << dendl;
   return left;
 }
 
@@ -766,7 +766,9 @@ void ObjectCache::try_merge_bh_left(map<block_t, BufferHead*>::iterator& p)
     if (p->second->end() == bh->start() &&
 	p->second->is_clean() && 
 	bh->is_clean() &&
-	bh->get_num_ref() == 0)
+	bh->get_num_ref() == 0 &&
+	bh->data.buffers().size() < 8 &&
+	p->second->data.buffers().size() < 8)
       bh = merge_bh_left(p->second, bh);      // yay!
     else 
       p++;      // nope.
@@ -785,7 +787,9 @@ void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
       bh->end() == p->second->start() && 
       p->second->is_clean() && 
       bh->is_clean() &&
-      p->second->get_num_ref() == 0) {
+      p->second->get_num_ref() == 0 &&
+      bh->data.buffers().size() < 8 &&
+      p->second->data.buffers().size() < 8) {
     BufferHead *right = p->second;
     p--;
     merge_bh_left(bh, right);
