@@ -116,6 +116,7 @@ protected:
   Table<coll_object_t, bool>  *co_tab;
 
   void close_tables();
+  void verify_tables();
 
 
   // ** onodes **

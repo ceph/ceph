@@ -139,6 +139,7 @@ class Table {
           leaf_item(i) = leaf_item(i+1);
       }
       set_size(size() - 1);
+      dbtout << "remove_at_pos done, size now " << size() << " " << (node->is_index() ? "index":"leaf") << std::endl;
     }
     void insert_at_leaf_pos(int p, K key, V value) {
       assert(is_leaf());
@@ -305,7 +306,7 @@ class Table {
       repair_parents();
       
       // was it a key?
-      if (level == table->depth-1)
+      if (level == table->depth-1) 
         table->nkeys--;
     }
 
@@ -420,6 +421,7 @@ class Table {
   
   int find(K key, Cursor& cursor) {
     dbtout << "find " << key << std::endl;
+    verify("find");
 
     if (depth == 0)
       return Cursor::OOB;
@@ -530,6 +532,7 @@ class Table {
   }
 
   int insert(K key, V value) {
+    verify("pre-insert"); 
     dbtout << "insert " << key << " -> " << value << std::endl;
     if (almost_full()) return -1;
     
@@ -653,6 +656,7 @@ class Table {
 
 
   int remove(K key) {
+    verify("pre-remove"); 
     dbtout << "remove " << key << std::endl;
 
     if (almost_full()) {
@@ -674,7 +678,8 @@ class Table {
 
     while (1) {
       cursor.remove();
-      
+      verify("post-remove"); 
+
       // balance + adjust
       
       if (cursor.level == 0) {
@@ -849,7 +854,7 @@ class Table {
       }
     }
     
-    //return err;
+    if (err == 0) return err;
     
     // print it
     char s[1000];
@@ -867,7 +872,7 @@ class Table {
                << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
       }
 
-      if (0) {
+      if (1) {
         for (int i=0; i<node.size(); i++) {
           if (level < depth-1) {          // index
             dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << std::endl;

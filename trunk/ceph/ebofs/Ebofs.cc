@@ -115,6 +115,8 @@ int Ebofs::mount()
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
   co_tab = new Table<coll_object_t, bool>( nodepool, sb->co_tab );
 
+  verify_tables();
+
   allocator.release_limbo();
 
   
@@ -290,6 +292,22 @@ void Ebofs::close_tables()
   delete co_tab;
 
   nodepool.close();
+}
+
+void Ebofs::verify_tables()
+{
+  bool o = g_conf.ebofs_verify;
+  g_conf.ebofs_verify = true;
+
+  object_tab->verify("onmount");
+  limbo_tab->verify("onmount");
+  alloc_tab->verify("onmount");
+  collection_tab->verify("onmount");
+  co_tab->verify("onmount");
+  for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
+    free_tab[i]->verify("onmount");
+
+  g_conf.ebofs_verify = o;
 }
 
 int Ebofs::umount()
