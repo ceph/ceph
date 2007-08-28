@@ -874,7 +874,7 @@ void CDir::_fetched(bufferlist &bl)
 	CInode *in = 0;
 	if (cache->have_inode(inode.ino)) {
 	  in = cache->get_inode(inode.ino);
-	  dout(12) << "_fetched  got (but i already had) " << *in 
+	  dout(-12) << "_fetched  got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
 	  assert(0);  // this shouldn't happen!! 

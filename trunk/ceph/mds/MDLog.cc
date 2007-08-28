@@ -77,7 +77,7 @@ void MDLog::init_journaler()
 void MDLog::flush_logger()
 {
   if (logger)
-    logger->flush(true);
+    logger->flush();
 }
 
 

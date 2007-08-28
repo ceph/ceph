@@ -73,10 +73,8 @@ void Server::reopen_logger()
     mdserver_logtype.add_inc("dsreq"); // slave
   }
 
-  if (logger) {
-    logger->flush();
+  if (logger) 
     delete logger;
-  }
 
   // logger
   char name[80];

@@ -183,14 +183,8 @@ void MDS::reopen_logger()
   if (whoami < 0) return;
 
   // flush+close old log
-  if (logger) {
-    logger->flush(true);
-    delete logger;
-  }
-  if (logger2) {
-    logger2->flush(true);
-    delete logger2;
-  }
+  if (logger) delete logger;
+  if (logger2) delete logger2;
 
   // log
   string name;
@@ -1018,8 +1012,8 @@ void MDS::suicide()
   dout(1) << "suicide" << dendl;
 
   // flush loggers
-  if (logger) logger->flush(true);
-  if (logger2) logger2->flush(true);
+  if (logger) logger->flush();
+  if (logger2) logger2->flush();
   mdlog->flush_logger();
   
   // stop timers
