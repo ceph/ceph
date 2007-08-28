@@ -22,19 +22,23 @@ public:
   // the map
   version_t version;
   hash_map<pg_t,pg_stat_t> pg_stat;
+  hash_map<int,osd_stat_t> osd_stat;
 
   class Incremental {
   public:
     version_t version;
     map<pg_t,pg_stat_t> pg_stat_updates;
+    map<int,osd_stat_t> osd_stat_updates;
 
     void _encode(bufferlist &bl) {
       ::_encode(version, bl);
       ::_encode(pg_stat_updates, bl);
+      ::_encode(osd_stat_updates, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(version, bl, off);
       ::_decode(pg_stat_updates, bl, off);
+      ::_decode(osd_stat_updates, bl, off);
     }
   };
 

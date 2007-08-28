@@ -189,6 +189,7 @@ private:
   hash_map<int, double> peer_read_time;
   
 
+
   // -- waiters --
   list<class Message*> finished;
   Mutex finished_lock;
@@ -273,6 +274,25 @@ private:
       osd->activate_pg(pgid, epoch);
     }
   };
+
+
+  // -- pg stats --
+  Mutex pg_stat_queue_lock;
+  set<pg_t> pg_stat_queue;
+  Context *send_pg_stats_event;
+
+  class C_Stats : public Context {
+    OSD *osd;
+  public:
+    C_Stats(OSD *o) : osd(o) {}
+    void finish(int r) { 
+      if (osd->send_pg_stats_event == this) {
+	osd->send_pg_stats_event = 0;
+	osd->send_pg_stats(); 
+      }
+    }
+  };
+  void send_pg_stats(); 
 
 
   // -- tids --

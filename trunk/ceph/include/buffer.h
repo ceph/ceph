@@ -476,7 +476,7 @@ public:
       _buffers.push_front(bp);
       _len += bp.length();
     }
-    void push_back(ptr& bp) {
+    void push_back(const ptr& bp) {
       _buffers.push_back(bp);
       _len += bp.length();
     }
@@ -622,10 +622,10 @@ public:
 	append_buffer.set_length(0);   // unused, so far.
       }
     }
-    void append(ptr& bp) {
+    void append(const ptr& bp) {
       push_back(bp);
     }
-    void append(ptr& bp, unsigned off, unsigned len) {
+    void append(const ptr& bp, unsigned off, unsigned len) {
       assert(len+off <= bp.length());
       ptr tempbp(bp, off, len);
       push_back(tempbp);
@@ -1010,14 +1010,14 @@ inline void _encode(const std::string& s, bufferlist& bl)
 {
   uint32_t len = s.length();
   _encoderaw(len, bl);
-  bl.append(s.c_str(), len+1);
+  bl.append(s.c_str(), len);
 }
 inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
   s = bl.c_str() + off;    // FIXME someday to avoid a huge buffer copy?
-  off += len+1;
+  off += len;
 }
 
 // const char* (encode only, string compatible)
@@ -1025,17 +1025,17 @@ inline void _encode(const char *s, bufferlist& bl)
 {
   uint32_t len = strlen(s);
   _encoderaw(len, bl);
-  bl.append(s, len+1);
+  bl.append(s, len);
 }
 
 // bufferptr (encapsulated)
-inline void _encode(bufferptr& bp, bufferlist& bl) 
+inline void _encode(const buffer::ptr& bp, bufferlist& bl) 
 {
   uint32_t len = bp.length();
   _encoderaw(len, bl);
   bl.append(bp);
 }
-inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
+inline void _decode(buffer::ptr& bp, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);

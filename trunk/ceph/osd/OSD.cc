@@ -56,6 +56,8 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGActivateSet.h"
 
+#include "messages/MPGStats.h"
+
 #include "common/Logger.h"
 #include "common/LogType.h"
 #include "common/Timer.h"
@@ -109,7 +111,8 @@ LogType osd_logtype;
 OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
   timer(osd_lock),
   load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
-  iat_averager(g_conf.osd_flash_crowd_iat_alpha)
+  iat_averager(g_conf.osd_flash_crowd_iat_alpha),
+  send_pg_stats_event(0)
 {
   whoami = id;
   messenger = m;
@@ -278,6 +281,10 @@ int OSD::init()
   
   // start the heart
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
+
+  // and stat beacon
+  send_pg_stats_event = new C_Stats(this);
+  timer.add_event_after(g_conf.osd_pg_stats_interval, send_pg_stats_event);
 
   //dout(0) << "osd_rep " << g_conf.osd_rep << dendl;
   
@@ -672,6 +679,50 @@ void OSD::heartbeat()
   float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
   timer.add_event_after(wait, new C_Heartbeat(this));
 }
+
+
+
+void OSD::send_pg_stats()
+{
+  //dout(-10) << "send_pg_stats" << dendl;
+  
+  // grab queue
+  set<pg_t> q;
+  pg_stat_queue_lock.Lock();
+  q.swap(pg_stat_queue);
+  pg_stat_queue_lock.Unlock();
+
+  dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
+  
+  if (q.empty()) return;
+
+  MPGStats *m = new MPGStats;
+  while (!q.empty()) {
+    pg_t pgid = *q.begin();
+    q.erase(q.begin());
+
+    if (!pg_map.count(pgid)) continue;
+    PG *pg = pg_map[pgid];
+    pg->pg_stats_lock.Lock();
+    m->pg_stat[pgid] = pg->pg_stats;
+    pg->pg_stats_lock.Unlock();
+  }
+
+  // fill in osd stats too
+  struct statfs stbuf;
+  store->statfs(&stbuf);
+  m->osd_stat.num_blocks = stbuf.f_blocks;
+  m->osd_stat.num_blocks_avail = stbuf.f_bavail;
+  m->osd_stat.num_objects = stbuf.f_files;
+
+  int mon = monmap->pick_mon();
+  messenger->send_message(m, monmap->get_inst(mon));  
+
+  // reschedule
+  send_pg_stats_event = new C_Stats(this);
+  timer.add_event_after(g_conf.osd_pg_stats_interval, send_pg_stats_event);
+}
+
 
 
 

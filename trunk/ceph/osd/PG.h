@@ -477,6 +477,17 @@ protected:
   // recovery
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
+
+
+  // stats
+  off_t stat_size;
+  off_t stat_num_blocks;
+
+  Mutex pg_stats_lock;
+  pg_stat_t pg_stats;
+
+  void update_stats();
+
 public:
   void clear_primary_state();
 
@@ -543,7 +554,8 @@ public:
     last_epoch_started_any(0),
     last_complete_commit(0),
     peers_complete_thru(0),
-    have_master_log(true)
+    have_master_log(true),
+    stat_size(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }
   

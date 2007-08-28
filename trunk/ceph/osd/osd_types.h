@@ -222,6 +222,18 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 
 
 
+/** osd_stat
+ * aggregate stats for an osd
+ */
+struct osd_stat_t {
+  int64_t num_blocks;
+  int64_t num_blocks_avail;
+  int64_t num_objects;
+
+  osd_stat_t() : num_blocks(0), num_blocks_avail(0), num_objects(0) {}
+};
+
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
@@ -236,8 +248,9 @@ struct pg_stat_t {
   int32_t state;
   int64_t size;         // in bytes
   int64_t num_blocks;   // in 4k blocks
+  int64_t num_objects;
   
-  pg_stat_t() : state(0), size(0), num_blocks(0) {}
+  pg_stat_t() : state(0), size(0), num_blocks(0), num_objects(0) {}
 };
 
 

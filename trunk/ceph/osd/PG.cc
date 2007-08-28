@@ -960,6 +960,7 @@ void PG::activate(ObjectStore::Transaction& t,
       state_set(STATE_CLEAN);
       dout(10) << "activate all replicas clean" << dendl;
       clean_replicas();    
+      update_stats();
     }
   }
 
@@ -990,10 +991,43 @@ void PG::activate(ObjectStore::Transaction& t,
     osd->take_waiters(replay);
   }
 
+  if (is_primary())
+    update_stats(); // update stats
+
   // waiters
   osd->take_waiters(waiting_for_active);
 }
 
+
+void PG::update_stats()
+{
+  dout(15) << "update_stats" << dendl;
+  assert(is_primary());
+
+  // update our stat summary
+  pg_stats_lock.Lock();
+  pg_stats.reported = info.last_update;
+  pg_stats.size = stat_size;
+  pg_stats.num_blocks = stat_num_blocks;
+  switch (state) {
+  case STATE_ACTIVE:
+    if (is_clean())
+      pg_stats.state = pg_stat_t::STATE_OK;
+    else
+      pg_stats.state = pg_stat_t::STATE_RECOVERING;
+    break;
+  case STATE_CRASHED:
+  case STATE_REPLAY:
+    pg_stats.state = pg_stat_t::STATE_RECOVERING; 
+    break;
+  }
+  pg_stats_lock.Unlock();
+
+  // put in osd stat_queue
+  osd->pg_stat_queue_lock.Lock();
+  osd->pg_stat_queue.insert(info.pgid);    
+  osd->pg_stat_queue_lock.Unlock();
+}
 
 
 void PG::write_log(ObjectStore::Transaction& t)

@@ -88,7 +88,7 @@ public:
   }
 
 private:
-  struct {
+  struct st_ {
     // who's asking?
     entity_inst_t client;
     osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
@@ -167,7 +167,7 @@ private:
   const off_t get_offset() { return st.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
-  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
+  void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
@@ -258,7 +258,7 @@ private:
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&st, sizeof(st));
+    ::_encode(st, payload);
     ::_encode(attrset, payload);
     add_payload_chunk_breaks(payload.length() + 4, 
 			     st.offset, data.length(),

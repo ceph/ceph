@@ -1322,10 +1322,12 @@ void ReplicatedPG::op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t las
   dout(10) << "rep_modify_commit on op " << *op
            << ", sending commit to osd" << ackerosd
            << dendl;
-  MOSDOpReply *commit = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true);
-  commit->set_pg_complete_thru(last_complete);
-  osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
-  delete op;
+  if (osd->osdmap->is_up(ackerosd)) {
+    MOSDOpReply *commit = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true);
+    commit->set_pg_complete_thru(last_complete);
+    osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
+    delete op;
+  }
 }
 
 
