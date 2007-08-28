@@ -289,7 +289,7 @@ public:
     
     bool do_cow() {
       if (_raw->nref > 1) {
-	std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
+	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
 	raw *newraw = _raw->clone();
 	release();
 	newraw->nref++;
