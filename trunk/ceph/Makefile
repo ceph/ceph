@@ -204,6 +204,9 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
+dup.ebofs: ebofs/dup.ebofs.cc config.cc common/Clock.o ebofs.o
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+
 
 # hadoop
 libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o

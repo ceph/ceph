@@ -2478,7 +2478,6 @@ int Ebofs::write(object_t oid,
                  const bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
-  assert(len > 0);
 
   // go
   int r = _write(oid, off, len, bl);
@@ -2892,6 +2891,26 @@ int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsaf
   return r;
 }
 
+
+int Ebofs::get_object_collections(object_t oid, set<coll_t>& ls)
+{
+  ebofs_lock.Lock();
+  int r = _get_object_collections(oid, ls);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_get_object_collections(object_t oid, set<coll_t>& ls)
+{
+  dout(8) << "_get_object_collections " << oid << dendl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+  ls = on->collections;
+  put_onode(on);
+  return 0;
+}
+
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
@@ -3010,6 +3029,25 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
   return 0;
 }
 
+int Ebofs::list_objects(list<object_t>& ls)
+{
+  ebofs_lock.Lock();
+  dout(9) << "list_objects " << dendl;
+
+  Table<object_t, Extent>::Cursor cursor(object_tab);
+
+  int num = 0;
+  if (object_tab->find(object_t(), cursor) >= 0) {
+    while (1) {
+      ls.push_back(cursor.current().key);
+      num++;
+      if (cursor.move_right() <= 0) break;
+    }
+  }
+
+  ebofs_lock.Unlock();
+  return num;
+}
 
 
 /***************** collections ******************/
@@ -3343,6 +3381,47 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   ebofs_lock.Unlock();
   return r;
 }
+
+int Ebofs::collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  ebofs_lock.Lock();
+  int r = _collection_getattrs(cid, aset);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  dout(8) << "_collection_getattrs " << cid << dendl;
+
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -ENOENT;
+  aset = cn->attr;
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::collection_setattrs(coll_t cid, const map<string,bufferptr> &aset, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  assert(onsafe == 0); // der i am lazy
+  int r = _collection_setattrs(cid, aset);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_collection_setattrs(coll_t cid, const map<string,bufferptr> &aset)
+{
+  dout(8) << "_collection_setattrs " << cid << dendl;
+  
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -ENOENT;
+  cn->attr = aset;
+  dirty_cnode(cn);
+  put_cnode(cn);
+  return 0;
+}
+
 
 int Ebofs::_collection_rmattr(coll_t cid, const char *name) 
 {
