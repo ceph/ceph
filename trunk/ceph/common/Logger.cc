@@ -65,12 +65,12 @@ static void flush_all_loggers()
 
   // do any catching up we need to
   while (now_sec - last_flush >= g_conf.log_interval) {
-    last_flush += g_conf.log_interval;
     generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushign" << dendl;
     for (list<Logger*>::iterator p = logger_list.begin();
 	 p != logger_list.end();
 	 ++p) 
       (*p)->_flush();
+    last_flush += g_conf.log_interval;
   }
 
   // schedule next flush event
@@ -113,7 +113,6 @@ Logger::Logger(string fn, LogType *type)
 
     this->type = type;
     wrote_header = -1;
-    last_logged = 0;
     wrote_header_last = 0;
     
     version = 0;
@@ -151,12 +150,14 @@ void Logger::set_start(utime_t s)
   start = s;
 }
 
+/*
 void Logger::flush()
 {
   logger_lock.Lock();
   _flush();
   logger_lock.Unlock();
 }
+*/
 
 void Logger::_flush()
 {
@@ -175,7 +176,7 @@ void Logger::_flush()
   maybe_resize(type->keys.size());
   
   // write line to log
-  out << last_logged;
+  out << last_flush;
   for (unsigned i=0; i<type->keys.size(); i++) {
     if (fvals[i] > 0 && vals[i] == 0)
       out << "\t" << fvals[i];

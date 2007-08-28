@@ -50,7 +50,7 @@ class Logger {
   ofstream out;
 
   // what i've written
-  int last_logged;
+  //int last_logged;
   int wrote_header;
   int wrote_header_last;
 
@@ -65,7 +65,7 @@ class Logger {
   double fset(const char *s, double v);
   double finc(const char *s, double v);
 
-  void flush();
+  //void flush();
   void _flush();
 
   void set_start(utime_t s);

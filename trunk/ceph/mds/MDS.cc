@@ -1011,11 +1011,6 @@ void MDS::suicide()
 {
   dout(1) << "suicide" << dendl;
 
-  // flush loggers
-  if (logger) logger->flush();
-  if (logger2) logger2->flush();
-  mdlog->flush_logger();
-  
   // stop timers
   if (beacon_killer) {
     timer.cancel_event(beacon_killer);
