@@ -25,6 +25,7 @@
 #include "BlockDevice.h"
 
 #include "include/interval_set.h"
+#include "include/xlist.h"
 
 class ObjectCache;
 class BufferCache;
@@ -62,6 +63,7 @@ class BufferHead : public LRUObject {
   set<BufferHead*>  shadows;     // shadow bh's that clone()ed me.
   BufferHead*       shadow_of;
 
+
  private:
   int        ref;
   int        state;
@@ -75,6 +77,7 @@ class BufferHead : public LRUObject {
   Extent     object_loc;     // block position _in_object_
 
   utime_t    dirty_stamp;
+  //xlist<BufferHead*>::item xlist_dirty;
 
   bool       want_to_expire;  // wants to be at bottom of lru
 
@@ -84,6 +87,7 @@ class BufferHead : public LRUObject {
     rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
     shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
+    //xlist_dirty(this),
     want_to_expire(false)
     {}
   ~BufferHead() {
@@ -103,6 +107,7 @@ class BufferHead : public LRUObject {
     --ref;
     return ref;
   }
+  int get_num_ref() { return ref; }
 
   block_t start() { return object_loc.start; }
   void set_start(block_t s) { object_loc.start = s; }
@@ -283,7 +288,7 @@ class BufferHead : public LRUObject {
         continue;
       }
       // overlap tail of i?
-      if (off > i->first && off < i->first + i->second.length()) {
+      if (off > i->first && off+len >= i->first + i->second.length()) {
         // shorten i.
         bufferlist o;
         o.claim( i->second );
@@ -293,7 +298,7 @@ class BufferHead : public LRUObject {
         continue;
       }
       // overlap head of i?
-      if (off < i->first && off+len < i->first + i->second.length()) {
+      if (off <= i->first && off+len < i->first + i->second.length()) {
         // move i (make new tail).
         off_t tailoff = off+len;
         unsigned trim = tailoff - i->first;
@@ -321,7 +326,6 @@ class BufferHead : public LRUObject {
     // insert
     partial[off] = p;
   }
-
 
 };
 
@@ -413,6 +417,11 @@ class ObjectCache {
   }
   bool is_empty() { return data.empty(); }
 
+  void try_merge_bh(BufferHead *bh);
+  void try_merge_bh_left(map<block_t, BufferHead*>::iterator& p);
+  void try_merge_bh_right(map<block_t, BufferHead*>::iterator& p);
+  BufferHead* merge_bh_left(BufferHead *left, BufferHead *right);
+
   int find_tx(block_t start, block_t len,
               list<BufferHead*>& tx);
 
@@ -459,7 +468,7 @@ class BufferCache {
   Mutex             &ebofs_lock;          // hack: this is a ref to global ebofs_lock
   BlockDevice       &dev;
 
-  set<BufferHead*> dirty_bh;
+  //xlist<BufferHead*> dirty_bh;
 
   LRU   lru_dirty, lru_rest;
 
@@ -521,7 +530,7 @@ class BufferCache {
     bh->get_oc()->add_bh(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_insert_mid(bh);
-      dirty_bh.insert(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     } else
       lru_rest.lru_insert_mid(bh);
     stat_add(bh);
@@ -544,7 +553,7 @@ class BufferCache {
     stat_sub(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_remove(bh);
-      dirty_bh.erase(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     } else
       lru_rest.lru_remove(bh);
   }
@@ -612,7 +621,7 @@ class BufferCache {
     if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
       lru_rest.lru_remove(bh);
       lru_dirty.lru_insert_top(bh);
-      dirty_bh.insert(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     }
     if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
       lru_dirty.lru_remove(bh);
@@ -620,7 +629,7 @@ class BufferCache {
 	lru_rest.lru_insert_bot(bh);
       else
 	lru_rest.lru_insert_mid(bh);
-      dirty_bh.erase(bh);
+      //dirty_bh.remove(&bh->xlist_dirty);
     }
 
     // set state

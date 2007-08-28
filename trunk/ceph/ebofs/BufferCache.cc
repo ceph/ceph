@@ -133,7 +133,10 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
     assert(p->first == bh->start());
 
     // past?
-    if (p->first >= start+length) break;
+    if (p->first >= start+length) {
+      bh->oc->try_merge_bh_right(p);
+      break;
+    }
 
     if (bh->tx_ioh == ioh)
       bh->tx_ioh = 0;
@@ -149,6 +152,7 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
       assert(bh->end() <= start+length);
       bh->set_last_flushed(version);
       bc->mark_clean(bh);
+      bh->oc->try_merge_bh_left(p);
     } else {
       dout(10) << "tx_finish  leaving tx, " << bh->version << " > " << version 
                << " on " << *bh << dendl;
@@ -714,6 +718,83 @@ void ObjectCache::clone_to(Onode *other)
 
 
 
+BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
+{
+  dout(-10) << "merge_bh_left " << *left << " " << *right << dendl;
+  assert(left->end() == right->start());
+  assert(left->is_clean());
+  assert(right->is_clean());
+  assert(right->get_num_ref() == 0);
+
+  // hrm, is this right?
+  if (right->version > left->version) left->version = right->version;
+  if (right->last_flushed > left->last_flushed) left->last_flushed = right->last_flushed;
+
+  left->set_length(left->length() + right->length());
+  left->data.claim_append(right->data);
+
+  // remove right
+  remove_bh(right);
+  bc->lru_rest.lru_remove(right);
+  delete right;  
+  dout(-10) << "merge_bh_left result " << *left << dendl;
+  return left;
+}
+
+/* wait until this has a user
+void ObjectCache::try_merge_bh(BufferHead *bh)
+{
+  dout(-10) << "try_merge_bh " << *bh << dendl;
+
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(bh->start());
+  assert(p->second == bh);
+  
+  try_merge_bh_left(p);
+  try_merge_bh_right(p);
+}
+*/
+
+
+void ObjectCache::try_merge_bh_left(map<block_t, BufferHead*>::iterator& p)
+{
+  BufferHead *bh = p->second;
+  dout(10) << "try_merge_bh_left " << *bh << dendl;
+
+  // left?
+  if (p != data.begin()) {
+    p--;
+    if (p->second->end() == bh->start() &&
+	p->second->is_clean() && 
+	bh->is_clean() &&
+	bh->get_num_ref() == 0)
+      bh = merge_bh_left(p->second, bh);      // yay!
+    else 
+      p++;      // nope.
+  }
+}
+
+void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
+{
+  BufferHead *bh = p->second;
+  dout(10) << "try_merge_bh_right " << *bh << dendl;
+
+  // right?
+  map<block_t, BufferHead*>::iterator o = p;
+  p++;
+  if (p != data.end() &&
+      bh->end() == p->second->start() && 
+      p->second->is_clean() && 
+      bh->is_clean() &&
+      p->second->get_num_ref() == 0) {
+    BufferHead *right = p->second;
+    p--;
+    merge_bh_left(bh, right);
+  } else
+    p = o;
+}
+
+
+
 /************** BufferCache ***************/
 
 #undef dout
@@ -785,6 +866,8 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   dout(20) << "split   right is " << *right << dendl;
   return right;
 }
+
+
 
 
 void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
