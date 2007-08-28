@@ -264,7 +264,7 @@ private:
   void mark_down(entity_addr_t addr);
   //void mark_up(entity_name_t addr, entity_addr_t& i);
 
-  //tcpaddr_t get_listen_addr() { return listen_addr; }
+  entity_addr_t get_my_addr() { return my_addr; }
 
   void reaper();
 

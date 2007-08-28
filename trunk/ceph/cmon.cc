@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 
     // start messenger
     rank.start_rank();
-    cout << "bound to " << rank.get_listen_addr() << std::endl;
+    cout << "bound to " << rank.get_my_addr() << std::endl;
 
     // add single mon0
     entity_inst_t inst;

@@ -53,9 +53,7 @@ sage mds
 
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
 
-/- .ceph_hosts file, so we can use the infiniband addresses
-
-- look at mds osds
+/- look at mds osds
 
 
 
