@@ -287,11 +287,16 @@ public:
       return _raw->clone();
     }
     
-    void do_cow() {
-      if (_raw->nref != 1) {
+    bool do_cow() {
+      if (_raw->nref > 1) {
 	std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
-	_raw = _raw->clone();
-      }
+	raw *newraw = _raw->clone();
+	release();
+	newraw->nref++;
+	_raw = newraw;
+	return true;
+      } else
+	return false;
     }
 
     void swap(ptr& other) {
