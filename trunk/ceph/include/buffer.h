@@ -681,23 +681,18 @@ public:
       
       // skip off
       std::list<ptr>::const_iterator curbuf = other._buffers.begin();
-      while (off > 0) {
-	assert(curbuf != _buffers.end());
-	if (off >= (*curbuf).length()) {
-	  // skip this buffer
-	  //cout << "skipping over " << *curbuf << std::endl;
-	  off -= (*curbuf).length();
-	  curbuf++;
-	} else {
-	  // somewhere in this buffer!
-	  //cout << "somewhere in " << *curbuf << std::endl;
-	  break;
-	}
+      while (off > 0 &&
+	     off >= curbuf->length()) {
+	// skip this buffer
+	//cout << "skipping over " << *curbuf << std::endl;
+	off -= (*curbuf).length();
+	curbuf++;
       }
+      assert(len == 0 || curbuf != other._buffers.end());
       
       while (len > 0) {
 	// partial?
-	if (off + len < (*curbuf).length()) {
+	if (off + len < curbuf->length()) {
 	  //cout << "copying partial of " << *curbuf << std::endl;
 	  _buffers.push_back( ptr( *curbuf, off, len ) );
 	  _len += len;
@@ -706,13 +701,49 @@ public:
 	
 	// through end
 	//cout << "copying end (all?) of " << *curbuf << std::endl;
-	unsigned howmuch = (*curbuf).length() - off;
+	unsigned howmuch = curbuf->length() - off;
 	_buffers.push_back( ptr( *curbuf, off, howmuch ) );
 	_len += howmuch;
 	len -= howmuch;
 	off = 0;
 	curbuf++;
       }
+    }
+
+    std::string substr(unsigned off, unsigned len) {
+      std::string s;
+      //cout << "substr " << off << "~" << len << " of " << length() << std::endl;
+
+      // skip off
+      std::list<ptr>::const_iterator curbuf = _buffers.begin();
+      while (off > 0 &&
+	     off >= (*curbuf).length()) {
+	// skip this buffer
+	//cout << "skipping over " << *curbuf << std::endl;
+	off -= (*curbuf).length();
+	curbuf++;
+      }
+      assert(len == 0 || curbuf != _buffers.end());
+
+      while (len > 0) {
+	// partial?
+	if (off + len < curbuf->length()) {
+	  //cout << "copying partial of " << *curbuf << std::endl;
+	  s.append(curbuf->c_str() + off, len);
+	  break;
+	}
+	
+	// through end
+	//cout << "copying end (all?) of " << *curbuf << std::endl;
+	unsigned howmuch = curbuf->length() - off;
+	s.append(curbuf->c_str() + off, howmuch);
+	len -= howmuch;
+	off = 0;
+	curbuf++;
+      }
+
+      //cout << "done, got " << s.length() << std::endl;
+      return s;
     }
 
 
@@ -1016,7 +1047,7 @@ inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
-  s = bl.c_str() + off;    // FIXME someday to avoid a huge buffer copy?
+  s = bl.substr(off, len);
   off += len;
 }
 
