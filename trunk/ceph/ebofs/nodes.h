@@ -78,12 +78,20 @@ class Node {
   Node(nodeid_t i, int pib, bufferptr& b, int s) : 
     id(i), pos_in_bitmap(pib), 
     state(s), bptr(b), xlist(this)  {
+    setup_pointers();
+  }
+
+  void setup_pointers() {
     nrecs = (int*)(bptr.c_str());
     type = (int*)(bptr.c_str() + sizeof(*nrecs));
   }
 
-  void do_cow() {
-    bptr.do_cow();
+  bool do_cow() {
+    if (bptr.do_cow()) {
+      setup_pointers();
+      return true;
+    }
+    return false;
   }
 
 
@@ -376,7 +384,7 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-    debofs(20) << "ebofs.nodepool.commit_start start" << std::endl;
+    debofs(20) << "ebofs.nodepool.commit_start start dirty=" << dirty_ls.size() << std::endl;
 
     assert(flushing == 0);
     /*if (0)
@@ -404,7 +412,12 @@ class NodePool {
       debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << std::endl;
       
       bufferlist bl;
-      bl.append(n->get_buffer());
+      if (0) {
+	bufferptr bp = n->get_buffer().clone();  // dup it now
+	bl.append(bp);
+      } else {
+	bl.append(n->get_buffer());
+      }
       dev.write(n->get_id(), EBOFS_NODE_BLOCKS, 
                 bl,
                 new C_NP_FlushNode(this, n->get_id()), "node");
@@ -421,13 +434,13 @@ class NodePool {
     }
     limbo.clear();
 
-    generic_dout(20) << "ebofs.nodepool.commit_start finish" << dendl;
+    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
   }
 
   void commit_wait() {
     while (flushing > 0) 
       commit_cond.Wait(ebofs_lock);
-    generic_dout(20) << "ebofs.nodepool.commit_wait finish" << dendl;
+    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
   }
 
 
@@ -520,8 +533,12 @@ class NodePool {
     // dup data?
     //  this only does a memcpy if there are multiple references.. 
     //  i.e. if we are still writing the old data
-    n->do_cow();
-    
+    if (n->do_cow()) {
+      //assert(0); //i'm duping on write
+      debofs(15) << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << std::endl;
+      //cerr << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << std::endl;
+    }
+
     // release old block
     assert(n->is_clean());
     num_clean--;
@@ -538,6 +555,7 @@ class NodePool {
     // new block
     n->set_state(Node::STATE_DIRTY);
     dirty_ls.push_back(&n->xlist);
+    debofs(15) << "ebofs.nodepool.dirty_node added to dirty list, len now " << dirty_ls.size() << std::endl;
     num_dirty++;
     usemap_bits.set(n->get_pos_in_bitmap());
 
