@@ -227,7 +227,7 @@ class SyntheticClient {
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
 
-  int create_objects(int nobj, int osize);
+  int create_objects(int nobj, int osize, int inflight);
   int uniform_object_rw(int nobj, int osize, int wrpc);
 
   int read_random(string& fn, int mb, int chunk);

@@ -129,6 +129,7 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_CREATEOBJECTS );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"uniformobjectrw") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_UNIFORMOBJECTRW );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -478,9 +479,11 @@ int SyntheticClient::run()
       {
         int count = iargs.front();  iargs.pop_front();
         int size = iargs.front();  iargs.pop_front();
+        int inflight = iargs.front();  iargs.pop_front();
         if (run_me()) {
-          dout(2) << "createobjects " << cout << " " << size << dendl;
-          create_objects(count, size);
+          dout(2) << "createobjects " << cout << " of " << size << " bytes"
+		  << ", " << inflight << " in flight" << dendl;
+          create_objects(count, size, inflight);
         }
       }
       break;
@@ -780,7 +783,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   Cond cond;
   bool ack;
   bool safe;
-  C_Gather *safeg = 0;
+  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+  Context *safegref = safeg->new_sub();  // take a ref
 
   while (!t.end()) {
 
@@ -1123,7 +1127,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
-      if (!safeg) safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
       client->objecter->write(oid, off, len, layout, bl, 
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg->new_sub());
@@ -1138,7 +1141,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_t oid(oh, ol);
       lock.Lock();
       ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-      if (!safeg) safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
       client->objecter->zero(oid, off, len, layout, 
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg->new_sub());
@@ -1154,14 +1156,14 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   }
 
   // wait for safe after an object trace
-  if (safeg) {
-    lock.Lock();
-    while (!safe) {
-      dout(10) << "waiting for safe" << dendl;
-      cond.Wait(lock);
-    }
-    lock.Unlock();
+  safegref->finish(0);
+  delete safegref;
+  lock.Lock();
+  while (!safe) {
+    dout(10) << "waiting for safe" << dendl;
+    cond.Wait(lock);
   }
+  lock.Unlock();
 
   // close open files
   for (hash_map<int64_t, int64_t>::iterator fi = open_files.begin();
@@ -1579,7 +1581,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
 
 
 
-int SyntheticClient::create_objects(int nobj, int osize)
+int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
   dout(5) << "create_objects " << nobj << " size=" << osize << dendl;
 
@@ -1588,34 +1590,41 @@ int SyntheticClient::create_objects(int nobj, int osize)
   bufferlist bl;
   bl.push_back(bp);
 
-  int nper = 10;
-
   Mutex &lock = client->client_lock;
   Cond cond;
   bool ack;
   C_Gather *ackg = 0;
   bool safe;
   C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+  Context *ref = safeg->new_sub();
 
   lock.Lock();
   for (int i=0; i<nobj; i++) {
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
 
-    if (i % nper == 0) {
+    if (i % inflight == 0) {
       if (ackg) {
 	dout(10) << "waiting" << dendl;
 	while (!ack) cond.Wait(lock);
       }
+      dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
       ackg = new C_Gather(new C_SafeCond(&lock, &cond, &ack));
     }
     dout(10) << "writing " << oid << dendl;
     client->objecter->write(oid, 0, osize, layout, bl, ackg->new_sub(), safeg->new_sub());
   }
   while (!ack) cond.Wait(lock);
+
+  lock.Unlock();
+  ref->finish(0);
+  delete ref;
+  lock.Lock();
   dout(10) << "waiting for safe" << dendl;
   while (!safe) cond.Wait(lock);
   lock.Unlock();
+
+  dout(5) << "create_objects done" << dendl;
   return 0;
 }
 
@@ -1634,6 +1643,8 @@ int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
   bool ack;
   bool safe;
   C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+  dout(10) << "safeg = " << safeg << dendl;
+  Context *ref = safeg->new_sub();
 
   lock.Lock();
   while (1) {
@@ -1657,10 +1668,17 @@ int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
       client->objecter->read(oid, 0, osize, layout, &inbl, 
 			     new C_SafeCond(&lock, &cond, &ack));
     }
-    while (!ack) cond.Wait(lock);
+    while (!ack) {
+      dout(20) << "waiting for ack" << dendl;
+      cond.Wait(lock);
+    }
 
   }
   dout(10) << "waiting for safe" << dendl;
+  lock.Unlock();
+  ref->finish(0);
+  delete ref;
+  lock.Lock();
   while (!safe) cond.Wait(lock);
   lock.Unlock();
   return 0;
