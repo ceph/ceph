@@ -80,7 +80,7 @@ protected:
   void get_rep_gather(RepGather*);
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
-  void issue_repop(MOSDOp *op, int osd);
+  void issue_repop(MOSDOp *op, int osd, osd_peer_stat_t& stat);
   RepGather *new_rep_gather(MOSDOp *op);
   void repop_ack(RepGather *repop,
                  int result, bool commit,

@@ -113,6 +113,8 @@ private:
     bool   want_ack;
     bool   want_commit;
     bool   retry_attempt;
+
+    osd_peer_stat_t peer_stat;
   } st;
 
   bufferlist data;
@@ -179,6 +181,8 @@ private:
     return request_received_time;
   }
 
+  void set_peer_stat(osd_peer_stat_t& stat) { st.peer_stat = stat; }
+  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
   
   void set_data(bufferlist &d) {
     data.claim(d);

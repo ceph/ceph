@@ -245,12 +245,16 @@ md_config_t g_conf = {
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
 
-  osd_balance_reads: false,
-  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
-  osd_exclusive_caching: true,         // replicas evict replicated writes
-  osd_load_diff_percent: 20, // load diff for read forwarding
+  osd_balance_reads: false,  // send from client to replica
   osd_flash_crowd_iat_threshold: 100,
   osd_flash_crowd_iat_alpha: 0.125,
+  
+  osd_shed_reads: false,     // forward from primary to replica
+  osd_shed_reads_min_latency: .001,
+  osd_shed_reads_min_load_diff: .2,
+
+  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
+  osd_exclusive_caching: true,         // replicas evict replicated writes
 
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
@@ -804,16 +808,22 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);
-    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
-      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
-    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
-      g_conf.osd_exclusive_caching = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
-      g_conf.osd_load_diff_percent = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0) 
       g_conf.osd_flash_crowd_iat_threshold = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0) 
       g_conf.osd_flash_crowd_iat_alpha = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--osd_shed_reads") == 0) 
+      g_conf.osd_shed_reads = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency") == 0) 
+      g_conf.osd_shed_reads_min_latency = atof(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_load_diff") == 0) 
+      g_conf.osd_shed_reads_min_load_diff = atof(args[++i]);
+
+    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
+      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
+      g_conf.osd_exclusive_caching = atoi(args[++i]);
 
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);

@@ -238,12 +238,16 @@ struct md_config_t {
   // osd
   int   osd_rep;
 
-  bool  osd_balance_reads;
-  bool  osd_immediate_read_from_cache;
-  bool  osd_exclusive_caching;
-  int  osd_load_diff_percent;
+  bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
+
+  bool  osd_shed_reads;
+  double osd_shed_reads_min_latency;
+  double osd_shed_reads_min_load_diff;  // .5 == 50%
+
+  bool  osd_immediate_read_from_cache;
+  bool  osd_exclusive_caching;
 
   int   osd_pg_bits;
   int   osd_object_layout;

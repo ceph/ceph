@@ -18,34 +18,29 @@
 #include "common/Clock.h"
 
 #include "msg/Message.h"
+#include "osd/osd_types.h"
 
 
 class MOSDPing : public Message {
  public:
   epoch_t map_epoch;
   bool ack;
-  float avg_qlen;
-  double read_mean_time;
+  osd_peer_stat_t peer_stat;
 
-  MOSDPing(epoch_t e, 
-	   float aq,
-	   double _read_mean_time,
-	   bool a=false) : Message(MSG_OSD_PING), map_epoch(e), ack(a), avg_qlen(aq), read_mean_time(_read_mean_time) {
-  }
+  MOSDPing(epoch_t e, osd_peer_stat_t& ps, bool a=false) : 
+    Message(MSG_OSD_PING), map_epoch(e), ack(a), peer_stat(ps) { }
   MOSDPing() {}
 
   virtual void decode_payload() {
     int off = 0;
     ::_decode(map_epoch, payload, off);
     ::_decode(ack, payload, off);
-    ::_decode(avg_qlen, payload, off);
-    ::_decode(read_mean_time, payload, off);
+    ::_decode(peer_stat, payload, off);
   }
   virtual void encode_payload() {
     ::_encode(map_epoch, payload);
     ::_encode(ack, payload);
-    ::_encode(avg_qlen, payload);
-    ::_encode(read_mean_time, payload);
+    ::_encode(peer_stat, payload);
   }
 
   virtual char *get_type_name() { return "osd_ping"; }

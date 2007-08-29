@@ -108,7 +108,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 
 
   // -- load balance reads --
-  if (g_conf.osd_balance_reads &&
+  if (g_conf.osd_shed_reads &&
       is_primary() &&
       g_conf.osd_rep == OSD_REP_PRIMARY) {
     // -- read on primary+acker ---
@@ -124,7 +124,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     }
     
     // -- flash crowd?
-    if (!op->get_source().is_osd() && 
+    if (g_conf.osd_balance_reads &&
+	!op->get_source().is_osd() && 
 	is_primary()) {
       // add sample
       osd->iat_averager.add_sample( op->get_oid(), (double)g_clock.now() );
@@ -160,55 +161,56 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       }
     }
     
-    
+    // -- read shedding
+
     // check my load. 
     // TODO xxx we must also compare with our own load
     // if i am x percentage higher than replica , 
     // redirect the read 
     
-    if ( g_conf.osd_balance_reads == LOAD_LATENCY) {
-      double mean_read_time = osd->load_calc.get_average();
-      
-      if ( mean_read_time != -1 ) {
-	
-	for (unsigned i=1; 
-	     i<acting.size(); 
-	     ++i) {
+    if (g_conf.osd_shed_reads == LOAD_LATENCY) {
+      Mutex::Locker lock(osd->peer_stat_lock);
+
+      // above some minimum?
+      if (osd->my_stat.read_latency >= .001) {  
+	for (unsigned i=1; i<acting.size(); ++i) {
 	  int peer = acting[i];
+	  if (osd->peer_stat.count(peer) == 0) continue;
 	  
-	  dout(10) << "my read time " << mean_read_time 
-		   << "peer_readtime" << osd->peer_read_time[peer] 
+	  dout(-10) << "preprocess_op my read latency " << osd->my_stat.read_latency
+		   << ", peer " << peer << " is " << osd->peer_stat[peer].read_latency
 		   << " of peer" << peer << dendl;
 	  
-	  if ( osd->peer_read_time.count(peer) &&
-	       ( (osd->peer_read_time[peer]*100/mean_read_time) <
-		 (100 - g_conf.osd_load_diff_percent))) {
+	  if ((osd->peer_stat[peer].read_latency/osd->my_stat.read_latency) <
+	      (1.0 - g_conf.osd_shed_reads_min_load_diff)) {
 	    dout(10) << " forwarding to peer osd" << peer << dendl;
-	    
 	    osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
 	    return true;
 	  }
 	}
       }
     }
-    else if ( g_conf.osd_balance_reads == LOAD_QUEUE_SIZE ) {
+    else if (g_conf.osd_shed_reads == LOAD_QUEUE_SIZE && osd->stat_ops) {
+      Mutex::Locker lock(osd->peer_stat_lock);
+
       // am i above my average?
-      float my_avg = osd->hb_stat_qlen / osd->hb_stat_ops;
+      float my_avg = osd->stat_qlen / osd->stat_ops;
       
       if (osd->pending_ops > my_avg) {
 	// is there a peer who is below my average?
 	for (unsigned i=1; i<acting.size(); ++i) {
 	  int peer = acting[i];
-	  if (osd->peer_qlen.count(peer) &&
-	      osd->peer_qlen[peer] < my_avg) {
+	  Mutex::Locker lock(osd->peer_stat_lock);
+	  if (osd->peer_stat.count(peer) &&
+	      osd->peer_stat[peer].qlen < my_avg) {
 	    // calculate a probability that we should redirect
-	    float p = (my_avg - osd->peer_qlen[peer]) / my_avg;             // this is dumb.
+	    float p = (my_avg - osd->peer_stat[peer].qlen) / my_avg;             // this is dumb.
 	    
 	    if (drand48() <= p) {
 	      // take the first one
 	      dout(10) << "my qlen " << osd->pending_ops << " > my_avg " << my_avg
 		       << ", p=" << p 
-		       << ", fwd to peer w/ qlen " << osd->peer_qlen[peer]
+		       << ", fwd to peer w/ qlen " << osd->peer_stat[peer].qlen
 		       << " osd" << peer
 		       << dendl;
 	      osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
@@ -219,31 +221,32 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       }
     }
     
-    else if ( g_conf.osd_balance_reads == LOAD_HYBRID ) {
+    else if ( g_conf.osd_shed_reads == LOAD_HYBRID ) {
       // am i above my average?
-      float my_avg = osd->hb_stat_qlen / osd->hb_stat_ops;
+      float my_avg = osd->stat_qlen / osd->stat_ops;
       
       if (osd->pending_ops > my_avg) {
 	// is there a peer who is below my average?
 	for (unsigned i=1; i<acting.size(); ++i) {
 	  int peer = acting[i];
-	  if (osd->peer_qlen.count(peer) &&
-	      osd->peer_qlen[peer] < my_avg) {
+	  Mutex::Locker lock(osd->peer_stat_lock);
+	  if (osd->peer_stat.count(peer) &&
+	      osd->peer_stat[peer].qlen < my_avg) {
 	    // calculate a probability that we should redirect
-	    //float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
+	    //float p = (my_avg - peer_stat[peer].qlen) / my_avg;             // this is dumb.
 	    
-	    double mean_read_time = osd->load_calc.get_average();
+	    double mean_read_time = osd->my_stat.read_latency;
 	    
 	    if ( mean_read_time != -1 &&  
-		 osd->peer_read_time.count(peer) &&
-		 ( (osd->peer_read_time[peer]*100/mean_read_time) <
-		   ( 100 - g_conf.osd_load_diff_percent) ) )
+		 osd->peer_stat.count(peer) &&
+		 ( (osd->peer_stat[peer].read_latency/mean_read_time) <
+		   ( 1.0 - g_conf.osd_shed_reads_min_load_diff) ) )
 	      //if (drand48() <= p) {
 	      // take the first one
 	      dout(10) << "using hybrid :my qlen " << osd->pending_ops << " > my_avg " << my_avg
 		       << "my read time  "<<  mean_read_time
-		       << "peer read time " << osd->peer_read_time[peer]  
-		       << ", fwd to peer w/ qlen " << osd->peer_qlen[peer]
+		       << "peer read time " << osd->peer_stat[peer].read_latency
+		       << ", fwd to peer w/ qlen " << osd->peer_stat[peer].read_latency
 		       << " osd" << peer
 		       << dendl;
 	    osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
@@ -261,11 +264,11 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     if (osd->store->is_cached( op->get_oid() , 
 			       op->get_offset(), 
 			       op->get_length() ) == 0) {
-      if (!is_primary()) {
+      if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
 	if (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) < 0) {
-	  dout(10) << "preprocess_op in-cache but no balance-reads on " << op->get_oid()
+	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << op->get_oid()
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
 	  return true;
@@ -439,16 +442,15 @@ void ReplicatedPG::op_read(MOSDOp *op)
   if (r >= 0) {
     reply->set_result(0);
 
-    dout(10) <<  "READ TIME DIFF"
-	     << (double)g_clock.now()-op->get_received_time()
-	     << dendl;
-    osd->load_calc.add((double)g_clock.now() - op->get_received_time());
+    utime_t diff = g_clock.now();
+    diff -= op->get_received_time();
+    dout(10) <<  "op_read total op latency " << diff << dendl;
+    osd->read_latency_calc.add(diff);
 
   } else {
     reply->set_result(r);   // error
   }
   
- 
   // send it
   osd->messenger->send_message(reply, op->get_client_inst());
   
@@ -803,7 +805,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
 }
 
 
-void ReplicatedPG::issue_repop(MOSDOp *op, int dest)
+void ReplicatedPG::issue_repop(MOSDOp *op, int dest, osd_peer_stat_t& stat)
 {
   object_t oid = op->get_oid();
   
@@ -825,6 +827,8 @@ void ReplicatedPG::issue_repop(MOSDOp *op, int dest)
   
   wr->set_rep_tid(op->get_rep_tid());
   wr->set_pg_trim_to(peers_complete_thru);
+
+  wr->set_peer_stat(stat);
   
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
@@ -1122,6 +1126,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     osd->logger->inc("c_wrb", op->get_length());
   }
 
+  // note my stats
+  osd->peer_stat_lock.Lock();
+  osd->_refresh_my_stat(g_clock.now());
+  osd_peer_stat_t stat = osd->my_stat;
+  osd->peer_stat_lock.Unlock();
+
+
   // issue replica writes
   RepGather *repop = 0;
   bool alone = (acting.size() == 1);
@@ -1133,13 +1144,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     int next = acting[1];
     if (acting.size() > 2)
       next = acting[2];
-    issue_repop(op, next);
+    issue_repop(op, next, stat);
   } 
   else if (g_conf.osd_rep == OSD_REP_SPLAY && !alone) {
     // splay rep.  send to rest.
     for (unsigned i=1; i<acting.size(); ++i)
     //for (unsigned i=acting.size()-1; i>=1; --i)
-      issue_repop(op, acting[i]);
+      issue_repop(op, acting[i], stat);
   } else {
     // primary rep, or alone.
     repop = new_rep_gather(op);
@@ -1147,7 +1158,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     // send to rest.
     if (!alone)
       for (unsigned i=1; i<acting.size(); i++)
-        issue_repop(op, acting[i]);
+        issue_repop(op, acting[i], stat);
   }
 
   if (repop) {    
@@ -1216,6 +1227,13 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
   
+  // note peer's stat
+  int fromosd = op->get_source().num();
+  osd->peer_stat_lock.Lock();
+  osd->peer_stat[fromosd] = op->get_peer_stat();
+  dout(20) << "op_rep_modify got peer " << fromosd << " stat " << op->get_peer_stat() << dendl;
+  osd->peer_stat_lock.Unlock();
+
   // we better not be missing this.
   assert(!missing.is_missing(oid));
 
@@ -1238,7 +1256,6 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
       }
       
       // infer ack from source
-      int fromosd = op->get_source().num();
       get_rep_gather(repop);
       {
         //assert(repop->waitfor_ack.count(fromosd));   // no, we may come thru here twice.
@@ -1252,12 +1269,14 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
 
     // chain?  forward?
     if (g_conf.osd_rep == OSD_REP_CHAIN && !is_acker()) {
+      osd_peer_stat_t stat = osd->my_stat; // FIXME
+      
       // chain rep, not at the tail yet.
       int myrank = osd->osdmap->calc_pg_rank(osd->get_nodeid(), acting);
       int next = myrank+1;
       if (next == (int)acting.size())
 	next = 1;
-      issue_repop(op, acting[next]);	
+      issue_repop(op, acting[next], stat);	
     }
   }
 

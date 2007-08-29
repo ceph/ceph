@@ -109,7 +109,9 @@ LogType osd_logtype;
 
 OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
   timer(osd_lock),
-  load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
+  stat_oprate(5.0),
+  read_latency_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
+  qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha)
 {
   whoami = id;
@@ -124,8 +126,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) :
 
   state = STATE_BOOTING;
 
-  hb_stat_ops = 0;
-  hb_stat_qlen = 0;
+  stat_ops = 0;
+  stat_qlen = 0;
 
   pending_ops = 0;
   waiting_for_no_ops = false;
@@ -599,6 +601,31 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 
 // -------------------------------------
 
+void OSD::_refresh_my_stat(utime_t now)
+{
+  assert(peer_stat_lock.is_locked());
+
+  // refresh?
+  if (now - my_stat.stamp > .5) {
+    my_stat.stamp = now;
+
+    my_stat.oprate = stat_oprate.get(now);
+
+    // qlen
+    //double qlen = 0;
+    //if (stat_ops) qlen = 
+    //qlen_calc.add(qlen);
+    my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
+    stat_ops = 0;
+    stat_qlen = 0;
+
+    my_stat.read_latency = read_latency_calc.get_average();
+    if (my_stat.read_latency < 0) my_stat.read_latency = 0;
+
+    dout(-10) << "_refresh_my_stat " << my_stat << dendl;
+  }
+}
+
 void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
@@ -606,21 +633,13 @@ void OSD::heartbeat()
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
 
   // calc my stats
-  float avg_qlen = 0;
-  if (hb_stat_ops) avg_qlen = (float)hb_stat_qlen / (float)hb_stat_ops;
+  peer_stat_lock.Lock();
+  _refresh_my_stat(now);
+  dout(-5) << "heartbeat: " << my_stat << dendl;
+  peer_stat_lock.Unlock();
 
-  double read_mean_time = load_calc.get_average();
-
-  dout(5) << "heartbeat " << now 
-	  << ": ops " << hb_stat_ops
-	  << ", avg qlen " << avg_qlen
- 	  << ", mean read time " << read_mean_time
-	  << dendl;
+  //load_calc.set_size(stat_ops);
   
-  // reset until next time around
-  hb_stat_ops = 0;
-  hb_stat_qlen = 0;
-
   // send pings
   set<int> pingset;
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
@@ -641,10 +660,8 @@ void OSD::heartbeat()
        i != pingset.end();
        i++) {
     _share_map_outgoing( osdmap->get_inst(*i) );
-    messenger->send_message(new MOSDPing(osdmap->get_epoch(), 
-				avg_qlen, 
-				read_mean_time ), 
-				osdmap->get_inst(*i));
+    messenger->send_message(new MOSDPing(osdmap->get_epoch(), my_stat),
+			    osdmap->get_inst(*i));
   }
 
   if (logger) logger->set("pingset", pingset.size());
@@ -937,8 +954,9 @@ void OSD::handle_osd_ping(MOSDPing *m)
   _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
   int from = m->get_source().num();
-  peer_qlen[from] = m->avg_qlen;
-  peer_read_time[from] = m->read_mean_time;
+  peer_stat_lock.Lock();
+  peer_stat[from] = m->peer_stat;
+  peer_stat_lock.Unlock();
 
   delete m;
 }
@@ -1947,11 +1965,13 @@ void OSD::handle_op(MOSDOp *op)
 
   // mark the read request received time for finding the 
   // read througput load.  
-  op->set_received_time(g_clock.now());
+  utime_t now = g_clock.now();
+  op->set_received_time(now);
 
   // update qlen stats
-  hb_stat_ops++;
-  hb_stat_qlen += pending_ops;
+  stat_oprate.hit(now);
+  stat_ops++;
+  stat_qlen += pending_ops;
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) {
