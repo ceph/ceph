@@ -41,8 +41,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
-#define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " osd" << whoami << ".fakestore "
+#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
@@ -51,8 +51,8 @@
 using namespace __gnu_cxx;
 
 // crap-a-crap hash
-#define HASH_DIRS       0x80
-#define HASH_MASK       0x7f
+//#define HASH_DIRS       0x80
+//#define HASH_MASK       0x7f
 // end crap hash
 
 
@@ -69,14 +69,16 @@ int FakeStore::statfs(struct statfs *buf)
  */ 
 void FakeStore::get_oname(object_t oid, char *s) 
 {
-  static hash<object_t> H;
+  //static hash<object_t> H;
   assert(sizeof(oid) == 16);
 #ifdef __LP64__
-  sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
+  //sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
+  sprintf(s, "%s/objects/%016lx.%016lx", basedir.c_str(), 
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #else
-  sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
+  //sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
+  sprintf(s, "%s/objects/%016llx.%016llx", basedir.c_str(), 
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #endif
@@ -130,6 +132,7 @@ int FakeStore::mkfs()
   system(cmd);
 
   // hashed bits too
+  /*
   for (int i=0; i<HASH_DIRS; i++) {
     char s[4];
     sprintf(s, "%02x", i);
@@ -142,7 +145,8 @@ int FakeStore::mkfs()
       return r;
     }
   }
-  
+  */
+
   if (g_conf.fakestore_dev) {
     char cmd[100];
     dout(0) << "umounting" << dendl;
@@ -434,7 +438,10 @@ int FakeStore::setattrs(object_t oid, map<string,bufferptr>& aset)
        p != aset.end();
        ++p) {
     r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-    if (r < 0) break;
+    if (r < 0) {
+      cerr << "error setxattr " << strerror(errno) << std::endl;
+      break;
+    }
   }
 #endif
   return r;
@@ -524,6 +531,49 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   return 0;
 }
 
+int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
+{
+  if (fake_attrs) return attrs.collection_setattrs(cid, aset);
+
+  char fn[100];
+  get_cdir(cid, fn);
+  int r = 0;
+#ifndef __CYGWIN__
+  for (map<string,bufferptr>::iterator p = aset.begin();
+       p != aset.end();
+       ++p) {
+    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+    if (r < 0) break;
+  }
+#endif
+  return r;
+}
+
+int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
+{
+  if (fake_attrs) return attrs.collection_getattrs(cid, aset);
+
+#ifndef __CYGWIN__
+  char fn[100];
+  get_cdir(cid, fn);
+
+  char val[1000];
+  char names[1000];
+  int num = ::listxattr(fn, names, 1000);
+  
+  char *name = names;
+  for (int i=0; i<num; i++) {
+    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+    int l = ::getxattr(fn, name, val, 1000);
+    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
+    aset[names].append(val, l);
+    name += strlen(name) + 1;
+  }
+#endif
+  return 0;
+}
+
+
 /*
 int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size) 
 {
@@ -531,6 +581,35 @@ int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size)
   return 0;
 }
 */
+
+
+int FakeStore::list_objects(list<object_t>& ls) 
+{
+  char fn[200];
+  sprintf(fn, "%s/objects", basedir.c_str());
+
+  DIR *dir = ::opendir(fn);
+  assert(dir);
+
+  struct dirent *de;
+  while ((de = ::readdir(dir)) != 0) {
+    if (de->d_name[0] == '.') continue;
+    // parse
+    object_t o;
+    assert(sizeof(o) == 16);
+    //cout << "  got object " << de->d_name << std::endl;
+    *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
+    assert(de->d_name[16] == '.');
+    *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
+    //dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << dendl;
+    if (errno) continue;
+    ls.push_back(o);
+  }
+  
+  ::closedir(dir);
+  return 0;
+}
+
 
 // --------------------------
 // collections
@@ -645,6 +724,8 @@ int FakeStore::collection_list(coll_t c, list<object_t>& ls)
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
+    if (de->d_name[0] == '.') continue;
+    //cout << "  got object " << de->d_name << std::endl;
     object_t o;
     assert(sizeof(o) == 16);
     *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);

@@ -310,7 +310,7 @@ protected:
   int collection_list(coll_t c, list<object_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
-  int collection_setattrs(coll_t cid, const map<string,bufferptr> &aset, Context *onsafe);
+  int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_getattr(coll_t cid, const char *name, void *value, size_t size);
   int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
@@ -362,7 +362,7 @@ private:
   int _collection_remove(coll_t c, object_t o);
   int _collection_getattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
-  int _collection_setattrs(coll_t oid, const map<string,bufferptr> &aset);
+  int _collection_setattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_rmattr(coll_t cid, const char *name);
 
   

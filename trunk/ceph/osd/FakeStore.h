@@ -35,7 +35,6 @@ using namespace __gnu_cxx;
 
 class FakeStore : public ObjectStore {
   string basedir;
-  int whoami;
 
   Mutex synclock;
   Cond synccond;
@@ -55,9 +54,8 @@ class FakeStore : public ObjectStore {
   void get_coname(coll_t cid, object_t oid, char *s);
 
  public:
-  FakeStore(char *base, int w) : 
+  FakeStore(char *base) : 
     basedir(base),
-    whoami(w),
     unsync(0),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false) { }
@@ -83,6 +81,8 @@ class FakeStore : public ObjectStore {
   void sync();
   void sync(Context *onsafe);
 
+  int list_objects(list<object_t>& ls);
+
   // attrs
   int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(object_t oid, map<string,bufferptr>& aset);
@@ -94,7 +94,8 @@ class FakeStore : public ObjectStore {
   int collection_rmattr(coll_t c, const char *name, Context *onsafe=0);
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   //int collection_listattr(coll_t c, char *attrs, size_t size);
-
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
+  int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
 
   // collections
   int list_collections(list<coll_t>& ls);
@@ -105,6 +106,8 @@ class FakeStore : public ObjectStore {
   int collection_add(coll_t c, object_t o, Context *onsafe=0);
   int collection_remove(coll_t c, object_t o, Context *onsafe=0);
   int collection_list(coll_t c, list<object_t>& o);
+
+
 
 };
 

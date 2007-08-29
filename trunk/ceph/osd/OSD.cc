@@ -170,7 +170,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) :
 #endif // USE_OSBDB
   else {
     sprintf(dev_path, "osddata/osd%d", whoami);
-    store = new FakeStore(dev_path, whoami);
+    store = new FakeStore(dev_path);
   }
 
 }
@@ -298,6 +298,8 @@ int OSD::shutdown()
   state = STATE_STOPPING;
 
   // cancel timers
+  timer.cancel_event(send_pg_stats_event);
+  send_pg_stats_event = 0;
   timer.cancel_all();
   timer.join();
 

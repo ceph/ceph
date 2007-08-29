@@ -119,7 +119,7 @@ endif
 
 
 # targets
-TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn
+TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn dupstore
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 ifneq ($(fuse),no)
@@ -204,7 +204,7 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-dup.ebofs: ebofs/dup.ebofs.cc config.cc common/Clock.o ebofs.o
+dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 

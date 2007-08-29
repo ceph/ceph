@@ -3401,16 +3401,15 @@ int Ebofs::_collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
   return 0;
 }
 
-int Ebofs::collection_setattrs(coll_t cid, const map<string,bufferptr> &aset, Context *onsafe)
+int Ebofs::collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
-  assert(onsafe == 0); // der i am lazy
   int r = _collection_setattrs(cid, aset);
   ebofs_lock.Unlock();
   return r;
 }
 
-int Ebofs::_collection_setattrs(coll_t cid, const map<string,bufferptr> &aset)
+int Ebofs::_collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   dout(8) << "_collection_setattrs " << cid << dendl;
   
