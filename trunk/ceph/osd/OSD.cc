@@ -283,11 +283,8 @@ int OSD::init()
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
 
   // and stat beacon
-  send_pg_stats_event = new C_Stats(this);
-  timer.add_event_after(g_conf.osd_pg_stats_interval, send_pg_stats_event);
+  timer.add_event_after(g_conf.osd_pg_stats_interval, new C_Stats(this));
 
-  //dout(0) << "osd_rep " << g_conf.osd_rep << dendl;
-  
   return 0;
 }
 
@@ -298,8 +295,6 @@ int OSD::shutdown()
   state = STATE_STOPPING;
 
   // cancel timers
-  timer.cancel_event(send_pg_stats_event);
-  send_pg_stats_event = 0;
   timer.cancel_all();
   timer.join();
 
@@ -721,8 +716,7 @@ void OSD::send_pg_stats()
   messenger->send_message(m, monmap->get_inst(mon));  
 
   // reschedule
-  send_pg_stats_event = new C_Stats(this);
-  timer.add_event_after(g_conf.osd_pg_stats_interval, send_pg_stats_event);
+  timer.add_event_after(g_conf.osd_pg_stats_interval, new C_Stats(this));
 }
 
 

@@ -299,10 +299,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
   case OSD_OP_READ:
   case OSD_OP_STAT:
     op_read(op);
-    if (op->get_op() == OSD_OP_READ) {
-      osd->logger->inc("c_rd");
-      osd->logger->inc("c_rdb", op->get_length());
-    }
     break;
     
     // rep stuff
@@ -332,11 +328,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
     } else {
       // go go gadget pg
       op_modify(op);
-      
-      if (op->get_op() == OSD_OP_WRITE) {
-	osd->logger->inc("c_wr");
-	osd->logger->inc("c_wrb", op->get_length());
-      }
     }
     break;
     
@@ -421,6 +412,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	reply->set_length(r);
 	dout(15) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
       }
+      osd->logger->inc("c_rd");
+      osd->logger->inc("c_rdb", op->get_length());
       break;
 
     case OSD_OP_STAT:
@@ -1120,6 +1113,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
 
+  if (op->get_op() == OSD_OP_WRITE) {
+    osd->logger->inc("c_wr");
+    osd->logger->inc("c_wrb", op->get_length());
+  }
+
   // issue replica writes
   RepGather *repop = 0;
   bool alone = (acting.size() == 1);
@@ -1187,8 +1185,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
     oncommit->ack();
   }
-
-
 
 }
 

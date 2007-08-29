@@ -286,10 +286,7 @@ private:
   public:
     C_Stats(OSD *o) : osd(o) {}
     void finish(int r) { 
-      if (osd->send_pg_stats_event == this) {
-	osd->send_pg_stats_event = 0;
-	osd->send_pg_stats(); 
-      }
+      osd->send_pg_stats(); 
     }
   };
   void send_pg_stats(); 
