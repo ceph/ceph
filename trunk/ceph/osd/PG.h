@@ -25,6 +25,7 @@
 #include "msg/Messenger.h"
 
 #include <list>
+#include <string>
 using namespace std;
 
 #include <ext/hash_map>
@@ -73,7 +74,7 @@ public:
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
                      last_epoch_started(0), last_epoch_finished(0) {}
-    bool is_clean() const { return last_update == last_complete; }
+    bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
   };
   
@@ -379,6 +380,19 @@ public:
   // non-primary
   static const int STATE_STRAY =  16; // i must notify the primary i exist.
 
+  static std::string get_state_string(int state) {
+    std::string st;
+    if (state & STATE_ACTIVE) st += "active+";
+    if (state & STATE_CLEAN) st += "clean+";
+    if (state & STATE_CRASHED) st += "crashed+";
+    if (state & STATE_REPLAY) st += "replay+";
+    if (state & STATE_STRAY) st += "stray+";
+    if (!st.length()) 
+      st = "inactive";
+    else 
+      st.resize(st.length()-1);
+    return st;
+  }
 
 protected:
   OSD *osd;
@@ -453,7 +467,7 @@ protected:
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
-  set<int>    clean_set;   // current OSDs that are clean
+  set<int>    uptodate_set;  // current OSDs that are uptodate
   eversion_t  oldest_update; // lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   set<int>             peer_info_requested;
@@ -500,7 +514,7 @@ public:
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
   
-  bool is_all_clean() const { return clean_set.size() == acting.size(); }
+  bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
@@ -536,7 +550,9 @@ public:
 
   virtual void cancel_recovery() = 0;
   virtual bool do_recovery() = 0;
-  virtual void clean_replicas() = 0;
+  virtual void purge_strays() = 0;
+
+  void finish_recovery();
 
   off_t get_log_write_pos() {
     return 0;

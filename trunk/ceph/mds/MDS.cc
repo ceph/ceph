@@ -72,6 +72,7 @@
 MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
   timer(mds_lock), 
   clientmap(this) {
+
   this->whoami = whoami;
 
   monmap = mm;
@@ -80,7 +81,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   mdsmap = new MDSMap;
   osdmap = new OSDMap;
 
-  objecter = new Objecter(messenger, monmap, osdmap);
+  objecter = new Objecter(messenger, monmap, osdmap, mds_lock);
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
@@ -117,6 +118,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
 }
 
 MDS::~MDS() {
+  Mutex::Locker lock(mds_lock);
+
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
@@ -290,6 +293,8 @@ void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
 int MDS::init(bool standby)
 {
   mds_lock.Lock();
+
+  objecter->init();
   
   want_state = MDSMap::STATE_BOOT;
   
@@ -1029,6 +1034,8 @@ void MDS::suicide()
   
   // shut down cache
   mdcache->shutdown();
+
+  objecter->shutdown();
   
   // shut down messenger
   messenger->shutdown();

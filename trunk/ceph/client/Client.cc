@@ -128,7 +128,7 @@ Client::Client(Messenger *m, MonMap *mm, int in) : timer(client_lock)
 
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
-  objecter = new Objecter(messenger, monmap, osdmap);
+  objecter = new Objecter(messenger, monmap, osdmap, client_lock);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock);
   filer = new Filer(objecter);
@@ -229,10 +229,12 @@ void Client::dump_cache()
 
 void Client::init() 
 {
+  objecter->init();
 }
 
 void Client::shutdown() {
   dout(1) << "shutdown" << dendl;
+  objecter->shutdown();
   messenger->shutdown();
 }
 
@@ -2842,6 +2844,7 @@ void Client::hack_sync_write_safe()
   client_lock.Lock();
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
+  dout(15) << "hack_sync_write_safe unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
     dout(10) << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();

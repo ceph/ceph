@@ -26,7 +26,12 @@
 
 #include "common/Timer.h"
 
+#include "osd/osd_types.h"
+#include "osd/PG.h"  // yuck
+
 #include "config.h"
+#include <sstream>
+
 
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
@@ -65,6 +70,17 @@ bool PGMonitor::update_from_paxos()
       inc._decode(bl, off);
       pg_map.apply_incremental(inc);
       
+      std::stringstream ss;
+      for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
+	   p != pg_map.num_pg_by_state.end();
+	   ++p) {
+	if (p != pg_map.num_pg_by_state.begin())
+	  ss << ", ";
+	ss << p->second << " " << PG::get_state_string(p->first) << "(" << p->first << ")";
+      }
+      string states = ss.str();
+      dout(0) << "v" << pg_map.version << " " << states << dendl;
+
     } else {
       dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << dendl;
       return false;
@@ -169,20 +185,22 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++) {
-    pg_t pgid;
+    pg_t pgid = p->first;
     if ((pg_map.pg_stat.count(pgid) && 
-	 pg_map.pg_stat[pgid].reported >= p->second.reported)) {
+	 pg_map.pg_stat[pgid].reported > p->second.reported)) {
       dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << dendl;
       continue;
     }
     if (pending_inc.pg_stat_updates.count(pgid) && 
-	pending_inc.pg_stat_updates[pgid].reported >= p->second.reported) {
+	pending_inc.pg_stat_updates[pgid].reported > p->second.reported) {
       dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported
 	       << " (pending)" << dendl;
       continue;
     }
 
-    dout(15) << " got " << pgid << " reported at " << p->second.reported << dendl;
+    dout(-15) << " got " << pgid << " reported at " << p->second.reported 
+	     << " state " << PG::get_state_string(p->second.state)
+	     << dendl;
     pending_inc.pg_stat_updates[pgid] = p->second;
 
     // we don't care about consistency; apply to live map.

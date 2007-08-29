@@ -319,7 +319,7 @@ FakeMessenger::~FakeMessenger()
 
 int FakeMessenger::shutdown()
 {
-  dout(0) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
+  dout(2) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
   lock.Lock();
   assert(directory.count(_myinst.addr) == 1);
   shutdown_set.insert(_myinst.addr);

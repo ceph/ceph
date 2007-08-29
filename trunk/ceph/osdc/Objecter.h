@@ -21,6 +21,8 @@
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
 
+#include "common/Timer.h"
+
 #include <list>
 #include <map>
 #include <ext/hash_map>
@@ -49,6 +51,19 @@ class Objecter {
   utime_t last_epoch_requested_stamp;
 
   void maybe_request_map();
+
+  Mutex &client_lock;
+  SafeTimer timer;
+  Context *tick_event;
+  
+  class C_Tick : public Context {
+    Objecter *ob;
+  public:
+    C_Tick(Objecter *o) : ob(o) {}
+    void finish(int r) { ob->tick(); }
+  };
+  void tick();
+
 
   /*** track pending operations ***/
   // read
@@ -117,7 +132,8 @@ class Objecter {
   public:
     vector<int> acting;
     set<tid_t>  active_tids; // active ops
-    
+    utime_t last;
+
     PG() {}
     
     // primary - where i write
@@ -153,14 +169,21 @@ class Objecter {
     
 
  public:
-  Objecter(Messenger *m, MonMap *mm, OSDMap *om) : 
-    messenger(m), monmap(mm), osdmap(om),
+  Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
+    messenger(m), monmap(mm), osdmap(om), 
     last_tid(0), client_inc(-1),
-    num_unacked(0), num_uncommitted(0)
-    {}
-  ~Objecter() {
-    // clean up op_*
-    // ***
+    num_unacked(0), num_uncommitted(0),
+    client_lock(l), timer(l), tick_event(0) 
+  { }
+  ~Objecter() { }
+
+  void init() {
+    assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
+    timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+  }
+  void shutdown() {
+    assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
+    if (tick_event) timer.cancel_event(tick_event);
   }
 
   // messages

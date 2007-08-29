@@ -238,11 +238,6 @@ struct osd_stat_t {
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
-  const static int STATE_UNKNOWN =    0;
-  const static int STATE_OK =         1;
-  const static int STATE_RECOVERING = 2;
-  const static int STATE_OFFLINE =    3;
-  
   eversion_t reported;
   
   int32_t state;

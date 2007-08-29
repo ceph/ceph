@@ -53,6 +53,8 @@ struct md_config_t {
   bool log_messages;
   bool log_pins;
 
+  char *dout_dir;
+
   bool fake_clock;
   bool fakemessenger_serialize;
 
@@ -168,6 +170,8 @@ struct md_config_t {
   // objecter
   bool  objecter_buffer_uncommitted;
   double objecter_map_request_interval;
+  double objecter_tick_interval;
+  double objecter_timeout;
 
   // journaler
   bool  journaler_allow_split_entries;

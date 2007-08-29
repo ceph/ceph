@@ -29,7 +29,7 @@
 
 
 #include "ReplicatedPG.h"
-#include "RAID4PG.h"
+//#include "RAID4PG.h"
 
 #include "Ager.h"
 
@@ -79,7 +79,6 @@ char *ebofs_base_path = "./dev";
 
 static const object_t SUPERBLOCK_OBJECT(0,0);
 
-
 // <hack> force remount hack for performance testing FakeStore
 class C_Remount : public Context {
   OSD *osd;
@@ -111,8 +110,7 @@ LogType osd_logtype;
 OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
   timer(osd_lock),
   load_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
-  iat_averager(g_conf.osd_flash_crowd_iat_alpha),
-  send_pg_stats_event(0)
+  iat_averager(g_conf.osd_flash_crowd_iat_alpha)
 {
   whoami = id;
   messenger = m;
@@ -371,8 +369,8 @@ PG *OSD::_new_lock_pg(pg_t pgid)
   PG *pg;
   if (pgid.is_rep())
     pg = new ReplicatedPG(this, pgid);
-  else if (pgid.is_raid4())
-    pg = new RAID4PG(this, pgid);
+  //else if (pgid.is_raid4())
+  //pg = new RAID4PG(this, pgid);
   else 
     assert(0);
 
@@ -689,31 +687,32 @@ void OSD::send_pg_stats()
   q.swap(pg_stat_queue);
   pg_stat_queue_lock.Unlock();
 
-  dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
-  
-  if (q.empty()) return;
-
-  MPGStats *m = new MPGStats;
-  while (!q.empty()) {
-    pg_t pgid = *q.begin();
-    q.erase(q.begin());
-
-    if (!pg_map.count(pgid)) continue;
-    PG *pg = pg_map[pgid];
-    pg->pg_stats_lock.Lock();
-    m->pg_stat[pgid] = pg->pg_stats;
-    pg->pg_stats_lock.Unlock();
+  if (!q.empty()) {
+    dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
+    
+    MPGStats *m = new MPGStats;
+    while (!q.empty()) {
+      pg_t pgid = *q.begin();
+      q.erase(q.begin());
+      
+      if (!pg_map.count(pgid)) continue;
+      PG *pg = pg_map[pgid];
+      pg->pg_stats_lock.Lock();
+      m->pg_stat[pgid] = pg->pg_stats;
+      dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+      pg->pg_stats_lock.Unlock();
+    }
+    
+    // fill in osd stats too
+    struct statfs stbuf;
+    store->statfs(&stbuf);
+    m->osd_stat.num_blocks = stbuf.f_blocks;
+    m->osd_stat.num_blocks_avail = stbuf.f_bavail;
+    m->osd_stat.num_objects = stbuf.f_files;
+    
+    int mon = monmap->pick_mon();
+    messenger->send_message(m, monmap->get_inst(mon));  
   }
-
-  // fill in osd stats too
-  struct statfs stbuf;
-  store->statfs(&stbuf);
-  m->osd_stat.num_blocks = stbuf.f_blocks;
-  m->osd_stat.num_blocks_avail = stbuf.f_bavail;
-  m->osd_stat.num_objects = stbuf.f_files;
-
-  int mon = monmap->pick_mon();
-  messenger->send_message(m, monmap->get_inst(mon));  
 
   // reschedule
   timer.add_event_after(g_conf.osd_pg_stats_interval, new C_Stats(this));
@@ -1043,9 +1042,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   // advance if we can
   bool advanced = false;
   
-  if (m->get_source().is_mon() && is_booting()) 
-    advanced = true;
-
   epoch_t cur = superblock.current_epoch;
   while (cur < superblock.newest_map) {
     dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
@@ -1190,12 +1186,14 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
 
     // raided
+    /*
     for (int size = minraid; size <= maxraid; size++) {
       for (ps_t ps = 0; ps < numps; ++ps) 
 	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, -1), t);
       for (ps_t ps = 0; ps < numlps; ++ps) 
 	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, whoami), t);
     }
+    */
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << dendl;
 
   } else {
@@ -1325,7 +1323,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
           }
         }
       }
-      
+
       pg->unlock();
     }
   }
@@ -1345,7 +1343,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
        it++) {
     //pg_t pgid = it->first;
     PG *pg = it->second;
-
+    pg->lock();
     if (pg->is_active()) {
       // update started counter
       pg->info.last_epoch_started = osdmap->get_epoch();
@@ -1360,6 +1358,9 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       // i am residual|replica
       notify_list[pg->get_primary()].push_back(pg->info);
     }
+    if (pg->is_primary())
+      pg->update_stats();
+    pg->unlock();
   }  
 
   if (g_conf.osd_hack_fast_startup &&
@@ -1641,15 +1642,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     if (had) {
       if (pg->is_active() && 
-          (*it).is_clean() && acting) {
-        pg->clean_set.insert(from);
-        dout(10) << *pg << " osd" << from << " now clean (" << pg->clean_set  
+          (*it).is_uptodate() && acting) {
+        pg->uptodate_set.insert(from);
+        dout(10) << *pg << " osd" << from << " now uptodate (" << pg->uptodate_set  
                  << "): " << *it << dendl;
-        if (pg->is_all_clean()) {
-          dout(10) << *pg << " now clean on all replicas" << dendl;
-          pg->state_set(PG::STATE_CLEAN);
-          pg->clean_replicas();
-        }
+        if (pg->is_all_uptodate()) 
+	  pg->finish_recovery();
       } else {
         // hmm, maybe keep an eye out for cases where we see this, but peer should happen.
         dout(10) << *pg << " already had notify info from osd" << from << ": " << *it << dendl;

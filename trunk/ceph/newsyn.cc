@@ -139,7 +139,7 @@ class C_Die : public Context {
 public:
   void finish(int) {
     cerr << "die" << std::endl;
-    exit(1);
+    _exit(1);
   }
 };
 
@@ -249,10 +249,20 @@ int main(int argc, char **argv)
 
   //if (myrank == 0) g_conf.debug = 20;
   
+  // courtesy symlinks
+  char ffrom[100];
+  char fto[100];
+  sprintf(fto, "%s.%d", hostname, pid);
+
+
   // create mon
   if (myrank < g_conf.num_mon) {
     Monitor *mon = new Monitor(myrank, rank.register_entity(entity_name_t(entity_name_t::TYPE_MON, myrank)), monmap);
     mon->init();
+    if (g_conf.dout_dir) {
+      sprintf(ffrom, "%s/mon%d", g_conf.dout_dir, myrank);
+      ::symlink(fto, ffrom);
+    }
   }
 
   
@@ -270,6 +280,10 @@ int main(int argc, char **argv)
     if (myrank != g_conf.ms_skip_rank0+i) continue;
     Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_MDS, i));
     cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
+    if (g_conf.dout_dir) {
+      sprintf(ffrom, "%s/mds%d", g_conf.dout_dir, i);
+      ::symlink(fto, ffrom);
+    }
     mds[i] = new MDS(i, m, monmap);
     mds[i]->init();
     started++;
@@ -297,6 +311,11 @@ int main(int argc, char **argv)
 
     Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_OSD, i));
     cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << std::endl;
+    if (g_conf.dout_dir) {
+      sprintf(ffrom, "%s/osd%d", g_conf.dout_dir, i);
+      ::symlink(fto, ffrom);
+    }
+
     osd[i] = new OSD(i, m, monmap);
     if (osd[i]->init() < 0)
       return 1;

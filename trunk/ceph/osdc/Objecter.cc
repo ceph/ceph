@@ -242,7 +242,27 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
       else 
         assert(0);
     }         
-  }         
+  }
+}
+
+
+void Objecter::tick()
+{
+  dout(-10) << "tick" << dendl;
+
+  // look for laggy pgs
+  utime_t cutoff = g_clock.now();
+  cutoff -= g_conf.objecter_timeout;  // timeout
+  for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
+       i != pg_map.end();
+       i++) {
+    if (!i->second.active_tids.empty() &&
+	i->second.last < cutoff) {
+      dout(-10) << "tick pg " << i->first << " is laggy" << dendl;
+      maybe_request_map();
+      break;
+    }
+  }
 }
 
 
@@ -425,6 +445,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
   op_read[last_tid] = rd;    
 
   pg.active_tids.insert(last_tid);
+  pg.last = g_clock.now();
 
   // send?
   dout(10) << "readx_submit " << rd << " tid " << last_tid
@@ -702,7 +723,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   wr->waitfor_commit[tid] = ex;
   op_modify[tid] = wr;
   pg.active_tids.insert(tid);
-  
+  pg.last = g_clock.now();
+
   ++num_unacked;
   ++num_uncommitted;
 
@@ -841,6 +863,8 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     }
   }
   
+  dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
+
   // do callbacks
   if (onack) {
     onack->finish(0);

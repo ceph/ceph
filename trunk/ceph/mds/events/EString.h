@@ -37,11 +37,10 @@ class EString : public LogEvent {
   }
 
   void decode_payload(bufferlist& bl, int& off) {
-    event = bl.c_str() + off;
-    off += event.length() + 1;
+    ::_decode(event, bl, off);
   }
   void encode_payload(bufferlist& bl) {
-    bl.append(event.c_str(), event.length()+1);
+    ::_encode(event, bl);
   }
 
   void print(ostream& out) {

@@ -73,6 +73,8 @@ md_config_t g_conf = {
   log_messages: true,
   log_pins: true,
 
+  dout_dir: 0,
+
   fake_clock: false,
   fakemessenger_serialize: true,
 
@@ -175,6 +177,8 @@ md_config_t g_conf = {
   // --- objecter ---
   objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
   objecter_map_request_interval: 15.0, // request a new map every N seconds, if we have pending io
+  objecter_tick_interval: 5.0,
+  objecter_timeout: 10.0,    // before we ask for a map
 
   // --- journaler ---
   journaler_allow_split_entries: true,
@@ -261,7 +265,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 15,   // shut up while i'm debugging
-  osd_pg_stats_interval:  15,   // shut up while i'm debugging
+  osd_pg_stats_interval:  5,
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
@@ -449,8 +453,6 @@ void parse_config_options(std::vector<char*>& args)
 {
   std::vector<char*> nargs;
 
-  char *doutdir = 0;
-
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--bind") == 0) 
       assert(parse_ip_port(args[++i], g_my_addr));
@@ -526,7 +528,7 @@ void parse_config_options(std::vector<char*>& args)
 
     
     else if (strcmp(args[i], "--doutdir") == 0) {
-      doutdir = args[++i];
+      g_conf.dout_dir = args[++i];
     }
 
     else if (strcmp(args[i], "--debug") == 0) 
@@ -947,11 +949,11 @@ void parse_config_options(std::vector<char*>& args)
   }
 
   // redirect dout?
-  if (doutdir) {
+  if (g_conf.dout_dir) {
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);
-    sprintf(fn, "%s/%s.%d", doutdir, hostname, getpid());
+    sprintf(fn, "%s/%s.%d", g_conf.dout_dir, hostname, getpid());
     std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
     if (!out->is_open()) {
       std::cerr << "error opening output file " << fn << std::endl;

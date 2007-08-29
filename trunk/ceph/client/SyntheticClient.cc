@@ -2047,8 +2047,7 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
     // pick a name
     std::stringstream ss;
     ss << parent << "/" << i;
-    string dir;
-    ss >> dir;
+    string dir = ss.str();
 
     // update dirs
     dirs.push_back(parent);

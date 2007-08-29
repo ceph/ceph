@@ -565,7 +565,7 @@ void PG::clear_primary_state()
   have_master_log = false;
   prior_set.clear();
   stray_set.clear();
-  clean_set.clear();
+  uptodate_set.clear();
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_info.clear();
@@ -864,9 +864,8 @@ void PG::activate(ObjectStore::Transaction& t,
     log.complete_to == log.log.end();
     log.requested_to = log.log.end();
   } 
-  //else if (is_primary()) {
   else if (true) {
-    dout(10) << "activate - not complete, " << missing << ", starting recovery" << dendl;
+    dout(10) << "activate - not complete, " << missing << dendl;
     
     // init complete_to
     log.complete_to = log.log.begin();
@@ -875,9 +874,12 @@ void PG::activate(ObjectStore::Transaction& t,
       assert(log.complete_to != log.log.end());
     }
     
-    // start recovery
-    log.requested_to = log.complete_to;
-    do_recovery();
+    if (is_primary()) {
+      // start recovery
+      dout(10) << "activate - starting recovery" << dendl;    
+      log.requested_to = log.complete_to;
+      do_recovery();
+    }
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
   }
@@ -886,9 +888,9 @@ void PG::activate(ObjectStore::Transaction& t,
   if (role == 0 &&
       (!g_conf.osd_hack_fast_startup || osd->osdmap->post_mkfs())) {
     // who is clean?
-    clean_set.clear();
-    if (info.is_clean()) 
-      clean_set.insert(osd->whoami);
+    uptodate_set.clear();
+    if (info.is_uptodate()) 
+      uptodate_set.insert(osd->whoami);
     
     // start up replicas
     for (unsigned i=1; i<acting.size(); i++) {
@@ -942,9 +944,9 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update our missing
       if (peer_missing[peer].num_missing() == 0) {
-        dout(10) << "activate peer osd" << peer << " already clean, " << peer_info[peer] << dendl;
-        assert(peer_info[peer].last_complete == info.last_update);
-        clean_set.insert(peer);
+        dout(10) << "activate peer osd" << peer << " already uptodate, " << peer_info[peer] << dendl;
+	assert(peer_info[peer].is_uptodate());
+        uptodate_set.insert(peer);
       } else {
         dout(10) << "activate peer osd" << peer << " " << peer_info[peer]
                  << " missing " << peer_missing[peer] << dendl;
@@ -956,11 +958,11 @@ void PG::activate(ObjectStore::Transaction& t,
     //peer_log.clear(); // actually, do this carefully, in case peer() is called again.
     
     // all clean?
-    if (is_all_clean()) {
-      state_set(STATE_CLEAN);
-      dout(10) << "activate all replicas clean" << dendl;
-      clean_replicas();    
-      update_stats();
+    if (is_all_uptodate()) 
+      finish_recovery();
+    else {
+      dout(10) << "activate not all replicas are uptodate, starting recovery" << dendl;
+      do_recovery();
     }
   }
 
@@ -999,6 +1001,17 @@ void PG::activate(ObjectStore::Transaction& t,
 }
 
 
+void PG::finish_recovery()
+{
+  dout(10) << "finish_recovery" << dendl;
+
+  state_set(PG::STATE_CLEAN);
+  purge_strays();
+  update_stats();
+}
+
+
+
 void PG::update_stats()
 {
   dout(15) << "update_stats" << dendl;
@@ -1007,20 +1020,9 @@ void PG::update_stats()
   // update our stat summary
   pg_stats_lock.Lock();
   pg_stats.reported = info.last_update;
+  pg_stats.state = state;
   pg_stats.size = stat_size;
   pg_stats.num_blocks = stat_num_blocks;
-  switch (state) {
-  case STATE_ACTIVE:
-    if (is_clean())
-      pg_stats.state = pg_stat_t::STATE_OK;
-    else
-      pg_stats.state = pg_stat_t::STATE_RECOVERING;
-    break;
-  case STATE_CRASHED:
-  case STATE_REPLAY:
-    pg_stats.state = pg_stat_t::STATE_RECOVERING; 
-    break;
-  }
   pg_stats_lock.Unlock();
 
   // put in osd stat_queue

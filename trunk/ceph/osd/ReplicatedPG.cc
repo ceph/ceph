@@ -338,20 +338,25 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
 void ReplicatedPG::do_op_reply(MOSDOpReply *r)
 {
-  // must be replication.
-  tid_t rep_tid = r->get_rep_tid();
-  
-  if (rep_gather.count(rep_tid)) {
-    // oh, good.
-    int fromosd = r->get_source().num();
-    repop_ack(rep_gather[rep_tid], 
-	      r->get_result(), r->get_commit(), 
-	      fromosd, 
-	      r->get_pg_complete_thru());
-    delete r;
+  if (r->get_op() == OSD_OP_PUSH) {
+    // continue peer recovery
+    op_push_reply(r);
   } else {
-    // early ack.
-    waiting_for_repop[rep_tid].push_back(r);
+    // must be replication.
+    tid_t rep_tid = r->get_rep_tid();
+    
+    if (rep_gather.count(rep_tid)) {
+      // oh, good.
+      int fromosd = r->get_source().num();
+      repop_ack(rep_gather[rep_tid], 
+		r->get_result(), r->get_commit(), 
+		fromosd, 
+		r->get_pg_complete_thru());
+      delete r;
+    } else {
+      // early ack.
+      waiting_for_repop[rep_tid].push_back(r);
+    }
   }
 }
 
@@ -1083,7 +1088,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // dup op?
   if (is_dup(op->get_reqid())) {
-    dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()
+    dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
     op->set_op(OSD_OP_WRNOOP);
     opname = MOSDOp::get_opname(op->get_op());
@@ -1100,7 +1105,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
         peer_missing[peer].is_missing(oid)) {
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
-      peer_missing[peer].got(oid);
       push(oid, peer);
     }
   }
@@ -1368,7 +1372,7 @@ void ReplicatedPG::pull(object_t oid)
 
 /** push - send object to a peer
  */
-void ReplicatedPG::push(object_t oid, int dest)
+void ReplicatedPG::push(object_t oid, int peer)
 {
   // read data+attrs
   bufferlist bl;
@@ -1387,7 +1391,7 @@ void ReplicatedPG::push(object_t oid, int dest)
   // ok
   dout(7) << "push " << oid << " v " << v 
           << " size " << bl.length()
-          << " to osd" << dest
+          << " to osd" << peer
           << dendl;
 
   osd->logger->inc("r_push");
@@ -1403,7 +1407,12 @@ void ReplicatedPG::push(object_t oid, int dest)
   op->set_version(v);
   op->set_attrset(attrset);
   
-  osd->messenger->send_message(op, osd->osdmap->get_inst(dest));
+  osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+  
+  if (is_primary()) {
+    peer_missing[peer].got(oid);
+    pushing[oid].insert(peer);
+  }
 }
 
 
@@ -1510,21 +1519,24 @@ void ReplicatedPG::op_push(MOSDOp *op)
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_missing.count(peer));
-      if (peer_missing[peer].is_missing(oid)) {
-        // ok, push it, and they (will) have it now.
-        peer_missing[peer].got(oid, v);
-        push(oid, peer);
-      }
+      if (peer_missing[peer].is_missing(oid)) 
+	push(oid, peer);  // ok, push it, and they (will) have it now.
     }
   }
 
-  // continue recovery
-  do_recovery();
-  
   // kick waiters
   if (waiting_for_missing_object.count(oid)) {
     osd->take_waiters(waiting_for_missing_object[oid]);
     waiting_for_missing_object.erase(oid);
+  }
+
+  if (is_primary()) {
+    // continue recovery
+    do_recovery();
+  } else {
+    // ack if i'm a replica and being pushed to.
+    MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true); 
+    osd->messenger->send_message(reply, op->get_source_inst());
   }
 
   delete op;
@@ -1559,26 +1571,33 @@ void ReplicatedPG::on_acker_change()
 {
   dout(10) << "on_acker_change" << dendl;
 
-  // apply repops
-  for (map<tid_t,RepGather*>::iterator p = rep_gather.begin();
-       p != rep_gather.end();
-       p++) {
-    if (!p->second->applied)
-      apply_repop(p->second);
-    delete p->second->op;
-    delete p->second;
+  if (g_conf.osd_rep == OSD_REP_PRIMARY) {
+    // we're fine.
+    // note that note_failed_osd() above shoudl ahve implicitly acked/committed
+    // from the failed guy.
+  } else {
+    // for splay or chain replication, any change is significant. 
+    // apply repops
+    for (map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+	 p != rep_gather.end();
+	 p++) {
+      if (!p->second->applied)
+	apply_repop(p->second);
+      delete p->second->op;
+      delete p->second;
+    }
+    rep_gather.clear();
+    
+    // and repop waiters
+    for (map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
+	 p != waiting_for_repop.end();
+	 p++)
+      for (list<Message*>::iterator pm = p->second.begin();
+	   pm != p->second.end();
+	   pm++)
+	delete *pm;
+    waiting_for_repop.clear();
   }
-  rep_gather.clear();
-        
-  // and repop waiters
-  for (map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
-       p != waiting_for_repop.end();
-       p++)
-    for (list<Message*>::iterator pm = p->second.begin();
-	 pm != p->second.end();
-	 pm++)
-      delete *pm;
-  waiting_for_repop.clear();
 }
 
 
@@ -1678,6 +1697,8 @@ void ReplicatedPG::cancel_recovery()
   missing.loc.clear();
   osd->num_pulling -= objects_pulling.size();
   objects_pulling.clear();
+  num_pulling = 0;
+  pushing.clear();
 }
 
 /**
@@ -1686,6 +1707,23 @@ void ReplicatedPG::cancel_recovery()
  */
 bool ReplicatedPG::do_recovery()
 {
+  assert(is_primary());
+  /*if (!is_primary()) {
+    dout(10) << "do_recovery not primary, doing nothing" << dendl;
+    return true;
+  }
+  */
+
+  if (info.is_uptodate()) {  // am i up to date?
+    if (!is_all_uptodate()) {
+      dout(-10) << "do_recovery i'm clean but replicas aren't, starting peer recovery" << dendl;
+      do_peer_recovery();
+    } else {
+      dout(-10) << "do_recovery all clean, nothing to do" << dendl;
+    }
+    return true;
+  }
+
   dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
            << dendl;
@@ -1731,12 +1769,10 @@ bool ReplicatedPG::do_recovery()
   
   if (is_primary()) {
     // i am primary
-    dout(7) << "do_recovery complete, cleaning strays" << dendl;
-    clean_set.insert(osd->whoami);
-    if (is_all_clean()) {
-      state_set(PG::STATE_CLEAN);
-      clean_replicas();
-    }
+    dout(-7) << "do_recovery complete, cleaning strays" << dendl;
+    uptodate_set.insert(osd->whoami);
+    if (is_all_uptodate())
+      finish_recovery();
   } else {
     // tell primary
     dout(7) << "do_recovery complete, telling primary" << dendl;
@@ -1752,10 +1788,12 @@ bool ReplicatedPG::do_recovery()
 
 void ReplicatedPG::do_peer_recovery()
 {
-  dout(10) << "do_peer_recovery" << dendl;
+  dout(-10) << "do_peer_recovery" << dendl;
 
+  // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=0; i<acting.size(); i++) {
     int peer = acting[i];
+
     if (peer_missing.count(peer) == 0 ||
         peer_missing[peer].num_missing() == 0) 
       continue;
@@ -1770,19 +1808,51 @@ void ReplicatedPG::do_peer_recovery()
     for (i++; i<acting.size(); i++) {
       int peer = acting[i];
       if (peer_missing.count(peer) &&
-          peer_missing[peer].is_missing(oid))
-        push(oid, peer);
+          peer_missing[peer].is_missing(oid)) 
+	push(oid, peer);
     }
 
     return;
   }
   
   // nothing to do!
+  dout(-10) << "do_peer_recovery - nothing to do!" << dendl;
+
+  if (is_all_uptodate()) 
+    finish_recovery();
 }
 
-void ReplicatedPG::clean_replicas()
+void ReplicatedPG::op_push_reply(MOSDOpReply *reply)
 {
-  dout(10) << "clean_replicas.  strays are " << stray_set << dendl;
+  dout(10) << "op_push_reply from " << reply->get_source() << " " << *reply << dendl;
+  
+  int peer = reply->get_source().num();
+  object_t oid = reply->get_oid();
+  
+  if (pushing.count(oid) &&
+      pushing[oid].count(peer)) {
+    pushing[oid].erase(peer);
+
+    if (peer_missing.count(peer) == 0 ||
+        peer_missing[peer].num_missing() == 0) 
+      uptodate_set.insert(peer);
+
+    if (pushing[oid].empty()) {
+      dout(10) << "pushed " << oid << " to all replicas" << dendl;
+      do_peer_recovery();
+    } else {
+      dout(10) << "pushed " << oid << ", still waiting for push ack from " 
+	       << pushing[oid] << dendl;
+    }
+  } else {
+    dout(10) << "huh, i wasn't pushing " << oid << dendl;
+  }
+  delete reply;
+}
+
+void ReplicatedPG::purge_strays()
+{
+  dout(10) << "purge_strays " << stray_set << dendl;
   
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
