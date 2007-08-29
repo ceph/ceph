@@ -125,6 +125,16 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
 
+      } else if (strcmp(args[i],"createobjects") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_CREATEOBJECTS );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"uniformobjectrw") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_UNIFORMOBJECTRW );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+
       } else if (strcmp(args[i],"walk") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
         //syn_sargs.push_back( atoi(args[++i]) );
@@ -464,6 +474,28 @@ int SyntheticClient::run()
       }
       break;
 
+    case SYNCLIENT_MODE_CREATEOBJECTS:
+      {
+        int count = iargs.front();  iargs.pop_front();
+        int size = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "createobjects " << cout << " " << size << dendl;
+          create_objects(count, size);
+        }
+      }
+      break;
+    case SYNCLIENT_MODE_UNIFORMOBJECTRW:
+      {
+        int count = iargs.front();  iargs.pop_front();
+        int size = iargs.front();  iargs.pop_front();
+        int wrpc = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "uniformobjectrw " << cout << " " << size << " " << wrpc << dendl;
+          uniform_object_rw(count, size, wrpc);
+        }
+      }
+      break;
+
     case SYNCLIENT_MODE_FULLWALK:
       {
         string sarg1;// = get_sarg(0);
@@ -577,7 +609,7 @@ int SyntheticClient::run()
             if (time_to_stop()) break;
             play_trace(t, prefix, false);
             if (time_to_stop()) break;
-            clean_dir(prefix);
+            //clean_dir(prefix);
             
             utime_t lat = g_clock.now();
             lat -= start;
@@ -591,6 +623,7 @@ int SyntheticClient::run()
               client_logger->inc("trnum");
             }
           }
+	  dout(1) << "done " << dendl;
         }
       }
       break;
@@ -647,6 +680,7 @@ int SyntheticClient::run()
       assert(0);
     }
   }
+  dout(1) << "syn done, unmounting " << dendl;
 
   client->unmount();
   client->shutdown();
@@ -740,6 +774,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   utime_t last_status = start;
   
   int n = 0;
+
+  // for object traces
+  Mutex &lock = client->client_lock;
+  Cond cond;
+  bool ack;
+  bool safe;
+  C_Gather *safeg = 0;
 
   while (!t.end()) {
 
@@ -1051,15 +1092,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t oh = t.get_int();
       int64_t ol = t.get_int();
       object_t oid(oh, ol);
-      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-      Cond cond;
-      Mutex lock;
-      bool done = false;
-      off_t size;
-      C_SafeCond *fin = new C_SafeCond(&lock, &cond, &done);
       lock.Lock();
-      client->objecter->stat(oid, &size, layout, fin);
-      while (!done) cond.Wait(lock);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      off_t size;
+      client->objecter->stat(oid, &size, layout, new C_SafeCond(&lock, &cond, &ack));
+      while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
     else if (strcmp(op, "o_read") == 0) {
@@ -1068,15 +1105,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid(oh, ol);
+      lock.Lock();
       ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
       bufferlist bl;
-      Cond cond;
-      Mutex lock;
-      bool done = false;
-      C_SafeCond *fin = new C_SafeCond(&lock, &cond, &done);
-      lock.Lock();
-      client->objecter->read(oid, off, len, layout, &bl, fin);
-      while (!done) cond.Wait(lock);
+      client->objecter->read(oid, off, len, layout, &bl, new C_SafeCond(&lock, &cond, &ack));
+      while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
     else if (strcmp(op, "o_write") == 0) {
@@ -1085,17 +1118,16 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid(oh, ol);
+      lock.Lock();
       ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
-      Cond cond;
-      Mutex lock;
-      bool done = false;
-      C_SafeCond *onack = new C_SafeCond(&lock, &cond, &done);
-      lock.Lock();
-      client->objecter->write(oid, off, len, layout, bl, onack, 0);
-      while (!done) cond.Wait(lock);
+      if (!safeg) safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+      client->objecter->write(oid, off, len, layout, bl, 
+			      new C_SafeCond(&lock, &cond, &ack),
+			      safeg->new_sub());
+      while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
     else if (strcmp(op, "o_zero") == 0) {
@@ -1104,14 +1136,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid(oh, ol);
-      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-      Cond cond;
-      Mutex lock;
-      bool done = false;
-      C_SafeCond *onack = new C_SafeCond(&lock, &cond, &done);
       lock.Lock();
-      client->objecter->zero(oid, off, len, layout, onack, 0);
-      while (!done) cond.Wait(lock);
+      ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      if (!safeg) safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+      client->objecter->zero(oid, off, len, layout, 
+			     new C_SafeCond(&lock, &cond, &ack),
+			     safeg->new_sub());
+      while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
 
@@ -1120,6 +1151,16 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       dout(0) << (t.get_line()-1) << ": *** trace hit unrecognized symbol '" << op << "' " << dendl;
       assert(0);
     }
+  }
+
+  // wait for safe after an object trace
+  if (safeg) {
+    lock.Lock();
+    while (!safe) {
+      dout(10) << "waiting for safe" << dendl;
+      cond.Wait(lock);
+    }
+    lock.Unlock();
   }
 
   // close open files
@@ -1534,6 +1575,100 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
 
   return 0;
 }
+
+
+
+
+int SyntheticClient::create_objects(int nobj, int osize)
+{
+  dout(5) << "create_objects " << nobj << " size=" << osize << dendl;
+
+  bufferptr bp(osize);
+  bp.zero();
+  bufferlist bl;
+  bl.push_back(bp);
+
+  int nper = 10;
+
+  Mutex &lock = client->client_lock;
+  Cond cond;
+  bool ack;
+  C_Gather *ackg = 0;
+  bool safe;
+  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+
+  lock.Lock();
+  for (int i=0; i<nobj; i++) {
+    object_t oid(0x1000, i);
+    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+
+    if (i % nper == 0) {
+      if (ackg) {
+	dout(10) << "waiting" << dendl;
+	while (!ack) cond.Wait(lock);
+      }
+      ackg = new C_Gather(new C_SafeCond(&lock, &cond, &ack));
+    }
+    dout(10) << "writing " << oid << dendl;
+    client->objecter->write(oid, 0, osize, layout, bl, ackg->new_sub(), safeg->new_sub());
+  }
+  while (!ack) cond.Wait(lock);
+  dout(10) << "waiting for safe" << dendl;
+  while (!safe) cond.Wait(lock);
+  lock.Unlock();
+  return 0;
+}
+
+int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
+{
+  dout(5) << "uniform_object_pc " << nobj << " size=" << osize << " " << wrpc << dendl;
+
+  bufferptr bp(osize);
+  bp.zero();
+  bufferlist bl;
+  bl.push_back(bp);
+
+  Mutex &lock = client->client_lock;
+  Cond cond;
+
+  bool ack;
+  bool safe;
+  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+
+  lock.Lock();
+  while (1) {
+    if (time_to_stop()) break;
+    
+    // pick a random object
+    object_t oid(0x1000, rand() % nobj);
+    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+
+    // read or write?
+    bool write = (rand() % 100) < wrpc;
+
+    if (write) {
+      dout(10) << "write to " << oid << dendl;
+      client->objecter->write(oid, 0, osize, layout, bl, 
+			      new C_SafeCond(&lock, &cond, &ack),
+			      safeg->new_sub());
+    } else {
+      dout(10) << "read from " << oid << dendl;
+      bufferlist inbl;
+      client->objecter->read(oid, 0, osize, layout, &inbl, 
+			     new C_SafeCond(&lock, &cond, &ack));
+    }
+    while (!ack) cond.Wait(lock);
+
+  }
+  dout(10) << "waiting for safe" << dendl;
+  while (!safe) cond.Wait(lock);
+  lock.Unlock();
+  return 0;
+}
+
+
+
+
 
 int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
