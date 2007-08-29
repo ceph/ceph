@@ -54,7 +54,6 @@ class Objecter {
 
   Mutex &client_lock;
   SafeTimer timer;
-  Context *tick_event;
   
   class C_Tick : public Context {
     Objecter *ob;
@@ -173,18 +172,12 @@ class Objecter {
     messenger(m), monmap(mm), osdmap(om), 
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
-    client_lock(l), timer(l), tick_event(0) 
+    client_lock(l), timer(l)
   { }
   ~Objecter() { }
 
-  void init() {
-    assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
-    timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
-  }
-  void shutdown() {
-    assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
-    if (tick_event) timer.cancel_event(tick_event);
-  }
+  void init();
+  void shutdown();
 
   // messages
  public:

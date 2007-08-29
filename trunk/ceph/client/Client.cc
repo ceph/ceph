@@ -229,10 +229,13 @@ void Client::dump_cache()
 
 void Client::init() 
 {
+  Mutex::Locker lock(client_lock);
   objecter->init();
 }
 
-void Client::shutdown() {
+void Client::shutdown() 
+{
+  Mutex::Locker lock(client_lock);
   dout(1) << "shutdown" << dendl;
   objecter->shutdown();
   messenger->shutdown();

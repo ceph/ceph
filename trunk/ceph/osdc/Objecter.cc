@@ -36,6 +36,19 @@
 
 // messages ------------------------------
 
+void Objecter::init()
+{
+  assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
+  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+}
+
+void Objecter::shutdown() 
+{
+  assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
+  timer.cancel_all();
+}
+
+
 void Objecter::dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -263,6 +276,9 @@ void Objecter::tick()
       break;
     }
   }
+
+  // reschedule
+  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
 }
 
 
