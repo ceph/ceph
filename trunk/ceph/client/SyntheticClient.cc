@@ -156,6 +156,10 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"only") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_ONLY );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"onlyrange") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_ONLYRANGE );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
         
       } else if (strcmp(args[i],"sleep") == 0) { 
         syn_modes.push_back( SYNCLIENT_MODE_SLEEP );
@@ -288,6 +292,19 @@ int SyntheticClient::run()
         iargs.pop_front();
         if (run_only == client->get_nodeid())
           dout(2) << "only " << run_only << dendl;
+      }
+      break;
+    case SYNCLIENT_MODE_ONLYRANGE:
+      {
+        int first = iargs.front();
+        iargs.pop_front();
+        int last = iargs.front();
+        iargs.pop_front();
+        if (first <= client->get_nodeid() &&
+	    last >= client->get_nodeid()) {
+	  run_only = client->get_nodeid();
+          dout(2) << "onlyrange " << first << " " << last << " includes me" << dendl;
+	}
       }
       break;
     case SYNCLIENT_MODE_EXCLUDE:
