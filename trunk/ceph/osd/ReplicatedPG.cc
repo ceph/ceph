@@ -162,97 +162,120 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     }
     
     // -- read shedding
-
-    // check my load. 
-    // TODO xxx we must also compare with our own load
-    // if i am x percentage higher than replica , 
-    // redirect the read 
-    
-    if (g_conf.osd_shed_reads == LOAD_LATENCY) {
+    if (g_conf.osd_shed_reads) {
       Mutex::Locker lock(osd->peer_stat_lock);
 
-      // above some minimum?
-      if (osd->my_stat.read_latency >= .001) {  
-	for (unsigned i=1; i<acting.size(); ++i) {
-	  int peer = acting[i];
-	  if (osd->peer_stat.count(peer) == 0) continue;
-	  
-	  dout(-10) << "preprocess_op my read latency " << osd->my_stat.read_latency
-		   << ", peer " << peer << " is " << osd->peer_stat[peer].read_latency
-		   << " of peer" << peer << dendl;
-	  
-	  if ((osd->peer_stat[peer].read_latency/osd->my_stat.read_latency) <
-	      (1.0 - g_conf.osd_shed_reads_min_load_diff)) {
-	    dout(10) << " forwarding to peer osd" << peer << dendl;
-	    osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
-	    return true;
-	  }
-	}
-      }
-    }
-    else if (g_conf.osd_shed_reads == LOAD_QUEUE_SIZE && osd->stat_ops) {
-      Mutex::Locker lock(osd->peer_stat_lock);
+      osd->_refresh_my_stat(op->request_received_time);
 
-      // am i above my average?
-      float my_avg = osd->stat_qlen / osd->stat_ops;
+      // check my load. 
+      // TODO xxx we must also compare with our own load
+      // if i am x percentage higher than replica , 
+      // redirect the read 
+
+      int shedto = -1;
+      double bestscore = 0.0;  // highest positive score wins
       
-      if (osd->pending_ops > my_avg) {
-	// is there a peer who is below my average?
-	for (unsigned i=1; i<acting.size(); ++i) {
-	  int peer = acting[i];
-	  Mutex::Locker lock(osd->peer_stat_lock);
-	  if (osd->peer_stat.count(peer) &&
-	      osd->peer_stat[peer].qlen < my_avg) {
-	    // calculate a probability that we should redirect
-	    float p = (my_avg - osd->peer_stat[peer].qlen) / my_avg;             // this is dumb.
-	    
-	    if (drand48() <= p) {
-	      // take the first one
-	      dout(10) << "my qlen " << osd->pending_ops << " > my_avg " << my_avg
-		       << ", p=" << p 
-		       << ", fwd to peer w/ qlen " << osd->peer_stat[peer].qlen
-		       << " osd" << peer
-		       << dendl;
-	      osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
-	      return true;
+      // we calculate score values such that we can interpret them as a probability.
+
+      switch (g_conf.osd_shed_reads) {
+      case LOAD_LATENCY:
+	// above some minimum?
+	if (osd->my_stat.read_latency >= .001) {  
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_stat.count(peer) == 0) continue;
+
+	    double c = .002; // add in a constant to smooth it a bit
+	    double latratio = 
+	      (c+osd->my_stat.read_latency) /   
+	      (c+osd->peer_stat[peer].read_latency);
+	    double p = (latratio  - 1.0) / 2.0;
+	    dout(-15) << "preprocess_op my read latency " << osd->my_stat.read_latency
+		      << ", peer osd" << peer << " is " << osd->peer_stat[peer].read_latency
+		      << ", latratio " << latratio
+		      << ", p=" << p
+		      << dendl;
+	    if (latratio > g_conf.osd_shed_reads_min_latency_ratio &&
+		p > bestscore &&
+		drand48() < p) {
+	      shedto = peer;
+	      bestscore = p;
 	    }
 	  }
 	}
-      }
-    }
-    
-    else if ( g_conf.osd_shed_reads == LOAD_HYBRID ) {
-      // am i above my average?
-      float my_avg = osd->stat_qlen / osd->stat_ops;
-      
-      if (osd->pending_ops > my_avg) {
-	// is there a peer who is below my average?
-	for (unsigned i=1; i<acting.size(); ++i) {
-	  int peer = acting[i];
-	  Mutex::Locker lock(osd->peer_stat_lock);
-	  if (osd->peer_stat.count(peer) &&
-	      osd->peer_stat[peer].qlen < my_avg) {
-	    // calculate a probability that we should redirect
-	    //float p = (my_avg - peer_stat[peer].qlen) / my_avg;             // this is dumb.
-	    
-	    double mean_read_time = osd->my_stat.read_latency;
-	    
-	    if ( mean_read_time != -1 &&  
-		 osd->peer_stat.count(peer) &&
-		 ( (osd->peer_stat[peer].read_latency/mean_read_time) <
-		   ( 1.0 - g_conf.osd_shed_reads_min_load_diff) ) )
-	      //if (drand48() <= p) {
-	      // take the first one
-	      dout(10) << "using hybrid :my qlen " << osd->pending_ops << " > my_avg " << my_avg
-		       << "my read time  "<<  mean_read_time
-		       << "peer read time " << osd->peer_stat[peer].read_latency
-		       << ", fwd to peer w/ qlen " << osd->peer_stat[peer].read_latency
-		       << " osd" << peer
+	break;
+	
+	/*
+      case LOAD_QUEUE_SIZE:
+	// am i above my average?
+	if (osd->pending_ops > osd->my_stat.qlen) {
+	  // yes. is there a peer who is below my average?
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_stat.count(peer) == 0) continue;
+	    if (osd->peer_stat[peer].qlen < osd->my_stat.qlen) {
+	      // calculate a probability that we should redirect
+	      float p = (osd->my_stat.qlen - osd->peer_stat[peer].qlen) / osd->my_stat.qlen;  // this is dumb.
+	      float v = 1.0 - p;
+	      
+	      dout(10) << "my qlen " << osd->pending_ops << " > my_avg " << osd->my_stat.qlen
+		       << ", peer osd" << peer << " has qlen " << osd->peer_stat[peer].qlen
+		       << ", p=" << p
+		       << ", v= "<< v
 		       << dendl;
-	    osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
-	    return true;
+	      
+	      if (v > bestscore) {
+		shedto = peer;
+		bestscore = v;
+	      }
+	    }
 	  }
 	}
+	break;*/
+
+      case LOAD_HYBRID:
+	if (osd->pending_ops > osd->my_stat.qlen &&
+	    osd->my_stat.read_latency > 0.0) {
+	  // is there a peer who is below my average?
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_stat.count(peer) == 0) continue;
+	    if (osd->peer_stat[peer].qlen < osd->my_stat.qlen) {
+	      
+	      double qratio = osd->pending_ops / osd->peer_stat[peer].qlen;
+	      
+	      double c = .002; // add in a constant to smooth it a bit
+	      double latratio = 
+		(c+osd->my_stat.read_latency)/   
+		(c+osd->peer_stat[peer].read_latency);
+	      double p = (latratio  - 1.0) / 2.0;
+	      
+	      dout(-15) << "preprocess_op my qlen / read latency " 
+			<< osd->pending_ops << " " << osd->my_stat.read_latency
+			<< ", peer osd" << peer << " is "
+			<< osd->peer_stat[peer].qlen << " " << osd->peer_stat[peer].read_latency
+			<< ", qratio " << qratio
+			<< ", latratio " << latratio
+			<< ", p=" << p
+			<< dendl;
+	      if (latratio > g_conf.osd_shed_reads_min_latency_ratio &&
+		  p > bestscore &&
+		  drand48() < p) {
+		shedto = peer;
+		bestscore = p;
+	      }
+	    }
+	  }
+	}
+	break;
+      }
+	
+      // shed?
+      if (shedto >= 0) {
+	dout(-10) << "preprocess_op shedding read to peer osd" << shedto << dendl;
+	osd->messenger->send_message(op, osd->osdmap->get_inst(shedto));
+	osd->logger->inc("shdout");
+	return true;
       }
     }
   } // endif balance reads
@@ -384,17 +407,21 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
   // !primary and unbalanced?
   //  (ignore ops forwarded from the primary)
-  if (!is_primary() &&
-      !(op->get_source().is_osd() &&
-	op->get_source().num() == get_primary())) {
-    // make sure i exist and am balanced, otherwise fw back to acker.
-    bool b;
-    if (!osd->store->exists(oid) || 
-	osd->store->getattr(oid, "balance-reads", &b, 1) < 0) {
-      dout(-10) << "read on replica, object " << oid 
-		<< " dne or no balance-reads, fw back to primary" << dendl;
-      osd->messenger->send_message(op, osd->osdmap->get_inst(get_acker()));
-      return;
+  if (!is_primary()) {
+    if (op->get_source().is_osd() &&
+	op->get_source().num() == get_primary()) {
+      // read was shed to me by the primary
+      osd->logger->inc("shdin");      
+    } else {
+      // make sure i exist and am balanced, otherwise fw back to acker.
+      bool b;
+      if (!osd->store->exists(oid) || 
+	  osd->store->getattr(oid, "balance-reads", &b, 1) < 0) {
+	dout(-10) << "read on replica, object " << oid 
+		  << " dne or no balance-reads, fw back to primary" << dendl;
+	osd->messenger->send_message(op, osd->osdmap->get_inst(get_acker()));
+	return;
+      }
     }
   }
   

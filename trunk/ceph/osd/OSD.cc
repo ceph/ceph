@@ -250,8 +250,15 @@ int OSD::init()
   osd_logtype.add_inc("r_wr");
   osd_logtype.add_inc("r_wrb");
   
+  osd_logtype.add_set("qlen");
+  osd_logtype.add_set("rqlen");
+  osd_logtype.add_set("rdlat");
+  osd_logtype.add_inc("shdout");
+  osd_logtype.add_inc("shdin");
+
+  osd_logtype.add_inc("rlsum");
   osd_logtype.add_inc("rlnum");
-  
+
   osd_logtype.add_set("numpg");
   osd_logtype.add_set("pingset");
   
@@ -612,16 +619,19 @@ void OSD::_refresh_my_stat(utime_t now)
     my_stat.oprate = stat_oprate.get(now);
 
     // qlen
-    //double qlen = 0;
-    //if (stat_ops) qlen = 
-    //qlen_calc.add(qlen);
     my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
     stat_ops = 0;
     stat_qlen = 0;
+    
+    qlen_calc.add(my_stat.qlen);
+    my_stat.recent_qlen = qlen_calc.get_average();
 
     my_stat.read_latency = read_latency_calc.get_average();
     if (my_stat.read_latency < 0) my_stat.read_latency = 0;
 
+    logger->fset("qlen", my_stat.qlen);
+    logger->fset("rqlen", my_stat.recent_qlen);
+    logger->fset("readlat", my_stat.read_latency);
     dout(-10) << "_refresh_my_stat " << my_stat << dendl;
   }
 }

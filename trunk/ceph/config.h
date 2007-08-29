@@ -244,7 +244,7 @@ struct md_config_t {
 
   bool  osd_shed_reads;
   double osd_shed_reads_min_latency;
-  double osd_shed_reads_min_load_diff;  // .5 == 50%
+  double osd_shed_reads_min_latency_ratio;
 
   bool  osd_immediate_read_from_cache;
   bool  osd_exclusive_caching;

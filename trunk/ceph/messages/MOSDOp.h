@@ -119,12 +119,14 @@ private:
 
   bufferlist data;
   map<string,bufferptr> attrset;
-  double request_received_time;
+
+public:  // ugh
+  utime_t request_received_time;
   
 
   friend class MOSDOpReply;
 
- public:
+public:
   const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
@@ -174,10 +176,10 @@ private:
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
 
-  void set_received_time(double time) {
+  void set_received_time(utime_t time) {
     request_received_time = time;
   }
-  double get_received_time() {
+  utime_t get_received_time() {
     return request_received_time;
   }
 

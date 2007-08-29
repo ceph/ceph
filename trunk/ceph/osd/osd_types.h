@@ -254,14 +254,16 @@ struct osd_peer_stat_t {
   utime_t stamp;
   double oprate;
   double qlen;
+  double recent_qlen;
   double read_latency;
-  osd_peer_stat_t() : oprate(0), qlen(0), read_latency(0) {}
+  osd_peer_stat_t() : oprate(0), qlen(0), recent_qlen(0), read_latency(0) {}
 };
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
 	     << " oprate=" << stat.oprate
-	     << " qlen=" << stat.qlen
+	     << " qlen=" << stat.qlen 
+	     << " recent_qlen=" << stat.recent_qlen
 	     << " read_latency=" << stat.read_latency
 	     << ")";
 }

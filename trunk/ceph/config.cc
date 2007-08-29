@@ -250,8 +250,8 @@ md_config_t g_conf = {
   osd_flash_crowd_iat_alpha: 0.125,
   
   osd_shed_reads: false,     // forward from primary to replica
-  osd_shed_reads_min_latency: .001,
-  osd_shed_reads_min_load_diff: .2,
+  osd_shed_reads_min_latency: .001,       // 
+  osd_shed_reads_min_latency_ratio: 1.2,  // 1.2 == 20% higher than peer
 
   osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
   osd_exclusive_caching: true,         // replicas evict replicated writes
@@ -817,8 +817,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_shed_reads = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_shed_reads_min_latency") == 0) 
       g_conf.osd_shed_reads_min_latency = atof(args[++i]);
-    else if (strcmp(args[i], "--osd_shed_reads_min_load_diff") == 0) 
-      g_conf.osd_shed_reads_min_load_diff = atof(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency_ratio") == 0) 
+      g_conf.osd_shed_reads_min_latency_ratio = atof(args[++i]);
 
     else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
       g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
