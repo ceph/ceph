@@ -168,9 +168,13 @@ int fakemessenger_do_loop_2()
 	 p != ls.end();
 	 ++p) {
       Message *m = *p;
-      FakeMessenger *mgr = directory[m->get_source_addr()];
+      FakeMessenger *mgr = 0;
       Dispatcher *dis = 0;
-      if (mgr) dis = mgr->get_dispatcher();
+      if (directory.count(m->get_source_addr())) {
+	mgr = directory[m->get_source_addr()];
+	if (mgr) 
+	  dis = mgr->get_dispatcher();
+      }
       if (dis) {
 	dout(1) << "fail on " << *m 
 		<< " to " << m->get_dest() << " from " << m->get_source()
@@ -315,7 +319,7 @@ FakeMessenger::~FakeMessenger()
 
 int FakeMessenger::shutdown()
 {
-  //dout(0) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
+  dout(0) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
   lock.Lock();
   assert(directory.count(_myinst.addr) == 1);
   shutdown_set.insert(_myinst.addr);
