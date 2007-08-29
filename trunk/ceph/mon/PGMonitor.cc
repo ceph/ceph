@@ -198,7 +198,7 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
       continue;
     }
 
-    dout(-15) << " got " << pgid << " reported at " << p->second.reported 
+    dout(15) << " got " << pgid << " reported at " << p->second.reported 
 	     << " state " << PG::get_state_string(p->second.state)
 	     << dendl;
     pending_inc.pg_stat_updates[pgid] = p->second;

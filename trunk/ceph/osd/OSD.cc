@@ -1604,7 +1604,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->set_role(role);
       pg->info.history = history;
       pg->last_epoch_started_any = it->last_epoch_started;
-      pg->build_prior();
+      pg->clear_primary_state();  // yep, notably, set hml=false
+      pg->build_prior();      
       pg->write_log(t);
       
       dout(10) << *pg << " is new" << dendl;

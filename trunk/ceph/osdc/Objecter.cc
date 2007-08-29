@@ -261,7 +261,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 
 void Objecter::tick()
 {
-  dout(-10) << "tick" << dendl;
+  dout(10) << "tick" << dendl;
 
   // look for laggy pgs
   utime_t cutoff = g_clock.now();
@@ -271,7 +271,7 @@ void Objecter::tick()
        i++) {
     if (!i->second.active_tids.empty() &&
 	i->second.last < cutoff) {
-      dout(-10) << "tick pg " << i->first << " is laggy" << dendl;
+      dout(10) << "tick pg " << i->first << " is laggy" << dendl;
       maybe_request_map();
       break;
     }
