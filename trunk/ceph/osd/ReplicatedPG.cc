@@ -106,6 +106,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
   if (!op->is_read()) 
     return false;
 
+  object_t oid = op->get_oid();
 
   // -- load balance reads --
   if (g_conf.osd_shed_reads &&
@@ -123,37 +124,52 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       }
     }
     
-    // -- flash crowd?
+    // -- balance reads?
     if (g_conf.osd_balance_reads &&
 	!op->get_source().is_osd() && 
 	is_primary()) {
-      // add sample
-      osd->iat_averager.add_sample( op->get_oid(), (double)g_clock.now() );
-      
-      // candidate?
-      bool is_flash_crowd_candidate = osd->iat_averager.is_flash_crowd_candidate( op->get_oid() );
+      // flash crowd?
+      bool is_flash_crowd_candidate = false;
+      if (g_conf.osd_flash_crowd_iat_threshold > 0) {
+	osd->iat_averager.add_sample( oid, (double)g_clock.now() );
+	is_flash_crowd_candidate = osd->iat_averager.is_flash_crowd_candidate( oid );
+      }
+
+      // hot?
+      double temp = 0;
+      if (stat_object_temp_rd.count(oid))
+	temp = stat_object_temp_rd[oid].get(op->request_received_time);
+      bool is_hotly_read = temp > g_conf.osd_balance_reads_temp;
+
+      dout(20) << "balance_reads oid " << oid << " temp " << temp 
+		<< (is_hotly_read ? " hotly_read":"")
+		<< (is_flash_crowd_candidate ? " flash_crowd_candidate":"")
+		<< dendl;
+
+      bool should_balance = is_flash_crowd_candidate || is_hotly_read;
       bool is_balanced = false;
       bool b;
-      if (osd->store->getattr(op->get_oid(), "balance-reads", &b, 1) >= 0)
+      // *** FIXME *** this may block, and we're in the fast past! ***
+      if (osd->store->getattr(oid, "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
-      if (!is_balanced && is_flash_crowd_candidate &&
-	  balancing_reads.count(op->get_oid()) == 0) {
-	dout(-10) << "preprocess_op balance-reads on " << op->get_oid() << dendl;
-	balancing_reads.insert(op->get_oid());
+      if (!is_balanced && should_balance &&
+	  balancing_reads.count(oid) == 0) {
+	dout(-10) << "preprocess_op balance-reads on " << oid << dendl;
+	balancing_reads.insert(oid);
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
-				 op->get_oid(),
+				 oid,
 				 ObjectLayout(info.pgid),
 				 osd->osdmap->get_epoch(),
 				 OSD_OP_BALANCEREADS);
 	do_op(pop);
       }
-      if (is_balanced && !is_flash_crowd_candidate &&
-	  !unbalancing_reads.count(op->get_oid()) == 0) {
-	dout(-10) << "preprocess_op unbalance-reads on " << op->get_oid() << dendl;
-	unbalancing_reads.insert(op->get_oid());
+      if (is_balanced && !should_balance &&
+	  !unbalancing_reads.count(oid) == 0) {
+	dout(-10) << "preprocess_op unbalance-reads on " << oid << dendl;
+	unbalancing_reads.insert(oid);
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
-				 op->get_oid(),
+				 oid,
 				 ObjectLayout(info.pgid),
 				 osd->osdmap->get_epoch(),
 				 OSD_OP_UNBALANCEREADS);
@@ -284,14 +300,14 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
   // -- fastpath read?
   // if this is a read and the data is in the cache, do an immediate read.. 
   if ( g_conf.osd_immediate_read_from_cache ) {
-    if (osd->store->is_cached( op->get_oid() , 
+    if (osd->store->is_cached( oid , 
 			       op->get_offset(), 
 			       op->get_length() ) == 0) {
       if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
-	if (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) < 0) {
-	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << op->get_oid()
+	if (osd->store->getattr(oid, "balance-reads", &v, 1) < 0) {
+	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
 	  return true;
@@ -469,10 +485,15 @@ void ReplicatedPG::op_read(MOSDOp *op)
   if (r >= 0) {
     reply->set_result(0);
 
-    utime_t diff = g_clock.now();
+    utime_t now = g_clock.now();
+    utime_t diff = now;
     diff -= op->get_received_time();
     dout(10) <<  "op_read total op latency " << diff << dendl;
     osd->read_latency_calc.add(diff);
+
+    if (is_primary() &&
+	g_conf.osd_balance_reads)
+      stat_object_temp_rd[oid].hit(now);  // hit temp.
 
   } else {
     reply->set_result(r);   // error

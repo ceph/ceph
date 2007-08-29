@@ -571,6 +571,8 @@ void PG::clear_primary_state()
   peer_info.clear();
   peer_missing.clear();
   
+  stat_object_temp_rd.clear();
+
   last_epoch_started_any = info.last_epoch_started;
 }
 

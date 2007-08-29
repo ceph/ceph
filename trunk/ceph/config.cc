@@ -246,8 +246,9 @@ md_config_t g_conf = {
   osd_rep: OSD_REP_PRIMARY,
 
   osd_balance_reads: false,  // send from client to replica
-  osd_flash_crowd_iat_threshold: 100,
+  osd_flash_crowd_iat_threshold: 0,//100,
   osd_flash_crowd_iat_alpha: 0.125,
+  osd_balance_reads_temp: 100,
   
   osd_shed_reads: false,     // forward from primary to replica
   osd_shed_reads_min_latency: .001,       // 

@@ -241,6 +241,7 @@ struct md_config_t {
   bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
+  double osd_balance_reads_temp;
 
   bool  osd_shed_reads;
   double osd_shed_reads_min_latency;

@@ -24,6 +24,8 @@
 #include "ObjectStore.h"
 #include "msg/Messenger.h"
 
+#include "common/DecayCounter.h"
+
 #include <list>
 #include <string>
 using namespace std;
@@ -496,6 +498,8 @@ protected:
   // stats
   off_t stat_size;
   off_t stat_num_blocks;
+
+  hash_map<object_t, DecayCounter> stat_object_temp_rd;
 
   Mutex pg_stats_lock;
   pg_stat_t pg_stats;
