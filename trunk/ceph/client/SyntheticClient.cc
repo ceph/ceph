@@ -36,6 +36,7 @@ using namespace std;
 #include "config.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_dout << dbeginl << g_clock.now() << " synthetic" << client->get_nodeid() << " "
+#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_derr << dbeginl << g_clock.now() << " synthetic" << client->get_nodeid() << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
@@ -1628,6 +1629,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   lock.Unlock();
 
   dout(5) << "create_objects done" << dendl;
+  derr(0) << "create_objects done" << dendl;
   return 0;
 }
 

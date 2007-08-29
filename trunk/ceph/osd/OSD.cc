@@ -236,7 +236,7 @@ int OSD::init()
   
   // log
   char name[80];
-  sprintf(name, "osd%02d", whoami);
+  sprintf(name, "osd%d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
   osd_logtype.add_set("opq");
   osd_logtype.add_inc("op");
@@ -613,7 +613,7 @@ void OSD::_refresh_my_stat(utime_t now)
   assert(peer_stat_lock.is_locked());
 
   // refresh?
-  if (now - my_stat.stamp > .5) {
+  if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval) {
     my_stat.stamp = now;
 
     my_stat.oprate = stat_oprate.get(now);
@@ -632,7 +632,7 @@ void OSD::_refresh_my_stat(utime_t now)
     logger->fset("qlen", my_stat.qlen);
     logger->fset("rqlen", my_stat.recent_qlen);
     logger->fset("readlat", my_stat.read_latency);
-    dout(-10) << "_refresh_my_stat " << my_stat << dendl;
+    dout(12) << "_refresh_my_stat " << my_stat << dendl;
   }
 }
 

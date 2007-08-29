@@ -257,6 +257,8 @@ md_config_t g_conf = {
   osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
   osd_exclusive_caching: true,         // replicas evict replicated writes
 
+  osd_stat_refresh_interval: 4.0,
+
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
@@ -825,6 +827,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
     else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
       g_conf.osd_exclusive_caching = atoi(args[++i]);
+
+    else if ( strcmp(args[i],"--osd_stat_refresh_interval" ) == 0)
+      g_conf.osd_stat_refresh_interval = atof(args[++i]);
 
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);

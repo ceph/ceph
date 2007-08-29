@@ -205,7 +205,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	    double latratio = 
 	      (c+osd->my_stat.read_latency) /   
 	      (c+osd->peer_stat[peer].read_latency);
-	    double p = (latratio  - 1.0) / 2.0;
+	    double p = (latratio - 1.0) / 2.0 / latratio;
 	    dout(-15) << "preprocess_op my read latency " << osd->my_stat.read_latency
 		      << ", peer osd" << peer << " is " << osd->peer_stat[peer].read_latency
 		      << ", latratio " << latratio

@@ -249,6 +249,7 @@ struct md_config_t {
 
   bool  osd_immediate_read_from_cache;
   bool  osd_exclusive_caching;
+  double osd_stat_refresh_interval;
 
   int   osd_pg_bits;
   int   osd_object_layout;
