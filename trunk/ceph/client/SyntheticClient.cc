@@ -599,10 +599,13 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();  iargs.pop_front();
         string prefix = get_sarg(0);
 
+	char realtfile[100];
+	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
+
         if (run_me()) {
           dout(2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times" << dendl;
           
-          Trace t(tfile.c_str());
+          Trace t(realtfile);
           
           client->mkdir(prefix.c_str(), 0755);
           
