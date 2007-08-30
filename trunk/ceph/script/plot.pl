@@ -30,10 +30,12 @@ for my $f (`ls $dir/$type*`) {
 #print "#files @files\n";
 
 # get field names
-print "set style data lines\n";
-print "set title \"$dir\"\n";
 my $var = shift @ARGV;
 my $rest = join(' ', @ARGV);
+
+print "set style data lines\n";
+print "set title \"$dir .. $var\"\n";
+if (scalar(@files) > 30) { print "set key off\n"; }
 #for my $var (@ARGV) {
     my @p;
     for my $f (@files) {
@@ -42,4 +44,4 @@ my $rest = join(' ', @ARGV);
     } 
     print "plot " . join(',', @p) . "\n";
 #}
-print "pause 100000000\n";
+print "pause 60000\n";

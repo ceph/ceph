@@ -7,7 +7,7 @@ use Data::Dumper;
 my $usage = "script/runset.pl [--clean] jobs/some/job blah\n";
 
 my $clean;
-my $use_srun;
+my $use_srun = 1;
 my $nobg = '&';
 my $in = shift || die $usage;
 if ($in eq '--clean') {
@@ -174,10 +174,19 @@ sub run {
 
 	for my $k (keys %$h) {
 	    next if $k =~ /^_/;
+	    next if $h->{'_noarg'} && grep {$k eq $_} @{$h->{'_noarg'}};
+	    next if $h->{'_subst'} && grep {$k eq $_} @{$h->{'_subst'}};
 	    $c .= " --$k $h->{$k}";
 	}
 
-	$c .= ' ' . $h->{'_custom'} if $h->{'_custom'};
+	if ($h->{'_custom'}) {
+	    if ($h->{'_subst'}) {
+		for my $var (@{$h->{'_subst'}}) {
+		    $h->{'_custom'} =~ s/\$$var/$h->{$var}/g;
+		}
+	    }
+	    $c .= ' ' . $h->{'_custom'};
+	}
 
 	$c .= " --log_name $relout/$keys";
 	$c .= " --doutdir log/$relout/$keys/out";
@@ -193,14 +202,18 @@ touch $fn/.post
 	print O $post;
 	close O;
 
-	my $killmin = 1 + int ($h->{'_kill_after'} / 60);
+	my $killmin;
+	if ($h->{'_kill_after'}) {
+	    $killmin = 1 + int ($h->{'_kill_after'} / 60);
+	    $killmin = "-t $killmin";
+	}
 	
 	$c = "bash -c \"ulimit -c 0 ; $c\"";
 	#$c = "bash -c \"$c\"";
 
 	#print "h keys are " . join(' ', sort keys %$h) . "\n";
 
-	my $srun = "srun --wait=600 --exclude=jobs/ltest.ignore -l -t $killmin -N $h->{'_n'} -p ltest";
+	my $srun = "srun --wait=600 -x jobs/ltest.ignore -l $killmin -N $h->{'_n'} -p ltest";
 	my $mpiexec = "mpiexec -l -n $h->{'_n'}";
 	my $launch;
 	if ($use_srun)  {
