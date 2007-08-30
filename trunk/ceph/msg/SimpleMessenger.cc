@@ -444,7 +444,11 @@ void Rank::Pipe::reader()
 	  entity = rank.find_unnamed(m->get_dest());
 	  if (entity) {
 	    dout(3) << "pipe(" << peer_addr << ' ' << this << ").reader blessing " << m->get_dest() << dendl;
-	    entity->reset_myname(m->get_dest());
+	    //entity->reset_myname(m->get_dest());
+	    rank.local.erase(entity->get_myname());
+	    rank.local[m->get_dest()] = entity;
+	    entity->_set_myname(m->get_dest());
+
 	  } else {
 	    if (rank.stopped.count(m->get_dest())) {
 	      // ignore it
@@ -1135,6 +1139,9 @@ Rank::EntityMessenger::EntityMessenger(entity_name_t myaddr) :
 }
 Rank::EntityMessenger::~EntityMessenger()
 {
+  // join dispatch thread
+  if (dispatch_thread.is_started())
+    dispatch_thread.join();
 }
 
 void Rank::EntityMessenger::dispatch_entry()
@@ -1179,7 +1186,8 @@ void Rank::EntityMessenger::dispatch_entry()
 void Rank::EntityMessenger::ready()
 {
   dout(10) << "ready " << get_myaddr() << dendl;
-
+  assert(!dispatch_thread.is_started());
+  
   if (g_conf.ms_single_dispatch) {
     rank.lock.Lock();
     if (rank.waiting_for_ready.count(get_myname())) {
@@ -1210,7 +1218,6 @@ int Rank::EntityMessenger::shutdown()
     stop = true;
     cond.Signal();
     lock.Unlock();
-    dispatch_thread.join();
   }
 
   return 0;

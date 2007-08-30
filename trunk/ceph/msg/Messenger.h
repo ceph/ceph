@@ -54,7 +54,12 @@ class Messenger {
   virtual int get_dispatch_queue_len() { return 0; };
 
   // setup
-  void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
+  void set_dispatcher(Dispatcher *d) { 
+    if (!dispatcher) {
+      dispatcher = d; 
+      ready(); 
+    }
+  }
   Dispatcher *get_dispatcher() { return dispatcher; }
   virtual void ready() { }
   bool is_ready() { return dispatcher != 0; }
