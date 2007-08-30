@@ -1628,16 +1628,18 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   int unsafe = 0;
   
   for (int i=start; i<end; i++) {
+    if (time_to_stop()) break;
+
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
 
+    lock.Lock();
+    while (unack > inflight) {
+      dout(20) << "waiting for " << unack << " unack" << dendl;
+      cond.Wait(lock);
+    }
+    lock.Unlock();
     if (i % inflight == 0) {
-      lock.Lock();
-      while (unack > 0) {
-	dout(20) << "waiting for " << unack << " unack" << dendl;
-	cond.Wait(lock);
-      }
-      lock.Unlock();
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
     }
     dout(10) << "writing " << oid << dendl;
