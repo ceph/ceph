@@ -409,6 +409,8 @@ void ReplicatedPG::do_op_reply(MOSDOpReply *r)
     tid_t rep_tid = r->get_rep_tid();
     int fromosd = r->get_source().num();
 
+    osd->take_peer_stat(fromosd, r->get_peer_stat());
+
     if (rep_gather.count(rep_tid)) {
       // oh, good.
       repop_ack(rep_gather[rep_tid], 
@@ -420,8 +422,6 @@ void ReplicatedPG::do_op_reply(MOSDOpReply *r)
       // early ack.
       waiting_for_repop[rep_tid].push_back(r);
     }
-    
-    osd->take_peer_stat(fromosd, r->get_peer_stat());
   }
 }
 
