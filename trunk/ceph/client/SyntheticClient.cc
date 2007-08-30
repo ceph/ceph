@@ -1587,6 +1587,24 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
 
 
 
+class C_Ref : public Context {
+  Mutex& lock;
+  Cond& cond;
+  int *ref;
+public:
+  C_Ref(Mutex &l, Cond &c, int *r) : lock(l), cond(c), ref(r) {
+    lock.Lock();
+    (*ref)++;
+    lock.Unlock();
+  }
+  void finish(int) {
+    lock.Lock();
+    (*ref)--;
+    cond.Signal();
+    lock.Unlock();
+  }
+};
+
 int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
   // divy up
@@ -1605,46 +1623,41 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 
   Mutex lock;
   Cond cond;
-  bool ack;
-  C_Gather *ackg = 0;
-  bool safe;
-  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
-  Context *ref = safeg->new_sub();
-
+  
+  int unack = 0;
+  int unsafe = 0;
+  
   for (int i=start; i<end; i++) {
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
 
     if (i % inflight == 0) {
-      if (ackg) {
-	dout(10) << "waiting" << dendl;
-	lock.Lock();
-	while (!ack) cond.Wait(lock);
-	lock.Unlock();
+      lock.Lock();
+      while (unack > 0) {
+	dout(20) << "waiting for " << unack << " unack" << dendl;
+	cond.Wait(lock);
       }
+      lock.Unlock();
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
-      ackg = new C_Gather(new C_SafeCond(&lock, &cond, &ack));
     }
     dout(10) << "writing " << oid << dendl;
-
+    
     client->client_lock.Lock();
-    Context *fin = safeg->new_sub();
-    client->objecter->write(oid, 0, osize, layout, bl, ackg->new_sub(), fin);
+    client->objecter->write(oid, 0, osize, layout, bl, 
+			    new C_Ref(lock, cond, &unack),
+			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
   }
-  lock.Lock();
-  while (!ack) cond.Wait(lock);
-  lock.Unlock();
 
-  dout(10) << "removing safe ref" << dendl;
-  client->client_lock.Lock();
-  ref->finish(0);
-  delete ref;
-  client->client_lock.Unlock();
-  
   lock.Lock();
-  dout(10) << "waiting for safe" << dendl;
-  while (!safe) cond.Wait(lock);
+  while (unack > 0) {
+    dout(20) << "waiting for " << unack << " unack" << dendl;
+    cond.Wait(lock);
+  }
+  while (unsafe > 0) {
+    dout(-10) << "waiting for " << unsafe << " unsafe" << dendl;
+    cond.Wait(lock);
+  }
   lock.Unlock();
 
   dout(5) << "create_objects done" << dendl;
@@ -1666,11 +1679,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
   Mutex lock;
   Cond cond;
 
-  bool ack;
-  bool safe;
-  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
-  dout(10) << "safeg = " << safeg << dendl;
-  Context *ref = safeg->new_sub();
+  int unack = 0;
+  int unsafe = 0;
 
   while (1) {
     if (time_to_stop()) break;
@@ -1691,35 +1701,31 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
     if (write) {
       dout(10) << "write to " << oid << dendl;
       client->objecter->write(oid, 0, osize, layout, bl, 
-			      new C_SafeCond(&lock, &cond, &ack),
-			      safeg->new_sub());
+			      new C_Ref(lock, cond, &unack),
+			      new C_Ref(lock, cond, &unsafe));
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
       client->objecter->read(oid, 0, osize, layout, &inbl, 
-			     new C_SafeCond(&lock, &cond, &ack));
+			     new C_Ref(lock, cond, &unack));
     }
     client->client_lock.Unlock();
 
     lock.Lock();
-    while (!ack) {
-      dout(20) << "waiting for ack" << dendl;
+    while (unack > 0) {
+      dout(20) << "waiting for " << unack << " unack" << dendl;
       cond.Wait(lock);
     }
     lock.Unlock();
   }
 
-  dout(10) << "removing safe ref" << dendl;
-  client->client_lock.Lock();
-  ref->finish(0);
-  delete ref;
-  client->client_lock.Unlock();
 
-  dout(10) << "waiting for safe" << dendl;
   lock.Lock();
-  while (!safe) cond.Wait(lock);
+  while (unsafe > 0) {
+    dout(-10) << "waiting for " << unsafe << " unsafe" << dendl;
+    cond.Wait(lock);
+  }
   lock.Unlock();
-
   return 0;
 }
 
