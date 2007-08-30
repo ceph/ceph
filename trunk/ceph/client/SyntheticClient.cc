@@ -1644,7 +1644,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 
 int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
 {
-  dout(5) << "uniform_object_rw " << nobj << " size=" << osize << " with "
+  dout(5) << "object_rw " << nobj << " size=" << osize << " with "
 	  << wrpc << "% writes, skew = " << skew
 	  << dendl;
 
