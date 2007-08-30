@@ -337,7 +337,9 @@ int main(int argc, char **argv)
   int nclients = 0;
   for (int i=0; i<start_client; i++) {
     //if (myrank != start_mds + start_osd + i % client_nodes) continue;
-    if (myrank != g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node) continue;
+    //int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node;
+    int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i % client_nodes;
+    if (myrank != node) continue;
     clientlist.insert(i);
     client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)),
 			   monmap, 
@@ -392,28 +394,27 @@ int main(int argc, char **argv)
     int i = *it;
     //      cout << "waiting for synthetic client" << i << " to finish" << std::endl;
     syn[i]->join_thread();
-    delete syn[i];
-    delete client[i];
+    // fix simpelmeessenger race first!
+    //delete syn[i];
+    //delete client[i];
   }
   
 
   if (myrank && !started) {
     //dout(1) << "IDLE" << dendl;
-    cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << std::endl; 
+    cerr << "idle at " << rank.my_addr << " rank " << myrank << " " << hostname << "." << pid << std::endl; 
   } 
 
   // wait for everything to finish
   rank.wait();
 
-  if (started) cerr << "newsyn finishing" << std::endl;
+  cerr << "newsyn done on " << hostname << "." << pid << std::endl;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
   sprintf(s, "gmon/%d", myrank);
   mkdir(s, 0755);
   chdir(s);
-
-
 
   return 0;  // whatever, cleanup hangs sometimes (stopping ebofs threads?).
 
