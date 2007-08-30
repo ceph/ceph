@@ -260,7 +260,7 @@ md_config_t g_conf = {
 
   osd_stat_refresh_interval: .5,
 
-  osd_pg_bits: 0,  // 0 == let osdmonitor decide
+  osd_pg_bits: 4,  // bits per osd
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,

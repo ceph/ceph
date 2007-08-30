@@ -114,12 +114,7 @@ void OSDMonitor::create_initial()
   newmap.mon_epoch = mon->mon_epoch;
   newmap.ctime = g_clock.now();
 
-  if (g_conf.osd_pg_bits) {
-    newmap.set_pg_num(1 << g_conf.osd_pg_bits);
-  } else {
-    // 4 bits of pgs per osd.
-    newmap.set_pg_num(g_conf.num_osd << 4);
-  }
+  newmap.set_pg_num(g_conf.num_osd << g_conf.osd_pg_bits);
   
   // start at epoch 1 until all osds boot
   newmap.inc_epoch();  // = 1
