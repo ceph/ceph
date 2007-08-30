@@ -1603,7 +1603,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   bufferlist bl;
   bl.push_back(bp);
 
-  Mutex &lock = client->client_lock;
+  Mutex lock;
   Cond cond;
   bool ack;
   C_Gather *ackg = 0;
@@ -1611,7 +1611,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
   Context *ref = safeg->new_sub();
 
-  lock.Lock();
   for (int i=start; i<end; i++) {
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
@@ -1619,19 +1618,30 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (i % inflight == 0) {
       if (ackg) {
 	dout(10) << "waiting" << dendl;
+	lock.Lock();
 	while (!ack) cond.Wait(lock);
+	lock.Unlock();
       }
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
       ackg = new C_Gather(new C_SafeCond(&lock, &cond, &ack));
     }
     dout(10) << "writing " << oid << dendl;
-    client->objecter->write(oid, 0, osize, layout, bl, ackg->new_sub(), safeg->new_sub());
-  }
-  while (!ack) cond.Wait(lock);
 
+    client->client_lock.Lock();
+    Context *fin = safeg->new_sub();
+    client->objecter->write(oid, 0, osize, layout, bl, ackg->new_sub(), fin);
+    client->client_lock.Unlock();
+  }
+  lock.Lock();
+  while (!ack) cond.Wait(lock);
   lock.Unlock();
+
+  dout(10) << "removing safe ref" << dendl;
+  client->client_lock.Lock();
   ref->finish(0);
   delete ref;
+  client->client_lock.Unlock();
+  
   lock.Lock();
   dout(10) << "waiting for safe" << dendl;
   while (!safe) cond.Wait(lock);
@@ -1653,7 +1663,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
   bufferlist bl;
   bl.push_back(bp);
 
-  Mutex &lock = client->client_lock;
+  Mutex lock;
   Cond cond;
 
   bool ack;
@@ -1662,19 +1672,22 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
   dout(10) << "safeg = " << safeg << dendl;
   Context *ref = safeg->new_sub();
 
-  lock.Lock();
   while (1) {
     if (time_to_stop()) break;
     
-    // pick a random object
-    double r = drand48(); // [0..1)
-    long o = (long)trunc(pow(r, skew) * (double)nobj);  // exponentially skew towards 0
-    object_t oid(0x1000, o);
-    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-
     // read or write?
     bool write = (rand() % 100) < wrpc;
 
+    // pick a random object
+    double r = drand48(); // [0..1)
+    long o = (long)trunc(pow(r, skew) * (double)nobj);  // exponentially skew towards 0
+
+    //if (write) o = hash(o) % nobj;
+
+    object_t oid(0x1000, o);
+    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+
+    client->client_lock.Lock();
     if (write) {
       dout(10) << "write to " << oid << dendl;
       client->objecter->write(oid, 0, osize, layout, bl, 
@@ -1686,19 +1699,27 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
       client->objecter->read(oid, 0, osize, layout, &inbl, 
 			     new C_SafeCond(&lock, &cond, &ack));
     }
+    client->client_lock.Unlock();
+
+    lock.Lock();
     while (!ack) {
       dout(20) << "waiting for ack" << dendl;
       cond.Wait(lock);
     }
-
+    lock.Unlock();
   }
-  dout(10) << "waiting for safe" << dendl;
-  lock.Unlock();
+
+  dout(10) << "removing safe ref" << dendl;
+  client->client_lock.Lock();
   ref->finish(0);
   delete ref;
+  client->client_lock.Unlock();
+
+  dout(10) << "waiting for safe" << dendl;
   lock.Lock();
   while (!safe) cond.Wait(lock);
   lock.Unlock();
+
   return 0;
 }
 
