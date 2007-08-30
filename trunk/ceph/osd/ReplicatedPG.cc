@@ -23,6 +23,8 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGRemove.h"
 
+#include "messages/MOSDPing.h"
+
 #include "config.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
@@ -109,8 +111,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
   object_t oid = op->get_oid();
 
   // -- load balance reads --
-  if (g_conf.osd_shed_reads &&
-      is_primary() &&
+  if (is_primary() &&
       g_conf.osd_rep == OSD_REP_PRIMARY) {
     // -- read on primary+acker ---
     
@@ -126,8 +127,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     
     // -- balance reads?
     if (g_conf.osd_balance_reads &&
-	!op->get_source().is_osd() && 
-	is_primary()) {
+	!op->get_source().is_osd()) {
       // flash crowd?
       bool is_flash_crowd_candidate = false;
       if (g_conf.osd_flash_crowd_iat_threshold > 0) {
@@ -178,7 +178,9 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
     }
     
     // -- read shedding
-    if (g_conf.osd_shed_reads) {
+    if (g_conf.osd_shed_reads &&
+	g_conf.osd_stat_refresh_interval > 0 &&
+	!op->get_source().is_osd()) {        // no re-shedding!
       Mutex::Locker lock(osd->peer_stat_lock);
 
       osd->_refresh_my_stat(op->request_received_time);
@@ -196,17 +198,24 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       switch (g_conf.osd_shed_reads) {
       case LOAD_LATENCY:
 	// above some minimum?
-	if (osd->my_stat.read_latency >= .001) {  
+	if (osd->my_stat.read_latency >= g_conf.osd_shed_reads_min_latency) {  
 	  for (unsigned i=1; i<acting.size(); ++i) {
 	    int peer = acting[i];
 	    if (osd->peer_stat.count(peer) == 0) continue;
+
+	    // assume a read_latency of 0 (technically, undefined) is OK, since
+	    // we'll be corrected soon enough if we're wrong.
+
+	    double diff = osd->my_stat.read_latency - osd->peer_stat[peer].read_latency;
+	    if (diff < g_conf.osd_shed_reads_min_latency_diff) continue;
 
 	    double c = .002; // add in a constant to smooth it a bit
 	    double latratio = 
 	      (c+osd->my_stat.read_latency) /   
 	      (c+osd->peer_stat[peer].read_latency);
 	    double p = (latratio - 1.0) / 2.0 / latratio;
-	    dout(-15) << "preprocess_op my read latency " << osd->my_stat.read_latency
+	    dout(-15) << "preprocess_op " << op->get_reqid() 
+		      << " my read latency " << osd->my_stat.read_latency
 		      << ", peer osd" << peer << " is " << osd->peer_stat[peer].read_latency
 		      << ", latratio " << latratio
 		      << ", p=" << p
@@ -221,9 +230,50 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	}
 	break;
 	
+      case LOAD_HYBRID:
+	// dumb mostly
+	if (osd->my_stat.read_latency >= g_conf.osd_shed_reads_min_latency) {
+	  for (unsigned i=1; i<acting.size(); ++i) {
+	    int peer = acting[i];
+	    if (osd->peer_stat.count(peer) == 0/* ||
+		osd->peer_stat[peer].read_latency <= 0*/) continue;
+
+	    if (osd->peer_stat[peer].qlen < osd->my_stat.qlen) {
+	      
+	      if (osd->my_stat.read_latency - osd->peer_stat[peer].read_latency >
+		  g_conf.osd_shed_reads_min_latency_diff) continue;
+
+	      double qratio = osd->pending_ops / osd->peer_stat[peer].qlen;
+	      
+	      double c = .002; // add in a constant to smooth it a bit
+	      double latratio = 
+		(c+osd->my_stat.read_latency)/   
+		(c+osd->peer_stat[peer].read_latency);
+	      double p = (latratio - 1.0) / 2.0 / latratio;
+	      
+	      dout(-15) << "preprocess_op " << op->get_reqid() 
+			<< " my qlen / rdlat " 
+			<< osd->pending_ops << " " << osd->my_stat.read_latency
+			<< ", peer osd" << peer << " is "
+			<< osd->peer_stat[peer].qlen << " " << osd->peer_stat[peer].read_latency
+			<< ", qratio " << qratio
+			<< ", latratio " << latratio
+			<< ", p=" << p
+			<< dendl;
+	      if (latratio > g_conf.osd_shed_reads_min_latency_ratio &&
+		  p > bestscore &&
+		  drand48() < p) {
+		shedto = peer;
+		bestscore = p;
+	      }
+	    }
+	  }
+	}
+	break;
+
 	/*
       case LOAD_QUEUE_SIZE:
-	// am i above my average?
+	// am i above my average?  -- dumb
 	if (osd->pending_ops > osd->my_stat.qlen) {
 	  // yes. is there a peer who is below my average?
 	  for (unsigned i=1; i<acting.size(); ++i) {
@@ -249,46 +299,14 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	}
 	break;*/
 
-      case LOAD_HYBRID:
-	if (osd->pending_ops > osd->my_stat.qlen &&
-	    osd->my_stat.read_latency > 0.0) {
-	  // is there a peer who is below my average?
-	  for (unsigned i=1; i<acting.size(); ++i) {
-	    int peer = acting[i];
-	    if (osd->peer_stat.count(peer) == 0) continue;
-	    if (osd->peer_stat[peer].qlen < osd->my_stat.qlen) {
-	      
-	      double qratio = osd->pending_ops / osd->peer_stat[peer].qlen;
-	      
-	      double c = .002; // add in a constant to smooth it a bit
-	      double latratio = 
-		(c+osd->my_stat.read_latency)/   
-		(c+osd->peer_stat[peer].read_latency);
-	      double p = (latratio  - 1.0) / 2.0;
-	      
-	      dout(-15) << "preprocess_op my qlen / read latency " 
-			<< osd->pending_ops << " " << osd->my_stat.read_latency
-			<< ", peer osd" << peer << " is "
-			<< osd->peer_stat[peer].qlen << " " << osd->peer_stat[peer].read_latency
-			<< ", qratio " << qratio
-			<< ", latratio " << latratio
-			<< ", p=" << p
-			<< dendl;
-	      if (latratio > g_conf.osd_shed_reads_min_latency_ratio &&
-		  p > bestscore &&
-		  drand48() < p) {
-		shedto = peer;
-		bestscore = p;
-	      }
-	    }
-	  }
-	}
-	break;
       }
 	
       // shed?
       if (shedto >= 0) {
-	dout(-10) << "preprocess_op shedding read to peer osd" << shedto << dendl;
+	dout(-10) << "preprocess_op shedding read to peer osd" << shedto
+		  << " " << op->get_reqid()
+		  << dendl;
+	op->set_peer_stat(osd->my_stat);
 	osd->messenger->send_message(op, osd->osdmap->get_inst(shedto));
 	osd->logger->inc("shdout");
 	return true;
@@ -386,10 +404,10 @@ void ReplicatedPG::do_op_reply(MOSDOpReply *r)
   } else {
     // must be replication.
     tid_t rep_tid = r->get_rep_tid();
-    
+    int fromosd = r->get_source().num();
+
     if (rep_gather.count(rep_tid)) {
       // oh, good.
-      int fromosd = r->get_source().num();
       repop_ack(rep_gather[rep_tid], 
 		r->get_result(), r->get_commit(), 
 		fromosd, 
@@ -399,6 +417,8 @@ void ReplicatedPG::do_op_reply(MOSDOpReply *r)
       // early ack.
       waiting_for_repop[rep_tid].push_back(r);
     }
+    
+    osd->take_peer_stat(fromosd, r->get_peer_stat());
   }
 }
 
@@ -427,7 +447,29 @@ void ReplicatedPG::op_read(MOSDOp *op)
     if (op->get_source().is_osd() &&
 	op->get_source().num() == get_primary()) {
       // read was shed to me by the primary
-      osd->logger->inc("shdin");      
+      int from = op->get_source().num();
+      osd->take_peer_stat(from, op->get_peer_stat());
+      dout(-10) << "read shed IN from " << op->get_source() 
+		<< " " << op->get_reqid()
+		<< ", me = " << osd->my_stat.read_latency
+		<< ", them = " << op->get_peer_stat().read_latency
+		<< (osd->my_stat.read_latency > op->get_peer_stat().read_latency ? " WTF":"")
+		<< dendl;
+      osd->logger->inc("shdin");
+
+      // does it look like they were wrong to do so?
+      Mutex::Locker lock(osd->peer_stat_lock);
+      if (osd->my_stat.read_latency > op->get_peer_stat().read_latency &&
+	  osd->my_stat_on_peer[from].read_latency < op->get_peer_stat().read_latency) {
+	dout(-10) << "read shed IN from " << op->get_source() 
+		  << " " << op->get_reqid()
+		  << " and me " << osd->my_stat.read_latency
+		  << " > them " << op->get_peer_stat().read_latency
+		  << ", but they didn't know better, sharing" << dendl;
+	osd->my_stat_on_peer[from] = osd->my_stat;
+	osd->messenger->send_message(new MOSDPing(osd->osdmap->get_epoch(), osd->my_stat),
+				     osd->osdmap->get_inst(from));
+      }
     } else {
       // make sure i exist and am balanced, otherwise fw back to acker.
       bool b;
@@ -488,7 +530,9 @@ void ReplicatedPG::op_read(MOSDOp *op)
     utime_t now = g_clock.now();
     utime_t diff = now;
     diff -= op->get_received_time();
-    dout(10) <<  "op_read total op latency " << diff << dendl;
+    dout(10) <<  "op_read " << op->get_reqid() << " total op latency " << diff << dendl;
+    Mutex::Locker lock(osd->peer_stat_lock);
+    osd->stat_rd_ops_in_queue--;
     osd->read_latency_calc.add(diff);
 
     if (is_primary() &&
@@ -853,7 +897,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
 }
 
 
-void ReplicatedPG::issue_repop(MOSDOp *op, int dest, osd_peer_stat_t& stat)
+void ReplicatedPG::issue_repop(MOSDOp *op, int dest, utime_t now)
 {
   object_t oid = op->get_oid();
   
@@ -876,7 +920,7 @@ void ReplicatedPG::issue_repop(MOSDOp *op, int dest, osd_peer_stat_t& stat)
   wr->set_rep_tid(op->get_rep_tid());
   wr->set_pg_trim_to(peers_complete_thru);
 
-  wr->set_peer_stat(stat);
+  wr->set_peer_stat(osd->get_my_stat_for(now, dest));
   
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
@@ -1175,11 +1219,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   }
 
   // note my stats
-  osd->peer_stat_lock.Lock();
-  osd->_refresh_my_stat(g_clock.now());
-  osd_peer_stat_t stat = osd->my_stat;
-  osd->peer_stat_lock.Unlock();
-
+  utime_t now = g_clock.now();
 
   // issue replica writes
   RepGather *repop = 0;
@@ -1192,13 +1232,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     int next = acting[1];
     if (acting.size() > 2)
       next = acting[2];
-    issue_repop(op, next, stat);
+    issue_repop(op, next, now);
   } 
   else if (g_conf.osd_rep == OSD_REP_SPLAY && !alone) {
     // splay rep.  send to rest.
     for (unsigned i=1; i<acting.size(); ++i)
     //for (unsigned i=acting.size()-1; i>=1; --i)
-      issue_repop(op, acting[i], stat);
+      issue_repop(op, acting[i], now);
   } else {
     // primary rep, or alone.
     repop = new_rep_gather(op);
@@ -1206,7 +1246,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     // send to rest.
     if (!alone)
       for (unsigned i=1; i<acting.size(); i++)
-        issue_repop(op, acting[i], stat);
+        issue_repop(op, acting[i], now);
   }
 
   if (repop) {    
@@ -1277,10 +1317,7 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
   
   // note peer's stat
   int fromosd = op->get_source().num();
-  osd->peer_stat_lock.Lock();
-  osd->peer_stat[fromosd] = op->get_peer_stat();
-  dout(20) << "op_rep_modify got peer " << fromosd << " stat " << op->get_peer_stat() << dendl;
-  osd->peer_stat_lock.Unlock();
+  osd->take_peer_stat(fromosd, op->get_peer_stat());
 
   // we better not be missing this.
   assert(!missing.is_missing(oid));
@@ -1317,14 +1354,12 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
 
     // chain?  forward?
     if (g_conf.osd_rep == OSD_REP_CHAIN && !is_acker()) {
-      osd_peer_stat_t stat = osd->my_stat; // FIXME
-      
       // chain rep, not at the tail yet.
       int myrank = osd->osdmap->calc_pg_rank(osd->get_nodeid(), acting);
       int next = myrank+1;
       if (next == (int)acting.size())
 	next = 1;
-      issue_repop(op, acting[next], stat);	
+      issue_repop(op, acting[next], g_clock.now());	
     }
   }
 
@@ -1372,6 +1407,7 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
     // send ack to acker?
     if (g_conf.osd_rep != OSD_REP_CHAIN) {
       MOSDOpReply *ack = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), false);
+      ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
       osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
     }
 
@@ -1392,6 +1428,7 @@ void ReplicatedPG::op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t las
   if (osd->osdmap->is_up(ackerosd)) {
     MOSDOpReply *commit = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true);
     commit->set_pg_complete_thru(last_complete);
+    commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
     osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
     delete op;
   }

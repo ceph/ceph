@@ -108,12 +108,16 @@ private:
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat
   int stat_qlen; // cumulative queue length since last refresh
-  
+  int stat_rd_ops_in_queue;  // in queue
+
   Mutex peer_stat_lock;
   osd_peer_stat_t my_stat;
   hash_map<int, osd_peer_stat_t> peer_stat;
+  hash_map<int, osd_peer_stat_t> my_stat_on_peer;  // what the peer thinks of me
 
   void _refresh_my_stat(utime_t now);
+  osd_peer_stat_t get_my_stat_for(utime_t now, int peer);
+  void take_peer_stat(int peer, const osd_peer_stat_t& stat);
   
   // load calculation
   //current implementation is moving averges.

@@ -1635,7 +1635,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 
 int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
 {
-  dout(5) << "uniform_object_pc " << nobj << " size=" << osize << " " << wrpc << dendl;
+  dout(5) << "uniform_object_rw " << nobj << " size=" << osize << " with " << wrpc << "% writes" << dendl;
 
   bufferptr bp(osize);
   bp.zero();

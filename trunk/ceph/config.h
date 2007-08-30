@@ -243,8 +243,9 @@ struct md_config_t {
   double osd_flash_crowd_iat_alpha;
   double osd_balance_reads_temp;
 
-  bool  osd_shed_reads;
+  int  osd_shed_reads;
   double osd_shed_reads_min_latency;
+  double osd_shed_reads_min_latency_diff;
   double osd_shed_reads_min_latency_ratio;
 
   bool  osd_immediate_read_from_cache;

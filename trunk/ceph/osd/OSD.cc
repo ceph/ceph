@@ -110,7 +110,7 @@ LogType osd_logtype;
 OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
   timer(osd_lock),
   stat_oprate(5.0),
-  read_latency_calc(g_conf.osd_max_opq<1?1:g_conf.osd_max_opq),
+  read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha)
 {
@@ -613,27 +613,52 @@ void OSD::_refresh_my_stat(utime_t now)
   assert(peer_stat_lock.is_locked());
 
   // refresh?
-  if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval) {
-    my_stat.stamp = now;
+  if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval ||
+      pending_ops > 2*my_stat.qlen) {
 
+    my_stat.stamp = now;
     my_stat.oprate = stat_oprate.get(now);
 
+    //read_latency_calc.set_size( 20 );  // hrm.
+
     // qlen
-    my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
+    my_stat.qlen = 0;
+    if (stat_ops) my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
     stat_ops = 0;
     stat_qlen = 0;
-    
+
+    // recent_qlen
     qlen_calc.add(my_stat.qlen);
     my_stat.recent_qlen = qlen_calc.get_average();
 
-    my_stat.read_latency = read_latency_calc.get_average();
-    if (my_stat.read_latency < 0) my_stat.read_latency = 0;
+    // read latency
+    if (stat_rd_ops_in_queue) {
+      my_stat.read_latency = read_latency_calc.get_average();
+      if (my_stat.read_latency < 0) my_stat.read_latency = 0;
+    } else {
+      my_stat.read_latency = 0;
+    }
 
     logger->fset("qlen", my_stat.qlen);
     logger->fset("rqlen", my_stat.recent_qlen);
-    logger->fset("readlat", my_stat.read_latency);
-    dout(12) << "_refresh_my_stat " << my_stat << dendl;
+    logger->fset("rdlat", my_stat.read_latency);
+    dout(12) << "_refresh_my_stat " << my_stat << " rdinq " << stat_rd_ops_in_queue << dendl;
   }
+}
+
+osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
+{
+  Mutex::Locker lock(peer_stat_lock);
+  _refresh_my_stat(now);
+  my_stat_on_peer[peer] = my_stat;
+  return my_stat;
+}
+
+void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
+{
+  Mutex::Locker lock(peer_stat_lock);
+  dout(10) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
+  peer_stat[peer] = stat;
 }
 
 void OSD::heartbeat()
@@ -643,10 +668,10 @@ void OSD::heartbeat()
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
 
   // calc my stats
-  peer_stat_lock.Lock();
+  Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
-  dout(-5) << "heartbeat: " << my_stat << dendl;
-  peer_stat_lock.Unlock();
+
+  dout(5) << "heartbeat: " << my_stat << dendl;
 
   //load_calc.set_size(stat_ops);
   
@@ -666,10 +691,12 @@ void OSD::heartbeat()
       pingset.insert(pg->acting[0]);
     }
   }
+  my_stat_on_peer.clear();
   for (set<int>::iterator i = pingset.begin();
        i != pingset.end();
        i++) {
     _share_map_outgoing( osdmap->get_inst(*i) );
+    my_stat_on_peer[*i] = my_stat;
     messenger->send_message(new MOSDPing(osdmap->get_epoch(), my_stat),
 			    osdmap->get_inst(*i));
   }
@@ -959,14 +986,12 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  dout(20) << "osdping from " << m->get_source() << dendl;
+  dout(20) << "osdping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
 
   _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
   int from = m->get_source().num();
-  peer_stat_lock.Lock();
-  peer_stat[from] = m->peer_stat;
-  peer_stat_lock.Unlock();
+  take_peer_stat(from, m->peer_stat);
 
   delete m;
 }
@@ -2130,6 +2155,11 @@ void OSD::handle_op(MOSDOp *op)
   if (pg->preprocess_op(op)) {
     pg->unlock();
     return;
+  }
+
+  if (op->get_op() == OSD_OP_READ) {
+    Mutex::Locker lock(peer_stat_lock);
+    stat_rd_ops_in_queue++;
   }
 
   if (g_conf.osd_maxthreads < 1) {

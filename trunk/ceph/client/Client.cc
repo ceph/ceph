@@ -229,15 +229,11 @@ void Client::dump_cache()
 
 void Client::init() 
 {
-  Mutex::Locker lock(client_lock);
-  objecter->init();
 }
 
 void Client::shutdown() 
 {
-  Mutex::Locker lock(client_lock);
   dout(1) << "shutdown" << dendl;
-  objecter->shutdown();
   messenger->shutdown();
 }
 
@@ -1351,6 +1347,8 @@ int Client::mount()
 {
   client_lock.Lock();
   assert(!mounted);  // caller is confused?
+
+  objecter->init();
     
   _try_mount();
   //messenger->set_dispatcher(this);   // FIXME: there is still a race condition here!
@@ -1493,6 +1491,8 @@ int Client::unmount()
     mount_cond.Wait(client_lock);
 
   dout(2) << "unmounted." << dendl;
+
+  objecter->shutdown();
 
   client_lock.Unlock();
   return 0;

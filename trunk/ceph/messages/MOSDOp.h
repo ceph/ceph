@@ -113,7 +113,8 @@ private:
     bool   want_ack;
     bool   want_commit;
     bool   retry_attempt;
-
+    
+    int shed_count;
     osd_peer_stat_t peer_stat;
   } st;
 
@@ -183,8 +184,10 @@ public:
     return request_received_time;
   }
 
-  void set_peer_stat(osd_peer_stat_t& stat) { st.peer_stat = stat; }
+  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
+  void inc_shed_count() { st.shed_count++; }
+  int get_shed_count() { return st.shed_count; }
   
   void set_data(bufferlist &d) {
     data.claim(d);
