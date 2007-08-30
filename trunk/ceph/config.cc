@@ -253,12 +253,12 @@ md_config_t g_conf = {
   osd_shed_reads: false,     // forward from primary to replica
   osd_shed_reads_min_latency: .01,       // min local latency
   osd_shed_reads_min_latency_diff: .01,  // min latency difference
-  osd_shed_reads_min_latency_ratio: 1.1,  // 1.2 == 20% higher than peer
+  osd_shed_reads_min_latency_ratio: 1.2,  // 1.2 == 20% higher than peer
 
-  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
+  osd_immediate_read_from_cache: false,//true, // osds to read from the cache immediately?
   osd_exclusive_caching: true,         // replicas evict replicated writes
 
-  osd_stat_refresh_interval: 4.0,
+  osd_stat_refresh_interval: .5,
 
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
@@ -272,7 +272,7 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 5,
+  osd_heartbeat_interval: 1,
   osd_pg_stats_interval:  5,
   osd_replay_window: 5,
   osd_max_pull: 2,
@@ -844,6 +844,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_rep = OSD_REP_PRIMARY;
     else if (strcmp(args[i], "--osd_mkfs") == 0) 
       g_conf.osd_mkfs = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_heartbeat_interval") == 0) 
+      g_conf.osd_heartbeat_interval = atoi(args[++i]);
+    
     else if (strcmp(args[i], "--osd_age") == 0) 
       g_conf.osd_age = atof(args[++i]);
     else if (strcmp(args[i], "--osd_age_time") == 0) 

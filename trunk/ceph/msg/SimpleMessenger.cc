@@ -428,6 +428,7 @@ void Rank::Pipe::reader()
 	     << m << " " << *m
 	     << " for " << m->get_dest() << dendl;
 
+    // deliver
     EntityMessenger *entity = 0;
 
     rank.lock.Lock();

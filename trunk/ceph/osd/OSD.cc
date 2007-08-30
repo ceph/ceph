@@ -128,6 +128,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) :
 
   stat_ops = 0;
   stat_qlen = 0;
+  stat_rd_ops = stat_rd_ops_shed_in = stat_rd_ops_shed_out = 0;
+  stat_rd_ops_in_queue = 0;
 
   pending_ops = 0;
   waiting_for_no_ops = false;
@@ -253,6 +255,9 @@ int OSD::init()
   osd_logtype.add_set("qlen");
   osd_logtype.add_set("rqlen");
   osd_logtype.add_set("rdlat");
+  osd_logtype.add_set("rdlatm");
+  osd_logtype.add_set("fshdin");
+  osd_logtype.add_set("fshdout");
   osd_logtype.add_inc("shdout");
   osd_logtype.add_inc("shdin");
 
@@ -624,25 +629,44 @@ void OSD::_refresh_my_stat(utime_t now)
     // qlen
     my_stat.qlen = 0;
     if (stat_ops) my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
-    stat_ops = 0;
-    stat_qlen = 0;
+
+    // rd ops shed in
+    float frac_rd_ops_shed_in = 0;
+    float frac_rd_ops_shed_out = 0;
+    if (stat_rd_ops) {
+      frac_rd_ops_shed_in = (float)stat_rd_ops_shed_in / (float)stat_rd_ops;
+      frac_rd_ops_shed_out = (float)stat_rd_ops_shed_out / (float)stat_rd_ops;
+    }
+    my_stat.frac_rd_ops_shed_in = (my_stat.frac_rd_ops_shed_in + frac_rd_ops_shed_in) / 2.0;
+    my_stat.frac_rd_ops_shed_out = (my_stat.frac_rd_ops_shed_out + frac_rd_ops_shed_out) / 2.0;
 
     // recent_qlen
     qlen_calc.add(my_stat.qlen);
     my_stat.recent_qlen = qlen_calc.get_average();
 
     // read latency
-    if (stat_rd_ops_in_queue) {
+    if (stat_rd_ops) {
       my_stat.read_latency = read_latency_calc.get_average();
       if (my_stat.read_latency < 0) my_stat.read_latency = 0;
     } else {
       my_stat.read_latency = 0;
     }
 
+    my_stat.read_latency_mine = my_stat.read_latency * (1.0 - frac_rd_ops_shed_in);
+
     logger->fset("qlen", my_stat.qlen);
     logger->fset("rqlen", my_stat.recent_qlen);
     logger->fset("rdlat", my_stat.read_latency);
-    dout(12) << "_refresh_my_stat " << my_stat << " rdinq " << stat_rd_ops_in_queue << dendl;
+    logger->fset("rdlatm", my_stat.read_latency_mine);
+    logger->fset("fshdin", my_stat.frac_rd_ops_shed_in);
+    logger->fset("fshdout", my_stat.frac_rd_ops_shed_out);
+    dout(12) << "_refresh_my_stat " << my_stat << dendl;
+
+    stat_rd_ops = 0;
+    stat_rd_ops_shed_in = 0;
+    stat_rd_ops_shed_out = 0;
+    stat_ops = 0;
+    stat_qlen = 0;
   }
 }
 
@@ -1998,15 +2022,19 @@ void OSD::handle_op(MOSDOp *op)
 
   logger->set("buf", buffer_total_alloc);
 
-  // mark the read request received time for finding the 
-  // read througput load.  
   utime_t now = g_clock.now();
-  op->set_received_time(now);
 
   // update qlen stats
   stat_oprate.hit(now);
   stat_ops++;
   stat_qlen += pending_ops;
+  if (op->get_op() == OSD_OP_READ) {
+    stat_rd_ops++;
+    if (op->get_source().is_osd()) {
+      //derr(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
+      stat_rd_ops_shed_in++;
+    }
+  }
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) {
@@ -2152,7 +2180,7 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   // proprocess op? 
-  if (pg->preprocess_op(op)) {
+  if (pg->preprocess_op(op, now)) {
     pg->unlock();
     return;
   }

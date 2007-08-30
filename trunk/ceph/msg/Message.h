@@ -178,6 +178,8 @@ class Message {
   bufferlist      payload;        // payload
   list<int> chunk_payload_at;
   
+  utime_t recv_stamp;
+
   friend class Messenger;
 public:
 
@@ -194,10 +196,6 @@ public:
   virtual ~Message() {
   }
 
-
-  // for rpc-type procedural messages (pcid = procedure call id)
-  virtual long get_pcid() { return 0; }
-  virtual void set_pcid(long t) { assert(0); }  // overload me
 
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
@@ -218,6 +216,9 @@ public:
     this->env = env;
   }
 
+
+  void set_recv_stamp(utime_t t) { recv_stamp = t; }
+  utime_t get_recv_stamp() { return recv_stamp; }
 
   // ENVELOPE ----
 

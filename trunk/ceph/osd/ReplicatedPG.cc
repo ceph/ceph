@@ -102,7 +102,7 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, MOSDOp *op)
 /** preprocess_op - preprocess an op (before it gets queued).
  * fasttrack read
  */
-bool ReplicatedPG::preprocess_op(MOSDOp *op)
+bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 {
   // we only care about reads here on out..
   if (!op->is_read()) 
@@ -138,7 +138,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       // hot?
       double temp = 0;
       if (stat_object_temp_rd.count(oid))
-	temp = stat_object_temp_rd[oid].get(op->request_received_time);
+	temp = stat_object_temp_rd[oid].get(op->get_recv_stamp());
       bool is_hotly_read = temp > g_conf.osd_balance_reads_temp;
 
       dout(20) << "balance_reads oid " << oid << " temp " << temp 
@@ -149,7 +149,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
       bool should_balance = is_flash_crowd_candidate || is_hotly_read;
       bool is_balanced = false;
       bool b;
-      // *** FIXME *** this may block, and we're in the fast past! ***
+      // *** FIXME *** this may block, and we're in the fast path! ***
       if (osd->store->getattr(oid, "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
@@ -183,7 +183,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	!op->get_source().is_osd()) {        // no re-shedding!
       Mutex::Locker lock(osd->peer_stat_lock);
 
-      osd->_refresh_my_stat(op->request_received_time);
+      osd->_refresh_my_stat(now);
 
       // check my load. 
       // TODO xxx we must also compare with our own load
@@ -206,17 +206,19 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	    // assume a read_latency of 0 (technically, undefined) is OK, since
 	    // we'll be corrected soon enough if we're wrong.
 
-	    double diff = osd->my_stat.read_latency - osd->peer_stat[peer].read_latency;
+	    double plat = osd->peer_stat[peer].read_latency_mine;
+
+	    double diff = osd->my_stat.read_latency - plat;
 	    if (diff < g_conf.osd_shed_reads_min_latency_diff) continue;
 
 	    double c = .002; // add in a constant to smooth it a bit
 	    double latratio = 
 	      (c+osd->my_stat.read_latency) /   
-	      (c+osd->peer_stat[peer].read_latency);
+	      (c+plat);
 	    double p = (latratio - 1.0) / 2.0 / latratio;
-	    dout(-15) << "preprocess_op " << op->get_reqid() 
+	    dout(15) << "preprocess_op " << op->get_reqid() 
 		      << " my read latency " << osd->my_stat.read_latency
-		      << ", peer osd" << peer << " is " << osd->peer_stat[peer].read_latency
+		      << ", peer osd" << peer << " is " << plat << " (" << osd->peer_stat[peer].read_latency << ")"
 		      << ", latratio " << latratio
 		      << ", p=" << p
 		      << dendl;
@@ -303,11 +305,12 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op)
 	
       // shed?
       if (shedto >= 0) {
-	dout(-10) << "preprocess_op shedding read to peer osd" << shedto
+	dout(10) << "preprocess_op shedding read to peer osd" << shedto
 		  << " " << op->get_reqid()
 		  << dendl;
 	op->set_peer_stat(osd->my_stat);
 	osd->messenger->send_message(op, osd->osdmap->get_inst(shedto));
+	osd->stat_rd_ops_shed_out++;
 	osd->logger->inc("shdout");
 	return true;
       }
@@ -449,21 +452,21 @@ void ReplicatedPG::op_read(MOSDOp *op)
       // read was shed to me by the primary
       int from = op->get_source().num();
       osd->take_peer_stat(from, op->get_peer_stat());
-      dout(-10) << "read shed IN from " << op->get_source() 
+      dout(10) << "read shed IN from " << op->get_source() 
 		<< " " << op->get_reqid()
-		<< ", me = " << osd->my_stat.read_latency
+		<< ", me = " << osd->my_stat.read_latency_mine
 		<< ", them = " << op->get_peer_stat().read_latency
-		<< (osd->my_stat.read_latency > op->get_peer_stat().read_latency ? " WTF":"")
+		<< (osd->my_stat.read_latency_mine > op->get_peer_stat().read_latency ? " WTF":"")
 		<< dendl;
       osd->logger->inc("shdin");
 
       // does it look like they were wrong to do so?
       Mutex::Locker lock(osd->peer_stat_lock);
-      if (osd->my_stat.read_latency > op->get_peer_stat().read_latency &&
-	  osd->my_stat_on_peer[from].read_latency < op->get_peer_stat().read_latency) {
+      if (osd->my_stat.read_latency_mine > op->get_peer_stat().read_latency &&
+	  osd->my_stat_on_peer[from].read_latency_mine < op->get_peer_stat().read_latency) {
 	dout(-10) << "read shed IN from " << op->get_source() 
 		  << " " << op->get_reqid()
-		  << " and me " << osd->my_stat.read_latency
+		  << " and me " << osd->my_stat.read_latency_mine
 		  << " > them " << op->get_peer_stat().read_latency
 		  << ", but they didn't know better, sharing" << dendl;
 	osd->my_stat_on_peer[from] = osd->my_stat;
@@ -529,7 +532,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
     utime_t now = g_clock.now();
     utime_t diff = now;
-    diff -= op->get_received_time();
+    diff -= op->get_recv_stamp();
     dout(10) <<  "op_read " << op->get_reqid() << " total op latency " << diff << dendl;
     Mutex::Locker lock(osd->peer_stat_lock);
     osd->stat_rd_ops_in_queue--;

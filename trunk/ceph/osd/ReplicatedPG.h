@@ -136,7 +136,7 @@ public:
   { }
   ~ReplicatedPG() {}
 
-  bool preprocess_op(MOSDOp *op);
+  bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
   void do_op_reply(MOSDOpReply *r);
 

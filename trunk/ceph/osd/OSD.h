@@ -107,6 +107,9 @@ private:
   // -- stats --
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat
+  int stat_rd_ops;
+  int stat_rd_ops_shed_in;
+  int stat_rd_ops_shed_out;
   int stat_qlen; // cumulative queue length since last refresh
   int stat_rd_ops_in_queue;  // in queue
 

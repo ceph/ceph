@@ -121,9 +121,6 @@ private:
   bufferlist data;
   map<string,bufferptr> attrset;
 
-public:  // ugh
-  utime_t request_received_time;
-  
 
   friend class MOSDOpReply;
 
@@ -176,13 +173,6 @@ public:
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
-
-  void set_received_time(utime_t time) {
-    request_received_time = time;
-  }
-  utime_t get_received_time() {
-    return request_received_time;
-  }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }

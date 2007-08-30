@@ -204,6 +204,8 @@ int fakemessenger_do_loop_2()
       Message *m = mgr->get_message();
       it++;
       
+      m->set_recv_stamp(g_clock.now());
+
       if (m) {
         //dout(18) << "got " << m << dendl;
         dout(1) << "==== " << m->get_dest() 

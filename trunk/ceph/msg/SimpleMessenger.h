@@ -178,6 +178,9 @@ private:
 
   public:
     void queue_message(Message *m) {
+      // set recv stamp
+      m->set_recv_stamp(g_clock.now());
+
       lock.Lock();
       dispatch_queue.push_back(m);
       cond.Signal();
