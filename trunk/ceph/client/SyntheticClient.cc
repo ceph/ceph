@@ -131,8 +131,9 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
-      } else if (strcmp(args[i],"uniformobjectrw") == 0) {
-        syn_modes.push_back( SYNCLIENT_MODE_UNIFORMOBJECTRW );
+      } else if (strcmp(args[i],"objectrw") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_OBJECTRW );
+        syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -488,14 +489,15 @@ int SyntheticClient::run()
         }
       }
       break;
-    case SYNCLIENT_MODE_UNIFORMOBJECTRW:
+    case SYNCLIENT_MODE_OBJECTRW:
       {
         int count = iargs.front();  iargs.pop_front();
         int size = iargs.front();  iargs.pop_front();
         int wrpc = iargs.front();  iargs.pop_front();
+        int skew = iargs.front();  iargs.pop_front();
         if (run_me()) {
-          dout(2) << "uniformobjectrw " << cout << " " << size << " " << wrpc << dendl;
-          uniform_object_rw(count, size, wrpc);
+          dout(2) << "objectrw " << cout << " " << size << " " << wrpc << " " << skew << dendl;
+          object_rw(count, size, wrpc, skew);
         }
       }
       break;
@@ -1587,8 +1589,15 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
 
 int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
-  dout(5) << "create_objects " << nobj << " size=" << osize << dendl;
+  // divy up
+  int numc = g_conf.num_client ? g_conf.num_client : 1;
+  int start = nobj * client->get_nodeid() / numc;
+  int end = nobj * (client->get_nodeid()+1) / numc;
 
+  dout(5) << "create_objects " << nobj << " size=" << osize 
+	  << " .. doing [" << start << "," << end << ")"
+	  << dendl;
+  
   bufferptr bp(osize);
   bp.zero();
   bufferlist bl;
@@ -1603,7 +1612,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   Context *ref = safeg->new_sub();
 
   lock.Lock();
-  for (int i=0; i<nobj; i++) {
+  for (int i=start; i<end; i++) {
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
 
@@ -1633,9 +1642,11 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   return 0;
 }
 
-int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
+int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
 {
-  dout(5) << "uniform_object_rw " << nobj << " size=" << osize << " with " << wrpc << "% writes" << dendl;
+  dout(5) << "uniform_object_rw " << nobj << " size=" << osize << " with "
+	  << wrpc << "% writes, skew = " << skew
+	  << dendl;
 
   bufferptr bp(osize);
   bp.zero();
@@ -1656,7 +1667,9 @@ int SyntheticClient::uniform_object_rw(int nobj, int osize, int wrpc)
     if (time_to_stop()) break;
     
     // pick a random object
-    object_t oid(0x1000, rand() % nobj);
+    double r = drand48(); // [0..1)
+    long o = (long)trunc(pow(r, skew) * (double)nobj);  // exponentially skew towards 0
+    object_t oid(0x1000, o);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
 
     // read or write?

@@ -48,7 +48,7 @@
 #define SYNCLIENT_MODE_TRACE       30
 
 #define SYNCLIENT_MODE_CREATEOBJECTS 35
-#define SYNCLIENT_MODE_UNIFORMOBJECTRW 36
+#define SYNCLIENT_MODE_OBJECTRW 36
 
 #define SYNCLIENT_MODE_OPENTEST     40
 #define SYNCLIENT_MODE_OPTEST       41
@@ -228,7 +228,7 @@ class SyntheticClient {
   int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
 
   int create_objects(int nobj, int osize, int inflight);
-  int uniform_object_rw(int nobj, int osize, int wrpc);
+  int object_rw(int nobj, int osize, int wrpc, double skew);
 
   int read_random(string& fn, int mb, int chunk);
   int read_random_ex(string& fn, int mb, int chunk);
