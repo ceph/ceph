@@ -989,6 +989,11 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
     exit(0);
   }
 
+  if (is_stopping()) {
+    delete m;
+    return;
+  }
+
   if (dest.is_osd()) {
     // failed osd.  drop message, report to mon.
     int mon = monmap->pick_mon();
