@@ -1655,7 +1655,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     cond.Wait(lock);
   }
   while (unsafe > 0) {
-    dout(-10) << "waiting for " << unsafe << " unsafe" << dendl;
+    dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
     cond.Wait(lock);
   }
   lock.Unlock();
@@ -1722,7 +1722,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
 
   lock.Lock();
   while (unsafe > 0) {
-    dout(-10) << "waiting for " << unsafe << " unsafe" << dendl;
+    dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
     cond.Wait(lock);
   }
   lock.Unlock();
