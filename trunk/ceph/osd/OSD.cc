@@ -261,6 +261,8 @@ int OSD::init()
   osd_logtype.add_inc("shdout");
   osd_logtype.add_inc("shdin");
 
+  osd_logtype.add_set("loadavg");
+
   osd_logtype.add_inc("rlsum");
   osd_logtype.add_inc("rlnum");
 
@@ -690,6 +692,15 @@ void OSD::heartbeat()
   utime_t now = g_clock.now();
   utime_t since = now;
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
+
+  // get CPU load avg
+  ifstream in("/proc/loadavg");
+  if (in.is_open()) {
+    float oneminavg;
+    in >> oneminavg;
+    logger->fset("loadavg", oneminavg);
+    in.close();
+  }
 
   // calc my stats
   Mutex::Locker lock(peer_stat_lock);
