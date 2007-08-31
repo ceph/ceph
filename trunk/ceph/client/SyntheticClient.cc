@@ -2595,10 +2595,13 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
    *
    */
 
-  client->mkdir(base, 0755);
+  if (base[0] != '-') 
+    client->mkdir(base, 0755);
 
   ifstream f(find);
   assert(f.is_open());
+  
+  int dirnum = 0;
 
   while (!f.eof()) {
     uint64_t ino;
@@ -2620,10 +2623,23 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     f.seekg(1, ios::cur);
     getline(f, filename);
 
+    // ignore "."
+    if (filename == ".") continue;
+
     // remove leading ./
-    if (filename[0] == '.' && filename[1] == '/')
-      filename = filename.substr(2);
-    
+    assert(filename[0] == '.' && filename[1] == '/');
+    filename = filename.substr(2);
+
+    // new leading dir?
+    int sp = filename.find("/");
+    if (sp < 0) dirnum++;
+
+    //dout(0) << "leading dir " << filename << " " << dirnum << dendl;
+    if (dirnum % g_conf.num_client != client->get_nodeid()) {
+      dout(0) << "skipping leading dir " << dirnum << " " << filename << dendl;
+      continue;
+    }
+
     // parse the mode
     assert(modestring.length() == 10);
     mode_t mode = 0;
@@ -2649,12 +2665,16 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       // target vs destination
       int pos = filename.find(" -> ");
       assert(pos > 0);
-      string link = base;
-      link += "/";
+      string link;
+      if (base[0] != '-') {
+	link = base;
+	link += "/";
+      }
       link += filename.substr(0, pos);
       string target;
       if (filename[pos+4] == '/') {
-	target = base;
+	if (base[0] != '-') 
+	  target = base;
 	target += filename.substr(pos + 4);
       } else {
 	target = filename.substr(pos + 4);
@@ -2662,8 +2682,11 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       dout(10) << "symlink from '" << link << "' -> '" << target << "'" << dendl;
       client->symlink(target.c_str(), link.c_str());
     } else {
-      string f = base;
-      f += "/";
+      string f;
+      if (base[0] != '-') {
+	f = base;
+	f += "/";
+      }
       f += filename;
       if (S_ISDIR(mode)) {
 	client->mkdir(f.c_str(), mode);
