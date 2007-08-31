@@ -265,7 +265,6 @@ int main(int argc, char **argv)
     }
   }
 
-  
   // wait for monitors to start.
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -346,30 +345,6 @@ int main(int argc, char **argv)
 			   i+1);
     syn[i] = new SyntheticClient(client[i]);
     
-    // logger?
-    if (client_logger == 0) {
-      client_logtype.add_inc("lsum");
-      client_logtype.add_inc("lnum");
-      client_logtype.add_inc("lwsum");
-      client_logtype.add_inc("lwnum");
-      client_logtype.add_inc("lrsum");
-      client_logtype.add_inc("lrnum");
-      client_logtype.add_inc("trsum");
-      client_logtype.add_inc("trnum");
-      client_logtype.add_inc("wrlsum");
-      client_logtype.add_inc("wrlnum");
-      client_logtype.add_inc("lstatsum");
-      client_logtype.add_inc("lstatnum");
-      client_logtype.add_inc("ldirsum");
-      client_logtype.add_inc("ldirnum");
-      client_logtype.add_inc("readdir");
-      client_logtype.add_inc("stat");
-
-      char s[80];
-      sprintf(s,"clnode.%d", myrank);
-      client_logger = new Logger(s, &client_logtype);
-    }
-
     started++;
     nclients++;
   }

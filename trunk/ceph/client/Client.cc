@@ -67,8 +67,10 @@ using namespace std;
 
 
 // static logger
+Mutex client_logger_lock;
 LogType client_logtype;
 Logger  *client_logger = 0;
+
 
 
 
@@ -229,6 +231,39 @@ void Client::dump_cache()
 
 void Client::init() 
 {
+  
+  // logger?
+  client_logger_lock.Lock();
+  if (client_logger == 0) {
+    client_logtype.add_inc("lsum");
+    client_logtype.add_inc("lnum");
+    client_logtype.add_inc("lwsum");
+    client_logtype.add_inc("lwnum");
+    client_logtype.add_inc("lrsum");
+    client_logtype.add_inc("lrnum");
+    client_logtype.add_inc("trsum");
+    client_logtype.add_inc("trnum");
+    client_logtype.add_inc("wrlsum");
+    client_logtype.add_inc("wrlnum");
+    client_logtype.add_inc("lstatsum");
+    client_logtype.add_inc("lstatnum");
+    client_logtype.add_inc("ldirsum");
+    client_logtype.add_inc("ldirnum");
+    client_logtype.add_inc("readdir");
+    client_logtype.add_inc("stat");
+    client_logtype.add_avg("owrlat");
+    client_logtype.add_avg("ordlat");
+    client_logtype.add_inc("owr");
+    client_logtype.add_inc("ord");
+    
+    char s[80];
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(s,"clients.%s.%d", hostname, getpid());
+    client_logger = new Logger(s, &client_logtype);
+  }
+  client_logger_lock.Unlock();
+
 }
 
 void Client::shutdown() 
