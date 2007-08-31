@@ -21,6 +21,7 @@ using namespace __gnu_cxx;
 
 #include "include/Context.h"
 #include "include/buffer.h"
+#include "include/hash.h"
 
 #include "types.h"
 #include "Onode.h"
@@ -137,7 +138,7 @@ protected:
   void write_onode(Onode *on);
 
   // ** cnodes **
-  hash_map<coll_t, Cnode*>    cnode_map;
+  hash_map<coll_t, Cnode*, rjhash<coll_t> >    cnode_map;
   LRU                         cnode_lru;
   set<Cnode*>                 dirty_cnodes;
   map<coll_t, list<Cond*> >   waitfor_cnode;

@@ -327,12 +327,15 @@ private:
       break;
       
     case OBJECT_LAYOUT_HASHINO:
+      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
       ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
-      ps = stable_mod(H(oid.bno) ^ H(oid.ino)^H(oid.ino>>32), num, num_mask);
+      //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
+      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
+      ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       break;
 
     default:

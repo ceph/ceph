@@ -47,8 +47,7 @@
 #include "include/buffer.h"
 
 #include <map>
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+
 
 // crap-a-crap hash
 //#define HASH_DIRS       0x80
@@ -174,7 +173,7 @@ int FakeStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", r = " << r << dendl;
+    derr(0) << "unable to stat basedir " << basedir << ", " << strerror(errno) << dendl;
     return r;
   }
   

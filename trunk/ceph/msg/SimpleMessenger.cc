@@ -715,7 +715,7 @@ int Rank::Pipe::write_message(Message *m)
 	      << " writing " << donow 
 	      << dendl;
 
-      if (msg.msg_iovlen == IOV_MAX-1) {
+      if (msg.msg_iovlen >= IOV_MAX-1) {
 	// send what we have so far...
 	int r = sendmsg(sd, &msg, 0);
 	if (r < 0) { 
