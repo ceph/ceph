@@ -7,7 +7,7 @@ use Data::Dumper;
 my $usage = "script/runset.pl [--clean] jobs/some/job blah\n";
 
 my $clean;
-my $use_srun = 1;
+my $use_srun = 0;
 my $nobg = '&';
 my $in = shift || die $usage;
 if ($in eq '--clean') {
