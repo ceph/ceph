@@ -1647,12 +1647,9 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   for (int i=start; i<end; i += inc) {
     if (time_to_stop()) break;
 
-    //object_t oid(0x1000, i);
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-    //oid = object_t(0x1000+i, i);  // this magically fixes it.. so it's NOT the oid->pg translation
     
-
     if (i % inflight == 0) {
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
     }
@@ -1742,17 +1739,16 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
     // choose object
     double r = drand48(); // [0..1)
-    object_t oid;
+    long o;
     if (write) {
-      long o = (long)trunc(pow(r, wskew) * (double)nobj);  // exponentially skew towards 0
+      o = (long)trunc(pow(r, wskew) * (double)nobj);  // exponentially skew towards 0
       int pnoremap = (long)(r * 100.0);
       if (pnoremap >= overlappc) 
 	o = (o*prime) % nobj;    // remap
-      oid = object_t(0x1000, o);
     } else {
-      long o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
-      oid = object_t(0x1000, o);
+      o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
     }
+    object_t oid(0x1000, o);
 
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
     
