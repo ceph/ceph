@@ -25,16 +25,16 @@
 class blobhash {
 public:
   size_t operator()(const char *p, unsigned len) {
-    static rjhash<unsigned long> H;
-    long acc = 0;
-    while (len >= sizeof(long)) {
-      acc ^= *(long*)p;
-      p += sizeof(long);
-      len -= sizeof(long);
+    static rjhash<size_t> H;
+    size_t acc = 0;
+    while (len >= sizeof(size_t)) {
+      acc ^= *(size_t*)p;
+      p += sizeof(size_t);
+      len -= sizeof(size_t);
     }   
     int sh = 0;
     while (len) {
-      acc ^= (long)*p << sh;
+      acc ^= (size_t)*p << sh;
       sh += 8;
       len--;
       p++;
