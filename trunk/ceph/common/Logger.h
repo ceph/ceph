@@ -34,11 +34,13 @@ class Logger {
   // values for this instance
   vector<long> vals;
   vector<double> fvals;
+  vector< vector<double> > vals_to_avg;
 
   void maybe_resize(unsigned s) {
     if (s >= vals.size()) {
       vals.resize(s);
       fvals.resize(s);
+      vals_to_avg.resize(s);
     }
   }
 
@@ -64,6 +66,7 @@ class Logger {
 
   double fset(const char *s, double v);
   double finc(const char *s, double v);
+  double favg(const char *s, double v);
 
   //void flush();
   void _flush();

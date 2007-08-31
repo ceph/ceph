@@ -53,6 +53,8 @@ struct md_config_t {
   bool log_messages;
   bool log_pins;
 
+  bool logger_calc_variance;
+
   char *dout_dir;
 
   bool fake_clock;

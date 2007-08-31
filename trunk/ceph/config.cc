@@ -73,6 +73,8 @@ md_config_t g_conf = {
   log_messages: true,
   log_pins: true,
 
+  logger_calc_variance: true,
+
   dout_dir: 0,
 
   fake_clock: false,

@@ -166,8 +166,11 @@ void Logger::_flush()
   if (wrote_header != type->version ||
       wrote_header_last > 10) {
     out << "#" << type->keymap.size();
-    for (unsigned i=0; i<type->keys.size(); i++) 
+    for (unsigned i=0; i<type->keys.size(); i++) {
       out << "\t" << type->keys[i];
+      if (type->avg[i]) 
+	out << "\t" << type->keys[i] << "*\t" << type->keys[i] << "~";
+    }
     out << std::endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
     wrote_header = type->version;
     wrote_header_last = 0;
@@ -177,11 +180,29 @@ void Logger::_flush()
   
   // write line to log
   out << last_flush;
+  vector< vector<double> > to_avg(type->keys.size());
+  to_avg.swap(vals_to_avg);
   for (unsigned i=0; i<type->keys.size(); i++) {
-    if (fvals[i] > 0 && vals[i] == 0)
-      out << "\t" << fvals[i];
-    else
-      out << "\t" << vals[i];
+    if (type->avg[i]) {
+      if (vals[i] > 0) {
+	double avg = (fvals[i] / (double)vals[i]);
+	//logger_lock.Unlock();
+	double var = 0.0;
+	if (g_conf.logger_calc_variance) {
+	  int n = vals[i];
+	  for (vector<double>::iterator p = to_avg[i].begin(); n--; ++p) 
+	    var += (avg - *p) * (avg - *p);
+	}
+	//logger_lock.Lock();
+	out << "\t" << avg << "\t" << vals[i] << "\t" << var;
+      } else
+	out << "\t" << 0 << "\t";
+    } else {
+      if (fvals[i] > 0 && vals[i] == 0)
+	out << "\t" << fvals[i];
+      else
+	out << "\t" << vals[i];
+    }
   }
   out << std::endl;
   
@@ -247,6 +268,22 @@ double Logger::fset(const char *key, double v)
   maybe_resize(i+1);
 
   double r = fvals[i] = v;
+  logger_lock.Unlock();
+  return r;
+}
+
+double Logger::favg(const char *key, double v)
+{
+  if (!g_conf.log) return 0;
+  logger_lock.Lock();
+  int i = type->lookup_key(key);
+  if (i < 0) i = type->add_avg(key);
+  maybe_resize(i+1);
+
+  vals[i]++;
+  double r = fvals[i] = v;
+  if (g_conf.logger_calc_variance)
+    vals_to_avg[i].push_back(v);
   logger_lock.Unlock();
   return r;
 }
