@@ -9,6 +9,7 @@ my $ndirs = 0;
 my $nreg = 0;
 my $nhardlinks = 0;
 my %nlinks;
+my %ino_nlinks;
 my %names;
 my %dirsize;
 
@@ -95,6 +96,7 @@ while (<>) {
 	    #system "ls -aldi $file";
 	    $nhardlinks++;
 	    $nlinks{$nlink}++;
+	    $ino_nlinks{$ino} = $nlink;
 	    push(@{$names{$ino}->{$dir}}, $file);
 	}
     }
@@ -107,6 +109,7 @@ for my $d (keys %numindir) {
 
 my $nsamedir = 0;
 open(LOG, ">$name.log");
+my %dirmap;  # from dir -> to dir
 for my $ino (keys %names) {
     print LOG "# $ino\n";
     my @dirs = keys %{$names{$ino}};
@@ -118,8 +121,46 @@ for my $ino (keys %names) {
 	    $nsamedir++ if $insamedir;
 	}
     }
+
+    # stick in dirmap
+    for (my $i=0; $i<$#dirs; $i++) {
+	for (my $j=1; $j <= $#dirs; $j++) {
+	    print LOG "# $dirs[$i] <-> $dirs[$j]\n";
+	    push(@{$dirmap{$dirs[$i]}->{$dirs[$j]}}, $ino);
+	    push(@{$dirmap{$dirs[$j]}->{$dirs[$i]}}, $ino);
+	}
+    }
+}
+
+
+my $notherinsamedir = 0;
+my $notherinsamedirs = 0;
+for my $ino (keys %names) {
+    my @dirs = keys %{$names{$ino}};
+    next unless (scalar(@dirs) > 1);
+    my $n = 0;
+    my $np = 0;	
+    for (my $i=0; $i<$#dirs; $i++) {
+	for (my $j=$i+1; $j <= $#dirs; $j++) {
+	    $np++;
+	    if (scalar(@{$dirmap{$dirs[$i]}->{$dirs[$j]}}) > 1 ||
+		scalar(@{$dirmap{$dirs[$j]}->{$dirs[$i]}}) > 1) {
+		$n++;
+		#print LOG "# $ino is not alone between $dirs[$i] and $dirs[$j] : @{$dirmap{$dirs[$j]}->{$dirs[$i]}}\n";
+	    }
+	}
+    }
+    if ($n) {
+	print LOG "# $ino\tfor $n / $np dir pairs, there is another hl between the same pair of dirs\n";
+	$notherinsamedir += $ino_nlinks{$ino};
+	$notherinsamedirs += ($n / $np) * $ino_nlinks{$ino};
+    } else {
+	print LOG "# $ino is ALL ALONE\n";
+    }
 }
 close LOG;
+$notherinsamedirs = sprintf("%.1f",$notherinsamedirs);
+
 
 sub do_cdf {
     my $hash = shift @_;
@@ -168,8 +209,8 @@ open(O, ">$name.sum");
 
 # final line
 my $pad = '# ' . (' ' x (length($name)-2));
-print O "$pad\tgb\tfiles\tdirs\tdsavg\tdsmed\tfnavg\tfnmed\treg\tnl>1\tsmdr\tnlink=2\t=3\t=4\t...\n";
-print O "$name\t$gb\t$nfiles\t$ndirs\t$avgdirsize\t$mediandirsize\t$avgfnlen\t$medianfnlen\t$nreg\t$nhardlinks\t$nsamedir";
+print O "$pad\tgb\tfiles\tdirs\tdsavg\tdsmed\tfnavg\tfnmed\treg\tnl>1\tsmdr\tothers\totherss\tnlink=2\t=3\t=4\t...\n";
+print O "$name\t$gb\t$nfiles\t$ndirs\t$avgdirsize\t$mediandirsize\t$avgfnlen\t$medianfnlen\t$nreg\t$nhardlinks\t$nsamedir\t$notherinsamedir\t$notherinsamedirs";
 my $i = 2;
 for (sort {$a <=> $b} keys %nlinks) {
     while ($_ < $i) {
@@ -178,6 +219,6 @@ for (sort {$a <=> $b} keys %nlinks) {
     print O "\t$nlinks{$_}";
     $i = $_ + 1;
 }
-print "\n";
+print O "\n";
 
 close O;
