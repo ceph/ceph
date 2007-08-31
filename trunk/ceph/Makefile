@@ -13,10 +13,10 @@
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = -I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS = #-I${HOME}/include -L${HOME}/lib
 
 # base
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
+CFLAGS = -O3 -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
 CC = g++
 LIBS = -pthread
@@ -41,7 +41,7 @@ MPILIBS = ${LIBS}
 
 #for LLNL boxes without mpicxx
 #MPICC = g++
-#MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
+#MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/mpi_gnu/include -L/usr/lib/mpi/mpi_gnu/lib
 #MPILIBS = ${LIBS} -lelan -lmpi
 
 EBOFS_OBJS= \
@@ -230,6 +230,10 @@ testos: test/testos.o ebofs.o osbdb.o common.o
 	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
 
 
+# misc
+gprof-helper.so: test/gprof-helper.c
+	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
+
 # bits
 common.o: ${COMMON_OBJS}
 	${LDINC} $@ $^
@@ -261,7 +265,7 @@ osbdb.o: ${OSBDB_OBJS}
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
 %.o: %.cc
-	${CC} -fPIC ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
