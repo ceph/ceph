@@ -228,7 +228,8 @@ class SyntheticClient {
   int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
 
   int create_objects(int nobj, int osize, int inflight);
-  int object_rw(int nobj, int osize, int wrpc, double skew);
+  int object_rw(int nobj, int osize, int wrpc, int overlap, 
+		double rskew, double wskew);
 
   int read_random(string& fn, int mb, int chunk);
   int read_random_ex(string& fn, int mb, int chunk);

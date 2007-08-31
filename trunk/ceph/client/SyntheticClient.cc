@@ -494,10 +494,13 @@ int SyntheticClient::run()
         int count = iargs.front();  iargs.pop_front();
         int size = iargs.front();  iargs.pop_front();
         int wrpc = iargs.front();  iargs.pop_front();
-        int skew = iargs.front();  iargs.pop_front();
+        int overlap = iargs.front();  iargs.pop_front();
+        int rskew = iargs.front();  iargs.pop_front();
+        int wskew = iargs.front();  iargs.pop_front();
         if (run_me()) {
-          dout(2) << "objectrw " << cout << " " << size << " " << wrpc << " " << skew << dendl;
-          object_rw(count, size, wrpc, skew);
+          dout(2) << "objectrw " << cout << " " << size << " " << wrpc 
+		  << " " << overlap << " " << rskew << " " << wskew << dendl;
+          object_rw(count, size, wrpc, overlap, rskew, wskew);
         }
       }
       break;
@@ -1609,11 +1612,23 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
   // divy up
   int numc = g_conf.num_client ? g_conf.num_client : 1;
-  int start = nobj * client->get_nodeid() / numc;
-  int end = nobj * (client->get_nodeid()+1) / numc;
+
+  int start, inc, end;
+
+  if (0) {
+    // strided
+    start = nobj % numc;
+    inc = numc;
+    end = start + nobj;
+  } else {
+    // segments
+    start = nobj * client->get_nodeid() % numc;  
+    inc = 1;
+    end = nobj * (client->get_nodeid()+1) / numc;
+  }
 
   dout(5) << "create_objects " << nobj << " size=" << osize 
-	  << " .. doing [" << start << "," << end << ")"
+	  << " .. doing [" << start << "," << end << ") inc " << inc
 	  << dendl;
   
   bufferptr bp(osize);
@@ -1627,11 +1642,28 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   int unack = 0;
   int unsafe = 0;
   
-  for (int i=start; i<end; i++) {
+  list<utime_t> starts;
+
+  for (int i=start; i<end; i += inc) {
     if (time_to_stop()) break;
 
+    //object_t oid(0x1000, i);
     object_t oid(0x1000, i);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+    //oid = object_t(0x1000+i, i);  // this magically fixes it.. so it's NOT the oid->pg translation
+    
+
+    if (i % inflight == 0) {
+      dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
+    }
+    dout(10) << "writing " << oid << dendl;
+    
+    starts.push_back(g_clock.now());
+    client->client_lock.Lock();
+    client->objecter->write(oid, 0, osize, layout, bl, 
+			    new C_Ref(lock, cond, &unack),
+			    new C_Ref(lock, cond, &unsafe));
+    client->client_lock.Unlock();
 
     lock.Lock();
     while (unack > inflight) {
@@ -1639,16 +1671,12 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
       cond.Wait(lock);
     }
     lock.Unlock();
-    if (i % inflight == 0) {
-      dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
-    }
-    dout(10) << "writing " << oid << dendl;
     
-    client->client_lock.Lock();
-    client->objecter->write(oid, 0, osize, layout, bl, 
-			    new C_Ref(lock, cond, &unack),
-			    new C_Ref(lock, cond, &unsafe));
-    client->client_lock.Unlock();
+    utime_t lat = g_clock.now();
+    lat -= starts.front();
+    starts.pop_front();
+    if (client_logger) 
+      client_logger->favg("owrlat", lat);
   }
 
   lock.Lock();
@@ -1667,16 +1695,38 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   return 0;
 }
 
-int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
+int SyntheticClient::object_rw(int nobj, int osize, int wrpc, 
+			       int overlappc,
+			       double rskew, double wskew)
 {
   dout(5) << "object_rw " << nobj << " size=" << osize << " with "
-	  << wrpc << "% writes, skew = " << skew
+	  << wrpc << "% writes" 
+	  << ", " << overlappc << "% overlap"
+	  << ", rskew = " << rskew
+	  << ", wskew = " << wskew
 	  << dendl;
 
   bufferptr bp(osize);
   bp.zero();
   bufferlist bl;
   bl.push_back(bp);
+
+  // start with odd number > nobj
+  rjhash<uint32_t> h;
+  unsigned prime = nobj + 1;             // this is the minimum!
+  prime += h(nobj) % (3*nobj);  // bump it up some
+  prime |= 1;                               // make it odd
+
+  while (true) {
+    unsigned j;
+    for (j=2; j*j<=prime; j++)
+      if (prime % j == 0) break;
+    if (j*j > prime) {
+      break;
+      //cout << "prime " << prime << endl;
+    }
+    prime += 2;
+  }
 
   Mutex lock;
   Cond cond;
@@ -1690,16 +1740,24 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
     // read or write?
     bool write = (rand() % 100) < wrpc;
 
-    // pick a random object
+    // choose object
     double r = drand48(); // [0..1)
-    long o = (long)trunc(pow(r, skew) * (double)nobj);  // exponentially skew towards 0
+    object_t oid;
+    if (write) {
+      long o = (long)trunc(pow(r, wskew) * (double)nobj);  // exponentially skew towards 0
+      int pnoremap = (long)(r * 100.0);
+      if (pnoremap >= overlappc) 
+	o = (o*prime) % nobj;    // remap
+      oid = object_t(0x1000, o);
+    } else {
+      long o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
+      oid = object_t(0x1000, o);
+    }
 
-    //if (write) o = hash(o) % nobj;
-
-    object_t oid(0x1000, o);
     ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
-
+    
     client->client_lock.Lock();
+    utime_t start = g_clock.now();
     if (write) {
       dout(10) << "write to " << oid << dendl;
       client->objecter->write(oid, 0, osize, layout, bl, 
@@ -1719,6 +1777,15 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc, double skew)
       cond.Wait(lock);
     }
     lock.Unlock();
+
+    utime_t lat = g_clock.now();
+    lat -= start;
+    if (client_logger) {
+      if (write) 
+	client_logger->favg("owrlat", lat);
+      else 
+	client_logger->favg("ordlat", lat);
+    }
   }
 
 
