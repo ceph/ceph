@@ -228,6 +228,17 @@ void print_time()
 }
 
 
+bool has_perm(int mask, Inode *in, int uid, int gid)
+{
+    dout << "hash_perm " << uid << "." << gid << " " << oct << mask << " in " << in->stbuf.st_mode
+	 << " " << in->stbuf.st_uid << "." << in->stbuf.st_gid << endl;
+    if (in->stbuf.st_mode & mask) return true;
+    if (in->stbuf.st_gid == gid && in->stbuf.st_mode & (mask << 3)) return true;
+    if (in->stbuf.st_uid == uid && in->stbuf.st_mode & (mask << 6)) return true;
+    return false;
+}
+
+
 static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
 {
     int res = 0;
@@ -241,10 +252,15 @@ static void ft_ll_lookup(fuse_req_t req, fuse_ino_t pino, const char *name)
     Inode *parent = inode_map[pino];
     assert(parent);
 
+    // check permissions
+
     string dname(name);
     string path;
     Inode *in = 0;
-    if (!make_inode_path(path, parent, name)) {
+    if (!has_perm(0001, parent, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) {
+	res = EPERM;
+    } 
+    else if (!make_inode_path(path, parent, name)) {
 	res = ENOENT;
     } else {
 	in = parent->lookup(dname);
@@ -389,7 +405,9 @@ static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     traceout << to_set << endl;
     trace_lock.Unlock();
 
-    if (res == 0) {
+    if (res == 0 && !has_perm(0010, in, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) {
+	res = EPERM;
+    } else if (res == 0) {
 	if (to_set & FUSE_SET_ATTR_MODE) {
 	    if (fd > 0)
 		res = ::fchmod(fd, attr->st_mode);
@@ -462,12 +480,15 @@ static void ft_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     string path;
     int res = 0;
     lock.Lock();
-    if (!make_ino_path(path, ino))
+    Inode *in = inode_map[ino];
+    if (!make_inode_path(path, in))
 	res = ENOENT;
     lock.Unlock();
 
     DIR *dir = 0;
-    if (res == 0) dir = opendir(path.c_str());
+    if (res == 0 && !has_perm(0100, in, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) dir = opendir(path.c_str());
     if (res < 0) res = errno;
 
     trace_lock.Lock();
@@ -545,7 +566,9 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
     lock.Unlock();
 
     dout << "mknod " << path << endl;
-    if (res == 0) res = ::mknod(path.c_str(), mode, rdev);
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) res = ::mknod(path.c_str(), mode, rdev);
     if (res < 0) 
 	res = errno;
     else
@@ -586,7 +609,9 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 	res = ENOENT;
     lock.Unlock();
 
-    if (res == 0) res = ::mkdir(path.c_str(), mode);
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) res = ::mkdir(path.c_str(), mode);
     if (res < 0)
 	res = errno;
     else
@@ -627,7 +652,9 @@ static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, 
 	res = ENOENT;
     lock.Unlock();
 
-    if (res == 0) res = ::symlink(value, path.c_str());
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) res = ::symlink(value, path.c_str());
     if (res < 0) 
 	res = errno;
     else
@@ -671,7 +698,9 @@ static void ft_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 
     dout << "create " << path << endl;
     int fd = 0;
-    if (res == 0) {
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) {
 	fd = ::open(path.c_str(), fi->flags|O_CREAT, mode);
 	if (fd < 0) {
 	    res = errno;
@@ -759,7 +788,9 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
     traceout << "ll_unlink" << endl << parent << endl << name << endl;
     trace_lock.Unlock();
     
-    if (res == 0) {
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) {
 	if (in && in->fds.empty()) {
 	    int fd = ::open(path.c_str(), O_RDWR);
 	    if (fd > 0)
@@ -799,7 +830,9 @@ static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
     traceout << "ll_rmdir" << endl << parent << endl << name << endl;
     trace_lock.Unlock();
 
-    if (res == 0) res = ::rmdir(path.c_str());
+    if (res == 0 && !has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)) 
+	res = EPERM;
+    else if (res == 0) res = ::rmdir(path.c_str());
     if (res < 0) res = errno;
 
     if (res == 0) {
@@ -841,7 +874,10 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	     << newname << endl;
     trace_lock.Unlock();
 
-    if (res == 0) res = ::rename(path.c_str(), newpath.c_str());
+    if (res == 0 && (!has_perm(0010, pin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid) ||
+		     !has_perm(0010, newpin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)))
+	res = EPERM;
+    else if (res == 0) res = ::rename(path.c_str(), newpath.c_str());
     if (res < 0) res = errno;
     
     if (res == 0) {
@@ -888,7 +924,10 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     trace_lock.Unlock();
     
     //cout << "link " << path << " newpath " << newpath << endl;
-    if (res == 0) res = ::link(path.c_str(), newpath.c_str());
+    if (res == 0 && (!has_perm(0010, in, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid) ||
+		     !has_perm(0010, newpin, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid)))
+	res = EPERM;
+    else if (res == 0) res = ::link(path.c_str(), newpath.c_str());
     if (res < 0) res = errno;
     
     if (res == 0) {
@@ -921,8 +960,14 @@ static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 	res = ENOENT;
     lock.Unlock();
     
+    int want = 0100;
+    if (fi->flags & O_RDWR) want |= 0010;
+    if (fi->flags == O_WRONLY) want = 0010;
+
     int fd = 0;
-    if (res == 0) {
+    if (res == 0 && !has_perm(want, in, fuse_req_ctx(req)->uid, fuse_req_ctx(req)->gid))
+	res = EPERM;
+    else if (res == 0) {
 	fd = ::open(path.c_str(), fi->flags);
 	if (fd <= 0) res = errno;
     }
