@@ -2636,7 +2636,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 
     //dout(0) << "leading dir " << filename << " " << dirnum << dendl;
     if (dirnum % g_conf.num_client != client->get_nodeid()) {
-      dout(0) << "skipping leading dir " << dirnum << " " << filename << dendl;
+      dout(20) << "skipping leading dir " << dirnum << " " << filename << dendl;
       continue;
     }
 
