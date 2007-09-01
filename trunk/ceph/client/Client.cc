@@ -3643,8 +3643,7 @@ int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, str
 
   int r = _link(path.c_str(), newpath.c_str());
   if (r == 0) {
-    string dname(newname);
-    Inode *in = diri->dir->dentries[dname]->inode;
+    Inode *in = _ll_get_inode(ino);
     fill_stat(in, attr);
     _ll_get(in);
   }

@@ -1810,7 +1810,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
  // dout(0) << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  dendl;
 
   if (fd < 0) return fd;
-  int offset;
+  int offset = 0;
   char * buf = NULL;
 
   for (unsigned i=0; i<2000; i++) {
@@ -1978,7 +1978,7 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
   // dout(0) << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  dendl;
   
   if (fd < 0) return fd;
-  int offset;
+  int offset = 0;
   char * buf = NULL;
   
   for (unsigned i=0; i<2000; i++) {
