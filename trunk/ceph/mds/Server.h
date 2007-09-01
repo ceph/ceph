@@ -101,9 +101,6 @@ public:
   void handle_client_chmod(MDRequest *mdr);
   void handle_client_chown(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
-  int encode_dir_contents(CDir *dir, 
-			  list<string>& dnls,
-			  list<class InodeStat*>& inls);
   void handle_client_truncate(MDRequest *mdr);
   void handle_client_fsync(MDRequest *mdr);
 

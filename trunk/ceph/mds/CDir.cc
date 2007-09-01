@@ -1077,12 +1077,14 @@ void CDir::_commit(version_t want)
     // primary or remote?
     if (dn->is_remote()) {
       inodeno_t ino = dn->get_remote_ino();
+      unsigned char d_type = dn->get_remote_d_type();
       dout(14) << " pos " << bl.length() << " dn '" << it->first << "' remote ino " << ino << dendl;
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
       ::_encode(it->first, bl);
       ::_encode(ino, bl);
+      ::_encode(d_type, bl);
     } else {
       // primary link
       CInode *in = dn->get_inode();

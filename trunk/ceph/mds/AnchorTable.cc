@@ -116,25 +116,23 @@ void AnchorTable::dec(inodeno_t ino)
 
 void AnchorTable::handle_lookup(MAnchor *req)
 {
-  inodeno_t ino = req->get_ino();
-  dout(7) << "handle_lookup " << ino << dendl;
-
-  assert(anchor_map.count(ino) == 1);
-  Anchor &anchor = anchor_map[ino];
+  inodeno_t curino = req->get_ino();
+  dout(7) << "handle_lookup " << curino << dendl;
 
   vector<Anchor> trace;
   while (true) {
+    assert(anchor_map.count(curino) == 1);
+    Anchor &anchor = anchor_map[curino];
+
     dout(10) << "handle_lookup  adding " << anchor << dendl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
 
     if (anchor.dirfrag.ino < MDS_INO_BASE) break;
-
-    assert(anchor_map.count(anchor.dirfrag.ino) == 1);
-    anchor = anchor_map[anchor.dirfrag.ino];
+    curino = anchor.dirfrag.ino;
   }
 
   // reply
-  MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, ino);
+  MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, req->get_ino());
   reply->set_trace(trace);
   mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
 
