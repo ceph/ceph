@@ -3381,8 +3381,14 @@ bool Client::ll_forget(inodeno_t ino, int num)
   } else {
     Inode *in = inode_map[ino];
     assert(in);
-    if (_ll_put(in, num) == 0)
+    if (in->ll_ref < num) {
+      dout(1) << "WARNING: ll_forget on " << ino << " " << num << ", which only has ll_ref=" << in->ll_ref << dendl;
+      _ll_put(in, in->ll_ref);
       last = true;
+    } else {
+      if (_ll_put(in, num) == 0)
+	last = true;
+    }
   }
   return last;
 }
