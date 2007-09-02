@@ -1044,7 +1044,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni))
-      client->ll_link(ll_inos[i], ni, nn, &attr);
+      client->ll_link(ll_inos[i], ll_inos[ni], nn, &attr);
     } else if (strcmp(op, "ll_opendir") == 0) {
       int64_t i = t.get_int();
       int64_t r = t.get_int();
