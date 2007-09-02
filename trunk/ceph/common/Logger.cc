@@ -196,7 +196,7 @@ void Logger::_flush()
 	//logger_lock.Lock();
 	out << "\t" << avg << "\t" << vals[i] << "\t" << var;
       } else
-	out << "\t" << 0 << "\t";
+	out << "\t0\t0\t0";
     } else {
       if (fvals[i] > 0 && vals[i] == 0)
 	out << "\t" << fvals[i];
