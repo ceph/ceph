@@ -807,6 +807,7 @@ public:
   int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
   int ll_write(Fh *fh, off_t off, off_t len, const char *data);
   int ll_flush(Fh *fh);
+  int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(inodeno_t, struct statvfs *stbuf);
 

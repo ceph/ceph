@@ -1836,8 +1836,9 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
   if (dn && 
       now <= dn->inode->valid_until)
     dout(10) << "_lstat has inode " << path << " with mask " << dn->inode->mask << ", want " << mask << dendl;
-
+  
   if (dn && dn->inode &&
+      now <= dn->inode->valid_until &&
       ((mask & ~STAT_MASK_BASE) || now <= dn->inode->valid_until) &&
       ((dn->inode->mask & mask) == mask)) {
     inode = dn->inode->inode;
@@ -2330,7 +2331,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
 	else if (g_conf.client_cache_readdir_ttl) {
 	  in->valid_until = now;
 	  in->valid_until += g_conf.client_cache_readdir_ttl;
-	}
+	} else 
+	  in->valid_until = utime_t();
 	
 	// contents to caller too!
 	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << dendl;
@@ -3763,6 +3765,17 @@ int Client::ll_flush(Fh *fh)
 
   return _flush(fh);
 }
+
+int Client::ll_fsync(Fh *fh, bool syncdataonly) 
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_fsync " << fh << dendl;
+  tout << "ll_fsync" << std::endl;
+  tout << (unsigned long)fh << std::endl;
+
+  return _fsync(fh, syncdataonly);
+}
+
 
 int Client::ll_release(Fh *fh)
 {

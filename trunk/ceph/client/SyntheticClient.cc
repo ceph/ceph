@@ -603,13 +603,13 @@ int SyntheticClient::run()
         string tfile = get_sarg(0);
         sargs.push_front(string("~"));
         int iarg1 = iargs.front();  iargs.pop_front();
-        string prefix = get_sarg(0);
+        string prefix;// = get_sarg(0);
 
 	char realtfile[100];
 	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
 
         if (run_me()) {
-          dout(2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times" << dendl;
+          dout(-2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times" << dendl;
           
           Trace t(realtfile);
           
@@ -959,17 +959,20 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *name = t.get_string(buf, p);
       int64_t r = t.get_int();
       struct stat attr;
-      if (client->ll_lookup(ll_inos[i], name, &attr) == 0)
+      if (ll_inos.count(i) &&
+	  client->ll_lookup(ll_inos[i], name, &attr) == 0)
 	ll_inos[r] = attr.st_ino;
     } else if (strcmp(op, "ll_forget") == 0) {
       int64_t i = t.get_int();
       int64_t n = t.get_int();
-      if (client->ll_forget(ll_inos[i], n))
+      if (ll_inos.count(i) && 
+	  client->ll_forget(ll_inos[i], n))
 	ll_inos.erase(i);
     } else if (strcmp(op, "ll_getattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
-      client->ll_getattr(ll_inos[i], &attr);
+      if (ll_inos.count(i))
+	client->ll_getattr(ll_inos[i], &attr);
     } else if (strcmp(op, "ll_setattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
@@ -981,11 +984,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       attr.st_mtime = t.get_int();
       attr.st_atime = t.get_int();
       int mask = t.get_int();
-      client->ll_setattr(ll_inos[i], &attr, mask);
+      if (ll_inos.count(i))
+	client->ll_setattr(ll_inos[i], &attr, mask);
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
       const char *value;
-      client->ll_readlink(ll_inos[i], &value);
+      if (ll_inos.count(i))
+	client->ll_readlink(ll_inos[i], &value);
     } else if (strcmp(op, "ll_mknod") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -993,7 +998,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int r = t.get_int();
       int64_t ri = t.get_int();
       struct stat attr;
-      if (client->ll_mknod(ll_inos[i], n, m, r, &attr) == 0)
+      if (ll_inos.count(i) &&
+	  client->ll_mknod(ll_inos[i], n, m, r, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_mkdir") == 0) {
       int64_t i = t.get_int();
@@ -1001,7 +1007,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int m = t.get_int();
       int64_t ri = t.get_int();
       struct stat attr;
-      if (client->ll_mkdir(ll_inos[i], n, m, &attr) == 0)
+      if (ll_inos.count(i) &&
+	  client->ll_mkdir(ll_inos[i], n, m, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_symlink") == 0) {
       int64_t i = t.get_int();
@@ -1009,48 +1016,56 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *v = t.get_string(buf2, p);
       int64_t ri = t.get_int();
       struct stat attr;
-      if (client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
+      if (ll_inos.count(i) &&
+	  client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
-      else
-	dout(0) << "**** symlink returned an error ****" << dendl;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
-      client->ll_unlink(ll_inos[i], n);
+      if (ll_inos.count(i))
+	client->ll_unlink(ll_inos[i], n);
     } else if (strcmp(op, "ll_rmdir") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
-      client->ll_rmdir(ll_inos[i], n);
+      if (ll_inos.count(i))
+	client->ll_rmdir(ll_inos[i], n);
     } else if (strcmp(op, "ll_rename") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf2, p);
-      client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
+      if (ll_inos.count(i) &&
+	  ll_inos.count(ni))
+	client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
     } else if (strcmp(op, "ll_link") == 0) {
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf, p);
       struct stat attr;
+      if (ll_inos.count(i) &&
+	  ll_inos.count(ni))
       client->ll_link(ll_inos[i], ni, nn, &attr);
     } else if (strcmp(op, "ll_opendir") == 0) {
       int64_t i = t.get_int();
       int64_t r = t.get_int();
       void *dirp;
-      client->ll_opendir(ll_inos[i], &dirp);
-      ll_dirs[r] = dirp;
+      if (ll_inos.count(i) &&
+	  client->ll_opendir(ll_inos[i], &dirp) == 0)
+	ll_dirs[r] = dirp;
     } else if (strcmp(op, "ll_releasedir") == 0) {
       int64_t f = t.get_int();
-      void *dirp = ll_dirs[f];
-      client->ll_releasedir(dirp);
-      ll_dirs.erase(f);
+      if (ll_dirs.count(f)) {
+	client->ll_releasedir(ll_dirs[f]);
+	ll_dirs.erase(f);
+      }
     } else if (strcmp(op, "ll_open") == 0) {
       int64_t i = t.get_int();
       int64_t f = t.get_int();
       int64_t r = t.get_int();
       Fh *fhp;
-      client->ll_open(ll_inos[i], f, &fhp);
-      ll_files[r] = fhp;
+      if (ll_inos.count(i) &&
+	  client->ll_open(ll_inos[i], f, &fhp) == 0)
+	ll_files[r] = fhp;
     } else if (strcmp(op, "ll_create") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -1060,7 +1075,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       Fh *fhp;
       struct stat attr;
-      if (client->ll_create(ll_inos[i], n, m, f, &attr, &fhp) == 0) {
+      if (ll_inos.count(i) &&
+	  client->ll_create(ll_inos[i], n, m, f, &attr, &fhp) == 0) {
 	ll_inos[ri] = attr.st_ino;
 	ll_files[r] = fhp;
       }
@@ -1068,34 +1084,44 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t f = t.get_int();
       int64_t off = t.get_int();
       int64_t size = t.get_int();
-      Fh *fh = ll_files[f];
-      if (!metadata_only) {
+      if (ll_files.count(f) &&
+	  !metadata_only) {
 	bufferlist bl;
-	client->ll_read(fh, off, size, &bl);
+	client->ll_read(ll_files[f], off, size, &bl);
       }
     } else if (strcmp(op, "ll_write") == 0) {
       int64_t f = t.get_int();
       int64_t off = t.get_int();
       int64_t size = t.get_int();
-      Fh *fh = ll_files[f];
-      if (!metadata_only) {
-	bufferlist bl;
-	bufferptr bp(size);
-	bl.push_back(bp);
-	bp.zero();
-	client->ll_write(fh, off, size, bl.c_str());
-      } else {
-	client->ll_write(fh, off+size, 0, NULL);
+      if (ll_files.count(f)) {
+	if (!metadata_only) {
+	  bufferlist bl;
+	  bufferptr bp(size);
+	  bl.push_back(bp);
+	  bp.zero();
+	  client->ll_write(ll_files[f], off, size, bl.c_str());
+	} else {
+	  client->ll_write(ll_files[f], off+size, 0, NULL);
+	}
       }
     } else if (strcmp(op, "ll_flush") == 0) {
       int64_t f = t.get_int();
-      Fh *fh = ll_files[f];
-      client->ll_flush(fh);
+      if (ll_files.count(f)) 
+	client->ll_flush(ll_files[f]);
+    } else if (strcmp(op, "ll_fsync") == 0) {
+      int64_t f = t.get_int();
+      if (ll_files.count(f)) 
+	client->ll_fsync(ll_files[f], false); // FIXME dataonly param
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
-      Fh *fh = ll_files[f];
-      client->ll_release(fh);
+      if (ll_files.count(f)) 
+	client->ll_release(ll_files[f]);
       ll_files.erase(f);
+
+    } else if (strcmp(op, "ll_statfs") == 0) {
+      int64_t i = t.get_int();
+      if (ll_inos.count(i))
+	{} //client->ll_statfs(ll_inos[i]);
     } 
 
 
