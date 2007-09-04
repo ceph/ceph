@@ -102,7 +102,10 @@ class MDLog {
   friend class MDCache;
 
   void init_journaler();
+
  public:
+  void reopen_logger(utime_t start);
+
   off_t get_last_subtree_map_offset() { return last_subtree_map; }
   void add_subtree_map_expire_waiter(Context *c) {
     subtree_map_expire_waiters.push_back(c);

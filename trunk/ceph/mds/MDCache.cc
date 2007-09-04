@@ -3971,7 +3971,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  else
 	    mds->forward_message_mds(req, dauth.first, req->get_dest_port());
 	  
-	  if (mds->logger) mds->logger->inc("cfw");
+	  if (mds->logger) mds->logger->inc("fw");
 	  return 2;
 	}
       }    
@@ -4246,10 +4246,15 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
     MDRequest *mdr = active_requests[req->get_reqid()];
-    dout(10) << "request_start already had " << *mdr << ", cleaning up" << dendl;
-    assert(mdr->is_slave());
-    request_cleanup(mdr);
-    delete mdr;
+    if (mdr->is_slave()) {
+      dout(10) << "request_start already had " << *mdr << ", cleaning up" << dendl;
+      request_cleanup(mdr);
+      delete mdr;
+    } else {
+      dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
+      delete req;
+      return 0;
+    }
   }
 
   // register new client request
@@ -4287,11 +4292,14 @@ void MDCache::request_finish(MDRequest *mdr)
     mdr->slave_commit = 0;
   }
 
+  if (mdr->client_request && mds->logger) {
+    mds->logger->inc("reply");
+    mds->logger->favg("replyl", g_clock.now() - mdr->client_request->get_recv_stamp());
+  }
+
   delete mdr->client_request;
   delete mdr->slave_request;
   request_cleanup(mdr);
-  
-  if (mds->logger) mds->logger->inc("reply");
 }
 
 

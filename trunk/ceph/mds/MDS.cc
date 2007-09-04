@@ -142,17 +142,17 @@ MDS::~MDS() {
 }
 
 
-void MDS::reopen_logger()
+void MDS::reopen_logger(utime_t start)
 {
   static LogType mds_logtype, mds_cache_logtype;
   static bool didit = false;
   if (!didit) {
     didit = true;
     
-    mds_logtype.add_inc("req");
+    //mds_logtype.add_inc("req");
     mds_logtype.add_inc("reply");
     mds_logtype.add_inc("fw");
-    mds_logtype.add_inc("cfw");
+    mds_logtype.add_avg("replyl");
     
     mds_logtype.add_inc("dir_f");
     mds_logtype.add_inc("dir_c");
@@ -199,12 +199,15 @@ void MDS::reopen_logger()
   name += ('0' + ((w/1)%10));
 
   logger = new Logger(name, (LogType*)&mds_logtype);
+  logger->set_start(start);
 
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
   logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
+  logger2->set_start(start);
 
-  server->reopen_logger();
+  mdlog->reopen_logger(start);
+  server->reopen_logger(start);
 }
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
@@ -305,7 +308,7 @@ int MDS::init(bool standby)
   reset_tick();
 
   // init logger
-  reopen_logger();
+  reopen_logger(g_clock.now());
 
   mds_lock.Unlock();
   return 0;
@@ -334,7 +337,7 @@ void MDS::tick()
   if (logger) {
     req_rate = logger->get("req");
     
-    logger->set("l", (int)load.mds_load(g_clock.now()));
+    logger->set("l", (int)load.mds_load());
     logger->set("q", messenger->get_dispatch_queue_len());
     logger->set("buf", buffer_total_alloc);
     
@@ -511,7 +514,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   if (oldwhoami != whoami) {
     // update messenger.
-    reopen_logger();
+    reopen_logger(mdsmap->get_create());
     dout(1) << "handle_mds_map i am now mds" << whoami
 	    << " incarnation " << mdsmap->get_inc(whoami)
 	    << dendl;
@@ -523,6 +526,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       messenger->send_message(new MOSDGetMap(0),
 			      monmap->get_inst(mon));
     }
+    
   }
 
   // tell objecter my incarnation

@@ -39,12 +39,13 @@ MDLog::~MDLog()
 }
 
 
-void MDLog::init_journaler()
+void MDLog::reopen_logger(utime_t start)
 {
   // logger
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
   logger = new Logger(name, &mdlog_logtype);
+  logger->set_start(start);
 
   static bool didit = false;
   if (!didit) {
@@ -61,6 +62,10 @@ void MDLog::init_journaler()
     mdlog_logtype.add_inc("jlnum");
   }
 
+}
+
+void MDLog::init_journaler()
+{
   // inode
   memset(&log_inode, 0, sizeof(log_inode));
   log_inode.ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();

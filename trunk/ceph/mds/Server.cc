@@ -60,7 +60,7 @@ using namespace std;
 #define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
 
 
-void Server::reopen_logger()
+void Server::reopen_logger(utime_t start)
 {
   static LogType mdserver_logtype;
   static bool didit = false;
@@ -80,6 +80,7 @@ void Server::reopen_logger()
   char name[80];
   sprintf(name, "mds%d.server", mds->get_nodeid());
   logger = new Logger(name, &mdserver_logtype);
+  logger->set_start(start);
 }
 
 
@@ -482,6 +483,7 @@ void Server::handle_client_request(MClientRequest *req)
 
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
+  if (!mdr) return;
 
   if (ref) {
     dout(10) << "inode op on ref " << *ref << dendl;
@@ -1541,6 +1543,13 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	mdcache->open_remote_ino(dn->get_remote_ino(),
 				 mdr,
 				 new C_MDS_RetryRequest(mdcache, mdr));
+
+	// touch everything i _do_ have
+	for (it = dir->begin(); 
+	     it != dir->end(); 
+	     it++) 
+	  if (!it->second->is_null())
+	    mdcache->lru.lru_touch(it->second);
 	return;
       }
     }
