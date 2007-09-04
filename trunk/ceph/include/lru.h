@@ -207,7 +207,7 @@ class LRU {
     if (!lru_max) return;
 
     unsigned toplen = lru_top.get_length();
-    unsigned topwant = (unsigned)(lru_midpoint * (double)lru_max);
+    unsigned topwant = (unsigned)(lru_midpoint * ((double)lru_max - lru_num_pinned));
     while (toplen > 0 && 
            toplen > topwant) {
       // remove from tail of top, stick at head of bot
