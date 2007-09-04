@@ -272,32 +272,9 @@ int SyntheticClient::run()
     dout(3) << "mode " << mode << dendl;
 
     switch (mode) {
-    case SYNCLIENT_MODE_FOO:
-      if (run_me()) 
-	foo();
-      break;
 
-    case SYNCLIENT_MODE_RANDOMSLEEP:
-      {
-        int iarg1 = iargs.front();
-        iargs.pop_front();
-        if (run_me()) {
-          srand(time(0) + getpid() + client->whoami);
-          sleep(rand() % iarg1);
-        }
-      }
-      break;
 
-    case SYNCLIENT_MODE_SLEEP:
-      {
-        int iarg1 = iargs.front();
-        iargs.pop_front();
-        if (run_me()) {
-          dout(2) << "sleep " << iarg1 << dendl;
-          sleep(iarg1);
-        }
-      }
-      break;
+      // WHO?
 
     case SYNCLIENT_MODE_ONLY:
       {
@@ -314,33 +291,74 @@ int SyntheticClient::run()
         int last = iargs.front();
         iargs.pop_front();
         if (first <= client->get_nodeid() &&
-	    last >= client->get_nodeid()) {
+	    last > client->get_nodeid()) {
 	  run_only = client->get_nodeid();
-          dout(2) << "onlyrange " << first << " " << last << " includes me" << dendl;
-	}
+          dout(2) << "onlyrange [" << first << ", " << last << ") includes me" << dendl;
+	} else
+	  run_only = client->get_nodeid()+1;  // not me
       }
       break;
     case SYNCLIENT_MODE_EXCLUDE:
       {
         exclude = iargs.front();
         iargs.pop_front();
-        if (exclude == client->get_nodeid())
+        if (exclude == client->get_nodeid()) {
+	  run_only = client->get_nodeid() + 1;
           dout(2) << "not running " << exclude << dendl;
+	} else
+	  run_only = -1;
       }
       break;
 
+      // HOW LONG?
 
     case SYNCLIENT_MODE_UNTIL:
       {
         int iarg1 = iargs.front();
         iargs.pop_front();
-        if (iarg1) {
-          dout(2) << "until " << iarg1 << dendl;
-          utime_t dur(iarg1,0);
-          run_until = run_start + dur;
-        } else {
-          dout(2) << "until " << iarg1 << " (no limit)" << dendl;
-          run_until = utime_t(0,0);
+	if (run_me()) {
+	  if (iarg1) {
+	    dout(2) << "until " << iarg1 << dendl;
+	    utime_t dur(iarg1,0);
+	    run_until = run_start + dur;
+	  } else {
+	    dout(2) << "until " << iarg1 << " (no limit)" << dendl;
+	    run_until = utime_t(0,0);
+	  }
+	}
+      }
+      break;
+
+
+      // ...
+
+    case SYNCLIENT_MODE_FOO:
+      if (run_me()) {
+	foo();
+	did_run_me();
+      }
+      break;
+
+    case SYNCLIENT_MODE_RANDOMSLEEP:
+      {
+        int iarg1 = iargs.front();
+        iargs.pop_front();
+        if (run_me()) {
+          srand(time(0) + getpid() + client->whoami);
+          sleep(rand() % iarg1);
+	  did_run_me();
+        }
+      }
+      break;
+
+    case SYNCLIENT_MODE_SLEEP:
+      {
+        int iarg1 = iargs.front();
+        iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "sleep " << iarg1 << dendl;
+          sleep(iarg1);
+	  did_run_me();
         }
       }
       break;
@@ -349,11 +367,12 @@ int SyntheticClient::run()
       {
         int iarg1 = iargs.front();
         iargs.pop_front();
-        if (iarg1) {
+        if (iarg1 && run_me()) {
           dout(2) << "sleepuntil " << iarg1 << dendl;
           utime_t at = g_clock.now() - run_start;
           if (at.sec() < iarg1) 
             sleep(iarg1 - at.sec());
+	  did_run_me();
         }
       }
       break;
@@ -365,6 +384,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "randomwalk " << iarg1 << dendl;
           random_walk(iarg1);
+	  did_run_me();
         }
       }
       break;
@@ -376,6 +396,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "makedirmess " << sarg1 << " " << iarg1 << dendl;
           make_dir_mess(sarg1.c_str(), iarg1);
+	  did_run_me();
         }
       }
       break;
@@ -388,6 +409,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << dendl;
           make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  did_run_me();
         }
       }
       break;
@@ -400,6 +422,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "statdirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << dendl;
           stat_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  did_run_me();
         }
       }
       break;
@@ -412,6 +435,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "readdirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << dendl;
           read_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  did_run_me();
         }
       }
       break;
@@ -427,6 +451,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "thrashlinks " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << dendl;
           thrash_links(sarg1.c_str(), iarg1, iarg2, iarg3, iarg4);
+	  did_run_me();
         }
       }
       break;
@@ -441,6 +466,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "makefiles " << num << " " << count << " " << priv << dendl;
           make_files(num, count, priv, false);
+	  did_run_me();
         }
       }
       break;
@@ -452,6 +478,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "makefiles2 " << num << " " << count << " " << priv << dendl;
           make_files(num, count, priv, true);
+	  did_run_me();
         }
       }
       break;
@@ -462,6 +489,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "createshared " << num << dendl;
           create_shared(num);
+	  did_run_me();
         }
       }
       break;
@@ -473,6 +501,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "openshared " << num << dendl;
           open_shared(num, count);
+	  did_run_me();
         }
       }
       break;
@@ -486,6 +515,7 @@ int SyntheticClient::run()
           dout(2) << "createobjects " << cout << " of " << size << " bytes"
 		  << ", " << inflight << " in flight" << dendl;
           create_objects(count, size, inflight);
+	  did_run_me();
         }
       }
       break;
@@ -501,6 +531,7 @@ int SyntheticClient::run()
           dout(2) << "objectrw " << cout << " " << size << " " << wrpc 
 		  << " " << overlap << " " << rskew << " " << wskew << dendl;
           object_rw(count, size, wrpc, overlap, rskew, wskew);
+	  did_run_me();
         }
       }
       break;
@@ -511,6 +542,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "fullwalk" << sarg1 << dendl;
           full_walk(sarg1);
+	  did_run_me();
         }
       }
       break;
@@ -520,6 +552,7 @@ int SyntheticClient::run()
         if (run_me()) {
           dout(2) << "repeatwalk " << sarg1 << dendl;
           while (full_walk(sarg1) == 0) ;
+	  did_run_me();
         }
       }
       break;
@@ -530,8 +563,10 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
         dout(1) << "WRITING SYN CLIENT" << dendl;
-        if (run_me())
+        if (run_me()) {
           write_file(sarg1, iarg1, iarg2);
+	  did_run_me();
+	}
       }
       break;
     case SYNCLIENT_MODE_WRSHARED:
@@ -539,8 +574,10 @@ int SyntheticClient::run()
         string sarg1 = "shared";
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
-        if (run_me())
+        if (run_me()) {
           write_file(sarg1, iarg1, iarg2);
+	  did_run_me();
+	}
       }
       break;
     case SYNCLIENT_MODE_READSHARED:
@@ -548,8 +585,10 @@ int SyntheticClient::run()
         string sarg1 = "shared";
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
-        if (run_me())
+        if (run_me()) {
           read_file(sarg1, iarg1, iarg2, true);
+	  did_run_me();
+	}
       }
       break;
     case SYNCLIENT_MODE_WRITEBATCH:
@@ -558,8 +597,10 @@ int SyntheticClient::run()
         int iarg2 = iargs.front(); iargs.pop_front();
         int iarg3 = iargs.front(); iargs.pop_front();
 
-        if (run_me())
+        if (run_me()) {
           write_batch(iarg1, iarg2, iarg3);
+	  did_run_me();
+	}
       }
       break;
 
@@ -570,8 +611,10 @@ int SyntheticClient::run()
         int iarg2 = iargs.front();  iargs.pop_front();
 
         dout(1) << "READING SYN CLIENT" << dendl;
-        if (run_me())
+        if (run_me()) {
           read_file(sarg1, iarg1, iarg2);
+	  did_run_me();
+	}
       }
       break;
 
@@ -582,8 +625,10 @@ int SyntheticClient::run()
         int iarg2 = iargs.front();  iargs.pop_front();
 
         dout(1) << "RANDOM READ WRITE SYN CLIENT" << dendl;
-        if (run_me())
+        if (run_me()) {
           read_random(sarg1, iarg1, iarg2);
+	  did_run_me();
+	}
       }
       break;
 
@@ -594,8 +639,10 @@ int SyntheticClient::run()
         int iarg2 = iargs.front();  iargs.pop_front();
 
         dout(1) << "RANDOM READ WRITE SYN CLIENT" << dendl;
-        if (run_me())
+        if (run_me()) {
           read_random_ex(sarg1, iarg1, iarg2);
+	  did_run_me();
+	}
       }
       break;
     case SYNCLIENT_MODE_TRACE:
@@ -636,6 +683,7 @@ int SyntheticClient::run()
             }
           }
 	  dout(1) << "done " << dendl;
+	  did_run_me();
         }
       }
       break;
@@ -649,6 +697,7 @@ int SyntheticClient::run()
             int fd = client->open("test", rand()%2 ? (O_WRONLY|O_CREAT):O_RDONLY);
             if (fd > 0) client->close(fd);
           }
+	  did_run_me();
         }
       }
       break;
@@ -663,6 +712,7 @@ int SyntheticClient::run()
 	    client->lstat("test", &st);
 	    client->chmod("test", 0777);
           }
+	  did_run_me();
         }
       }
       break;
@@ -672,8 +722,10 @@ int SyntheticClient::run()
         string file = get_sarg(0);
         sargs.push_front(file);
         int iarg1 = iargs.front();  iargs.pop_front();
-	if (run_me()) 
+	if (run_me()) {
 	  client->truncate(file.c_str(), iarg1);
+	  did_run_me();
+	}
       }
       break;
 
@@ -683,8 +735,10 @@ int SyntheticClient::run()
 	string base = get_sarg(0);
 	string find = get_sarg(0);
 	int data = get_iarg();
-	if (run_me())
+	if (run_me()) {
 	  import_find(base.c_str(), find.c_str(), data);
+	  did_run_me();
+	}
       }
       break;
       

@@ -153,30 +153,18 @@ class SyntheticClient {
 
   int run();
 
-  bool exclude_me() {
-    if (exclude < 0) 
-      return false;
-    if (exclude == client->get_nodeid()) {
-      exclude = -1;
-      return true;
-    } else {
-      exclude = -1;
-      return false;
-    }
-  }
   bool run_me() {
-    if (exclude_me())
-      return false;
-
     if (run_only >= 0) {
-      if (run_only == client->get_nodeid()) {
-        run_only = -1;
+      if (run_only == client->get_nodeid())
         return true;
-      }
-      run_only = -1;
-      return false;
+      else
+	return false;
     }
     return true;
+  }
+  void did_run_me() {
+    run_only = -1;
+    run_until = utime_t();
   }
 
   // run() will do one of these things:
