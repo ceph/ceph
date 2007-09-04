@@ -148,6 +148,7 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
   fragtree_t dirfragtree;
+  map<frag_t,int> fragmap;  // known frag -> mds mappings
 
   // for caching i/o mode
   FileCache fc;
@@ -246,39 +247,29 @@ class Inode {
     if (cmode & FILE_MODE_W) num_open_wr--;
     if (cmode & FILE_MODE_LAZY) num_open_lazy--;
   }
-
-  int authority(MDSMap *mdsmap) {
-    //cout << "authority on " << inode.ino << " .. dir_auth is " << dir_auth<< endl;
-    // parent?
-    if (dn && dn->dir && dn->dir->parent_inode) {
-      // parent hashed?
-      if (dn->dir->parent_inode->dir_hashed) {
-        // hashed
-	assert(0); 
-	// fixme
-        //return mdcluster->hash_dentry( dn->dir->parent_inode->ino(),
-	//dn->name );
+  
+  int authority(const string& dname) {
+    if (!dirfragtree.empty()) {
+      __gnu_cxx::hash<string> H;
+      frag_t fg = dirfragtree[H(dname)];
+      if (fragmap.count(fg) &&
+	  fragmap[fg] >= 0) {
+	//cout << "picked frag ino " << inode.ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
+	return fragmap[fg];
       }
-
-      if (dir_auth >= 0)
-        return dir_auth;
-      else
-        return dn->dir->parent_inode->authority(mdsmap);
     }
+    return authority();
+  }
 
+  int authority() {
     if (dir_auth >= 0)
       return dir_auth;
 
-    assert(0);    // !!!
-    return 0;
+    assert(dn);
+    return dn->dir->parent_inode->authority(dn->name);
   }
-  int dentry_authority(const char *dn,
-                       MDSMap *mdsmap) {
-    assert(0);
-    return 0;
-    //return ->hash_dentry( ino(),
-    //dn );
-  }
+
+
   int pick_replica(MDSMap *mdsmap) {
     // replicas?
     if (ino() > 1ULL && dir_contacts.size()) {
@@ -299,7 +290,7 @@ class Inode {
       //return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
     }
     else
-      return authority(mdsmap);
+      return authority();
   }
 
 

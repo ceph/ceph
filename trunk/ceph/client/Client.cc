@@ -413,8 +413,15 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
 {
   // auth
   in->dir_auth = -1;
-  if (!st->dirfrag_auth.empty()) {        // HACK FIXME ******* FIXME FIXME FIXME FIXME dirfrag_t
+  if (st->dirfrag_auth.size() == 1) { 
     in->dir_auth = st->dirfrag_auth.begin()->second; 
+  } else {
+    for (map<frag_t,int>::iterator p = st->dirfrag_auth.begin();
+	 p != st->dirfrag_auth.end();
+	 ++p) {
+      dout(20) << "got dirfrag map for " << in->inode.ino << " frag " << p->first << " to mds " << p->second << dendl;
+      in->fragmap[p->first] = p->second;
+    }
   }
 
   // replicated
@@ -578,20 +585,13 @@ int Client::choose_target_mds(MClientRequest *req)
     if (req->auth_is_best()) {
       // pick the actual auth (as best we can)
       if (item) {
-	mds = item->authority(mdsmap);
-      } else if (diri->dir_hashed && missing_dn >= 0) {
-	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-				     mdsmap);
+	mds = item->authority();
       } else {
-	mds = diri->authority(mdsmap);
+	mds = diri->authority(req->get_filepath()[missing_dn]);
       }
     } else {
       // balance our traffic!
-      if (diri->dir_hashed && missing_dn >= 0) 
-	mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
-				     mdsmap);
-      else 
-	mds = diri->pick_replica(mdsmap);
+      mds = diri->pick_replica(mdsmap);
     }
   }
   dout(20) << "mds is " << mds << dendl;
