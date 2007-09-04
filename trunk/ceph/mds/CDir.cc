@@ -511,6 +511,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 
   vector<CDir*> subfrags(1 << bits);
   
+  double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
+
   // create subfrag dirs
   int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
@@ -521,6 +523,18 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->init_fragment_pins();
     f->version = version;
     f->projected_version = projected_version;
+
+    f->pop_me = pop_me;
+    f->pop_me *= fac;
+
+    // FIXME; this is an approximation
+    f->pop_nested = pop_nested;
+    f->pop_nested *= fac;
+    f->pop_auth_subtree = pop_auth_subtree;
+    f->pop_auth_subtree *= fac;
+    f->pop_auth_subtree_nested = pop_auth_subtree_nested;
+    f->pop_auth_subtree_nested *= fac;
+
     dout(10) << " subfrag " << *p << " " << *f << dendl;
     subfrags[n++] = f;
     subs.push_back(f);
