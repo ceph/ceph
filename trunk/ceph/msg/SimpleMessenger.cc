@@ -40,7 +40,7 @@
 Rank rank;
 
 
-sighandler_t old_sigint_handler;
+sighandler_t old_sigint_handler = 0;
 
 
 /********************************************
@@ -50,7 +50,8 @@ sighandler_t old_sigint_handler;
 void simplemessenger_sigint(int r)
 {
   rank.sigint();
-  old_sigint_handler(r);
+  if (old_sigint_handler)
+    old_sigint_handler(r);
 }
 
 void Rank::sigint()
@@ -1180,6 +1181,7 @@ void Rank::EntityMessenger::dispatch_entry()
     if (!dispatch_queue.empty()) {
       list<Message*> ls;
       ls.swap(dispatch_queue);
+      qlen = 0;
 
       lock.Unlock();
       {

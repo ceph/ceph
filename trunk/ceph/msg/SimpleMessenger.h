@@ -164,6 +164,7 @@ private:
     Cond cond;
     list<Message*> dispatch_queue;
     bool stop;
+    int qlen;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
@@ -180,14 +181,16 @@ private:
     void queue_message(Message *m) {
       // set recv stamp
       m->set_recv_stamp(g_clock.now());
-
+      
       lock.Lock();
       dispatch_queue.push_back(m);
+      qlen++;
       cond.Signal();
       lock.Unlock();
     }
     void queue_messages(list<Message*> ls) {
       lock.Lock();
+      qlen += ls.size();
       dispatch_queue.splice(dispatch_queue.end(), ls);
       cond.Signal();
       lock.Unlock();
@@ -205,6 +208,8 @@ private:
     }
     
     const entity_addr_t &get_myaddr();
+
+    int get_dispatch_queue_len() { return qlen; }
 
     void reset_myname(entity_name_t m);
 
