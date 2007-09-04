@@ -180,20 +180,16 @@ void Logger::_flush()
   
   // write line to log
   out << last_flush;
-  vector< vector<double> > to_avg(type->keys.size());
-  to_avg.swap(vals_to_avg);
   for (unsigned i=0; i<type->keys.size(); i++) {
     if (type->avg[i]) {
       if (vals[i] > 0) {
 	double avg = (fvals[i] / (double)vals[i]);
-	//logger_lock.Unlock();
 	double var = 0.0;
 	if (g_conf.logger_calc_variance) {
 	  int n = vals[i];
-	  for (vector<double>::iterator p = to_avg[i].begin(); n--; ++p) 
+	  for (vector<double>::iterator p = vals_to_avg[i].begin(); n--; ++p) 
 	    var += (avg - *p) * (avg - *p);
 	}
-	//logger_lock.Lock();
 	out << "\t" << avg << "\t" << vals[i] << "\t" << var;
       } else
 	out << "\t0\t0\t0";
