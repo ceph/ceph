@@ -409,7 +409,7 @@ bool MDSMonitor::handle_command(MMonCommand *m)
     else if (m->cmd[1] == "set_target_num" && m->cmd.size() > 2) {
       pending_mdsmap.target_num = atoi(m->cmd[2].c_str());
       r = 0;
-      ss << "target_num = " << pending_mdsmap.target_num << dendl;
+      ss << "target_num = " << pending_mdsmap.target_num;
     }
   }
   if (r == -EINVAL) {
