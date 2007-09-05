@@ -661,12 +661,19 @@ int SyntheticClient::run()
           Trace t(realtfile);
           
           client->mkdir(prefix.c_str(), 0755);
-          
+
+	  // stupid ugly hack
+	  bool mdonly = false;
+	  if (iarg1 == 0) {
+	    mdonly = true;
+	    iarg1 = 1;
+	  }
+
           for (int i=0; i<iarg1; i++) {
             utime_t start = g_clock.now();
             
             if (time_to_stop()) break;
-            play_trace(t, prefix, false);
+            play_trace(t, prefix, mdonly);
             if (time_to_stop()) break;
             //clean_dir(prefix);
             
@@ -1160,18 +1167,20 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       }
     } else if (strcmp(op, "ll_flush") == 0) {
       int64_t f = t.get_int();
-      if (ll_files.count(f)) 
+      if (!metadata_only &&
+	  ll_files.count(f)) 
 	client->ll_flush(ll_files[f]);
     } else if (strcmp(op, "ll_fsync") == 0) {
       int64_t f = t.get_int();
-      if (ll_files.count(f)) 
+      if (!metadata_only &&
+	  ll_files.count(f)) 
 	client->ll_fsync(ll_files[f], false); // FIXME dataonly param
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
-      if (ll_files.count(f)) 
+      if (ll_files.count(f)) {
 	client->ll_release(ll_files[f]);
-      ll_files.erase(f);
-
+	ll_files.erase(f);
+      }
     } else if (strcmp(op, "ll_statfs") == 0) {
       int64_t i = t.get_int();
       if (ll_inos.count(i))
