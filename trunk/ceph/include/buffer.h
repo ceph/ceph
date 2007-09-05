@@ -473,25 +473,53 @@ public:
 	advance(1);
       }
 
+      // copy data out.
+      // note that these all _append_ to dest!
+
       void copy(unsigned len, char *dest) {
-	// copy
-	//cout << this << " copy " << off << "~" << len << " of " << bl->_len << std::endl;
 	if (p == ls.end()) seek(off);
 	while (len > 0) {
 	  assert(p != ls.end());
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
-	  //cout << this << " copy copying " << howmuch << " at " << p_off << " in bp of len " << p->length() << std::endl;
-
 	  p->copy_out(p_off, howmuch, dest);
-	  
 	  dest += howmuch;
+
 	  len -= howmuch;
 	  advance(howmuch);
-	  //cout << this << " copy didi " << howmuch << " len now " << len << std::endl;
 	}
       }
+
+      void copy(unsigned len, list &dest) {
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+	  
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  dest.append(*p, p_off, howmuch);
+	  
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      void copy(unsigned len, std::string &dest) {
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  dest.append(p->c_str() + p_off, howmuch);
+
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      // copy data in
 
       void copy_in(unsigned len, const char *src) {
 	// copy
@@ -522,10 +550,11 @@ public:
 	  if (left == 0) break;
 	}
       }
+
     };
 
   private:
-    iterator last_p;
+    mutable iterator last_p;
 
   public:
     // cons/des
@@ -635,13 +664,28 @@ public:
     // crope lookalikes.
     // **** WARNING: this are horribly inefficient for large bufferlists. ****
 
-    void copy(unsigned off, unsigned len, char *dest) {
+    // data OUT
+
+    void copy(unsigned off, unsigned len, char *dest) const {
       assert(off >= 0);
       assert(off + len <= length());
-
       if (last_p.get_off() != off) 
 	last_p.seek(off);
       last_p.copy(len, dest);
+    }
+
+    void copy(unsigned off, unsigned len, list &dest) const {
+      assert(off >= 0);
+      assert(off + len <= length());
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      last_p.copy(len, dest);
+    }
+
+    void copy(unsigned off, unsigned len, std::string& dest) const {
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      return last_p.copy(len, dest);
     }
     
     void copy_in(unsigned off, unsigned len, const char *src) {
@@ -658,6 +702,7 @@ public:
 	last_p.seek(off);
       last_p.copy_in(len, src);
     }
+
 
     void append(const char *data, unsigned len) {
       while (len > 0) {
@@ -766,42 +811,7 @@ public:
       }
     }
 
-    std::string substr(unsigned off, unsigned len) {
-      std::string s;
-      //cout << "substr " << off << "~" << len << " of " << length() << std::endl;
-
-      // skip off
-      std::list<ptr>::const_iterator curbuf = _buffers.begin();
-      while (off > 0 &&
-	     off >= (*curbuf).length()) {
-	// skip this buffer
-	//cout << "skipping over " << *curbuf << std::endl;
-	off -= (*curbuf).length();
-	curbuf++;
-      }
-      assert(len == 0 || curbuf != _buffers.end());
-
-      while (len > 0) {
-	// partial?
-	if (off + len < curbuf->length()) {
-	  //cout << "copying partial of " << *curbuf << std::endl;
-	  s.append(curbuf->c_str() + off, len);
-	  break;
-	}
-	
-	// through end
-	//cout << "copying end (all?) of " << *curbuf << std::endl;
-	unsigned howmuch = curbuf->length() - off;
-	s.append(curbuf->c_str() + off, howmuch);
-	len -= howmuch;
-	off = 0;
-	curbuf++;
-      }
-
-      //cout << "done, got " << s.length() << std::endl;
-      return s;
-    }
-
+    
 
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
@@ -1103,7 +1113,8 @@ inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
-  s = bl.substr(off, len);
+  s.clear();
+  bl.copy(off, len, s);
   off += len;
 }
 
@@ -1128,7 +1139,7 @@ inline void _decode(buffer::ptr& bp, bufferlist& bl, int& off)
   _decoderaw(len, bl, off);
 
   bufferlist s;
-  s.substr_of(bl, off, len);
+  bl.copy(off, len, s);
   off += len;
 
   if (s.buffers().size() == 1)
@@ -1154,7 +1165,8 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
-  s.substr_of(bl, off, len);
+  s.clear();
+  bl.copy(off, len, s);
   off += len;
 }
 
