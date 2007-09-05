@@ -68,14 +68,15 @@ protected:
 public:
   int get_nodeid() { return whoami; }
   
+  static object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
+  static object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
+  
+
 private:
   /** superblock **/
   OSDSuperblock superblock;
   epoch_t  boot_epoch;      
 
-  object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
-  object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
-  
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
