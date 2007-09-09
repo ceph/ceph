@@ -164,7 +164,7 @@ int Rank::Accepter::start()
   dout(1) << "accepter.start my_addr is " << rank.my_addr << dendl;
 
   // set up signal handler
-  old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
+  //old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
 
   // set a harmless handle for SIGUSR1 (we'll use it to stop the accepter)
   struct sigaction sa;
@@ -457,7 +457,7 @@ void Rank::Pipe::reader()
 	      // ignore it
 	    } else {
 	      derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
-	      assert(0);  // FIXME do this differently
+	      //assert(0);  // FIXME do this differently
 	    }
 	  }
 	}
