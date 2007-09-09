@@ -376,9 +376,18 @@ void MDBalancer::do_rebalance(int beat)
   // under or over?
   if (my_load < target_load * (1.0 + g_conf.mds_bal_min_rebalance)) {
     dout(5) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
+    last_epoch_under = beat_epoch;
     show_imports();
     return;
-  }  
+  }
+  
+  last_epoch_over = beat_epoch;
+
+  // am i over long enough?
+  if (last_epoch_under && beat_epoch - last_epoch_under < 2) {
+    dout(5) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
+    return;
+  }
 
   dout(5) << "  i am sufficiently overloaded" << dendl;
 

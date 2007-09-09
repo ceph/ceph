@@ -42,6 +42,9 @@ class MDBalancer {
   MDS *mds;
   int beat_epoch;
 
+  int last_epoch_under;  
+  int last_epoch_over; 
+
   utime_t last_heartbeat;
   utime_t last_fragment;
   utime_t last_sample;    
@@ -73,7 +76,8 @@ class MDBalancer {
  public:
   MDBalancer(MDS *m) : 
     mds(m),
-    beat_epoch(0) { }
+    beat_epoch(0),
+    last_epoch_under(0), last_epoch_over(0) { }
   
   mds_load_t get_load();
 
