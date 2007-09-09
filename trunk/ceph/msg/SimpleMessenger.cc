@@ -657,6 +657,13 @@ Message *Rank::Pipe::read_message()
 int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
 {
   while (len > 0) {
+    if (0) { // sanity
+      int l = 0;
+      for (unsigned i=0; i<msg->msg_iovlen; i++)
+	l += msg->msg_iov[i].iov_len;
+      assert(l == len);
+    }
+
     int r = ::sendmsg(sd, msg, 0);
     if (r < 0) { 
       assert(r == -1);
@@ -671,14 +678,20 @@ int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
     if (len == 0) break;
     
     // hrmph.  trim r bytes off the front of our message.
+    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer partial sendmsg for " << *m
+	    << " to " << m->get_dest()
+	    << " did " << r << ", still have " << len
+	    << dendl;
     while (r > 0) {
-      if (msg->msg_iov[0].iov_len >= (size_t)r) {
+      if (msg->msg_iov[0].iov_len <= (size_t)r) {
 	// lose this whole item
+	//dout(30) << "skipping " << msg->msg_iov[0].iov_len << ", " << (msg->msg_iovlen-1) << " v, " << r << " left" << dendl;
 	r -= msg->msg_iov[0].iov_len;
 	msg->msg_iov++;
 	msg->msg_iovlen--;
       } else {
 	// partial!
+	//dout(30) << "adjusting " << msg->msg_iov[0].iov_len << ", " << msg->msg_iovlen << " v, " << r << " left" << dendl;
 	msg->msg_iov[0].iov_base = (void*)((long)msg->msg_iov[0].iov_base + r);
 	msg->msg_iov[0].iov_len -= r;
 	break;
