@@ -5959,6 +5959,8 @@ void MDCache::show_cache()
 
 void MDCache::dump_cache()
 {
+  if (g_conf.debug_mds < 2) return;
+
   char fn[20];
   sprintf(fn, "cachedump.%d.mds%d", mds->mdsmap->get_epoch(), mds->get_nodeid());
 
@@ -5974,14 +5976,14 @@ void MDCache::dump_cache()
     it->second->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
-      myfile << *dir->inode << dendl;
-      myfile << *dir << dendl;
+      myfile << *dir->inode << std::endl;
+      myfile << *dir << std::endl;
       
       for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
 	CDentry *dn = p->second;
-	myfile << *dn << dendl;
+	myfile << *dn << std::endl;
       }
     }
   }
