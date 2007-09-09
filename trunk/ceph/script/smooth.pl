@@ -18,7 +18,7 @@ for my $t (sort {$a <=> $b} keys %v) {
 	my $x = $t + $a;
 	next unless ($v{$x});
 	my @o = @{$v{$x}};
-	print "$t: $x o @o\n";
+	#print "$t: $x o @o\n";
 	if (@v) {
 	    for (my $y=0; $y<=$#o; $y++) {
 		$v[$y] += $o[$y];
@@ -26,7 +26,7 @@ for my $t (sort {$a <=> $b} keys %v) {
 	} else {
 	    @v = @o;
 	}
-	print "$t: $x v @v\n";
+	#print "$t: $x v @v\n";
 	$c++;
     }
     print "$t";
