@@ -100,6 +100,8 @@ void PaxosService::_commit()
     assert(have_pending == false);
     create_pending();
     have_pending = true;
+
+    committed();
   }
 }
 

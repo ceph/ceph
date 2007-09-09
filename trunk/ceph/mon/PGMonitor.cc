@@ -154,6 +154,10 @@ bool PGMonitor::prepare_update(Message *m)
   }
 }
 
+void PGMonitor::committed()
+{
+
+}
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {

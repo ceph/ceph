@@ -342,6 +342,12 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 }
 
 
+void OSDMonitor::committed()
+{
+
+}
+
+
 // -------------
 
 bool OSDMonitor::preprocess_query(Message *m)

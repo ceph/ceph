@@ -376,6 +376,50 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
     send_latest(m->get_mds_inst());
   }
 
+  delete m;
+}
+
+
+void MDSMonitor::committed()
+{
+  // check for failed
+  set<int> standby;
+  set<int> failed;
+  mdsmap.get_mds_set(standby, MDSMap::STATE_STANDBY);
+  mdsmap.get_failed_mds_set(failed);
+
+  if (!standby.empty() && !failed.empty()) {
+    while (!standby.empty() && !failed.empty()) {
+      int f = *failed.begin();
+      int t = *standby.begin();
+      failed.erase(failed.begin());
+      standby.erase(standby.begin());
+
+      dout(0) << "mds" << t << " taking over for mds" << f << dendl;
+    
+      // send new map to old inst/name
+      waiting_for_map.push_back(mdsmap.mds_inst[t]);
+      
+      pending_mdsmap.mds_inst[f] = mdsmap.mds_inst[t];
+      pending_mdsmap.mds_inst[f].name = entity_name_t::MDS(f);
+      pending_mdsmap.mds_inc[f]++;
+      pending_mdsmap.mds_state[f] = MDSMap::STATE_REPLAY;
+      pending_mdsmap.mds_state_seq[f] = mdsmap.mds_state_seq[t];
+
+      pending_mdsmap.mds_inst.erase(t);
+      pending_mdsmap.mds_state.erase(t);
+      pending_mdsmap.mds_state_seq.erase(t);
+
+      last_beacon[f] = last_beacon[t];
+      last_beacon.erase(t);
+    }
+
+    dout(7) << "pending map now:" << dendl;
+    print_map(pending_mdsmap);
+
+    propose_pending();
+  }
+
   // hackish: did all mds's shut down?
   if (mon->is_leader() &&
       g_conf.mon_stop_with_last_mds &&
@@ -383,10 +427,7 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
       mdsmap.is_stopped()) 
     mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
-
-  delete m;
 }
-
 
 
 bool MDSMonitor::handle_command(MMonCommand *m)

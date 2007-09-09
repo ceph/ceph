@@ -99,6 +99,8 @@ public:
   virtual bool prepare_update(Message *m) = 0;
   virtual bool should_propose(double &delay);
 
+  virtual void committed() = 0;
+
 };
 
 #endif

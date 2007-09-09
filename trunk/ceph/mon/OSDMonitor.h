@@ -47,6 +47,8 @@ private:
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
 
+  void committed();
+
   void handle_query(Message *m);
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);

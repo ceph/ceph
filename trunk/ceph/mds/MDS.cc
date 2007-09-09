@@ -529,6 +529,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "handle_mds_map i am now mds" << whoami
 	    << " incarnation " << mdsmap->get_inc(whoami)
 	    << dendl;
+    messenger->reset_myname(entity_name_t::MDS(whoami));
 
     // do i need an osdmap?
     if (oldwhoami < 0) {
@@ -564,13 +565,6 @@ void MDS::handle_mds_map(MMDSMap *m)
 	      << dendl;
       want_state = state;
     }    
-
-    // contemplate suicide
-    if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
-      dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << dendl;
-      suicide();
-      return;
-    }
 
     // now active?
     if (is_active()) {
@@ -896,6 +890,9 @@ void MDS::replay_start()
 
   // note: don't actually start yet.  boot() will get called once we have 
   // an mdsmap AND osdmap.
+  if (osdmap->get_epoch() > 0 &&
+      mdsmap->get_epoch() > 0)
+    boot_replay();
 }
 
 void MDS::replay_done()

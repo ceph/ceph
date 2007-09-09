@@ -159,6 +159,8 @@ private:
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 
+  void committed();
+
   void _mounted(int c, MClientMount *m);
   void _unmounted(MClientUnmount *m);
  

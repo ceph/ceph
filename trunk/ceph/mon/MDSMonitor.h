@@ -66,6 +66,8 @@ class MDSMonitor : public PaxosService {
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 
+  void committed();
+
   bool preprocess_beacon(class MMDSBeacon *m);
   bool handle_beacon(class MMDSBeacon *m);
   bool handle_command(class MMonCommand *m);

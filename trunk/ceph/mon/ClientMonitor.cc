@@ -99,6 +99,10 @@ void ClientMonitor::create_initial()
   dout(1) << "create_initial -- creating initial map" << dendl;
 }
 
+void ClientMonitor::committed()
+{
+
+}
 
 
 void ClientMonitor::encode_pending(bufferlist &bl)
