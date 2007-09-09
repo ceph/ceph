@@ -338,6 +338,7 @@ public:
     bool is_page_aligned() const { return (long)c_str() % BUFFER_PAGE_SIZE == 0; }
 
     // accessors
+    raw *get_raw() const { return _raw; }
     const char *c_str() const { assert(_raw); return _raw->data + _off; }
     char *c_str() { assert(_raw); return _raw->data + _off; }
     unsigned length() const { return _len; }
@@ -729,8 +730,17 @@ public:
     }
     void append(const ptr& bp, unsigned off, unsigned len) {
       assert(len+off <= bp.length());
-      ptr tempbp(bp, off, len);
-      push_back(tempbp);
+      if (!_buffers.empty() &&
+	  _buffers.back().get_raw() == bp.get_raw() &&
+	  _buffers.back().end() == bp.start() + off) {
+	// yay contiguous with tail bp!
+	_buffers.back().set_length(_buffers.back().length()+len);
+	_len += len;
+      } else {
+	// add new item to list
+	ptr tempbp(bp, off, len);
+	push_back(tempbp);
+      }
     }
     void append(const list& bl) {
       _len += bl._len;
@@ -1108,7 +1118,7 @@ inline void _encode(const std::string& s, bufferlist& bl)
 {
   uint32_t len = s.length();
   _encoderaw(len, bl);
-  bl.append(s.c_str(), len);
+  bl.append(s.data(), len);
 }
 inline void _decode(std::string& s, bufferlist& bl, int& off)
 {

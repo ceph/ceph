@@ -773,11 +773,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 	bufferlist cur;
 	for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
 	     bit != ex.buffer_extents.end();
-	     bit++) {
-	  bufferlist thisbit;
-	  thisbit.substr_of(((OSDWrite*)wr)->bl, bit->first, bit->second);
-	  cur.claim_append(thisbit);
-	}
+	     bit++) 
+	  ((OSDWrite*)wr)->bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == ex.length);
 	m->set_data(cur);//.claim(cur);
       }
