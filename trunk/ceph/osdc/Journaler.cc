@@ -208,8 +208,7 @@ void Journaler::_finish_flush(int r, off_t start)
   if (logger) {
     utime_t lat = g_clock.now();
     lat -= pending_flush[start];
-    logger->finc("jlsum", lat);
-    logger->inc("jlnum");
+    logger->favg("jlat", lat);
   }
 
   pending_flush.erase(start);

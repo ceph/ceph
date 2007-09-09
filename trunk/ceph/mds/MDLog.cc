@@ -58,8 +58,7 @@ void MDLog::reopen_logger(utime_t start)
     mdlog_logtype.add_set("size");
     mdlog_logtype.add_set("rdpos");
     mdlog_logtype.add_set("wrpos");
-    mdlog_logtype.add_inc("jlsum");
-    mdlog_logtype.add_inc("jlnum");
+    mdlog_logtype.add_avg("jlat");
   }
 
 }
