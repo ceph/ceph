@@ -19,6 +19,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
 
 #include "config.h"
 
@@ -507,6 +509,14 @@ void Rank::Pipe::writer()
     }
   }
 
+  // disable Nagle algorithm?
+  if (g_conf.ms_tcp_nodelay) {
+    int flag = 1;
+    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    if (r < 0) 
+      dout(0) << "pipe(" << peer_addr << ' ' << this << ").writer couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
+  }
+
   // loop.
   lock.Lock();
   while (!q.empty() || !done) {
@@ -644,6 +654,40 @@ Message *Rank::Pipe::read_message()
 }
 
 
+int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
+{
+  while (len > 0) {
+    int r = ::sendmsg(sd, msg, 0);
+    if (r < 0) { 
+      assert(r == -1);
+      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error on sendmsg for " << *m
+	      << " to " << m->get_dest() 
+	      << ", " << strerror(errno)
+	      << dendl; 
+      need_to_send_close = false;
+      return -1;
+    }
+    len -= r;
+    if (len == 0) break;
+    
+    // hrmph.  trim r bytes off the front of our message.
+    while (r > 0) {
+      if (msg->msg_iov[0].iov_len >= (size_t)r) {
+	// lose this whole item
+	r -= msg->msg_iov[0].iov_len;
+	msg->msg_iov++;
+	msg->msg_iovlen--;
+      } else {
+	// partial!
+	msg->msg_iov[0].iov_base = (void*)((long)msg->msg_iov[0].iov_base + r);
+	msg->msg_iov[0].iov_len -= r;
+	break;
+      }
+    }
+  }
+  return 0;
+}
+
 
 int Rank::Pipe::write_message(Message *m)
 {
@@ -668,22 +712,28 @@ int Rank::Pipe::write_message(Message *m)
 	    << " in " << env->nchunks
             << dendl;
   
+  // set up msghdr and iovecs
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  struct iovec msgvec[1 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
+  msg.msg_iov = msgvec;
+  int msglen = 0;
+  
   // send envelope
-  int r = tcp_write( sd, (char*)env, sizeof(*env) );
-  if (r < 0) { 
-    derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending envelope for " << *m
-             << " to " << m->get_dest() << dendl; 
-    need_to_send_close = false;
-    return -1;
-  }
-
+  msgvec[0].iov_base = (char*)env;
+  msgvec[0].iov_len = sizeof(*env);
+  msglen += sizeof(*env);
+  msg.msg_iovlen++;
+  
   // payload
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
   list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
   int b_off = 0;  // carry-over buffer offset, if any
   int bl_pos = 0; // blist pos
   int nchunks = env->nchunks;
-  while (nchunks) {
+  int32_t chunksizes[nchunks];
+
+  for (int curchunk=0; curchunk < nchunks; curchunk++) {
     // start a chunk
     int32_t size = blist.length() - bl_pos;
     if (pc != m->get_chunk_payload_at().end()) {
@@ -693,14 +743,14 @@ int Rank::Pipe::write_message(Message *m)
       pc++;
     }
     assert(size > 0);
-    dout(30) << "pipe(" << peer_addr << ' ' << this << ").writer chunk pos " << bl_pos << " size " << size << dendl;
-    
-    r = tcp_write(sd, (char*)&size, sizeof(size));
-    if (r < 0) { 
-      derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending chunk len for " << *m << " to " << m->get_dest() << dendl; 
-      need_to_send_close = false;
-      return -1;
-    }
+    dout(30) << "chunk " << curchunk << " pos " << bl_pos << " size " << size << dendl;
+
+    // chunk size
+    chunksizes[curchunk] = size;
+    msgvec[msg.msg_iovlen].iov_base = &chunksizes[curchunk];
+    msgvec[msg.msg_iovlen].iov_len = sizeof(int32_t);
+    msglen += sizeof(int32_t);
+    msg.msg_iovlen++;
 
     // chunk contents
     int left = size;
@@ -712,12 +762,21 @@ int Rank::Pipe::write_message(Message *m)
 	      << " buffer len " << pb->length()
 	      << " writing " << donow 
 	      << dendl;
-      r = tcp_write(sd, pb->c_str()+b_off, donow);
-      if (r < 0) { 
-	derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data chunk for " << *m << " to " << m->get_dest() << dendl; 
-	need_to_send_close = false;
-	return -1;
+
+      if (msg.msg_iovlen >= IOV_MAX-1) {
+	if (do_sendmsg(m, &msg, msglen)) 
+	  return -1;	
+
+	// and restart the iov
+	msg.msg_iov = msgvec;
+	msg.msg_iovlen = 0;
+	msglen = 0;
       }
+
+      msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str()+b_off);
+      msgvec[msg.msg_iovlen].iov_len = donow;
+      msglen += donow;
+      msg.msg_iovlen++;
 
       left -= donow;
       assert(left >= 0);
@@ -729,10 +788,13 @@ int Rank::Pipe::write_message(Message *m)
       b_off = 0;
     }
     assert(left == 0);
-    nchunks--;
   }
   assert(pb == blist.buffers().end());
   
+  // send
+  if (do_sendmsg(m, &msg, msglen)) 
+    return -1;	
+
   return 0;
 }
 

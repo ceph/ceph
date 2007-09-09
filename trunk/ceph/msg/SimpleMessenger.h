@@ -86,6 +86,7 @@ private:
 
     Message *read_message();
     int write_message(Message *m);
+    int do_sendmsg(Message *m, struct msghdr *msg, int len);
     void fail(list<Message*>& ls);
 
     // threads

@@ -121,6 +121,7 @@ md_config_t g_conf = {
   clock_tare: false,
   
   // --- messenger ---
+  ms_tcp_nodelay: true,
   ms_single_dispatch: false,
   ms_requeue_on_sender_fail: false,
 

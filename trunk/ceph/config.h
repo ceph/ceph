@@ -111,6 +111,7 @@ struct md_config_t {
   bool tcp_multi_dispatch;
   */
 
+  bool ms_tcp_nodelay;
   bool ms_single_dispatch;
   bool ms_requeue_on_sender_fail;
 
