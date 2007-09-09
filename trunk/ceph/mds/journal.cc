@@ -861,28 +861,64 @@ void ESlaveUpdate::replay(MDS *mds)
 
 bool ESubtreeMap::has_expired(MDS *mds)
 {
-  if (mds->mdlog->get_last_subtree_map_offset() > get_start_off()) {
-    dout(10) << "ESubtreeMap.has_expired -- there's a newer map" << dendl;
-    return true;
-  } else if (mds->mdlog->is_capped()) {
-    dout(10) << "ESubtreeMap.has_expired -- log is capped, allowing map to expire" << dendl;
-    return true;
-  } else {
-    dout(10) << "ESubtreeMap.has_expired -- not until there's a newer map written" 
-	     << " (" << get_start_off() << " >= " << mds->mdlog->get_last_subtree_map_offset() << ")"
-	     << dendl;
+  assert(!mds->mdlog->subtree_maps.empty());
+  set<off_t>::iterator p = mds->mdlog->subtree_maps.begin();
+  off_t first = *p;
+  if (get_start_off() != first) {
+    dout(10) << "ESubtreeMap.has_expired -- not the oldest segment" << dendl;
     return false;
   }
+
+  // i am the oldest.
+
+  // capped and last event?
+  if (mds->mdlog->is_capped() && 
+      mds->mdlog->subtree_maps.size() == 1 && 
+      (mds->mdlog->trimming.empty() ||
+       (mds->mdlog->trimming.size() == 1 &&
+	mds->mdlog->trimming.begin()->second == this))) {
+    dout(10) << "ESubtreeMap.has_expired -- capped and last one" << dendl;
+    return true;
+  }
+
+  p++;
+  if (p == mds->mdlog->subtree_maps.end()) {
+    dout(10) << "ESubtreeMap.has_expired -- only segment" << dendl;
+    return false;
+  }
+  off_t next = *p;
+
+  if (mds->mdlog->get_read_pos() < next) {
+    dout(10) << "ESubtreeMap.has_expired -- haven't read this segment, read pos " 
+	     << mds->mdlog->get_read_pos() << " < next map at "  << next
+	     << dendl;    
+    return false;
+  }
+
+  map<off_t,LogEvent*>::iterator trimp = mds->mdlog->trimming.begin();
+  assert(trimp->first == get_start_off());
+  trimp++;
+  if (trimp != mds->mdlog->trimming.end() &&
+      trimp->first < next) {
+    dout(10) << "ESubtreeMap.has_expired -- segment still trimming at " << trimp->first << dendl;    
+    return false;
+  }
+
+  dout(10) << "ESubtreeMap.has_expired -- segment is empty" << dendl;    
+  return true;
 }
 
 void ESubtreeMap::expire(MDS *mds, Context *c)
 {
   dout(10) << "ESubtreeMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << dendl;
-  mds->mdlog->add_subtree_map_expire_waiter(c);
+  mds->mdlog->subtree_map_expire_waiters[get_start_off()].push_back(c);
 }
 
 void ESubtreeMap::replay(MDS *mds) 
 {
+  // note location
+  mds->mdlog->subtree_maps.insert(get_start_off());
+
   if (mds->mdcache->is_subtrees()) {
     dout(10) << "ESubtreeMap.replay -- ignoring, already have import map" << dendl;
   } else {

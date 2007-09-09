@@ -175,10 +175,10 @@ private:
   int num_osds() { return osds.size(); }
   void get_all_osds(set<int>& ls) { ls = osds; }
 
-  const set<int>& get_osds() { return osds; }
-  const map<int,bool>& get_down_osds() { return down_osds; }
-  const set<int>& get_out_osds() { return out_osds; }
-  const map<int,float>& get_overload_osds() { return overload_osds; }
+  const set<int32_t>& get_osds() { return osds; }
+  const map<int32_t,bool>& get_down_osds() { return down_osds; }
+  const set<int32_t>& get_out_osds() { return out_osds; }
+  const map<int32_t,float>& get_overload_osds() { return overload_osds; }
   
   bool exists(int osd) { return osds.count(osd); }
   bool is_down(int osd) { return down_osds.count(osd); }

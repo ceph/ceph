@@ -490,7 +490,7 @@ void MDBalancer::do_rebalance(int beat)
       dout(-5) << " exporting idle (" << pop << ") import " << *im
                << " back to mds" << im->inode->authority().first
                << dendl;
-      mds->mdcache->migrator->export_dir(im, im->inode->authority().first);
+      mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
       continue;
     }
 
@@ -556,7 +556,7 @@ void MDBalancer::do_rebalance(int beat)
           dout(-5) << "reexporting " << *dir 
                    << " pop " << pop 
                    << " back to mds" << target << dendl;
-          mds->mdcache->migrator->export_dir(dir, target);
+          mds->mdcache->migrator->export_dir_nicely(dir, target);
           have += pop;
           import_from_map.erase(plast);
           import_pop_map.erase(pop);
@@ -586,7 +586,7 @@ void MDBalancer::do_rebalance(int beat)
                  << " back to mds" << imp->inode->authority()
                  << dendl;
         have += pop;
-        mds->mdcache->migrator->export_dir(imp, imp->inode->authority().first);
+        mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
       }
       if (amount-have < MIN_OFFLOAD) break;
     }
@@ -621,7 +621,7 @@ void MDBalancer::do_rebalance(int beat)
 	       << " to mds" << target 
                << " " << **it 
                << dendl;
-      mds->mdcache->migrator->export_dir(*it, target);
+      mds->mdcache->migrator->export_dir_nicely(*it, target);
     }
   }
 

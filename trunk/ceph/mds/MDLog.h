@@ -67,6 +67,13 @@ class MDLog {
   bool waiting_for_read;
   friend class C_MDL_Reading;
 
+  
+  off_t get_trimmed_to() {
+    if (trimming.empty())
+      return get_read_pos();
+    else 
+      return trimming.begin()->first;
+  }
 
 
   // -- replay --
@@ -93,35 +100,42 @@ class MDLog {
 
 
   // -- subtreemaps --
-  off_t  last_subtree_map;   // offsets of last committed subtreemap.  constrains trimming.
-  list<Context*> subtree_map_expire_waiters;
+  set<off_t>  subtree_maps;
+  map<off_t,list<Context*> > subtree_map_expire_waiters;
   bool writing_subtree_map;  // one is being written now
   bool seen_subtree_map;     // for recovery
 
+  friend class ESubtreeMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
+  void kick_subtree_map() {
+    if (subtree_map_expire_waiters.empty()) return;
+    list<Context*> ls;
+    ls.swap(subtree_map_expire_waiters.begin()->second);
+    subtree_map_expire_waiters.erase(subtree_map_expire_waiters.begin());
+    finish_contexts(ls);
+  }
+
+public:
+  off_t get_last_subtree_map_offset() {
+    assert(!subtree_maps.empty());
+    return *subtree_maps.rbegin();
+  }
+
+
+private:
   void init_journaler();
-
- public:
+  
+public:
   void reopen_logger(utime_t start);
-
-  off_t get_last_subtree_map_offset() { return last_subtree_map; }
-  void add_subtree_map_expire_waiter(Context *c) {
-    subtree_map_expire_waiters.push_back(c);
-  }
-  void take_subtree_map_expire_waiters(list<Context*>& ls) {
-    ls.splice(ls.end(), subtree_map_expire_waiters);
-  }
-
-
-
+  
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 
 
 
- public:
+public:
   MDLog(MDS *m) : mds(m),
 		  num_events(0), max_events(g_conf.mds_log_max_len),
 		  unflushed(0),
@@ -130,7 +144,6 @@ class MDLog {
 		  logger(0),
 		  trim_reading(false), waiting_for_read(false),
 		  replay_thread(this),
-		  last_subtree_map(0),
 		  writing_subtree_map(false), seen_subtree_map(false) {
   }		  
   ~MDLog();
@@ -148,12 +161,7 @@ class MDLog {
   }
 
   bool is_capped() { return capped; }
-  void cap() { 
-    capped = true;
-    list<Context*> ls;
-    ls.swap(subtree_map_expire_waiters);
-    finish_contexts(ls);
-  }
+  void cap();
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );

@@ -13,10 +13,10 @@
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = #-I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS = -pg -g  #-I${HOME}/include -L${HOME}/lib
 
 # base
-CFLAGS = -O3 -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
+CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
 CC = g++
 LIBS = -pthread
@@ -186,26 +186,26 @@ ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
 
 # fake*
 fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
 newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # hadoop

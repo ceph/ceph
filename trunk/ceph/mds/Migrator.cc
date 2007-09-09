@@ -260,8 +260,10 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	
 	// send pending import_maps?  (these need to go out when all exports have finished.)
 	cache->maybe_send_pending_resolves();
-	
+
 	cache->show_subtrees();
+
+	maybe_do_queued_export();	
       }
     } else {
       // bystander failed.
@@ -485,6 +487,35 @@ void Migrator::audit()
 
 // ==========================================================
 // EXPORT
+
+void Migrator::export_dir_nicely(CDir *dir, int dest)
+{
+  // enqueue
+  dout(7) << "export_dir_nicely " << *dir << " to " << dest << dendl;
+  export_queue.push_back(pair<dirfrag_t,int>(dir->dirfrag(), dest));
+
+  maybe_do_queued_export();
+}
+
+void Migrator::maybe_do_queued_export()
+{
+  while (!export_queue.empty() &&
+	 export_state.size() <= 2) {
+    dirfrag_t df = export_queue.front().first;
+    int dest = export_queue.front().second;
+    export_queue.pop_front();
+    
+    CDir *dir = mds->mdcache->get_dirfrag(df);
+    if (!dir) continue;
+    if (!dir->is_auth()) continue;
+
+    dout(-7) << "nicely exporting " << *dir << " to " << dest << dendl;
+
+    export_dir(dir, dest);
+  }
+}
+
+
 
 
 class C_MDC_ExportFreeze : public Context {
@@ -1240,6 +1271,8 @@ void Migrator::export_finish(CDir *dir)
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
+  
+  maybe_do_queued_export();
 }
 
 

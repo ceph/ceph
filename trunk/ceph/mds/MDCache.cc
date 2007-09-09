@@ -1039,12 +1039,10 @@ void MDCache::log_subtree_map(Context *onsync)
 void MDCache::_logged_subtree_map(off_t off)
 {
   dout(10) << "_logged_subtree_map at " << off << dendl;
-  mds->mdlog->last_subtree_map = off;
+  mds->mdlog->subtree_maps.insert(off);
   mds->mdlog->writing_subtree_map = false;
 
-  list<Context*> ls;
-  mds->mdlog->take_subtree_map_expire_waiters(ls);
-  mds->queue_waiters(ls);
+  mds->mdlog->kick_subtree_map();  // just in case the last segment was empty.
 }
 
 

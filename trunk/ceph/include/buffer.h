@@ -471,6 +471,7 @@ public:
       iterator& operator++() {
 	assert(p != ls.end());
 	advance(1);
+	return *this;
       }
 
       // copy data out.

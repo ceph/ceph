@@ -146,12 +146,12 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
 
     // should we log a new import_map?
     // FIXME: should this go elsewhere?
-    if (last_subtree_map && !writing_subtree_map &&
+    if (!writing_subtree_map &&
 	(journaler->get_write_pos() / log_inode.layout.period()) !=
-	(last_subtree_map / log_inode.layout.period()) &&
-	(journaler->get_write_pos() - last_subtree_map > log_inode.layout.period()/2)) {
+	(get_last_subtree_map_offset() / log_inode.layout.period()) &&
+	(journaler->get_write_pos() - get_last_subtree_map_offset() > log_inode.layout.period()/2)) {
       // log import map
-      dout(10) << "submit_entry also logging subtree map: last = " << last_subtree_map
+      dout(10) << "submit_entry also logging subtree map: last = " << get_last_subtree_map_offset()
 	       << ", cur pos = " << journaler->get_write_pos() << dendl;
       mds->mdcache->log_subtree_map();
     }
@@ -187,7 +187,12 @@ void MDLog::flush()
   trim(NULL);
 }
 
-
+void MDLog::cap()
+{ 
+  dout(5) << "cap" << dendl;
+  capped = true;
+  kick_subtree_map();
+}
 
 
 // trim
@@ -236,16 +241,55 @@ void MDLog::_trimmed(LogEvent *le)
 
   dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << dendl;
 
-  if (trimming.begin()->first == le->_end_off) {
-    // we trimmed off the front!  
+  bool kick = false;
+
+  map<off_t,LogEvent*>::iterator p = trimming.begin();
+  if (p->first == le->_start_off) {
+    // we trimmed off the front!  it must have been a segment head.
+    assert(!subtree_maps.empty());
+    assert(p->first == *subtree_maps.begin());
+    subtree_maps.erase(subtree_maps.begin());
+
     // we can expire the log a bit.
-    journaler->set_expire_pos(le->_end_off);
+    off_t to = get_trimmed_to();
+    journaler->set_expire_pos(to);
     journaler->trim();
+
+    kick = true;
+  } else {
+    p++;
+    
+    // is the next one us?
+    if (le->_start_off == p->first) {
+      p++;
+
+      // did we empty a segment?
+      if (subtree_maps.size() >= 2) {
+	set<off_t>::iterator segp = subtree_maps.begin();
+	assert(*segp < le->_end_off);
+	segp++;
+	dout(20) << "i ended at " << le->get_end_off() 
+		 << ", next seg starts at " << *segp
+		 << ", next trimming is " << (p == trimming.end() ? 0:p->first)
+		 << dendl;
+	if (*segp >= le->_end_off &&
+	    (p == trimming.end() ||
+	     p->first >= *segp)) {
+	  dout(10) << "_trimmed segment looks empty" << dendl;
+	  kick = true;
+	}
+      } else if (capped && trimming.size() < 3) {
+	kick = true;   // blech, imprecise
+      }
+    }
   }
 
-  trimming.erase(le->_end_off);
+  trimming.erase(le->_start_off);
   delete le;
- 
+
+  if (kick) 
+    kick_subtree_map();
+  
   logger->inc("trimf");
   logger->set("trimng", trimming.size());
   logger->set("rdpos", journaler->get_read_pos());
@@ -305,7 +349,7 @@ void MDLog::trim(Context *c)
 
         // trim!
 	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << dendl;
-        trimming[le->_end_off] = le;
+        trimming[le->_start_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("trims");
         logger->set("trimng", trimming.size());
