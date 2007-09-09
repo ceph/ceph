@@ -1263,9 +1263,6 @@ void Migrator::export_finish(CDir *dir)
   mds->queue_waiters(export_finish_waiters[dir]);
   export_finish_waiters.erase(dir);
 
-  // stats
-  //if (mds->logger) mds->logger->set("nex", cache->exports.size());
-
   cache->show_subtrees();
   audit();
 
@@ -1613,7 +1610,6 @@ void Migrator::handle_export_dir(MExportDir *m)
   if (mds->logger) {
     mds->logger->inc("im");
     mds->logger->inc("iim", num_imported_inodes);
-    //mds->logger->set("nim", cache->imports.size());
   }
 
   delete m;

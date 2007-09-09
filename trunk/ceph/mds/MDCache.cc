@@ -3696,6 +3696,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     return 1;
   }
 
+  if (mds->logger) mds->logger->inc("t");
+
   // start trace
   trace.clear();
 
@@ -3748,6 +3750,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  dir_discovers[cur->ino()].insert(cur->authority().first);
 	}
 	cur->add_waiter(CInode::WAIT_DIR, _get_waiter(mdr, req));
+	if (mds->logger) mds->logger->inc("tdis");
         return 1;
       }
     }
@@ -3798,6 +3801,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (!noperm && dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
         dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
+	if (mds->logger) mds->logger->inc("tlock");
         return 1;
       }
 
@@ -3813,6 +3817,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           open_remote_ino(dn->get_remote_ino(), mdr, _get_waiter(mdr, req));
+	  if (mds->logger) mds->logger->inc("trino");
           return 1;
         }        
       }
@@ -3905,7 +3910,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
         curdir->fetch(_get_waiter(mdr, req));
-	if (mds->logger) mds->logger->inc("cmiss");
+	if (mds->logger) mds->logger->inc("tdirf");
         return 1;
       }
     } else {
@@ -3936,12 +3941,11 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 					      false,
 					      onfail == MDS_TRAVERSE_DISCOVERXLOCK),
 				dauth.first, MDS_PORT_CACHE);
-          if (mds->logger) mds->logger->inc("dis");
         }
         
         // delay processing of current request.
         curdir->add_dentry_waiter(path[depth], _get_waiter(mdr, req));
-        if (mds->logger) mds->logger->inc("cmiss");
+	if (mds->logger) mds->logger->inc("tdis");
         return 1;
       } 
       if (onfail == MDS_TRAVERSE_FORWARD) {
@@ -3969,7 +3973,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  else
 	    mds->forward_message_mds(req, dauth.first, req->get_dest_port());
 	  
-	  if (mds->logger) mds->logger->inc("fw");
+	  if (mds->logger) mds->logger->inc("tfw");
 	  return 2;
 	}
       }    
@@ -3982,6 +3986,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   }
   
   // success.
+  if (mds->logger) mds->logger->inc("thit");
   return 0;
 }
 

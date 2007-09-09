@@ -152,7 +152,6 @@ void MDS::reopen_logger(utime_t start)
     //mds_logtype.add_inc("req");
     mds_logtype.add_inc("reply");
     mds_logtype.add_inc("fw");
-    mds_logtype.add_avg("replyl");
     
     mds_logtype.add_inc("dir_f");
     mds_logtype.add_inc("dir_c");
@@ -165,7 +164,14 @@ void MDS::reopen_logger(utime_t start)
     mds_logtype.add_set("cpin");
     mds_logtype.add_inc("cex");
     mds_logtype.add_inc("dis");
-    mds_logtype.add_inc("cmiss");
+
+    mds_logtype.add_inc("t"); 
+    mds_logtype.add_inc("thit");
+    mds_logtype.add_inc("tfw");
+    mds_logtype.add_inc("tdis");
+    mds_logtype.add_inc("tdirf");
+    mds_logtype.add_inc("trino");
+    mds_logtype.add_inc("tlock");
     
     mds_logtype.add_set("l");
     mds_logtype.add_set("q");
@@ -174,13 +180,18 @@ void MDS::reopen_logger(utime_t start)
     
     mds_logtype.add_set("buf");
     
-    mds_logtype.add_inc("iex");
-    mds_logtype.add_inc("iim");
     mds_logtype.add_inc("ex");
+    mds_logtype.add_inc("iex");
     mds_logtype.add_inc("im");
+    mds_logtype.add_inc("iim");
+    /*
     mds_logtype.add_inc("imex");  
     mds_logtype.add_set("nex");
     mds_logtype.add_set("nim");
+    */
+
+    mds_logtype.add_avg("replyl");
+
   }
  
   if (whoami < 0) return;
