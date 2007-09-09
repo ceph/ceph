@@ -148,10 +148,12 @@ public:
 	<< " " << MOSDOp::get_opname(st.op)
 	<< " " << st.oid;
     if (st.length) out << " " << st.offset << "~" << st.length;
-    if (st.commit)
-      out << " commit";
-    else
-      out << " ack";
+    if (st.op >= 10) {
+      if (st.commit)
+	out << " commit";
+      else
+	out << " ack";
+    }
     out << " = " << st.result;
     out << ")";
   }
