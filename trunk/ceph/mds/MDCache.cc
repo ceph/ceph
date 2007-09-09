@@ -1286,7 +1286,7 @@ void MDCache::handle_mds_recovery(int who)
       d->take_waiting(CDir::WAIT_ANY, waiters);
 
       // inode waiters too
-      for (CDir_map_t::iterator p = d->items.begin();
+      for (CDir::map_t::iterator p = d->items.begin();
 	   p != d->items.end();
 	   ++p) {
 	CDentry *dn = p->second;
@@ -1653,7 +1653,7 @@ void MDCache::recalc_auth_bits()
       }
 
       // dentries in this dir
-      for (map<string,CDentry*>::iterator q = dir->items.begin();
+      for (hash_map<string,CDentry*>::iterator q = dir->items.begin();
 	   q != dir->items.end();
 	   ++q) {
 	// dn
@@ -1838,7 +1838,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     dout(15) << " add_weak_dirfrag " << *dir << dendl;
     rejoin->add_weak_dirfrag(dir->dirfrag());
 
-    for (map<string,CDentry*>::iterator p = dir->items.begin();
+    for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
@@ -1852,7 +1852,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     dout(15) << " add_strong_dirfrag " << *dir << dendl;
     rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce());
 
-    for (map<string,CDentry*>::iterator p = dir->items.begin();
+    for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
@@ -2155,7 +2155,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
       } 
       
       // dentries
-      for (map<string,CDentry*>::iterator p = dir->items.begin();
+      for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
 	CDentry *dn = p->second;
@@ -2522,7 +2522,7 @@ void MDCache::rejoin_trim_undef_inodes()
 	CDir *dir = *p;
 	dir->clear_replica_map();
 
-	for (map<string,CDentry*>::iterator p = dir->items.begin();
+	for (CDir::map_t::iterator p = dir->items.begin();
 	     p != dir->items.end();
 	     ++p) {
 	  CDentry *dn = p->second;
@@ -2655,7 +2655,7 @@ void MDCache::rejoin_send_acks()
 	   ++r) 
 	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), r->second);
 	   
-      for (map<string,CDentry*>::iterator q = dir->items.begin();
+      for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
 	   ++q) {
 	CDentry *dn = q->second;
@@ -5613,7 +5613,7 @@ void MDCache::fragment_mark_and_complete(CInode *diri,
     } 
     else if (!dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
       dout(15) << " marking " << *dir << dendl;
-      for (map<string,CDentry*>::iterator p = dir->items.begin();
+      for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
 	p->second->get(CDentry::PIN_FRAGMENTING);
@@ -5763,7 +5763,7 @@ void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
     dir->mark_dirty(*pv);
     pv++;
 
-    for (map<string,CDentry*>::iterator p = dir->items.begin();
+    for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) { 
       CDentry *dn = p->second;
@@ -5944,7 +5944,7 @@ void MDCache::show_cache()
       CDir *dir = *p;
       dout(7) << "  dirfrag " << *dir << dendl;
 	    
-      for (CDir_map_t::iterator p = dir->items.begin();
+      for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
 	CDentry *dn = p->second;
@@ -5977,7 +5977,7 @@ void MDCache::dump_cache()
       myfile << *dir->inode << dendl;
       myfile << *dir << dendl;
       
-      for (CDir_map_t::iterator p = dir->items.begin();
+      for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
 	CDentry *dn = p->second;

@@ -926,7 +926,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   fin->take(waiting);
   
   // dentries
-  CDir_map_t::iterator it;
+  CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
     CInode *in = dn->get_inode();
@@ -1682,7 +1682,7 @@ void Migrator::import_reverse(CDir *dir)
     if (cur->is_dirty())
       cur->mark_clean();
 
-    CDir_map_t::iterator it;
+    CDir::map_t::iterator it;
     for (it = cur->begin(); it != cur->end(); it++) {
       CDentry *dn = it->second;
 

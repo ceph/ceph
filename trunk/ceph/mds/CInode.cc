@@ -238,7 +238,7 @@ void CInode::close_dirfrag(frag_t fg)
   }
   
   // dump any remaining dentries, for debugging purposes
-  for (map<string,CDentry*>::iterator p = dir->items.begin();
+  for (CDir::map_t::iterator p = dir->items.begin();
        p != dir->items.end();
        ++p) 
     dout(14) << "close_dirfrag LEFTOVER dn " << *p->second << dendl;

@@ -50,7 +50,6 @@ ostream& operator<<(ostream& out, class CDir& dir);
 
 
 // CDir
-typedef map<string, CDentry*> CDir_map_t;
 
 
 
@@ -161,9 +160,11 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
+public:
+  typedef hash_map<string, CDentry*> map_t;
 protected:
   // contents
-  CDir_map_t items;       // non-null AND null
+  map_t items;       // non-null AND null
   unsigned nitems;             // # non-null
   unsigned nnull;              // # null
 
@@ -181,7 +182,6 @@ protected:
   int nested_auth_pins;
   int request_pins;
 
-
   // cache control  (defined for authority; hints for replicas)
   int      dir_rep;
   set<int> dir_rep_by;      // if dir_rep == REP_LIST
@@ -191,8 +191,14 @@ protected:
   dirfrag_load_vec_t pop_nested;
   dirfrag_load_vec_t pop_auth_subtree;
   dirfrag_load_vec_t pop_auth_subtree_nested;
-  
+ 
   utime_t last_popularity_sample;
+
+  // and to provide density
+  int num_dentries_nested;
+  int num_dentries_auth_subtree;
+  int num_dentries_auth_subtree_nested;
+
 
   // friends
   friend class Migrator;
@@ -217,8 +223,8 @@ protected:
   CInode *get_inode()    { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
-  CDir_map_t::iterator begin() { return items.begin(); }
-  CDir_map_t::iterator end() { return items.end(); }
+  map_t::iterator begin() { return items.begin(); }
+  map_t::iterator end() { return items.end(); }
   unsigned get_size() { 
     return nitems; 
   }
@@ -238,7 +244,7 @@ protected:
   // -- dentries and inodes --
  public:
   CDentry* lookup(const string& n) {
-    map<string,CDentry*>::iterator iter = items.find(n);
+    hash_map<string,CDentry*>::iterator iter = items.find(n);
     if (iter == items.end()) 
       return 0;
     else

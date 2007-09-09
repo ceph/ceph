@@ -417,7 +417,7 @@ void CDir::remove_null_dentries() {
   dout(12) << "remove_null_dentries " << *this << dendl;
 
   list<CDentry*> dns;
-  for (CDir_map_t::iterator it = items.begin();
+  for (CDir::map_t::iterator it = items.begin();
        it != items.end(); 
        it++) {
     if (it->second->is_null())
@@ -543,7 +543,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   
   // repartition dentries
   while (!items.empty()) {
-    map<string,CDentry*>::iterator p = items.begin();
+    CDir::map_t::iterator p = items.begin();
     
     CDentry *dn = p->second;
     frag_t subfrag = inode->pick_dirfrag(p->first);
@@ -1078,7 +1078,7 @@ void CDir::_commit(version_t want)
   int32_t n = nitems;
   ::_encode(n, bl);
 
-  for (CDir_map_t::iterator it = items.begin();
+  for (map_t::iterator it = items.begin();
        it != items.end();
        it++) {
     CDentry *dn = it->second;
@@ -1156,7 +1156,7 @@ void CDir::_committed(version_t v)
     mark_clean();
 
   // dentries clean?
-  for (CDir_map_t::iterator it = items.begin();
+  for (map_t::iterator it = items.begin();
        it != items.end(); ) {
     CDentry *dn = it->second;
     it++;

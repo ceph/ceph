@@ -1525,7 +1525,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   list<string> dnls;
 
   int numfiles = 0;
-  for (CDir_map_t::iterator it = dir->begin(); 
+  for (CDir::map_t::iterator it = dir->begin(); 
        it != dir->end(); 
        it++) {
     CDentry *dn = it->second;

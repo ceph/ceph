@@ -654,7 +654,7 @@ void MDBalancer::find_exports(CDir *dir,
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
-  for (CDir_map_t::iterator it = dir->begin();
+  for (CDir::map_t::iterator it = dir->begin();
        it != dir->end();
        it++) {
     CInode *in = it->second->get_inode();
@@ -974,7 +974,7 @@ void MDBalancer::dump_pop_map()
 	myfile << std::endl; //"/" << dir->get_frag() << dendl;
 	
 	// add contents
-	for (map<string,CDentry*>::iterator q = dir->items.begin();
+	for (CDir::map_t::iterator q = dir->items.begin();
 	     q != dir->items.end();
 	     q++) 
 	  if (q->second->is_primary())
