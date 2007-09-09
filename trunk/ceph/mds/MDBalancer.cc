@@ -852,7 +852,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount)
   bool hit_subtree = dir->is_auth();         // current auth subtree (if any)
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
-  while (dir) {
+  while (1) {
     dir->pop_nested.get(type).hit(now, amount);
     if (rd_adj != 0.0) 
       dir->pop_nested.get(META_POP_IRD).adjust(now, rd_adj);
@@ -871,7 +871,9 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount)
     
     if (dir->is_subtree_root()) 
       hit_subtree = false;                // end of auth domain, stop hitting auth counters.
-    dir = dir->inode->get_parent_dir();
+
+    if (dir->inode->get_parent_dn() == 0) break;
+    dir = dir->inode->get_parent_dn()->get_dir();
   }
 }
 
