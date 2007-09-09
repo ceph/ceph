@@ -45,6 +45,8 @@
 #define SYNCLIENT_MODE_RDWRRANDOM    25
 #define SYNCLIENT_MODE_RDWRRANDOM_EX    26
 
+#define SYNCLIENT_MODE_LINKTEST   27
+
 #define SYNCLIENT_MODE_TRACE       30
 
 #define SYNCLIENT_MODE_CREATEOBJECTS 35
@@ -207,6 +209,7 @@ class SyntheticClient {
   int stat_dirs(const char *basedir, int dirs, int files, int depth);
   int read_dirs(const char *basedir, int dirs, int files, int depth);
   int make_files(int num, int count, int priv, bool more);
+  int link_test();
 
   int create_shared(int num);
   int open_shared(int num, int count);

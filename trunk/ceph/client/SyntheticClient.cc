@@ -118,6 +118,8 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"linktest") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_LINKTEST );
       } else if (strcmp(args[i],"createshared") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_CREATESHARED );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -456,6 +458,14 @@ int SyntheticClient::run()
       }
       break;
 
+    case SYNCLIENT_MODE_LINKTEST:
+      {
+	if (run_me()) {
+	  link_test();
+	  did_run_me();
+	}
+      }
+      break;
 
 
     case SYNCLIENT_MODE_MAKEFILES:
@@ -1522,6 +1532,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
   
   // files
   struct stat st;
+  utime_t start = g_clock.now();
   for (int c=0; c<count; c++) {
     for (int n=0; n<num; n++) {
       sprintf(d,"dir.%d.run%d/file.client%d.%d", priv ? whoami:0, c, whoami, n);
@@ -1538,7 +1549,45 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
       if (time_to_stop()) return 0;
     }
   }
+  utime_t end = g_clock.now();
+  end -= start;
+  dout(0) << "makefiles time is " << end << " or " << ((double)end / (double)num) <<" per file" << dendl;
   
+  return 0;
+}
+
+int SyntheticClient::link_test()
+{
+  char d[255];
+  char e[255];
+
+ // create files
+  int num = 200;
+
+  client->mkdir("orig", 0755);
+  client->mkdir("copy", 0755);
+
+  utime_t start = g_clock.now();
+  for (int i=0; i<num; i++) {
+    sprintf(d,"orig/file.%d", i);
+    client->mknod(d, 0755);
+  }
+  utime_t end = g_clock.now();
+  end -= start;
+
+  dout(0) << "orig " << end << dendl;
+
+  // link
+  start = g_clock.now();
+  for (int i=0; i<num; i++) {
+    sprintf(d,"orig/file.%d", i);
+    sprintf(e,"copy/file.%d", i);
+    client->link(d, e);
+  }
+  end = g_clock.now();
+  end -= start;
+  dout(0) << "copy " << end << dendl;
+
   return 0;
 }
 
