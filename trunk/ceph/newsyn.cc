@@ -40,6 +40,8 @@ public:
   }
 };
 
+extern std::map<entity_name_t,float> g_fake_kill_after;
+
 
 /*
  * start up NewMessenger via MPI.
@@ -291,6 +293,11 @@ int main(int argc, char **argv)
       int n = i+g_conf.mds_local_osd_offset;
       mdsosd[i] = new OSD(n, rank.register_entity(entity_name_t(entity_name_t::TYPE_OSD, n)), monmap);
       mdsosd[i]->init();                                                    
+    }
+
+    if (g_fake_kill_after.count(entity_name_t::MDS(i))) {
+      cerr << "mds" << i << " will die after " << g_fake_kill_after[entity_name_t::MDS(i)] << std::endl;
+      g_timer.add_event_after(g_fake_kill_after[entity_name_t::MDS(i)], new C_Die);
     }
   }
   
