@@ -432,6 +432,7 @@ void MDLog::_replay_thread()
   dout(10) << "_replay_thread start" << dendl;
 
   // loop
+  off_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
@@ -454,7 +455,6 @@ void MDLog::_replay_thread()
     
     // unpack event
     LogEvent *le = LogEvent::decode(bl);
-    num_events++;
 
     // have we seen an import map yet?
     if (!seen_subtree_map &&
@@ -465,6 +465,10 @@ void MDLog::_replay_thread()
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
 	       << " : " << *le << dendl;
       le->replay(mds);
+
+      num_events++;
+      if (!new_expire_pos) 
+	new_expire_pos = pos;
 
       if (le->get_type() == EVENT_SUBTREEMAP)
 	seen_subtree_map = true;
@@ -478,10 +482,11 @@ void MDLog::_replay_thread()
 
   // done!
   assert(journaler->get_read_pos() == journaler->get_write_pos());
-  dout(10) << "_replay - complete" << dendl;
+  dout(10) << "_replay - complete, " << num_events << " events, new read/expire pos is " << new_expire_pos << dendl;
   
-  // move read pointer _back_ to expire pos, for eventual trimming
-  journaler->set_read_pos(journaler->get_expire_pos());
+  // move read pointer _back_ to first subtree map we saw, for eventual trimming
+  journaler->set_read_pos(new_expire_pos);
+  journaler->set_expire_pos(new_expire_pos);
   
   // kick waiter(s)
   list<Context*> ls;

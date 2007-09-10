@@ -336,6 +336,7 @@ private:
 
     // make note of where this inode was last journaled
     in->last_journaled = my_offset;
+    //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     lump.nfull++;
     if (dirty) {
@@ -402,11 +403,19 @@ private:
       // subtree root?
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
+
       // was the inode journaled since the last subtree_map?
       if (//false &&  // for benchmarking
 	  last_subtree_map &&
-	  dir->inode->last_journaled >= last_subtree_map) 
+	  dir->inode->last_journaled >= last_subtree_map) {
+	/*
+	cout << " inode " << dir->inode->inode.ino 
+	     << " last journaled at " << dir->inode->last_journaled
+	     << " and last_subtree_map is " << last_subtree_map 
+	     << std::endl;
+	*/
 	return;
+      }
     }
     
     // stop at root/stray

@@ -379,6 +379,7 @@ void EMetaBlob::replay(MDS *mds)
 	  diri = mds->mdcache->create_stray_inode(whose);
 	  dout(10) << "EMetaBlob.replay created stray " << *diri << dendl;
 	} else {
+	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
 	  assert(0);
 	}
       }

@@ -4743,6 +4743,13 @@ void MDCache::handle_discover(MDiscover *dis)
 
   assert(dis->get_asker() != whoami);
 
+  if (mds->get_state() < MDSMap::STATE_ACTIVE) {
+    dout(7) << "discover_reply NOT ACTIVE YET" << dendl;
+    delete dis;
+    return;
+  }
+
+
   CInode *cur = 0;
   MDiscoverReply *reply = new MDiscoverReply(dis->get_base_ino());
 
@@ -4965,6 +4972,12 @@ void MDCache::handle_discover(MDiscover *dis)
 
 void MDCache::handle_discover_reply(MDiscoverReply *m) 
 {
+  if (mds->get_state() < MDSMap::STATE_ACTIVE) {
+    dout(7) << "discover_reply NOT ACTIVE YET" << dendl;
+    delete m;
+    return;
+  }
+
   // starting point
   list<Context*> finished, error;
   
