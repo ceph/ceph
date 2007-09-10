@@ -307,8 +307,9 @@ class MDSMap {
   }
 
   int get_inc(int m) {
-    assert(mds_inc.count(m));
-    return mds_inc[m];
+    if (mds_inc.count(m))
+      return mds_inc[m];
+    return 0;
   }
 
 
