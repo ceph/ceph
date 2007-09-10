@@ -44,6 +44,7 @@ class Trace {
 
   void start();
 
+  const char *peek_string(char *buf, const char *prefix);
   const char *get_string(char *buf, const char *prefix);
 
   __int64_t get_int() {

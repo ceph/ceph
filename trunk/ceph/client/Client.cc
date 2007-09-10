@@ -1752,17 +1752,16 @@ int Client::_rmdir(const char *path)
 
 // symlinks
   
-int Client::symlink(const char *reltarget, const char *rellink)
+int Client::symlink(const char *target, const char *rellink)
 {
   Mutex::Locker lock(client_lock);
   tout << "symlink" << std::endl;
-  tout << reltarget << std::endl;
+  tout << target << std::endl;
   tout << rellink << std::endl;
 
-  string target, link;
-  mkabspath(reltarget, target);
+  string link;
   mkabspath(rellink, link);
-  return _symlink(target.c_str(), link.c_str());
+  return _symlink(target, link.c_str());
 }
 
 int Client::_symlink(const char *target, const char *link)

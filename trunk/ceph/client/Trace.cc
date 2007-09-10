@@ -61,21 +61,30 @@ void Trace::start()
   _line = 1;
 }
 
-const char *Trace::get_string(char *buf, const char *prefix)
+const char *Trace::peek_string(char *buf, const char *prefix)
 {
+  //if (prefix) cout << "prefix '" << prefix << "' line '" << line << "'" << std::endl;
   if (prefix &&
-      strstr(buf, "/prefix") == buf) {
+      strstr(line.c_str(), "/prefix") == line.c_str()) {
     strcpy(buf, prefix);
     strcpy(buf + strlen(prefix),
 	   line.c_str() + strlen("/prefix"));
   } else {
     strcpy(buf, line.c_str());
   }
-  //cout << "get_string got " << buf << endl;
+  return buf;
+}
 
+
+const char *Trace::get_string(char *buf, const char *prefix)
+{
+  peek_string(buf, prefix);
+
+  //cout << "buf is " << buf << std::endl;
   // read next line (and detect eof early)
   _line++;
   getline(fs, line);
   //cout << "next line is " << line << endl;
+
   return buf;
 }

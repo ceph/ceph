@@ -671,7 +671,7 @@ int SyntheticClient::run()
 	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
 
         if (run_me()) {
-          dout(-2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times,  data=" << playdata << dendl;
+          dout(-2) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
           
           Trace t(realtfile);
           
@@ -833,7 +833,7 @@ void SyntheticClient::up()
 
 int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 {
-  dout(4) << "play trace" << dendl;
+  dout(4) << "play trace prefix '" << prefix << "'" << dendl;
   t.start();
 
   char buf[1024];
@@ -952,6 +952,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t b = t.get_int();
       int64_t c = t.get_int();
       client->mknod(a, b, c);
+    } else if (strcmp(op, "oldmknod") == 0) {
+      const char *a = t.get_string(buf, p);
+      int64_t b = t.get_int();
+      client->mknod(a, b, 0);
     } else if (strcmp(op, "getdir") == 0) {
       const char *a = t.get_string(buf, p);
       list<string> contents;
@@ -976,6 +980,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t c = t.get_int(); 
       int64_t d = t.get_int();
       int64_t fd = client->open(a, b, c);
+      if (fd > 0) open_files[d] = fd;
+    } else if (strcmp(op, "oldopen") == 0) {
+      const char *a = t.get_string(buf, p);
+      int64_t b = t.get_int(); 
+      int64_t d = t.get_int();
+      int64_t fd = client->open(a, b, 0755);
       if (fd > 0) open_files[d] = fd;
     } else if (strcmp(op, "close") == 0) {
       int64_t id = t.get_int();
