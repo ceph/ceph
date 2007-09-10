@@ -151,7 +151,12 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_TRACE );
         syn_sargs.push_back( args[++i] );
         syn_iargs.push_back( atoi(args[++i]) );
-
+	syn_iargs.push_back(1);// data
+      } else if (strcmp(args[i],"mtrace") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_TRACE );
+        syn_sargs.push_back( args[++i] );
+        syn_iargs.push_back( atoi(args[++i]) );
+	syn_iargs.push_back(0);// no data
       } else if (strcmp(args[i],"thrashlinks") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_THRASHLINKS );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -660,32 +665,25 @@ int SyntheticClient::run()
         string tfile = get_sarg(0);
         sargs.push_front(string("~"));
         int iarg1 = iargs.front();  iargs.pop_front();
+	int playdata = iargs.front(); iargs.pop_front();
         string prefix = get_sarg(0);
-
 	char realtfile[100];
 	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
 
         if (run_me()) {
-          dout(-2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times" << dendl;
+          dout(-2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times,  data=" << playdata << dendl;
           
           Trace t(realtfile);
           
-          client->mkdir(prefix.c_str(), 0755);
-
-	  // stupid ugly hack
-	  bool mdonly = false;
-	  if (iarg1 == 0) {
-	    mdonly = true;
-	    iarg1 = 1;
-	  }
+	  if (iarg1 == 0) iarg1 = 1; // play trace at least once!
 
           for (int i=0; i<iarg1; i++) {
             utime_t start = g_clock.now();
             
             if (time_to_stop()) break;
-            play_trace(t, prefix, mdonly);
+            play_trace(t, prefix, !playdata);
             if (time_to_stop()) break;
-            //clean_dir(prefix);
+            if (iarg1 > 1) clean_dir(prefix);  // clean only if repeat
             
             utime_t lat = g_clock.now();
             lat -= start;
@@ -858,7 +856,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     struct stat attr;
     if (client->ll_lookup(1, prefix.c_str(), &attr) == 0) {
       ll_inos[1] = attr.st_ino;
-      dout(0) << "'root' ino is " << attr.st_ino << dendl;
+      dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
     } else {
       dout(0) << "warning: play_trace coudln't lookup up my per-client directory" << dendl;
     }
