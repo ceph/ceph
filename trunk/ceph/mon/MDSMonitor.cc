@@ -315,6 +315,14 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     
     // reset the beacon timer
     last_beacon[from] = g_clock.now();
+
+    // if starting|creating and degraded|full, go to standby
+    if ((state == MDSMap::STATE_CREATING || state == MDSMap::STATE_STARTING) &&
+	(pending_mdsmap.would_be_overfull_with(from) ||
+	 pending_mdsmap.is_degraded())) {
+      dout(10) << "mds_beacon cluster full, mds" << from << " will be standby" << dendl;
+      state = MDSMap::STATE_STANDBY;
+    }
   }
 
   // created?
@@ -324,17 +332,6 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
     dout(10) << "mds_beacon created mds" << from << dendl;
   }
   
-  // if starting|creating and degraded|full, go to standby
-  if ((state == MDSMap::STATE_STARTING || 
-       state == MDSMap::STATE_CREATING ||
-       mdsmap.is_starting(from) ||
-       mdsmap.is_creating(from)) &&
-      (pending_mdsmap.is_degraded() || 
-       pending_mdsmap.is_full())) {
-    dout(10) << "mds_beacon cluster degraded|full, mds" << from << " will be standby" << dendl;
-    state = MDSMap::STATE_STANDBY;
-  }
-
   // update the map
   dout(10) << "mds_beacon mds" << from << " " << MDSMap::get_state_name(mdsmap.mds_state[from])
 	   << " -> " << MDSMap::get_state_name(state)
