@@ -359,6 +359,11 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
   return true;
 }
 
+bool MDSMonitor::should_propose(double& delay)
+{
+  delay = 0.0;
+  return true;
+}
 
 void MDSMonitor::_updated(int from, MMDSBeacon *m)
 {
