@@ -7,7 +7,11 @@ while (<>) {
     chomp;
     my @l = split(/\t/,$_);
     my $t = shift @l;
-    $v{$t} = \@l;
+    if (int $t) {
+	$v{$t} = \@l;
+    } else {
+	print "$_\n";
+    }
 }
 
 for my $t (sort {$a <=> $b} keys %v) {

@@ -3,14 +3,15 @@
 use strict;
 
 my $dir = shift @ARGV;
-my $type = shift @ARGV;
+my ($type,$subtype) = split(/\./, shift @ARGV);
+$subtype = '.' . $subtype if $subtype;
 
 # list files
 my @files;
 my %fields;
-for my $f (`ls $dir/$type*`) {
+for my $f (`ls $dir/$type*$subtype`) {
     chomp $f;
-    next unless $f =~ /$type(\d+)$/;
+    next unless $f =~ /$type(\d+)$subtype$/;
     push(@files, $f);
     unless (%fields) {
 	open(I,$f);
@@ -33,7 +34,7 @@ for my $f (`ls $dir/$type*`) {
 my $var = shift @ARGV;
 my $rest = join(' ', @ARGV);
 
-print "set style data lines\n";
+print "set style data lines\nset grid\n";
 print "set title \"$dir .. $var\"\n";
 if (scalar(@files) > 30) { print "set key off\n"; }
 #for my $var (@ARGV) {
