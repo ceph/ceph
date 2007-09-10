@@ -3847,7 +3847,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           // absolute
           trace.clear();
           depth = 0;
-          path = tail;
+	  path = dn->inode->symlink;
+	  path.append(tail);
           dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << dendl;
         } else {
           // relative
