@@ -60,7 +60,7 @@ using namespace std;
 #define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
 
 
-void Server::reopen_logger(utime_t start)
+void Server::reopen_logger(utime_t start, bool append)
 {
   static LogType mdserver_logtype;
   static bool didit = false;
@@ -79,7 +79,7 @@ void Server::reopen_logger(utime_t start)
   // logger
   char name[80];
   sprintf(name, "mds%d.server", mds->get_nodeid());
-  logger = new Logger(name, &mdserver_logtype);
+  logger = new Logger(name, &mdserver_logtype, append);
   logger->set_start(start);
 }
 

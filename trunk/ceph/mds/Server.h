@@ -43,7 +43,7 @@ public:
     delete logger;
   }
 
-  void reopen_logger(utime_t start);
+  void reopen_logger(utime_t start, bool append);
 
   // message handler
   void dispatch(Message *m);

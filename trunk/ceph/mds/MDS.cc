@@ -201,24 +201,21 @@ void MDS::reopen_logger(utime_t start)
   if (logger2) delete logger2;
 
   // log
-  string name;
-  name = "mds";
-  int w = whoami;
-  if (w >= 1000) name += ('0' + ((w/1000)%10));
-  if (w >= 100) name += ('0' + ((w/100)%10));
-  if (w >= 10) name += ('0' + ((w/10)%10));
-  name += ('0' + ((w/1)%10));
+  char name[80];
+  sprintf(name, "mds%d", whoami);
 
-  logger = new Logger(name, (LogType*)&mds_logtype);
+  bool append = mdsmap->get_inc(whoami) > 1;
+
+  logger = new Logger(name, (LogType*)&mds_logtype, append);
   logger->set_start(start);
 
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
-  logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
+  logger2 = new Logger(n, (LogType*)&mds_cache_logtype, append);
   logger2->set_start(start);
 
-  mdlog->reopen_logger(start);
-  server->reopen_logger(start);
+  mdlog->reopen_logger(start, append);
+  server->reopen_logger(start, append);
 }
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
@@ -319,7 +316,7 @@ int MDS::init(bool standby)
   reset_tick();
 
   // init logger
-  reopen_logger(g_clock.now());
+  //reopen_logger(g_clock.now());
 
   mds_lock.Unlock();
   return 0;
@@ -523,9 +520,12 @@ void MDS::handle_mds_map(MMDSMap *m)
     suicide();
     return;
   }
+
+  if (oldwhoami != whoami || !logger)
+    reopen_logger(mdsmap->get_create());
+
   if (oldwhoami != whoami) {
     // update messenger.
-    reopen_logger(mdsmap->get_create());
     dout(1) << "handle_mds_map i am now mds" << whoami
 	    << " incarnation " << mdsmap->get_inc(whoami)
 	    << dendl;

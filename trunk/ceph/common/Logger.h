@@ -57,7 +57,7 @@ class Logger {
   int wrote_header_last;
 
  public:
-  Logger(string fn, LogType *type);
+  Logger(string fn, LogType *type, bool append=false);
   ~Logger();
 
   long inc(const char *s, long v = 1);

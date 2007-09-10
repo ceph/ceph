@@ -49,6 +49,23 @@ public:
   }
 };
 
+void Logger::set_start(utime_t s)
+{
+  logger_lock.Lock();
+
+  start = s;
+
+  utime_t fromstart = g_clock.now();
+  if (fromstart < start) {
+    cerr << "set_start: logger time jumped backwards from " << start << " to " << fromstart << std::endl;
+    fromstart = start;
+  }
+  fromstart -= start;
+  last_flush = fromstart.sec();
+
+  logger_lock.Unlock();
+}
+
 static void flush_all_loggers()
 {
   generic_dout(20) << "flush_all_loggers" << dendl;
@@ -89,7 +106,7 @@ static void flush_all_loggers()
 
 // ---------
 
-Logger::Logger(string fn, LogType *type)
+Logger::Logger(string fn, LogType *type, bool append)
 {
   logger_lock.Lock();
   {
@@ -109,7 +126,10 @@ Logger::Logger(string fn, LogType *type)
     }
     filename += fn;
 
-    out.open(filename.c_str(), ofstream::out);
+    if (append)
+      out.open(filename.c_str(), ofstream::out|ofstream::app);
+    else
+      out.open(filename.c_str(), ofstream::out);
 
     this->type = type;
     wrote_header = -1;
@@ -145,10 +165,6 @@ Logger::~Logger()
   logger_lock.Unlock();
 }
 
-void Logger::set_start(utime_t s)
-{
-  start = s;
-}
 
 /*
 void Logger::flush()

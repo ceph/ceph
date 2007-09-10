@@ -39,12 +39,12 @@ MDLog::~MDLog()
 }
 
 
-void MDLog::reopen_logger(utime_t start)
+void MDLog::reopen_logger(utime_t start, bool append)
 {
   // logger
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
-  logger = new Logger(name, &mdlog_logtype);
+  logger = new Logger(name, &mdlog_logtype, append);
   logger->set_start(start);
 
   static bool didit = false;
@@ -132,9 +132,11 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
     delete le;
     num_events++;
 
-    logger->inc("add");
-    logger->set("size", num_events);
-    logger->set("wrpos", journaler->get_write_pos());
+    if (logger) {
+      logger->inc("add");
+      logger->set("size", num_events);
+      logger->set("wrpos", journaler->get_write_pos());
+    }
 
     if (c) {
       unflushed = 0;
@@ -289,10 +291,12 @@ void MDLog::_trimmed(LogEvent *le)
   if (kick) 
     kick_subtree_map();
   
-  logger->inc("trimf");
-  logger->set("trimng", trimming.size());
-  logger->set("rdpos", journaler->get_read_pos());
- 
+  if (logger) {
+    logger->inc("trimf");
+    logger->set("trimng", trimming.size());
+    logger->set("rdpos", journaler->get_read_pos());
+  }
+
   trim(0);
 }
 
@@ -342,7 +346,7 @@ void MDLog::trim(Context *c)
         // obsolete
  	dout(7) << "trim  obsolete : " << le->get_start_off() << " : " << *le << dendl;
         delete le;
-        logger->inc("obs");
+        if (logger) logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
@@ -350,11 +354,15 @@ void MDLog::trim(Context *c)
 	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << dendl;
         trimming[le->_start_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
-        logger->inc("trims");
-        logger->set("trimng", trimming.size());
+	if (logger) {
+	  logger->inc("trims");
+	  logger->set("trimng", trimming.size());
+	}
       }
-      logger->set("rdpos", journaler->get_read_pos());
-      logger->set("size", num_events);
+      if (logger) {
+	logger->set("rdpos", journaler->get_read_pos());
+	logger->set("size", num_events);
+      }
     } else {
       // need to read!
       if (!waiting_for_read) {

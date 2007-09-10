@@ -128,7 +128,7 @@ private:
   void init_journaler();
   
 public:
-  void reopen_logger(utime_t start);
+  void reopen_logger(utime_t start, bool append=false);
   
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
