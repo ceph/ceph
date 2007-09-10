@@ -660,7 +660,7 @@ int SyntheticClient::run()
         string tfile = get_sarg(0);
         sargs.push_front(string("~"));
         int iarg1 = iargs.front();  iargs.pop_front();
-        string prefix;// = get_sarg(0);
+        string prefix = get_sarg(0);
 
 	char realtfile[100];
 	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
@@ -843,8 +843,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
   utime_t start = g_clock.now();
 
-  const char *p = prefix.c_str();
-
   hash_map<int64_t, int64_t> open_files;
   hash_map<int64_t, DIR*>    open_dirs;
 
@@ -853,6 +851,19 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   hash_map<uint64_t, int64_t> ll_inos;
 
   ll_inos[1] = 1; // root inode is known.
+
+  const char *p = prefix.c_str();
+  if (prefix.length()) {
+    client->mkdir(prefix.c_str(), 0755);
+    struct stat attr;
+    if (client->ll_lookup(1, prefix.c_str(), &attr) == 0) {
+      ll_inos[1] = attr.st_ino;
+      dout(0) << "'root' ino is " << attr.st_ino << dendl;
+    } else {
+      dout(0) << "warning: play_trace coudln't lookup up my per-client directory" << dendl;
+    }
+  }
+
 
   utime_t last_status = start;
   
