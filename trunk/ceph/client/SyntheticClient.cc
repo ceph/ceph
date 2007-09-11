@@ -930,7 +930,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "lstat") == 0) {
       struct stat st;
       const char *a = t.get_string(buf, p);
-      client->lstat(a, &st);
+      if (strcmp(a, p) != 0 &&
+	  strcmp(a, "/") != 0 &&
+	  strcmp(a, "") != 0)  // stop stating the root directory already
+	client->lstat(a, &st);
     } else if (strcmp(op, "chmod") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
