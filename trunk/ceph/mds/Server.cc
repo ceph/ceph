@@ -1591,7 +1591,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, numfiles);  
+  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, mdr->client_request->get_source().num(), numfiles);  
   
   // reply
   reply_request(mdr, reply, diri);
@@ -3555,7 +3555,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
       cmode == FILE_MODE_W) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD);
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, mdr->client_request->get_source().num());
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);

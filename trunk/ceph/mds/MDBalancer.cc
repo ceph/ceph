@@ -766,13 +766,13 @@ void MDBalancer::find_exports(CDir *dir,
 
 
 
-void MDBalancer::hit_inode(utime_t now, CInode *in, int type)
+void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
 {
   // hit inode
   in->pop.get(type).hit(now);
 
   if (in->get_parent_dir())
-    hit_dir(now, in->get_parent_dir(), type);
+    hit_dir(now, in->get_parent_dir(), type, who);
 }
 /*
   // hit me
@@ -803,7 +803,7 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type)
 */
 
 
-void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount) 
+void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount) 
 {
   // hit me
   double v = dir->pop_me.get(type).hit(now, amount);
@@ -823,13 +823,19 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount)
   }
   
   // replicate?
+  if (type == META_POP_IRD)
+    dir->pop_spread.hit(now, who);
+
   double rd_adj = 0;
   if (type == META_POP_IRD &&
       dir->last_popularity_sample < last_sample) {
     float dir_pop = dir->pop_auth_subtree.get(type).get(now);    // hmm??
     dir->last_popularity_sample = last_sample;
+    float pop_sp = dir->pop_spread.get(now);
+    dir_pop += pop_sp * 10;
 
-    dout(20) << "hit_dir " << type << " pop " << dir_pop << " in " << *dir << dendl;
+    if (pop_sp > 0)
+      dout(20) << "hit_dir " << type << " pop " << dir_pop << " spread " << pop_sp << " in " << *dir << dendl;
     
     if (dir->is_auth()) {
       if (!dir->is_rep() &&

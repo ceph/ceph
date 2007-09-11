@@ -276,6 +276,36 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 */
 
 
+class load_spread_t {
+  static const int MAX = 4;
+  int last[MAX];
+  int p, n;
+  DecayCounter count;
+
+public:
+  load_spread_t() : p(0), n(0) { 
+    for (int i=0; i<MAX; i++) last[i] = -1;
+  } 
+
+  double hit(utime_t now, int who) {
+    for (int i=0; i<n; i++)
+      if (last[i] == who) 
+	return count.get_last();
+
+    // we're new(ish)
+    last[p++] = who;
+    if (n < MAX) n++;
+    if (n == 1) return 0.0;
+
+    if (p == MAX) p = 0;
+
+    return count.hit(now);
+  }
+  double get(utime_t now) {
+    return count.get(now);
+  }
+};
+
 
 
 // ================================================================

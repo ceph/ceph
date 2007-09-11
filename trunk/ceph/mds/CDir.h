@@ -195,6 +195,8 @@ protected:
  
   utime_t last_popularity_sample;
 
+  load_spread_t pop_spread;
+
   // and to provide density
   int num_dentries_nested;
   int num_dentries_auth_subtree;

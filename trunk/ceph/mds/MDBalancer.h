@@ -103,8 +103,8 @@ class MDBalancer {
   void subtract_export(class CDir *ex);
   void add_import(class CDir *im);
 
-  void hit_inode(utime_t now, class CInode *in, int type);
-  void hit_dir(utime_t now, class CDir *dir, int type, double amount=1.0);
+  void hit_inode(utime_t now, class CInode *in, int type, int who=-1);
+  void hit_dir(utime_t now, class CDir *dir, int type, int who, double amount=1.0);
   void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
 
 
