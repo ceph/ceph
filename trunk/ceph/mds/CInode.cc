@@ -379,9 +379,9 @@ void CInode::name_stray_dentry(string& dname)
 {
   char s[20];
 #ifdef __LP64__
-  sprintf(s, "%ld", inode.ino.val);
+  sprintf(s, "%lx", inode.ino.val);
 #else
-  sprintf(s, "%lld", inode.ino.val);
+  sprintf(s, "%llx", inode.ino.val);
 #endif
   dname = s;
 }

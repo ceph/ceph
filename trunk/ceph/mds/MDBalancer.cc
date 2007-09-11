@@ -219,6 +219,9 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
   
+  if (!mds->is_active()) 
+    return;
+
   if (!mds->mdcache->get_root()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
     mds->mdcache->open_root(new C_MDS_RetryMessage(mds, m));
@@ -836,7 +839,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount)
 	rd_adj = rdp / mds->get_mds_map()->get_num_mds() - rdp; 
 	rd_adj /= 2.0;  // temper somewhat
 	
-	dout(2) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
+	dout(0) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
 	
 	dir->dir_rep = CDir::REP_ALL;
 	mds->mdcache->send_dir_updates(dir, true);
@@ -849,7 +852,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, double amount)
 	  dir->is_rep() &&
 	  dir_pop < g_conf.mds_bal_unreplicate_threshold) {
 	// unreplicate
-	dout(2) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
+	dout(0) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
 	
 	dir->dir_rep = CDir::REP_NONE;
 	mds->mdcache->send_dir_updates(dir);

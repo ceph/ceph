@@ -147,7 +147,7 @@ public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
-      assert(dirfragtree.is_leaf(fg));
+      assert(g_conf.debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return dirfrags[fg];
     } else
       return 0;

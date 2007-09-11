@@ -500,7 +500,7 @@ void Migrator::export_dir_nicely(CDir *dir, int dest)
 void Migrator::maybe_do_queued_export()
 {
   while (!export_queue.empty() &&
-	 export_state.size() <= 2) {
+	 export_state.size() <= 4) {
     dirfrag_t df = export_queue.front().first;
     int dest = export_queue.front().second;
     export_queue.pop_front();
@@ -509,7 +509,7 @@ void Migrator::maybe_do_queued_export()
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
-    dout(-7) << "nicely exporting " << *dir << " to " << dest << dendl;
+    dout(-7) << "nicely exporting to mds" << dest << " " << *dir << dendl;
 
     export_dir(dir, dest);
   }

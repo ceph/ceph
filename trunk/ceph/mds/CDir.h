@@ -161,7 +161,8 @@ class CDir : public MDSCacheObject {
   }
 
 public:
-  typedef hash_map<string, CDentry*> map_t;
+  //typedef hash_map<string, CDentry*> map_t;
+  typedef map<string, CDentry*> map_t;
 protected:
   // contents
   map_t items;       // non-null AND null
@@ -244,7 +245,7 @@ protected:
   // -- dentries and inodes --
  public:
   CDentry* lookup(const string& n) {
-    hash_map<string,CDentry*>::iterator iter = items.find(n);
+    map_t::iterator iter = items.find(n);
     if (iter == items.end()) 
       return 0;
     else
@@ -326,6 +327,7 @@ private:
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
 
+  int get_dir_rep() { return dir_rep; }
   bool is_rep() { 
     if (dir_rep == REP_NONE) return false;
     return true;
