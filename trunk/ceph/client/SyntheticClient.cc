@@ -932,7 +932,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       if (strcmp(a, p) != 0 &&
 	  strcmp(a, "/") != 0 &&
-	  strcmp(a, "") != 0)  // stop stating the root directory already
+	  strcmp(a, "/lib") != 0 && // or /lib.. that would be a lookup. hack.
+	  a[0] != 0)  // stop stating the root directory already
 	client->lstat(a, &st);
     } else if (strcmp(op, "chmod") == 0) {
       const char *a = t.get_string(buf, p);
@@ -1405,7 +1406,8 @@ int SyntheticClient::full_walk(string& basedir)
       // print
       char *tm = ctime(&st.st_mtime);
       tm[strlen(tm)-1] = 0;
-      printf("%c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+      printf("%llx %c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+	     st.st_ino,
 	     S_ISDIR(st.st_mode) ? 'd':'-',
 	     (st.st_mode & 0400) ? 'r':'-',
 	     (st.st_mode & 0200) ? 'w':'-',

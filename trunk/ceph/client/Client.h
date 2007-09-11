@@ -272,27 +272,53 @@ class Inode {
 
   int pick_replica(MDSMap *mdsmap) {
     // replicas?
-    if (ino() > 1ULL && dir_contacts.size()) {
+    /* fixme
+    if (//ino() > 1ULL && 
+	dir_contacts.size()) {
       set<int>::iterator it = dir_contacts.begin();
       if (dir_contacts.size() == 1)
         return *it;
       else {
 	//cout << "dir_contacts on " << inode.ino << " is " << dir_contacts << std::endl;
-	int r = rand() % dir_contacts.size();
+	int r = 1 + (rand() % dir_contacts.size());
+	int a = authority();
 	while (r--) {
 	  it++;
-	  if (mdsmap->is_down(*it)) 
-	    it++;
-	  if (it == dir_contacts.end()) 
-	    it = dir_contacts.begin();
+	  if (mdsmap->is_down(*it)) it++;
+	  if (it == dir_contacts.end()) it = dir_contacts.begin();
+	  if (*it == a) it++;  // skip the authority
+	  if (it == dir_contacts.end()) it = dir_contacts.begin();
 	}
 	return *it;
       }
     }
+    */
 
-    if (dir_replicated || ino() == 1) {
+    if (dir_replicated) {// || ino() == 1) {
+      // pick a random mds that isn't the auth
+      set<int> s;
+      mdsmap->get_in_mds_set(s);
+      set<int>::iterator it = s.begin();
+      if (s.empty())
+	return 0;
+      if (s.size() == 1)
+        return *it;
+      else {
+	//cout << "dir_contacts on " << inode.ino << " is " << dir_contacts << std::endl;
+	int r = 1 + (rand() % s.size());
+	int a = authority();
+	while (r--) {
+	  it++;
+	  if (mdsmap->is_down(*it)) it++;
+	  if (it == s.end()) it = s.begin();
+	  if (*it == a) it++;  // skip the authority
+	  if (it == s.end()) it = s.begin();
+	}
+	//if (inode.ino == 1) cout << "chose " << *it << " from " << s << std::endl;
+	return *it;
+      }
       //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
-      return mdsmap->get_random_in_mds();
+      //return mdsmap->get_random_in_mds();
       //return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
     }
     else

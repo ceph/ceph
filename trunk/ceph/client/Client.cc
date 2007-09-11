@@ -430,6 +430,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
     in->dir_replicated = true;       // FIXME
   
   // dist
+  /*
   if (!st->dirfrag_dist.empty()) {   // FIXME
     set<int> dist = st->dirfrag_dist.begin()->second;
     if (dist.empty() && !in->dir_contacts.empty())
@@ -440,6 +441,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
               << " " << dist << dendl;
     in->dir_contacts = dist;
   }
+  */
 }
 
 
@@ -544,7 +546,8 @@ int Client::choose_target_mds(MClientRequest *req)
   int missing_dn = -1;  // which dn we miss on (if we miss)
   
   unsigned depth = req->get_filepath().depth();
-  for (unsigned i=0; i<depth; i++) {
+  unsigned i;
+  for (i=0; i<depth; i++) {
     // dir?
     if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
       Dir *dir = diri->dir;
@@ -591,7 +594,10 @@ int Client::choose_target_mds(MClientRequest *req)
       }
     } else {
       // balance our traffic!
-      mds = diri->pick_replica(mdsmap);
+      mds = diri->pick_replica(mdsmap); // for the _inode_
+      dout(20) << "for " << req->get_filepath() << " diri " << diri->inode.ino << " rep " 
+	      << diri->dir_contacts
+	      << " mds" << mds << dendl;
     }
   }
   dout(20) << "mds is " << mds << dendl;
@@ -1087,7 +1093,9 @@ void Client::handle_file_caps(MClientFileCaps *m)
   m->clear_payload();  // for if/when we send back to MDS
 
   // note push seq increment
-  assert(mds_sessions.count(mds));
+  if (mds_sessions.count(mds) == 0) 
+    dout(0) << "got file_caps without session from mds" << mds << " msg " << *m << dendl;
+  //assert(mds_sessions.count(mds));   // HACK FIXME SOON
   mds_sessions[mds]++;
 
   // reap?
