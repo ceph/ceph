@@ -1653,7 +1653,7 @@ void MDCache::recalc_auth_bits()
       }
 
       // dentries in this dir
-      for (hash_map<string,CDentry*>::iterator q = dir->items.begin();
+      for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
 	   ++q) {
 	// dn
