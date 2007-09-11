@@ -2280,7 +2280,9 @@ void Server::handle_client_unlink(MDRequest *mdr)
   CDentry *straydn = 0;
   if (dn->is_primary()) {
     straydn = mdcache->get_or_create_stray_dentry(dn->inode);
+    mdr->pin(straydn);  // pin it.
     dout(10) << " straydn is " << *straydn << dendl;
+    assert(straydn->is_null());
 
     if (!mdr->dst_reanchor_atid &&
 	dn->inode->is_anchored()) {
@@ -2379,7 +2381,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->dir->unlink_inode(dn);
 
   // relink as stray?  (i.e. was primary link?)
-  if (straydn) straydn->dir->link_primary_inode(straydn, in);  
+  if (straydn) {
+    dout(20) << " straydn is " << *straydn << dendl;
+    straydn->dir->link_primary_inode(straydn, in);
+  }
 
   // nlink--, dirty old dentry
   in->pop_and_dirty_projected_inode();
@@ -2758,6 +2763,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry *straydn = 0;
   if (destdn->is_primary()) {
     straydn = mdcache->get_or_create_stray_dentry(destdn->inode);
+    mdr->pin(straydn);
     dout(10) << "straydn is " << *straydn << dendl;
   }
 
