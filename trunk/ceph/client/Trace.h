@@ -34,12 +34,14 @@ using std::ifstream;
 class Trace {
   int _line;
   const char *filename;
-  ifstream fs;
+  ifstream *fs;
   string line;
 
  public:
-  Trace(const char* filename);
-  ~Trace();
+  Trace(const char* f) : filename(f), fs(0) {}
+  ~Trace() { 
+    delete fs; 
+  }
 
   int get_line() { return _line; }
 
@@ -53,7 +55,7 @@ class Trace {
     return atoll(get_string(buf, 0));
   }
   bool end() {
-    return fs.eof();
+    return !fs || fs->eof();
     //return _cur == _end;
   }
 };

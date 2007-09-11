@@ -688,7 +688,7 @@ int SyntheticClient::run()
             utime_t lat = g_clock.now();
             lat -= start;
             
-            dout(1) << " trace " << tfile << " loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << dendl;
+            dout(0) << " trace " << tfile << " loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << dendl;
             if (client_logger 
                 && i > 0
                 && i < iarg1-1
@@ -1282,6 +1282,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       assert(0);
     }
   }
+
+  dout(10) << "trace finished on line " << t.get_line() << dendl;
 
   // wait for safe after an object trace
   safegref->finish(0);
