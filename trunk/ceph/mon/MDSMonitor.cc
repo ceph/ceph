@@ -552,6 +552,7 @@ void MDSMonitor::tick()
 
 	  case MDSMap::STATE_REPLAY:
 	  case MDSMap::STATE_RESOLVE:
+	  case MDSMap::STATE_RECONNECT:
 	  case MDSMap::STATE_REJOIN:
 	  case MDSMap::STATE_ACTIVE:
 	  case MDSMap::STATE_STOPPING:
