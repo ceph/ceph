@@ -63,6 +63,8 @@ ostream& operator<<(ostream& out, CDir& dir)
       out << "." << dir.get_replica_nonce();
   }
 
+  if (dir.is_rep()) out << " REP";
+
   if (dir.get_dir_auth() != CDIR_AUTH_DEFAULT) {
     if (dir.get_dir_auth().second == CDIR_AUTH_UNKNOWN)
       out << " dir_auth=" << dir.get_dir_auth().first;

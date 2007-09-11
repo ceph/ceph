@@ -1850,7 +1850,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
   } else {
     // STRONG
     dout(15) << " add_strong_dirfrag " << *dir << dendl;
-    rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce());
+    rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce(), dir->get_dir_rep());
 
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
@@ -1997,7 +1997,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     int nonce = dir->add_replica(from);
     dout(10) << " have " << *dir << dendl;
     if (ack) 
-      ack->add_strong_dirfrag(p->first, nonce);
+      ack->add_strong_dirfrag(p->first, nonce, dir->dir_rep);
     
     // weak dentries
     for (map<string,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
@@ -2209,9 +2209,10 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       }
       dir = in->get_or_open_dirfrag(this, p->first.frag);
     } else {
-      dir->add_replica(from);
       dout(10) << " have " << *dir << dendl;
     }
+    dir->add_replica(from);
+    dir->dir_rep = p->second.dir_rep;
 
     for (map<string,MMDSCacheRejoin::dn_strong>::iterator q = strong->strong_dentries[p->first].begin();
 	 q != strong->strong_dentries[p->first].end();
@@ -2653,7 +2654,7 @@ void MDCache::rejoin_send_acks()
       for (map<int,int>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
 	   ++r) 
-	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), r->second);
+	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), r->second, dir->dir_rep);
 	   
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
@@ -4651,6 +4652,9 @@ void MDCache::eval_stray(CDentry *dn)
   assert(dn->is_primary());
   CInode *in = dn->inode;
   assert(in);
+
+  return;  // BROKEN, FIXME
+
 
   // purge?
   if (in->inode.nlink == 0) {

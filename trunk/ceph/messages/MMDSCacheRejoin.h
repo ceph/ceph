@@ -78,8 +78,9 @@ class MMDSCacheRejoin : public Message {
 
   struct dirfrag_strong {
     int32_t nonce;
+    int8_t  dir_rep;
     dirfrag_strong() {}
-    dirfrag_strong(int n) : nonce(n) {}
+    dirfrag_strong(int n, int dr) : nonce(n), dir_rep(dr) {}
   };
   struct dn_strong {
     inodeno_t ino;
@@ -167,8 +168,8 @@ class MMDSCacheRejoin : public Message {
   void add_weak_dirfrag(dirfrag_t df, map<string,dn_weak>& dnmap) {
     weak[df] = dnmap;
   }
-  void add_strong_dirfrag(dirfrag_t df, int n) {
-    strong_dirfrags[df] = dirfrag_strong(n);
+  void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
+    strong_dirfrags[df] = dirfrag_strong(n, dr);
   }
    
   // dentries

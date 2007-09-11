@@ -743,7 +743,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   // reevaluate, waiters
   if (!in->filelock.is_stable())
     file_eval_gather(&in->filelock);
-  else
+  else if (in->is_auth())
     file_eval(&in->filelock);
   
   //in->finish_waiting(CInode::WAIT_CAPS, 0);  // note: any users for this? 
