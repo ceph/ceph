@@ -36,12 +36,7 @@ using namespace __gnu_cxx;
 //
 Trace::Trace(const char* f)
 {
-  fs.open(f);
-  if (!fs.is_open()) {
-    generic_dout(0) << "** unable to open trace file " << f << dendl;
-    assert(0);
-  }
-  generic_dout(2) << "opened traced file '" << f << "'" << dendl;
+  filename = f;
 }
 
 Trace::~Trace()
@@ -53,7 +48,13 @@ Trace::~Trace()
 void Trace::start()
 {
   //cout << "start" << endl;
-  fs.seekg(0);
+  fs.close();
+  fs.open(filename);
+  if (!fs.is_open()) {
+    generic_dout(0) << "** unable to open trace file " << filename << dendl;
+    assert(0);
+  }
+  generic_dout(2) << "opened traced file '" << filename << "'" << dendl;
   
   // read first line
   getline(fs, line);

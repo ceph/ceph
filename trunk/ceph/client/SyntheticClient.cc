@@ -850,6 +850,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
   ll_inos[1] = 1; // root inode is known.
 
+  // prefix?
   const char *p = prefix.c_str();
   if (prefix.length()) {
     client->mkdir(prefix.c_str(), 0755);
@@ -874,8 +875,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   bool safe;
   C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
   Context *safegref = safeg->new_sub();  // take a ref
-
-  t.start();
 
   while (!t.end()) {
 

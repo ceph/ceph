@@ -33,6 +33,7 @@ using std::ifstream;
 
 class Trace {
   int _line;
+  const char *filename;
   ifstream fs;
   string line;
 
