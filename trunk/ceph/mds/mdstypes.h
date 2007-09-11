@@ -277,6 +277,7 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 
 
 class load_spread_t {
+public:
   static const int MAX = 4;
   int last[MAX];
   int p, n;

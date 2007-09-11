@@ -1327,6 +1327,9 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  mds->balancer->hit_inode(g_clock.now(), ref, META_POP_IRD,
+			   mdr->client_request->get_client_inst().name.num());
+
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   MClientReply *reply = new MClientReply(req);
@@ -1591,7 +1594,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, mdr->client_request->get_source().num(), numfiles);  
+  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
   reply_request(mdr, reply, diri);
@@ -3151,7 +3154,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     mdcache->adjust_subtree_after_rename(destdn->inode, srcdn->dir);
 
   // removing a new dn?
-  srcdn->dir->try_remove_unlinked_dn(srcdn);
+  if (srcdn->is_auth())
+    srcdn->dir->try_remove_unlinked_dn(srcdn);
 }
 
 
@@ -3555,7 +3559,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
       cmode == FILE_MODE_W) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, mdr->client_request->get_source().num());
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
+			     mdr->client_request->get_client_inst().name.num());
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);

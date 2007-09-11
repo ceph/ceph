@@ -808,6 +808,9 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   // hit me
   double v = dir->pop_me.get(type).hit(now, amount);
   
+  //if (dir->ino() == inodeno_t(10000000001))
+  //dout(0) << "hit_dir " << type << " pop " << v << " in " << *dir << dendl;
+
   // hit modify counter, if this was a modify
   if (g_conf.num_mds > 2 &&             // FIXME >2 thing
       !dir->inode->is_root() &&        // not root (for now at least)
@@ -823,8 +826,9 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   }
   
   // replicate?
-  if (type == META_POP_IRD)
+  if (type == META_POP_IRD && who >= 0) {
     dir->pop_spread.hit(now, who);
+  }
 
   double rd_adj = 0;
   if (type == META_POP_IRD &&
@@ -834,8 +838,15 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     float pop_sp = dir->pop_spread.get(now);
     dir_pop += pop_sp * 10;
 
-    if (pop_sp > 0)
-      dout(20) << "hit_dir " << type << " pop " << dir_pop << " spread " << pop_sp << " in " << *dir << dendl;
+    //if (dir->ino() == inodeno_t(10000000001))
+    if (pop_sp > 0) {
+      dout(20) << "hit_dir " << type << " pop " << dir_pop << " spread " << pop_sp 
+	      << " " << dir->pop_spread.last[0]
+	      << " " << dir->pop_spread.last[1]
+	      << " " << dir->pop_spread.last[2]
+	      << " " << dir->pop_spread.last[3]
+	      << " in " << *dir << dendl;
+    }
     
     if (dir->is_auth()) {
       if (!dir->is_rep() &&
@@ -850,11 +861,12 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	dir->dir_rep = CDir::REP_ALL;
 	mds->mdcache->send_dir_updates(dir, true);
 	
+	// fixme this should adjust the whole pop hierarchy
 	dir->pop_me.get(META_POP_IRD).adjust(rd_adj);
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(rd_adj);
       }
       
-      if (!dir->ino() != 1 &&
+      if (dir->ino() != 1 &&
 	  dir->is_rep() &&
 	  dir_pop < g_conf.mds_bal_unreplicate_threshold) {
 	// unreplicate
