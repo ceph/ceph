@@ -2180,80 +2180,68 @@ void Locker::file_eval_gather(FileLock *lock)
     case LOCK_GLOCKR:
     case LOCK_GLOCKM:
     case LOCK_GLOCKL:
-      if ((issued & ~CAP_FILE_RDCACHE) == 0) {
-        lock->set_state(LOCK_LOCK);
-        
-        // waiters
-        lock->get_rdlock();
-        lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
-        lock->put_rdlock();
-	lock->get_parent()->auth_unpin();
-      }
+      lock->set_state(LOCK_LOCK);
+      
+      // waiters
+      lock->get_rdlock();
+      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
+      lock->put_rdlock();
+      lock->get_parent()->auth_unpin();
       break;
       
       // to mixed
     case LOCK_GMIXEDR:
-      if ((issued & ~(CAP_FILE_RD)) == 0) {
-        lock->set_state(LOCK_MIXED);
-        lock->finish_waiters(SimpleLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
-      }
+      lock->set_state(LOCK_MIXED);
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
       break;
 
     case LOCK_GMIXEDL:
-      if ((issued & ~(CAP_FILE_WR)) == 0) {
-        lock->set_state(LOCK_MIXED);
-
-        if (in->is_replicated()) {
-          // data
-          bufferlist softdata;
-	  lock->encode_locked_state(softdata);
-          
-          // bcast to replicas
-	  send_lock_message(lock, LOCK_AC_MIXED, softdata);
-        }
-
-        lock->finish_waiters(SimpleLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
+      lock->set_state(LOCK_MIXED);
+      
+      if (in->is_replicated()) {
+	// data
+	bufferlist softdata;
+	lock->encode_locked_state(softdata);
+        
+	// bcast to replicas
+	send_lock_message(lock, LOCK_AC_MIXED, softdata);
       }
+      
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
       break;
 
       // to loner
     case LOCK_GLONERR:
-      if ((issued & ~lock->caps_allowed()) == 0) {
-        lock->set_state(LOCK_LONER);
-        lock->finish_waiters(SimpleLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
-      }
+      lock->set_state(LOCK_LONER);
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
       break;
 
     case LOCK_GLONERM:
-      if ((issued & ~CAP_FILE_WR) == 0) {
-        lock->set_state(LOCK_LONER);
-        lock->finish_waiters(SimpleLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
-      }
+      lock->set_state(LOCK_LONER);
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->get_parent()->auth_unpin();
       break;
       
       // to sync
     case LOCK_GSYNCL:
     case LOCK_GSYNCM:
-      if ((issued & ~(CAP_FILE_RD)) == 0) {
-        lock->set_state(LOCK_SYNC);
-        
-        { // bcast data to replicas
-          bufferlist softdata;
-          lock->encode_locked_state(softdata);
+      lock->set_state(LOCK_SYNC);
+      
+      { // bcast data to replicas
+	bufferlist softdata;
+	lock->encode_locked_state(softdata);
           
-	  send_lock_message(lock, LOCK_AC_SYNC, softdata);
-        }
-        
-        // waiters
-        lock->get_rdlock();
-        lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
-        lock->put_rdlock();
-	lock->get_parent()->auth_unpin();
+	send_lock_message(lock, LOCK_AC_SYNC, softdata);
       }
+      
+      // waiters
+      lock->get_rdlock();
+      lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+      lock->put_rdlock();
+      lock->get_parent()->auth_unpin();
       break;
       
     default: 
@@ -2268,20 +2256,21 @@ void Locker::file_eval_gather(FileLock *lock)
   }
   
   // [replica] finished caps gather?
-  if (!in->is_auth()) {
+  if (!in->is_auth() &&
+      ((issued & ~lock->caps_allowed()) == 0)) {
     switch (lock->get_state()) {
     case LOCK_GMIXEDR:
-      if ((issued & ~(CAP_FILE_RD)) == 0) {
-        lock->set_state(LOCK_MIXED);
-        
-        // ack
-        MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
-        mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
+      { 
+	lock->set_state(LOCK_MIXED);
+	
+	// ack
+	MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
+	mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
       }
       break;
 
     case LOCK_GLOCKR:
-      if (issued == 0) {
+      {
         lock->set_state(LOCK_LOCK);
         
         // ack
