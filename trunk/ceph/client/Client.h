@@ -273,14 +273,20 @@ class Inode {
   int pick_replica(MDSMap *mdsmap) {
     // replicas?
     if (ino() > 1ULL && dir_contacts.size()) {
-      //cout << "dir_contacts if " << dir_contacts << endl;
       set<int>::iterator it = dir_contacts.begin();
       if (dir_contacts.size() == 1)
         return *it;
       else {
-        int r = rand() % dir_contacts.size();
-        while (r--) it++;
-        return *it;
+	//cout << "dir_contacts on " << inode.ino << " is " << dir_contacts << std::endl;
+	int r = rand() % dir_contacts.size();
+	while (r--) {
+	  it++;
+	  if (mdsmap->is_down(*it)) 
+	    it++;
+	  if (it == dir_contacts.end()) 
+	    it = dir_contacts.begin();
+	}
+	return *it;
       }
     }
 
