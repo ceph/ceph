@@ -1407,7 +1407,7 @@ int SyntheticClient::full_walk(string& basedir)
       char *tm = ctime(&st.st_mtime);
       tm[strlen(tm)-1] = 0;
       printf("%llx %c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
-	     st.st_ino,
+	     (long long)st.st_ino,
 	     S_ISDIR(st.st_mode) ? 'd':'-',
 	     (st.st_mode & 0400) ? 'r':'-',
 	     (st.st_mode & 0200) ? 'w':'-',
