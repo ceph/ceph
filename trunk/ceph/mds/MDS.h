@@ -222,6 +222,7 @@ class MDS : public Dispatcher {
 
   void send_message_client(Message *m, int client);
   void send_message_client(Message *m, entity_inst_t clientinst);
+  void send_message_client_maybe_opening(Message *m, int);
   void send_message_client_maybe_open(Message *m, entity_inst_t clientinst);
 
 

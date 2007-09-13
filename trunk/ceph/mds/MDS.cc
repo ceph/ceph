@@ -180,6 +180,7 @@ void MDS::reopen_logger(utime_t start)
     
     mds_logtype.add_set("buf");
     
+    mds_logtype.add_set("sm");
     mds_logtype.add_inc("ex");
     mds_logtype.add_inc("iex");
     mds_logtype.add_inc("im");
@@ -284,8 +285,17 @@ public:
   }
 };
 
+void MDS::send_message_client_maybe_opening(Message *m, int c)
+{
+  send_message_client_maybe_open(m, clientmap.get_inst(c));
+}
+
 void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
 {
+  // FIXME
+  //  _most_ ppl shoudl check for a client session, since migration may call this,
+  //  start opening, and then e.g. locker sends something else (through non-maybe_open 
+  //  version)
   int client = clientinst.name.num();
   if (!clientmap.have_session(client)) {
     // no session!
@@ -348,6 +358,7 @@ void MDS::tick()
     logger->set("l", (int)load.mds_load());
     logger->set("q", messenger->get_dispatch_queue_len());
     logger->set("buf", buffer_total_alloc);
+    logger->set("sm", mdcache->num_subtrees());
     
     mdcache->log_stat(logger);
   }
@@ -357,29 +368,7 @@ void MDS::tick()
     
     // balancer
     balancer->tick();
-    
-    // HACK to test hashing stuff
-    if (false) {
-      /*
-      static map<int,int> didhash;
-      if (elapsed.sec() > 15 && !didhash[whoami]) {
-	CInode *in = mdcache->get_inode(100000010);
-	if (in && in->dir) {
-	  if (in->dir->is_auth()) 
-	    mdcache->migrator->hash_dir(in->dir);
-	  didhash[whoami] = 1;
-	}
-      }
-      if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
-	CInode *in = mdcache->get_inode(100000010);
-	if (in && in->dir) {
-	  if (in->dir->is_auth() && in->dir->is_hashed())
-	    mdcache->migrator->unhash_dir(in->dir);
-	  didhash[whoami] = 2;
-	}
-      }
-      */
-    }
+
   }
 }
 
@@ -1042,7 +1031,7 @@ void MDS::suicide()
     tick_event = 0;
   }
   timer.cancel_all();
-  timer.join();
+  //timer.join();  // this will deadlock from beacon_kill -> suicide
   
   // shut down cache
   mdcache->shutdown();
@@ -1150,6 +1139,13 @@ void MDS::my_dispatch(Message *m)
 
   
   // hack: thrash exports
+  static utime_t start;
+  utime_t now = g_clock.now();
+  if (start == utime_t()) 
+    start = now;
+  double el = now - start;
+  if (el > 30.0 &&
+	   el < 60.0)
   for (int i=0; i<g_conf.mds_thrash_exports; i++) {
     set<int> s;
     if (!is_active()) break;
@@ -1176,7 +1172,7 @@ void MDS::my_dispatch(Message *m)
       while (k--) p++;
       dest = *p;
     } while (dest == whoami);
-    mdcache->migrator->export_dir(dir,dest);
+    mdcache->migrator->export_dir_nicely(dir,dest);
   }
   // hack: thrash exports
   for (int i=0; i<g_conf.mds_thrash_fragments; i++) {

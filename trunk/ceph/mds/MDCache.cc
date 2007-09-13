@@ -1566,6 +1566,16 @@ void MDCache::disambiguate_imports()
   }
   assert(my_ambiguous_imports.empty());
 
+  // verify all my subtrees are unambiguous!
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *dir = p->first;
+    if (dir->is_ambiguous_dir_auth()) 
+      dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
+    assert(!dir->is_ambiguous_dir_auth());
+  }
+
   show_subtrees();
 }
 
@@ -1895,7 +1905,9 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
  */
 void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 {
-  dout(7) << "handle_cache_rejoin " << *m << " from " << m->get_source() << dendl;
+  dout(7) << "handle_cache_rejoin " << *m << " from " << m->get_source() 
+	  << " (" << m->get_payload().length() << " bytes)"
+	  << dendl;
 
   switch (m->op) {
   case MMDSCacheRejoin::OP_WEAK:
@@ -2383,7 +2395,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       }
       else if (!dn->is_null() &&
 	       q->second.is_null()) {
-	dout(10) << " had bad linkage for " << *dn << dendl;
+	dout(-10) << " had bad linkage for " << *dn << dendl;
 	assert(0);  // hrmpf.  unlink should use slave requests to clean this up during resolve.
       }
       dn->set_replica_nonce(q->second.nonce);
@@ -3172,6 +3184,11 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
   int from = m->get_from();
   
   dout(7) << "cache_expire from mds" << from << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_REJOIN) {
+    delete m;
+    return;
+  }
 
   // loop over realms
   for (map<dirfrag_t,MCacheExpire::realm>::iterator p = m->realms.begin();

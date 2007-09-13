@@ -423,6 +423,15 @@ void EMetaBlob::replay(MDS *mds)
 	in->dirfragtree = p->dirfragtree;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
+	if (!dn->is_null()) {
+	  if (dn->is_primary())
+	    dout(-10) << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn 
+		     << " " << *dn->get_inode()
+		     << " should be " << p->inode.ino
+		     << dendl;
+	  dir->unlink_inode(dn);
+	  //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
+	}
 	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty();
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;

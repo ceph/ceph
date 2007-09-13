@@ -243,6 +243,7 @@ void Server::reconnect_clients()
   // init gather list
   reconnect_start = g_clock.now();
   client_reconnect_gather = mds->clientmap.get_session_set();
+  dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
 }
 
 void Server::handle_client_reconnect(MClientReconnect *m)
@@ -350,9 +351,12 @@ void Server::process_reconnected_caps()
 void Server::client_reconnect_failure(int from) 
 {
   dout(5) << "client_reconnect_failure on client" << from << dendl;
-  client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty()) 
-    reconnect_gather_finish();
+  if (mds->is_reconnect() &&
+      client_reconnect_gather.count(from)) {
+    client_reconnect_gather.erase(from);
+    if (client_reconnect_gather.empty()) 
+      reconnect_gather_finish();
+  }
 }
 
 void Server::reconnect_gather_finish()

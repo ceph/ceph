@@ -287,9 +287,9 @@ void CDir::remove_dentry(CDentry *dn)
 
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
-  dout(12) << "link_inode " << *dn << " remote " << ino << dendl;
-
+  dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;
   assert(dn->is_null());
+
   dn->set_remote(ino, d_type);
   nitems++;
   dn->clear_dir_offset();
@@ -303,7 +303,7 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
   dout(12) << "link_primary_inode " << *dn << " " << *in << dendl;
-  assert(!dn->is_remote());
+  assert(dn->is_null());
 
   link_inode_work(dn,in);
   dn->clear_dir_offset();
@@ -362,6 +362,16 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
   assert(dn->is_null());
   assert(dn->is_dirty());
   
+  /* FIXME: there is a bug in this.  i think new dentries are properly
+     identified.. e.g. maybe a dentry exists, is committed, is removed, is now
+     dirty+null, then reused and mistakenly considered new.. then it is removed, 
+     we remove it here, the dir is fetched, and the dentry exists again.  
+     
+     somethign like that...
+  */
+  return;
+
+
   // no pins (besides dirty)?
   if (dn->get_num_ref() != 1) 
     return;

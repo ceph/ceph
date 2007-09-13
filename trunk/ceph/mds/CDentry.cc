@@ -163,7 +163,7 @@ void CDentry::mark_clean()
 {
   dout(10) << " mark_clean " << *this << dendl;
   assert(is_dirty());
-  assert(version <= dir->get_version());
+  assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
   // state+pin
   state_clear(STATE_DIRTY);

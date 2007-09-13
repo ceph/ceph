@@ -176,6 +176,7 @@ protected:
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
+  friend class C_MDL_RequestInodeFileCaps;
 
 };
 

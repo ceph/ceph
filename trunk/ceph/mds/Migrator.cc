@@ -618,9 +618,11 @@ void Migrator::export_frozen(CDir *dir)
 {
   dout(7) << "export_frozen on " << *dir << dendl;
   assert(dir->is_frozen());
-  int dest = export_peer[dir];
+  assert(dir->get_cum_auth_pins() == 0);
 
   // ok!
+  int dest = export_peer[dir];
+
   cache->show_subtrees();
 
   // note the bounds.
@@ -844,7 +846,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
                                              it->second.wanted());
     entity_inst_t inst = mds->clientmap.get_inst(it->first);
     exported_client_map[it->first] = inst; 
-    mds->send_message_client(m, inst);
+    mds->send_message_client_maybe_open(m, inst);
   }
 
   // relax locks?
@@ -1883,6 +1885,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   for (set<int>::iterator it = merged_client_caps.begin();
        it != merged_client_caps.end();
        it++) {
+    dout(0) << "merged caps for client" << *it << " on " << *in << dendl;
     MClientFileCaps *caps = new MClientFileCaps(MClientFileCaps::OP_REAP,
 						in->inode,
                                                 in->client_caps[*it].get_last_seq(),

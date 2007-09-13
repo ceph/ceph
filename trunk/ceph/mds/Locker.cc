@@ -546,7 +546,7 @@ bool Locker::issue_caps(CInode *in)
       if (seq > 0 && 
           !it->second.is_suppress()) {
         dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << it->second.get_last_seq() << " new pending " << cap_string(it->second.pending()) << " was " << cap_string(before) << dendl;
-        mds->send_message_client(new MClientFileCaps(MClientFileCaps::OP_GRANT,
+        mds->send_message_client_maybe_opening(new MClientFileCaps(MClientFileCaps::OP_GRANT,
 						     in->inode,
 						     it->second.get_last_seq(),
 						     it->second.pending(),
@@ -560,6 +560,16 @@ bool Locker::issue_caps(CInode *in)
 }
 
 
+class C_MDL_RequestInodeFileCaps : public Context {
+  Locker *locker;
+  CInode *in;
+public:
+  C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {}
+  void finish(int r) {
+    if (!in->is_auth())
+      locker->request_inode_file_caps(in);
+  }
+};
 
 void Locker::request_inode_file_caps(CInode *in)
 {
@@ -594,6 +604,13 @@ void Locker::request_inode_file_caps(CInode *in)
       in->replica_caps_wanted_keep_until.sec_ref() = 0;
     }
     assert(!in->is_auth());
+
+    // wait for single auth
+    if (in->is_ambiguous_auth()) {
+      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
+		     new C_MDL_RequestInodeFileCaps(this, in));
+      return;
+    }
 
     int auth = in->authority().first;
     dout(7) << "request_inode_file_caps " << cap_string(wanted)
@@ -708,7 +725,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(MClientFileCaps::OP_RELEASE,
 					     in->inode, 
                                              0, 0, 0);
-    mds->send_message_client(r, m->get_source_inst());
+    mds->send_message_client_maybe_open(r, m->get_source_inst());
   }
 
   // merge in atime?

@@ -309,9 +309,10 @@ private:
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    if (( pop_auth_subtree.get(META_POP_IRD).get() > 
-	  g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
+    //if (( pop_auth_subtree.get(META_POP_IRD).get() > 
+    //g_conf.mds_bal_replicate_threshold)) {
+    //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
+    if (is_rep()) {
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)

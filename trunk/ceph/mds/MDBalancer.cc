@@ -808,7 +808,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   // hit me
   double v = dir->pop_me.get(type).hit(now, amount);
   
-  //if (dir->ino() == inodeno_t(10000000001))
+  //if (dir->ino() == inodeno_t(0x10000000000))
   //dout(0) << "hit_dir " << type << " pop " << v << " in " << *dir << dendl;
 
   // hit modify counter, if this was a modify
@@ -838,7 +838,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     float pop_sp = dir->pop_spread.get(now);
     dir_pop += pop_sp * 10;
 
-    //if (dir->ino() == inodeno_t(10000000001))
+    //if (dir->ino() == inodeno_t(0x10000000002))
     if (pop_sp > 0) {
       dout(20) << "hit_dir " << type << " pop " << dir_pop << " spread " << pop_sp 
 	      << " " << dir->pop_spread.last[0]
@@ -848,7 +848,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	      << " in " << *dir << dendl;
     }
     
-    if (dir->is_auth()) {
+    if (dir->is_auth() && !dir->is_ambiguous_auth()) {
       if (!dir->is_rep() &&
 	  dir_pop >= g_conf.mds_bal_replicate_threshold) {
 	// replicate
