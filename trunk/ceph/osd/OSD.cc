@@ -997,7 +997,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   if (dest.is_osd()) {
     // failed osd.  drop message, report to mon.
     int mon = monmap->pick_mon();
-    dout(0) << "ms_handle_failure " << inst 
+    dout(1) << "ms_handle_failure " << inst 
             << ", dropping and reporting to mon" << mon 
 	    << " " << *m
             << dendl;
@@ -1007,7 +1007,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   } else if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << inst 
+    dout(1) << "ms_handle_failure " << inst 
             << ", resending to mon" << mon 
 	    << " " << *m
             << dendl;
@@ -1015,7 +1015,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   }
   else {
     // client?
-    dout(0) << "ms_handle_failure " << inst 
+    dout(1) << "ms_handle_failure " << inst 
             << ", dropping " << *m << dendl;
     delete m;
   }
