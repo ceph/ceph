@@ -129,15 +129,15 @@ int main(int argc, char **argv)
   for (int i=0; i<g_conf.num_mon; i++) {
     mon[i]->init();
   }
+  for (int i=0; i<g_conf.num_osd; i++) {
+    osd[i]->init();
+  }
   for (int i=0; i<g_conf.num_mds; i++) {
     mds[i]->init();
     if (g_conf.mds_local_osd)
       mdsosd[i]->init();
   }
   
-  for (int i=0; i<g_conf.num_osd; i++) {
-    osd[i]->init();
-  }
   
   // create client(s)
   Client *client[g_conf.num_client];
