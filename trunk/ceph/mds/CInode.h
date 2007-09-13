@@ -83,7 +83,6 @@ class CInode : public MDSCacheObject {
   }
 
   // -- state --
-  static const int STATE_ROOT =        (1<<1);
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
   static const int STATE_ANCHORING =   (1<<3);
   static const int STATE_UNANCHORING = (1<<4);
@@ -122,6 +121,9 @@ class CInode : public MDSCacheObject {
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
+
+  //bool hack_accessed;
+  //utime_t hack_load_stamp;
 
   // projected values (only defined while dirty)
   list<inode_t*>    projected_inode;
@@ -204,6 +206,7 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_journaled(0), last_open_journaled(0), 
+    //hack_accessed(true),
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
@@ -232,7 +235,7 @@ protected:
   bool is_anchoring() { return state_test(STATE_ANCHORING); }
   bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
   
-  bool is_root() { return state & STATE_ROOT; }
+  bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
 
 

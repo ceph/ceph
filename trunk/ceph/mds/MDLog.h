@@ -173,6 +173,7 @@ public:
 
   void reset();  // fresh, empty log! 
   void open(Context *onopen);
+  void append();
   void write_head(Context *onfinish);
 
   void replay(Context *onfinish);

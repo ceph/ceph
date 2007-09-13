@@ -308,6 +308,9 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
 {
   string straydname;
   in->name_stray_dentry(straydname);
+  
+  if (!stray) create_stray_inode(mds->get_nodeid());
+
   frag_t fg = stray->pick_dirfrag(straydname);
 
   CDir *straydir = stray->get_or_open_dirfrag(this, fg);
@@ -2719,29 +2722,11 @@ void MDCache::rejoin_send_acks()
 
 // ===============================================================================
 
-/*
-void MDCache::rename_file(CDentry *srcdn, 
-                          CDentry *destdn)
-{
-  CInode *in = srcdn->inode;
-
-  // unlink src
-  srcdn->dir->unlink_inode(srcdn);
-  
-  // unlink old inode?
-  if (destdn->inode) destdn->dir->unlink_inode(destdn);
-  
-  // link inode w/ dentry
-  destdn->dir->link_inode( destdn, in );
-}
-*/
-
 
 void MDCache::set_root(CInode *in)
 {
   assert(root == 0);
   root = in;
-  root->state_set(CInode::STATE_ROOT);
 }
 
 
@@ -3074,6 +3059,17 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       expiremap[a]->add_inode(df, in->ino(), in->get_replica_nonce());
     }
   }
+
+  /*
+  if (in->is_auth()) {
+    if (in->hack_accessed)
+      mds->logger->inc("outt");
+    else {
+      mds->logger->inc("outut");
+      mds->logger->favg("oututl", g_clock.now() - in->hack_load_stamp);
+    }
+  }
+  */
     
   // unlink
   if (dn)
@@ -4670,14 +4666,13 @@ void MDCache::eval_stray(CDentry *dn)
   CInode *in = dn->inode;
   assert(in);
 
-  return;  // BROKEN, FIXME
-
+  return;  // FIXME or test me rather, there is a bug here somewhere!
 
   // purge?
   if (in->inode.nlink == 0) {
-    if (!dn->is_replicated() && !in->is_any_caps()) 
-      _purge_stray(dn);
-    return;
+    if (dn->is_replicated() || in->is_any_caps()) return;  // wait
+    if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
+    _purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
     // trivial reintegrate?

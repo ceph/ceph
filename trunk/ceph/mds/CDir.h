@@ -160,9 +160,11 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
+  //int hack_num_accessed;
+
 public:
-  //typedef hash_map<string, CDentry*> map_t;
-  typedef map<string, CDentry*> map_t;
+  typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
+  //typedef map<string, CDentry*> map_t;
 protected:
   // contents
   map_t items;       // non-null AND null
@@ -170,6 +172,8 @@ protected:
   unsigned nnull;              // # null
 
   int num_dirty;
+
+
 
   // state
   version_t version;

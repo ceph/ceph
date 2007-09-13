@@ -145,6 +145,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   auth_pins = 0;
   nested_auth_pins = 0;
   request_pins = 0;
+
+  //hack_num_accessed = -1;
   
   dir_rep = REP_NONE;
   //dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
@@ -319,6 +321,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
+  assert(dn->inode == 0);
   dn->inode = in;
   in->set_primary_parent(dn);
 
@@ -834,6 +837,8 @@ void CDir::_fetched(bufferlist &bl)
   int32_t n;
   ::_decode(n, bl, off);
 
+  //int num_new_inodes_loaded = 0;
+
   for (int i=0; i<n; i++) {
     off_t dn_offset = off;
 
@@ -922,6 +927,10 @@ void CDir::_fetched(bufferlist &bl)
 	  // link
 	  dn = add_primary_dentry(dname, in);
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+
+	  //in->hack_accessed = false;
+	  //in->hack_load_stamp = g_clock.now();
+	  //num_new_inodes_loaded++;
 	}
       }
     } else {
@@ -969,6 +978,9 @@ void CDir::_fetched(bufferlist &bl)
     projected_version = version = committing_version = committed_version = got_version;
   }
 
+  //cache->mds->logger->inc("newin", num_new_inodes_loaded);
+  //hack_num_accessed = 0;
+
   // mark complete, !fetching
   state_set(STATE_COMPLETE);
   state_clear(STATE_FETCHING);
@@ -976,11 +988,6 @@ void CDir::_fetched(bufferlist &bl)
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
-  /*
-  list<Context*> waiters;
-  take_waiting(WAIT_COMPLETE, waiters);
-  cache->mds->queue_finished(waiters);
-  */
 }
 
 

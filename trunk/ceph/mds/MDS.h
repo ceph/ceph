@@ -234,12 +234,13 @@ class MDS : public Dispatcher {
 
   void boot();
   void boot_create();             // i am new mds.
-  void boot_start();              // i am old but empty (was down:out) mds.
-  void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
-  void boot_finish();
+  void boot_start(int step=0);    // starting|replay
 
   void replay_start();
+  void creating_done();
+  void starting_done();
   void replay_done();
+
   void resolve_start();
   void resolve_done();
   void reconnect_start();

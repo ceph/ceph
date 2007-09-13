@@ -94,6 +94,13 @@ void MDLog::open(Context *c)
   journaler->recover(c);
 }
 
+void MDLog::append()
+{
+  dout(5) << "append positioning at end" << dendl;
+  journaler->set_read_pos(journaler->get_write_pos());
+  journaler->set_expire_pos(journaler->get_write_pos());
+}
+
 void MDLog::write_head(Context *c) 
 {
   journaler->write_head(c);

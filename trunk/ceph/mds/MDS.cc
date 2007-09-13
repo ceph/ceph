@@ -155,8 +155,22 @@ void MDS::reopen_logger(utime_t start)
     
     mds_logtype.add_inc("dir_f");
     mds_logtype.add_inc("dir_c");
-    mds_logtype.add_inc("mkdir");
-    
+    //mds_logtype.add_inc("mkdir");
+
+    /*
+    mds_logtype.add_inc("newin"); // new inodes (pre)loaded
+    mds_logtype.add_inc("newt");  // inodes first touched/used
+    mds_logtype.add_inc("outt");  // trimmed touched
+    mds_logtype.add_inc("outut"); // trimmed untouched (wasted effort)
+    mds_logtype.add_avg("oututl"); // avg trim latency for untouched
+
+    mds_logtype.add_inc("dirt1");
+    mds_logtype.add_inc("dirt2");
+    mds_logtype.add_inc("dirt3");
+    mds_logtype.add_inc("dirt4");
+    mds_logtype.add_inc("dirt5");
+    */
+
     mds_logtype.add_set("c");
     mds_logtype.add_set("ctop");
     mds_logtype.add_set("cbot");
@@ -510,7 +524,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     return;
   }
 
-  if (oldwhoami != whoami || !logger)
+  if (oldwhoami != whoami || !logger)  // fakesyn/newsyn starts knowing who they are
     reopen_logger(mdsmap->get_create());
 
   if (oldwhoami != whoami) {
@@ -700,27 +714,25 @@ void MDS::boot()
 {   
   if (is_creating()) 
     boot_create();    // new tables, journal
-  else if (is_starting())
-    boot_start();     // old tables, empty journal
-  else if (is_replay()) 
-    boot_replay();    // replay, join
+  else if (is_starting() || is_replay())
+    boot_start();    // start|replay, join
   else 
     assert(is_standby());
 }
 
 
-class C_MDS_BootFinish : public Context {
+class C_MDS_CreateFinish : public Context {
   MDS *mds;
 public:
-  C_MDS_BootFinish(MDS *m) : mds(m) {}
-  void finish(int r) { mds->boot_finish(); }
+  C_MDS_CreateFinish(MDS *m) : mds(m) {}
+  void finish(int r) { mds->creating_done(); }
 };
 
 void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
+  C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
 
   if (whoami == 0) {
     dout(3) << "boot_create since i am also mds0, creating root inode and dir" << dendl;
@@ -774,59 +786,22 @@ void MDS::boot_create()
   }
 }
 
-void MDS::boot_start()
+void MDS::creating_done()
 {
-  dout(2) << "boot_start" << dendl;
-  
-  C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
-  
-  dout(2) << "boot_start opening idalloc" << dendl;
-  idalloc->load(fin->new_sub());
-
-  dout(2) << "boot_start opening clientmap" << dendl;
-  clientmap.load(fin->new_sub());
-  
-  if (mdsmap->get_anchortable() == whoami) {
-    dout(2) << "boot_start opening anchor table" << dendl;
-    anchortable->load(fin->new_sub());
-  } else {
-    dout(2) << "boot_start i have no anchor table" << dendl;
-  }
-
-  dout(2) << "boot_start opening mds log" << dendl;
-  mdlog->open(fin->new_sub());
-
-  if (mdsmap->get_root() == whoami) {
-    dout(2) << "boot_start opening root directory" << dendl;
-    mdcache->open_root(fin->new_sub());
-  }
-
-  dout(2) << "boot_start opening local stray directory" << dendl;
-  mdcache->open_local_stray();
-}
-
-void MDS::boot_finish()
-{
-  dout(3) << "boot_finish" << dendl;
-
-  if (is_starting()) {
-    // make sure mdslog is empty
-    assert(mdlog->get_read_pos() == mdlog->get_write_pos());
-  }
-
+  dout(1)<< "creating_done" << dendl;
   set_want_state(MDSMap::STATE_ACTIVE);
 }
 
 
-class C_MDS_BootRecover : public Context {
+class C_MDS_BootStart : public Context {
   MDS *mds;
   int nextstep;
 public:
-  C_MDS_BootRecover(MDS *m, int n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_replay(nextstep); }
+  C_MDS_BootStart(MDS *m, int n) : mds(m), nextstep(n) {}
+  void finish(int r) { mds->boot_start(nextstep); }
 };
 
-void MDS::boot_replay(int step)
+void MDS::boot_start(int step)
 {
   switch (step) {
   case 0:
@@ -834,35 +809,63 @@ void MDS::boot_replay(int step)
 
   case 1:
     {
-      C_Gather *gather = new C_Gather(new C_MDS_BootRecover(this, 2));
-      dout(2) << "boot_replay " << step << ": opening idalloc" << dendl;
+      C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 2));
+      dout(2) << "boot_start " << step << ": opening idalloc" << dendl;
       idalloc->load(gather->new_sub());
 
-      dout(2) << "boot_replay " << step << ": opening clientmap" << dendl;
+      dout(2) << "boot_start " << step << ": opening clientmap" << dendl;
       clientmap.load(gather->new_sub());
 
       if (mdsmap->get_anchortable() == whoami) {
-	dout(2) << "boot_replay " << step << ": opening anchor table" << dendl;
+	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
 	anchortable->load(gather->new_sub());
       }
+      
+      dout(2) << "boot_start " << step << ": opening mds log" << dendl;
+      mdlog->open(gather->new_sub());
     }
     break;
 
   case 2:
-    dout(2) << "boot_replay " << step << ": opening mds log" << dendl;
-    mdlog->open(new C_MDS_BootRecover(this, 3));
+    if (is_replay()) {
+      dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+      mdlog->replay(new C_MDS_BootStart(this, 3));
+    } else {
+      dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
+      mdlog->append();
+      mdcache->log_subtree_map(new C_MDS_BootStart(this, 3));
+    }
     break;
-    
+
   case 3:
-    dout(2) << "boot_replay " << step << ": replaying mds log" << dendl;
-    mdlog->replay(new C_MDS_BootRecover(this, 4));
-    break;
+    if (is_replay()) {
+      replay_done();
+      break;
+    }
 
+    // starting only
+    assert(is_starting());
+    if (mdsmap->get_root() == whoami) {
+      dout(2) << "boot_start " << step << ": opening root directory" << dendl;
+      mdcache->open_root(new C_MDS_BootStart(this, 4));
+      break;
+    }
+    step++;
+    
   case 4:
-    replay_done();
-    break;
+    dout(2) << "boot_start " << step << ": opening local stray directory" << dendl;
+    mdcache->open_local_stray();
 
+    starting_done();
+    break;
   }
+}
+
+void MDS::starting_done()
+{
+  dout(3) << "starting_done" << dendl;
+  assert(is_starting());
+  set_want_state(MDSMap::STATE_ACTIVE);
 }
 
 
@@ -877,11 +880,10 @@ void MDS::replay_start()
   dout(1) << "now replay.  my recovery peers are " << rs << dendl;
   mdcache->set_recovery_set(rs);
 
-  // note: don't actually start yet.  boot() will get called once we have 
-  // an mdsmap AND osdmap.
+  // start?
   if (osdmap->get_epoch() > 0 &&
       mdsmap->get_epoch() > 0)
-    boot_replay();
+    boot_start();
 }
 
 void MDS::replay_done()
@@ -992,7 +994,7 @@ void MDS::handle_mds_recovery(int who)
 void MDS::stopping_start()
 {
   dout(2) << "stopping_start" << dendl;
-
+  
   // start cache shutdown
   mdcache->shutdown_start();
   

@@ -397,6 +397,27 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   if (!req->is_idempotent())
     mds->clientmap.add_completed_request(mdr->reqid);
 
+  /*
+  if (tracei && !tracei->hack_accessed) {
+    tracei->hack_accessed = true;
+    mds->logger->inc("newt");
+    if (tracei->parent &&
+	tracei->parent->dir->hack_num_accessed >= 0) {
+      tracei->parent->dir->hack_num_accessed++;
+      if (tracei->parent->dir->hack_num_accessed == 1)
+	mds->logger->inc("dirt1");
+      if (tracei->parent->dir->hack_num_accessed == 2)
+	mds->logger->inc("dirt2");
+      if (tracei->parent->dir->hack_num_accessed == 3)
+	mds->logger->inc("dirt3");
+      if (tracei->parent->dir->hack_num_accessed == 4)
+	mds->logger->inc("dirt4");
+      if (tracei->parent->dir->hack_num_accessed == 5)
+	mds->logger->inc("dirt5");
+    }
+  }
+  */
+
   // include trace
   if (tracei) {
     reply->set_trace_dist( tracei, mds->get_nodeid() );
@@ -1381,6 +1402,11 @@ void Server::handle_client_utime(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
@@ -1414,6 +1440,11 @@ void Server::handle_client_chmod(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
+
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
 
   // write
   set<SimpleLock*> rdlocks = mdr->rdlocks;
@@ -1449,6 +1480,11 @@ void Server::handle_client_chown(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
+
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
 
   // write
   set<SimpleLock*> rdlocks = mdr->rdlocks;
@@ -1703,7 +1739,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newdir->mark_complete();
   newdir->mark_dirty(newdir->pre_dirty());
 
-  if (mds->logger) mds->logger->inc("mkdir");
+  //if (mds->logger) mds->logger->inc("mkdir");
 
   // prepare finisher
   EUpdate *le = new EUpdate(mdlog, "mkdir");
@@ -3118,14 +3154,14 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       oldin->inode.nlink--;
       oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
-	oldin->mark_dirty(mdr->pvmap[straydn]);
+	oldin->pop_and_dirty_projected_inode();
     }
     else if (oldin) {
       // nlink-- remote.  destdn was remote.
       oldin->inode.nlink--;
       oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
-	oldin->mark_dirty(mdr->pvmap[oldin]);
+	oldin->pop_and_dirty_projected_inode();
     }
     
     CInode *in = srcdn->inode;
@@ -3134,6 +3170,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
+      destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->pvmap[destdn]);
     } else {
