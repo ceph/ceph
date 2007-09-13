@@ -226,8 +226,7 @@ private:
          i++) {
       assert(down_osds.count(i->first) == 0);
       down_osds[i->first] = i->second.second;
-      assert(osd_inst.count(i->first) == 0 ||
-             osd_inst[i->first] == i->second.first);
+      //assert(osd_inst.count(i->first) == 0 || osd_inst[i->first] == i->second.first);
       osd_inst.erase(i->first);
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
