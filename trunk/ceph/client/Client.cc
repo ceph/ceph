@@ -1486,6 +1486,7 @@ int Client::unmount()
     }
   }
 
+  //if (0) {// hack
   while (lru.lru_get_size() > 0 || 
          !inode_map.empty()) {
     dout(2) << "cache still has " << lru.lru_get_size() 
@@ -1497,6 +1498,7 @@ int Client::unmount()
   }
   assert(lru.lru_get_size() == 0);
   assert(inode_map.empty());
+  //}
 
   // unsafe writes
   if (!g_conf.client_oc) {
@@ -1667,6 +1669,15 @@ int Client::_rename(const char *from, const char *to)
    
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
+  if (res == 0) {
+    // remove from local cache
+    filepath fp(to);
+    Dentry *dn = lookup(fp);
+    if (dn) {
+      assert(dn->inode);
+      unlink(dn);
+    }
+  }
   insert_trace(reply);
   delete reply;
   dout(10) << "rename result is " << res << dendl;
@@ -3313,7 +3324,9 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   // get the inode
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
-    in = diri->dir->dentries[dname]->inode;
+    Dentry *dn = diri->dir->dentries[dname];
+    touch_dn(dn);
+    in = dn->inode;
   } else {
     string path;
     diri->make_path(path);
@@ -3480,6 +3493,8 @@ int Client::ll_readlink(inodeno_t ino, const char **value)
   tout << ino.val << std::endl;
 
   Inode *in = _ll_get_inode(ino);
+  if (in->dn) touch_dn(in->dn);
+
   int r = 0;
   if (in->inode.is_symlink()) {
     *value = in->symlink->c_str();

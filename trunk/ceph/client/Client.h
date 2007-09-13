@@ -567,6 +567,7 @@ protected:
 
     // link to inode
     dn->inode = in;
+    assert(in->dn == 0);
     in->dn = dn;
     in->get();
 
@@ -578,6 +579,7 @@ protected:
 
   void unlink(Dentry *dn) {
     Inode *in = dn->inode;
+    assert(in->dn == dn);
 
     // unlink from inode
     if (dn->inode->dir) dn->put();        // dir -> dn pin
@@ -602,9 +604,9 @@ protected:
 
     // newdn, attach to inode.  don't touch inode ref.
     Dentry *newdn = new Dentry;
+    newdn->dir = dir;
     newdn->name = name;
     newdn->inode = in;
-    newdn->dir = dir;
     in->dn = newdn;
 
     if (in->dir) { // dir -> dn pin
