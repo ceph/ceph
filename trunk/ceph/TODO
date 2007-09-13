@@ -48,6 +48,9 @@ sage doc
 - metablob version semantics
 
 
+mdsmon
+- per-mds, shared standby queues 
+
 
 sage mds
 
