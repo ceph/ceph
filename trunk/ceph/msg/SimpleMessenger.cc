@@ -1118,7 +1118,6 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
       }
     }
   }
-  lock.Unlock();
   
   // do it
   if (entity) {  
@@ -1131,6 +1130,8 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
     dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << dendl;
     pipe->send(m);
   } 
+
+  lock.Unlock();
 }
 
 
