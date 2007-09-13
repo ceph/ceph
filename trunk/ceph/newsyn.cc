@@ -148,9 +148,10 @@ public:
 class C_Debug : public Context {
   public:
   void finish(int) {
-    int size = &g_conf.debug_after - &g_conf.debug;
+    int size = (long)&g_conf.debug_after - (long)&g_conf.debug;
     memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
     cout << "debug_after flipping debug settings" << std::endl;
+    //g_conf.debug_ms = 1;
   }
 };
 
