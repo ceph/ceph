@@ -55,7 +55,7 @@ my $curdir;
 while (<>) {
     #print;
     chomp;
-    my ($ino, $blah, $mode, $blah, $nlink, $uid, $gid, $size, $mtime, @path) = split(/ /,$_);
+    my ($ino, $blah, $mode, $nlink, $uid, $gid, $size, $mtime, @path) = split(/[ ]+/,$_);
     my $file = join(' ',@path);
     ($file) = split(/ \-\> /, $file); # ignore symlink dest
     my @bits = split(/\//, $file);
