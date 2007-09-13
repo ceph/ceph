@@ -51,16 +51,17 @@ sage doc
 
 sage mds
 
+
+bugs to fix
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
+- fix purge_stray bug
+- try_remove_unlinked_dn thing
+- emetablob playback with bad linkage.. from sloppy unlink?  hmm
+- client session open from locker.. doesn't work properly with delays
 
-/- look at mds osds
+- proper handling of cache expire messages during rejoin phase?
 
-
-
-- the split/merge plan:
-
-- hmm, should we move ESubtreeMap out of the journal?  
-  that would avoid all the icky weirdness in shutdown, with periodic logging, etc.
+- verify once-per-segment jouranl context is working...
 
 - extend/clean up filepath to allow paths relative to an ino
   - fix path_traverse
@@ -74,9 +75,6 @@ sage mds
 - consistency points/snapshots
   - dentry versions vs dirfrags...
 
-- more testing of failures + thrashing.
-  - is export prep dir open deadlock properly fixed by forge_replica_dir()?
-- failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 
 - detect and deal with client failure
   - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
