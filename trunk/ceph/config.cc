@@ -188,15 +188,16 @@ md_config_t g_conf = {
   journaler_safe: false,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
+  journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
-  mds_decay_halflife: 10,
+  mds_decay_halflife: 5,
 
-  mds_beacon_interval: 10, //30.0,
-  mds_beacon_grace: 90, //60*60.0,
+  mds_beacon_interval: 4, //30.0,
+  mds_beacon_grace: 15, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -206,23 +207,23 @@ md_config_t g_conf = {
   mds_log_flush_on_shutdown: true,
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
-  mds_bal_sample_interval: 5.0,  // every 5 seconds
-  mds_bal_replicate_threshold: 2000,
+  mds_bal_sample_interval: 3.0,  // every 5 seconds
+  mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_split_size: 1000,
-  mds_bal_split_rd: 10000,
+  mds_bal_split_size: 10000,
+  mds_bal_split_rd: 25000,
   mds_bal_split_wr: 10000,
   mds_bal_merge_size: 50,
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
-  mds_bal_interval: 3000,           // seconds
+  mds_bal_interval: 10,           // seconds
   mds_bal_fragment_interval: 5,      // seconds
-  mds_bal_idle_threshold: .1,
+  mds_bal_idle_threshold: 0, //.1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
 
   mds_bal_mode: 0,
-  mds_bal_min_rebalance: .2,  // must be this much above average before we export anything
+  mds_bal_min_rebalance: .1,  // must be this much above average before we export anything
   mds_bal_min_start: .2,      // if we need less than this, we don't do anything
   mds_bal_need_min: .8,       // take within this range of what we need
   mds_bal_need_max: 1.2,
@@ -301,8 +302,8 @@ md_config_t g_conf = {
   ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (80 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (60 *256), // before write() will block
+  ebofs_bc_size:        (60 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (30 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   

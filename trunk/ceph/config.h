@@ -181,6 +181,7 @@ struct md_config_t {
   bool  journaler_safe;
   int   journaler_write_head_interval;
   bool  journaler_cache;
+  int   journaler_prefetch_periods;
   
   // mds
   int   mds_cache_size;
