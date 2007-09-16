@@ -1780,14 +1780,14 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 
   int start, inc, end;
 
-  if (0) {
+  if (1) {
     // strided
-    start = nobj % numc;
+    start = client->get_nodeid(); //nobjs % numc;
     inc = numc;
     end = start + nobj;
   } else {
     // segments
-    start = nobj * client->get_nodeid() % numc;  
+    start = nobj * client->get_nodeid() / numc;
     inc = 1;
     end = nobj * (client->get_nodeid()+1) / numc;
   }
@@ -1813,7 +1813,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid(0x1000, i);
-    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.pg_size);
     
     if (i % inflight == 0) {
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
@@ -1915,7 +1915,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
     object_t oid(0x1000, o);
 
-    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+    ObjectLayout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.pg_size);
     
     client->client_lock.Lock();
     utime_t start = g_clock.now();
