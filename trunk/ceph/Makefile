@@ -139,6 +139,9 @@ test: depend ${TEST_TARGETS}
 mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
+extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
 cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
@@ -234,6 +237,9 @@ testos: test/testos.o ebofs.o osbdb.o common.o
 gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
+test_disk_bw: test/test_disk_bw.cc common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
 # bits
 common.o: ${COMMON_OBJS}
 	${LDINC} $@ $^
@@ -288,7 +294,7 @@ TAGS:
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
-#	for f in $(SRCS) ; do cpp -MM $(CFLAGS) $$f >> .depend ; done
+#	for f in $(SRCS) ; do cpp -MM $(CFLAGS) $$f 2> /dev/null >> .depend ; done
 
 
 # now add a line to include the dependency list.
