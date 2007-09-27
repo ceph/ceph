@@ -3508,7 +3508,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   
   // already small enough?
-  if (cur->inode.size >= req->args.truncate.length) {
+  if (cur->inode.size <= req->args.truncate.length) {
     reply_request(mdr, 0);
     return;
   }
