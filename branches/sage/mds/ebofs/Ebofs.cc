@@ -29,9 +29,8 @@
 
 // *******************
 
-#undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
-#define derr(x) if (x <= g_conf.debug_ebofs) cerr << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
+#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
+#define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
 
 
 char *nice_blocks(block_t b) 
@@ -59,7 +58,7 @@ int Ebofs::mount()
     return r;
   }
 
-  dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << dendl;
 
   // read super
   bufferptr bp1 = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
@@ -73,17 +72,17 @@ int Ebofs::mount()
   // valid superblocks?
   if (sb1->s_magic != EBOFS_MAGIC ||
       sb2->s_magic != EBOFS_MAGIC) {
-    derr(0) << "mount bad magic, not a valid EBOFS file system" << endl;
+    derr(0) << "mount bad magic, not a valid EBOFS file system" << dendl;
     return -EINVAL;
   }
   if (sb1->num_blocks > dev.get_num_blocks() ||
       sb2->num_blocks > dev.get_num_blocks()) {
-    derr(0) << "mount superblock size exceeds actual device size" << endl;
+    derr(0) << "mount superblock size exceeds actual device size" << dendl;
     return -EINVAL;
   }
 
-  dout(3) << "mount super @0 epoch " << sb1->epoch << endl;
-  dout(3) << "mount super @1 epoch " << sb2->epoch << endl;
+  dout(3) << "mount super @0 epoch " << sb1->epoch << dendl;
+  dout(3) << "mount super @1 epoch " << sb2->epoch << dendl;
 
   // pick newest super
   struct ebofs_super *sb = 0;
@@ -92,7 +91,7 @@ int Ebofs::mount()
   else
     sb = sb2;
   super_epoch = sb->epoch;
-  dout(3) << "mount epoch " << super_epoch << endl;
+  dout(3) << "mount epoch " << super_epoch << dendl;
   assert(super_epoch == sb->epoch);
 
   super_fsid = sb->fsid;
@@ -101,13 +100,12 @@ int Ebofs::mount()
   limbo_blocks = sb->limbo_blocks;
 
   // init node pools
-  dout(3) << "mount nodepool" << endl;
+  dout(3) << "mount nodepool" << dendl;
   nodepool.init( &sb->nodepool );
-  nodepool.read_usemap( dev, super_epoch );
-  nodepool.read_clean_nodes( dev );
+  nodepool.read_usemap_and_clean_nodes( dev, super_epoch );
   
   // open tables
-  dout(3) << "mount opening tables" << endl;
+  dout(3) << "mount opening tables" << dendl;
   object_tab = new Table<object_t, Extent>( nodepool, sb->object_tab );
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
     free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
@@ -117,6 +115,8 @@ int Ebofs::mount()
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
   co_tab = new Table<coll_object_t, bool>( nodepool, sb->co_tab );
 
+  verify_tables();
+
   allocator.release_limbo();
 
   
@@ -124,31 +124,31 @@ int Ebofs::mount()
   if (journalfn) {
     journal = new FileJournal(this, journalfn);
     if (journal->open() < 0) {
-      dout(3) << "mount journal " << journalfn << " open failed" << endl;
+      dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;
       journal = 0;
     } else {
-      dout(3) << "mount journal " << journalfn << " opened, replaying" << endl;
+      dout(3) << "mount journal " << journalfn << " opened, replaying" << dendl;
       
       while (1) {
 	bufferlist bl;
 	epoch_t e;
 	if (!journal->read_entry(bl, e)) {
-	  dout(3) << "mount replay: end of journal, done." << endl;
+	  dout(3) << "mount replay: end of journal, done." << dendl;
 	  break;
 	}
 
 	if (e < super_epoch) {
-	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << endl;
+	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << dendl;
 	  continue;
 	}
 	if (e == super_epoch+1) {
 	  super_epoch++;
-	  dout(3) << "mount replay: jumped to next epoch " << super_epoch << endl;
+	  dout(3) << "mount replay: jumped to next epoch " << super_epoch << dendl;
 	}
 	assert(e == super_epoch);
 	
-	dout(3) << "mount replay: applying transaction in epoch " << e << endl;
+	dout(3) << "mount replay: applying transaction in epoch " << e << dendl;
 	Transaction t;
 	int off = 0;
 	t._decode(bl, off);
@@ -160,13 +160,13 @@ int Ebofs::mount()
     }
   }
 
-  dout(3) << "mount starting commit+finisher threads" << endl;
+  dout(3) << "mount starting commit+finisher threads" << dendl;
   commit_thread.create();
   finisher_thread.create();
 
   dout(1) << "mounted " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks())
 	  << (journal ? ", with journal":", no journal")
-	  << endl;
+	  << dendl;
   mounted = true;
 
 
@@ -204,7 +204,7 @@ int Ebofs::mkfs()
   nr.length = 20+ (num_blocks / 1000);
   if (nr.length < 10) nr.length = 10;
   nodepool.add_region(nr);
-  dout(10) << "mkfs: first node region at " << nr << endl;
+  dout(10) << "mkfs: first node region at " << nr << dendl;
 
   // allocate two usemaps
   block_t usemap_len = nodepool.get_usemap_len();
@@ -212,8 +212,9 @@ int Ebofs::mkfs()
   nodepool.usemap_even.length = usemap_len;
   nodepool.usemap_odd.start = nodepool.usemap_even.end();
   nodepool.usemap_odd.length = usemap_len;
-  dout(10) << "mkfs: even usemap at " << nodepool.usemap_even << endl;
-  dout(10) << "mkfs:  odd usemap at " << nodepool.usemap_odd << endl;
+  dout(10) << "mkfs: even usemap at " << nodepool.usemap_even << dendl;
+  dout(10) << "mkfs:  odd usemap at " << nodepool.usemap_odd << dendl;
+  nodepool.init_usemap();
 
   // init tables
   struct ebofs_table empty;
@@ -235,7 +236,7 @@ int Ebofs::mkfs()
   Extent left;
   left.start = nodepool.usemap_odd.end();
   left.length = num_blocks - left.start;
-  dout(10) << "mkfs: free data blocks at " << left << endl;
+  dout(10) << "mkfs: free data blocks at " << left << dendl;
   allocator._release_into_limbo( left );
   if (g_conf.ebofs_cloneable) {
     allocator.alloc_inc(nr);
@@ -246,22 +247,18 @@ int Ebofs::mkfs()
   allocator.release_limbo();  // -> free_tab
 
   // write nodes, super, 2x
-  dout(10) << "mkfs: flushing nodepool and superblocks (2x)" << endl;
+  dout(10) << "mkfs: flushing nodepool and superblocks (2x)" << dendl;
 
-  nodepool.commit_start( dev, 0 );
-  nodepool.commit_wait();
-  bufferptr superbp0;
-  prepare_super(0, superbp0);
-  write_super(0, superbp0);
-  
-  nodepool.commit_start( dev, 1 );
-  nodepool.commit_wait();
-  bufferptr superbp1;
-  prepare_super(1, superbp1);
-  write_super(1, superbp1);
-  
+  for (epoch_t e=0; e<2; e++) {
+    nodepool.commit_start(dev, e);
+    nodepool.commit_wait();
+    bufferptr superbp;
+    prepare_super(e, superbp);
+    write_super(e, superbp);
+  }
+
   // free memory
-  dout(10) << "mkfs: cleaning up" << endl;
+  dout(10) << "mkfs: cleaning up" << dendl;
   close_tables();
 
   dev.close();
@@ -271,14 +268,14 @@ int Ebofs::mkfs()
   if (journalfn) {
     Journal *journal = new FileJournal(this, journalfn);
     if (journal->create() < 0) {
-      dout(3) << "mount journal " << journalfn << " created failed" << endl;
+      dout(3) << "mount journal " << journalfn << " created failed" << dendl;
     } else {
-      dout(3) << "mount journal " << journalfn << " created" << endl;
+      dout(3) << "mount journal " << journalfn << " created" << dendl;
     }
     delete journal;
   }
 
-  dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << dendl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -297,24 +294,40 @@ void Ebofs::close_tables()
   nodepool.close();
 }
 
+void Ebofs::verify_tables()
+{
+  bool o = g_conf.ebofs_verify;
+  g_conf.ebofs_verify = true;
+
+  object_tab->verify("onmount");
+  limbo_tab->verify("onmount");
+  alloc_tab->verify("onmount");
+  collection_tab->verify("onmount");
+  co_tab->verify("onmount");
+  for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
+    free_tab[i]->verify("onmount");
+
+  g_conf.ebofs_verify = o;
+}
+
 int Ebofs::umount()
 {
   ebofs_lock.Lock();
   
   // mark unmounting
-  dout(1) << "umount start" << endl;
+  dout(2) << "umount start" << dendl;
   readonly = true;
   unmounting = true;
   
   // kick commit thread
-  dout(5) << "umount stopping commit thread" << endl;
+  dout(5) << "umount stopping commit thread" << dendl;
   commit_cond.Signal();
   ebofs_lock.Unlock();
   commit_thread.join();
   ebofs_lock.Lock();
 
   // kick finisher thread
-  dout(5) << "umount stopping finisher thread" << endl;
+  dout(5) << "umount stopping finisher thread" << dendl;
   finisher_lock.Lock();
   finisher_stop = true;
   finisher_cond.Signal();
@@ -328,16 +341,16 @@ int Ebofs::umount()
   for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
        i != onode_map.end();
        i++) {
-    dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
+    dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << dendl;
   }
 
   // free memory
-  dout(5) << "umount cleaning up" << endl;
+  dout(5) << "umount cleaning up" << dendl;
   close_tables();
   dev.close();
   readonly = unmounting = mounted = false;
 
-  dout(1) << "umount done on " << dev.get_device_name() << endl;
+  dout(2) << "umount done on " << dev.get_device_name() << dendl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -348,7 +361,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
 {
   struct ebofs_super sb;
   
-  dout(10) << "prepare_super v" << epoch << endl;
+  dout(10) << "prepare_super v" << epoch << dendl;
 
   // fill in super
   memset(&sb, 0, sizeof(sb));
@@ -404,7 +417,7 @@ void Ebofs::write_super(version_t epoch, bufferptr& bp)
 {
   block_t bno = epoch & 1;
   
-  dout(10) << "write_super v" << epoch << " to b" << bno << endl;
+  dout(10) << "write_super v" << epoch << " to b" << bno << dendl;
 
   dev.write(bno, 1, bp, "write_super");
 }
@@ -412,7 +425,7 @@ void Ebofs::write_super(version_t epoch, bufferptr& bp)
 int Ebofs::commit_thread_entry()
 {  
   ebofs_lock.Lock();
-  dout(10) << "commit_thread start" << endl;
+  dout(10) << "commit_thread start" << dendl;
 
   assert(!commit_thread_started); // there can be only one
   commit_thread_started = true;
@@ -423,39 +436,48 @@ int Ebofs::commit_thread_entry()
     // wait for kick, or timeout
     if (g_conf.ebofs_commit_ms) {
       if (g_conf.ebofs_idle_commit_ms > 0) {
+	// *** this is an ugly ugly hack ****
+	//     do not use
         // periodically check for idle block device
+	utime_t idle_wait(0, g_conf.ebofs_idle_commit_ms*1000);
         dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms, " 
-                 << g_conf.ebofs_idle_commit_ms << " ms if idle" << endl;
-        long left = g_conf.ebofs_commit_ms;
-        while (left > 0) {
-          long next = MIN(left, g_conf.ebofs_idle_commit_ms);
-          if (commit_cond.WaitInterval(ebofs_lock, utime_t(0, next*1000)) != ETIMEDOUT) 
+		  << idle_wait << " ms if idle" << dendl;
+	utime_t now = g_clock.now();
+	utime_t stop = now;
+	stop += (double)g_conf.ebofs_commit_ms / 1000.0;
+        do {
+	  utime_t wait = MIN(stop - now, idle_wait);
+          if (commit_cond.WaitInterval(ebofs_lock, wait) != ETIMEDOUT) {
+            dout(20) << "commit_thread i got kicked" << dendl;
             break;   // we got kicked
+	  }
           if (dev.is_idle()) {
-            dout(20) << "commit_thread bdev is idle, early commit" << endl;
+            dout(20) << "commit_thread bdev is idle, early commit" << dendl;
             break;  // dev is idle
           }
-          left -= next;
-          dout(20) << "commit_thread " << left << " ms left" << endl;
+	  now = g_clock.now();
+          dout(20) << "commit_thread now=" << now << ", stop at " << stop << dendl;
 
           // hack hack
           //if (!left) g_conf.debug_ebofs = 10;
           // /hack hack
-        }
+	} while (now < stop);
+	dout(20) << "commit_thread done with idle loop" << dendl;
+
       } else {
         // normal wait+timeout
-        dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << endl;
+        dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << dendl;
         commit_cond.WaitInterval(ebofs_lock, utime_t(0, g_conf.ebofs_commit_ms*1000));   
       }
 
     } else {
       // DEBUG.. wait until kicked
-      dout(10) << "commit_thread no commit_ms, waiting until kicked" << endl;
+      dout(10) << "commit_thread no commit_ms, waiting until kicked" << dendl;
       commit_cond.Wait(ebofs_lock);
     }
 
     if (unmounting) {
-      dout(10) << "commit_thread unmounting: final commit pass" << endl;
+      dout(10) << "commit_thread unmounting: final commit pass" << dendl;
       assert(readonly);
       unmounting = false;
       mounted = false;
@@ -463,25 +485,26 @@ int Ebofs::commit_thread_entry()
     }
     
     if (!dirty && !limbo_blocks) {
-      dout(10) << "commit_thread not dirty" << endl;
+      dout(10) << "commit_thread not dirty" << dendl;
     }
     else {
       super_epoch++;
       dirty = false;
 
-      dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
+      derr(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
+      dout(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
       dout(2) << "commit_thread   data: " 
               << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
               << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
               << "%) free in " << get_free_extents() 
               << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
               << "%) limbo in " << get_limbo_extents() 
-              << endl;
+              << dendl;
       dout(2) << "commit_thread  nodes: " 
-              << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
-              << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
-              << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
-              << nodepool.num_total() << " total." << endl;
+              << 100*nodepool.get_num_used()/nodepool.get_num_total() << "% used, "
+              << nodepool.get_num_free() << " (" << 100*nodepool.get_num_free()/nodepool.get_num_total() << "%) free, " 
+              << nodepool.get_num_limbo() << " (" << 100*nodepool.get_num_limbo()/nodepool.get_num_total() << "%) limbo, " 
+              << nodepool.get_num_total() << " total." << dendl;
       dout(2) << "commit_thread    bc: " 
               << "size " << bc.get_size() 
               << ", trimmable " << bc.get_trimmable()
@@ -489,7 +512,7 @@ int Ebofs::commit_thread_entry()
               << "; dirty " << bc.get_stat_dirty()
               << ", tx " << bc.get_stat_tx()
               << ", max dirty " << g_conf.ebofs_bc_max_dirty
-              << endl;
+              << dendl;
       
       if (journal) journal->commit_epoch_start();
       
@@ -502,7 +525,7 @@ int Ebofs::commit_thread_entry()
       nodepool.commit_start( dev, super_epoch );
       
       // blockdev barrier (prioritize our writes!)
-      dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << endl;
+      dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << dendl;
       dev.barrier();
 
       // prepare super (before any changes get made!)
@@ -511,19 +534,19 @@ int Ebofs::commit_thread_entry()
       
       // wait for it all to flush (drops global lock)
       commit_bc_wait(super_epoch-1);  
-      dout(30) << "commit_thread bc flushed" << endl;
+      dout(30) << "commit_thread bc flushed" << dendl;
       commit_inodes_wait();
-      dout(30) << "commit_thread inodes flushed" << endl;
+      dout(30) << "commit_thread inodes flushed" << dendl;
       nodepool.commit_wait();
-      dout(30) << "commit_thread btree nodes flushed" << endl;
+      dout(30) << "commit_thread btree nodes flushed" << dendl;
 
       // ok, now (synchronously) write the prior super!
-      dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+      dout(10) << "commit_thread commit flushed, writing super for prior epoch" << dendl;
       ebofs_lock.Unlock();
       write_super(super_epoch, superbp);    
       ebofs_lock.Lock();
       
-      dout(10) << "commit_thread wrote super" << endl;
+      dout(10) << "commit_thread wrote super" << dendl;
 
       // free limbo space now 
       // (since we're done allocating things, 
@@ -531,8 +554,8 @@ int Ebofs::commit_thread_entry()
       allocator.release_limbo();   // limbo_tab -> free_tabs
       
       // do we need more node space?
-      if (nodepool.num_free() < nodepool.num_total() / 3) {
-        dout(2) << "commit_thread running low on node space, allocating more." << endl;
+      if (nodepool.get_num_free() < nodepool.get_num_total() / 3) {
+        dout(2) << "commit_thread running low on node space, allocating more." << dendl;
         alloc_more_node_space();
       }
       
@@ -540,14 +563,14 @@ int Ebofs::commit_thread_entry()
       if (journal) journal->commit_epoch_finish();
 
       // kick waiters
-      dout(10) << "commit_thread queueing commit + kicking sync waiters" << endl;
+      dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
       
       queue_finishers(commit_waiters[super_epoch-1]);
       commit_waiters.erase(super_epoch-1);
 
       sync_cond.Signal();
 
-      dout(10) << "commit_thread commit finish" << endl;
+      dout(10) << "commit_thread commit finish" << dendl;
     }
 
     // trim bc?
@@ -556,7 +579,7 @@ int Ebofs::commit_thread_entry()
 
   }
   
-  dout(10) << "commit_thread finish" << endl;
+  dout(10) << "commit_thread finish" << dendl;
   commit_thread_started = false;
   ebofs_lock.Unlock();
   return 0;
@@ -565,37 +588,40 @@ int Ebofs::commit_thread_entry()
 
 void Ebofs::alloc_more_node_space()
 {
-  dout(1) << "alloc_more_node_space free " << nodepool.num_free() << "/" << nodepool.num_total() << endl;
+  dout(1) << "alloc_more_node_space free " << nodepool.get_num_free() << "/" << nodepool.get_num_total() << dendl;
   
   if (nodepool.num_regions() < EBOFS_MAX_NODE_REGIONS) {
-    int want = nodepool.num_total();
+    int want = nodepool.get_num_total();
 
     Extent ex;
     allocator.allocate(ex, want, 2);
-    dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << endl;
+    dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << dendl;
 
     Extent even, odd;
-    unsigned ulen = nodepool.get_usemap_len(nodepool.num_total() + ex.length);
+    unsigned ulen = nodepool.get_usemap_len(nodepool.get_num_total() + ex.length);
     allocator.allocate(even, ulen, 2);
     allocator.allocate(odd, ulen, 2);
-    dout(1) << "alloc_more_node_space maps need " << ulen << " x2, got " << even << " " << odd << endl;
+    dout(1) << "alloc_more_node_space maps need " << ulen << " x2, got " << even << " " << odd << dendl;
 
     if (even.length == ulen && odd.length == ulen) {
-      dout(1) << "alloc_more_node_space got " << ex << ", new usemaps at even " << even << " odd " << odd << endl;
+      dout(1) << "alloc_more_node_space got " << ex << ", new usemaps at even " << even << " odd " << odd << dendl;
       allocator.release(nodepool.usemap_even);
       allocator.release(nodepool.usemap_odd);
       nodepool.add_region(ex);
+
+      // expand usemap?
       nodepool.usemap_even = even;
       nodepool.usemap_odd = odd;
+      nodepool.expand_usemap();
     } else {
-      dout (1) << "alloc_more_node_space failed to get space for new usemaps" << endl;
+      dout (1) << "alloc_more_node_space failed to get space for new usemaps" << dendl;
       allocator.release(ex);
       allocator.release(even);
       allocator.release(odd);
       //assert(0);
     }
   } else {
-    dout(1) << "alloc_more_node_space already have max node regions!" << endl;
+    dout(1) << "alloc_more_node_space already have max node regions!" << dendl;
     assert(0);
   }
 }
@@ -604,7 +630,7 @@ void Ebofs::alloc_more_node_space()
 void *Ebofs::finisher_thread_entry()
 {
   finisher_lock.Lock();
-  dout(10) << "finisher_thread start" << endl;
+  dout(10) << "finisher_thread start" << dendl;
 
   while (!finisher_stop) {
     while (!finisher_queue.empty()) {
@@ -621,11 +647,11 @@ void *Ebofs::finisher_thread_entry()
     }
     if (finisher_stop) break;
     
-    dout(30) << "finisher_thread sleeping" << endl;
+    dout(30) << "finisher_thread sleeping" << dendl;
     finisher_cond.Wait(finisher_lock);
   }
 
-  dout(10) << "finisher_thread start" << endl;
+  dout(10) << "finisher_thread start" << dendl;
   finisher_lock.Unlock();
   return 0;
 }
@@ -650,7 +676,7 @@ Onode* Ebofs::new_onode(object_t oid)
 
   dirty_onode(on);
 
-  dout(7) << "new_onode " << *on << endl;
+  dout(7) << "new_onode " << *on << dendl;
   return on;
 }
 
@@ -663,14 +689,14 @@ Onode* Ebofs::get_onode(object_t oid)
       // yay
       Onode *on = onode_map[oid];
       on->get();
-      //cout << "get_onode " << *on << endl;
+      //dout(0) << "get_onode " << *on << dendl;
       return on;   
     }
     
     // on disk?
     Extent onode_loc;
     if (object_tab->lookup(oid, onode_loc) < 0) {
-      dout(10) << "onode lookup failed on " << oid << endl;
+      dout(10) << "onode lookup failed on " << oid << dendl;
       // object dne.
       return 0;
     }
@@ -680,12 +706,12 @@ Onode* Ebofs::get_onode(object_t oid)
       // yep, just wait.
       Cond c;
       waitfor_onode[oid].push_back(&c);
-      dout(10) << "get_onode " << oid << " already loading, waiting" << endl;
+      dout(10) << "get_onode " << oid << " already loading, waiting" << dendl;
       c.Wait(ebofs_lock);
       continue;
     }
 
-    dout(10) << "get_onode reading " << oid << " from " << onode_loc << endl;
+    dout(10) << "get_onode reading " << oid << " from " << onode_loc << dendl;
 
     assert(waitfor_onode.count(oid) == 0);
     waitfor_onode[oid].clear();  // this should be empty initially. 
@@ -706,13 +732,13 @@ Onode* Ebofs::get_onode(object_t oid)
     // parse data block
     struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
     if (eo->object_id != oid) {
-      cerr << " wrong oid in onode block: " << eo->object_id << " != " << oid << endl;
-      cerr << " onode_loc is " << eo->onode_loc << endl;
-      cerr << " object_size " << eo->object_size << endl;
-      cerr << " object_blocks " << eo->object_blocks << endl;
-      cerr << " " << eo->num_collections << " coll + " 
-           << eo->num_attr << " attr + " 
-           << eo->num_extents << " extents" << endl;
+      dout(0) << " wrong oid in onode block: " << eo->object_id << " != " << oid << dendl;
+      dout(0) << " onode_loc is " << eo->onode_loc << dendl;
+      dout(0) << " object_size " << eo->object_size << dendl;
+      dout(0) << " object_blocks " << eo->object_blocks << dendl;
+      dout(0) << " " << eo->num_collections << " coll + " 
+	      << eo->num_attr << " attr + " 
+	      << eo->num_extents << " extents" << dendl;
       assert(eo->object_id == oid);
     }
     on->readonly = eo->readonly;
@@ -738,7 +764,7 @@ Onode* Ebofs::get_onode(object_t oid)
       p += sizeof(len);
       on->attr[key] = buffer::copy(p, len);
       p += len;
-      dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
+      dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << dendl;
     }
     
     // parse extents
@@ -747,7 +773,7 @@ Onode* Ebofs::get_onode(object_t oid)
     for (int i=0; i<eo->num_extents; i++) {
       Extent ex = *((Extent*)p);
       on->extent_map[n] = ex;
-      dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
+      dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << dendl;
       n += ex.length;
       p += sizeof(Extent);
     }
@@ -761,7 +787,7 @@ Onode* Ebofs::get_onode(object_t oid)
     waitfor_onode.erase(oid);   // remove Cond list
     
     on->get();
-    //cout << "get_onode " << *on << " (loaded)" << endl;
+    //dout(0) << "get_onode " << *on << " (loaded)" << dendl;
     return on;
   }
 }
@@ -811,7 +837,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
     off += sizeof(int);
     bl.copy_in(off, l, i->second.c_str());
     off += l;
-    dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << l << endl;
+    dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << l << dendl;
   }
   
   // extents
@@ -820,7 +846,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
        i++) {
     bl.copy_in(off, sizeof(Extent), (char*)&(i->second));
     off += sizeof(Extent);
-    dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << i->second << endl;
+    dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << i->second << dendl;
   }
 }
 
@@ -848,7 +874,7 @@ void Ebofs::write_onode(Onode *on)
     //object_tab->verify();
   }
 
-  dout(10) << "write_onode " << *on << " to " << on->onode_loc << endl;
+  dout(10) << "write_onode " << *on << " to " << on->onode_loc << dendl;
 
   unsigned off = 0;
   encode_onode(on, bl, off);
@@ -861,7 +887,7 @@ void Ebofs::write_onode(Onode *on)
 
 void Ebofs::remove_onode(Onode *on)
 {
-  dout(8) << "remove_onode " << *on << endl;
+  dout(8) << "remove_onode " << *on << dendl;
 
   assert(on->get_ref_count() >= 1);  // caller
 
@@ -878,7 +904,7 @@ void Ebofs::remove_onode(Onode *on)
   on->dangling = true;
   
   // remove from object table
-  //dout(0) << "remove_onode on " << *on << endl;
+  //dout(0) << "remove_onode on " << *on << dendl;
   object_tab->remove(on->object_id);
   
   // free onode space
@@ -906,7 +932,7 @@ void Ebofs::remove_onode(Onode *on)
     dirty_onodes.erase(on);
   }
 
-  if (on->get_ref_count() > 1) dout(10) << "remove_onode **** will survive " << *on << endl;
+  if (on->get_ref_count() > 1) dout(10) << "remove_onode **** will survive " << *on << dendl;
   put_onode(on);
 
   dirty = true;
@@ -915,10 +941,10 @@ void Ebofs::remove_onode(Onode *on)
 void Ebofs::put_onode(Onode *on)
 {
   on->put();
-  //cout << "put_onode " << *on << endl;
+  //dout(0) << "put_onode " << *on << dendl;
   
   if (on->get_ref_count() == 0 && on->dangling) {
-    //cout << " *** hosing on " << *on << endl;
+    //dot(0) << " *** hosing on " << *on << dendl;
     delete on;
   }
 }
@@ -938,7 +964,7 @@ void Ebofs::trim_inodes(int max)
   unsigned cmax = cnode_lru.lru_get_max();
   if (max >= 0) omax = cmax = max;
   dout(10) << "trim_inodes start " << onode_lru.lru_get_size() << " / " << omax << " onodes, " 
-            << cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << endl;
+            << cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << dendl;
 
   // onodes
   while (onode_lru.lru_get_size() > omax) {
@@ -947,7 +973,7 @@ void Ebofs::trim_inodes(int max)
     if (on == 0) break;  // nothing to expire
     
     // expire
-    dout(20) << "trim_inodes removing onode " << *on << endl;
+    dout(20) << "trim_inodes removing onode " << *on << dendl;
     onode_map.erase(on->object_id);
     on->dangling = true;
 
@@ -955,7 +981,7 @@ void Ebofs::trim_inodes(int max)
       assert(on->oc == 0);   // an open oc pins the onode!
       delete on;
     } else {
-      dout(-20) << "trim_inodes   still active: " << *on << endl;
+      dout(-20) << "trim_inodes   still active: " << *on << dendl;
       assert(0); // huh?
     }
   }
@@ -968,7 +994,7 @@ void Ebofs::trim_inodes(int max)
     if (cn == 0) break;  // nothing to expire
 
     // expire
-    dout(20) << "trim_inodes removing cnode " << *cn << endl;
+    dout(20) << "trim_inodes removing cnode " << *cn << dendl;
     cnode_map.erase(cn->coll_id);
     
     delete cn;
@@ -976,7 +1002,7 @@ void Ebofs::trim_inodes(int max)
 
   dout(10) << "trim_inodes finish " 
            << onode_lru.lru_get_size() << " / " << omax << " onodes, " 
-           << cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << endl;
+           << cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << dendl;
 }
 
 
@@ -1026,12 +1052,12 @@ Cnode* Ebofs::get_cnode(coll_t cid)
       // yep, just wait.
       Cond c;
       waitfor_cnode[cid].push_back(&c);
-      dout(10) << "get_cnode " << cid << " already loading, waiting" << endl;
+      dout(10) << "get_cnode " << cid << " already loading, waiting" << dendl;
       c.Wait(ebofs_lock);
       continue;
     }
 
-    dout(10) << "get_cnode reading " << cid << " from " << cnode_loc << endl;
+    dout(10) << "get_cnode reading " << cid << " from " << cnode_loc << dendl;
 
     assert(waitfor_cnode.count(cid) == 0);
     waitfor_cnode[cid].clear();  // this should be empty initially. 
@@ -1063,7 +1089,7 @@ Cnode* Ebofs::get_cnode(coll_t cid)
       p += sizeof(len);
       cn->attr[key] = buffer::copy(p, len);
       p += len;
-      dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
+      dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << dendl;
     }
     
     // wake up other waiters
@@ -1100,7 +1126,7 @@ void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
     bl.copy_in(off, len, i->second.c_str());
     off += len;
 
-    dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << len << endl;
+    dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << len << dendl;
   }
 }
 
@@ -1124,7 +1150,7 @@ void Ebofs::write_cnode(Cnode *cn)
     collection_tab->insert( cn->coll_id, cn->cnode_loc );
   }
   
-  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << endl;
+  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << dendl;
 
   unsigned off = 0;
   encode_cnode(cn, bl, off);
@@ -1137,7 +1163,7 @@ void Ebofs::write_cnode(Cnode *cn)
 
 void Ebofs::remove_cnode(Cnode *cn)
 {
-  dout(10) << "remove_cnode " << *cn << endl;
+  dout(10) << "remove_cnode " << *cn << dendl;
 
   // remove from table
   collection_tab->remove(cn->coll_id);
@@ -1189,7 +1215,7 @@ void Ebofs::flush_inode_finish()
   {
     inodes_flushing--;
     if (inodes_flushing < 1000)
-    dout(20) << "flush_inode_finish, " << inodes_flushing << " left" << endl;
+    dout(20) << "flush_inode_finish, " << inodes_flushing << " left" << dendl;
     if (inodes_flushing == 0) 
       inode_commit_cond.Signal();
   }
@@ -1198,7 +1224,7 @@ void Ebofs::flush_inode_finish()
 
 void Ebofs::commit_inodes_start() 
 {
-  dout(10) << "commit_inodes_start" << endl;
+  dout(10) << "commit_inodes_start" << dendl;
 
   assert(inodes_flushing == 0);
 
@@ -1226,17 +1252,17 @@ void Ebofs::commit_inodes_start()
   }
   dirty_cnodes.clear();
 
-  dout(10) << "commit_inodes_start writing " << inodes_flushing << " onodes+cnodes" << endl;
+  dout(10) << "commit_inodes_start writing " << inodes_flushing << " onodes+cnodes" << dendl;
 }
 
 void Ebofs::commit_inodes_wait()
 {
   // caller must hold ebofs_lock
   while (inodes_flushing > 0) {
-    dout(10) << "commit_inodes_wait waiting for " << inodes_flushing << " onodes+cnodes to flush" << endl;
+    dout(10) << "commit_inodes_wait waiting for " << inodes_flushing << " onodes+cnodes to flush" << dendl;
     inode_commit_cond.Wait(ebofs_lock);
   }
-  dout(10) << "commit_inodes_wait all flushed" << endl;
+  dout(10) << "commit_inodes_wait all flushed" << dendl;
 }
 
 
@@ -1258,14 +1284,14 @@ void Ebofs::trim_bc(off_t max)
 {
   if (max < 0)
     max = g_conf.ebofs_bc_size;
-  dout(10) << "trim_bc start: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+  dout(10) << "trim_bc start: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << dendl;
 
   while (bc.get_size() > max &&
          bc.get_trimmable()) {
     BufferHead *bh = (BufferHead*) bc.lru_rest.lru_expire();
     if (!bh) break;
     
-    dout(25) << "trim_bc trimming " << *bh << endl;
+    dout(25) << "trim_bc trimming " << *bh << dendl;
     assert(bh->is_clean());
     
     ObjectCache *oc = bh->oc;
@@ -1274,30 +1300,28 @@ void Ebofs::trim_bc(off_t max)
     
     if (oc->is_empty()) {
       Onode *on = oc->on;
-      dout(10) << "trim_bc  closing oc on " << *on << endl;
+      dout(10) << "trim_bc  closing oc on " << *on << dendl;
       on->close_oc();
     }
   }
 
-  dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+  dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << dendl;
 }
 
 
 void Ebofs::kick_idle()
 {
-  dout(10) << "kick_idle" << endl;
-  commit_cond.Signal();
+  dout(10) << "kick_idle" << dendl;
+  //commit_cond.Signal();
 
-  /*
   ebofs_lock.Lock();
   if (mounted && !unmounting && dirty) {
-    dout(0) << "kick_idle dirty, doing commit" << endl;
+    dout(10) << "kick_idle dirty, doing commit" << dendl;
     commit_cond.Signal();
   } else {
-    dout(0) << "kick_idle !dirty or !mounted or unmounting, doing nothing" << endl;
+    dout(10) << "kick_idle !dirty or !mounted or unmounting, doing nothing" << dendl;
   }
   ebofs_lock.Unlock();
-  */
 }
 
 void Ebofs::sync(Context *onsafe)
@@ -1325,17 +1349,17 @@ void Ebofs::sync()
 {
   ebofs_lock.Lock();
   if (!dirty) {
-    dout(7) << "sync in " << super_epoch << ", not dirty" << endl;
+    dout(7) << "sync in " << super_epoch << ", not dirty" << dendl;
   } else {
     epoch_t start = super_epoch;
-    dout(7) << "sync start in " << start << endl;
+    dout(7) << "sync start in " << start << dendl;
     while (super_epoch == start) {
-      dout(7) << "sync kicking commit in " << super_epoch << endl;
+      dout(7) << "sync kicking commit in " << super_epoch << dendl;
       dirty = true;
       commit_cond.Signal();
       sync_cond.Wait(ebofs_lock);
     }
-    dout(10) << "sync finish in " << super_epoch << endl;
+    dout(10) << "sync finish in " << super_epoch << dendl;
   }
   ebofs_lock.Unlock();
 }
@@ -1344,15 +1368,15 @@ void Ebofs::sync()
 
 void Ebofs::commit_bc_wait(version_t epoch)
 {
-  dout(10) << "commit_bc_wait on epoch " << epoch << endl;  
+  dout(10) << "commit_bc_wait on epoch " << epoch << dendl;  
   
   while (bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE,epoch) > 0 ||
          bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL,epoch) > 0) {
-    //dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
+    //dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << dendl;
     dout(10) << "commit_bc_wait epoch " << epoch
               << ", unflushed bhwrite " << bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE) 
               << ", unflushed partial " << bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL) 
-              << endl;
+              << dendl;
     bc.waitfor_flush();
   }
 
@@ -1362,14 +1386,14 @@ void Ebofs::commit_bc_wait(version_t epoch)
   dout(10) << "commit_bc_wait all flushed for epoch " << epoch
             << "; " << bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE)
             << " " << bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL)
-            << endl;  
+            << dendl;  
 }
 
 
 
 int Ebofs::statfs(struct statfs *buf)
 {
-  dout(7) << "statfs" << endl;
+  dout(7) << "statfs" << dendl;
 
   buf->f_type = EBOFS_MAGIC;             /* type of filesystem */
   buf->f_bsize = 4096;                   /* optimal transfer block size */
@@ -1377,8 +1401,8 @@ int Ebofs::statfs(struct statfs *buf)
   buf->f_bfree = get_free_blocks() 
     + get_limbo_blocks();                /* free blocks in fs */
   buf->f_bavail = get_free_blocks();     /* free blocks avail to non-superuser -- actually, for writing. */
-  buf->f_files = nodepool.num_total();   /* total file nodes in file system */
-  buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
+  buf->f_files = nodepool.get_num_total();   /* total file nodes in file system */
+  buf->f_ffree = nodepool.get_num_free();    /* free file nodes in fs */
   //buf->f_fsid = 0;                       /* file system id */
 #ifndef DARWIN
   buf->f_namelen = 8;                    /* maximum length of filenames */
@@ -1410,7 +1434,7 @@ void Ebofs::alloc_write(Onode *on,
   // subtract those off, so we're left with the committed bits (that must be reallocated).
   alloc.subtract(already_uncom);
   
-  dout(10) << "alloc_write must (re)alloc " << alloc << " on " << *on << endl;
+  dout(10) << "alloc_write must (re)alloc " << alloc << " on " << *on << dendl;
   
   // release it (into limbo)
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
@@ -1427,11 +1451,11 @@ void Ebofs::alloc_write(Onode *on,
     if (!old.empty()) {
       if (i->first == start) {
         old_bfirst = old[0].start;
-        dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << endl;
+        dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << dendl;
       }
       if (i->first+i->second == start+len) {
         old_blast = old[old.size()-1].last();
-        dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << endl;
+        dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << dendl;
       }
     }
   }
@@ -1451,7 +1475,7 @@ void Ebofs::alloc_write(Onode *on,
 
       // cancelable/moveable?
       if (alloc.contains(bh->start(), bh->length())) {
-        dout(10) << "alloc_write  " << *bh << " already in " << alloc << endl;
+        dout(10) << "alloc_write  " << *bh << " already in " << alloc << dendl;
         continue;
       }
 
@@ -1463,14 +1487,14 @@ void Ebofs::alloc_write(Onode *on,
         assert(bh->epoch_modified == super_epoch);
         if (bc.bh_cancel_write(bh, super_epoch)) {
           if (bh->length() == 1)
-          dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
+          dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << dendl;
 	  // no, this isn't compatible with clone() and extent reference counting.
           //allocator.unallocate(old[0]);  // release (into free)
-	  allocator.release(old[0]);  
+	  allocator.release(old[0]);    // **FIXME** no cloning yet, my friend!
           alloc.insert(bh->start(), bh->length());
         } else {
           if (bh->length() == 1)
-          dout(10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
+          dout(10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << dendl;
           allocator.release(old[0]);     // release (into limbo)
           alloc.insert(bh->start(), bh->length());
         }
@@ -1478,33 +1502,33 @@ void Ebofs::alloc_write(Onode *on,
         if (bh->length() == 1)
         dout(10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
                  << start << "~" << len 
-                 << " bh " << *bh << endl;
+                 << " bh " << *bh << dendl;
       }
     }
     
-    dout(10) << "alloc_write will (re)alloc " << alloc << " on " << *on << endl;
+    dout(10) << "alloc_write will (re)alloc " << alloc << " on " << *on << dendl;
   }
 
   if (alloc.empty()) return;  // no need to dirty the onode below!
   
 
   // merge alloc into onode uncommitted map
-  //dout(10) << " union of " << on->uncommitted << " and " << alloc << endl;
+  //dout(10) << " union of " << on->uncommitted << " and " << alloc << dendl;
   interval_set<block_t> old = on->uncommitted;
   on->uncommitted.union_of(alloc);
   
-  dout(10) << "alloc_write onode.uncommitted is now " << on->uncommitted << endl;
+  dout(10) << "alloc_write onode.uncommitted is now " << on->uncommitted << dendl;
 
   if (0) {
     // verify
     interval_set<block_t> ta;
     ta.intersection_of(on->uncommitted, alloc);
-    cout << " ta " << ta << endl;
+    dout(0) << " ta " << ta << dendl;
     assert(alloc == ta);
 
     interval_set<block_t> tb;
     tb.intersection_of(on->uncommitted, old);
-    cout << " tb " << tb << endl;
+    dout(0) << " tb " << tb << dendl;
     assert(old == tb);
   }
 
@@ -1514,7 +1538,7 @@ void Ebofs::alloc_write(Onode *on,
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
        i != alloc.m.end();
        i++) {
-    dout(15) << "alloc_write alloc " << i->first << "~" << i->second << " (of " << start << "~" << len << ")" << endl;
+    dout(15) << "alloc_write alloc " << i->first << "~" << i->second << " (of " << start << "~" << len << ")" << dendl;
 
     // allocate new space
     block_t left = i->second;
@@ -1522,7 +1546,7 @@ void Ebofs::alloc_write(Onode *on,
     while (left > 0) {
       Extent ex;
       allocator.allocate(ex, left, Allocator::NEAR_LAST_FWD);
-      dout(10) << "alloc_write got " << ex << " for object offset " << cur << endl;
+      dout(10) << "alloc_write got " << ex << " for object offset " << cur << dendl;
       on->set_extent(cur, ex);      // map object to new region
       left -= ex.length;
       cur += ex.length;
@@ -1551,7 +1575,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   }
   if (off+(off_t)len > on->object_size) {
     dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
-             << " -> " << off+len << endl;
+             << " -> " << off+len << dendl;
     on->object_size = off+len;
     dirty_onode(on);
   }
@@ -1563,7 +1587,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   }
   if (zleft)
     dout(10) << "apply_write zeroing " << zleft << " bytes before " << off << "~" << len 
-	      << " in " << *on << endl;
+	      << " in " << *on << dendl;
 
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
@@ -1573,7 +1597,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   block_t old_bfirst = 0;  // zero means not defined here (since we ultimately pass to bh_read)
   block_t old_blast = 0; 
   alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast);
-  dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << endl;
+  dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << dendl;
 
   if (fake_writes) {
     on->uncommitted.clear();   // worst case!
@@ -1582,7 +1606,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
-  oc->map_write(bstart, blen, alloc, hits, super_epoch);
+  oc->map_write(bstart, blen, hits, super_epoch);
   
   // get current versions
   //version_t lowv, highv;
@@ -1603,7 +1627,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     
     // old write in progress?
     if (bh->is_tx()) {      // copy the buffer to avoid munging up in-flight write
-      dout(10) << "apply_write tx pending, copying buffer on " << *bh << endl;
+      dout(10) << "apply_write tx pending, copying buffer on " << *bh << dendl;
       bufferlist temp;
       temp.claim(bh->data);
       //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
@@ -1616,13 +1640,13 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       if ((bh->start() == bstart && opos % EBOFS_BLOCK_SIZE != 0)) {
         BufferHead *right = bc.split(bh, bh->start()+1);
         hits[right->start()] = right;
-        dout(10) << "apply_write split off left block for partial write; rest is " << *right << endl;
+        dout(10) << "apply_write split off left block for partial write; rest is " << *right << dendl;
       }
       if ((bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0) &&
           ((off_t)len+off < on->object_size)) {
         BufferHead *right = bc.split(bh, bh->last());
         hits[right->start()] = right;
-        dout(10) << "apply_write split off right block for upcoming partial write; rest is " << *right << endl;
+        dout(10) << "apply_write split off right block for upcoming partial write; rest is " << *right << dendl;
       }
     }
 
@@ -1643,7 +1667,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
         dout(10) << "apply_write writing into partial " << *bh << ":"
                  << " off_in_bh " << off_in_bh 
                  << " len_in_bh " << len_in_bh
-                 << endl;
+                 << dendl;
         unsigned z = MIN( zleft, len_in_bh );
         if (z) {
 	  bufferptr zp(z);
@@ -1665,7 +1689,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
         opos += len_in_bh-z;
 
         if (bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
-          dout(10) << "apply_write  completed partial " << *bh << endl;
+          dout(10) << "apply_write  completed partial " << *bh << dendl;
           //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
 	  bh->data.clear();
 	  bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
@@ -1675,13 +1699,13 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
           bc.bh_write(on, bh);
         } 
         else if (bh->is_rx()) {
-          dout(10) << "apply_write  rx -> partial " << *bh << endl;
+          dout(10) << "apply_write  rx -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
           bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
         else if (bh->is_missing()) {
-          dout(10) << "apply_write  missing -> partial " << *bh << endl;
+          dout(10) << "apply_write  missing -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
 
@@ -1695,7 +1719,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
           bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
         else if (bh->is_partial()) {
-          dout(10) << "apply_write  already partial, no need to submit rx on " << *bh << endl;
+          dout(10) << "apply_write  already partial, no need to submit rx on " << *bh << dendl;
           if (bh->partial_tx_epoch == super_epoch)
             bc.bh_cancel_partial_write(bh);
           bc.bh_queue_partial_write(on, bh);          // queue the eventual write
@@ -1709,32 +1733,33 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
         dout(10) << "apply_write writing leading/tailing partial into " << *bh << ":"
                  << " off_in_bh " << off_in_bh 
                  << " len_in_bh " << len_in_bh
-                 << endl;
+                 << dendl;
 
-        // copy data into new buffers first (copy on write!)
-        //  FIXME: only do the modified pages?  this might be a big bh!
-        bufferlist temp;
-        temp.claim(bh->data);
-        //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+	// copy data into new buffers first (copy on write!)
+	//  FIXME: only do the modified pages?  this might be a big bh!
+	bufferlist temp;
+	temp.claim(bh->data);
+	//bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
 	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-        bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
-
-        unsigned z = MIN( zleft, len_in_bh );
-        if (z) {
+	bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+	
+	unsigned z = MIN( zleft, len_in_bh );
+	if (z) {
 	  bufferptr zp(z);
 	  zp.zero();
-          bufferlist zb;
-          zb.push_back(zp);
-          bh->data.copy_in(off_in_bh, z, zb);
-          zleft -= z;
-          opos += z;
-        }
+	  bufferlist zb;
+	  zb.push_back(zp);
+	  bh->data.copy_in(off_in_bh, z, zb);
+	  zleft -= z;
+	  opos += z;
+	}
+	
+	bufferlist sub;
+	sub.substr_of(bl, blpos, len_in_bh-z);
+	bh->data.copy_in(off_in_bh+z, len_in_bh-z, sub);
 
-        bufferlist sub;
-        sub.substr_of(bl, blpos, len_in_bh-z);
-        bh->data.copy_in(off_in_bh+z, len_in_bh-z, sub);
-        blpos += len_in_bh-z;
-        left -= len_in_bh-z;
+	blpos += len_in_bh-z;
+	left -= len_in_bh-z;
         opos += len_in_bh-z;
 
         if (!bh->is_dirty())
@@ -1750,32 +1775,43 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     assert((off_t)(zleft+left) >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
            opos+(off_t)(zleft+left) == on->object_size);
 
-    // alloc new buffers.
-    //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
-    bh->data.clear();
-    bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-    
-    // copy!
     unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, zleft+left);
     assert(len_in_bh <= zleft+left);
-    
+
     dout(10) << "apply_write writing into " << *bh << ":"
-             << " len_in_bh " << len_in_bh
-             << endl;
-    
+	     << " len_in_bh " << len_in_bh
+	     << dendl;
+
+    // i will write:
     unsigned z = MIN(len_in_bh, zleft);
-    if (z) {
-      bufferptr zp(z);
-      zp.zero();
-      bufferlist zb;
-      zb.push_back(zp);
-      bh->data.copy_in(0, z, zb);
-      zleft -= z;
-    }
-    
     bufferlist sub;
     sub.substr_of(bl, blpos, len_in_bh-z);
-    bh->data.copy_in(z, len_in_bh-z, sub);
+
+    if (!z && 
+	sub.is_page_aligned() &&
+	sub.is_n_page_sized()) {
+      // assume caller isn't going to modify written buffers.
+      // just refrence them!
+      dout(10) << "apply_write yippee, written buffer already page aligned" << dendl;
+      bh->data.claim(sub);
+    } else {
+      // alloc new buffers.
+      bh->data.clear();
+      bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
+      
+      if (z) {
+	bufferptr zp(z);
+	zp.zero();
+	bufferlist zb;
+	zb.push_back(zp);
+	bh->data.copy_in(0, z, zb);
+	zleft -= z;
+      }
+      
+      bufferlist sub;
+      sub.substr_of(bl, blpos, len_in_bh-z);
+      bh->data.copy_in(z, len_in_bh-z, sub);
+    }
 
     blpos += len_in_bh-z;
     left -= len_in_bh-z;
@@ -1807,7 +1843,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
                          Cond *will_wait_on, bool *will_wait_on_bool)
 {
-  dout(10) << "attempt_read " << *on << " " << off << "~" << len << endl;
+  dout(10) << "attempt_read " << *on << " " << off << "~" << len << dendl;
   ObjectCache *oc = on->get_oc(&bc);
 
   // map
@@ -1826,7 +1862,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     for (map<block_t,BufferHead*>::iterator i = missing.begin();
          i != missing.end();
          i++) {
-      dout(10) << "attempt_read missing buffer " << *(i->second) << endl;
+      dout(10) << "attempt_read missing buffer " << *(i->second) << dendl;
       bc.bh_read(on, i->second);
     }
     BufferHead *wait_on = missing.begin()->second;
@@ -1850,7 +1886,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
       if (partials_ok) {
         // wait on this one
         Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
-        dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << endl;
+        dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << dendl;
         i->second->waitfor_read[i->second->start()].push_back(c);
       }
       partials_ok = false;
@@ -1862,7 +1898,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   if (!rx.empty()) {
     BufferHead *wait_on = rx.begin()->second;
     Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
-    dout(20) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << endl;
+    dout(20) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << dendl;
     block_t b = MAX(wait_on->start(), bstart);
     wait_on->waitfor_read[b].push_back(c);
     return false;
@@ -1904,7 +1940,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
         pos += bh->data.length();
       } else {
         bufferlist frag;
-        dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << endl;
+        dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << dendl;
         frag.substr_of(bh->data, start-bhstart, end-start);
         pos += frag.length();
         bl.claim_append( frag );
@@ -1940,14 +1976,14 @@ int Ebofs::is_cached(object_t oid, off_t off, size_t len)
 int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
 {
   if (!have_onode(oid)) {
-    dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << endl;
+    dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << dendl;
     return -1;  // object dne?
   } 
   Onode *on = get_onode(oid);
   
   if (!on->have_oc()) {  
     // nothing is cached.  return # of extents in file.
-    dout(10) << "_is_cached have onode but no object cache, returning extent count" << endl;
+    dout(10) << "_is_cached have onode but no object cache, returning extent count" << dendl;
     return on->extent_map.size();
   }
   
@@ -1962,7 +1998,7 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   map<block_t, BufferHead*> partials;  // ??
   
   int num_missing = on->get_oc(&bc)->try_map_read(bstart, blen);
-  dout(7) << "_is_cached try_map_read reports " << num_missing << " missing extents" << endl;
+  dout(7) << "_is_cached try_map_read reports " << num_missing << " missing extents" << dendl;
   return num_missing;
 
   // FIXME: actually, we should calculate if these extents are contiguous.
@@ -1991,7 +2027,7 @@ void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
 {
   // be careful not to load it if we don't have it
   if (!have_onode(oid)) {
-    dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << endl;
+    dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << dendl;
     return; 
   } 
   
@@ -2024,11 +2060,11 @@ int Ebofs::read(object_t oid,
 
 int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
 {
-  dout(7) << "_read " << oid << " " << off << "~" << len << endl;
+  dout(7) << "_read " << oid << " " << off << "~" << len << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) {
-    dout(7) << "_read " << oid << " " << off << "~" << len << " ... dne " << endl;
+    dout(7) << "_read " << oid << " " << off << "~" << len << " ... dne " << dendl;
     return -ENOENT;  // object dne?
   }
 
@@ -2039,7 +2075,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
   while (1) {
     // check size bound
     if (off >= on->object_size) {
-      dout(7) << "_read " << oid << " " << off << "~" << len << " ... off past eof " << on->object_size << endl;
+      dout(7) << "_read " << oid << " " << off << "~" << len << " ... off past eof " << on->object_size << dendl;
       r = -ESPIPE;   // FIXME better errno?
       break;
     }
@@ -2056,7 +2092,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
       cond.Wait(ebofs_lock);
 
     if (on->deleted) {
-      dout(7) << "_read " << oid << " " << off << "~" << len << " ... object deleted" << endl;
+      dout(7) << "_read " << oid << " " << off << "~" << len << " ... object deleted" << dendl;
       r = -ENOENT;
       break;
     }
@@ -2067,7 +2103,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
   trim_bc();
 
   if (r < 0) return r;   // return error,
-  dout(7) << "_read " << oid << " " << off << "~" << len << " ... got " << bl.length() << endl;
+  dout(7) << "_read " << oid << " " << off << "~" << len << " ... got " << bl.length() << dendl;
   return bl.length();    // or bytes read.
 }
 
@@ -2089,7 +2125,7 @@ bool Ebofs::write_will_block()
 unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 {
   ebofs_lock.Lock();
-  dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << endl;
+  dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << dendl;
 
   unsigned r = _apply_transaction(t);
 
@@ -2130,7 +2166,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         bufferlist *pbl;
 	t.get_pbl(pbl);
         if (_read(oid, offset, len, *pbl) < 0) {
-          dout(7) << "apply_transaction fail on _read" << endl;
+          dout(7) << "apply_transaction fail on _read" << dendl;
           r &= bit;
         }
       }
@@ -2143,7 +2179,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         struct stat *st;
 	t.get_pstat(st);
         if (_stat(oid, st) < 0) {
-          dout(7) << "apply_transaction fail on _stat" << endl;
+          dout(7) << "apply_transaction fail on _stat" << dendl;
           r &= bit;
         }
       }
@@ -2158,7 +2194,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         pair<void*,int*> pattrval;
 	t.get_pattrval(pattrval);
         if ((*(pattrval.second) = _getattr(oid, attrname, pattrval.first, *(pattrval.second))) < 0) {
-          dout(7) << "apply_transaction fail on _getattr" << endl;
+          dout(7) << "apply_transaction fail on _getattr" << dendl;
           r &= bit;
         }        
       }
@@ -2171,7 +2207,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         map<string,bufferptr> *pset;
 	t.get_pattrset(pset);
         if (_getattrs(oid, *pset) < 0) {
-          dout(7) << "apply_transaction fail on _getattrs" << endl;
+          dout(7) << "apply_transaction fail on _getattrs" << dendl;
           r &= bit;
         }        
       }
@@ -2188,7 +2224,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         bufferlist bl;
 	t.get_bl(bl);
         if (_write(oid, offset, len, bl) < 0) {
-          dout(7) << "apply_transaction fail on _write" << endl;
+          dout(7) << "apply_transaction fail on _write" << dendl;
           r &= bit;
         }
       }
@@ -2212,7 +2248,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         off_t len;
 	t.get_length(len);
         if (_truncate(oid, len) < 0) {
-          dout(7) << "apply_transaction fail on _truncate" << endl;
+          dout(7) << "apply_transaction fail on _truncate" << dendl;
           r &= bit;
         }
       }
@@ -2223,7 +2259,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         object_t oid;
 	t.get_oid(oid);
         if (_remove(oid) < 0) {
-          dout(7) << "apply_transaction fail on _remove" << endl;
+          dout(7) << "apply_transaction fail on _remove" << dendl;
           r &= bit;
         }
       }
@@ -2238,7 +2274,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         bufferlist bl;
 	t.get_bl(bl);
         if (_setattr(oid, attrname, bl.c_str(), bl.length()) < 0) {
-          dout(7) << "apply_transaction fail on _setattr" << endl;
+          dout(7) << "apply_transaction fail on _setattr" << dendl;
           r &= bit;
         }
       }
@@ -2251,7 +2287,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         map<string,bufferptr> *pattrset;
 	t.get_pattrset(pattrset);
         if (_setattrs(oid, *pattrset) < 0) {
-          dout(7) << "apply_transaction fail on _setattrs" << endl;
+          dout(7) << "apply_transaction fail on _setattrs" << dendl;
           r &= bit;
         }
       }
@@ -2264,7 +2300,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	const char *attrname;
 	t.get_attrname(attrname);
         if (_rmattr(oid, attrname) < 0) {
-          dout(7) << "apply_transaction fail on _rmattr" << endl;
+          dout(7) << "apply_transaction fail on _rmattr" << dendl;
           r &= bit;
         }
       }
@@ -2277,7 +2313,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         object_t noid;
 	t.get_oid(noid);
 	if (_clone(oid, noid) < 0) {
-	  dout(7) << "apply_transaction fail on _clone" << endl;
+	  dout(7) << "apply_transaction fail on _clone" << dendl;
 	  r &= bit;
 	}
       }
@@ -2288,7 +2324,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         coll_t cid;
 	t.get_cid(cid);
         if (_create_collection(cid) < 0) {
-          dout(7) << "apply_transaction fail on _create_collection" << endl;
+          dout(7) << "apply_transaction fail on _create_collection" << dendl;
           r &= bit;
         }
       }
@@ -2299,7 +2335,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         coll_t cid;
 	t.get_cid(cid);
         if (_destroy_collection(cid) < 0) {
-          dout(7) << "apply_transaction fail on _destroy_collection" << endl;
+          dout(7) << "apply_transaction fail on _destroy_collection" << dendl;
           r &= bit;
         }
       }
@@ -2312,7 +2348,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         object_t oid;
 	t.get_oid(oid);
         if (_collection_add(cid, oid) < 0) {
-          //dout(7) << "apply_transaction fail on _collection_add" << endl;
+          //dout(7) << "apply_transaction fail on _collection_add" << dendl;
           //r &= bit;
         }
       }
@@ -2325,7 +2361,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         object_t oid;
 	t.get_oid(oid);
         if (_collection_remove(cid, oid) < 0) {
-          dout(7) << "apply_transaction fail on _collection_remove" << endl;
+          dout(7) << "apply_transaction fail on _collection_remove" << dendl;
           r &= bit;
         }
       }
@@ -2341,7 +2377,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	t.get_bl(bl);
         if (_collection_setattr(cid, attrname, bl.c_str(), bl.length()) < 0) {
           //if (_collection_setattr(cid, attrname, attrval.first, attrval.second) < 0) {
-          dout(7) << "apply_transaction fail on _collection_setattr" << endl;
+          dout(7) << "apply_transaction fail on _collection_setattr" << dendl;
           r &= bit;
         }
       }
@@ -2354,21 +2390,21 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	const char *attrname;
 	t.get_attrname(attrname);
         if (_collection_rmattr(cid, attrname) < 0) {
-          dout(7) << "apply_transaction fail on _collection_rmattr" << endl;
+          dout(7) << "apply_transaction fail on _collection_rmattr" << dendl;
           r &= bit;
         }
       }
       break;
       
     default:
-      cerr << "bad op " << op << endl;
+      dout(0) << "bad op " << op << dendl;
       assert(0);
     }
 
     bit = bit << 1;
   }
   
-  dout(7) << "_apply_transaction finish (r = " << r << ")" << endl;
+  dout(7) << "_apply_transaction finish (r = " << r << ")" << dendl;
   return r;
 }
 
@@ -2376,7 +2412,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
 int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& bl)
 {
-  dout(7) << "_write " << oid << " " << offset << "~" << length << endl;
+  dout(7) << "_write " << oid << " " << offset << "~" << length << dendl;
   assert(bl.length() == length);
 
   // too much unflushed dirty data?  (if so, block!)
@@ -2390,7 +2426,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& b
               << "; dirty " << bc.get_stat_dirty()
               << ", tx " << bc.get_stat_tx()
               << ", max dirty " << g_conf.ebofs_bc_max_dirty
-              << endl;
+              << dendl;
 
     while (_write_will_block()) 
       bc.waitfor_stat();  // waits on ebofs_lock
@@ -2404,14 +2440,14 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& b
               << "; dirty " << bc.get_stat_dirty()
               << ", tx " << bc.get_stat_tx()
               << ", max dirty " << g_conf.ebofs_bc_max_dirty
-              << endl;
+              << dendl;
   }
 
   // out of space?
   unsigned max = (length+offset) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
   max += dirty_onodes.size() + dirty_cnodes.size();
   if (max >= free_blocks) {
-    dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << endl;
+    dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << dendl;
     return -ENOSPC;
   }
   
@@ -2442,7 +2478,6 @@ int Ebofs::write(object_t oid,
                  const bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
-  assert(len > 0);
 
   // go
   int r = _write(oid, off, len, bl);
@@ -2472,7 +2507,7 @@ int Ebofs::write(object_t oid,
 
 int Ebofs::_remove(object_t oid)
 {
-  dout(7) << "_remove " << oid << endl;
+  dout(7) << "_remove " << oid << dendl;
 
   // get inode
   Onode *on = get_onode(oid);
@@ -2515,7 +2550,7 @@ int Ebofs::remove(object_t oid, Context *onsafe)
 
 int Ebofs::_truncate(object_t oid, off_t size)
 {
-  dout(7) << "_truncate " << oid << " size " << size << endl;
+  dout(7) << "_truncate " << oid << " size " << size << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) 
@@ -2558,7 +2593,7 @@ int Ebofs::_truncate(object_t oid, off_t size)
       left.insert(0, nblocks);
       uncom.intersection_of(left, on->uncommitted);
     }
-    dout(10) << "uncommitted was " << on->uncommitted << "  now " << uncom << endl;
+    dout(10) << "uncommitted was " << on->uncommitted << "  now " << uncom << dendl;
     on->uncommitted = uncom;
 
   }
@@ -2629,7 +2664,7 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
 
 int Ebofs::_clone(object_t from, object_t to)
 {
-  dout(7) << "_clone " << from << " -> " << to << endl;
+  dout(7) << "_clone " << from << " -> " << to << dendl;
 
   if (!g_conf.ebofs_cloneable) 
     return -1;  // no!
@@ -2725,7 +2760,7 @@ int Ebofs::pick_object_revision_lt(object_t& oid)
     }
     
     dout(8) << "find_object_revision " << orig << " -> " << oid
-	    << "  r=" << r << endl;
+	    << "  r=" << r << dendl;
   }
   ebofs_lock.Unlock();
   return r;
@@ -2737,7 +2772,7 @@ int Ebofs::pick_object_revision_lt(object_t& oid)
 bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
-  dout(8) << "exists " << oid << endl;
+  dout(8) << "exists " << oid << dendl;
   bool e = (object_tab->lookup(oid) == 0);
   ebofs_lock.Unlock();
   return e;
@@ -2753,7 +2788,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
 
 int Ebofs::_stat(object_t oid, struct stat *st)
 {
-  dout(7) << "_stat " << oid << endl;
+  dout(7) << "_stat " << oid << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2768,7 +2803,7 @@ int Ebofs::_stat(object_t oid, struct stat *st)
 
 int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t size) 
 {
-  dout(8) << "setattr " << oid << " '" << name << "' len " << size << endl;
+  dout(8) << "setattr " << oid << " '" << name << "' len " << size << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2782,7 +2817,7 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   dirty_onode(on);
   put_onode(on);
 
-  dout(8) << "setattr " << oid << " '" << name << "' len " << size << " success" << endl;
+  dout(8) << "setattr " << oid << " '" << name << "' len " << size << " success" << dendl;
 
   return 0;
 }
@@ -2815,7 +2850,7 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
 
 int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
 {
-  dout(8) << "setattrs " << oid << endl;
+  dout(8) << "setattrs " << oid << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2856,6 +2891,26 @@ int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsaf
   return r;
 }
 
+
+int Ebofs::get_object_collections(object_t oid, set<coll_t>& ls)
+{
+  ebofs_lock.Lock();
+  int r = _get_object_collections(oid, ls);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_get_object_collections(object_t oid, set<coll_t>& ls)
+{
+  dout(8) << "_get_object_collections " << oid << dendl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+  ls = on->collections;
+  put_onode(on);
+  return 0;
+}
+
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
@@ -2866,7 +2921,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 
 int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
 {
-  dout(8) << "_getattr " << oid << " '" << name << "' maxlen " << size << endl;
+  dout(8) << "_getattr " << oid << " '" << name << "' maxlen " << size << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2874,11 +2929,11 @@ int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
   string n(name);
   int r = 0;
   if (on->attr.count(n) == 0) {
-    dout(10) << "_getattr " << oid << " '" << name << "' dne" << endl;
+    dout(10) << "_getattr " << oid << " '" << name << "' dne" << dendl;
     r = -1;
   } else {
     r = MIN( on->attr[n].length(), size );
-    dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << endl;
+    dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << dendl;
     memcpy(value, on->attr[n].c_str(), r );
   }
   put_onode(on);
@@ -2895,7 +2950,7 @@ int Ebofs::getattrs(object_t oid, map<string,bufferptr> &aset)
 
 int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
 {
-  dout(8) << "_getattrs " << oid << endl;
+  dout(8) << "_getattrs " << oid << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2908,7 +2963,7 @@ int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
 
 int Ebofs::_rmattr(object_t oid, const char *name) 
 {
-  dout(8) << "_rmattr " << oid << " '" << name << "'" << endl;
+  dout(8) << "_rmattr " << oid << " '" << name << "'" << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2954,7 +3009,7 @@ int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe)
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
-  dout(8) << "listattr " << oid << endl;
+  dout(8) << "listattr " << oid << dendl;
 
   Onode *on = get_onode(oid);
   if (!on) {
@@ -2974,6 +3029,25 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
   return 0;
 }
 
+int Ebofs::list_objects(list<object_t>& ls)
+{
+  ebofs_lock.Lock();
+  dout(9) << "list_objects " << dendl;
+
+  Table<object_t, Extent>::Cursor cursor(object_tab);
+
+  int num = 0;
+  if (object_tab->find(object_t(), cursor) >= 0) {
+    while (1) {
+      ls.push_back(cursor.current().key);
+      num++;
+      if (cursor.move_right() <= 0) break;
+    }
+  }
+
+  ebofs_lock.Unlock();
+  return num;
+}
 
 
 /***************** collections ******************/
@@ -2981,7 +3055,7 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
 int Ebofs::list_collections(list<coll_t>& ls)
 {
   ebofs_lock.Lock();
-  dout(9) << "list_collections " << endl;
+  dout(9) << "list_collections " << dendl;
 
   Table<coll_t, Extent>::Cursor cursor(collection_tab);
 
@@ -3000,7 +3074,7 @@ int Ebofs::list_collections(list<coll_t>& ls)
 
 int Ebofs::_create_collection(coll_t cid)
 {
-  dout(9) << "_create_collection " << hex << cid << dec << endl;
+  dout(9) << "_create_collection " << hex << cid << dec << dendl;
   
   if (_collection_exists(cid)) 
     return -EEXIST;
@@ -3040,7 +3114,7 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
 
 int Ebofs::_destroy_collection(coll_t cid)
 {
-  dout(9) << "_destroy_collection " << hex << cid << dec << endl;
+  dout(9) << "_destroy_collection " << hex << cid << dec << dendl;
 
   if (!_collection_exists(cid)) 
     return -ENOENT;
@@ -3098,7 +3172,7 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
 bool Ebofs::collection_exists(coll_t cid)
 {
   ebofs_lock.Lock();
-  dout(10) << "collection_exists " << hex << cid << dec << endl;
+  dout(10) << "collection_exists " << hex << cid << dec << dendl;
   bool r = _collection_exists(cid);
   ebofs_lock.Unlock();
   return r;
@@ -3110,7 +3184,7 @@ bool Ebofs::_collection_exists(coll_t cid)
 
 int Ebofs::_collection_add(coll_t cid, object_t oid)
 {
-  dout(9) << "_collection_add " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "_collection_add " << hex << cid << " object " << oid << dec << dendl;
 
   if (!_collection_exists(cid)) 
     return -ENOENT;
@@ -3161,7 +3235,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
 
 int Ebofs::_collection_remove(coll_t cid, object_t oid)
 {
-  dout(9) << "_collection_remove " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "_collection_remove " << hex << cid << " object " << oid << dec << dendl;
 
   if (!_collection_exists(cid)) 
     return -ENOENT;
@@ -3213,7 +3287,7 @@ int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
 int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 {
   ebofs_lock.Lock();
-  dout(9) << "collection_list " << hex << cid << dec << endl;
+  dout(9) << "collection_list " << hex << cid << dec << dendl;
 
   if (!_collection_exists(cid)) {
     ebofs_lock.Unlock();
@@ -3228,7 +3302,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
       const coll_t c = cursor.current().key.first;
       const object_t o = cursor.current().key.second;
       if (c != cid) break;   // end!
-      dout(10) << "collection_list  " << hex << cid << " includes " << o << dec << endl;
+      dout(10) << "collection_list  " << hex << cid << " includes " << o << dec << dendl;
       ls.push_back(o);
       num++;
       if (cursor.move_right() < 0) break;
@@ -3242,7 +3316,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 
 int Ebofs::_collection_setattr(coll_t cid, const char *name, const void *value, size_t size)
 {
-  dout(10) << "_collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
+  dout(10) << "_collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << dendl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) return -ENOENT;
@@ -3258,7 +3332,7 @@ int Ebofs::_collection_setattr(coll_t cid, const char *name, const void *value, 
 int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
-  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << dendl;
 
   int r = _collection_setattr(cid, name, value, size);
 
@@ -3286,7 +3360,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
 int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
-  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' maxlen " << size << endl;
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' maxlen " << size << dendl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -3308,9 +3382,49 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   return r;
 }
 
+int Ebofs::collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  ebofs_lock.Lock();
+  int r = _collection_getattrs(cid, aset);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  dout(8) << "_collection_getattrs " << cid << dendl;
+
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -ENOENT;
+  aset = cn->attr;
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  ebofs_lock.Lock();
+  int r = _collection_setattrs(cid, aset);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
+{
+  dout(8) << "_collection_setattrs " << cid << dendl;
+  
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -ENOENT;
+  cn->attr = aset;
+  dirty_cnode(cn);
+  put_cnode(cn);
+  return 0;
+}
+
+
 int Ebofs::_collection_rmattr(coll_t cid, const char *name) 
 {
-  dout(10) << "_collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
+  dout(10) << "_collection_rmattr " << hex << cid << dec << " '" << name << "'" << dendl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) return -ENOENT;
@@ -3354,7 +3468,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
 int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
-  dout(10) << "collection_listattr " << hex << cid << dec << endl;
+  dout(10) << "collection_listattr " << hex << cid << dec << dendl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -3393,7 +3507,7 @@ void Ebofs::_export_freelist(bufferlist& bl)
         assert(cursor.current().value > 0);
         
         Extent ex(cursor.current().key, cursor.current().value);
-        dout(10) << "_export_freelist " << ex << endl;
+        dout(10) << "_export_freelist " << ex << dendl;
         bl.append((char*)&ex, sizeof(ex));
         if (cursor.move_right() <= 0) break;
       }
@@ -3412,7 +3526,7 @@ void Ebofs::_import_freelist(bufferlist& bl)
   int num = bl.length() / sizeof(Extent);
   Extent *p = (Extent*)bl.c_str();
   for (int i=0; i<num; i++) {
-    dout(10) << "_import_freelist " << p[i] << endl;
+    dout(10) << "_import_freelist " << p[i] << dendl;
     allocator._release_loner(p[i]);
   }
 }
@@ -3433,10 +3547,10 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
     Table<block_t,block_t> *tab;
     if (b < EBOFS_NUM_FREE_BUCKETS) {
       tab = free_tab[b];
-      dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
+      dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << dendl;
     } else {
       tab = limbo_tab;
-      dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
+      dout(30) << "dump limbo  " << tab->get_num_keys() << dendl;;
     }
     
     if (tab->get_num_keys() > 0) {

@@ -83,7 +83,6 @@ class CInode : public MDSCacheObject {
   }
 
   // -- state --
-  static const int STATE_ROOT =        (1<<1);
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
   static const int STATE_ANCHORING =   (1<<3);
   static const int STATE_UNANCHORING = (1<<4);
@@ -123,6 +122,9 @@ class CInode : public MDSCacheObject {
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
 
+  //bool hack_accessed;
+  //utime_t hack_load_stamp;
+
   // projected values (only defined while dirty)
   list<inode_t*>    projected_inode;
   list<fragtree_t> projected_dirfragtree;
@@ -147,7 +149,7 @@ public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
-      assert(dirfragtree.is_leaf(fg));
+      assert(g_conf.debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return dirfrags[fg];
     } else
       return 0;
@@ -210,6 +212,7 @@ protected:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_journaled(0), last_open_journaled(0), 
+    //hack_accessed(true),
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
@@ -240,7 +243,7 @@ protected:
   bool is_anchoring() { return state_test(STATE_ANCHORING); }
   bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
   
-  bool is_root() { return state & STATE_ROOT; }
+  bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
 
 
@@ -401,7 +404,7 @@ public:
 
 
   void replicate_relax_locks() {
-    dout(10) << " relaxing locks on " << *this << endl;
+    //dout(10) << " relaxing locks on " << *this << dendl;
     assert(is_auth());
     assert(!is_replicated());
 
@@ -438,12 +441,12 @@ public:
 
   // -- reference counting --
   void bad_put(int by) {
-    dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    generic_dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
     assert(ref_set.count(by) == 1);
     assert(ref > 0);
   }
   void bad_get(int by) {
-    dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    generic_dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
     assert(ref_set.count(by) == 0);
   }
   void first_get();
@@ -472,7 +475,7 @@ public:
   void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
     if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
         (!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << dendl;
       ls = cached_by;
     }
   }

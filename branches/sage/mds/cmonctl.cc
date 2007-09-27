@@ -41,9 +41,9 @@ class Admin : public Dispatcher {
   void dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
-      dout(0) << m->get_source() << " -> '"
-	      << ((MMonCommandAck*)m)->rs << "' (" << ((MMonCommandAck*)m)->r << ")"
-	      << endl;
+      generic_dout(0) << m->get_source() << " -> '"
+		      << ((MMonCommandAck*)m)->rs << "' (" << ((MMonCommandAck*)m)->r << ")"
+		      << dendl;
       messenger->shutdown();
       break;      
     }
@@ -66,7 +66,7 @@ int main(int argc, char **argv, char *envp[]) {
   
   // start up network
   rank.start_rank();
-  messenger = rank.register_entity(entity_name_t(entity_name_t::TYPE_ADMIN));
+  messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
   
   // build command
@@ -79,7 +79,7 @@ int main(int argc, char **argv, char *envp[]) {
   }
   int mon = monmap.pick_mon();
 
-  dout(0) << "mon" << mon << " <- '" << cmd << "'" << endl;
+  generic_dout(0) << "mon" << mon << " <- '" << cmd << "'" << dendl;
 
   // send it
   messenger->send_message(m, monmap.get_inst(mon));

@@ -19,8 +19,6 @@
 
 #include <stdint.h>
 #include <assert.h>
-#include <iostream>
-using namespace std;
 
 #include "config.h"
 
@@ -209,7 +207,7 @@ class LRU {
     if (!lru_max) return;
 
     unsigned toplen = lru_top.get_length();
-    unsigned topwant = (unsigned)(lru_midpoint * (double)lru_max);
+    unsigned topwant = (unsigned)(lru_midpoint * ((double)lru_max - lru_num_pinned));
     while (toplen > 0 && 
            toplen > topwant) {
       // remove from tail of top, stick at head of bot
@@ -307,7 +305,7 @@ class LRU {
 
 
   void lru_status() {
-    dout(10) << "lru: " << lru_num << " items, " << lru_top.get_length() << " top, " << lru_bot.get_length() << " bot, " << lru_pintail.get_length() << " pintail" << endl;
+    generic_dout(10) << "lru: " << lru_num << " items, " << lru_top.get_length() << " top, " << lru_bot.get_length() << " bot, " << lru_pintail.get_length() << " pintail" << dendl;
   }
 
 };

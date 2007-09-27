@@ -21,9 +21,8 @@
 #include "config.h"
 #include "include/Context.h"
 
-#undef dout
-#define dout(x)  if (x <= g_conf.debug_timer) cout << g_clock.now() << " TIMER "
-#define derr(x)  if (x <= g_conf.debug_timer) cerr << g_clock.now() << " TIMER "
+#define dout(x)  if (x <= g_conf.debug_timer) *_dout << dbeginl << g_clock.now() << " TIMER "
+#define derr(x)  if (x <= g_conf.debug_timer) *_derr << dbeginl << g_clock.now() << " TIMER "
 
 #define DBL 10
 
@@ -41,12 +40,12 @@ Timer      g_timer;
 bool Timer::get_next_due(utime_t& when)
 {
   if (scheduled.empty()) {
-    dout(10) << "get_next_due - nothing scheduled" << endl;
+    dout(10) << "get_next_due - nothing scheduled" << dendl;
     return false;
   } else {
     map< utime_t, set<Context*> >::iterator it = scheduled.begin();
     when = it->first;
-    dout(10) << "get_next_due - " << when << endl;
+    dout(10) << "get_next_due - " << when << dendl;
     return true;
   }
 }
@@ -74,7 +73,7 @@ void Timer::timer_entry()
         if (it->first > now) break;
 
         utime_t t = it->first;
-        dout(DBL) << "queueing event(s) scheduled at " << t << endl;
+        dout(DBL) << "queueing event(s) scheduled at " << t << dendl;
 
         for (set<Context*>::iterator cit = it->second.begin();
              cit != it->second.end();
@@ -98,9 +97,9 @@ void Timer::timer_entry()
           for (list<Context*>::iterator cit = pending.begin();
                cit != pending.end();
                cit++) {
-            dout(DBL) << "start callback " << *cit << endl;
+            dout(DBL) << "start callback " << *cit << dendl;
             (*cit)->finish(0);
-            dout(DBL) << "finish callback " << *cit << endl;
+            dout(DBL) << "finish callback " << *cit << dendl;
 	    delete *cit;
           }
           pending.clear();
@@ -113,19 +112,19 @@ void Timer::timer_entry()
     else {
       // sleep
       if (next_due) {
-        dout(DBL) << "sleeping until " << next << endl;
+        dout(DBL) << "sleeping until " << next << dendl;
         timed_sleep = true;
         sleeping = true;
         timeout_cond.WaitUntil(lock, next);  // wait for waker or time
         utime_t now = g_clock.now();
-        dout(DBL) << "kicked or timed out at " << now << endl;
+        dout(DBL) << "kicked or timed out at " << now << dendl;
       } else {
-        dout(DBL) << "sleeping" << endl;
+        dout(DBL) << "sleeping" << dendl;
         timed_sleep = false;
         sleeping = true;
         sleep_cond.Wait(lock);         // wait for waker
         utime_t now = g_clock.now();
-        dout(DBL) << "kicked at " << now << endl;
+        dout(DBL) << "kicked at " << now << dendl;
       }
     }
   }
@@ -143,17 +142,17 @@ void Timer::register_timer()
 {
   if (timer_thread.is_started()) {
     if (sleeping) {
-      dout(DBL) << "register_timer kicking thread" << endl;
+      dout(DBL) << "register_timer kicking thread" << dendl;
       if (timed_sleep)
         timeout_cond.SignalAll();
       else
         sleep_cond.SignalAll();
     } else {
-      dout(DBL) << "register_timer doing nothing; thread is awake" << endl;
+      dout(DBL) << "register_timer doing nothing; thread is awake" << dendl;
       // it's probably doing callbacks.
     }
   } else {
-    dout(DBL) << "register_timer starting thread" << endl;
+    dout(DBL) << "register_timer starting thread" << dendl;
     timer_thread.create();
   }
 }
@@ -162,7 +161,7 @@ void Timer::cancel_timer()
 {
   // clear my callback pointers
   if (timer_thread.is_started()) {
-    dout(10) << "setting thread_stop flag" << endl;
+    dout(10) << "setting thread_stop flag" << dendl;
     lock.Lock();
     thread_stop = true;
     if (timed_sleep)
@@ -171,11 +170,11 @@ void Timer::cancel_timer()
       sleep_cond.SignalAll();
     lock.Unlock();
     
-    dout(10) << "waiting for thread to finish" << endl;
+    dout(10) << "waiting for thread to finish" << dendl;
     void *ptr;
     timer_thread.join(&ptr);
     
-    dout(10) << "thread finished, exit code " << ptr << endl;
+    dout(10) << "thread finished, exit code " << ptr << dendl;
   }
 }
 
@@ -198,7 +197,7 @@ void Timer::add_event_at(utime_t when,
 {
   lock.Lock();
 
-  dout(DBL) << "add_event " << callback << " at " << when << endl;
+  dout(DBL) << "add_event " << callback << " at " << when << dendl;
 
   // insert
   scheduled[when].insert(callback);
@@ -217,10 +216,10 @@ bool Timer::cancel_event(Context *callback)
 {
   lock.Lock();
   
-  dout(DBL) << "cancel_event " << callback << endl;
+  dout(DBL) << "cancel_event " << callback << dendl;
 
   if (!event_times.count(callback)) {
-    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing)" << endl;
+    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing)" << dendl;
     lock.Unlock();
     return false;     // wasn't scheduled.
   }
@@ -249,7 +248,7 @@ void SafeTimer::add_event_after(float seconds, Context *c)
 {
   assert(lock.is_locked());
   Context *w = new EventWrapper(this, c);
-  dout(DBL) << "SafeTimer.add_event_after wrapping " << c << " with " << w << endl;
+  dout(DBL) << "SafeTimer.add_event_after wrapping " << c << " with " << w << dendl;
   scheduled[c] = w;
   g_timer.add_event_after(seconds, w);
 }
@@ -258,7 +257,7 @@ void SafeTimer::add_event_at(utime_t when, Context *c)
 {
   assert(lock.is_locked());
   Context *w = new EventWrapper(this, c);
-  dout(DBL) << "SafeTimer.add_event_at wrapping " << c << " with " << w << endl;
+  dout(DBL) << "SafeTimer.add_event_at wrapping " << c << " with " << w << dendl;
   scheduled[c] = w;
   g_timer.add_event_at(when, w);
 }
@@ -316,11 +315,13 @@ void SafeTimer::join()
   assert(lock.is_locked());
   assert(scheduled.empty());
 
-  while (!canceled.empty()) {
-    // wait
-    dout(-10) << "SafeTimer.join waiting for " << canceled.size() << " to join" << endl;
-    dout(-10) << canceled << endl;
-    cond.Wait(lock);
+  if (!canceled.empty()) {
+    while (!canceled.empty()) {
+      // wait
+      dout(2) << "SafeTimer.join waiting for " << canceled.size() << " to join: " << canceled << dendl;
+      cond.Wait(lock);
+    }
+    dout(2) << "SafeTimer.join done" << dendl;
   }
 }
 
@@ -329,6 +330,6 @@ SafeTimer::~SafeTimer()
   if (!scheduled.empty() && !canceled.empty()) {
     derr(0) << "SafeTimer.~SafeTimer " << scheduled.size() << " events scheduled, " 
 	    << canceled.size() << " canceled but unflushed" 
-	    << endl;
+	    << dendl;
   }
 }

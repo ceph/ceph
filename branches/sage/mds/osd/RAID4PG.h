@@ -65,7 +65,7 @@ public:
   void cancel_recovery();
   bool do_recovery();
 
-  void clean_replicas();
+  void purge_strays();
 
 
 };

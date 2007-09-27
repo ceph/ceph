@@ -31,6 +31,12 @@
 
 #include <cassert>
 
+#include "config.h"
+
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
+
+
+
 
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
@@ -57,6 +63,8 @@ ostream& operator<<(ostream& out, CDir& dir)
     if (dir.get_replica_nonce() > 1)
       out << "." << dir.get_replica_nonce();
   }
+
+  if (dir.is_rep()) out << " REP";
 
   if (dir.get_dir_auth() != CDIR_AUTH_DEFAULT) {
     if (dir.get_dir_auth().second == CDIR_AUTH_UNKNOWN)
@@ -99,10 +107,6 @@ void CDir::print(ostream& out)
 }
 
 
-#include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
-//#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
 
 
 ostream& CDir::print_db_line_prefix(ostream& out) 
@@ -143,6 +147,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   auth_pins = 0;
   nested_auth_pins = 0;
   request_pins = 0;
+
+  //hack_num_accessed = -1;
   
   dir_rep = REP_NONE;
   //dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
@@ -176,7 +182,7 @@ CDentry* CDir::add_null_dentry(const string& dname)
   items[dn->name] = dn;
   nnull++;
 
-  dout(12) << "add_null_dentry " << *dn << endl;
+  dout(12) << "add_null_dentry " << *dn << dendl;
 
   // pin?
   if (nnull + nitems == 1) get(PIN_CHILD);
@@ -208,7 +214,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in)
   items[dn->name] = dn;
   link_inode_work( dn, in );
 
-  dout(12) << "add_primary_dentry " << *dn << endl;
+  dout(12) << "add_primary_dentry " << *dn << dendl;
 
   // pin?
   if (nnull + nitems == 1) get(PIN_CHILD);
@@ -239,7 +245,7 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
   items[dn->name] = dn;
   nitems++;
 
-  dout(12) << "add_remote_dentry " << *dn << endl;
+  dout(12) << "add_remote_dentry " << *dn << dendl;
 
   // pin?
   if (nnull + nitems == 1) get(PIN_CHILD);
@@ -253,7 +259,7 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
 
 void CDir::remove_dentry(CDentry *dn) 
 {
-  dout(12) << "remove_dentry " << *dn << endl;
+  dout(12) << "remove_dentry " << *dn << dendl;
 
   if (dn->inode) {
     // detach inode and dentry
@@ -285,9 +291,9 @@ void CDir::remove_dentry(CDentry *dn)
 
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
-  dout(12) << "link_inode " << *dn << " remote " << ino << endl;
-
+  dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;
   assert(dn->is_null());
+
   dn->set_remote(ino, d_type);
   nitems++;
   dn->clear_dir_offset();
@@ -300,8 +306,8 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
-  dout(12) << "link_primary_inode " << *dn << " " << *in << endl;
-  assert(!dn->is_remote());
+  dout(12) << "link_primary_inode " << *dn << " " << *in << dendl;
+  assert(dn->is_null());
 
   link_inode_work(dn,in);
   dn->clear_dir_offset();
@@ -317,6 +323,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
+  assert(dn->inode == 0);
   dn->inode = in;
   in->set_primary_parent(dn);
 
@@ -337,9 +344,9 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 void CDir::unlink_inode( CDentry *dn )
 {
   if (dn->is_remote()) {
-    dout(12) << "unlink_inode " << *dn << endl;
+    dout(12) << "unlink_inode " << *dn << dendl;
   } else {
-    dout(12) << "unlink_inode " << *dn << " " << *dn->inode << endl;
+    dout(12) << "unlink_inode " << *dn << " " << *dn->inode << dendl;
   }
 
   dn->clear_dir_offset();
@@ -360,13 +367,23 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
   assert(dn->is_null());
   assert(dn->is_dirty());
   
+  /* FIXME: there is a bug in this.  i think new dentries are properly
+     identified.. e.g. maybe a dentry exists, is committed, is removed, is now
+     dirty+null, then reused and mistakenly considered new.. then it is removed, 
+     we remove it here, the dir is fetched, and the dentry exists again.  
+     
+     somethign like that...
+  */
+  return;
+
+
   // no pins (besides dirty)?
   if (dn->get_num_ref() != 1) 
     return;
 
   // was the dn new?  or is the dir complete (i.e. we don't need negatives)? 
   if (dn->is_new() || is_complete()) {
-    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << endl;
+    dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << dendl;
     dn->mark_clean();
     remove_dentry(dn);
 
@@ -375,7 +392,7 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
 	num_dirty == 0) {
       dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
 	       << " vs committed " << committed_version
-	       << endl;
+	       << dendl;
       committed_version_equivalent = committed_version;    
     }
   }
@@ -414,10 +431,10 @@ void CDir::unlink_inode_work( CDentry *dn )
 }
 
 void CDir::remove_null_dentries() {
-  dout(12) << "remove_null_dentries " << *this << endl;
+  dout(12) << "remove_null_dentries " << *this << dendl;
 
   list<CDentry*> dns;
-  for (CDir_map_t::iterator it = items.begin();
+  for (CDir::map_t::iterator it = items.begin();
        it != items.end(); 
        it++) {
     if (it->second->is_null())
@@ -443,7 +460,7 @@ void CDir::remove_null_dentries() {
  */
 void CDir::steal_dentry(CDentry *dn)
 {
-  dout(15) << "steal_dentry " << *dn << endl;
+  dout(15) << "steal_dentry " << *dn << dendl;
 
   items[dn->name] = dn;
 
@@ -500,7 +517,7 @@ void CDir::init_fragment_pins()
 
 void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 {
-  dout(10) << "split by " << bits << " bits on " << *this << endl;
+  dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
   if (cache->mds->logger) cache->mds->logger->inc("dir_sp");
 
@@ -511,6 +528,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 
   vector<CDir*> subfrags(1 << bits);
   
+  double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
+
   // create subfrag dirs
   int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
@@ -521,7 +540,19 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->init_fragment_pins();
     f->version = version;
     f->projected_version = projected_version;
-    dout(10) << " subfrag " << *p << " " << *f << endl;
+
+    f->pop_me = pop_me;
+    f->pop_me *= fac;
+
+    // FIXME; this is an approximation
+    f->pop_nested = pop_nested;
+    f->pop_nested *= fac;
+    f->pop_auth_subtree = pop_auth_subtree;
+    f->pop_auth_subtree *= fac;
+    f->pop_auth_subtree_nested = pop_auth_subtree_nested;
+    f->pop_auth_subtree_nested *= fac;
+
+    dout(10) << " subfrag " << *p << " " << *f << dendl;
     subfrags[n++] = f;
     subs.push_back(f);
     inode->add_dirfrag(f);
@@ -529,12 +560,12 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   
   // repartition dentries
   while (!items.empty()) {
-    map<string,CDentry*>::iterator p = items.begin();
+    CDir::map_t::iterator p = items.begin();
     
     CDentry *dn = p->second;
     frag_t subfrag = inode->pick_dirfrag(p->first);
     int n = subfrag.value() >> frag.bits();
-    dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << endl;
+    dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << dendl;
     CDir *f = subfrags[n];
     f->steal_dentry(dn);
   }
@@ -545,7 +576,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
 
 void CDir::merge(int bits, list<Context*>& waiters)
 {
-  dout(10) << "merge by " << bits << " bits" << endl;
+  dout(10) << "merge by " << bits << " bits" << dendl;
 
   list<frag_t> frags;
   frag.split(bits, frags);
@@ -553,7 +584,7 @@ void CDir::merge(int bits, list<Context*>& waiters)
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
     CDir *dir = inode->get_or_open_dirfrag(cache, *p);
     assert(dir->is_complete());
-    dout(10) << " subfrag " << *p << " " << *dir << endl;
+    dout(10) << " subfrag " << *p << " " << *dir << dendl;
     
     // steal dentries
     while (!dir->items.empty()) 
@@ -601,7 +632,7 @@ void CDir::add_dentry_waiter(const string& dname, Context *c)
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
   waiting_on_dentry[dname].push_back(c);
-  dout(10) << "add_dentry_waiter dentry " << dname << " " << c << " on " << *this << endl;
+  dout(10) << "add_dentry_waiter dentry " << dname << " " << c << " on " << *this << dendl;
 }
 
 void CDir::take_dentry_waiting(const string& dname, list<Context*>& ls)
@@ -610,7 +641,7 @@ void CDir::take_dentry_waiting(const string& dname, list<Context*>& ls)
   if (waiting_on_dentry.count(dname) == 0) return;
   dout(10) << "take_dentry_waiting dentry " << dname
 	   << " x " << waiting_on_dentry[dname].size() 
-	   << " on " << *this << endl;
+	   << " on " << *this << dendl;
   ls.splice(ls.end(), waiting_on_dentry[dname]);
   waiting_on_dentry.erase(dname);
   if (waiting_on_dentry.empty())
@@ -627,7 +658,7 @@ void CDir::add_waiter(int tag, Context *c)
     if (!(is_freezing_tree_root() || is_frozen_tree_root() ||
 	  is_freezing_dir() || is_frozen_dir())) {
       // try parent
-      dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << endl;
+      dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << dendl;
       inode->parent->dir->add_waiter(tag, c);
       return;
     }
@@ -637,7 +668,7 @@ void CDir::add_waiter(int tag, Context *c)
   if (tag & WAIT_ATSUBTREEROOT) {
     if (!is_subtree_root()) {
       // try parent
-      dout(10) << "add_waiter " << tag << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << endl;
+      dout(10) << "add_waiter " << tag << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << dendl;
       inode->parent->dir->add_waiter(tag, c);
       return;
     }
@@ -667,7 +698,7 @@ void CDir::take_waiting(int mask, list<Context*>& ls)
 
 void CDir::finish_waiting(int mask, int result) 
 {
-  dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << endl;
+  dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
 
   list<Context*> finished;
   take_waiting(mask, finished);
@@ -684,7 +715,7 @@ version_t CDir::pre_dirty(version_t min)
   if (min > projected_version) 
     projected_version = min;
   ++projected_version;
-  dout(10) << "pre_dirty " << projected_version << endl;
+  dout(10) << "pre_dirty " << projected_version << dendl;
   return projected_version;
 }
 
@@ -692,11 +723,11 @@ void CDir::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dout(10) << "mark_dirty (was clean) " << *this << " version " << version << endl;
+    dout(10) << "mark_dirty (was clean) " << *this << " version " << version << dendl;
     get(PIN_DIRTY);
     assert(ls);
   } else {
-    dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << endl;
+    dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << dendl;
   }
   if (ls) 
     ls->dirty_dirfrags.push_back(&xlist_dirty);
@@ -711,7 +742,7 @@ void CDir::mark_dirty(version_t pv, LogSegment *ls)
 
 void CDir::mark_clean()
 {
-  dout(10) << "mark_clean " << *this << " version " << version << endl;
+  dout(10) << "mark_clean " << *this << " version " << version << dendl;
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
@@ -756,13 +787,13 @@ class C_Dir_Fetch : public Context {
 
 void CDir::fetch(Context *c, bool ignore_authpinnability)
 {
-  dout(10) << "fetch on " << *this << endl;
+  dout(10) << "fetch on " << *this << dendl;
   
   assert(is_auth());
   assert(!is_complete());
 
   if (!can_auth_pin() && !ignore_authpinnability) {
-    dout(7) << "fetch waiting for authpinnable" << endl;
+    dout(7) << "fetch waiting for authpinnable" << dendl;
     add_waiter(WAIT_AUTHPINNABLE, c);
     return;
   }
@@ -771,7 +802,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   
   // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
-    dout(7) << "already fetching; waiting" << endl;
+    dout(7) << "already fetching; waiting" << dendl;
     return;
   }
 
@@ -794,7 +825,7 @@ void CDir::_fetched(bufferlist &bl)
 {
   dout(10) << "_fetched " << bl.length() 
 	   << " bytes for " << *this
-	   << endl;
+	   << dendl;
   
   assert(is_auth());
   assert(!is_frozen());
@@ -808,10 +839,12 @@ void CDir::_fetched(bufferlist &bl)
 
   dout(10) << "_fetched version " << got_version
 	   << ", " << len << " bytes"
-	   << endl;
+	   << dendl;
   
   int32_t n;
   ::_decode(n, bl, off);
+
+  //int num_new_inodes_loaded = 0;
 
   for (int i=0; i<n; i++) {
     off_t dn_offset = off;
@@ -823,7 +856,7 @@ void CDir::_fetched(bufferlist &bl)
     // dname
     string dname;
     ::_decode(dname, bl, off);
-    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << endl;
+    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << dendl;
     
     CDentry *dn = lookup(dname);  // existing dentry?
 
@@ -836,9 +869,9 @@ void CDir::_fetched(bufferlist &bl)
 
       if (dn) {
         if (dn->get_inode() == 0) {
-          dout(12) << "_fetched  had NEG dentry " << *dn << endl;
+          dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
         } else {
-          dout(12) << "_fetched  had dentry " << *dn << endl;
+          dout(12) << "_fetched  had dentry " << *dn << dendl;
         }
       } else {
 	// (remote) link
@@ -848,9 +881,9 @@ void CDir::_fetched(bufferlist &bl)
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
 	if (in) {
 	  dn->link_remote(in);
-	  dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << endl;
+	  dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
 	} else {
-	  dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << endl;
+	  dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
 	}
       }
     } 
@@ -870,18 +903,18 @@ void CDir::_fetched(bufferlist &bl)
       
       if (dn) {
         if (dn->get_inode() == 0) {
-          dout(12) << "_fetched  had NEG dentry " << *dn << endl;
+          dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
         } else {
-          dout(12) << "_fetched  had dentry " << *dn << endl;
+          dout(12) << "_fetched  had dentry " << *dn << dendl;
         }
       } else {
 	// add inode
 	CInode *in = 0;
 	if (cache->have_inode(inode.ino)) {
 	  in = cache->get_inode(inode.ino);
-	  dout(12) << "_fetched  got (but i already had) " << *in 
+	  dout(-12) << "_fetched  got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
-		   << " mtime " << in->inode.mtime << endl;
+		   << " mtime " << in->inode.mtime << dendl;
 	  assert(0);  // this shouldn't happen!! 
 	} else {
 	  // inode
@@ -900,12 +933,16 @@ void CDir::_fetched(bufferlist &bl)
 	
 	  // link
 	  dn = add_primary_dentry(dname, in);
-	  dout(12) << "_fetched  got " << *dn << " " << *in << endl;
+	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+
+	  //in->hack_accessed = false;
+	  //in->hack_load_stamp = g_clock.now();
+	  //num_new_inodes_loaded++;
 	}
       }
     } else {
       dout(1) << "corrupt directory, i got tag char '" << type << "' val " << (int)(type) 
-	      << " at pos " << off << endl;
+	      << " at pos " << off << dendl;
       assert(0);
     }
     
@@ -928,12 +965,12 @@ void CDir::_fetched(bufferlist &bl)
 	dn &&
 	dn->get_version() <= got_version &&
 	dn->is_dirty()) {
-      dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << endl;
+      dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
       if (dn->get_inode()) {
 	assert(dn->get_inode()->get_version() <= got_version);
-	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << endl;
+	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << dendl;
 	dn->get_inode()->mark_clean();
       }
     }
@@ -948,6 +985,9 @@ void CDir::_fetched(bufferlist &bl)
     projected_version = version = committing_version = committed_version = got_version;
   }
 
+  //cache->mds->logger->inc("newin", num_new_inodes_loaded);
+  //hack_num_accessed = 0;
+
   // mark complete, !fetching
   state_set(STATE_COMPLETE);
   state_clear(STATE_FETCHING);
@@ -955,11 +995,6 @@ void CDir::_fetched(bufferlist &bl)
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
-  /*
-  list<Context*> waiters;
-  take_waiting(WAIT_COMPLETE, waiters);
-  cache->mds->queue_finished(waiters);
-  */
 }
 
 
@@ -975,7 +1010,7 @@ void CDir::_fetched(bufferlist &bl)
  */
 void CDir::commit(version_t want, Context *c)
 {
-  dout(10) << "commit want " << want << " on " << *this << endl;
+  dout(10) << "commit want " << want << " on " << *this << dendl;
   if (want == 0) want = version;
 
   // preconditions
@@ -1022,7 +1057,7 @@ public:
 
 void CDir::_commit(version_t want)
 {
-  dout(10) << "_commit want " << want << " on " << *this << endl;
+  dout(10) << "_commit want " << want << " on " << *this << dendl;
 
   // we can't commit things in the future.
   // (even the projected future.)
@@ -1033,19 +1068,19 @@ void CDir::_commit(version_t want)
 
   // already committed?
   if (committed_version >= want) {
-    dout(10) << "already committed " << committed_version << " >= " << want << endl;
+    dout(10) << "already committed " << committed_version << " >= " << want << dendl;
     return;
   }
   // already committing >= want?
   if (committing_version >= want) {
-    dout(10) << "already committing " << committing_version << " >= " << want << endl;
+    dout(10) << "already committing " << committing_version << " >= " << want << dendl;
     assert(state_test(STATE_COMMITTING));
     return;
   }
   
   // complete?
   if (!is_complete()) {
-    dout(7) << "commit not complete, fetching first" << endl;
+    dout(7) << "commit not complete, fetching first" << dendl;
     if (cache->mds->logger) cache->mds->logger->inc("dir_ffc");
     fetch(new C_Dir_RetryCommit(this, want));
     return;
@@ -1056,7 +1091,7 @@ void CDir::_commit(version_t want)
 
   // mark committing (if not already)
   if (!state_test(STATE_COMMITTING)) {
-    dout(10) << "marking committing" << endl;
+    dout(10) << "marking committing" << dendl;
     state_set(STATE_COMMITTING);
   }
   
@@ -1069,7 +1104,7 @@ void CDir::_commit(version_t want)
   int32_t n = nitems;
   ::_encode(n, bl);
 
-  for (CDir_map_t::iterator it = items.begin();
+  for (map_t::iterator it = items.begin();
        it != items.end();
        it++) {
     CDentry *dn = it->second;
@@ -1082,18 +1117,20 @@ void CDir::_commit(version_t want)
     // primary or remote?
     if (dn->is_remote()) {
       inodeno_t ino = dn->get_remote_ino();
-      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' remote ino " << ino << endl;
+      unsigned char d_type = dn->get_remote_d_type();
+      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' remote ino " << ino << dendl;
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
       ::_encode(it->first, bl);
       ::_encode(ino, bl);
+      ::_encode(d_type, bl);
     } else {
       // primary link
       CInode *in = dn->get_inode();
       assert(in);
 
-      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' inode " << *in << endl;
+      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' inode " << *in << dendl;
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
@@ -1102,7 +1139,7 @@ void CDir::_commit(version_t want)
       
       if (in->is_symlink()) {
         // include symlink destination!
-        dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
+        dout(18) << "    inlcuding symlink ptr " << in->symlink << dendl;
 	::_encode(in->symlink, bl);
       }
 
@@ -1128,7 +1165,7 @@ void CDir::_commit(version_t want)
  */
 void CDir::_committed(version_t v)
 {
-  dout(10) << "_committed v " << v << " on " << *this << endl;
+  dout(10) << "_committed v " << v << " on " << *this << dendl;
   assert(is_auth());
   
   // take note.
@@ -1145,7 +1182,7 @@ void CDir::_committed(version_t v)
     mark_clean();
 
   // dentries clean?
-  for (CDir_map_t::iterator it = items.begin();
+  for (map_t::iterator it = items.begin();
        it != items.end(); ) {
     CDentry *dn = it->second;
     it++;
@@ -1153,11 +1190,11 @@ void CDir::_committed(version_t v)
     // dentry
     if (committed_version >= dn->get_version()) {
       if (dn->is_dirty()) {
-	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << endl;
+	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
 	dn->mark_clean();
       } 
     } else {
-      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << endl;
+      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << dendl;
     }
 
     // inode?
@@ -1168,11 +1205,11 @@ void CDir::_committed(version_t v)
       
       if (committed_version >= in->get_version()) {
 	if (in->is_dirty()) {
-	  dout(15) << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << endl;
+	  dout(15) << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << dendl;
 	  in->mark_clean();
 	}
       } else {
-	dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << endl;
+	dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << dendl;
 	assert(in->is_dirty());
       }
     }
@@ -1228,18 +1265,20 @@ pair<int,int> CDir::authority()
  *
  * note that this DOES heed dir_auth.pending
  */
+/*
 bool CDir::is_subtree_root()
 {
   if (dir_auth == CDIR_AUTH_DEFAULT) {
     //dout(10) << "is_subtree_root false " << dir_auth << " != " << CDIR_AUTH_DEFAULT
-    //<< " on " << ino() << endl;
+    //<< " on " << ino() << dendl;
     return false;
   } else {
     //dout(10) << "is_subtree_root true " << dir_auth << " != " << CDIR_AUTH_DEFAULT
-    //<< " on " << ino() << endl;
+    //<< " on " << ino() << dendl;
     return true;
   }
 }
+*/
 
 /** contains(x)
  * true if we are x, or an ancestor of x
@@ -1261,7 +1300,7 @@ void CDir::set_dir_auth(pair<int,int> a)
 { 
   dout(10) << "setting dir_auth=" << a
 	   << " from " << dir_auth
-	   << " on " << *this << endl;
+	   << " on " << *this << dendl;
   
   bool was_subtree = is_subtree_root();
   bool was_ambiguous = dir_auth.second >= 0;
@@ -1271,7 +1310,7 @@ void CDir::set_dir_auth(pair<int,int> a)
 
   // new subtree root?
   if (!was_subtree && is_subtree_root()) {
-    dout(10) << " new subtree root, adjusting auth_pins" << endl;
+    dout(10) << " new subtree root, adjusting auth_pins" << dendl;
     
     // adjust nested auth pins
     inode->adjust_nested_auth_pins(-get_cum_auth_pins());
@@ -1281,7 +1320,7 @@ void CDir::set_dir_auth(pair<int,int> a)
       inode->auth_unpin();
   } 
   if (was_subtree && !is_subtree_root()) {
-    dout(10) << " old subtree root, adjusting auth_pins" << endl;
+    dout(10) << " old subtree root, adjusting auth_pins" << dendl;
     
     // adjust nested auth pins
     inode->adjust_nested_auth_pins(get_cum_auth_pins());
@@ -1322,7 +1361,7 @@ void CDir::auth_pin()
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
 
   // nest pins?
   if (is_subtree_root()) return;  // no.
@@ -1337,7 +1376,7 @@ void CDir::auth_unpin()
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
 
-  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(auth_pins >= 0);
   
   // pending freeze?
@@ -1358,7 +1397,7 @@ void CDir::adjust_nested_auth_pins(int inc)
   nested_auth_pins += inc;
   
   dout(10) << "adjust_nested_auth_pins " << inc << " on " << *this
-	   << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
   
   // pending freeze?
@@ -1412,14 +1451,14 @@ void CDir::freeze_tree(Context *c)
     }
   } else {
     state_set(STATE_FREEZINGTREE);
-    dout(10) << "freeze_tree waiting " << *this << endl;
+    dout(10) << "freeze_tree waiting " << *this << dendl;
     add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
   } 
 }
 
 void CDir::_freeze_tree()
 {
-  dout(10) << "_freeze_tree " << *this << endl;
+  dout(10) << "_freeze_tree " << *this << dendl;
 
   // there shouldn't be any conflicting auth_pins (except the 'freezing' one)
   assert(is_freezeable(true));
@@ -1438,7 +1477,7 @@ void CDir::freeze_tree_finish(Context *c)
 {
   // still freezing?  (we may have been canceled)
   if (!is_freezing()) {
-    dout(10) << "freeze_tree_finish no longer freezing, done on " << *this << endl;
+    dout(10) << "freeze_tree_finish no longer freezing, done on " << *this << dendl;
     c->finish(-1);
     delete c;
     return;
@@ -1446,13 +1485,13 @@ void CDir::freeze_tree_finish(Context *c)
 
   // freezeable now?
   if (!is_freezeable(true)) {
-    dout(10) << "freeze_tree_finish still waiting " << *this << endl;
+    dout(10) << "freeze_tree_finish still waiting " << *this << dendl;
     assert(state_test(STATE_FREEZINGTREE));
     add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
     return;
   }
 
-  dout(10) << "freeze_tree_finish " << *this << endl;
+  dout(10) << "freeze_tree_finish " << *this << dendl;
   _freeze_tree();
   auth_unpin();
   if (c) {
@@ -1463,7 +1502,7 @@ void CDir::freeze_tree_finish(Context *c)
 
 void CDir::unfreeze_tree()
 {
-  dout(10) << "unfreeze_tree " << *this << endl;
+  dout(10) << "unfreeze_tree " << *this << dendl;
 
   if (state_test(STATE_FROZENTREE)) {
     // frozen.  unfreeze.
@@ -1560,14 +1599,14 @@ void CDir::freeze_dir(Context *c)
     }
   } else {
     state_set(STATE_FREEZINGDIR);
-    dout(10) << "freeze_dir + wait " << *this << endl;
+    dout(10) << "freeze_dir + wait " << *this << dendl;
     add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
   } 
 }
 
 void CDir::_freeze_dir()
 {  
-  dout(10) << "_freeze_dir " << *this << endl;
+  dout(10) << "_freeze_dir " << *this << dendl;
 
   assert(is_freezeable_dir(true));
 
@@ -1583,7 +1622,7 @@ void CDir::freeze_dir_finish(Context *c)
 {
   // still freezing?  (we may have been canceled)
   if (!is_freezing()) {
-    dout(10) << "freeze_dir_finish no longer freezing, done on " << *this << endl;
+    dout(10) << "freeze_dir_finish no longer freezing, done on " << *this << dendl;
     c->finish(-1);
     delete c;
     return;
@@ -1591,14 +1630,14 @@ void CDir::freeze_dir_finish(Context *c)
 
   // freezeable now?
   if (!is_freezeable_dir(true)) {
-    dout(10) << "freeze_dir_finish still waiting " << *this << endl;
+    dout(10) << "freeze_dir_finish still waiting " << *this << dendl;
     state_set(STATE_FREEZINGDIR);
     add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
     return;
   }
 
   // freeze now
-  dout(10) << "freeze_dir_finish " << *this << endl;
+  dout(10) << "freeze_dir_finish " << *this << dendl;
   _freeze_dir();
   auth_unpin();
   if (c) {
@@ -1609,7 +1648,7 @@ void CDir::freeze_dir_finish(Context *c)
 
 void CDir::unfreeze_dir()
 {
-  dout(10) << "unfreeze_dir " << *this << endl;
+  dout(10) << "unfreeze_dir " << *this << dendl;
 
   if (state_test(STATE_FROZENDIR)) {
     state_clear(STATE_FROZENDIR);

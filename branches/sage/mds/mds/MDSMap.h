@@ -252,6 +252,19 @@ class MDSMap {
       get_num_mds(STATE_STANDBY) == 0;
   }
 
+  bool would_be_overfull_with(int mds) {
+    int in = 1;  // mds!
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++) {
+      if (p->first == mds) continue;
+      if (p->second > 0 ||
+	  p->second == STATE_STARTING ||
+	  p->second == STATE_CREATING) 
+	in++;
+    }
+    return (in > target_num);
+  }
 
   int get_state(int m) {
     if (mds_state.count(m)) 
@@ -294,8 +307,9 @@ class MDSMap {
   }
 
   int get_inc(int m) {
-    assert(mds_inc.count(m));
-    return mds_inc[m];
+    if (mds_inc.count(m))
+      return mds_inc[m];
+    return 0;
   }
 
 

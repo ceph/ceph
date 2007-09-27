@@ -53,6 +53,10 @@ struct md_config_t {
   bool log_messages;
   bool log_pins;
 
+  bool logger_calc_variance;
+
+  char *dout_dir;
+
   bool fake_clock;
   bool fakemessenger_serialize;
 
@@ -107,6 +111,7 @@ struct md_config_t {
   bool tcp_multi_dispatch;
   */
 
+  bool ms_tcp_nodelay;
   bool ms_single_dispatch;
   bool ms_requeue_on_sender_fail;
 
@@ -127,6 +132,8 @@ struct md_config_t {
   bool mon_stop_with_last_mds;
   bool mon_allow_mds_bully;
 
+  double paxos_propose_interval;
+
   // client
   int      client_cache_size;
   float    client_cache_mid;
@@ -135,11 +142,6 @@ struct md_config_t {
   bool     client_use_random_mds;          // debug flag
 
   bool     client_sync_writes;
-
-  bool     client_oc;
-  int      client_oc_size;
-  int      client_oc_max_dirty;
-  size_t   client_oc_max_sync_write;
 
   double   client_mount_timeout;
 
@@ -162,14 +164,24 @@ struct md_config_t {
   int      fuse_direct_io;
   bool fuse_ll;
 
+  // objectcacher
+  bool     client_oc;
+  int      client_oc_size;
+  int      client_oc_max_dirty;
+  size_t   client_oc_max_sync_write;
+
   // objecter
   bool  objecter_buffer_uncommitted;
+  double objecter_map_request_interval;
+  double objecter_tick_interval;
+  double objecter_timeout;
 
   // journaler
   bool  journaler_allow_split_entries;
   bool  journaler_safe;
   int   journaler_write_head_interval;
   bool  journaler_cache;
+  int   journaler_prefetch_periods;
   
   // mds
   int   mds_cache_size;
@@ -186,7 +198,6 @@ struct md_config_t {
   int mds_log_read_inc;
   int mds_log_pad_entry;
   bool  mds_log_flush_on_shutdown;
-  //off_t mds_log_subtree_map_interval;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
@@ -226,15 +237,24 @@ struct md_config_t {
   bool mds_dump_cache_on_map;
   bool mds_dump_cache_after_rejoin;
 
+  bool mds_hack_log_expire_for_better_stats;
+
   // osd
   int   osd_rep;
 
-  bool  osd_balance_reads;
-  bool  osd_immediate_read_from_cache;
-  bool  osd_exclusive_caching;
-  int  osd_load_diff_percent;
+  bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
+  double osd_balance_reads_temp;
+
+  int  osd_shed_reads;
+  double osd_shed_reads_min_latency;
+  double osd_shed_reads_min_latency_diff;
+  double osd_shed_reads_min_latency_ratio;
+
+  bool  osd_immediate_read_from_cache;
+  bool  osd_exclusive_caching;
+  double osd_stat_refresh_interval;
 
   int   osd_pg_bits;
   int   osd_object_layout;
@@ -248,9 +268,12 @@ struct md_config_t {
   float   osd_age;
   int   osd_age_time;
   int   osd_heartbeat_interval;
+  int   osd_pg_stats_interval;
   int   osd_replay_window;
   int   osd_max_pull;
   bool  osd_pad_pg_log;
+
+  bool osd_hack_fast_startup;
 
   double   fakestore_fake_sync;
   bool  fakestore_fsync;
@@ -337,39 +360,6 @@ extern md_config_t g_debug_after_conf;
 
 
 /**
- * debug output framework
- */
-#define dout(x)  if ((x) <= g_conf.debug) std::cout
-#define dout2(x) if ((x) <= g_conf.debug) std::cout
-
-#define pdout(x,p)  if ((x) <= (p)) std::cout
-
-/**
- * for cleaner output, bracket each line with
- * dbeginl (in the dout macro) and dendl (in place of endl).
- */
-extern Mutex _dout_lock;
-struct _dbeginl_t {
-  _dbeginl_t(int) {}
-};
-struct _dendl_t {
-  _dendl_t(int) {}
-};
-static const _dbeginl_t dbeginl = 0;
-static const _dendl_t dendl = 0;
-
-inline ostream& operator<<(ostream& out, _dbeginl_t) {
-  _dout_lock.Lock();
-  return out;
-}
-inline ostream& operator<<(ostream& out, _dendl_t) {
-  out << endl;
-  _dout_lock.Unlock();
-  return out;
-}
-
-
-/**
  * command line / environment argument parsing
  */
 void env_to_vec(std::vector<char*>& args);
@@ -382,6 +372,44 @@ void parse_config_options(std::vector<char*>& args);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
 
+
+/**
+ * for cleaner output, bracket each line with
+ * dbeginl (in the dout macro) and dendl (in place of endl).
+ */
+extern Mutex _dout_lock;
+struct _dbeginl_t { _dbeginl_t(int) {} };
+struct _dendl_t { _dendl_t(int) {} };
+static const _dbeginl_t dbeginl = 0;
+static const _dendl_t dendl = 0;
+
+// intentionally conflict with endl
+class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
+static const _bad_endl_use_dendl_t endl = 0;
+
+inline ostream& operator<<(ostream& out, _dbeginl_t) {
+  _dout_lock.Lock();
+  return out;
+}
+inline ostream& operator<<(ostream& out, _dendl_t) {
+  out << std::endl;
+  _dout_lock.Unlock();
+  return out;
+}
+inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
+  assert(0 && "you are using the wrong endl.. use std::endl or dendl");
+  return out;
+}
+
+// the streams
+extern ostream *_dout;
+extern ostream *_derr;
+
+// generic macros
+#define generic_dout(x) if ((x) <= g_conf.debug) *_dout << dbeginl
+#define generic_derr(x) if ((x) <= g_conf.debug) *_derr << dbeginl
+
+#define pdout(x,p) if ((x) <= (p)) *_dout << dbeginl
 
 
 #endif

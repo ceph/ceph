@@ -44,13 +44,13 @@ using namespace std;
 class C_Test : public Context {
 public:
   void finish(int r) {
-    cout << "C_Test->finish(" << r << ")" << endl;
+    cout << "C_Test->finish(" << r << ")" << std::endl;
   }
 };
 class C_Test2 : public Context {
 public:
   void finish(int r) {
-    cout << "C_Test2->finish(" << r << ")" << endl;
+    cout << "C_Test2->finish(" << r << ")" << std::endl;
     g_timer.add_event_after(2, new C_Test);
   }
 };
@@ -58,7 +58,7 @@ public:
 
 
 int main(int argc, char **argv) {
-  cerr << "fakefuse starting" << endl;
+  cerr << "fakefuse starting" << std::endl;
 
   // stop on our own (by default)
   g_conf.mon_stop_on_last_unmount = true;
@@ -91,24 +91,24 @@ int main(int argc, char **argv) {
   a.nonce = getpid();
   for (int i=0; i<g_conf.num_mon; i++) {
     a.port = i;
-    monmap->mon_inst[i] = entity_inst_t(MSG_ADDR_MON(i), a);  // hack ; see FakeMessenger.cc
+    monmap->mon_inst[i] = entity_inst_t(entity_name_t::MON(i), a);  // hack ; see FakeMessenger.cc
   }
 
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
+    mon[i] = new Monitor(i, new FakeMessenger(entity_name_t::MON(i)), monmap);
   }
 
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
+    osd[i] = new OSD(i, new FakeMessenger(entity_name_t::OSD(i)), monmap);
   }
 
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-    mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
+    mds[i] = new MDS(i, new FakeMessenger(entity_name_t::MDS(i)), monmap);
   }
  
   // init
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(0)), monmap);
+    client[i] = new Client(new FakeMessenger(entity_name_t::CLIENT(0)), monmap);
     client[i]->init();
 
 
@@ -132,12 +132,12 @@ int main(int argc, char **argv) {
     client[i]->mount();
 
     char *oldcwd = get_current_dir_name();  // note previous wd
-    cout << "starting fuse on pid " << getpid() << endl;
+    cout << "starting fuse on pid " << getpid() << std::endl;
     if (g_conf.fuse_ll)
       ceph_fuse_ll_main(client[i], argc, argv);
     else
       ceph_fuse_main(client[i], argc, argv);
-    cout << "fuse finished on pid " << getpid() << endl;
+    cout << "fuse finished on pid " << getpid() << std::endl;
     ::chdir(oldcwd);                        // return to previous wd
     free(oldcwd);
 
@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
 
 
   // wait for it to finish
-  cout << "DONE -----" << endl;
+  cout << "DONE -----" << std::endl;
   fakemessenger_wait();  // blocks until messenger stops
   
 

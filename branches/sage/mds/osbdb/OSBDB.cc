@@ -19,17 +19,15 @@ Foundation.  See file COPYING. */
 
 using namespace std;
 
-#undef dout
-#define dout(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) cout << "bdbstore(" << device << ")@" << __LINE__ << "."
-#undef derr
-#define derr(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) cerr << "bdbstore(" << device << ")@" << __LINE__ << "."
+#define dout(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) *_dout << dbeginl << "bdbstore(" << device << ")@" << __LINE__ << "."
+#define derr(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) *_derr << dbeginl << "bdbstore(" << device << ")@" << __LINE__ << "."
 
 #define CLEANUP(onsafe) do { \
-    dout(6) << "DELETE " << hex << onsafe << dec << endl; \
+    dout(6) << "DELETE " << hex << onsafe << dec << dendl; \
     delete onsafe; \
   } while (0)
 #define COMMIT(onsafe) do { \
-    dout(6) << "COMMIT " << hex << onsafe << dec << endl; \
+    dout(6) << "COMMIT " << hex << onsafe << dec << dendl; \
     sync(onsafe); \
   } while (0)
 
@@ -140,7 +138,7 @@ int OSBDB::opendb(DBTYPE type, int flags, bool new_env)
   if ((ret = db->open (NULL, device.c_str(), NULL, type, flags, 0)) != 0)
     {
       derr(1) << "failed to open database: " << device << ": "
-              << db_strerror(ret) << std::endl;
+              << db_strerror(ret) << std::dendl;
       return -EINVAL;
     }
   opened = true;
@@ -149,11 +147,11 @@ int OSBDB::opendb(DBTYPE type, int flags, bool new_env)
 
 int OSBDB::mount()
 {
-  dout(2) << "mount " << device << endl;
+  dout(2) << "mount " << device << dendl;
 
   if (mounted)
     {
-      dout(4) << "..already mounted" << endl;
+      dout(4) << "..already mounted" << dendl;
       return 0;
     }
 
@@ -162,7 +160,7 @@ int OSBDB::mount()
       int ret;
       if ((ret = opendb ()) != 0)
         {
-          dout(4) << "..returns " << ret << endl;
+          dout(4) << "..returns " << ret << dendl;
           return ret;
         }
     }
@@ -178,15 +176,15 @@ int OSBDB::mount()
 
   if (db->get (NULL, &key, &value, 0) != 0)
     {
-      dout(4) << "..get superblock fails" << endl;
+      dout(4) << "..get superblock fails" << dendl;
       return -EINVAL; // XXX how to say "badly formed fs?"
     }
 
-  dout(3) << ".mount " << super << endl;
+  dout(3) << ".mount " << super << dendl;
 
   if (super.version != OSBDB_THIS_VERSION)
     {
-      dout(4) << "version mismatch (" << super.version << ")" << endl;
+      dout(4) << "version mismatch (" << super.version << ")" << dendl;
       return -EINVAL;
     }
 
@@ -201,7 +199,7 @@ int OSBDB::mount()
       db->get_flags (&flags);
       dout(1) << "mounted version " << OSBDB_THIS_VERSION << "; Btree; "
               << "min keys per page: " << minkey << "; flags: "
-              << hex << flags << dec << endl;
+              << hex << flags << dec << dendl;
       cout << dec;
     }
   else
@@ -215,12 +213,12 @@ int OSBDB::mount()
       dout(1) << "mounted version " << OSBDB_THIS_VERSION << "; Hash; "
               << "fill factor: " << ffactor
               << " table size: " << nelem << "; flags: "
-              << hex << flags << dec << endl;
+              << hex << flags << dec << dendl;
       cout << dec;
     }
 
   mounted = true;
-  dout(4) << "..mounted" << endl;
+  dout(4) << "..mounted" << dendl;
   return 0;
 }
 
@@ -229,7 +227,7 @@ int OSBDB::umount()
   if (!mounted)
     return -EINVAL;
 
-  dout(2) << "umount" << endl;
+  dout(2) << "umount" << dendl;
 
   int ret;
   if (opened)
@@ -239,7 +237,7 @@ int OSBDB::umount()
           env->log_flush (NULL);
           if ((ret = env->lsn_reset (device.c_str(), 0)) != 0)
             {
-              derr(1) << "lsn_reset: " << db_strerror (ret) << endl;
+              derr(1) << "lsn_reset: " << db_strerror (ret) << dendl;
             }
         }
 
@@ -247,7 +245,7 @@ int OSBDB::umount()
 
       if ((ret = db->close (0)) != 0)
         {
-          derr(1) << "close: " << db_strerror(ret) << endl;
+          derr(1) << "close: " << db_strerror(ret) << dendl;
           return -EINVAL;
         }
       delete db;
@@ -262,7 +260,7 @@ int OSBDB::umount()
     }
   mounted = false;
   opened = false;
-  dout(4) << "..unmounted" << endl;
+  dout(4) << "..unmounted" << dendl;
   return 0;
 }
 
@@ -271,7 +269,7 @@ int OSBDB::mkfs()
   if (mounted)
     return -EINVAL;
 
-  dout(2) << "mkfs" << endl;
+  dout(2) << "mkfs" << dendl;
 
   string d = env_dir;
   d += device;
@@ -282,17 +280,17 @@ int OSBDB::mkfs()
                     DB_CREATE, true)) != 0)
     {
       derr(1) << "failed to open database: " << device << ": "
-              << db_strerror(ret) << std::endl;
+              << db_strerror(ret) << std::dendl;
       return -EINVAL;
     }
   opened = true;
-  dout(3) << "..opened " << device << endl;
+  dout(3) << "..opened " << device << dendl;
 
   uint32_t c;
   ret = db->truncate (NULL, &c, 0);
   if (ret != 0)
     {
-      derr(1) << "db truncate failed: " << db_strerror (ret) << endl;
+      derr(1) << "db truncate failed: " << db_strerror (ret) << dendl;
       return -EIO; // ???
     }
 
@@ -301,15 +299,15 @@ int OSBDB::mkfs()
   sb.version = OSBDB_THIS_VERSION;
   Dbt value (&sb, sizeof (sb));
 
-  dout(3) << "..writing superblock" << endl;
+  dout(3) << "..writing superblock" << dendl;
   if ((ret = db->put (NULL, &key, &value, 0)) != 0)
     {
       derr(1) << "failed to write superblock: " << db_strerror (ret)
-              << endl;
+              << dendl;
       return -EIO;
     }
-  dout(3) << "..wrote superblock" << endl;
-  dout(4) << "..mkfs done" << endl;
+  dout(3) << "..wrote superblock" << dendl;
+  dout(4) << "..mkfs done" << dendl;
   return 0;
 }
 
@@ -318,16 +316,16 @@ int OSBDB::mkfs()
 int OSBDB::pick_object_revision_lt(object_t& oid)
 {
   // Not really needed.
-  dout(0) << "pick_object_revision_lt " << oid << endl;
+  dout(0) << "pick_object_revision_lt " << oid << dendl;
   return -ENOSYS;
 }
 
 bool OSBDB::exists(object_t oid)
 {
-  dout(2) << "exists " << oid << endl;
+  dout(2) << "exists " << oid << dendl;
   struct stat st;
   bool ret = (stat (oid, &st) == 0);
-  dout(4) << "..returns " << ret << endl;
+  dout(4) << "..returns " << ret << dendl;
   return ret;
 }
 
@@ -337,11 +335,11 @@ int OSBDB::statfs (struct statfs *st)
   if (::statfs (device.c_str(), st) != 0)
     {
       int ret = -errno;
-      derr(1) << "statfs returns " << ret << endl;
+      derr(1) << "statfs returns " << ret << dendl;
       return ret;
     }
   st->f_type = OSBDB_MAGIC;
-  dout(4) << "..statfs OK" << endl;
+  dout(4) << "..statfs OK" << dendl;
   return 0;
 }
 
@@ -349,11 +347,11 @@ int OSBDB::stat(object_t oid, struct stat *st)
 {
   if (!mounted)
     {
-      dout(4) << "not mounted!" << endl;
+      dout(4) << "not mounted!" << dendl;
       return -EINVAL;
     }
 
-  dout(2) << "stat " << oid << endl;
+  dout(2) << "stat " << oid << dendl;
 
   object_inode_key ikey = new_object_inode_key(oid);
   stored_object obj;
@@ -362,17 +360,17 @@ int OSBDB::stat(object_t oid, struct stat *st)
   value.set_flags (DB_DBT_USERMEM);
   value.set_ulen (sizeof (obj));
 
-  dout(3) << "  lookup " << ikey << endl;
+  dout(3) << "  lookup " << ikey << dendl;
   int ret;
   if ((ret = db->get (NULL, &key, &value, 0)) != 0)
     {
-      derr(1) << " get returned " << ret << endl;
+      derr(1) << " get returned " << ret << dendl;
       return -ENOENT;
     }
 
   st->st_size = obj.length;
-  dout(3) << "stat length:" << obj.length << endl;
-  dout(4) << "..stat OK" << endl;
+  dout(3) << "stat length:" << obj.length << dendl;
+  dout(4) << "..stat OK" << dendl;
   return 0;
 }
 
@@ -380,15 +378,15 @@ int OSBDB::remove(object_t oid, Context *onsafe)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   scoped_lock __lock(&lock);
-  dout(2) << "remove " << oid << endl;
+  dout(2) << "remove " << oid << dendl;
 
   DbTxn *txn = NULL;
   if (transactional)
@@ -400,7 +398,7 @@ int OSBDB::remove(object_t oid, Context *onsafe)
   int ret;
   if ((ret = db->del (txn, &key, 0)) != 0)
     {
-      derr(1) << ".del returned error: " << db_strerror (ret) << endl;
+      derr(1) << ".del returned error: " << db_strerror (ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -412,7 +410,7 @@ int OSBDB::remove(object_t oid, Context *onsafe)
   Dbt ikey (&_ikey, sizeof_object_inode_key());
   if ((ret = db->del (txn, &ikey, 0)) != 0)
     {
-      derr(1) << ".del returned error: " << db_strerror (ret) << endl;
+      derr(1) << ".del returned error: " << db_strerror (ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -435,7 +433,7 @@ int OSBDB::remove(object_t oid, Context *onsafe)
           Dbt akey (&aid, sizeof (aid));
           if ((ret = db->del (txn, &akey, 0)) != 0)
             {
-              derr(1) << ".del returns error: " << db_strerror (ret) << endl;
+              derr(1) << ".del returns error: " << db_strerror (ret) << dendl;
               if (txn != NULL)
                 txn->abort();
               if (onsafe != NULL)
@@ -445,7 +443,7 @@ int OSBDB::remove(object_t oid, Context *onsafe)
         }
       if ((ret = db->del (txn, &askey, 0)) != 0)
         {
-          derr(1) << ".del returns error: " << db_strerror (ret) << endl;
+          derr(1) << ".del returns error: " << db_strerror (ret) << dendl;
           if (txn != NULL)
             txn->abort();
           if (onsafe != NULL)
@@ -460,28 +458,28 @@ int OSBDB::remove(object_t oid, Context *onsafe)
     txn->commit (0);
   if (onsafe != NULL)
     COMMIT(onsafe);
-  dout(4) << "..remove OK" << endl;
+  dout(4) << "..remove OK" << dendl;
   return 0;
 }
 
 int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
 
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "truncate " << size << endl;
+  dout(2) << "truncate " << size << dendl;
 
   if (size > 0xFFFFFFFF)
     {
-      derr(1) << "object size too big!" << endl;
+      derr(1) << "object size too big!" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -ENOSPC;
@@ -506,7 +504,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      dout(4) << "..returns -ENOENT" << endl;
+      dout(4) << "..returns -ENOENT" << dendl;
       return -ENOENT;
     }
 
@@ -527,7 +525,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << ".updating object failed" << endl;
+          derr(1) << ".updating object failed" << dendl;
           return -EIO;
         }
 
@@ -539,7 +537,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << ".updating object info failed" << endl;
+          derr(1) << ".updating object info failed" << dendl;
           return -EIO;
         }
     }
@@ -555,7 +553,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << ".updating object info failed" << endl;
+          derr(1) << ".updating object info failed" << dendl;
           return -EIO;
         }
       if (size == 0)
@@ -571,7 +569,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
                 txn->abort();
               if (onsafe != NULL)
                 CLEANUP(onsafe);
-              derr(1) << ".updating object failed" << endl;
+              derr(1) << ".updating object failed" << dendl;
               return -EIO;
             }
         }
@@ -588,7 +586,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
                 txn->abort();
               if (onsafe != NULL)
                 CLEANUP(onsafe);
-              derr(1) << ".getting old object failed" << endl;
+              derr(1) << ".getting old object failed" << dendl;
               return -EIO;
             }
           auto_ptr<char> ovalPtr ((char *) oval.get_data());
@@ -600,7 +598,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
                 txn->abort();
               if (onsafe != NULL)
                 CLEANUP(onsafe);
-              derr(1) << ".putting new object failed" << endl;
+              derr(1) << ".putting new object failed" << dendl;
               return -EIO;
             }
         }
@@ -611,7 +609,7 @@ int OSBDB::truncate(object_t oid, off_t size, Context *onsafe)
   if (onsafe != NULL)
     COMMIT(onsafe);
 
-  dout(4) << "..truncate OK" << endl;
+  dout(4) << "..truncate OK" << dendl;
   return 0;
 }
 
@@ -619,12 +617,12 @@ int OSBDB::read(object_t oid, off_t offset, size_t len, bufferlist& bl)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       return -EINVAL;
     }
 
   dout(2) << "read " << oid << " " << offset << " "
-          << len << endl;
+          << len << dendl;
 
   if (bl.length() < len)
     {
@@ -644,32 +642,32 @@ int OSBDB::read(object_t oid, off_t offset, size_t len, bufferlist& bl)
   ival.set_flags (DB_DBT_USERMEM);
   ival.set_ulen (sizeof(obj));
 
-  dout(3) << "..get " << _ikey << endl;
+  dout(3) << "..get " << _ikey << dendl;
   int ret;
   if ((ret = db->get (txn, &ikey, &ival, 0)) != 0)
     {
       if (txn)
         txn->abort();
-      derr(1) << "get returned " << db_strerror (ret) << endl;
+      derr(1) << "get returned " << db_strerror (ret) << dendl;
       return -ENOENT;
     }
 
-  dout(3) << "..object has size " << obj.length << endl;
+  dout(3) << "..object has size " << obj.length << dendl;
 
   if (offset == 0 && len >= obj.length)
     {
       len = obj.length;
-      dout(3) << "..doing full read of " << len << endl;
+      dout(3) << "..doing full read of " << len << dendl;
       oid_t id;
       mkoid (id, oid);
       Dbt key (&id, sizeof (oid_t));
       Dbt value (bl.c_str(), len);
       value.set_ulen (len);
       value.set_flags (DB_DBT_USERMEM);
-      dout(3) << "..getting " << oid << endl;
+      dout(3) << "..getting " << oid << dendl;
       if ((ret = db->get (txn, &key, &value, 0)) != 0)
         {
-          derr(1) << ".get returned " << db_strerror (ret) << endl;
+          derr(1) << ".get returned " << db_strerror (ret) << dendl;
           if (txn)
             txn->abort();
           return -EIO;
@@ -679,27 +677,27 @@ int OSBDB::read(object_t oid, off_t offset, size_t len, bufferlist& bl)
     {
       if (offset > obj.length)
         {
-          dout(2) << "..offset out of range" << endl;
+          dout(2) << "..offset out of range" << dendl;
           return 0;
         }
       if (offset + len > obj.length)
         len = obj.length - (size_t) offset;
-      dout(3) << "..doing partial read of " << len << endl;
+      dout(3) << "..doing partial read of " << len << dendl;
       oid_t id;
       mkoid (id, oid);
       Dbt key (&id, sizeof (oid));
       Dbt value;
       char *data = bl.c_str();
-      dout(3) << ".bufferlist c_str returned " << ((void*) data) << endl;
+      dout(3) << ".bufferlist c_str returned " << ((void*) data) << dendl;
       value.set_data (data);
       value.set_doff ((size_t) offset);
       value.set_dlen (len);
       value.set_ulen (len);
       value.set_flags (DB_DBT_USERMEM | DB_DBT_PARTIAL);
-      dout(3) << "..getting " << oid << endl;
+      dout(3) << "..getting " << oid << dendl;
       if ((ret = db->get (txn, &key, &value, 0)) != 0)
         {
-          derr(1) << ".get returned " << db_strerror (ret) << endl;
+          derr(1) << ".get returned " << db_strerror (ret) << dendl;
           if (txn)
             txn->abort();
           return -EIO;
@@ -708,17 +706,17 @@ int OSBDB::read(object_t oid, off_t offset, size_t len, bufferlist& bl)
 
   if (txn)
     txn->commit (0);
-  dout(4) << "..read OK, returning " << len << endl;
+  dout(4) << "..read OK, returning " << len << dendl;
   return len;
 }
 
 int OSBDB::write(object_t oid, off_t offset, size_t len,
                  bufferlist& bl, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
@@ -726,11 +724,11 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
 
   scoped_lock __lock(&lock);
   dout(2) << "write " << oid << " " << offset << " "
-          << len << endl;
+          << len << dendl;
 
   if (offset > 0xFFFFFFFFL || offset + len > 0xFFFFFFFFL)
     {
-      derr(1) << "object too big" << endl;
+      derr(1) << "object too big" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -ENOSPC;
@@ -748,18 +746,18 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
   ival.set_flags (DB_DBT_USERMEM);
 
   int ret;
-  dout(3) << "..getting " << _ikey << endl;
+  dout(3) << "..getting " << _ikey << dendl;
   if (db->get (txn, &ikey, &ival, 0) != 0)
     {
-      dout(3) << "..writing new object" << endl;
+      dout(3) << "..writing new object" << dendl;
 
       // New object.
       obj.length = (size_t) offset + len;
       dout(3) << "..mapping " << _ikey << " => "
-              << obj << endl;
+              << obj << dendl;
       if ((ret = db->put (txn, &ikey, &ival, 0)) != 0)
         {
-          derr(1) << "..put returned " << db_strerror (ret) << endl;
+          derr(1) << "..put returned " << db_strerror (ret) << dendl;
           if (txn)
             txn->abort();
           if (onsafe != NULL)
@@ -784,10 +782,10 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
           value.set_dlen (len);
         }
       dout(3) << "..mapping " << oid << " => ("
-              << obj.length << " bytes)" << endl;
+              << obj.length << " bytes)" << dendl;
       if ((ret = db->put (txn, &key, &value, 0)) != 0)
         {
-          derr(1) << "..put returned " << db_strerror (ret) << endl;
+          derr(1) << "..put returned " << db_strerror (ret) << dendl;
           if (txn)
             txn->abort();
           if (onsafe != NULL)
@@ -800,7 +798,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
       if (onsafe != NULL)
         COMMIT(onsafe);
 
-      dout(4) << "..write OK, returning " << len << endl;
+      dout(4) << "..write OK, returning " << len << dendl;
       return len;
     }
 
@@ -811,7 +809,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
           obj.length = len;
           if ((ret = db->put (txn, &ikey, &ival, 0)) != 0)
             {
-              derr(1) << "  put returned " << db_strerror (ret) << endl;
+              derr(1) << "  put returned " << db_strerror (ret) << dendl;
               if (txn)
                 txn->abort();
               if (onsafe != NULL)
@@ -829,7 +827,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << "..writing object failed!" << endl;
+          derr(1) << "..writing object failed!" << dendl;
           return -EIO;
         }
     }
@@ -844,7 +842,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
                 txn->abort();
               if (onsafe != NULL)
                 CLEANUP(onsafe);
-              derr(1) << "..writing object info failed!" << endl;
+              derr(1) << "..writing object info failed!" << dendl;
               return -EIO;
             }
         }
@@ -862,7 +860,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << "..writing object failed!" << endl;
+          derr(1) << "..writing object failed!" << dendl;
           return -EIO;
         }
     }
@@ -872,7 +870,7 @@ int OSBDB::write(object_t oid, off_t offset, size_t len,
   if (onsafe != NULL)
     COMMIT(onsafe);
 
-  dout(4) << "..write OK, returning " << len << endl;
+  dout(4) << "..write OK, returning " << len << dendl;
   return len;
 }
 
@@ -880,15 +878,15 @@ int OSBDB::clone(object_t oid, object_t noid)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       return -EINVAL;
     }
 
-  dout(2) << "clone " << oid << ", " << noid << endl;
+  dout(2) << "clone " << oid << ", " << noid << dendl;
 
   if (exists (noid))
     {
-      dout(4) << "..target exists; returning -EEXIST" << endl;
+      dout(4) << "..target exists; returning -EEXIST" << dendl;
       return -EEXIST;
     }
 
@@ -917,14 +915,14 @@ int OSBDB::clone(object_t oid, object_t noid)
     {
       if (txn)
         txn->abort();
-      derr(1) << "..getting object info failed!" << endl;
+      derr(1) << "..getting object info failed!" << dendl;
       return -ENOENT;
     }
   if (db->get (txn, &key, &value, 0) != 0)
     {
       if (txn)
         txn->abort();
-      derr(1) << "..getting original object failed" << endl;
+      derr(1) << "..getting original object failed" << dendl;
       return -ENOENT;
     }
   auto_ptr<char> valueptr ((char *) value.get_data());
@@ -933,21 +931,21 @@ int OSBDB::clone(object_t oid, object_t noid)
     {
       if (txn)
         txn->abort();
-      derr(1) << "..putting object info failed" << endl;
+      derr(1) << "..putting object info failed" << dendl;
       return -EIO;
     }
   if (db->put (txn, &nkey, &value, 0) != 0)
     {
       if (txn)
         txn->abort();
-      derr(1) << "..putting new object failed" << endl;
+      derr(1) << "..putting new object failed" << dendl;
       return -EIO;
     }
 
   if (txn)
     txn->commit (0);
 
-  dout(4) << "..clone OK" << endl;
+  dout(4) << "..clone OK" << dendl;
   return 0;
 }
 
@@ -957,11 +955,11 @@ int OSBDB::list_collections(list<coll_t>& ls)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted!" << endl;
+      derr(1) << "not mounted!" << dendl;
       return -EINVAL;
     }
 
-  dout(2) << "list_collections" << endl;
+  dout(2) << "list_collections" << dendl;
 
   Dbt key (COLLECTIONS_KEY, 1);
   Dbt value;
@@ -969,7 +967,7 @@ int OSBDB::list_collections(list<coll_t>& ls)
 
   if (db->get (NULL, &key, &value, 0) != 0)
     {
-      dout(4) << "..no collections" << endl;
+      dout(4) << "..no collections" << dendl;
       return 0; // no collections.
     }
 
@@ -978,23 +976,23 @@ int OSBDB::list_collections(list<coll_t>& ls)
   for (uint32_t i = 0; i < sc->count; i++)
     ls.push_back (scp->colls[i]);
 
-  dout(4) << "..list_collections returns " << scp->count << endl;
+  dout(4) << "..list_collections returns " << scp->count << dendl;
   return scp->count;
 }
 
 int OSBDB::create_collection(coll_t c, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "create_collection " << hex << c << dec << endl;
+  dout(2) << "create_collection " << hex << c << dec << dendl;
 
   Dbt key (COLLECTIONS_KEY, 1);
   Dbt value;
@@ -1030,17 +1028,17 @@ int OSBDB::create_collection(coll_t c, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".collection " << c << " already exists " << endl;
+      derr(1) << ".collection " << c << " already exists " << dendl;
       return -EEXIST;
     }
 
-  dout(3) << "..insertion point: " << ins << endl;
+  dout(3) << "..insertion point: " << ins << dendl;
 
   // Make room for a new collection ID.
   if (!created)
   {
     sz += sizeof (coll_t);
-    dout(3) << "..increase size to " << sz << endl;
+    dout(3) << "..increase size to " << sz << dendl;
     stored_colls *scp2 = (stored_colls *) realloc (scp, sz);
     sc.release ();
     sc.reset (scp2);
@@ -1050,13 +1048,13 @@ int OSBDB::create_collection(coll_t c, Context *onsafe)
   int n = (scp->count - ins) * sizeof (coll_t);
   if (n > 0)
     {
-      dout(3) << "..moving " << n << " bytes up" << endl;
+      dout(3) << "..moving " << n << " bytes up" << dendl;
       memmove (&scp->colls[ins + 1], &scp->colls[ins], n);
     }
   scp->count++;
   scp->colls[ins] = c;
 
-  dout(3) << "..collections: " << scp << endl;
+  dout(3) << "..collections: " << scp << dendl;
 
   // Put the modified collection list back.
   {
@@ -1067,7 +1065,7 @@ int OSBDB::create_collection(coll_t c, Context *onsafe)
           txn->abort();
         if (onsafe != NULL)
           CLEANUP(onsafe);
-        derr(1) << ".writing new collections list failed" << endl;
+        derr(1) << ".writing new collections list failed" << dendl;
         return -EIO;
       }
   }
@@ -1084,7 +1082,7 @@ int OSBDB::create_collection(coll_t c, Context *onsafe)
           txn->abort();
         if (onsafe != NULL)
           CLEANUP(onsafe);
-        derr(1) << ".writing new collection failed" << endl;
+        derr(1) << ".writing new collection failed" << dendl;
         return -EIO;
       }
   }
@@ -1094,23 +1092,23 @@ int OSBDB::create_collection(coll_t c, Context *onsafe)
   if (onsafe != NULL)
     COMMIT(onsafe);
 
-  dout(4) << "..create_collection OK" << endl;
+  dout(4) << "..create_collection OK" << dendl;
   return 0;
 }
 
 int OSBDB::destroy_collection(coll_t c, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "destroy_collection " << hex << c << dec << endl;
+  dout(2) << "destroy_collection " << hex << c << dec << dendl;
 
   Dbt key (COLLECTIONS_KEY, 1);
   Dbt value;
@@ -1126,7 +1124,7 @@ int OSBDB::destroy_collection(coll_t c, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".collection list doesn't exist" << endl;
+      derr(1) << ".collection list doesn't exist" << dendl;
       return -ENOENT; // XXX
     }
 
@@ -1138,32 +1136,32 @@ int OSBDB::destroy_collection(coll_t c, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".collection " << c << " not listed" << endl;
+      derr(1) << ".collection " << c << " not listed" << dendl;
       return -ENOENT;
     }
   uint32_t ins = binary_search<coll_t> (scp->colls, scp->count, c);
-  dout(4) << "..insertion point is " << ins << endl;
+  dout(4) << "..insertion point is " << ins << dendl;
   if (ins >= scp->count || scp->colls[ins] != c)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".collection " << c << " not listed" << endl;
+      derr(1) << ".collection " << c << " not listed" << dendl;
       return -ENOENT;
     }
 
-  dout(4) << "..collections list is " << scp << endl;
+  dout(4) << "..collections list is " << scp << dendl;
 
   // Move the rest of the list down in memory, if needed.
   if (ins < scp->count)
     {
       size_t n = scp->count - ins - 1;
-      dout(4) << "..shift list down " << n << endl;
+      dout(4) << "..shift list down " << n << dendl;
       memmove (&scp->colls[ins], &scp->colls[ins + 1], n);
     }
 
-  dout(4) << "..collections list is " << scp << endl;
+  dout(4) << "..collections list is " << scp << dendl;
 
   // Modify the record size to be one less.
   Dbt nvalue (scp, value.get_size() - sizeof (coll_t));
@@ -1174,7 +1172,7 @@ int OSBDB::destroy_collection(coll_t c, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".putting modified collection list failed" << endl;
+      derr(1) << ".putting modified collection list failed" << dendl;
       return -EIO;
     }
 
@@ -1186,7 +1184,7 @@ int OSBDB::destroy_collection(coll_t c, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".deleting collection failed" << endl;
+      derr(1) << ".deleting collection failed" << dendl;
       return -EIO;
     }
 
@@ -1194,7 +1192,7 @@ int OSBDB::destroy_collection(coll_t c, Context *onsafe)
     txn->commit (0);
   if (onsafe != NULL)
     COMMIT(onsafe);
-  dout(4) << "..destroy_collection OK" << endl;
+  dout(4) << "..destroy_collection OK" << dendl;
   return 0;
 }
 
@@ -1202,11 +1200,11 @@ bool OSBDB::collection_exists(coll_t c)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       return -EINVAL;
     }
 
-  dout(2) << "collection_exists " << hex << c << dec << endl;
+  dout(2) << "collection_exists " << hex << c << dec << dendl;
 
   /*Dbt key (COLLECTIONS_KEY, 1);
   Dbt value;
@@ -1214,23 +1212,23 @@ bool OSBDB::collection_exists(coll_t c)
 
   if (db->get (NULL, &key, &value, 0) != 0)
     {
-      dout(4) << "..no collection list; return false" << endl;
+      dout(4) << "..no collection list; return false" << dendl;
       return false;
     }
 
   stored_colls *scp = (stored_colls *) value.get_data();
   auto_ptr<stored_colls> sc (scp);
-  dout(5) << "..collection list is " << scp << endl;
+  dout(5) << "..collection list is " << scp << dendl;
   if (scp->count == 0)
     {
-      dout(4) << "..empty collection list; return false" << endl;
+      dout(4) << "..empty collection list; return false" << dendl;
       return false;
     }
   uint32_t ins = binary_search<coll_t> (scp->colls, scp->count, c);
-  dout(4) << "..insertion point is " << ins << endl;
+  dout(4) << "..insertion point is " << ins << dendl;
 
   int ret = (scp->colls[ins] == c);
-  dout(4) << "..returns " << ret << endl;
+  dout(4) << "..returns " << ret << dendl;
   return ret;*/
 
   Dbt key (&c, sizeof (coll_t));
@@ -1238,12 +1236,12 @@ bool OSBDB::collection_exists(coll_t c)
   value.set_flags (DB_DBT_MALLOC);
   if (db->get (NULL, &key, &value, 0) != 0)
     {
-      dout(4) << "..no collection, return false" << endl;
+      dout(4) << "..no collection, return false" << dendl;
       return false;
     }
   void *val = value.get_data();
   free (val);
-  dout(4) << "..collection exists; return true" << endl;
+  dout(4) << "..collection exists; return true" << dendl;
   return true;
 }
 
@@ -1251,28 +1249,28 @@ int OSBDB::collection_stat(coll_t c, struct stat *st)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       return -EINVAL;
     }
 
-  dout(2) << "collection_stat " << c << endl;
+  dout(2) << "collection_stat " << c << dendl;
   // XXX is this needed?
   return -ENOSYS;
 }
 
 int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
-      dout(2) << "not mounted" << endl;
+      dout(2) << "not mounted" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "collection_add " << hex << c << dec << " " << o << endl;
+  dout(2) << "collection_add " << hex << c << dec << " " << o << dendl;
 
   Dbt key (&c, sizeof (coll_t));
   Dbt value;
@@ -1288,7 +1286,7 @@ int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << "failed to find collection" << endl;
+      derr(1) << "failed to find collection" << dendl;
       return -ENOENT;
     }
 
@@ -1308,7 +1306,7 @@ int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << "collection already has object" << endl;
+          derr(1) << "collection already has object" << dendl;
           return -EEXIST;
         }
     }
@@ -1318,17 +1316,17 @@ int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
   scp = (stored_coll *) realloc (scp, sz);
   sc.release();
   sc.reset (scp);
-  dout(3) << "..current collection: " << scp << endl;
+  dout(3) << "..current collection: " << scp << dendl;
   if (ins < scp->count - 1)
     {
       size_t n = (scp->count - ins) * sizeof (object_t);
-      dout(3) << "..move up " << n << " bytes" << endl;
+      dout(3) << "..move up " << n << " bytes" << dendl;
       memmove (&scp->objects[ins + 1], &scp->objects[ins], n);
     }
   scp->count++;
   scp->objects[ins] = o;
 
-  dout(3) << "..collection: " << scp << endl;
+  dout(3) << "..collection: " << scp << dendl;
 
   Dbt nvalue (scp, sz);
   if (db->put (txn, &key, &nvalue, 0) != 0)
@@ -1337,7 +1335,7 @@ int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << "..putting modified collection failed" << endl;
+      derr(1) << "..putting modified collection failed" << dendl;
       return -EIO;
     }
 
@@ -1345,23 +1343,23 @@ int OSBDB::collection_add(coll_t c, object_t o, Context *onsafe)
     txn->commit (0);
   if (onsafe != NULL)
     COMMIT(onsafe);
-  dout(4) << "..collection add OK" << endl;
+  dout(4) << "..collection add OK" << dendl;
   return 0;
 }
 
 int OSBDB::collection_remove(coll_t c, object_t o, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EINVAL;
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "collection_remove " << hex << c << dec << " " << o << endl;
+  dout(2) << "collection_remove " << hex << c << dec << " " << o << dendl;
 
   Dbt key (&c, sizeof (coll_t));
   Dbt value;
@@ -1377,44 +1375,44 @@ int OSBDB::collection_remove(coll_t c, object_t o, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      dout(1) << "..collection doesn't exist" << endl;
+      dout(1) << "..collection doesn't exist" << dendl;
       return -ENOENT;
     }
 
   stored_coll *scp = (stored_coll *) value.get_data();
   auto_ptr<stored_coll> sc (scp);
 
-  dout(5) << "..collection is " << scp << endl;
+  dout(5) << "..collection is " << scp << dendl;
   if (scp->count == 0)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      dout(1) << "..collection is empty" << endl;
+      dout(1) << "..collection is empty" << dendl;
       return -ENOENT;
     }
   uint32_t ins = binary_search<object_t> (scp->objects, scp->count, o);
-  dout(4) << "..insertion point is " << ins << endl;
+  dout(4) << "..insertion point is " << ins << dendl;
   if (ins >= scp->count || scp->objects[ins] != o)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      dout(1) << "..object not in collection" << endl;
+      dout(1) << "..object not in collection" << dendl;
       return -ENOENT;
     }
 
   if (ins < scp->count - 1)
     {
       size_t n = (scp->count - ins - 1) * sizeof (object_t);
-      dout(5) << "..moving " << n << " bytes down" << endl;
+      dout(5) << "..moving " << n << " bytes down" << dendl;
       memmove (&scp->objects[ins], &scp->objects[ins + 1], n);
     }
   scp->count--;
 
-  dout(3) << "..collection " << scp << endl;
+  dout(3) << "..collection " << scp << dendl;
 
   Dbt nval (scp, value.get_size() - sizeof (object_t));
   if (db->put (txn, &key, &nval, 0) != 0)
@@ -1423,7 +1421,7 @@ int OSBDB::collection_remove(coll_t c, object_t o, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << "..putting modified collection failed" << endl;
+      derr(1) << "..putting modified collection failed" << dendl;
       return -EIO;
     }
 
@@ -1431,7 +1429,7 @@ int OSBDB::collection_remove(coll_t c, object_t o, Context *onsafe)
     txn->commit (0);
   if (onsafe != NULL)
     COMMIT(onsafe);
-  dout(4) << "..collection remove OK" << endl;
+  dout(4) << "..collection remove OK" << dendl;
   return 0;
 }
 
@@ -1439,7 +1437,7 @@ int OSBDB::collection_list(coll_t c, list<object_t>& o)
 {
   if (!mounted)
     {
-      derr(1) << "not mounted" << endl;
+      derr(1) << "not mounted" << dendl;
       return -EINVAL;
     }
 
@@ -1473,7 +1471,7 @@ int OSBDB::_setattr(object_t oid, const char *name,
                     const void *value, size_t size, Context *onsafe,
                     DbTxn *txn)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1483,7 +1481,7 @@ int OSBDB::_setattr(object_t oid, const char *name,
 
   if (strlen (name) >= OSBDB_MAX_ATTR_LEN)
     {
-      derr(1) << "name too long: " << name << endl;
+      derr(1) << "name too long: " << name << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -ENAMETOOLONG;
@@ -1499,10 +1497,10 @@ int OSBDB::_setattr(object_t oid, const char *name,
   stored_attrs *sap = NULL;
   size_t sz = 0;
 
-  dout(3) << "  getting " << aids << endl;
+  dout(3) << "  getting " << aids << dendl;
   if (db->get (txn, &attrs_key, &attrs_val, 0) != 0)
     {
-      dout(2) << "  first attribute" << endl;
+      dout(2) << "  first attribute" << dendl;
       sz = sizeof (stored_attrs);
       sap = (stored_attrs *) malloc(sz);
       sap->count = 0;
@@ -1511,7 +1509,7 @@ int OSBDB::_setattr(object_t oid, const char *name,
     {
       sz = attrs_val.get_size();
       sap = (stored_attrs *) attrs_val.get_data();
-      dout(2) << "..add to list of " << sap->count << " attrs" << endl;
+      dout(2) << "..add to list of " << sap->count << " attrs" << dendl;
     }
   auto_ptr<stored_attrs> sa (sap);
 
@@ -1521,15 +1519,15 @@ int OSBDB::_setattr(object_t oid, const char *name,
   int ins = 0;
   if (sap->count > 0)
     ins = binary_search<attr_name> (sap->names, sap->count, _name);
-  dout(3) << "..insertion point is " << ins << endl;
+  dout(3) << "..insertion point is " << ins << dendl;
   if (sap->count == 0 ||
       (ins >= sap->count || strcmp (sap->names[ins].name, name) != 0))
     {
       sz += sizeof (attr_name);
       dout(3) << "..realloc " << ((void *) sap) << " to "
-              << dec << sz << endl;
+              << dec << sz << dendl;
       sap = (stored_attrs *) realloc (sap, sz);
-      dout(3) << "..returns " << ((void *) sap) << endl;
+      dout(3) << "..returns " << ((void *) sap) << dendl;
       sa.release ();
       sa.reset (sap);
       int n = (sap->count - ins) * sizeof (attr_name);
@@ -1537,7 +1535,7 @@ int OSBDB::_setattr(object_t oid, const char *name,
         {
           dout(3) << "..move " << n  << " bytes from 0x"
                   << hex << (&sap->names[ins]) << " to 0x"
-                  << hex << (&sap->names[ins+1]) << dec << endl;
+                  << hex << (&sap->names[ins+1]) << dec << dendl;
           memmove (&sap->names[ins+1], &sap->names[ins], n);
         }
       memset (&sap->names[ins], 0, sizeof (attr_name));
@@ -1547,10 +1545,10 @@ int OSBDB::_setattr(object_t oid, const char *name,
       Dbt newAttrs_val (sap, sz);
       newAttrs_val.set_ulen (sz);
       newAttrs_val.set_flags (DB_DBT_USERMEM);
-      dout(3) << "..putting " << aids << endl;
+      dout(3) << "..putting " << aids << dendl;
       if (db->put (txn, &attrs_key, &newAttrs_val, 0) != 0)
         {
-          derr(1) << ".writing attributes list failed" << endl;
+          derr(1) << ".writing attributes list failed" << dendl;
           if (onsafe != NULL)
             CLEANUP(onsafe);
           return -EIO;
@@ -1558,25 +1556,25 @@ int OSBDB::_setattr(object_t oid, const char *name,
     }
   else
     {
-      dout(3) << "..attribute " << name << " already exists" << endl;
+      dout(3) << "..attribute " << name << " already exists" << dendl;
     }
 
-  dout(5) << "..attributes list: " << sap << endl;
+  dout(5) << "..attributes list: " << sap << dendl;
 
   // Add the attribute.
   attr_id aid = new_attr_id (oid, name);
   Dbt attr_key (&aid, sizeof (aid));
   Dbt attr_val ((void *) value, size);
-  dout(3) << "..writing attribute key " << aid << endl;
+  dout(3) << "..writing attribute key " << aid << dendl;
   if (db->put (txn, &attr_key, &attr_val, 0) != 0)
     {
-      derr(1) << ".writing attribute key failed" << endl;
+      derr(1) << ".writing attribute key failed" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -EIO;
     }
 
-  dout(4) << "..setattr OK" << endl;
+  dout(4) << "..setattr OK" << dendl;
   if (onsafe != NULL)
     COMMIT(onsafe);
   return 0;
@@ -1586,7 +1584,7 @@ int OSBDB::setattr(object_t oid, const char *name,
                    const void *value, size_t size,
                    Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1599,7 +1597,7 @@ int OSBDB::setattr(object_t oid, const char *name,
     env->txn_begin (NULL, &txn, 0);
 
   dout(2) << "setattr " << oid << ":" << name << " => ("
-          << size << " bytes)" << endl;
+          << size << " bytes)" << dendl;
   int ret = _setattr (oid, name, value, size, onsafe, txn);
   if (ret == 0)
     {
@@ -1617,7 +1615,7 @@ int OSBDB::setattr(object_t oid, const char *name,
 int OSBDB::setattrs(object_t oid, map<string,bufferptr>& aset,
                     Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1655,7 +1653,7 @@ int OSBDB::_getattr (object_t oid, const char *name, void *value, size_t size)
   if (!mounted)
     return -EINVAL;
 
-  dout(2) << "_getattr " << oid << " " << name << " " << size << endl;
+  dout(2) << "_getattr " << oid << " " << name << " " << size << dendl;
 
   attr_id aid = new_attr_id (oid, name);
   Dbt key (&aid, sizeof (aid));
@@ -1668,11 +1666,11 @@ int OSBDB::_getattr (object_t oid, const char *name, void *value, size_t size)
   int ret;
   if ((ret = db->get (NULL, &key, &val, 0)) != 0)
     {
-      derr(1) << ".getting value failed: " << db_strerror (ret) << endl; 
+      derr(1) << ".getting value failed: " << db_strerror (ret) << dendl; 
       return -ENOENT;
     }
 
-  dout(4) << ".._getattr OK; returns " << val.get_size() << endl;
+  dout(4) << ".._getattr OK; returns " << val.get_size() << dendl;
   return val.get_size();
 }
 
@@ -1703,7 +1701,7 @@ int OSBDB::getattrs(object_t oid, map<string,bufferptr>& aset)
 
 int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1712,7 +1710,7 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
     }
 
   scoped_lock __lock(&lock);
-  dout(2) << "rmattr " << oid << " " << name << endl;
+  dout(2) << "rmattr " << oid << " " << name << dendl;
 
   attrs_id aids = new_attrs_id (oid);
   Dbt askey (&aids, sizeof_attrs_id());
@@ -1736,7 +1734,7 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
   stored_attrs *sap = (stored_attrs *) asvalue.get_data();
   auto_ptr<stored_attrs> sa (sap);
 
-  dout(5) << "..attributes list " << sap << endl;
+  dout(5) << "..attributes list " << sap << dendl;
 
   if (sap->count == 0)
     {
@@ -1744,7 +1742,7 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".empty attribute list" << endl;
+      derr(1) << ".empty attribute list" << dendl;
       return -ENOENT;
     }
 
@@ -1752,14 +1750,14 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
   memset(&_name, 0, sizeof (_name));
   strncpy (_name.name, name, OSBDB_MAX_ATTR_LEN);
   int ins = binary_search<attr_name> (sap->names, sap->count, _name);
-  dout(4) << "..insertion point is " << ins << endl;
+  dout(4) << "..insertion point is " << ins << dendl;
   if (ins >= sap->count || strcmp (sap->names[ins].name, name) != 0)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".attribute not found in list" << endl;
+      derr(1) << ".attribute not found in list" << dendl;
       return -ENOENT;
     }
 
@@ -1767,17 +1765,17 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
   int n = (sap->count - ins) * sizeof (attr_name);
   if (n > 0)
     {
-      dout(4) << "..shift down by " << n << endl;
+      dout(4) << "..shift down by " << n << dendl;
       memmove (&(sap->names[ins]), &(sap->names[ins + 1]), n);
     }
   sap->count--;
-  dout(5) << "..attributes list now " << sap << endl;
+  dout(5) << "..attributes list now " << sap << dendl;
 
   asvalue.set_size(asvalue.get_size() - sizeof (attr_name));
   int ret;
   if ((ret = db->put (txn, &askey, &asvalue, 0)) != 0)
     {
-      derr(1) << "put stored_attrs " << db_strerror (ret) << endl;
+      derr(1) << "put stored_attrs " << db_strerror (ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -1790,7 +1788,7 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
   Dbt key (&aid, sizeof (aid));
   if ((ret = db->del (txn, &key, 0)) != 0)
     {
-      derr(1) << "deleting " << aid << ": " << db_strerror(ret) << endl;
+      derr(1) << "deleting " << aid << ": " << db_strerror(ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -1802,7 +1800,7 @@ int OSBDB::rmattr(object_t oid, const char *name, Context *onsafe)
     txn->commit (0);
   if (onsafe != NULL)
     COMMIT(onsafe);
-  dout(4) << "..rmattr OK" << endl;
+  dout(4) << "..rmattr OK" << dendl;
   return 0;
 }
 
@@ -1811,7 +1809,7 @@ int OSBDB::listattr(object_t oid, char *attrs, size_t size)
   if (!mounted)
     return -EINVAL;
 
-  dout(2) << "listattr " << oid << endl;
+  dout(2) << "listattr " << oid << dendl;
 
   attrs_id aids = new_attrs_id (oid);
   Dbt key (&aids, sizeof_attrs_id());
@@ -1824,7 +1822,7 @@ int OSBDB::listattr(object_t oid, char *attrs, size_t size)
   if ((ret = db->get (NULL, &key, &value, 0)) != 0)
     {
       derr(1) << "fetching " << aids << ": " << db_strerror (ret)
-              << endl;
+              << dendl;
       return -ENOENT;
     }
 
@@ -1841,7 +1839,7 @@ int OSBDB::listattr(object_t oid, char *attrs, size_t size)
       p = p + n + 1;
     }
 
-  dout(4) << "listattr OK" << endl;
+  dout(4) << "listattr OK" << dendl;
   return 0;
 }
 
@@ -1851,7 +1849,7 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
                               const void *value, size_t size,
                               Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1861,10 +1859,10 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
 
   scoped_lock __lock(&lock);
   dout(2) << "collection_setattr " << hex << cid << dec << " " << name
-          << " (" << size << " bytes)" << endl;
+          << " (" << size << " bytes)" << dendl;
   if (strlen (name) >= OSBDB_MAX_ATTR_LEN)
     {
-      derr(1) << "name too long" << endl;
+      derr(1) << "name too long" << dendl;
       if (onsafe != NULL)
         CLEANUP(onsafe);
       return -ENAMETOOLONG;
@@ -1882,10 +1880,10 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
   if (transactional)
     env->txn_begin (NULL, &txn, 0);
 
-  dout(3) << "  getting " << aids << endl;
+  dout(3) << "  getting " << aids << dendl;
   if (db->get (txn, &attrs_key, &attrs_val, 0) != 0)
     {
-      dout(2) << "  first attribute" << endl;
+      dout(2) << "  first attribute" << dendl;
       sz = sizeof (stored_attrs);
       sap = (stored_attrs *) malloc(sz);
       sap->count = 0;
@@ -1894,7 +1892,7 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
     {
       sz = attrs_val.get_size();
       sap = (stored_attrs *) attrs_val.get_data();
-      dout(2) << "  add to list of " << sap->count << " attrs" << endl;
+      dout(2) << "  add to list of " << sap->count << " attrs" << dendl;
     }
   auto_ptr<stored_attrs> sa (sap);
 
@@ -1904,14 +1902,14 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
   int ins = 0;
   if (sap->count > 0)
     ins = binary_search<attr_name> (sap->names, sap->count, _name);
-  dout(3) << "  insertion point is " << ins << endl;
+  dout(3) << "  insertion point is " << ins << dendl;
   if (ins >= sap->count || strcmp (sap->names[ins].name, name) != 0)
     {
       sz += sizeof (attr_name);
       dout(3) << "  realloc " << hex << ((void *) sap) << " to "
-              << dec << sz << endl;
+              << dec << sz << dendl;
       sap = (stored_attrs *) realloc (sap, sz);
-      dout(3) << "  returns " << hex << ((void *) sap) << dec << endl;
+      dout(3) << "  returns " << hex << ((void *) sap) << dec << dendl;
       sa.release ();
       sa.reset (sap);
       int n = (sap->count - ins) * sizeof (attr_name);
@@ -1919,7 +1917,7 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
         {
           dout(3) << "  move " << n  << " bytes from 0x"
                   << hex << (&sap->names[ins]) << " to 0x"
-                  << hex << (&sap->names[ins+1]) << dec << endl;
+                  << hex << (&sap->names[ins+1]) << dec << dendl;
           memmove (&sap->names[ins+1], &sap->names[ins], n);
         }
       memset (&sap->names[ins], 0, sizeof (attr_name));
@@ -1929,36 +1927,36 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
       Dbt newAttrs_val (sap, sz);
       newAttrs_val.set_ulen (sz);
       newAttrs_val.set_flags (DB_DBT_USERMEM);
-      dout(3) << "  putting " << aids << endl;
+      dout(3) << "  putting " << aids << dendl;
       if (db->put (txn, &attrs_key, &newAttrs_val, 0) != 0)
         {
           if (txn != NULL)
             txn->abort();
           if (onsafe != NULL)
             CLEANUP(onsafe);
-          derr(1) << ".putting new attributes failed" << endl;
+          derr(1) << ".putting new attributes failed" << dendl;
           return -EIO;
         }
     }
   else
     {
-      dout(3) << "..attribute " << name << " already exists" << endl;
+      dout(3) << "..attribute " << name << " already exists" << dendl;
     }
 
-  dout(3) << "..attributes list: " << sap << endl;
+  dout(3) << "..attributes list: " << sap << dendl;
 
   // Add the attribute.
   coll_attr_id aid = new_coll_attr_id (cid, name);
   Dbt attr_key (&aid, sizeof (aid));
   Dbt attr_val ((void *) value, size);
-  dout(3) << "  writing attribute key " << aid << endl;
+  dout(3) << "  writing attribute key " << aid << dendl;
   if (db->put (txn, &attr_key, &attr_val, 0) != 0)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".putting attribute failed" << endl;
+      derr(1) << ".putting attribute failed" << dendl;
       return -EIO;
     }
 
@@ -1967,14 +1965,14 @@ int OSBDB::collection_setattr(coll_t cid, const char *name,
   if (onsafe != NULL)
     COMMIT(onsafe);
 
-  dout(4) << "..collection setattr OK" << endl;
+  dout(4) << "..collection setattr OK" << dendl;
   return 0;
 }
 
 int OSBDB::collection_rmattr(coll_t cid, const char *name,
                              Context *onsafe)
 {
-  dout(6) << "Context " << hex << onsafe << dec << endl;
+  dout(6) << "Context " << hex << onsafe << dec << dendl;
   if (!mounted)
     {
       if (onsafe != NULL)
@@ -1984,7 +1982,7 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
 
   scoped_lock __lock(&lock);
   dout(2) << "collection_rmattr " << hex << cid << dec
-          << " " << name << endl;
+          << " " << name << dendl;
 
   coll_attrs_id aids = new_coll_attrs_id (cid);
   Dbt askey (&aids, sizeof_coll_attrs_id());
@@ -2001,21 +1999,21 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".no attributes list" << endl;
+      derr(1) << ".no attributes list" << dendl;
       return -ENOENT;
     }
 
   stored_attrs *sap = (stored_attrs *) asvalue.get_data();
   auto_ptr<stored_attrs> sa (sap);
 
-  dout(5) << "..attributes list " << sap << endl;
+  dout(5) << "..attributes list " << sap << dendl;
   if (sap->count == 0)
     {
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".empty attributes list" << endl;
+      derr(1) << ".empty attributes list" << dendl;
       return -ENOENT;
     }
 
@@ -2029,7 +2027,7 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
         txn->abort();
       if (onsafe != NULL)
         CLEANUP(onsafe);
-      derr(1) << ".attribute not listed" << endl;
+      derr(1) << ".attribute not listed" << dendl;
       return -ENOENT;
     }
 
@@ -2037,17 +2035,17 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
   int n = (sap->count - ins) * sizeof (attr_name);
   if (n > 0)
     {
-      dout(4) << "..shift down by " << n << endl;
+      dout(4) << "..shift down by " << n << dendl;
       memmove (&(sap->names[ins]), &(sap->names[ins + 1]), n);
     }
   sap->count--;
-  dout(5) << "..attributes list now " << sap << endl;
+  dout(5) << "..attributes list now " << sap << dendl;
 
   asvalue.set_size(asvalue.get_size() - sizeof (attr_name));
   int ret;
   if ((ret = db->put (txn, &askey, &asvalue, 0)) != 0)
     {
-      derr(1) << "put stored_attrs " << db_strerror (ret) << endl;
+      derr(1) << "put stored_attrs " << db_strerror (ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -2060,7 +2058,7 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
   Dbt key (&aid, sizeof (aid));
   if ((ret = db->del (txn, &key, 0)) != 0)
     {
-      derr(1) << "deleting " << aid << ": " << db_strerror(ret) << endl;
+      derr(1) << "deleting " << aid << ": " << db_strerror(ret) << dendl;
       if (txn != NULL)
         txn->abort();
       if (onsafe != NULL)
@@ -2073,7 +2071,7 @@ int OSBDB::collection_rmattr(coll_t cid, const char *name,
   if (onsafe != NULL)
     COMMIT(onsafe);
 
-  dout(4) << "..collection rmattr OK" << endl;
+  dout(4) << "..collection rmattr OK" << dendl;
   return 0;
 }
 
@@ -2084,7 +2082,7 @@ int OSBDB::collection_getattr(coll_t cid, const char *name,
     return -EINVAL;
 
   dout(2) << "collection_getattr " << hex << cid << dec
-          << " " << name << endl;
+          << " " << name << dendl;
 
   // XXX transactions/read isolation?
 
@@ -2097,11 +2095,11 @@ int OSBDB::collection_getattr(coll_t cid, const char *name,
 
   if (db->get (NULL, &key, &val, 0) != 0)
     {
-      derr(1) << ".no attribute entry" << endl;
+      derr(1) << ".no attribute entry" << dendl;
       return -ENOENT;
     }
 
-  dout(4) << "..collection getattr OK; returns " << val.get_size() << endl;
+  dout(4) << "..collection getattr OK; returns " << val.get_size() << dendl;
   return val.get_size();
 }
 
@@ -2110,7 +2108,7 @@ int OSBDB::collection_listattr(coll_t cid, char *attrs, size_t size)
   if (!mounted)
     return -EINVAL;
 
-  dout(2) << "collection_listattr " << hex << cid << dec << endl;
+  dout(2) << "collection_listattr " << hex << cid << dec << dendl;
 
   // XXX transactions/read isolation?
 
@@ -2123,7 +2121,7 @@ int OSBDB::collection_listattr(coll_t cid, char *attrs, size_t size)
   if ((ret = db->get (NULL, &key, &value, 0)) != 0)
     {
       derr(1) << "fetching " << caids << ": " << db_strerror (ret)
-              << endl;
+              << dendl;
       return -ENOENT;
     }
 

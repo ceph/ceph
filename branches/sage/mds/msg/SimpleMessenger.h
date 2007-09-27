@@ -86,6 +86,7 @@ private:
 
     Message *read_message();
     int write_message(Message *m);
+    int do_sendmsg(Message *m, struct msghdr *msg, int len);
     void fail(list<Message*>& ls);
 
     // threads
@@ -131,6 +132,7 @@ private:
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
+    void unregister();
     void close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
@@ -163,6 +165,7 @@ private:
     Cond cond;
     list<Message*> dispatch_queue;
     bool stop;
+    int qlen;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
@@ -177,13 +180,18 @@ private:
 
   public:
     void queue_message(Message *m) {
+      // set recv stamp
+      m->set_recv_stamp(g_clock.now());
+      
       lock.Lock();
       dispatch_queue.push_back(m);
+      qlen++;
       cond.Signal();
       lock.Unlock();
     }
     void queue_messages(list<Message*> ls) {
       lock.Lock();
+      qlen += ls.size();
       dispatch_queue.splice(dispatch_queue.end(), ls);
       cond.Signal();
       lock.Unlock();
@@ -202,6 +210,8 @@ private:
     
     const entity_addr_t &get_myaddr();
 
+    int get_dispatch_queue_len() { return qlen; }
+
     void reset_myname(entity_name_t m);
 
     int shutdown();
@@ -209,6 +219,9 @@ private:
     void prepare_dest(const entity_addr_t& addr);
     int send_message(Message *m, entity_inst_t dest,
 		     int port=0, int fromport=0);
+    int send_first_message(Dispatcher *d,
+			   Message *m, entity_inst_t dest,
+			   int port=0, int fromport=0);
     
     void mark_down(entity_addr_t a);
     void mark_up(entity_name_t a, entity_addr_t& i);
@@ -242,7 +255,6 @@ private:
   bool started;
 
   // where i listen
-  tcpaddr_t listen_addr;
   entity_addr_t my_addr;
   
   // local
@@ -261,7 +273,7 @@ private:
   void mark_down(entity_addr_t addr);
   //void mark_up(entity_name_t addr, entity_addr_t& i);
 
-  tcpaddr_t get_listen_addr() { return listen_addr; }
+  entity_addr_t get_my_addr() { return my_addr; }
 
   void reaper();
 

@@ -13,10 +13,10 @@
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = -I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS = -O3 -g  #-I${HOME}/include -L${HOME}/lib
 
 # base
-CFLAGS = -pg -g -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
+CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
 CC = g++
 LIBS = -pthread
@@ -41,7 +41,7 @@ MPILIBS = ${LIBS}
 
 #for LLNL boxes without mpicxx
 #MPICC = g++
-#MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
+#MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/mpi_gnu/include -L/usr/lib/mpi/mpi_gnu/lib
 #MPILIBS = ${LIBS} -lelan -lmpi
 
 EBOFS_OBJS= \
@@ -72,10 +72,10 @@ MDS_OBJS= \
 OSD_OBJS= \
 	osd/PG.o\
 	osd/ReplicatedPG.o\
-	osd/RAID4PG.o\
 	osd/Ager.o\
 	osd/FakeStore.o\
 	osd/OSD.o
+#	osd/RAID4PG.o\
 
 OSDC_OBJS= \
 	osdc/Objecter.o\
@@ -119,7 +119,7 @@ endif
 
 
 # targets
-TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn
+TARGETS = cmon cosd cmds csyn mkmonmap cmonctl fakesyn dupstore
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 ifneq ($(fuse),no)
@@ -137,6 +137,9 @@ test: depend ${TEST_TARGETS}
 
 # real bits
 mkmonmap: mkmonmap.cc common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
@@ -186,23 +189,26 @@ ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
 
 # fake*
 fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
 newsyn: newsyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # hadoop
@@ -226,6 +232,13 @@ mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 testos: test/testos.o ebofs.o osbdb.o common.o
 	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
 
+
+# misc
+gprof-helper.so: test/gprof-helper.c
+	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
+
+test_disk_bw: test/test_disk_bw.cc common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 # bits
 common.o: ${COMMON_OBJS}
@@ -258,7 +271,7 @@ osbdb.o: ${OSBDB_OBJS}
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
 %.o: %.cc
-	${CC} -fPIC ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
@@ -281,6 +294,7 @@ TAGS:
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
+#	for f in $(SRCS) ; do cpp -MM $(CFLAGS) $$f 2> /dev/null >> .depend ; done
 
 
 # now add a line to include the dependency list.

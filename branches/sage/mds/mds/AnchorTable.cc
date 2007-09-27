@@ -26,18 +26,18 @@
 #include "events/EAnchor.h"
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
-#define derr(x)  if (x <= g_conf.debug_mds) cerr << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
+
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
+#define derr(x)  if (x <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchortable "
 
 
 void AnchorTable::dump()
 {
-  dout(7) << "dump v " << version << endl;
+  dout(7) << "dump v " << version << dendl;
   for (hash_map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
        it != anchor_map.end();
        it++) 
-    dout(15) << "dump " << it->second << endl;
+    dout(15) << "dump " << it->second << dendl;
 }
 
 
@@ -47,7 +47,7 @@ void AnchorTable::dump()
 
 bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag) 
 {
-  //dout(17) << "add " << ino << " dirfrag " << dirfrag << endl;
+  //dout(17) << "add " << ino << " dirfrag " << dirfrag << dendl;
   
   // parent should be there
   assert(dirfrag.ino < MDS_INO_BASE ||     // system dirino
@@ -56,17 +56,17 @@ bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag)
   if (anchor_map.count(ino) == 0) {
     // new item
     anchor_map[ino] = Anchor(ino, dirfrag);
-    dout(7) << "add added " << anchor_map[ino] << endl;
+    dout(7) << "add added " << anchor_map[ino] << dendl;
     return true;
   } else {
-    dout(7) << "add had " << anchor_map[ino] << endl;
+    dout(7) << "add had " << anchor_map[ino] << dendl;
     return false;
   }
 }
 
 void AnchorTable::inc(inodeno_t ino)
 {
-  dout(7) << "inc " << ino << endl;
+  dout(7) << "inc " << ino << dendl;
 
   assert(anchor_map.count(ino));
 
@@ -74,7 +74,7 @@ void AnchorTable::inc(inodeno_t ino)
     Anchor &anchor = anchor_map[ino];
     anchor.nref++;
       
-    dout(10) << "inc now " << anchor << endl;
+    dout(10) << "inc now " << anchor << dendl;
     ino = anchor.dirfrag.ino;
     
     if (ino == 0) break;
@@ -84,7 +84,7 @@ void AnchorTable::inc(inodeno_t ino)
 
 void AnchorTable::dec(inodeno_t ino) 
 {
-  dout(7) << "dec " << ino << endl;
+  dout(7) << "dec " << ino << dendl;
   assert(anchor_map.count(ino));
 
   while (true) {
@@ -92,12 +92,12 @@ void AnchorTable::dec(inodeno_t ino)
     anchor.nref--;
       
     if (anchor.nref == 0) {
-      dout(10) << "dec removing " << anchor << endl;
+      dout(10) << "dec removing " << anchor << dendl;
       dirfrag_t dirfrag = anchor.dirfrag;
       anchor_map.erase(ino);
       ino = dirfrag.ino;
     } else {
-      dout(10) << "dec now " << anchor << endl;
+      dout(10) << "dec now " << anchor << dendl;
       ino = anchor.dirfrag.ino;
     }
     
@@ -116,25 +116,23 @@ void AnchorTable::dec(inodeno_t ino)
 
 void AnchorTable::handle_lookup(MAnchor *req)
 {
-  inodeno_t ino = req->get_ino();
-  dout(7) << "handle_lookup " << ino << endl;
-
-  assert(anchor_map.count(ino) == 1);
-  Anchor &anchor = anchor_map[ino];
+  inodeno_t curino = req->get_ino();
+  dout(7) << "handle_lookup " << curino << dendl;
 
   vector<Anchor> trace;
   while (true) {
-    dout(10) << "handle_lookup  adding " << anchor << endl;
+    assert(anchor_map.count(curino) == 1);
+    Anchor &anchor = anchor_map[curino];
+
+    dout(10) << "handle_lookup  adding " << anchor << dendl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
 
     if (anchor.dirfrag.ino < MDS_INO_BASE) break;
-
-    assert(anchor_map.count(anchor.dirfrag.ino) == 1);
-    anchor = anchor_map[anchor.dirfrag.ino];
+    curino = anchor.dirfrag.ino;
   }
 
   // reply
-  MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, ino);
+  MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, req->get_ino());
   reply->set_trace(trace);
   mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
 
@@ -177,13 +175,13 @@ void AnchorTable::update_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmd
 void AnchorTable::commit(version_t atid) 
 {
   if (pending_create.count(atid)) {
-    dout(7) << "commit " << atid << " create " << pending_create[atid] << endl;
+    dout(7) << "commit " << atid << " create " << pending_create[atid] << dendl;
     pending_create.erase(atid);
   } 
 
   else if (pending_destroy.count(atid)) {
     inodeno_t ino = pending_destroy[atid];
-    dout(7) << "commit " << atid << " destroy " << ino << endl;
+    dout(7) << "commit " << atid << " destroy " << ino << dendl;
     
     dec(ino);  // destroy
     
@@ -194,7 +192,7 @@ void AnchorTable::commit(version_t atid)
     inodeno_t ino = pending_update[atid].first;
     vector<Anchor> &trace = pending_update[atid].second;
     
-    dout(7) << "commit " << atid << " update " << ino << endl;
+    dout(7) << "commit " << atid << " update " << ino << dendl;
 
     // remove old
     dec(ino);
@@ -220,20 +218,20 @@ void AnchorTable::rollback(version_t atid)
 {
   if (pending_create.count(atid)) {
     inodeno_t ino = pending_create[atid];
-    dout(7) << "rollback " << atid << " create " << ino << endl;
+    dout(7) << "rollback " << atid << " create " << ino << dendl;
     dec(ino);
     pending_create.erase(atid);
   } 
 
   else if (pending_destroy.count(atid)) {
     inodeno_t ino = pending_destroy[atid];
-    dout(7) << "rollback " << atid << " destroy " << ino << endl;
+    dout(7) << "rollback " << atid << " destroy " << ino << dendl;
     pending_destroy.erase(atid);
   }
 
   else if (pending_update.count(atid)) {
     inodeno_t ino = pending_update[atid].first;
-    dout(7) << "rollback " << atid << " update " << ino << endl;
+    dout(7) << "rollback " << atid << " update " << ino << dendl;
     pending_update.erase(atid);
   }
   else
@@ -268,7 +266,7 @@ void AnchorTable::handle_create_prepare(MAnchor *req)
   inodeno_t ino = req->get_ino();
   vector<Anchor>& trace = req->get_trace();
 
-  dout(7) << "handle_create_prepare " << ino << endl;
+  dout(7) << "handle_create_prepare " << ino << dendl;
   
   create_prepare(ino, trace, req->get_source().num());
 
@@ -282,7 +280,7 @@ void AnchorTable::handle_create_prepare(MAnchor *req)
 void AnchorTable::_create_prepare_logged(MAnchor *req, version_t atid)
 {
   inodeno_t ino = req->get_ino();
-  dout(7) << "_create_prepare_logged " << ino << " atid " << atid << endl;
+  dout(7) << "_create_prepare_logged " << ino << " atid " << atid << dendl;
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, ino, atid);
@@ -311,7 +309,7 @@ public:
 void AnchorTable::handle_destroy_prepare(MAnchor *req)
 {
   inodeno_t ino = req->get_ino();
-  dout(7) << "handle_destroy_prepare " << ino << endl;
+  dout(7) << "handle_destroy_prepare " << ino << dendl;
 
   destroy_prepare(ino, req->get_source().num());
 
@@ -322,7 +320,7 @@ void AnchorTable::handle_destroy_prepare(MAnchor *req)
 void AnchorTable::_destroy_prepare_logged(MAnchor *req, version_t atid)
 {
   inodeno_t ino = req->get_ino();
-  dout(7) << "_destroy_prepare_logged " << ino << " atid " << atid << endl;
+  dout(7) << "_destroy_prepare_logged " << ino << " atid " << atid << dendl;
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, ino, atid);
@@ -351,7 +349,7 @@ void AnchorTable::handle_update_prepare(MAnchor *req)
   inodeno_t ino = req->get_ino();
   vector<Anchor>& trace = req->get_trace();
 
-  dout(7) << "handle_update_prepare " << ino << endl;
+  dout(7) << "handle_update_prepare " << ino << dendl;
   
   update_prepare(ino, trace, req->get_source().num());
 
@@ -365,7 +363,7 @@ void AnchorTable::handle_update_prepare(MAnchor *req)
 void AnchorTable::_update_prepare_logged(MAnchor *req, version_t atid)
 {
   inodeno_t ino = req->get_ino();
-  dout(7) << "_update_prepare_logged " << ino << " atid " << atid << endl;
+  dout(7) << "_update_prepare_logged " << ino << " atid " << atid << dendl;
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, ino, atid);
@@ -391,7 +389,7 @@ public:
 void AnchorTable::handle_commit(MAnchor *req)
 {
   version_t atid = req->get_atid();
-  dout(7) << "handle_commit " << atid << endl;
+  dout(7) << "handle_commit " << atid << dendl;
   
   if (pending_create.count(atid) ||
       pending_destroy.count(atid) ||
@@ -402,7 +400,7 @@ void AnchorTable::handle_commit(MAnchor *req)
   else if (atid <= version) {
     dout(0) << "got commit for atid " << atid << " <= " << version 
 	    << ", already committed, sending ack." 
-	    << endl;
+	    << dendl;
     MAnchor *reply = new MAnchor(ANCHOR_OP_ACK, 0, atid);
     mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
     delete req;
@@ -410,7 +408,7 @@ void AnchorTable::handle_commit(MAnchor *req)
   } 
   else {
     // wtf.
-    dout(0) << "got commit for atid " << atid << " > " << version << endl;
+    dout(0) << "got commit for atid " << atid << " > " << version << dendl;
     assert(atid <= version);
   }
   
@@ -421,7 +419,7 @@ void AnchorTable::handle_commit(MAnchor *req)
 
 void AnchorTable::_commit_logged(MAnchor *req)
 {
-  dout(7) << "_commit_logged, sending ACK" << endl;
+  dout(7) << "_commit_logged, sending ACK" << dendl;
   MAnchor *reply = new MAnchor(ANCHOR_OP_ACK, req->get_ino(), req->get_atid());
   mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
   delete req;
@@ -434,7 +432,7 @@ void AnchorTable::_commit_logged(MAnchor *req)
 void AnchorTable::handle_rollback(MAnchor *req)
 {
   version_t atid = req->get_atid();
-  dout(7) << "handle_rollback " << atid << endl;
+  dout(7) << "handle_rollback " << atid << dendl;
   rollback(atid);
   delete req;
 }
@@ -462,7 +460,7 @@ void AnchorTable::handle_anchor_request(class MAnchor *req)
 {
   // make sure i'm open!
   if (!opened) {
-    dout(7) << "not open yet" << endl;
+    dout(7) << "not open yet" << dendl;
     
     waiting_for_open.push_back(new C_MDS_RetryMessage(mds, req));
     
@@ -473,7 +471,7 @@ void AnchorTable::handle_anchor_request(class MAnchor *req)
     return;
   }
 
-  dout(10) << "handle_anchor_request " << *req << endl;
+  dout(10) << "handle_anchor_request " << *req << dendl;
 
   // go
   switch (req->get_op()) {
@@ -525,7 +523,7 @@ public:
 
 void AnchorTable::save(Context *onfinish)
 {
-  dout(7) << "save v " << version << endl;
+  dout(7) << "save v " << version << dendl;
   if (!opened) {
     assert(!onfinish);
     return;
@@ -535,7 +533,7 @@ void AnchorTable::save(Context *onfinish)
     waiting_for_save[version].push_back(onfinish);
 
   if (committing_version == version) {
-    dout(7) << "save already committing v " << version << endl;
+    dout(7) << "save already committing v " << version << dendl;
     return;
   }
   committing_version = version;
@@ -555,7 +553,7 @@ void AnchorTable::save(Context *onfinish)
        it != anchor_map.end();
        it++) {
     it->second._encode(bl);
-    dout(15) << "save encoded " << it->second << endl;
+    dout(15) << "save encoded " << it->second << dendl;
   }
 
   // pending
@@ -584,7 +582,7 @@ void AnchorTable::save(Context *onfinish)
 
 void AnchorTable::_saved(version_t v)
 {
-  dout(7) << "_saved v " << v << endl;
+  dout(7) << "_saved v " << v << dendl;
 
   assert(v <= committing_version);
   assert(committed_version < v);
@@ -609,7 +607,7 @@ public:
 
 void AnchorTable::load(Context *onfinish)
 {
-  dout(7) << "load" << endl;
+  dout(7) << "load" << dendl;
   assert(!opened);
 
   waiting_for_open.push_back(onfinish);
@@ -624,7 +622,7 @@ void AnchorTable::load(Context *onfinish)
 
 void AnchorTable::_loaded(bufferlist& bl)
 {
-  dout(10) << "_loaded got " << bl.length() << " bytes" << endl;
+  dout(10) << "_loaded got " << bl.length() << " bytes" << dendl;
 
   int off = 0;
   bl.copy(off, sizeof(version), (char*)&version);
@@ -638,7 +636,7 @@ void AnchorTable::_loaded(bufferlist& bl)
     Anchor a;
     a._decode(bl, off);
     anchor_map[a.ino] = a;   
-    dout(15) << "load_2 decoded " << a << endl;
+    dout(15) << "load_2 decoded " << a << dendl;
   }
 
   ::_decode(pending_reqmds, bl, off);
@@ -674,7 +672,7 @@ void AnchorTable::_loaded(bufferlist& bl)
 
 void AnchorTable::finish_recovery()
 {
-  dout(7) << "finish_recovery" << endl;
+  dout(7) << "finish_recovery" << dendl;
   
   // resend agrees for everyone.
   for (map<version_t,int>::iterator p = pending_reqmds.begin();
@@ -703,7 +701,7 @@ void AnchorTable::resend_agree(version_t v, int who)
 
 void AnchorTable::handle_mds_recovery(int who)
 {
-  dout(7) << "handle_mds_recovery mds" << who << endl;
+  dout(7) << "handle_mds_recovery mds" << who << dendl;
   
   // resend agrees for recovered mds
   for (map<version_t,int>::iterator p = pending_reqmds.begin();

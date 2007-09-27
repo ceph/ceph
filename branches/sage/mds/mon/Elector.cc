@@ -20,9 +20,9 @@
 #include "messages/MMonElection.h"
 
 #include "config.h"
-#undef dout
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector(" << epoch << ") "
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector(" << epoch << ") "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector(" << epoch << ") "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector(" << epoch << ") "
 
 
 void Elector::init()
@@ -30,7 +30,7 @@ void Elector::init()
   epoch = mon->store->get_int("mon_epoch");
   if (!epoch)
     epoch = 1;
-  dout(1) << "init, last seen epoch " << epoch << endl;
+  dout(1) << "init, last seen epoch " << epoch << dendl;
 }
 
 void Elector::shutdown()
@@ -41,7 +41,7 @@ void Elector::shutdown()
 
 void Elector::bump_epoch(epoch_t e) 
 {
-  dout(10) << "bump_epoch " << epoch << " to " << e << endl;
+  dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
   assert(epoch < e);
   epoch = e;
   mon->store->put_int(epoch, "mon_epoch");
@@ -55,7 +55,7 @@ void Elector::bump_epoch(epoch_t e)
 
 void Elector::start()
 {
-  dout(5) << "start -- can i be leader?" << endl;
+  dout(5) << "start -- can i be leader?" << dendl;
   
   // start by trying to elect me
   if (epoch % 2 == 0) 
@@ -76,7 +76,7 @@ void Elector::start()
 
 void Elector::defer(int who)
 {
-  dout(5) << "defer to " << who << endl;
+  dout(5) << "defer to " << who << dendl;
 
   if (electing_me) {
     // drop out
@@ -115,7 +115,7 @@ void Elector::cancel_timer()
 
 void Elector::expire()
 {
-  dout(5) << "election timer expired" << endl;
+  dout(5) << "election timer expired" << dendl;
   
   // did i win?
   if (electing_me &&
@@ -156,7 +156,7 @@ void Elector::victory()
 
 void Elector::handle_propose(MMonElection *m)
 {
-  dout(5) << "handle_propose from " << m->get_source() << endl;
+  dout(5) << "handle_propose from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
   assert(m->epoch % 2 == 1); // election
@@ -167,7 +167,7 @@ void Elector::handle_propose(MMonElection *m)
 	   epoch % 2 == 0 &&    // in a non-election cycle
 	   mon->quorum.count(from) == 0) {  // from someone outside the quorum
     // a mon just started up, call a new election so they can rejoin!
-    dout(5) << " got propose from old epoch, " << m->get_source() << " must have just started" << endl;
+    dout(5) << " got propose from old epoch, " << m->get_source() << " must have just started" << dendl;
     start();
   }
 
@@ -175,7 +175,7 @@ void Elector::handle_propose(MMonElection *m)
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
       assert(leader_acked < from);  // and they still win, of course
-      dout(5) << "no, we already acked " << leader_acked << endl;
+      dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
       if (!electing_me)
@@ -189,7 +189,7 @@ void Elector::handle_propose(MMonElection *m)
       defer(from);
     } else {
       // ignore them!
-      dout(5) << "no, we already acked " << leader_acked << endl;
+      dout(5) << "no, we already acked " << leader_acked << dendl;
     }
   }
   
@@ -198,12 +198,12 @@ void Elector::handle_propose(MMonElection *m)
  
 void Elector::handle_ack(MMonElection *m)
 {
-  dout(5) << "handle_ack from " << m->get_source() << endl;
+  dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
   
   assert(m->epoch % 2 == 1); // election
   if (m->epoch > epoch) {
-    dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << endl;
+    dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
     delete m;
@@ -214,7 +214,7 @@ void Elector::handle_ack(MMonElection *m)
   if (electing_me) {
     // thanks
     acked_me.insert(from);
-    dout(5) << " so far i have " << acked_me << endl;
+    dout(5) << " so far i have " << acked_me << dendl;
     
     // is that _everyone_?
     if (acked_me.size() == (unsigned)mon->monmap->num_mon) {
@@ -232,7 +232,7 @@ void Elector::handle_ack(MMonElection *m)
 
 void Elector::handle_victory(MMonElection *m)
 {
-  dout(5) << "handle_victory from " << m->get_source() << endl;
+  dout(5) << "handle_victory from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
   assert(from < whoami);
@@ -265,7 +265,7 @@ void Elector::dispatch(Message *m)
       }
 
       if (em->epoch < epoch) {
-	dout(5) << "old epoch, dropping" << endl;
+	dout(5) << "old epoch, dropping" << dendl;
 	delete em;
 	break;
       }

@@ -79,7 +79,7 @@ for my $f (@filt) {
 		}
 		#next if ($f ne '.' && $d !~ /$reg/);			
 		#print "$d\n";
-		my ($x) = $d =~ /$xaxis=(\d+)/;
+		my ($x) = $d =~ /$xaxis=([\d\.]+)/;
 		
 		for my $v (@vars) {
 			my ($what, $field) = $v =~ /^(.+)\.([^\.]+)$/;

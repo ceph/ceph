@@ -84,6 +84,7 @@ protected:
 
   map<CDir*,list<Context*> >   export_finish_waiters;
   
+  list< pair<dirfrag_t,int> >  export_queue;
 
   // -- imports --
 public:
@@ -178,6 +179,9 @@ public:
  public:
   void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
+
+  void export_dir_nicely(CDir *dir, int dest);
+  void maybe_do_queued_export();
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
 			   map<int,entity_inst_t>& exported_client_map,

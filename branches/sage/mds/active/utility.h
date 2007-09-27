@@ -27,7 +27,7 @@ int send_msg_footer(int fd);
 
 Client* startCephClient()
 {
-  dout(3) << "ActiveMaster: Initializing Ceph client:" << endl;
+  cout << "ActiveMaster: Initializing Ceph client:" << endl;
   
   // parse args from CEPH_ARGS, not command line 
   vector<char*> args; 
@@ -43,7 +43,7 @@ Client* startCephClient()
   MonMap* monmap = new MonMap();
   int r = monmap->read(".ceph_monmap");
   if (r < 0) {
-    dout(0) << "ActiveMaster: could not find .ceph_monmap" << endl; 
+    cout << "ActiveMaster: could not find .ceph_monmap" << endl; 
     return 0;
   }
   assert(r >= 0);

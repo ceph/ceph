@@ -51,6 +51,8 @@ class MOSDOpReply : public Message {
     eversion_t pg_complete_thru;
     
     epoch_t map_epoch;
+
+    osd_peer_stat_t peer_stat;
   } st;
 
   bufferlist data;
@@ -84,6 +86,9 @@ class MOSDOpReply : public Message {
 
   void set_op(int op) { st.op = op; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
+
+  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
+  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
 
   // data payload
   void set_data(bufferlist &d) {
@@ -130,6 +135,9 @@ public:
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
+    MOSDOp::add_payload_chunk_breaks(payload.length() + 4, 
+				     st.offset, data.length(),
+				     chunk_payload_at);
     ::_encode(data, payload);
   }
 
@@ -140,10 +148,12 @@ public:
 	<< " " << MOSDOp::get_opname(st.op)
 	<< " " << st.oid;
     if (st.length) out << " " << st.offset << "~" << st.length;
-    if (st.commit)
-      out << " commit";
-    else
-      out << " ack";
+    if (st.op >= 10) {
+      if (st.commit)
+	out << " commit";
+      else
+	out << " ack";
+    }
     out << " = " << st.result;
     out << ")";
   }

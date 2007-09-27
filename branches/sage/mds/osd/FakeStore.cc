@@ -40,19 +40,18 @@
 #endif // DARWIN
 
 #include "config.h"
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << g_clock.now() << " osd" << whoami << ".fakestore "
-#define  derr(l)    if (l<=g_conf.debug) cerr << g_clock.now() << " osd" << whoami << ".fakestore "
+
+#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
 #include <map>
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+
 
 // crap-a-crap hash
-#define HASH_DIRS       0x80
-#define HASH_MASK       0x7f
+//#define HASH_DIRS       0x80
+//#define HASH_MASK       0x7f
 // end crap hash
 
 
@@ -69,14 +68,16 @@ int FakeStore::statfs(struct statfs *buf)
  */ 
 void FakeStore::get_oname(object_t oid, char *s) 
 {
-  static hash<object_t> H;
+  //static hash<object_t> H;
   assert(sizeof(oid) == 16);
 #ifdef __LP64__
-  sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
+  //sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
+  sprintf(s, "%s/objects/%016lx.%016lx", basedir.c_str(), 
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #else
-  sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
+  //sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
+  sprintf(s, "%s/objects/%016llx.%016llx", basedir.c_str(), 
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #endif
@@ -115,42 +116,44 @@ int FakeStore::mkfs()
 {
   char cmd[200];
   if (g_conf.fakestore_dev) {
-    dout(0) << "mounting" << endl;
+    dout(0) << "mounting" << dendl;
     sprintf(cmd,"mount %s", g_conf.fakestore_dev);
     system(cmd);
   }
 
-  dout(1) << "mkfs in " << basedir << endl;
+  dout(1) << "mkfs in " << basedir << dendl;
 
   // wipe
   sprintf(cmd, "test -d %s && rm -r %s ; mkdir -p %s/collections && mkdir -p %s/objects",
 	  basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str());
   
-  dout(5) << "wipe: " << cmd << endl;
+  dout(5) << "wipe: " << cmd << dendl;
   system(cmd);
 
   // hashed bits too
+  /*
   for (int i=0; i<HASH_DIRS; i++) {
     char s[4];
     sprintf(s, "%02x", i);
     string subdir = basedir + "/objects/" + s;
 
-    dout(15) << " creating " << subdir << endl;
+    dout(15) << " creating " << subdir << dendl;
     int r = ::mkdir(subdir.c_str(), 0755);
     if (r != 0) {
-      derr(0) << "couldnt create subdir, r = " << r << endl;
+      derr(0) << "couldnt create subdir, r = " << r << dendl;
       return r;
     }
   }
-  
+  */
+
   if (g_conf.fakestore_dev) {
     char cmd[100];
-    dout(0) << "umounting" << endl;
+    dout(0) << "umounting" << dendl;
     sprintf(cmd,"umount %s", g_conf.fakestore_dev);
     //system(cmd);
   }
 
-  dout(1) << "mkfs done in " << basedir << endl;
+  dout(1) << "mkfs done in " << basedir << dendl;
 
   return 0;
 }
@@ -158,24 +161,24 @@ int FakeStore::mkfs()
 int FakeStore::mount() 
 {
   if (g_conf.fakestore_dev) {
-    dout(0) << "mounting" << endl;
+    dout(0) << "mounting" << dendl;
     char cmd[100];
     sprintf(cmd,"mount %s", g_conf.fakestore_dev);
     //system(cmd);
   }
 
-  dout(5) << "basedir " << basedir << endl;
+  dout(5) << "basedir " << basedir << dendl;
   
   // make sure global base dir exists
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", r = " << r << endl;
+    derr(0) << "unable to stat basedir " << basedir << ", " << strerror(errno) << dendl;
     return r;
   }
   
   if (g_conf.fakestore_fake_collections) {
-    dout(0) << "faking collections (in memory)" << endl;
+    dout(0) << "faking collections (in memory)" << dendl;
     fake_collections = true;
   }
 
@@ -184,14 +187,14 @@ int FakeStore::mount()
 #ifndef __CYGWIN__
   if (g_conf.fakestore_fake_attrs) {
 #endif
-    dout(0) << "faking attrs (in memory)" << endl;
+    dout(0) << "faking attrs (in memory)" << dendl;
     fake_attrs = true;
 #ifndef __CYGWIN__
   } else {
     char names[1000];
     r = ::listxattr(basedir.c_str(), names, 1000);
     if (r < 0) {
-      derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --fakestore_fake_attrs to fake them (in memory)." << endl;
+      derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --fakestore_fake_attrs to fake them (in memory)." << dendl;
       assert(0);
     }
   }
@@ -203,13 +206,13 @@ int FakeStore::mount()
 
 int FakeStore::umount() 
 {
-  dout(5) << "umount " << basedir << endl;
+  dout(5) << "umount " << basedir << dendl;
   
   sync();
 
   if (g_conf.fakestore_dev) {
     char cmd[100];
-    dout(0) << "umounting" << endl;
+    dout(0) << "umounting" << dendl;
     sprintf(cmd,"umount %s", g_conf.fakestore_dev);
     //system(cmd);
   }
@@ -236,7 +239,7 @@ bool FakeStore::exists(object_t oid)
 int FakeStore::stat(object_t oid,
                     struct stat *st)
 {
-  dout(20) << "stat " << oid << endl;
+  dout(20) << "stat " << oid << dendl;
   char fn[200];
   get_oname(oid,fn);
   int r = ::stat(fn, st);
@@ -247,7 +250,7 @@ int FakeStore::stat(object_t oid,
 
 int FakeStore::remove(object_t oid, Context *onsafe) 
 {
-  dout(20) << "remove " << oid << endl;
+  dout(20) << "remove " << oid << dendl;
   char fn[200];
   get_oname(oid,fn);
   int r = ::unlink(fn);
@@ -257,7 +260,7 @@ int FakeStore::remove(object_t oid, Context *onsafe)
 
 int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
 {
-  dout(20) << "truncate " << oid << " size " << size << endl;
+  dout(20) << "truncate " << oid << " size " << size << dendl;
 
   char fn[200];
   get_oname(oid,fn);
@@ -269,14 +272,14 @@ int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
 int FakeStore::read(object_t oid, 
                     off_t offset, size_t len,
                     bufferlist& bl) {
-  dout(20) << "read " << oid << " len " << len << " off " << offset << endl;
+  dout(20) << "read " << oid << " len " << len << " off " << offset << dendl;
 
   char fn[200];
   get_oname(oid,fn);
   
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << endl;
+    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
     return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
@@ -310,7 +313,7 @@ int FakeStore::write(object_t oid,
   char fn[200];
   get_oname(oid,fn);
 
-  dout(20) << "write " << fn << " len " << len << " off " << offset << endl;
+  dout(20) << "write " << fn << " len " << len << " off " << offset << dendl;
 
   
   ::mknod(fn, 0644, 0);  // in case it doesn't exist yet.
@@ -318,7 +321,7 @@ int FakeStore::write(object_t oid,
   int flags = O_WRONLY;//|O_CREAT;
   int fd = ::open(fn, flags);
   if (fd < 0) {
-    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
+    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return fd;
   }
   ::fchmod(fd, 0664);
@@ -337,12 +340,12 @@ int FakeStore::write(object_t oid,
     if (r > 0)
       did += r;
     else {
-      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
     }
   }
   
   if (did < 0) {
-    derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+    derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
   }
 
   ::flock(fd, LOCK_UN);
@@ -384,7 +387,7 @@ void FakeStore::sync()
 {
   synclock.Lock();
   while (unsync > 0) {
-    dout(0) << "sync waiting for " << unsync << " items to (fake) sync" << endl;
+    dout(0) << "sync waiting for " << unsync << " items to (fake) sync" << dendl;
     synccond.Wait(synclock);
   }
   synclock.Unlock();
@@ -434,7 +437,10 @@ int FakeStore::setattrs(object_t oid, map<string,bufferptr>& aset)
        p != aset.end();
        ++p) {
     r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-    if (r < 0) break;
+    if (r < 0) {
+      cerr << "error setxattr " << strerror(errno) << std::endl;
+      break;
+    }
   }
 #endif
   return r;
@@ -467,9 +473,9 @@ int FakeStore::getattrs(object_t oid, map<string,bufferptr>& aset)
   
   char *name = names;
   for (int i=0; i<num; i++) {
-    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << endl;
+    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
     int l = ::getxattr(fn, name, val, 1000);
-    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << endl;
+    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
     aset[names].append(val, l);
     name += strlen(name) + 1;
   }
@@ -524,6 +530,49 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   return 0;
 }
 
+int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
+{
+  if (fake_attrs) return attrs.collection_setattrs(cid, aset);
+
+  char fn[100];
+  get_cdir(cid, fn);
+  int r = 0;
+#ifndef __CYGWIN__
+  for (map<string,bufferptr>::iterator p = aset.begin();
+       p != aset.end();
+       ++p) {
+    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+    if (r < 0) break;
+  }
+#endif
+  return r;
+}
+
+int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
+{
+  if (fake_attrs) return attrs.collection_getattrs(cid, aset);
+
+#ifndef __CYGWIN__
+  char fn[100];
+  get_cdir(cid, fn);
+
+  char val[1000];
+  char names[1000];
+  int num = ::listxattr(fn, names, 1000);
+  
+  char *name = names;
+  for (int i=0; i<num; i++) {
+    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+    int l = ::getxattr(fn, name, val, 1000);
+    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
+    aset[names].append(val, l);
+    name += strlen(name) + 1;
+  }
+#endif
+  return 0;
+}
+
+
 /*
 int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size) 
 {
@@ -531,6 +580,35 @@ int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size)
   return 0;
 }
 */
+
+
+int FakeStore::list_objects(list<object_t>& ls) 
+{
+  char fn[200];
+  sprintf(fn, "%s/objects", basedir.c_str());
+
+  DIR *dir = ::opendir(fn);
+  assert(dir);
+
+  struct dirent *de;
+  while ((de = ::readdir(dir)) != 0) {
+    if (de->d_name[0] == '.') continue;
+    // parse
+    object_t o;
+    assert(sizeof(o) == 16);
+    //cout << "  got object " << de->d_name << std::endl;
+    *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
+    assert(de->d_name[16] == '.');
+    *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
+    //dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << dendl;
+    if (errno) continue;
+    ls.push_back(o);
+  }
+  
+  ::closedir(dir);
+  return 0;
+}
+
 
 // --------------------------
 // collections
@@ -645,12 +723,14 @@ int FakeStore::collection_list(coll_t c, list<object_t>& ls)
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
+    if (de->d_name[0] == '.') continue;
+    //cout << "  got object " << de->d_name << std::endl;
     object_t o;
     assert(sizeof(o) == 16);
     *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
     assert(de->d_name[16] == '.');
     *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
-    dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << endl;
+    dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << dendl;
     if (errno) continue;
     ls.push_back(o);
   }

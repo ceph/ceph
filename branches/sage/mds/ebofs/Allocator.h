@@ -73,11 +73,10 @@ protected:
   int alloc_dec(Extent ex);
 
 
-  /*int unallocate(Extent& ex) {  // skip limbo
+  int unallocate(Extent& ex) {  // skip limbo
     return _release_merge(ex);
   }
-  */
-
+  
   int commit_limbo();  // limbo -> fs->limbo_tab
   int release_limbo(); // fs->limbo_tab -> free_tabs
 

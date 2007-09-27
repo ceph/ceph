@@ -80,7 +80,7 @@ protected:
   void get_rep_gather(RepGather*);
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
-  void issue_repop(MOSDOp *op, int osd);
+  void issue_repop(MOSDOp *op, int osd, utime_t now);
   RepGather *new_rep_gather(MOSDOp *op);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
@@ -88,7 +88,8 @@ protected:
   
   // push/pull
   int num_pulling;
-  
+  map<object_t, set<int> > pushing;
+
   void push(object_t oid, int dest);
   void pull(object_t oid);
 
@@ -116,7 +117,7 @@ protected:
   bool do_recovery();
   void do_peer_recovery();
 
-  void clean_replicas();
+  void purge_strays();
 
 
   void op_read(MOSDOp *op);
@@ -125,17 +126,17 @@ protected:
   void op_push(MOSDOp *op);
   void op_pull(MOSDOp *op);
 
-
+  void op_push_reply(MOSDOpReply *reply);
 
 
 public:
   ReplicatedPG(OSD *o, pg_t p) : 
     PG(o,p),
-    num_pulling(0)
+    num_pulling(0) 
   { }
   ~ReplicatedPG() {}
 
-  bool preprocess_op(MOSDOp *op);
+  bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
   void do_op_reply(MOSDOpReply *r);
 

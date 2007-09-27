@@ -25,6 +25,7 @@
 #include "BlockDevice.h"
 
 #include "include/interval_set.h"
+#include "include/xlist.h"
 
 class ObjectCache;
 class BufferCache;
@@ -62,6 +63,7 @@ class BufferHead : public LRUObject {
   set<BufferHead*>  shadows;     // shadow bh's that clone()ed me.
   BufferHead*       shadow_of;
 
+
  private:
   int        ref;
   int        state;
@@ -75,6 +77,7 @@ class BufferHead : public LRUObject {
   Extent     object_loc;     // block position _in_object_
 
   utime_t    dirty_stamp;
+  //xlist<BufferHead*>::item xlist_dirty;
 
   bool       want_to_expire;  // wants to be at bottom of lru
 
@@ -84,6 +87,7 @@ class BufferHead : public LRUObject {
     rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
     shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
+    //xlist_dirty(this),
     want_to_expire(false)
     {}
   ~BufferHead() {
@@ -103,6 +107,7 @@ class BufferHead : public LRUObject {
     --ref;
     return ref;
   }
+  int get_num_ref() { return ref; }
 
   block_t start() { return object_loc.start; }
   void set_start(block_t s) { object_loc.start = s; }
@@ -115,7 +120,7 @@ class BufferHead : public LRUObject {
   void set_version(version_t v) { version = v; }
   version_t get_last_flushed() { return last_flushed; }
   void set_last_flushed(version_t v) { 
-    if (v <= last_flushed) cout << "last_flushed begin set to " << v << ", was " << last_flushed << endl;
+    if (v <= last_flushed) cout << "last_flushed begin set to " << v << ", was " << last_flushed << std::endl;
     assert(v > last_flushed);
     last_flushed = v; 
   }
@@ -161,7 +166,7 @@ class BufferHead : public LRUObject {
     for (set<BufferHead*>::iterator p = shadows.begin();
 	 p != shadows.end();
 	 ++p) {
-      //cout << "unpin shadow " << *p << endl;
+      //cout << "unpin shadow " << *p << std::endl;
       (*p)->shadow_of = 0;
       (*p)->put();
     }
@@ -245,12 +250,12 @@ class BufferHead : public LRUObject {
   static void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
     assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
     //assert(partial_is_complete());
-    //cout << "apply_partial" << endl;
+    //cout << "apply_partial" << std::endl;
     for (map<off_t, bufferlist>::iterator i = pm.begin();
          i != pm.end();
          i++) {
       int pos = i->first;
-      //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << endl;
+      //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << std::endl;
       bl.copy_in(pos, i->second.length(), i->second);
     }
     pm.clear();
@@ -283,7 +288,7 @@ class BufferHead : public LRUObject {
         continue;
       }
       // overlap tail of i?
-      if (off > i->first && off < i->first + i->second.length()) {
+      if (off > i->first && off+len >= i->first + i->second.length()) {
         // shorten i.
         bufferlist o;
         o.claim( i->second );
@@ -293,7 +298,7 @@ class BufferHead : public LRUObject {
         continue;
       }
       // overlap head of i?
-      if (off < i->first && off+len < i->first + i->second.length()) {
+      if (off <= i->first && off+len < i->first + i->second.length()) {
         // move i (make new tail).
         off_t tailoff = off+len;
         unsigned trim = tailoff - i->first;
@@ -322,7 +327,6 @@ class BufferHead : public LRUObject {
     partial[off] = p;
   }
 
-
 };
 
 inline ostream& operator<<(ostream& out, BufferHead& bh)
@@ -335,6 +339,11 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
+
+  // include epoch modified?
+  if (bh.is_dirty() || bh.is_tx() || bh.is_partial()) 
+    out << "(e" << bh.epoch_modified << ")";
+
   //out << " " << bh.data.length();
   out << " " << &bh;
   out << ")";
@@ -367,13 +376,13 @@ class ObjectCache {
 
   int get() { 
     ++ref;
-    //cout << "oc.get " << object_id << " " << ref << endl;
+    //cout << "oc.get " << object_id << " " << ref << std::endl;
     return ref; 
   }
   int put() { 
     assert(ref > 0); 
     --ref;
-    //cout << "oc.put " << object_id << " " << ref << endl;
+    //cout << "oc.put " << object_id << " " << ref << std::endl;
     return ref; 
   }
   
@@ -384,18 +393,18 @@ class ObjectCache {
     assert(data.count(bh->start()) == 0);
 
     if (0) {  // sanity check     FIXME DEBUG
-      //cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
+      //cout << "add_bh " << bh->start() << "~" << bh->length() << std::endl;
       map<block_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
       if (p != data.end()) {
-        //cout << " after " << *p->second << endl;
-        //cout << " after starts at " << p->first << endl;
+        //cout << " after " << *p->second << std::endl;
+        //cout << " after starts at " << p->first << std::endl;
         assert(p->first >= bh->end());
       }
       if (p != data.begin()) {
         p--;
         //cout << " before starts at " << p->second->start() 
-        //<< " and ends at " << p->second->end() << endl;
-        //cout << " before " << *p->second << endl;
+        //<< " and ends at " << p->second->end() << std::endl;
+        //cout << " before " << *p->second << std::endl;
         assert(p->second->end() <= bh->start());
       }
     }
@@ -407,6 +416,11 @@ class ObjectCache {
     data.erase(bh->start());
   }
   bool is_empty() { return data.empty(); }
+
+  void try_merge_bh(BufferHead *bh);
+  void try_merge_bh_left(map<block_t, BufferHead*>::iterator& p);
+  void try_merge_bh_right(map<block_t, BufferHead*>::iterator& p);
+  BufferHead* merge_bh_left(BufferHead *left, BufferHead *right);
 
   int find_tx(block_t start, block_t len,
               list<BufferHead*>& tx);
@@ -420,7 +434,6 @@ class ObjectCache {
 
   
   int map_write(block_t start, block_t len,
-                interval_set<block_t>& alloc,
                 map<block_t, BufferHead*>& hits,
                 version_t super_epoch);   // can write to these.
   void touch_bottom(block_t bstart, block_t blast);
@@ -443,7 +456,7 @@ class ObjectCache {
     for (map<block_t,BufferHead*>::iterator i = data.begin();
          i != data.end();
          i++)
-      cout << "dump: " << i->first << ": " << *i->second << endl;
+      cout << "dump: " << i->first << ": " << *i->second << std::endl;
   }
 
 };
@@ -455,7 +468,7 @@ class BufferCache {
   Mutex             &ebofs_lock;          // hack: this is a ref to global ebofs_lock
   BlockDevice       &dev;
 
-  set<BufferHead*> dirty_bh;
+  //xlist<BufferHead*> dirty_bh;
 
   LRU   lru_dirty, lru_rest;
 
@@ -517,7 +530,7 @@ class BufferCache {
     bh->get_oc()->add_bh(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_insert_mid(bh);
-      dirty_bh.insert(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     } else
       lru_rest.lru_insert_mid(bh);
     stat_add(bh);
@@ -540,7 +553,7 @@ class BufferCache {
     stat_sub(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_remove(bh);
-      dirty_bh.erase(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     } else
       lru_rest.lru_remove(bh);
   }
@@ -583,11 +596,11 @@ class BufferCache {
   }
   void inc_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]++;
-    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
   }
   void dec_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]--;
-    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
     if (epoch_unflushed[what][epoch] == 0) 
       flush_cond.Signal();
   }
@@ -608,7 +621,7 @@ class BufferCache {
     if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
       lru_rest.lru_remove(bh);
       lru_dirty.lru_insert_top(bh);
-      dirty_bh.insert(bh);
+      //dirty_bh.push_back(&bh->xlist_dirty);
     }
     if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
       lru_dirty.lru_remove(bh);
@@ -616,7 +629,7 @@ class BufferCache {
 	lru_rest.lru_insert_bot(bh);
       else
 	lru_rest.lru_insert_mid(bh);
-      dirty_bh.erase(bh);
+      //dirty_bh.remove(&bh->xlist_dirty);
     }
 
     // set state

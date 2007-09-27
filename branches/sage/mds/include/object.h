@@ -24,6 +24,7 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "hash.h"
 
 typedef uint32_t objectrev_t;
 
@@ -80,24 +81,41 @@ inline ostream& operator<<(ostream& out, const object_t o) {
 }
 
 
+
+
+
 namespace __gnu_cxx {
 #ifndef __LP64__
   template<> struct hash<uint64_t> {
     size_t operator()(uint64_t __x) const { 
       static hash<uint32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
+      //static rjhash<uint64_t> H;
+      //return H(__x);
     }
   };
 #endif
 
   template<> struct hash<object_t> {
     size_t operator()(const object_t &r) const { 
-      static hash<uint64_t> H;
-      static hash<uint32_t> I;
-      return H(r.ino) ^ I(r.bno);
+      static rjhash<uint64_t> H;
+      static rjhash<uint32_t> I;
+      //static hash<uint64_t> H;
+      //static hash<uint32_t> I;
+      return H(r.ino) ^ I(r.bno) ^ I(r.rev);
     }
   };
+
 }
 
+/*
+  template<> struct rjhash<object_t> {
+    size_t operator()(const object_t &r) const { 
+      static rjhash<uint64_t> H;
+      static rjhash<uint32_t> I;
+      return H(r.ino) ^ I(r.bno) ^ I(r.rev);
+    }
+  };
+*/
 
 #endif

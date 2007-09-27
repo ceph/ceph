@@ -16,7 +16,7 @@
 #define __FILECACHE_H
 
 #include <iostream>
-using namespace std;
+using std::iostream;
 
 #include "common/Cond.h"
 #include "mds/Capability.h"

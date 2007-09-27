@@ -176,7 +176,10 @@ class Message {
  protected:
   msg_envelope_t  env;    // envelope
   bufferlist      payload;        // payload
+  list<int> chunk_payload_at;
   
+  utime_t recv_stamp;
+
   friend class Messenger;
 public:
 
@@ -194,10 +197,6 @@ public:
   }
 
 
-  // for rpc-type procedural messages (pcid = procedure call id)
-  virtual long get_pcid() { return 0; }
-  virtual void set_pcid(long t) { assert(0); }  // overload me
-
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() {
@@ -206,9 +205,10 @@ public:
   void set_payload(bufferlist& bl) {
     payload.claim(bl);
   }
-  void copy_payload(bufferlist& bl) {
+  void copy_payload(const bufferlist& bl) {
     payload = bl;
   }
+  const list<int>& get_chunk_payload_at() const { return chunk_payload_at; }
   msg_envelope_t& get_envelope() {
     return env;
   }
@@ -216,6 +216,9 @@ public:
     this->env = env;
   }
 
+
+  void set_recv_stamp(utime_t t) { recv_stamp = t; }
+  utime_t get_recv_stamp() { return recv_stamp; }
 
   // ENVELOPE ----
 

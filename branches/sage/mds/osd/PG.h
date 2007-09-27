@@ -24,7 +24,10 @@
 #include "ObjectStore.h"
 #include "msg/Messenger.h"
 
+#include "common/DecayCounter.h"
+
 #include <list>
+#include <string>
 using namespace std;
 
 #include <ext/hash_map>
@@ -73,7 +76,7 @@ public:
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
                      last_epoch_started(0), last_epoch_finished(0) {}
-    bool is_clean() const { return last_update == last_complete; }
+    bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
   };
   
@@ -379,6 +382,19 @@ public:
   // non-primary
   static const int STATE_STRAY =  16; // i must notify the primary i exist.
 
+  static std::string get_state_string(int state) {
+    std::string st;
+    if (state & STATE_ACTIVE) st += "active+";
+    if (state & STATE_CLEAN) st += "clean+";
+    if (state & STATE_CRASHED) st += "crashed+";
+    if (state & STATE_REPLAY) st += "replay+";
+    if (state & STATE_STRAY) st += "stray+";
+    if (!st.length()) 
+      st = "inactive";
+    else 
+      st.resize(st.length()-1);
+    return st;
+  }
 
 protected:
   OSD *osd;
@@ -453,7 +469,7 @@ protected:
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
-  set<int>    clean_set;   // current OSDs that are clean
+  set<int>    uptodate_set;  // current OSDs that are uptodate
   eversion_t  oldest_update; // lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   set<int>             peer_info_requested;
@@ -477,6 +493,19 @@ protected:
   // recovery
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
+
+
+  // stats
+  off_t stat_size;
+  off_t stat_num_blocks;
+
+  hash_map<object_t, DecayCounter> stat_object_temp_rd;
+
+  Mutex pg_stats_lock;
+  pg_stat_t pg_stats;
+
+  void update_stats();
+
 public:
   void clear_primary_state();
 
@@ -489,7 +518,7 @@ public:
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
   
-  bool is_all_clean() const { return clean_set.size() == acting.size(); }
+  bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
@@ -525,7 +554,9 @@ public:
 
   virtual void cancel_recovery() = 0;
   virtual bool do_recovery() = 0;
-  virtual void clean_replicas() = 0;
+  virtual void purge_strays() = 0;
+
+  void finish_recovery();
 
   off_t get_log_write_pos() {
     return 0;
@@ -543,7 +574,8 @@ public:
     last_epoch_started_any(0),
     last_complete_commit(0),
     peers_complete_thru(0),
-    have_master_log(true)
+    have_master_log(true),
+    stat_size(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }
   
@@ -614,7 +646,7 @@ public:
 
 
   // abstract bits
-  virtual bool preprocess_op(MOSDOp *op) { return false; } 
+  virtual bool preprocess_op(MOSDOp *op, utime_t now) { return false; } 
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_op_reply(MOSDOpReply *op) = 0;
 

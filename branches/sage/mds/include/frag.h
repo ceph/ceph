@@ -190,7 +190,7 @@ class fragtree_t {
   bool is_leaf(frag_t x) const {
     std::list<frag_t> ls;
     get_leaves_under(x, ls);
-    //cout << "is_leaf(" << x << ") -> " << ls << endl;
+    //cout << "is_leaf(" << x << ") -> " << ls << std::endl;
     if (!ls.empty() &&
 	ls.front() == x &&
 	ls.size() == 1)
@@ -383,20 +383,20 @@ class fragtree_t {
     if (is_leaf(x))
       return false;
 
-    cout << "force_to_leaf " << x << " on " << _splits << endl;
+    cout << "force_to_leaf " << x << " on " << _splits << std::endl;
 
     frag_t parent = get_branch_or_leaf(x);
     assert(parent.bits() <= x.bits());
-    cout << "parent is " << parent << endl;
+    cout << "parent is " << parent << std::endl;
 
     // do we need to split from parent to x?
     if (parent.bits() < x.bits()) {
       int spread = x.bits() - parent.bits();
       int nb = get_split(parent);
-      cout << "spread " << spread << ", parent splits by " << nb << endl;
+      cout << "spread " << spread << ", parent splits by " << nb << std::endl;
       if (nb == 0) {
 	// easy: split parent (a leaf) by the difference
-	cout << "splitting parent " << parent << " by spread " << spread << endl;
+	cout << "splitting parent " << parent << " by spread " << spread << std::endl;
 	split(parent, spread);
 	assert(is_leaf(x));
 	return true;
@@ -412,7 +412,7 @@ class fragtree_t {
       for (std::list<frag_t>::iterator p = subs.begin();
 	   p != subs.end();
 	   ++p) {
-	cout << "splitting intermediate " << *p << " by " << (nb-spread) << endl;
+	cout << "splitting intermediate " << *p << " by " << (nb-spread) << std::endl;
 	split(*p, nb - spread);
       }
     }
@@ -426,13 +426,13 @@ class fragtree_t {
       q.pop_front();
       int nb = get_split(t);
       if (nb) {
-	cout << "merging child " << t << " by " << nb << endl;
+	cout << "merging child " << t << " by " << nb << std::endl;
 	merge(t, nb);         // merge this point, and
 	t.split(nb, q);   // queue up children
       }
     }
 
-    cout << "force_to_leaf done" << endl;
+    cout << "force_to_leaf done" << std::endl;
     assert(is_leaf(x));
     return true;
   }
@@ -472,7 +472,7 @@ class fragtree_t {
       q.pop_front();
       // newline + indent?
       if (t.bits()) {
-	out << endl;
+	out << std::endl;
 	for (unsigned i=0; i<t.bits(); i++) out << ' ';
       }
       int nb = get_split(t);

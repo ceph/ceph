@@ -17,7 +17,7 @@
 
 #include <stdlib.h>
 #include <string>
-using namespace std;
+using std::string;
 
 #include "../CInode.h"
 #include "../CDir.h"
@@ -80,7 +80,7 @@ class EMetaBlob {
     void print(ostream& out) {
       out << " fullbit dn " << dn << " dnv " << dnv
 	  << " inode " << inode.ino
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
   
@@ -113,7 +113,7 @@ class EMetaBlob {
     void print(ostream& out) {
       out << " remotebit dn " << dn << " dnv " << dnv
 	  << " ino " << ino
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
 
@@ -138,7 +138,7 @@ class EMetaBlob {
     }
     void print(ostream& out) {
       out << " nullbit dn " << dn << " dnv " << dnv
-	  << " dirty=" << dirty << endl;
+	  << " dirty=" << dirty << std::endl;
     }
   };
 
@@ -177,7 +177,7 @@ public:
       out << "dirlump " << dirfrag << " dirv " << dirv 
 	  << " state " << state
 	  << " num " << nfull << "/" << nremote << "/" << nnull
-	  << endl;
+	  << std::endl;
       _decode_bits();
       for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
 	p->print(out);
@@ -340,6 +340,7 @@ private:
 
     // make note of where this inode was last journaled
     in->last_journaled = my_offset;
+    //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     lump.nfull++;
     if (dirty) {
@@ -401,13 +402,24 @@ private:
       return;
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
+      //return;  // hack: for comparison purposes.. what if NO context?
+
       // subtree root?
       if (dir->is_subtree_root() && dir->is_auth())
 	return;
+
       // was the inode journaled since the last subtree_map?
-      if (last_subtree_map &&
-	  dir->inode->last_journaled >= last_subtree_map) 
+      if (//false &&  // for benchmarking
+	  last_subtree_map &&
+	  dir->inode->last_journaled >= last_subtree_map) {
+	/*
+	cout << " inode " << dir->inode->inode.ino 
+	     << " last journaled at " << dir->inode->last_journaled
+	     << " and last_subtree_map is " << last_subtree_map 
+	     << std::endl;
+	*/
 	return;
+      }
     }
     
     // stop at root/stray

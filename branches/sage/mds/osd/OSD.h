@@ -26,6 +26,8 @@
 #include "ObjectStore.h"
 #include "PG.h"
 
+#include "common/DecayCounter.h"
+
 
 #include <map>
 using namespace std;
@@ -49,24 +51,100 @@ public:
   static const int STATE_STOPPING = 3;
 
 
+
+  /** OSD **/
+protected:
+  Mutex osd_lock;     // global lock
+  SafeTimer timer;    // safe timer
+
+  Messenger   *messenger; 
+  Logger      *logger;
+  ObjectStore *store;
+  MonMap      *monmap;
+
+  int whoami;
+  char dev_path[100];
+
+public:
+  int get_nodeid() { return whoami; }
+  
+  static object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
+  static object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
+  
+
+private:
+  /** superblock **/
+  OSDSuperblock superblock;
+  epoch_t  boot_epoch;      
+
+  void write_superblock();
+  void write_superblock(ObjectStore::Transaction& t);
+  int read_superblock();
+
+
+  // -- state --
+  int state;
+
+public:
+  bool is_booting() { return state == STATE_BOOTING; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_stopping() { return state == STATE_STOPPING; }
+
+private:
+
+  // heartbeat
+  void heartbeat();
+
+  class C_Heartbeat : public Context {
+    OSD *osd;
+  public:
+    C_Heartbeat(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->heartbeat();
+    }
+  };
+
+
+  // -- stats --
+  DecayCounter stat_oprate;
+  int stat_ops;  // ops since last heartbeat
+  int stat_rd_ops;
+  int stat_rd_ops_shed_in;
+  int stat_rd_ops_shed_out;
+  int stat_qlen; // cumulative queue length since last refresh
+  int stat_rd_ops_in_queue;  // in queue
+
+  Mutex peer_stat_lock;
+  osd_peer_stat_t my_stat;
+  hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > peer_stat;
+  hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > my_stat_on_peer;  // what the peer thinks of me
+
+  void _refresh_my_stat(utime_t now);
+  osd_peer_stat_t get_my_stat_for(utime_t now, int peer);
+  void take_peer_stat(int peer, const osd_peer_stat_t& stat);
+  
   // load calculation
   //current implementation is moving averges.
-  class LoadCalculator {
+  class MovingAverager {
   private:
     Mutex lock;
-    deque<double> m_Data ;
-    unsigned m_Size ;
-    double  m_Total ;
+    deque<double> m_Data;
+    unsigned m_Size;
+    double m_Total;
     
   public:
-    LoadCalculator( unsigned size ) : m_Size(0), m_Total(0) { }
+    MovingAverager(unsigned size) : m_Size(size), m_Total(0) { }
 
-    void add( double element ) {
+    void set_size(unsigned size) {
+      m_Size = size;
+    }
+
+    void add(double value) {
       Mutex::Locker locker(lock);
 
       // add item
-      m_Data.push_back(element);
-      m_Total += element;
+      m_Data.push_back(value);
+      m_Total += value;
 
       // trim
       while (m_Data.size() > m_Size) {
@@ -77,12 +155,10 @@ public:
     
     double get_average() {
       Mutex::Locker locker(lock);
-
-      if (m_Data.empty())
-	return -1;
+      if (m_Data.empty()) return -1;
       return m_Total / (double)m_Data.size();
     }
-  };
+  } read_latency_calc, qlen_calc;
 
   class IATAverager {
   public:
@@ -125,69 +201,8 @@ public:
     }
   };
 
-
-  /** OSD **/
-protected:
-  Mutex osd_lock;     // global lock
-  SafeTimer timer;    // safe timer
-
-  Messenger   *messenger; 
-  Logger      *logger;
-  ObjectStore *store;
-  MonMap      *monmap;
-
-  LoadCalculator load_calc;
   IATAverager    iat_averager;
-  
-  int whoami;
-  char dev_path[100];
-
-public:
-  int get_nodeid() { return whoami; }
-  
-private:
-  /** superblock **/
-  OSDSuperblock superblock;
-  epoch_t  boot_epoch;      
-
-  object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
-  object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
-  
-  void write_superblock();
-  void write_superblock(ObjectStore::Transaction& t);
-  int read_superblock();
-
-
-  // -- state --
-  int state;
-
-public:
-  bool is_booting() { return state == STATE_BOOTING; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_stopping() { return state == STATE_STOPPING; }
-
-private:
-
-  // heartbeat
-  void heartbeat();
-
-  class C_Heartbeat : public Context {
-    OSD *osd;
-  public:
-    C_Heartbeat(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->heartbeat();
-    }
-  };
-
-
-  // -- stats --
-  int hb_stat_ops;  // ops since last heartbeat
-  int hb_stat_qlen; // cumulative queue length since last hb
-
-  hash_map<int, float>  peer_qlen;
-  hash_map<int, double> peer_read_time;
-  
+ 
 
   // -- waiters --
   list<class Message*> finished;
@@ -256,6 +271,8 @@ private:
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
+  void try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
+
   void load_pgs();
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
@@ -271,6 +288,21 @@ private:
       osd->activate_pg(pgid, epoch);
     }
   };
+
+
+  // -- pg stats --
+  Mutex pg_stat_queue_lock;
+  set<pg_t> pg_stat_queue;
+
+  class C_Stats : public Context {
+    OSD *osd;
+  public:
+    C_Stats(OSD *o) : osd(o) {}
+    void finish(int r) { 
+      osd->send_pg_stats(); 
+    }
+  };
+  void send_pg_stats(); 
 
 
   // -- tids --

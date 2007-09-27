@@ -40,9 +40,9 @@
 #include "PGMonitor.h"
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
 
@@ -50,7 +50,7 @@ void Monitor::init()
 {
   lock.Lock();
   
-  dout(1) << "init" << endl;
+  dout(1) << "init" << dendl;
   
   // store
   char s[80];
@@ -97,7 +97,7 @@ void Monitor::init()
 
 void Monitor::shutdown()
 {
-  dout(1) << "shutdown" << endl;
+  dout(1) << "shutdown" << dendl;
   
   elector.shutdown();
   
@@ -107,7 +107,7 @@ void Monitor::shutdown()
 	 it != osdmon->osdmap.get_osds().end();
 	 it++) {
       if (osdmon->osdmap.is_down(*it)) continue;
-      dout(10) << "sending shutdown to osd" << *it << endl;
+      dout(10) << "sending shutdown to osd" << *it << dendl;
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 			      osdmon->osdmap.get_inst(*it));
     }
@@ -137,7 +137,6 @@ void Monitor::shutdown()
   
   // die.
   messenger->shutdown();
-  delete messenger;
 }
 
 
@@ -145,7 +144,7 @@ void Monitor::call_election()
 {
   if (monmap->num_mon == 1) return;
   
-  dout(10) << "call_election" << endl;
+  dout(10) << "call_election" << dendl;
   state = STATE_STARTING;
   
   // tell paxos
@@ -164,7 +163,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   leader = whoami;
   mon_epoch = epoch;
   quorum = active;
-  dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << endl;
+  dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
   
   // init paxos
   paxos_test.leader_init();
@@ -185,7 +184,7 @@ void Monitor::lose_election(epoch_t epoch, int l)
   state = STATE_PEON;
   mon_epoch = epoch;
   leader = l;
-  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << endl;
+  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << dendl;
   
   // init paxos
   paxos_test.peon_init();
@@ -204,7 +203,7 @@ void Monitor::lose_election(epoch_t epoch, int l)
 
 void Monitor::handle_command(MMonCommand *m)
 {
-  dout(0) << "handle_command " << *m << endl;
+  dout(0) << "handle_command " << *m << dendl;
   
   int r = -1;
   string rs = "unrecognized command";
@@ -232,7 +231,8 @@ void Monitor::handle_command(MMonCommand *m)
 
 void Monitor::do_stop()
 {
-  dout(0) << "do_stop -- shutting down" << endl;
+  dout(0) << "do_stop -- shutting down" << dendl;
+  stopping = true;
   mdsmon->do_stop();
 }
 
@@ -329,7 +329,7 @@ void Monitor::dispatch(Message *m)
 
       
     default:
-      dout(0) << "unknown message " << *m << endl;
+      dout(0) << "unknown message " << m << " " << *m << " from " << m->get_source_inst() << dendl;
       assert(0);
     }
   }
@@ -341,10 +341,10 @@ void Monitor::handle_shutdown(Message *m)
 {
   assert(m->get_source().is_mon());
   if (m->get_source().num() == get_leader()) {
-    dout(1) << "shutdown from leader " << m->get_source() << endl;
+    dout(1) << "shutdown from leader " << m->get_source() << dendl;
     shutdown();
   } else {
-    dout(1) << "ignoring shutdown from non-leader " << m->get_source() << endl;
+    dout(1) << "ignoring shutdown from non-leader " << m->get_source() << dendl;
   }
   delete m;
 }
@@ -388,7 +388,7 @@ void Monitor::tick()
   tick_timer = 0;
 
   // ok go.
-  dout(11) << "tick" << endl;
+  dout(11) << "tick" << dendl;
   
   osdmon->tick();
   mdsmon->tick();

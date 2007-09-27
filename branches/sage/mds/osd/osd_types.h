@@ -156,7 +156,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const pg_t& x ) const
     {
-      static hash<uint64_t> H;
+      static rjhash<uint64_t> H;
       return H(x);
     }
   };
@@ -222,25 +222,57 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 
 
 
+/** osd_stat
+ * aggregate stats for an osd
+ */
+struct osd_stat_t {
+  int64_t num_blocks;
+  int64_t num_blocks_avail;
+  int64_t num_objects;
+
+  osd_stat_t() : num_blocks(0), num_blocks_avail(0), num_objects(0) {}
+};
+
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
-  const static int STATE_UNKNOWN =    0;
-  const static int STATE_OK =         1;
-  const static int STATE_RECOVERING = 2;
-  const static int STATE_OFFLINE =    3;
-  
   eversion_t reported;
   
   int32_t state;
   int64_t size;         // in bytes
   int64_t num_blocks;   // in 4k blocks
+  int64_t num_objects;
   
-  pg_stat_t() : state(0), size(0), num_blocks(0) {}
+  pg_stat_t() : state(0), size(0), num_blocks(0), num_objects(0) {}
 };
 
 
+
+struct osd_peer_stat_t {
+  utime_t stamp;
+  double oprate;
+  double qlen;
+  double recent_qlen;
+  double read_latency;
+  double read_latency_mine;
+  double frac_rd_ops_shed_in;
+  double frac_rd_ops_shed_out;
+  osd_peer_stat_t() : oprate(0), qlen(0), recent_qlen(0), 
+		      read_latency(0), read_latency_mine(0), 
+		      frac_rd_ops_shed_in(0), frac_rd_ops_shed_out(0) {}
+};
+
+inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
+  return out << "stat(" << stat.stamp
+    //<< " oprate=" << stat.oprate
+    //	     << " qlen=" << stat.qlen 
+    //	     << " recent_qlen=" << stat.recent_qlen
+	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
+	     << " fshedin=" << stat.frac_rd_ops_shed_in
+	     << ")";
+}
 
 // -----------------------------------------
 

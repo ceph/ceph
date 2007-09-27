@@ -20,10 +20,13 @@
 
 #include <string>
 #include <fstream>
-using namespace std;
+using std::string;
+using std::ofstream;
+
 #include <ext/hash_map>
 #include <ext/hash_set>
-using namespace __gnu_cxx;
+using __gnu_cxx::hash_map;
+using __gnu_cxx::hash_set;
 
 #include "Mutex.h"
 
@@ -33,6 +36,7 @@ class LogType {
   hash_map<intptr_t, int> keymap;  
   vector<const char*>   keys;
   set<int>              inc_keys;
+  vector<bool> avg;
 
   int version;
 
@@ -59,6 +63,7 @@ class LogType {
 
     i = keys.size();
     keys.push_back(key);
+    avg.push_back(false);
 
     intptr_t p = (intptr_t)key;
     keymap[p] = i;
@@ -72,6 +77,11 @@ class LogType {
   }
   int add_set(const char *key) {
     return add_key(key, false);
+  }
+  int add_avg(const char *key) {
+    int i = add_key(key, true);
+    avg[i] = true;
+    return i;
   }
   
   bool have_key(const char* key) {

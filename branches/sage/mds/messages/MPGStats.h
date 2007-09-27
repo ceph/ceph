@@ -12,7 +12,6 @@
  * 
  */
 
-
 #ifndef __MPGSTATS_H
 #define __MPGSTATS_H
 
@@ -21,19 +20,22 @@
 class MPGStats : public Message {
 public:
   map<pg_t,pg_stat_t> pg_stat;
+  osd_stat_t osd_stat;
   
   MPGStats() : Message(MSG_PGSTATS) {}
 
   char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
-    out << "pg_stats" << endl;
+    out << "pg_stats";
   }
 
   void encode_payload() {
+    ::_encode(osd_stat, payload);
     ::_encode(pg_stat, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(osd_stat, payload, off);
     ::_decode(pg_stat, payload, off);
   }
 };

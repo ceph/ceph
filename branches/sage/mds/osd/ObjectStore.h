@@ -32,7 +32,7 @@
 #endif /* DARWIN */
 
 #include <list>
-using namespace std;
+using std::list;
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -497,7 +497,7 @@ public:
 
 
       default:
-        cerr << "bad op " << op << endl;
+        cerr << "bad op " << op << std::endl;
         assert(0);
       }
     }
@@ -562,6 +562,10 @@ public:
   virtual int clone(object_t oid, object_t noid) {
     return -1; 
   }
+  
+  virtual int list_objects(list<object_t>& ls) = 0;//{ return -1; }
+
+  virtual int get_object_collections(object_t oid, set<coll_t>& ls) { return -1; }
 
   //virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
@@ -586,6 +590,11 @@ public:
                                 Context *onsafe=0) {return 0;} //= 0;
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) {return 0;} //= 0;
+
+  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;//{ return -1; }
+  virtual int collection_setattrs(coll_t cid, map<string,bufferptr> &aset) = 0;//{ return -1; }
+
+
   //virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
   
   virtual void sync(Context *onsync) {}

@@ -36,6 +36,7 @@
 #include "events/EAnchorClient.h"
 
 
+
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
   // parse type, length
@@ -45,7 +46,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   off += sizeof(type);
 
   int length = bl.length() - off;
-  dout(15) << "decode_log_event type " << type << ", size " << length << endl;
+  generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
   assert(type > 0);
   
@@ -70,7 +71,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_ANCHOR: le = new EAnchor; break;
   case EVENT_ANCHORCLIENT: le = new EAnchorClient; break;
   default:
-    dout(1) << "uh oh, unknown log event type " << type << endl;
+    generic_dout(1) << "uh oh, unknown log event type " << type << dendl;
     assert(0);
   }
 

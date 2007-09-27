@@ -45,22 +45,22 @@ int main(int argc, char **argv)
       // parse ip:port
       entity_inst_t inst;
       if (!parse_ip_port(args[i], inst.addr)) {
-	cerr << "mkmonmap: invalid ip:port '" << args[i] << "'" << endl;
+	cerr << "mkmonmap: invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
-      inst.name = MSG_ADDR_MON(monmap.num_mon);
-      cout << "mkmonmap: adding " << inst << endl;
+      inst.name = entity_name_t::MON(monmap.num_mon);
+      cout << "mkmonmap: adding " << inst << std::endl;
       monmap.add_mon(inst);
     }
   }
 
   if (monmap.num_mon == 0) {
-    cerr << "usage: mkmonmap ip:port [...]" << endl;
+    cerr << "usage: mkmonmap ip:port [...]" << std::endl;
     return -1;
   }
 
   // write it out
-  cout << "mkmonmap: writing monmap to " << outfn << " (" << monmap.num_mon << " monitors)" << endl;
+  cout << "mkmonmap: writing monmap to " << outfn << " (" << monmap.num_mon << " monitors)" << std::endl;
   int r = monmap.write(outfn);
   assert(r >= 0);
   

@@ -265,7 +265,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     cout << "ceph_ll_readdir added " << de.d_name << " at " << pos << " len " << entrysize
 	 << " (buffer size is " << size << ")" 
 	 << " .. off = " << off
-	 << endl;
+	 << std::endl;
     */
     
     if (entrysize > size - pos) 
@@ -350,7 +350,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
 
 int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
 {
-  cout << "ceph_fuse_ll_main starting fuse" << endl;
+  cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
 
   client = c;
 
@@ -391,7 +391,7 @@ int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
   }
   fuse_opt_free_args(&args);
   
-  cout << "ceph_fuse_ll_main done, err=" << err << endl;
+  cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
   return err ? 1 : 0;
 }
 

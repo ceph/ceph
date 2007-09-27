@@ -19,8 +19,8 @@
 #include <iostream>
 #include <map>
 #include <vector>
-//#include <set>
-using namespace std;
+using std::map;
+using std::vector;
 
 #include "include/buffer.h"
 
@@ -95,12 +95,12 @@ namespace crush {
     }
     int left(int n) const { 
       int h = height(n);
-      //cout << "left of " << n << " is " << (n - (1 << h)) << endl;
+      //cout << "left of " << n << " is " << (n - (1 << h)) << std::endl;
       return n - (1 << (h-1));
     }
     int right(int n) const {
       int h = height(n);
-      //cout << "right of " << n << " is " << (n + (1 << h)) << endl;
+      //cout << "right of " << n << " is " << (n + (1 << h)) << std::endl;
       return n + (1 << (h-1));
     }
     bool on_right(int n, int h = -1) const { 
@@ -220,7 +220,7 @@ namespace crush {
       }
       
       // create at n
-      //cout << "creating " << n << endl;
+      //cout << "creating " << n << std::endl;
       realloc(n);
       node_weight[n] = w;
       node_nested[n] = 1;
@@ -264,7 +264,7 @@ namespace crush {
     }
     out << n << " : nested " << tree.nested(n) << "   weight " << tree.weight(n);
     if (tree.complete(n)) out << "  complete";
-    out << endl;
+    out << std::endl;
     if (!tree.terminal(n)) {
       if (tree.exists(tree.left(n)))
         print_binary_tree_node(out, tree, tree.left(n), i+2);

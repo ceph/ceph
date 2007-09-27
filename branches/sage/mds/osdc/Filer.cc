@@ -31,8 +31,8 @@
 #include "include/Context.h"
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".filer "
+
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".filer "
 
 
 class Filer::C_Probe : public Context {
@@ -52,7 +52,7 @@ int Filer::probe_fwd(inode_t& inode,
 		     off_t *end,
 		     Context *onfinish) 
 {
-  dout(10) << "probe_fwd " << hex << inode.ino << dec << " starting from " << start_from << endl;
+  dout(10) << "probe_fwd " << hex << inode.ino << dec << " starting from " << start_from << dendl;
 
   Probe *probe = new Probe(inode, start_from, end, onfinish);
 
@@ -70,7 +70,7 @@ int Filer::probe_fwd(inode_t& inode,
 
 void Filer::_probe(Probe *probe)
 {
-  dout(10) << "_probe " << hex << probe->inode.ino << dec << " " << probe->from << "~" << probe->probing_len << endl;
+  dout(10) << "_probe " << hex << probe->inode.ino << dec << " " << probe->from << "~" << probe->probing_len << dendl;
   
   // map range onto objects
   file_to_extents(probe->inode, probe->from, probe->probing_len, probe->probing);
@@ -78,7 +78,7 @@ void Filer::_probe(Probe *probe)
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    dout(10) << "_probe  probing " << p->oid << endl;
+    dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
     probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, c);
   }
@@ -86,7 +86,7 @@ void Filer::_probe(Probe *probe)
 
 void Filer::_probed(Probe *probe, object_t oid, off_t size)
 {
-  dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << endl;
+  dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << dendl;
 
   probe->known[oid] = size;
   assert(probe->ops.count(oid));
@@ -104,7 +104,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
     dout(10) << "_probed  " << probe->inode.ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known[p->oid]
-	     << endl;
+	     << dendl;
 
     if (probe->known[p->oid] < 0) { end = -1; break; } // error!
 
@@ -121,7 +121,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
 	end = probe->from + i->first + oleft;
 	dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
 		 << ", from was " << probe->from << ", end is " << end 
-		 << endl;
+		 << dendl;
 	break;
       }
       oleft -= i->second;
@@ -131,7 +131,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
 
   if (end == 0) {
     // keep probing!
-    dout(10) << "_probed didn't find end, probing further" << endl;
+    dout(10) << "_probed didn't find end, probing further" << dendl;
     off_t period = probe->inode.layout.object_size * probe->inode.layout.stripe_count;
     probe->from += probe->probing_len;
     probe->probing_len = period;
@@ -140,11 +140,11 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   }
 
   if (end < 0) {
-    dout(10) << "_probed encountered an error while probing" << endl;
+    dout(10) << "_probed encountered an error while probing" << dendl;
     *probe->end = -1;
   } else {
     // hooray!
-    dout(10) << "_probed found end at " << end << endl;
+    dout(10) << "_probed found end at " << end << dendl;
     *probe->end = end;
   }
 
@@ -162,7 +162,7 @@ void Filer::file_to_extents(inode_t inode,
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << inode.ino << dec
-           << endl;
+           << dendl;
 
   /* we want only one extent per object!
    * this means that each extent we read may map into different bits of the 
@@ -172,7 +172,7 @@ void Filer::file_to_extents(inode_t inode,
   
   assert(inode.layout.object_size >= inode.layout.stripe_unit);
   off_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_unit;
-  dout(20) << " stripes_per_object " << stripes_per_object << endl;
+  dout(20) << " stripes_per_object " << stripes_per_object << dendl;
 
   off_t cur = offset;
   off_t left = len;
@@ -220,8 +220,8 @@ void Filer::file_to_extents(inode_t inode,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << *ex << " in " << ex->layout << endl;
-    //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
+    dout(15) << "file_to_extents  " << *ex << " in " << ex->layout << dendl;
+    //dout(0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
     
     left -= x_len;
     cur += x_len;

@@ -35,7 +35,7 @@ public:
   OSDMap osdmap;
 
 private:
-  map<entity_name_t, pair<entity_inst_t, epoch_t> > awaiting_map;
+  map<entity_inst_t, pair<epoch_t,epoch_t> > waiting_for_map;  // who -> (has, wants)
 
   // [leader]
   OSDMap::Incremental pending_inc;
@@ -47,10 +47,12 @@ private:
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
 
+  void committed();
+
   void handle_query(Message *m);
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
-  bool should_propose_now();
+  bool should_propose(double &delay);
 
   // ...
   bool get_map_bl(epoch_t epoch, bufferlist &bl);

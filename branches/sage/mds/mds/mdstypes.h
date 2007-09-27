@@ -178,88 +178,54 @@ public:
       2*vec[META_POP_FETCH].get(now) +
       4*vec[META_POP_STORE].get(now);
   }
+  double meta_load() {
+    return 
+      1*vec[META_POP_IRD].get_last() + 
+      2*vec[META_POP_IWR].get_last() +
+      1*vec[META_POP_READDIR].get_last() +
+      2*vec[META_POP_FETCH].get_last() +
+      4*vec[META_POP_STORE].get_last();
+  }
 };
 
 inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
 {
+  utime_t now = g_clock.now();
   for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-    l.vec[i].adjust(r.vec[i].get_last());
+    l.vec[i].adjust(r.vec[i].get(now));
   return l;
 }
 
 inline dirfrag_load_vec_t& operator-=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
 {
+  utime_t now = g_clock.now();
   for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-    l.vec[i].adjust(-r.vec[i].get_last());
+    l.vec[i].adjust(-r.vec[i].get(now));
   return l;
 }
+
+inline dirfrag_load_vec_t& operator*=(dirfrag_load_vec_t& l, double f)
+{
+  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+    l.vec[i].scale(f);
+  return l;
+}
+
 
 inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
-  return out << "[" << dl.vec[0].get() << "," << dl.vec[1].get() << "]";
+  utime_t now = g_clock.now();
+  return out << "[" << dl.vec[0].get(now) << "," << dl.vec[1].get(now) 
+	     << " " << dl.meta_load(now)
+	     << "]";
 }
 
 
-/* meta_load_t
- * hierarchical load for an inode/dir and it's children
- */
-/*
-class meta_load_t {
- public:
-  DecayCounter pop[META_NPOP];
-
-  double meta_load(utime_t now) {
-    return 
-      pop[META_POP_IRD].get(now) + 
-      2*(pop[META_POP_IWR].get(now));
-  }
-
-  void take(meta_load_t& other) {
-    for (int i=0; i<META_NPOP; i++) {
-      pop[i] = other.pop[i];
-      other.pop[i].reset();
-    }
-  }
-};
-
-inline ostream& operator<<( ostream& out, meta_load_t& load )
-{
-  return out << "<rwd " 
-	     << load.pop[META_POP_IRD].get() << "/"
-             << load.pop[META_POP_IWR].get() 
-	     << " "
-	     << load.pop[META_POP_IRD].get_last_vel() << "/"
-             << load.pop[META_POP_IWR].get_last_vel() 
-	     << ">";
-}
-
-
-inline meta_load_t& operator-=(meta_load_t& l, meta_load_t& r)
-{
-  for (int i=0; i<META_NPOP; i++)
-    l.pop[i].adjust(- r.pop[i].get());
-  return l;
-}
-
-inline meta_load_t& operator+=(meta_load_t& l, meta_load_t& r)
-{
-  for (int i=0; i<META_NPOP; i++)
-    l.pop[i].adjust(r.pop[i].get());
-  return l;
-}
-*/
 
 
 /* mds_load_t
  * mds load
  */
-
-// popularity classes
-#define MDS_POP_JUSTME  0   // just me (this dir or inode)
-#define MDS_POP_NESTED  1   // me + children, auth or not
-#define MDS_POP_CURDOM  2   // (if auth) me + children in current auth domain
-#define MDS_POP_ANYDOM  3   // (if auth) me + children in any (nested) auth domain
-#define MDS_NPOP        4
 
 class mds_load_t {
  public:
@@ -270,24 +236,13 @@ class mds_load_t {
   double cache_hit_rate;
   double queue_len;
 
+  double cpu_load_avg;
+
   mds_load_t() : 
-    req_rate(0), cache_hit_rate(0), queue_len(0) { }    
-
-  double mds_load(utime_t now) {
-    switch(g_conf.mds_bal_mode) {
-    case 0: 
-      return 
-	.8 * auth.meta_load(now) +
-	.2 * all.meta_load(now) +
-        req_rate +
-        10.0 * queue_len;
-
-    case 1:
-      return req_rate + 10.0*queue_len;
-    }
-    assert(0);
-    return 0;
+    req_rate(0), cache_hit_rate(0), queue_len(0), cpu_load_avg(0) { 
   }
+  
+  double mds_load();  // defiend in MDBalancer.cc
 
 };
 
@@ -298,6 +253,7 @@ inline ostream& operator<<( ostream& out, mds_load_t& load )
              << ", req " << load.req_rate 
              << ", hr " << load.cache_hit_rate
              << ", qlen " << load.queue_len
+	     << ", cpu " << load.cpu_load_avg
              << ">";
 }
 
@@ -320,6 +276,37 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 }
 */
 
+
+class load_spread_t {
+public:
+  static const int MAX = 4;
+  int last[MAX];
+  int p, n;
+  DecayCounter count;
+
+public:
+  load_spread_t() : p(0), n(0) { 
+    for (int i=0; i<MAX; i++) last[i] = -1;
+  } 
+
+  double hit(utime_t now, int who) {
+    for (int i=0; i<n; i++)
+      if (last[i] == who) 
+	return count.get_last();
+
+    // we're new(ish)
+    last[p++] = who;
+    if (n < MAX) n++;
+    if (n == 1) return 0.0;
+
+    if (p == MAX) p = 0;
+
+    return count.hit(now);
+  }
+  double get(utime_t now) {
+    return count.get(now);
+  }
+};
 
 
 
@@ -583,7 +570,7 @@ protected:
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
-			       << endl;
+			       << dendl;
     
   }
   virtual void take_waiting(int mask, list<Context*>& ls) {
@@ -596,13 +583,13 @@ protected:
 				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 				   << " tag " << it->first
 				   << " on " << *this
-				   << endl;
+				   << dendl;
 	waiting.erase(it++);
       } else {
 	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 				   << " tag " << it->first
 				   << " on " << *this 
-				   << endl;
+				   << dendl;
 	it++;
       }
     }

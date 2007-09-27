@@ -17,7 +17,7 @@
 #define THREADPOOL
 
 #include <list>
-using namespace std;
+using std::list;
 
 
 #include <pthread.h>
@@ -28,7 +28,7 @@ using namespace std;
 
 // debug output
 #include "config.h"
-#define tpdout(x) if (x <= g_conf.debug) cout << myname 
+#define tpdout(x) if (x <= g_conf.debug) *_dout << myname 
 #define DBLVL 15
 
 
@@ -62,16 +62,16 @@ class ThreadPool {
 
   void *do_ops(void *nothing)
   {
-    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " starting" << endl;
+    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " starting" << std::endl;
     while (1) {
       q_sem.Get();
       if (q.empty()) break;
 
       T op = get_op();
-      tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << endl;
+      tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << std::endl;
       func(u, op);
     }
-    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " exiting" << endl;
+    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " exiting" << std::endl;
     return 0;
   }
 
@@ -86,7 +86,7 @@ class ThreadPool {
       num_ops--;
       
       if (prefunc && op) {
-        tpdout(DBLVL) << ".prefunc thread "<< pthread_self() << " on " << op << endl;
+        tpdout(DBLVL) << ".prefunc thread "<< pthread_self() << " on " << op << std::endl;
         prefunc(u, op);
       }
     }
@@ -103,7 +103,7 @@ class ThreadPool {
     u(obj),
     func(f), prefunc(pf), 
     myname(myname) {
-    tpdout(DBLVL) << ".cons num_threads " << num_threads << endl;
+    tpdout(DBLVL) << ".cons num_threads " << num_threads << std::endl;
     
     // start threads
     int status;
@@ -120,14 +120,14 @@ class ThreadPool {
     
     // wait for them to die
     for(int i = 0; i < num_threads; i++) {
-      tpdout(DBLVL) << ".des joining thread " << thread[i] << endl;
+      tpdout(DBLVL) << ".des joining thread " << thread[i] << std::endl;
       void *rval = 0;  // we don't actually care
       pthread_join(thread[i], &rval);
     }
   }
   
   void put_op(T op) {
-    tpdout(DBLVL) << ".put_op " << op << endl;
+    tpdout(DBLVL) << ".put_op " << op << std::endl;
     q_lock.Lock();
     q.push_back(op);
     num_ops++;

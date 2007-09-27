@@ -173,8 +173,11 @@ class MDS : public Dispatcher {
   public:
     C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
     void finish(int r) {
-      mds->beacon_killer = 0;
-      mds->beacon_kill(lab);
+      if (mds->beacon_killer) {
+	mds->beacon_killer = 0;
+	mds->beacon_kill(lab);
+      } 
+      // else mds is pbly already shutting down
     }
   } *beacon_killer;
 
@@ -219,23 +222,25 @@ class MDS : public Dispatcher {
 
   void send_message_client(Message *m, int client);
   void send_message_client(Message *m, entity_inst_t clientinst);
+  void send_message_client_maybe_opening(Message *m, int);
   void send_message_client_maybe_open(Message *m, entity_inst_t clientinst);
 
 
   // start up, shutdown
   int init(bool standby=false);
-  void reopen_logger();
+  void reopen_logger(utime_t start);
 
   void bcast_mds_map();  // to mounted clients
 
   void boot();
   void boot_create();             // i am new mds.
-  void boot_start();              // i am old but empty (was down:out) mds.
-  void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
-  void boot_finish();
+  void boot_start(int step=0);    // starting|replay
 
   void replay_start();
+  void creating_done();
+  void starting_done();
   void replay_done();
+
   void resolve_start();
   void resolve_done();
   void reconnect_start();
@@ -245,7 +250,6 @@ class MDS : public Dispatcher {
   void recovery_done();
   void handle_mds_recovery(int who);
 
-  void shutdown_start();
   void stopping_start();
   void stopping_done();
   void suicide();
@@ -266,14 +270,10 @@ class MDS : public Dispatcher {
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
   // special message types
-  void handle_ping(class MPing *m);
   void handle_mds_map(class MMDSMap *m);
-  void handle_shutdown_start(Message *m);
 
   // osds
-  void handle_osd_getmap(Message *m);
   void handle_osd_map(class MOSDMap *m);
-
 };
 
 

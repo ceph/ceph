@@ -37,15 +37,15 @@ public:
   struct Incremental {
     version_t version;
     uint32_t next_client;
-    map<int32_t, entity_addr_t> mount;
+    map<int32_t, pair<entity_addr_t,int> > mount;
     set<int32_t> unmount;
     
     Incremental() : version(0), next_client() {}
 
     bool is_empty() { return mount.empty() && unmount.empty(); }
-    void add_mount(uint32_t client, entity_addr_t addr) {
+    void add_mount(uint32_t client, entity_addr_t addr, int instance) {
       next_client = MAX(next_client, client+1);
-      mount[client] = addr;
+      mount[client] = pair<entity_addr_t,int>(addr, instance);
     }
     void add_unmount(uint32_t client) {
       assert(client < next_client);
@@ -72,14 +72,14 @@ public:
   struct Map {
     version_t version;
     uint32_t next_client;
-    map<uint32_t,entity_addr_t> client_addr;
-    hash_map<entity_addr_t,uint32_t> addr_client;
+    map<uint32_t,pair<entity_addr_t,int> > client_addr;
+    map<pair<entity_addr_t,int>,uint32_t> addr_client;
 
     Map() : version(0), next_client(0) {}
 
     void reverse() {
       addr_client.clear();
-      for (map<uint32_t,entity_addr_t>::iterator p = client_addr.begin();
+      for (map<uint32_t,pair<entity_addr_t,int> >::iterator p = client_addr.begin();
 	   p != client_addr.end();
 	   ++p) {
 	addr_client[p->second] = p->first;
@@ -89,7 +89,7 @@ public:
       assert(inc.version == version+1);
       version = inc.version;
       next_client = inc.next_client;
-      for (map<int32_t, entity_addr_t>::iterator p = inc.mount.begin();
+      for (map<int32_t,pair<entity_addr_t,int> >::iterator p = inc.mount.begin();
 	   p != inc.mount.end();
 	   ++p) {
 	client_addr[p->first] = p->second;
@@ -158,6 +158,8 @@ private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers
+
+  void committed();
 
   void _mounted(int c, MClientMount *m);
   void _unmounted(MClientUnmount *m);

@@ -49,7 +49,7 @@ class Thread {
   }
   int join(void **prval = 0) {
     if (thread_id == 0) {
-      cerr << "WARNING: join on thread that was never started" << endl;
+      generic_derr(0) << "WARNING: join on thread that was never started" << dendl;
       //assert(0);
       return -EINVAL;   // never started.
     }
@@ -58,17 +58,17 @@ class Thread {
     if (status != 0) {
       switch (status) {
       case -EINVAL:
-	cerr << "thread " << thread_id << " join status = EINVAL" << endl;
+	generic_derr(0) << "thread " << thread_id << " join status = EINVAL" << dendl;
 	break;
       case -ESRCH:
-	cerr << "thread " << thread_id << " join status = ESRCH" << endl;
+	generic_derr(0) << "thread " << thread_id << " join status = ESRCH" << dendl;
 	assert(0);
 	break;
       case -EDEADLK:
-	cerr << "thread " << thread_id << " join status = EDEADLK" << endl;
+	generic_derr(0) << "thread " << thread_id << " join status = EDEADLK" << dendl;
 	break;
       default:
-	cerr << "thread " << thread_id << " join status = " << status << endl;
+	generic_derr(0) << "thread " << thread_id << " join status = " << status << dendl;
       }
       assert(0); // none of these should happen.
     }

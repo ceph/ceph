@@ -88,7 +88,7 @@ public:
   }
 
 private:
-  struct {
+  struct st_ {
     // who's asking?
     entity_inst_t client;
     osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
@@ -113,16 +113,18 @@ private:
     bool   want_ack;
     bool   want_commit;
     bool   retry_attempt;
+    
+    int shed_count;
+    osd_peer_stat_t peer_stat;
   } st;
 
   bufferlist data;
   map<string,bufferptr> attrset;
-  double request_received_time;
-  
+
 
   friend class MOSDOpReply;
 
- public:
+public:
   const osdreqid_t&    get_reqid() { return st.reqid; }
   const tid_t          get_client_tid() { return st.reqid.tid; }
   int                  get_client_inc() { return st.reqid.inc; }
@@ -167,18 +169,15 @@ private:
   const off_t get_offset() { return st.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
-  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
+  void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
 
-  void set_received_time(double time) {
-    request_received_time = time;
-  }
-  double get_received_time() {
-    return request_received_time;
-  }
-
+  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
+  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
+  void inc_shed_count() { st.shed_count++; }
+  int get_shed_count() { return st.shed_count; }
   
   void set_data(bufferlist &d) {
     data.claim(d);
@@ -231,9 +230,38 @@ private:
     ::_decode(attrset, payload, off);
     ::_decode(data, payload, off);
   }
+
+  static void add_payload_chunk_breaks(int from, int off, int len,
+				       list<int>& breaks) {
+    if (len > 0 &&
+	len & 4095 == 0 && 
+	off & 4095 == 0) {
+      // page-sized and aligned data?  easy.
+      breaks.push_back(from);
+    } else if (len > 8192) {
+      // there is at least 1 full page in there.  somewhere.
+      int p = 0;
+
+      // leading partial page?
+      if (off & 4095 != 0) 
+	p = 4096 - (off & 4095);  
+
+      // full page(s)
+      breaks.push_back(from + p);
+      p += (len - p) & (~4095);
+
+      // tail bit?
+      if (p != len)
+	breaks.push_back(from + p);
+    }
+  }
+
   virtual void encode_payload() {
-    payload.append((char*)&st, sizeof(st));
+    ::_encode(st, payload);
     ::_encode(attrset, payload);
+    add_payload_chunk_breaks(payload.length() + 4, 
+			     st.offset, data.length(),
+			     chunk_payload_at);
     ::_encode(data, payload);
   }
 

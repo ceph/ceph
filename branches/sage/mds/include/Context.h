@@ -49,12 +49,12 @@ inline void finish_contexts(std::list<Context*>& finished,
 
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  dout(10) << ls.size() << " contexts to finish with " << result << endl;
+  generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    dout(10) << "---- " << c << endl;
+    generic_dout(10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
@@ -93,7 +93,7 @@ public:
 class C_Gather : public Context {
 public:
   bool sub_finish(int r) {
-    //cout << "C_Gather sub_finish " << this << endl;
+    //cout << "C_Gather sub_finish " << this << " got " << r << " of " << waitfor << endl;
     assert(waitfor.count(r));
     waitfor.erase(r);
     if (!waitfor.empty()) 

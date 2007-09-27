@@ -39,6 +39,7 @@
 #endif
 
 
+
 /*******************************************
  * biovec
  */
@@ -61,9 +62,8 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
  * ElevatorQueue
  */
 
-#undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ").elevatorq."
-#define derr(x) if (x <= g_conf.debug_bdev) cerr << g_clock.now() << " bdev(" << dev << ").elevatorq."
+#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ").elevatorq."
+#define derr(x) if (x <= g_conf.debug_bdev) *_derr << dbeginl << g_clock.now() << " bdev(" << dev << ").elevatorq."
 
 
 int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
@@ -73,12 +73,12 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
   // queue empty?
   assert(!io_map.empty());
 
-  dout(20) << "dequeue_io el_pos " << el_pos << " dir " << el_dir_forward << endl;
+  dout(20) << "dequeue_io el_pos " << el_pos << " dir " << el_dir_forward << dendl;
 
   // find our position: i >= pos
   map<block_t,biovec*>::iterator i;
   
-  int tries = g_conf.bdev_el_bidir + 1;
+  int tries = 2;
   while (tries > 0) {
     if (el_dir_forward) {
       i = io_map.lower_bound(el_pos);
@@ -95,7 +95,7 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
 
     // reverse (or initial startup)?
     if (g_conf.bdev_el_bidir || !el_dir_forward) {
-      //      dout(20) << "restart reversing" << endl;
+      //      dout(20) << "restart reversing" << dendl;
       el_dir_forward = !el_dir_forward;
     }
     
@@ -107,9 +107,9 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
         el_stop = g_clock.now();
         utime_t max(0, 1000*g_conf.bdev_el_fw_max_ms);  // (s,us), convert ms -> us!
         el_stop += max;
-        //    dout(20) << "restart forward sweep for " << max << endl;
+        //    dout(20) << "restart forward sweep for " << max << dendl;
       } else {
-        //    dout(20) << "restart fowrard sweep" << endl;
+        //    dout(20) << "restart fowrard sweep" << dendl;
       }
     } else {
       // reverse
@@ -119,9 +119,9 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
         el_stop = g_clock.now();
         utime_t max(0, 1000*g_conf.bdev_el_bw_max_ms);  // (s,us), convert ms -> us!
         el_stop += max;
-        //    dout(20) << "restart reverse sweep for " << max << endl;
+        //    dout(20) << "restart reverse sweep for " << max << dendl;
       } else {
-        //    dout(20) << "restart reverse sweep" << endl;
+        //    dout(20) << "restart reverse sweep" << dendl;
       }
     }
 
@@ -133,7 +133,7 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
   // get some biovecs
   int num_bio = 0;
   
-  dout(20) << "dequeue_io  starting with " << i->first << " " << *i->second << endl;
+  dout(20) << "dequeue_io  starting with " << i->first << " " << *i->second << dendl;
 
   // merge contiguous ops
   char type = i->second->type;  // read or write
@@ -156,23 +156,23 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
     // allowed?  (not already submitted to kernel?)
     if (block_lock.intersects(bio->start, bio->length)) {
       //      dout(20) << "dequeue_io " << bio->start << "~" << bio->length 
-      //               << " intersects block_lock " << block_lock << endl;
+      //               << " intersects block_lock " << block_lock << dendl;
       break;  // stop, or go with what we've got so far
     }
     
     // add to biols
     int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
-    if (num_iovs + nv >= g_conf.bdev_iov_max) break;  // too many!
+    if (num_iovs + nv >= IOV_MAX) break; // to many   //g_conf.bdev_iov_max) break;  // too many!
     num_iovs += nv;
     
     start = MIN(start, bio->start);
     length += bio->length;
     
     if (el_dir_forward) {
-      //dout(20) << "dequeue_io fw dequeue io at " << el_pos << " " << *i->second << endl;
+      //dout(20) << "dequeue_io fw dequeue io at " << el_pos << " " << *i->second << dendl;
       biols.push_back(bio);      // add at back
     } else {
-      //  dout(20) << "dequeue_io bw dequeue io at " << el_pos << " " << *i->second << endl;
+      //  dout(20) << "dequeue_io bw dequeue io at " << el_pos << " " << *i->second << dendl;
       biols.push_front(bio);     // add at front
     }
     num_bio++;
@@ -211,17 +211,17 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
  * BarrierQueue
  */
 #undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ").barrierq."
+#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ").barrierq."
 
 void BlockDevice::BarrierQueue::barrier()
 {
   if (!qls.empty() && qls.front()->empty()) {
     assert(qls.size() == 1);
-    dout(10) << "barrier not adding new queue, front is empty" << endl;
+    dout(10) << "barrier not adding new queue, front is empty" << dendl;
   } else {
     qls.push_back(new ElevatorQueue(bdev, dev));
     dout(10) << "barrier adding new elevator queue (now " << qls.size() << "), front queue has "
-             << qls.front()->size() << " ios left" << endl;
+             << qls.front()->size() << " ios left" << dendl;
   }
 }
 
@@ -234,7 +234,7 @@ bool BlockDevice::BarrierQueue::bump()
       qls.front() != qls.back()) {
     delete qls.front();
     qls.pop_front();
-    dout(10) << "dequeue_io front empty, moving to next queue (" << qls.front()->size() << ")" << endl;
+    dout(10) << "dequeue_io front empty, moving to next queue (" << qls.front()->size() << ")" << dendl;
     return true;
   }
 
@@ -259,7 +259,7 @@ int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols,
  */
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << g_clock.now() << " bdev(" << dev << ")."
+#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ")."
 
 
 
@@ -278,7 +278,7 @@ block_t BlockDevice::get_num_blocks()
       dout(10) << "get_num_blocks ioctl BLKGETSIZE64 reports "
 	       << num_blocks << " 4k blocks, " 
 	       << bytes << " bytes" 
-	       << endl;
+	       << dendl;
 #else
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
@@ -287,25 +287,25 @@ block_t BlockDevice::get_num_blocks()
     bytes = sectors*512ULL;
     if (r == 0) {
       dout(10) << "get_num_blocks ioctl BLKGETSIZE reports " << sectors << " sectors, "
-	       << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
+	       << num_blocks << " 4k blocks, " << bytes << " bytes" << dendl;
 #endif
     } else {
       // hmm, try stat!
-      dout(10) << "get_num_blocks ioctl(2) failed with " << errno << " " << strerror(errno) << ", using stat(2)" << endl;
+      dout(10) << "get_num_blocks ioctl(2) failed with " << errno << " " << strerror(errno) << ", using stat(2)" << dendl;
       struct stat st;
       fstat(fd, &st);
       uint64_t bytes = st.st_size;
       num_blocks = bytes / EBOFS_BLOCK_SIZE;
-      dout(10) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << bytes << " bytes" << endl;
+      dout(10) << "get_num_blocks stat reports " << num_blocks << " 4k blocks, " << bytes << " bytes" << dendl;
     }
     
     if (g_conf.bdev_fake_mb) {
       num_blocks = g_conf.bdev_fake_mb * 256;
-      dout(0) << "faking dev size " << g_conf.bdev_fake_mb << " mb" << endl;
+      dout(0) << "faking dev size " << g_conf.bdev_fake_mb << " mb" << dendl;
     }
     if (g_conf.bdev_fake_max_mb &&
         num_blocks > (block_t)g_conf.bdev_fake_max_mb * 256ULL) {
-      dout(0) << "faking dev size " << g_conf.bdev_fake_max_mb << " mb" << endl;
+      dout(0) << "faking dev size " << g_conf.bdev_fake_max_mb << " mb" << dendl;
       num_blocks = g_conf.bdev_fake_max_mb * 256;
     }
     
@@ -325,21 +325,15 @@ void* BlockDevice::io_thread_entry()
   int whoami = io_threads_started++;
   io_threads_running++;
   assert(io_threads_running <= g_conf.bdev_iothreads);
-  dout(10) << "io_thread" << whoami << " start, " << io_threads_running << " now running" << endl;
+  dout(10) << "io_thread" << whoami << " start, " << io_threads_running << " now running" << dendl;
 
   // get my own fd (and file position pointer)
   int fd = open_fd();
   assert(fd > 0);
 
   while (!io_stop) {
-    bool do_sleep = false;
-    
-    // queue empty?
-    if (root_queue.empty()) {
-      // sleep
-      do_sleep = true;
-    } else {
-      dout(20) << "io_thread" << whoami << " going" << endl;
+    if (!root_queue.empty()) {
+      dout(20) << "io_thread" << whoami << "/" << io_threads_running << " going" << dendl;
 
       block_t start, length;
       list<biovec*> biols;
@@ -347,9 +341,8 @@ void* BlockDevice::io_thread_entry()
 
       if (n == 0) {
         // failed to dequeue a do-able op, sleep for now
-        dout(20) << "io_thread" << whoami << " couldn't dequeue doable op, sleeping" << endl;
+        dout(20) << "io_thread" << whoami << "/" << io_threads_running << " couldn't dequeue doable op, sleeping" << dendl;
         assert(io_threads_running > 1);   // there must be someone else, if we couldn't dequeue something doable.
-        do_sleep = true;
       } 
       else {
         // lock blocks
@@ -368,37 +361,45 @@ void* BlockDevice::io_thread_entry()
         if (io_threads_running < g_conf.bdev_iothreads &&
             (int)root_queue.size() > io_threads_running)   
           io_wakeup.SignalAll();
+	
+	// loop again (don't sleep)
+	continue; 
       }
     }
 
-    if (do_sleep) {
-      do_sleep = false;
-      
-      // sleep
-      io_threads_running--;
-      dout(20) << "io_thread" << whoami << " sleeping, " << io_threads_running << " threads now running," 
-               << " queue has " << root_queue.size()               << endl;
+    // sleep
+    io_threads_running--;
+    dout(20) << "io_thread" << whoami << " sleeping, "
+	     << io_threads_running << " threads now running," 
+	     << " queue has " << root_queue.size() 
+	     << dendl;
+    
+    // first wait for signal | timeout?
+    if (g_conf.bdev_idle_kick_after_ms > 0 &&
+	idle_kicker &&
+	io_threads_running == 0 && !is_idle_waiting) {  // only the last thread asleep needs to kick.
+      // sleep, but just briefly.
+      dout(20) << "io_thread" << whoami << " doing short wait, to see if i stay idle" << dendl;
+      is_idle_waiting = true;
+      int r = io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));
+      is_idle_waiting = false;
 
-      if (g_conf.bdev_idle_kick_after_ms > 0 &&
-          io_threads_running == 0 && 
-          idle_kicker) {
-        // first wait for signal | timeout
-        io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));   
-
-        // should we still be sleeping?  (did we get woken up, or did timer expire?
-        if (root_queue.empty() && io_threads_running == 0) {
-          idle_kicker->kick();          // kick
-          io_wakeup.Wait(lock);          // and wait
-        }
+      if (r == ETIMEDOUT) {
+	dout(20) << "io_thread" << whoami << " timeout expired, kicking ebofs" << dendl;
+	kicker_cond.Signal(); // signal kicker thread
       } else {
-        // normal, just wait.
-        io_wakeup.Wait(lock);
+ 	dout(20) << "io_thread" << whoami << " signaled during short sleep, waking up" << dendl;
+	goto wake_up;
       }
-
-      io_threads_running++;
-      assert(io_threads_running <= g_conf.bdev_iothreads);
-      dout(20) << "io_thread" << whoami << " woke up, " << io_threads_running << " threads now running" << endl;
     }
+
+    // sleeeep
+    io_wakeup.Wait(lock);          // and wait (if condition still holds)
+    
+  wake_up:
+    io_threads_running++;
+    assert(io_threads_running <= g_conf.bdev_iothreads);
+    dout(20) << "io_thread" << whoami << "/" << io_threads_running << " woke up, " << io_threads_running << " threads now running" << dendl;
   }
 
   // clean up
@@ -407,7 +408,7 @@ void* BlockDevice::io_thread_entry()
   
   lock.Unlock();
 
-  dout(10) << "io_thread" << whoami << " finish" << endl;
+  dout(10) << "io_thread" << whoami << " finish" << dendl;
   return 0;
 }
 
@@ -440,14 +441,14 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
   // do it
   dout(20) << "do_io start " << (type==biovec::IO_WRITE?"write":"read") 
            << " " << start << "~" << length 
-           << " " << numbio << " bits" << endl;
+           << " " << numbio << " bits" << dendl;
   if (type == biovec::IO_WRITE) {
     r = _write(fd, start, length, bl);
   } else if (type == biovec::IO_READ) {
     r = _read(fd, start, length, bl);
   } else assert(0);
   dout(20) << "do_io finish " << (type==biovec::IO_WRITE?"write":"read") 
-           << " " << start << "~" << length << endl;
+           << " " << start << "~" << length << dendl;
   
   // set rval
   for (p = biols.begin(); p != biols.end(); p++)
@@ -460,6 +461,9 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
     complete_queue_len += numbio;
     complete_wakeup.Signal();
     complete_lock.Unlock();
+    dout(20) << "do_io kicked completer on " << (type==biovec::IO_WRITE?"write":"read") 
+	     << " " << start << "~" << length << dendl;
+
   } else {
     // be slow and finish synchronously
     for (p = biols.begin(); p != biols.end(); p++)
@@ -494,14 +498,14 @@ void BlockDevice::finish_io(biovec *bio)
 void* BlockDevice::complete_thread_entry()
 {
   complete_lock.Lock();
-  dout(10) << "complete_thread start" << endl;
+  dout(10) << "complete_thread start" << dendl;
 
   while (!io_stop) {
 
     while (!complete_queue.empty()) {
       list<biovec*> ls;
       ls.swap(complete_queue);
-      dout(10) << "complete_thread grabbed " << complete_queue_len << " biovecs" << endl;
+      dout(10) << "complete_thread grabbed " << complete_queue_len << " biovecs" << dendl;
       complete_queue_len = 0;
       
       complete_lock.Unlock();
@@ -511,7 +515,7 @@ void* BlockDevice::complete_thread_entry()
            p != ls.end(); 
            p++) {
         biovec *bio = *p;
-        dout(20) << "complete_thread finishing " << *bio << endl;
+        dout(20) << "complete_thread finishing " << *bio << dendl;
         finish_io(bio);
       }
       
@@ -519,22 +523,43 @@ void* BlockDevice::complete_thread_entry()
     }
     if (io_stop) break;
     
-    /*
-    if (io_threads_running == 0 && idle_kicker) {
-      complete_lock.Unlock();
-      idle_kicker->kick();
-      complete_lock.Lock();
-      if (!complete_queue.empty() || io_stop) 
-        continue;
-    }
-    */
-
-    dout(25) << "complete_thread sleeping" << endl;
+    dout(25) << "complete_thread sleeping" << dendl;
     complete_wakeup.Wait(complete_lock);
   }
 
-  dout(10) << "complete_thread finish" << endl;
+  dout(10) << "complete_thread finish" << dendl;
   complete_lock.Unlock();
+  return 0;
+}
+
+
+/*** idle kicker thread
+ * kick ebofs when we're idle.  we're a separate thread (yuck)
+ * because ebofs may be holding it's lock _and_ waiting for us 
+ * to do useful work.  that rules out io_thread and complete_thread!
+ */
+void* BlockDevice::kicker_thread_entry()
+{
+  lock.Lock();
+  dout(10) << "kicker_thread start" << dendl;
+
+  while (!io_stop) {
+    
+    if (io_threads_running == 0 && idle_kicker) {
+      dout(25) << "kicker_thread kicking ebofs" << dendl;
+      lock.Unlock();
+      idle_kicker->kick();
+      lock.Lock();
+      dout(25) << "kicker_thread done kicking ebofs" << dendl;
+    }
+    if (io_stop) break;
+
+    dout(25) << "kicker_thread sleeping" << dendl;
+    kicker_cond.Wait(lock);
+  }
+
+  dout(10) << "kicker_thread finish" << dendl;
+  lock.Unlock();
   return 0;
 }
 
@@ -546,7 +571,7 @@ void* BlockDevice::complete_thread_entry()
 void BlockDevice::_submit_io(biovec *b) 
 {
   // NOTE: lock must be held
-  dout(15) << "_submit_io " << *b << endl;
+  dout(15) << "_submit_io " << *b << dendl;
   
   // wake up io_thread(s)?
   if ((int)root_queue.size() == io_threads_running) 
@@ -568,9 +593,9 @@ void BlockDevice::_submit_io(biovec *b)
           (p != io_queue.begin() && 
            (p--, p->second->start + p->second->length > b->start))) {
         dout(1) << "_submit_io new io " << *b 
-                << " overlaps with existing " << *p->second << endl;
+                << " overlaps with existing " << *p->second << dendl;
         cerr << "_submit_io new io " << *b 
-             << " overlaps with existing " << *p->second << endl;
+             << " overlaps with existing " << *p->second << dendl;
       }
     }
   */
@@ -582,10 +607,10 @@ int BlockDevice::_cancel_io(biovec *bio)
   // NOTE: lock must be held
 
   if (bio->in_queue == 0) {
-    dout(15) << "_cancel_io " << *bio << " FAILED" << endl;
+    dout(15) << "_cancel_io " << *bio << " FAILED" << dendl;
     return -1;
   } else {
-    dout(15) << "_cancel_io " << *bio << endl;
+    dout(15) << "_cancel_io " << *bio << dendl;
     bio->in_queue->cancel_io(bio);
     if (root_queue.bump()) 
       io_wakeup.SignalAll();  // something happened!
@@ -599,7 +624,7 @@ int BlockDevice::_cancel_io(biovec *bio)
 
 int BlockDevice::_read(int fd, block_t bno, unsigned num, bufferlist& bl) 
 {
-  dout(10) << "_read " << bno << "~" << num << endl;
+  dout(10) << "_read " << bno << "~" << num << dendl;
 
   assert(fd > 0);
   
@@ -634,50 +659,64 @@ int BlockDevice::_read(int fd, block_t bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl) 
 {
-  dout(10) << "_write " << bno << "~" << num << endl;
+  dout(10) << "_write " << bno << "~" << num << dendl;
 
   assert(fd > 0);
   
-  off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
-  assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
-  off_t actual = lseek(fd, offset, SEEK_SET);
-  assert(actual == offset);
-  
-  // write buffers
-  size_t len = num*EBOFS_BLOCK_SIZE;
-
-  struct iovec iov[ bl.buffers().size() ];
-
-  int n = 0;
-  size_t left = len;
-  for (list<bufferptr>::const_iterator i = bl.buffers().begin();
-       i != bl.buffers().end();
-       i++) {
-    assert(i->length() % EBOFS_BLOCK_SIZE == 0);
-
-    iov[n].iov_base = (void*)i->c_str();
-    iov[n].iov_len = MIN(left, i->length());
-
-    assert((((intptr_t)iov[n].iov_base) & ((intptr_t)4095ULL)) == 0);
-    assert((iov[n].iov_len & 4095) == 0);
+  while (1) {
+    off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
+    assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
+    off_t actual = lseek(fd, offset, SEEK_SET);
+    assert(actual == offset);
     
-    left -= iov[n].iov_len;
-    n++;
-    if (left == 0) break;
+    // write buffers
+    size_t len = num*EBOFS_BLOCK_SIZE;
+    
+    struct iovec iov[ bl.buffers().size() ];
+    
+    int n = 0;
+    size_t left = len;
+    for (list<bufferptr>::const_iterator i = bl.buffers().begin();
+	 i != bl.buffers().end();
+	 i++) {
+      assert(i->length() % EBOFS_BLOCK_SIZE == 0);
+      
+      iov[n].iov_base = (void*)i->c_str();
+      iov[n].iov_len = MIN(left, i->length());
+      
+      assert((((intptr_t)iov[n].iov_base) & ((intptr_t)4095ULL)) == 0);
+      assert((iov[n].iov_len & 4095) == 0);
+      
+      left -= iov[n].iov_len;
+      n++;
+      if (left == 0) break;
+    }
+    
+    int r = ::writev(fd, iov, n);
+    
+    if (r < 0) {
+      dout(1) << "couldn't write bno " << bno << " num " << num 
+	      << " (" << len << " bytes) in " << n << " iovs,  r=" << r 
+	      << " errno " << errno << " " << strerror(errno) << dendl;
+      dout(1) << "bl is " << bl << dendl;
+      assert(0);
+    } else if (r < (int)len) {
+      // hrm, we didn't write _all_ of our data.  WTF kind of FS is this?
+      dout(-1) << "bloody hell, writev only wrote " << r << " of " << len << " bytes, looping" << dendl;
+      assert(r % 4096 == 0);
+      int wrote = r / 4096;
+      bno += wrote;
+      num -= wrote;
+      bufferlist tail;
+      tail.substr_of(bl, r, len-r);
+      bl.claim(tail);
+      continue;
+    } else {
+      // yay
+      assert(r == (int)len);
+      break;
+    }
   }
-
-  int r = ::writev(fd, iov, n);
-
-  if (r < 0) {
-    dout(1) << "couldn't write bno " << bno << " num " << num 
-            << " (" << len << " bytes) in " << n << " iovs,  r=" << r 
-            << " errno " << errno << " " << strerror(errno) << endl;
-    dout(1) << "bl is " << bl << endl;
-    assert(0);
-  } else {
-    assert(r == (int)len);
-  }
-  
   return 0;
 }
 
@@ -703,7 +742,7 @@ int BlockDevice::open(kicker *idle)
   // open?
   fd = open_fd();
   if (fd < 0) {
-    dout(1) << "open failed, r = " << fd << " " << strerror(errno) << endl;
+    dout(1) << "open failed, r = " << fd << " " << strerror(errno) << dendl;
     fd = 0;
     return -1;
   }
@@ -712,8 +751,7 @@ int BlockDevice::open(kicker *idle)
   if (g_conf.bdev_lock) {
     int r = ::flock(fd, LOCK_EX|LOCK_NB);
     if (r < 0) {
-      derr(1) << "open " << dev << " failed to get LOCK_EX" << endl;
-      assert(0);
+      derr(1) << "open " << dev << " failed to get LOCK_EX" << dendl;
       return -1;
     }
   }
@@ -721,10 +759,10 @@ int BlockDevice::open(kicker *idle)
   // figure size
   block_t b = get_num_blocks();
   if (!b) {
-    dout(0) << "open can't determine size of device" << endl;
+    dout(0) << "open can't determine size of device" << dendl;
     assert(0);
   }
-  dout(2) << "open " << b << " blocks, " << b*4096 << " bytes" << endl;
+  dout(2) << "open " << b << " blocks, " << b*4096 << " bytes" << dendl;
   
   // start thread
   io_threads_started = 0;
@@ -734,7 +772,8 @@ int BlockDevice::open(kicker *idle)
     io_threads.back()->create();
   }
   complete_thread.create();
- 
+  kicker_thread.create();
+
   // idle kicker?
   idle_kicker = idle;
 
@@ -742,6 +781,10 @@ int BlockDevice::open(kicker *idle)
 }
 
 
+/*
+ * warning: ebofs shoudl drop it's lock before calling close(),
+ * or else deadlock against the idle kicker
+ */
 int BlockDevice::close() 
 {
   assert(fd>0);
@@ -749,16 +792,16 @@ int BlockDevice::close()
   idle_kicker = 0;
 
   // shut down io thread
-  dout(10) << "close stopping io+complete threads" << endl;
+  dout(10) << "close stopping io+complete threads" << dendl;
   lock.Lock();
   complete_lock.Lock();
   io_stop = true;
   io_wakeup.SignalAll();
   complete_wakeup.SignalAll();
+  kicker_cond.Signal();
   complete_lock.Unlock();
   lock.Unlock();    
-  
-  
+    
   for (int i=0; i<g_conf.bdev_iothreads; i++) {
     io_threads[i]->join();
     delete io_threads[i];
@@ -766,10 +809,11 @@ int BlockDevice::close()
   io_threads.clear();
 
   complete_thread.join();
+  kicker_thread.join();
 
   io_stop = false;   // in case we start again
 
-  dout(2) << "close " << endl;
+  dout(2) << "close " << dendl;
 
   if (g_conf.bdev_lock)
     ::flock(fd, LOCK_UN);

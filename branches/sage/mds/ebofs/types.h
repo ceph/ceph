@@ -85,11 +85,12 @@ inline ostream& operator<<(ostream& out, Extent& ex)
 
 
 // tree/set nodes
-typedef int    nodeid_t;
+//typedef int    nodeid_t;
+typedef int64_t nodeid_t;     // actually, a block number.  FIXME.
 
-static const int EBOFS_NODE_BLOCKS = 1;
-static const int EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
-static const int EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
+static const unsigned EBOFS_NODE_BLOCKS = 1;
+static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
+static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
 
 struct ebofs_nodepool {
   Extent node_usemap_even;   // for even sb versions

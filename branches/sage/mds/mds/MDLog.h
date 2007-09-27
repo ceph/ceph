@@ -40,16 +40,6 @@ class Logger;
 #include <map>
 using std::map;
 
-/*
-namespace __gnu_cxx {
-  template<> struct hash<LogEvent*> {
-    size_t operator()(const LogEvent *p) const { 
-      static hash<unsigned long> H;
-      return H((unsigned long)p); 
-    }
-  };
-}
-*/
 
 class MDLog {
  protected:
@@ -107,31 +97,31 @@ class MDLog {
 
 
   // -- subtreemaps --
-  off_t  last_subtree_map;   // offsets of last committed subtreemap.  constrains trimming.
-  list<Context*> subtree_map_expire_waiters;
   bool writing_subtree_map;  // one is being written now
 
+  friend class ESubtreeMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
+public:
+  off_t get_last_segment_offset() {
+    assert(!segments.empty());
+    return segments.rbegin()->first;
+  }
+
+
+private:
   void init_journaler();
- public:
-  off_t get_last_subtree_map_offset() { return last_subtree_map; }
-  void add_subtree_map_expire_waiter(Context *c) {
-    subtree_map_expire_waiters.push_back(c);
-  }
-  void take_subtree_map_expire_waiters(list<Context*>& ls) {
-    ls.splice(ls.end(), subtree_map_expire_waiters);
-  }
-
-
-
+  
+public:
+  void reopen_logger(utime_t start, bool append=false);
+  
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 
 
 
- public:
+public:
   MDLog(MDS *m) : mds(m),
 		  num_events(0), max_events(g_conf.mds_log_max_len),
 		  unflushed(0),
@@ -139,7 +129,6 @@ class MDLog {
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
-		  last_subtree_map(0),
 		  writing_subtree_map(false) {
   }		  
   ~MDLog();
@@ -153,25 +142,16 @@ class MDLog {
 
   void flush_logger();
 
-  void set_max_events(size_t max) { max_events = max; }
-  size_t get_max_events() { return max_events; }
   size_t get_num_events() { return num_events; }
-  size_t get_non_subtreemap_events() { return num_events - subtree_map_expire_waiters.size(); }
+  void set_max_events(int m) { max_events = m; }
+  size_t get_num_segments() { return segments.size(); }  
 
   off_t get_read_pos();
   off_t get_write_pos();
-  bool empty() {
-    return num_events == 0;
-    //return get_read_pos() == get_write_pos();
-  }
+  bool empty() { return segments.empty(); }
 
   bool is_capped() { return capped; }
-  void cap() { 
-    capped = true;
-    list<Context*> ls;
-    ls.swap(subtree_map_expire_waiters);
-    finish_contexts(ls);
-  }
+  void cap();
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );
@@ -180,10 +160,13 @@ class MDLog {
   void trim();
   void _trimmed(LogSegment *ls);
 
-  void reset();  // fresh, empty log! 
-  void open(Context *onopen);
+private:
   void write_head(Context *onfinish);
 
+public:
+  void create(Context *onfinish);  // fresh, empty log! 
+  void open(Context *onopen);      // append() or replay() to follow!
+  void append();
   void replay(Context *onfinish);
 };
 

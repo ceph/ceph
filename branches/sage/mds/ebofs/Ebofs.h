@@ -21,6 +21,7 @@ using namespace __gnu_cxx;
 
 #include "include/Context.h"
 #include "include/buffer.h"
+#include "include/hash.h"
 
 #include "types.h"
 #include "Onode.h"
@@ -116,6 +117,7 @@ protected:
   Table<coll_object_t, bool>  *co_tab;
 
   void close_tables();
+  void verify_tables();
 
 
   // ** onodes **
@@ -136,7 +138,7 @@ protected:
   void write_onode(Onode *on);
 
   // ** cnodes **
-  hash_map<coll_t, Cnode*>    cnode_map;
+  hash_map<coll_t, Cnode*, rjhash<coll_t> >    cnode_map;
   LRU                         cnode_lru;
   set<Cnode*>                 dirty_cnodes;
   map<coll_t, list<Cond*> >   waitfor_cnode;
@@ -284,7 +286,8 @@ protected:
 
   int rename(object_t from, object_t to);
   int clone(object_t from, object_t to, Context *onsafe);
-  
+
+  int list_objects(list<object_t>& ls);
 
   // object attr
   int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
@@ -293,6 +296,8 @@ protected:
   int getattrs(object_t oid, map<string,bufferptr> &aset);
   int rmattr(object_t oid, const char *name, Context *onsafe=0);
   int listattr(object_t oid, vector<string>& attrs);
+
+  int get_object_collections(object_t oid, set<coll_t>& ls);
 
   // collections
   int list_collections(list<coll_t>& ls);
@@ -305,8 +310,10 @@ protected:
 
   int collection_list(coll_t c, list<object_t>& o);
   
-  int collection_setattr(coll_t oid, const char *name, const void *value, size_t size, Context *onsafe);
-  int collection_getattr(coll_t oid, const char *name, void *value, size_t size);
+  int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
+  int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
+  int collection_getattr(coll_t cid, const char *name, void *value, size_t size);
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(coll_t oid, vector<string>& attrs);
   
@@ -337,6 +344,7 @@ private:
   int _stat(object_t oid, struct stat *st);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
   int _getattrs(object_t oid, map<string,bufferptr> &aset);
+  int _get_object_collections(object_t oid, set<coll_t>& ls);
 
   bool _write_will_block();
   int _write(object_t oid, off_t off, size_t len, const bufferlist& bl);
@@ -353,7 +361,9 @@ private:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, object_t o);
   int _collection_remove(coll_t c, object_t o);
+  int _collection_getattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
+  int _collection_setattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_rmattr(coll_t cid, const char *name);
 
   

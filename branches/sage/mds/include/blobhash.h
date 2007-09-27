@@ -14,6 +14,8 @@
 #ifndef __BLOBHASH_H
 #define __BLOBHASH_H
 
+#include "hash.h"
+
 /*
 - this is to make some of the STL types work with 64 bit values, string hash keys, etc.
 - added when i was using an old STL.. maybe try taking these out and see if things 
@@ -23,16 +25,16 @@
 class blobhash {
 public:
   size_t operator()(const char *p, unsigned len) {
-    static hash<long> H;
-    long acc = 0;
-    while (len >= sizeof(long)) {
-      acc ^= *(long*)p;
-      p += sizeof(long);
-      len -= sizeof(long);
+    static rjhash<size_t> H;
+    size_t acc = 0;
+    while (len >= sizeof(size_t)) {
+      acc ^= *(size_t*)p;
+      p += sizeof(size_t);
+      len -= sizeof(size_t);
     }   
     int sh = 0;
     while (len) {
-      acc ^= (long)*p << sh;
+      acc ^= (size_t)*p << sh;
       sh += 8;
       len--;
       p++;

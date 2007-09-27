@@ -30,13 +30,12 @@
 #include <list>
 
 using std::cout;
-using std::endl;
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
 #endif
 
-#define BUFFER_PAGE_SIZE 4096  // fixme.
+#define BUFFER_PAGE_SIZE 4096  // FIXME
 
 // <hack>
 //  these are in config.o
@@ -97,6 +96,10 @@ private:
       raw *c = clone_empty();
       memcpy(c->data, data, len);
       return c;
+    }
+
+    bool is_page_aligned() {
+      return (long)data % BUFFER_PAGE_SIZE == 0;
     }
   };
 
@@ -170,21 +173,21 @@ private:
     char *realdata;
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
-      realdata = new char[len+4095];
-      unsigned off = ((unsigned)realdata) % 4096;
+      realdata = new char[len+BUFFER_PAGE_SIZE-1];
+      unsigned off = ((unsigned)realdata) % BUFFER_PAGE_SIZE;
       if (off) 
-	data = realdata + 4096 - off;
+	data = realdata + BUFFER_PAGE_SIZE - off;
       else
 	data = realdata;
-      inc_total_alloc(len+4095);
+      inc_total_alloc(len+BUFFER_PAGE_SIZE-1);
       //cout << "hack aligned " << (unsigned)data 
       //<< " in raw " << (unsigned)realdata
-      //<< " off " << off << endl;
-      assert(((unsigned)data & 4095) == 0);
+      //<< " off " << off << std::endl;
+      assert(((unsigned)data & (BUFFER_PAGE_SIZE-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-      dec_total_alloc(len+4095);
+      dec_total_alloc(len+BUFFER_PAGE_SIZE-1);
     }
     raw* clone_empty() {
       return new raw_hack_aligned(len);
@@ -279,6 +282,22 @@ public:
     ~ptr() {
       release();
     }
+    
+    raw *clone() {
+      return _raw->clone();
+    }
+    
+    bool do_cow() {
+      if (_raw->nref > 1) {
+	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
+	raw *newraw = _raw->clone();
+	release();
+	newraw->nref++;
+	_raw = newraw;
+	return true;
+      } else
+	return false;
+    }
 
     void swap(ptr& other) {
       raw *r = _raw;
@@ -316,7 +335,10 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const { return _off + _len == _raw->len; }
 
+    bool is_page_aligned() const { return (long)c_str() % BUFFER_PAGE_SIZE == 0; }
+
     // accessors
+    raw *get_raw() const { return _raw; }
     const char *c_str() const { assert(_raw); return _raw->data + _off; }
     char *c_str() { assert(_raw); return _raw->data + _off; }
     unsigned length() const { return _len; }
@@ -391,15 +413,156 @@ public:
 
   class list {
     // my private bits
+    list *bl;
     std::list<ptr> _buffers;
     unsigned _len;
+
     ptr append_buffer;  // where i put small appends.
 
   public:
+    class iterator {
+      list *bl;
+      std::list<ptr> &ls;
+      unsigned off;  // in bl
+      std::list<ptr>::iterator p;
+      unsigned p_off; // in *p
+    public:
+      // constructor.  position.
+      iterator(list *l, unsigned o=0) : 
+	bl(l), ls(bl->_buffers), off(0), p(ls.begin()), p_off(0) {
+	advance(o);
+      }
+      iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
+	bl(l), ls(bl->_buffers), off(0), p(ip), p_off(po) { }
+
+      iterator operator=(const iterator& other) {
+	return iterator(bl, off, p, p_off);
+      }
+
+      unsigned get_off() { return off; }
+
+      void advance(unsigned o) {
+	//cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
+	p_off += o;
+	while (p_off > 0) {
+	  assert(p != ls.end());
+	  if (p_off >= p->length()) {
+	    // skip this buffer
+	    p_off -= p->length();
+	    p++;
+	  } else {
+	    // somewhere in this buffer!
+	    break;
+	  }
+	}
+	off += o;
+      }
+
+      void seek(unsigned o) {
+	//cout << this << " seek " << o << std::endl;
+	p = ls.begin();
+	off = p_off = 0;
+	advance(o);
+      }
+
+      char operator*() {
+	assert(p != ls.end());
+	return (*p)[p_off];
+      }
+      iterator& operator++() {
+	assert(p != ls.end());
+	advance(1);
+	return *this;
+      }
+
+      // copy data out.
+      // note that these all _append_ to dest!
+
+      void copy(unsigned len, char *dest) {
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  p->copy_out(p_off, howmuch, dest);
+	  dest += howmuch;
+
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      void copy(unsigned len, list &dest) {
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+	  
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  dest.append(*p, p_off, howmuch);
+	  
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      void copy(unsigned len, std::string &dest) {
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  dest.append(p->c_str() + p_off, howmuch);
+
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      // copy data in
+
+      void copy_in(unsigned len, const char *src) {
+	// copy
+	if (p == ls.end()) seek(off);
+	while (len > 0) {
+	  assert(p != ls.end());
+
+	  unsigned howmuch = p->length() - p_off;
+	  if (len < howmuch) howmuch = len;
+	  p->copy_in(p_off, howmuch, src);
+	
+	  src += howmuch;
+	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      void copy_in(unsigned len, const list& otherl) {
+	if (p == ls.end()) seek(off);
+	unsigned left = len;
+	for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
+	     i != otherl._buffers.end();
+	     i++) {
+	  unsigned l = (*i).length();
+	  if (left < l) l = left;
+	  copy_in(l, i->c_str());
+	  left -= l;
+	  if (left == 0) break;
+	}
+      }
+
+    };
+
+  private:
+    mutable iterator last_p;
+
+  public:
     // cons/des
-    list() : _len(0) {}
-    list(const list& other) : _buffers(other._buffers), _len(other._len) { }
-    list(unsigned l) : _len(0) {
+    list() : _len(0), last_p(this) {}
+    list(const list& other) : _buffers(other._buffers), _len(other._len), last_p(this) { }
+    list(unsigned l) : _len(0), last_p(this) {
       ptr bp(l);
       push_back(bp);
     }
@@ -435,6 +598,16 @@ public:
       return _len;
     }
 
+    bool is_page_aligned() const {
+      for (std::list<ptr>::const_iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) 
+	if (!it->is_page_aligned()) return false;
+      return true;
+    }
+    bool is_n_page_sized() const {
+      return length() % BUFFER_PAGE_SIZE == 0;
+    }
 
     // modifiers
     void clear() {
@@ -450,7 +623,7 @@ public:
       _buffers.push_front(bp);
       _len += bp.length();
     }
-    void push_back(ptr& bp) {
+    void push_back(const ptr& bp) {
       _buffers.push_back(bp);
       _len += bp.length();
     }
@@ -478,102 +651,58 @@ public:
       _buffers.splice( _buffers.end(), bl._buffers );
       bl._len = 0;
     }
+
+
     
-    // crope lookalikes
-    void copy(unsigned off, unsigned len, char *dest) {
+
+    iterator begin() {
+      return iterator(this, 0);
+    }
+    iterator end() {
+      return iterator(this, _len, _buffers.end(), 0);
+    }
+
+
+    // crope lookalikes.
+    // **** WARNING: this are horribly inefficient for large bufferlists. ****
+
+    // data OUT
+
+    void copy(unsigned off, unsigned len, char *dest) const {
       assert(off >= 0);
       assert(off + len <= length());
-      /*assert(off < length());
-	if (off + len > length()) 
-	len = length() - off;
-      */
-      // advance to off
-      std::list<ptr>::iterator curbuf = _buffers.begin();
-      
-      // skip off
-      while (off > 0) {
-	assert(curbuf != _buffers.end());
-	if (off >= (*curbuf).length()) {
-	  // skip this buffer
-	  off -= (*curbuf).length();
-	  curbuf++;
-	} else {
-	  // somewhere in this buffer!
-	  break;
-	}
-      }
-      
-      // copy
-      while (len > 0) {
-	// is the rest ALL in this buffer?
-	if (off + len <= (*curbuf).length()) {
-	  (*curbuf).copy_out(off, len, dest);        // yup, last bit!
-	  break;
-	}
-	
-	// get as much as we can from this buffer.
-	unsigned howmuch = (*curbuf).length() - off;
-	(*curbuf).copy_out(off, howmuch, dest);
-	
-	dest += howmuch;
-	len -= howmuch;
-	off = 0;
-	curbuf++;
-	assert(curbuf != _buffers.end());
-      }
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      last_p.copy(len, dest);
+    }
+
+    void copy(unsigned off, unsigned len, list &dest) const {
+      assert(off >= 0);
+      assert(off + len <= length());
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      last_p.copy(len, dest);
+    }
+
+    void copy(unsigned off, unsigned len, std::string& dest) const {
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      return last_p.copy(len, dest);
     }
     
     void copy_in(unsigned off, unsigned len, const char *src) {
       assert(off >= 0);
       assert(off + len <= length());
-      
-      // advance to off
-      std::list<ptr>::iterator curbuf = _buffers.begin();
-      
-      // skip off
-      while (off > 0) {
-	assert(curbuf != _buffers.end());
-	if (off >= (*curbuf).length()) {
-	  // skip this buffer
-	  off -= (*curbuf).length();
-	  curbuf++;
-	} else {
-	  // somewhere in this buffer!
-	  break;
-	}
-      }
-      
-      // copy
-      while (len > 0) {
-	// is the rest ALL in this buffer?
-	if (off + len <= (*curbuf).length()) {
-	  (*curbuf).copy_in(off, len, src);        // yup, last bit!
-	  break;
-	}
-	
-	// get as much as we can from this buffer.
-	unsigned howmuch = (*curbuf).length() - off;
-	(*curbuf).copy_in(off, howmuch, src);
-	
-	src += howmuch;
-	len -= howmuch;
-	off = 0;
-	curbuf++;
-	assert(curbuf != _buffers.end());
-      }
+
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      last_p.copy_in(len, src);
     }
-    void copy_in(unsigned off, unsigned len, const list& bl) {
-      unsigned left = len;
-      for (std::list<ptr>::const_iterator i = bl._buffers.begin();
-	   i != bl._buffers.end();
-	   i++) {
-	unsigned l = (*i).length();
-	if (left < l) l = left;
-	copy_in(off, l, (*i).c_str());
-	left -= l;
-	if (left == 0) break;
-	off += l;
-      }
+
+    void copy_in(unsigned off, unsigned len, const list& src) {
+      if (last_p.get_off() != off) 
+	last_p.seek(off);
+      last_p.copy_in(len, src);
     }
 
 
@@ -596,13 +725,22 @@ public:
 	append_buffer.set_length(0);   // unused, so far.
       }
     }
-    void append(ptr& bp) {
+    void append(const ptr& bp) {
       push_back(bp);
     }
-    void append(ptr& bp, unsigned off, unsigned len) {
+    void append(const ptr& bp, unsigned off, unsigned len) {
       assert(len+off <= bp.length());
-      ptr tempbp(bp, off, len);
-      push_back(tempbp);
+      if (!_buffers.empty() &&
+	  _buffers.back().get_raw() == bp.get_raw() &&
+	  _buffers.back().end() == bp.start() + off) {
+	// yay contiguous with tail bp!
+	_buffers.back().set_length(_buffers.back().length()+len);
+	_len += len;
+      } else {
+	// add new item to list
+	ptr tempbp(bp, off, len);
+	push_back(tempbp);
+      }
     }
     void append(const list& bl) {
       _len += bl._len;
@@ -655,32 +793,27 @@ public:
       
       // skip off
       std::list<ptr>::const_iterator curbuf = other._buffers.begin();
-      while (off > 0) {
-	assert(curbuf != _buffers.end());
-	if (off >= (*curbuf).length()) {
-	  // skip this buffer
-	  //cout << "skipping over " << *curbuf << endl;
-	  off -= (*curbuf).length();
-	  curbuf++;
-	} else {
-	  // somewhere in this buffer!
-	  //cout << "somewhere in " << *curbuf << endl;
-	  break;
-	}
+      while (off > 0 &&
+	     off >= curbuf->length()) {
+	// skip this buffer
+	//cout << "skipping over " << *curbuf << std::endl;
+	off -= (*curbuf).length();
+	curbuf++;
       }
+      assert(len == 0 || curbuf != other._buffers.end());
       
       while (len > 0) {
 	// partial?
-	if (off + len < (*curbuf).length()) {
-	  //cout << "copying partial of " << *curbuf << endl;
+	if (off + len < curbuf->length()) {
+	  //cout << "copying partial of " << *curbuf << std::endl;
 	  _buffers.push_back( ptr( *curbuf, off, len ) );
 	  _len += len;
 	  break;
 	}
 	
 	// through end
-	//cout << "copying end (all?) of " << *curbuf << endl;
-	unsigned howmuch = (*curbuf).length() - off;
+	//cout << "copying end (all?) of " << *curbuf << std::endl;
+	unsigned howmuch = curbuf->length() - off;
 	_buffers.push_back( ptr( *curbuf, off, howmuch ) );
 	_len += howmuch;
 	len -= howmuch;
@@ -689,12 +822,13 @@ public:
       }
     }
 
+    
 
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
       assert(off < length()); 
       assert(len > 0);
-      //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << endl;
+      //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
       // skip off
       std::list<ptr>::iterator curbuf = _buffers.begin();
@@ -702,12 +836,12 @@ public:
 	assert(curbuf != _buffers.end());
 	if (off >= (*curbuf).length()) {
 	  // skip this buffer
-	  //cout << "off = " << off << " skipping over " << *curbuf << endl;
+	  //cout << "off = " << off << " skipping over " << *curbuf << std::endl;
 	  off -= (*curbuf).length();
 	  curbuf++;
 	} else {
 	  // somewhere in this buffer!
-	  //cout << "off = " << off << " somewhere in " << *curbuf << endl;
+	  //cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
 	  break;
 	}
       }
@@ -716,7 +850,7 @@ public:
       if (off) {
 	// add a reference to the front bit
 	//  insert it before curbuf (which we'll hose)
-	//cout << "keeping front " << off << " of " << *curbuf << endl;
+	//cout << "keeping front " << off << " of " << *curbuf << std::endl;
 	_buffers.insert( curbuf, ptr( *curbuf, 0, off ) );
 	_len += off;
       }
@@ -724,19 +858,19 @@ public:
       while (len > 0) {
 	// partial?
 	if (off + len < (*curbuf).length()) {
-	  //cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
+	  //cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
 	  if (claim_by) 
 	    claim_by->append( *curbuf, off, len );
 	  (*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
 	  (*curbuf).set_length( (*curbuf).length() - (len+off) );
 	  _len -= off+len;
-	  //cout << " now " << *curbuf << endl;
+	  //cout << " now " << *curbuf << std::endl;
 	  break;
 	}
 	
 	// hose though the end
 	unsigned howmuch = (*curbuf).length() - off;
-	//cout << "discarding " << howmuch << " of " << *curbuf << endl;
+	//cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
 	if (claim_by) 
 	  claim_by->append( *curbuf, off, howmuch );
 	_len -= (*curbuf).length();
@@ -984,14 +1118,15 @@ inline void _encode(const std::string& s, bufferlist& bl)
 {
   uint32_t len = s.length();
   _encoderaw(len, bl);
-  bl.append(s.c_str(), len+1);
+  bl.append(s.data(), len);
 }
 inline void _decode(std::string& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
-  s = bl.c_str() + off;    // FIXME someday to avoid a huge buffer copy?
-  off += len+1;
+  s.clear();
+  bl.copy(off, len, s);
+  off += len;
 }
 
 // const char* (encode only, string compatible)
@@ -999,23 +1134,23 @@ inline void _encode(const char *s, bufferlist& bl)
 {
   uint32_t len = strlen(s);
   _encoderaw(len, bl);
-  bl.append(s, len+1);
+  bl.append(s, len);
 }
 
 // bufferptr (encapsulated)
-inline void _encode(bufferptr& bp, bufferlist& bl) 
+inline void _encode(const buffer::ptr& bp, bufferlist& bl) 
 {
   uint32_t len = bp.length();
   _encoderaw(len, bl);
   bl.append(bp);
 }
-inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
+inline void _decode(buffer::ptr& bp, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
 
   bufferlist s;
-  s.substr_of(bl, off, len);
+  bl.copy(off, len, s);
   off += len;
 
   if (s.buffers().size() == 1)
@@ -1041,7 +1176,8 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 {
   uint32_t len;
   _decoderaw(len, bl, off);
-  s.substr_of(bl, off, len);
+  s.clear();
+  bl.copy(off, len, s);
   off += len;
 }
 

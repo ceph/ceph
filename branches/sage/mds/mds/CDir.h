@@ -50,7 +50,6 @@ ostream& operator<<(ostream& out, class CDir& dir);
 
 
 // CDir
-typedef map<string, CDentry*> CDir_map_t;
 
 
 
@@ -161,13 +160,20 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
+  //int hack_num_accessed;
+
+public:
+  typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
+  //typedef map<string, CDentry*> map_t;
 protected:
   // contents
-  CDir_map_t items;       // non-null AND null
+  map_t items;       // non-null AND null
   unsigned nitems;             // # non-null
   unsigned nnull;              // # null
 
   int num_dirty;
+
+
 
   // state
   version_t version;
@@ -183,7 +189,6 @@ protected:
   int nested_auth_pins;
   int request_pins;
 
-
   // cache control  (defined for authority; hints for replicas)
   int      dir_rep;
   set<int> dir_rep_by;      // if dir_rep == REP_LIST
@@ -193,8 +198,16 @@ protected:
   dirfrag_load_vec_t pop_nested;
   dirfrag_load_vec_t pop_auth_subtree;
   dirfrag_load_vec_t pop_auth_subtree_nested;
-  
+ 
   utime_t last_popularity_sample;
+
+  load_spread_t pop_spread;
+
+  // and to provide density
+  int num_dentries_nested;
+  int num_dentries_auth_subtree;
+  int num_dentries_auth_subtree_nested;
+
 
   // friends
   friend class Migrator;
@@ -219,8 +232,8 @@ protected:
   CInode *get_inode()    { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
-  CDir_map_t::iterator begin() { return items.begin(); }
-  CDir_map_t::iterator end() { return items.end(); }
+  map_t::iterator begin() { return items.begin(); }
+  map_t::iterator end() { return items.end(); }
   unsigned get_size() { 
     return nitems; 
   }
@@ -240,7 +253,7 @@ protected:
   // -- dentries and inodes --
  public:
   CDentry* lookup(const string& n) {
-    map<string,CDentry*>::iterator iter = items.find(n);
+    map_t::iterator iter = items.find(n);
     if (iter == items.end()) 
       return 0;
     else
@@ -293,16 +306,19 @@ private:
     return !is_auth() && !is_ambiguous_dir_auth();
   }
   
-  bool is_subtree_root();
+  bool is_subtree_root() {
+    return dir_auth != CDIR_AUTH_DEFAULT;
+  }
 
   bool contains(CDir *x);  // true if we are x or an ancestor of x 
 
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    if (( pop_auth_subtree.get(META_POP_IRD).get() > 
-	  g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+    //if (( pop_auth_subtree.get(META_POP_IRD).get() > 
+    //g_conf.mds_bal_replicate_threshold)) {
+    //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
+    if (is_rep()) {
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
@@ -320,6 +336,7 @@ private:
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
 
+  int get_dir_rep() { return dir_rep; }
   bool is_rep() { 
     if (dir_rep == REP_NONE) return false;
     return true;
@@ -566,11 +583,11 @@ class CDirExport {
     dir->replica_nonce = 0;  // no longer defined
 
     if (!dir->replica_map.empty())
-      dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << endl;
+      generic_dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << dendl;
 
     dir->dir_rep_by = rep_by;
     dir->replica_map = replicas;
-    dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << endl;
+    generic_dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << dendl;
     if (!replicas.empty())
       dir->get(CDir::PIN_REPLICATED);
     if (dir->is_dirty()) {

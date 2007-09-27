@@ -1,5 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __OBJECTER_H
 #define __OBJECTER_H
 
@@ -8,6 +20,8 @@
 
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
+
+#include "common/Timer.h"
 
 #include <list>
 #include <map>
@@ -32,6 +46,23 @@ class Objecter {
   int client_inc;
   int num_unacked;
   int num_uncommitted;
+
+  epoch_t last_epoch_requested;
+  utime_t last_epoch_requested_stamp;
+
+  void maybe_request_map();
+
+  Mutex &client_lock;
+  SafeTimer timer;
+  
+  class C_Tick : public Context {
+    Objecter *ob;
+  public:
+    C_Tick(Objecter *o) : ob(o) {}
+    void finish(int r) { ob->tick(); }
+  };
+  void tick();
+
 
   /*** track pending operations ***/
   // read
@@ -100,7 +131,8 @@ class Objecter {
   public:
     vector<int> acting;
     set<tid_t>  active_tids; // active ops
-    
+    utime_t last;
+
     PG() {}
     
     // primary - where i write
@@ -136,15 +168,16 @@ class Objecter {
     
 
  public:
-  Objecter(Messenger *m, MonMap *mm, OSDMap *om) : 
-    messenger(m), monmap(mm), osdmap(om),
+  Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
+    messenger(m), monmap(mm), osdmap(om), 
     last_tid(0), client_inc(-1),
-    num_unacked(0), num_uncommitted(0)
-    {}
-  ~Objecter() {
-    // clean up op_*
-    // ***
-  }
+    num_unacked(0), num_uncommitted(0),
+    client_lock(l), timer(l)
+  { }
+  ~Objecter() { }
+
+  void init();
+  void shutdown();
 
   // messages
  public:
@@ -180,16 +213,16 @@ class Objecter {
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
              Context *onfinish, 
-			 objectrev_t rev=0);
+	     objectrev_t rev=0);
   tid_t write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
               Context *onack, Context *oncommit, 
-			  objectrev_t rev=0);
+	      objectrev_t rev=0);
   tid_t zero(object_t oid, off_t off, size_t len, ObjectLayout ol,  
              Context *onack, Context *oncommit, 
-			 objectrev_t rev=0);
+	     objectrev_t rev=0);
   tid_t stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish, 
-			 objectrev_t rev=0);  
-
+	     objectrev_t rev=0);  
+  
   tid_t lock(int op, object_t oid, ObjectLayout ol, Context *onack, Context *oncommit);
 
 

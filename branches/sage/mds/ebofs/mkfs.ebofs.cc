@@ -26,7 +26,7 @@ int main(int argc, char **argv)
   parse_config_options(args);
 
   if (args.size() < 1) {
-    cerr << "usage: mkfs.ebofs [options] <device file>" << endl;
+    cerr << "usage: mkfs.ebofs [options] <device file>" << std::endl;
     return -1;
   }
   char *filename = args[0];
@@ -40,7 +40,56 @@ int main(int argc, char **argv)
     // test-o-rama!
     Ebofs fs(filename);
     fs.mount();
-    
+
+    // zillion objects
+    if (1) {
+      char crap[1024*1024];
+      memset(crap, 0, 1024*1024);
+      bufferlist bl;
+      int sz = 10000;  
+      bl.append(crap, sz);
+      
+      int n = 100000;
+      utime_t start = g_clock.now();
+      for (int i=0; i<n; i++) {
+	if (i && i % 1000 == 0) {
+	  utime_t now = g_clock.now();
+	  utime_t end = now;
+	  end -= start;
+	  start = now;
+	  cout << i << " / " << n << " in " << end << std::endl;
+	}
+	object_t oid(i,0);
+	fs.write(oid, 0, sz, bl, (Context*)0);
+      }
+    }
+
+    // streaming write test
+    if (0) {
+      char crap[1024*1024];
+      memset(crap, 0, 1024*1024);
+      
+
+      object_t oid(1,2);
+      off_t pos = 0;
+      off_t sz = 16;
+
+      bufferlist bl;
+      bl.append(crap, sz);
+
+      struct timespec ts;
+      ts.tv_sec = 0;
+      ts.tv_nsec = 1000*1000*40;  // ms -> nsec
+
+      while (1) {
+	cout << g_clock.now() << " writing " << pos << "~" << sz << std::endl;
+	fs.write(oid, pos, sz, bl, (Context*)0);
+	pos += sz;
+	nanosleep(&ts, 0);
+      }
+
+    }
+
     /*
     if (1) {
       // partial write tests
@@ -54,32 +103,32 @@ int main(int argc, char **argv)
       bufferlist big;
       big.append(crap, 1024*1024);
 
-      cout << "0" << endl;
+      cout << "0" << std::endl;
       fs.write(10, 0, 1024*1024, big, (Context*)0);
       fs.sync();
       fs.trim_buffer_cache();
 
-      cout << "1" << endl;
+      cout << "1" << std::endl;
       fs.write(10, 10, 10, small, 0);
       fs.write(10, 1, 1000, med, 0);
       fs.sync();
       fs.trim_buffer_cache();
 
-      cout << "2" << endl;
+      cout << "2" << std::endl;
       fs.write(10, 10, 10, small, 0);
       //fs.sync();
       fs.write(10, 1, 1000, med, 0);
       fs.sync();
       fs.trim_buffer_cache();
 
-      cout << "3" << endl;
+      cout << "3" << std::endl;
       fs.write(10, 1, 1000, med, 0);
       fs.write(10, 10000, 10, small, 0);
       fs.truncate(10, 100, 0);
       fs.sync();
       fs.trim_buffer_cache();
 
-      cout << "4" << endl;
+      cout << "4" << std::endl;
       fs.remove(10);
       fs.sync();
       fs.write(10, 10, 10, small, 0);
@@ -126,7 +175,7 @@ int main(int argc, char **argv)
       char *p = bl.c_str();
       off_t o = 0;
       for (int i=0; i<n; i++) {
-        cout << "write at " << o << endl;
+        cout << "write at " << o << std::endl;
         for (int j=0;j<l;j++) 
           p[j] = (char)(oid^(o+j));
         fs.write(oid, l, o, bl, (Context*)0);
@@ -138,7 +187,7 @@ int main(int argc, char **argv)
 
       o = 0;
       for (int i=0; i<n; i++) {
-        cout << "read at " << o << endl;
+        cout << "read at " << o << std::endl;
         bl.clear();
         fs.read(oid, l, o, bl);
         
@@ -167,7 +216,7 @@ int main(int argc, char **argv)
 
       for (off_t m=0; m<megs; m++) {
         //if (m%100 == 0)
-          cout << m << " / " << megs << endl;
+          cout << m << " / " << megs << std::endl;
         fs.write(10, bl.length(), 1024LL*1024LL*m, bl, (Context*)0);
       }      
       fs.sync();
@@ -175,10 +224,10 @@ int main(int argc, char **argv)
       utime_t end = g_clock.now();
       end -= start;
 
-      dout(1) << "elapsed " << end << endl;
+      cout << "elapsed " << end << std::endl;
       
       float mbs = (float)megs / (float)end;
-      dout(1) << "mb/s " << mbs << endl;
+      cout << "mb/s " << mbs << std::endl;
     }
     
     if (0) {  // test
@@ -207,7 +256,7 @@ int main(int argc, char **argv)
         for (int i=0; i<10000; i++) {
           off_t off = rand() % 1000000;
           size_t len = 1+rand() % 10000;
-          cout << endl << i << " writing bit at " << off << " len " << len << endl;
+          cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
           //fs.sync();
           //fs.trim_buffer_cache();
@@ -216,7 +265,7 @@ int main(int argc, char **argv)
         for (int i=0; i<100; i++) {
           off_t off = rand() % 1000000;
           size_t len = 1+rand() % 10000;
-          cout << endl << i << " writing bit at " << off << " len " << len << endl;
+          cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
           //fs.sync();
           //fs.trim_buffer_cache();
@@ -229,7 +278,7 @@ int main(int argc, char **argv)
         off_t off = 0;
         for (int i=0; i<10000; i++) {
           size_t len = 1024*1024;//1+rand() % 10000;
-          cout << endl << i << " writing bit at " << off << " len " << len << endl;
+          cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
           off += len;
         }
@@ -244,7 +293,7 @@ int main(int argc, char **argv)
           bufferlist bl;
           off_t off = rand() % 1000000;
           size_t len = rand() % 1000;
-          cout << endl << "read bit at " << off << " len " << len << endl;
+          cout << std::endl << "read bit at " << off << " len " << len << std::endl;
           int r = fs.read(10, len, off, bl);
           assert(bl.length() == len);
           assert(r == (int)len);
@@ -263,7 +312,7 @@ int main(int argc, char **argv)
           bufferlist bl;
           off_t off = rand() % 1000000;
           size_t len = 100;
-          cout << endl << "read bit at " << off << " len " << len << endl;
+          cout << std::endl << "read bit at " << off << " len " << len << std::endl;
           int r = fs.read(10, len, off, bl);
           assert(bl.length() == len);
           assert(r == (int)len);
@@ -280,7 +329,7 @@ int main(int argc, char **argv)
         for (int i=0; i<100; i++) {
           off_t off = rand() % 1000000;
           size_t len = 100;
-          cout << endl <<  "writing bit at " << off << " len " << len << endl;
+          cout << std::endl <<  "writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
         }
       }

@@ -54,7 +54,12 @@ class Messenger {
   virtual int get_dispatch_queue_len() { return 0; };
 
   // setup
-  void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
+  void set_dispatcher(Dispatcher *d) { 
+    if (!dispatcher) {
+      dispatcher = d; 
+      ready(); 
+    }
+  }
   Dispatcher *get_dispatcher() { return dispatcher; }
   virtual void ready() { }
   bool is_ready() { return dispatcher != 0; }
@@ -73,6 +78,12 @@ class Messenger {
   virtual void prepare_dest(const entity_addr_t& addr) {}
   virtual int send_message(Message *m, entity_inst_t dest,
 			   int port=0, int fromport=0) = 0;
+  virtual int send_first_message(Dispatcher *d,
+				 Message *m, entity_inst_t dest,
+				 int port=0, int fromport=0) {
+    set_dispatcher(d);
+    return send_message(m, dest, port, fromport);
+  }
 
   // make a procedure call
   //virtual Message* sendrecv(Message *m, msg_name_t dest, int port=0);

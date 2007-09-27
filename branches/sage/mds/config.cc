@@ -15,6 +15,7 @@
 
 #include "config.h"
 #include "include/types.h"
+#include <fstream>
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb
@@ -33,10 +34,15 @@ long buffer_total_alloc = 0;
 Mutex bufferlock;
 
 #include "osd/osd_types.h"
-Mutex _dout_lock;
 
-FileLayout g_OSD_FileLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );   // 8M objects, 2x replication
-FileLayout g_OSD_MDDirLayout( 1<<23, 1, 1<<23, pg_t::TYPE_REP, 2 );  // 8M objects, 2x replication.  (a lie, just object layout policy)
+// debug output
+Mutex _dout_lock;
+ostream *_dout = &std::cout;
+ostream *_derr = &std::cerr;
+
+// file layouts
+FileLayout g_OSD_FileLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );   // 4M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );  // 4M objects, 2x replication.  (a lie, just object layout policy)
 FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
 FileLayout g_OSD_MDAnchorTableLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects.  (a lie, just object layout policy)
 
@@ -66,6 +72,10 @@ md_config_t g_conf = {
 
   log_messages: true,
   log_pins: true,
+
+  logger_calc_variance: true,
+
+  dout_dir: 0,
 
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -98,7 +108,7 @@ md_config_t g_conf = {
   debug_bdev: 1,         // block device
   debug_ns: 0,
   debug_ms: 0,
-  debug_mon: 0,
+  debug_mon: 1,
   debug_paxos: 0,
   
   debug_after: 0,
@@ -111,6 +121,7 @@ md_config_t g_conf = {
   clock_tare: false,
   
   // --- messenger ---
+  ms_tcp_nodelay: true,
   ms_single_dispatch: false,
   ms_requeue_on_sender_fail: false,
 
@@ -141,6 +152,8 @@ md_config_t g_conf = {
   mon_stop_with_last_mds: false,
   mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
 
+  paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
+
   // --- client ---
   client_cache_size: 1000,
   client_cache_mid: .5,
@@ -150,11 +163,6 @@ md_config_t g_conf = {
 
   client_sync_writes: 0,
 
-  client_oc: true,
-  client_oc_size:      1024*1024* 5,    // MB * n
-  client_oc_max_dirty: 1024*1024* 5,    // MB * n
-  client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
-
   client_mount_timeout: 10.0,  // retry every N seconds
 
   client_hack_balance_reads: false,
@@ -163,23 +171,33 @@ md_config_t g_conf = {
   fuse_direct_io: 0,
   fuse_ll: true,
   
+  // --- objectcacher ---
+  client_oc: true,
+  client_oc_size:      1024*1024* 10,    // MB * n
+  client_oc_max_dirty: 1024*1024* 10,    // MB * n  (dirty OR tx)
+  client_oc_max_sync_write: 128*1024,   // synx writes >= this use wrlock
+
   // --- objecter ---
   objecter_buffer_uncommitted: true,  // this must be true for proper failure handling
+  objecter_map_request_interval: 15.0, // request a new map every N seconds, if we have pending io
+  objecter_tick_interval: 5.0,
+  objecter_timeout: 10.0,    // before we ask for a map
 
   // --- journaler ---
   journaler_allow_split_entries: true,
   journaler_safe: false,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
+  journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
-  mds_decay_halflife: 10,
+  mds_decay_halflife: 5,
 
-  mds_beacon_interval: 5, //30.0,
-  mds_beacon_grace: 10, //60*60.0,
+  mds_beacon_interval: 4, //30.0,
+  mds_beacon_grace: 15, //60*60.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -187,26 +205,25 @@ md_config_t g_conf = {
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_flush_on_shutdown: true,
-  //mds_log_subtree_map_interval: 128*1024,  // frequency (in bytes) of EImportMap in log
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
-  mds_bal_sample_interval: 5.0,  // every 5 seconds
-  mds_bal_replicate_threshold: 2000,
+  mds_bal_sample_interval: 3.0,  // every 5 seconds
+  mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_split_size: 1000,
-  mds_bal_split_rd: 10000,
+  mds_bal_split_size: 10000,
+  mds_bal_split_rd: 25000,
   mds_bal_split_wr: 10000,
   mds_bal_merge_size: 50,
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
-  mds_bal_interval: 3000,           // seconds
+  mds_bal_interval: 10,           // seconds
   mds_bal_fragment_interval: 5,      // seconds
-  mds_bal_idle_threshold: .1,
+  mds_bal_idle_threshold: 0, //.1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
 
   mds_bal_mode: 0,
-  mds_bal_min_rebalance: .2,  // must be this much above average before we export anything
+  mds_bal_min_rebalance: .1,  // must be this much above average before we export anything
   mds_bal_min_start: .2,      // if we need less than this, we don't do anything
   mds_bal_need_min: .8,       // take within this range of what we need
   mds_bal_need_max: 1.2,
@@ -227,17 +244,27 @@ md_config_t g_conf = {
   mds_dump_cache_on_map: false,
   mds_dump_cache_after_rejoin: true,
 
+  mds_hack_log_expire_for_better_stats: false,
+
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
 
-  osd_balance_reads: false,
-  osd_immediate_read_from_cache: true, // osds to read from the cache immediately?
-  osd_exclusive_caching: true,         // replicas evict replicated writes
-  osd_load_diff_percent: 20, // load diff for read forwarding
-  osd_flash_crowd_iat_threshold: 100,
+  osd_balance_reads: false,  // send from client to replica
+  osd_flash_crowd_iat_threshold: 0,//100,
   osd_flash_crowd_iat_alpha: 0.125,
+  osd_balance_reads_temp: 100,
+  
+  osd_shed_reads: false,     // forward from primary to replica
+  osd_shed_reads_min_latency: .01,       // min local latency
+  osd_shed_reads_min_latency_diff: .01,  // min latency difference
+  osd_shed_reads_min_latency_ratio: 1.2,  // 1.2 == 20% higher than peer
 
-  osd_pg_bits: 0,  // 0 == let osdmonitor decide
+  osd_immediate_read_from_cache: false,//true, // osds to read from the cache immediately?
+  osd_exclusive_caching: true,         // replicas evict replicated writes
+
+  osd_stat_refresh_interval: .5,
+
+  osd_pg_bits: 4,  // bits per osd
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
@@ -249,13 +276,17 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 15,   // shut up while i'm debugging
+  osd_heartbeat_interval: 1,
+  osd_pg_stats_interval:  5,
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
+
+  osd_hack_fast_startup: false,  // this breaks localized pgs.
+
   
   // --- fakestore ---
-  fakestore_fake_sync: .5,    // seconds
+  fakestore_fake_sync: .2,    // seconds
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
@@ -267,25 +298,25 @@ md_config_t g_conf = {
   ebofs: 1,
   ebofs_cloneable: false,
   ebofs_verify: false,
-  ebofs_commit_ms:      2000,       // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 20,         // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_commit_ms:      500,       // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (80 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (60 *256), // before write() will block
+  ebofs_bc_size:        (60 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (30 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
-  ebofs_realloc: true,
+  ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
   // --- block device ---
   bdev_lock: true,
-  bdev_iothreads:    1,         // number of ios to queue with kernel
-  bdev_idle_kick_after_ms: 0,//100, // ms   ** FIXME ** this seems to break things, not sure why yet **
+  bdev_iothreads:    2,         // number of ios to queue with kernel
+  bdev_idle_kick_after_ms: 100,   // ms   ** FIXME ** this seems to break things, not sure why yet **
   bdev_el_fw_max_ms: 10000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 3000,       // restart elevator at least once every 300 ms
-  bdev_el_bidir: true,          // bidirectional elevator?
+  bdev_el_bidir: false,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
   bdev_fake_mb: 0,
@@ -406,11 +437,11 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     //cout << "val " << val << endl;
     
     if (numdigits == 0) {
-      cerr << "no digits at off " << off << endl;
+      cerr << "no digits at off " << off << std::endl;
       return false;           // no digits
     }
     if (count < 3 && *s != '.') {
-      cerr << "should period at " << off << endl;
+      cerr << "should period at " << off << std::endl;
       return false;   // should have 3 periods
     }
     s++; off++;
@@ -507,6 +538,11 @@ void parse_config_options(std::vector<char*>& args)
     //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
     //g_conf.fake_osd_sync = atoi(args[++i]);
 
+    
+    else if (strcmp(args[i], "--doutdir") == 0) {
+      g_conf.dout_dir = args[++i];
+    }
+
     else if (strcmp(args[i], "--debug") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug = atoi(args[++i]);
@@ -592,6 +628,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_mon = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mon = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_paxos") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_paxos = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_paxos = atoi(args[++i]);
 
     else if (strcmp(args[i], "--debug_after") == 0) {
       g_conf.debug_after = atoi(args[++i]);
@@ -692,6 +733,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_thrash_fragments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
       g_conf.mds_dump_cache_on_map = true;
+
+    else if (strcmp(args[i], "--mds_hack_log_expire_for_better_stats") == 0) 
+      g_conf.mds_hack_log_expire_for_better_stats = atoi(args[++i]);
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;
@@ -772,16 +816,27 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);
-    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
-      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
-    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
-      g_conf.osd_exclusive_caching = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_load_diff_percent") == 0) 
-      g_conf.osd_load_diff_percent = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0) 
       g_conf.osd_flash_crowd_iat_threshold = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0) 
       g_conf.osd_flash_crowd_iat_alpha = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--osd_shed_reads") == 0) 
+      g_conf.osd_shed_reads = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency") == 0) 
+      g_conf.osd_shed_reads_min_latency = atof(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency_diff") == 0) 
+      g_conf.osd_shed_reads_min_latency_diff = atof(args[++i]);
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency_ratio") == 0) 
+      g_conf.osd_shed_reads_min_latency_ratio = atof(args[++i]);
+
+    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
+      g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
+    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
+      g_conf.osd_exclusive_caching = atoi(args[++i]);
+
+    else if ( strcmp(args[i],"--osd_stat_refresh_interval" ) == 0)
+      g_conf.osd_stat_refresh_interval = atof(args[++i]);
 
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);
@@ -793,6 +848,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_rep = OSD_REP_PRIMARY;
     else if (strcmp(args[i], "--osd_mkfs") == 0) 
       g_conf.osd_mkfs = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_heartbeat_interval") == 0) 
+      g_conf.osd_heartbeat_interval = atoi(args[++i]);
+    
     else if (strcmp(args[i], "--osd_age") == 0) 
       g_conf.osd_age = atof(args[++i]);
     else if (strcmp(args[i], "--osd_age_time") == 0) 
@@ -807,6 +865,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_max_pull = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_pad_pg_log") == 0) 
       g_conf.osd_pad_pg_log = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--osd_hack_fast_startup") == 0) 
+      g_conf.osd_hack_fast_startup = atoi(args[++i]);
 
 
     else if (strcmp(args[i], "--bdev_lock") == 0) 
@@ -910,6 +971,21 @@ void parse_config_options(std::vector<char*>& args)
 
     else {
       nargs.push_back(args[i]);
+    }
+  }
+
+  // redirect dout?
+  if (g_conf.dout_dir) {
+    char fn[80];
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(fn, "%s/%s.%d", g_conf.dout_dir, hostname, getpid());
+    std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
+    if (!out->is_open()) {
+      std::cerr << "error opening output file " << fn << std::endl;
+      delete out;
+    } else {
+      _dout = out;
     }
   }
 

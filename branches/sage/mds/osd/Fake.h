@@ -223,6 +223,18 @@ class FakeStoreAttrs {
     faker_lock.Unlock();
     return r;
   }
+  int collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
+    faker_lock.Lock();
+    int r = fakecattrs[cid].setattrs(aset);
+    faker_lock.Unlock();
+    return r;
+  }
+  int collection_getattrs(coll_t cid, map<string,bufferptr>& aset) {
+    faker_lock.Lock();
+    int r = fakecattrs[cid].getattrs(aset);
+    faker_lock.Unlock();
+    return r;
+  }
   int collection_rmattr(coll_t c, const char *name,
                         Context *onsafe=0) {
     faker_lock.Lock();

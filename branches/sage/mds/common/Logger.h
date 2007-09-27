@@ -18,49 +18,47 @@
 
 #include "include/types.h"
 #include "Clock.h"
-#include "Mutex.h"
 
 #include <string>
 #include <fstream>
-using namespace std;
-
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+#include <vector>
+using std::vector;
+using std::string;
+using std::ofstream;
 
 #include "LogType.h"
 
 
-
-
 class Logger {
  protected:
-  //hash_map<const char*, long, hash<const char*>, eqstr> vals;
-  //hash_map<const char*, double, hash<const char*>, eqstr> fvals;
+  // values for this instance
   vector<long> vals;
   vector<double> fvals;
+  vector< vector<double> > vals_to_avg;
 
-  //Mutex lock;
+  void maybe_resize(unsigned s) {
+    if (s >= vals.size()) {
+      vals.resize(s);
+      fvals.resize(s);
+      vals_to_avg.resize(s);
+    }
+  }
+
+  // my type
   LogType *type;
+  int version;
 
-  utime_t start;
-  int last_logged;
-  int interval;
+  string filename;
+  ofstream out;
+
+  // what i've written
+  //int last_logged;
   int wrote_header;
   int wrote_header_last;
 
-  string filename;
-
-  int version;
-
-  ofstream out;
-  bool open;
-
  public:
-  Logger(string fn, LogType *type);
+  Logger(string fn, LogType *type, bool append=false);
   ~Logger();
-
-  void set_start(const utime_t& a) { start = a; }
-  utime_t& get_start() { return start; }
 
   long inc(const char *s, long v = 1);
   long set(const char *s, long v);
@@ -68,8 +66,12 @@ class Logger {
 
   double fset(const char *s, double v);
   double finc(const char *s, double v);
+  double favg(const char *s, double v);
 
-  void flush(bool force = false);
+  //void flush();
+  void _flush();
+
+  void set_start(utime_t s);
 };
 
 #endif

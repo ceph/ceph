@@ -50,7 +50,7 @@ class MClientFileCaps : public Message {
   inode_t&  get_inode() { return inode; }
   int       get_caps() { return caps; }
   int       get_wanted() { return wanted; }
-  long      get_seq() { return seq; }
+  capseq_t  get_seq() { return seq; }
 
   // for cap migration
   int       get_mds() { return mds; }

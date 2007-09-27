@@ -6,6 +6,7 @@
 #include "config.h"
 #include "common/Clock.h"
 
+#define dout(x) if (x < g_conf.debug) *_dout << dbeginl << g_clock.now() << " ager: " 
 
 object_t ObjectStore::age_get_oid() {
     if (!age_free_oids.empty()) {
@@ -33,7 +34,7 @@ object_t ObjectStore::age_get_oid() {
       statfs(&st);
       float a = (float)(st.f_blocks-st.f_bavail) / (float)st.f_blocks;
       if (a >= pc) {
-        dout(10) << "age_fill at " << a << " / " << pc << " stopping" << endl;
+        dout(10) << "age_fill at " << a << " / " << pc << " stopping" << dendl;
         break;
       }
 
@@ -44,7 +45,7 @@ object_t ObjectStore::age_get_oid() {
 
       ssize_t s = age_pick_size();
 
-      dout(10) << "age_fill at " << a << " / " << pc << " creating " << hex << oid << dec << " sz " << s << endl;
+      dout(10) << "age_fill at " << a << " / " << pc << " creating " << hex << oid << dec << " sz " << s << dendl;
 
       off_t off = 0;
       while (s) {
@@ -65,14 +66,14 @@ object_t ObjectStore::age_get_oid() {
       statfs(&st);
       float a = (float)(st.f_blocks-st.f_bavail) / (float)st.f_blocks;
       if (a <= pc) {
-        dout(10) << "age_empty at " << a << " / " << pc << " stopping" << endl;
+        dout(10) << "age_empty at " << a << " / " << pc << " stopping" << dendl;
         break;
       }
 
       int b = rand() % 10;
       n--;
       if (n == 0 || age_objects[b].empty()) {
-        dout(10) << "age_empty sync" << endl;
+        dout(10) << "age_empty sync" << dendl;
         //sync();
         sync();
         n = nper;
@@ -81,7 +82,7 @@ object_t ObjectStore::age_get_oid() {
       object_t oid = age_objects[b].front();
       age_objects[b].pop_front();
 
-      dout(10) << "age_empty at " << a << " / " << pc << " removing " << hex << oid << dec << endl;
+      dout(10) << "age_empty at " << a << " / " << pc << " removing " << hex << oid << dec << dendl;
 
       remove(oid);
       age_free_oids.push_back(oid);
@@ -108,7 +109,7 @@ object_t ObjectStore::age_get_oid() {
       high_water = (float)high_water * f;
       low_water = (float)low_water * f;
       final_water = (float)final_water * f;
-      dout(10) << "fake " << fake_bl << " / " << st.f_blocks << " is " << f << ", high " << high_water << " low " << low_water << " final " << final_water << endl;
+      dout(10) << "fake " << fake_bl << " / " << st.f_blocks << " is " << f << ", high " << high_water << " low " << low_water << " final " << final_water << dendl;
     }
 
     // init size distn (once)
@@ -136,16 +137,16 @@ object_t ObjectStore::age_get_oid() {
     for (int c=1; c<=count; c++) {
       if (g_clock.now() > until) break;
 
-      dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
+      dout(1) << "age " << c << "/" << count << " filling to " << high_water << dendl;
       age_fill(high_water, until);
       if (c == count) {
-        dout(1) << "age final empty to " << final_water << endl;
+        dout(1) << "age final empty to " << final_water << dendl;
         age_empty(final_water);    
       } else {
-        dout(1) << "age " << c << "/" << count << " emptying to " << low_water << endl;
+        dout(1) << "age " << c << "/" << count << " emptying to " << low_water << dendl;
         age_empty(low_water);
       }
     }
-    dout(1) << "age finished" << endl;
+    dout(1) << "age finished" << dendl;
   }  
   

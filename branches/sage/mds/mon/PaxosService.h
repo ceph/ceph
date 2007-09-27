@@ -55,11 +55,25 @@ protected:
   };
   friend class C_Update;
 
+  class C_Propose : public Context {
+    PaxosService *ps;
+  public:
+    C_Propose(PaxosService *p) : ps(p) { }
+    void finish(int r) { 
+      ps->proposal_timer = 0;
+      ps->propose_pending(); 
+    }
+  };	
+  friend class C_Propose;
+  
+
 private:
+  Context *proposal_timer;
   bool have_pending;
 
 public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
+					proposal_timer(0),
 					have_pending(false) { }
   
   // i implement and you ignore
@@ -83,7 +97,9 @@ public:
 
   virtual bool preprocess_query(Message *m) = 0;  // true if processed (e.g., read-only)
   virtual bool prepare_update(Message *m) = 0;
-  virtual bool should_propose_now() { return true; }
+  virtual bool should_propose(double &delay);
+
+  virtual void committed() = 0;
 
 };
 

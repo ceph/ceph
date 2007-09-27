@@ -25,9 +25,9 @@
 #include "common/Timer.h"
 
 #include "config.h"
-#undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client "
 
 
 
@@ -40,13 +40,13 @@ bool ClientMonitor::update_from_paxos()
   assert(paxosv >= client_map.version);
 
   dout(10) << "update_from_paxos paxosv " << paxosv 
-	   << ", my v " << client_map.version << endl;
+	   << ", my v " << client_map.version << dendl;
 
 
   if (client_map.version == 0 && paxosv > 1 &&
       mon->store->exists_bl_ss("clientmap","latest")) {
     // starting up: load latest
-    dout(7) << "update_from_paxos startup: loading latest full clientmap" << endl;
+    dout(7) << "update_from_paxos startup: loading latest full clientmap" << dendl;
     bufferlist bl;
     mon->store->get_bl_ss(bl, "clientmap", "latest");
     int off = 0;
@@ -58,14 +58,19 @@ bool ClientMonitor::update_from_paxos()
     bufferlist bl;
     bool success = paxos->read(client_map.version+1, bl);
     if (success) {
-      dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << endl;
+      dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << dendl;
       Incremental inc;
       int off = 0;
       inc._decode(bl, off);
       client_map.apply_incremental(inc);
+
+      dout(1) << "v" << client_map.version << ": " 
+	      << client_map.client_addr.size() << " clients (+" 
+	      << inc.mount.size() << " -" << inc.unmount.size() << ")" 
+	      << dendl;
       
     } else {
-      dout(7) << "update_from_paxos  couldn't read incremental " << client_map.version+1 << endl;
+      dout(7) << "update_from_paxos  couldn't read incremental " << client_map.version+1 << dendl;
       return false;
     }
   }
@@ -86,14 +91,18 @@ void ClientMonitor::create_pending()
   pending_inc.next_client = client_map.next_client;
   dout(10) << "create_pending v " << pending_inc.version
 	   << ", next is " << pending_inc.next_client
-	   << endl;
+	   << dendl;
 }
 
 void ClientMonitor::create_initial()
 {
-  dout(1) << "create_initial -- creating initial map" << endl;
+  dout(1) << "create_initial -- creating initial map" << dendl;
 }
 
+void ClientMonitor::committed()
+{
+
+}
 
 
 void ClientMonitor::encode_pending(bufferlist &bl)
@@ -101,7 +110,7 @@ void ClientMonitor::encode_pending(bufferlist &bl)
   assert(mon->is_leader());
   dout(10) << "encode_pending v " << pending_inc.version 
 	   << ", next is " << pending_inc.next_client
-	   << endl;
+	   << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
   pending_inc._encode(bl);
 }
@@ -112,7 +121,7 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 bool ClientMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
 
   switch (m->get_type()) {
   case MSG_CLIENT_MOUNT:
@@ -120,10 +129,10 @@ bool ClientMonitor::preprocess_query(Message *m)
       // already mounted?
       MClientMount *mount = (MClientMount*)m;
       entity_addr_t addr = m->get_source_addr();
-      if (mount->instance == 0 &&                  // only check for addr uniqueness if the client claims to be alone
-	  client_map.addr_client.count(addr)) {
-	int client = client_map.addr_client[addr];
-	dout(7) << " client" << client << " already mounted" << endl;
+      pair<entity_addr_t,int> addrinst(addr, mount->instance);
+      if (client_map.addr_client.count(addrinst)) {
+	int client = client_map.addr_client[addrinst];
+	dout(7) << " client" << client << " already mounted" << dendl;
 	_mounted(client, (MClientMount*)m);
 	return true;
       }
@@ -135,7 +144,7 @@ bool ClientMonitor::preprocess_query(Message *m)
       // already unmounted?
       int client = m->get_source().num();
       if (client_map.client_addr.count(client) == 0) {
-	dout(7) << " client" << client << " not mounted" << endl;
+	dout(7) << " client" << client << " not mounted" << dendl;
 	_unmounted((MClientUnmount*)m);
 	return true;
       }
@@ -152,13 +161,13 @@ bool ClientMonitor::preprocess_query(Message *m)
 
 bool ClientMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << endl;
+  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
   
   switch (m->get_type()) {
   case MSG_CLIENT_MOUNT:
     {
       MClientMount *mount = (MClientMount*)m;
-      entity_addr_t addr = mount->addr;
+      pair<entity_addr_t,int> addrinst(mount->addr, mount->instance);
       int client = -1;
       if (mount->get_source().is_client())
 	client = mount->get_source().num();
@@ -166,17 +175,22 @@ bool ClientMonitor::prepare_update(Message *m)
       // choose a client id
       if (client < 0) {
 	client = pending_inc.next_client;
-	dout(10) << "mount: assigned client" << client << " to " << addr << endl;
+	dout(10) << "mount: assigned client" << client << " to " << mount->addr << dendl;
       } else {
-	dout(10) << "mount: client" << client << " requested by " << addr << endl;
+	dout(10) << "mount: client" << client << " requested by " 
+		 << mount->addr << "i" << mount->instance
+		 << dendl;
 	if (client_map.client_addr.count(client)) {
-	  assert(client_map.client_addr[client] != addr);
-	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
-		  << ", which used to be " << client_map.client_addr[client] << endl;
+	  assert(client_map.client_addr[client] != addrinst);
+	  dout(0) << "mount: WARNING: client" << client << " requested by " 
+		  << mount->addr << "." << mount->instance
+		  << ", which used to be " 
+		  << client_map.client_addr[client].first << "i" << client_map.client_addr[client].second
+		  << dendl;
 	}
       }
       
-      pending_inc.add_mount(client, addr);
+      pending_inc.add_mount(client, mount->addr, mount->instance);
       paxos->wait_for_commit(new C_Mounted(this, client, mount));
     }
     return true;
@@ -210,9 +224,9 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 {
   entity_inst_t to;
   to.addr = m->addr;
-  to.name = MSG_ADDR_CLIENT(client);
+  to.name = entity_name_t::CLIENT(client);
 
-  dout(10) << "_mounted client" << client << " at " << to << endl;
+  dout(10) << "_mounted client" << client << " at " << to << dendl;
   
   // reply with latest mds, osd maps
   mon->mdsmon->send_latest(to);
@@ -223,7 +237,7 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 
 void ClientMonitor::_unmounted(MClientUnmount *m)
 {
-  dout(10) << "_unmounted " << m->inst << endl;
+  dout(10) << "_unmounted " << m->inst << dendl;
   
   // reply with (same) unmount message
   mon->messenger->send_message(m, m->inst);
@@ -233,8 +247,9 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   if (mon->is_leader() &&
       client_map.version > 1 &&
       client_map.client_addr.empty() && 
-      g_conf.mon_stop_on_last_unmount) {
-    dout(1) << "last client unmounted" << endl;
+      g_conf.mon_stop_on_last_unmount &&
+      !mon->is_stopping()) {
+    dout(1) << "last client unmounted" << dendl;
     mon->do_stop();
   }
 }

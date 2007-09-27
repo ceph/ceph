@@ -175,10 +175,10 @@ private:
   int num_osds() { return osds.size(); }
   void get_all_osds(set<int>& ls) { ls = osds; }
 
-  const set<int>& get_osds() { return osds; }
-  const map<int,bool>& get_down_osds() { return down_osds; }
-  const set<int>& get_out_osds() { return out_osds; }
-  const map<int,float>& get_overload_osds() { return overload_osds; }
+  const set<int32_t>& get_osds() { return osds; }
+  const map<int32_t,bool>& get_down_osds() { return down_osds; }
+  const set<int32_t>& get_out_osds() { return out_osds; }
+  const map<int32_t,float>& get_overload_osds() { return overload_osds; }
   
   bool exists(int osd) { return osds.count(osd); }
   bool is_down(int osd) { return down_osds.count(osd); }
@@ -226,8 +226,7 @@ private:
          i++) {
       assert(down_osds.count(i->first) == 0);
       down_osds[i->first] = i->second.second;
-      assert(osd_inst.count(i->first) == 0 ||
-             osd_inst[i->first] == i->second.first);
+      //assert(osd_inst.count(i->first) == 0 || osd_inst[i->first] == i->second.first);
       osd_inst.erase(i->first);
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
@@ -327,11 +326,15 @@ private:
       break;
       
     case OBJECT_LAYOUT_HASHINO:
-      ps = stable_mod(oid.bno + H(oid.ino), num, num_mask);
+      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
+      ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       break;
 
     case OBJECT_LAYOUT_HASH:
-      ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
+      //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
+      //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
+      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
+      ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       break;
 
     default:

@@ -78,9 +78,10 @@ public:
    * adjusting
    */
 
-  void hit(utime_t now, double v = 1.0) {
+  double hit(utime_t now, double v = 1.0) {
     decay(now);
     delta += v;
+    return val+delta;
   }
 
   void adjust(double a) {
@@ -89,6 +90,11 @@ public:
   void adjust(utime_t now, double a) {
     decay(now);
     val += a;
+  }
+  void scale(double f) {
+    val *= f;
+    delta *= f;    
+    vel *= f;
   }
 
   /**

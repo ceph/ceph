@@ -36,7 +36,7 @@ using namespace std;
 class C_Die : public Context {
 public:
   void finish(int) {
-    cerr << "die" << endl;
+    cerr << "die" << std::endl;
     exit(1);
   }
 };
@@ -46,7 +46,7 @@ class C_Debug : public Context {
   void finish(int) {
     int size = &g_conf.debug_after - &g_conf.debug;
     memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    dout(0) << "debug_after flipping debug settings" << endl;
+    cout << "debug_after flipping debug settings" << std::endl;
   }
 };
 
@@ -75,18 +75,18 @@ int main(int argc, char **argv)
     else if (strcmp(args[i],"--osd") == 0)
       whoami = atoi(args[++i]);
     else {
-      cerr << "unrecognized arg " << args[i] << endl;
+      cerr << "unrecognized arg " << args[i] << std::endl;
       return -1;
     }
   }
   if (whoami < 0) {
-    cerr << "must specify '--osd #' where # is the osd number" << endl;
+    cerr << "must specify '--osd #' where # is the osd number" << std::endl;
   }
   if (!dev) {
     sprintf(dev_default, "dev/osd%d", whoami);
     dev = dev_default;
   }
-  cout << "dev " << dev << endl;
+  cout << "dev " << dev << std::endl;
   
 
   if (whoami < 0) {
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
     store->mount();
     int r = store->read(object_t(0,0), 0, sizeof(sb), bl);
     if (r < 0) {
-      cerr << "couldn't read superblock object on " << dev << endl;
+      cerr << "couldn't read superblock object on " << dev << std::endl;
       exit(0);
     }
     bl.copy(0, sizeof(sb), (char*)&sb);
@@ -105,9 +105,9 @@ int main(int argc, char **argv)
     delete store;
     whoami = sb.whoami;
     
-    cout << "osd fs says i am osd" << whoami << endl;
+    cout << "osd fs says i am osd" << whoami << std::endl;
   } else {
-    cout << "command line arg says i am osd" << whoami << endl;
+    cout << "command line arg says i am osd" << whoami << std::endl;
   }
 
   // load monmap
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
   rank.start_rank();
 
   // start osd
-  Messenger *m = rank.register_entity(MSG_ADDR_OSD(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
   assert(m);
   OSD *osd = new OSD(whoami, m, &monmap, dev);
   osd->init();

@@ -45,16 +45,23 @@
 #define SYNCLIENT_MODE_RDWRRANDOM    25
 #define SYNCLIENT_MODE_RDWRRANDOM_EX    26
 
+#define SYNCLIENT_MODE_LINKTEST   27
+
 #define SYNCLIENT_MODE_TRACE       30
+
+#define SYNCLIENT_MODE_CREATEOBJECTS 35
+#define SYNCLIENT_MODE_OBJECTRW 36
 
 #define SYNCLIENT_MODE_OPENTEST     40
 #define SYNCLIENT_MODE_OPTEST       41
 
 #define SYNCLIENT_MODE_ONLY        50
-#define SYNCLIENT_MODE_EXCLUDE     51
+#define SYNCLIENT_MODE_ONLYRANGE   51
+#define SYNCLIENT_MODE_EXCLUDE     52
+#define SYNCLIENT_MODE_EXCLUDERANGE  53
 
-#define SYNCLIENT_MODE_UNTIL       52
-#define SYNCLIENT_MODE_SLEEPUNTIL  53
+#define SYNCLIENT_MODE_UNTIL       55
+#define SYNCLIENT_MODE_SLEEPUNTIL  56
 
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
@@ -148,30 +155,18 @@ class SyntheticClient {
 
   int run();
 
-  bool exclude_me() {
-    if (exclude < 0) 
-      return false;
-    if (exclude == client->get_nodeid()) {
-      exclude = -1;
-      return true;
-    } else {
-      exclude = -1;
-      return false;
-    }
-  }
   bool run_me() {
-    if (exclude_me())
-      return false;
-
     if (run_only >= 0) {
-      if (run_only == client->get_nodeid()) {
-        run_only = -1;
+      if (run_only == client->get_nodeid())
         return true;
-      }
-      run_only = -1;
-      return false;
+      else
+	return false;
     }
     return true;
+  }
+  void did_run_me() {
+    run_only = -1;
+    run_until = utime_t();
   }
 
   // run() will do one of these things:
@@ -194,9 +189,9 @@ class SyntheticClient {
   bool time_to_stop() {
     utime_t now = g_clock.now();
     if (0) cout << "time_to_stop .. now " << now 
-         << " until " << run_until 
-         << " start " << run_start 
-         << endl;
+		<< " until " << run_until 
+		<< " start " << run_start 
+		<< std::endl;
     if (run_until.sec() && now > run_until) 
       return true;
     else
@@ -214,6 +209,7 @@ class SyntheticClient {
   int stat_dirs(const char *basedir, int dirs, int files, int depth);
   int read_dirs(const char *basedir, int dirs, int files, int depth);
   int make_files(int num, int count, int priv, bool more);
+  int link_test();
 
   int create_shared(int num);
   int open_shared(int num, int count);
@@ -221,6 +217,11 @@ class SyntheticClient {
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
+
+  int create_objects(int nobj, int osize, int inflight);
+  int object_rw(int nobj, int osize, int wrpc, int overlap, 
+		double rskew, double wskew);
+
   int read_random(string& fn, int mb, int chunk);
   int read_random_ex(string& fn, int mb, int chunk);
 

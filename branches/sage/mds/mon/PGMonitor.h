@@ -40,6 +40,8 @@ private:
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 
+  void committed();
+
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 

@@ -20,7 +20,9 @@
 #include <list>
 #include <string>
 #include <fstream>
-using namespace std;
+using std::list;
+using std::string;
+using std::ifstream;
 
 /*
 
@@ -31,17 +33,21 @@ using namespace std;
 
 class Trace {
   int _line;
-  ifstream fs;
+  const char *filename;
+  ifstream *fs;
   string line;
 
  public:
-  Trace(const char* filename);
-  ~Trace();
+  Trace(const char* f) : filename(f), fs(0) {}
+  ~Trace() { 
+    delete fs; 
+  }
 
   int get_line() { return _line; }
 
   void start();
 
+  const char *peek_string(char *buf, const char *prefix);
   const char *get_string(char *buf, const char *prefix);
 
   __int64_t get_int() {
@@ -49,7 +55,7 @@ class Trace {
     return atoll(get_string(buf, 0));
   }
   bool end() {
-    return fs.eof();
+    return !fs || fs->eof();
     //return _cur == _end;
   }
 };

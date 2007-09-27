@@ -25,8 +25,8 @@
 #include "include/types.h"
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".idalloc: "
+
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".idalloc: "
 
 
 void IdAllocator::init_inode()
@@ -44,7 +44,7 @@ inodeno_t IdAllocator::alloc_id()
   // pick one
   inodeno_t id = free.start();
   free.erase(id);
-  dout(10) << "idalloc " << this << ": alloc id " << id << endl;
+  dout(10) << "idalloc " << this << ": alloc id " << id << dendl;
 
   version++;
   
@@ -61,7 +61,7 @@ void IdAllocator::reclaim_id(inodeno_t id)
 {
   assert(is_active());
   
-  dout(10) << "idalloc " << this << ": reclaim id " << id << endl;
+  dout(10) << "idalloc " << this << ": reclaim id " << id << dendl;
   free.insert(id);
 
   version++;
@@ -88,12 +88,12 @@ void IdAllocator::save(Context *onfinish, version_t v)
 {
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
-	     << committing_version << " >= needed " << v << endl;
+	     << committing_version << " >= needed " << v << dendl;
     waitfor_save[v].push_back(onfinish);
     return;
   }
   
-  dout(10) << "save v " << version << endl;
+  dout(10) << "save v " << version << dendl;
   assert(is_active());
   
   bufferlist bl;
@@ -115,7 +115,7 @@ void IdAllocator::save(Context *onfinish, version_t v)
 
 void IdAllocator::save_2(version_t v)
 {
-  dout(10) << "save_2 v " << v << endl;
+  dout(10) << "save_2 v " << v << dendl;
   
   committed_version = v;
   
@@ -165,7 +165,7 @@ public:
 
 void IdAllocator::load(Context *onfinish)
 { 
-  dout(10) << "load" << endl;
+  dout(10) << "load" << dendl;
 
   init_inode();
 
@@ -185,7 +185,7 @@ void IdAllocator::load_2(int r, bufferlist& bl, Context *onfinish)
   state = STATE_ACTIVE;
 
   if (r > 0) {
-    dout(10) << "load_2 got " << bl.length() << " bytes" << endl;
+    dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
     int off = 0;
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
@@ -193,7 +193,7 @@ void IdAllocator::load_2(int r, bufferlist& bl, Context *onfinish)
     committed_version = version;
   }
   else {
-    dout(10) << "load_2 found no alloc file" << endl;
+    dout(10) << "load_2 found no alloc file" << dendl;
     assert(0); // this shouldn't happen if mkfs finished.
     reset();   
   }

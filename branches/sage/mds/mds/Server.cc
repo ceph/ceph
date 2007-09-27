@@ -55,12 +55,12 @@
 using namespace std;
 
 #include "config.h"
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
+
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
+#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
 
 
-void Server::reopen_logger()
+void Server::reopen_logger(utime_t start, bool append)
 {
   static LogType mdserver_logtype;
   static bool didit = false;
@@ -73,15 +73,14 @@ void Server::reopen_logger()
     mdserver_logtype.add_inc("dsreq"); // slave
   }
 
-  if (logger) {
-    logger->flush();
+  if (logger) 
     delete logger;
-  }
 
   // logger
   char name[80];
   sprintf(name, "mds%d.server", mds->get_nodeid());
-  logger = new Logger(name, &mdserver_logtype);
+  logger = new Logger(name, &mdserver_logtype, append);
+  logger->set_start(start);
 }
 
 
@@ -95,7 +94,7 @@ void Server::dispatch(Message *m)
 
   // active?
   if (!mds->is_active()) {
-    dout(3) << "not active yet, waiting" << endl;
+    dout(3) << "not active yet, waiting" << dendl;
     mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
     return;
   }
@@ -112,7 +111,7 @@ void Server::dispatch(Message *m)
     return;
   }
 
-  dout(1) << "server unknown message " << m->get_type() << endl;
+  dout(1) << "server unknown message " << m->get_type() << dendl;
   assert(0);
 }
 
@@ -139,31 +138,31 @@ public:
 
 void Server::handle_client_session(MClientSession *m)
 {
-  dout(3) << "handle_client_session " << *m << " from " << m->get_source() << endl;
+  dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
   bool open = m->op == MClientSession::OP_REQUEST_OPEN;
 
   if (open) {
     if (mds->clientmap.have_session(from)) {
-      dout(10) << "already open, dropping this req" << endl;
+      dout(10) << "already open, dropping this req" << dendl;
       delete m;
       return;
     }
     if (mds->clientmap.is_opening(from)) {
-      dout(10) << "already opening, dropping this req" << endl;
+      dout(10) << "already opening, dropping this req" << dendl;
       delete m;
       return;
     }
     mds->clientmap.add_opening(from);
   } else {
     if (mds->clientmap.is_closing(from)) {
-      dout(10) << "already closing, dropping this req" << endl;
+      dout(10) << "already closing, dropping this req" << dendl;
       delete m;
       return;
     }
     if (m->seq < mds->clientmap.get_push_seq(from)) {
       dout(10) << "old push seq " << m->seq << " < " << mds->clientmap.get_push_seq(from) 
-	       << ", dropping" << endl;
+	       << ", dropping" << dendl;
       delete m;
       return;
     }
@@ -185,7 +184,7 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
 {
   dout(10) << "_session_logged " << client_inst << " " << (open ? "open":"close")
 	   << " " << cmapv 
-	   << endl;
+	   << dendl;
 
   // apply
   int from = client_inst.name.num();
@@ -212,7 +211,7 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
 
 void Server::terminate_sessions()
 {
-  dout(2) << "terminate_sessions" << endl;
+  dout(2) << "terminate_sessions" << dendl;
 
   // kill them off.  clients will retry etc.
   for (set<int>::const_iterator p = mds->clientmap.get_session_set().begin();
@@ -232,27 +231,28 @@ void Server::reconnect_clients()
 {
   // reconnect with clients
   if (mds->clientmap.get_session_set().empty()) {
-    dout(7) << "reconnect_clients -- no sessions, doing nothing." << endl;
+    dout(7) << "reconnect_clients -- no sessions, doing nothing." << dendl;
     reconnect_gather_finish();
     return;
   }
   
-  dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << endl;
+  dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << dendl;
   
   mds->bcast_mds_map();  // send mdsmap to all client sessions
 
   // init gather list
   reconnect_start = g_clock.now();
   client_reconnect_gather = mds->clientmap.get_session_set();
+  dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
 }
 
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
-  dout(7) << "handle_client_reconnect " << m->get_source() << endl;
+  dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
   int from = m->get_source().num();
 
   if (m->closed) {
-    dout(7) << " client had no session, removing from clientmap" << endl;
+    dout(7) << " client had no session, removing from clientmap" << dendl;
 
     mds->clientmap.add_closing(from);
     version_t cmapv = mds->clientmap.inc_projected();
@@ -268,7 +268,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       CInode *in = mdcache->get_inode(p->first);
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
-	dout(15) << "open caps on " << *in << endl;
+	dout(15) << "open caps on " << *in << dendl;
 	in->reconnect_cap(from, p->second);
 	reconnected_caps.insert(in);
 	continue;
@@ -279,7 +279,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	  !mds->mdcache->path_is_mine(path)) {
 	// not mine.
 	dout(0) << "non-auth " << p->first << " " << m->inode_path[p->first]
-		<< ", will pass off to authority" << endl;
+		<< ", will pass off to authority" << dendl;
 	
 	// mark client caps stale.
 	inode_t fake_inode;
@@ -296,7 +296,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       } else {
 	// mine.  fetch later.
 	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
-		<< " (mine), will load later" << endl;
+		<< " (mine), will load later" << dendl;
 	mdcache->rejoin_recovered_caps(p->first, m->inode_path[p->first], from, p->second, 
 				       -1);  // "from" me.
       }
@@ -315,7 +315,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
  */
 void Server::process_reconnected_caps()
 {
-  dout(10) << "process_reconnected_caps" << endl;
+  dout(10) << "process_reconnected_caps" << dendl;
 
   // adjust filelock state appropriately
   for (set<CInode*>::iterator p = reconnected_caps.begin();
@@ -342,7 +342,7 @@ void Server::process_reconnected_caps()
     }
     dout(15) << " issued " << cap_string(issued)
 	     << " chose " << in->filelock
-	     << " on " << *in << endl;
+	     << " on " << *in << dendl;
   }
   reconnected_caps.clear();  // clean up
 }
@@ -350,15 +350,18 @@ void Server::process_reconnected_caps()
 
 void Server::client_reconnect_failure(int from) 
 {
-  dout(5) << "client_reconnect_failure on client" << from << endl;
-  client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty()) 
-    reconnect_gather_finish();
+  dout(5) << "client_reconnect_failure on client" << from << dendl;
+  if (mds->is_reconnect() &&
+      client_reconnect_gather.count(from)) {
+    client_reconnect_gather.erase(from);
+    if (client_reconnect_gather.empty()) 
+      reconnect_gather_finish();
+  }
 }
 
 void Server::reconnect_gather_finish()
 {
-  dout(7) << "reconnect_gather_finish" << endl;
+  dout(7) << "reconnect_gather_finish" << dendl;
   mds->reconnect_done();
 }
 
@@ -388,11 +391,32 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << strerror(-reply->get_result())
-	   << ") " << *req << endl;
+	   << ") " << *req << dendl;
 
   // note result code in clientmap?
   if (!req->is_idempotent())
     mds->clientmap.add_completed_request(mdr->reqid);
+
+  /*
+  if (tracei && !tracei->hack_accessed) {
+    tracei->hack_accessed = true;
+    mds->logger->inc("newt");
+    if (tracei->parent &&
+	tracei->parent->dir->hack_num_accessed >= 0) {
+      tracei->parent->dir->hack_num_accessed++;
+      if (tracei->parent->dir->hack_num_accessed == 1)
+	mds->logger->inc("dirt1");
+      if (tracei->parent->dir->hack_num_accessed == 2)
+	mds->logger->inc("dirt2");
+      if (tracei->parent->dir->hack_num_accessed == 3)
+	mds->logger->inc("dirt3");
+      if (tracei->parent->dir->hack_num_accessed == 4)
+	mds->logger->inc("dirt4");
+      if (tracei->parent->dir->hack_num_accessed == 5)
+	mds->logger->inc("dirt5");
+    }
+  }
+  */
 
   // include trace
   if (tracei) {
@@ -415,26 +439,26 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
  */
 void Server::handle_client_request(MClientRequest *req)
 {
-  dout(4) << "handle_client_request " << *req << endl;
+  dout(4) << "handle_client_request " << *req << dendl;
   int client = req->get_client();
 
   if (logger) logger->inc("hcreq");
 
   if (!mds->is_active()) {
-    dout(5) << " not active, discarding client request." << endl;
+    dout(5) << " not active, discarding client request." << dendl;
     delete req;
     return;
   }
   
   if (!mdcache->get_root()) {
-    dout(5) << "need to open root" << endl;
+    dout(5) << "need to open root" << dendl;
     mdcache->open_root(new C_MDS_RetryMessage(mds, req));
     return;
   }
 
   // active session?
   if (!mds->clientmap.have_session(client)) {
-    dout(1) << "no session for client" << client << ", dropping" << endl;
+    dout(5) << "no session for client" << client << ", dropping" << dendl;
     delete req;
     return;
   }
@@ -446,7 +470,7 @@ void Server::handle_client_request(MClientRequest *req)
   // retry?
   if (req->get_retry_attempt()) {
     if (mds->clientmap.have_completed_request(req->get_reqid())) {
-      dout(5) << "already completed " << req->get_reqid() << endl;
+      dout(5) << "already completed " << req->get_reqid() << dendl;
       mds->messenger->send_message(new MClientReply(req, 0),
 				   req->get_client_inst());
       delete req;
@@ -455,7 +479,7 @@ void Server::handle_client_request(MClientRequest *req)
   }
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0) {
-    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << endl;
+    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
     mds->clientmap.trim_completed_requests(client,
 					   req->get_oldest_client_tid());
   }
@@ -484,9 +508,10 @@ void Server::handle_client_request(MClientRequest *req)
 
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
+  if (!mdr) return;
 
   if (ref) {
-    dout(10) << "inode op on ref " << *ref << endl;
+    dout(10) << "inode op on ref " << *ref << dendl;
     mdr->ref = ref;
     mdr->pin(ref);
   }
@@ -503,9 +528,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
   if (logger) logger->inc("dcreq");
 
   if (mdr->ref) {
-    dout(7) << "dispatch_client_request " << *req << " ref " << *mdr->ref << endl;
+    dout(7) << "dispatch_client_request " << *req << " ref " << *mdr->ref << dendl;
   } else {
-    dout(7) << "dispatch_client_request " << *req << endl;
+    dout(7) << "dispatch_client_request " << *req << dendl;
   }
 
   // we shouldn't be waiting on anyone.
@@ -569,7 +594,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
 
   default:
-    dout(1) << " unknown client op " << req->get_op() << endl;
+    dout(1) << " unknown client op " << req->get_op() << dendl;
     assert(0);
   }
 }
@@ -580,7 +605,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
 void Server::handle_slave_request(MMDSSlaveRequest *m)
 {
-  dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << endl;
+  dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
   if (logger) logger->inc("hsreq");
@@ -596,7 +621,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 						 m->get_object_info());
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
 	mdr->slaves.insert(from);
-	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << endl;
+	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
 	lock->get_xlock(mdr);
@@ -648,7 +673,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       mdr = mdcache->request_get(m->get_reqid());
       if (mdr->slave_to_mds != from) {   // may not even be a slave! (e.g. forward race)
 	dout(10) << "local request " << *mdr << " not slave to mds" << from
-		 << ", ignoring " << *m << endl;
+		 << ", ignoring " << *m << dendl;
 	delete m;
 	return;
       }
@@ -656,7 +681,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       // new?
       if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
 	dout(10) << "missing slave request for " << m->get_reqid() 
-		 << " OP_FINISH, must have lost race with a forward" << endl;
+		 << " OP_FINISH, must have lost race with a forward" << dendl;
 	delete m;
 	return;
       }
@@ -671,10 +696,10 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 
 void Server::dispatch_slave_request(MDRequest *mdr)
 {
-  dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << endl;
+  dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
 
   if (mdr->aborted) {
-    dout(7) << " abort flag set, finishing" << endl;
+    dout(7) << " abort flag set, finishing" << dendl;
     mdcache->request_finish(mdr);
     return;
   }
@@ -707,9 +732,9 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       } else {
 	if (lock) {
 	  dout(10) << "not auth for remote xlock attempt, dropping on " 
-		   << *lock << " on " << *lock->get_parent() << endl;
+		   << *lock << " on " << *lock->get_parent() << dendl;
 	} else {
-	  dout(10) << "don't have object, dropping" << endl;
+	  dout(10) << "don't have object, dropping" << dendl;
 	  assert(0); // can this happen, if we auth pinned properly.
 	}
       }
@@ -763,7 +788,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 
 void Server::handle_slave_auth_pin(MDRequest *mdr)
 {
-  dout(10) << "handle_slave_auth_pin " << *mdr << endl;
+  dout(10) << "handle_slave_auth_pin " << *mdr << dendl;
 
   // build list of objects
   list<MDSCacheObject*> objects;
@@ -774,7 +799,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
        ++p) {
     MDSCacheObject *object = mdcache->get_object(*p);
     if (!object) {
-      dout(10) << " don't have " << *p << endl;
+      dout(10) << " don't have " << *p << dendl;
       fail = true;
       break;
     }
@@ -788,14 +813,14 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	 p != objects.end();
 	 ++p) {
       if (!(*p)->is_auth()) {
-	dout(10) << " not auth for " << **p << endl;
+	dout(10) << " not auth for " << **p << dendl;
 	fail = true;
 	break;
       }
       if (!mdr->is_auth_pinned(*p) &&
 	  !(*p)->can_auth_pin()) {
 	// wait
-	dout(10) << " waiting for authpinnable on " << **p << endl;
+	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
 	return;
@@ -810,7 +835,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
     for (list<MDSCacheObject*>::iterator p = objects.begin();
 	 p != objects.end();
 	 ++p) {
-      dout(10) << "auth_pinning " << **p << endl;
+      dout(10) << "auth_pinning " << **p << dendl;
       mdr->auth_pin(*p);
     }
   }
@@ -837,7 +862,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 
 void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
-  dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << endl;
+  dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << dendl;
   int from = ack->get_source().num();
 
   // added auth pins?
@@ -847,7 +872,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
        ++p) {
     MDSCacheObject *object = mdcache->get_object(*p);
     assert(object);  // we pinned it
-    dout(10) << " remote has pinned " << *object << endl;
+    dout(10) << " remote has pinned " << *object << dendl;
     if (!mdr->is_auth_pinned(object))
       mdr->auth_pins.insert(object);
     pinned.insert(object);
@@ -858,7 +883,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   while (p != mdr->auth_pins.end()) {
     if ((*p)->authority().first == from &&
 	pinned.count(*p) == 0) {
-      dout(10) << " remote has unpinned " << **p << endl;
+      dout(10) << " remote has unpinned " << **p << dendl;
       set<MDSCacheObject*>::iterator o = p;
       ++p;
       mdr->auth_pins.erase(o);
@@ -878,7 +903,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);
   else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
 }
 
 
@@ -895,7 +920,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
 {
   // make sure parent is a dir?
   if (!diri->is_dir()) {
-    dout(7) << "validate_dentry_dir: not a dir" << endl;
+    dout(7) << "validate_dentry_dir: not a dir" << dendl;
     reply_request(mdr, -ENOTDIR);
     return false;
   }
@@ -908,7 +933,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
 
   // frozen?
   if (dir->is_frozen()) {
-    dout(7) << "dir is frozen " << *dir << endl;
+    dout(7) << "dir is frozen " << *dir << dendl;
     dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return false;
   }
@@ -923,21 +948,21 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
  */
 CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist)
 {
-  dout(10) << "prepare_null_dentry " << dname << " in " << *dir << endl;
+  dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
   assert(dir->is_auth());
   
   // does it already exist?
   CDentry *dn = dir->lookup(dname);
   if (dn) {
     if (dn->lock.is_xlocked_by_other(mdr)) {
-      dout(10) << "waiting on xlocked dentry " << *dn << endl;
+      dout(10) << "waiting on xlocked dentry " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
 
     if (!dn->is_null()) {
       // name already exists
-      dout(10) << "dentry " << dname << " exists in " << *dir << endl;
+      dout(10) << "dentry " << dname << " exists in " << *dir << dendl;
       if (!okexist) {
         reply_request(mdr, -EEXIST);
         return 0;
@@ -949,7 +974,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
 
   // make sure dir is complete
   if (!dir->is_complete()) {
-    dout(7) << " incomplete dir contents for " << *dir << ", fetching" << endl;
+    dout(7) << " incomplete dir contents for " << *dir << ", fetching" << dendl;
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
@@ -957,7 +982,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   // create
   dn = dir->add_null_dentry(dname);
   dn->mark_new();
-  dout(10) << "prepare_null_dentry added " << *dn << endl;
+  dout(10) << "prepare_null_dentry added " << *dn << dendl;
 
   return dn;
 }
@@ -973,7 +998,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
   in->inode.uid = mdr->client_request->get_caller_uid();
   in->inode.gid = mdr->client_request->get_caller_gid();
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
-  dout(10) << "prepare_new_inode " << *in << endl;
+  dout(10) << "prepare_new_inode " << *in << dendl;
 
   return in;
 }
@@ -984,14 +1009,14 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 {
   // figure parent dir vs dname
   if (refpath.depth() == 0) {
-    dout(7) << "can't do that to root" << endl;
+    dout(7) << "can't do that to root" << dendl;
     reply_request(mdr, -EINVAL);
     return 0;
   }
   string dname = refpath.last_dentry();
   refpath.pop_dentry();
   
-  dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << endl;
+  dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
   int r = mdcache->path_traverse(mdr, mdr->client_request,
@@ -1017,7 +1042,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   if (!dir)
     return 0; // forwarded or waiting for freeze
 
-  dout(10) << "traverse_to_auth_dir " << *dir << endl;
+  dout(10) << "traverse_to_auth_dir " << *dir << dendl;
   return dir;
 }
 
@@ -1056,10 +1081,10 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 	(dn->is_null() ||
 	 (dn->is_remote() && dn->inode))) {
       if (dn->is_ambiguous_auth()) {
-	dout(10) << "waiting for single auth on " << *dn << endl;
+	dout(10) << "waiting for single auth on " << *dn << dendl;
 	dn->dir->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
       } else {
-	dout(10) << "fw to auth for " << *dn << endl;
+	dout(10) << "fw to auth for " << *dn << dendl;
 	mdcache->request_forward(mdr, dn->authority().first);
 	return 0;
       }
@@ -1069,15 +1094,15 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
     ref = mdcache->get_dentry_inode(dn, mdr);
     if (!ref) return 0;
   }
-  dout(10) << "ref is " << *ref << endl;
+  dout(10) << "ref is " << *ref << dendl;
 
   // fw to inode auth?
   if (want_auth && !ref->is_auth()) {
     if (ref->is_ambiguous_auth()) {
-      dout(10) << "waiting for single auth on " << *ref << endl;
+      dout(10) << "waiting for single auth on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
     } else {
-      dout(10) << "fw to auth for " << *ref << endl;
+      dout(10) << "fw to auth for " << *ref << dendl;
       mdcache->request_forward(mdr, ref->authority().first);
     }
     return 0;
@@ -1086,7 +1111,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   // auth_pin?
   if (want_auth) {
     if (ref->is_frozen()) {
-      dout(7) << "waiting for !frozen/authpinnable on " << *ref << endl;
+      dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
@@ -1126,11 +1151,11 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   vector<CDentry*> trace;
   CDir *dir = traverse_to_auth_dir(mdr, trace, req->get_filepath());
   if (!dir) return 0;
-  dout(10) << "rdlock_path_xlock_dentry dir " << *dir << endl;
+  dout(10) << "rdlock_path_xlock_dentry dir " << *dir << dendl;
 
   // make sure we can auth_pin (or have already authpinned) dir
   if (dir->is_frozen()) {
-    dout(7) << "waiting for !frozen/authpinnable on " << *dir << endl;
+    dout(7) << "waiting for !frozen/authpinnable on " << *dir << dendl;
     dir->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
@@ -1143,21 +1168,21 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
     // make sure dir is complete
     if (!dn && !dir->is_complete()) {
-      dout(7) << " incomplete dir contents for " << *dir << ", fetching" << endl;
+      dout(7) << " incomplete dir contents for " << *dir << ", fetching" << dendl;
       dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
 
     // readable?
     if (dn && dn->lock.is_xlocked_by_other(mdr)) {
-      dout(10) << "waiting on xlocked dentry " << *dn << endl;
+      dout(10) << "waiting on xlocked dentry " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
       
     // exists?
     if (!dn || dn->is_null()) {
-      dout(7) << "dentry " << dname << " dne in " << *dir << endl;
+      dout(7) << "dentry " << dname << " dne in " << *dir << dendl;
       reply_request(mdr, -ENOENT);
       return 0;
     }    
@@ -1205,14 +1230,14 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
   // not open and inode not mine?
   if (!dir && !diri->is_auth()) {
     int inauth = diri->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds" << inauth << endl;
+    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds" << inauth << dendl;
     mdcache->request_forward(mdr, inauth);
     return 0;
   }
 
   // not open and inode frozen?
   if (!dir && diri->is_frozen_dir()) {
-    dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << endl;
+    dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
     assert(diri->get_parent_dir());
     diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
@@ -1226,7 +1251,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
   if (!dir->is_auth()) {
     int auth = dir->authority().first;
     dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
-	    << ", fw to mds" << auth << endl;
+	    << ", fw to mds" << auth << dendl;
     mdcache->request_forward(mdr, auth);
     return 0;
   }
@@ -1251,7 +1276,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     assert(mdr->wrlocks.count(&diri->dirlock));
     
     dirpv = diri->pre_dirty();
-    dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << endl;
+    dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << dendl;
     
     // predirty+journal
     inode_t *pi = diri->project_inode();
@@ -1264,7 +1289,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     inode_t *ji = blob->add_primary_dentry(diri->get_parent_dn(), true);    
     ji->ctime = ji->mtime = mdr->now;
 
-    dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << endl;
+    dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << dendl;
     
     blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
   }
@@ -1285,12 +1310,12 @@ void Server::dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv)
     // we journaled and predirtied.
     assert(diri->is_auth() && !diri->is_root());
     diri->pop_and_dirty_projected_inode(mdr->ls);
-    dout(10) << "dirty_dn_diri ctime/mtime " << mdr->now << " v " << diri->inode.version << " on " << *diri << endl;
+    dout(10) << "dirty_dn_diri ctime/mtime " << mdr->now << " v " << diri->inode.version << " on " << *diri << dendl;
   } else {
     // dirlock scatterlock will propagate the update.
     diri->inode.ctime = diri->inode.mtime = mdr->now;
     diri->dirlock.set_updated();
-    dout(10) << "dirty_dn_diri (non-dirty) ctime/mtime " << mdr->now << " on " << *diri << endl;
+    dout(10) << "dirty_dn_diri (non-dirty) ctime/mtime " << mdr->now << " on " << *diri << dendl;
   }
 }
 
@@ -1327,8 +1352,11 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  mds->balancer->hit_inode(g_clock.now(), ref, META_POP_IRD,
+			   mdr->client_request->get_client_inst().name.num());
+
   // reply
-  dout(10) << "reply to stat on " << *req << endl;
+  dout(10) << "reply to stat on " << *req << dendl;
   MClientReply *reply = new MClientReply(req);
   reply_request(mdr, reply, ref);
 }
@@ -1374,6 +1402,11 @@ void Server::handle_client_utime(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
@@ -1407,6 +1440,11 @@ void Server::handle_client_chmod(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
+
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
 
   // write
   set<SimpleLock*> rdlocks = mdr->rdlocks;
@@ -1443,6 +1481,11 @@ void Server::handle_client_chown(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
   // write
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
@@ -1477,45 +1520,6 @@ void Server::handle_client_chown(MDRequest *mdr)
 
 // READDIR
 
-int Server::encode_dir_contents(CDir *dir, 
-				list<string>& dnls,
-				list<InodeStat*>& inls)
-{
-  int numfiles = 0;
-
-  for (CDir_map_t::iterator it = dir->begin(); 
-       it != dir->end(); 
-       it++) {
-    CDentry *dn = it->second;
-    
-    if (dn->is_null()) continue;
-
-    CInode *in = dn->inode;
-    InodeStat *st;
-    if (in) {
-      dout(12) << "including inode " << *in << endl;
-
-      // add this item
-      // note: InodeStat makes note of whether inode data is readable.
-      st = new InodeStat(in, mds->get_nodeid());
-    } else {
-      assert(dn->is_remote());
-      dout(12) << "including inode-less (remote) dentry " << *dn << endl;
-      st = new InodeStat;
-      st->mask = STAT_MASK_INO | STAT_MASK_TYPE;
-      memset(&st->inode, 0, sizeof(st->inode));
-      st->inode.ino = dn->get_remote_ino();
-      st->inode.mode = DT_TO_MODE(dn->get_remote_d_type());
-    }
-
-    dnls.push_back( it->first );
-    inls.push_back(st);
-    numfiles++;
-  }
-  return numfiles;
-}
-
-
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -1525,7 +1529,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // it's a directory, right?
   if (!diri->is_dir()) {
     // not a dir
-    dout(10) << "reply to " << *req << " readdir -ENOTDIR" << endl;
+    dout(10) << "reply to " << *req << " readdir -ENOTDIR" << dendl;
     reply_request(mdr, -ENOTDIR, diri);
     return;
   }
@@ -1535,7 +1539,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
-    dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << endl;
+    dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << dendl;
     reply_request(mdr, -EAGAIN, diri);
     return;
   }
@@ -1555,7 +1559,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   if (!dir->is_complete()) {
     // fetch
-    dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << endl;
+    dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
@@ -1563,22 +1567,75 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // build dir contents
   list<InodeStat*> inls;
   list<string> dnls;
-  int numfiles = encode_dir_contents(dir, dnls, inls);
-  
-  // . too
-  //dnls.push_back(".");
-  //inls.push_back(new InodeStat(diri, mds->get_nodeid()));
-  //++numfiles;
+
+  int numfiles = 0;
+  for (CDir::map_t::iterator it = dir->begin(); 
+       it != dir->end(); 
+       it++) {
+    CDentry *dn = it->second;
+    if (dn->is_null()) continue;
+
+    CInode *in = dn->inode;
+
+    // remote link?
+    // better for the MDS to do the work, if we think the client will stat any of these files.
+    if (dn->is_remote() && !in) {
+      in = mdcache->get_inode(dn->get_remote_ino());
+      if (in) {
+	dn->link_remote(in);
+      } else {
+	mdcache->open_remote_ino(dn->get_remote_ino(),
+				 mdr,
+				 new C_MDS_RetryRequest(mdcache, mdr));
+
+	// touch everything i _do_ have
+	for (it = dir->begin(); 
+	     it != dir->end(); 
+	     it++) 
+	  if (!it->second->is_null())
+	    mdcache->lru.lru_touch(it->second);
+	return;
+      }
+    }
+    assert(in);
+
+    InodeStat *st;
+    if (in) {
+      dout(12) << "including inode " << *in << dendl;
+
+      // add this item
+      // note: InodeStat makes note of whether inode data is readable.
+      st = new InodeStat(in, mds->get_nodeid());
+    } else {
+      assert(0);
+      /*
+      assert(dn->is_remote());
+      dout(12) << "including inode-less (remote) dentry " << *dn << dendl;
+      st = new InodeStat;
+      st->mask = STAT_MASK_INO | STAT_MASK_TYPE;
+      memset(&st->inode, 0, sizeof(st->inode));
+      st->inode.ino = dn->get_remote_ino();
+      st->inode.mode = DT_TO_MODE(dn->get_remote_d_type());
+      */
+    }
+
+    dnls.push_back( it->first );
+    inls.push_back(st);
+    numfiles++;
+
+    // touch it
+    mdcache->lru.lru_touch(dn);
+  }
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
   reply->take_dir_items(dnls, inls, numfiles);
   
-  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
+  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
   reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, numfiles);  
+  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
   reply_request(mdr, reply, diri);
@@ -1683,6 +1740,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newdir->mark_complete();
   newdir->mark_dirty(newdir->pre_dirty(), mdlog->get_current_segment());
 
+  //if (mds->logger) mds->logger->inc("mkdir");
+
   // prepare finisher
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
@@ -1704,7 +1763,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
       !newdir->is_hashing()) {
     int dest = rand() % mds->mdsmap->get_num_mds();
     if (dest != whoami) {
-      dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
+      dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << dendl;
       mdcache->migrator->export_dir(newdir, dest);
     }
   }
@@ -1757,7 +1816,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   dout(7) << "handle_client_link " << req->get_filepath()
 	  << " to " << req->get_sarg()
-	  << endl;
+	  << dendl;
 
   // traverse to dest dir, make sure it's ours.
   const filepath &linkpath = req->get_filepath();
@@ -1765,11 +1824,11 @@ void Server::handle_client_link(MDRequest *mdr)
   vector<CDentry*> linktrace;
   CDir *dir = traverse_to_auth_dir(mdr, linktrace, linkpath);
   if (!dir) return;
-  dout(7) << "handle_client_link link " << dname << " in " << *dir << endl;
+  dout(7) << "handle_client_link link " << dname << " in " << *dir << dendl;
   
   // traverse to link target
   filepath targetpath = req->get_sarg();
-  dout(7) << "handle_client_link discovering target " << targetpath << endl;
+  dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
 				 0, targetpath, targettrace, false,
@@ -1786,9 +1845,9 @@ void Server::handle_client_link(MDRequest *mdr)
   assert(targeti);
 
   // dir?
-  dout(7) << "target is " << *targeti << endl;
+  dout(7) << "target is " << *targeti << dendl;
   if (targeti->is_dir()) {
-    dout(7) << "target is a dir, failing..." << endl;
+    dout(7) << "target is a dir, failing..." << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
@@ -1820,15 +1879,15 @@ void Server::handle_client_link(MDRequest *mdr)
   // does the target need an anchor?
   if (targeti->is_auth()) {
     /*if (targeti->get_parent_dir() == dn->dir) {
-      dout(7) << "target is in the same dirfrag, sweet" << endl;
+      dout(7) << "target is in the same dirfrag, sweet" << dendl;
     } 
     else 
       */
     if (targeti->is_anchored() && !targeti->is_unanchoring()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
     } 
     else {
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << dendl;
       
       mdcache->anchor_create(mdr, targeti,
 			     new C_MDS_RetryRequest(mdcache, mdr));
@@ -1868,7 +1927,7 @@ public:
 
 void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
-  dout(10) << "_link_local " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_local " << *dn << " to " << *targeti << dendl;
 
   // predirty NEW dentry
   version_t dnpv = dn->pre_dirty();
@@ -1896,7 +1955,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 				version_t dnpv, version_t tipv, version_t dirpv)
 {
-  dout(10) << "_link_local_finish " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
   dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
@@ -1940,12 +1999,12 @@ public:
 
 void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
-  dout(10) << "_link_remote " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_remote " << *dn << " to " << *targeti << dendl;
     
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   int linkauth = targeti->authority().first;
   if (mdr->witnessed.count(linkauth) == 0) {
-    dout(10) << " targeti auth must prepare nlink++" << endl;
+    dout(10) << " targeti auth must prepare nlink++" << dendl;
 
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREP);
     targeti->set_object_info(req->get_object_info());
@@ -1956,7 +2015,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
     mdr->waiting_on_slave.insert(linkauth);
     return;
   }
-  dout(10) << " targeti auth has prepared nlink++" << endl;
+  dout(10) << " targeti auth has prepared nlink++" << dendl;
 
   // go.
   // predirty dentry
@@ -1980,7 +2039,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 				 version_t dpv, version_t dirpv)
 {
-  dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << endl;
+  dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << dendl;
 
   // link the new dentry
   dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
@@ -2020,11 +2079,11 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_link_prep " << *mdr 
 	   << " on " << mdr->slave_request->get_object_info() 
-	   << endl;
+	   << dendl;
 
   CInode *targeti = mdcache->get_inode(mdr->slave_request->get_object_info().ino);
   assert(targeti);
-  dout(10) << "targeti " << *targeti << endl;
+  dout(10) << "targeti " << *targeti << dendl;
   CDentry *dn = targeti->get_parent_dn();
   assert(dn->is_primary());
 
@@ -2033,10 +2092,10 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   // anchor?
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     if (targeti->is_anchored() && !targeti->is_unanchoring()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
     } 
     else {
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << dendl;
       mdcache->anchor_create(mdr, targeti,
 			     new C_MDS_RetryRequest(mdcache, mdr));
       return;
@@ -2059,7 +2118,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   pi->ctime = mdr->now;
   pi->version = targeti->pre_dirty();
 
-  dout(10) << " projected inode " << pi << " v " << pi->version << endl;
+  dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
 
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
@@ -2089,7 +2148,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
 {
   dout(10) << "_logged_slave_link " << *mdr
 	   << " inc=" << inc
-	   << " " << *targeti << endl;
+	   << " " << *targeti << dendl;
 
   version_t old_version = targeti->inode.version;
 
@@ -2118,7 +2177,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
   dout(10) << "_commit_slave_link " << *mdr
 	   << " r=" << r
 	   << " inc=" << inc
-	   << " " << *targeti << endl;
+	   << " " << *targeti << dendl;
 
   ESlaveUpdate *le;
   if (r == 0) {
@@ -2148,7 +2207,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
 void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
   dout(10) << "handle_slave_link_prep_ack " << *mdr 
-	   << " " << *m << endl;
+	   << " " << *m << dendl;
   int from = m->get_source().num();
 
   // note slave
@@ -2204,14 +2263,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (req->get_op() == MDS_OP_RMDIR) rmdir = true;
   
   if (rmdir) {
-    dout(7) << "handle_client_rmdir on " << *dn << endl;
+    dout(7) << "handle_client_rmdir on " << *dn << dendl;
   } else {
-    dout(7) << "handle_client_unlink on " << *dn << endl;
+    dout(7) << "handle_client_unlink on " << *dn << dendl;
   }
 
   // readable?
   if (dn->lock.is_xlocked_by_other(mdr)) {
-    dout(10) << "waiting on xlocked dentry " << *dn << endl;
+    dout(10) << "waiting on xlocked dentry " << *dn << dendl;
     dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
@@ -2222,7 +2281,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   mdr->trace.swap(trace);
   CInode *in = mdcache->get_dentry_inode(dn, mdr);
   if (!in) return;
-  dout(7) << "dn links to " << *in << endl;
+  dout(7) << "dn links to " << *in << dendl;
 
   // rmdir vs is_dir 
   if (in->is_dir()) {
@@ -2231,14 +2290,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
       if (!_verify_rmdir(mdr, in))
 	return;
     } else {
-      dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << endl;
+      dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
       reply_request(mdr, -EISDIR);
       return;
     }
   } else {
     if (rmdir) {
       // unlink
-      dout(7) << "handle_client_rmdir on non-dir " << *in << ", returning error" << endl;
+      dout(7) << "handle_client_rmdir on non-dir " << *in << ", returning error" << dendl;
       reply_request(mdr, -ENOTDIR);
       return;
     }
@@ -2265,11 +2324,13 @@ void Server::handle_client_unlink(MDRequest *mdr)
   CDentry *straydn = 0;
   if (dn->is_primary()) {
     straydn = mdcache->get_or_create_stray_dentry(dn->inode);
-    dout(10) << " straydn is " << *straydn << endl;
+    mdr->pin(straydn);  // pin it.
+    dout(10) << " straydn is " << *straydn << dendl;
+    assert(straydn->is_null());
 
     if (!mdr->dst_reanchor_atid &&
 	dn->inode->is_anchored()) {
-      dout(10) << "reanchoring to stray " << *dn->inode << endl;
+      dout(10) << "reanchoring to stray " << *dn->inode << dendl;
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, dn->inode);
       mds->anchorclient->prepare_update(dn->inode->ino(), trace, &mdr->dst_reanchor_atid, 
@@ -2308,7 +2369,7 @@ public:
 
 void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
-  dout(10) << "_unlink_local " << *dn << endl;
+  dout(10) << "_unlink_local " << *dn << dendl;
 
   // ok, let's do it.
   // prepare log entry
@@ -2357,14 +2418,17 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 				  CDentry *dn, CDentry *straydn,
 				  version_t dnpv, version_t dirpv) 
 {
-  dout(10) << "_unlink_local_finish " << *dn << endl;
+  dout(10) << "_unlink_local_finish " << *dn << dendl;
 
   // unlink main dentry
   CInode *in = dn->inode;
   dn->dir->unlink_inode(dn);
 
   // relink as stray?  (i.e. was primary link?)
-  if (straydn) straydn->dir->link_primary_inode(straydn, in);  
+  if (straydn) {
+    dout(20) << " straydn is " << *straydn << dendl;
+    straydn->dir->link_primary_inode(straydn, in);
+  }
 
   // nlink--, dirty old dentry
   in->pop_and_dirty_projected_inode(mdr->ls);
@@ -2377,7 +2441,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
        it++) {
-    dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << endl;
+    dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
     if (straydn) {
       unlink->strayin = straydn->dir->inode->replicate_to(it->first);
@@ -2426,12 +2490,12 @@ public:
 
 void Server::_unlink_remote(MDRequest *mdr, CDentry *dn) 
 {
-  dout(10) << "_unlink_remote " << *dn << " " << *dn->inode << endl;
+  dout(10) << "_unlink_remote " << *dn << " " << *dn->inode << dendl;
 
   // 1. send LinkPrepare to dest (journal nlink-- prepare)
   int inauth = dn->inode->authority().first;
   if (mdr->witnessed.count(inauth) == 0) {
-    dout(10) << " inode auth must prepare nlink--" << endl;
+    dout(10) << " inode auth must prepare nlink--" << dendl;
 
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNLINKPREP);
     dn->inode->set_object_info(req->get_object_info());
@@ -2442,7 +2506,7 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
     mdr->waiting_on_slave.insert(inauth);
     return;
   }
-  dout(10) << " inode auth has prepared nlink--" << endl;
+  dout(10) << " inode auth has prepared nlink--" << dendl;
 
   // ok, let's do it.
   // prepare log entry
@@ -2475,7 +2539,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
 				   CDentry *dn, 
 				   version_t dnpv, version_t dirpv) 
 {
-  dout(10) << "_unlink_remote_finish " << *dn << endl;
+  dout(10) << "_unlink_remote_finish " << *dn << dendl;
 
   // unlink main dentry
   dn->dir->unlink_inode(dn);
@@ -2488,7 +2552,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
        it++) {
-    dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << endl;
+    dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
     mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
   }
@@ -2520,7 +2584,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
  */
 bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
 {
-  dout(10) << "_verify_rmdir " << *in << endl;
+  dout(10) << "_verify_rmdir " << *in << dendl;
   assert(in->is_auth());
 
   list<frag_t> frags;
@@ -2536,21 +2600,21 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
     if (dir->is_auth() &&
 	dir->get_size() == 0 && 
 	!dir->is_complete()) {
-      dout(7) << "_verify_rmdir fetching incomplete dir " << *dir << endl;
+      dout(7) << "_verify_rmdir fetching incomplete dir " << *dir << dendl;
       dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
       return false;
     }
     
     // does the frag _look_ empty?
     if (dir->get_size()) {
-      dout(10) << "_verify_rmdir still " << dir->get_size() << " items in frag " << *dir << endl;
+      dout(10) << "_verify_rmdir still " << dir->get_size() << " items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return false;
     }
     
     // not dir auth?
     if (!dir->is_auth()) {
-      dout(10) << "_verify_rmdir not auth for " << *dir << ", FIXME BUG" << endl;
+      dout(10) << "_verify_rmdir not auth for " << *dir << ", FIXME BUG" << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return false;
     }
@@ -2562,7 +2626,7 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
       // export sanity check
       if (!in->is_auth()) {
         // i should be exporting this now/soon, since the dir is empty.
-        dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
+        dout(7) << "handle_client_rmdir dir is auth, but not inode." << dendl;
 	mdcache->migrator->export_empty_import(in->dir);          
         in->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mds, req, diri));
         return;
@@ -2599,7 +2663,7 @@ public:
 void Server::handle_client_rename(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  dout(7) << "handle_client_rename " << *req << endl;
+  dout(7) << "handle_client_rename " << *req << dendl;
 
   // traverse to dest dir (not dest)
   //  we do this FIRST, because the rename should occur on the 
@@ -2609,7 +2673,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   vector<CDentry*> desttrace;
   CDir *destdir = traverse_to_auth_dir(mdr, desttrace, destpath);
   if (!destdir) return;  // fw or error out
-  dout(10) << "dest will be " << destname << " in " << *destdir << endl;
+  dout(10) << "dest will be " << destname << " in " << *destdir << dendl;
   assert(destdir->is_auth());
 
   // traverse to src
@@ -2625,14 +2689,14 @@ void Server::handle_client_rename(MDRequest *mdr)
     return;
   }
   CDentry *srcdn = srctrace[srctrace.size()-1];
-  dout(10) << " srcdn " << *srcdn << endl;
+  dout(10) << " srcdn " << *srcdn << dendl;
   CInode *srci = mdcache->get_dentry_inode(srcdn, mdr);
-  dout(10) << " srci " << *srci << endl;
+  dout(10) << " srci " << *srci << dendl;
 
   // -- some sanity checks --
   // src == dest?
   if (srcdn->get_dir() == destdir && srcdn->name == destname) {
-    dout(7) << "rename src=dest, noop" << endl;
+    dout(7) << "rename src=dest, noop" << dendl;
     reply_request(mdr, 0);
     return;
   }
@@ -2642,7 +2706,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry *pdn = destdir->inode->parent;
   while (pdn) {
     if (pdn == srcdn) {
-      dout(7) << "cannot rename item to be a child of itself" << endl;
+      dout(7) << "cannot rename item to be a child of itself" << dendl;
       reply_request(mdr, -EINVAL);
       return;
     }
@@ -2659,10 +2723,10 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   CInode *oldin = 0;
   if (destdn && !destdn->is_null()) {
-    //dout(10) << "dest dn exists " << *destdn << endl;
+    //dout(10) << "dest dn exists " << *destdn << dendl;
     oldin = mdcache->get_dentry_inode(destdn, mdr);
     if (!oldin) return;
-    dout(10) << " oldin " << *oldin << endl;
+    dout(10) << " oldin " << *oldin << dendl;
     
     // mv /some/thing /to/some/existing_other_thing
     if (oldin->is_dir() && !srci->is_dir()) {
@@ -2684,7 +2748,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (!destdn) return;
   }
 
-  dout(10) << " destdn " << *destdn << endl;
+  dout(10) << " destdn " << *destdn << dendl;
 
 
   // -- locks --
@@ -2718,7 +2782,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (srcdn->is_primary() && 
       !srcdn->is_auth() && 
       srci->is_dir()) {
-    dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << endl;
+    dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << dendl;
     mdr->set_stickydirs(srci);
 
     list<frag_t> frags;
@@ -2728,7 +2792,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 	 ++p) {
       CDir *dir = srci->get_dirfrag(*p);
       if (!dir) {
-	dout(10) << " opening " << *dir << endl;
+	dout(10) << " opening " << *dir << dendl;
 	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
@@ -2743,7 +2807,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry *straydn = 0;
   if (destdn->is_primary()) {
     straydn = mdcache->get_or_create_stray_dentry(destdn->inode);
-    dout(10) << "straydn is " << *straydn << endl;
+    mdr->pin(straydn);
+    dout(10) << "straydn is " << *straydn << dendl;
   }
 
   // -- prepare witnesses --
@@ -2767,9 +2832,9 @@ void Server::handle_client_rename(MDRequest *mdr)
        p != witnesses.end();
        ++p) {
     if (mdr->witnessed.count(*p)) {
-      dout(10) << " already witnessed by mds" << *p << endl;
+      dout(10) << " already witnessed by mds" << *p << dendl;
     } else {
-      dout(10) << " not yet witnessed by mds" << *p << ", sending prepare" << endl;
+      dout(10) << " not yet witnessed by mds" << *p << ", sending prepare" << dendl;
       MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREP);
       srcdn->make_path(req->srcdnpath);
       destdn->make_path(req->destdnpath);
@@ -2802,7 +2867,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (mdr->inode_import.length() == 0) {
       // get inode
       int auth = srcdn->authority().first;
-      dout(10) << " requesting inode export from srcdn auth mds" << auth << endl;
+      dout(10) << " requesting inode export from srcdn auth mds" << auth << dendl;
       MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODE);
       srcdn->make_path(req->srcdnpath);
       mds->send_message_mds(req, auth, MDS_PORT_SERVER);
@@ -2811,7 +2876,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       mdr->waiting_on_slave.insert(auth);
       return;
     } else {
-      dout(10) << " already (just!) got inode export from srcdn auth" << endl;
+      dout(10) << " already (just!) got inode export from srcdn auth" << dendl;
       /*int off = 0;
       mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
 					     srcdn->authority().first);
@@ -2830,7 +2895,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (srcdn->is_primary() && srcdn->inode->is_anchored() &&
 	srcdn->dir != destdn->dir &&
 	!mdr->src_reanchor_atid) {
-      dout(10) << "reanchoring src->dst " << *srcdn->inode << endl;
+      dout(10) << "reanchoring src->dst " << *srcdn->inode << dendl;
       vector<Anchor> trace;
       destdn->make_anchor_trace(trace, srcdn->inode);
       
@@ -2841,7 +2906,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (destdn->is_primary() &&
 	destdn->inode->is_anchored() &&
 	!mdr->dst_reanchor_atid) {
-      dout(10) << "reanchoring dst->stray " << *destdn->inode << endl;
+      dout(10) << "reanchoring dst->stray " << *destdn->inode << dendl;
 
       assert(straydn);
       vector<Anchor> trace;
@@ -2879,7 +2944,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_rename_finish " << *mdr << endl;
+  dout(10) << "_rename_finish " << *mdr << dendl;
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
@@ -2913,7 +2978,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, 
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << endl;
+  dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
 
   // primary+remote link merge?
   bool linkmerge = (srcdn->inode == destdn->inode &&
@@ -2925,11 +2990,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdr->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
   }
 
-  inode_t *ji; // journaled inode getting nlink--
+  inode_t *ji = 0;     // journaled inode getting nlink--
   version_t ipv = 0;   // it's version
   
   if (linkmerge) {
-    dout(10) << "will merge remote+primary links" << endl;
+    dout(10) << "will merge remote+primary links" << dendl;
 
     // destdn -> primary
     metablob->add_dir_context(destdn->dir);
@@ -2962,7 +3027,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (destdn->inode->is_auth())
 	ipv = mdr->pvmap[destdn->inode] = destdn->inode->pre_dirty();
       ji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
-      dout(10) << "remote targeti (nlink--) is " << *destdn->inode << endl;
+      dout(10) << "remote targeti (nlink--) is " << *destdn->inode << dendl;
     }
     else {
       assert(destdn->is_null());
@@ -2971,7 +3036,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     // add dest dentry
     metablob->add_dir_context(destdn->dir);
     if (srcdn->is_primary()) {
-      dout(10) << "src is a primary dentry" << endl;
+      dout(10) << "src is a primary dentry" << dendl;
       if (destdn->is_auth()) {
 	version_t siv;
 	if (srcdn->is_auth())
@@ -2984,7 +3049,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     } else {
       assert(srcdn->is_remote());
-      dout(10) << "src is a remote dentry" << endl;
+      dout(10) << "src is a remote dentry" << dendl;
       if (destdn->is_auth())
 	mdr->pvmap[destdn] = destdn->pre_dirty();
       metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
@@ -3026,8 +3091,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 
 void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_rename_apply " << *mdr << " " << *srcdn << " " << *destdn << endl;
-  dout(10) << " pvs " << mdr->pvmap << endl;
+  dout(10) << "_rename_apply " << *mdr << " " << *srcdn << " " << *destdn << dendl;
+  dout(10) << " pvs " << mdr->pvmap << dendl;
 
   CInode *oldin = destdn->inode;
   
@@ -3044,7 +3109,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   if (linkmerge) {
     if (destdn->is_primary()) {
-      dout(10) << "merging remote onto primary link" << endl;
+      dout(10) << "merging remote onto primary link" << dendl;
 
       // nlink-- in place
       destdn->inode->inode.nlink--;
@@ -3057,7 +3122,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       if (srcdn->is_auth())
 	srcdn->mark_dirty(mdr->pvmap[srcdn], mdr->ls);
     } else {
-      dout(10) << "merging primary onto remote link" << endl;
+      dout(10) << "merging primary onto remote link" << dendl;
       assert(srcdn->is_primary());
       
       // move inode to dest
@@ -3082,7 +3147,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->dir->unlink_inode(destdn);
 
     if (straydn) {
-      dout(10) << "straydn is " << *straydn << endl;
+      dout(10) << "straydn is " << *straydn << dendl;
 
       // relink oldin to stray dir.  destdn was primary.
       assert(oldin);
@@ -3093,14 +3158,14 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       oldin->inode.nlink--;
       oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
-	oldin->mark_dirty(mdr->pvmap[straydn], mdr->ls);
+	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
     else if (oldin) {
       // nlink-- remote.  destdn was remote.
       oldin->inode.nlink--;
       oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
-	oldin->mark_dirty(mdr->pvmap[oldin], mdr->ls);
+	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
     
     CInode *in = srcdn->inode;
@@ -3109,6 +3174,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
+      destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->pvmap[destdn], mdr->ls);
     } else {
@@ -3140,7 +3206,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     mdcache->adjust_subtree_after_rename(destdn->inode, srcdn->dir);
 
   // removing a new dn?
-  srcdn->dir->try_remove_unlinked_dn(srcdn);
+  if (srcdn->is_auth())
+    srcdn->dir->try_remove_unlinked_dn(srcdn);
 }
 
 
@@ -3179,11 +3246,11 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << "handle_slave_rename_prep " << *mdr 
 	   << " " << mdr->slave_request->srcdnpath 
 	   << " to " << mdr->slave_request->destdnpath
-	   << endl;
+	   << dendl;
 
   // discover destdn
   filepath destpath(mdr->slave_request->destdnpath);
-  dout(10) << " dest " << destpath << endl;
+  dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, mdr->slave_request, 
 				 0, destpath, trace, false,
@@ -3192,13 +3259,13 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   assert(r == 0);  // we shouldn't get an error here!
       
   CDentry *destdn = trace[trace.size()-1];
-  dout(10) << " destdn " << *destdn << endl;
+  dout(10) << " destdn " << *destdn << dendl;
   mdr->pin(destdn);
   
       
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
-  dout(10) << " src " << srcpath << endl;
+  dout(10) << " src " << srcpath << dendl;
   r = mdcache->path_traverse(mdr, mdr->slave_request,
 			     0, srcpath, trace, false,  
 			     MDS_TRAVERSE_DISCOVERXLOCK);
@@ -3206,7 +3273,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   assert(r == 0);  // we shouldn't get an error here!
       
   CDentry *srcdn = trace[trace.size()-1];
-  dout(10) << " srcdn " << *srcdn << endl;
+  dout(10) << " srcdn " << *srcdn << dendl;
   mdr->pin(srcdn);
   assert(srcdn->inode);
   mdr->pin(srcdn->inode);
@@ -3234,7 +3301,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
     // don't journal.
-    dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << endl;
+    dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << dendl;
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 }
@@ -3242,7 +3309,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 void Server::_logged_slave_rename(MDRequest *mdr, 
 				  CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_logged_slave_rename " << *mdr << endl;
+  dout(10) << "_logged_slave_rename " << *mdr << dendl;
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
@@ -3273,7 +3340,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 void Server::_commit_slave_rename(MDRequest *mdr, int r,
 				  CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_commit_slave_rename " << *mdr << " r=" << r << endl;
+  dout(10) << "_commit_slave_rename " << *mdr << " r=" << r << dendl;
 
   ESlaveUpdate *le;
   if (r == 0) {
@@ -3294,7 +3361,7 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
   dout(10) << "handle_slave_rename_prep_ack " << *mdr 
 	   << " witnessed by " << m->get_source()
-	   << " " << *m << endl;
+	   << " " << *m << dendl;
   int from = m->get_source().num();
 
   // note slave
@@ -3307,7 +3374,7 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 
   // add extra witnesses?
   if (!m->srcdn_replicas.empty()) {
-    dout(10) << " extra witnesses (srcdn replicas) are " << m->srcdn_replicas << endl;
+    dout(10) << " extra witnesses (srcdn replicas) are " << m->srcdn_replicas << dendl;
     mdr->extra_witnesses = m->srcdn_replicas;
     mdr->extra_witnesses.erase(mds->get_nodeid());  // not me!
   }
@@ -3319,14 +3386,14 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
   else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
 }
 
 
 
 void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 {
-  dout(10) << "handle_slave_rename_get_inode " << *mdr << endl;
+  dout(10) << "handle_slave_rename_get_inode " << *mdr << dendl;
 
   assert(mdr->srcdn);
   assert(mdr->srcdn->is_auth());
@@ -3334,7 +3401,7 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 
   // reply
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODEACK);
-  dout(10) << " replying with inode export info " << *mdr->srcdn->inode << endl;
+  dout(10) << " replying with inode export info " << *mdr->srcdn->inode << dendl;
 
   map<int,entity_inst_t> exported_client_map;
   bufferlist inodebl;
@@ -3358,11 +3425,11 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
   dout(10) << "handle_slave_rename_get_inode_ack " << *mdr 
-	   << " " << *m << endl;
+	   << " " << *m << dendl;
   int from = m->get_source().num();
 
   assert(m->inode_export.length());
-  dout(10) << " got inode export, saving in " << *mdr << endl;
+  dout(10) << " got inode export, saving in " << *mdr << dendl;
   mdr->inode_import.claim(m->inode_export);
   mdr->inode_import_v = m->inode_export_v;
 
@@ -3372,7 +3439,7 @@ void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest 
   if (mdr->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
   else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << endl;
+    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
 }
 
 
@@ -3448,7 +3515,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   
   // already small enough?
-  if (cur->inode.size >= req->args.truncate.length) {
+  if (cur->inode.size <= req->args.truncate.length) {
     reply_request(mdr, 0);
     return;
   }
@@ -3489,14 +3556,14 @@ void Server::handle_client_open(MDRequest *mdr)
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
 	   << ", need_auth = " << need_auth
-	   << endl;
+	   << dendl;
 
   CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
   if (!cur) return;
   
   // regular file?
   if ((cur->inode.mode & INODE_TYPE_MASK) != INODE_MODE_FILE) {
-    dout(7) << "not a regular file " << *cur << endl;
+    dout(7) << "not a regular file " << *cur << dendl;
     reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
     return;
   }
@@ -3538,7 +3605,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   
   dout(12) << "_do_open issuing caps " << cap_string(cap->pending())
 	   << " for " << req->get_source()
-	   << " on " << *cur << endl;
+	   << " on " << *cur << dendl;
   
   // hit pop
   mdr->now = g_clock.now();
@@ -3546,7 +3613,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
       cmode == FILE_MODE_W) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD);
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
+			     mdr->client_request->get_client_inst().name.num());
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -3565,7 +3633,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 
 void Server::queue_journal_open(CInode *in)
 {
-  dout(10) << "queue_journal_open on " << *in << endl;
+  dout(10) << "queue_journal_open on " << *in << dendl;
 
   if (journal_open_queue.count(in) == 0) {
     // pin so our pointer stays valid
@@ -3579,7 +3647,7 @@ void Server::queue_journal_open(CInode *in)
 
 void Server::journal_opens()
 {
-  dout(10) << "journal_opens " << journal_open_queue.size() << " inodes" << endl;
+  dout(10) << "journal_opens " << journal_open_queue.size() << " inodes" << dendl;
   if (journal_open_queue.empty()) return;
 
   EOpen *le = 0;
@@ -3730,7 +3798,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  dout(7) << "open w/ O_CREAT on " << req->get_filepath() << endl;
+  dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
   
   bool excl = (req->args.open.flags & O_EXCL);
   CDentry *dn = rdlock_path_xlock_dentry(mdr, !excl, false);
@@ -3739,7 +3807,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (!dn->is_null()) {
     // it existed.  
     if (req->args.open.flags & O_EXCL) {
-      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << endl;
+      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
       reply_request(mdr, -EEXIST, dn->get_dir()->get_inode());
       return;
     } 

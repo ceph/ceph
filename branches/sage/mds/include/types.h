@@ -193,7 +193,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const inodeno_t& x ) const
     {
-      static hash<uint64_t> H;
+      static rjhash<uint64_t> H;
       return H(x.val);
     }
   };

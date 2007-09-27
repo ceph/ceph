@@ -19,9 +19,9 @@
 #include "messages/MMonPaxos.h"
 
 #include "config.h"
-#undef dout
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) cerr << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
+
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_dout << dbeginl << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
 
 
 void Paxos::init()
@@ -31,7 +31,7 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
 
-  dout(10) << "init" << endl;
+  dout(10) << "init" << dendl;
 }
 
 // ---------------------------------
@@ -57,14 +57,14 @@ void Paxos::collect(version_t oldpn)
     mon->store->get_bl_sn(uncommitted_value, machine_name, last_committed+1);
     dout(10) << "learned uncommitted " << (last_committed+1)
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
-	     << endl;
+	     << dendl;
   }
 
   // pick new pn
   accepted_pn = get_new_proposal_number(MAX(accepted_pn, oldpn));
   accepted_pn_from = last_committed;
   num_last = 1;
-  dout(10) << "collect with pn " << accepted_pn << endl;
+  dout(10) << "collect with pn " << accepted_pn << dendl;
 
   // send collect
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -84,7 +84,7 @@ void Paxos::collect(version_t oldpn)
 // peon
 void Paxos::handle_collect(MMonPaxos *collect)
 {
-  dout(10) << "handle_collect " << *collect << endl;
+  dout(10) << "handle_collect " << *collect << dendl;
 
   assert(mon->is_peon()); // mon epoch filter should catch strays
 
@@ -102,7 +102,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
     mon->store->get_bl_sn(bl, machine_name, last_committed+1);
     assert(bl.length() > 0);
     dout(10) << " sharing our accepted but uncommitted value for " << last_committed+1 
-	     << " (" << bl.length() << " bytes)" << endl;
+	     << " (" << bl.length() << " bytes)" << dendl;
     last->values[last_committed+1] = bl;
     last->uncommitted_pn = accepted_pn;
   }
@@ -112,13 +112,13 @@ void Paxos::handle_collect(MMonPaxos *collect)
     // ok, accept it
     accepted_pn = collect->pn;
     accepted_pn_from = collect->pn_from;
-    dout(10) << "accepting pn " << accepted_pn << " from " << accepted_pn_from << endl;
+    dout(10) << "accepting pn " << accepted_pn << " from " << accepted_pn_from << dendl;
     mon->store->put_int(accepted_pn, machine_name, "accepted_pn");
   } else {
     // don't accept!
     dout(10) << "NOT accepting pn " << collect->pn << " from " << collect->pn_from 
 	     << ", we already accepted " << accepted_pn << " from " << accepted_pn_from 
-	     << endl;
+	     << dendl;
   }
   last->pn = accepted_pn;
   last->pn_from = accepted_pn_from;
@@ -130,7 +130,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
     if (mon->store->exists_bl_sn(machine_name, v)) {
       mon->store->get_bl_sn(last->values[v], machine_name, v);
       dout(10) << " sharing " << v << " (" 
-	       << last->values[v].length() << " bytes)" << endl;
+	       << last->values[v].length() << " bytes)" << dendl;
     }
   }
 
@@ -143,10 +143,10 @@ void Paxos::handle_collect(MMonPaxos *collect)
 // leader
 void Paxos::handle_last(MMonPaxos *last)
 {
-  dout(10) << "handle_last " << *last << endl;
+  dout(10) << "handle_last " << *last << dendl;
 
   if (!mon->is_leader()) {
-    dout(10) << "not leader, dropping" << endl;
+    dout(10) << "not leader, dropping" << dendl;
     delete last;
     return;
   }
@@ -154,14 +154,14 @@ void Paxos::handle_last(MMonPaxos *last)
   // share committed values?
   if (last->last_committed < last_committed) {
     // share committed values
-    dout(10) << "sending commit to " << last->get_source() << endl;
+    dout(10) << "sending commit to " << last->get_source() << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     for (version_t v = last->last_committed+1;
 	 v <= last_committed;
 	 v++) {
       mon->store->get_bl_sn(commit->values[v], machine_name, v);
       dout(10) << " sharing " << v << " (" 
-	       << commit->values[v].length() << " bytes)" << endl;
+	       << commit->values[v].length() << " bytes)" << dendl;
     }
     commit->last_committed = last_committed;
     mon->messenger->send_message(commit, last->get_source_inst());
@@ -174,23 +174,23 @@ void Paxos::handle_last(MMonPaxos *last)
 	 v++) {
       mon->store->put_bl_sn(last->values[v], machine_name, v);
       dout(10) << "committing " << v << " " 
-	       << last->values[v].length() << " bytes" << endl;
+	       << last->values[v].length() << " bytes" << dendl;
     }
     last_committed = last->last_committed;
     mon->store->put_int(last_committed, machine_name, "last_committed");
-    dout(10) << "last_committed now " << last_committed << endl;
+    dout(10) << "last_committed now " << last_committed << dendl;
   }
       
   // do they accept your pn?
   if (last->pn > accepted_pn) {
     // no, try again.
-    dout(10) << " they had a higher pn than us, picking a new one." << endl;
+    dout(10) << " they had a higher pn than us, picking a new one." << dendl;
     collect(last->pn);
   } else {
     // yes, they accepted our pn.  great.
     num_last++;
     dout(10) << " they accepted our pn, we now have " 
-	     << num_last << " peons" << endl;
+	     << num_last << " peons" << dendl;
 
     // did this person send back an accepted but uncommitted value?
     if (last->uncommitted_pn &&
@@ -201,7 +201,7 @@ void Paxos::handle_last(MMonPaxos *last)
       dout(10) << "we learned an uncommitted value for " << uncommitted_v 
 	       << " pn " << uncommitted_pn
 	       << " " << uncommitted_value.length() << " bytes"
-	       << endl;
+	       << dendl;
     }
     
     // is that everyone?
@@ -212,11 +212,11 @@ void Paxos::handle_last(MMonPaxos *last)
       // did we learn an old value?
       if (uncommitted_v == last_committed+1 &&
 	  uncommitted_value.length()) {
-	dout(10) << "that's everyone.  begin on old learned value" << endl;
+	dout(10) << "that's everyone.  begin on old learned value" << dendl;
 	begin(uncommitted_value);
       } else {
 	// active!
-	dout(10) << "that's everyone.  active!" << endl;
+	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
 	// wake people up
@@ -236,7 +236,7 @@ void Paxos::begin(bufferlist& v)
 {
   dout(10) << "begin for " << last_committed+1 << " " 
 	   << v.length() << " bytes"
-	   << endl;
+	   << dendl;
 
   assert(mon->is_leader());
   assert(is_active());
@@ -272,7 +272,7 @@ void Paxos::begin(bufferlist& v)
        ++p) {
     if (*p == whoami) continue;
     
-    dout(10) << " sending begin to mon" << *p << endl;
+    dout(10) << " sending begin to mon" << *p << dendl;
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id);
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
@@ -289,11 +289,11 @@ void Paxos::begin(bufferlist& v)
 // peon
 void Paxos::handle_begin(MMonPaxos *begin)
 {
-  dout(10) << "handle_begin " << *begin << endl;
+  dout(10) << "handle_begin " << *begin << dendl;
 
   // can we accept this?
   if (begin->pn < accepted_pn) {
-    dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << endl;
+    dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
     delete begin;
     return;
   }
@@ -306,7 +306,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
 
   // yes.
   version_t v = last_committed+1;
-  dout(10) << "accepting value for " << v << " pn " << accepted_pn << endl;
+  dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
   mon->store->put_bl_sn(begin->values[v], machine_name, v);
   
   // reply
@@ -321,18 +321,18 @@ void Paxos::handle_begin(MMonPaxos *begin)
 // leader
 void Paxos::handle_accept(MMonPaxos *accept)
 {
-  dout(10) << "handle_accept " << *accept << endl;
+  dout(10) << "handle_accept " << *accept << dendl;
   int from = accept->get_source().num();
 
   if (accept->pn != accepted_pn) {
     // we accepted a higher pn, from some other leader
-    dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << endl;
+    dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
     delete accept;
     return;
   }
   if (last_committed > 0 &&
       accept->last_committed < last_committed-1) {
-    dout(10) << " this is from an old round, ignoring" << endl;
+    dout(10) << " this is from an old round, ignoring" << dendl;
     delete accept;
     return;
   }
@@ -342,19 +342,19 @@ void Paxos::handle_accept(MMonPaxos *accept)
   assert(state == STATE_UPDATING);
   assert(accepted.count(from) == 0);
   accepted.insert(from);
-  dout(10) << " now " << accepted << " have accepted" << endl;
+  dout(10) << " now " << accepted << " have accepted" << dendl;
 
   // new majority?
   if (accepted.size() == (unsigned)mon->monmap->num_mon/2+1) {
     // yay, commit!
     // note: this may happen before the lease is reextended (below)
-    dout(10) << " got majority, committing" << endl;
+    dout(10) << " got majority, committing" << dendl;
     commit();
   }
 
   // done?
   if (accepted == mon->get_quorum()) {
-    dout(10) << " got quorum, done with update" << endl;
+    dout(10) << " got quorum, done with update" << dendl;
     // cancel timeout event
     mon->timer.cancel_event(accept_timeout_event);
     accept_timeout_event = 0;
@@ -373,7 +373,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
 
 void Paxos::accept_timeout()
 {
-  dout(5) << "accept timeout, calling fresh election" << endl;
+  dout(5) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
   assert(mon->is_leader());
   assert(is_updating());
@@ -383,7 +383,7 @@ void Paxos::accept_timeout()
 
 void Paxos::commit()
 {
-  dout(10) << "commit " << last_committed+1 << endl;
+  dout(10) << "commit " << last_committed+1 << dendl;
 
   // commit locally
   last_committed++;
@@ -395,7 +395,7 @@ void Paxos::commit()
        ++p) {
     if (*p == whoami) continue;
 
-    dout(10) << " sending commit to mon" << *p << endl;
+    dout(10) << " sending commit to mon" << *p << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
@@ -410,10 +410,10 @@ void Paxos::commit()
 
 void Paxos::handle_commit(MMonPaxos *commit)
 {
-  dout(10) << "handle_commit on " << commit->last_committed << endl;
+  dout(10) << "handle_commit on " << commit->last_committed << dendl;
 
   if (!mon->is_peon()) {
-    dout(10) << "not a peon, dropping" << endl;
+    dout(10) << "not a peon, dropping" << dendl;
     assert(0);
     delete commit;
     return;
@@ -425,7 +425,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
        ++p) {
     assert(p->first == last_committed+1);
     last_committed = p->first;
-    dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << endl;
+    dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
     mon->store->put_bl_sn(p->second, machine_name, last_committed);
   }
   mon->store->put_int(last_committed, machine_name, "last_committed");
@@ -443,7 +443,7 @@ void Paxos::extend_lease()
   acked_lease.clear();
   acked_lease.insert(whoami);
 
-  dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_expire << ")" << endl;
+  dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_expire << ")" << dendl;
 
   // bcast
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -478,7 +478,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   // sanity
   if (!mon->is_peon() ||
       last_committed != lease->last_committed) {
-    dout(10) << "handle_lease i'm not a peon, or they're not the leader, or the last_committed doesn't match, dropping" << endl;
+    dout(10) << "handle_lease i'm not a peon, or they're not the leader, or the last_committed doesn't match, dropping" << dendl;
     delete lease;
     return;
   }
@@ -490,7 +490,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   state = STATE_ACTIVE;
   
   dout(10) << "handle_lease on " << lease->last_committed
-	   << " now " << lease_expire << endl;
+	   << " now " << lease_expire << dendl;
 
   // ack
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
@@ -517,7 +517,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
-    dout(10) << "handle_lease_ack from " << ack->get_source() << " -- stray (probably since revoked)" << endl;
+    dout(10) << "handle_lease_ack from " << ack->get_source() << " -- stray (probably since revoked)" << dendl;
   }
   else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
@@ -525,18 +525,18 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     if (acked_lease == mon->get_quorum()) {
       // yay!
       dout(10) << "handle_lease_ack from " << ack->get_source() 
-	       << " -- got everyone" << endl;
+	       << " -- got everyone" << dendl;
       mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
     } else {
       dout(10) << "handle_lease_ack from " << ack->get_source() 
 	       << " -- still need "
 	       << mon->get_quorum().size() - acked_lease.size()
-	       << " more" << endl;
+	       << " more" << dendl;
     }
   } else {
     dout(10) << "handle_lease_ack from " << ack->get_source() 
-	     << " dup (lagging!), ignoring" << endl;
+	     << " dup (lagging!), ignoring" << dendl;
   }
   
   delete ack;
@@ -544,7 +544,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 
 void Paxos::lease_ack_timeout()
 {
-  dout(5) << "lease_ack_timeout -- calling new election" << endl;
+  dout(5) << "lease_ack_timeout -- calling new election" << dendl;
   assert(mon->is_leader());
   assert(is_active());
 
@@ -555,7 +555,7 @@ void Paxos::lease_ack_timeout()
 
 void Paxos::lease_timeout()
 {
-  dout(5) << "lease_timeout -- calling new election" << endl;
+  dout(5) << "lease_timeout -- calling new election" << dendl;
   assert(mon->is_peon());
 
   lease_timeout_event = 0;
@@ -587,7 +587,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   // write
   mon->store->put_int(last_pn, machine_name, "last_pn");
 
-  dout(10) << "get_new_proposal_number = " << last_pn << endl;
+  dout(10) << "get_new_proposal_number = " << last_pn << dendl;
   return last_pn;
 }
 
@@ -621,7 +621,7 @@ void Paxos::leader_init()
   cancel_events();
   state = STATE_RECOVERING;
   lease_expire = utime_t();
-  dout(10) << "leader_init -- starting paxos recovery" << endl;
+  dout(10) << "leader_init -- starting paxos recovery" << dendl;
   collect(0);
 }
 
@@ -630,7 +630,7 @@ void Paxos::peon_init()
   cancel_events();
   state = STATE_RECOVERING;
   lease_expire = utime_t();
-  dout(10) << "peon_init -- i am a peon" << endl;
+  dout(10) << "peon_init -- i am a peon" << dendl;
 
   // no chance to write now!
   finish_contexts(waiting_for_writeable, -1);
@@ -639,7 +639,7 @@ void Paxos::peon_init()
 
 void Paxos::election_starting()
 {
-  dout(10) << "election_starting -- canceling timeouts" << endl;
+  dout(10) << "election_starting -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
 
@@ -651,7 +651,7 @@ void Paxos::dispatch(Message *m)
 {
   // election in progress?
   if (mon->is_starting()) {
-    dout(5) << "election in progress, dropping " << *m << endl;
+    dout(5) << "election in progress, dropping " << *m << dendl;
     delete m;
     return;    
   }
@@ -711,7 +711,7 @@ void Paxos::dispatch(Message *m)
 
 bool Paxos::is_readable()
 {
-  //dout(15) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << endl;
+  //dout(15) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << dendl;
   return 
     (mon->is_peon() || mon->is_leader()) &&
     is_active() &&
@@ -759,7 +759,7 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
   // writeable?
   if (!is_writeable()) {
     dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes"
-	    << " -- not writeable" << endl;
+	    << " -- not writeable" << dendl;
     if (oncommit) {
       oncommit->finish(-1);
       delete oncommit;
@@ -774,7 +774,7 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
   cancel_events();
 
   // ok!
-  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes" << endl;
+  dout(5) << "propose_new_value " << last_committed+1 << " " << bl.length() << " bytes" << dendl;
   if (oncommit)
     waiting_for_commit.push_back(oncommit);
   begin(bl);

@@ -19,15 +19,15 @@
 #include "msg/Messenger.h"
 
 #include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cout << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) cerr << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) *_derr << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
 
 
 
 void Journaler::reset()
 {
-  dout(1) << "reset to blank journal" << endl;
+  dout(1) << "reset to blank journal" << dendl;
   state = STATE_ACTIVE;
   write_pos = flush_pos = ack_pos =
     read_pos = requested_pos = received_pos =
@@ -74,11 +74,11 @@ void Journaler::recover(Context *onread)
     waitfor_recover.push_back(onread);
   
   if (state != STATE_UNDEF) {
-    dout(1) << "recover - already recoverying" << endl;
+    dout(1) << "recover - already recoverying" << dendl;
     return;
   }
 
-  dout(1) << "read_head" << endl;
+  dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
   filer.read(inode, 0, sizeof(Header), &fin->bl, fin);
@@ -89,7 +89,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   assert(state == STATE_READHEAD);
 
   if (bl.length() == 0) {
-    dout(1) << "_finish_read_head r=" << r << " read 0 bytes, assuming empty log" << endl;    
+    dout(1) << "_finish_read_head r=" << r << " read 0 bytes, assuming empty log" << dendl;    
     state = STATE_ACTIVE;
     list<Context*> ls;
     ls.swap(waitfor_recover);
@@ -107,7 +107,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
-  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << endl;
+  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
 
   // probe the log
   state = STATE_PROBING;
@@ -123,14 +123,14 @@ void Journaler::_finish_probe_end(int r, off_t end)
     end = write_pos;
     dout(1) << "_finish_probe_end write_pos = " << end 
 	    << " (header had " << write_pos << "). log was empty. recovered."
-	    << endl;
+	    << dendl;
     assert(0); // hrm.
   } else {
     assert(end >= write_pos);
     assert(r >= 0);
     dout(1) << "_finish_probe_end write_pos = " << end 
 	    << " (header had " << write_pos << "). recovered."
-	    << endl;
+	    << dendl;
   }
 
   write_pos = flush_pos = ack_pos = end;
@@ -162,7 +162,7 @@ void Journaler::write_head(Context *oncommit)
   last_written.expire_pos = expire_pos;
   last_written.read_pos = read_pos;
   last_written.write_pos = ack_pos; //write_pos;
-  dout(10) << "write_head " << last_written << endl;
+  dout(10) << "write_head " << last_written << dendl;
   
   last_wrote_head = g_clock.now();
 
@@ -175,7 +175,7 @@ void Journaler::write_head(Context *oncommit)
 
 void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 {
-  dout(10) << "_finish_write_head " << wrote << endl;
+  dout(10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
   if (oncommit) {
     oncommit->finish(0);
@@ -208,8 +208,7 @@ void Journaler::_finish_flush(int r, off_t start)
   if (logger) {
     utime_t lat = g_clock.now();
     lat -= pending_flush[start];
-    logger->finc("lsum", lat);
-    logger->inc("lnum");
+    logger->favg("jlat", lat);
   }
 
   pending_flush.erase(start);
@@ -223,7 +222,7 @@ void Journaler::_finish_flush(int r, off_t start)
   dout(10) << "_finish_flush from " << start
 	   << ", pending_flush now " << pending_flush 
 	   << ", write positions now " << write_pos << "/" << flush_pos << "/" << ack_pos
-	   << endl;
+	   << dendl;
 
   // kick waiters <= ack_pos
   while (!waitfor_flush.empty()) {
@@ -257,18 +256,18 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
       // now flush.
       flush();
       
-      dout(12) << "append_entry skipped " << (write_pos-owp) << " bytes to " << write_pos << " to avoid spanning stripe boundary" << endl;
+      dout(12) << "append_entry skipped " << (write_pos-owp) << " bytes to " << write_pos << " to avoid spanning stripe boundary" << dendl;
     }
   }
 	
-  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << endl;
+  dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << dendl;
   
   // cache?
   //  NOTE: this is a dumb thing to do; this is used for a benchmarking
   //   purposes only.
   if (g_conf.journaler_cache &&
       write_pos == read_pos + read_buf.length()) {
-    dout(10) << "append_entry caching in read_buf too" << endl;
+    dout(10) << "append_entry caching in read_buf too" << dendl;
     assert(requested_pos == received_pos);
     assert(requested_pos == read_pos + read_buf.length());
     read_buf.append((char*)&s, sizeof(s));
@@ -294,7 +293,7 @@ void Journaler::flush(Context *onsync)
   // all flushed and acked?
   if (write_pos == ack_pos) {
     assert(write_buf.length() == 0);
-    dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+    dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
     if (onsync) {
       onsync->finish(0);
       delete onsync;
@@ -304,12 +303,12 @@ void Journaler::flush(Context *onsync)
 
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
-    dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+    dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
   } else {
     // flush
     unsigned len = write_pos - flush_pos;
     assert(len == write_buf.length());
-    dout(10) << "flush flushing " << flush_pos << "~" << len << endl;
+    dout(10) << "flush flushing " << flush_pos << "~" << len << dendl;
     
     // submit write for anything pending
     // flush _start_ pos to _finish_flush
@@ -322,7 +321,7 @@ void Journaler::flush(Context *onsync)
     flush_pos = write_pos;
     write_buf.clear();  
     
-    dout(10) << "flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+    dout(10) << "flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
   }
 
   // queue waiter (at _new_ write_pos; will go when reached by ack_pos)
@@ -358,17 +357,17 @@ void Journaler::_finish_read(int r)
 {
   assert(r>=0);
 
-  dout(10) << "_finish_read got " << received_pos << "~" << reading_buf.length() << endl;
+  dout(10) << "_finish_read got " << received_pos << "~" << reading_buf.length() << dendl;
   received_pos += reading_buf.length();
   read_buf.claim_append(reading_buf);
   assert(received_pos <= requested_pos);
   dout(10) << "_finish_read read_buf now " << read_pos << "~" << read_buf.length() 
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
-	   << endl;
+	   << dendl;
   
   if (is_readable()) { // NOTE: this check may read more
     // readable!
-    dout(10) << "_finish_read now readable" << endl;
+    dout(10) << "_finish_read now readable" << dendl;
     if (on_readable) {
       Context *f = on_readable;
       on_readable = 0;
@@ -404,7 +403,7 @@ void Journaler::_issue_read(off_t len)
 {
   if (_is_reading()) {
     dout(10) << "_issue_read " << len << " waiting, already reading " 
-	     << received_pos << "~" << (requested_pos-received_pos) << endl;
+	     << received_pos << "~" << (requested_pos-received_pos) << dendl;
     return;
   } 
   assert(requested_pos == received_pos);
@@ -412,7 +411,7 @@ void Journaler::_issue_read(off_t len)
   // stuck at ack_pos?
   assert(requested_pos <= ack_pos);
   if (requested_pos == ack_pos) {
-    dout(10) << "_issue_read requested_pos = ack_pos = " << ack_pos << ", waiting" << endl;
+    dout(10) << "_issue_read requested_pos = ack_pos = " << ack_pos << ", waiting" << dendl;
     assert(write_pos > requested_pos);
     if (flush_pos == ack_pos)
       flush();
@@ -424,13 +423,13 @@ void Journaler::_issue_read(off_t len)
   // don't read too much
   if (requested_pos + len > ack_pos) {
     len = ack_pos - requested_pos;
-    dout(10) << "_issue_read reading only up to ack_pos " << ack_pos << endl;
+    dout(10) << "_issue_read reading only up to ack_pos " << ack_pos << dendl;
   }
 
   // go.
   dout(10) << "_issue_read reading " << requested_pos << "~" << len 
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
-	   << endl;
+	   << dendl;
   
   filer.read(inode, requested_pos, len, &reading_buf, 
 	     new C_Read(this));
@@ -445,7 +444,7 @@ void Journaler::_prefetch()
       !_is_reading() &&             // and not reading anything right now
       write_pos > requested_pos) {  // there's something more to read...
     dout(10) << "_prefetch only " << left << " < " << prefetch_from
-	     << ", prefetching " << endl;
+	     << ", prefetching " << dendl;
     _issue_read(fetch_len);
   }
 }
@@ -460,7 +459,7 @@ void Journaler::read_entry(bufferlist *bl, Context *onfinish)
   if (is_readable()) {
     dout(10) << "read_entry at " << read_pos << ", read_buf is " 
 	     << read_pos << "~" << read_buf.length() 
-	     << ", readable now" << endl;
+	     << ", readable now" << dendl;
 
     // nice, just do it now.
     bool r = try_read_entry(*bl);
@@ -472,7 +471,7 @@ void Journaler::read_entry(bufferlist *bl, Context *onfinish)
   } else {
     dout(10) << "read_entry at " << read_pos << ", read_buf is " 
 	     << read_pos << "~" << read_buf.length() 
-	     << ", not readable now" << endl;
+	     << ", not readable now" << dendl;
 
     bl->clear();
 
@@ -508,7 +507,7 @@ bool Journaler::is_readable()
 
   // partial fragment at the end?
   if (received_pos == write_pos) {
-    dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << endl;
+    dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << dendl;
     write_pos = flush_pos = ack_pos = read_pos;
     assert(write_buf.length() == 0);
 
@@ -536,7 +535,7 @@ bool Journaler::is_readable()
 bool Journaler::try_read_entry(bufferlist& bl)
 {
   if (!is_readable()) {  // this may start a read. 
-    dout(10) << "try_read_entry at " << read_pos << " not readable" << endl;
+    dout(10) << "try_read_entry at " << read_pos << " not readable" << dendl;
     return false;
   }
   
@@ -546,7 +545,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
   assert(read_buf.length() >= sizeof(s) + s);
   
   dout(10) << "try_read_entry at " << read_pos << " reading " 
-	   << read_pos << "~" << (sizeof(s)+s) << endl;
+	   << read_pos << "~" << (sizeof(s)+s) << dendl;
 
   // do it
   assert(bl.length() == 0);
@@ -561,7 +560,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 
 void Journaler::wait_for_readable(Context *onreadable)
 {
-  dout(10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << endl;
+  dout(10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << dendl;
   assert(!is_readable());
   assert(on_readable == 0);
   on_readable = onreadable;
@@ -589,10 +588,16 @@ void Journaler::trim()
   trim_to -= trim_to % inode.layout.period();
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
-	   << endl;
+	   << dendl;
   if (trim_to == 0 || trim_to == trimming_pos) {
     dout(10) << "trim already trimmed/trimming to " 
-	     << trimmed_pos << "/" << trimming_pos << endl;
+	     << trimmed_pos << "/" << trimming_pos << dendl;
+    return;
+  }
+
+  if (trimming_pos > trimmed_pos) {
+    dout(10) << "trim already trimming atm, try again later.  trimmed/trimming is " 
+	     << trimmed_pos << "/" << trimming_pos << dendl;
     return;
   }
   
@@ -602,7 +607,7 @@ void Journaler::trim()
   dout(10) << "trim trimming to " << trim_to 
 	   << ", trimmed/trimming/expire are " 
 	   << trimmed_pos << "/" << trimming_pos << "/" << expire_pos
-	   << endl;
+	   << dendl;
   
   filer.remove(inode, trimming_pos, trim_to-trimming_pos, 
 	       0, new C_Trim(this, trim_to));
@@ -614,7 +619,7 @@ void Journaler::_trim_finish(int r, off_t to)
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos
-	   << endl;
+	   << dendl;
   assert(r >= 0);
   
   assert(to <= trimming_pos);

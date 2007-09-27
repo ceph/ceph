@@ -37,7 +37,7 @@ using namespace std;
 
 int main(int argc, char **argv, char *envp[]) {
 
-  //cerr << "cfuse starting " << myrank << "/" << world << endl;
+  //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
@@ -59,37 +59,22 @@ int main(int argc, char **argv, char *envp[]) {
   list<Client*> clients;
   list<SyntheticClient*> synclients;
 
-  cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << endl;
+  cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
-    // start client
-    Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
-    client->init();
-    
-    // start syntheticclient
+    Client *client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-2-i)), &monmap);
     SyntheticClient *syn = new SyntheticClient(client);
-
-    client->mount();
-    
     syn->start_thread();
-
     clients.push_back(client);
     synclients.push_back(syn);
   }
 
-  cout << "waiting for client(s) to finish" << endl;
+  cout << "waiting for client(s) to finish" << std::endl;
   while (!clients.empty()) {
     Client *client = clients.front();
     SyntheticClient *syn = synclients.front();
     clients.pop_front();
-    synclients.pop_front();
-    
-    // wait
+    synclients.pop_front();    
     syn->join_thread();
-
-    // unmount
-    client->unmount();
-    client->shutdown();
-
     delete syn;
     delete client;
   }

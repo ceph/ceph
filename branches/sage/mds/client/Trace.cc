@@ -32,49 +32,52 @@ using namespace __gnu_cxx;
 
 
 
-//
-Trace::Trace(const char* f)
-{
-  fs.open(f);
-  if (!fs.is_open()) {
-    dout(0) << "** unable to open trace file " << f << endl;
-    assert(0);
-  }
-  dout(2) << "opened traced file '" << f << "'" << endl;
-}
-
-Trace::~Trace()
-{
-  fs.close();
-}
 
 
 void Trace::start()
 {
-  //cout << "start" << endl;
-  fs.seekg(0);
+  //cout << "start" << std::endl;
+  delete fs;
+
+  fs = new ifstream();
+  fs->open(filename);
+  if (!fs->is_open()) {
+    generic_dout(0) << "** unable to open trace file " << filename << dendl;
+    assert(0);
+  }
+  generic_dout(2) << "opened traced file '" << filename << "'" << dendl;
   
   // read first line
-  getline(fs, line);
-  
+  getline(*fs, line);
+  //cout << "first line is " << line << std::endl;
+
   _line = 1;
 }
 
-const char *Trace::get_string(char *buf, const char *prefix)
+const char *Trace::peek_string(char *buf, const char *prefix)
 {
+  //if (prefix) cout << "prefix '" << prefix << "' line '" << line << "'" << std::endl;
   if (prefix &&
-      strstr(buf, "/prefix") == buf) {
+      strstr(line.c_str(), "/prefix") == line.c_str()) {
     strcpy(buf, prefix);
     strcpy(buf + strlen(prefix),
 	   line.c_str() + strlen("/prefix"));
   } else {
     strcpy(buf, line.c_str());
   }
-  //cout << "get_string got " << buf << endl;
+  return buf;
+}
 
+
+const char *Trace::get_string(char *buf, const char *prefix)
+{
+  peek_string(buf, prefix);
+
+  //cout << "buf is " << buf << std::endl;
   // read next line (and detect eof early)
   _line++;
-  getline(fs, line);
-  //cout << "next line is " << line << endl;
+  getline(*fs, line);
+  //cout << "next line is " << line << std::endl;
+
   return buf;
 }
