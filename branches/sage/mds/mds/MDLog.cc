@@ -127,61 +127,61 @@ void MDLog::append()
 
 void MDLog::submit_entry( LogEvent *le, Context *c ) 
 {
-  if (g_conf.mds_log) {
-    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << dendl;
-
-    // let the event register itself in the segment
-    assert(!segments.empty());
-    le->_segment = segments.rbegin()->second;
-    le->_segment->num_events++;
-    le->update_segment();
-
-    // encode it, with event type
-    {
-      bufferlist bl;
-      bl.append((char*)&le->_type, sizeof(le->_type));
-      le->encode_payload(bl);
-      
-      // journal it.
-      journaler->append_entry(bl);  // bl is destroyed.
-    }
-
-    assert(!capped);
-
-    delete le;
-    num_events++;
-
-    if (logger) {
-      logger->inc("add");
-      logger->set("size", num_events);
-      logger->set("wrpos", journaler->get_write_pos());
-    }
-
-    if (c) {
-      unflushed = 0;
-      journaler->flush(c);
-    }
-    else
-      unflushed++;
-
-    // start a new segment?
-    //  FIXME: should this go elsewhere?
-    off_t last_seg = get_last_segment_offset();
-    if (!segments.empty() && 
-	!writing_subtree_map &&
-	(journaler->get_write_pos() / log_inode.layout.period()) != (last_seg / log_inode.layout.period()) &&
-	(journaler->get_write_pos() - last_seg > log_inode.layout.period()/2)) {
-      dout(10) << "submit_entry also starting new segment: last = " << last_seg
-	       << ", cur pos = " << journaler->get_write_pos() << dendl;
-      start_new_segment();
-    }
-
-  } else {
+  if (!g_conf.mds_log) {
     // hack: log is disabled.
     if (c) {
       c->finish(0);
       delete c;
     }
+    return;
+  }
+
+  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << dendl;
+  
+  // let the event register itself in the segment
+  assert(!segments.empty());
+  le->_segment = segments.rbegin()->second;
+  le->_segment->num_events++;
+  le->update_segment();
+  
+  num_events++;
+  assert(!capped);
+  
+  // encode it, with event type
+  {
+    bufferlist bl;
+    bl.append((char*)&le->_type, sizeof(le->_type));
+    le->encode_payload(bl);
+    
+    // journal it.
+    journaler->append_entry(bl);  // bl is destroyed.
+  }
+  
+  delete le;
+  
+  if (logger) {
+    logger->inc("add");
+    logger->set("size", num_events);
+    logger->set("wrpos", journaler->get_write_pos());
+  }
+  
+  if (c) {
+    unflushed = 0;
+    journaler->flush(c);
+  }
+  else
+    unflushed++;
+  
+  // start a new segment?
+  //  FIXME: should this go elsewhere?
+  off_t last_seg = get_last_segment_offset();
+  if (!segments.empty() && 
+      !writing_subtree_map &&
+      (journaler->get_write_pos() / log_inode.layout.period()) != (last_seg / log_inode.layout.period()) &&
+      (journaler->get_write_pos() - last_seg > log_inode.layout.period()/2)) {
+    dout(10) << "submit_entry also starting new segment: last = " << last_seg
+	     << ", cur pos = " << journaler->get_write_pos() << dendl;
+    start_new_segment();
   }
 }
 
@@ -211,7 +211,6 @@ void MDLog::cap()
 { 
   dout(5) << "cap" << dendl;
   capped = true;
-  //kick_subtree_map();
 }
 
 
@@ -224,7 +223,6 @@ void MDLog::start_new_segment(Context *onsync)
   assert(!writing_subtree_map);
 
   segments[journaler->get_write_pos()] = new LogSegment(journaler->get_write_pos());
-  num_segments++;
 
   writing_subtree_map = true;
 
@@ -247,21 +245,14 @@ void MDLog::_logged_subtree_map(off_t off)
 }
 
 
-class C_MDL_TrimmedSegment : public Context {
-  MDLog *mdlog;
-  LogSegment *ls;
-public:
-  C_MDL_TrimmedSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
-  void finish(int res) {
-    mdlog->_trimmed(ls);
-  }
-};
 
 void MDLog::trim()
 {
   // trim!
-  dout(10) << "trim " << segments.size() << " segments, " 
-	   << num_events << " events / " << max_events << " max" << dendl;
+  dout(10) << "trim " 
+	   << segments.size() << " / " << max_segments << " segments, " 
+	   << num_events << " / " << max_events << " events"
+	   << dendl;
 
   if (segments.empty()) return;
 
@@ -271,7 +262,10 @@ void MDLog::trim()
 
   map<off_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
-  while (left > max_events) {
+  while (((max_events >= 0 && left > max_events) ||
+	  (max_segments >= 0 && (int)segments.size() > max_segments)) &&
+	 (int)trimming_segments.size() < g_conf.mds_log_max_trimming) {
+
     if (stop < g_clock.now())
       break;
 
@@ -281,15 +275,7 @@ void MDLog::trim()
     if (trimming_segments.count(ls)) {
       dout(5) << "trim already trimming segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
     } else {
-      C_Gather *exp = ls->try_to_expire(mds);
-      if (exp) {
-	trimming_segments.insert(ls);
-	dout(5) << "trim trimming segment " << ls->offset << dendl;
-	exp->set_finisher(new C_MDL_TrimmedSegment(this, ls));
-      } else {
-	dout(5) << "trim trimmed segment " << ls->offset << dendl;
-	_trimmed(ls);
-      }
+      try_trim(ls);
     }
 
     left -= ls->num_events;
@@ -297,16 +283,39 @@ void MDLog::trim()
   }
 }
 
+
+void MDLog::try_trim(LogSegment *ls)
+{
+  C_Gather *exp = ls->try_to_expire(mds);
+  if (exp) {
+    trimming_segments.insert(ls);
+    dout(5) << "try_trim trimming segment " << ls->offset << dendl;
+    exp->set_finisher(new C_TrimmedSegment(this, ls));
+  } else {
+    dout(10) << "try_trim trimmed segment " << ls->offset << dendl;
+    _trimmed(ls);
+  }
+}
+
+void MDLog::_maybe_trimmed(LogSegment *ls) 
+{
+  dout(10) << "_maybe_trimmed segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+  trimming_segments.erase(ls);
+  try_trim(ls);
+}
+
 void MDLog::_trimmed(LogSegment *ls)
 {
-  if (ls == segments.begin()->second) {
-    dout(5) << "_trimmed segment " << ls->offset << " " << ls->num_events << " events, dropping" << dendl;
-    num_events -= ls->num_events;
-    segments.erase(segments.begin());
-    delete ls;
-  } else {
-    dout(5) << "_trimmed segment " << ls->offset << " " << ls->num_events << " events, remembering" << dendl;
-  }
+  dout(5) << "_trimmed segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+
+  num_events -= ls->num_events;
+
+  assert(segments.count(ls->offset));
+  if (segments.begin()->second == ls) 
+    journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
+  segments.erase(ls->offset);
+
+  delete ls;
 }
 
 
@@ -386,10 +395,8 @@ void MDLog::_replay_thread()
     LogEvent *le = LogEvent::decode(bl);
 
     // new segment?
-    if (le->get_type() == EVENT_SUBTREEMAP) {
+    if (le->get_type() == EVENT_SUBTREEMAP) 
       segments[pos] = new LogSegment(pos);
-      num_segments++;
-    }
 
     le->_segment = get_current_segment();    // replay may need this
 

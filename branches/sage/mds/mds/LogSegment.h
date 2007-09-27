@@ -37,10 +37,14 @@ class LogSegment {
   xlist<CInode*>  opened_files;
   xlist<CInode*>  dirty_inode_mtimes;
 
-  xlist<CInode*>  purging_inodes;
+  //xlist<CInode*>  purging_inodes;
+  map<CInode*, map<off_t,off_t> > purging_inodes;
 
   // committed anchor transactions
   interval_set<version_t> atids;
+
+  // client request ids
+  map<int, tid_t> last_client_tids;
 
   // table version
   version_t allocv;

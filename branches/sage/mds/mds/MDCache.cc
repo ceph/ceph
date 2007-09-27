@@ -2714,22 +2714,24 @@ void MDCache::set_root(CInode *in)
 
 class C_MDC_PurgeFinish : public Context {
   MDCache *mdc;
-  inodeno_t ino;
-  off_t newsize;
+  CInode *in;
+  off_t newsize, oldsize;
 public:
-  C_MDC_PurgeFinish(MDCache *c, inodeno_t i, off_t s) : mdc(c), ino(i), newsize(s) {}
+  C_MDC_PurgeFinish(MDCache *c, CInode *i, off_t ns, off_t os) :
+    mdc(c), in(i), newsize(ns), oldsize(os) {}
   void finish(int r) {
-    mdc->purge_inode_finish(ino, newsize);
+    mdc->purge_inode_finish(in, newsize, oldsize);
   }
 };
 class C_MDC_PurgeFinish2 : public Context {
   MDCache *mdc;
-  inodeno_t ino;
-  off_t newsize;
+  CInode *in;
+  off_t newsize, oldsize;
 public:
-  C_MDC_PurgeFinish2(MDCache *c, inodeno_t i, off_t s) : mdc(c), ino(i), newsize(s) {}
+  C_MDC_PurgeFinish2(MDCache *c, CInode *i, off_t ns, off_t os) : 
+    mdc(c), in(i), newsize(ns), oldsize(os) {}
   void finish(int r) {
-    mdc->purge_inode_finish_2(ino, newsize);
+    mdc->purge_inode_finish_2(in, newsize, oldsize);
   }
 };
 
@@ -2737,85 +2739,108 @@ public:
  * will be called by on unlink or rmdir or truncate
  * caller responsible for journaling an appropriate EUpdate
  */
-void MDCache::purge_inode(inode_t *inode, off_t newsize)
+void MDCache::purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
 {
-  dout(10) << "purge_inode " << inode->ino << " size " << inode->size 
-	   << " -> " << newsize
+  dout(10) << "purge_inode " << oldsize << " -> " << newsize
+	   << " on " << *in
 	   << dendl;
 
-  // take note
-  assert(purging[inode->ino].count(newsize) == 0);
-  purging[inode->ino][newsize] = *inode;
+  assert(oldsize >= newsize);
 
-  assert(inode->size >= newsize);
-  _do_purge_inode(inode, newsize);
+  purging[in][newsize] = oldsize;
+  purging_ls[in][newsize] = ls;
+  ls->purging_inodes[in][newsize] = oldsize;
+  
+  _do_purge_inode(in, newsize, oldsize);
 }
 
-void MDCache::_do_purge_inode(inode_t *inode, off_t newsize)
+void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
 {
+  in->get(CInode::PIN_PURGING);
+
   // remove
-  if (inode->size > 0) {
-    mds->filer->remove(*inode, newsize, inode->size,
-		       0, new C_MDC_PurgeFinish(this, inode->ino, newsize));
+  if (in->inode.size > 0) {
+    mds->filer->remove(in->inode, newsize, oldsize,
+		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it
-    purge_inode_finish(inode->ino, newsize);
+    purge_inode_finish(in, newsize, oldsize);
   }
 }
 
-void MDCache::purge_inode_finish(inodeno_t ino, off_t newsize)
+void MDCache::purge_inode_finish(CInode *in, off_t newsize, off_t oldsize)
 {
-  dout(10) << "purge_inode_finish " << ino << " to " << newsize
-	   << " - logging our completion" << dendl;
+  dout(10) << "purge_inode_finish " << oldsize << " -> " << newsize
+	   << " on " << *in << dendl;
   
   // log completion
-  mds->mdlog->submit_entry(new EPurgeFinish(ino, newsize),
-			   new C_MDC_PurgeFinish2(this, ino, newsize));
+  mds->mdlog->submit_entry(new EPurgeFinish(in->ino(), newsize, oldsize),
+			   new C_MDC_PurgeFinish2(this, in, newsize, oldsize));
 }
 
-void MDCache::purge_inode_finish_2(inodeno_t ino, off_t newsize)
+void MDCache::purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize)
 {
-  dout(10) << "purge_inode_finish_2 " << ino << " to " << newsize << dendl;
+  dout(10) << "purge_inode_finish_2 " << oldsize << " -> " << newsize 
+	   << " on " << *in << dendl;
 
   // remove from purging list
-  purging[ino].erase(newsize);
-  if (purging[ino].empty())
-    purging.erase(ino);
+  LogSegment *ls = purging_ls[in][newsize];
+  purging[in].erase(newsize);
+  purging_ls[in].erase(newsize);
+  if (purging[in].empty()) {
+    purging.erase(in);
+    purging_ls.erase(in);
+  }
+
+  assert(ls->purging_inodes.count(in));
+  assert(ls->purging_inodes[in].count(newsize));
+  assert(ls->purging_inodes[in][newsize] == oldsize);
+  ls->purging_inodes[in].erase(newsize);
+  if (ls->purging_inodes[in].empty())
+    ls->purging_inodes.erase(in);
   
+  in->put(CInode::PIN_PURGING);
+
   // tell anyone who cares (log flusher?)
-  list<Context*> ls;
-  ls.swap(waiting_for_purge[ino][newsize]);
-  waiting_for_purge[ino].erase(newsize);
-  if (waiting_for_purge[ino].empty())
-    waiting_for_purge.erase(ino);
-  finish_contexts(ls, 0);
+  if (purging.count(in) == 0 ||
+      purging[in].rbegin()->first < newsize) {
+    list<Context*> ls;
+    ls.swap(waiting_for_purge[in][newsize]);
+    waiting_for_purge[in].erase(newsize);
+    if (waiting_for_purge[in].empty())
+      waiting_for_purge.erase(in);
+    finish_contexts(ls, 0);
+  }
 }
 
-void MDCache::add_recovered_purge(const inode_t& inode, off_t newsize)
+void MDCache::add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
 {
-  assert(purging[inode.ino].count(newsize) == 0);
-  purging[inode.ino][newsize] = inode;
+  assert(purging[in].count(newsize) == 0);
+  purging[in][newsize] = oldsize;
+  purging_ls[in][newsize] = ls;
+  ls->purging_inodes[in][newsize] = oldsize;
 }
 
-void MDCache::remove_recovered_purge(inodeno_t ino, off_t newsize)
+void MDCache::remove_recovered_purge(CInode *in, off_t newsize, off_t oldsize)
 {
-  purging[ino].erase(newsize);
+  purging[in].erase(newsize);
 }
 
 void MDCache::start_recovered_purges()
 {
   dout(10) << "start_recovered_purges (" << purging.size() << " purges)" << dendl;
 
-  for (map<inodeno_t, map<off_t,inode_t> >::iterator p = purging.begin();
+  for (map<CInode*, map<off_t, off_t> >::iterator p = purging.begin();
        p != purging.end();
        ++p) {
-    for (map<off_t,inode_t>::iterator q = p->second.begin();
+    for (map<off_t,off_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
-      dout(10) << "start_recovered_purges " << p->first
-	       << " size " << q->second.size
-	       << " to " << q->first << dendl;
-      _do_purge_inode(&q->second, q->first);
+      dout(10) << "start_recovered_purges " 
+	       << q->second << " -> " << q->first
+	       << " on " << *p->first
+	       << dendl;
+      _do_purge_inode(p->first, q->first, q->second);
     }
   }
 }
@@ -3530,7 +3555,7 @@ bool MDCache::shutdown_pass()
       // note that this won't flush right away, so we'll make at least one more pass
     }
     
-    if (!mds->mdlog->empty()) {
+    if (mds->mdlog->empty()) {
       dout(7) << "waiting for log to flush (including subtree_map, now) .. " << mds->mdlog->get_num_events() 
 	      << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
       return false;
@@ -4693,8 +4718,11 @@ void MDCache::_purge_stray(CDentry *dn)
   EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
-  le->metablob.add_inode_truncate(dn->inode->inode, 0);
+  le->metablob.add_inode_truncate(dn->inode->ino(), 0, dn->inode->inode.size);
+
   mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv, mds->mdlog->get_current_segment()));
+
+
 }
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
@@ -4708,7 +4736,7 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->dir->remove_dentry(dn);
 
   // purge+remove inode
-  purge_inode(&in->inode, 0);
+  purge_inode(in, 0, in->inode.size, ls);
   remove_inode(in);
 }
 

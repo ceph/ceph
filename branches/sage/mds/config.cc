@@ -200,10 +200,11 @@ md_config_t g_conf = {
   mds_beacon_grace: 15, //60*60.0,
 
   mds_log: true,
-  mds_log_max_len:  MDS_CACHE_SIZE / 3,
-  mds_log_max_trimming: 10000,
-  mds_log_read_inc: 1<<20,
+  mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
+  mds_log_max_segments: 500,
+  mds_log_max_trimming: 2,
   mds_log_pad_entry: 128,//256,//64,
+  mds_log_read_inc: 1<<24,
   mds_log_flush_on_shutdown: true,
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
@@ -671,8 +672,10 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_max_len") == 0) 
-      g_conf.mds_log_max_len = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_log_max_events") == 0) 
+      g_conf.mds_log_max_events = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_log_max_segments") == 0) 
+      g_conf.mds_log_max_segments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_read_inc") == 0) 
       g_conf.mds_log_read_inc = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_max_trimming") == 0) 

@@ -308,8 +308,9 @@ public:
 
 
   // inode purging
-  map<inodeno_t, map<off_t, inode_t> >         purging;
-  map<inodeno_t, map<off_t, list<Context*> > > waiting_for_purge;
+  map<CInode*, map<off_t, off_t> > purging;  // inode -> newsize -> oldsize
+  map<CInode*, map<off_t, LogSegment*> > purging_ls;
+  map<CInode*, map<off_t, list<Context*> > > waiting_for_purge;
   
   // shutdown crap
   int shutdown_commits;
@@ -497,19 +498,19 @@ public:
 
  public:
   // inode purging
-  void purge_inode(inode_t *inode, off_t newsize);
-  void _do_purge_inode(inode_t *inode, off_t newsize);
-  void purge_inode_finish(inodeno_t ino, off_t newsize);
-  void purge_inode_finish_2(inodeno_t ino, off_t newsize);
-  bool is_purging(inodeno_t ino, off_t newsize) {
-    return purging.count(ino) && purging[ino].count(newsize);
+  void purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls);
+  void _do_purge_inode(CInode *in, off_t newsize, off_t oldsize);
+  void purge_inode_finish(CInode *in, off_t newsize, off_t oldsize);
+  void purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize);
+  bool is_purging(CInode *in, off_t newsize, off_t oldsize) {
+    return purging.count(in) && purging[in].count(newsize);
   }
-  void wait_for_purge(inodeno_t ino, off_t newsize, Context *c) {
-    waiting_for_purge[ino][newsize].push_back(c);
+  void wait_for_purge(CInode *in, off_t newsize, Context *c) {
+    waiting_for_purge[in][newsize].push_back(c);
   }
 
-  void add_recovered_purge(const inode_t& inode, off_t newsize);
-  void remove_recovered_purge(inodeno_t ino, off_t newsize);
+  void add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls);
+  void remove_recovered_purge(CInode *in, off_t newsize, off_t oldsize);
   void start_recovered_purges();
 
 

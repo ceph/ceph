@@ -46,6 +46,7 @@ class MDLog {
   MDS *mds;
   int num_events; // in events
   int max_events;
+  int max_segments;
 
   int unflushed;
 
@@ -82,7 +83,6 @@ class MDLog {
   // -- segments --
   map<off_t,LogSegment*> segments;
   set<LogSegment*> trimming_segments;
-  int num_segments;
 
   class C_MDL_WroteSubtreeMap : public Context {
     MDLog *mdlog;
@@ -123,7 +123,9 @@ public:
 
 public:
   MDLog(MDS *m) : mds(m),
-		  num_events(0), max_events(g_conf.mds_log_max_len),
+		  num_events(0), 
+		  max_events(g_conf.mds_log_max_events),
+		  max_segments(g_conf.mds_log_max_segments),
 		  unflushed(0),
 		  capped(false),
 		  journaler(0),
@@ -145,6 +147,7 @@ public:
   size_t get_num_events() { return num_events; }
   void set_max_events(int m) { max_events = m; }
   size_t get_num_segments() { return segments.size(); }  
+  void set_max_segments(int m) { max_segments = m; }
 
   off_t get_read_pos();
   off_t get_write_pos();
@@ -157,8 +160,23 @@ public:
   void wait_for_sync( Context *c );
   void flush();
 
-  void trim();
+private:
+  class C_TrimmedSegment : public Context {
+    MDLog *mdlog;
+    LogSegment *ls;
+  public:
+    C_TrimmedSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
+    void finish(int res) {
+      mdlog->_trimmed(ls);
+    }
+  };
+
+  void try_trim(LogSegment *ls);
+  void _maybe_trimmed(LogSegment *ls);
   void _trimmed(LogSegment *ls);
+
+public:
+  void trim();
 
 private:
   void write_head(Context *onfinish);

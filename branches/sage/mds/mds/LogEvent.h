@@ -75,27 +75,10 @@ class LogEvent {
   }
 
   /*** live journal ***/
-
+  /* update_segment() - adjust any state we need to in the LogSegment 
+   */
   virtual void update_segment() { }
-    
 
-  /* obsolete() - is this entry committed to primary store, such that
-   *   we can expire it from the journal?
-   */
-  virtual bool has_expired(MDS *m) {
-    return true;
-  }
-  
-  /* expire() - prod MDS into committing the relevant state so that this
-   *   entry can be expired from the jorunal.
-   */
-  virtual void expire(MDS *m, Context *c) {
-    assert(0);
-    c->finish(0);
-    delete c;
-  }
-
-  
   /*** recovery ***/
   /* replay() - replay given event.  this is idempotent.
    */

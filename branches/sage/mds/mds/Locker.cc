@@ -1836,6 +1836,13 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     lock->set_state(LOCK_SYNC);
     lock->decode_locked_state(m->get_data());
     lock->clear_updated();
+
+    // remove dirty inode mtime from segment list?
+    if (lock->get_type() == LOCK_OTYPE_IDIR) {
+      CInode *in = (CInode*)lock->get_parent();
+      in->xlist_dirty_inode_mtime.remove_myself();
+    }
+
     lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
     break;
 

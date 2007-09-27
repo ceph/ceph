@@ -53,38 +53,56 @@
 // -----------------------
 // LogSegment
 
+class C_MDL_RetryExpireSegment : public Context {
+public:
+  MDS *mds;
+  LogSegment *ls;
+  C_MDL_RetryExpireSegment(MDS *m, LogSegment *l) : mds(m), ls(l) {}
+  void finish(int r) {
+    ls->try_to_expire(mds);
+  }
+};
+
 C_Gather *LogSegment::try_to_expire(MDS *mds)
 {
   C_Gather *gather = 0;
 
-  set<CDir*> committing_dirs;
+  set<CDir*> commit;
 
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
-  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
-    dout(10) << " committing " << **p << dendl;
-    committing_dirs.insert(*p);
+  // commit dirs
+  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) 
+    commit.insert(*p);
+  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) 
+    commit.insert((*p)->get_dir());
+  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) 
+    commit.insert((*p)->get_parent_dir());
+
+  if (!commit.empty()) {
     if (!gather) gather = new C_Gather;
-    (*p)->commit(0, gather->new_sub());
-  }
-  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
-    CDir *dir = (*p)->get_dir();    
-    if (committing_dirs.count(dir) == 0) {
-      dout(10) << " committing " << *dir << dendl;
-      committing_dirs.insert(dir);
-      if (!gather) gather = new C_Gather;
-      dir->commit(0, gather->new_sub());
+    
+    for (set<CDir*>::iterator p = commit.begin();
+	 p != commit.end();
+	 ++p) {
+      CDir *dir = *p;
+      if (dir->can_auth_pin()) {
+	dout(10) << " committing " << *dir << dendl;
+	dir->commit(0, gather->new_sub());
+      } else {
+	dout(10) << " waiting for unfreeze on " << *dir << dendl;
+	dir->add_waiter(CDir::WAIT_AUTHPINNABLE, gather->new_sub());
+      }
     }
   }
-  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
-    CDir *dir = (*p)->get_parent_dir();    
-    if (committing_dirs.count(dir) == 0) {
-      dout(10) << " committing " << *dir << dendl;
-      committing_dirs.insert(dir);
-      if (!gather) gather = new C_Gather;
-      dir->commit(0, gather->new_sub());
-    }
+
+  // dirty non-auth mtimes
+  for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
+    if (!gather) gather = new C_Gather;
+    (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
+  
+  // 
 
   return gather;
 }
@@ -134,6 +152,7 @@ EMetaBlob::EMetaBlob(MDLog *mdlog) :
  */
 bool EMetaBlob::has_expired(MDS *mds)
 {
+/*
   // examine dirv's for my lumps
   for (map<dirfrag_t,dirlump>::iterator lp = lump_map.begin();
        lp != lump_map.end();
@@ -254,12 +273,14 @@ bool EMetaBlob::has_expired(MDS *mds)
   }
 
   
+  */
   return true;  // all dirlumps expired, etc.
 }
 
 
 void EMetaBlob::expire(MDS *mds, Context *c)
 {
+/*
   map<CDir*,version_t> commit;  // dir -> version needed
   list<CDir*> waitfor_export;
   list<CDir*> waitfor_import;
@@ -395,23 +416,29 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 
   dout(10) << "my gather finsher is " << gather << " with " << gather->get_num() << dendl;
 
+*/
 }
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
-  // alloc table update?
-  if (!allocated_inos.empty())
-    ls->allocv = alloc_tablev;
-
   // atids?
   for (list<version_t>::iterator p = atids.begin(); p != atids.end(); ++p)
     ls->atids.insert(*p);
 
+  // dirty inode mtimes
+  // -> handled directly by Server.cc, replay()
+
+  // alloc table update?
+  if (!allocated_inos.empty())
+    ls->allocv = alloc_tablev;
+
   // truncated inodes
-  // **
+  // -> handled directory by Server.cc
 
   // client requests
-  // **
+  //  note the newest request per client
+  if (!client_reqs.empty())
+    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
@@ -576,6 +603,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       CInode *in = mds->mdcache->get_inode(p->first);
       dout(10) << "EMetaBlob.replay setting dirlock updated flag on " << *in << dendl;
       in->dirlock.set_updated();
+      logseg->dirty_inode_mtimes.push_back(&in->xlist_dirty_inode_mtime);
     }
 
   // allocated_inos
@@ -593,19 +621,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	
 	inodeno_t ino = mds->idalloc->alloc_id();
 	assert(ino == *p);       // this should match.
-    
-	assert(alloc_tablev == mds->idalloc->get_version());
       }	
+      assert(alloc_tablev == mds->idalloc->get_version());
     }
   }
 
   // truncated inodes
-  for (list< pair<inode_t,off_t> >::iterator p = truncated_inodes.begin();
+  for (list< triple<inodeno_t,off_t,off_t> >::iterator p = truncated_inodes.begin();
        p != truncated_inodes.end();
        ++p) {
-    dout(10) << "EMetaBlob.replay will purge truncated inode " << p->first.ino
-	     << " to " << p->second << dendl;
-    mds->mdcache->add_recovered_purge(p->first, p->second);  
+    CInode *in = mds->mdcache->get_inode(p->first);
+    assert(in);
+    dout(10) << "EMetaBlob.replay will purge truncated " 
+	     << p->third << " -> " << p->second
+	     << " on " << *in << dendl;
+    mds->mdcache->add_recovered_purge(in, p->second, p->third, logseg);
   }
 
   // client requests
@@ -613,6 +643,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
        p != client_reqs.end();
        ++p)
     mds->clientmap.add_completed_request(*p);
+
+
+  // update segment
+  update_segment(logseg);
 }
 
 // -----------------------
@@ -764,16 +798,6 @@ void EAnchorClient::replay(MDS *mds)
 // -----------------------
 // EUpdate
 
-bool EUpdate::has_expired(MDS *mds)
-{
-  return metablob.has_expired(mds);
-}
-
-void EUpdate::expire(MDS *mds, Context *c)
-{
-  metablob.expire(mds, c);
-}
-
 void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
@@ -904,7 +928,7 @@ void ESlaveUpdate::expire(MDS *mds, Context *c)
     assert(mds->mdcache->ambiguous_slave_updates[reqid] == true); 
     dout(10) << "ESlaveUpdate.expire prepare " << reqid << " for mds" << master
 	     << ": waiting for metablob to expire" << dendl;
-    metablob.expire(mds, c);
+    //metablob.expire(mds, c);
   }
 }
 
@@ -953,68 +977,8 @@ void ESlaveUpdate::replay(MDS *mds)
 // -----------------------
 // ESubtreeMap
 
-/*
-bool ESubtreeMap::has_expired(MDS *mds)
-{
-  assert(!mds->mdlog->subtree_maps.empty());
-  set<off_t>::iterator p = mds->mdlog->subtree_maps.begin();
-  off_t first = *p;
-  if (get_start_off() != first) {
-    dout(10) << "ESubtreeMap.has_expired -- not the oldest segment" << dendl;
-    return false;
-  }
-
-  // i am the oldest.
-
-  // capped and last event?
-  if (mds->mdlog->is_capped() && 
-      mds->mdlog->subtree_maps.size() == 1 && 
-      (mds->mdlog->trimming.empty() ||
-       (mds->mdlog->trimming.size() == 1 &&
-	mds->mdlog->trimming.begin()->second == this))) {
-    dout(10) << "ESubtreeMap.has_expired -- capped and last one" << dendl;
-    return true;
-  }
-
-  p++;
-  if (p == mds->mdlog->subtree_maps.end()) {
-    dout(10) << "ESubtreeMap.has_expired -- only segment" << dendl;
-    return false;
-  }
-  off_t next = *p;
-
-  if (mds->mdlog->get_read_pos() < next) {
-    dout(10) << "ESubtreeMap.has_expired -- haven't read this segment, read pos " 
-	     << mds->mdlog->get_read_pos() << " < next map at "  << next
-	     << dendl;    
-    return false;
-  }
-
-  map<off_t,LogEvent*>::iterator trimp = mds->mdlog->trimming.begin();
-  assert(trimp->first == get_start_off());
-  trimp++;
-  if (trimp != mds->mdlog->trimming.end() &&
-      trimp->first < next) {
-    dout(10) << "ESubtreeMap.has_expired -- segment still trimming at " << trimp->first << dendl;    
-    return false;
-  }
-
-  dout(10) << "ESubtreeMap.has_expired -- segment is empty" << dendl;    
-  return true;
-}
-
-void ESubtreeMap::expire(MDS *mds, Context *c)
-{
-  dout(10) << "ESubtreeMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << dendl;
-  mds->mdlog->subtree_map_expire_waiters[get_start_off()].push_back(c);
-}
-*/
-
 void ESubtreeMap::replay(MDS *mds) 
 {
-  // note location
-  mds->mdlog->segments[get_start_off()] = new LogSegment(get_start_off());
-
   // suck up the subtree map?
   if (mds->mdcache->is_subtrees()) {
     dout(10) << "ESubtreeMap.replay -- ignoring, already have import map" << dendl;
@@ -1042,16 +1006,6 @@ void ESubtreeMap::replay(MDS *mds)
 
 // -----------------------
 // EFragment
-
-bool EFragment::has_expired(MDS *mds)
-{
-  return metablob.has_expired(mds);
-}
-
-void EFragment::expire(MDS *mds, Context *c)
-{
-  metablob.expire(mds, c);
-}
 
 void EFragment::replay(MDS *mds)
 {
@@ -1090,8 +1044,10 @@ void EPurgeFinish::update_segment()
 
 void EPurgeFinish::replay(MDS *mds)
 {
-  dout(10) << "EPurgeFinish.replay " << ino << " to " << newsize << dendl;
-  mds->mdcache->remove_recovered_purge(ino, newsize);
+  dout(10) << "EPurgeFinish.replay " << ino << " " << oldsize << " -> " << newsize << dendl;
+  CInode *in = mds->mdcache->get_inode(ino);
+  assert(in);
+  mds->mdcache->remove_recovered_purge(in, newsize, oldsize);
 }
 
 
@@ -1148,17 +1104,6 @@ void EExport::replay(MDS *mds)
 
 // -----------------------
 // EImportStart
-
-bool EImportStart::has_expired(MDS *mds)
-{
-  return metablob.has_expired(mds);
-}
-
-void EImportStart::expire(MDS *mds, Context *c)
-{
-  dout(10) << "EImportStart.expire " << base << dendl;
-  metablob.expire(mds, c);
-}
 
 void EImportStart::replay(MDS *mds)
 {

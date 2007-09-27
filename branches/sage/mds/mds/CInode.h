@@ -65,6 +65,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_BATCHOPENJOURNAL = 9;
   static const int PIN_SCATTERED =        10;
   static const int PIN_STICKYDIRS =       11;
+  static const int PIN_PURGING =         -12;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -186,11 +187,12 @@ protected:
 
   // LogSegment xlists i (may) belong to
   xlist<CInode*>::item xlist_dirty;
+public:
   xlist<CInode*>::item xlist_opened_files;
-  xlist<CInode*>::item xlist_dirty_inode_mtimes;
-  xlist<CInode*>::item xlist_purging_inodes;
+  xlist<CInode*>::item xlist_dirty_inode_mtime;
+  xlist<CInode*>::item xlist_purging_inode;
 
- private:
+private:
   // auth pin
   int auth_pins;
   int nested_auth_pins;
@@ -217,7 +219,7 @@ protected:
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_opened_files(this), 
-    xlist_dirty_inode_mtimes(this), xlist_purging_inodes(this),
+    xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),

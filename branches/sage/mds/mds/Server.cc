@@ -1292,6 +1292,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << dendl;
     
     blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
+    mdr->ls->dirty_inode_mtimes.push_back(&diri->xlist_dirty_inode_mtime);
   }
   
   return dirpv;
@@ -3492,8 +3493,8 @@ public:
     assert(r == 0);
 
     // purge
-    mds->mdcache->purge_inode(&in->inode, size);
-    mds->mdcache->wait_for_purge(in->inode.ino, size, 
+    mds->mdcache->purge_inode(in, size, in->inode.size, mdr->ls);
+    mds->mdcache->wait_for_purge(in, size, 
 				 new C_MDS_truncate_purged(mds, mdr, in, pv, size, ctime));
   }
 };
@@ -3530,7 +3531,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
-  le->metablob.add_inode_truncate(cur->inode, req->args.truncate.length);
+  le->metablob.add_inode_truncate(cur->ino(), req->args.truncate.length, cur->inode.size);
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = ctime;
   pi->ctime = ctime;
@@ -3538,6 +3539,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->size = req->args.truncate.length;
   
   mdr->ls = mdlog->get_current_segment();
+
   mdlog->submit_entry(le, fin);
 }
 
@@ -3727,8 +3729,8 @@ public:
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
     // purge also...
-    mds->mdcache->purge_inode(&in->inode, 0);
-    mds->mdcache->wait_for_purge(in->inode.ino, 0,
+    mds->mdcache->purge_inode(in, 0, in->inode.size, mdr->ls);
+    mds->mdcache->wait_for_purge(in, 0,
 				 new C_MDS_open_truncate_purged(mds, mdr, in, pv, ctime));
   }
 };
@@ -3749,7 +3751,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
-  le->metablob.add_inode_truncate(cur->inode, 0);
+  le->metablob.add_inode_truncate(cur->ino(), 0, cur->inode.size);
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = ctime;
   pi->ctime = ctime;
@@ -3757,6 +3759,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->size = 0;
   
   mdr->ls = mdlog->get_current_segment();
+
   mdlog->submit_entry(le, fin);
 }
 
