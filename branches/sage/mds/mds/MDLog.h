@@ -22,6 +22,8 @@
 #include "common/Thread.h"
 #include "common/Cond.h"
 
+#include "LogSegment.h"
+
 #include <list>
 
 //#include <ext/hash_map>
@@ -30,8 +32,13 @@
 class Journaler;
 class LogEvent;
 class MDS;
+class LogSegment;
+class ESubtreeMap;
 
 class Logger;
+
+#include <map>
+using std::map;
 
 /*
 namespace __gnu_cxx {
@@ -47,8 +54,8 @@ namespace __gnu_cxx {
 class MDLog {
  protected:
   MDS *mds;
-  size_t num_events; // in events
-  size_t max_events;
+  int num_events; // in events
+  int max_events;
 
   int unflushed;
 
@@ -58,15 +65,6 @@ class MDLog {
   Journaler *journaler;
 
   Logger *logger;
-
-  // -- trimming --
-  map<off_t,LogEvent*> trimming;
-  std::list<Context*>  trim_waiters;   // contexts waiting for trim
-  bool                 trim_reading;
-
-  bool waiting_for_read;
-  friend class C_MDL_Reading;
-
 
 
   // -- replay --
@@ -91,12 +89,27 @@ class MDLog {
   void _replay_thread();  // new way
 
 
+  // -- segments --
+  map<off_t,LogSegment*> segments;
+  set<LogSegment*> trimming_segments;
+  int num_segments;
+
+  class C_MDL_WroteSubtreeMap : public Context {
+    MDLog *mdlog;
+    off_t off;
+  public:
+    C_MDL_WroteSubtreeMap(MDLog *l, off_t o) : mdlog(l), off(o) { }
+    void finish(int r) {
+      mdlog->_logged_subtree_map(off);
+    }
+  };
+  void _logged_subtree_map(off_t off);
+
 
   // -- subtreemaps --
   off_t  last_subtree_map;   // offsets of last committed subtreemap.  constrains trimming.
   list<Context*> subtree_map_expire_waiters;
   bool writing_subtree_map;  // one is being written now
-  bool seen_subtree_map;     // for recovery
 
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
@@ -125,25 +138,31 @@ class MDLog {
 		  capped(false),
 		  journaler(0),
 		  logger(0),
-		  trim_reading(false), waiting_for_read(false),
 		  replay_thread(this),
 		  last_subtree_map(0),
-		  writing_subtree_map(false), seen_subtree_map(false) {
+		  writing_subtree_map(false) {
   }		  
   ~MDLog();
+
+
+  void start_new_segment(Context *onsync=0);
+  LogSegment *get_current_segment() { 
+    return segments.empty() ? 0:segments.rbegin()->second; 
+  }
 
 
   void flush_logger();
 
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }
-  size_t get_num_events() { return num_events + trimming.size(); }
-  size_t get_non_subtreemap_events() { return num_events + trimming.size() - subtree_map_expire_waiters.size(); }
+  size_t get_num_events() { return num_events; }
+  size_t get_non_subtreemap_events() { return num_events - subtree_map_expire_waiters.size(); }
 
   off_t get_read_pos();
   off_t get_write_pos();
   bool empty() {
-    return get_read_pos() == get_write_pos();
+    return num_events == 0;
+    //return get_read_pos() == get_write_pos();
   }
 
   bool is_capped() { return capped; }
@@ -158,9 +177,8 @@ class MDLog {
   void wait_for_sync( Context *c );
   void flush();
 
-  void trim(Context *c);
-  void _did_read();
-  void _trimmed(LogEvent *le);
+  void trim();
+  void _trimmed(LogSegment *ls);
 
   void reset();  // fresh, empty log! 
   void open(Context *onopen);

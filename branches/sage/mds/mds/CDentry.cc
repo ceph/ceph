@@ -21,6 +21,7 @@
 
 #include "MDS.h"
 #include "MDCache.h"
+#include "LogSegment.h"
 
 #include "messages/MLock.h"
 
@@ -134,27 +135,30 @@ version_t CDentry::pre_dirty(version_t min)
 }
 
 
-void CDentry::_mark_dirty()
+void CDentry::_mark_dirty(LogSegment *ls)
 {
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     dir->inc_num_dirty();
     get(PIN_DIRTY);
+    assert(ls);
   }
+  if (ls) 
+    ls->dirty_dentries.push_back(&xlist_dirty);
 }
 
-void CDentry::mark_dirty(version_t pv) 
+void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
 {
   dout(10) << " mark_dirty " << *this << endl;
 
   // i now live in this new dir version
   assert(pv <= projected_version);
   version = pv;
-  _mark_dirty();
+  _mark_dirty(ls);
 
   // mark dir too
-  dir->mark_dirty(pv);
+  dir->mark_dirty(pv, ls);
 }
 
 
@@ -169,6 +173,8 @@ void CDentry::mark_clean()
   dir->dec_num_dirty();
   put(PIN_DIRTY);
   
+  xlist_dirty.remove_myself();
+
   if (state_test(STATE_NEW)) 
     state_clear(STATE_NEW);
 }    

@@ -25,6 +25,7 @@ using namespace std;
 
 class MDS;
 class MDLog;
+class LogSegment;
 
 /*
  * a bunch of metadata in the journal
@@ -252,7 +253,10 @@ private:
   off_t last_subtree_map;
   off_t my_offset;
 
-  EMetaBlob() : last_subtree_map(0), my_offset(0) { }
+  // for replay, in certain cases
+  LogSegment *_segment;
+
+  EMetaBlob() : last_subtree_map(0), my_offset(0), _segment(0) { }
   EMetaBlob(MDLog *mdl);  // defined in journal.cc
 
   void print(ostream& out) {
@@ -471,7 +475,8 @@ private:
 
   bool has_expired(MDS *mds);
   void expire(MDS *mds, Context *c);
-  void replay(MDS *mds);
+  void update_segment(LogSegment *ls);
+  void replay(MDS *mds, LogSegment *ls=0);
 };
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {

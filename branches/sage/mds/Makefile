@@ -185,15 +185,15 @@ ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
 
 
 # fake*
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
+fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+newsyn: newsyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 

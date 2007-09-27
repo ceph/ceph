@@ -999,7 +999,8 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
-  // log completion
+  // log completion. 
+  //  include export bounds, to ensure they're in the journal.
   EExport *le = new EExport(mds->mdlog, dir);
   le->metablob.add_dir_context(dir);
   le->metablob.add_dir( dir, false );
@@ -1060,7 +1061,8 @@ void Migrator::export_reverse(CDir *dir)
 		      export_peer[dir], 
 		      dir,                 // import root
 		      0,
-		      imported_client_map);
+		      imported_client_map,
+		      0);
     export_data[dir].pop_front();
   }
 
@@ -1551,7 +1553,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 			oldauth, 
 			dir,                 // import root
 			le,
-			imported_client_map);
+			imported_client_map,
+			mds->mdlog->get_current_segment());
     m->get_dirstate().pop_front();
   }
   dout(10) << " " << m->get_bounds().size() << " imported bounds" << endl;
@@ -1809,7 +1812,8 @@ void Migrator::import_finish(CDir *dir)
 
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth,
-				   map<int,entity_inst_t>& imported_client_map)
+				   map<int,entity_inst_t>& imported_client_map, 
+				   LogSegment *ls)
 {  
   dout(15) << "decode_import_inode on " << *dn << endl;
 
@@ -1827,7 +1831,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
 
   // state after link  -- or not!  -sage
   set<int> merged_client_caps;
-  istate.update_inode(in, merged_client_caps);
+  istate.update_inode(in, merged_client_caps, ls);
  
   // link before state  -- or not!  -sage
   if (dn->inode != in) {
@@ -1869,7 +1873,8 @@ int Migrator::decode_import_dir(bufferlist& bl,
 				int oldauth,
 				CDir *import_root,
 				EImportStart *le,
-				map<int,entity_inst_t>& imported_client_map)
+				map<int,entity_inst_t>& imported_client_map,
+				LogSegment *ls)
 {
   int off = 0;
   
@@ -1933,7 +1938,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
       dn = dir->add_null_dentry(dname);
     
     // decode state
-    dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
+    dn->decode_import_state(bl, off, oldauth, mds->get_nodeid(), ls);
     dout(15) << "decode_import_dir got " << *dn << endl;
     
     // points to...
@@ -1961,7 +1966,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
     }
     else if (icode == 'I') {
       // inode
-      decode_import_inode(dn, bl, off, oldauth, imported_client_map);
+      decode_import_inode(dn, bl, off, oldauth, imported_client_map, ls);
     }
     
     // add dentry to journal entry

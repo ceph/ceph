@@ -22,6 +22,7 @@
 #include "MDS.h"
 #include "MDCache.h"
 #include "MDSMap.h"
+#include "LogSegment.h"
 
 #include "include/Context.h"
 #include "common/Clock.h"
@@ -114,7 +115,8 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // -------------------------------------------------------------------
 // CDir
 
-CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
+CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
+  xlist_dirty(this)
 {
   inode = in;
   frag = fg;
@@ -686,22 +688,25 @@ version_t CDir::pre_dirty(version_t min)
   return projected_version;
 }
 
-void CDir::_mark_dirty()
+void CDir::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     dout(10) << "mark_dirty (was clean) " << *this << " version " << version << endl;
     get(PIN_DIRTY);
+    assert(ls);
   } else {
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << endl;
   }
+  if (ls) 
+    ls->dirty_dirfrags.push_back(&xlist_dirty);
 }
 
-void CDir::mark_dirty(version_t pv)
+void CDir::mark_dirty(version_t pv, LogSegment *ls)
 {
   assert(version < pv);
   version = pv;
-  _mark_dirty();
+  _mark_dirty(ls);
 }
 
 void CDir::mark_clean()
@@ -710,6 +715,8 @@ void CDir::mark_clean()
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
+
+    xlist_dirty.remove_myself();
   }
 }
 

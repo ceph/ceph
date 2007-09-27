@@ -218,12 +218,14 @@ public:
 
 public:
   void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, 
-			   map<int,entity_inst_t>& imported_client_map);
+			   map<int,entity_inst_t>& imported_client_map,
+			   LogSegment *ls);
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
-			map<int,entity_inst_t>& imported_client_map);
+			map<int,entity_inst_t>& imported_client_map,
+			LogSegment *ls);
 
 public:
   void import_reverse(CDir *dir);

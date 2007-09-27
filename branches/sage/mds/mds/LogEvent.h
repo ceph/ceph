@@ -43,6 +43,7 @@ using namespace std;
 #include "include/Context.h"
 
 class MDS;
+class LogSegment;
 
 // generic log event
 class LogEvent {
@@ -53,8 +54,10 @@ class LogEvent {
   friend class MDLog;
 
  public:
+  LogSegment *_segment;
+
   LogEvent(int t) : 
-    _type(t), _start_off(0), _end_off(0) { }
+    _type(t), _start_off(0), _end_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
   int get_type() { return _type; }
@@ -72,6 +75,9 @@ class LogEvent {
   }
 
   /*** live journal ***/
+
+  virtual void update_segment() { }
+    
 
   /* obsolete() - is this entry committed to primary store, such that
    *   we can expire it from the journal?
@@ -94,6 +100,7 @@ class LogEvent {
   /* replay() - replay given event.  this is idempotent.
    */
   virtual void replay(MDS *m) { assert(0); }
+
 
 };
 

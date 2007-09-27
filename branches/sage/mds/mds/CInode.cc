@@ -22,6 +22,8 @@
 #include "MDCache.h"
 #include "AnchorTable.h"
 
+#include "LogSegment.h"
+
 #include "common/Clock.h"
 
 #include "messages/MLock.h"
@@ -109,12 +111,12 @@ inode_t *CInode::project_inode()
   return projected_inode.back();
 }
   
-void CInode::pop_and_dirty_projected_inode() 
+void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
 {
   assert(!projected_inode.empty());
   dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
 	   << " v" << projected_inode.front()->version << endl;
-  mark_dirty(projected_inode.front()->version);
+  mark_dirty(projected_inode.front()->version, ls);
   inode = *projected_inode.front();
   delete projected_inode.front();
   projected_inode.pop_front();
@@ -393,15 +395,20 @@ version_t CInode::pre_dirty()
   return parent->pre_dirty();
 }
 
-void CInode::_mark_dirty()
+void CInode::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
+    assert(ls);
   }
+  
+  // move myself to this segment's dirty list
+  if (ls) 
+    ls->dirty_inodes.push_back(&xlist_dirty);
 }
 
-void CInode::mark_dirty(version_t pv) {
+void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << endl;
 
@@ -420,10 +427,10 @@ void CInode::mark_dirty(version_t pv) {
   // touch my private version
   assert(inode.version < pv);
   inode.version = pv;
-  _mark_dirty();
+  _mark_dirty(ls);
 
   // mark dentry too
-  parent->mark_dirty(pv);
+  parent->mark_dirty(pv, ls);
 }
 
 
@@ -433,6 +440,9 @@ void CInode::mark_clean()
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
+    
+    // remove myself from ls dirty list
+    xlist_dirty.remove_myself();
   }
 }    
 

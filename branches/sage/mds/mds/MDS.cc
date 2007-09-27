@@ -729,6 +729,7 @@ void MDS::boot_create()
 
   C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
 
+  CDir *rootdir = 0;
   if (whoami == 0) {
     dout(3) << "boot_create since i am also mds0, creating root inode and dir" << endl;
 
@@ -738,23 +739,18 @@ void MDS::boot_create()
     assert(root);
     
     // force empty root dir
-    CDir *dir = root->get_dirfrag(frag_t());
-    dir->mark_complete();
-    dir->mark_dirty(dir->pre_dirty());
-    
-    // save it
-    dir->commit(0, fin->new_sub());
+    rootdir = root->get_dirfrag(frag_t());
+    rootdir->mark_complete();
   }
 
   // create my stray dir
+  CDir *straydir;
   {
     dout(10) << "boot_create creating local stray dir" << endl;
     mdcache->open_local_stray();
     CInode *stray = mdcache->get_stray();
-    CDir *dir = stray->get_dirfrag(frag_t());
-    dir->mark_complete();
-    dir->mark_dirty(dir->pre_dirty());
-    dir->commit(0, fin->new_sub());
+    straydir = stray->get_dirfrag(frag_t());
+    straydir->mark_complete();
   }
 
   // start with a fresh journal
@@ -763,8 +759,16 @@ void MDS::boot_create()
   mdlog->write_head(fin->new_sub());
   
   // write our first subtreemap
-  mdcache->log_subtree_map(fin->new_sub());
+  mdlog->start_new_segment(fin->new_sub());
 
+  // dirty, commit (root and) stray dir(s)
+  if (whoami == 0) {
+    rootdir->mark_dirty(rootdir->pre_dirty(), mdlog->get_current_segment());
+    rootdir->commit(0, fin->new_sub());
+  }
+  straydir->mark_dirty(straydir->pre_dirty(), mdlog->get_current_segment());
+  straydir->commit(0, fin->new_sub());
+ 
   // fixme: fake out idalloc (reset, pretend loaded)
   dout(10) << "boot_create creating fresh idalloc table" << endl;
   idalloc->reset();
@@ -1038,7 +1042,7 @@ void MDS::stopping_start()
   
   // flush log
   mdlog->set_max_events(0);
-  mdlog->trim(NULL);
+  mdlog->trim();
 }
 void MDS::stopping_done()
 {

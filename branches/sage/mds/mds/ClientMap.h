@@ -48,9 +48,6 @@ private:
   map<version_t, list<Context*> > commit_waiters;
 
 public:
-  ClientMap(MDS *m) : mds(m),
-		      version(0), projected(0), committing(0), committed(0) {}
-
   version_t get_version() { return version; }
   version_t get_projected() { return projected; }
   version_t get_committing() { return committing; }
@@ -119,10 +116,12 @@ private:
   // client id -> tid -> result code
   map<int, set<tid_t> > completed_requests;  // completed client requests
   map<int, map<tid_t, Context*> > waiting_for_trim;
+  version_t requestmapv;
  
 public:
   void add_completed_request(metareqid_t ri) {
     completed_requests[ri.client].insert(ri.tid);
+    requestmapv++;
   }
   void trim_completed_requests(int client, 
 			       tid_t mintid) {  // zero means trim all!
@@ -159,6 +158,12 @@ public:
   }
 
 
+
+  ClientMap(MDS *m) : mds(m),
+		      version(0), projected(0), committing(0), committed(0),
+		      requestmapv(0) {}
+
+
   // -- encoding --
   void encode(bufferlist& bl) {
     bl.append((char*)&version, sizeof(version));
@@ -173,6 +178,7 @@ public:
 
     projected = committing = committed = version;
   }
+
 
   // -- loading, saving --
   inode_t inode;

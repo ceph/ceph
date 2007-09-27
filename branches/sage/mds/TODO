@@ -51,11 +51,15 @@ sage doc
 
 sage mds
 
+* reverse_export is fuggered by the log segment business.  need to delay auth/clean step until export is confirmed (i.e. make second pass over the subtree?).  retest migrator!  pay close attention to cache_expire checks on auth ordering... ,.dkjasdfjdajfdkjl
+ - upshot: once it's done, it'll be much cleaner!
+
+
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
 
 /- .ceph_hosts file, so we can use the infiniband addresses
 
-- look at mds osds
+/- look at mds osds
 
 
 

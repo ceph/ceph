@@ -57,6 +57,9 @@ class MMDSSlaveRequest;
 
 class MMDSFragmentNotify;
 
+class ESubtreeMap;
+
+
 // MDCache
 
 //typedef const char* pchar;
@@ -91,6 +94,8 @@ struct MDRequest {
   int slave_to_mds;                // this is a slave request if >= 0.
 
   // -- my pins and locks --
+  LogSegment *ls;  // the log segment i'm committing to
+
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
   set<CInode*> stickydirs;
@@ -131,18 +136,21 @@ struct MDRequest {
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
     slave_commit(0) { }
@@ -250,7 +258,7 @@ public:
   void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
-  void subtree_merge_writebehind_finish(CInode *in);
+  void subtree_merge_writebehind_finish(CInode *in, LogSegment *ls);
   void eval_subtree_root(CDir *dir);
   CDir *get_subtree_root(CDir *dir);
   void remove_subtree(CDir *dir);
@@ -351,8 +359,8 @@ public:
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
-  void log_subtree_map(Context *onsync=0);
-  void _logged_subtree_map(off_t off);
+  
+  ESubtreeMap *create_subtree_map();
 
 protected:
   // [rejoin]
@@ -549,7 +557,7 @@ public:
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_create_prepared(CInode *in, version_t atid);
-  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv, LogSegment *ls);
   void _anchor_destroy_prepared(CInode *in, version_t atid);
   void _anchor_destroy_logged(CInode *in, version_t atid, version_t pdv);
 
@@ -563,7 +571,7 @@ public:
   void eval_stray(CDentry *dn);
 protected:
   void _purge_stray(CDentry *dn);
-  void _purge_stray_logged(CDentry *dn, version_t pdv);
+  void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   friend class C_MDC_PurgeStray;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
   void migrate_stray(CDentry *dn, int dest);
@@ -611,7 +619,7 @@ private:
   void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_stored(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags);
-  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs);
+  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs, LogSegment *ls);
   friend class C_MDC_FragmentGo;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentStored;

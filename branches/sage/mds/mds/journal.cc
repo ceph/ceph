@@ -32,6 +32,8 @@
 #include "events/EAnchor.h"
 #include "events/EAnchorClient.h"
 
+#include "LogSegment.h"
+
 #include "MDS.h"
 #include "MDLog.h"
 #include "MDCache.h"
@@ -41,10 +43,50 @@
 #include "AnchorClient.h"
 #include "IdAllocator.h"
 
+
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 #define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+
+// -----------------------
+// LogSegment
+
+C_Gather *LogSegment::try_to_expire(MDS *mds)
+{
+  C_Gather *gather = 0;
+
+  set<CDir*> committing_dirs;
+
+  dout(6) << "LogSegment(" << offset << ").try_to_expire" << endl;
+
+  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+    dout(10) << " committing " << **p << endl;
+    committing_dirs.insert(*p);
+    if (!gather) gather = new C_Gather;
+    (*p)->commit(0, gather->new_sub());
+  }
+  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+    CDir *dir = (*p)->get_dir();    
+    if (committing_dirs.count(dir) == 0) {
+      dout(10) << " committing " << *dir << endl;
+      committing_dirs.insert(dir);
+      if (!gather) gather = new C_Gather;
+      dir->commit(0, gather->new_sub());
+    }
+  }
+  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+    CDir *dir = (*p)->get_parent_dir();    
+    if (committing_dirs.count(dir) == 0) {
+      dout(10) << " committing " << *dir << endl;
+      committing_dirs.insert(dir);
+      if (!gather) gather = new C_Gather;
+      dir->commit(0, gather->new_sub());
+    }
+  }
+
+  return gather;
+}
 
 
 // -----------------------
@@ -339,9 +381,29 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 
 }
 
-void EMetaBlob::replay(MDS *mds)
+void EMetaBlob::update_segment(LogSegment *ls)
+{
+  // alloc table update?
+  if (!allocated_inos.empty())
+    ls->allocv = alloc_tablev;
+
+  // atids?
+  for (list<version_t>::iterator p = atids.begin(); p != atids.end(); ++p)
+    ls->atids.insert(*p);
+
+  // truncated inodes
+  // **
+
+  // client requests
+  // **
+}
+
+void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << endl;
+
+  if (!logseg) logseg = _segment;
+  assert(logseg);
 
   // walk through my dirs (in order!)
   for (list<dirfrag_t>::iterator lp = lump_order.begin();
@@ -377,7 +439,7 @@ void EMetaBlob::replay(MDS *mds)
     }
     dir->set_version( lump.dirv );
     if (lump.is_dirty())
-      dir->_mark_dirty();
+      dir->_mark_dirty(logseg);
     if (lump.is_complete())
       dir->mark_complete();
     
@@ -392,11 +454,11 @@ void EMetaBlob::replay(MDS *mds)
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
       } else {
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
       }
 
@@ -408,7 +470,7 @@ void EMetaBlob::replay(MDS *mds)
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	dir->link_primary_inode(dn, in);
-	if (p->dirty) in->_mark_dirty();
+	if (p->dirty) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << endl;
       } else {
 	if (dn->get_inode() != in && in->get_parent_dn()) {
@@ -418,7 +480,7 @@ void EMetaBlob::replay(MDS *mds)
 	in->inode = p->inode;
 	in->dirfragtree = p->dirfragtree;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
-	if (p->dirty) in->_mark_dirty();
+	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << endl;
@@ -436,7 +498,7 @@ void EMetaBlob::replay(MDS *mds)
       if (!dn) {
 	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
       } else {
 	if (!dn->is_null()) {
@@ -445,7 +507,7 @@ void EMetaBlob::replay(MDS *mds)
 	}
 	dn->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
       }
     }
@@ -458,7 +520,7 @@ void EMetaBlob::replay(MDS *mds)
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn);
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << endl;
       } else {
 	if (!dn->is_null()) {
@@ -466,7 +528,7 @@ void EMetaBlob::replay(MDS *mds)
 	  dir->unlink_inode(dn);
 	}
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty();
+	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << endl;
       }
     }
@@ -552,6 +614,11 @@ void ESession::expire(MDS *mds, Context *c)
   mds->clientmap.save(c, cmapv);
 }
 
+void ESession::update_segment()
+{
+  _segment->clientmapv = cmapv;
+}
+
 void ESession::replay(MDS *mds)
 {
   if (mds->clientmap.get_version() >= cmapv) {
@@ -599,6 +666,11 @@ void EAnchor::expire(MDS *mds, Context *c)
 {
   dout(10) << "EAnchor.expire saving anchor table" << endl;
   mds->anchortable->save(c);
+}
+
+void EAnchor::update_segment()
+{
+  _segment->anchortablev = version;
 }
 
 void EAnchor::replay(MDS *mds)
@@ -676,9 +748,14 @@ void EUpdate::expire(MDS *mds, Context *c)
   metablob.expire(mds, c);
 }
 
+void EUpdate::update_segment()
+{
+  metablob.update_segment(_segment);
+}
+
 void EUpdate::replay(MDS *mds)
 {
-  metablob.replay(mds);
+  metablob.replay(mds, _segment);
 }
 
 
@@ -723,10 +800,15 @@ void EOpen::expire(MDS *mds, Context *c)
   mds->server->maybe_journal_opens();
 }
 
+void EOpen::update_segment()
+{
+  // ??
+}
+
 void EOpen::replay(MDS *mds)
 {
   dout(10) << "EOpen.replay " << endl;
-  metablob.replay(mds);
+  metablob.replay(mds, _segment);
 }
 
 
@@ -808,6 +890,7 @@ void ESlaveUpdate::replay(MDS *mds)
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds" << master 
 	     << ": saving blob for later commit" << endl;
     assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
+    metablob._segment = _segment;  // may need this later
     mds->mdcache->uncommitted_slave_updates[master][reqid] = metablob;
     break;
 
@@ -815,7 +898,7 @@ void ESlaveUpdate::replay(MDS *mds)
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master
 	       << ": applying previously saved blob" << endl;
-      mds->mdcache->uncommitted_slave_updates[master][reqid].replay(mds);
+      mds->mdcache->uncommitted_slave_updates[master][reqid].replay(mds, _segment);
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
@@ -875,7 +958,7 @@ void ESubtreeMap::replay(MDS *mds)
     
     // first, stick the spanning tree in my cache
     //metablob.print(cout);
-    metablob.replay(mds);
+    metablob.replay(mds, _segment);
     
     // restore import/export maps
     for (map<dirfrag_t, list<dirfrag_t> >::iterator p = subtrees.begin();
@@ -914,7 +997,7 @@ void EFragment::replay(MDS *mds)
   list<Context*> waiters;
   mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters);
 
-  metablob.replay(mds);
+  metablob.replay(mds, _segment);
 }
 
 
@@ -931,6 +1014,11 @@ bool EPurgeFinish::has_expired(MDS *mds)
 void EPurgeFinish::expire(MDS *mds, Context *c)
 {
   assert(0);
+}
+
+void EPurgeFinish::update_segment()
+{
+  // ** update purge lists?
 }
 
 void EPurgeFinish::replay(MDS *mds)
@@ -971,7 +1059,7 @@ void EExport::expire(MDS *mds, Context *c)
 void EExport::replay(MDS *mds)
 {
   dout(10) << "EExport.replay " << base << endl;
-  metablob.replay(mds);
+  metablob.replay(mds, _segment);
   
   CDir *dir = mds->mdcache->get_dirfrag(base);
   assert(dir);
@@ -1008,7 +1096,7 @@ void EImportStart::expire(MDS *mds, Context *c)
 void EImportStart::replay(MDS *mds)
 {
   dout(10) << "EImportStart.replay " << base << endl;
-  metablob.replay(mds);
+  metablob.replay(mds, _segment);
 
   // put in ambiguous import list
   mds->mdcache->add_ambiguous_import(base, bounds);

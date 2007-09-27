@@ -75,8 +75,8 @@ protected:
 
   bool has_expired(MDS *mds);
   void expire(MDS *mds, Context *c);
-  void replay(MDS *mds);
-  
+  void update_segment();
+  void replay(MDS *mds);  
 };
 
 #endif

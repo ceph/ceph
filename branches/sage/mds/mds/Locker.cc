@@ -1553,14 +1553,14 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock));
+  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mds->mdlog->get_current_segment()));
 }
 
-void Locker::scatter_writebehind_finish(ScatterLock *lock)
+void Locker::scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << endl;
-  in->pop_and_dirty_projected_inode();
+  in->pop_and_dirty_projected_inode(ls);
   lock->clear_updated();
   scatter_eval_gather(lock);
 }

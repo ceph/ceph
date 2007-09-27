@@ -176,6 +176,8 @@ protected:
   version_t committed_version_equivalent;  // in case of, e.g., temporary file
   version_t projected_version; 
 
+  xlist<CDir*>::item xlist_dirty;
+
   // lock nesting, freeze
   int auth_pins;
   int nested_auth_pins;
@@ -347,8 +349,8 @@ private:
   void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty();
-  void mark_dirty(version_t pv);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
 

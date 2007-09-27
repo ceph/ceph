@@ -482,10 +482,11 @@ void MDCache::try_subtree_merge(CDir *dir)
 class C_MDC_SubtreeMergeWB : public Context {
   MDCache *mdcache;
   CInode *in;
+  LogSegment *ls;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i) : mdcache(mdc), in(i) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, LogSegment *s) : mdcache(mdc), in(i), ls(s) {}
   void finish(int r) { 
-    mdcache->subtree_merge_writebehind_finish(in);
+    mdcache->subtree_merge_writebehind_finish(in, ls);
   }
 };
 
@@ -549,17 +550,18 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
       
       mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in));
+      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, 
+							 mds->mdlog->get_current_segment()));
     }
   } 
 
   show_subtrees(15);
 }
 
-void MDCache::subtree_merge_writebehind_finish(CInode *in)
+void MDCache::subtree_merge_writebehind_finish(CInode *in, LogSegment *ls)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << endl;
-  in->pop_and_dirty_projected_inode();
+  in->pop_and_dirty_projected_inode(ls);
   in->auth_unpin();
 }
 
@@ -978,24 +980,10 @@ int MDCache::num_subtrees_fullnonauth()
 // ====================================================================
 // import map, recovery
 
-/*
- * take note of where we write import_maps in the log, as we need
- * to take care not to expire them until an updated map is safely flushed.
- */
-class C_MDS_WroteSubtreeMap : public Context {
-  MDCache *mdcache;
-  off_t end_off;
-public:
-  C_MDS_WroteSubtreeMap(MDCache *mc, off_t eo) : mdcache(mc), end_off(eo) { }
-  void finish(int r) {
-    mdcache->_logged_subtree_map(end_off);
-  }
-};
 
-
-void MDCache::log_subtree_map(Context *onsync)
+ESubtreeMap *MDCache::create_subtree_map() 
 {
-  dout(10) << "log_subtree_map " << num_subtrees() << " subtrees, " 
+  dout(10) << "create_subtree_map " << num_subtrees() << " subtrees, " 
 	   << num_subtrees_fullauth() << " fullauth"
 	   << endl;
   
@@ -1027,25 +1015,9 @@ void MDCache::log_subtree_map(Context *onsync)
   }
 
   //le->metablob.print(cout);
-
-  Context *fin = new C_MDS_WroteSubtreeMap(this, mds->mdlog->get_write_pos());
-  mds->mdlog->writing_subtree_map = true;
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(fin);
-  if (onsync)
-    mds->mdlog->wait_for_sync(onsync);
+  return le;
 }
 
-void MDCache::_logged_subtree_map(off_t off)
-{
-  dout(10) << "_logged_subtree_map at " << off << endl;
-  mds->mdlog->last_subtree_map = off;
-  mds->mdlog->writing_subtree_map = false;
-
-  list<Context*> ls;
-  mds->mdlog->take_subtree_map_expire_waiters(ls);
-  mds->queue_waiters(ls);
-}
 
 
 void MDCache::send_resolve(int who)
@@ -2570,6 +2542,8 @@ void MDCache::rejoin_gather_finish()
   rejoin_trim_undef_inodes();
 
   // fetch paths?
+  //  do this before ack, since some inodes we may have already gotten
+  //  from surviving MDSs.
   if (!cap_import_paths.empty() &&
       !parallel_fetch(cap_import_paths, new C_MDC_RejoinGatherFinish(this)))
     return;
@@ -3478,7 +3452,7 @@ bool MDCache::shutdown_pass()
   mds->server->journal_opens();    // hrm, this is sort of a hack.
 
   // flush what we can from the log
-  mds->mdlog->trim(0);
+  mds->mdlog->trim();
 
   // SUBTREES
   // send all imports back to 0.
@@ -4469,11 +4443,12 @@ class C_MDC_AnchorCreateLogged : public Context {
   CInode *in;
   version_t atid;
   version_t pdv;
+  LogSegment *ls;
 public:
-  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, version_t v) : 
-    cache(c), in(i), atid(t), pdv(v) {}
+  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, version_t v, LogSegment *s) : 
+    cache(c), in(i), atid(t), pdv(v), ls(s) {}
   void finish(int r) {
-    cache->_anchor_create_logged(in, atid, pdv);
+    cache->_anchor_create_logged(in, atid, pdv, ls);
   }
 };
 
@@ -4497,11 +4472,12 @@ void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
   le->metablob.add_anchor_transaction(atid);
 
   // log + wait
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid, pdv));
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid, pdv, 
+							    mds->mdlog->get_current_segment()));
 }
 
 
-void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv)
+void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv, LogSegment *ls)
 {
   dout(10) << "_anchor_create_logged pdv " << pdv << " on " << *in << endl;
 
@@ -4513,7 +4489,7 @@ void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv)
   
   // apply update to cache
   in->inode.anchored = true;
-  in->mark_dirty(pdv);
+  in->mark_dirty(pdv, ls);
   
   // tell the anchortable we've committed
   mds->anchorclient->commit(atid);
@@ -4668,10 +4644,12 @@ class C_MDC_PurgeStray : public Context {
   MDCache *cache;
   CDentry *dn;
   version_t pdv;
+  LogSegment *ls;
 public:
-  C_MDC_PurgeStray(MDCache *c, CDentry *d, version_t v) : cache(c), dn(d), pdv(v) { }
+  C_MDC_PurgeStray(MDCache *c, CDentry *d, version_t v, LogSegment *s) : 
+    cache(c), dn(d), pdv(v), ls(s) { }
   void finish(int r) {
-    cache->_purge_stray_logged(dn, pdv);
+    cache->_purge_stray_logged(dn, pdv, ls);
   }
 };
 
@@ -4687,16 +4665,16 @@ void MDCache::_purge_stray(CDentry *dn)
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
   le->metablob.add_inode_truncate(dn->inode->inode, 0);
-  mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv));
+  mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv, mds->mdlog->get_current_segment()));
 }
 
-void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv)
+void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 {
   dout(10) << "_purge_stray_logged " << *dn << " " << *dn->inode << endl;
   CInode *in = dn->inode;
   
   // dirty+unlink dentry
-  dn->dir->mark_dirty(pdv);
+  dn->dir->mark_dirty(pdv, ls);
   dn->dir->unlink_inode(dn);
   dn->dir->remove_dentry(dn);
 
@@ -5670,16 +5648,19 @@ class C_MDC_FragmentLogged : public Context {
   int bits;
   list<CDir*> resultfrags;
   vector<version_t> pvs;
+  LogSegment *ls;
 public:
   C_MDC_FragmentLogged(MDCache *m, CInode *di, frag_t bf, int b, 
-		       list<CDir*>& rf, vector<version_t>& p) : 
-    mdcache(m), diri(di), basefrag(bf), bits(b) {
+		       list<CDir*>& rf, vector<version_t>& p,
+		       LogSegment *s) : 
+    mdcache(m), diri(di), basefrag(bf), bits(b), ls(s) {
     resultfrags.swap(rf);
     pvs.swap(p);
   }
   virtual void finish(int r) {
     mdcache->fragment_logged(diri, basefrag, bits, 
-			     resultfrags, pvs);
+			     resultfrags, pvs,
+			     ls);
   }
 };
 
@@ -5716,7 +5697,7 @@ void MDCache::fragment_stored(CInode *diri, frag_t basefrag, int bits,
   
   mds->mdlog->submit_entry(le,
 			   new C_MDC_FragmentLogged(this, diri, basefrag, bits, 
-						    resultfrags, pvs));
+						    resultfrags, pvs, mds->mdlog->get_current_segment()));
   
   // announcelist<CDir*>& resultfrags, 
   for (set<int>::iterator p = peers.begin();
@@ -5737,7 +5718,8 @@ void MDCache::fragment_stored(CInode *diri, frag_t basefrag, int bits,
 
 void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
 			      list<CDir*>& resultfrags, 
-			      vector<version_t>& pvs)
+			      vector<version_t>& pvs,
+			      LogSegment *ls)
 {
   dout(10) << "fragment_logged " << basefrag << " bits " << bits 
 	   << " on " << *diri << endl;
@@ -5754,7 +5736,7 @@ void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
     
     // dirty, unpin, unfreeze
     dir->state_clear(CDir::STATE_FRAGMENTING);  
-    dir->mark_dirty(*pv);
+    dir->mark_dirty(*pv, ls);
     pv++;
 
     for (map<string,CDentry*>::iterator p = dir->items.begin();

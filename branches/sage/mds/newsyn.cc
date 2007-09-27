@@ -14,6 +14,8 @@
 
 #define intabs(x) ((x) >= 0 ? (x):(-(x)))
 
+#include <mpi.h>
+
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
@@ -44,7 +46,6 @@ public:
 /*
  * start up NewMessenger via MPI.
  */ 
-#include <mpi.h>
 
 pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
 {

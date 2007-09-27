@@ -17,6 +17,7 @@ using namespace std;
 #include <cassert>
 
 #include "include/frag.h"
+#include "include/xlist.h"
 
 
 #define MDS_PORT_MAIN     0
@@ -411,7 +412,7 @@ class MDSCacheObject {
   // cons
  public:
   MDSCacheObject() :
-    state(0),
+    state(0), 
     ref(0),
     replica_nonce(0) {}
   virtual ~MDSCacheObject() {}

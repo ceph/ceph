@@ -46,7 +46,7 @@ class Message;
 class CInode;
 class CInodeDiscover;
 class MDCache;
-
+class LogSegment;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -135,7 +135,7 @@ class CInode : public MDSCacheObject {
   }
 
   inode_t *project_inode();
-  void pop_and_dirty_projected_inode();
+  void pop_and_dirty_projected_inode(LogSegment *ls);
 
   // -- cache infrastructure --
 private:
@@ -182,6 +182,12 @@ protected:
   utime_t               replica_caps_wanted_keep_until;
 
 
+  // LogSegment xlists i (may) belong to
+  xlist<CInode*>::item xlist_dirty;
+  xlist<CInode*>::item xlist_opened_files;
+  xlist<CInode*>::item xlist_dirty_inode_mtimes;
+  xlist<CInode*>::item xlist_purging_inodes;
+
  private:
   // auth pin
   int auth_pins;
@@ -207,6 +213,8 @@ protected:
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
+    xlist_dirty(this), xlist_opened_files(this), 
+    xlist_dirty_inode_mtimes(this), xlist_purging_inodes(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
@@ -257,8 +265,8 @@ protected:
   version_t get_version() { return inode.version; }
 
   version_t pre_dirty();
-  void _mark_dirty();
-  void mark_dirty(version_t projected_dirv);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
 
@@ -277,6 +285,7 @@ public:
   ScatterLock dirfragtreelock;
   FileLock   filelock;
   ScatterLock dirlock;
+
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -602,7 +611,7 @@ public:
   
   inodeno_t get_ino() { return st.inode.ino; }
 
-  void update_inode(CInode *in, set<int>& new_client_caps) {
+  void update_inode(CInode *in, set<int>& new_client_caps, LogSegment *ls) {
     // treat scatterlocked mtime special, since replica may have newer info
     if (in->dirlock.get_state() == LOCK_SCATTER ||
 	in->dirlock.get_state() == LOCK_GLOCKC ||
@@ -616,7 +625,7 @@ public:
     in->pop = st.pop;
 
     if (st.is_dirty) 
-      in->_mark_dirty();
+      in->_mark_dirty(ls);
 
     in->replica_map = replicas;
     if (!replicas.empty()) 

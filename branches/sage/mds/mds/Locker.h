@@ -40,9 +40,9 @@ class MLock;
 
 class MClientRequest;
 
-
 class Anchor;
 class Capability;
+class LogSegment;
 
 class SimpleLock;
 class FileLock;
@@ -129,13 +129,14 @@ protected:
   class C_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
+    LogSegment *ls;
   public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl) : locker(l), lock(sl) {}
+    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, LogSegment *s) : locker(l), lock(sl), ls(s) {}
     void finish(int r) { 
-      locker->scatter_writebehind_finish(lock); 
+      locker->scatter_writebehind_finish(lock, ls); 
     }
   };
-  void scatter_writebehind_finish(ScatterLock *lock);
+  void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
 
   // local
 protected:

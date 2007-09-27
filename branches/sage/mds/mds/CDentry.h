@@ -25,6 +25,7 @@ using namespace std;
 #include "include/types.h"
 #include "include/buffer.h"
 #include "include/lru.h"
+#include "include/xlist.h"
 #include "mdstypes.h"
 
 #include "SimpleLock.h"
@@ -38,6 +39,8 @@ class CDentryDiscover;
 class Anchor;
 
 class CDentry;
+class LogSegment;
+
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);
@@ -83,6 +86,8 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
 
+  xlist<CDentry*>::item xlist_dirty;
+
   off_t dir_offset;   
 
   int auth_pins, nested_auth_pins;
@@ -109,6 +114,7 @@ public:
     remote_ino(0), remote_d_type(0),
     inode(0), dir(0),
     version(0), projected_version(0),
+    xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
@@ -117,6 +123,7 @@ public:
     remote_ino(0), remote_d_type(0),
     inode(in), dir(0),
     version(0), projected_version(0),
+    xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
@@ -125,6 +132,7 @@ public:
     remote_ino(ino), remote_d_type(dt),
     inode(in), dir(0),
     version(0), projected_version(0),
+    xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
     lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
@@ -189,8 +197,8 @@ public:
   pair<int,int> authority();
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty();
-  void mark_dirty(version_t projected_dirv);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
   void mark_new();
@@ -217,7 +225,7 @@ public:
     if (is_dirty())
       mark_clean();
   }
-  void decode_import_state(bufferlist& bl, int& off, int from, int to) {
+  void decode_import_state(bufferlist& bl, int& off, int from, int to, LogSegment *ls) {
     int nstate;
     bl.copy(off, sizeof(nstate), (char*)&nstate);
     off += sizeof(nstate);
@@ -232,7 +240,7 @@ public:
     state = 0;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
-      _mark_dirty();
+      _mark_dirty(ls);
     if (!replica_map.empty())
       get(PIN_REPLICATED);
     add_replica(from, EXPORT_NONCE);

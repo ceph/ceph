@@ -92,7 +92,7 @@ public:
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
 
   version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
-  void dirty_dn_diri(CDentry *dn, version_t dirpv, utime_t mtime);
+  void dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv);
 
 
   // requests on existing inodes.
