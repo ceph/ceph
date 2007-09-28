@@ -368,7 +368,7 @@ class MDSCacheObject {
   const static int PIN_LOCK       = -1002;
   const static int PIN_REQUEST    = -1003;
   const static int PIN_WAITER     =  1004;
-  const static int PIN_DIRTYSCATTERED = 1005;
+  const static int PIN_DIRTYSCATTERED = 1005;   // make this neg if we start using multiple scatterlocks?  
   static const int PIN_AUTHPIN    =  1006;
 
   const char *generic_pin_name(int p) {
@@ -614,6 +614,7 @@ protected:
   virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
   virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
 
+  virtual void clear_dirty_scattered(int type) { }
 
   // ---------------------------------------------
   // ordering

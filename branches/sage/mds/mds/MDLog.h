@@ -161,13 +161,13 @@ public:
   void flush();
 
 private:
-  class C_TrimmedSegment : public Context {
+  class C_MaybeTrimmedSegment : public Context {
     MDLog *mdlog;
     LogSegment *ls;
   public:
-    C_TrimmedSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
+    C_MaybeTrimmedSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
     void finish(int res) {
-      mdlog->_trimmed(ls);
+      mdlog->_maybe_trimmed(ls);
     }
   };
 

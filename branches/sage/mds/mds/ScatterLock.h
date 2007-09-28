@@ -109,13 +109,12 @@ public:
     if (updated) {
       parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
       updated = false; 
+      parent->clear_dirty_scattered(type);
     }
   }
   bool is_updated() { return updated; }
   
   void replicate_relax() {
-    //if (state == LOCK_SYNC && !is_rdlocked())
-    //state = LOCK_SCATTER;
   }
 
   void export_twiddle() {

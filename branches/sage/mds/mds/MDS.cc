@@ -833,11 +833,12 @@ void MDS::boot_start(int step)
     if (is_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
       mdlog->replay(new C_MDS_BootStart(this, 3));
+      break;
     } else {
       dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
       mdlog->append();
+      step++;
     }
-    break;
 
   case 3:
     if (is_replay()) {
@@ -1008,11 +1009,8 @@ void MDS::stopping_start()
   
   // terminate client sessions
   server->terminate_sessions();
-  
-  // flush log
-  mdlog->set_max_events(0);
-  mdlog->trim();
 }
+
 void MDS::stopping_done()
 {
   dout(2) << "stopping_done" << dendl;

@@ -199,7 +199,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in)
   assert(lookup(dname) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, in);
+  CDentry* dn = new CDentry(dname, 0);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);

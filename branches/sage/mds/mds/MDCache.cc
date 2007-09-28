@@ -1832,6 +1832,14 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
+
+      if (dn->get_inode()->dirlock.is_updated()) {
+	// include full inode to shed our dirtyscattered state
+	rejoin->add_full_inode(dn->get_inode()->inode, 
+			       dn->get_inode()->symlink,
+			       dn->get_inode()->dirfragtree);
+	dn->get_inode()->dirlock.clear_updated();
+      }
     }
   } else {
     // STRONG
@@ -1917,6 +1925,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
  * the sender 
  *  - is recovering from their journal.
  *  - may have incorrect (out of date) inode contents
+ *  - will include full inodes IFF they contain dirty scatterlock content
  *
  * if the sender didn't trim_non_auth(), they
  *  - may have incorrect (out of date) dentry/inode linkage
@@ -1995,7 +2004,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(dn);
       assert(dn->is_primary());
       
-      if (survivor) dentry_remove_replica(dn, from);
+      if (survivor && dn->is_replica(from)) 
+	dentry_remove_replica(dn, from);  // this induces a lock gather completion
       int dnonce = dn->add_replica(from);
       dout(10) << " have " << *dn << dendl;
       if (ack) 
@@ -2007,7 +2017,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       CInode *in = dn->get_inode();
       assert(in);
 
-      if (survivor) inode_remove_replica(in, from);
+      if (survivor && in->is_replica(from)) 
+	inode_remove_replica(in, from);    // this induces a lock gather completion
       int inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
@@ -2029,6 +2040,17 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
   
+  // full inodes?
+  //   dirty scatterlock content!
+  for (list<MMDSCacheRejoin::inode_full>::iterator p = weak->full_inodes.begin();
+       p != weak->full_inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->inode.ino);
+    if (!in) continue;
+    if (p->inode.mtime > in->inode.mtime) in->inode.mtime = p->inode.mtime;
+    dout(10) << " got dirty inode scatterlock content " << *in << dendl;
+  }
+
   if (survivor)
     rejoin_scour_survivor_replicas(from, ack);
 
@@ -3490,7 +3512,10 @@ bool MDCache::shutdown_pass()
   mds->server->journal_opens();    // hrm, this is sort of a hack.
 
   // flush what we can from the log
-  mds->mdlog->trim();
+  if (g_conf.mds_log_flush_on_shutdown) {
+    mds->mdlog->set_max_events(0);
+    mds->mdlog->trim();
+  }
 
   // SUBTREES
   // send all imports back to 0.
@@ -3536,15 +3561,6 @@ bool MDCache::shutdown_pass()
   // FIXME
   dout(7) << "FIXME: i need to empty out stray dir contents..." << dendl;
 
-  // (wait for) flush log?
-  if (g_conf.mds_log_flush_on_shutdown) {
-    if (!mds->mdlog->empty()) {
-      dout(7) << "waiting for log to flush .. " << mds->mdlog->get_num_events() 
-	      << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
-      return false;
-    } 
-  }
-
   // cap log?
   if (g_conf.mds_log_flush_on_shutdown) {
 
@@ -3552,15 +3568,15 @@ bool MDCache::shutdown_pass()
     if (!mds->mdlog->is_capped()) {
       dout(7) << "capping the log" << dendl;
       mds->mdlog->cap();
-      // note that this won't flush right away, so we'll make at least one more pass
+      mds->mdlog->trim();
     }
-    
-    if (mds->mdlog->empty()) {
-      dout(7) << "waiting for log to flush (including subtree_map, now) .. " << mds->mdlog->get_num_events() 
+
+    if (!mds->mdlog->empty()) {
+      dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
 	      << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
       return false;
     }
-    
+
     if (!did_shutdown_log_cap) {
       // flush journal header
       dout(7) << "writing header for (now-empty) journal" << dendl;

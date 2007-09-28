@@ -1292,6 +1292,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << dendl;
     
     blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
+    assert(mdr->ls);
     mdr->ls->dirty_inode_mtimes.push_back(&diri->xlist_dirty_inode_mtime);
   }
   
@@ -1424,12 +1425,12 @@ void Server::handle_client_utime(MDRequest *mdr)
   pi->ctime = g_clock.real_now();
 
   // log + wait
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "utime");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1464,12 +1465,12 @@ void Server::handle_client_chmod(MDRequest *mdr)
   pi->ctime = g_clock.real_now();
 
   // log + wait
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chmod");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
 
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1503,12 +1504,12 @@ void Server::handle_client_chown(MDRequest *mdr)
   pi->ctime = g_clock.real_now();
   
   // log + wait
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1701,6 +1702,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty() - 1;
   
   // prepare finisher
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
@@ -1709,7 +1711,6 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
 }
 
@@ -1744,6 +1745,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   //if (mds->logger) mds->logger->inc("mkdir");
 
   // prepare finisher
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
@@ -1753,7 +1755,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
 
   /* old export heuristic.  pbly need to reimplement this at some point.    
@@ -1782,7 +1783,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!dn) return;
 
   mdr->now = g_clock.real_now();
-  mdr->ls = mds->mdlog->get_current_segment();
+
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
@@ -1793,6 +1794,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty() - 1;
 
   // prepare finisher
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
@@ -1801,7 +1803,6 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
 }
 
@@ -1930,6 +1931,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_local " << *dn << " to " << *targeti << dendl;
 
+  mdr->ls = mdlog->get_current_segment();
+
   // predirty NEW dentry
   version_t dnpv = dn->pre_dirty();
   version_t tipv = targeti->pre_dirty();
@@ -1949,7 +1952,6 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv, dirpv));
 }
 
@@ -2023,6 +2025,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   dn->pre_dirty();
   
   // add to event
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "link_remote");
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
@@ -2033,7 +2036,6 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   mdr->committing = true;
 
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, dn, targeti, dirpv));
 }
 
@@ -2122,10 +2124,10 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
 
   // journal it
+  mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
 }
 
@@ -2180,6 +2182,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
 	   << " inc=" << inc
 	   << " " << *targeti << dendl;
 
+  mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le;
   if (r == 0) {
     // write a commit to the journal
@@ -2199,7 +2202,6 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
       targeti->inode.nlink--;
   }
 
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le);
 }
 
@@ -2373,6 +2375,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   dout(10) << "_unlink_local " << *dn << dendl;
 
   // ok, let's do it.
+  mdr->ls = mdlog->get_current_segment();
+
   // prepare log entry
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   le->metablob.add_client_req(mdr->reqid);
@@ -2410,7 +2414,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   // log + wait
   journal_opens();  // journal pending opens, just in case
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
 							dirpv));
 }
@@ -2511,6 +2514,7 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
 
   // ok, let's do it.
   // prepare log entry
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "unlink_remote");
   le->metablob.add_client_req(mdr->reqid);
 
@@ -2532,7 +2536,6 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   mdr->committing = true;
 
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, fin);
 }
 
@@ -2924,6 +2927,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // -- prepare journal entry --
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rename");
   le->metablob.add_client_req(mdr->reqid);
   
@@ -2938,7 +2942,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->committing = true;
   
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, fin);
 }
 
@@ -3296,9 +3299,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       destdn->inode->is_auth() ||
       srcdn->inode->is_any_caps()) {
     // journal.
+    mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
     _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
-    mdr->ls = mdlog->get_current_segment();
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
     // don't journal.
@@ -3343,6 +3346,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 {
   dout(10) << "_commit_slave_rename " << *mdr << " r=" << r << dendl;
 
+  mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le;
   if (r == 0) {
     // commit
@@ -3354,7 +3358,6 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     // abort
     le = new ESlaveUpdate(mdlog, "slave_rename_abort", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
   }
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le);
 }
 
@@ -3528,6 +3531,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 					   pdv, req->args.truncate.length, ctime);
   
   // log + wait
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
@@ -3538,7 +3542,6 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->version = pdv;
   pi->size = req->args.truncate.length;
   
-  mdr->ls = mdlog->get_current_segment();
 
   mdlog->submit_entry(le, fin);
 }
@@ -3748,6 +3751,7 @@ void Server::handle_client_opent(MDRequest *mdr)
 						pdv, ctime);
   
   // log + wait
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
@@ -3758,8 +3762,6 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->version = pdv;
   pi->size = 0;
   
-  mdr->ls = mdlog->get_current_segment();
-
   mdlog->submit_entry(le, fin);
 }
 
@@ -3834,6 +3836,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   
   // prepare finisher
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
+  mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
@@ -3841,7 +3844,6 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
   mdlog->submit_entry(le, fin);
   
   /*

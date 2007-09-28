@@ -98,6 +98,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // dirty non-auth mtimes
   for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
+    dout(10) << " waiting for dirlock mtime flush on " << *p << dendl;
     if (!gather) gather = new C_Gather;
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
@@ -437,8 +438,8 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
   // client requests
   //  note the newest request per client
-  if (!client_reqs.empty())
-    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
+  //if (!client_reqs.empty())
+    //    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg)

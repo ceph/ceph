@@ -252,6 +252,7 @@ void MDLog::trim()
   dout(10) << "trim " 
 	   << segments.size() << " / " << max_segments << " segments, " 
 	   << num_events << " / " << max_events << " events"
+	   << ", " << trimming_segments.size() << " trimming"
 	   << dendl;
 
   if (segments.empty()) return;
@@ -262,15 +263,21 @@ void MDLog::trim()
 
   map<off_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
-  while (((max_events >= 0 && left > max_events) ||
-	  (max_segments >= 0 && (int)segments.size() > max_segments)) &&
-	 (int)trimming_segments.size() < g_conf.mds_log_max_trimming) {
+  while (p != segments.end() && 
+	 ((max_events >= 0 && left > max_events) ||
+	  (max_segments >= 0 && (int)segments.size() > max_segments))) {
 
     if (stop < g_clock.now())
       break;
 
+    if ((int)trimming_segments.size() >= g_conf.mds_log_max_trimming)
+      break;
+
     // look at first segment
     LogSegment *ls = p->second;
+    assert(ls);
+
+    p++;
     
     if (trimming_segments.count(ls)) {
       dout(5) << "trim already trimming segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
@@ -279,7 +286,6 @@ void MDLog::trim()
     }
 
     left -= ls->num_events;
-    p++;
   }
 }
 
@@ -290,7 +296,7 @@ void MDLog::try_trim(LogSegment *ls)
   if (exp) {
     trimming_segments.insert(ls);
     dout(5) << "try_trim trimming segment " << ls->offset << dendl;
-    exp->set_finisher(new C_TrimmedSegment(this, ls));
+    exp->set_finisher(new C_MaybeTrimmedSegment(this, ls));
   } else {
     dout(10) << "try_trim trimmed segment " << ls->offset << dendl;
     _trimmed(ls);
@@ -300,6 +306,7 @@ void MDLog::try_trim(LogSegment *ls)
 void MDLog::_maybe_trimmed(LogSegment *ls) 
 {
   dout(10) << "_maybe_trimmed segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+  assert(trimming_segments.count(ls));
   trimming_segments.erase(ls);
   try_trim(ls);
 }
@@ -307,6 +314,12 @@ void MDLog::_maybe_trimmed(LogSegment *ls)
 void MDLog::_trimmed(LogSegment *ls)
 {
   dout(5) << "_trimmed segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+
+  // don't trim last segment, unless we're capped
+  if (!capped && ls == get_current_segment()) {
+    dout(5) << "_trimmed not trimming " << ls->offset << ", last one and !capped" << dendl;
+    return;
+  }
 
   num_events -= ls->num_events;
 

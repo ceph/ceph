@@ -201,7 +201,7 @@ md_config_t g_conf = {
 
   mds_log: true,
   mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
-  mds_log_max_segments: 500,
+  mds_log_max_segments: 100,
   mds_log_max_trimming: 2,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_read_inc: 1<<24,
