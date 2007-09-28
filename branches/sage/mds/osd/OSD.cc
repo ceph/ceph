@@ -221,6 +221,26 @@ int OSD::init()
 		 50000, 
 		 g_conf.osd_age - .05);
     }
+
+    if (g_conf.osd_auto_weight) {
+      // benchmark
+      bufferlist bl;
+      bufferptr bp(1048576);
+      bp.zero();
+      bl.push_back(bp);
+      utime_t start = g_clock.now();
+      for (int i=0; i<1000; i++) 
+	store->write(object_t(999,i), 0, bl.length(), bl, 0);
+      store->sync();
+      utime_t end = g_clock.now();
+      end -= start;
+      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
+      for (int i=0; i<1000; i++) 
+	store->remove(object_t(999,i), 0);
+      
+      // set osd weight
+      superblock.weight = (1000.0 / (double)end);
+    }
   }
   else {
     dout(2) << "boot" << dendl;
@@ -235,6 +255,8 @@ int OSD::init()
     assert(whoami == superblock.whoami);
   }
   
+
+
   
   // log
   char name[80];

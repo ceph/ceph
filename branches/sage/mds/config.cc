@@ -189,6 +189,8 @@ md_config_t g_conf = {
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
+  journaler_batch_interval: .001,   // seconds.. max add'l latency we artificially incur
+  journaler_batch_max: 16384,        // max bytes we'll delay flushing
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -258,7 +260,7 @@ md_config_t g_conf = {
   osd_shed_reads: false,     // forward from primary to replica
   osd_shed_reads_min_latency: .01,       // min local latency
   osd_shed_reads_min_latency_diff: .01,  // min latency difference
-  osd_shed_reads_min_latency_ratio: 1.2,  // 1.2 == 20% higher than peer
+  osd_shed_reads_min_latency_ratio: 1.5,  // 1.2 == 20% higher than peer
 
   osd_immediate_read_from_cache: false,//true, // osds to read from the cache immediately?
   osd_exclusive_caching: true,         // replicas evict replicated writes
@@ -266,8 +268,8 @@ md_config_t g_conf = {
   osd_stat_refresh_interval: .5,
 
   osd_pg_bits: 4,  // bits per osd
-  osd_object_layout: OBJECT_LAYOUT_HASHINO,
-  osd_pg_layout: PG_LAYOUT_CRUSH,
+  osd_object_layout: OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
+  osd_pg_layout: PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_max_rep: 4,
   osd_min_raid_width: 4,
   osd_max_raid_width: 3, //6, 
@@ -282,6 +284,8 @@ md_config_t g_conf = {
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
+
+  osd_auto_weight: false,
 
   osd_hack_fast_startup: false,  // this breaks localized pgs.
 
@@ -299,11 +303,11 @@ md_config_t g_conf = {
   ebofs: 1,
   ebofs_cloneable: false,
   ebofs_verify: false,
-  ebofs_commit_ms:      500,       // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_commit_ms:      1000,       // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (60 *256), // 4k blocks, *256 for MB
+  ebofs_bc_size:        (50 *256), // 4k blocks, *256 for MB
   ebofs_bc_max_dirty:   (30 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
@@ -313,8 +317,8 @@ md_config_t g_conf = {
 
   // --- block device ---
   bdev_lock: true,
-  bdev_iothreads:    2,         // number of ios to queue with kernel
-  bdev_idle_kick_after_ms: 100,   // ms   ** FIXME ** this seems to break things, not sure why yet **
+  bdev_iothreads:   1,         // number of ios to queue with kernel
+  bdev_idle_kick_after_ms: 100,  // ms
   bdev_el_fw_max_ms: 10000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 3000,       // restart elevator at least once every 300 ms
   bdev_el_bidir: false,          // bidirectional elevator?
@@ -540,6 +544,7 @@ void parse_config_options(std::vector<char*>& args)
     //g_conf.fake_osd_sync = atoi(args[++i]);
 
     
+    
     else if (strcmp(args[i], "--doutdir") == 0) {
       g_conf.dout_dir = args[++i];
     }
@@ -661,6 +666,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.journaler_safe = atoi(args[++i]);
     else if (strcmp(args[i], "--journaler_cache") == 0) 
       g_conf.journaler_cache = atoi(args[++i]);
+    else if (strcmp(args[i], "--journaler_batch_interval") == 0) 
+      g_conf.journaler_batch_interval = atof(args[++i]);
+    else if (strcmp(args[i], "--journaler_batch_max") == 0) 
+      g_conf.journaler_batch_max = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
@@ -869,9 +878,11 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--osd_pad_pg_log") == 0) 
       g_conf.osd_pad_pg_log = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--osd_auto_weight") == 0) 
+      g_conf.osd_auto_weight = atoi(args[++i]);
+
     else if (strcmp(args[i], "--osd_hack_fast_startup") == 0) 
       g_conf.osd_hack_fast_startup = atoi(args[++i]);
-
 
     else if (strcmp(args[i], "--bdev_lock") == 0) 
       g_conf.bdev_lock = atoi(args[++i]);

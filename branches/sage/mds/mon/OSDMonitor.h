@@ -41,6 +41,11 @@ private:
   OSDMap::Incremental pending_inc;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
+  map<int,double> osd_weight;
+
+  void build_crush_map(Crush& crush,
+		       map<int,double>& weights);
+
   // svc
   void create_initial();
   bool update_from_paxos();

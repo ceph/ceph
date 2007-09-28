@@ -886,16 +886,12 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
     }
 
     dout(10) << "put_repop  deleting " << *repop << dendl;
-    //repop->lock.Unlock();  
 	
     assert(rep_gather.count(repop->rep_tid));
     rep_gather.erase(repop->rep_tid);
 	
     delete repop->op;
     delete repop;
-
-  } else {
-    //repop->lock.Unlock();
   }
 }
 
@@ -1659,7 +1655,7 @@ void ReplicatedPG::note_failed_osd(int o)
   dout(10) << "note_failed_osd " << o << dendl;
   // do async; repop_ack() may modify pg->repop_gather
   list<RepGather*> ls;  
-  for (map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
        p != rep_gather.end();
        p++) {
     //dout(-1) << "checking repop tid " << p->first << dendl;
@@ -1685,7 +1681,7 @@ void ReplicatedPG::on_acker_change()
   } else {
     // for splay or chain replication, any change is significant. 
     // apply repops
-    for (map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+    for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
 	 p != rep_gather.end();
 	 p++) {
       if (!p->second->applied)
@@ -1696,7 +1692,7 @@ void ReplicatedPG::on_acker_change()
     rep_gather.clear();
     
     // and repop waiters
-    for (map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
+    for (hash_map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
 	 p != waiting_for_repop.end();
 	 p++)
       for (list<Message*>::iterator pm = p->second.begin();

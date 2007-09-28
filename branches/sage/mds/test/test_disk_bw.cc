@@ -18,35 +18,42 @@ using namespace std;
 int main(int argc, char **argv)
 {
   void   *buf;
-  int     dev_id, count, loop = 0, ret;
+  int     fd, count, loop = 0, ret;
   
-  if (argc != 3) {
-    fprintf(stderr, "Usage: %s device mb\n", argv[0]);
+  if (argc != 4) {
+    fprintf(stderr, "Usage: %s device bsize count\n", argv[0]);
     exit (0);
   }
   
-  count = atoi(argv[2]);
-  int bsize = 1048576;
+  int bsize = atoi(argv[2]);
+  count = atoi(argv[3]);
   
   posix_memalign(&buf, sysconf(_SC_PAGESIZE), bsize);
   
-  if ((dev_id = open(argv[1], O_DIRECT|O_RDWR)) < 0) {
+  //if ((fd = open(argv[1], O_SYNC|O_RDWR)) < 0) {  
+  if ((fd = open(argv[1], O_DIRECT|O_RDWR)) < 0) {
+
     fprintf(stderr, "Can't open device %s\n", argv[1]);
     exit (4);
   }
   
-  fprintf(stderr, "device is %s, dev_id is %d\n", argv[1], dev_id);
-  
+ 
   utime_t start = g_clock.now();
   while (loop++ < count) {
-    ret = ::write(dev_id, buf, bsize);
-    if ((loop % 100) == 0) 
-      fprintf(stderr, ".");
+    ret = ::write(fd, buf, bsize);
+    //if ((loop % 100) == 0) 
+    //fprintf(stderr, ".");
   }
+  ::fsync(fd);
+  ::close(fd);
   utime_t end = g_clock.now();
   end -= start;
 
-  int mb = count;
 
-  cout << mb << " MB, " << end << " seconds, " << ((double)mb / (double)end) << " MB/sec" << std::endl;
+  char hostname[80];
+  gethostname(hostname, 80);
+  
+  double mb = bsize*count/1024/1024;
+
+  cout << hostname << "\t" << mb << " MB\t" << end << " seconds\t" << (mb / (double)end) << " MB/sec" << std::endl;
 }

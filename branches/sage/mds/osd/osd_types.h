@@ -312,9 +312,10 @@ public:
   int32_t    whoami;    // my role in this fs.
   epoch_t    current_epoch;             // most recent epoch
   epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
+  double weight;
   OSDSuperblock(uint64_t f=0, int w=0) : 
     magic(MAGIC), fsid(f), whoami(w), 
-    current_epoch(0), oldest_map(0), newest_map(0) {}
+    current_epoch(0), oldest_map(0), newest_map(0), weight(0) {}
 };
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)

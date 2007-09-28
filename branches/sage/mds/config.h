@@ -182,6 +182,8 @@ struct md_config_t {
   int   journaler_write_head_interval;
   bool  journaler_cache;
   int   journaler_prefetch_periods;
+  double journaler_batch_interval;
+  size_t journaler_batch_max;
   
   // mds
   int   mds_cache_size;
@@ -273,6 +275,8 @@ struct md_config_t {
   int   osd_replay_window;
   int   osd_max_pull;
   bool  osd_pad_pg_log;
+
+  bool osd_auto_weight;
 
   bool osd_hack_fast_startup;
 

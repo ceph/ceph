@@ -184,11 +184,11 @@ void Timer::cancel_timer()
  */
 
 
-void Timer::add_event_after(float seconds,
+void Timer::add_event_after(double seconds,
                             Context *callback) 
 {
   utime_t when = g_clock.now();
-  when.sec_ref() += (int)seconds;
+  when += seconds;
   add_event_at(when, callback);
 }
 
@@ -244,7 +244,7 @@ bool Timer::cancel_event(Context *callback)
 
 // -------------------------------
 
-void SafeTimer::add_event_after(float seconds, Context *c)
+void SafeTimer::add_event_after(double seconds, Context *c)
 {
   assert(lock.is_locked());
   Context *w = new EventWrapper(this, c);

@@ -69,8 +69,8 @@ public:
 protected:
   // replica ops
   // [primary|tail]
-  map<tid_t, RepGather*>               rep_gather;
-  map<tid_t, list<class Message*> > waiting_for_repop;
+  hash_map<tid_t, RepGather*>            rep_gather;
+  hash_map<tid_t, list<class Message*> > waiting_for_repop;
 
   // load balancing
   set<object_t> balancing_reads;
