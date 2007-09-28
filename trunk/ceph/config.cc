@@ -189,8 +189,8 @@ md_config_t g_conf = {
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
-  journaler_batch_interval: .002,   // seconds.. max latency we artificially incur
-  journaler_batch_max: 8192,        // max bytes we'll delay flushing
+  journaler_batch_interval: .001,   // seconds.. max add'l latency we artificially incur
+  journaler_batch_max: 16384,        // max bytes we'll delay flushing
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -665,6 +665,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.journaler_safe = atoi(args[++i]);
     else if (strcmp(args[i], "--journaler_cache") == 0) 
       g_conf.journaler_cache = atoi(args[++i]);
+    else if (strcmp(args[i], "--journaler_batch_interval") == 0) 
+      g_conf.journaler_batch_interval = atof(args[++i]);
+    else if (strcmp(args[i], "--journaler_batch_max") == 0) 
+      g_conf.journaler_batch_max = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);

@@ -183,7 +183,7 @@ struct md_config_t {
   bool  journaler_cache;
   int   journaler_prefetch_periods;
   double journaler_batch_interval;
-  int journaler_batch_max;
+  size_t journaler_batch_max;
   
   // mds
   int   mds_cache_size;

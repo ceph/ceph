@@ -426,6 +426,9 @@ void Journaler::_finish_read(int r)
  */
 void Journaler::_issue_read(off_t len)
 {
+  // make sure we're fully flushed
+  _do_flush();
+
   if (_is_reading()) {
     dout(10) << "_issue_read " << len << " waiting, already reading " 
 	     << received_pos << "~" << (requested_pos-received_pos) << dendl;
