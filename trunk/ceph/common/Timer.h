@@ -117,7 +117,7 @@ class Timer {
   }
 
   // schedule events
-  void add_event_after(float seconds,
+  void add_event_after(double seconds,
                        Context *callback);
   void add_event_at(utime_t when,
                     Context *callback);
@@ -156,7 +156,7 @@ public:
   SafeTimer(Mutex& l) : lock(l) { }
   ~SafeTimer();
 
-  void add_event_after(float seconds, Context *c);
+  void add_event_after(double seconds, Context *c);
   void add_event_at(utime_t when, Context *c);
   void cancel_event(Context *c);
   void cancel_all();
