@@ -189,6 +189,8 @@ md_config_t g_conf = {
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
+  journaler_batch_interval: .002,   // seconds.. max latency we artificially incur
+  journaler_batch_max: 8192,        // max bytes we'll delay flushing
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,

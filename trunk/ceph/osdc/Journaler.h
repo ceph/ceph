@@ -80,6 +80,20 @@ class Journaler {
 
   Logger *logger;
 
+  Mutex *lock;
+  SafeTimer timer;
+
+  class C_DelayFlush : public Context {
+    Journaler *journaler;
+  public:
+    C_DelayFlush(Journaler *j) : journaler(j) {}
+    void finish(int r) {
+      journaler->delay_flush_event = 0;
+      journaler->_do_flush();
+    }
+  } *delay_flush_event;
+
+
   // my state
   static const int STATE_UNDEF = 0;
   static const int STATE_READHEAD = 1;
@@ -113,6 +127,7 @@ class Journaler {
   std::map<off_t, utime_t> pending_flush;  // start offsets and times for pending flushes
   std::map<off_t, std::list<Context*> > waitfor_flush; // when flushed through given offset
 
+  void _do_flush();
   void _finish_flush(int r, off_t start);
   class C_Flush;
   friend class C_Flush;
@@ -155,8 +170,9 @@ class Journaler {
   friend class C_Trim;
 
 public:
-  Journaler(inode_t& inode_, Objecter *obj, Logger *l, off_t fl=0, off_t pff=0) : 
-    inode(inode_), objecter(obj), filer(objecter), logger(l),
+  Journaler(inode_t& inode_, Objecter *obj, Logger *l, Mutex *lk, off_t fl=0, off_t pff=0) : 
+    inode(inode_), objecter(obj), filer(objecter), logger(l), 
+    lock(lk), timer(*lk), delay_flush_event(0),
     state(STATE_UNDEF),
     write_pos(0), flush_pos(0), ack_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),

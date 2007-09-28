@@ -288,6 +288,32 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 }
 
 
+void Journaler::_do_flush()
+{
+  if (write_pos == flush_pos) return;
+  assert(write_pos > flush_pos);
+
+  // flush
+  unsigned len = write_pos - flush_pos;
+  assert(len == write_buf.length());
+  dout(-10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
+  
+  // submit write for anything pending
+  // flush _start_ pos to _finish_flush
+  filer.write(inode, flush_pos, len, write_buf, 0,
+	      g_conf.journaler_safe ? 0:new C_Flush(this, flush_pos),  // on ACK
+	      g_conf.journaler_safe ?   new C_Flush(this, flush_pos):0); // on COMMIT
+  pending_flush[flush_pos] = g_clock.now();
+  
+  // adjust pointers
+  flush_pos = write_pos;
+  write_buf.clear();  
+  
+  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
+}
+
+  
+
 void Journaler::flush(Context *onsync)
 {
   // all flushed and acked?
@@ -305,23 +331,22 @@ void Journaler::flush(Context *onsync)
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
   } else {
-    // flush
-    unsigned len = write_pos - flush_pos;
-    assert(len == write_buf.length());
-    dout(10) << "flush flushing " << flush_pos << "~" << len << dendl;
-    
-    // submit write for anything pending
-    // flush _start_ pos to _finish_flush
-    filer.write(inode, flush_pos, len, write_buf, 0,
-		g_conf.journaler_safe ? 0:new C_Flush(this, flush_pos),  // on ACK
-		g_conf.journaler_safe ?   new C_Flush(this, flush_pos):0); // on COMMIT
-    pending_flush[flush_pos] = g_clock.now();
-    
-    // adjust pointers
-    flush_pos = write_pos;
-    write_buf.clear();  
-    
-    dout(10) << "flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
+    if (1) {
+      // maybe buffer
+      if (write_buf.length() < g_conf.journaler_batch_max) {
+	// delay!  schedule an event.
+	dout(-10) << "flush delaying flush" << dendl;
+	if (delay_flush_event) timer.cancel_event(delay_flush_event);
+	delay_flush_event = new C_DelayFlush(this);
+	timer.add_event_after(g_conf.journaler_batch_interval, delay_flush_event);	
+      } else {
+	dout(-10) << "flush not delaying flush" << dendl;
+	_do_flush();
+      }
+    } else {
+      // always flush
+      _do_flush();
+    }
   }
 
   // queue waiter (at _new_ write_pos; will go when reached by ack_pos)
