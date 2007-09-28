@@ -296,7 +296,7 @@ void Journaler::_do_flush()
   // flush
   unsigned len = write_pos - flush_pos;
   assert(len == write_buf.length());
-  dout(-10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
+  dout(10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
   
   // submit write for anything pending
   // flush _start_ pos to _finish_flush
@@ -335,12 +335,12 @@ void Journaler::flush(Context *onsync)
       // maybe buffer
       if (write_buf.length() < g_conf.journaler_batch_max) {
 	// delay!  schedule an event.
-	dout(-10) << "flush delaying flush" << dendl;
+	dout(20) << "flush delaying flush" << dendl;
 	if (delay_flush_event) timer.cancel_event(delay_flush_event);
 	delay_flush_event = new C_DelayFlush(this);
 	timer.add_event_after(g_conf.journaler_batch_interval, delay_flush_event);	
       } else {
-	dout(-10) << "flush not delaying flush" << dendl;
+	dout(20) << "flush not delaying flush" << dendl;
 	_do_flush();
       }
     } else {
