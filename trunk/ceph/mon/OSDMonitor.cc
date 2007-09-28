@@ -119,92 +119,13 @@ void OSDMonitor::create_initial()
   // start at epoch 1 until all osds boot
   newmap.inc_epoch();  // = 1
   assert(newmap.get_epoch() == 1);
-  
-  if (g_conf.num_osd >= 12) {
-    int ndom = g_conf.osd_max_rep;
-    UniformBucket *domain[ndom];
-    int domid[ndom];
-    for (int i=0; i<ndom; i++) {
-      domain[i] = new UniformBucket(1, 0);
-      domid[i] = newmap.crush.add_bucket(domain[i]);
-    }
-    
-    // add osds
-    int nper = ((g_conf.num_osd - 1) / ndom) + 1;
-    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
-    int i = 0;
-    for (int dom=0; dom<ndom; dom++) {
-      for (int j=0; j<nper; j++) {
-	newmap.osds.insert(i);
-	newmap.down_osds[i] = true; // initially DOWN
-	domain[dom]->add_item(i, 1.0);
-	//derr(0) << "osd" << i << " in domain " << dom << dendl;
-	i++;
-	if (i == g_conf.num_osd) break;
-      }
-    }
-    
-    // root
-    Bucket *root = new ListBucket(2);
-    for (int i=0; i<ndom; i++) {
-      //derr(0) << "dom " << i << " w " << domain[i]->get_weight() << dendl;
-      root->add_item(domid[i], domain[i]->get_weight());
-    }
-    int nroot = newmap.crush.add_bucket(root);    
-    
-    // rules
-    // replication
-    for (int i=1; i<=ndom; i++) {
-      int r = CRUSH_REP_RULE(i);
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 1));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));      
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-    }
-    // raid
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      int r = CRUSH_RAID_RULE(i);      
-      if (ndom >= i) {
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 1));
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, 1, 0));      
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-      } else {
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
-	newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-      }
-    }
-    
-    // test
-    //vector<int> out;
-    //newmap.pg_to_osds(0x40200000110ULL, out);
-    
-  } else {
-    // one bucket
-    Bucket *b = new UniformBucket(1, 0);
-    int root = newmap.crush.add_bucket(b);
-    for (int i=0; i<g_conf.num_osd; i++) {
-      newmap.osds.insert(i);
-      newmap.down_osds[i] = true;
-      b->add_item(i, 1.0);
-    }
-    
-    // rules
-    // replication
-    for (int i=1; i<=g_conf.osd_max_rep; i++) {
-      int r = CRUSH_REP_RULE(i);
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-    }
-    // raid
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      int r = CRUSH_RAID_RULE(i);      
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
-      newmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-    }
+
+  map<int,double> weights;
+  build_crush_map(newmap.crush, weights);
+
+  for (int i=0; i<g_conf.num_osd; i++) {
+    newmap.osds.insert(i);
+    newmap.down_osds[i] = true;
   }
   
   if (g_conf.mds_local_osd) {
@@ -236,6 +157,94 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap);
 }
 
+
+void OSDMonitor::build_crush_map(Crush& crush,
+				 map<int,double>& weights)
+{
+
+  if (g_conf.num_osd >= 12) {
+    int ndom = g_conf.osd_max_rep;
+    UniformBucket *domain[ndom];
+    int domid[ndom];
+    for (int i=0; i<ndom; i++) {
+      domain[i] = new UniformBucket(1, 0);
+      domid[i] = crush.add_bucket(domain[i]);
+    }
+    
+    // add osds
+    int nper = ((g_conf.num_osd - 1) / ndom) + 1;
+    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
+    int i = 0;
+    for (int dom=0; dom<ndom; dom++) {
+      for (int j=0; j<nper; j++) {
+	domain[dom]->add_item(i, weights[i] ? weights[i]:1.0);
+	//derr(0) << "osd" << i << " in domain " << dom << dendl;
+	i++;
+	if (i == g_conf.num_osd) break;
+      }
+    }
+    
+    // root
+    Bucket *root = new ListBucket(2);
+    for (int i=0; i<ndom; i++) {
+      //derr(0) << "dom " << i << " w " << domain[i]->get_weight() << dendl;
+      root->add_item(domid[i], domain[i]->get_weight());
+    }
+    int nroot = crush.add_bucket(root);    
+    
+    // rules
+    // replication
+    for (int i=1; i<=ndom; i++) {
+      int r = CRUSH_REP_RULE(i);
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 1));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));      
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    }
+    // raid
+    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+      int r = CRUSH_RAID_RULE(i);      
+      if (ndom >= i) {
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 1));
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, 1, 0));      
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      } else {
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
+	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      }
+    }
+    
+    // test
+    //vector<int> out;
+    //pg_to_osds(0x40200000110ULL, out);
+    
+  } else {
+    // one bucket
+    Bucket *b = new UniformBucket(1, 0);
+    int root = crush.add_bucket(b);
+    for (int i=0; i<g_conf.num_osd; i++) {
+      b->add_item(i, weights[i] ? weights[i]:1.0);
+    }
+    
+    // rules
+    // replication
+    for (int i=1; i<=g_conf.osd_max_rep; i++) {
+      int r = CRUSH_REP_RULE(i);
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    }
+    // raid
+    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+      int r = CRUSH_RAID_RULE(i);      
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
+      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    }
+  }
+}
 
 
 bool OSDMonitor::update_from_paxos()
@@ -410,6 +419,11 @@ bool OSDMonitor::should_propose(double& delay)
   if (osdmap.epoch == 1) {
     if (pending_inc.new_up.size() == osdmap.get_osds().size()) {
       delay = 0.0;
+      if (g_conf.osd_auto_weight) {
+	Crush crush;
+	build_crush_map(crush, osd_weight);
+	crush._encode(pending_inc.crush);
+      }
       return true;
     } else 
       return false;
@@ -552,6 +566,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if (osdmap.out_osds.count(from)) 
       pending_inc.new_in.push_back(from);
     
+    osd_weight[from] = m->sb.weight;
+
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
   }
@@ -560,7 +576,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
 void OSDMonitor::_booted(MOSDBoot *m)
 {
-  dout(7) << "_booted " << m->inst << dendl;
+  dout(7) << "_booted " << m->inst << " w " << m->sb.weight << dendl;
   send_latest(m->inst, m->sb.current_epoch);
   delete m;
 }

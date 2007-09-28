@@ -90,6 +90,7 @@ public:
 
     // full (rare)
     bufferlist fullmap;  // in leiu of below.
+    bufferlist crush;
 
     // incremental
     map<int32_t,entity_inst_t> new_up;
@@ -109,6 +110,7 @@ public:
       ::_encode(new_out, bl);
       ::_encode(new_overload, bl);
       ::_encode(fullmap, bl);
+      ::_encode(crush, bl);
     }
     void decode(bufferlist& bl, int& off) {
       ::_decode(epoch, bl, off);
@@ -120,6 +122,7 @@ public:
       ::_decode(new_out, bl, off);
       ::_decode(new_overload, bl, off);
       ::_decode(fullmap, bl, off);
+      ::_decode(crush, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
@@ -218,6 +221,10 @@ private:
     if (inc.fullmap.length()) {
       decode(inc.fullmap);
       return;
+    }
+    if (inc.crush.length()) {
+      int off = 0;
+      crush._decode(inc.crush, off);
     }
 
     // nope, incremental.
