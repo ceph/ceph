@@ -13,7 +13,7 @@
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = -O3 -g  #-I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS = -O3 -pg -g  #-I${HOME}/include -L${HOME}/lib
 
 # base
 CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
@@ -196,7 +196,7 @@ fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o
 
 
 # mpi startup
-newsyn: newsyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
