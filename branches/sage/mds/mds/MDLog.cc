@@ -52,12 +52,13 @@ void MDLog::reopen_logger(utime_t start, bool append)
   static bool didit = false;
   if (!didit) {
     didit = true;
-    mdlog_logtype.add_inc("add");
-    mdlog_logtype.add_inc("obs");    
-    mdlog_logtype.add_inc("trims");
-    mdlog_logtype.add_inc("trimf");
-    mdlog_logtype.add_inc("trimng");    
-    mdlog_logtype.add_set("size");
+    mdlog_logtype.add_inc("evadd");
+    mdlog_logtype.add_inc("evtrm");
+    mdlog_logtype.add_set("ev");
+    mdlog_logtype.add_inc("segadd");
+    mdlog_logtype.add_inc("segtrm");
+    mdlog_logtype.add_set("segtrmg");    
+    mdlog_logtype.add_set("seg");
     mdlog_logtype.add_set("rdpos");
     mdlog_logtype.add_set("wrpos");
     mdlog_logtype.add_avg("jlat");
@@ -160,8 +161,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   delete le;
   
   if (logger) {
-    logger->inc("add");
-    logger->set("size", num_events);
+    logger->inc("evadd");
+    logger->set("ev", num_events);
     logger->set("wrpos", journaler->get_write_pos());
   }
   
@@ -230,6 +231,9 @@ void MDLog::start_new_segment(Context *onsync)
   submit_entry(le, new C_MDL_WroteSubtreeMap(this, mds->mdlog->get_write_pos()));
   if (onsync)
     wait_for_sync(onsync);  
+
+  logger->inc("segadd");
+  logger->set("seg", segments.size());
 }
 
 void MDLog::_logged_subtree_map(off_t off)
@@ -301,6 +305,8 @@ void MDLog::try_trim(LogSegment *ls)
     dout(10) << "try_trim trimmed segment " << ls->offset << dendl;
     _trimmed(ls);
   }
+  
+  logger->set("segtrmg", trimming_segments.size());
 }
 
 void MDLog::_maybe_trimmed(LogSegment *ls) 
@@ -327,6 +333,11 @@ void MDLog::_trimmed(LogSegment *ls)
   if (segments.begin()->second == ls) 
     journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
   segments.erase(ls->offset);
+
+  logger->set("ev", num_events);
+  logger->inc("evtrm", ls->num_events);
+  logger->set("seg", segments.size());
+  logger->inc("segtrm");
 
   delete ls;
 }
@@ -408,8 +419,10 @@ void MDLog::_replay_thread()
     LogEvent *le = LogEvent::decode(bl);
 
     // new segment?
-    if (le->get_type() == EVENT_SUBTREEMAP) 
+    if (le->get_type() == EVENT_SUBTREEMAP) {
       segments[pos] = new LogSegment(pos);
+      logger->set("seg", segments.size());
+    }
 
     le->_segment = get_current_segment();    // replay may need this
 

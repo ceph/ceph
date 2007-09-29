@@ -625,7 +625,9 @@ void CInode::auth_pin()
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_pin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
   
   if (parent)
     parent->adjust_nested_auth_pins( 1 );
@@ -637,7 +639,9 @@ void CInode::auth_unpin()
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_unpin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
   
   assert(auth_pins >= 0);
   
@@ -649,6 +653,12 @@ void CInode::adjust_nested_auth_pins(int a)
 {
   if (!parent) return;
   nested_auth_pins += a;
+
+  dout(10) << "adjust_nested_auth_pins by " << a
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(nested_auth_pins >= 0);
+
   parent->adjust_nested_auth_pins(a);
 }
 

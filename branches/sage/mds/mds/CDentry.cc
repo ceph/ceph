@@ -268,6 +268,11 @@ void CDentry::auth_pin()
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
+
+  dout(10) << "auth_pin on " << *this 
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+
   dir->adjust_nested_auth_pins(1);
 }
 
@@ -276,12 +281,24 @@ void CDentry::auth_unpin()
   auth_pins--;
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
+
+  dout(10) << "auth_unpin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(auth_pins >= 0);
+
   dir->adjust_nested_auth_pins(-1);
 }
 
 void CDentry::adjust_nested_auth_pins(int by)
 {
   nested_auth_pins += by;
+
+  dout(10) << "adjust_nested_auth_pins by " << by 
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(nested_auth_pins >= 0);
+
   dir->adjust_nested_auth_pins(by);
 }
 

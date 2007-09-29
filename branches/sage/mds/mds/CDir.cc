@@ -1361,7 +1361,7 @@ void CDir::auth_pin()
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
 
   // nest pins?
   if (is_subtree_root()) return;  // no.
@@ -1376,7 +1376,7 @@ void CDir::auth_unpin()
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
 
-  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(auth_pins >= 0);
   
   // pending freeze?

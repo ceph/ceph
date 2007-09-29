@@ -1655,10 +1655,11 @@ class C_MDS_mknod_finish : public Context {
   CDentry *dn;
   CInode *newi;
   version_t dirpv;
+  version_t newdirpv;
 public:
-  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dirpv_) :
+  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dirpv_, version_t newdirpv_=0) :
     mds(m), mdr(r), dn(d), newi(ni),
-    dirpv(dirpv_) {}
+    dirpv(dirpv_), newdirpv(newdirpv_) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -1667,6 +1668,13 @@ public:
     
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
+
+    // mkdir?
+    if (newdirpv) { 
+      CDir *dir = newi->get_dirfrag(frag_t());
+      assert(dir);
+      dir->mark_dirty(newdirpv, mdr->ls);
+    }
 
     // dir inode's mtime
     mds->server->dirty_dn_diri(mdr, dn, dirpv);
@@ -1740,7 +1748,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
   newdir->mark_complete();
-  newdir->mark_dirty(newdir->pre_dirty(), mdlog->get_current_segment());
+  version_t newdirpv = newdir->pre_dirty();
 
   //if (mds->logger) mds->logger->inc("mkdir");
 
@@ -1755,7 +1763,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv, newdirpv));
 
   /* old export heuristic.  pbly need to reimplement this at some point.    
   if (
