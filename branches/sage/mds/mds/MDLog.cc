@@ -124,7 +124,7 @@ void MDLog::append()
   journaler->set_read_pos(journaler->get_write_pos());
   journaler->set_expire_pos(journaler->get_write_pos());
 
-  logger->set("expos", new_expire_pos);
+  logger->set("expos", journaler->get_write_pos());
 }
 
 
