@@ -771,8 +771,8 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
   // hit inode
   in->pop.get(type).hit(now);
 
-  if (in->get_parent_dir())
-    hit_dir(now, in->get_parent_dir(), type, who);
+  if (in->get_parent_dn())
+    hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
 }
 /*
   // hit me

@@ -3752,7 +3752,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         // parent dir frozen_dir?
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << dendl;
-          cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
+          cur->get_parent_dn()->get_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
           return 1;
         }
 

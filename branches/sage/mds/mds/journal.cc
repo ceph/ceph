@@ -77,7 +77,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) 
     commit.insert((*p)->get_dir());
   for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) 
-    commit.insert((*p)->get_parent_dir());
+    commit.insert((*p)->get_parent_dn()->get_dir());
 
   if (!commit.empty()) {
     if (!gather) gather = new C_Gather;

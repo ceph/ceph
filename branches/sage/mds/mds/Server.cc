@@ -1282,7 +1282,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     inode_t *pi = diri->project_inode();
     if (dirpv) pi->version = dirpv;
     pi->ctime = pi->mtime = mdr->now;
-    blob->add_dir_context(diri->get_parent_dir());
+    blob->add_dir_context(diri->get_parent_dn()->get_dir());
     blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
   } else {
     // journal the mtime change anyway.

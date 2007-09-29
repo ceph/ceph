@@ -199,7 +199,6 @@ struct md_config_t {
   int mds_log_max_segments;
   int mds_log_max_trimming;
   int mds_log_pad_entry;
-  int mds_log_read_inc;
   bool  mds_log_flush_on_shutdown;
   int mds_log_eopen_size;
   
