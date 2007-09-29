@@ -106,7 +106,7 @@ int Rank::Accepter::start()
 	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << dendl;
 	if (host == hostname) {
 	  parse_ip_port(addr.c_str(), g_my_addr);
-	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
+	  dout(1) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
 	  break;
 	}
       }
@@ -615,6 +615,8 @@ Message *Rank::Pipe::read_message()
   
   // payload
   bufferlist blist;
+  int32_t pos = 0;
+  list<int> chunk_at;
   for (int i=0; i<env.nchunks; i++) {
     int32_t size;
     if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
@@ -623,6 +625,9 @@ Message *Rank::Pipe::read_message()
     }
 
     dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
+
+    if (pos) chunk_at.push_back(pos);
+    pos += size;
 
     bufferptr bp;
     if (size % 4096 == 0) {
@@ -646,6 +651,8 @@ Message *Rank::Pipe::read_message()
   // unmarshall message
   size_t s = blist.length();
   Message *m = decode_message(env, blist);
+
+  m->set_chunk_payload_at(chunk_at);
   
   dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got " << s << " byte message from " 
            << m->get_source() << dendl;

@@ -209,6 +209,7 @@ public:
     payload = bl;
   }
   const list<int>& get_chunk_payload_at() const { return chunk_payload_at; }
+  void set_chunk_payload_at(list<int>& o) { chunk_payload_at.swap(o); }
   msg_envelope_t& get_envelope() {
     return env;
   }
