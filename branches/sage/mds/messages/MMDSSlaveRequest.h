@@ -123,19 +123,19 @@ public:
     ::_encode(stray, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(reqid, payload, off);
-    ::_decode(op, payload, off);
-    ::_decode(lock_type, payload, off);
-    object_info._decode(payload, off);
-    ::_decode_complex(authpins, payload, off);
-    ::_decode(srcdnpath, payload, off);
-    ::_decode(destdnpath, payload, off);
-    ::_decode(srcdn_replicas, payload, off);
-    ::_decode(now, payload, off);
-    ::_decode(inode_export, payload, off);
-    ::_decode(inode_export_v, payload, off);
-    ::_decode(stray, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(reqid, p);
+    ::_decode_simple(op, p);
+    ::_decode_simple(lock_type, p);
+    object_info._decode(p);
+    ::_decode_complex(authpins, p);
+    ::_decode_simple(srcdnpath, p);
+    ::_decode_simple(destdnpath, p);
+    ::_decode_simple(srcdn_replicas, p);
+    ::_decode_simple(now, p);
+    ::_decode_simple(inode_export, p);
+    ::_decode_simple(inode_export_v, p);
+    ::_decode_simple(stray, p);
   }
 
   char *get_type_name() { return "slave_request"; }

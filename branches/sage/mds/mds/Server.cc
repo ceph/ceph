@@ -1567,8 +1567,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // build dir contents
-  list<InodeStat*> inls;
-  list<string> dnls;
+  bufferlist dirbl;
 
   int numfiles = 0;
   for (CDir::map_t::iterator it = dir->begin(); 
@@ -1601,29 +1600,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
     }
     assert(in);
 
-    InodeStat *st;
-    if (in) {
-      dout(12) << "including inode " << *in << dendl;
+    
+    assert(in);
 
-      // add this item
-      // note: InodeStat makes note of whether inode data is readable.
-      st = new InodeStat(in, mds->get_nodeid());
-    } else {
-      assert(0);
-      /*
-      assert(dn->is_remote());
-      dout(12) << "including inode-less (remote) dentry " << *dn << dendl;
-      st = new InodeStat;
-      st->mask = STAT_MASK_INO | STAT_MASK_TYPE;
-      memset(&st->inode, 0, sizeof(st->inode));
-      st->inode.ino = dn->get_remote_ino();
-      st->inode.mode = DT_TO_MODE(dn->get_remote_d_type());
-      */
-    }
-
-    dnls.push_back( it->first );
-    inls.push_back(st);
-    numfiles++;
+    dout(12) << "including inode " << *in << dendl;
+    
+    // add this dentry + inodeinfo
+    ::_encode(it->first, dirbl);
+    InodeStat::_encode(dirbl, in, mds->get_nodeid());
 
     // touch it
     mdcache->lru.lru_touch(dn);
@@ -1631,7 +1615,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
-  reply->take_dir_items(dnls, inls, numfiles);
+  reply->take_dir_items(dirbl);
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
   reply->set_result(0);

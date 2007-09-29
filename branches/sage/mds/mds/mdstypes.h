@@ -357,6 +357,11 @@ public:
     ::_decode(dirfrag, bl, off);
     ::_decode(dname, bl, off);
   }
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(ino, p);
+    ::_decode_simple(dirfrag, p);
+    ::_decode_simple(dname, p);
+  }
 };
 
 

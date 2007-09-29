@@ -441,6 +441,10 @@ public:
 
       unsigned get_off() { return off; }
 
+      bool end() {
+	return p == ls.end();
+      }
+
       void advance(unsigned o) {
 	//cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
 	p_off += o;
@@ -946,7 +950,9 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
 
 
 // ----------------------------------------------------------
-// new encoders
+// encoders
+
+// DEPRECATED, please use _(en|de)code_(simple|complex)
 
 // raw
 template<class T>

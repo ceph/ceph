@@ -20,6 +20,7 @@
 #include <list>
 #include <iostream>
 #include "buffer.h"
+#include "encodable.h"
 
 /*
  * 
@@ -461,6 +462,9 @@ class fragtree_t {
   }
   void _decode(bufferlist& bl, int& off) {
     ::_decode(_splits, bl, off);
+  }
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(_splits, p);
   }
 
   void print(std::ostream& out) {
