@@ -59,7 +59,7 @@ void MDLog::reopen_logger(utime_t start, bool append)
     mdlog_logtype.add_inc("segtrm");
     mdlog_logtype.add_set("segtrmg");    
     mdlog_logtype.add_set("seg");
-    mdlog_logtype.add_set("rdpos");
+    mdlog_logtype.add_set("expos");
     mdlog_logtype.add_set("wrpos");
     mdlog_logtype.add_avg("jlat");
   }
@@ -104,6 +104,9 @@ void MDLog::create(Context *c)
   init_journaler();
   journaler->reset();
   write_head(c);
+
+  logger->set("expos", journaler->get_expire_pos());
+  logger->set("wrpos", journaler->get_write_pos());
 }
 
 void MDLog::open(Context *c)
@@ -112,7 +115,7 @@ void MDLog::open(Context *c)
   init_journaler();
   journaler->recover(c);
 
-  // either append() or reply() will follow.
+  // either append() or replay() will follow.
 }
 
 void MDLog::append()
@@ -120,6 +123,8 @@ void MDLog::append()
   dout(5) << "append positioning at end" << dendl;
   journaler->set_read_pos(journaler->get_write_pos());
   journaler->set_expire_pos(journaler->get_write_pos());
+
+  logger->set("expos", new_expire_pos);
 }
 
 
@@ -269,7 +274,7 @@ void MDLog::trim()
   int left = num_events;
   while (p != segments.end() && 
 	 ((max_events >= 0 && left > max_events) ||
-	  (max_segments >= 0 && (int)segments.size() > max_segments))) {
+	  (max_segments >= 0 && (int)(segments.size()-trimming_segments.size()) > max_segments))) {
 
     if (stop < g_clock.now())
       break;
@@ -330,8 +335,10 @@ void MDLog::_trimmed(LogSegment *ls)
   num_events -= ls->num_events;
 
   assert(segments.count(ls->offset));
-  if (segments.begin()->second == ls) 
+  if (segments.begin()->second == ls) {
     journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
+    logger->set("expos", ls->offset);
+  }
   segments.erase(ls->offset);
 
   logger->set("ev", num_events);
@@ -441,6 +448,8 @@ void MDLog::_replay_thread()
     }
     delete le;
 
+    logger->set("rdpos", pos);
+
     // drop lock for a second, so other events/messages (e.g. beacon timer!) can go off
     mds->mds_lock.Unlock();
     mds->mds_lock.Lock();
@@ -453,6 +462,7 @@ void MDLog::_replay_thread()
   // move read pointer _back_ to first subtree map we saw, for eventual trimming
   journaler->set_read_pos(new_expire_pos);
   journaler->set_expire_pos(new_expire_pos);
+  logger->set("expos", new_expire_pos);
   
   // kick waiter(s)
   list<Context*> ls;
