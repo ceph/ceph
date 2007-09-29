@@ -428,7 +428,19 @@ int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
                            version_t super_epoch)
 {
-  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+  map<block_t, BufferHead*>::iterator p;
+
+  // hack speed up common cases
+  if (start == 0) {
+    p = data.begin();
+  } else if (start + len == on->object_blocks && len == 1 && !data.empty()) {
+    // append hack.
+    p = data.end();
+    p--;
+    if (p->first < start) p++;
+  } else {
+    p = data.lower_bound(start);  
+  }
 
   dout(10) << "map_write " << *on << " " << start << "~" << len << dendl;
   // p->first >= start
