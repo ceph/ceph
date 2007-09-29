@@ -20,7 +20,7 @@
 class MClientMount : public Message {
 public:
   entity_addr_t addr;
-  int instance;  // on this node
+  int32_t instance;  // on this node
 
   MClientMount() : Message(MSG_CLIENT_MOUNT) { }
   MClientMount(entity_addr_t a, int i = 0) : 

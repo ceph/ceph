@@ -18,8 +18,8 @@
 
 class MClientRequestForward : public Message {
   tid_t tid;
-  int   dest_mds;
-  int   num_fwd;
+  int32_t dest_mds;
+  int32_t num_fwd;
 
  public:
   MClientRequestForward() : Message(MSG_CLIENT_REQUEST_FORWARD) {}
