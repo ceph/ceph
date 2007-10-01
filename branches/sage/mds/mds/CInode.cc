@@ -654,7 +654,7 @@ void CInode::adjust_nested_auth_pins(int a)
   if (!parent) return;
   nested_auth_pins += a;
 
-  dout(10) << "adjust_nested_auth_pins by " << a
+  dout(15) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);

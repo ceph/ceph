@@ -13,7 +13,10 @@
 #  on issdm, it's /usr/local/mpich2/bin.
 
 # Hook for extra -I options, etc.
-EXTRA_CFLAGS = -pg -g  #-I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS = #-I${HOME}/include -L${HOME}/lib
+EXTRA_CFLAGS += -g
+EXTRA_CFLAGS += -pg
+EXTRA_CFLAGS += -O3
 
 # base
 CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}

@@ -83,6 +83,7 @@ class MDLog {
   // -- segments --
   map<off_t,LogSegment*> segments;
   set<LogSegment*> trimming_segments;
+  int trimming_events;
 
   class C_MDL_WroteSubtreeMap : public Context {
     MDLog *mdlog;
@@ -131,6 +132,7 @@ public:
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
+		  trimming_events(0),
 		  writing_subtree_map(false) {
   }		  
   ~MDLog();

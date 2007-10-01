@@ -294,7 +294,7 @@ void CDentry::adjust_nested_auth_pins(int by)
 {
   nested_auth_pins += by;
 
-  dout(10) << "adjust_nested_auth_pins by " << by 
+  dout(15) << "adjust_nested_auth_pins by " << by 
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);

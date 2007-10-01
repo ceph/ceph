@@ -261,7 +261,7 @@ void MDLog::trim()
   dout(10) << "trim " 
 	   << segments.size() << " / " << max_segments << " segments, " 
 	   << num_events << " / " << max_events << " events"
-	   << ", " << trimming_segments.size() << " trimming"
+	   << ", " << trimming_segments.size() << " (" << trimming_events << ") trimming"
 	   << dendl;
 
   if (segments.empty()) return;
@@ -273,7 +273,7 @@ void MDLog::trim()
   map<off_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
   while (p != segments.end() && 
-	 ((max_events >= 0 && left > max_events) ||
+	 ((max_events >= 0 && left-trimming_events > max_events) ||
 	  (max_segments >= 0 && (int)(segments.size()-trimming_segments.size()) > max_segments))) {
 
     if (stop < g_clock.now())
@@ -304,6 +304,7 @@ void MDLog::try_trim(LogSegment *ls)
   C_Gather *exp = ls->try_to_expire(mds);
   if (exp) {
     trimming_segments.insert(ls);
+    trimming_events += ls->num_events;
     dout(5) << "try_trim trimming segment " << ls->offset << dendl;
     exp->set_finisher(new C_MaybeTrimmedSegment(this, ls));
   } else {
@@ -319,6 +320,7 @@ void MDLog::_maybe_trimmed(LogSegment *ls)
   dout(10) << "_maybe_trimmed segment " << ls->offset << " " << ls->num_events << " events" << dendl;
   assert(trimming_segments.count(ls));
   trimming_segments.erase(ls);
+  trimming_events -= ls->num_events;
   try_trim(ls);
 }
 

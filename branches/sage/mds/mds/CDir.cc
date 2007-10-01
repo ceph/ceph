@@ -1396,7 +1396,7 @@ void CDir::adjust_nested_auth_pins(int inc)
 {
   nested_auth_pins += inc;
   
-  dout(10) << "adjust_nested_auth_pins " << inc << " on " << *this
+  dout(15) << "adjust_nested_auth_pins " << inc << " on " << *this
 	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
   
