@@ -102,7 +102,21 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     if (!gather) gather = new C_Gather;
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
-  
+
+  // idalloc
+  if (allocv > mds->idalloc->get_committed_version()) {
+    dout(10) << " saving idalloc table, need " << allocv << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->idalloc->save(gather->new_sub(), allocv);
+  }
+
+  // clientmap
+  if (clientmapv > mds->clientmap.get_committed()) {
+    dout(10) << " saving clientmap, need " << clientmapv << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->clientmap.save(gather->new_sub(), clientmapv);
+  }
+
   // pending commit atids
   for (hash_set<version_t>::iterator p = pending_commit_atids.begin();
        p != pending_commit_atids.end();
@@ -113,6 +127,17 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	     << " pending commit (not yet acked), waiting" << dendl;
     mds->anchorclient->wait_for_ack(*p, gather->new_sub());
   }
+  
+  // anchortable
+  if (anchortablev > mds->anchortable->get_committed_version()) {
+    dout(10) << " saving anchor table, need " << anchortablev << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->anchortable->save(gather->new_sub());
+  }
+
+  // FIXME client requests...?
+  // audit handling of anchor transactions?
+  // open files?
 
   return gather;
 }
@@ -662,28 +687,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
 // -----------------------
 // ESession
-bool ESession::has_expired(MDS *mds) 
-{
-  if (mds->clientmap.get_committed() >= cmapv) {
-    dout(10) << "ESession.has_expired newer clientmap " << mds->clientmap.get_committed() 
-	     << " >= " << cmapv << " has committed" << dendl;
-    return true;
-  } else if (mds->clientmap.get_committing() >= cmapv) {
-    dout(10) << "ESession.has_expired newer clientmap " << mds->clientmap.get_committing() 
-	     << " >= " << cmapv << " is still committing" << dendl;
-    return false;
-  } else {
-    dout(10) << "ESession.has_expired clientmap " << mds->clientmap.get_version() 
-	     << " > " << cmapv << ", need to save" << dendl;
-    return false;
-  }
-}
-
-void ESession::expire(MDS *mds, Context *c)
-{  
-  dout(10) << "ESession.expire saving clientmap" << dendl;
-  mds->clientmap.save(c, cmapv);
-}
 
 void ESession::update_segment()
 {
@@ -718,26 +721,6 @@ void ESession::replay(MDS *mds)
 
 // -----------------------
 // EAnchor
-
-bool EAnchor::has_expired(MDS *mds) 
-{
-  version_t cv = mds->anchortable->get_committed_version();
-  if (cv < version) {
-    dout(10) << "EAnchor.has_expired v " << version << " > " << cv
-	     << ", still dirty" << dendl;
-    return false;   // still dirty
-  } else {
-    dout(10) << "EAnchor.has_expired v " << version << " <= " << cv
-	     << ", already flushed" << dendl;
-    return true;    // already flushed
-  }
-}
-
-void EAnchor::expire(MDS *mds, Context *c)
-{
-  dout(10) << "EAnchor.expire saving anchor table" << dendl;
-  mds->anchortable->save(c);
-}
 
 void EAnchor::update_segment()
 {
@@ -779,16 +762,6 @@ void EAnchor::replay(MDS *mds)
 
 
 // EAnchorClient
-
-bool EAnchorClient::has_expired(MDS *mds) 
-{
-  return true;
-}
-
-void EAnchorClient::expire(MDS *mds, Context *c)
-{
-  assert(0);
-}
 
 void EAnchorClient::replay(MDS *mds)
 {

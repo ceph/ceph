@@ -512,6 +512,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
   set<int> oldstopped;
   mdsmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
+  bool wasdegraded = mdsmap->is_degraded();
 
   // decode and process
   mdsmap->decode(m->get_encoded());
@@ -620,6 +621,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 	wasrejoining && !mdsmap->is_rejoining()) 
       mdcache->dump_cache();      // for DEBUG only
   }
+  if (wasdegraded && !mdsmap->is_degraded()) 
+    dout(1) << "cluster recovered." << dendl;
 
   // did someone go active?
   if (is_active() || is_stopping()) {
@@ -1003,7 +1006,7 @@ void MDS::handle_mds_recovery(int who)
 void MDS::stopping_start()
 {
   dout(2) << "stopping_start" << dendl;
-  
+
   // start cache shutdown
   mdcache->shutdown_start();
   

@@ -54,6 +54,7 @@ void MDLog::reopen_logger(utime_t start, bool append)
     didit = true;
     mdlog_logtype.add_inc("evadd");
     mdlog_logtype.add_inc("evtrm");
+    mdlog_logtype.add_set("evtrmg");
     mdlog_logtype.add_set("ev");
     mdlog_logtype.add_inc("segadd");
     mdlog_logtype.add_inc("segtrm");
@@ -313,6 +314,7 @@ void MDLog::try_trim(LogSegment *ls)
   }
   
   logger->set("segtrmg", trimming_segments.size());
+  logger->set("evtrmg", trimming_events);
 }
 
 void MDLog::_maybe_trimmed(LogSegment *ls) 

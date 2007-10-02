@@ -383,6 +383,7 @@ public:
 protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
+  set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<int,inode_caps_reconnect_t> > cap_exports; // ino -> client -> capex

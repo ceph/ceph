@@ -1128,11 +1128,13 @@ void MDCache::handle_mds_failure(int who)
   // make note of recovery set
   mds->mdsmap->get_recovery_mds_set(recovery_set);
   recovery_set.erase(mds->get_nodeid());
-  dout(1) << "my recovery peers will be " << recovery_set << dendl;
+  dout(1) << "handle_mds_failure mds" << who << " : recovery peers are " << recovery_set << dendl;
 
   // adjust my recovery lists
   wants_resolve.erase(who);   // MDS will ask again
   got_resolve.erase(who);     // i'll get another.
+
+  rejoin_sent.erase(who);        // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
  
   // tell the migrator too.
@@ -1325,6 +1327,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	  dout(7) << "ambiguous import succeeded on " << *dir << dendl;
 	  migrator->import_finish(dir);
 	}
+	my_ambiguous_imports.erase(p);  // no longer ambiguous.
       }
       p = next;
     }
@@ -1638,6 +1641,10 @@ void MDCache::recalc_auth_bits()
 
 /*
  * rejoin phase!
+ *
+ * this initiates rejoin.  it shoudl be called before we get any
+ * rejoin or rejoin_ack messages (or else mdsmap distribution is broken).
+ *
  * we start out by sending rejoins to everyone in the recovery set.
  *
  * if we are rejoin, send for all regions in our cache.
@@ -1662,6 +1669,7 @@ void MDCache::rejoin_send_rejoins()
        p != recovery_set.end();
        ++p) {
     if (*p == mds->get_nodeid())  continue;  // nothing to myself!
+    if (rejoin_sent.count(*p)) continue;     // already sent a rejoin to this node!
     if (mds->is_rejoin()) {
       rejoin_gather.insert(*p);
       rejoins[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_WEAK);
@@ -1691,7 +1699,7 @@ void MDCache::rejoin_send_rejoins()
   }
 
   if (!mds->is_rejoin()) {
-    // strong.
+    // i am survivor.  send strong rejoin.
     // note request authpins, xlocks
     for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
 	 p != active_requests.end();
@@ -1736,17 +1744,19 @@ void MDCache::rejoin_send_rejoins()
   }
 
   // send the messages
-  assert(rejoin_ack_gather.empty());
   for (map<int,MMDSCacheRejoin*>::iterator p = rejoins.begin();
        p != rejoins.end();
        ++p) {
-    mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
+    assert(rejoin_sent.count(p->first) == 0);
+    assert(rejoin_ack_gather.count(p->first) == 0);
+    rejoin_sent.insert(p->first);
     rejoin_ack_gather.insert(p->first);
+    mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
   }
 
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
-    dout(10) << "nothing left to rejoin" << dendl;
+    dout(10) << "nothing to rejoin" << dendl;
     mds->rejoin_done();
   }
 }
@@ -2005,14 +2015,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     dout(10) << " got dirty inode scatterlock content " << *in << dendl;
   }
 
-  if (survivor)
-    rejoin_scour_survivor_replicas(from, ack);
-
   if (survivor) {
-    // send ack
+    // survivor.  do everything now.
+    rejoin_scour_survivor_replicas(from, ack);
     mds->send_message_mds(ack, from, MDS_PORT_CACHE);
   } else {
     // done?
+    assert(rejoin_gather.count(from));
     rejoin_gather.erase(from);
     if (rejoin_gather.empty()) {
       rejoin_gather_finish();
@@ -2291,9 +2300,11 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
   // send missing?
   if (missing) {
+    // we expect a FULL soon.
     mds->send_message_mds(missing, from, MDS_PORT_CACHE);
   } else {
     // done?
+    assert(rejoin_gather.count(from));
     rejoin_gather.erase(from);
     if (rejoin_gather.empty()) {
       rejoin_gather_finish();
@@ -2386,6 +2397,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   }
 
   // done?
+  assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
   if (mds->is_rejoin() && 
       rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
@@ -2450,6 +2462,7 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
   }
 
   // done?
+  assert(rejoin_gather.count(from));
   rejoin_gather.erase(from);
   if (rejoin_gather.empty()) {
     rejoin_gather_finish();
@@ -2524,6 +2537,8 @@ public:
     cache->rejoin_gather_finish();
   }
 };
+
+
 
 void MDCache::rejoin_gather_finish() 
 {
@@ -3490,10 +3505,12 @@ bool MDCache::shutdown_pass()
       if (!dir->is_full_dir_auth()) continue;
       ls.push_back(dir);
     }
+    int max = 5; // throttle shutdown exports.. hack!
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
       dout(7) << "sending " << *dir << " back to mds0" << dendl;
       migrator->export_dir(dir, 0);
+      if (--max == 0) break;
     }
   }
 
