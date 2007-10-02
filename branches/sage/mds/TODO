@@ -52,10 +52,6 @@ mdsmon
 - per-mds, shared standby queues 
 
 
-mds segments
-- reverse_export is fuggered by the log segment business.  need to delay auth/clean step until export is confirmed (i.e. make second pass over the subtree?).  retest migrator!  pay close attention to cache_expire checks on auth ordering... ,.dkjasdfjdajfdkjl
- - upshot: once it's done, it'll be much cleaner!
-
 bugs to fix
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
 - fix purge_stray bug

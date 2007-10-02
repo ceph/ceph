@@ -76,6 +76,7 @@ class MDiscoverReply : public Message {
   bool flag_error_ino;
   bool        flag_error_dir;
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
+  inodeno_t   discover_ino;
   int dir_auth_hint;
   bool wanted_xlocks_hint;
   
@@ -113,6 +114,7 @@ class MDiscoverReply : public Message {
   bool is_flag_error_ino() { return flag_error_ino; }
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
+  inodeno_t get_discover_ino() { return discover_ino; }
   int get_dir_auth_hint() { return dir_auth_hint; }
   bool get_wanted_xlocks_hint() { return wanted_xlocks_hint; }
 
@@ -130,8 +132,10 @@ class MDiscoverReply : public Message {
     Message(MSG_MDS_DISCOVERREPLY) {
     this->base_ino = base_ino;
     flag_error_dn = false;
+    flag_error_ino = false;
     flag_error_dir = false;
     no_base_dir = no_base_dentry = false;
+    discover_ino = 0;
     dir_auth_hint = CDIR_AUTH_UNKNOWN;
   }
   ~MDiscoverReply() {
@@ -154,6 +158,7 @@ class MDiscoverReply : public Message {
   bool is_empty() {
     return dirs.empty() && dentries.empty() && inodes.empty() && 
       !flag_error_dn &&
+      !flag_error_ino &&
       !flag_error_dir &&
       dir_auth_hint == CDIR_AUTH_UNKNOWN;
   }
@@ -171,6 +176,10 @@ class MDiscoverReply : public Message {
 
   void add_dir(CDirDiscover* dir) {
     dirs.push_back( dir );
+  }
+
+  void set_discover_ino(inodeno_t ino) {
+    discover_ino = ino;
   }
 
   //  void set_flag_forward() { flag_forward = true; }
@@ -202,6 +211,7 @@ class MDiscoverReply : public Message {
     ::_decode(flag_error_ino, payload, off);
     ::_decode(flag_error_dir, payload, off);
     ::_decode(error_dentry, payload, off);
+    ::_decode(discover_ino, payload, off);
     ::_decode(dir_auth_hint, payload, off);
     ::_decode(wanted_xlocks_hint, payload, off);
     
@@ -238,6 +248,7 @@ class MDiscoverReply : public Message {
     ::_encode(flag_error_ino, payload);
     ::_encode(flag_error_dir, payload);
     ::_encode(error_dentry, payload);
+    ::_encode(discover_ino, payload);
     ::_encode(dir_auth_hint, payload);
     ::_encode(wanted_xlocks_hint, payload);
 

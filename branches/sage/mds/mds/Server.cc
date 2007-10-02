@@ -2755,7 +2755,11 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
-  rdlocks.insert(&srcdn->dir->inode->dirfragtreelock);  // rd lock on srci dirfragtree.
+  /*
+   * no, this causes problems if the dftlock is scattered...
+   *  and what was i thinking anyway? 
+   * rdlocks.insert(&srcdn->dir->inode->dirfragtreelock);  // rd lock on srci dirfragtree.
+   */
 
   // rdlock destdir path, xlock dest dentry
   for (int i=0; i<(int)desttrace.size(); i++)
@@ -2788,7 +2792,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 	 ++p) {
       CDir *dir = srci->get_dirfrag(*p);
       if (!dir) {
-	dout(10) << " opening " << *dir << dendl;
+	dout(10) << " opening " << *p << " under " << *srci << dendl;
 	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
@@ -3288,7 +3292,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // journal it?
   if (srcdn->is_auth() ||
-      destdn->inode->is_auth() ||
+      (destdn->inode && destdn->inode->is_auth()) ||
       srcdn->inode->is_any_caps()) {
     // journal.
     mdr->ls = mdlog->get_current_segment();
@@ -3341,14 +3345,15 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le;
   if (r == 0) {
-    // commit
-    _rename_apply(mdr, srcdn, destdn, straydn);
-    
+    // finish the inode export
     if (mdr->inode_export) {
       C_Contexts *fin = new C_Contexts;
       mdcache->migrator->finish_export_inode(mdr->inode_export, fin);
       mds->queue_waiter(fin);
     }
+
+    // commit
+    _rename_apply(mdr, srcdn, destdn, straydn);   
 
     // write a commit to the journal
     le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
@@ -3412,8 +3417,10 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 					 mdr->now);
   ::_encode(exported_client_map, reply->inode_export);
   reply->inode_export.claim_append(inodebl);
-  
   reply->inode_export_v = mdr->srcdn->inode->inode.version;
+
+  // take note of inode; we'll need to finish the export later!
+  mdr->inode_export = mdr->srcdn->inode;
 
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
 

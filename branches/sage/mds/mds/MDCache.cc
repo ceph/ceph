@@ -4222,7 +4222,9 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     return;
   }
 
-  if (!in->is_auth()) {
+  CDir *dir = in->get_dirfrag(frag);
+
+  if (!dir && !in->is_auth()) {
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << dendl;
     /* FIXME: we re-query the anchortable just to avoid a fragtree update race */
     open_remote_dirfrag(in, frag,
@@ -4230,7 +4232,9 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     return;
   }
 
-  CDir *dir = in->get_or_open_dirfrag(this, frag);
+  if (!dir && in->is_auth())
+    dir = in->get_or_open_dirfrag(this, frag);
+  
   assert(dir);
   if (dir->is_auth()) {
     if (dir->is_complete()) {
@@ -4256,6 +4260,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 				   anchortrace[i].ino,
 				   true);  // being conservative here.
     mds->send_message_mds(dis, dir->authority().first, MDS_PORT_CACHE);
+    ino_discover_waiters[anchortrace[i].ino].push_back(new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
   }
 }
 
@@ -4782,6 +4787,10 @@ void MDCache::handle_discover(MDiscover *dis)
   CInode *cur = 0;
   MDiscoverReply *reply = new MDiscoverReply(dis->get_base_ino());
 
+  // note ino discover in reply (if we are discovering by ino)
+  if (dis->get_want_ino())
+    reply->set_discover_ino(dis->get_want_ino());
+
   // get started.
   if (dis->get_base_ino() == MDS_INO_ROOT) {
     // wants root
@@ -4906,19 +4915,20 @@ void MDCache::handle_discover(MDiscover *dis)
       reply->add_dir( curdir->replicate_to(dis->get_asker()) );
       dout(7) << "handle_discover added dir " << *curdir << dendl;
     }
-    if (dis->get_want().depth() == 0) break;
-    
-    // lookup inode?
+
+    // lookup
     CDentry *dn = 0;
     if (dis->get_want_ino()) {
+      // lookup by ino
       CInode *in = get_inode(dis->get_want_ino());
       if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir)
 	dn = in->get_parent_dn();
-    } else {
+    } else if (dis->get_want().depth() > 0) {
       // lookup dentry
       dn = curdir->lookup( dis->get_dentry(i) );
-    }
-    
+    } else 
+      break; // done!
+          
     // incomplete dir?
     if (!dn) {
       if (!curdir->is_complete()) {
@@ -5052,6 +5062,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   // fyi
   if (m->is_flag_error_dir()) dout(7) << " flag error, dir" << dendl;
   if (m->is_flag_error_dn()) dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
+  if (m->is_flag_error_ino()) dout(7) << " flag error, ino = " << m->get_discover_ino() << dendl;
   dout(10) << "depth = " << m->get_depth()
 	   << ", has base_dir/base_dn/root = " 
 	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_base_inode()
@@ -5144,6 +5155,16 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     assert(!cur->is_dir());
     cur->take_waiting(CInode::WAIT_DIR, error);
     dir_discovers.erase(cur->ino());
+  }
+  
+  // kick ino discover waiters?
+  if (m->get_discover_ino()) {
+    dout(7) << " was ino discover on " << m->get_discover_ino() << dendl;
+    list<Context*> ls;
+    ls.swap(ino_discover_waiters[m->get_discover_ino()]);
+    ino_discover_waiters.erase(m->get_discover_ino());
+    finish_contexts(ls);   // fixme maybe: do we want an error code here?  or better to retry?
+    //finish_contexts(ls, m->is_flag_error_ino() ? -1:0);
   }
   
   // finish errors directly

@@ -287,6 +287,7 @@ protected:
 
   // -- discover --
   hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
+  map<inodeno_t, list<Context*> > ino_discover_waiters;
 
 
   // -- requests --
