@@ -69,26 +69,36 @@ using namespace std;
  */
 
 class MDiscoverReply : public Message {
-  inodeno_t    base_ino;
-  bool         no_base_dir;     // no base dir (but IS dentry+inode)
-  bool         no_base_dentry;  // no base dentry (but IS inode)
-  bool        flag_error_dn;
+  // info about original request
+  inodeno_t base_ino;
+  frag_t base_dir_frag;  
+  bool wanted_base_dir;
+  bool wanted_xlocked;
+  inodeno_t wanted_ino;
+
+  // and the response
+  bool flag_error_dn;
   bool flag_error_ino;
-  bool        flag_error_dir;
-  string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
-  inodeno_t   discover_ino;
+  bool flag_error_dir;
+  bool no_base_dir;     // no base dir (but IS dentry+inode)
+  bool no_base_dentry;  // no base dentry (but IS inode)
+  string error_dentry;   // dentry that was not found (to trigger waiters on asker)
+
   int dir_auth_hint;
-  bool wanted_xlocks_hint;
-  
+
   vector<CDirDiscover*>    dirs;      // not inode-aligned if no_base_dir = true.
   vector<CDentryDiscover*> dentries;  // not inode-aligned if no_base_dentry = true
   vector<CInodeDiscover*>  inodes;
 
-  string path;
 
  public:
   // accessors
   inodeno_t get_base_ino() { return base_ino; }
+  frag_t get_base_dir_frag() { return base_dir_frag; }
+  bool get_wanted_base_dir() { return wanted_base_dir; }
+  bool get_wanted_xlocked() { return wanted_xlocked; }
+  inodeno_t get_wanted_ino() { return wanted_ino; }
+
   int       get_num_inodes() { return inodes.size(); }
   int       get_num_dentries() { return dentries.size(); }
   int       get_num_dirs() { return dirs.size(); }
@@ -107,18 +117,13 @@ class MDiscoverReply : public Message {
   bool has_base_dentry() { return !no_base_dentry && dentries.size(); }
   bool has_base_inode() { return no_base_dir && no_base_dentry; }
 
-  const string& get_path() { return path; }
-
-  //  bool is_flag_forward() { return flag_forward; }
   bool is_flag_error_dn() { return flag_error_dn; }
   bool is_flag_error_ino() { return flag_error_ino; }
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
-  inodeno_t get_discover_ino() { return discover_ino; }
-  int get_dir_auth_hint() { return dir_auth_hint; }
-  bool get_wanted_xlocks_hint() { return wanted_xlocks_hint; }
 
-  void set_wanted_xlocks_hint(bool w) { wanted_xlocks_hint = w; }
+  int get_dir_auth_hint() { return dir_auth_hint; }
+
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
@@ -128,15 +133,31 @@ class MDiscoverReply : public Message {
 
   // cons
   MDiscoverReply() {}
-  MDiscoverReply(inodeno_t base_ino) :
-    Message(MSG_MDS_DISCOVERREPLY) {
-    this->base_ino = base_ino;
-    flag_error_dn = false;
-    flag_error_ino = false;
-    flag_error_dir = false;
-    no_base_dir = no_base_dentry = false;
-    discover_ino = 0;
-    dir_auth_hint = CDIR_AUTH_UNKNOWN;
+  MDiscoverReply(MDiscover *dis) :
+    Message(MSG_MDS_DISCOVERREPLY),
+    base_ino(dis->get_base_ino()),
+    base_dir_frag(dis->get_base_dir_frag()),
+    wanted_base_dir(dis->wants_base_dir()),
+    wanted_xlocked(dis->wants_xlocked()),
+    wanted_ino(dis->get_want_ino()),
+    flag_error_dn(false),
+    flag_error_ino(false),
+    flag_error_dir(false),
+    no_base_dir(false), no_base_dentry(false),
+    dir_auth_hint(CDIR_AUTH_UNKNOWN) {
+  }
+  MDiscoverReply(dirfrag_t df) :
+    Message(MSG_MDS_DISCOVERREPLY),
+    base_ino(df.ino),
+    base_dir_frag(df.frag),
+    wanted_base_dir(false),
+    wanted_xlocked(false),
+    wanted_ino(inodeno_t()),
+    flag_error_dn(false),
+    flag_error_ino(false),
+    flag_error_dir(false),
+    no_base_dir(false), no_base_dentry(false),
+    dir_auth_hint(CDIR_AUTH_UNKNOWN) {
   }
   ~MDiscoverReply() {
     for (vector<CDirDiscover*>::iterator it = dirs.begin();
@@ -165,8 +186,6 @@ class MDiscoverReply : public Message {
   void add_dentry(CDentryDiscover* ddis) {
     if (dentries.empty() && dirs.empty()) no_base_dir = true;
     dentries.push_back(ddis);
-    if (path.length()) path += "/";
-    path += ddis->get_dname();
   }
   
   void add_inode(CInodeDiscover* din) {
@@ -178,9 +197,6 @@ class MDiscoverReply : public Message {
     dirs.push_back( dir );
   }
 
-  void set_discover_ino(inodeno_t ino) {
-    discover_ino = ino;
-  }
 
   //  void set_flag_forward() { flag_forward = true; }
   void set_flag_error_dn(const string& dn) { 
@@ -205,15 +221,16 @@ class MDiscoverReply : public Message {
   virtual void decode_payload() {
     int off = 0;
     ::_decode(base_ino, payload, off);
-    ::_decode(no_base_dir, payload, off);
-    ::_decode(no_base_dentry, payload, off);
+    ::_decode(base_dir_frag, payload, off);
+    ::_decode(wanted_base_dir, payload, off);
+    ::_decode(wanted_xlocked, payload, off);
     ::_decode(flag_error_dn, payload, off);
     ::_decode(flag_error_ino, payload, off);
     ::_decode(flag_error_dir, payload, off);
+    ::_decode(no_base_dir, payload, off);
+    ::_decode(no_base_dentry, payload, off);
     ::_decode(error_dentry, payload, off);
-    ::_decode(discover_ino, payload, off);
     ::_decode(dir_auth_hint, payload, off);
-    ::_decode(wanted_xlocks_hint, payload, off);
     
     // dirs
     int n;
@@ -242,15 +259,16 @@ class MDiscoverReply : public Message {
   }
   void encode_payload() {
     ::_encode(base_ino, payload);
-    ::_encode(no_base_dir, payload);
-    ::_encode(no_base_dentry, payload);
+    ::_encode(base_dir_frag, payload);
+    ::_encode(wanted_base_dir, payload);
+    ::_encode(wanted_xlocked, payload);
     ::_encode(flag_error_dn, payload);
     ::_encode(flag_error_ino, payload);
     ::_encode(flag_error_dir, payload);
+    ::_encode(no_base_dir, payload);
+    ::_encode(no_base_dentry, payload);
     ::_encode(error_dentry, payload);
-    ::_encode(discover_ino, payload);
     ::_encode(dir_auth_hint, payload);
-    ::_encode(wanted_xlocks_hint, payload);
 
     // dirs
     int n = dirs.size();

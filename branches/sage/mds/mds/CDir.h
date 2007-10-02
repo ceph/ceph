@@ -45,20 +45,16 @@ class Context;
 class CDirDiscover;
 
 
-
 ostream& operator<<(ostream& out, class CDir& dir);
-
-
-// CDir
-
 
 
 class CDir : public MDSCacheObject {
  public:
   // -- pins --
   static const int PIN_DNWAITER =     1;
-  static const int PIN_CHILD =        2;
-  static const int PIN_FROZEN =       3;
+  static const int PIN_INOWAITER =    2;
+  static const int PIN_CHILD =        3;
+  static const int PIN_FROZEN =       4;
   static const int PIN_EXPORT =       5;
   static const int PIN_IMPORTING =    7;
   static const int PIN_EXPORTING =    8;
@@ -68,6 +64,7 @@ class CDir : public MDSCacheObject {
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
+    case PIN_INOWAITER: return "inowaiter";
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
     case PIN_EXPORT: return "export";
@@ -315,9 +312,6 @@ private:
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    //if (( pop_auth_subtree.get(META_POP_IRD).get() > 
-    //g_conf.mds_bal_replicate_threshold)) {
-    //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
     if (is_rep()) {
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
@@ -389,6 +383,7 @@ private:
   // -- waiters --
 protected:
   hash_map< string, list<Context*> > waiting_on_dentry;
+  hash_map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dn) {
@@ -396,6 +391,14 @@ public:
   }
   void add_dentry_waiter(const string& dentry, Context *c);
   void take_dentry_waiting(const string& dentry, list<Context*>& ls);
+
+  bool is_waiting_for_ino(inodeno_t ino) {
+    return waiting_on_ino.count(ino);
+  }
+  void add_ino_waiter(inodeno_t ino, Context *c);
+  void take_ino_waiting(inodeno_t ino, list<Context*>& ls);
+
+  void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
   void add_waiter(int mask, Context *c);
   void take_waiting(int mask, list<Context*>& ls);  // may include dentry waiters
@@ -495,7 +498,6 @@ class CDirDiscover {
 
   dirfrag_t get_dirfrag() { return dirfrag; }
 
-  
   void _encode(bufferlist& bl) {
     bl.append((char*)&dirfrag, sizeof(dirfrag));
     bl.append((char*)&nonce, sizeof(nonce));

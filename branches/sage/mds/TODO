@@ -52,7 +52,7 @@ mdsmon
 - per-mds, shared standby queues 
 
 
-bugs to fix
+mds bugs
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
 - fix purge_stray bug
 - try_remove_unlinked_dn thing
@@ -105,6 +105,13 @@ mds
 - FIXME how to journal root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
+
+- chdir (directory opens!)
+- efficient stat for single writers
+- lstat vs stat?
+- add FILE_CAP_EXTEND capability bit
+- only share osdmap updates with clients holding capabilities
+- delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 
 
 
@@ -247,29 +254,6 @@ crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 
-mds
-- distributed client management
-- chdir (directory opens!)
-- rewrite logstream
-  - clean up
-  - be smart about rados ack vs reread
-  - log locking?  root log object
-  - trimming, rotation
-
-- efficient stat for single writers
-- lstat vs stat
-- add FILE_CAP_EXTEND capability bit
-- only share osdmap updates with clients holding capabilities
-- delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
-- finish hard links!
- - reclaim danglers from inode file on discover...
- - fix rename wrt hard links
-- interactive hash/unhash interface
-- test hashed readdir
-- make logstream.flush align itself to stripes
-
-- carefully define/document frozen wrt dir_auth vs hashing
-
 
 
 client
@@ -295,52 +279,6 @@ why qsync could be wrong (for very strict POSIX) : varying mds -> client message
 -> stat results in size 200, even though at no single point in time was the max size 500.
 -> for correct result, need to _stop_ client writers while gathering metadata.
 
-
-SAGE:
-
-- string table?
-
-- hard links
- - fix MExportAck and others to use dir+dentry, not inode
-   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
-
-- do real permission checks?
-
-
-
-
-
-
-ISSUES
-
-
-- discover
- - soft: authority selectively repicates, or sets a 'forward' flag in reply
- - hard: authority always replicates (eg. discover for export)
- - forward flag (see soft)
- - error flag   (if file not found, etc.)
- - [what was i talking about?] make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
-
-
-
-DOCUMENT
-- cache, distributed cache structure and invariants
-- export process
-- hash/unhash process
-
-
-TEST
-- hashing
- - test hash/unhash operation
- - hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
- - test nauthitems (wrt hashing?)
-
-
-IMPLEMENT
-
-- smarter balancing
-  - popularity calculation and management is inconsistent/wrong.
-  - does it work?
 
 - dump active config in run output somewhere
 

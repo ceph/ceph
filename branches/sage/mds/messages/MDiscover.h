@@ -40,13 +40,14 @@ class MDiscover : public Message {
   int       get_asker() { return asker; }
   inodeno_t get_base_ino() { return base_ino; }
   frag_t    get_base_dir_frag() { return base_dir_frag; }
+
   filepath& get_want() { return want; }
   inodeno_t get_want_ino() { return want_ino; }
-  const string&   get_dentry(int n) { return want[n]; }
+  const string& get_dentry(int n) { return want[n]; }
 
   bool wants_base_dir() { return want_base_dir; }
   bool wants_xlocked() { return want_xlocked; }
-
+  
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
   MDiscover() { }

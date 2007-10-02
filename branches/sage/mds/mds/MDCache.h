@@ -218,17 +218,36 @@ class MDCache {
   // my master
   MDS *mds;
 
+  // -- my cache --
   LRU                           lru;         // dentry lru for expiring items from cache
-
  protected:
-  // the cache
-  CInode                       *root;        // root inode
   hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino
+  CInode                       *root;        // root inode
   CInode                       *stray;       // my stray dir
 
-  // root
-  list<Context*> waiting_for_root;
-  map<inodeno_t,list<Context*> > waiting_for_stray;
+
+  // -- discover --
+  // waiters
+  map<int, hash_map<inodeno_t, list<Context*> > > waiting_for_base_ino;
+
+  // in process discovers, by mds.
+  //  this is just enough info to kick any waiters in the event of a failure.
+  //  FIXME: use pointers here instead of identifiers?
+  map<int, hash_map<inodeno_t,int> > discover_dir;
+  map<int, hash_map<dirfrag_t,int> > discover_dir_sub;
+
+  void discover_base_ino(inodeno_t want_ino, Context *onfinish, int from=-1);
+  void discover_dir_frag(CInode *base, frag_t approx_fg, Context *onfinish,
+			 int from=-1);
+  void discover_path(CInode *base, filepath want_path, Context *onfinish,
+		     bool want_xlocked=false, int from=-1);
+  void discover_path(CDir *base, filepath want_path, Context *onfinish,
+		     bool want_xlocked=false);
+  void discover_ino(CDir *base, inodeno_t want_ino, Context *onfinish,
+		    bool want_xlocked=false);
+
+  void kick_discovers(int who);  // after a failure.
+
 
 public:
   int get_num_inodes() { return inode_map.size(); }
@@ -285,18 +304,11 @@ protected:
   // delayed cache expire
   map<CDir*, map<int, MCacheExpire*> > delayed_expire; // subtree root -> expire msg
 
-  // -- discover --
-  hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
-  map<inodeno_t, list<Context*> > ino_discover_waiters;
-
 
   // -- requests --
-public:
-
-  
 protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
-  
+
 public:
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, int by);
@@ -599,7 +611,7 @@ protected:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
 
   CDentry *add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished);
-  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn);
+  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished);
 
 public:
   CDentry *add_replica_stray(bufferlist &bl, CInode *strayin, int from);

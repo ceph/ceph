@@ -130,6 +130,17 @@ inline bool operator==(dirfrag_t l, dirfrag_t r) {
   return l.ino == r.ino && l.frag == r.frag;
 }
 
+namespace __gnu_cxx {
+  template<> struct hash<dirfrag_t> {
+    size_t operator()(const dirfrag_t &df) const { 
+      static rjhash<uint64_t> H;
+      static rjhash<uint32_t> I;
+      return H(df.ino) ^ I(df.frag);
+    }
+  };
+}
+
+
 
 // ================================================================
 
