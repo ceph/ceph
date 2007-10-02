@@ -604,7 +604,7 @@ bool CInode::is_freezing()
 void CInode::add_waiter(int tag, Context *c) 
 {
   // wait on the directory?
-  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+  if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
     parent->dir->add_waiter(tag, c);
     return;
   }

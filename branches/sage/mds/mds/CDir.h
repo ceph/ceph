@@ -143,7 +143,7 @@ class CDir : public MDSCacheObject {
   static const int WAIT_DNLOCK_OFFSET = 4;
 
   static const int WAIT_ANY  = (0xffffffff);
-  static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
+  static const int WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
@@ -550,10 +550,11 @@ class CDirExport {
     
     st.pop_me = dir->pop_me;
     st.pop_auth_subtree = dir->pop_auth_subtree;
+    /*
     dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
     dir->pop_me.zero(now);
     dir->pop_auth_subtree.zero(now);
-
+    */
     rep_by = dir->dir_rep_by;
     replicas = dir->replica_map;
   }

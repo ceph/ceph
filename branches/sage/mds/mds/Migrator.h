@@ -78,7 +78,7 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
-  map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
+  //map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
 
@@ -183,16 +183,15 @@ public:
   void export_dir_nicely(CDir *dir, int dest);
   void maybe_do_queued_export();
 
-  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
+  void encode_export_inode(CInode *in, bufferlist& enc_state, 
 			   map<int,entity_inst_t>& exported_client_map,
 			   utime_t now);
+  void finish_export_inode(CInode *in, C_Contexts *fin);
   int encode_export_dir(list<bufferlist>& dirstatelist,
-			class C_Contexts *fin,
-			CDir *basedir,
 			CDir *dir,
-			int newauth, 
 			map<int,entity_inst_t>& exported_client_map,
 			utime_t now);
+  void finish_export_dir(CDir *dir, class C_Contexts *fin, utime_t now);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);

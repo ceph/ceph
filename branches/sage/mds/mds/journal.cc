@@ -91,7 +91,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	dir->commit(0, gather->new_sub());
       } else {
 	dout(10) << " waiting for unfreeze on " << *dir << dendl;
-	dir->add_waiter(CDir::WAIT_AUTHPINNABLE, gather->new_sub());
+	dir->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());
       }
     }
   }
@@ -103,7 +103,16 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
   
-  // 
+  // pending commit atids
+  for (hash_set<version_t>::iterator p = pending_commit_atids.begin();
+       p != pending_commit_atids.end();
+       ++p) {
+    if (!gather) gather = new C_Gather;
+    assert(!mds->anchorclient->has_committed(*p));
+    dout(10) << " anchor transaction " << *p 
+	     << " pending commit (not yet acked), waiting" << dendl;
+    mds->anchorclient->wait_for_ack(*p, gather->new_sub());
+  }
 
   return gather;
 }
@@ -345,7 +354,7 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     else
       // pbly about to export|split|merge. 
       // just wait for it to unfreeze, then retry
-      p->first->add_waiter(CDir::WAIT_AUTHPINNABLE, gather->new_sub());  
+      p->first->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());  
   }
   for (list<CDir*>::iterator p = waitfor_export.begin();
        p != waitfor_export.end();
@@ -423,8 +432,9 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 void EMetaBlob::update_segment(LogSegment *ls)
 {
   // atids?
-  for (list<version_t>::iterator p = atids.begin(); p != atids.end(); ++p)
-    ls->atids.insert(*p);
+  //for (list<version_t>::iterator p = atids.begin(); p != atids.end(); ++p)
+  //  ls->pending_commit_atids[*p] = ls;
+  // -> handled directly by AnchorClient
 
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
@@ -434,7 +444,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
     ls->allocv = alloc_tablev;
 
   // truncated inodes
-  // -> handled directory by Server.cc
+  // -> handled directly by Server.cc
 
   // client requests
   //  note the newest request per client
@@ -593,7 +603,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
        p != atids.end();
        ++p) {
     dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << dendl;
-    mds->anchorclient->got_journaled_agree(*p);
+    mds->anchorclient->got_journaled_agree(*p, logseg);
   }
 
   // dirtied inode mtimes

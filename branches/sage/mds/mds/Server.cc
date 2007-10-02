@@ -821,7 +821,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	  !(*p)->can_auth_pin()) {
 	// wait
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
-	(*p)->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
 	return;
       }
@@ -1112,7 +1112,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   if (want_auth) {
     if (ref->is_frozen()) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
-      ref->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
     mdr->auth_pin(ref);
@@ -1156,7 +1156,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   // make sure we can auth_pin (or have already authpinned) dir
   if (dir->is_frozen()) {
     dout(7) << "waiting for !frozen/authpinnable on " << *dir << dendl;
-    dir->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    dir->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
 
@@ -2449,7 +2449,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->dst_reanchor_atid);
+    mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
 
   // bump pop
   //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
@@ -2555,7 +2555,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
 
   // commit anchor update?
   if (mdr->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->dst_reanchor_atid);
+    mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
 
   //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
 
@@ -2946,8 +2946,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   _rename_apply(mdr, srcdn, destdn, straydn);
   
   // commit anchor updates?
-  if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid);
-  if (mdr->dst_reanchor_atid) mds->anchorclient->commit(mdr->dst_reanchor_atid);
+  if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid, mdr->ls);
+  if (mdr->dst_reanchor_atid) mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
 
   // bump popularity
   //if (srcdn->is_auth())
@@ -3325,7 +3325,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // bump popularity
   //if (srcdn->is_auth())
     //mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
-  if (destdn->inode->is_auth())
+  if (destdn->inode && destdn->inode->is_auth())
     mds->balancer->hit_inode(mdr->now, destdn->inode, META_POP_IWR);
 
   // done.
@@ -3344,6 +3344,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     // commit
     _rename_apply(mdr, srcdn, destdn, straydn);
     
+    if (mdr->inode_export) {
+      C_Contexts *fin = new C_Contexts;
+      mdcache->migrator->finish_export_inode(mdr->inode_export, fin);
+      mds->queue_waiter(fin);
+    }
+
     // write a commit to the journal
     le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
   } else {
@@ -3401,7 +3407,7 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
 
   map<int,entity_inst_t> exported_client_map;
   bufferlist inodebl;
-  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, inodebl, mdr->slave_to_mds, 
+  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, inodebl, 
 					 exported_client_map, 
 					 mdr->now);
   ::_encode(exported_client_map, reply->inode_export);
@@ -3409,8 +3415,6 @@ void Server::handle_slave_rename_get_inode(MDRequest *mdr)
   
   reply->inode_export_v = mdr->srcdn->inode->inode.version;
 
-  mdr->inode_import = reply->inode_export;   // keep a copy locally, in case we have to rollback
-  
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
 
   // clean up.

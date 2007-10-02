@@ -202,7 +202,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if (!object->can_auth_pin()) {
       // wait
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
-      object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       mds->locker->drop_locks(mdr);
       mdr->drop_local_auth_pins();
       return false;
@@ -979,7 +979,7 @@ void Locker::try_simple_eval(SimpleLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_simple_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_SimpleEval(this, lock));
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_SimpleEval(this, lock));
     return;
   }
 
@@ -1437,7 +1437,7 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_ScatterEval(this, lock));
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_ScatterEval(this, lock));
     return;
   }
 
@@ -2162,7 +2162,7 @@ void Locker::try_file_eval(FileLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_Locker_FileEval(this, lock));
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_FileEval(this, lock));
     return;
   }
 

@@ -126,6 +126,7 @@ struct MDRequest {
   version_t dst_reanchor_atid;  // dst->stray
   bufferlist inode_import;
   version_t inode_import_v;
+  CInode *inode_export;         // inode we're exporting, if any
   CDentry *srcdn; // srcdn, if auth, on slave
   
   // called when slave commits
@@ -139,6 +140,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
+    inode_export(0), srcdn(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
@@ -146,6 +148,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
+    inode_export(0), srcdn(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
@@ -153,6 +156,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
+    inode_export(0), srcdn(0),
     slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
@@ -558,9 +562,9 @@ public:
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_create_prepared(CInode *in, version_t atid);
-  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv, LogSegment *ls);
+  void _anchor_create_logged(CInode *in, version_t atid, LogSegment *ls);
   void _anchor_destroy_prepared(CInode *in, version_t atid);
-  void _anchor_destroy_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_destroy_logged(CInode *in, version_t atid, LogSegment *ls);
 
   friend class C_MDC_AnchorCreatePrepared;
   friend class C_MDC_AnchorCreateLogged;

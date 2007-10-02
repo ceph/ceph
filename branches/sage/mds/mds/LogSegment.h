@@ -19,6 +19,9 @@
 #include "include/interval_set.h"
 #include "include/Context.h"
 
+#include <ext/hash_set>
+using __gnu_cxx::hash_set;
+
 class CDir;
 class CInode;
 class CDentry;
@@ -41,7 +44,7 @@ class LogSegment {
   map<CInode*, map<off_t,off_t> > purging_inodes;
 
   // committed anchor transactions
-  interval_set<version_t> atids;
+  hash_set<version_t> pending_commit_atids;
 
   // client request ids
   map<int, tid_t> last_client_tids;

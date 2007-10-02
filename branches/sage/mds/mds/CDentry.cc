@@ -120,7 +120,7 @@ pair<int,int> CDentry::authority()
 void CDentry::add_waiter(int tag, Context *c)
 {
   // wait on the directory?
-  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+  if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
     dir->add_waiter(tag, c);
     return;
   }

@@ -27,6 +27,7 @@ using __gnu_cxx::hash_map;
 
 class Context;
 class MDS;
+class LogSegment;
 
 class AnchorClient : public Dispatcher {
   MDS *mds;
@@ -49,10 +50,21 @@ class AnchorClient : public Dispatcher {
   hash_map<inodeno_t, _pending_prepare> pending_update_prepare;
 
   // pending commits
-  set<version_t> pending_commit;
+  map<version_t, LogSegment*> pending_commit;
   map<version_t, list<Context*> > ack_waiters;
 
   void handle_anchor_reply(class MAnchor *m);  
+
+  class C_LoggedAck : public Context {
+    AnchorClient *ac;
+    version_t atid;
+  public:
+    C_LoggedAck(AnchorClient *a, version_t t) : ac(a), atid(t) {}
+    void finish(int r) {
+      ac->_logged_ack(atid);
+    }
+  };
+  void _logged_ack(version_t atid);
 
 public:
   AnchorClient(MDS *m) : mds(m) {}
@@ -66,7 +78,7 @@ public:
   void prepare_destroy(inodeno_t ino, version_t *atid, Context *onfinish);
   void prepare_update(inodeno_t ino, vector<Anchor>& trace, version_t *atid, Context *onfinish);
 
-  void commit(version_t atid);
+  void commit(version_t atid, LogSegment *ls);
 
   // for recovery (by other nodes)
   void handle_mds_recovery(int mds); // called when someone else recovers
@@ -75,8 +87,8 @@ public:
   void resend_prepares(hash_map<inodeno_t, _pending_prepare>& prepares, int op);
 
   // for recovery (by me)
-  void got_journaled_agree(version_t atid) {
-    pending_commit.insert(atid);
+  void got_journaled_agree(version_t atid, LogSegment *ls) {
+    pending_commit[atid] = ls;
   }
   void got_journaled_ack(version_t atid) {
     pending_commit.erase(atid);

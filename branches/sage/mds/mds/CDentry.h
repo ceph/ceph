@@ -211,13 +211,14 @@ public:
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
-  void encode_export_state(bufferlist& bl) {
-    bl.append((char*)&state, sizeof(state));
-    bl.append((char*)&version, sizeof(version));
-    bl.append((char*)&projected_version, sizeof(projected_version));
+  void encode_export(bufferlist& bl) {
+    ::_encode_simple(state, bl);
+    ::_encode_simple(version, bl);
+    ::_encode_simple(projected_version, bl);
     lock._encode(bl);
-    ::_encode(replica_map, bl);
-
+    ::_encode_simple(replica_map, bl);
+  }
+  void finish_export() {
     // twiddle
     clear_replica_map();
     replica_nonce = EXPORT_NONCE;
@@ -225,6 +226,7 @@ public:
     if (is_dirty())
       mark_clean();
   }
+
   void decode_import_state(bufferlist& bl, int& off, int from, int to, LogSegment *ls) {
     int nstate;
     bl.copy(off, sizeof(nstate), (char*)&nstate);

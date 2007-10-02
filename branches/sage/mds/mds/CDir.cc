@@ -794,7 +794,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
 
   if (!can_auth_pin() && !ignore_authpinnability) {
     dout(7) << "fetch waiting for authpinnable" << dendl;
-    add_waiter(WAIT_AUTHPINNABLE, c);
+    add_waiter(WAIT_UNFREEZE, c);
     return;
   }
 

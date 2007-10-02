@@ -4477,7 +4477,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   if (!in->can_auth_pin() &&
       !mdr->is_auth_pinned(in)) {
     dout(7) << "anchor_create not authpinnable, waiting on " << *in << dendl;
-    in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
+    in->add_waiter(CInode::WAIT_UNFREEZE, onfinish);
     return;
   }
 
@@ -4510,13 +4510,12 @@ class C_MDC_AnchorCreateLogged : public Context {
   MDCache *cache;
   CInode *in;
   version_t atid;
-  version_t pdv;
   LogSegment *ls;
 public:
-  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, version_t v, LogSegment *s) : 
-    cache(c), in(i), atid(t), pdv(v), ls(s) {}
+  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, LogSegment *s) : 
+    cache(c), in(i), atid(t), ls(s) {}
   void finish(int r) {
-    cache->_anchor_create_logged(in, atid, pdv, ls);
+    cache->_anchor_create_logged(in, atid, ls);
   }
 };
 
@@ -4525,29 +4524,24 @@ void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
   dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << dendl;
   assert(in->inode.anchored == false);
 
-  // predirty, prepare log entry
-  version_t pdv = in->pre_dirty();
-
-  EUpdate *le = new EUpdate(mds->mdlog, "anchor_create");
-  le->metablob.add_dir_context(in->get_parent_dir());
-
   // update the logged inode copy
-  inode_t *pi = le->metablob.add_dentry(in->parent, true);
+  inode_t *pi = in->project_inode();
   pi->anchored = true;
-  pi->version = pdv;
+  pi->version = in->pre_dirty();
 
   // note anchor transaction
+  EUpdate *le = new EUpdate(mds->mdlog, "anchor_create");
+  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->metablob.add_anchor_transaction(atid);
-
-  // log + wait
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid, pdv, 
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid,
 							    mds->mdlog->get_current_segment()));
 }
 
 
-void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv, LogSegment *ls)
+void MDCache::_anchor_create_logged(CInode *in, version_t atid, LogSegment *ls)
 {
-  dout(10) << "_anchor_create_logged pdv " << pdv << " on " << *in << dendl;
+  dout(10) << "_anchor_create_logged on " << *in << dendl;
 
   // unpin
   assert(in->state_test(CInode::STATE_ANCHORING));
@@ -4556,11 +4550,10 @@ void MDCache::_anchor_create_logged(CInode *in, version_t atid, version_t pdv, L
   in->auth_unpin();
   
   // apply update to cache
-  in->inode.anchored = true;
-  in->mark_dirty(pdv, ls);
+  in->pop_and_dirty_projected_inode(ls);
   
   // tell the anchortable we've committed
-  mds->anchorclient->commit(atid);
+  mds->anchorclient->commit(atid, ls);
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
@@ -4588,7 +4581,7 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   if (!in->can_auth_pin()/* &&
 			    !mdr->is_auth_pinned(in)*/) {
     dout(7) << "anchor_destroy not authpinnable, waiting on " << *in << dendl;
-    in->add_waiter(CInode::WAIT_AUTHPINNABLE, onfinish);
+    in->add_waiter(CInode::WAIT_UNFREEZE, onfinish);
     return;
   }
 
@@ -4618,12 +4611,12 @@ class C_MDC_AnchorDestroyLogged : public Context {
   MDCache *cache;
   CInode *in;
   version_t atid;
-  version_t pdv;
+  LogSegment *ls;
 public:
-  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t t, version_t v) :
-    cache(c), in(i), atid(t), pdv(v) {}
+  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t t, LogSegment *l) :
+    cache(c), in(i), atid(t), ls(l) {}
   void finish(int r) {
-    cache->_anchor_destroy_logged(in, atid, pdv);
+    cache->_anchor_destroy_logged(in, atid, ls);
   }
 };
 
@@ -4633,28 +4626,23 @@ void MDCache::_anchor_destroy_prepared(CInode *in, version_t atid)
 
   assert(in->inode.anchored == true);
 
-  // predirty, prepare log entry
-  version_t pdv = in->pre_dirty();
-
-  EUpdate *le = new EUpdate(mds->mdlog, "anchor_destroy");
-  le->metablob.add_dir_context(in->get_parent_dir());
-
   // update the logged inode copy
-  inode_t *pi = le->metablob.add_dentry(in->parent, true);
+  inode_t *pi = in->project_inode();
   pi->anchored = true;
-  pi->version = pdv;
-
-  // note anchor transaction
-  le->metablob.add_anchor_transaction(atid);
+  pi->version = in->pre_dirty();
 
   // log + wait
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, atid, pdv));
+  EUpdate *le = new EUpdate(mds->mdlog, "anchor_destroy");
+  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+  le->metablob.add_anchor_transaction(atid);
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, atid, mds->mdlog->get_current_segment()));
 }
 
 
-void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
+void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, LogSegment *ls)
 {
-  dout(10) << "_anchor_destroy_logged pdv " << pdv << " on " << *in << dendl;
+  dout(10) << "_anchor_destroy_logged on " << *in << dendl;
   
   // unpin
   assert(in->state_test(CInode::STATE_UNANCHORING));
@@ -4663,11 +4651,10 @@ void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, version_t pdv)
   in->auth_unpin();
   
   // apply update to cache
-  in->inode.anchored = false;
-  in->inode.version = pdv;
-  
+  in->pop_and_dirty_projected_inode(ls);
+
   // tell the anchortable we've committed
-  mds->anchorclient->commit(atid);
+  mds->anchorclient->commit(atid, ls);
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_UNANCHORED, 0);

@@ -46,6 +46,9 @@ class MExportDir : public Message {
   void set_dirstate(const list<bufferlist>& ls) {
     dirstate = ls;
   }
+  void take_dirstate(list<bufferlist>& ls) {
+    dirstate.swap(ls);
+  }
   void add_export(dirfrag_t df) { 
     bounds.push_back(df); 
   }
