@@ -2174,7 +2174,6 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
 	   << " inc=" << inc
 	   << " " << *targeti << dendl;
 
-  mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le;
   if (r == 0) {
     // write a commit to the journal
