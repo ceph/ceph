@@ -51,6 +51,32 @@ sage doc
 mdsmon
 - per-mds, shared standby queues 
 
+fix rename
+if (0) {
+- who cares if dir items are dirtied out of order?
+  - need to make sure slave_prepare isn't trimmed before teh commit commits
+  - put xlist_item in MDRequest, add to LogSegment for duration of delay before change is applied to
+    the cache
+  - dirtying has to be attached to teh _original_ logsegment.. mdr->ls
+} else {
+- witnesses
+ - rename_apply after _prepare
+ - srci auth do versionlock on inode to avoid mention in journal prior to commit|rollback
+ - add in-memory rollback in the _commit (on failure)
+}
+- srci auth needs to freeze inode before exporting it
+  - hrm, what about misdirected lock requests.. singleauth won't capture a rename export!
+- make sure handle_slave_rename_prep can only happen once
+  (e.g. if witness journals then fails, and initiator re-requests prepare)
+
+fix link/unlink
+- prepare should be sure that the handle_slave_link or whatever only happens _once_ on the slave
+
+
+
+mds segments
+- reverse_export is fuggered by the log segment business.  need to delay auth/clean step until export is confirmed (i.e. make second pass over the subtree?).  retest migrator!  pay close attention to cache_expire checks on auth ordering... ,.dkjasdfjdajfdkjl
+ - upshot: once it's done, it'll be much cleaner!
 
 mds bugs
 - fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
