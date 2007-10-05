@@ -167,6 +167,9 @@ void MDCache::add_inode(CInode *in)
   // add to lru, inode map
   assert(inode_map.count(in->ino()) == 0);  // should be no dup inos!
   inode_map[ in->ino() ] = in;
+
+  if (in->ino() < MDS_INO_BASE)
+    base_inodes.insert(in);
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -183,11 +186,16 @@ void MDCache::remove_inode(CInode *o)
   // remove from inode map
   inode_map.erase(o->ino());    
 
+  if (o->ino() < MDS_INO_BASE) {
+    assert(base_inodes.count(o));
+    base_inodes.erase(o);
+
+    if (o == root) root = 0;
+    if (o == stray) stray = 0;
+  }
+
   // delete it
   delete o; 
-
-  if (o == root) root = 0;
-  if (o == stray) stray = 0;
 }
 
 
@@ -2693,6 +2701,7 @@ void MDCache::set_root(CInode *in)
 {
   assert(root == 0);
   root = in;
+  base_inodes.insert(in);
 }
 
 
@@ -4324,6 +4333,12 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
 
+  // drop stickydirs
+  for (set<CInode*>::iterator p = mdr->stickydirs.begin();
+       p != mdr->stickydirs.end();
+       ++p) 
+    (*p)->put_stickydirs();
+
   // drop cache pins
   for (set<MDSCacheObject*>::iterator it = mdr->pins.begin();
        it != mdr->pins.end();
@@ -4725,13 +4740,15 @@ void MDCache::discover_dir_frag(CInode *base,
   dout(7) << "discover_dir_frag " << base->ino() << " " << approx_fg
 	  << " from mds" << from << dendl;
 
-  filepath want_path;
-  MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				 base->ino(),
-				 want_path,
-				 true);  // need the base dir open
-  dis->set_base_dir_frag(approx_fg);
-  mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
+    filepath want_path;
+    MDiscover *dis = new MDiscover(mds->get_nodeid(),
+				   base->ino(),
+				   want_path,
+				   true);  // need the base dir open
+    dis->set_base_dir_frag(approx_fg);
+    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+  }
 
   // register + wait
   if (onfinish) 
@@ -4757,12 +4774,14 @@ void MDCache::discover_path(CInode *base,
     return;
   } 
 
-  MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				 base->ino(),
-				 want_path,
-				 true,        // we want the base dir; we are relative to ino.
-				 want_xlocked);
-  mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
+    MDiscover *dis = new MDiscover(mds->get_nodeid(),
+				   base->ino(),
+				   want_path,
+				   true,        // we want the base dir; we are relative to ino.
+				   want_xlocked);
+    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+  }
 
   // register + wait
   if (onfinish) base->add_waiter(CInode::WAIT_DIR, onfinish);
@@ -4915,18 +4934,19 @@ void MDCache::handle_discover(MDiscover *dis)
 	      << " don't have base ino " << dis->get_base_ino() 
 	      << ", dropping" << dendl;
       delete reply;
+      assert(0); // hmm: when does this happen?
       return;
     }
 
     if (dis->wants_base_dir()) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
-	      << " has " << *cur 
 	      << " wants basedir+" << dis->get_want().get_path() 
+	      << " has " << *cur 
 	      << dendl;
     } else {
       dout(7) << "handle_discover mds" << dis->get_asker() 
-	      << " has " << *cur
 	      << " wants " << dis->get_want().get_path()
+	      << " has " << *cur
 	      << dendl;
     }
   }
@@ -4963,19 +4983,35 @@ void MDCache::handle_discover(MDiscover *dis)
 
     if ((!curdir && !cur->is_auth()) ||
 	(curdir && !curdir->is_auth())) {
-      // set hint
-      if (curdir) {
-	dout(7) << " not dirfrag auth, setting dir_auth_hint for " << *curdir << dendl;
-	reply->set_dir_auth_hint(curdir->authority().first);
-      } else {
-	dout(7) << " dirfrag not open, not inode auth, setting dir_auth_hint for " 
-		<< *cur << dendl;
-	reply->set_dir_auth_hint(cur->authority().first);
+
+	/* before:
+	 * ONLY set flag if empty!!
+	 * otherwise requester will wake up waiter(s) _and_ continue with discover,
+	 * resulting in duplicate discovers in flight,
+	 * which can wreak havoc when discovering rename srcdn (which may move)
+	 */
+
+      if (reply->is_empty()) {
+	// only hint if empty.
+	//  someday this could be better, but right now the waiter logic isn't smart enough.
+	
+	// hint
+	if (curdir) {
+	  dout(7) << " not dirfrag auth, setting dir_auth_hint for " << *curdir << dendl;
+	  reply->set_dir_auth_hint(curdir->authority().first);
+	} else {
+	  dout(7) << " dirfrag not open, not inode auth, setting dir_auth_hint for " 
+		  << *cur << dendl;
+	  reply->set_dir_auth_hint(cur->authority().first);
+	}
+	
+	// note error dentry, if any
+	//  NOTE: important, as it allows requester to issue an equivalent discover
+	//        to whomever we hint at.
+	if (dis->get_want().depth() > i)
+	  reply->set_error_dentry(dis->get_dentry(i));
       }
-      
-      // set error dentry, if there is one
-      if (dis->get_want().depth() > i)
-	reply->set_error_dentry(dis->get_dentry(i));
+
       break;
     }
 
@@ -5065,6 +5101,20 @@ void MDCache::handle_discover(MDiscover *dis)
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
 	delete reply;
 	return;
+      }
+    }
+
+    // frozen inode?
+    if (dn->is_primary() &&
+	dn->inode->is_frozen()) {
+      if (reply->is_empty()) {
+	dout(7) << *dn->inode << " is frozen, empty reply, waiting" << dendl;
+	dn->inode->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	delete reply;
+	return;
+      } else {
+	dout(7) << *dn->inode << " is frozen, non-empty reply, stopping" << dendl;
+	break;
       }
     }
 
@@ -5223,17 +5273,36 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       m->get_dir_auth_hint() != mds->get_nodeid()) {
     dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << dendl;
 
-    // try again
-    frag_t fg;
-    if (m->get_error_dentry().length())
-      fg = cur->pick_dirfrag(m->get_error_dentry());
-    else
-      fg = m->get_base_dir_frag();
-    discover_dir_frag(cur, fg, 0, m->get_dir_auth_hint());
-  }
-  else if (m->is_flag_error_dir()) {
-    // dir error at the end there?
-    dout(7) << " flag_error on dir " << *cur << dendl;
+    // try again?
+    if (m->get_error_dentry().length()) {
+      // wanted a dentry
+      frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
+      CDir *dir = cur->get_dirfrag(fg);
+      if (dir) {
+	// don't actaully need the hint, now
+	if (dir->lookup(m->get_error_dentry()) == 0 &&
+	    dir->is_waiting_for_dentry(m->get_error_dentry())) 
+	  discover_path(dir, m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
+	else 
+	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
+		  << m->get_error_dentry() << dendl;
+      } else {
+	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
+	  discover_path(cur, m->get_error_dentry(), 0, m->get_wanted_xlocked(), 
+			m->get_dir_auth_hint());
+	else
+	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
+      }
+    } else {
+      // wanted just the dir
+      frag_t fg = m->get_base_dir_frag();
+      if (cur->get_dirfrag(fg) == 0 && cur->is_waiter_for(CInode::WAIT_DIR))
+	discover_dir_frag(cur, fg, 0, m->get_dir_auth_hint());
+      else
+	dout(7) << " doing nothing, nobody is waiting for dir" << dendl;	  
+    }
+  } else if (m->is_flag_error_dir()) {
+    dout(7) << " flag_error_dir on " << *cur << dendl;
     //assert(!cur->is_dir());  // this assert might be racey if dir auth != inode auth?
     cur->take_waiting(CInode::WAIT_DIR, error);
   }
@@ -5975,10 +6044,12 @@ void MDCache::show_subtrees(int dbl)
   }
 
   // root frags
-  list<CDir*> rootfrags;
-  if (root) root->get_dirfrags(rootfrags);
-  if (stray) stray->get_dirfrags(rootfrags);
-  dout(15) << "rootfrags " << rootfrags << dendl;
+  list<CDir*> basefrags;
+  for (set<CInode*>::iterator p = base_inodes.begin();
+       p != base_inodes.end();
+       ++p) 
+    (*p)->get_dirfrags(basefrags);
+  dout(15) << "show_subtrees, base dirfrags " << basefrags << dendl;
 
   // queue stuff
   list<pair<CDir*,int> > q;
@@ -5986,8 +6057,10 @@ void MDCache::show_subtrees(int dbl)
   set<CDir*> seen;
 
   // calc max depth
-  for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
+  for (list<CDir*>::iterator p = basefrags.begin(); p != basefrags.end(); ++p) 
     q.push_back(pair<CDir*,int>(*p, 0));
+
+  set<CDir*> subtrees_seen;
 
   int depth = 0;
   while (!q.empty()) {
@@ -5996,6 +6069,8 @@ void MDCache::show_subtrees(int dbl)
     q.pop_front();
 
     if (subtrees.count(dir) == 0) continue;
+
+    subtrees_seen.insert(dir);
 
     if (d > depth) depth = d;
 
@@ -6018,7 +6093,7 @@ void MDCache::show_subtrees(int dbl)
 
 
   // print tree
-  for (list<CDir*>::iterator p = rootfrags.begin(); p != rootfrags.end(); ++p) 
+  for (list<CDir*>::iterator p = basefrags.begin(); p != basefrags.end(); ++p) 
     q.push_back(pair<CDir*,int>(*p, 0));
 
   while (!q.empty()) {
@@ -6073,6 +6148,17 @@ void MDCache::show_subtrees(int dbl)
 	q.push_front(pair<CDir*,int>(*p, d+2));
     }
   }
+
+  // verify there isn't stray crap in subtree map
+  int lost = 0;
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    if (subtrees_seen.count(p->first)) continue;
+    dout(10) << "*** stray/lost entry in subtree map: " << *p->first << dendl;
+    lost++;
+  }
+  assert(lost == 0);
 }
 
 

@@ -70,17 +70,17 @@ public:
  * C_Contexts - set of Contexts
  */
 class C_Contexts : public Context {
-  std::list<Context*> clist;
-  
 public:
+  std::list<Context*> contexts;
+
   void add(Context* c) {
-    clist.push_back(c);
+    contexts.push_back(c);
   }
   void take(std::list<Context*>& ls) {
-    clist.splice(clist.end(), ls);
+    contexts.splice(contexts.end(), ls);
   }
   void finish(int r) {
-    finish_contexts(clist, r);
+    finish_contexts(contexts, r);
   }
 };
 

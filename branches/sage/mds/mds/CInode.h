@@ -65,7 +65,9 @@ class CInode : public MDSCacheObject {
   static const int PIN_BATCHOPENJOURNAL = 9;
   static const int PIN_SCATTERED =        10;
   static const int PIN_STICKYDIRS =       11;
-  static const int PIN_PURGING =         -12;
+  static const int PIN_PURGING =         -12;	
+  static const int PIN_FREEZING =         13;
+  static const int PIN_FROZEN =           14;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -79,6 +81,8 @@ class CInode : public MDSCacheObject {
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
     case PIN_STICKYDIRS: return "stickydirs";
+    case PIN_FREEZING: return "freezing";
+    case PIN_FROZEN: return "frozen";
     default: return generic_pin_name(p);
     }
   }
@@ -89,6 +93,9 @@ class CInode : public MDSCacheObject {
   static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
   static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
+  static const int STATE_FREEZING =    (1<<7);
+  static const int STATE_FROZEN =      (1<<8);
+  static const int STATE_AMBIGUOUSAUTH = (1<<9);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -96,6 +103,8 @@ class CInode : public MDSCacheObject {
   static const int WAIT_ANCHORED    = (1<<2);
   static const int WAIT_UNANCHORED  = (1<<3);
   static const int WAIT_CAPS        = (1<<4);
+  static const int WAIT_FROZEN      = (1<<5);
+  static const int WAIT_UNFREEZE    = (1<<6);
   
   static const int WAIT_AUTHLOCK_OFFSET = 5;
   static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
@@ -196,6 +205,7 @@ private:
   // auth pin
   int auth_pins;
   int nested_auth_pins;
+  int auth_pin_freeze_allowance;
 
  public:
   inode_load_vec_t pop;
@@ -247,6 +257,12 @@ private:
   
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
+
+  // note: this overloads MDSCacheObject
+  bool is_ambiguous_auth() {
+    return state_test(STATE_AMBIGUOUSAUTH) ||
+      MDSCacheObject::is_ambiguous_auth();
+  }
 
 
   inodeno_t ino() const { return inode.ino; }
@@ -358,15 +374,17 @@ public:
     client_caps = cl;
   }
   */
-  void take_client_caps(map<int,Capability::Export>& cl) {
+  void clear_client_caps() {
     if (!client_caps.empty())
       put(PIN_CAPS);
+    client_caps.clear();
+  }
+  void export_client_caps(map<int,Capability::Export>& cl) {
     for (map<int,Capability>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
       cl[it->first] = it->second.make_export();
     }
-    client_caps.clear();
   }
   void merge_client_caps(map<int,Capability::Export>& cl, set<int>& new_client_caps) {
     if (client_caps.empty() && !cl.empty())
@@ -445,9 +463,14 @@ public:
 
 
   // -- freeze --
+  bool is_freezing_inode() { return state_test(STATE_FREEZING); }
+  bool is_frozen_inode() { return state_test(STATE_FROZEN); }
   bool is_frozen();
   bool is_frozen_dir();
   bool is_freezing();
+
+  bool freeze_inode(int auth_pin_allowance=0);
+  void unfreeze_inode(list<Context*>& finished);
 
 
   // -- reference counting --
@@ -618,9 +641,7 @@ public:
     st.pop = in->pop;
     in->pop.zero(now);
     
-    // steal WRITER caps from inode
-    in->take_client_caps(cap_map);
-    //remaining_issued = in->get_caps_issued();
+    in->export_client_caps(cap_map);
   }
   
   inodeno_t get_ino() { return st.inode.ino; }

@@ -186,12 +186,12 @@ public:
   void encode_export_inode(CInode *in, bufferlist& enc_state, 
 			   map<int,entity_inst_t>& exported_client_map,
 			   utime_t now);
-  void finish_export_inode(CInode *in, C_Contexts *fin);
+  void finish_export_inode(CInode *in, list<Context*>& finished);
   int encode_export_dir(list<bufferlist>& dirstatelist,
 			CDir *dir,
 			map<int,entity_inst_t>& exported_client_map,
 			utime_t now);
-  void finish_export_dir(CDir *dir, class C_Contexts *fin, utime_t now);
+  void finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);

@@ -130,11 +130,13 @@ void Migrator::export_empty_import(CDir *dir)
   }
   
   // is it really empty?
+  /* who cares!  nothing cached, so clearly unimportant.  export it!
   if (!dir->is_complete()) {
     dout(7) << "not complete, fetching." << dendl;
     dir->fetch(new C_MDC_EmptyImport(this,dir));
     return;
   }
+  */
   
   int dest = dir->inode->authority().first;
   
@@ -840,7 +842,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
     exported_client_map[it->first] = mds->clientmap.get_inst(it->first);
 }
 
-void Migrator::finish_export_inode(CInode *in, C_Contexts *fin)
+void Migrator::finish_export_inode(CInode *in, list<Context*>& finished)
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
@@ -858,6 +860,7 @@ void Migrator::finish_export_inode(CInode *in, C_Contexts *fin)
     entity_inst_t inst = mds->clientmap.get_inst(it->first);
     mds->send_message_client_maybe_open(m, inst);
   }
+  in->clear_client_caps();
 
   // relax locks?
   if (!in->is_replicated())
@@ -882,9 +885,7 @@ void Migrator::finish_export_inode(CInode *in, C_Contexts *fin)
   in->replica_nonce = CInode::EXPORT_NONCE;
   
   // waiters
-  list<Context*> waiters;
-  in->take_waiting(CInode::WAIT_ANY, waiters);
-  fin->take(waiters);
+  in->take_waiting(CInode::WAIT_ANY, finished);
   
   // *** other state too?
 
@@ -978,7 +979,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   return num_exported;
 }
 
-void Migrator::finish_export_dir(CDir *dir, C_Contexts *fin, utime_t now)
+void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now)
 {
   dout(10) << "finish_export_dir " << *dir << dendl;
 
@@ -997,9 +998,7 @@ void Migrator::finish_export_dir(CDir *dir, C_Contexts *fin, utime_t now)
   dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
 
   // suck up all waiters
-  list<Context*> waiting;
-  dir->take_waiting(CDir::WAIT_ANY, waiting);    // all dir waiters
-  fin->take(waiting);
+  dir->take_waiting(CDir::WAIT_ANY, finished);    // all dir waiters
   
   // pop
   dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
@@ -1018,7 +1017,7 @@ void Migrator::finish_export_dir(CDir *dir, C_Contexts *fin, utime_t now)
 
     // inode?
     if (dn->is_primary()) {
-      finish_export_inode(in, fin);
+      finish_export_inode(in, finished);
 
       // subdirs?
       in->get_nested_dirfrags(subdirs);
@@ -1027,7 +1026,7 @@ void Migrator::finish_export_dir(CDir *dir, C_Contexts *fin, utime_t now)
 
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++) 
-    finish_export_dir(*it, fin, now);
+    finish_export_dir(*it, finished, now);
 }
 
 class C_MDS_ExportFinishLogged : public Context {
@@ -1241,7 +1240,7 @@ void Migrator::export_finish(CDir *dir)
   
   // finish export (adjust local cache state)
   C_Contexts *fin = new C_Contexts;
-  finish_export_dir(dir, fin, g_clock.now());
+  finish_export_dir(dir, fin->contexts, g_clock.now());
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   // unfreeze

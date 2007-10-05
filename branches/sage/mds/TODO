@@ -54,32 +54,27 @@ mdsmon
 fix rename
 if (0) {
 - who cares if dir items are dirtied out of order?
-  - need to make sure slave_prepare isn't trimmed before teh commit commits
+  - continue to delay _apply
+  - need to make sure slave_prepare isn't trimmed before the commit commits
   - put xlist_item in MDRequest, add to LogSegment for duration of delay before change is applied to
     the cache
   - dirtying has to be attached to teh _original_ logsegment.. mdr->ls
 } else {
 - witnesses
- - rename_apply after _prepare
- - srci auth do versionlock on inode to avoid mention in journal prior to commit|rollback
+/ - rename_apply immediately after _prepare (preserve journal pipelining)
+/ - srci auth do versionlock on inode to avoid mention in journal prior to commit|rollback
+/   - this is to avoid some event between the prepare and rollback with incorrect linkage
  - add in-memory rollback in the _commit (on failure)
+/ - do separate get_srci_replicas slave op first, then wrap inode export into actual prepare last, so that srci auth can apply immediately.
 }
-- srci auth needs to freeze inode before exporting it
-  - hrm, what about misdirected lock requests.. singleauth won't capture a rename export!
-- make sure handle_slave_rename_prep can only happen once
-  (e.g. if witness journals then fails, and initiator re-requests prepare)
-
-fix link/unlink
-- prepare should be sure that the handle_slave_link or whatever only happens _once_ on the slave
+/- srci auth needs to freeze inode before exporting it
+/  *** hrm, what about misdirected lock requests.. singleauth won't capture a rename export!
+/  -> inode ambiguous_auth bit+waiter; set on prepare, clear on mdr finish.
 
 
-
-mds segments
-- reverse_export is fuggered by the log segment business.  need to delay auth/clean step until export is confirmed (i.e. make second pass over the subtree?).  retest migrator!  pay close attention to cache_expire checks on auth ordering... ,.dkjasdfjdajfdkjl
- - upshot: once it's done, it'll be much cleaner!
 
 mds bugs
-- fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
+???- fix server unlink .. needs to use slave_requests to clean up any failures during the resolve stage
 - fix purge_stray bug
 - try_remove_unlinked_dn thing
 - emetablob playback with bad linkage.. from sloppy unlink?  hmm
@@ -89,6 +84,9 @@ mds bugs
 
 - verify once-per-segment jouranl context is working...
 
+mds cleanup
+- fix freeze_* interface to pull waiters _outside_
+- get rid of replicate objects for replicate_to .. encode to bufferlists directly
 
 mds
 - extend/clean up filepath to allow paths relative to an ino
@@ -100,24 +98,23 @@ mds
   - need to export stray crap to another mds..
 - verify stray is empty on shutdown
 
+- real chdir (directory "open")
+  - relative metadata ops
+
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-
 
 - detect and deal with client failure
   - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
 
 - inode.max_size
 - inode.allocated_size
-
-- real chdir (directory "open")
-  - relative metadata ops
-
+ 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
 - EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
 
-- could mark dir complete in EMetaBlob by counting how many dentries are dirtied in teh current log epoch in CDir...
+- could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
 
 - fix rmdir empty exported dirfrag race
   - export all frags <= 1 item?  then we ensure freezing before empty, avoiding any last unlink + export vs rmdir race.
@@ -128,7 +125,7 @@ mds
   - need to move state from replicas to auth.  simplelock doesn't currently support that.
     - ScatterLock or something?  hrm.
 
-- FIXME how to journal root and stray inode content? 
+- FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 

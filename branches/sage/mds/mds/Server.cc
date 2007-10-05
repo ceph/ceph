@@ -650,13 +650,6 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
 
-    case MMDSSlaveRequest::OP_RENAMEGETINODEACK:
-      {
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	handle_slave_rename_get_inode_ack(mdr, m);
-      }
-      break;
-
     default:
       assert(0);
     }
@@ -771,10 +764,6 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     handle_slave_rename_prep(mdr);
     break;
 
-  case MMDSSlaveRequest::OP_RENAMEGETINODE:
-    handle_slave_rename_get_inode(mdr);
-    break;
-
   case MMDSSlaveRequest::OP_FINISH:
     // finish off request.
     mdcache->request_finish(mdr);
@@ -874,19 +863,19 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     assert(object);  // we pinned it
     dout(10) << " remote has pinned " << *object << dendl;
     if (!mdr->is_auth_pinned(object))
-      mdr->auth_pins.insert(object);
+      mdr->remote_auth_pins.insert(object);
     pinned.insert(object);
   }
 
   // removed auth pins?
-  set<MDSCacheObject*>::iterator p = mdr->auth_pins.begin();
-  while (p != mdr->auth_pins.end()) {
+  set<MDSCacheObject*>::iterator p = mdr->remote_auth_pins.begin();
+  while (p != mdr->remote_auth_pins.end()) {
     if ((*p)->authority().first == from &&
 	pinned.count(*p) == 0) {
       dout(10) << " remote has unpinned " << **p << dendl;
       set<MDSCacheObject*>::iterator o = p;
       ++p;
-      mdr->auth_pins.erase(o);
+      mdr->remote_auth_pins.erase(o);
     } else {
       ++p;
     }
@@ -2097,10 +2086,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
     }
   }
 
-
-  inode_t *pi = dn->inode->project_inode();
-
   // update journaled target inode
+  inode_t *pi = dn->inode->project_inode();
   bool inc;
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     inc = true;
@@ -2766,6 +2753,13 @@ void Server::handle_client_rename(MDRequest *mdr)
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);
 
+  // xlock versionlock on srci if remote?
+  //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
+  //  strictly speaking, having the slave node freeze the inode is 
+  //  otherwise sufficient for avoiding conflicts with inode locks, etc.
+  if (!srcdn->is_auth() && srcdn->is_primary())
+    xlocks.insert(&srcdn->inode->versionlock);
+
   // xlock oldin (for nlink--)
   if (oldin) xlocks.insert(&oldin->linklock);
   
@@ -2826,62 +2820,34 @@ void Server::handle_client_rename(MDRequest *mdr)
   else
     witnesses.insert(srcdn->authority().first);
   destdn->list_replicas(witnesses);
+  dout(10) << " witnesses " << witnesses << ", have " << mdr->witnessed << dendl;
 
+  // do srcdn auth last
+  int last = -1;
+  if (!srcdn->is_auth())
+    last = srcdn->authority().first;
+  
   for (set<int>::iterator p = witnesses.begin();
        p != witnesses.end();
        ++p) {
+    if (*p == last) continue;  // do it last!
     if (mdr->witnessed.count(*p)) {
       dout(10) << " already witnessed by mds" << *p << dendl;
+    } else if (mdr->waiting_on_slave.count(*p)) {
+      dout(10) << " already waiting on witness mds" << *p << dendl;      
     } else {
-      dout(10) << " not yet witnessed by mds" << *p << ", sending prepare" << dendl;
-      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREP);
-      srcdn->make_path(req->srcdnpath);
-      destdn->make_path(req->destdnpath);
-      req->now = mdr->now;
-
-      if (straydn) {
-	CInodeDiscover *indis = straydn->dir->inode->replicate_to(*p);
-	CDirDiscover *dirdis = straydn->dir->replicate_to(*p);
-	CDentryDiscover *dndis = straydn->replicate_to(*p);
-	indis->_encode(req->stray);
-	dirdis->_encode(req->stray);
-	dndis->_encode(req->stray);
-	delete indis;
-	delete dirdis;
-	delete dndis;
-      }
-
-      mds->send_message_mds(req, *p, MDS_PORT_SERVER);
-
-      assert(mdr->waiting_on_slave.count(*p) == 0);
-      mdr->waiting_on_slave.insert(*p);
+      _rename_prepare_witness(mdr, *p, srcdn, destdn, straydn);
     }
   }
   if (!mdr->waiting_on_slave.empty())
     return;  // we're waiting for a witness.
 
-  // -- inode migration? --
-  if (!srcdn->is_auth() &&
-      srcdn->is_primary()) {
-    if (mdr->inode_import.length() == 0) {
-      // get inode
-      int auth = srcdn->authority().first;
-      dout(10) << " requesting inode export from srcdn auth mds" << auth << dendl;
-      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODE);
-      srcdn->make_path(req->srcdnpath);
-      mds->send_message_mds(req, auth, MDS_PORT_SERVER);
-
-      assert(mdr->waiting_on_slave.count(auth) == 0);
-      mdr->waiting_on_slave.insert(auth);
-      return;
-    } else {
-      dout(10) << " already (just!) got inode export from srcdn auth" << dendl;
-      /*int off = 0;
-      mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
-					     srcdn->authority().first);
-      srcdn->inode->force_auth.first = srcdn->authority().first;
-      */
-    }
+  if (last >= 0 &&
+      mdr->witnessed.count(last) == 0 &&
+      mdr->waiting_on_slave.count(last) == 0) {
+    dout(10) << " preparing last witness (srcdn auth)" << dendl;
+    _rename_prepare_witness(mdr, last, srcdn, destdn, straydn);
+    return;
   }
   
   // -- prepare anchor updates -- 
@@ -2972,6 +2938,36 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
 
 // helpers
+
+void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+{
+  dout(10) << "_rename_prepare_witness mds" << who << dendl;
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREP);
+  srcdn->make_path(req->srcdnpath);
+  destdn->make_path(req->destdnpath);
+  req->now = mdr->now;
+  
+  if (straydn) {
+    CInodeDiscover *indis = straydn->dir->inode->replicate_to(who);
+    CDirDiscover *dirdis = straydn->dir->replicate_to(who);
+    CDentryDiscover *dndis = straydn->replicate_to(who);
+    indis->_encode(req->stray);
+    dirdis->_encode(req->stray);
+    dndis->_encode(req->stray);
+    delete indis;
+    delete dirdis;
+    delete dndis;
+  }
+  
+  // srcdn auth will verify our current witness list is sufficient
+  req->witnesses = mdr->witnessed;
+
+  mds->send_message_mds(req, who, MDS_PORT_SERVER);
+  
+  assert(mdr->waiting_on_slave.count(who) == 0);
+  mdr->waiting_on_slave.insert(who);
+}
+
 
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, 
@@ -3289,6 +3285,51 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   mdr->now = mdr->slave_request->now;
 
+  // set up commit waiter (early, to clean up any freezing etc we do)
+  if (!mdr->slave_commit)
+    mdr->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
+
+  // am i srcdn auth?
+  if (srcdn->is_auth()) {
+    if (srcdn->is_primary() && 
+	!srcdn->inode->is_freezing_inode() &&
+	!srcdn->inode->is_frozen_inode()) {
+      // srci auth.  
+      // set ambiguous auth.
+      srcdn->inode->state_set(CInode::STATE_AMBIGUOUSAUTH);
+
+      // freeze?
+      // we need this to
+      //  - avoid conflicting lock state changes
+      //  - avoid concurrent updates to the inode
+      //     (this could also be accomplished with the versionlock)
+      int allowance = 1; // for the versionlock and possible linklock xlock (both are tied to mdr)
+      dout(10) << " freezing srci " << *srcdn->inode << " with allowance " << allowance << dendl;
+      if (!srcdn->inode->freeze_inode(allowance)) {
+	srcdn->inode->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+    }
+
+    // is witness list sufficient?
+    set<int> srcdnrep;
+    srcdn->list_replicas(srcdnrep);
+    for (set<int>::iterator p = srcdnrep.begin();
+	 p != srcdnrep.end();
+	 ++p) {
+      if (*p == mdr->slave_to_mds ||
+	  mdr->slave_request->witnesses.count(*p)) continue;
+      dout(10) << " witness list insufficient; providing srcdn replica list" << dendl;
+      MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
+      reply->witnesses.swap(srcdnrep);
+      mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+      delete mdr->slave_request;
+      mdr->slave_request = 0;
+      return;	
+    }
+    dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
+  }
+
   // journal it?
   if (srcdn->is_auth() ||
       (destdn->inode && destdn->inode->is_auth()) ||
@@ -3310,21 +3351,35 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 {
   dout(10) << "_logged_slave_rename " << *mdr << dendl;
 
-  // ack
+  // prepare ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
-  if (srcdn->is_auth()) {
-    // share the replica list, so that they can all witness the rename.
-    srcdn->list_replicas(reply->srcdn_replicas);
+  
+  // export srci?
+  if (srcdn->is_auth() && srcdn->is_primary()) {
+    list<Context*> finished;
+    map<int,entity_inst_t> exported_client_map;
+    bufferlist inodebl;
+    mdcache->migrator->encode_export_inode(srcdn->inode, inodebl, 
+					   exported_client_map, 
+					   mdr->now);
+    mdcache->migrator->finish_export_inode(srcdn->inode, finished); 
+    mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
+    ::_encode(exported_client_map, reply->inode_export);
+    reply->inode_export.claim_append(inodebl);
+    reply->inode_export_v = srcdn->inode->inode.version;
 
-    // note srcdn, we'll get asked for inode momentarily
-    mdr->srcdn = srcdn;
-  }  
+    // remove mdr auth pin
+    mdr->auth_unpin(srcdn->inode);
+    assert(!srcdn->inode->is_auth_pinned());
+    
+    dout(10) << " exported srci " << *srcdn->inode << dendl;
+  }
+
+  // apply
+  _rename_apply(mdr, srcdn, destdn, straydn);   
 
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
-  // set up commit waiter
-  mdr->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
-
   // bump popularity
   //if (srcdn->is_auth())
     //mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
@@ -3341,48 +3396,72 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 {
   dout(10) << "_commit_slave_rename " << *mdr << " r=" << r << dendl;
 
-  mdr->ls = mdlog->get_current_segment();
+  // unfreeze+singleauth inode
+  //  hmm, do i really need to delay this?
+  if (srcdn->is_auth() && destdn->is_primary()) {
+    dout(10) << " unfreezing exported inode " << *destdn->inode << dendl;
+    list<Context*> finished;
+    
+    // singleauth
+    assert(destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH));
+    destdn->inode->state_clear(CInode::STATE_AMBIGUOUSAUTH);
+    destdn->inode->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
+    
+    // unfreeze
+    assert(destdn->inode->is_frozen_inode() ||
+	   destdn->inode->is_freezing_inode());
+    destdn->inode->unfreeze_inode(finished);
+    
+    mds->queue_waiters(finished);
+  }
+  
+
   ESlaveUpdate *le;
   if (r == 0) {
-    // finish the inode export
-    if (mdr->inode_export) {
-      C_Contexts *fin = new C_Contexts;
-      mdcache->migrator->finish_export_inode(mdr->inode_export, fin);
-      mds->queue_waiter(fin);
-    }
-
-    // commit
-    _rename_apply(mdr, srcdn, destdn, straydn);   
-
     // write a commit to the journal
     le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT);
+
   } else {
     // abort
     le = new ESlaveUpdate(mdlog, "slave_rename_abort", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_ROLLBACK);
+
+    // -- rollback in memory --
+
+    // *** WRITE ME ***
+    assert(0);
+
   }
+
+  
+
   mdlog->submit_entry(le);
 }
 
-void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
+void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
   dout(10) << "handle_slave_rename_prep_ack " << *mdr 
-	   << " witnessed by " << m->get_source()
-	   << " " << *m << dendl;
-  int from = m->get_source().num();
+	   << " witnessed by " << ack->get_source()
+	   << " " << *ack << dendl;
+  int from = ack->get_source().num();
 
   // note slave
   mdr->slaves.insert(from);
 
-  // witnessed!
+  // witnessed?  or add extra witnesses?
   assert(mdr->witnessed.count(from) == 0);
-  mdr->witnessed.insert(from);
-
-
-  // add extra witnesses?
-  if (!m->srcdn_replicas.empty()) {
-    dout(10) << " extra witnesses (srcdn replicas) are " << m->srcdn_replicas << dendl;
-    mdr->extra_witnesses = m->srcdn_replicas;
+  if (ack->witnesses.empty()) {
+    mdr->witnessed.insert(from);
+  } else {
+    dout(10) << " extra witnesses (srcdn replicas) are " << ack->witnesses << dendl;
+    mdr->extra_witnesses.swap(ack->witnesses);
     mdr->extra_witnesses.erase(mds->get_nodeid());  // not me!
+  }
+
+  // srci import?
+  if (ack->inode_export.length()) {
+    dout(10) << " got srci import" << dendl;
+    mdr->inode_import.claim(ack->inode_export);
+    mdr->inode_import_v = ack->inode_export_v;
   }
 
   // remove from waiting list
@@ -3394,60 +3473,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
   else 
     dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
 }
-
-
-
-void Server::handle_slave_rename_get_inode(MDRequest *mdr)
-{
-  dout(10) << "handle_slave_rename_get_inode " << *mdr << dendl;
-
-  assert(mdr->srcdn);
-  assert(mdr->srcdn->is_auth());
-  assert(mdr->srcdn->is_primary());
-
-  // reply
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEGETINODEACK);
-  dout(10) << " replying with inode export info " << *mdr->srcdn->inode << dendl;
-
-  map<int,entity_inst_t> exported_client_map;
-  bufferlist inodebl;
-  mdcache->migrator->encode_export_inode(mdr->srcdn->inode, inodebl, 
-					 exported_client_map, 
-					 mdr->now);
-  ::_encode(exported_client_map, reply->inode_export);
-  reply->inode_export.claim_append(inodebl);
-  reply->inode_export_v = mdr->srcdn->inode->inode.version;
-
-  // take note of inode; we'll need to finish the export later!
-  mdr->inode_export = mdr->srcdn->inode;
-
-  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
-
-  // clean up.
-  delete mdr->slave_request;
-  mdr->slave_request = 0;
-}
-
-void Server::handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m)
-{
-  dout(10) << "handle_slave_rename_get_inode_ack " << *mdr 
-	   << " " << *m << dendl;
-  int from = m->get_source().num();
-
-  assert(m->inode_export.length());
-  dout(10) << " got inode export, saving in " << *mdr << dendl;
-  mdr->inode_import.claim(m->inode_export);
-  mdr->inode_import_v = m->inode_export_v;
-
-  assert(mdr->waiting_on_slave.count(from));
-  mdr->waiting_on_slave.erase(from);
-  
-  if (mdr->waiting_on_slave.empty())
-    dispatch_client_request(mdr);  // go again!
-  else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
-}
-
 
 
 

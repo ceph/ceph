@@ -566,6 +566,7 @@ class C_MDL_RequestInodeFileCaps : public Context {
 public:
   C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {}
   void finish(int r) {
+    in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
   }
@@ -607,6 +608,7 @@ void Locker::request_inode_file_caps(CInode *in)
 
     // wait for single auth
     if (in->is_ambiguous_auth()) {
+      in->get(CInode::PIN_PTRWAITER);
       in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
 		     new C_MDL_RequestInodeFileCaps(this, in));
       return;
@@ -1413,6 +1415,7 @@ class C_Locker_ScatterEval : public Context {
 public:
   C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
+    lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_scatter_eval(lock);
   }
 };
@@ -1423,8 +1426,9 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   // unstable and ambiguous auth?
   if (!lock->is_stable() &&
       lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
+    dout(7) << "try_scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);
     lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
     return;
   }
@@ -1437,6 +1441,7 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);
     lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_ScatterEval(this, lock));
     return;
   }
@@ -2137,6 +2142,7 @@ class C_Locker_FileEval : public Context {
 public:
   C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
+    lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_file_eval(lock);
   }
 };
@@ -2150,6 +2156,7 @@ void Locker::try_file_eval(FileLock *lock)
       in->is_ambiguous_auth()) {
     dout(7) << "try_file_eval not stable and ambiguous auth, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    in->get(CInode::PIN_PTRWAITER);
     in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
     return;
   }
@@ -2162,6 +2169,7 @@ void Locker::try_file_eval(FileLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    in->get(CInode::PIN_PTRWAITER);
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_FileEval(this, lock));
     return;
   }

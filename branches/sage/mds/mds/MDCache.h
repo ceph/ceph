@@ -101,6 +101,7 @@ struct MDRequest {
   set<CInode*> stickydirs;
 
   // auth pins
+  set< MDSCacheObject* > remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
   
   // held locks
@@ -126,8 +127,8 @@ struct MDRequest {
   version_t dst_reanchor_atid;  // dst->stray
   bufferlist inode_import;
   version_t inode_import_v;
-  CInode *inode_export;         // inode we're exporting, if any
-  CDentry *srcdn; // srcdn, if auth, on slave
+  //CInode *inode_export;         // inode we're exporting, if any
+  //CDentry *srcdn; // srcdn, if auth, on slave
   
   // called when slave commits
   Context *slave_commit;
@@ -140,7 +141,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    inode_export(0), srcdn(0),
+    //inode_export(0), srcdn(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
@@ -148,7 +149,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    inode_export(0), srcdn(0),
+    //inode_export(0), srcdn(0),
     slave_commit(0) { }
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
@@ -156,7 +157,7 @@ struct MDRequest {
     ls(0),
     done_locking(false), committing(false), aborted(false),
     src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    inode_export(0), srcdn(0),
+    //inode_export(0), srcdn(0),
     slave_commit(0) { }
   
   bool is_master() { return slave_to_mds < 0; }
@@ -180,7 +181,7 @@ struct MDRequest {
 
   // auth pins
   bool is_auth_pinned(MDSCacheObject *object) { 
-    return auth_pins.count(object); 
+    return auth_pins.count(object) || remote_auth_pins.count(object); 
   }
   void auth_pin(MDSCacheObject *object) {
     if (!is_auth_pinned(object)) {
@@ -188,15 +189,17 @@ struct MDRequest {
       auth_pins.insert(object);
     }
   }
+  void auth_unpin(MDSCacheObject *object) {
+    assert(is_auth_pinned(object));
+    object->auth_unpin();
+    auth_pins.erase(object);
+  }
   void drop_local_auth_pins() {
-    set<MDSCacheObject*>::iterator it = auth_pins.begin();
-    while (it != auth_pins.end()) {
-      if ((*it)->is_auth()) {
-	(*it)->auth_unpin();
-	auth_pins.erase(it++);
-      } else {
-	it++;
-      }
+    for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
+	 it != auth_pins.end();
+	 it++) {
+      assert((*it)->is_auth());
+      (*it)->auth_unpin();
     }
     auth_pins.clear();
   }
@@ -219,12 +222,13 @@ class MDCache {
   MDS *mds;
 
   // -- my cache --
-  LRU                           lru;         // dentry lru for expiring items from cache
+  LRU lru;   // dentry lru for expiring items from cache
  protected:
-  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino
-  CInode                       *root;        // root inode
-  CInode                       *stray;       // my stray dir
+  hash_map<inodeno_t,CInode*>   inode_map;  // map of inodes by ino
+  CInode *root;                             // root inode
+  CInode *stray;                            // my stray dir
 
+  set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
   // -- discover --
   // waiters
@@ -379,6 +383,7 @@ public:
   void maybe_send_pending_resolves();
   
   ESubtreeMap *create_subtree_map();
+
 
 protected:
   // [rejoin]
@@ -612,6 +617,7 @@ protected:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
 
   CDentry *add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished);
+public: // for Server::handle_slave_rename_prep
   CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished);
 
 public:

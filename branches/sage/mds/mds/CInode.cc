@@ -64,6 +64,11 @@ ostream& operator<<(ostream& out, CInode& in)
   
   out << " v" << in.get_version();
 
+  if (in.state_test(CInode::STATE_AMBIGUOUSAUTH))
+    out << " AMBIGAUTH";
+  if (in.is_freezing_inode()) out << " FREEZING";
+  if (in.is_frozen_inode()) out << " FROZEN";
+
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;
@@ -400,7 +405,7 @@ void CInode::_mark_dirty(LogSegment *ls)
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
-    assert(ls);
+    //assert(ls);  // not true for wonky srci import on rename.
   }
   
   // move myself to this segment's dirty list
@@ -582,38 +587,73 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
 bool CInode::is_frozen()
 {
-  if (parent && parent->dir->is_frozen())
-    return true;
+  if (is_frozen_inode()) return true;
+  if (parent && parent->dir->is_frozen()) return true;
   return false;
 }
 
 bool CInode::is_frozen_dir()
 {
-  if (parent && parent->dir->is_frozen_dir())
-    return true;
+  if (parent && parent->dir->is_frozen_dir()) return true;
   return false;
 }
 
 bool CInode::is_freezing()
 {
-  if (parent && parent->dir->is_freezing())
-    return true;
+  if (is_freezing_inode()) return true;
+  if (parent && parent->dir->is_freezing()) return true;
   return false;
 }
 
 void CInode::add_waiter(int tag, Context *c) 
 {
   // wait on the directory?
-  if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
+  //  make sure its not the inode that is explicitly ambiguous|freezing|frozen
+  if ((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH) ||
+      (tag & WAIT_UNFREEZE) && !state_test(STATE_FROZEN|STATE_FREEZING)) {
     parent->dir->add_waiter(tag, c);
     return;
   }
   MDSCacheObject::add_waiter(tag, c);
 }
 
+bool CInode::freeze_inode(int auth_pin_allowance)
+{
+  assert(auth_pin_allowance > 0);  // otherwise we need to adjust parent's nested_auth_pins
+  assert(auth_pins >= auth_pin_allowance);
+  if (auth_pins > auth_pin_allowance) {
+    dout(10) << "freeze_inode - waiting for auth_pins to drop" << dendl;
+    auth_pin_freeze_allowance = auth_pin_freeze_allowance;
+    get(PIN_FREEZING);
+    state_set(STATE_FREEZING);
+    return false;
+  }
+
+  dout(10) << "freeze_inode - frozen" << dendl;
+  assert(auth_pins == auth_pin_allowance);
+  get(PIN_FROZEN);
+  state_set(STATE_FROZEN);
+  return true;
+}
+
+void CInode::unfreeze_inode(list<Context*>& finished) 
+{
+  dout(10) << "unfreeze_inode" << dendl;
+  if (state_test(STATE_FREEZING)) {
+    state_clear(STATE_FREEZING);
+    put(PIN_FREEZING);
+  } else if (state_test(STATE_FROZEN)) {
+    state_clear(STATE_FROZEN);
+    put(PIN_FROZEN);
+  } else 
+    assert(0);
+  take_waiting(WAIT_UNFREEZE, finished);
+}
+
 
 // auth_pins
 bool CInode::can_auth_pin() {
+  if (is_freezing_inode() || is_frozen_inode()) return false;
   if (parent)
     return parent->can_auth_pin();
   return true;
@@ -644,9 +684,19 @@ void CInode::auth_unpin()
 	   << dendl;
   
   assert(auth_pins >= 0);
-  
+
   if (parent)
     parent->adjust_nested_auth_pins( -1 );
+
+  if (is_freezing_inode() &&
+      auth_pins == auth_pin_freeze_allowance) {
+    dout(10) << "auth_unpin freezing!" << dendl;
+    get(PIN_FROZEN);
+    put(PIN_FREEZING);
+    state_clear(STATE_FREEZING);
+    state_set(STATE_FROZEN);
+    finish_waiting(WAIT_FROZEN);
+  }  
 }
 
 void CInode::adjust_nested_auth_pins(int a)

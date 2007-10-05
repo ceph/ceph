@@ -163,6 +163,8 @@ public:
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // helpers
+  void _rename_prepare_witness(MDRequest *mdr, int who,
+			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _rename_prepare(MDRequest *mdr,
 		       EMetaBlob *metablob, 
 		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
@@ -173,8 +175,6 @@ public:
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void handle_slave_rename_get_inode(MDRequest *mdr);
-  void handle_slave_rename_get_inode_ack(MDRequest *mdr, MMDSSlaveRequest *m);
 
 };
 
