@@ -104,7 +104,6 @@ class CInode : public MDSCacheObject {
   static const int WAIT_UNANCHORED  = (1<<3);
   static const int WAIT_CAPS        = (1<<4);
   static const int WAIT_FROZEN      = (1<<5);
-  static const int WAIT_UNFREEZE    = (1<<6);
   
   static const int WAIT_AUTHLOCK_OFFSET = 5;
   static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
@@ -197,7 +196,7 @@ protected:
   // LogSegment xlists i (may) belong to
   xlist<CInode*>::item xlist_dirty;
 public:
-  xlist<CInode*>::item xlist_opened_files;
+  xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_inode_mtime;
   xlist<CInode*>::item xlist_purging_inode;
 
@@ -228,7 +227,7 @@ private:
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_opened_files(this), 
+    xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
@@ -257,6 +256,7 @@ private:
   
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
+  bool is_base() { return inode.ino < MDS_INO_BASE; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() {

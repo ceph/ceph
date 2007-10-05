@@ -37,7 +37,7 @@ class LogSegment {
   xlist<CInode*>  dirty_inodes;
   xlist<CDentry*> dirty_dentries;
 
-  xlist<CInode*>  opened_files;
+  xlist<CInode*>  open_files;
   xlist<CInode*>  dirty_inode_mtimes;
 
   //xlist<CInode*>  purging_inodes;

@@ -84,6 +84,9 @@ mds bugs
 
 - verify once-per-segment jouranl context is working...
 
+- open file rejournaling vs capped log...
+  - open files vs shutdown in general!  need to export any caps on replicated metadata
+
 mds cleanup
 - fix freeze_* interface to pull waiters _outside_
 - get rid of replicate objects for replicate_to .. encode to bufferlists directly
@@ -92,6 +95,8 @@ mds
 - extend/clean up filepath to allow paths relative to an ino
   - fix path_traverse
   - fix reconnect/rejoin open file weirdness
+
+- export caps to auth on unlinked inodes
 
 - stray reintegration
 - stray purge on shutdown

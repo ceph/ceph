@@ -720,6 +720,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   if (cap->is_null()) {
     dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
     in->remove_client_cap(client);
+    if (!in->is_any_caps()) 
+      in->xlist_open_file.remove_myself();  // unpin logsegment
     if (!in->is_auth())
       request_inode_file_caps(in);
 
@@ -1594,7 +1596,8 @@ void Locker::scatter_eval(ScatterLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
+  CInode *in = (CInode*)lock->get_parent();
+  if (in->has_subtree_root_dirfrag() && !in->is_base()) {
     // i _should_ be scattered.
     if (!lock->is_rdlocked() &&
 	!lock->is_xlocked()) {

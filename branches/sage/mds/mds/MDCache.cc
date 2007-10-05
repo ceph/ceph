@@ -2895,6 +2895,22 @@ bool MDCache::trim(int max)
       p = n;
     } 
   }
+  if (max == 0) {
+    for (set<CInode*>::iterator p = base_inodes.begin();
+	 p != base_inodes.end();
+	 ++p) {
+      CInode *in = *p;
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	CDir *dir = *p;
+	if (dir->get_num_ref() == 0) 
+	  trim_dirfrag(dir, 0, expiremap);
+      }
+      if (in->get_num_ref() == 0)
+	trim_inode(0, in, 0, expiremap);
+    }
+  }
 
   // send!
   send_expire_messages(expiremap);
@@ -6039,7 +6055,7 @@ void MDCache::show_subtrees(int dbl)
     return;  // i won't print anything.
 
   if (subtrees.empty()) {
-    dout(dbl) << "no subtrees" << dendl;
+    dout(dbl) << "show_subtrees - no subtrees" << dendl;
     return;
   }
 
@@ -6049,7 +6065,8 @@ void MDCache::show_subtrees(int dbl)
        p != base_inodes.end();
        ++p) 
     (*p)->get_dirfrags(basefrags);
-  dout(15) << "show_subtrees, base dirfrags " << basefrags << dendl;
+  //dout(15) << "show_subtrees, base dirfrags " << basefrags << dendl;
+  dout(15) << "show_subtrees" << dendl;
 
   // queue stuff
   list<pair<CDir*,int> > q;

@@ -87,10 +87,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 ++p) {
       CDir *dir = *p;
       if (dir->can_auth_pin()) {
-	dout(10) << " committing " << *dir << dendl;
+	dout(10) << "try_to_expire committing " << *dir << dendl;
 	dir->commit(0, gather->new_sub());
       } else {
-	dout(10) << " waiting for unfreeze on " << *dir << dendl;
+	dout(10) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
 	dir->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());
       }
     }
@@ -98,21 +98,34 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // dirty non-auth mtimes
   for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
-    dout(10) << " waiting for dirlock mtime flush on " << *p << dendl;
+    dout(10) << "try_to_expire waiting for dirlock mtime flush on " << *p << dendl;
     if (!gather) gather = new C_Gather;
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+  }
+  
+  // open files
+  if (!open_files.empty()) {
+    assert(!mds->mdlog->is_capped()); // hmm FIXME
+    for (xlist<CInode*>::iterator p = open_files.begin(); !p.end(); ++p) {
+      dout(20) << "try_to_expire requeueing open file " << **p << dendl;
+      mds->server->queue_journal_open(*p);
+    }
+    if (!gather) gather = new C_Gather;
+    mds->server->add_journal_open_waiter(gather->new_sub());
+    mds->server->maybe_journal_opens();
+    dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
   }
 
   // idalloc
   if (allocv > mds->idalloc->get_committed_version()) {
-    dout(10) << " saving idalloc table, need " << allocv << dendl;
+    dout(10) << "try_to_expire saving idalloc table, need " << allocv << dendl;
     if (!gather) gather = new C_Gather;
     mds->idalloc->save(gather->new_sub(), allocv);
   }
 
   // clientmap
   if (clientmapv > mds->clientmap.get_committed()) {
-    dout(10) << " saving clientmap, need " << clientmapv << dendl;
+    dout(10) << "try_to_expire saving clientmap, need " << clientmapv << dendl;
     if (!gather) gather = new C_Gather;
     mds->clientmap.save(gather->new_sub(), clientmapv);
   }
@@ -123,21 +136,20 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
        ++p) {
     if (!gather) gather = new C_Gather;
     assert(!mds->anchorclient->has_committed(*p));
-    dout(10) << " anchor transaction " << *p 
+    dout(10) << "try_to_expire anchor transaction " << *p 
 	     << " pending commit (not yet acked), waiting" << dendl;
     mds->anchorclient->wait_for_ack(*p, gather->new_sub());
   }
   
   // anchortable
   if (anchortablev > mds->anchortable->get_committed_version()) {
-    dout(10) << " saving anchor table, need " << anchortablev << dendl;
+    dout(10) << "try_to_expire waiting for anchor table to save, need " << anchortablev << dendl;
     if (!gather) gather = new C_Gather;
     mds->anchortable->save(gather->new_sub());
   }
 
   // FIXME client requests...?
   // audit handling of anchor transactions?
-  // open files?
 
   return gather;
 }
@@ -795,44 +807,6 @@ void EUpdate::replay(MDS *mds)
 
 // ------------------------
 // EOpen
-
-bool EOpen::has_expired(MDS *mds)
-{
-  for (list<inodeno_t>::iterator p = inos.begin(); p != inos.end(); ++p) {
-    CInode *in = mds->mdcache->get_inode(*p);
-    if (in &&
-	in->is_any_caps() &&
-	!(in->last_open_journaled > get_start_off() ||
-	  in->last_open_journaled == 0)) {
-      dout(10) << "EOpen.has_expired still refer to caps on " << *in << dendl;
-      return false;
-    }
-  }
-  return true;
-}
-
-void EOpen::expire(MDS *mds, Context *c)
-{
-  dout(10) << "EOpen.expire " << dendl;
-  
-  if (mds->mdlog->is_capped()) {
-    dout(0) << "uh oh, log is capped, but i have unexpired opens." << dendl;
-    assert(0);
-  }
-
-  for (list<inodeno_t>::iterator p = inos.begin(); p != inos.end(); ++p) {
-    CInode *in = mds->mdcache->get_inode(*p);
-    if (!in) continue;
-    if (!in->is_any_caps()) continue;
-    
-    dout(10) << "EOpen.expire " << in->ino()
-	     << " last_open_journaled " << in->last_open_journaled << dendl;
-
-    mds->server->queue_journal_open(in);
-  }
-  mds->server->add_journal_open_waiter(c);
-  mds->server->maybe_journal_opens();
-}
 
 void EOpen::update_segment()
 {

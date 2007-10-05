@@ -166,6 +166,8 @@ public:
       out << " x=" << get_xlocked_by();
     if (is_wrlocked()) 
       out << " wr=" << get_num_wrlocks();
+    if (updated)
+      out << " updated";
     out << ")";
   }
 

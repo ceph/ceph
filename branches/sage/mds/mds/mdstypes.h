@@ -433,16 +433,16 @@ class MDSCacheObject {
   unsigned state;     // state bits
 
  public:
-  unsigned get_state() { return state; }
+  unsigned get_state() const { return state; }
+  unsigned state_test(unsigned mask) const { return (state & mask); }
   void state_clear(unsigned mask) { state &= ~mask; }
   void state_set(unsigned mask) { state |= mask; }
-  unsigned state_test(unsigned mask) { return state & mask; }
   void state_reset(unsigned s) { state = s; }
 
-  bool is_auth() { return state_test(STATE_AUTH); }
-  bool is_dirty() { return state_test(STATE_DIRTY); }
-  bool is_clean() { return !is_dirty(); }
-  bool is_rejoining() { return state_test(STATE_REJOINING); }
+  bool is_auth() const { return state_test(STATE_AUTH); }
+  bool is_dirty() const { return state_test(STATE_DIRTY); }
+  bool is_clean() const { return !is_dirty(); }
+  bool is_rejoining() const { return state_test(STATE_REJOINING); }
 
   // --------------------------------------------
   // authority

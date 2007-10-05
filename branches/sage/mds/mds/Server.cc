@@ -3685,14 +3685,17 @@ void Server::journal_opens()
   EOpen *le = 0;
 
   // check queued inodes
+  LogSegment *ls = mdlog->get_current_segment();
   for (set<CInode*>::iterator p = journal_open_queue.begin();
        p != journal_open_queue.end();
        ++p) {
-    (*p)->put(CInode::PIN_BATCHOPENJOURNAL);
-    if ((*p)->is_any_caps()) {
+    CInode *in = *p;
+    in->put(CInode::PIN_BATCHOPENJOURNAL);
+    if (in->is_any_caps()) {
       if (!le) le = new EOpen(mdlog);
-      le->add_inode(*p);
-      (*p)->last_open_journaled = mds->mdlog->get_write_pos();
+      le->add_inode(in);
+      in->last_open_journaled = mds->mdlog->get_write_pos();
+      ls->open_files.push_back(&in->xlist_open_file);
     }
   }
   journal_open_queue.clear();

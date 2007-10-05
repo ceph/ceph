@@ -43,8 +43,6 @@ public:
     metablob._decode(bl, off);
   }
 
-  bool has_expired(MDS *mds);
-  void expire(MDS *mds, Context *c);
   void update_segment();
   void replay(MDS *mds);
 };

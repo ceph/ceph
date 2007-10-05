@@ -64,8 +64,7 @@ ostream& operator<<(ostream& out, CInode& in)
   
   out << " v" << in.get_version();
 
-  if (in.state_test(CInode::STATE_AMBIGUOUSAUTH))
-    out << " AMBIGAUTH";
+  if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.is_freezing_inode()) out << " FREEZING";
   if (in.is_frozen_inode()) out << " FROZEN";
 
@@ -607,10 +606,15 @@ bool CInode::is_freezing()
 
 void CInode::add_waiter(int tag, Context *c) 
 {
+  dout(10) << "add_waiter tag " << tag 
+	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
+	   << " !frozen " << !is_frozen_inode()
+	   << " !freezing " << !is_freezing_inode()
+	   << dendl;
   // wait on the directory?
   //  make sure its not the inode that is explicitly ambiguous|freezing|frozen
-  if ((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH) ||
-      (tag & WAIT_UNFREEZE) && !state_test(STATE_FROZEN|STATE_FREEZING)) {
+  if (((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH)) ||
+      ((tag & WAIT_UNFREEZE) && !is_frozen_inode() && !is_freezing_inode())) {
     parent->dir->add_waiter(tag, c);
     return;
   }
