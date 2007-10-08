@@ -1894,6 +1894,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     dout(10) << "  had " << *in << dendl;
   }
   
+  // clear if dirtyscattered, since we're journaling this
+  in->dirlock.clear_updated();
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export

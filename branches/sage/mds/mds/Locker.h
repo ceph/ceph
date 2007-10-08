@@ -62,6 +62,7 @@ private:
   void dispatch(Message *m);
   void handle_lock(MLock *m);
 
+
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
@@ -109,10 +110,15 @@ public:
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
   // scatter
+protected:
+  xlist<ScatterLock*> autoscattered;
+
 public:
   void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
+
+  void scatter_unscatter_autoscattered();
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);

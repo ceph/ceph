@@ -376,7 +376,10 @@ void MDS::tick()
     
     mdcache->log_stat(logger);
   }
-  
+
+  if (is_active() || is_stopping())
+    locker->scatter_unscatter_autoscattered();
+
   // booted?
   if (is_active()) {
     

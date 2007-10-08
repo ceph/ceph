@@ -1603,9 +1603,11 @@ void Locker::scatter_eval(ScatterLock *lock)
 	!lock->is_xlocked()) {
       dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << dendl;
       scatter_scatter(lock);
+      autoscattered.push_back(&lock->xlistitem_autoscattered);
     }
   } else {
     // i _should_ be sync.
+    lock->xlistitem_autoscattered.remove_myself(); 
     if (!lock->is_wrlocked() &&
 	!lock->is_xlocked()) {
       dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << dendl;
@@ -1675,6 +1677,8 @@ void Locker::scatter_scatter(ScatterLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
   
+  lock->set_last_scatter(g_clock.now());
+
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
@@ -1877,7 +1881,6 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_SCATTER:
     assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
-    lock->clear_updated();
     lock->set_state(LOCK_SCATTER);
     //lock->get_parent()->get(CInode::PIN_SCATTERED);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -1922,6 +1925,44 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 }
 
 
+
+void Locker::scatter_unscatter_autoscattered()
+{
+  /* 
+   * periodically unscatter autoscattered locks
+   */
+
+  dout(10) << "scatter_unscatter_autoscattered" << dendl;
+  
+  utime_t now = g_clock.now();
+  int n = autoscattered.size();
+  while (!autoscattered.empty()) {
+    ScatterLock *lock = autoscattered.front();
+    
+    // stop?
+    if (lock->get_state() == LOCK_SCATTER &&
+	now - lock->get_last_scatter() < 10.0) 
+      break;
+    
+    autoscattered.pop_front();
+
+    if (lock->get_state() == LOCK_SCATTER &&
+	lock->get_parent()->is_replicated()) {
+      if (((CInode*)lock->get_parent())->is_frozen() ||
+	  ((CInode*)lock->get_parent())->is_freezing()) {
+	// hrm.. requeue.
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", but frozen|freezing, requeueing" << dendl;
+	autoscattered.push_back(&lock->xlistitem_autoscattered);	
+      } else {
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", locking" << dendl;
+	scatter_lock(lock);
+      }
+    }
+    if (--n == 0) break;
+  }
+}
 
 
 
