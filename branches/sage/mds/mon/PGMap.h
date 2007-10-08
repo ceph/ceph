@@ -40,6 +40,8 @@ public:
       ::_decode(pg_stat_updates, bl, off);
       ::_decode(osd_stat_updates, bl, off);
     }
+
+    Incremental() : version(0) {}
   };
 
   void apply_incremental(Incremental& inc) {

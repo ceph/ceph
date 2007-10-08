@@ -245,7 +245,7 @@ struct pg_stat_t {
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
-  pg_stat_t() : state(0), size(0), num_blocks(0), num_objects(0) {}
+  pg_stat_t() : reported(0), state(0), size(0), num_blocks(0), num_objects(0) {}
 };
 
 
