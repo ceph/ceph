@@ -226,17 +226,13 @@ public:
     if (is_dirty())
       mark_clean();
   }
-
-  void decode_import_state(bufferlist& bl, int& off, int from, int to, LogSegment *ls) {
+  void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
     int nstate;
-    bl.copy(off, sizeof(nstate), (char*)&nstate);
-    off += sizeof(nstate);
-    bl.copy(off, sizeof(version), (char*)&version);
-    off += sizeof(version);
-    bl.copy(off, sizeof(projected_version), (char*)&projected_version);
-    off += sizeof(projected_version);
-    lock._decode(bl, off);
-    ::_decode(replica_map, bl, off);
+    ::_decode_simple(nstate, blp);
+    ::_decode_simple(version, blp);
+    ::_decode_simple(projected_version, blp);
+    lock._decode(blp);
+    ::_decode_simple(replica_map, blp);
 
     // twiddle
     state = 0;
@@ -245,9 +241,6 @@ public:
       _mark_dirty(ls);
     if (!replica_map.empty())
       get(PIN_REPLICATED);
-    add_replica(from, EXPORT_NONCE);
-    if (is_replica(to))
-      remove_replica(to);
   }
 
   // -- locking --

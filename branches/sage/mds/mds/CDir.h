@@ -405,6 +405,12 @@ public:
   void finish_waiting(int mask, int result = 0);    // ditto
   
 
+  // -- import/export --
+  void encode_export(bufferlist& bl);
+  void finish_export(utime_t now);
+  void decode_import(bufferlist::iterator& blp);
+
+
   // -- auth pins --
   bool can_auth_pin() { return is_auth() && !(is_frozen() || is_freezing()); }
   int is_auth_pinned() { return auth_pins; }
@@ -513,104 +519,6 @@ class CDirDiscover {
     bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
     off += sizeof(dir_rep);
     ::_decode(rep_by, bl, off);
-  }
-
-};
-
-
-// export
-
-class CDirExport {
-  struct {
-    dirfrag_t   dirfrag;
-    uint32_t    nden;   // num dentries (including null ones)
-    version_t   version;
-    version_t   committed_version;
-    version_t   committed_version_equivalent;
-    uint32_t    state;
-    dirfrag_load_vec_t pop_me;
-    dirfrag_load_vec_t pop_auth_subtree;
-    int32_t     dir_rep;
-  } st;
-  map<int,int> replicas;
-  set<int>     rep_by;
-
- public:
-  CDirExport() {}
-  CDirExport(CDir *dir, utime_t now) {
-    memset(&st, 0, sizeof(st));
-
-    assert(dir->get_version() == dir->get_projected_version());
-
-    st.dirfrag = dir->dirfrag();
-    st.nden = dir->items.size();
-    st.version = dir->version;
-    st.committed_version = dir->committed_version;
-    st.committed_version_equivalent = dir->committed_version_equivalent;
-    st.state = dir->state;
-    st.dir_rep = dir->dir_rep;
-    
-    st.pop_me = dir->pop_me;
-    st.pop_auth_subtree = dir->pop_auth_subtree;
-    /*
-    dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
-    dir->pop_me.zero(now);
-    dir->pop_auth_subtree.zero(now);
-    */
-    rep_by = dir->dir_rep_by;
-    replicas = dir->replica_map;
-  }
-
-  dirfrag_t get_dirfrag() { return st.dirfrag; }
-  uint32_t get_nden() { return st.nden; }
-
-  void update_dir(CDir *dir) {
-    assert(dir->dirfrag() == st.dirfrag);
-
-    // set committed_version at old version
-    dir->committing_version = 
-      dir->committed_version = st.committed_version;
-    dir->committed_version_equivalent = st.committed_version_equivalent;
-    dir->projected_version = 
-      dir->version = st.version;
-
-    // twiddle state
-    dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-      (st.state & CDir::MASK_STATE_EXPORTED);
-    dir->dir_rep = st.dir_rep;
-
-    dir->pop_me = st.pop_me;
-    dir->pop_auth_subtree = st.pop_auth_subtree;
-    dir->pop_auth_subtree_nested += dir->pop_auth_subtree;
-
-    dir->replica_nonce = 0;  // no longer defined
-
-    if (!dir->replica_map.empty())
-      generic_dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << dendl;
-
-    dir->dir_rep_by = rep_by;
-    dir->replica_map = replicas;
-    generic_dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << dendl;
-    if (!replicas.empty())
-      dir->get(CDir::PIN_REPLICATED);
-    if (dir->is_dirty()) {
-      dir->get(CDir::PIN_DIRTY);  
-    }
-  }
-
-
-  void _encode(bufferlist& bl) {
-    bl.append((char*)&st, sizeof(st));
-    ::_encode(replicas, bl);
-    ::_encode(rep_by, bl);
-  }
-
-  int _decode(bufferlist& bl, int off = 0) {
-    bl.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
-    ::_decode(replicas, bl, off);
-    ::_decode(rep_by, bl, off);
-    return off;
   }
 
 };

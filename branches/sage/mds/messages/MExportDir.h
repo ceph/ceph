@@ -22,8 +22,8 @@
 class MExportDir : public Message {
   dirfrag_t dirfrag;
   
-  list<bufferlist> dirstate; // a bl for reach dir
-  list<dirfrag_t>  bounds;
+  bufferlist dirstate;
+  list<dirfrag_t> bounds;
 
  public:  
   MExportDir() {}
@@ -37,17 +37,11 @@ class MExportDir : public Message {
   }
 
   dirfrag_t get_dirfrag() { return dirfrag; }
-  list<bufferlist>& get_dirstate() { return dirstate; }
+  bufferlist& get_dirstate() { return dirstate; }
   list<dirfrag_t>& get_bounds() { return bounds; }
 
-  void add_dir(bufferlist& dir) {
-    dirstate.push_back(dir);
-  }
-  void set_dirstate(const list<bufferlist>& ls) {
-    dirstate = ls;
-  }
-  void take_dirstate(list<bufferlist>& ls) {
-    dirstate.swap(ls);
+  void take_dirstate(bufferlist& bl) {
+    dirstate.claim(bl);
   }
   void add_export(dirfrag_t df) { 
     bounds.push_back(df); 

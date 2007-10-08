@@ -184,10 +184,9 @@ public:
   void maybe_do_queued_export();
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, 
-			   map<int,entity_inst_t>& exported_client_map,
-			   utime_t now);
-  void finish_export_inode(CInode *in, list<Context*>& finished);
-  int encode_export_dir(list<bufferlist>& dirstatelist,
+			   map<int,entity_inst_t>& exported_client_map);
+  void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
+  int encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<int,entity_inst_t>& exported_client_map,
 			utime_t now);
@@ -220,10 +219,10 @@ public:
   void handle_export_dir(MExportDir *m);
 
 public:
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, 
+  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
 			   map<int,entity_inst_t>& imported_client_map,
 			   LogSegment *ls);
-  int decode_import_dir(bufferlist& bl,
+  int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 

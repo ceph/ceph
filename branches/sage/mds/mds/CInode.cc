@@ -65,7 +65,7 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " v" << in.get_version();
 
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
-  if (in.is_freezing_inode()) out << " FREEZING";
+  if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
   // locks
@@ -626,8 +626,8 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   assert(auth_pin_allowance > 0);  // otherwise we need to adjust parent's nested_auth_pins
   assert(auth_pins >= auth_pin_allowance);
   if (auth_pins > auth_pin_allowance) {
-    dout(10) << "freeze_inode - waiting for auth_pins to drop" << dendl;
-    auth_pin_freeze_allowance = auth_pin_freeze_allowance;
+    dout(10) << "freeze_inode - waiting for auth_pins to drop to " << auth_pin_allowance << dendl;
+    auth_pin_freeze_allowance = auth_pin_allowance;
     get(PIN_FREEZING);
     state_set(STATE_FREEZING);
     return false;
@@ -747,3 +747,63 @@ CInodeDiscover* CInode::replicate_to( int rep )
 
 
 
+
+// IMPORT/EXPORT
+
+void CInode::encode_export(bufferlist& bl)
+{
+  ::_encode_simple(inode, bl);
+  ::_encode_simple(symlink, bl);
+  dirfragtree._encode(bl);
+
+  bool dirty = is_dirty();
+  ::_encode_simple(dirty, bl);
+
+  ::_encode_simple(pop, bl);
+ 
+  ::_encode_simple(replica_map, bl);
+
+  map<int,Capability::Export>  cap_map;
+  export_client_caps(cap_map);
+  ::_encode_simple(cap_map, bl);
+
+  authlock._encode(bl);
+  linklock._encode(bl);
+  dirfragtreelock._encode(bl);
+  filelock._encode(bl);
+  dirlock._encode(bl);
+}
+
+void CInode::finish_export(utime_t now)
+{
+  pop.zero(now);
+}
+
+void CInode::decode_import(bufferlist::iterator& p,
+			   set<int>& new_client_caps, 
+			   LogSegment *ls)
+{
+  ::_decode_simple(inode, p);
+  ::_decode_simple(symlink, p);
+  dirfragtree._decode(p);
+
+  bool dirty;
+  ::_decode_simple(dirty, p);
+  if (dirty) 
+    _mark_dirty(ls);
+
+  ::_decode_simple(pop, p);
+
+  ::_decode_simple(replica_map, p);
+  if (!replica_map.empty()) get(PIN_REPLICATED);
+
+  map<int,Capability::Export>  cap_map;
+  ::_decode_simple(cap_map, p);
+  merge_client_caps(cap_map, new_client_caps);
+
+  authlock._decode(p);
+  linklock._decode(p);
+  dirfragtreelock._decode(p);
+  filelock._decode(p);
+  dirlock._decode(p);
+}

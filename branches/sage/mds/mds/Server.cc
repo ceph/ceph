@@ -3180,10 +3180,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // srcdn inode import?
       if (!srcdn->is_auth() && destdn->is_auth()) {
 	assert(mdr->inode_import.length() > 0);
-	int off = 0;
+	bufferlist::iterator blp = mdr->inode_import.begin();
 	map<int,entity_inst_t> imported_client_map;
-	::_decode(imported_client_map, mdr->inode_import, off);
-	mdcache->migrator->decode_import_inode(destdn, mdr->inode_import, off, 
+	::_decode_simple(imported_client_map, blp);
+	mdcache->migrator->decode_import_inode(destdn, blp, 
 					       srcdn->authority().first,
 					       imported_client_map,
 					       mdr->ls);
@@ -3360,9 +3360,8 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     map<int,entity_inst_t> exported_client_map;
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdn->inode, inodebl, 
-					   exported_client_map, 
-					   mdr->now);
-    mdcache->migrator->finish_export_inode(srcdn->inode, finished); 
+					   exported_client_map);
+    mdcache->migrator->finish_export_inode(srcdn->inode, mdr->now, finished); 
     mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
     ::_encode(exported_client_map, reply->inode_export);
     reply->inode_export.claim_append(inodebl);

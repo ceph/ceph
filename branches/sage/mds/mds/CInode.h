@@ -204,6 +204,7 @@ private:
   // auth pin
   int auth_pins;
   int nested_auth_pins;
+public:
   int auth_pin_freeze_allowance;
 
  public:
@@ -296,6 +297,14 @@ private:
 
   // -- waiting --
   void add_waiter(int tag, Context *c);
+
+
+  // -- import/export --
+  void encode_export(bufferlist& bl);
+  void finish_export(utime_t now);
+  void decode_import(bufferlist::iterator& p,
+		     set<int>& new_client_caps, 
+		     LogSegment *ls);
 
 
   // -- locks --
@@ -597,107 +606,6 @@ class CInodeDiscover {
     ::_decode(dirlock_state, bl, off);
   }  
 
-};
-
-
-// export
-
-class CInodeExport {
-
-  struct st_ {
-    inode_t        inode;
-
-    inode_load_vec_t pop;
-
-    bool           is_dirty;       // dirty inode?
-    
-    int            num_caps;
-  } st;
-
-  string         symlink;
-  fragtree_t     dirfragtree;
-
-  map<int,int>     replicas;
-  map<int,Capability::Export>  cap_map;
-
-  bufferlist locks;
-
-public:
-  CInodeExport() {}
-  CInodeExport(CInode *in, utime_t now) {
-    st.inode = in->inode;
-    symlink = in->symlink;
-    dirfragtree = in->dirfragtree;
-
-    st.is_dirty = in->is_dirty();
-    replicas = in->replica_map;
-
-    in->authlock._encode(locks);
-    in->linklock._encode(locks);
-    in->dirfragtreelock._encode(locks);
-    in->filelock._encode(locks);
-    in->dirlock._encode(locks);
-    
-    st.pop = in->pop;
-    in->pop.zero(now);
-    
-    in->export_client_caps(cap_map);
-  }
-  
-  inodeno_t get_ino() { return st.inode.ino; }
-
-  void update_inode(CInode *in, set<int>& new_client_caps, LogSegment *ls) {
-    // treat scatterlocked mtime special, since replica may have newer info
-    if (in->dirlock.get_state() == LOCK_SCATTER ||
-	in->dirlock.get_state() == LOCK_GLOCKC ||
-	in->dirlock.get_state() == LOCK_GTEMPSYNCC)
-      st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
-
-    in->inode = st.inode;
-    in->symlink = symlink;
-    in->dirfragtree = dirfragtree;
-
-    in->pop = st.pop;
-
-    if (st.is_dirty) 
-      in->_mark_dirty(ls);
-
-    in->replica_map = replicas;
-    if (!replicas.empty()) 
-      in->get(CInode::PIN_REPLICATED);
-
-    int off = 0;
-    in->authlock._decode(locks, off);
-    in->linklock._decode(locks, off);
-    in->dirfragtreelock._decode(locks, off);
-    in->filelock._decode(locks, off);
-    in->dirlock._decode(locks, off);
-
-    // caps
-    in->merge_client_caps(cap_map, new_client_caps);
-  }
-
-  void _encode(bufferlist& bl) {
-    st.num_caps = cap_map.size();
-
-    ::_encode(st, bl);
-    ::_encode(symlink, bl);
-    dirfragtree._encode(bl);
-    ::_encode(replicas, bl);
-    ::_encode(locks, bl);
-    ::_encode(cap_map, bl);
-  }
-
-  int _decode(bufferlist& bl, int off = 0) {
-    ::_decode(st, bl, off);
-    ::_decode(symlink, bl, off);
-    dirfragtree._decode(bl, off);
-    ::_decode(replicas, bl, off);
-    ::_decode(locks, bl, off);
-    ::_decode(cap_map, bl, off);
-
-    return off;
-  }
 };
 
 
