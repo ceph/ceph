@@ -1226,10 +1226,22 @@ void Rank::EntityMessenger::dispatch_entry()
 {
   lock.Lock();
   while (!stop) {
-    if (!dispatch_queue.empty()) {
+    if (!dispatch_queue.empty() || !prio_dispatch_queue.empty()) {
       list<Message*> ls;
-      ls.swap(dispatch_queue);
-      qlen = 0;
+      if (!prio_dispatch_queue.empty()) {
+	ls.swap(prio_dispatch_queue);
+	pqlen = 0;
+      } else {
+	if (0) {
+	  ls.swap(dispatch_queue);
+	  qlen = 0;
+	} else {
+	  // limit how much low-prio stuff we grab, to avoid starving high-prio messages!
+	  ls.push_back(dispatch_queue.front());
+	  dispatch_queue.pop_front();
+	  qlen--;
+	}
+      }
 
       lock.Unlock();
       {
