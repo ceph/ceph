@@ -24,12 +24,15 @@ public:
     xlist *_head;
     
     item(T i) : _item(i), _prev(0), _next(0), _head(0) {}
+    ~item() { 
+      remove_myself();
+    }
     
     xlist* get_xlist() { return _head; }
     void remove_myself() {
-      if (_head) {
+      if (_head) 
 	_head->remove(this);
-      }
+      assert(_head == 0);
     }
   };
 
@@ -83,6 +86,15 @@ public:
 
   T front() { return (T)_front->_item; }
   T back() { return (T)_back->_item; }
+
+  void pop_front() {
+    assert(!empty());
+    remove(_front);
+  }
+  void pop_back() {
+    assert(!empty());
+    remove(_back);
+  }
 
   class iterator {
   private:

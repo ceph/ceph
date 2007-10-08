@@ -3547,7 +3547,8 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
-    //show_cache();
+    if (!migrator->is_importing() && !migrator->is_exporting())
+      show_cache();
     return false;
   }
   assert(subtrees.empty());
