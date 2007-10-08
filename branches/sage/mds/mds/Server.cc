@@ -1558,6 +1558,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // build dir contents
   bufferlist dirbl;
 
+  DirStat::_encode(dirbl, dir, mds->get_nodeid());
+
   int numfiles = 0;
   for (CDir::map_t::iterator it = dir->begin(); 
        it != dir->end(); 
@@ -1596,7 +1598,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     
     // add this dentry + inodeinfo
     ::_encode(it->first, dirbl);
-    InodeStat::_encode(dirbl, in, mds->get_nodeid());
+    InodeStat::_encode(dirbl, in);
 
     // touch it
     mdcache->lru.lru_touch(dn);
