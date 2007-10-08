@@ -895,8 +895,10 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
     CDir *dir = *p;
 
     // un-force dir to subtree root
-    if (dir->dir_auth == pair<int,int>(dir->dir_auth.first, dir->dir_auth.first))
+    if (dir->dir_auth == pair<int,int>(dir->dir_auth.first, dir->dir_auth.first)) {
       adjust_subtree_auth(dir, dir->dir_auth.first);
+      try_subtree_merge_at(dir);
+    }
   }
 
   show_subtrees();
@@ -4821,7 +4823,7 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if (!base->is_waiting_for_dentry(want_path[0])) {
+  if (!base->is_waiting_for_dentry(want_path[0]) || !onfinish) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
 				   want_path,
@@ -4831,7 +4833,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   // register + wait
-  base->add_dentry_waiter(want_path[0], onfinish);
+  if (onfinish) base->add_dentry_waiter(want_path[0], onfinish);
   discover_dir_sub[from][base->dirfrag()]++;
 }
 
