@@ -528,6 +528,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   // open logger?
   //  note that fakesyn/newsyn starts knowing who they are
   if (whoami >= 0 &&
+      mdsmap->is_up(whoami) && !mdsmap->is_standby(whoami) &&
       (oldwhoami != whoami || !logger))
     reopen_logger(mdsmap->get_create());   // adopt mds cluster timeline
   
