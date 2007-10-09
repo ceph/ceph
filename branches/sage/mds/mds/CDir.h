@@ -433,16 +433,16 @@ public:
   void unfreeze_dir();
 
   void maybe_finish_freeze() {
-    if (state_test(STATE_FREEZINGTREE) &&
-	auth_pins == 1 && 
-	nested_auth_pins == 0) {
-      freeze_tree_finish();
+    if (auth_pins != 1 || nested_auth_pins != 0) 
+      return;
+    if (state_test(STATE_FREEZINGTREE)) {
+      _freeze_tree();
+      auth_unpin();
       finish_waiting(WAIT_FROZEN);
     }
-    if (state_test(STATE_FREEZINGDIR) &&
-	auth_pins == 1 && 
-	nested_auth_pins == 0) {
-      freeze_dir_finish();
+    if (state_test(STATE_FREEZINGDIR)) {
+      _freeze_dir();
+      auth_unpin();
       finish_waiting(WAIT_FROZEN);
     }
   }

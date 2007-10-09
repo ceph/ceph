@@ -1511,9 +1511,9 @@ bool CDir::freeze_tree()
   assert(!is_freezing());
 
   auth_pin();
-  
-  if (is_freezeable()) {
-    freeze_tree_finish();
+  if (is_freezeable(true)) {
+    _freeze_tree();
+    auth_unpin();
     return true;
   } else {
     state_set(STATE_FREEZINGTREE);
@@ -1524,7 +1524,7 @@ bool CDir::freeze_tree()
 
 void CDir::_freeze_tree()
 {
-  // there shouldn't be any conflicting auth_pins (except the 'freezing' one)
+  dout(10) << "_freeze_tree " << *this << dendl;
   assert(is_freezeable(true));
 
   // twiddle state
@@ -1535,13 +1535,6 @@ void CDir::_freeze_tree()
   // auth_pin inode for duration of freeze, if we are not a subtree root.
   if (is_auth() && !is_subtree_root())
     inode->auth_pin();
-}
-
-void CDir::freeze_tree_finish()
-{
-  dout(10) << "freeze_tree_finish " << *this << dendl;
-  _freeze_tree();
-  auth_unpin();
 }
 
 void CDir::unfreeze_tree()
@@ -1621,8 +1614,9 @@ bool CDir::freeze_dir()
   assert(!is_freezing());
   
   auth_pin();
-  if (is_freezeable_dir()) {
-    freeze_dir_finish();
+  if (is_freezeable_dir(true)) {
+    _freeze_dir();
+    auth_unpin();
     return true;
   } else {
     state_set(STATE_FREEZINGDIR);
@@ -1633,6 +1627,7 @@ bool CDir::freeze_dir()
 
 void CDir::_freeze_dir()
 {
+  dout(10) << "_freeze_dir " << *this << dendl;
   assert(is_freezeable_dir(true));
 
   state_clear(STATE_FREEZINGDIR);
@@ -1643,12 +1638,6 @@ void CDir::_freeze_dir()
     inode->auth_pin();  // auth_pin for duration of freeze
 }
 
-void CDir::freeze_dir_finish()
-{
-  dout(10) << "freeze_dir_finish " << *this << dendl;
-  _freeze_dir();
-  auth_unpin();
-}
 
 void CDir::unfreeze_dir()
 {

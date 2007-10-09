@@ -587,10 +587,9 @@ void Migrator::export_dir(CDir *dir, int dest)
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin();
-  if (dir->freeze_tree())
-    export_frozen(dir);
-  else
-    dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
+  dir->freeze_tree();
+  assert(dir->is_freezing_tree());
+  dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
 }
 
 
