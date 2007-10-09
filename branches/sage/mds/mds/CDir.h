@@ -135,7 +135,7 @@ class CDir : public MDSCacheObject {
   // -- wait masks --
   static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const int WAIT_FREEZEABLE   = (1<<2);  // auth pins removed
+  static const int WAIT_FROZEN       = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
@@ -422,15 +422,30 @@ public:
   void adjust_nested_auth_pins(int inc);
 
   // -- freezing --
-  void freeze_tree(Context *c);
-  void freeze_tree_finish(Context *c);
-  void unfreeze_tree();
+  bool freeze_tree();
   void _freeze_tree();
+  void freeze_tree_finish();
+  void unfreeze_tree();
 
-  void freeze_dir(Context *c);
-  void freeze_dir_finish(Context *c);
+  bool freeze_dir();
   void _freeze_dir();
+  void freeze_dir_finish();
   void unfreeze_dir();
+
+  void maybe_finish_freeze() {
+    if (state_test(STATE_FREEZINGTREE) &&
+	auth_pins == 1 && 
+	nested_auth_pins == 0) {
+      freeze_tree_finish();
+      finish_waiting(WAIT_FROZEN);
+    }
+    if (state_test(STATE_FREEZINGDIR) &&
+	auth_pins == 1 && 
+	nested_auth_pins == 0) {
+      freeze_dir_finish();
+      finish_waiting(WAIT_FROZEN);
+    }
+  }
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree();

@@ -5856,7 +5856,7 @@ void MDCache::split_dir(CDir *dir, int bits)
  */
 void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag, int bits)
 {
-  C_Gather *gather = new C_Gather(new C_MDC_FragmentGo(this, diri, frags, basefrag, bits));
+  C_Gather *gather = new C_Gather(new C_MDC_FragmentGo(this, diri, frags, basefrag, bits));  
   
   // freeze the dirs
   for (list<CDir*>::iterator p = frags.begin();
@@ -5864,7 +5864,9 @@ void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag,
        ++p) {
     CDir *dir = *p;
     dir->auth_pin(); // this will block the freeze
-    dir->freeze_dir(gather->new_sub());
+    dir->freeze_dir();
+    assert(dir->is_freezing_dir());
+    dir->add_waiter(CDir::WAIT_FROZEN, gather->new_sub());
   }
 }
 

@@ -1470,11 +1470,7 @@ void CDir::auth_unpin()
   dout(10) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(auth_pins >= 0);
   
-  // pending freeze?
-  if (state_test(STATE_FREEZINGTREE|STATE_FREEZINGDIR) &&
-      auth_pins == 1 && 
-      nested_auth_pins == 0) 
-    finish_waiting(WAIT_FREEZEABLE);
+  maybe_finish_freeze();  // pending freeze?
   
   // nest?
   if (is_subtree_root()) return;  // no.
@@ -1490,12 +1486,8 @@ void CDir::adjust_nested_auth_pins(int inc)
   dout(15) << "adjust_nested_auth_pins " << inc << " on " << *this
 	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
-  
-  // pending freeze?
-  if (state_test(STATE_FREEZINGTREE|STATE_FREEZINGDIR) &&
-      auth_pins == 1 && 
-      nested_auth_pins == 0) 
-    finish_waiting(WAIT_FREEZEABLE);
+
+  maybe_finish_freeze();  // pending freeze?
   
   // adjust my inode?
   if (is_subtree_root()) 
@@ -1513,20 +1505,7 @@ void CDir::adjust_nested_auth_pins(int inc)
 
 // FREEZE TREE
 
-class C_MDS_FreezeTree : public Context {
-  CDir *dir;
-  Context *con;
-public:
-  C_MDS_FreezeTree(CDir *dir, Context *c) {
-    this->dir = dir;
-    this->con = c;
-  }
-  virtual void finish(int r) {
-    dir->freeze_tree_finish(con);
-  }
-};
-
-void CDir::freeze_tree(Context *c)
+bool CDir::freeze_tree()
 {
   assert(!is_frozen());
   assert(!is_freezing());
@@ -1534,23 +1513,17 @@ void CDir::freeze_tree(Context *c)
   auth_pin();
   
   if (is_freezeable()) {
-    _freeze_tree();
-    auth_unpin();
-    if (c) {
-      c->finish(0);
-      delete c;
-    }
+    freeze_tree_finish();
+    return true;
   } else {
     state_set(STATE_FREEZINGTREE);
     dout(10) << "freeze_tree waiting " << *this << dendl;
-    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
-  } 
+    return false;
+  }
 }
 
 void CDir::_freeze_tree()
 {
-  dout(10) << "_freeze_tree " << *this << dendl;
-
   // there shouldn't be any conflicting auth_pins (except the 'freezing' one)
   assert(is_freezeable(true));
 
@@ -1564,31 +1537,11 @@ void CDir::_freeze_tree()
     inode->auth_pin();
 }
 
-void CDir::freeze_tree_finish(Context *c)
+void CDir::freeze_tree_finish()
 {
-  // still freezing?  (we may have been canceled)
-  if (!is_freezing()) {
-    dout(10) << "freeze_tree_finish no longer freezing, done on " << *this << dendl;
-    c->finish(-1);
-    delete c;
-    return;
-  }
-
-  // freezeable now?
-  if (!is_freezeable(true)) {
-    dout(10) << "freeze_tree_finish still waiting " << *this << dendl;
-    assert(state_test(STATE_FREEZINGTREE));
-    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
-    return;
-  }
-
   dout(10) << "freeze_tree_finish " << *this << dendl;
   _freeze_tree();
   auth_unpin();
-  if (c) {
-    c->finish(0);
-    delete c;
-  }
 }
 
 void CDir::unfreeze_tree()
@@ -1614,7 +1567,7 @@ void CDir::unfreeze_tree()
     
     // cancel freeze waiters
     finish_waiting(WAIT_UNFREEZE);
-    finish_waiting(WAIT_FREEZEABLE, -1);
+    finish_waiting(WAIT_FROZEN, -1);
   }
 }
 
@@ -1662,43 +1615,24 @@ CDir *CDir::get_frozen_tree_root()
 
 // FREEZE DIR
 
-class C_MDS_FreezeDir : public Context {
-  CDir *dir;
-  Context *con;
-public:
-  C_MDS_FreezeDir(CDir *dir, Context *c) {
-    this->dir = dir;
-    this->con = c;
-  }
-  virtual void finish(int r) {
-    dir->freeze_dir_finish(con);
-  }
-};
-
-void CDir::freeze_dir(Context *c)
+bool CDir::freeze_dir()
 {
   assert(!is_frozen());
   assert(!is_freezing());
   
   auth_pin();
   if (is_freezeable_dir()) {
-    _freeze_dir();
-    auth_unpin();
-    if (c) {
-      c->finish(0);
-      delete c;
-    }
+    freeze_dir_finish();
+    return true;
   } else {
     state_set(STATE_FREEZINGDIR);
     dout(10) << "freeze_dir + wait " << *this << dendl;
-    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+    return false;
   } 
 }
 
 void CDir::_freeze_dir()
-{  
-  dout(10) << "_freeze_dir " << *this << dendl;
-
+{
   assert(is_freezeable_dir(true));
 
   state_clear(STATE_FREEZINGDIR);
@@ -1709,32 +1643,11 @@ void CDir::_freeze_dir()
     inode->auth_pin();  // auth_pin for duration of freeze
 }
 
-void CDir::freeze_dir_finish(Context *c)
+void CDir::freeze_dir_finish()
 {
-  // still freezing?  (we may have been canceled)
-  if (!is_freezing()) {
-    dout(10) << "freeze_dir_finish no longer freezing, done on " << *this << dendl;
-    c->finish(-1);
-    delete c;
-    return;
-  }
-
-  // freezeable now?
-  if (!is_freezeable_dir(true)) {
-    dout(10) << "freeze_dir_finish still waiting " << *this << dendl;
-    state_set(STATE_FREEZINGDIR);
-    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
-    return;
-  }
-
-  // freeze now
   dout(10) << "freeze_dir_finish " << *this << dendl;
   _freeze_dir();
   auth_unpin();
-  if (c) {
-    c->finish(0);
-    delete c;
-  }
 }
 
 void CDir::unfreeze_dir()
@@ -1759,7 +1672,7 @@ void CDir::unfreeze_dir()
     
     // cancel freeze waiters
     finish_waiting(WAIT_UNFREEZE);
-    finish_waiting(WAIT_FREEZEABLE, -1);
+    finish_waiting(WAIT_FROZEN, -1);
   }
 }
 
