@@ -35,4 +35,15 @@ struct ceph_entity_inst {
 	struct ceph_entity_addr addr;
 };
 
+
+/*
+ * message header
+ */
+struct ceph_message_header {
+	__u32 type;
+	struct ceph_entity_inst src, dst;
+	__u32 source_port, dest_port;
+	__u32 nchunks;
+};
+
 #endif

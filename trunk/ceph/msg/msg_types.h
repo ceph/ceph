@@ -82,6 +82,9 @@ inline std::ostream& operator<<(std::ostream& out, const entity_name_t& addr) {
   else
     return out << addr.type_str() << addr.num();
 }
+inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr) {
+  return out << *(const entity_name_t*)&addr;
+}
 
 namespace __gnu_cxx {
   template<> struct hash< entity_name_t >
@@ -188,6 +191,11 @@ inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 {
   return out << i.name << " " << i.addr;
 }
+inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
+{
+  return out << *(const entity_inst_t*)&i;
+}
+
 
 
 #endif

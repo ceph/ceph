@@ -218,7 +218,7 @@ int fakemessenger_do_loop_2()
           // encode
           if (m->empty_payload()) 
             m->encode_payload();
-          msg_envelope_t env = m->get_envelope();
+          ceph_message_header env = m->get_envelope();
           bufferlist bl;
           bl.claim( m->get_payload() );
           //bl.c_str();   // condense into 1 buffer
