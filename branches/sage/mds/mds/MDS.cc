@@ -339,9 +339,6 @@ int MDS::init(bool standby)
   // schedule tick
   reset_tick();
 
-  // init logger
-  //reopen_logger(g_clock.now());
-
   mds_lock.Unlock();
   return 0;
 }
@@ -528,9 +525,12 @@ void MDS::handle_mds_map(MMDSMap *m)
     return;
   }
 
-  if (oldwhoami != whoami || !logger)  // fakesyn/newsyn starts knowing who they are
-    reopen_logger(mdsmap->get_create());
-
+  // open logger?
+  //  note that fakesyn/newsyn starts knowing who they are
+  if (whoami >= 0 &&
+      (oldwhoami != whoami || !logger))
+    reopen_logger(mdsmap->get_create());   // adopt mds cluster timeline
+  
   if (oldwhoami != whoami) {
     // update messenger.
     dout(1) << "handle_mds_map i am now mds" << whoami
