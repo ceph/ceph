@@ -317,7 +317,7 @@ void MDBalancer::do_fragmenting()
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_fragmenting splitting " << *dir << dendl;
-    mds->mdcache->split_dir(dir, 3);
+    mds->mdcache->split_dir(dir, 4);
   }
   split_queue.clear();
 }
@@ -338,6 +338,8 @@ void MDBalancer::do_rebalance(int beat)
   exported.clear();
 
   dout(5) << " do_rebalance: cluster loads are" << dendl;
+
+  mds->mdcache->migrator->clear_export_queue();
 
   // rescale!  turn my mds_load back into meta_load units
   double load_fac = 1.0;

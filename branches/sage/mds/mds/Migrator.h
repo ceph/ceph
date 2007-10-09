@@ -182,6 +182,9 @@ public:
 
   void export_dir_nicely(CDir *dir, int dest);
   void maybe_do_queued_export();
+  void clear_export_queue() {
+    export_queue.clear();
+  }
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, 
 			   map<int,entity_inst_t>& exported_client_map);

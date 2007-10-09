@@ -97,8 +97,9 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // dirty non-auth mtimes
-  for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
-    dout(10) << "try_to_expire waiting for dirlock mtime flush on " << *p << dendl;
+  if(0) //fuckfuck
+    for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
+    dout(10) << "try_to_expire waiting for dirlock mtime flush on " << **p << dendl;
     if (!gather) gather = new C_Gather;
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
@@ -118,7 +119,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // idalloc
   if (allocv > mds->idalloc->get_committed_version()) {
-    dout(10) << "try_to_expire saving idalloc table, need " << allocv << dendl;
+    dout(10) << "try_to_expire saving idalloc table, need " << allocv
+	      << ", committed is " << mds->idalloc->get_committed_version()
+	      << " (" << mds->idalloc->get_committing_version() << ")"
+	      << dendl;
     if (!gather) gather = new C_Gather;
     mds->idalloc->save(gather->new_sub(), allocv);
   }
@@ -151,6 +155,11 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   // FIXME client requests...?
   // audit handling of anchor transactions?
 
+  if (gather) {
+    dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
+  } else {
+    dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
+  }
   return gather;
 }
 

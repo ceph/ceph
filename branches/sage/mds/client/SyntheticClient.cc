@@ -272,6 +272,8 @@ int SyntheticClient::run()
   run_until = utime_t(0,0);
   dout(5) << "run" << dendl;
 
+  int seq = 0;
+
   for (list<int>::iterator it = modes.begin();
        it != modes.end();
        it++) {
@@ -409,7 +411,7 @@ int SyntheticClient::run()
       break;
     case SYNCLIENT_MODE_MAKEDIRS:
       {
-        string sarg1 = get_sarg(0);
+        string sarg1 = get_sarg(seq++);
         int iarg1 = iargs.front();  iargs.pop_front();
         int iarg2 = iargs.front();  iargs.pop_front();
         int iarg3 = iargs.front();  iargs.pop_front();
@@ -1547,13 +1549,13 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
     }
   } else {
     // shared
-    if (whoami == 0) {
+    if (true || whoami == 0) {
       for (int c=0; c<count; c++) {
         sprintf(d,"dir.%d.run%d", 0, c);
         client->mkdir(d, 0755);
       }
     } else {
-      sleep(5);
+      sleep(2);
     }
   }
   

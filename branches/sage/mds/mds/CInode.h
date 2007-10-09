@@ -331,15 +331,7 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
-  void clear_dirty_scattered(int type) {
-    switch (type) {
-    case LOCK_OTYPE_IDIR:
-      xlist_dirty_inode_mtime.remove_myself();
-      break;
-    default:
-      assert(0);
-    }
-  }
+  void clear_dirty_scattered(int type);
 
   // -- caps -- (new)
   // client caps

@@ -100,7 +100,6 @@ MDCache::MDCache(MDS *m)
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
   did_shutdown_log_cap = false;
-  shutdown_commits = 0;
 }
 
 MDCache::~MDCache() 
@@ -1707,6 +1706,41 @@ void MDCache::rejoin_send_rejoins()
 
     rejoin_walk(dir, rejoins[auth]);
   }
+  
+  // rejoin root inodes, too
+  for (map<int, MMDSCacheRejoin*>::iterator p = rejoins.begin();
+       p != rejoins.end();
+       ++p) {
+    if (mds->is_rejoin()) {
+      // weak
+      if (p->first == 0 && root) 
+	p->second->add_weak_inode(root->ino());
+      if (get_inode(MDS_INO_STRAY(p->first))) 
+	p->second->add_weak_inode(MDS_INO_STRAY(p->first));
+    } else {
+      // strong
+      if (p->first == 0 && root) {
+	p->second->add_weak_inode(root->ino());
+	p->second->add_strong_inode(root->ino(), root->get_replica_nonce(),
+				    root->get_caps_wanted(),
+				    root->authlock.get_state(),
+				    root->linklock.get_state(),
+				    root->dirfragtreelock.get_state(),
+				    root->filelock.get_state(),
+				    root->dirlock.get_state());
+      }
+      if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
+    	p->second->add_weak_inode(in->ino());
+  	p->second->add_strong_inode(in->ino(), in->get_replica_nonce(),
+				    in->get_caps_wanted(),
+				    in->authlock.get_state(),
+				    in->linklock.get_state(),
+				    in->dirfragtreelock.get_state(),
+				    in->filelock.get_state(),
+				    in->dirlock.get_state());
+      }
+    }
+  }  
 
   if (!mds->is_rejoin()) {
     // i am survivor.  send strong rejoin.
@@ -2014,6 +2048,28 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
   
+  // weak base inodes?  (root, stray, etc.)
+  for (set<inodeno_t>::iterator p = weak->weak_inodes.begin();
+       p != weak->weak_inodes.end();
+       ++p) {
+    CInode *in = get_inode(*p);
+    assert(in);   // hmm fixme wrt stray?
+    if (survivor && in->is_replica(from)) 
+      inode_remove_replica(in, from);    // this induces a lock gather completion
+    int inonce = in->add_replica(from);
+    dout(10) << " have base " << *in << dendl;
+    
+    if (ack) 
+      ack->add_strong_inode(in->ino(), 
+			    inonce,
+			    0,
+			    in->authlock.get_replica_state(), 
+			    in->linklock.get_replica_state(), 
+			    in->dirfragtreelock.get_replica_state(), 
+			    in->filelock.get_replica_state(),
+			    in->dirlock.get_replica_state());
+  }
+
   // full inodes?
   //   dirty scatterlock content!
   for (list<MMDSCacheRejoin::inode_full>::iterator p = weak->full_inodes.begin();
@@ -2306,6 +2362,15 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	dout(10) << " have " << *in << dendl;
       }
     }
+  }
+
+  // base inodes?  (root, stray, etc.)
+  for (set<inodeno_t>::iterator p = strong->weak_inodes.begin();
+       p != strong->weak_inodes.end();
+       ++p) {
+    CInode *in = get_inode(*p);
+    dout(10) << " have base " << *in << dendl;
+    in->add_replica(from);
   }
 
   // send missing?
@@ -2685,6 +2750,32 @@ void MDCache::rejoin_send_acks()
       }
     }
   }
+
+  // root inodes too
+  if (root) 
+    for (map<int,int>::iterator r = root->replicas_begin();
+	 r != root->replicas_end();
+	 ++r) {
+      ack[r->first]->add_full_inode(root->inode, root->symlink, root->dirfragtree);
+      ack[r->first]->add_strong_inode(root->ino(), r->second, 0,
+				      root->authlock.get_replica_state(),
+				      root->linklock.get_replica_state(),
+				      root->dirfragtreelock.get_replica_state(),
+				      root->filelock.get_replica_state(),
+				      root->dirlock.get_replica_state());
+    }
+  if (stray)
+    for (map<int,int>::iterator r = stray->replicas_begin();
+	 r != stray->replicas_end();
+	 ++r) {
+      ack[r->first]->add_full_inode(stray->inode, stray->symlink, stray->dirfragtree);
+      ack[r->first]->add_strong_inode(stray->ino(), r->second, 0,
+				      stray->authlock.get_replica_state(),
+				      stray->linklock.get_replica_state(),
+				      stray->dirfragtreelock.get_replica_state(),
+				      stray->filelock.get_replica_state(),
+				      stray->dirlock.get_replica_state());
+    }
 
   // send acks
   for (map<int,MMDSCacheRejoin*>::iterator p = ack.begin();
@@ -3105,6 +3196,8 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
  * the only non-auth items that remain are those that are needed to 
  * attach our own subtrees to the root.  
  *
+ * when we are done, all dentries will be in the top bit of the lru.
+ *
  * why we have to do this:
  *  we may not have accurate linkage for non-auth items.  which means we will 
  *  know which subtree it falls into, and can not be sure to declare it to the
@@ -3189,6 +3282,9 @@ void MDCache::trim_non_auth()
       p = next;
     }
   }
+
+  // move everything in the pintail to the top bit of the lru.
+  lru.lru_touch_entire_pintail();
 
   show_subtrees();
 }
@@ -3406,17 +3502,6 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 // =========================================================================================
 // shutdown
 
-class C_MDC_ShutdownCommit : public Context {
-  MDCache *mdc;
-public:
-  C_MDC_ShutdownCommit(MDCache *mdc) {
-    this->mdc = mdc;
-  }
-  void finish(int r) {
-    mdc->shutdown_commits--;
-  }
-};
-
 class C_MDC_ShutdownCheck : public Context {
   MDCache *mdc;
 public:
@@ -3452,6 +3537,8 @@ void MDCache::shutdown_start()
 
   if (g_conf.mds_shutdown_check)
     mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+
+  //  g_conf.debug_mds = 10;
 }
 
 
@@ -3467,60 +3554,27 @@ bool MDCache::shutdown_pass()
     return true;
   }
 
-  // commit dirs?
-  if (g_conf.mds_commit_on_shutdown) {
-    
-    if (shutdown_commits < 0) {
-      dout(1) << "shutdown_pass committing all dirty dirs" << dendl;
-      shutdown_commits = 0;
-      
-      for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
-           it != inode_map.end();
-           it++) {
-        CInode *in = it->second;
-	if (!in->is_dir()) continue;
-        
-        // commit any dirty dirfrag that's ours
-	list<CDir*> dfs;
-	in->get_dirfrags(dfs);
-	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-	  CDir *dir = *p;
-	  if (dir->is_auth() && dir->is_dirty()) {
-	    dir->commit(0, new C_MDC_ShutdownCommit(this));
-	    shutdown_commits++;
-	  }
-	}
-      }
-    }
-
-    // commits?
-    if (shutdown_commits > 0) {
-      dout(7) << "shutdown_commits still waiting for " << shutdown_commits << dendl;
-      return false;
-    }
-  }
-
-  // flush anything we can from the cache
-  trim(0);
-  dout(5) << "lru size now " << lru.lru_get_size() << dendl;
-
   // flush batching eopens, so that we can properly expire them.
   mds->server->journal_opens();    // hrm, this is sort of a hack.
 
   // flush what we can from the log
-  if (g_conf.mds_log_flush_on_shutdown) {
-    mds->mdlog->set_max_events(0);
-    mds->mdlog->trim();
+  mds->mdlog->set_max_events(0);
+  mds->mdlog->trim();
+
+  if (mds->mdlog->get_num_segments() > 1) {
+    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
+    return false;
   }
 
+  trim(0);
+  dout(5) << "lru size now " << lru.lru_get_size() << dendl;
+
   // SUBTREES
-  // send all imports back to 0.
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0 && 
       !migrator->is_exporting() //&&
       //!migrator->is_importing()
       ) {
-    // export to root
     dout(7) << "looking for subtrees to export to mds0" << dendl;
     list<CDir*> ls;
     for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
@@ -3535,11 +3589,14 @@ bool MDCache::shutdown_pass()
     int max = 5; // throttle shutdown exports.. hack!
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
-      dout(7) << "sending " << *dir << " back to mds0" << dendl;
-      migrator->export_dir(dir, 0);
+      int dest = dir->get_inode()->authority().first;
+      if (dest > 0 && !mds->mdsmap->is_active(dest)) dest = 0;
+      dout(7) << "sending " << *dir << " back to mds" << dest << dendl;
+      migrator->export_dir(dir, dest);
       if (--max == 0) break;
     }
   }
+
 
   // subtrees map not empty yet?
   if (!subtrees.empty()) {
@@ -3547,8 +3604,8 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
-    if (!migrator->is_importing() && !migrator->is_exporting())
-      show_cache();
+    //if (!migrator->is_importing() && !migrator->is_exporting())
+    //show_cache();
     return false;
   }
   assert(subtrees.empty());
@@ -3556,35 +3613,32 @@ bool MDCache::shutdown_pass()
   assert(!migrator->is_importing());
 
 
+
   // empty out stray contents
   // FIXME
   dout(7) << "FIXME: i need to empty out stray dir contents..." << dendl;
 
-  // cap log?
-  if (g_conf.mds_log_flush_on_shutdown) {
-
-    // (only do this once!)
-    if (!mds->mdlog->is_capped()) {
-      dout(7) << "capping the log" << dendl;
-      mds->mdlog->cap();
-      mds->mdlog->trim();
-    }
-
-    if (!mds->mdlog->empty()) {
-      dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
-	      << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
-      return false;
-    }
-
-    if (!did_shutdown_log_cap) {
-      // flush journal header
-      dout(7) << "writing header for (now-empty) journal" << dendl;
-      assert(mds->mdlog->empty());
-      mds->mdlog->write_head(0);  
-      // NOTE: filer active checker below will block us until this completes.
-      did_shutdown_log_cap = true;
-      return false;
-    }
+  // (only do this once!)
+  if (!mds->mdlog->is_capped()) {
+    dout(7) << "capping the log" << dendl;
+    mds->mdlog->cap();
+    mds->mdlog->trim();
+  }
+  
+  if (!mds->mdlog->empty()) {
+    dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
+	    << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
+    return false;
+  }
+  
+  if (!did_shutdown_log_cap) {
+    // flush journal header
+    dout(7) << "writing header for (now-empty) journal" << dendl;
+    assert(mds->mdlog->empty());
+    mds->mdlog->write_head(0);  
+    // NOTE: filer active checker below will block us until this completes.
+    did_shutdown_log_cap = true;
+    return false;
   }
 
   // filer active?
@@ -3593,8 +3647,7 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
-
-  // done?
+  // trim what we can from the cache
   if (lru.lru_get_size() > 0) {
     dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << dendl;
     show_cache();

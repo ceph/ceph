@@ -631,7 +631,7 @@ protected:
   virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
   virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
 
-  virtual void clear_dirty_scattered(int type) { }
+  virtual void clear_dirty_scattered(int type) { assert(0); }
 
   // ---------------------------------------------
   // ordering

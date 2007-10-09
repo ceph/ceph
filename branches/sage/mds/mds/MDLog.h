@@ -82,8 +82,10 @@ class MDLog {
 
   // -- segments --
   map<off_t,LogSegment*> segments;
-  set<LogSegment*> trimming_segments;
-  int trimming_events;
+  set<LogSegment*> expiring_segments;
+  set<LogSegment*> expired_segments;
+  int expiring_events;
+  int expired_events;
 
   class C_MDL_WroteSubtreeMap : public Context {
     MDLog *mdlog;
@@ -132,7 +134,7 @@ public:
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
-		  trimming_events(0),
+		  expiring_events(0), expired_events(0),
 		  writing_subtree_map(false) {
   }		  
   ~MDLog();
@@ -163,19 +165,19 @@ public:
   void flush();
 
 private:
-  class C_MaybeTrimmedSegment : public Context {
+  class C_MaybeExpiredSegment : public Context {
     MDLog *mdlog;
     LogSegment *ls;
   public:
-    C_MaybeTrimmedSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
+    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
     void finish(int res) {
-      mdlog->_maybe_trimmed(ls);
+      mdlog->_maybe_expired(ls);
     }
   };
 
-  void try_trim(LogSegment *ls);
-  void _maybe_trimmed(LogSegment *ls);
-  void _trimmed(LogSegment *ls);
+  void try_expire(LogSegment *ls);
+  void _maybe_expired(LogSegment *ls);
+  void _expired(LogSegment *ls);
 
 public:
   void trim();

@@ -197,9 +197,8 @@ struct md_config_t {
   bool mds_log;
   int mds_log_max_events;
   int mds_log_max_segments;
-  int mds_log_max_trimming;
+  int mds_log_max_expiring;
   int mds_log_pad_entry;
-  bool  mds_log_flush_on_shutdown;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
@@ -226,7 +225,6 @@ struct md_config_t {
   float mds_bal_minchunk;
 
   bool  mds_trim_on_rejoin;
-  bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
 
   bool  mds_verify_export_dirauth;     // debug flag

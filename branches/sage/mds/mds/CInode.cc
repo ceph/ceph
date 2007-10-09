@@ -579,6 +579,17 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   }
 }
 
+void CInode::clear_dirty_scattered(int type)
+{
+  dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
+  switch (type) {
+  case LOCK_OTYPE_IDIR:
+    xlist_dirty_inode_mtime.remove_myself();
+    break;
+  default:
+    assert(0);
+  }
+}
 
 
 

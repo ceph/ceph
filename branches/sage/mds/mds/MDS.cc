@@ -1078,14 +1078,18 @@ void MDS::my_dispatch(Message *m)
 	mdsmap->get_inst(from) != m->get_source_inst() ||
 	mdsmap->is_down(from)) {
       // bogus mds?
-      if (m->get_type() != MSG_MDS_MAP) {
+      if (m->get_type() == MSG_MDS_MAP) {
+	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
+		<< ", but it's an mdsmap, looking at it" << dendl;
+      } else if (m->get_type() == MSG_MDS_CACHEEXPIRE &&
+		 mdsmap->get_inst(from) == m->get_source_inst()) {
+	dout(5) << "got " << *m << " from down mds " << m->get_source()
+		<< ", but it's a cache_expire, looking at it" << dendl;
+      } else {
 	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << dendl;
 	delete m;
 	return;
-      } else {
-	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
-		<< ", but it's an mdsmap, looking at it" << dendl;
       }
     }
   }

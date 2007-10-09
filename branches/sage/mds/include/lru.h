@@ -267,6 +267,15 @@ class LRU {
     return true;
   }
 
+  void lru_touch_entire_pintail() {
+    // promote entire pintail to the top lru
+    while (lru_pintail.get_length() > 0) {
+      LRUObject *o = lru_pintail.get_head();
+      lru_pintail.remove(o);
+      lru_top.insert_tail(o);
+    }
+  }
+
 
   // expire -- expire a single item
   LRUObject *lru_get_next_expire() {

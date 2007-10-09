@@ -193,7 +193,7 @@ md_config_t g_conf = {
   journaler_batch_max: 16384,        // max bytes we'll delay flushing
 
   // --- mds ---
-  mds_cache_size: MDS_CACHE_SIZE,
+  mds_cache_size: 300000,  //MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
   mds_decay_halflife: 5,
@@ -204,9 +204,8 @@ md_config_t g_conf = {
   mds_log: true,
   mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
   mds_log_max_segments: 100,
-  mds_log_max_trimming: 10,
+  mds_log_max_expiring: 20,
   mds_log_pad_entry: 128,//256,//64,
-  mds_log_flush_on_shutdown: true,
   mds_log_eopen_size: 100,   // # open inodes per log entry
 
   mds_bal_sample_interval: 3.0,  // every 5 seconds
@@ -219,7 +218,7 @@ md_config_t g_conf = {
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
   mds_bal_interval: 10,           // seconds
-  mds_bal_fragment_interval: 5,      // seconds
+  mds_bal_fragment_interval: 2,      // seconds
   mds_bal_idle_threshold: 0, //.1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
@@ -233,7 +232,6 @@ md_config_t g_conf = {
   mds_bal_minchunk: .001,     // never take anything smaller than this
 
   mds_trim_on_rejoin: true,
-  mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
 
   mds_verify_export_dirauth: true,
@@ -684,15 +682,11 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_log_max_events = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_max_segments") == 0) 
       g_conf.mds_log_max_segments = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_max_trimming") == 0) 
-      g_conf.mds_log_max_trimming = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_log_max_expiring") == 0) 
+      g_conf.mds_log_max_expiring = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_commit_on_shutdown") == 0) 
-      g_conf.mds_commit_on_shutdown = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
       g_conf.mds_shutdown_check = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
-      g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_decay_halflife") == 0) 
       g_conf.mds_decay_halflife = atoi(args[++i]);

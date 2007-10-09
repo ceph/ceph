@@ -333,11 +333,6 @@ public:
   map<CInode*, map<off_t, LogSegment*> > purging_ls;
   map<CInode*, map<off_t, list<Context*> > > waiting_for_purge;
   
-  // shutdown crap
-  int shutdown_commits;
-  bool did_shutdown_log_cap;
-  friend class C_MDC_ShutdownCommit;
-
   // -- recovery --
 protected:
   set<int> recovery_set;
@@ -469,6 +464,8 @@ public:
   void shutdown_check();
   bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
+
+  bool did_shutdown_log_cap;
 
   // inode_map
   bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
