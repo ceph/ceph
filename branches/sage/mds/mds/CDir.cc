@@ -1553,14 +1553,14 @@ void CDir::unfreeze_tree()
     // waiters?
     finish_waiting(WAIT_UNFREEZE);
   } else {
+    finish_waiting(WAIT_FROZEN, -1);
+
     // freezing.  stop it.
     assert(state_test(STATE_FREEZINGTREE));
     state_clear(STATE_FREEZINGTREE);
     auth_unpin();
     
-    // cancel freeze waiters
     finish_waiting(WAIT_UNFREEZE);
-    finish_waiting(WAIT_FROZEN, -1);
   }
 }
 
@@ -1651,17 +1651,16 @@ void CDir::unfreeze_dir()
     if (is_auth() && !is_subtree_root())
       inode->auth_unpin();
 
-    // waiters?
     finish_waiting(WAIT_UNFREEZE);
   } else {
+    finish_waiting(WAIT_FROZEN, -1);
+
     // still freezing. stop.
     assert(state_test(STATE_FREEZINGDIR));
     state_clear(STATE_FREEZINGDIR);
     auth_unpin();
     
-    // cancel freeze waiters
     finish_waiting(WAIT_UNFREEZE);
-    finish_waiting(WAIT_FROZEN, -1);
   }
 }
 
