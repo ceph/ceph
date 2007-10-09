@@ -1508,14 +1508,18 @@ void MDCache::disambiguate_imports()
   }
   assert(my_ambiguous_imports.empty());
 
-  // verify all my subtrees are unambiguous!
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = p->first;
-    if (dir->is_ambiguous_dir_auth()) 
-      dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
-    assert(!dir->is_ambiguous_dir_auth());
+  if (mds->is_resolve()) {
+    // verify all my subtrees are unambiguous!
+    for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+	 p != subtrees.end();
+	 ++p) {
+      CDir *dir = p->first;
+      if (dir->is_ambiguous_dir_auth()) {
+	dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
+	show_subtrees();
+      }
+      assert(!dir->is_ambiguous_dir_auth());
+    }
   }
 
   show_subtrees();
