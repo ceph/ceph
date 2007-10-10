@@ -96,9 +96,14 @@ public:
 void ClientMap::save(Context *onsave, version_t needv)
 {
   dout(10) << "save needv " << needv << ", v " << version << dendl;
+ 
+  if (needv && committing >= needv) {
+    assert(committing > committed);
+    commit_waiters[committing].push_back(onsave);
+    return;
+  }
+
   commit_waiters[version].push_back(onsave);
-  
-  if (needv && committing >= needv) return;
   
   bufferlist bl;
   
@@ -108,7 +113,7 @@ void ClientMap::save(Context *onsave, version_t needv)
   mds->filer->write(inode,
                     0, bl.length(), bl,
                     0,
-					0, new C_CM_Save(this, version));
+		    0, new C_CM_Save(this, version));
 }
 
 void ClientMap::_save_finish(version_t v)
