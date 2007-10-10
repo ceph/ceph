@@ -978,10 +978,15 @@ void Client::handle_mds_map(MMDSMap* m)
     mount_cond.Signal();  // mount might be waiting for this.
   } 
 
+  if (m->get_epoch() < mdsmap->get_epoch()) {
+    dout(1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
+	    << mdsmap->get_epoch() << dendl;
+    delete m;
+    return;
+  }  
+
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
-  epoch_t was = mdsmap->get_epoch();
   mdsmap->decode(m->get_encoded());
-  assert(mdsmap->get_epoch() >= was);
   
   // send reconnect?
   if (frommds >= 0 && 

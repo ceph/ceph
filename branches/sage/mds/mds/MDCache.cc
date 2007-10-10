@@ -1996,6 +1996,18 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
 
+  // full inodes?
+  //   dirty scatterlock content!
+  for (list<MMDSCacheRejoin::inode_full>::iterator p = weak->full_inodes.begin();
+       p != weak->full_inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->inode.ino);
+    if (!in) continue;
+    if (p->inode.mtime > in->inode.mtime) in->inode.mtime = p->inode.mtime;
+    dout(10) << " got dirty inode scatterlock content " << *in << dendl;
+    in->dirlock.set_updated();
+  }
+
   // walk weak map
   for (map<dirfrag_t, map<string, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
        p != weak->weak.end();
@@ -2074,17 +2086,6 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 			    in->dirlock.get_replica_state());
   }
 
-  // full inodes?
-  //   dirty scatterlock content!
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = weak->full_inodes.begin();
-       p != weak->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
-    if (!in) continue;
-    if (p->inode.mtime > in->inode.mtime) in->inode.mtime = p->inode.mtime;
-    dout(10) << " got dirty inode scatterlock content " << *in << dendl;
-  }
-
   if (survivor) {
     // survivor.  do everything now.
     rejoin_scour_survivor_replicas(from, ack);
@@ -2107,11 +2108,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  *
  * @pathmap - map of inodeno to full pathnames.  we remove items from this map 
  *            as we discover we have them.
- * @retry   - non-completion callback context.  called when a pass of fetches
- *            completes.  deleted if we are done (i.e. pathmap is empty).
+ *
+ * returns a C_Gather* is there is work to do.  caller is responsible for setting
+ * the C_Gather completer.
  */
-bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
-			     Context *retry)
+C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
@@ -2138,12 +2139,11 @@ bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
   if (pathmap.empty()) {
     dout(10) << "parallel_fetch done" << dendl;
     assert(fetch_queue.empty());
-    delete retry;
-    return true;
+    return false;
   }
 
   // do a parallel fetch
-  C_Gather *gather = new C_Gather(retry);
+  C_Gather *gather = new C_Gather;
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
        ++p) {
@@ -2151,7 +2151,7 @@ bool MDCache::parallel_fetch(map<inodeno_t,string>& pathmap,
     (*p)->fetch(gather->new_sub());
   }
   
-  return false;
+  return gather;
 }
 
 
@@ -2629,9 +2629,13 @@ void MDCache::rejoin_gather_finish()
   // fetch paths?
   //  do this before ack, since some inodes we may have already gotten
   //  from surviving MDSs.
-  if (!cap_import_paths.empty() &&
-      !parallel_fetch(cap_import_paths, new C_MDC_RejoinGatherFinish(this)))
-    return;
+  if (!cap_import_paths.empty()) {
+    C_Gather *gather = parallel_fetch(cap_import_paths);
+    if (gather) {
+      gather->set_finisher(new C_MDC_RejoinGatherFinish(this));
+      return;
+    }
+  }
   
   // process cap imports
   //  ino -> client -> frommds -> capex

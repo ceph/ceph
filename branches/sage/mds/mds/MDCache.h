@@ -567,8 +567,7 @@ public:
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  bool parallel_fetch(map<inodeno_t,string>& pathmap,
-		      Context *c);
+  C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

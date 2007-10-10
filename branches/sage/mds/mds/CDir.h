@@ -160,8 +160,8 @@ class CDir : public MDSCacheObject {
   //int hack_num_accessed;
 
 public:
-  typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  //typedef map<string, CDentry*> map_t;
+  //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
+  typedef map<string, CDentry*> map_t;
 protected:
   // contents
   map_t items;       // non-null AND null
@@ -424,12 +424,10 @@ public:
   // -- freezing --
   bool freeze_tree();
   void _freeze_tree();
-  void freeze_tree_finish();
   void unfreeze_tree();
 
   bool freeze_dir();
   void _freeze_dir();
-  void freeze_dir_finish();
   void unfreeze_dir();
 
   void maybe_finish_freeze() {

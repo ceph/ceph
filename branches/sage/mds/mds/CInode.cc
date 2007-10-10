@@ -404,7 +404,7 @@ void CInode::_mark_dirty(LogSegment *ls)
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
-    //assert(ls);  // not true for wonky srci import on rename.
+    assert(ls);
   }
   
   // move myself to this segment's dirty list

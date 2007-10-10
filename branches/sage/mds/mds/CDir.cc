@@ -739,8 +739,10 @@ void CDir::finish_waiting(int mask, int result)
 
   list<Context*> finished;
   take_waiting(mask, finished);
-  //finish_contexts(finished, result);
-  cache->mds->queue_waiters(finished);
+  if (result < 0)
+    finish_contexts(finished, result);
+  else
+    cache->mds->queue_waiters(finished);
 }
 
 
