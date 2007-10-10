@@ -53,8 +53,8 @@ static const char *get_lock_action_name(int a) {
 
 
 class MLock : public Message {
-  int       asker;  // who is initiating this request
-  int       action;  // action type
+  int32_t     action;  // action type
+  int32_t     asker;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
 
   char      lock_type;  // lock object type
@@ -72,24 +72,20 @@ class MLock : public Message {
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
   MLock() {}
-  MLock(int action, int asker) :
-    Message(MSG_MDS_LOCK) {
-    this->action = action;
-    this->asker = asker;
-  }
-  MLock(SimpleLock *lock, int action, int asker) :
-    Message(MSG_MDS_LOCK) {
-    this->lock_type = lock->get_type();
+  MLock(int ac, int as) :
+    Message(MSG_MDS_LOCK),
+    action(ac), asker(as),
+    lock_type(0) { }
+  MLock(SimpleLock *lock, int ac, int as) :
+    Message(MSG_MDS_LOCK),
+    action(ac), asker(as),
+    lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
-    this->action = action;
-    this->asker = asker;
   }
-  MLock(SimpleLock *lock, int action, int asker, bufferlist& bl) :
-    Message(MSG_MDS_LOCK) {
-    this->lock_type = lock->get_type();
+  MLock(SimpleLock *lock, int ac, int as, bufferlist& bl) :
+    Message(MSG_MDS_LOCK),
+    action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
-    this->action = action;
-    this->asker = asker;
     data.claim(bl);
   }
   virtual char *get_type_name() { return "ILock"; }

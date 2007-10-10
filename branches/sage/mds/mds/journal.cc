@@ -46,8 +46,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------
@@ -87,10 +87,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 ++p) {
       CDir *dir = *p;
       if (dir->can_auth_pin()) {
-	dout(10) << "try_to_expire committing " << *dir << dendl;
+	dout(15) << "try_to_expire committing " << *dir << dendl;
 	dir->commit(0, gather->new_sub());
       } else {
-	dout(10) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
+	dout(15) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
 	dir->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());
       }
     }
@@ -129,7 +129,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // clientmap
   if (clientmapv > mds->clientmap.get_committed()) {
-    dout(10) << "try_to_expire saving clientmap, need " << clientmapv << dendl;
+    dout(10) << "try_to_expire saving clientmap, need " << clientmapv 
+	      << ", committed is " << mds->clientmap.get_committed()
+	      << " (" << mds->clientmap.get_committing() << ")"
+	      << dendl;
     if (!gather) gather = new C_Gather;
     mds->clientmap.save(gather->new_sub(), clientmapv);
   }
@@ -162,6 +165,13 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
   return gather;
 }
+
+
+
+#undef dout
+#undef derr
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------

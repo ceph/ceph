@@ -175,7 +175,7 @@ void MDBalancer::send_heartbeat()
   if (mds->get_nodeid() == 0)
     beat_epoch++;
 
-  // load
+  // my load
   mds_load_t load = get_load();
   mds_load[ mds->get_nodeid() ] = load;
 
@@ -243,7 +243,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
   
-  unsigned cluster_size = mds->get_mds_map()->get_num_mds();
+  unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
   if (mds_load.size() == cluster_size) {
     // let's go!
     //export_empties();  // no!

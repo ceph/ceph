@@ -95,6 +95,7 @@ md_config_t g_conf = {
   debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
+  debug_mds_log_expire: 1,
   debug_mds_migrator: 1,
   debug_buffer: 0,
   debug_timer: 0,
@@ -566,6 +567,11 @@ void parse_config_options(std::vector<char*>& args)
         g_conf.debug_mds_log = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_log = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_mds_log_expire") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_mds_log_expire = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_mds_log_expire = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_mds_migrator") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds_migrator = atoi(args[++i]);
