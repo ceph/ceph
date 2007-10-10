@@ -1109,7 +1109,7 @@ bool Locker::simple_rdlock_try(SimpleLock *lock, Context *con)
 
   // wait!
   dout(7) << "simple_rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->add_waiter(SimpleLock::WAIT_RD, con);
+  if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
   return false;
 }
 

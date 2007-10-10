@@ -3754,10 +3754,13 @@ void MDCache::dispatch(Message *m)
 
 Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 {
-  if (mdr)
+  if (mdr) {
+    dout(20) << "_get_waiter retryrequest" << dendl;
     return new C_MDS_RetryRequest(this, mdr);
-  else
+  } else {
+    dout(20) << "_get_waiter retrymessage" << dendl;
     return new C_MDS_RetryMessage(mds, req);
+  }
 }
 
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
@@ -3840,8 +3843,11 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     // must read directory hard data (permissions, x bit) to traverse
     if (!noperm && 
-	!mds->locker->simple_rdlock_try(&cur->authlock, _get_waiter(mdr, req))) 
+	!mds->locker->simple_rdlock_try(&cur->authlock, 0)) {
+      dout(7) << "traverse: waiting on authlock rdlock on " << *cur << dendl;
+      cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
       return 1;
+    }
     
     // check permissions?
     // XXX
