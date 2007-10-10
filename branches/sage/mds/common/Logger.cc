@@ -212,7 +212,7 @@ void Logger::_flush()
     } else {
       if (fvals[i] > 0 && vals[i] == 0)
 	out << "\t" << fvals[i];
-      else
+      else 
 	out << "\t" << vals[i];
     }
   }
