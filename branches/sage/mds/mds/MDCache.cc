@@ -2997,10 +2997,9 @@ bool MDCache::trim(int max)
     } 
   }
   if (max == 0) {
-    for (set<CInode*>::iterator p = base_inodes.begin();
-	 p != base_inodes.end();
-	 ++p) {
-      CInode *in = *p;
+    set<CInode*>::iterator p = base_inodes.begin();
+    while (p != base_inodes.end()) {
+      CInode *in = *p++;
       list<CDir*> ls;
       in->get_dirfrags(ls);
       for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {

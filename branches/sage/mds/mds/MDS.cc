@@ -366,11 +366,11 @@ void MDS::tick()
   if (logger) {
     req_rate = logger->get("req");
     
-    logger->set("l", (int)load.mds_load());
+    logger->fset("l", (int)load.mds_load());
     logger->set("q", messenger->get_dispatch_queue_len());
     logger->set("buf", buffer_total_alloc);
     logger->set("sm", mdcache->num_subtrees());
-    
+
     mdcache->log_stat(logger);
   }
 

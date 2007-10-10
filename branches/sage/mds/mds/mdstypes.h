@@ -53,10 +53,11 @@ using namespace std;
 
 
 struct metareqid_t {
+  uint64_t tid;
   int32_t client;
-  tid_t tid;
-  metareqid_t() : client(-1), tid(0) {}
-  metareqid_t(int c, tid_t t) : client(c), tid(t) {}
+  int32_t _pad;
+  metareqid_t() : tid(0), client(-1), _pad(0) {}
+  metareqid_t(int c, tid_t t) : tid(t), client(c), _pad(0) {}
 };
 
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
@@ -111,9 +112,10 @@ struct inode_caps_reconnect_t {
 struct dirfrag_t {
   inodeno_t ino;
   frag_t    frag;
+  uint32_t  _pad;
 
   dirfrag_t() { }
-  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
+  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
 };
 
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {

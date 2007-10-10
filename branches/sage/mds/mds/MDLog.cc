@@ -164,7 +164,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   // encode it, with event type
   {
     bufferlist bl;
-    bl.append((char*)&le->_type, sizeof(le->_type));
+    ::_encode(le->_type, bl);
     le->encode_payload(bl);
     
     // journal it.
@@ -297,6 +297,8 @@ void MDLog::trim()
 
     p++;
     
+    left -= ls->num_events;
+
     if (expiring_segments.count(ls)) {
       dout(5) << "trim already expiring segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
     } else if (expired_segments.count(ls)) {
@@ -304,8 +306,6 @@ void MDLog::trim()
     } else {
       try_expire(ls);
     }
-
-    left -= ls->num_events;
   }
 }
 

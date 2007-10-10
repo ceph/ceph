@@ -65,7 +65,7 @@ class EMetaBlob {
       ::_encode(dn, bl);
       ::_encode(dnv, bl);
       ::_encode(inode, bl);
-      ::_encode(dirfragtree, bl);
+      dirfragtree._encode(bl);
       if (inode.is_symlink())
 	::_encode(symlink, bl);
       ::_encode(dirty, bl);
@@ -74,7 +74,7 @@ class EMetaBlob {
       ::_decode(dn, bl, off);
       ::_decode(dnv, bl, off);
       ::_decode(inode, bl, off);
-      ::_decode(dirfragtree, bl, off);
+      dirfragtree._decode(bl, off);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
       ::_decode(dirty, bl, off);
@@ -164,7 +164,7 @@ public:
     list<nullbit>   dnull;
 
   public:
-    dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
+    dirlump() : dirv(0), state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
