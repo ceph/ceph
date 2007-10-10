@@ -168,8 +168,10 @@ int Rank::Accepter::start()
 
   // set a harmless handle for SIGUSR1 (we'll use it to stop the accepter)
   struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sa_handler = noop_signal_handler;
   sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
 
   // start thread
@@ -1208,19 +1210,6 @@ void Rank::wait()
 /**********************************
  * EntityMessenger
  */
-
-Rank::EntityMessenger::EntityMessenger(entity_name_t myaddr) :
-  Messenger(myaddr),
-  stop(false),
-  dispatch_thread(this)
-{
-}
-Rank::EntityMessenger::~EntityMessenger()
-{
-  // join dispatch thread
-  if (dispatch_thread.is_started())
-    dispatch_thread.join();
-}
 
 void Rank::EntityMessenger::dispatch_entry()
 {

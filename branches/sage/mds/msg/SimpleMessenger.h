@@ -197,8 +197,16 @@ private:
     }
 
   public:
-    EntityMessenger(entity_name_t myaddr);
-    ~EntityMessenger();
+    EntityMessenger(entity_name_t myaddr) : 
+      Messenger(myaddr),
+      stop(false),
+      qlen(0), pqlen(0),
+      dispatch_thread(this) { }
+    ~EntityMessenger() {
+      // join dispatch thread
+      if (dispatch_thread.is_started())
+	dispatch_thread.join();
+    }
 
     void ready();
     bool is_stopped() { return stop; }
