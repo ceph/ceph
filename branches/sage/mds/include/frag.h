@@ -457,7 +457,7 @@ class fragtree_t {
   }
   
   // encoding
-  void _encode(bufferlist& bl) {
+  void _encode(bufferlist& bl) const {
     ::_encode(_splits, bl);
   }
   void _decode(bufferlist& bl, int& off) {
