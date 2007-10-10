@@ -26,6 +26,7 @@ class CDir;
 class CInode;
 class CDentry;
 class MDS;
+class MDSlaveUpdate;
 
 class LogSegment {
  public:
@@ -39,6 +40,8 @@ class LogSegment {
 
   xlist<CInode*>  open_files;
   xlist<CInode*>  dirty_inode_mtimes;
+
+  xlist<MDSlaveUpdate*> slave_updates;
 
   //xlist<CInode*>  purging_inodes;
   map<CInode*, map<off_t,off_t> > purging_inodes;

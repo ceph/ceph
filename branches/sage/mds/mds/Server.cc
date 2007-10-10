@@ -2088,8 +2088,17 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
     }
   }
 
-  // update journaled target inode
+  // journal it
+  mdr->ls = mdlog->get_current_segment();
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
+
   inode_t *pi = dn->inode->project_inode();
+
+  // rollback case
+  le->rollback.add_dir_context(targeti->get_parent_dir());
+  le->rollback.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+
+  // update journaled target inode
   bool inc;
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     inc = true;
@@ -2104,11 +2113,10 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
 
-  // journal it
-  mdr->ls = mdlog->get_current_segment();
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
-  le->metablob.add_dir_context(targeti->get_parent_dir());
-  le->metablob.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  // commit case
+  le->commit.add_dir_context(targeti->get_parent_dir());
+  le->commit.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
 }
 
@@ -3339,7 +3347,22 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     // journal.
     mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
-    _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
+
+    // rollback case
+    if (destdn->inode && destdn->inode->is_auth()) {
+      assert(destdn->is_remote());
+      le->rollback.add_dir_context(destdn->dir);
+      le->rollback.add_dentry(destdn, true);
+    }
+    if (srcdn->is_auth() ||
+	(srcdn->inode && srcdn->inode->is_auth())) {
+      le->rollback.add_dir_context(srcdn->dir);
+      le->rollback.add_dentry(srcdn, true);
+    }
+
+    // commit case
+    _rename_prepare(mdr, &le->commit, srcdn, destdn, straydn);
+
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
     // don't journal.

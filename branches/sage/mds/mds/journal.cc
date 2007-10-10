@@ -97,8 +97,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // dirty non-auth mtimes
-  if(0) //fuckfuck
-    for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
+  for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
     dout(10) << "try_to_expire waiting for dirlock mtime flush on " << **p << dendl;
     if (!gather) gather = new C_Gather;
     (*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
@@ -115,6 +114,15 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     mds->server->add_journal_open_waiter(gather->new_sub());
     mds->server->maybe_journal_opens();
     dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
+  }
+
+  // slave updates
+  for (xlist<MDSlaveUpdate*>::iterator p = slave_updates.begin(); !p.end(); ++p) {
+    MDSlaveUpdate *su = *p;
+    dout(10) << "try_to_expire waiting on slave update " << su << dendl;
+    assert(su->waiter == 0);
+    if (!gather) gather = new C_Gather;
+    su->waiter = gather->new_sub();
   }
 
   // idalloc
@@ -842,106 +850,42 @@ void EOpen::replay(MDS *mds)
 // -----------------------
 // ESlaveUpdate
 
-bool ESlaveUpdate::has_expired(MDS *mds)
-{
-  switch (op) {
-  case ESlaveUpdate::OP_PREPARE:
-    if (mds->mdcache->ambiguous_slave_updates.count(reqid) == 0) {
-      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
-	       << ": haven't yet seen commit|rollback" << dendl;
-      return false;
-    } 
-    else if (mds->mdcache->ambiguous_slave_updates[reqid]) {
-      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
-	       << ": committed, checking metablob" << dendl;
-      bool exp = metablob.has_expired(mds);
-      if (exp) 
-	mds->mdcache->ambiguous_slave_updates.erase(reqid);
-      return exp;      
-    }
-    else {
-      dout(10) << "ESlaveUpdate.has_expired prepare " << reqid << " for mds" << master 
-	       << ": aborted" << dendl;
-      mds->mdcache->ambiguous_slave_updates.erase(reqid);
-      return true;
-    }
-    
-  case ESlaveUpdate::OP_COMMIT:
-  case ESlaveUpdate::OP_ROLLBACK:
-    if (mds->mdcache->waiting_for_slave_update_commit.count(reqid)) {
-      dout(10) << "ESlaveUpdate.has_expired "
-	       << ((op == ESlaveUpdate::OP_COMMIT) ? "commit ":"rollback ")
-	       << reqid << " for mds" << master 
-	       << ": noting commit, kicking prepare waiter" << dendl;
-      mds->mdcache->ambiguous_slave_updates[reqid] = (op == ESlaveUpdate::OP_COMMIT);
-      mds->mdcache->waiting_for_slave_update_commit[reqid]->finish(0);
-      delete mds->mdcache->waiting_for_slave_update_commit[reqid];
-      mds->mdcache->waiting_for_slave_update_commit.erase(reqid);
-    } else {
-      dout(10) << "ESlaveUpdate.has_expired "
-	       << ((op == ESlaveUpdate::OP_COMMIT) ? "commit ":"rollback ")
-	       << reqid << " for mds" << master 
-	       << ": no prepare waiter, ignoring" << dendl;
-    }
-    return true;
-
-  default:
-    assert(0);
-    return false;
-  }
-}
-
-void ESlaveUpdate::expire(MDS *mds, Context *c)
-{
-  assert(op == ESlaveUpdate::OP_PREPARE);
-
-  if (mds->mdcache->ambiguous_slave_updates.count(reqid) == 0) {
-    // wait
-    dout(10) << "ESlaveUpdate.expire prepare " << reqid << " for mds" << master
-	     << ": waiting for commit|rollback" << dendl;
-    mds->mdcache->waiting_for_slave_update_commit[reqid] = c;
-  } else {
-    // we committed.. expire the metablob
-    assert(mds->mdcache->ambiguous_slave_updates[reqid] == true); 
-    dout(10) << "ESlaveUpdate.expire prepare " << reqid << " for mds" << master
-	     << ": waiting for metablob to expire" << dendl;
-    //metablob.expire(mds, c);
-  }
-}
-
 void ESlaveUpdate::replay(MDS *mds)
 {
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
     // FIXME: horribly inefficient copy; EMetaBlob needs a swap() or something
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds" << master 
-	     << ": saving blob for later commit" << dendl;
+	     << ": saving blobs for later commit" << dendl;
     assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
-    metablob._segment = _segment;  // may need this later
-    mds->mdcache->uncommitted_slave_updates[master][reqid] = metablob;
+    commit._segment = _segment;  // may need this later
+    rollback._segment = _segment;  // may need this later
+    mds->mdcache->uncommitted_slave_updates[master][reqid] = 
+      MDSlaveUpdate(commit, rollback, _segment->slave_updates);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master
-	       << ": applying previously saved blob" << dendl;
-      mds->mdcache->uncommitted_slave_updates[master][reqid].replay(mds, _segment);
+	       << ": applying commit blob" << dendl;
+      mds->mdcache->uncommitted_slave_updates[master][reqid].commit.replay(mds, _segment);
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blob" << dendl;
+	       << ": ignoring, no previously saved blobs" << dendl;
     }
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
-	       << ": discarding previously saved blob" << dendl;
+	       << ": applying rollback blob" << dendl;
       assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
+      mds->mdcache->uncommitted_slave_updates[master][reqid].rollback.replay(mds, _segment);
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blob" << dendl;
+	       << ": ignoring, no previously saved blobs" << dendl;
     }
     break;
 

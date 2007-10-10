@@ -1115,7 +1115,7 @@ void MDCache::send_resolve_now(int who)
   }
   // [resolving]
   if (uncommitted_slave_updates.count(who)) {
-    for (map<metareqid_t, EMetaBlob>::iterator p = uncommitted_slave_updates[who].begin();
+    for (map<metareqid_t, MDSlaveUpdate>::iterator p = uncommitted_slave_updates[who].begin();
 	 p != uncommitted_slave_updates[who].end();
 	 ++p) {
       dout(10) << " including uncommitted " << p->first << dendl;
@@ -1415,7 +1415,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     if (mds->is_resolve()) {
       // replay
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p].replay(mds);
+      uncommitted_slave_updates[from][*p].commit.replay(mds);
       uncommitted_slave_updates[from].erase(*p);
       // log commit
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_COMMIT));
@@ -1433,6 +1433,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
     if (mds->is_resolve()) {
       assert(uncommitted_slave_updates[from].count(*p));
+      uncommitted_slave_updates[from][*p].rollback.replay(mds);
       uncommitted_slave_updates[from].erase(*p);
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {

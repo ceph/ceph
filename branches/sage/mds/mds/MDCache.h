@@ -216,6 +216,25 @@ inline ostream& operator<<(ostream& out, MDRequest &mdr)
   return out;
 }
 
+struct MDSlaveUpdate {
+  EMetaBlob commit;
+  EMetaBlob rollback;
+  xlist<MDSlaveUpdate*>::item xlistitem;
+  Context *waiter;
+  MDSlaveUpdate() : xlistitem(this), waiter(0) {}
+  MDSlaveUpdate(EMetaBlob c, EMetaBlob r, xlist<MDSlaveUpdate*> &list) :
+    commit(c), rollback(r),
+    xlistitem(this),
+    waiter(0) {
+    list.push_back(&xlistitem);
+  }
+  ~MDSlaveUpdate() {
+    if (waiter) waiter->finish(0);
+    delete waiter;
+  }
+};
+
+
 class MDCache {
  public:
   // my master
@@ -349,7 +368,7 @@ protected:
   // from MMDSResolves
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
-  map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;  // for replay.
+  map<int, map<metareqid_t, MDSlaveUpdate> > uncommitted_slave_updates;  // for replay.
   map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
   map<metareqid_t, Context*> waiting_for_slave_update_commit;
   friend class ESlaveUpdate;
