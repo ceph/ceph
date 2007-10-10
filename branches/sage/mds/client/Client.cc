@@ -470,6 +470,7 @@ Inode* Client::insert_trace(MClientReply *reply)
     } else {
       // not root.
       Dir *dir = cur->open_dir();
+      assert(pdn != reply->get_trace_dn().end());
       cur = this->insert_inode(dir, *pin, *pdn);
       dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
       ++pdn;      

@@ -108,8 +108,9 @@ struct entity_addr_t {
   uint8_t  ipq[4];
   uint32_t port;
   uint32_t nonce;  // bind time, or pid, or something unique!
+  uint32_t _pad;
 
-  entity_addr_t() : port(0), nonce(0) {
+  entity_addr_t() : port(0), nonce(0), _pad(0) {
     ipq[0] = ipq[1] = ipq[2] = ipq[3] = 0;
   }
 

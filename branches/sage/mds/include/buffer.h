@@ -716,6 +716,7 @@ public:
 	unsigned gap = append_buffer.unused_tail_length();
 	if (gap > 0) {
 	  if (gap > len) gap = len;
+	  //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
 	  append_buffer.append(data, gap);
 	  append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
 	  len -= gap;

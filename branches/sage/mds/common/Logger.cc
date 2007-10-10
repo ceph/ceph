@@ -212,8 +212,10 @@ void Logger::_flush()
     } else {
       if (fvals[i] > 0 && vals[i] == 0)
 	out << "\t" << fvals[i];
-      else 
+      else {
+	//cout << this << " p " << i << " and size is " << vals.size() << std::endl;
 	out << "\t" << vals[i];
+      }
     }
   }
   out << std::endl;
@@ -265,6 +267,7 @@ long Logger::set(const char *key, long v)
   if (i < 0) i = type->add_set(key);
   maybe_resize(i+1);
 
+  //cout << this << " set " << i << " to " << v << std::endl;
   long r = vals[i] = v;
   logger_lock.Unlock();
   return r;
@@ -279,6 +282,7 @@ double Logger::fset(const char *key, double v)
   if (i < 0) i = type->add_set(key);
   maybe_resize(i+1);
 
+  //cout << this << " fset " << i << " to " << v << std::endl;
   double r = fvals[i] = v;
   logger_lock.Unlock();
   return r;
