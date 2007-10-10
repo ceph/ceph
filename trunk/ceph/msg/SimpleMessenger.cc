@@ -152,13 +152,13 @@ int Rank::Accepter::start()
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
     rank.my_addr.set_addr(listen_addr);
-    rank.my_addr.port = 0;  // see below
+    rank.my_addr.v.port = 0;  // see below
   }
-  if (rank.my_addr.port == 0) {
+  if (rank.my_addr.v.port == 0) {
     entity_addr_t tmp;
     tmp.set_addr(listen_addr);
-    rank.my_addr.port = tmp.port;
-    rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+    rank.my_addr.v.port = tmp.v.port;
+    rank.my_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
 
   dout(1) << "accepter.start my_addr is " << rank.my_addr << dendl;
@@ -602,7 +602,7 @@ Message *Rank::Pipe::read_message()
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
-  msg_envelope_t env; 
+  ceph_message_header env; 
   if (!tcp_read( sd, (char*)&env, sizeof(env) )) {
     need_to_send_close = false;
     return 0;
@@ -617,7 +617,7 @@ Message *Rank::Pipe::read_message()
   bufferlist blist;
   int32_t pos = 0;
   list<int> chunk_at;
-  for (int i=0; i<env.nchunks; i++) {
+  for (unsigned i=0; i<env.nchunks; i++) {
     int32_t size;
     if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
       need_to_send_close = false;
@@ -712,7 +712,7 @@ int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
 int Rank::Pipe::write_message(Message *m)
 {
   // get envelope, buffers
-  msg_envelope_t *env = &m->get_envelope();
+  ceph_message_header *env = &m->get_envelope();
   bufferlist blist;
   blist.claim( m->get_payload() );
   
