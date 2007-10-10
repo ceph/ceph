@@ -67,12 +67,12 @@ class MMDSCacheRejoin : public Message {
     void _decode(bufferlist::iterator& p) {
       ::_decode_simple(inode, p);
       ::_decode_simple(symlink, p);
-      ::_decode_simple(dirfragtree, p);
+      dirfragtree._decode(p);
     }
     void _encode(bufferlist& bl) const {
       ::_encode(inode, bl);
       ::_encode(symlink, bl);
-      ::_encode(dirfragtree, bl);
+      dirfragtree._encode(bl);
     }
   };
 
