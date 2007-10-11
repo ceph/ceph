@@ -23,3 +23,21 @@
    obj:*
    obj:*
 }
+
+# gethostbyname
+{
+   gethostbyname thing
+   Memcheck:Param
+   socketcall.sendto(msg)
+   fun:send
+   fun:get_mapping
+   fun:__nscd_get_map_ref
+   fun:nscd_gethst_r
+   fun:__nscd_gethostbyname_r
+   fun:gethostbyname_r@@GLIBC_2.2.5
+   fun:gethostbyname
+   fun:_ZN4Rank8Accepter5startEv
+   fun:_ZN4Rank10start_rankEv
+   fun:main
+}
+
