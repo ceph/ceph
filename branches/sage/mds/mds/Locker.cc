@@ -1471,7 +1471,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 			      auth, MDS_PORT_LOCKER);
       }
       lock->set_state(LOCK_LOCK);
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
     }
     
   } else {
@@ -1499,7 +1498,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
 	lock->set_state(LOCK_LOCK);
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);
 	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
 	lock->get_parent()->auth_unpin();
       }
@@ -1535,7 +1533,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	send_lock_message(lock, LOCK_AC_SCATTER, data);
       }
       lock->set_state(LOCK_SCATTER);
-      //lock->get_parent()->get(CInode::PIN_SCATTERED);
       lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);      
       lock->get_parent()->auth_unpin();
     }
@@ -1566,10 +1563,11 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(10) << "scatter_writebehind on " << *lock << " on " << *in << dendl;
+  dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // journal write-behind.
   inode_t *pi = in->project_inode();
+  pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
   pi->version = in->pre_dirty();
   
   EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
@@ -1617,6 +1615,27 @@ void Locker::scatter_eval(ScatterLock *lock)
 }
 
 
+/*
+ * this is called by LogSegment::try_to_trim() when trying to 
+ * flush dirty scattered data (e.g. inode->dirlock mtime) back
+ * to the auth node.
+ */
+void Locker::scatter_try_unscatter(ScatterLock *lock, Context *c)
+{
+  dout(10) << "scatter_try_unscatter " << *lock << " on " << *lock->get_parent() << dendl;
+  assert(!lock->get_parent()->is_auth());
+  assert(!lock->get_parent()->is_ambiguous_auth());
+
+  // request unscatter?
+  if (lock->get_state() == LOCK_SCATTER) 
+    mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()),
+			  lock->get_parent()->authority().first, MDS_PORT_LOCKER);
+  
+  // wait...
+  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+}
+
+
 void Locker::scatter_sync(ScatterLock *lock)
 {
   dout(10) << "scatter_sync " << *lock
@@ -1646,7 +1665,6 @@ void Locker::scatter_sync(ScatterLock *lock)
       lock->init_gather();
     } else {
       if (!lock->is_wrlocked()) {
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
 	break; // do it now, we're fine
       }
     }
@@ -1720,7 +1738,6 @@ void Locker::scatter_scatter(ScatterLock *lock)
     send_lock_message(lock, LOCK_AC_SCATTER, data);
   } 
   lock->set_state(LOCK_SCATTER);
-  //lock->get_parent()->get(CInode::PIN_SCATTERED);
   lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
 }
 
@@ -1729,6 +1746,7 @@ void Locker::scatter_lock(ScatterLock *lock)
   dout(10) << "scatter_lock " << *lock
 	   << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
+  assert(lock->get_parent()->can_auth_pin());
   assert(lock->is_stable());
 
   switch (lock->get_state()) {
@@ -1751,7 +1769,6 @@ void Locker::scatter_lock(ScatterLock *lock)
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
 	!lock->get_parent()->is_replicated()) {
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
     }
 
@@ -1800,7 +1817,6 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
 	!lock->get_parent()->is_replicated()) {
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
     }
     
@@ -1820,8 +1836,6 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   lock->set_state(LOCK_TEMPSYNC);
   lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
 }
-
-
 
 
 
@@ -1853,7 +1867,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCK:
     assert(lock->get_state() == LOCK_SCATTER ||
 	   lock->get_state() == LOCK_SYNC);
-    
+
     // wait for wrlocks to close?
     if (lock->is_wrlocked()) {
       assert(lock->get_state() == LOCK_SCATTER);
@@ -1866,9 +1880,9 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 	      << " on " << *lock->get_parent() << dendl;
       lock->set_state(LOCK_GLOCKS);
     } else {
-      //if (lock->get_state() == LOCK_SCATTER) 
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
-
+      dout(7) << "handle_scatter_lock has no rd|wrlocks, sending lockack for " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      
       // encode and reply
       bufferlist data;
       lock->encode_locked_state(data);
@@ -1881,8 +1895,8 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_SCATTER:
     assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
+    lock->clear_updated();
     lock->set_state(LOCK_SCATTER);
-    //lock->get_parent()->get(CInode::PIN_SCATTERED);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
     break;
 
@@ -1910,15 +1924,31 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
   case LOCK_AC_REQSCATTER:
     if (lock->is_stable()) {
-      dout(7) << "handle_scatter_lock got scatter request on " << *lock << " on " << *lock->get_parent()
-	      << dendl;
+      /* NOTE: we can do this _even_ if !can_auth_pin (i.e. freezing)
+       *  because the replica should be holding an auth_pin if they're
+       *  doing this (and thus, we are freezing, not frozen, and indefinite
+       *  starvation isn't an issue).
+       */
+      dout(7) << "handle_scatter_lock got scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
       scatter_scatter(lock);
     } else {
-      dout(7) << "handle_scatter_lock ignoring scatter request on " << *lock << " on " << *lock->get_parent()
-	      << dendl;
+      dout(7) << "handle_scatter_lock ignoring scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
     }
     break;
 
+  case LOCK_AC_REQUNSCATTER:
+    if (lock->is_stable() &&
+	lock->get_parent()->can_auth_pin()) {
+      dout(7) << "handle_scatter_lock got unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      scatter_lock(lock);
+    } else {
+      dout(7) << "handle_scatter_lock ignoring unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      /* FIXME: if we can't auth_pin here, this request is effectively lost... */
+    }
   }
 
   delete m;

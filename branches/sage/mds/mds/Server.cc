@@ -3192,11 +3192,14 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	assert(mdr->inode_import.length() > 0);
 	bufferlist::iterator blp = mdr->inode_import.begin();
 	map<int,entity_inst_t> imported_client_map;
+	list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
 	::_decode_simple(imported_client_map, blp);
 	mdcache->migrator->decode_import_inode(destdn, blp, 
 					       srcdn->authority().first,
 					       imported_client_map,
-					       mdr->ls);
+					       mdr->ls,
+					       updated_scatterlocks);
+	destdn->inode->dirlock.clear_updated();   
       }
       if (destdn->inode->is_auth())
 	destdn->inode->mark_dirty(mdr->pvmap[destdn], mdr->ls);

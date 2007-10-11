@@ -145,22 +145,22 @@ mkmonmap: mkmonmap.cc common.o
 extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
+cmon: cmon.o mon.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
+cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
+cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o
+csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o
+cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 

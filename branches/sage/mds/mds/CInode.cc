@@ -565,7 +565,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     _decode(tm, bl, off);
     if (inode.mtime < tm) {
       inode.mtime = tm;
-      dirlock.set_updated();
+      if (is_auth()) {
+	dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
+		 << ", setting dirlock updated flag on " << *this
+		 << dendl;
+	dirlock.set_updated();
+      }
     }
     if (0) {
       map<frag_t,int> dfsz;
@@ -788,13 +793,22 @@ void CInode::encode_export(bufferlist& bl)
 void CInode::finish_export(utime_t now)
 {
   pop.zero(now);
+
+  // just in case!
+  dirlock.clear_updated();
 }
 
 void CInode::decode_import(bufferlist::iterator& p,
 			   set<int>& new_client_caps, 
 			   LogSegment *ls)
 {
+  utime_t old_mtime = inode.mtime;
   ::_decode_simple(inode, p);
+  if (old_mtime > inode.mtime) {
+    assert(dirlock.is_updated());
+    inode.mtime = old_mtime;     // preserve our mtime, if it is larger
+  }
+
   ::_decode_simple(symlink, p);
   dirfragtree._decode(p);
 

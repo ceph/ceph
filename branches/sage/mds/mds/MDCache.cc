@@ -3612,8 +3612,8 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
-    //if (!migrator->is_importing() && !migrator->is_exporting())
-    //show_cache();
+    if (!migrator->is_importing() && !migrator->is_exporting())
+      show_cache();
     return false;
   }
   assert(subtrees.empty());
@@ -5018,10 +5018,8 @@ void MDCache::handle_discover(MDiscover *dis)
     if (!cur) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
 	      << " don't have base ino " << dis->get_base_ino() 
-	      << ", dropping" << dendl;
-      delete reply;
-      assert(0); // hmm: when does this happen?
-      return;
+	      << dendl;
+      reply->set_flag_error_dir();
     }
 
     if (dis->wants_base_dir()) {
@@ -5038,12 +5036,11 @@ void MDCache::handle_discover(MDiscover *dis)
   }
 
   assert(reply);
-  assert(cur);
   
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
   for (unsigned i = 0; 
-       i < dis->get_want().depth() || dis->get_want().depth() == 0; 
+       cur && (i < dis->get_want().depth() || dis->get_want().depth() == 0); 
        i++) {
 
     // -- figure out the dir
@@ -5354,10 +5351,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     cur = add_replica_inode(m->get_inode(i), dn, finished);
   }
 
-  // dir_auth hint?
-  if (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN &&
-      m->get_dir_auth_hint() != mds->get_nodeid()) {
-    dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << dendl;
+  // dir error?
+  // or dir_auth hint?
+  if (m->is_flag_error_dir() && !cur->is_dir()) {
+    // not a dir.
+    cur->take_waiting(CInode::WAIT_DIR, error);
+  } else if (m->is_flag_error_dir() ||
+	     (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN &&
+	      m->get_dir_auth_hint() != mds->get_nodeid())) {
+    int who = m->get_dir_auth_hint();
+    if (who == mds->get_nodeid()) who = -1;
+    if (who >= 0)
+      dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << dendl;
 
     // try again?
     if (m->get_error_dentry().length()) {
@@ -5374,8 +5379,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		  << m->get_error_dentry() << dendl;
       } else {
 	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_error_dentry(), 0, m->get_wanted_xlocked(), 
-			m->get_dir_auth_hint());
+	  discover_path(cur, m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
 	else
 	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }
@@ -5383,14 +5387,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       // wanted just the dir
       frag_t fg = m->get_base_dir_frag();
       if (cur->get_dirfrag(fg) == 0 && cur->is_waiter_for(CInode::WAIT_DIR))
-	discover_dir_frag(cur, fg, 0, m->get_dir_auth_hint());
+	discover_dir_frag(cur, fg, 0, who);
       else
 	dout(7) << " doing nothing, nobody is waiting for dir" << dendl;	  
     }
-  } else if (m->is_flag_error_dir()) {
-    dout(7) << " flag_error_dir on " << *cur << dendl;
-    //assert(!cur->is_dir());  // this assert might be racey if dir auth != inode auth?
-    cur->take_waiting(CInode::WAIT_DIR, error);
   }
 
   // waiters

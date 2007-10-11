@@ -583,7 +583,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   dir->get(CDir::PIN_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), export_peer[dir], MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin();
@@ -1604,7 +1604,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 			dir,                 // import root
 			le,
 			imported_client_map,
-			mds->mdlog->get_current_segment());
+			mds->mdlog->get_current_segment(),
+			import_updated_scatterlocks[dir]);
   }
   dout(10) << " " << m->get_bounds().size() << " imported bounds" << dendl;
   
@@ -1782,6 +1783,7 @@ void Migrator::import_reverse_final(CDir *dir)
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
   import_bound_ls.erase(dir);
+  import_updated_scatterlocks.erase(dir);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -1823,6 +1825,12 @@ void Migrator::import_finish(CDir *dir)
   // log finish
   mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
+  // clear updated scatterlocks
+  for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
+       p != import_updated_scatterlocks[dir].end();
+       ++p) 
+    (*p)->clear_updated();
+
   // remove pins
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -1837,6 +1845,7 @@ void Migrator::import_finish(CDir *dir)
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
   import_bound_ls.erase(dir);
+  import_updated_scatterlocks.erase(dir);
 
   // process delayed expires
   cache->process_delayed_expire(dir);
@@ -1861,7 +1870,8 @@ void Migrator::import_finish(CDir *dir)
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth,
 				   map<int,entity_inst_t>& imported_client_map, 
-				   LogSegment *ls)
+				   LogSegment *ls,
+				   list<ScatterLock*>& updated_scatterlocks)
 {  
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
@@ -1895,8 +1905,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
     dout(10) << "  had " << *in << dendl;
   }
   
-  // clear if dirtyscattered, since we're journaling this
-  in->dirlock.clear_updated();
+  // clear if dirtyscattered, since we're going to journal this
+  //  but not until we _actually_ finish the import...
+  if (in->dirlock.is_updated())
+    updated_scatterlocks.push_back(&in->dirlock);
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
@@ -1925,7 +1937,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 				CDir *import_root,
 				EImportStart *le,
 				map<int,entity_inst_t>& imported_client_map,
-				LogSegment *ls)
+				LogSegment *ls,
+				list<ScatterLock*>& updated_scatterlocks)
 {
   // set up dir
   dirfrag_t df;
@@ -2019,7 +2032,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     }
     else if (icode == 'I') {
       // inode
-      decode_import_inode(dn, blp, oldauth, imported_client_map, ls);
+      decode_import_inode(dn, blp, oldauth, imported_client_map, ls, updated_scatterlocks);
     }
     
     // add dentry to journal entry

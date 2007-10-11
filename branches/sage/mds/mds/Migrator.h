@@ -113,7 +113,7 @@ protected:
   map<dirfrag_t,int>              import_peer;
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
-
+  map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
 
   /*
   // -- hashing madness --
@@ -224,13 +224,15 @@ public:
 public:
   void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
 			   map<int,entity_inst_t>& imported_client_map,
-			   LogSegment *ls);
+			   LogSegment *ls,
+			   list<ScatterLock*>& updated_scatterlocks);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
 			map<int,entity_inst_t>& imported_client_map,
-			LogSegment *ls);
+			LogSegment *ls,
+			list<ScatterLock*>& updated_scatterlocks);
 
 public:
   void import_reverse(CDir *dir);
