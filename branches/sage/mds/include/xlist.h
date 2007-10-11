@@ -42,6 +42,11 @@ private:
 
 public:
   xlist() : _front(0), _back(0), _size(0) {}
+  ~xlist() { 
+    assert(_size == 0);
+    assert(_front == 0);
+    assert(_back == 0);
+  }
 
   int size() { return _size; }
   bool empty() { 
