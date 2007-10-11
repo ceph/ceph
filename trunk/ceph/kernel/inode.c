@@ -3,12 +3,6 @@
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
 #include "ceph_fs.h"
-/* #include <linux/mm.h>
-#include <linux/init.h>
-#include <linux/buffer_head.h>
-#include <linux/vfs.h>
-#include <asm/uaccess.h>
-#include "ceph_fs.h"  */
 
 MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_DESCRIPTION("Ceph filesystem for Linux");
