@@ -1,19 +1,52 @@
+/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
+ * vim: ts=8 sw=8 smarttab
+ */
+
 #ifndef _FS_CEPH_CEPH_H
 #define _FS_CEPH_CEPH_H
 
 /* #include <linux/ceph_fs.h> */
 
+#include "kmsg.h"
+
+/* do these later
+#include "osdmap.h"
+#include "mdsmap.h"
+#include "monmap.h"
+*/
+struct ceph_monmap;
+struct ceph_osdmap;
+struct ceph_mdsmap;
+
+
+
+/*
+ * state associated with an individual MDS<->client session
+ */
+struct ceph_mds_session {
+	__u64 s_push_seq;  
+	/* wait queue? */
+};
+
+
 /*
  * CEPH file system in-core superblock info
- * taken from OSDSuperblock from osd_types.h ??  check with sage
  */
 struct ceph_sb_info {
-	uint64_t magic;
-	uint64_t fsid;
-	int32_t  whoami;
-	uint32_t current_epoch;
-	uint32_t oldest_map;
-	uint32_t newest_map;
+	__u32  s_whoami;               /* client number */
+	struct ceph_kmsg   *s_kmsg;    /* messenger instance */
+
+	struct ceph_monmap *s_monmap;  /* monitor map */
+	struct ceph_mdsmap *s_mdsmap;  /* mds map */
+	struct ceph_osdmap *s_osdmap;  /* osd map */
+
+	/* mds sessions */
+	struct ceph_mds_session **s_mds_sessions;     /* sparse array; elements NULL if no session */
+	int                      s_max_mds_sessions;  /* size of s_mds_sessions array */
+
+	/* current requests */
+	/* ... */
+	__u64 last_tid;
 };
 
 /*
