@@ -114,40 +114,34 @@ void Migrator::export_empty_import(CDir *dir)
   dout(7) << "export_empty_import " << *dir << dendl;
   assert(dir->is_subtree_root());
 
-  if (dir->inode->is_auth()) return;
-  if (!dir->is_auth()) return;
-  
-  //if (dir->inode->is_freezing() || dir->inode->is_frozen()) return;
-  if (dir->is_freezing() || dir->is_frozen()) return;
-  
+  if (dir->inode->is_auth()) {
+    dout(7) << " inode is auth" << dendl;
+    return;
+  }
+  if (!dir->is_auth()) {
+    dout(7) << " not auth" << dendl;
+    return;
+  }
+  if (dir->is_freezing() || dir->is_frozen()) {
+    dout(7) << " freezing or frozen" << dendl;
+    return;
+  }
   if (dir->get_size() > 0) {
-    dout(7) << "not actually empty" << dendl;
+    dout(7) << " not actually empty" << dendl;
     return;
   }
-
   if (dir->inode->is_root()) {
-    dout(7) << "root" << dendl;
+    dout(7) << " root" << dendl;
     return;
   }
-  
-  // is it really empty?
-  /* who cares!  nothing cached, so clearly unimportant.  export it!
-  if (!dir->is_complete()) {
-    dout(7) << "not complete, fetching." << dendl;
-    dir->fetch(new C_MDC_EmptyImport(this,dir));
-    return;
-  }
-  */
   
   int dest = dir->inode->authority().first;
-  
-  // comment this out ot wreak havoc?
   //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
   
-  dout(7) << "really empty, exporting to " << dest << dendl;
+  dout(7) << " really empty, exporting to " << dest << dendl;
   assert (dest != mds->get_nodeid());
   
-  dout(-7) << "exporting to mds" << dest 
+  dout(7) << "exporting to mds" << dest 
            << " empty import " << *dir << dendl;
   export_dir( dir, dest );
 }
@@ -1106,6 +1100,23 @@ void Migrator::export_reverse(CDir *dir)
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
   cache->try_subtree_merge(dir);
 
+  // remove exporting pins
+  list<CDir*> rq;
+  rq.push_back(dir);
+  while (!rq.empty()) {
+    CDir *dir = rq.front(); 
+    rq.pop_front();
+    dir->abort_export();
+    for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
+      p->second->abort_export();
+      if (!p->second->is_primary()) continue;
+      CInode *in = p->second->get_inode();
+      in->abort_export();
+      if (in->is_dir())
+	in->get_nested_dirfrags(rq);
+    }
+  }
+  
   // unpin bounds
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();

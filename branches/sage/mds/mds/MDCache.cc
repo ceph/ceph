@@ -352,8 +352,10 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
   CDir *root;
   if (dir->ino() < MDS_INO_BASE) {
     root = dir;  // bootstrap hack.
-    if (subtrees.count(root) == 0)
+    if (subtrees.count(root) == 0) {
       subtrees[root].clear();
+      root->get(CDir::PIN_SUBTREE);
+    }
   } else {
     root = get_subtree_root(dir);  // subtree root
   }
@@ -369,6 +371,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
     dout(10) << "  new subtree at " << *dir << dendl;
     assert(subtrees.count(dir) == 0);
     subtrees[dir].clear();      // create empty subtree bounds list for me.
+    dir->get(CDir::PIN_SUBTREE);
 
     // set dir_auth
     dir->set_dir_auth(auth);
@@ -406,52 +409,9 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
     eval_subtree_root(dir);
   }
 
-  // adjust export pins
-  adjust_export_state(dir);
-  for (set<CDir*>::iterator p = subtrees[dir].begin();
-       p != subtrees[dir].end();
-       ++p) 
-    adjust_export_state(*p);
-  
   show_subtrees();
 }
 
-
-/*
- * any "export" point must be pinned in cache to ensure a proper
- * chain of delegation.  we do this by pinning when a dir is nonauth
- * but the inode is auth.
- *
- * import points don't need to be pinned the same way simply because the
- * exporting mds is pinning the exprot (as above) thus the dir is
- * always open on the importer.
- */
-void MDCache::adjust_export_state(CDir *dir)
-{
-  dout(15) << "adjust_export_state, me " << mds->get_nodeid() << dendl;
-  dout(15) << " inode " << dir->get_inode()->authority().first << " " << *dir->get_inode() << dendl;
-  dout(15) << "   dir " << dir->authority().first << " " << *dir << dendl;
-
-  // be auth bit agnostic, so that we work during recovery
-  //  (before recalc_auth_bits)
-  if (dir->authority().first        != mds->get_nodeid() &&
-      dir->inode->authority().first == mds->get_nodeid()) {
-    // export.
-    if (!dir->state_test(CDir::STATE_EXPORT)) {
-      dout(10) << "adjust_export_state pinning new export " << *dir << dendl;
-      dir->state_set(CDir::STATE_EXPORT);
-      dir->get(CDir::PIN_EXPORT);
-    }
-  } 
-  else {
-    // not export.
-    if (dir->state_test(CDir::STATE_EXPORT)) {
-      dout(10) << "adjust_export_state unpinning old export " << *dir << dendl;
-      dir->state_clear(CDir::STATE_EXPORT);
-      dir->put(CDir::PIN_EXPORT);
-    }
-  }
-}
 
 void MDCache::try_subtree_merge(CDir *dir)
 {
@@ -505,6 +465,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       subtrees[parent].insert(*p);
     
     // we are no longer a subtree or bound
+    dir->put(CDir::PIN_SUBTREE);
     subtrees.erase(dir);
     subtrees[parent].erase(dir);
 
@@ -583,8 +544,10 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
   CDir *root;
   if (dir->ino() < MDS_INO_BASE) {
     root = dir;  // bootstrap hack.
-    if (subtrees.count(root) == 0) 
+    if (subtrees.count(root) == 0) {
       subtrees[root].clear();
+      root->get(CDir::PIN_SUBTREE);
+    }
   } else {
     root = get_subtree_root(dir);  // subtree root
   }
@@ -602,6 +565,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
     dout(10) << "  new subtree at " << *dir << dendl;
     assert(subtrees.count(dir) == 0);
     subtrees[dir].clear();      // create empty subtree bounds list for me.
+    dir->get(CDir::PIN_SUBTREE);
     
     // set dir_auth
     dir->set_dir_auth(auth);
@@ -673,13 +637,6 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
     }
     p = n;
   }
-
-  // adjust export pins
-  adjust_export_state(dir);
-  for (set<CDir*>::iterator p = subtrees[dir].begin();
-       p != subtrees[dir].end();
-       ++p) 
-    adjust_export_state(*p);
 
   // bound should now match.
   verify_subtree_bounds(dir, bounds);
@@ -756,6 +713,7 @@ void MDCache::remove_subtree(CDir *dir)
   assert(subtrees.count(dir));
   assert(subtrees[dir].empty());
   subtrees.erase(dir);
+  dir->put(CDir::PIN_SUBTREE);
   if (dir->get_parent_dir()) {
     CDir *p = get_subtree_root(dir->get_parent_dir());
     assert(subtrees[p].count(dir));
@@ -2979,39 +2937,14 @@ bool MDCache::trim(int max)
 
   map<int, MCacheExpire*> expiremap;
 
-  // DENTRIES from the LRU
-
+  // trim dentries from the LRU
   while (lru.lru_get_size() > (unsigned)max) {
     CDentry *dn = (CDentry*)lru.lru_expire();
     if (!dn) break;
     trim_dentry(dn, expiremap);
   }
 
-  // trim root inode+dir?
-  if (max == 0 &&  // only if we're trimming everything!
-      lru.lru_get_size() == 0) {
-    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
-    while (p != inode_map.end()) {
-      hash_map<inodeno_t,CInode*>::iterator n = p;
-      n++;
-      
-      CInode *in = p->second;
-
-      list<CDir*> ls;
-      in->get_dirfrags(ls);
-      for (list<CDir*>::iterator q = ls.begin();
-	   q != ls.end();
-	   ++q) 
-	if ((*q)->get_num_ref() == 0) 
-	  trim_dirfrag(*q, *q, expiremap);
-      
-      // root inode?
-      if (in->get_num_ref() == 0)
-	trim_inode(0, in, 0, expiremap);    // hrm, FIXME
-      
-      p = n;
-    } 
-  }
+  // trim base inodes?
   if (max == 0) {
     set<CInode*>::iterator p = base_inodes.begin();
     while (p != base_inodes.end()) {
@@ -3020,7 +2953,7 @@ bool MDCache::trim(int max)
       in->get_dirfrags(ls);
       for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	CDir *dir = *p;
-	if (dir->get_num_ref() == 0) 
+	if (dir->get_num_ref() == 1)  // subtree pin
 	  trim_dirfrag(dir, 0, expiremap);
       }
       if (in->get_num_ref() == 0)
@@ -3028,7 +2961,7 @@ bool MDCache::trim(int max)
     }
   }
 
-  // send!
+  // send any expire messages
   send_expire_messages(expiremap);
 
   return true;
@@ -3113,9 +3046,14 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
 
 void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expiremap)
 {
-  assert(dir->get_num_ref() == 0);
-
   dout(15) << "trim_dirfrag " << *dir << dendl;
+
+  if (dir->is_subtree_root()) {
+    assert(!dir->is_auth() ||
+	   (!dir->is_replicated() && dir->inode->is_base()));
+    remove_subtree(dir);	// remove from subtree map
+  }
+  assert(dir->get_num_ref() == 0);
 
   CInode *in = dir->get_inode();
 
@@ -3148,11 +3086,6 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expire
     }
   }
   
-  if (dir->is_subtree_root()) {
-    assert(!dir->is_auth() ||
-	   (!dir->is_replicated() && dir->inode->is_base()));
-    remove_subtree(dir);	// remove from subtree map
-  }
   in->close_dirfrag(dir->dirfrag().frag);
 }
 

@@ -302,6 +302,9 @@ public:
   // -- import/export --
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
+  void abort_export() {
+    put(PIN_TEMPEXPORTING);
+  }
   void decode_import(bufferlist::iterator& p,
 		     set<int>& new_client_caps, 
 		     LogSegment *ls);

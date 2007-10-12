@@ -391,6 +391,7 @@ class MDSCacheObject {
   const static int PIN_DIRTYSCATTERED = 1005;   // make this neg if we start using multiple scatterlocks?  
   static const int PIN_AUTHPIN    =  1006;
   static const int PIN_PTRWAITER  = -1007;
+  const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
 
   const char *generic_pin_name(int p) {
     switch (p) {
@@ -402,6 +403,7 @@ class MDSCacheObject {
     case PIN_DIRTYSCATTERED: return "dirtyscattered";
     case PIN_AUTHPIN: return "authpin";
     case PIN_PTRWAITER: return "ptrwaiter";
+    case PIN_TEMPEXPORTING: return "tempexporting";
     default: assert(0); return 0;
     }
   }

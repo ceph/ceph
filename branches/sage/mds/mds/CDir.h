@@ -55,7 +55,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_INOWAITER =    2;
   static const int PIN_CHILD =        3;
   static const int PIN_FROZEN =       4;
-  static const int PIN_EXPORT =       5;
+  static const int PIN_SUBTREE =      5;
   static const int PIN_IMPORTING =    7;
   static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
@@ -68,7 +68,7 @@ class CDir : public MDSCacheObject {
     case PIN_INOWAITER: return "inowaiter";
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
-    case PIN_EXPORT: return "export";
+    case PIN_SUBTREE: return "subtree";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
@@ -87,8 +87,6 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_FREEZINGDIR =   (1<< 5);
   static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
   static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
-  static const unsigned STATE_DELETED =       (1<< 8);
-  static const unsigned STATE_EXPORT    =     (1<< 9);
   static const unsigned STATE_IMPORTBOUND =   (1<<10);
   static const unsigned STATE_EXPORTBOUND =   (1<<11);
   static const unsigned STATE_EXPORTING =     (1<<12);
@@ -106,8 +104,8 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_EXPORTED = 
   (STATE_COMPLETE|STATE_DIRTY);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
-  (STATE_EXPORT
-   |STATE_IMPORTING
+  (						  
+   STATE_IMPORTING
    |STATE_IMPORTBOUND|STATE_EXPORTBOUND
    |STATE_FROZENTREE
    |STATE_STICKY);
@@ -116,12 +114,10 @@ class CDir : public MDSCacheObject {
    |STATE_IMPORTBOUND|STATE_EXPORTBOUND
    |STATE_FROZENTREE
    |STATE_FROZENDIR
-   |STATE_EXPORT
    |STATE_STICKY);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_COMPLETE |
-   STATE_EXPORT |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND);
 
@@ -410,6 +406,9 @@ public:
   // -- import/export --
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
+  void abort_export() { 
+    put(PIN_TEMPEXPORTING);
+  }
   void decode_import(bufferlist::iterator& blp);
 
 

@@ -217,6 +217,7 @@ public:
     ::_encode_simple(projected_version, bl);
     lock._encode(bl);
     ::_encode_simple(replica_map, bl);
+    get(PIN_TEMPEXPORTING);
   }
   void finish_export() {
     // twiddle
@@ -225,6 +226,10 @@ public:
     state_clear(CDentry::STATE_AUTH);
     if (is_dirty())
       mark_clean();
+    put(PIN_TEMPEXPORTING);
+  }
+  void abort_export() {
+    put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
     int nstate;

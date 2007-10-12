@@ -497,7 +497,6 @@ void CDir::purge_stolen(list<Context*>& waiters)
   if (is_auth()) 
     clear_replica_map();
   if (is_dirty()) mark_clean();
-  if (state_test(STATE_EXPORT)) put(PIN_EXPORT);
   if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
   if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
 
@@ -510,7 +509,6 @@ void CDir::init_fragment_pins()
 {
   if (!replica_map.empty()) get(PIN_REPLICATED);
   if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
-  if (state_test(STATE_EXPORT)) get(PIN_EXPORT);
   if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
   if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
 }
@@ -1292,7 +1290,9 @@ void CDir::encode_export(bufferlist& bl)
   ::_encode_simple(pop_auth_subtree, bl);
 
   ::_encode_simple(dir_rep_by, bl);  
-  ::_encode_simple(replica_map, bl);  
+  ::_encode_simple(replica_map, bl);
+
+  get(PIN_TEMPEXPORTING);
 }
 
 void CDir::finish_export(utime_t now)
@@ -1300,6 +1300,7 @@ void CDir::finish_export(utime_t now)
   pop_auth_subtree_nested -= pop_auth_subtree;
   pop_me.zero(now);
   pop_auth_subtree.zero(now);
+  put(PIN_TEMPEXPORTING);
 }
 
 void CDir::decode_import(bufferlist::iterator& blp)

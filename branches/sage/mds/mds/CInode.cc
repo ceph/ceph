@@ -788,6 +788,8 @@ void CInode::encode_export(bufferlist& bl)
   dirfragtreelock._encode(bl);
   filelock._encode(bl);
   dirlock._encode(bl);
+
+  get(PIN_TEMPEXPORTING);
 }
 
 void CInode::finish_export(utime_t now)
@@ -796,6 +798,8 @@ void CInode::finish_export(utime_t now)
 
   // just in case!
   dirlock.clear_updated();
+
+  put(PIN_TEMPEXPORTING);
 }
 
 void CInode::decode_import(bufferlist::iterator& p,

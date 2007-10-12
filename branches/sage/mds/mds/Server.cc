@@ -3495,6 +3495,8 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       }
     }
 
+    // FIXME: reverse srci export?
+
     dout(-10) << "  srcdn back to " << *srcdn << dendl;
     dout(-10) << "   srci back to " << *srcdn->inode << dendl;
     dout(-10) << " destdn back to " << *destdn << dendl;

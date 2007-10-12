@@ -313,7 +313,6 @@ public:
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
-  void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
   void subtree_merge_writebehind_finish(CInode *in, LogSegment *ls);
