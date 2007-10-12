@@ -43,6 +43,7 @@ using namespace std;
 #include "include/Context.h"
 
 class MDS;
+class LogSegment;
 
 // generic log event
 class LogEvent {
@@ -53,8 +54,10 @@ class LogEvent {
   friend class MDLog;
 
  public:
+  LogSegment *_segment;
+
   LogEvent(int t) : 
-    _type(t), _start_off(0), _end_off(0) { }
+    _type(t), _start_off(0), _end_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
   int get_type() { return _type; }
@@ -72,28 +75,15 @@ class LogEvent {
   }
 
   /*** live journal ***/
-
-  /* obsolete() - is this entry committed to primary store, such that
-   *   we can expire it from the journal?
+  /* update_segment() - adjust any state we need to in the LogSegment 
    */
-  virtual bool has_expired(MDS *m) {
-    return true;
-  }
-  
-  /* expire() - prod MDS into committing the relevant state so that this
-   *   entry can be expired from the jorunal.
-   */
-  virtual void expire(MDS *m, Context *c) {
-    assert(0);
-    c->finish(0);
-    delete c;
-  }
+  virtual void update_segment() { }
 
-  
   /*** recovery ***/
   /* replay() - replay given event.  this is idempotent.
    */
   virtual void replay(MDS *m) { assert(0); }
+
 
 };
 

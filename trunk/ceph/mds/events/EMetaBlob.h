@@ -23,8 +23,11 @@ using std::string;
 #include "../CDir.h"
 #include "../CDentry.h"
 
+#include "include/triple.h"
+
 class MDS;
 class MDLog;
+class LogSegment;
 
 /*
  * a bunch of metadata in the journal
@@ -62,7 +65,7 @@ class EMetaBlob {
       ::_encode(dn, bl);
       ::_encode(dnv, bl);
       ::_encode(inode, bl);
-      ::_encode(dirfragtree, bl);
+      dirfragtree._encode(bl);
       if (inode.is_symlink())
 	::_encode(symlink, bl);
       ::_encode(dirty, bl);
@@ -71,7 +74,7 @@ class EMetaBlob {
       ::_decode(dn, bl, off);
       ::_decode(dnv, bl, off);
       ::_decode(inode, bl, off);
-      ::_decode(dirfragtree, bl, off);
+      dirfragtree._decode(bl, off);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
       ::_decode(dirty, bl, off);
@@ -161,7 +164,7 @@ public:
     list<nullbit>   dnull;
 
   public:
-    dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
+    dirlump() : dirv(0), state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
@@ -242,7 +245,7 @@ private:
   version_t alloc_tablev;
 
   // inodes i've destroyed.
-  list< pair<inode_t,off_t> > truncated_inodes;
+  list< triple<inodeno_t,off_t,off_t> > truncated_inodes;
 
   // idempotent op(s)
   list<metareqid_t> client_reqs;
@@ -252,7 +255,10 @@ private:
   off_t last_subtree_map;
   off_t my_offset;
 
-  EMetaBlob() : last_subtree_map(0), my_offset(0) { }
+  // for replay, in certain cases
+  LogSegment *_segment;
+
+  EMetaBlob() : last_subtree_map(0), my_offset(0), _segment(0) { }
   EMetaBlob(MDLog *mdl);  // defined in journal.cc
 
   void print(ostream& out) {
@@ -280,8 +286,8 @@ private:
     alloc_tablev = tablev;
   }
 
-  void add_inode_truncate(const inode_t& inode, off_t newsize) {
-    truncated_inodes.push_back(pair<inode_t,off_t>(inode, newsize));
+  void add_inode_truncate(inodeno_t ino, off_t newsize, off_t oldsize) {
+    truncated_inodes.push_back(triple<inodeno_t,off_t,off_t>(ino, newsize, oldsize));
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {
@@ -483,7 +489,8 @@ private:
 
   bool has_expired(MDS *mds);
   void expire(MDS *mds, Context *c);
-  void replay(MDS *mds);
+  void update_segment(LogSegment *ls);
+  void replay(MDS *mds, LogSegment *ls=0);
 };
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {

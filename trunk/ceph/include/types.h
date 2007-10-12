@@ -242,13 +242,13 @@ struct inode_t {
   // base (immutable)
   inodeno_t ino;
   FileLayout layout;  // ?immutable?
-  dev_t      rdev;    // if special file
+  uint32_t   rdev;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
 
   // perm (namespace permissions)
-  mode_t     mode;
+  uint32_t   mode;
   uid_t      uid;
   gid_t      gid;
 
@@ -257,7 +257,7 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
-  off_t      size, max_size, allocated_size;
+  int64_t    size, max_size, allocated_size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
  

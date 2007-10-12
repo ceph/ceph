@@ -838,6 +838,8 @@ void OSD::send_pg_stats()
 bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
 {
   bool shared = false;
+  dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
+  assert(osd_lock.is_locked());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -851,8 +853,10 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
   // does peer have old map?
   if (inst.name.is_osd()) {
     // remember
-    if (peer_map_epoch[inst.name] < epoch)
+    if (peer_map_epoch[inst.name] < epoch) {
+      dout(20) << "peer " << inst.name << " has " << epoch << dendl;
       peer_map_epoch[inst.name] = epoch;
+    }
     
     // older?
     if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {

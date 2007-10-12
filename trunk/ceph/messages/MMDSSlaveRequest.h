@@ -35,9 +35,6 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RENAMEPREP =     7;
   static const int OP_RENAMEPREPACK = -7;
 
-  static const int OP_RENAMEGETINODE =     8;
-  static const int OP_RENAMEGETINODEACK = -8;
-
   static const int OP_FINISH = 17;  
 
   static const int OP_ABORT =  20;  // used for recovery only
@@ -58,8 +55,6 @@ class MMDSSlaveRequest : public Message {
 
     case OP_RENAMEPREP: return "rename_prep";
     case OP_RENAMEPREPACK: return "rename_prep_ack";
-    case OP_RENAMEGETINODE: return "rename_get_inode";
-    case OP_RENAMEGETINODEACK: return "rename_get_inode_ack";
 
     case OP_FINISH: return "finish"; // commit
     case OP_ABORT: return "abort";
@@ -84,9 +79,10 @@ class MMDSSlaveRequest : public Message {
   // for rename prep
   string srcdnpath;
   string destdnpath;
-  set<int> srcdn_replicas;
+  set<int> witnesses;
   bufferlist inode_export;
   version_t inode_export_v;
+  bufferlist srci_replica;
   utime_t now;
 
   bufferlist stray;  // stray dir + dentry
@@ -116,26 +112,28 @@ public:
     ::_encode_complex(authpins, payload);
     ::_encode(srcdnpath, payload);
     ::_encode(destdnpath, payload);
-    ::_encode(srcdn_replicas, payload);
+    ::_encode(witnesses, payload);
     ::_encode(now, payload);
     ::_encode(inode_export, payload);
     ::_encode(inode_export_v, payload);
+    ::_encode(srci_replica, payload);
     ::_encode(stray, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(reqid, payload, off);
-    ::_decode(op, payload, off);
-    ::_decode(lock_type, payload, off);
-    object_info._decode(payload, off);
-    ::_decode_complex(authpins, payload, off);
-    ::_decode(srcdnpath, payload, off);
-    ::_decode(destdnpath, payload, off);
-    ::_decode(srcdn_replicas, payload, off);
-    ::_decode(now, payload, off);
-    ::_decode(inode_export, payload, off);
-    ::_decode(inode_export_v, payload, off);
-    ::_decode(stray, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(reqid, p);
+    ::_decode_simple(op, p);
+    ::_decode_simple(lock_type, p);
+    object_info._decode(p);
+    ::_decode_complex(authpins, p);
+    ::_decode_simple(srcdnpath, p);
+    ::_decode_simple(destdnpath, p);
+    ::_decode_simple(witnesses, p);
+    ::_decode_simple(now, p);
+    ::_decode_simple(inode_export, p);
+    ::_decode_simple(inode_export_v, p);
+    ::_decode_simple(srci_replica, p);
+    ::_decode_simple(stray, p);
   }
 
   char *get_type_name() { return "slave_request"; }

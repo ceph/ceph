@@ -64,15 +64,15 @@ class MMDSCacheRejoin : public Message {
     inode_full(const inode_t& i, const string& s, const fragtree_t& f) :
       inode(i), symlink(s), dirfragtree(f) {}
 
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(inode, bl, off);
-      ::_decode(symlink, bl, off);
-      ::_decode(dirfragtree, bl, off);
+    void _decode(bufferlist::iterator& p) {
+      ::_decode_simple(inode, p);
+      ::_decode_simple(symlink, p);
+      dirfragtree._decode(p);
     }
     void _encode(bufferlist& bl) const {
       ::_encode(inode, bl);
       ::_encode(symlink, bl);
-      ::_encode(dirfragtree, bl);
+      dirfragtree._encode(bl);
     }
   };
 
@@ -205,24 +205,24 @@ class MMDSCacheRejoin : public Message {
     ::_encode(xlocked_dentries, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(op, payload, off);
-    ::_decode(strong_inodes, payload, off);
-    ::_decode_complex(full_inodes, payload, off);
-    ::_decode(authpinned_inodes, payload, off);
-    ::_decode(xlocked_inodes, payload, off);
-    ::_decode(cap_export_bl, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(op, p);
+    ::_decode_simple(strong_inodes, p);
+    ::_decode_complex(full_inodes, p);
+    ::_decode_simple(authpinned_inodes, p);
+    ::_decode_simple(xlocked_inodes, p);
+    ::_decode_simple(cap_export_bl, p);
     if (cap_export_bl.length()) {
-      int off = 0;
-      ::_decode(cap_exports, cap_export_bl, off);
-      ::_decode(cap_export_paths, cap_export_bl, off);
+      bufferlist::iterator q = cap_export_bl.begin();
+      ::_decode_simple(cap_exports, q);
+      ::_decode_simple(cap_export_paths, q);
     }
-    ::_decode(strong_dirfrags, payload, off);
-    ::_decode(weak, payload, off);
-    ::_decode(weak_inodes, payload, off);
-    ::_decode(strong_dentries, payload, off);
-    ::_decode(authpinned_dentries, payload, off);
-    ::_decode(xlocked_dentries, payload, off);
+    ::_decode_simple(strong_dirfrags, p);
+    ::_decode_simple(weak, p);
+    ::_decode_simple(weak_inodes, p);
+    ::_decode_simple(strong_dentries, p);
+    ::_decode_simple(authpinned_dentries, p);
+    ::_decode_simple(xlocked_dentries, p);
   }
 
 };

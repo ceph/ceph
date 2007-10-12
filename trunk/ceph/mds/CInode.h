@@ -46,7 +46,7 @@ class Message;
 class CInode;
 class CInodeDiscover;
 class MDCache;
-
+class LogSegment;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -65,6 +65,9 @@ class CInode : public MDSCacheObject {
   static const int PIN_BATCHOPENJOURNAL = 9;
   static const int PIN_SCATTERED =        10;
   static const int PIN_STICKYDIRS =       11;
+  static const int PIN_PURGING =         -12;	
+  static const int PIN_FREEZING =         13;
+  static const int PIN_FROZEN =           14;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -78,6 +81,8 @@ class CInode : public MDSCacheObject {
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
     case PIN_STICKYDIRS: return "stickydirs";
+    case PIN_FREEZING: return "freezing";
+    case PIN_FROZEN: return "frozen";
     default: return generic_pin_name(p);
     }
   }
@@ -88,6 +93,9 @@ class CInode : public MDSCacheObject {
   static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
   static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
+  static const int STATE_FREEZING =    (1<<7);
+  static const int STATE_FROZEN =      (1<<8);
+  static const int STATE_AMBIGUOUSAUTH = (1<<9);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -95,6 +103,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_ANCHORED    = (1<<2);
   static const int WAIT_UNANCHORED  = (1<<3);
   static const int WAIT_CAPS        = (1<<4);
+  static const int WAIT_FROZEN      = (1<<5);
   
   static const int WAIT_AUTHLOCK_OFFSET = 5;
   static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
@@ -137,7 +146,7 @@ class CInode : public MDSCacheObject {
   }
 
   inode_t *project_inode();
-  void pop_and_dirty_projected_inode();
+  void pop_and_dirty_projected_inode(LogSegment *ls);
 
   // -- cache infrastructure --
 private:
@@ -184,10 +193,19 @@ protected:
   utime_t               replica_caps_wanted_keep_until;
 
 
- private:
+  // LogSegment xlists i (may) belong to
+  xlist<CInode*>::item xlist_dirty;
+public:
+  xlist<CInode*>::item xlist_open_file;
+  xlist<CInode*>::item xlist_dirty_inode_mtime;
+  xlist<CInode*>::item xlist_purging_inode;
+
+private:
   // auth pin
   int auth_pins;
   int nested_auth_pins;
+public:
+  int auth_pin_freeze_allowance;
 
  public:
   inode_load_vec_t pop;
@@ -210,6 +228,8 @@ protected:
     stickydir_ref(0),
     parent(0), force_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
+    xlist_dirty(this), xlist_open_file(this), 
+    xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
@@ -237,6 +257,13 @@ protected:
   
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
+  bool is_base() { return inode.ino < MDS_INO_BASE; }
+
+  // note: this overloads MDSCacheObject
+  bool is_ambiguous_auth() {
+    return state_test(STATE_AMBIGUOUSAUTH) ||
+      MDSCacheObject::is_ambiguous_auth();
+  }
 
 
   inodeno_t ino() const { return inode.ino; }
@@ -260,8 +287,8 @@ protected:
   version_t get_version() { return inode.version; }
 
   version_t pre_dirty();
-  void _mark_dirty();
-  void mark_dirty(version_t projected_dirv);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
 
@@ -272,6 +299,17 @@ protected:
   void add_waiter(int tag, Context *c);
 
 
+  // -- import/export --
+  void encode_export(bufferlist& bl);
+  void finish_export(utime_t now);
+  void abort_export() {
+    put(PIN_TEMPEXPORTING);
+  }
+  void decode_import(bufferlist::iterator& p,
+		     set<int>& new_client_caps, 
+		     LogSegment *ls);
+
+
   // -- locks --
 public:
   LocalLock  versionlock;
@@ -280,6 +318,7 @@ public:
   ScatterLock dirfragtreelock;
   FileLock   filelock;
   ScatterLock dirlock;
+
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -295,6 +334,7 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
+  void clear_dirty_scattered(int type);
 
   // -- caps -- (new)
   // client caps
@@ -338,15 +378,17 @@ public:
     client_caps = cl;
   }
   */
-  void take_client_caps(map<int,Capability::Export>& cl) {
+  void clear_client_caps() {
     if (!client_caps.empty())
       put(PIN_CAPS);
+    client_caps.clear();
+  }
+  void export_client_caps(map<int,Capability::Export>& cl) {
     for (map<int,Capability>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
       cl[it->first] = it->second.make_export();
     }
-    client_caps.clear();
   }
   void merge_client_caps(map<int,Capability::Export>& cl, set<int>& new_client_caps) {
     if (client_caps.empty() && !cl.empty())
@@ -425,9 +467,14 @@ public:
 
 
   // -- freeze --
+  bool is_freezing_inode() { return state_test(STATE_FREEZING); }
+  bool is_frozen_inode() { return state_test(STATE_FROZEN); }
   bool is_frozen();
   bool is_frozen_dir();
   bool is_freezing();
+
+  bool freeze_inode(int auth_pin_allowance=0);
+  void unfreeze_inode(list<Context*>& finished);
 
 
   // -- reference counting --
@@ -558,109 +605,6 @@ class CInodeDiscover {
     ::_decode(dirlock_state, bl, off);
   }  
 
-};
-
-
-// export
-
-class CInodeExport {
-
-  struct st_ {
-    inode_t        inode;
-
-    inode_load_vec_t pop;
-
-    bool           is_dirty;       // dirty inode?
-    
-    int            num_caps;
-  } st;
-
-  string         symlink;
-  fragtree_t     dirfragtree;
-
-  map<int,int>     replicas;
-  map<int,Capability::Export>  cap_map;
-
-  bufferlist locks;
-
-public:
-  CInodeExport() {}
-  CInodeExport(CInode *in, utime_t now) {
-    st.inode = in->inode;
-    symlink = in->symlink;
-    dirfragtree = in->dirfragtree;
-
-    st.is_dirty = in->is_dirty();
-    replicas = in->replica_map;
-
-    in->authlock._encode(locks);
-    in->linklock._encode(locks);
-    in->dirfragtreelock._encode(locks);
-    in->filelock._encode(locks);
-    in->dirlock._encode(locks);
-    
-    st.pop = in->pop;
-    in->pop.zero(now);
-    
-    // steal WRITER caps from inode
-    in->take_client_caps(cap_map);
-    //remaining_issued = in->get_caps_issued();
-  }
-  
-  inodeno_t get_ino() { return st.inode.ino; }
-
-  void update_inode(CInode *in, set<int>& new_client_caps) {
-    // treat scatterlocked mtime special, since replica may have newer info
-    if (in->dirlock.get_state() == LOCK_SCATTER ||
-	in->dirlock.get_state() == LOCK_GLOCKC ||
-	in->dirlock.get_state() == LOCK_GTEMPSYNCC)
-      st.inode.mtime = MAX(in->inode.mtime, st.inode.mtime);
-
-    in->inode = st.inode;
-    in->symlink = symlink;
-    in->dirfragtree = dirfragtree;
-
-    in->pop = st.pop;
-
-    if (st.is_dirty) 
-      in->_mark_dirty();
-
-    in->replica_map = replicas;
-    if (!replicas.empty()) 
-      in->get(CInode::PIN_REPLICATED);
-
-    int off = 0;
-    in->authlock._decode(locks, off);
-    in->linklock._decode(locks, off);
-    in->dirfragtreelock._decode(locks, off);
-    in->filelock._decode(locks, off);
-    in->dirlock._decode(locks, off);
-
-    // caps
-    in->merge_client_caps(cap_map, new_client_caps);
-  }
-
-  void _encode(bufferlist& bl) {
-    st.num_caps = cap_map.size();
-
-    ::_encode(st, bl);
-    ::_encode(symlink, bl);
-    dirfragtree._encode(bl);
-    ::_encode(replicas, bl);
-    ::_encode(locks, bl);
-    ::_encode(cap_map, bl);
-  }
-
-  int _decode(bufferlist& bl, int off = 0) {
-    ::_decode(st, bl, off);
-    ::_decode(symlink, bl, off);
-    dirfragtree._decode(bl, off);
-    ::_decode(replicas, bl, off);
-    ::_decode(locks, bl, off);
-    ::_decode(cap_map, bl, off);
-
-    return off;
-  }
 };
 
 

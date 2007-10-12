@@ -25,6 +25,7 @@ using std::cerr;
 
 #include "MDS.h"
 #include "MDLog.h"
+#include "LogSegment.h"
 
 #include "events/EAnchorClient.h"
 #include "messages/MAnchor.h"
@@ -79,8 +80,6 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
       *pending_create_prepare[ino].patid = atid;
       pending_create_prepare.erase(ino);
 
-      pending_commit.insert(atid);
-      
       if (onfinish) {
         onfinish->finish(0);
         delete onfinish;
@@ -114,8 +113,6 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
       Context *onfinish = pending_destroy_prepare[ino].onfinish;
       *pending_destroy_prepare[ino].patid = atid;
       pending_destroy_prepare.erase(ino);
-
-      pending_commit.insert(atid);
 
       if (onfinish) {
         onfinish->finish(0);
@@ -151,8 +148,6 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
       *pending_update_prepare[ino].patid = atid;
       pending_update_prepare.erase(ino);
 
-      pending_commit.insert(atid);
-
       if (onfinish) {
         onfinish->finish(0);
         delete onfinish;
@@ -187,17 +182,11 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 
       // remove from committing list
       assert(pending_commit.count(atid));
-      pending_commit.erase(atid);
-
+      assert(pending_commit[atid]->pending_commit_atids.count(atid));
+      
       // log ACK.
-      mds->mdlog->submit_entry(new EAnchorClient(ANCHOR_OP_ACK, atid));
-
-      // kick any waiters
-      if (ack_waiters.count(atid)) {
-	dout(15) << "kicking waiters on atid " << atid << dendl;
-	mds->queue_waiters(ack_waiters[atid]);
-	ack_waiters.erase(atid);
-      }
+      mds->mdlog->submit_entry(new EAnchorClient(ANCHOR_OP_ACK, atid),
+			       new C_LoggedAck(this, atid));
     }
     break;
 
@@ -208,6 +197,24 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
   delete m;
 }
 
+
+void AnchorClient::_logged_ack(version_t atid)
+{
+  dout(10) << "_logged_ack" << dendl;
+
+  assert(pending_commit.count(atid));
+  assert(pending_commit[atid]->pending_commit_atids.count(atid));
+  
+  pending_commit[atid]->pending_commit_atids.erase(atid);
+  pending_commit.erase(atid);
+  
+  // kick any waiters (LogSegment trim)
+  if (ack_waiters.count(atid)) {
+    dout(15) << "kicking ack waiters on atid " << atid << dendl;
+    mds->queue_waiters(ack_waiters[atid]);
+    ack_waiters.erase(atid);
+  }
+}
 
 
 /*
@@ -291,12 +298,13 @@ void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace,
 
 // COMMIT
 
-void AnchorClient::commit(version_t atid)
+void AnchorClient::commit(version_t atid, LogSegment *ls)
 {
   dout(10) << "commit " << atid << dendl;
 
-  assert(pending_commit.count(atid));
-  pending_commit.insert(atid);
+  assert(pending_commit.count(atid) == 0);
+  pending_commit[atid] = ls;
+  ls->pending_commit_atids.insert(atid);
 
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
@@ -318,11 +326,11 @@ void AnchorClient::finish_recovery()
 
 void AnchorClient::resend_commits()
 {
-  for (set<version_t>::iterator p = pending_commit.begin();
+  for (map<version_t,LogSegment*>::iterator p = pending_commit.begin();
        p != pending_commit.end();
        ++p) {
-    dout(10) << "resending commit on " << *p << dendl;
-    MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, *p);
+    dout(10) << "resending commit on " << p->first << dendl;
+    MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, p->first);
     mds->send_message_mds(req, 
 			  mds->mdsmap->get_anchortable(),
 			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);

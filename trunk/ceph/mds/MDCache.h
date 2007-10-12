@@ -57,6 +57,9 @@ class MMDSSlaveRequest;
 
 class MMDSFragmentNotify;
 
+class ESubtreeMap;
+
+
 // MDCache
 
 //typedef const char* pchar;
@@ -80,8 +83,6 @@ struct MDRequest {
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
-  set<int> slaves;            // mds nodes that have slave requests to me (implies client_request)
-  set<int> waiting_on_slave;  // peers i'm waiting for slavereq replies from. 
 
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
@@ -90,12 +91,17 @@ struct MDRequest {
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
   int slave_to_mds;                // this is a slave request if >= 0.
 
+  // -- misc --
+  LogSegment *ls;  // the log segment i'm committing to
+  utime_t now;
+
   // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
   set<CInode*> stickydirs;
 
   // auth pins
+  set< MDSCacheObject* > remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
   
   // held locks
@@ -110,48 +116,67 @@ struct MDRequest {
   bool committing;
   bool aborted;
 
-  // for rename/link/unlink
-  utime_t now;
-  set<int> witnessed;       // nodes who have journaled a RenamePrepare
-  map<MDSCacheObject*,version_t> pvmap;
+  struct More {
+    set<int> slaves;           // mds nodes that have slave requests to me (implies client_request)
+    set<int> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
-  // for rename
-  set<int> extra_witnesses; // replica list from srcdn auth (rename)
-  version_t src_reanchor_atid;  // src->dst
-  version_t dst_reanchor_atid;  // dst->stray
-  bufferlist inode_import;
-  version_t inode_import_v;
-  CDentry *srcdn; // srcdn, if auth, on slave
-  
-  // called when slave commits
-  Context *slave_commit;
+    // for rename/link/unlink
+    set<int> witnessed;       // nodes who have journaled a RenamePrepare
+    map<MDSCacheObject*,version_t> pvmap;
+    
+    // for rename
+    set<int> extra_witnesses; // replica list from srcdn auth (rename)
+    version_t src_reanchor_atid;  // src->dst
+    version_t dst_reanchor_atid;  // dst->stray
+    bufferlist inode_import;
+    version_t inode_import_v;
+    CInode* destdn_was_remote_inode;
+    bool was_link_merge;
+    
+    // called when slave commits or aborts
+    Context *slave_commit;
+
+    More() : 
+      src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
+      destdn_was_remote_inode(0), was_link_merge(false),
+      slave_commit(0) { }
+  } *_more;
 
 
   // ---------------------------------------------------
   MDRequest() : 
     client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
-    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    slave_commit(0) { }
+    _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     reqid(ri), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
-    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    slave_commit(0) { }
+    _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
     reqid(ri), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
+    ls(0),
     done_locking(false), committing(false), aborted(false),
-    src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-    slave_commit(0) { }
+    _more(0) {}
+  ~MDRequest() {
+    delete _more;
+  }
   
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
 
-  bool slave_did_prepare() { return slave_commit; }
+  More* more() { 
+    if (!_more) _more = new More();
+    return _more;
+  }
+
+  bool slave_did_prepare() { return more()->slave_commit; }
   
+
   // pin items in cache
   void pin(MDSCacheObject *o) {
     if (pins.count(o) == 0) {
@@ -168,7 +193,7 @@ struct MDRequest {
 
   // auth pins
   bool is_auth_pinned(MDSCacheObject *object) { 
-    return auth_pins.count(object); 
+    return auth_pins.count(object) || remote_auth_pins.count(object); 
   }
   void auth_pin(MDSCacheObject *object) {
     if (!is_auth_pinned(object)) {
@@ -176,15 +201,17 @@ struct MDRequest {
       auth_pins.insert(object);
     }
   }
+  void auth_unpin(MDSCacheObject *object) {
+    assert(is_auth_pinned(object));
+    object->auth_unpin();
+    auth_pins.erase(object);
+  }
   void drop_local_auth_pins() {
-    set<MDSCacheObject*>::iterator it = auth_pins.begin();
-    while (it != auth_pins.end()) {
-      if ((*it)->is_auth()) {
-	(*it)->auth_unpin();
-	auth_pins.erase(it++);
-      } else {
-	it++;
-      }
+    for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
+	 it != auth_pins.end();
+	 it++) {
+      assert((*it)->is_auth());
+      (*it)->auth_unpin();
     }
     auth_pins.clear();
   }
@@ -201,22 +228,61 @@ inline ostream& operator<<(ostream& out, MDRequest &mdr)
   return out;
 }
 
+struct MDSlaveUpdate {
+  EMetaBlob commit;
+  EMetaBlob rollback;
+  xlist<MDSlaveUpdate*>::item xlistitem;
+  Context *waiter;
+  MDSlaveUpdate() : xlistitem(this), waiter(0) {}
+  MDSlaveUpdate(EMetaBlob c, EMetaBlob r, xlist<MDSlaveUpdate*> &list) :
+    commit(c), rollback(r),
+    xlistitem(this),
+    waiter(0) {
+    list.push_back(&xlistitem);
+  }
+  ~MDSlaveUpdate() {
+    if (waiter) waiter->finish(0);
+    delete waiter;
+  }
+};
+
+
 class MDCache {
  public:
   // my master
   MDS *mds;
 
-  LRU                           lru;         // dentry lru for expiring items from cache
-
+  // -- my cache --
+  LRU lru;   // dentry lru for expiring items from cache
  protected:
-  // the cache
-  CInode                       *root;        // root inode
-  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino
-  CInode                       *stray;       // my stray dir
+  hash_map<inodeno_t,CInode*>   inode_map;  // map of inodes by ino
+  CInode *root;                             // root inode
+  CInode *stray;                            // my stray dir
 
-  // root
-  list<Context*> waiting_for_root;
-  map<inodeno_t,list<Context*> > waiting_for_stray;
+  set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
+
+  // -- discover --
+  // waiters
+  map<int, hash_map<inodeno_t, list<Context*> > > waiting_for_base_ino;
+
+  // in process discovers, by mds.
+  //  this is just enough info to kick any waiters in the event of a failure.
+  //  FIXME: use pointers here instead of identifiers?
+  map<int, hash_map<inodeno_t,int> > discover_dir;
+  map<int, hash_map<dirfrag_t,int> > discover_dir_sub;
+
+  void discover_base_ino(inodeno_t want_ino, Context *onfinish, int from=-1);
+  void discover_dir_frag(CInode *base, frag_t approx_fg, Context *onfinish,
+			 int from=-1);
+  void discover_path(CInode *base, filepath want_path, Context *onfinish,
+		     bool want_xlocked=false, int from=-1);
+  void discover_path(CDir *base, filepath want_path, Context *onfinish,
+		     bool want_xlocked=false);
+  void discover_ino(CDir *base, inodeno_t want_ino, Context *onfinish,
+		    bool want_xlocked=false);
+
+  void kick_discovers(int who);  // after a failure.
+
 
 public:
   int get_num_inodes() { return inode_map.size(); }
@@ -247,10 +313,9 @@ public:
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
-  void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
-  void subtree_merge_writebehind_finish(CInode *in);
+  void subtree_merge_writebehind_finish(CInode *in, LogSegment *ls);
   void eval_subtree_root(CDir *dir);
   CDir *get_subtree_root(CDir *dir);
   void remove_subtree(CDir *dir);
@@ -273,17 +338,11 @@ protected:
   // delayed cache expire
   map<CDir*, map<int, MCacheExpire*> > delayed_expire; // subtree root -> expire msg
 
-  // -- discover --
-  hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
-
 
   // -- requests --
-public:
-
-  
 protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
-  
+
 public:
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, int by);
@@ -300,14 +359,10 @@ public:
 
 
   // inode purging
-  map<inodeno_t, map<off_t, inode_t> >         purging;
-  map<inodeno_t, map<off_t, list<Context*> > > waiting_for_purge;
+  map<CInode*, map<off_t, off_t> > purging;  // inode -> newsize -> oldsize
+  map<CInode*, map<off_t, LogSegment*> > purging_ls;
+  map<CInode*, map<off_t, list<Context*> > > waiting_for_purge;
   
-  // shutdown crap
-  int shutdown_commits;
-  bool did_shutdown_log_cap;
-  friend class C_MDC_ShutdownCommit;
-
   // -- recovery --
 protected:
   set<int> recovery_set;
@@ -324,7 +379,7 @@ protected:
   // from MMDSResolves
   map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
-  map<int, map<metareqid_t, EMetaBlob> > uncommitted_slave_updates;  // for replay.
+  map<int, map<metareqid_t, MDSlaveUpdate> > uncommitted_slave_updates;  // for replay.
   map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
   map<metareqid_t, Context*> waiting_for_slave_update_commit;
   friend class ESlaveUpdate;
@@ -351,12 +406,14 @@ public:
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
-  void log_subtree_map(Context *onsync=0);
-  void _logged_subtree_map(off_t off);
+  
+  ESubtreeMap *create_subtree_map();
+
 
 protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
+  set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<int,inode_caps_reconnect_t> > cap_exports; // ino -> client -> capex
@@ -438,6 +495,8 @@ public:
   bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
+  bool did_shutdown_log_cap;
+
   // inode_map
   bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
   CInode* get_inode( inodeno_t ino ) {
@@ -489,19 +548,19 @@ public:
 
  public:
   // inode purging
-  void purge_inode(inode_t *inode, off_t newsize);
-  void _do_purge_inode(inode_t *inode, off_t newsize);
-  void purge_inode_finish(inodeno_t ino, off_t newsize);
-  void purge_inode_finish_2(inodeno_t ino, off_t newsize);
-  bool is_purging(inodeno_t ino, off_t newsize) {
-    return purging.count(ino) && purging[ino].count(newsize);
+  void purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls);
+  void _do_purge_inode(CInode *in, off_t newsize, off_t oldsize);
+  void purge_inode_finish(CInode *in, off_t newsize, off_t oldsize);
+  void purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize);
+  bool is_purging(CInode *in, off_t newsize, off_t oldsize) {
+    return purging.count(in) && purging[in].count(newsize);
   }
-  void wait_for_purge(inodeno_t ino, off_t newsize, Context *c) {
-    waiting_for_purge[ino][newsize].push_back(c);
+  void wait_for_purge(CInode *in, off_t newsize, Context *c) {
+    waiting_for_purge[in][newsize].push_back(c);
   }
 
-  void add_recovered_purge(const inode_t& inode, off_t newsize);
-  void remove_recovered_purge(inodeno_t ino, off_t newsize);
+  void add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls);
+  void remove_recovered_purge(CInode *in, off_t newsize, off_t oldsize);
   void start_recovered_purges();
 
 
@@ -538,8 +597,7 @@ public:
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  bool parallel_fetch(map<inodeno_t,string>& pathmap,
-		      Context *c);
+  C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
@@ -549,9 +607,9 @@ public:
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_create_prepared(CInode *in, version_t atid);
-  void _anchor_create_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_create_logged(CInode *in, version_t atid, LogSegment *ls);
   void _anchor_destroy_prepared(CInode *in, version_t atid);
-  void _anchor_destroy_logged(CInode *in, version_t atid, version_t pdv);
+  void _anchor_destroy_logged(CInode *in, version_t atid, LogSegment *ls);
 
   friend class C_MDC_AnchorCreatePrepared;
   friend class C_MDC_AnchorCreateLogged;
@@ -563,7 +621,7 @@ public:
   void eval_stray(CDentry *dn);
 protected:
   void _purge_stray(CDentry *dn);
-  void _purge_stray_logged(CDentry *dn, version_t pdv);
+  void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   friend class C_MDC_PurgeStray;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
   void migrate_stray(CDentry *dn, int dest);
@@ -585,7 +643,8 @@ protected:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
 
   CDentry *add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished);
-  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn);
+public: // for Server::handle_slave_rename_prep
+  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished);
 
 public:
   CDentry *add_replica_stray(bufferlist &bl, CInode *strayin, int from);
@@ -611,7 +670,7 @@ private:
   void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_stored(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags);
-  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs);
+  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs, LogSegment *ls);
   friend class C_MDC_FragmentGo;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentStored;

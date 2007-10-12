@@ -20,6 +20,7 @@
 #include <list>
 #include <iostream>
 #include "buffer.h"
+#include "encodable.h"
 
 /*
  * 
@@ -164,7 +165,7 @@ class fragtree_t {
   // pairs <f, b>:
   //  frag_t f is split by b bits.
   //  if child frag_t does not appear, it is not split.
-  std::map<frag_t,__int32_t> _splits;  
+  std::map<frag_t,int32_t> _splits;  
 
  public:
   // -------------
@@ -456,11 +457,14 @@ class fragtree_t {
   }
   
   // encoding
-  void _encode(bufferlist& bl) {
+  void _encode(bufferlist& bl) const {
     ::_encode(_splits, bl);
   }
   void _decode(bufferlist& bl, int& off) {
     ::_decode(_splits, bl, off);
+  }
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(_splits, p);
   }
 
   void print(std::ostream& out) {

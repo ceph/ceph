@@ -164,8 +164,9 @@ private:
     Mutex lock;
     Cond cond;
     list<Message*> dispatch_queue;
+    list<Message*> prio_dispatch_queue;
     bool stop;
-    int qlen;
+    int qlen, pqlen;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
@@ -184,22 +185,28 @@ private:
       m->set_recv_stamp(g_clock.now());
       
       lock.Lock();
-      dispatch_queue.push_back(m);
-      qlen++;
-      cond.Signal();
-      lock.Unlock();
-    }
-    void queue_messages(list<Message*> ls) {
-      lock.Lock();
-      qlen += ls.size();
-      dispatch_queue.splice(dispatch_queue.end(), ls);
+      if (m->get_source().is_mon()) {
+	prio_dispatch_queue.push_back(m);
+	pqlen++;
+      } else {
+	qlen++;
+	dispatch_queue.push_back(m);
+      }
       cond.Signal();
       lock.Unlock();
     }
 
   public:
-    EntityMessenger(entity_name_t myaddr);
-    ~EntityMessenger();
+    EntityMessenger(entity_name_t myaddr) : 
+      Messenger(myaddr),
+      stop(false),
+      qlen(0), pqlen(0),
+      dispatch_thread(this) { }
+    ~EntityMessenger() {
+      // join dispatch thread
+      if (dispatch_thread.is_started())
+	dispatch_thread.join();
+    }
 
     void ready();
     bool is_stopped() { return stop; }
@@ -210,7 +217,7 @@ private:
     
     const entity_addr_t &get_myaddr();
 
-    int get_dispatch_queue_len() { return qlen; }
+    int get_dispatch_queue_len() { return qlen + pqlen; }
 
     void reset_myname(entity_name_t m);
 

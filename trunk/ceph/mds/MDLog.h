@@ -22,6 +22,8 @@
 #include "common/Thread.h"
 #include "common/Cond.h"
 
+#include "LogSegment.h"
+
 #include <list>
 
 //#include <ext/hash_map>
@@ -30,25 +32,21 @@
 class Journaler;
 class LogEvent;
 class MDS;
+class LogSegment;
+class ESubtreeMap;
 
 class Logger;
 
-/*
-namespace __gnu_cxx {
-  template<> struct hash<LogEvent*> {
-    size_t operator()(const LogEvent *p) const { 
-      static hash<unsigned long> H;
-      return H((unsigned long)p); 
-    }
-  };
-}
-*/
+#include <map>
+using std::map;
+
 
 class MDLog {
  protected:
   MDS *mds;
-  size_t num_events; // in events
-  size_t max_events;
+  int num_events; // in events
+  int max_events;
+  int max_segments;
 
   int unflushed;
 
@@ -58,22 +56,6 @@ class MDLog {
   Journaler *journaler;
 
   Logger *logger;
-
-  // -- trimming --
-  map<off_t,LogEvent*> trimming;
-  std::list<Context*>  trim_waiters;   // contexts waiting for trim
-  bool                 trim_reading;
-
-  bool waiting_for_read;
-  friend class C_MDL_Reading;
-
-  
-  off_t get_trimmed_to() {
-    if (trimming.empty())
-      return get_read_pos();
-    else 
-      return trimming.begin()->first;
-  }
 
 
   // -- replay --
@@ -98,29 +80,36 @@ class MDLog {
   void _replay_thread();  // new way
 
 
+  // -- segments --
+  map<off_t,LogSegment*> segments;
+  set<LogSegment*> expiring_segments;
+  set<LogSegment*> expired_segments;
+  int expiring_events;
+  int expired_events;
+
+  class C_MDL_WroteSubtreeMap : public Context {
+    MDLog *mdlog;
+    off_t off;
+  public:
+    C_MDL_WroteSubtreeMap(MDLog *l, off_t o) : mdlog(l), off(o) { }
+    void finish(int r) {
+      mdlog->_logged_subtree_map(off);
+    }
+  };
+  void _logged_subtree_map(off_t off);
+
 
   // -- subtreemaps --
-  set<off_t>  subtree_maps;
-  map<off_t,list<Context*> > subtree_map_expire_waiters;
   bool writing_subtree_map;  // one is being written now
-  bool seen_subtree_map;     // for recovery
 
   friend class ESubtreeMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
-  void kick_subtree_map() {
-    if (subtree_map_expire_waiters.empty()) return;
-    list<Context*> ls;
-    ls.swap(subtree_map_expire_waiters.begin()->second);
-    subtree_map_expire_waiters.erase(subtree_map_expire_waiters.begin());
-    finish_contexts(ls);
-  }
-
 public:
-  off_t get_last_subtree_map_offset() {
-    assert(!subtree_maps.empty());
-    return *subtree_maps.rbegin();
+  off_t get_last_segment_offset() {
+    assert(!segments.empty());
+    return segments.rbegin()->first;
   }
 
 
@@ -137,28 +126,36 @@ public:
 
 public:
   MDLog(MDS *m) : mds(m),
-		  num_events(0), max_events(g_conf.mds_log_max_len),
+		  num_events(0), 
+		  max_events(g_conf.mds_log_max_events),
+		  max_segments(g_conf.mds_log_max_segments),
 		  unflushed(0),
 		  capped(false),
 		  journaler(0),
 		  logger(0),
-		  trim_reading(false), waiting_for_read(false),
 		  replay_thread(this),
-		  writing_subtree_map(false), seen_subtree_map(false) {
+		  expiring_events(0), expired_events(0),
+		  writing_subtree_map(false) {
   }		  
   ~MDLog();
 
 
-  void set_max_events(size_t max) { max_events = max; }
-  size_t get_max_events() { return max_events; }
-  size_t get_num_events() { return num_events + trimming.size(); }
-  size_t get_non_subtreemap_events() { return num_events + trimming.size() - subtree_map_expire_waiters.size(); }
+  void start_new_segment(Context *onsync=0);
+  LogSegment *get_current_segment() { 
+    return segments.empty() ? 0:segments.rbegin()->second; 
+  }
+
+
+  void flush_logger();
+
+  size_t get_num_events() { return num_events; }
+  void set_max_events(int m) { max_events = m; }
+  size_t get_num_segments() { return segments.size(); }  
+  void set_max_segments(int m) { max_segments = m; }
 
   off_t get_read_pos();
   off_t get_write_pos();
-  bool empty() {
-    return get_read_pos() == get_write_pos();
-  }
+  bool empty() { return segments.empty(); }
 
   bool is_capped() { return capped; }
   void cap();
@@ -167,15 +164,31 @@ public:
   void wait_for_sync( Context *c );
   void flush();
 
-  void trim(Context *c);
-  void _did_read();
-  void _trimmed(LogEvent *le);
+private:
+  class C_MaybeExpiredSegment : public Context {
+    MDLog *mdlog;
+    LogSegment *ls;
+  public:
+    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
+    void finish(int res) {
+      mdlog->_maybe_expired(ls);
+    }
+  };
 
-  void reset();  // fresh, empty log! 
-  void open(Context *onopen);
-  void append();
+  void try_expire(LogSegment *ls);
+  void _maybe_expired(LogSegment *ls);
+  void _expired(LogSegment *ls);
+
+public:
+  void trim();
+
+private:
   void write_head(Context *onfinish);
 
+public:
+  void create(Context *onfinish);  // fresh, empty log! 
+  void open(Context *onopen);      // append() or replay() to follow!
+  void append();
   void replay(Context *onfinish);
 };
 

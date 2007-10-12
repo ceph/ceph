@@ -17,6 +17,7 @@ using namespace std;
 #include <cassert>
 
 #include "include/frag.h"
+#include "include/xlist.h"
 
 #define MDS_REF_SET    // define me for improved debug output, sanity checking
 
@@ -53,10 +54,11 @@ using namespace std;
 
 
 struct metareqid_t {
+  uint64_t tid;
   int32_t client;
-  tid_t tid;
-  metareqid_t() : client(-1), tid(0) {}
-  metareqid_t(int c, tid_t t) : client(c), tid(t) {}
+  int32_t _pad;
+  metareqid_t() : tid(0), client(-1), _pad(0) {}
+  metareqid_t(int c, tid_t t) : tid(t), client(c), _pad(0) {}
 };
 
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
@@ -111,9 +113,10 @@ struct inode_caps_reconnect_t {
 struct dirfrag_t {
   inodeno_t ino;
   frag_t    frag;
+  uint32_t  _pad;
 
-  dirfrag_t() { }
-  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
+  dirfrag_t() : ino(0), _pad(0) { }
+  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
 };
 
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {
@@ -129,6 +132,17 @@ inline bool operator<(dirfrag_t l, dirfrag_t r) {
 inline bool operator==(dirfrag_t l, dirfrag_t r) {
   return l.ino == r.ino && l.frag == r.frag;
 }
+
+namespace __gnu_cxx {
+  template<> struct hash<dirfrag_t> {
+    size_t operator()(const dirfrag_t &df) const { 
+      static rjhash<uint64_t> H;
+      static rjhash<uint32_t> I;
+      return H(df.ino) ^ I(df.frag);
+    }
+  };
+}
+
 
 
 // ================================================================
@@ -347,6 +361,8 @@ public:
   dirfrag_t dirfrag;
   string dname;
 
+  MDSCacheObjectInfo() : ino(0) {}
+
   void _encode(bufferlist& bl) const {
     ::_encode(ino, bl);
     ::_encode(dirfrag, bl);
@@ -356,6 +372,11 @@ public:
     ::_decode(ino, bl, off);
     ::_decode(dirfrag, bl, off);
     ::_decode(dname, bl, off);
+  }
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(ino, p);
+    ::_decode_simple(dirfrag, p);
+    ::_decode_simple(dname, p);
   }
 };
 
@@ -368,8 +389,10 @@ class MDSCacheObject {
   const static int PIN_LOCK       = -1002;
   const static int PIN_REQUEST    = -1003;
   const static int PIN_WAITER     =  1004;
-  const static int PIN_DIRTYSCATTERED = 1005;
+  const static int PIN_DIRTYSCATTERED = 1005;   // make this neg if we start using multiple scatterlocks?  
   static const int PIN_AUTHPIN    =  1006;
+  static const int PIN_PTRWAITER  = -1007;
+  const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
 
   const char *generic_pin_name(int p) {
     switch (p) {
@@ -380,6 +403,8 @@ class MDSCacheObject {
     case PIN_WAITER: return "waiter";
     case PIN_DIRTYSCATTERED: return "dirtyscattered";
     case PIN_AUTHPIN: return "authpin";
+    case PIN_PTRWAITER: return "ptrwaiter";
+    case PIN_TEMPEXPORTING: return "tempexporting";
     default: assert(0); return 0;
     }
   }
@@ -391,15 +416,14 @@ class MDSCacheObject {
 
   // -- wait --
   const static int WAIT_SINGLEAUTH  = (1<<30);
-  const static int WAIT_AUTHPINNABLE = (1<<29);
-  const static int WAIT_UNFREEZE = WAIT_AUTHPINNABLE;
+  const static int WAIT_UNFREEZE    = (1<<29); // pka AUTHPINNABLE
 
 
   // ============================================
   // cons
  public:
   MDSCacheObject() :
-    state(0),
+    state(0), 
     ref(0),
     replica_nonce(0) {}
   virtual ~MDSCacheObject() {}
@@ -416,16 +440,16 @@ class MDSCacheObject {
   unsigned state;     // state bits
 
  public:
-  unsigned get_state() { return state; }
+  unsigned get_state() const { return state; }
+  unsigned state_test(unsigned mask) const { return (state & mask); }
   void state_clear(unsigned mask) { state &= ~mask; }
   void state_set(unsigned mask) { state |= mask; }
-  unsigned state_test(unsigned mask) { return state & mask; }
   void state_reset(unsigned s) { state = s; }
 
-  bool is_auth() { return state_test(STATE_AUTH); }
-  bool is_dirty() { return state_test(STATE_DIRTY); }
-  bool is_clean() { return !is_dirty(); }
-  bool is_rejoining() { return state_test(STATE_REJOINING); }
+  bool is_auth() const { return state_test(STATE_AUTH); }
+  bool is_dirty() const { return state_test(STATE_DIRTY); }
+  bool is_clean() const { return !is_dirty(); }
+  bool is_rejoining() const { return state_test(STATE_REJOINING); }
 
   // --------------------------------------------
   // authority
@@ -632,6 +656,7 @@ protected:
   virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
   virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
 
+  virtual void clear_dirty_scattered(int type) { assert(0); }
 
   // ---------------------------------------------
   // ordering

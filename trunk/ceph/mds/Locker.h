@@ -40,9 +40,9 @@ class MLock;
 
 class MClientRequest;
 
-
 class Anchor;
 class Capability;
+class LogSegment;
 
 class SimpleLock;
 class FileLock;
@@ -61,6 +61,7 @@ private:
   
   void dispatch(Message *m);
   void handle_lock(MLock *m);
+
 
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
@@ -109,15 +110,24 @@ public:
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
   // scatter
+protected:
+  xlist<ScatterLock*> autoscattered;
+
 public:
   void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
 
+  void scatter_unscatter_autoscattered();
+  void scatter_try_unscatter(ScatterLock *lock, Context *c);
+  void note_autoscattered(ScatterLock *lock);
+
+  void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
+
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
+  void _scatter_replica_lock(ScatterLock *lock, int auth);
   void scatter_sync(ScatterLock *lock);
-  void scatter_lock(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock);
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
@@ -129,13 +139,14 @@ protected:
   class C_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
+    LogSegment *ls;
   public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl) : locker(l), lock(sl) {}
+    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, LogSegment *s) : locker(l), lock(sl), ls(s) {}
     void finish(int r) { 
-      locker->scatter_writebehind_finish(lock); 
+      locker->scatter_writebehind_finish(lock, ls); 
     }
   };
-  void scatter_writebehind_finish(ScatterLock *lock);
+  void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
 
   // local
 protected:

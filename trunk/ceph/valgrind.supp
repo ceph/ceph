@@ -23,3 +23,40 @@
    obj:*
    obj:*
 }
+
+# gethostbyname
+{
+   gethostbyname on issdm
+   Memcheck:Param
+   socketcall.sendto(msg)
+   fun:send
+   fun:get_mapping
+   fun:__nscd_get_map_ref
+   fun:nscd_gethst_r
+   fun:__nscd_gethostbyname_r
+   fun:gethostbyname_r@@GLIBC_2.2.5
+   fun:gethostbyname
+   fun:_ZN4Rank8Accepter5startEv
+   fun:_ZN4Rank10start_rankEv
+   fun:main
+}
+
+# gethostbyname
+
+{
+   gethostbyname on foil
+   Memcheck:Addr8
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/libc-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   fun:__libc_dlopen_mode
+   fun:__nss_lookup_function
+   obj:/lib/libc-2.6.1.so
+}
+

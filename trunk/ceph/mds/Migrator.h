@@ -78,7 +78,7 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
-  map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
+  //map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
 
@@ -113,7 +113,7 @@ protected:
   map<dirfrag_t,int>              import_peer;
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
-
+  map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
 
   /*
   // -- hashing madness --
@@ -182,17 +182,18 @@ public:
 
   void export_dir_nicely(CDir *dir, int dest);
   void maybe_do_queued_export();
+  void clear_export_queue() {
+    export_queue.clear();
+  }
 
-  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth, 
-			   map<int,entity_inst_t>& exported_client_map,
-			   utime_t now);
-  int encode_export_dir(list<bufferlist>& dirstatelist,
-			class C_Contexts *fin,
-			CDir *basedir,
+  void encode_export_inode(CInode *in, bufferlist& enc_state, 
+			   map<int,entity_inst_t>& exported_client_map);
+  void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
+  int encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
-			int newauth, 
 			map<int,entity_inst_t>& exported_client_map,
 			utime_t now);
+  void finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);
@@ -221,13 +222,17 @@ public:
   void handle_export_dir(MExportDir *m);
 
 public:
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, 
-			   map<int,entity_inst_t>& imported_client_map);
-  int decode_import_dir(bufferlist& bl,
+  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
+			   map<int,entity_inst_t>& imported_client_map,
+			   LogSegment *ls,
+			   list<ScatterLock*>& updated_scatterlocks);
+  int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
-			map<int,entity_inst_t>& imported_client_map);
+			map<int,entity_inst_t>& imported_client_map,
+			LogSegment *ls,
+			list<ScatterLock*>& updated_scatterlocks);
 
 public:
   void import_reverse(CDir *dir);

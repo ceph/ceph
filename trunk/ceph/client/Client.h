@@ -252,10 +252,13 @@ class Inode {
     if (!dirfragtree.empty()) {
       __gnu_cxx::hash<string> H;
       frag_t fg = dirfragtree[H(dname)];
-      if (fragmap.count(fg) &&
-	  fragmap[fg] >= 0) {
-	//cout << "picked frag ino " << inode.ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
-	return fragmap[fg];
+      while (fg != frag_t()) {
+	if (fragmap.count(fg) &&
+	    fragmap[fg] >= 0) {
+	  //cout << "picked frag ino " << inode.ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
+	  return fragmap[fg];
+	}
+	fg = frag_t(fg.value(), fg.bits()-1); // try more general...
       }
     }
     return authority();
@@ -682,7 +685,7 @@ protected:
   
   // metadata cache
   Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
-  void update_inode_dist(Inode *in, InodeStat *st);
+  void update_dir_dist(Inode *in, DirStat *st);
   Inode* insert_trace(MClientReply *reply);
 
   // ----------------------

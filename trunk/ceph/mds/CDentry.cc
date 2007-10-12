@@ -21,6 +21,7 @@
 
 #include "MDS.h"
 #include "MDCache.h"
+#include "LogSegment.h"
 
 #include "messages/MLock.h"
 
@@ -119,7 +120,7 @@ pair<int,int> CDentry::authority()
 void CDentry::add_waiter(int tag, Context *c)
 {
   // wait on the directory?
-  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+  if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
     dir->add_waiter(tag, c);
     return;
   }
@@ -135,27 +136,30 @@ version_t CDentry::pre_dirty(version_t min)
 }
 
 
-void CDentry::_mark_dirty()
+void CDentry::_mark_dirty(LogSegment *ls)
 {
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     dir->inc_num_dirty();
     get(PIN_DIRTY);
+    assert(ls);
   }
+  if (ls) 
+    ls->dirty_dentries.push_back(&xlist_dirty);
 }
 
-void CDentry::mark_dirty(version_t pv) 
+void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
 {
   dout(10) << " mark_dirty " << *this << dendl;
 
   // i now live in this new dir version
   assert(pv <= projected_version);
   version = pv;
-  _mark_dirty();
+  _mark_dirty(ls);
 
   // mark dir too
-  dir->mark_dirty(pv);
+  dir->mark_dirty(pv, ls);
 }
 
 
@@ -170,6 +174,8 @@ void CDentry::mark_clean()
   dir->dec_num_dirty();
   put(PIN_DIRTY);
   
+  xlist_dirty.remove_myself();
+
   if (state_test(STATE_NEW)) 
     state_clear(STATE_NEW);
 }    
@@ -262,6 +268,11 @@ void CDentry::auth_pin()
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
+
+  dout(10) << "auth_pin on " << *this 
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+
   dir->adjust_nested_auth_pins(1);
 }
 
@@ -270,12 +281,24 @@ void CDentry::auth_unpin()
   auth_pins--;
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
+
+  dout(10) << "auth_unpin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(auth_pins >= 0);
+
   dir->adjust_nested_auth_pins(-1);
 }
 
 void CDentry::adjust_nested_auth_pins(int by)
 {
   nested_auth_pins += by;
+
+  dout(15) << "adjust_nested_auth_pins by " << by 
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(nested_auth_pins >= 0);
+
   dir->adjust_nested_auth_pins(by);
 }
 

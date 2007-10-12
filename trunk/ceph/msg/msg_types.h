@@ -111,8 +111,9 @@ namespace __gnu_cxx {
  */
 struct entity_addr_t {
   struct ceph_entity_addr v;
+  uint32_t _pad;
 
-  entity_addr_t() { 
+  entity_addr_t() : _pad(0) { 
     v.port = v.nonce = 0; 
     v.ipq[0] = v.ipq[1] = v.ipq[2] = v.ipq[3] = 0;
   }

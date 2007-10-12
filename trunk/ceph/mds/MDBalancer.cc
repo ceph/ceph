@@ -175,7 +175,7 @@ void MDBalancer::send_heartbeat()
   if (mds->get_nodeid() == 0)
     beat_epoch++;
 
-  // load
+  // my load
   mds_load_t load = get_load();
   mds_load[ mds->get_nodeid() ] = load;
 
@@ -243,7 +243,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
   
-  unsigned cluster_size = mds->get_mds_map()->get_num_mds();
+  unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
   if (mds_load.size() == cluster_size) {
     // let's go!
     //export_empties();  // no!
@@ -317,7 +317,7 @@ void MDBalancer::do_fragmenting()
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_fragmenting splitting " << *dir << dendl;
-    mds->mdcache->split_dir(dir, 3);
+    mds->mdcache->split_dir(dir, 4);
   }
   split_queue.clear();
 }
@@ -338,6 +338,8 @@ void MDBalancer::do_rebalance(int beat)
   exported.clear();
 
   dout(5) << " do_rebalance: cluster loads are" << dendl;
+
+  mds->mdcache->migrator->clear_export_queue();
 
   // rescale!  turn my mds_load back into meta_load units
   double load_fac = 1.0;
@@ -771,8 +773,8 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
   // hit inode
   in->pop.get(type).hit(now);
 
-  if (in->get_parent_dir())
-    hit_dir(now, in->get_parent_dir(), type, who);
+  if (in->get_parent_dn())
+    hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
 }
 /*
   // hit me

@@ -130,15 +130,18 @@ void Objecter::handle_osd_map(MOSDMap *m)
 void Objecter::maybe_request_map()
 {
   utime_t now;
-
-  if (last_epoch_requested <= osdmap->get_epoch() ||
-      (now = g_clock.now()) - last_epoch_requested_stamp > g_conf.objecter_map_request_interval) {
-    dout(10) << "maybe_request_map requesting next osd map" << dendl;
-    last_epoch_requested_stamp = now;
-    last_epoch_requested = osdmap->get_epoch()+1;
-    messenger->send_message(new MOSDGetMap(osdmap->get_epoch(), last_epoch_requested),
-			    monmap->get_inst(monmap->pick_mon()));
-  }
+  if (!osdmap) goto yes;
+  if (last_epoch_requested <= osdmap->get_epoch()) goto yes;
+  now = g_clock.now();
+  if (now - last_epoch_requested_stamp > g_conf.objecter_map_request_interval) goto yes;
+  return;
+  
+ yes:
+  dout(10) << "maybe_request_map requesting next osd map" << dendl;
+  last_epoch_requested_stamp = now;
+  last_epoch_requested = osdmap->get_epoch()+1;
+  messenger->send_message(new MOSDGetMap(osdmap->get_epoch(), last_epoch_requested),
+			  monmap->get_inst(monmap->pick_mon()));
 }
 
 

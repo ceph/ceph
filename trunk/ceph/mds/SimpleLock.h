@@ -202,12 +202,12 @@ public:
 
   // encode/decode
   void _encode(bufferlist& bl) {
-    ::_encode(state, bl);
-    ::_encode(gather_set, bl);
+    ::_encode_simple(state, bl);
+    ::_encode_simple(gather_set, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(state, bl, off);
-    ::_decode(gather_set, bl, off);
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(state, p);
+    ::_decode_simple(gather_set, p);
   }
 
   

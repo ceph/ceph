@@ -45,37 +45,34 @@ class Context;
 class CDirDiscover;
 
 
-
 ostream& operator<<(ostream& out, class CDir& dir);
-
-
-// CDir
-
 
 
 class CDir : public MDSCacheObject {
  public:
   // -- pins --
   static const int PIN_DNWAITER =     1;
-  static const int PIN_CHILD =        2;
-  static const int PIN_FROZEN =       3;
-  static const int PIN_EXPORT =       5;
+  static const int PIN_INOWAITER =    2;
+  static const int PIN_CHILD =        3;
+  static const int PIN_FROZEN =       4;
+  static const int PIN_SUBTREE =      5;
   static const int PIN_IMPORTING =    7;
-  static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
+  static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
+    case PIN_INOWAITER: return "inowaiter";
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
-    case PIN_EXPORT: return "export";
-    case PIN_EXPORTING: return "exporting";
+    case PIN_SUBTREE: return "subtree";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
     case PIN_STICKY: return "sticky";
+    case PIN_SUBTREETEMP: return "subtreetemp";
     default: return generic_pin_name(p);
     }
   }
@@ -88,8 +85,6 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_FREEZINGDIR =   (1<< 5);
   static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
   static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
-  static const unsigned STATE_DELETED =       (1<< 8);
-  static const unsigned STATE_EXPORT    =     (1<< 9);
   static const unsigned STATE_IMPORTBOUND =   (1<<10);
   static const unsigned STATE_EXPORTBOUND =   (1<<11);
   static const unsigned STATE_EXPORTING =     (1<<12);
@@ -107,8 +102,8 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_EXPORTED = 
   (STATE_COMPLETE|STATE_DIRTY);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
-  (STATE_EXPORT
-   |STATE_IMPORTING
+  (						  
+   STATE_IMPORTING
    |STATE_IMPORTBOUND|STATE_EXPORTBOUND
    |STATE_FROZENTREE
    |STATE_STICKY);
@@ -117,12 +112,10 @@ class CDir : public MDSCacheObject {
    |STATE_IMPORTBOUND|STATE_EXPORTBOUND
    |STATE_FROZENTREE
    |STATE_FROZENDIR
-   |STATE_EXPORT
    |STATE_STICKY);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_COMPLETE |
-   STATE_EXPORT |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND);
 
@@ -138,12 +131,12 @@ class CDir : public MDSCacheObject {
   // -- wait masks --
   static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const int WAIT_FREEZEABLE   = (1<<2);  // auth pins removed
+  static const int WAIT_FROZEN       = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
   static const int WAIT_ANY  = (0xffffffff);
-  static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|WAIT_UNFREEZE);
+  static const int WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
@@ -163,8 +156,8 @@ class CDir : public MDSCacheObject {
   //int hack_num_accessed;
 
 public:
-  typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  //typedef map<string, CDentry*> map_t;
+  //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
+  typedef map<string, CDentry*> map_t;
 protected:
   // contents
   map_t items;       // non-null AND null
@@ -181,6 +174,8 @@ protected:
   version_t committed_version;
   version_t committed_version_equivalent;  // in case of, e.g., temporary file
   version_t projected_version; 
+
+  xlist<CDir*>::item xlist_dirty;
 
   // lock nesting, freeze
   int auth_pins;
@@ -313,9 +308,6 @@ private:
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-    //if (( pop_auth_subtree.get(META_POP_IRD).get() > 
-    //g_conf.mds_bal_replicate_threshold)) {
-    //if (!cached_by.empty() && inode.ino > 1) generic_dout(1) << "distributed spec for " << *this << endl;
     if (is_rep()) {
       for (map<int,int>::iterator p = replicas_begin();
 	   p != replicas_end(); 
@@ -364,8 +356,8 @@ private:
   void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty();
-  void mark_dirty(version_t pv);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
 
@@ -387,6 +379,7 @@ private:
   // -- waiters --
 protected:
   hash_map< string, list<Context*> > waiting_on_dentry;
+  hash_map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dn) {
@@ -395,10 +388,27 @@ public:
   void add_dentry_waiter(const string& dentry, Context *c);
   void take_dentry_waiting(const string& dentry, list<Context*>& ls);
 
+  bool is_waiting_for_ino(inodeno_t ino) {
+    return waiting_on_ino.count(ino);
+  }
+  void add_ino_waiter(inodeno_t ino, Context *c);
+  void take_ino_waiting(inodeno_t ino, list<Context*>& ls);
+
+  void take_sub_waiting(list<Context*>& ls);  // dentry or ino
+
   void add_waiter(int mask, Context *c);
   void take_waiting(int mask, list<Context*>& ls);  // may include dentry waiters
   void finish_waiting(int mask, int result = 0);    // ditto
   
+
+  // -- import/export --
+  void encode_export(bufferlist& bl);
+  void finish_export(utime_t now);
+  void abort_export() { 
+    put(PIN_TEMPEXPORTING);
+  }
+  void decode_import(bufferlist::iterator& blp);
+
 
   // -- auth pins --
   bool can_auth_pin() { return is_auth() && !(is_frozen() || is_freezing()); }
@@ -411,15 +421,28 @@ public:
   void adjust_nested_auth_pins(int inc);
 
   // -- freezing --
-  void freeze_tree(Context *c);
-  void freeze_tree_finish(Context *c);
-  void unfreeze_tree();
+  bool freeze_tree();
   void _freeze_tree();
+  void unfreeze_tree();
 
-  void freeze_dir(Context *c);
-  void freeze_dir_finish(Context *c);
+  bool freeze_dir();
   void _freeze_dir();
   void unfreeze_dir();
+
+  void maybe_finish_freeze() {
+    if (auth_pins != 1 || nested_auth_pins != 0) 
+      return;
+    if (state_test(STATE_FREEZINGTREE)) {
+      _freeze_tree();
+      auth_unpin();
+      finish_waiting(WAIT_FROZEN);
+    }
+    if (state_test(STATE_FREEZINGDIR)) {
+      _freeze_dir();
+      auth_unpin();
+      finish_waiting(WAIT_FROZEN);
+    }
+  }
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree();
@@ -493,7 +516,6 @@ class CDirDiscover {
 
   dirfrag_t get_dirfrag() { return dirfrag; }
 
-  
   void _encode(bufferlist& bl) {
     bl.append((char*)&dirfrag, sizeof(dirfrag));
     bl.append((char*)&nonce, sizeof(nonce));
@@ -509,103 +531,6 @@ class CDirDiscover {
     bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
     off += sizeof(dir_rep);
     ::_decode(rep_by, bl, off);
-  }
-
-};
-
-
-// export
-
-class CDirExport {
-  struct {
-    dirfrag_t   dirfrag;
-    uint32_t    nden;   // num dentries (including null ones)
-    version_t   version;
-    version_t   committed_version;
-    version_t   committed_version_equivalent;
-    uint32_t    state;
-    dirfrag_load_vec_t pop_me;
-    dirfrag_load_vec_t pop_auth_subtree;
-    int32_t     dir_rep;
-  } st;
-  map<int,int> replicas;
-  set<int>     rep_by;
-
- public:
-  CDirExport() {}
-  CDirExport(CDir *dir, utime_t now) {
-    memset(&st, 0, sizeof(st));
-
-    assert(dir->get_version() == dir->get_projected_version());
-
-    st.dirfrag = dir->dirfrag();
-    st.nden = dir->items.size();
-    st.version = dir->version;
-    st.committed_version = dir->committed_version;
-    st.committed_version_equivalent = dir->committed_version_equivalent;
-    st.state = dir->state;
-    st.dir_rep = dir->dir_rep;
-    
-    st.pop_me = dir->pop_me;
-    st.pop_auth_subtree = dir->pop_auth_subtree;
-    dir->pop_auth_subtree_nested -= dir->pop_auth_subtree;
-    dir->pop_me.zero(now);
-    dir->pop_auth_subtree.zero(now);
-
-    rep_by = dir->dir_rep_by;
-    replicas = dir->replica_map;
-  }
-
-  dirfrag_t get_dirfrag() { return st.dirfrag; }
-  uint32_t get_nden() { return st.nden; }
-
-  void update_dir(CDir *dir) {
-    assert(dir->dirfrag() == st.dirfrag);
-
-    // set committed_version at old version
-    dir->committing_version = 
-      dir->committed_version = st.committed_version;
-    dir->committed_version_equivalent = st.committed_version_equivalent;
-    dir->projected_version = 
-      dir->version = st.version;
-
-    // twiddle state
-    dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-      (st.state & CDir::MASK_STATE_EXPORTED);
-    dir->dir_rep = st.dir_rep;
-
-    dir->pop_me = st.pop_me;
-    dir->pop_auth_subtree = st.pop_auth_subtree;
-    dir->pop_auth_subtree_nested += dir->pop_auth_subtree;
-
-    dir->replica_nonce = 0;  // no longer defined
-
-    if (!dir->replica_map.empty())
-      generic_dout(0) << "replicas not empty non import, " << *dir << ", " << dir->replica_map << dendl;
-
-    dir->dir_rep_by = rep_by;
-    dir->replica_map = replicas;
-    generic_dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replica_map << dendl;
-    if (!replicas.empty())
-      dir->get(CDir::PIN_REPLICATED);
-    if (dir->is_dirty()) {
-      dir->get(CDir::PIN_DIRTY);  
-    }
-  }
-
-
-  void _encode(bufferlist& bl) {
-    bl.append((char*)&st, sizeof(st));
-    ::_encode(replicas, bl);
-    ::_encode(rep_by, bl);
-  }
-
-  int _decode(bufferlist& bl, int off = 0) {
-    bl.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
-    ::_decode(replicas, bl, off);
-    ::_decode(rep_by, bl, off);
-    return off;
   }
 
 };

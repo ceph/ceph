@@ -112,39 +112,36 @@ public:
 void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << "export_empty_import " << *dir << dendl;
-  
-  if (dir->inode->is_auth()) return;
-  if (!dir->is_auth()) return;
-  
-  if (dir->inode->is_freezing() || dir->inode->is_frozen()) return;
-  if (dir->is_freezing() || dir->is_frozen()) return;
-  
-  if (dir->get_size() > 0) {
-    dout(7) << "not actually empty" << dendl;
-    return;
-  }
+  assert(dir->is_subtree_root());
 
-  if (dir->inode->is_root()) {
-    dout(7) << "root" << dendl;
+  if (dir->inode->is_auth()) {
+    dout(7) << " inode is auth" << dendl;
     return;
   }
-  
-  // is it really empty?
-  if (!dir->is_complete()) {
-    dout(7) << "not complete, fetching." << dendl;
-    dir->fetch(new C_MDC_EmptyImport(this,dir));
+  if (!dir->is_auth()) {
+    dout(7) << " not auth" << dendl;
+    return;
+  }
+  if (dir->is_freezing() || dir->is_frozen()) {
+    dout(7) << " freezing or frozen" << dendl;
+    return;
+  }
+  if (dir->get_size() > 0) {
+    dout(7) << " not actually empty" << dendl;
+    return;
+  }
+  if (dir->inode->is_root()) {
+    dout(7) << " root" << dendl;
     return;
   }
   
   int dest = dir->inode->authority().first;
-  
-  // comment this out ot wreak havoc?
   //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
   
-  dout(7) << "really empty, exporting to " << dest << dendl;
+  dout(7) << " really empty, exporting to " << dest << dendl;
   assert (dest != mds->get_nodeid());
   
-  dout(-7) << "exporting to mds" << dest 
+  dout(7) << "exporting to mds" << dest 
            << " empty import " << *dir << dendl;
   export_dir( dir, dest );
 }
@@ -181,7 +178,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->auth_unpin();
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	dir->put(CDir::PIN_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
 	break;
@@ -191,7 +187,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	dir->put(CDir::PIN_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
 	break;
@@ -222,7 +217,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	cache->try_subtree_merge(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	dir->put(CDir::PIN_EXPORTING);
 	break;
 	
       case EXPORT_EXPORTING:
@@ -230,7 +224,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_reverse(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	dir->put(CDir::PIN_EXPORTING);
 	break;
 
       case EXPORT_LOGGINGFINISH:
@@ -578,14 +571,15 @@ void Migrator::export_dir(CDir *dir, int dest)
   export_peer[dir] = dest;
 
   dir->state_set(CDir::STATE_EXPORTING);
-  dir->get(CDir::PIN_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), export_peer[dir], MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin();
-  dir->freeze_tree(new C_MDC_ExportFreeze(this, dir));
+  dir->freeze_tree();
+  assert(dir->is_freezing_tree());
+  dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
 }
 
 
@@ -775,7 +769,6 @@ void Migrator::export_go(CDir *dir)
   export_warning_ack_waiting.erase(dir);
   export_state[dir] = EXPORT_EXPORTING;
 
-  assert(export_data.count(dir) == 0);
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
@@ -786,22 +779,20 @@ void Migrator::export_go(CDir *dir)
   
   // fill export message with cache data
   utime_t now = g_clock.now();
-  C_Contexts *fin = new C_Contexts;       // collect all the waiters
   map<int,entity_inst_t> exported_client_map;
-  int num_exported_inodes = encode_export_dir( export_data[dir], 
-					       fin, 
-					       dir,   // base
+  bufferlist export_data;
+  int num_exported_inodes = encode_export_dir( export_data,
 					       dir,   // recur start point
-					       dest,
 					       exported_client_map,
 					       now );
   bufferlist bl;
   ::_encode(exported_client_map, bl);
-  export_data[dir].push_front(bl);
+  bl.claim_append(export_data);
+  export_data.claim(bl);
 
   // send the export data!
   MExportDir *req = new MExportDir(dir->dirfrag());
-  req->set_dirstate(export_data[dir]);
+  req->take_dirstate(export_data);
 
   // add bounds to message
   set<CDir*> bounds;
@@ -811,11 +802,8 @@ void Migrator::export_go(CDir *dir)
        ++p)
     req->add_export((*p)->dirfrag());
 
-  //s end
+  // send
   mds->send_message_mds(req, dest, MDS_PORT_MIGRATOR);
-
-  // queue up the finisher
-  dir->add_waiter( CDir::WAIT_UNFREEZE, fin );
 
   // stats
   if (mds->logger) mds->logger->inc("ex");
@@ -829,38 +817,53 @@ void Migrator::export_go(CDir *dir)
  * update our local state for this inode to export.
  * encode relevant state to be sent over the wire.
  * used by: encode_export_dir, file_rename (if foreign)
+ *
+ * FIXME: the separation between CInode.encode_export and these methods 
+ * is pretty arbitrary and dumb.
  */
-void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_auth, 
-				   map<int,entity_inst_t>& exported_client_map,
-				   utime_t now)
+void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, 
+				   map<int,entity_inst_t>& exported_client_map)
 {
+  dout(7) << "encode_export_inode " << *in << dendl;
+  assert(!in->is_replica(mds->get_nodeid()));
+
+  ::_encode_simple(in->inode.ino, enc_state);
+  in->encode_export(enc_state);
+
+  // make note of clients named by exported capabilities
+  for (map<int, Capability>::iterator it = in->client_caps.begin();
+       it != in->client_caps.end();
+       it++) 
+    exported_client_map[it->first] = mds->clientmap.get_inst(it->first);
+}
+
+void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& finished)
+{
+  dout(12) << "finish_export_inode " << *in << dendl;
+
+  in->finish_export(now);
+
   // tell (all) clients about migrating caps.. mark STALE
   for (map<int, Capability>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    dout(7) << "encode_export_inode " << *in << " telling client" << it->first << " stale caps" << dendl;
+    dout(7) << "finish_export_inode telling client" << it->first
+	    << " stale caps on " << *in << dendl;
     MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_STALE,
 					     in->inode, 
                                              it->second.get_last_seq(), 
                                              it->second.pending(),
                                              it->second.wanted());
     entity_inst_t inst = mds->clientmap.get_inst(it->first);
-    exported_client_map[it->first] = inst; 
     mds->send_message_client_maybe_open(m, inst);
   }
+  in->clear_client_caps();
 
   // relax locks?
   if (!in->is_replicated())
     in->replicate_relax_locks();
 
-  // add inode
-  assert(!in->is_replica(mds->get_nodeid()));
-  CInodeExport istate(in, now);
-  istate._encode( enc_state );
-
-  // we're export this inode; fix inode state
-  dout(7) << "encode_export_inode " << *in << dendl;
-  
+  // clean
   if (in->is_dirty()) in->mark_clean();
   
   // clear/unpin cached_by (we're no longer the authority)
@@ -878,19 +881,19 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   in->state_clear(CInode::STATE_AUTH);
   in->replica_nonce = CInode::EXPORT_NONCE;
   
+  // waiters
+  in->take_waiting(CInode::WAIT_ANY, finished);
+  
   // *** other state too?
 
   // move to end of LRU so we drop out of cache quickly!
   if (in->get_parent_dn()) 
     cache->lru.lru_bottouch(in->get_parent_dn());
+
 }
 
-
-int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
-				C_Contexts *fin,
-				CDir *basedir,
+int Migrator::encode_export_dir(bufferlist& exportbl,
 				CDir *dir,
-				int newauth, 
 				map<int,entity_inst_t>& exported_client_map,
 				utime_t now)
 {
@@ -901,33 +904,15 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   assert(dir->get_projected_version() == dir->get_version());
 
   // dir 
-  bufferlist enc_dir;
+  dirfrag_t df = dir->dirfrag();
+  ::_encode_simple(df, exportbl);
+  dir->encode_export(exportbl);
   
-  CDirExport dstate(dir, now);
-  dstate._encode( enc_dir );
-  
-  // release open_by 
-  dir->clear_replica_map();
-
-  // mark
-  assert(dir->is_auth());
-  dir->state_clear(CDir::STATE_AUTH);
-  dir->replica_nonce = CDir::NONCE_EXPORT;
-
-  list<CDir*> subdirs;
-
-  if (dir->is_dirty())
-    dir->mark_clean();
-  
-  // discard most dir state
-  dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
-  
-  // suck up all waiters
-  list<Context*> waiting;
-  dir->take_waiting(CDir::WAIT_ANY, waiting);    // all dir waiters
-  fin->take(waiting);
+  long nden = dir->items.size();
+  ::_encode_simple(nden, exportbl);
   
   // dentries
+  list<CDir*> subdirs;
   CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
@@ -938,36 +923,36 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
     // -- dentry
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
-    // name
-    ::_encode(it->first, enc_dir);
+    // dn name
+    ::_encode(it->first, exportbl);
     
     // state
-    it->second->encode_export_state(enc_dir);
+    dn->encode_export(exportbl);
     
     // points to...
     
     // null dentry?
     if (dn->is_null()) {
-      enc_dir.append("N", 1);  // null dentry
+      exportbl.append("N", 1);  // null dentry
       continue;
     }
     
     if (dn->is_remote()) {
       // remote link
-      enc_dir.append("L", 1);  // remote link
+      exportbl.append("L", 1);  // remote link
       
       inodeno_t ino = dn->get_remote_ino();
       unsigned char d_type = dn->get_remote_d_type();
-      ::_encode(ino, enc_dir);
-      ::_encode(d_type, enc_dir);
+      ::_encode(ino, exportbl);
+      ::_encode(d_type, exportbl);
       continue;
     }
     
     // primary link
     // -- inode
-    enc_dir.append("I", 1);    // inode dentry
+    exportbl.append("I", 1);    // inode dentry
     
-    encode_export_inode(in, enc_dir, newauth, exported_client_map, now);  // encode, and (update state for) export
+    encode_export_inode(in, exportbl, exported_client_map);  // encode, and (update state for) export
     
     // directory?
     list<CDir*> dfs;
@@ -980,26 +965,62 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
 	subdirs.push_back(dir);  // it's ours, recurse (later)
       }
     }
-    
-    // waiters
-    list<Context*> waiters;
-    in->take_waiting(CInode::WAIT_ANY, waiters);
-    fin->take(waiters);
   }
-
-  // add to dirstatelist
-  bufferlist bl;
-  dirstatelist.push_back( bl );
-  dirstatelist.back().claim( enc_dir );
 
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
-    num_exported += encode_export_dir(dirstatelist, fin, basedir, *it, newauth, 
-				      exported_client_map, now);
+    num_exported += encode_export_dir(exportbl, *it, exported_client_map, now);
 
   return num_exported;
 }
 
+void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now)
+{
+  dout(10) << "finish_export_dir " << *dir << dendl;
+
+  // release open_by 
+  dir->clear_replica_map();
+
+  // mark
+  assert(dir->is_auth());
+  dir->state_clear(CDir::STATE_AUTH);
+  dir->replica_nonce = CDir::NONCE_EXPORT;
+
+  if (dir->is_dirty())
+    dir->mark_clean();
+  
+  // discard most dir state
+  dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+
+  // suck up all waiters
+  dir->take_waiting(CDir::WAIT_ANY, finished);    // all dir waiters
+  
+  // pop
+  dir->finish_export(now);
+
+  // dentries
+  list<CDir*> subdirs;
+  CDir::map_t::iterator it;
+  for (it = dir->begin(); it != dir->end(); it++) {
+    CDentry *dn = it->second;
+    CInode *in = dn->get_inode();
+
+    // dentry
+    dn->finish_export();
+
+    // inode?
+    if (dn->is_primary()) {
+      finish_export_inode(in, now, finished);
+
+      // subdirs?
+      in->get_nested_dirfrags(subdirs);
+    }
+  }
+
+  // subdirs
+  for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++) 
+    finish_export_dir(*it, finished, now);
+}
 
 class C_MDS_ExportFinishLogged : public Context {
   Migrator *migrator;
@@ -1027,12 +1048,12 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   export_warning_ack_waiting.erase(dir);
   
   export_state[dir] = EXPORT_LOGGINGFINISH;
-  export_data.erase(dir);
   
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
-  // log completion
+  // log completion. 
+  //  include export bounds, to ensure they're in the journal.
   EExport *le = new EExport(mds->mdlog, dir);
   le->metablob.add_dir_context(dir);
   le->metablob.add_dir( dir, false );
@@ -1054,6 +1075,8 @@ void Migrator::handle_export_ack(MExportDirAck *m)
 
 
 
+
+
 /*
  * this happens if hte dest failes after i send teh export data but before it is acked
  * that is, we don't know they safely received and logged it, so we reverse our changes
@@ -1064,7 +1087,6 @@ void Migrator::export_reverse(CDir *dir)
   dout(7) << "export_reverse " << *dir << dendl;
   
   assert(export_state[dir] == EXPORT_EXPORTING);
-  assert(export_data.count(dir));
   
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -1073,6 +1095,23 @@ void Migrator::export_reverse(CDir *dir)
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
   cache->try_subtree_merge(dir);
 
+  // remove exporting pins
+  list<CDir*> rq;
+  rq.push_back(dir);
+  while (!rq.empty()) {
+    CDir *dir = rq.front(); 
+    rq.pop_front();
+    dir->abort_export();
+    for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
+      p->second->abort_export();
+      if (!p->second->is_primary()) continue;
+      CInode *in = p->second->get_inode();
+      in->abort_export();
+      if (in->is_dir())
+	in->get_nested_dirfrags(rq);
+    }
+  }
+  
   // unpin bounds
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
@@ -1082,26 +1121,10 @@ void Migrator::export_reverse(CDir *dir)
     bd->state_clear(CDir::STATE_EXPORTBOUND);
   }
 
-  // re-import the metadata
-  map<int,entity_inst_t> imported_client_map;
-  int off = 0;
-  ::_decode(imported_client_map, export_data[dir].front(), off);
-  export_data[dir].pop_front();
-
-  while (!export_data[dir].empty()) {
-    decode_import_dir(export_data[dir].front(), 
-		      export_peer[dir], 
-		      dir,                 // import root
-		      0,
-		      imported_client_map);
-    export_data[dir].pop_front();
-  }
-
   // process delayed expires
   cache->process_delayed_expire(dir);
   
   // some clean up
-  export_data.erase(dir);
   export_warning_ack_waiting.erase(dir);
   export_notify_ack_waiting.erase(dir);
 
@@ -1225,6 +1248,11 @@ void Migrator::export_finish(CDir *dir)
     dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;
   }
   
+  // finish export (adjust local cache state)
+  C_Contexts *fin = new C_Contexts;
+  finish_export_dir(dir, fin->contexts, g_clock.now());
+  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
+
   // unfreeze
   dout(7) << "export_finish unfreezing" << dendl;
   dir->unfreeze_tree();
@@ -1256,7 +1284,6 @@ void Migrator::export_finish(CDir *dir)
 
   // remove from exporting list, clean up state
   dir->state_clear(CDir::STATE_EXPORTING);
-  dir->put(CDir::PIN_EXPORTING);
   export_state.erase(dir);
   export_peer.erase(dir);
   export_notify_ack_waiting.erase(dir);
@@ -1572,19 +1599,19 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // add this crap to my cache
   map<int,entity_inst_t> imported_client_map;
-  int off = 0;
-  ::_decode(imported_client_map, m->get_dirstate().front(), off);
-  m->get_dirstate().pop_front();
+  bufferlist::iterator blp = m->get_dirstate().begin();
+  ::_decode_simple(imported_client_map, blp);
 
   int num_imported_inodes = 0;
-  while (!m->get_dirstate().empty()) {
+  while (!blp.end()) {
     num_imported_inodes += 
-      decode_import_dir(m->get_dirstate().front(), 
+      decode_import_dir(blp,
 			oldauth, 
 			dir,                 // import root
 			le,
-			imported_client_map);
-    m->get_dirstate().pop_front();
+			imported_client_map,
+			mds->mdlog->get_current_segment(),
+			import_updated_scatterlocks[dir]);
   }
   dout(10) << " " << m->get_bounds().size() << " imported bounds" << dendl;
   
@@ -1762,6 +1789,7 @@ void Migrator::import_reverse_final(CDir *dir)
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
   import_bound_ls.erase(dir);
+  import_updated_scatterlocks.erase(dir);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -1803,6 +1831,12 @@ void Migrator::import_finish(CDir *dir)
   // log finish
   mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
+  // clear updated scatterlocks
+  for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
+       p != import_updated_scatterlocks[dir].end();
+       ++p) 
+    (*p)->clear_updated();
+
   // remove pins
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -1817,6 +1851,7 @@ void Migrator::import_finish(CDir *dir)
   import_peer.erase(dir->dirfrag());
   import_bystanders.erase(dir);
   import_bound_ls.erase(dir);
+  import_updated_scatterlocks.erase(dir);
 
   // process delayed expires
   cache->process_delayed_expire(dir);
@@ -1839,16 +1874,18 @@ void Migrator::import_finish(CDir *dir)
 }
 
 
-void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth,
-				   map<int,entity_inst_t>& imported_client_map)
+void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth,
+				   map<int,entity_inst_t>& imported_client_map, 
+				   LogSegment *ls,
+				   list<ScatterLock*>& updated_scatterlocks)
 {  
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
-  CInodeExport istate;
-  off = istate._decode(bl, off);
+  inodeno_t ino;
+  ::_decode_simple(ino, blp);
   
   bool added = false;
-  CInode *in = cache->get_inode(istate.get_ino());
+  CInode *in = cache->get_inode(ino);
   if (!in) {
     in = new CInode(mds->mdcache);
     added = true;
@@ -1858,7 +1895,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
 
   // state after link  -- or not!  -sage
   set<int> merged_client_caps;
-  istate.update_inode(in, merged_client_caps);
+  in->decode_import(blp, merged_client_caps, ls);
  
   // link before state  -- or not!  -sage
   if (dn->inode != in) {
@@ -1874,6 +1911,15 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     dout(10) << "  had " << *in << dendl;
   }
   
+  // clear if dirtyscattered, since we're going to journal this
+  //  but not until we _actually_ finish the import...
+  if (in->dirlock.is_updated())
+    updated_scatterlocks.push_back(&in->dirlock);
+
+  // put in autoscatter list?
+  //  this is conservative, but safe.
+  if (in->dirlock.get_state() == LOCK_SCATTER)
+    mds->locker->note_autoscattered(&in->dirlock);
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
@@ -1897,27 +1943,27 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
 }
 
 
-int Migrator::decode_import_dir(bufferlist& bl,
+int Migrator::decode_import_dir(bufferlist::iterator& blp,
 				int oldauth,
 				CDir *import_root,
 				EImportStart *le,
-				map<int,entity_inst_t>& imported_client_map)
+				map<int,entity_inst_t>& imported_client_map,
+				LogSegment *ls,
+				list<ScatterLock*>& updated_scatterlocks)
 {
-  int off = 0;
-  
   // set up dir
-  CDirExport dstate;
-  off = dstate._decode(bl, off);
-  
-  CInode *diri = cache->get_inode(dstate.get_dirfrag().ino);
+  dirfrag_t df;
+  ::_decode_simple(df, blp);
+
+  CInode *diri = cache->get_inode(df.ino);
   assert(diri);
-  CDir *dir = diri->get_or_open_dirfrag(mds->mdcache, dstate.get_dirfrag().frag);
+  CDir *dir = diri->get_or_open_dirfrag(mds->mdcache, df.frag);
   assert(dir);
   
   dout(7) << "decode_import_dir " << *dir << dendl;
 
   // assimilate state
-  dstate.update_dir( dir );
+  dir->decode_import(blp);
 
   // mark  (may already be marked from get_or_open_dir() above)
   if (!dir->is_auth())
@@ -1951,27 +1997,31 @@ int Migrator::decode_import_dir(bufferlist& bl,
   dout(15) << "doing contents" << dendl;
   
   // contents
-  long nden = dstate.get_nden();
+  long nden;
+  ::_decode_simple(nden, blp);
   
   for (; nden>0; nden--) {
     num_imported++;
     
     // dentry
     string dname;
-    ::_decode(dname, bl, off);
+    ::_decode_simple(dname, blp);
     
     CDentry *dn = dir->lookup(dname);
     if (!dn)
       dn = dir->add_null_dentry(dname);
     
-    // decode state
-    dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
+    dn->decode_import(blp, ls);
+
+    dn->add_replica(oldauth, CDentry::EXPORT_NONCE);
+    if (dn->is_replica(mds->get_nodeid()))
+      dn->remove_replica(mds->get_nodeid());
+
     dout(15) << "decode_import_dir got " << *dn << dendl;
     
     // points to...
     char icode;
-    bl.copy(off, 1, &icode);
-    off++;
+    ::_decode_simple(icode, blp);
     
     if (icode == 'N') {
       // null dentry
@@ -1983,8 +2033,8 @@ int Migrator::decode_import_dir(bufferlist& bl,
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      ::_decode(ino, bl, off);
-      ::_decode(d_type, bl, off);
+      ::_decode_simple(ino, blp);
+      ::_decode_simple(d_type, blp);
       if (dn->is_remote()) {
 	assert(dn->get_remote_ino() == ino);
       } else {
@@ -1993,7 +2043,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
     }
     else if (icode == 'I') {
       // inode
-      decode_import_inode(dn, bl, off, oldauth, imported_client_map);
+      decode_import_inode(dn, blp, oldauth, imported_client_map, ls, updated_scatterlocks);
     }
     
     // add dentry to journal entry

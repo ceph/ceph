@@ -441,6 +441,10 @@ public:
 
       unsigned get_off() { return off; }
 
+      bool end() {
+	return p == ls.end();
+      }
+
       void advance(unsigned o) {
 	//cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
 	p_off += o;
@@ -712,6 +716,7 @@ public:
 	unsigned gap = append_buffer.unused_tail_length();
 	if (gap > 0) {
 	  if (gap > len) gap = len;
+	  //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
 	  append_buffer.append(data, gap);
 	  append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
 	  len -= gap;
@@ -946,7 +951,9 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
 
 
 // ----------------------------------------------------------
-// new encoders
+// encoders
+
+// DEPRECATED, please use _(en|de)code_(simple|complex)
 
 // raw
 template<class T>

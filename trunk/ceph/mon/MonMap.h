@@ -24,8 +24,8 @@
 
 class MonMap {
  public:
-  epoch_t   epoch;       // what epoch/version of the monmap
-  int       num_mon;
+  epoch_t epoch;       // what epoch/version of the monmap
+  int32_t num_mon;
   vector<entity_inst_t> mon_inst;
 
   int       last_mon;    // last mon i talked to
@@ -52,20 +52,16 @@ class MonMap {
   }
 
   void encode(bufferlist& blist) {
-    blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&num_mon, sizeof(num_mon));
-    
-    _encode(mon_inst, blist);
+    ::_encode(epoch, blist);
+    ::_encode(num_mon, blist);
+    ::_encode(mon_inst, blist);
   }
   
   void decode(bufferlist& blist) {
     int off = 0;
-    blist.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
-    blist.copy(off, sizeof(num_mon), (char*)&num_mon);
-    off += sizeof(num_mon);
-
-    _decode(mon_inst, blist, off);
+    ::_decode(epoch, blist, off);
+    ::_decode(num_mon, blist, off);
+    ::_decode(mon_inst, blist, off);
   }
 
   // read from/write to a file

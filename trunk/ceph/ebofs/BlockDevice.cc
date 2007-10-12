@@ -155,24 +155,25 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
     
     // allowed?  (not already submitted to kernel?)
     if (block_lock.intersects(bio->start, bio->length)) {
-      //      dout(20) << "dequeue_io " << bio->start << "~" << bio->length 
-      //               << " intersects block_lock " << block_lock << dendl;
+      dout(20) << "dequeue_io " << bio->start << "~" << bio->length 
+	       << " intersects block_lock " << block_lock << dendl;
       break;  // stop, or go with what we've got so far
     }
     
     // add to biols
     int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
-    if (num_iovs + nv >= IOV_MAX) break; // to many   //g_conf.bdev_iov_max) break;  // too many!
+    if (num_bio &&
+	num_iovs + nv >= IOV_MAX) break; // to many   //g_conf.bdev_iov_max) break;  // too many!
     num_iovs += nv;
     
     start = MIN(start, bio->start);
     length += bio->length;
     
     if (el_dir_forward) {
-      //dout(20) << "dequeue_io fw dequeue io at " << el_pos << " " << *i->second << dendl;
+      dout(20) << "dequeue_io fw dequeue io at " << el_pos << " " << *i->second << dendl;
       biols.push_back(bio);      // add at back
     } else {
-      //  dout(20) << "dequeue_io bw dequeue io at " << el_pos << " " << *i->second << dendl;
+      dout(20) << "dequeue_io bw dequeue io at " << el_pos << " " << *i->second << dendl;
       biols.push_front(bio);     // add at front
     }
     num_bio++;
@@ -689,7 +690,8 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
       
       left -= iov[n].iov_len;
       n++;
-      if (left == 0) break;
+      if (left == 0 ||
+	  n == IOV_MAX) break;
     }
     
     int r = ::writev(fd, iov, n);

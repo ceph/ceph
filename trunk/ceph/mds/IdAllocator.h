@@ -55,6 +55,7 @@ class IdAllocator {
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }
+  version_t get_committing_version() { return committing_version; }
 
   // load/save from disk (hack)
   bool is_undef() { return state == STATE_UNDEF; }

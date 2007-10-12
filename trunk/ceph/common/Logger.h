@@ -37,10 +37,10 @@ class Logger {
   vector< vector<double> > vals_to_avg;
 
   void maybe_resize(unsigned s) {
-    if (s >= vals.size()) {
-      vals.resize(s);
-      fvals.resize(s);
-      vals_to_avg.resize(s);
+    while (s >= vals.size()) {
+      vals.push_back(0);
+      fvals.push_back(0.0);
+      vals_to_avg.push_back(vector<double>());
     }
   }
 

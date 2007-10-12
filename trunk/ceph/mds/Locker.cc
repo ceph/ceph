@@ -202,7 +202,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if (!object->can_auth_pin()) {
       // wait
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
-      object->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       mds->locker->drop_locks(mdr);
       mdr->drop_local_auth_pins();
       return false;
@@ -241,8 +241,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
       mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
 
       // put in waiting list
-      assert(mdr->waiting_on_slave.count(p->first) == 0);
-      mdr->waiting_on_slave.insert(p->first);
+      assert(mdr->more()->waiting_on_slave.count(p->first) == 0);
+      mdr->more()->waiting_on_slave.insert(p->first);
     }
     return false;
   }
@@ -566,6 +566,7 @@ class C_MDL_RequestInodeFileCaps : public Context {
 public:
   C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {}
   void finish(int r) {
+    in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
   }
@@ -607,6 +608,7 @@ void Locker::request_inode_file_caps(CInode *in)
 
     // wait for single auth
     if (in->is_ambiguous_auth()) {
+      in->get(CInode::PIN_PTRWAITER);
       in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
 		     new C_MDL_RequestInodeFileCaps(this, in));
       return;
@@ -718,6 +720,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   if (cap->is_null()) {
     dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
     in->remove_client_cap(client);
+    if (!in->is_any_caps()) 
+      in->xlist_open_file.remove_myself();  // unpin logsegment
     if (!in->is_auth())
       request_inode_file_caps(in);
 
@@ -979,7 +983,7 @@ void Locker::try_simple_eval(SimpleLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_simple_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_SimpleEval(this, lock));
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_SimpleEval(this, lock));
     return;
   }
 
@@ -1105,7 +1109,7 @@ bool Locker::simple_rdlock_try(SimpleLock *lock, Context *con)
 
   // wait!
   dout(7) << "simple_rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->add_waiter(SimpleLock::WAIT_RD, con);
+  if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
   return false;
 }
 
@@ -1192,7 +1196,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
 
     // send lock request
     int auth = lock->get_parent()->authority().first;
-    mdr->slaves.insert(auth);
+    mdr->more()->slaves.insert(auth);
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
@@ -1413,6 +1417,7 @@ class C_Locker_ScatterEval : public Context {
 public:
   C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
+    lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_scatter_eval(lock);
   }
 };
@@ -1423,8 +1428,9 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   // unstable and ambiguous auth?
   if (!lock->is_stable() &&
       lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
+    dout(7) << "try_scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);
     lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
     return;
   }
@@ -1437,7 +1443,8 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_AUTHPINNABLE, new C_Locker_ScatterEval(this, lock));
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_ScatterEval(this, lock));
     return;
   }
 
@@ -1464,7 +1471,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 			      auth, MDS_PORT_LOCKER);
       }
       lock->set_state(LOCK_LOCK);
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
     }
     
   } else {
@@ -1492,7 +1498,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	dout(7) << "scatter_eval finished lock gather/un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
 	lock->set_state(LOCK_LOCK);
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);
 	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
 	lock->get_parent()->auth_unpin();
       }
@@ -1528,7 +1533,6 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	send_lock_message(lock, LOCK_AC_SCATTER, data);
       }
       lock->set_state(LOCK_SCATTER);
-      //lock->get_parent()->get(CInode::PIN_SCATTERED);
       lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);      
       lock->get_parent()->auth_unpin();
     }
@@ -1559,10 +1563,11 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(10) << "scatter_writebehind on " << *lock << " on " << *in << dendl;
+  dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // journal write-behind.
   inode_t *pi = in->project_inode();
+  pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
   pi->version = in->pre_dirty();
   
   EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
@@ -1570,14 +1575,14 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock));
+  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mds->mdlog->get_current_segment()));
 }
 
-void Locker::scatter_writebehind_finish(ScatterLock *lock)
+void Locker::scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
-  in->pop_and_dirty_projected_inode();
+  in->pop_and_dirty_projected_inode(ls);
   lock->clear_updated();
   scatter_eval_gather(lock);
 }
@@ -1589,21 +1594,55 @@ void Locker::scatter_eval(ScatterLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (((CInode*)lock->get_parent())->has_subtree_root_dirfrag()) {
+  CInode *in = (CInode*)lock->get_parent();
+  if (in->has_subtree_root_dirfrag() && !in->is_base()) {
     // i _should_ be scattered.
     if (!lock->is_rdlocked() &&
-	!lock->is_xlocked()) {
+	!lock->is_xlocked() &&
+	lock->get_state() != LOCK_SCATTER) {
       dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << dendl;
       scatter_scatter(lock);
+      autoscattered.push_back(&lock->xlistitem_autoscattered);
     }
   } else {
     // i _should_ be sync.
+    lock->xlistitem_autoscattered.remove_myself(); 
     if (!lock->is_wrlocked() &&
-	!lock->is_xlocked()) {
+	!lock->is_xlocked() &&
+	lock->get_state() != LOCK_SYNC) {
       dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << dendl;
       scatter_sync(lock);
     }
   }
+}
+
+void Locker::note_autoscattered(ScatterLock *lock)
+{
+  dout(10) << "note_autoscattered " << *lock << " on " << *lock->get_parent() << dendl;
+  autoscattered.push_back(&lock->xlistitem_autoscattered);
+}
+
+
+/*
+ * this is called by LogSegment::try_to_trim() when trying to 
+ * flush dirty scattered data (e.g. inode->dirlock mtime) back
+ * to the auth node.
+ */
+void Locker::scatter_try_unscatter(ScatterLock *lock, Context *c)
+{
+  dout(10) << "scatter_try_unscatter " << *lock << " on " << *lock->get_parent() << dendl;
+  assert(!lock->get_parent()->is_auth());
+  assert(!lock->get_parent()->is_ambiguous_auth());
+
+  // request unscatter?
+  int auth = lock->get_parent()->authority().first;
+  if (lock->get_state() == LOCK_SCATTER &&
+      mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) 
+    mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()),
+			  auth, MDS_PORT_LOCKER);
+  
+  // wait...
+  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 }
 
 
@@ -1636,7 +1675,6 @@ void Locker::scatter_sync(ScatterLock *lock)
       lock->init_gather();
     } else {
       if (!lock->is_wrlocked()) {
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
 	break; // do it now, we're fine
       }
     }
@@ -1667,6 +1705,8 @@ void Locker::scatter_scatter(ScatterLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
   
+  lock->set_last_scatter(g_clock.now());
+
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
@@ -1708,7 +1748,6 @@ void Locker::scatter_scatter(ScatterLock *lock)
     send_lock_message(lock, LOCK_AC_SCATTER, data);
   } 
   lock->set_state(LOCK_SCATTER);
-  //lock->get_parent()->get(CInode::PIN_SCATTERED);
   lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
 }
 
@@ -1739,7 +1778,6 @@ void Locker::scatter_lock(ScatterLock *lock)
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
 	!lock->get_parent()->is_replicated()) {
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
     }
 
@@ -1788,7 +1826,6 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   case LOCK_SCATTER:
     if (!lock->is_wrlocked() &&
 	!lock->get_parent()->is_replicated()) {
-      //lock->get_parent()->put(CInode::PIN_SCATTERED);      
       break; // do it.
     }
     
@@ -1812,8 +1849,6 @@ void Locker::scatter_tempsync(ScatterLock *lock)
 
 
 
-
-
 void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 {
   int from = m->get_asker();
@@ -1832,7 +1867,6 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     // -- replica --
   case LOCK_AC_SYNC:
     assert(lock->get_state() == LOCK_LOCK);
-
     lock->set_state(LOCK_SYNC);
     lock->decode_locked_state(m->get_data());
     lock->clear_updated();
@@ -1842,7 +1876,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCK:
     assert(lock->get_state() == LOCK_SCATTER ||
 	   lock->get_state() == LOCK_SYNC);
-    
+
     // wait for wrlocks to close?
     if (lock->is_wrlocked()) {
       assert(lock->get_state() == LOCK_SCATTER);
@@ -1855,9 +1889,9 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 	      << " on " << *lock->get_parent() << dendl;
       lock->set_state(LOCK_GLOCKS);
     } else {
-      //if (lock->get_state() == LOCK_SCATTER) 
-	//lock->get_parent()->put(CInode::PIN_SCATTERED);      
-
+      dout(7) << "handle_scatter_lock has no rd|wrlocks, sending lockack for " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      
       // encode and reply
       bufferlist data;
       lock->encode_locked_state(data);
@@ -1872,7 +1906,6 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     lock->decode_locked_state(m->get_data());
     lock->clear_updated();
     lock->set_state(LOCK_SCATTER);
-    //lock->get_parent()->get(CInode::PIN_SCATTERED);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
     break;
 
@@ -1900,21 +1933,77 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
   case LOCK_AC_REQSCATTER:
     if (lock->is_stable()) {
-      dout(7) << "handle_scatter_lock got scatter request on " << *lock << " on " << *lock->get_parent()
-	      << dendl;
+      /* NOTE: we can do this _even_ if !can_auth_pin (i.e. freezing)
+       *  because the replica should be holding an auth_pin if they're
+       *  doing this (and thus, we are freezing, not frozen, and indefinite
+       *  starvation isn't an issue).
+       */
+      dout(7) << "handle_scatter_lock got scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
       scatter_scatter(lock);
     } else {
-      dout(7) << "handle_scatter_lock ignoring scatter request on " << *lock << " on " << *lock->get_parent()
-	      << dendl;
+      dout(7) << "handle_scatter_lock ignoring scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
     }
     break;
 
+  case LOCK_AC_REQUNSCATTER:
+    if (!lock->is_stable()) {
+      dout(7) << "handle_scatter_lock ignoring now-unnecessary unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    } else if (lock->get_parent()->can_auth_pin()) {
+      dout(7) << "handle_scatter_lock got unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      scatter_lock(lock);
+    } else {
+      dout(7) << "handle_scatter_lock DROPPING unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      /* FIXME: if we can't auth_pin here, this request is effectively lost... */
+    }
   }
 
   delete m;
 }
 
 
+
+void Locker::scatter_unscatter_autoscattered()
+{
+  /* 
+   * periodically unscatter autoscattered locks
+   */
+
+  dout(10) << "scatter_unscatter_autoscattered" << dendl;
+  
+  utime_t now = g_clock.now();
+  int n = autoscattered.size();
+  while (!autoscattered.empty()) {
+    ScatterLock *lock = autoscattered.front();
+    
+    // stop?
+    if (lock->get_state() == LOCK_SCATTER &&
+	now - lock->get_last_scatter() < 10.0) 
+      break;
+    
+    autoscattered.pop_front();
+
+    if (lock->get_state() == LOCK_SCATTER &&
+	lock->get_parent()->is_replicated()) {
+      if (((CInode*)lock->get_parent())->is_frozen() ||
+	  ((CInode*)lock->get_parent())->is_freezing()) {
+	// hrm.. requeue.
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", but frozen|freezing, requeueing" << dendl;
+	autoscattered.push_back(&lock->xlistitem_autoscattered);	
+      } else {
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", locking" << dendl;
+	scatter_lock(lock);
+      }
+    }
+    if (--n == 0) break;
+  }
+}
 
 
 
@@ -2138,6 +2227,7 @@ class C_Locker_FileEval : public Context {
 public:
   C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {}
   void finish(int r) {
+    lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_file_eval(lock);
   }
 };
@@ -2151,6 +2241,7 @@ void Locker::try_file_eval(FileLock *lock)
       in->is_ambiguous_auth()) {
     dout(7) << "try_file_eval not stable and ambiguous auth, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
+    in->get(CInode::PIN_PTRWAITER);
     in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
     return;
   }
@@ -2163,7 +2254,8 @@ void Locker::try_file_eval(FileLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_Locker_FileEval(this, lock));
+    in->get(CInode::PIN_PTRWAITER);
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_FileEval(this, lock));
     return;
   }
 

@@ -410,6 +410,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   
   // put in a buffer
   bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
+  bp.zero();
   memcpy(bp.c_str(), (const char*)&sb, sizeof(sb));
 }
 

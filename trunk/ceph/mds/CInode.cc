@@ -22,6 +22,8 @@
 #include "MDCache.h"
 #include "AnchorTable.h"
 
+#include "LogSegment.h"
+
 #include "common/Clock.h"
 
 #include "messages/MLock.h"
@@ -61,6 +63,10 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_dir() && !in.dirfragtree.empty()) out << " " << in.dirfragtree;
   
   out << " v" << in.get_version();
+
+  if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
+  if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
+  if (in.is_frozen_inode()) out << " FROZEN";
 
   // locks
   out << " " << in.authlock;
@@ -109,12 +115,12 @@ inode_t *CInode::project_inode()
   return projected_inode.back();
 }
   
-void CInode::pop_and_dirty_projected_inode() 
+void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
 {
   assert(!projected_inode.empty());
   dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
 	   << " v" << projected_inode.front()->version << dendl;
-  mark_dirty(projected_inode.front()->version);
+  mark_dirty(projected_inode.front()->version, ls);
   inode = *projected_inode.front();
   delete projected_inode.front();
   projected_inode.pop_front();
@@ -393,15 +399,20 @@ version_t CInode::pre_dirty()
   return parent->pre_dirty();
 }
 
-void CInode::_mark_dirty()
+void CInode::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
+    assert(ls);
   }
+  
+  // move myself to this segment's dirty list
+  if (ls) 
+    ls->dirty_inodes.push_back(&xlist_dirty);
 }
 
-void CInode::mark_dirty(version_t pv) {
+void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << dendl;
 
@@ -420,10 +431,10 @@ void CInode::mark_dirty(version_t pv) {
   // touch my private version
   assert(inode.version < pv);
   inode.version = pv;
-  _mark_dirty();
+  _mark_dirty(ls);
 
   // mark dentry too
-  parent->mark_dirty(pv);
+  parent->mark_dirty(pv, ls);
 }
 
 
@@ -433,6 +444,9 @@ void CInode::mark_clean()
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
+    
+    // remove myself from ls dirty list
+    xlist_dirty.remove_myself();
   }
 }    
 
@@ -551,7 +565,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     _decode(tm, bl, off);
     if (inode.mtime < tm) {
       inode.mtime = tm;
-      dirlock.set_updated();
+      if (is_auth()) {
+	dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
+		 << ", setting dirlock updated flag on " << *this
+		 << dendl;
+	dirlock.set_updated();
+      }
     }
     if (0) {
       map<frag_t,int> dfsz;
@@ -565,6 +584,17 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   }
 }
 
+void CInode::clear_dirty_scattered(int type)
+{
+  dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
+  switch (type) {
+  case LOCK_OTYPE_IDIR:
+    xlist_dirty_inode_mtime.remove_myself();
+    break;
+  default:
+    assert(0);
+  }
+}
 
 
 
@@ -572,38 +602,78 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
 bool CInode::is_frozen()
 {
-  if (parent && parent->dir->is_frozen())
-    return true;
+  if (is_frozen_inode()) return true;
+  if (parent && parent->dir->is_frozen()) return true;
   return false;
 }
 
 bool CInode::is_frozen_dir()
 {
-  if (parent && parent->dir->is_frozen_dir())
-    return true;
+  if (parent && parent->dir->is_frozen_dir()) return true;
   return false;
 }
 
 bool CInode::is_freezing()
 {
-  if (parent && parent->dir->is_freezing())
-    return true;
+  if (is_freezing_inode()) return true;
+  if (parent && parent->dir->is_freezing()) return true;
   return false;
 }
 
 void CInode::add_waiter(int tag, Context *c) 
 {
+  dout(10) << "add_waiter tag " << tag 
+	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
+	   << " !frozen " << !is_frozen_inode()
+	   << " !freezing " << !is_freezing_inode()
+	   << dendl;
   // wait on the directory?
-  if (tag & (WAIT_AUTHPINNABLE|WAIT_SINGLEAUTH)) {
+  //  make sure its not the inode that is explicitly ambiguous|freezing|frozen
+  if (((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH)) ||
+      ((tag & WAIT_UNFREEZE) && !is_frozen_inode() && !is_freezing_inode())) {
     parent->dir->add_waiter(tag, c);
     return;
   }
   MDSCacheObject::add_waiter(tag, c);
 }
 
+bool CInode::freeze_inode(int auth_pin_allowance)
+{
+  assert(auth_pin_allowance > 0);  // otherwise we need to adjust parent's nested_auth_pins
+  assert(auth_pins >= auth_pin_allowance);
+  if (auth_pins > auth_pin_allowance) {
+    dout(10) << "freeze_inode - waiting for auth_pins to drop to " << auth_pin_allowance << dendl;
+    auth_pin_freeze_allowance = auth_pin_allowance;
+    get(PIN_FREEZING);
+    state_set(STATE_FREEZING);
+    return false;
+  }
+
+  dout(10) << "freeze_inode - frozen" << dendl;
+  assert(auth_pins == auth_pin_allowance);
+  get(PIN_FROZEN);
+  state_set(STATE_FROZEN);
+  return true;
+}
+
+void CInode::unfreeze_inode(list<Context*>& finished) 
+{
+  dout(10) << "unfreeze_inode" << dendl;
+  if (state_test(STATE_FREEZING)) {
+    state_clear(STATE_FREEZING);
+    put(PIN_FREEZING);
+  } else if (state_test(STATE_FROZEN)) {
+    state_clear(STATE_FROZEN);
+    put(PIN_FROZEN);
+  } else 
+    assert(0);
+  take_waiting(WAIT_UNFREEZE, finished);
+}
+
 
 // auth_pins
 bool CInode::can_auth_pin() {
+  if (is_freezing_inode() || is_frozen_inode()) return false;
   if (parent)
     return parent->can_auth_pin();
   return true;
@@ -615,7 +685,9 @@ void CInode::auth_pin()
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_pin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
   
   if (parent)
     parent->adjust_nested_auth_pins( 1 );
@@ -627,18 +699,36 @@ void CInode::auth_unpin()
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+  dout(10) << "auth_unpin on " << *this
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
   
   assert(auth_pins >= 0);
-  
+
   if (parent)
     parent->adjust_nested_auth_pins( -1 );
+
+  if (is_freezing_inode() &&
+      auth_pins == auth_pin_freeze_allowance) {
+    dout(10) << "auth_unpin freezing!" << dendl;
+    get(PIN_FROZEN);
+    put(PIN_FREEZING);
+    state_clear(STATE_FREEZING);
+    state_set(STATE_FROZEN);
+    finish_waiting(WAIT_FROZEN);
+  }  
 }
 
 void CInode::adjust_nested_auth_pins(int a)
 {
   if (!parent) return;
   nested_auth_pins += a;
+
+  dout(15) << "adjust_nested_auth_pins by " << a
+	   << " now " << auth_pins << "+" << nested_auth_pins
+	   << dendl;
+  assert(nested_auth_pins >= 0);
+
   parent->adjust_nested_auth_pins(a);
 }
 
@@ -673,3 +763,76 @@ CInodeDiscover* CInode::replicate_to( int rep )
 
 
 
+
+// IMPORT/EXPORT
+
+void CInode::encode_export(bufferlist& bl)
+{
+  ::_encode_simple(inode, bl);
+  ::_encode_simple(symlink, bl);
+  dirfragtree._encode(bl);
+
+  bool dirty = is_dirty();
+  ::_encode_simple(dirty, bl);
+
+  ::_encode_simple(pop, bl);
+ 
+  ::_encode_simple(replica_map, bl);
+
+  map<int,Capability::Export>  cap_map;
+  export_client_caps(cap_map);
+  ::_encode_simple(cap_map, bl);
+
+  authlock._encode(bl);
+  linklock._encode(bl);
+  dirfragtreelock._encode(bl);
+  filelock._encode(bl);
+  dirlock._encode(bl);
+
+  get(PIN_TEMPEXPORTING);
+}
+
+void CInode::finish_export(utime_t now)
+{
+  pop.zero(now);
+
+  // just in case!
+  dirlock.clear_updated();
+
+  put(PIN_TEMPEXPORTING);
+}
+
+void CInode::decode_import(bufferlist::iterator& p,
+			   set<int>& new_client_caps, 
+			   LogSegment *ls)
+{
+  utime_t old_mtime = inode.mtime;
+  ::_decode_simple(inode, p);
+  if (old_mtime > inode.mtime) {
+    assert(dirlock.is_updated());
+    inode.mtime = old_mtime;     // preserve our mtime, if it is larger
+  }
+
+  ::_decode_simple(symlink, p);
+  dirfragtree._decode(p);
+
+  bool dirty;
+  ::_decode_simple(dirty, p);
+  if (dirty) 
+    _mark_dirty(ls);
+
+  ::_decode_simple(pop, p);
+
+  ::_decode_simple(replica_map, p);
+  if (!replica_map.empty()) get(PIN_REPLICATED);
+
+  map<int,Capability::Export>  cap_map;
+  ::_decode_simple(cap_map, p);
+  merge_client_caps(cap_map, new_client_caps);
+
+  authlock._decode(p);
+  linklock._decode(p);
+  dirfragtreelock._decode(p);
+  filelock._decode(p);
+  dirlock._decode(p);
+}

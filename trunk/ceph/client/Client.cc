@@ -409,25 +409,19 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
  *
  * update MDS location cache for a single inode
  */
-void Client::update_inode_dist(Inode *in, InodeStat *st)
+void Client::update_dir_dist(Inode *in, DirStat *dst)
 {
   // auth
   in->dir_auth = -1;
-  if (st->dirfrag_auth.size() == 1) { 
-    in->dir_auth = st->dirfrag_auth.begin()->second; 
+  if (dst->frag == frag_t()) {
+    in->dir_auth = dst->auth;
   } else {
-    for (map<frag_t,int>::iterator p = st->dirfrag_auth.begin();
-	 p != st->dirfrag_auth.end();
-	 ++p) {
-      dout(20) << "got dirfrag map for " << in->inode.ino << " frag " << p->first << " to mds " << p->second << dendl;
-      in->fragmap[p->first] = p->second;
-    }
+    dout(20) << "got dirfrag map for " << in->inode.ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
+    in->fragmap[dst->frag] = dst->auth;
   }
 
   // replicated
-  in->dir_replicated = false;
-  if (!st->dirfrag_rep.empty())
-    in->dir_replicated = true;       // FIXME
+  in->dir_replicated = dst->is_rep;  // FIXME that's just one frag!
   
   // dist
   /*
@@ -457,6 +451,7 @@ Inode* Client::insert_trace(MClientReply *reply)
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
 
   list<string>::const_iterator pdn = reply->get_trace_dn().begin();
+  list<DirStat*>::const_iterator pdir = reply->get_trace_dir().begin();
 
   for (list<InodeStat*>::const_iterator pin = reply->get_trace_in().begin();
        pin != reply->get_trace_in().end();
@@ -470,10 +465,12 @@ Inode* Client::insert_trace(MClientReply *reply)
         cur = root = new Inode((*pin)->inode, objectcacher);
 	dout(10) << "insert_trace new root is " << root << dendl;
         inode_map[root->inode.ino] = root;
+	root->dir_auth = 0;
       }
     } else {
       // not root.
       Dir *dir = cur->open_dir();
+      assert(pdn != reply->get_trace_dn().end());
       cur = this->insert_inode(dir, *pin, *pdn);
       dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
       ++pdn;      
@@ -483,14 +480,16 @@ Inode* Client::insert_trace(MClientReply *reply)
         lru.lru_touch(cur->dn);
     }
 
-    // update dist info
-    update_inode_dist(cur, *pin);
-
     // set cache ttl
     if (g_conf.client_cache_stat_ttl) {
       cur->valid_until = now;
       cur->valid_until += g_conf.client_cache_stat_ttl;
     }
+
+    // update dir dist info
+    if (pdir == reply->get_trace_dir().end()) break;
+    update_dir_dist(cur, *pdir);
+    ++pdir;
   }
 
   return cur;
@@ -980,10 +979,15 @@ void Client::handle_mds_map(MMDSMap* m)
     mount_cond.Signal();  // mount might be waiting for this.
   } 
 
+  if (m->get_epoch() < mdsmap->get_epoch()) {
+    dout(1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
+	    << mdsmap->get_epoch() << dendl;
+    delete m;
+    return;
+  }  
+
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
-  epoch_t was = mdsmap->get_epoch();
   mdsmap->decode(m->get_encoded());
-  assert(mdsmap->get_epoch() >= was);
   
   // send reconnect?
   if (frommds >= 0 && 

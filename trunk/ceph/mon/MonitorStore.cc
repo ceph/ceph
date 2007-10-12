@@ -109,9 +109,8 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   char tfn[200];
   sprintf(tfn, "%s.new", fn);
 
-  int fd = ::open(tfn, O_WRONLY|O_CREAT);
+  int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   assert(fd > 0);
-  ::fchmod(fd, 0644);
   ::write(fd, vs, strlen(vs));
   ::close(fd);
   ::rename(tfn, fn);
@@ -201,12 +200,9 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
   
   char tfn[200];
   sprintf(tfn, "%s.new", fn);
-  int fd = ::open(tfn, O_WRONLY|O_CREAT);
+  int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   assert(fd);
   
-  // chmod
-  ::fchmod(fd, 0644);
-
   // write data
   for (list<bufferptr>::const_iterator it = bl.buffers().begin();
        it != bl.buffers().end();

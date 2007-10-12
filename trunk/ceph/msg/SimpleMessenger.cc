@@ -86,6 +86,7 @@ int Rank::Accepter::start()
   dout(10) << "accepter.start" << dendl;
   
   char hostname[100];
+  memset(hostname, 0, 100);
   gethostname(hostname, 100);
   dout(2) << "accepter.start my hostname is " << hostname << dendl;
 
@@ -168,8 +169,10 @@ int Rank::Accepter::start()
 
   // set a harmless handle for SIGUSR1 (we'll use it to stop the accepter)
   struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sa_handler = noop_signal_handler;
   sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
 
   // start thread
@@ -1216,27 +1219,26 @@ void Rank::wait()
  * EntityMessenger
  */
 
-Rank::EntityMessenger::EntityMessenger(entity_name_t myaddr) :
-  Messenger(myaddr),
-  stop(false),
-  dispatch_thread(this)
-{
-}
-Rank::EntityMessenger::~EntityMessenger()
-{
-  // join dispatch thread
-  if (dispatch_thread.is_started())
-    dispatch_thread.join();
-}
-
 void Rank::EntityMessenger::dispatch_entry()
 {
   lock.Lock();
   while (!stop) {
-    if (!dispatch_queue.empty()) {
+    if (!dispatch_queue.empty() || !prio_dispatch_queue.empty()) {
       list<Message*> ls;
-      ls.swap(dispatch_queue);
-      qlen = 0;
+      if (!prio_dispatch_queue.empty()) {
+	ls.swap(prio_dispatch_queue);
+	pqlen = 0;
+      } else {
+	if (0) {
+	  ls.swap(dispatch_queue);
+	  qlen = 0;
+	} else {
+	  // limit how much low-prio stuff we grab, to avoid starving high-prio messages!
+	  ls.push_back(dispatch_queue.front());
+	  dispatch_queue.pop_front();
+	  qlen--;
+	}
+      }
 
       lock.Unlock();
       {

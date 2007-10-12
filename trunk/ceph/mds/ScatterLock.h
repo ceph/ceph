@@ -65,12 +65,16 @@ inline const char *get_scatterlock_state_name(int s) {
 class ScatterLock : public SimpleLock {
   int num_wrlock;
   bool updated;
+  utime_t last_scatter;
 
 public:
+  xlist<ScatterLock*>::item xlistitem_autoscattered;
+
   ScatterLock(MDSCacheObject *o, int t, int wo) : 
     SimpleLock(o, t, wo),
     num_wrlock(0),
-    updated(false) {}
+    updated(false),
+    xlistitem_autoscattered(this) {}
 
   int get_replica_state() {
     switch (state) {
@@ -109,13 +113,15 @@ public:
     if (updated) {
       parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
       updated = false; 
+      parent->clear_dirty_scattered(type);
     }
   }
   bool is_updated() { return updated; }
   
+  void set_last_scatter(utime_t t) { last_scatter = t; }
+  utime_t get_last_scatter() { return last_scatter; }
+
   void replicate_relax() {
-    //if (state == LOCK_SYNC && !is_rdlocked())
-    //state = LOCK_SCATTER;
   }
 
   void export_twiddle() {
@@ -167,6 +173,8 @@ public:
       out << " x=" << get_xlocked_by();
     if (is_wrlocked()) 
       out << " wr=" << get_num_wrlocks();
+    if (updated)
+      out << " updated";
     out << ")";
   }
 
