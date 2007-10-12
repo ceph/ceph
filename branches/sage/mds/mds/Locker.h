@@ -120,6 +120,7 @@ public:
 
   void scatter_unscatter_autoscattered();
   void scatter_try_unscatter(ScatterLock *lock, Context *c);
+  void note_autoscattered(ScatterLock *lock);
 
   void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
 

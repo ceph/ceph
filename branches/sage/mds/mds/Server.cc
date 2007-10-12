@@ -534,7 +534,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
   }
 
   // we shouldn't be waiting on anyone.
-  assert(mdr->waiting_on_slave.empty());
+  assert(mdr->more()->waiting_on_slave.empty());
   
   switch (req->get_op()) {
 
@@ -620,7 +620,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 						 m->get_object_info());
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	mdr->slaves.insert(from);
+	mdr->more()->slaves.insert(from);
 	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
@@ -882,17 +882,17 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   }
   
   // note slave
-  mdr->slaves.insert(from);
+  mdr->more()->slaves.insert(from);
 
   // clear from waiting list
-  assert(mdr->waiting_on_slave.count(from));
-  mdr->waiting_on_slave.erase(from);
+  assert(mdr->more()->waiting_on_slave.count(from));
+  mdr->more()->waiting_on_slave.erase(from);
 
   // go again?
-  if (mdr->waiting_on_slave.empty())
+  if (mdr->more()->waiting_on_slave.empty())
     dispatch_client_request(mdr);
   else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
+    dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
 
@@ -1989,7 +1989,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
     
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   int linkauth = targeti->authority().first;
-  if (mdr->witnessed.count(linkauth) == 0) {
+  if (mdr->more()->witnessed.count(linkauth) == 0) {
     dout(10) << " targeti auth must prepare nlink++" << dendl;
 
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREP);
@@ -1997,8 +1997,8 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
     req->now = mdr->now;
     mds->send_message_mds(req, linkauth, MDS_PORT_SERVER);
 
-    assert(mdr->waiting_on_slave.count(linkauth) == 0);
-    mdr->waiting_on_slave.insert(linkauth);
+    assert(mdr->more()->waiting_on_slave.count(linkauth) == 0);
+    mdr->more()->waiting_on_slave.insert(linkauth);
     return;
   }
   dout(10) << " targeti auth has prepared nlink++" << dendl;
@@ -2155,7 +2155,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
   mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
   
   // set up commit waiter
-  mdr->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, old_version, inc);
+  mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, old_version, inc);
 
   // done.
   delete mdr->slave_request;
@@ -2202,17 +2202,17 @@ void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
   int from = m->get_source().num();
 
   // note slave
-  mdr->slaves.insert(from);
+  mdr->more()->slaves.insert(from);
   
   // witnessed!
-  assert(mdr->witnessed.count(from) == 0);
-  mdr->witnessed.insert(from);
+  assert(mdr->more()->witnessed.count(from) == 0);
+  mdr->more()->witnessed.insert(from);
   
   // remove from waiting list
-  assert(mdr->waiting_on_slave.count(from));
-  mdr->waiting_on_slave.erase(from);
+  assert(mdr->more()->waiting_on_slave.count(from));
+  mdr->more()->waiting_on_slave.erase(from);
 
-  assert(mdr->waiting_on_slave.empty());
+  assert(mdr->more()->waiting_on_slave.empty());
 
   dispatch_client_request(mdr);  // go again!
 }
@@ -2319,12 +2319,12 @@ void Server::handle_client_unlink(MDRequest *mdr)
     dout(10) << " straydn is " << *straydn << dendl;
     assert(straydn->is_null());
 
-    if (!mdr->dst_reanchor_atid &&
+    if (!mdr->more()->dst_reanchor_atid &&
 	dn->inode->is_anchored()) {
       dout(10) << "reanchoring to stray " << *dn->inode << dendl;
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, dn->inode);
-      mds->anchorclient->prepare_update(dn->inode->ino(), trace, &mdr->dst_reanchor_atid, 
+      mds->anchorclient->prepare_update(dn->inode->ino(), trace, &mdr->more()->dst_reanchor_atid, 
 					new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
@@ -2397,8 +2397,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
-  if (mdr->dst_reanchor_atid)
-    le->metablob.add_anchor_transaction(mdr->dst_reanchor_atid);
+  if (mdr->more()->dst_reanchor_atid)
+    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // log + wait
   journal_opens();  // journal pending opens, just in case
@@ -2444,8 +2444,8 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   }
   
   // commit anchor update?
-  if (mdr->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
+  if (mdr->more()->dst_reanchor_atid) 
+    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   // bump pop
   //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
@@ -2486,7 +2486,7 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
 
   // 1. send LinkPrepare to dest (journal nlink-- prepare)
   int inauth = dn->inode->authority().first;
-  if (mdr->witnessed.count(inauth) == 0) {
+  if (mdr->more()->witnessed.count(inauth) == 0) {
     dout(10) << " inode auth must prepare nlink--" << dendl;
 
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNLINKPREP);
@@ -2494,8 +2494,8 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
     req->now = mdr->now;
     mds->send_message_mds(req, inauth, MDS_PORT_SERVER);
 
-    assert(mdr->waiting_on_slave.count(inauth) == 0);
-    mdr->waiting_on_slave.insert(inauth);
+    assert(mdr->more()->waiting_on_slave.count(inauth) == 0);
+    mdr->more()->waiting_on_slave.insert(inauth);
     return;
   }
   dout(10) << " inode auth has prepared nlink--" << dendl;
@@ -2512,8 +2512,8 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
-  if (mdr->dst_reanchor_atid)
-    le->metablob.add_anchor_transaction(mdr->dst_reanchor_atid);
+  if (mdr->more()->dst_reanchor_atid)
+    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // finisher
   C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn, dirpv);
@@ -2550,8 +2550,8 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
   }
 
   // commit anchor update?
-  if (mdr->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
+  if (mdr->more()->dst_reanchor_atid) 
+    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
 
@@ -2824,13 +2824,13 @@ void Server::handle_client_rename(MDRequest *mdr)
    * (currently, it can ignore rename effects, because the resolve
    * stage will sort them out.)
    */
-  set<int> witnesses = mdr->extra_witnesses;
+  set<int> witnesses = mdr->more()->extra_witnesses;
   if (srcdn->is_auth())
     srcdn->list_replicas(witnesses);
   else
     witnesses.insert(srcdn->authority().first);
   destdn->list_replicas(witnesses);
-  dout(10) << " witnesses " << witnesses << ", have " << mdr->witnessed << dendl;
+  dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
   // do srcdn auth last
   int last = -1;
@@ -2841,20 +2841,20 @@ void Server::handle_client_rename(MDRequest *mdr)
        p != witnesses.end();
        ++p) {
     if (*p == last) continue;  // do it last!
-    if (mdr->witnessed.count(*p)) {
+    if (mdr->more()->witnessed.count(*p)) {
       dout(10) << " already witnessed by mds" << *p << dendl;
-    } else if (mdr->waiting_on_slave.count(*p)) {
+    } else if (mdr->more()->waiting_on_slave.count(*p)) {
       dout(10) << " already waiting on witness mds" << *p << dendl;      
     } else {
       _rename_prepare_witness(mdr, *p, srcdn, destdn, straydn);
     }
   }
-  if (!mdr->waiting_on_slave.empty())
+  if (!mdr->more()->waiting_on_slave.empty())
     return;  // we're waiting for a witness.
 
   if (last >= 0 &&
-      mdr->witnessed.count(last) == 0 &&
-      mdr->waiting_on_slave.count(last) == 0) {
+      mdr->more()->witnessed.count(last) == 0 &&
+      mdr->more()->waiting_on_slave.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
     _rename_prepare_witness(mdr, last, srcdn, destdn, straydn);
     return;
@@ -2869,18 +2869,18 @@ void Server::handle_client_rename(MDRequest *mdr)
 
     if (srcdn->is_primary() && srcdn->inode->is_anchored() &&
 	srcdn->dir != destdn->dir &&
-	!mdr->src_reanchor_atid) {
+	!mdr->more()->src_reanchor_atid) {
       dout(10) << "reanchoring src->dst " << *srcdn->inode << dendl;
       vector<Anchor> trace;
       destdn->make_anchor_trace(trace, srcdn->inode);
       
       anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
-      mds->anchorclient->prepare_update(srcdn->inode->ino(), trace, &mdr->src_reanchor_atid, 
+      mds->anchorclient->prepare_update(srcdn->inode->ino(), trace, &mdr->more()->src_reanchor_atid, 
 					anchorgather->new_sub());
     }
     if (destdn->is_primary() &&
 	destdn->inode->is_anchored() &&
-	!mdr->dst_reanchor_atid) {
+	!mdr->more()->dst_reanchor_atid) {
       dout(10) << "reanchoring dst->stray " << *destdn->inode << dendl;
 
       assert(straydn);
@@ -2889,7 +2889,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       
       if (!anchorgather)
 	anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
-      mds->anchorclient->prepare_update(destdn->inode->ino(), trace, &mdr->dst_reanchor_atid, 
+      mds->anchorclient->prepare_update(destdn->inode->ino(), trace, &mdr->more()->dst_reanchor_atid, 
 					anchorgather->new_sub());
     }
 
@@ -2925,8 +2925,10 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   _rename_apply(mdr, srcdn, destdn, straydn);
   
   // commit anchor updates?
-  if (mdr->src_reanchor_atid) mds->anchorclient->commit(mdr->src_reanchor_atid, mdr->ls);
-  if (mdr->dst_reanchor_atid) mds->anchorclient->commit(mdr->dst_reanchor_atid, mdr->ls);
+  if (mdr->more()->src_reanchor_atid) 
+    mds->anchorclient->commit(mdr->more()->src_reanchor_atid, mdr->ls);
+  if (mdr->more()->dst_reanchor_atid) 
+    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   // bump popularity
   //if (srcdn->is_auth())
@@ -2970,12 +2972,12 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
   }
   
   // srcdn auth will verify our current witness list is sufficient
-  req->witnesses = mdr->witnessed;
+  req->witnesses = mdr->more()->witnessed;
 
   mds->send_message_mds(req, who, MDS_PORT_SERVER);
   
-  assert(mdr->waiting_on_slave.count(who) == 0);
-  mdr->waiting_on_slave.insert(who);
+  assert(mdr->more()->waiting_on_slave.count(who) == 0);
+  mdr->more()->waiting_on_slave.insert(who);
 }
 
 
@@ -2990,9 +2992,9 @@ void Server::_rename_prepare(MDRequest *mdr,
 		    (srcdn->is_primary() || destdn->is_primary()));
 
   if (mdr->is_master()) {
-    mdr->pvmap[destdn->dir->inode] = predirty_dn_diri(mdr, destdn, metablob); 
+    mdr->more()->pvmap[destdn->dir->inode] = predirty_dn_diri(mdr, destdn, metablob); 
     if (destdn->dir != srcdn->dir)
-      mdr->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
+      mdr->more()->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
   }
 
   inode_t *ji = 0;     // journaled inode getting nlink--
@@ -3004,13 +3006,13 @@ void Server::_rename_prepare(MDRequest *mdr,
     // destdn -> primary
     metablob->add_dir_context(destdn->dir);
     if (destdn->is_auth())
-      ipv = mdr->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
+      ipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
     ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
     
     // do src dentry
     metablob->add_dir_context(srcdn->dir);
     if (srcdn->is_auth())
-      mdr->pvmap[srcdn] = srcdn->pre_dirty();
+      mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
     metablob->add_null_dentry(srcdn, true);
 
   } else {
@@ -3022,7 +3024,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       // link-- inode, move to stray dir.
       metablob->add_dir_context(straydn->dir);
       if (straydn->is_auth())
-	ipv = mdr->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
+	ipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
       ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
     } 
     else if (destdn->is_remote()) {
@@ -3030,7 +3032,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       // nlink-- targeti
       metablob->add_dir_context(destdn->inode->get_parent_dir());
       if (destdn->inode->is_auth())
-	ipv = mdr->pvmap[destdn->inode] = destdn->inode->pre_dirty();
+	ipv = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
       ji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
       dout(10) << "remote targeti (nlink--) is " << *destdn->inode << dendl;
     }
@@ -3047,8 +3049,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	if (srcdn->is_auth())
 	  siv = srcdn->inode->get_projected_version();
 	else
-	  siv = mdr->inode_import_v;
-	mdr->pvmap[destdn] = destdn->pre_dirty(siv+1);
+	  siv = mdr->more()->inode_import_v;
+	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
 
@@ -3056,14 +3058,14 @@ void Server::_rename_prepare(MDRequest *mdr,
       assert(srcdn->is_remote());
       dout(10) << "src is a remote dentry" << dendl;
       if (destdn->is_auth())
-	mdr->pvmap[destdn] = destdn->pre_dirty();
+	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
       metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
     }
     
     // remove src dentry
     metablob->add_dir_context(srcdn->dir);
     if (srcdn->is_auth())
-      mdr->pvmap[srcdn] = srcdn->pre_dirty();
+      mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
     metablob->add_null_dentry(srcdn, true);
 
     // new subtree?
@@ -3087,17 +3089,17 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // anchor updates?
-  if (mdr->src_reanchor_atid)
-    metablob->add_anchor_transaction(mdr->src_reanchor_atid);
-  if (mdr->dst_reanchor_atid)
-    metablob->add_anchor_transaction(mdr->dst_reanchor_atid);
+  if (mdr->more()->src_reanchor_atid)
+    metablob->add_anchor_transaction(mdr->more()->src_reanchor_atid);
+  if (mdr->more()->dst_reanchor_atid)
+    metablob->add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 }
 
 
 void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_apply " << *mdr << " " << *srcdn << " " << *destdn << dendl;
-  dout(10) << " pvs " << mdr->pvmap << dendl;
+  dout(10) << " pvs " << mdr->more()->pvmap << dendl;
 
   CInode *oldin = destdn->inode;
   
@@ -3107,9 +3109,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   // dir mtimes
   if (mdr->is_master()) {
-    dirty_dn_diri(mdr, destdn, mdr->pvmap[destdn->dir->inode]);
+    dirty_dn_diri(mdr, destdn, mdr->more()->pvmap[destdn->dir->inode]);
     if (destdn->dir != srcdn->dir)
-      dirty_dn_diri(mdr, srcdn, mdr->pvmap[srcdn->dir->inode]);
+      dirty_dn_diri(mdr, srcdn, mdr->more()->pvmap[srcdn->dir->inode]);
   }
 
   if (linkmerge) {
@@ -3120,12 +3122,12 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->inode->inode.nlink--;
       destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->pvmap[destdn], mdr->ls);
+	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
 
       // unlink srcdn
       srcdn->dir->unlink_inode(srcdn);
       if (srcdn->is_auth())
-	srcdn->mark_dirty(mdr->pvmap[srcdn], mdr->ls);
+	srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
     } else {
       dout(10) << "merging primary onto remote link" << dendl;
       assert(srcdn->is_primary());
@@ -3139,11 +3141,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->inode->inode.nlink--;
       destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->pvmap[destdn], mdr->ls);
+	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
       
       // mark src dirty
       if (srcdn->is_auth())
-	srcdn->mark_dirty(mdr->pvmap[srcdn], mdr->ls);
+	srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
     }
   } 
   else {
@@ -3181,7 +3183,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
       destdn->link_remote(in);
       if (destdn->is_auth())
-	destdn->mark_dirty(mdr->pvmap[destdn], mdr->ls);
+	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     } else {
       // srcdn was primary.
       srcdn->dir->unlink_inode(srcdn);
@@ -3189,8 +3191,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
       // srcdn inode import?
       if (!srcdn->is_auth() && destdn->is_auth()) {
-	assert(mdr->inode_import.length() > 0);
-	bufferlist::iterator blp = mdr->inode_import.begin();
+	assert(mdr->more()->inode_import.length() > 0);
+	bufferlist::iterator blp = mdr->more()->inode_import.begin();
 	map<int,entity_inst_t> imported_client_map;
 	list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
 	::_decode_simple(imported_client_map, blp);
@@ -3202,11 +3204,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	destdn->inode->dirlock.clear_updated();   
       }
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->pvmap[destdn], mdr->ls);
+	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     }
 
     if (srcdn->is_auth())
-      srcdn->mark_dirty(mdr->pvmap[srcdn], mdr->ls);
+      srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
   }
 
   // update subtree map?
@@ -3299,8 +3301,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   mdr->now = mdr->slave_request->now;
 
   // set up commit waiter (early, to clean up any freezing etc we do)
-  if (!mdr->slave_commit)
-    mdr->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
+  if (!mdr->more()->slave_commit)
+    mdr->more()->slave_commit = new C_MDS_SlaveRenameCommit(this, mdr, srcdn, destdn, straydn);
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
@@ -3454,6 +3456,50 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
     // -- rollback in memory --
 
+    if (mdr->more()->was_link_merge) { 
+      // link merge
+      CInode *in = destdn->inode;
+      in->inode.nlink++;
+      if (mdr->more()->destdn_was_remote_inode) {
+	destdn->dir->unlink_inode(destdn);
+	srcdn->dir->link_primary_inode(srcdn, in);
+	destdn->dir->link_remote_inode(destdn, in->ino(),  MODE_TO_DT(in->inode.mode));
+      } else {
+	srcdn->dir->link_remote_inode(srcdn, in->ino(), MODE_TO_DT(in->inode.mode));
+      }
+    } else {
+      // normal
+
+      // revert srcdn
+      if (destdn->is_remote()) {
+	srcdn->dir->link_remote_inode(srcdn, destdn->inode->ino(), MODE_TO_DT(destdn->inode->inode.mode));
+	destdn->dir->unlink_inode(destdn);
+      } else {
+	// renamed a primary
+	CInode *in = destdn->inode;
+	destdn->dir->unlink_inode(destdn);
+	srcdn->dir->link_primary_inode(srcdn, in);
+      }
+      
+      // revert destdn
+      if (mdr->more()->destdn_was_remote_inode) {
+	destdn->dir->link_remote_inode(destdn, 
+				       mdr->more()->destdn_was_remote_inode->ino(), 
+				       MODE_TO_DT(mdr->more()->destdn_was_remote_inode->inode.mode));
+	mdr->more()->destdn_was_remote_inode->inode.nlink++;
+      } else if (straydn && straydn->inode) {
+	CInode *in = straydn->inode;
+	straydn->dir->unlink_inode(straydn);
+	destdn->dir->link_primary_inode(destdn, in);
+	straydn->dir->remove_dentry(straydn);
+      }
+    }
+
+    dout(-10) << "  srcdn back to " << *srcdn << dendl;
+    dout(-10) << "   srci back to " << *srcdn->inode << dendl;
+    dout(-10) << " destdn back to " << *destdn << dendl;
+    if (destdn->inode) dout(-10) << "  desti back to " << *destdn->inode << dendl;
+    
     // *** WRITE ME ***
     assert(0);
 
@@ -3472,33 +3518,33 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   int from = ack->get_source().num();
 
   // note slave
-  mdr->slaves.insert(from);
+  mdr->more()->slaves.insert(from);
 
   // witnessed?  or add extra witnesses?
-  assert(mdr->witnessed.count(from) == 0);
+  assert(mdr->more()->witnessed.count(from) == 0);
   if (ack->witnesses.empty()) {
-    mdr->witnessed.insert(from);
+    mdr->more()->witnessed.insert(from);
   } else {
     dout(10) << " extra witnesses (srcdn replicas) are " << ack->witnesses << dendl;
-    mdr->extra_witnesses.swap(ack->witnesses);
-    mdr->extra_witnesses.erase(mds->get_nodeid());  // not me!
+    mdr->more()->extra_witnesses.swap(ack->witnesses);
+    mdr->more()->extra_witnesses.erase(mds->get_nodeid());  // not me!
   }
 
   // srci import?
   if (ack->inode_export.length()) {
     dout(10) << " got srci import" << dendl;
-    mdr->inode_import.claim(ack->inode_export);
-    mdr->inode_import_v = ack->inode_export_v;
+    mdr->more()->inode_import.claim(ack->inode_export);
+    mdr->more()->inode_import_v = ack->inode_export_v;
   }
 
   // remove from waiting list
-  assert(mdr->waiting_on_slave.count(from));
-  mdr->waiting_on_slave.erase(from);
+  assert(mdr->more()->waiting_on_slave.count(from));
+  mdr->more()->waiting_on_slave.erase(from);
 
-  if (mdr->waiting_on_slave.empty())
+  if (mdr->more()->waiting_on_slave.empty())
     dispatch_client_request(mdr);  // go again!
   else 
-    dout(10) << "still waiting on slaves " << mdr->waiting_on_slave << dendl;
+    dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
 

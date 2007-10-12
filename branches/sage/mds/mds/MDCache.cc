@@ -1183,18 +1183,18 @@ void MDCache::handle_mds_failure(int who)
     
     // failed node is slave?
     if (!p->second->committing) {
-      if (p->second->witnessed.count(who)) {
+      if (p->second->more()->witnessed.count(who)) {
 	dout(10) << " master request " << *p->second << " no longer witnessed by slave mds" << who
 		 << dendl;
 	// discard this peer's prepare (if any)
-	p->second->witnessed.erase(who);
+	p->second->more()->witnessed.erase(who);
       }
       
-      if (p->second->waiting_on_slave.count(who)) {
+      if (p->second->more()->waiting_on_slave.count(who)) {
 	dout(10) << " master request " << *p->second << " waiting for slave mds" << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
-	p->second->waiting_on_slave.erase(who);
+	p->second->more()->waiting_on_slave.erase(who);
 	mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
       }
     }
@@ -1449,10 +1449,10 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {
       MDRequest *mdr = request_get(*p);
-      if (mdr->slave_commit) {
-	mdr->slave_commit->finish(-1);
-	delete mdr->slave_commit;
-	mdr->slave_commit = 0;
+      if (mdr->more()->slave_commit) {
+	mdr->more()->slave_commit->finish(-1);
+	delete mdr->more()->slave_commit;
+	mdr->more()->slave_commit = 0;
       }
       if (mdr->slave_request) 
 	mdr->aborted = true;
@@ -4364,10 +4364,10 @@ void MDCache::request_finish(MDRequest *mdr)
   dout(7) << "request_finish " << *mdr << dendl;
 
   // slave finisher?
-  if (mdr->slave_commit) {
-    mdr->slave_commit->finish(0);
-    delete mdr->slave_commit;
-    mdr->slave_commit = 0;
+  if (mdr->more()->slave_commit) {
+    mdr->more()->slave_commit->finish(0);
+    delete mdr->more()->slave_commit;
+    mdr->more()->slave_commit = 0;
   }
 
   if (mdr->client_request && mds->logger) {
@@ -4433,8 +4433,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // clean up slaves
   //  (will implicitly drop remote dn pins)
-  for (set<int>::iterator p = mdr->slaves.begin();
-       p != mdr->slaves.end();
+  for (set<int>::iterator p = mdr->more()->slaves.begin();
+       p != mdr->more()->slaves.end();
        ++p) {
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
     mds->send_message_mds(r, *p, MDS_PORT_SERVER);

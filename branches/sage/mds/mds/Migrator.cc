@@ -112,11 +112,12 @@ public:
 void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << "export_empty_import " << *dir << dendl;
-  
+  assert(dir->is_subtree_root());
+
   if (dir->inode->is_auth()) return;
   if (!dir->is_auth()) return;
   
-  if (dir->inode->is_freezing() || dir->inode->is_frozen()) return;
+  //if (dir->inode->is_freezing() || dir->inode->is_frozen()) return;
   if (dir->is_freezing() || dir->is_frozen()) return;
   
   if (dir->get_size() > 0) {
@@ -1909,6 +1910,11 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   //  but not until we _actually_ finish the import...
   if (in->dirlock.is_updated())
     updated_scatterlocks.push_back(&in->dirlock);
+
+  // put in autoscatter list?
+  //  this is conservative, but safe.
+  if (in->dirlock.get_state() == LOCK_SCATTER)
+    mds->locker->note_autoscattered(&in->dirlock);
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export

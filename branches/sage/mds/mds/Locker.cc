@@ -241,8 +241,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
       mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
 
       // put in waiting list
-      assert(mdr->waiting_on_slave.count(p->first) == 0);
-      mdr->waiting_on_slave.insert(p->first);
+      assert(mdr->more()->waiting_on_slave.count(p->first) == 0);
+      mdr->more()->waiting_on_slave.insert(p->first);
     }
     return false;
   }
@@ -1196,7 +1196,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
 
     // send lock request
     int auth = lock->get_parent()->authority().first;
-    mdr->slaves.insert(auth);
+    mdr->more()->slaves.insert(auth);
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
@@ -1614,6 +1614,12 @@ void Locker::scatter_eval(ScatterLock *lock)
   }
 }
 
+void Locker::note_autoscattered(ScatterLock *lock)
+{
+  dout(10) << "note_autoscattered " << *lock << " on " << *lock->get_parent() << dendl;
+  autoscattered.push_back(&lock->xlistitem_autoscattered);
+}
+
 
 /*
  * this is called by LogSegment::try_to_trim() when trying to 
@@ -1748,7 +1754,6 @@ void Locker::scatter_lock(ScatterLock *lock)
   dout(10) << "scatter_lock " << *lock
 	   << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
-  assert(lock->get_parent()->can_auth_pin());
   assert(lock->is_stable());
 
   switch (lock->get_state()) {
