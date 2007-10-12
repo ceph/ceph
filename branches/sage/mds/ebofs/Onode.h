@@ -67,7 +67,8 @@ public:
  public:
   Onode(object_t oid) : ref(0), object_id(oid), version(0),
 			readonly(false),
-			object_size(0), object_blocks(0), oc(0),
+			object_size(0), object_blocks(0),
+			oc(0),
 			dirty(false), dangling(false), deleted(false) { 
     onode_loc.length = 0;
   }
@@ -239,7 +240,23 @@ public:
 
     //assert(start+len <= object_blocks);
 
-    map<block_t,Extent>::iterator p = extent_map.lower_bound(start);
+    map<block_t,Extent>::iterator p;
+    
+    // hack hack speed up common cases!
+    if (start == 0) {
+      p = extent_map.begin();
+    } else if (start+len == object_blocks && len == 1 && !extent_map.empty()) {
+      // append hack.
+      p = extent_map.end();
+      p--;
+      if (p->first < start) p++;
+      //while (p->first >= start) p--;
+      //p++;
+    } else {
+      // normal
+      p = extent_map.lower_bound(start);
+    }
+
     if (p != extent_map.begin() &&
         (p == extent_map.end() || p->first > start && p->first)) {
       p--;

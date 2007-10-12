@@ -15,27 +15,29 @@
 #ifndef __MSG_TYPES_H
 #define __MSG_TYPES_H
 
+// raw C structs
+#include "include/ceph_inttypes.h"
+#include "ceph_msg_types.h"
+
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "tcp.h"
 
-// new typed msg_addr_t way!
 class entity_name_t {
-  int32_t _type;
-  int32_t _num;
+  struct ceph_entity_name v;
 
 public:
-  static const int TYPE_MON = 1;
-  static const int TYPE_MDS = 2;
-  static const int TYPE_OSD = 3;
-  static const int TYPE_CLIENT = 4;
-  static const int TYPE_ADMIN = 5;
+  static const int TYPE_MON = CEPH_ENTITY_TYPE_MON;
+  static const int TYPE_MDS = CEPH_ENTITY_TYPE_MDS;
+  static const int TYPE_OSD = CEPH_ENTITY_TYPE_OSD;
+  static const int TYPE_CLIENT = CEPH_ENTITY_TYPE_CLIENT;
+  static const int TYPE_ADMIN = CEPH_ENTITY_TYPE_ADMIN;
 
   static const int NEW = -1;
 
   // cons
-  entity_name_t() : _type(0), _num(0) {}
-  entity_name_t(int t, int n=NEW) : _type(t), _num(n) {}
+  entity_name_t() { v.type = v.num = 0; }
+  entity_name_t(int t, int n=NEW) { v.type = t; v.num = n; }
 
   // static cons
   static entity_name_t MON(int i=NEW) { return entity_name_t(TYPE_MON, i); }
@@ -44,8 +46,8 @@ public:
   static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
   static entity_name_t ADMIN(int i=NEW) { return entity_name_t(TYPE_ADMIN, i); }
   
-  int num() const { return _num; }
-  int type() const { return _type; }
+  int num() const { return v.num; }
+  int type() const { return v.type; }
   const char *type_str() const {
     switch (type()) {
     case TYPE_MDS: return "mds"; 
@@ -80,6 +82,9 @@ inline std::ostream& operator<<(std::ostream& out, const entity_name_t& addr) {
   else
     return out << addr.type_str() << addr.num();
 }
+inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr) {
+  return out << *(const entity_name_t*)&addr;
+}
 
 namespace __gnu_cxx {
   template<> struct hash< entity_name_t >
@@ -105,35 +110,34 @@ namespace __gnu_cxx {
  * ipv4 for now.
  */
 struct entity_addr_t {
-  uint8_t  ipq[4];
-  uint32_t port;
-  uint32_t nonce;  // bind time, or pid, or something unique!
+  struct ceph_entity_addr v;
   uint32_t _pad;
 
-  entity_addr_t() : port(0), nonce(0), _pad(0) {
-    ipq[0] = ipq[1] = ipq[2] = ipq[3] = 0;
+  entity_addr_t() : _pad(0) { 
+    v.port = v.nonce = 0; 
+    v.ipq[0] = v.ipq[1] = v.ipq[2] = v.ipq[3] = 0;
   }
 
   void set_addr(tcpaddr_t a) {
-    memcpy((char*)ipq, (char*)&a.sin_addr.s_addr, 4);
-    port = ntohs(a.sin_port);
+    memcpy((char*)v.ipq, (char*)&a.sin_addr.s_addr, 4);
+    v.port = ntohs(a.sin_port);
   }
   void make_addr(tcpaddr_t& a) const {
     memset(&a, 0, sizeof(a));
     a.sin_family = AF_INET;
-    memcpy((char*)&a.sin_addr.s_addr, (char*)ipq, 4);
-    a.sin_port = htons(port);
+    memcpy((char*)&a.sin_addr.s_addr, (char*)v.ipq, 4);
+    a.sin_port = htons(v.port);
   }
 };
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << (int)addr.ipq[0]
-	     << '.' << (int)addr.ipq[1]
-	     << '.' << (int)addr.ipq[2]
-	     << '.' << (int)addr.ipq[3]
-	     << ':' << addr.port
-	     << '.' << addr.nonce;
+  return out << (int)addr.v.ipq[0]
+	     << '.' << (int)addr.v.ipq[1]
+	     << '.' << (int)addr.v.ipq[2]
+	     << '.' << (int)addr.v.ipq[3]
+	     << ':' << addr.v.port
+	     << '.' << addr.v.nonce;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
@@ -188,6 +192,11 @@ inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 {
   return out << i.name << " " << i.addr;
 }
+inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
+{
+  return out << *(const entity_inst_t*)&i;
+}
+
 
 
 #endif

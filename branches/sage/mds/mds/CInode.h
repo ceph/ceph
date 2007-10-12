@@ -480,12 +480,16 @@ public:
   // -- reference counting --
   void bad_put(int by) {
     generic_dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+#ifdef MDS_REF_SET
     assert(ref_set.count(by) == 1);
+#endif
     assert(ref > 0);
   }
   void bad_get(int by) {
     generic_dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+#ifdef MDS_REF_SET
     assert(ref_set.count(by) == 0);
+#endif
   }
   void first_get();
   void last_put();

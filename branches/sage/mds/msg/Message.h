@@ -159,22 +159,11 @@ using std::list;
 // abstract Message class
 
 
-
-typedef struct {
-  int32_t type;
-  entity_inst_t src, dst;
-  int32_t source_port, dest_port;
-  int32_t nchunks;
-} msg_envelope_t;
-
-#define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)
-
-
 class Message {
  private:
   
  protected:
-  msg_envelope_t  env;    // envelope
+  ceph_message_header  env;    // envelope
   bufferlist      payload;        // payload
   list<int> chunk_payload_at;
   
@@ -209,10 +198,11 @@ public:
     payload = bl;
   }
   const list<int>& get_chunk_payload_at() const { return chunk_payload_at; }
-  msg_envelope_t& get_envelope() {
+  void set_chunk_payload_at(list<int>& o) { chunk_payload_at.swap(o); }
+  ceph_message_header& get_envelope() {
     return env;
   }
-  void set_envelope(msg_envelope_t& env) {
+  void set_envelope(ceph_message_header& env) {
     this->env = env;
   }
 
@@ -228,23 +218,23 @@ public:
   virtual char *get_type_name() = 0;
 
   // source/dest
-  entity_inst_t& get_dest_inst() { return env.dst; }
-  void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
+  entity_inst_t& get_dest_inst() { return *(entity_inst_t*)&env.dst; }
+  void set_dest_inst(entity_inst_t& inst) { env.dst = *(ceph_entity_inst*)&inst; }
 
-  entity_inst_t& get_source_inst() { return env.src; }
-  void set_source_inst(entity_inst_t& inst) { env.src = inst; }
+  entity_inst_t& get_source_inst() { return *(entity_inst_t*)&env.src; }
+  void set_source_inst(entity_inst_t& inst) { env.src = *(ceph_entity_inst*)&inst; }
 
-  entity_name_t& get_dest() { return env.dst.name; }
-  void set_dest(entity_name_t a, int p) { env.dst.name = a; env.dest_port = p; }
+  entity_name_t& get_dest() { return *(entity_name_t*)&env.dst.name; }
+  void set_dest(entity_name_t a, int p) { env.dst.name = *(ceph_entity_name*)&a; env.dest_port = p; }
   int get_dest_port() { return env.dest_port; }
   void set_dest_port(int p) { env.dest_port = p; }
   
-  entity_name_t& get_source() { return env.src.name; }
-  void set_source(entity_name_t a, int p) { env.src.name = a; env.source_port = p; }
+  entity_name_t& get_source() { return *(entity_name_t*)&env.src.name; }
+  void set_source(entity_name_t a, int p) { env.src.name = *(ceph_entity_name*)&a; env.source_port = p; }
   int get_source_port() { return env.source_port; }
 
-  entity_addr_t& get_source_addr() { return env.src.addr; }
-  void set_source_addr(const entity_addr_t &i) { env.src.addr = i; }
+  entity_addr_t& get_source_addr() { return *(entity_addr_t*)&env.src.addr; }
+  void set_source_addr(const entity_addr_t &i) { env.src.addr = *(ceph_entity_addr*)&i; }
 
   // PAYLOAD ----
   void reset_payload() {
@@ -260,7 +250,7 @@ public:
   
 };
 
-extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);
+extern Message *decode_message(ceph_message_header &env, bufferlist& bl);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;

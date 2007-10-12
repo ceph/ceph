@@ -107,7 +107,7 @@ int Rank::Accepter::start()
 	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << dendl;
 	if (host == hostname) {
 	  parse_ip_port(addr.c_str(), g_my_addr);
-	  dout(0) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
+	  dout(1) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
 	  break;
 	}
       }
@@ -153,13 +153,13 @@ int Rank::Accepter::start()
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
     rank.my_addr.set_addr(listen_addr);
-    rank.my_addr.port = 0;  // see below
+    rank.my_addr.v.port = 0;  // see below
   }
-  if (rank.my_addr.port == 0) {
+  if (rank.my_addr.v.port == 0) {
     entity_addr_t tmp;
     tmp.set_addr(listen_addr);
-    rank.my_addr.port = tmp.port;
-    rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+    rank.my_addr.v.port = tmp.v.port;
+    rank.my_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
 
   dout(1) << "accepter.start my_addr is " << rank.my_addr << dendl;
@@ -605,7 +605,7 @@ Message *Rank::Pipe::read_message()
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
-  msg_envelope_t env; 
+  ceph_message_header env; 
   if (!tcp_read( sd, (char*)&env, sizeof(env) )) {
     need_to_send_close = false;
     return 0;
@@ -618,7 +618,9 @@ Message *Rank::Pipe::read_message()
   
   // payload
   bufferlist blist;
-  for (int i=0; i<env.nchunks; i++) {
+  int32_t pos = 0;
+  list<int> chunk_at;
+  for (unsigned i=0; i<env.nchunks; i++) {
     int32_t size;
     if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
       need_to_send_close = false;
@@ -626,6 +628,9 @@ Message *Rank::Pipe::read_message()
     }
 
     dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
+
+    if (pos) chunk_at.push_back(pos);
+    pos += size;
 
     bufferptr bp;
     if (size % 4096 == 0) {
@@ -649,6 +654,8 @@ Message *Rank::Pipe::read_message()
   // unmarshall message
   size_t s = blist.length();
   Message *m = decode_message(env, blist);
+
+  m->set_chunk_payload_at(chunk_at);
   
   dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got " << s << " byte message from " 
            << m->get_source() << dendl;
@@ -708,7 +715,7 @@ int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
 int Rank::Pipe::write_message(Message *m)
 {
   // get envelope, buffers
-  msg_envelope_t *env = &m->get_envelope();
+  ceph_message_header *env = &m->get_envelope();
   bufferlist blist;
   blist.claim( m->get_payload() );
   

@@ -105,7 +105,7 @@ using namespace std;
 
 
 Message *
-decode_message(msg_envelope_t& env, bufferlist& payload)
+decode_message(ceph_message_header& env, bufferlist& payload)
 {
   // make message
   Message *m = 0;

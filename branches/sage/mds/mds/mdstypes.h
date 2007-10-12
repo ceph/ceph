@@ -19,6 +19,7 @@ using namespace std;
 #include "include/frag.h"
 #include "include/xlist.h"
 
+#define MDS_REF_SET    // define me for improved debug output, sanity checking
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -36,12 +37,12 @@ using namespace std;
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2
 #define MDS_INO_ANCHORTABLE       3
-#define MDS_INO_PG                4       // this should match osd/osd_types.h PG_INO
-#define MDS_INO_LOG_OFFSET        0x100
-#define MDS_INO_IDS_OFFSET        0x200
-#define MDS_INO_CLIENTMAP_OFFSET  0x300
-#define MDS_INO_STRAY_OFFSET      0x400
-#define MDS_INO_BASE              0x1000
+#define MDS_INO_PG                4       // *** WARNING: this should match osd/osd_types.h PG_INO ***
+#define MDS_INO_LOG_OFFSET        (1*MAX_MDS)
+#define MDS_INO_IDS_OFFSET        (2*MAX_MDS)
+#define MDS_INO_CLIENTMAP_OFFSET  (3*MAX_MDS)
+#define MDS_INO_STRAY_OFFSET      (4*MAX_MDS)
+#define MDS_INO_BASE              (5*MAX_MDS)
 
 #define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
 #define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)
@@ -461,26 +462,36 @@ class MDSCacheObject {
   // pins
 protected:
   int      ref;       // reference count
+#ifdef MDS_REF_SET
   multiset<int> ref_set;
+#endif
 
  public:
   int get_num_ref() { return ref; }
-  bool is_pinned_by(int by) { return ref_set.count(by); }
-  multiset<int>& get_ref_set() { return ref_set; }
   virtual const char *pin_name(int by) = 0;
+  //bool is_pinned_by(int by) { return ref_set.count(by); }
+  //multiset<int>& get_ref_set() { return ref_set; }
 
   virtual void last_put() {}
   virtual void bad_put(int by) {
+#ifdef MDS_REF_SET
     assert(ref_set.count(by) > 0);
+#endif
     assert(ref > 0);
   }
   void put(int by) {
+#ifdef MDS_REF_SET
     if (ref == 0 || ref_set.count(by) == 0) {
+#else
+    if (ref == 0) {
+#endif
       bad_put(by);
     } else {
       ref--;
+#ifdef MDS_REF_SET
       ref_set.erase(ref_set.find(by));
       assert(ref == (int)ref_set.size());
+#endif
       if (ref == 0)
 	last_put();
     }
@@ -488,22 +499,29 @@ protected:
 
   virtual void first_get() {}
   virtual void bad_get(int by) {
+#ifdef MDS_REF_SET
     assert(by < 0 || ref_set.count(by) == 0);
+#endif
     assert(0);
   }
   void get(int by) {
+#ifdef MDS_REF_SET
     if (by >= 0 && ref_set.count(by)) {
       bad_get(by);
     } else {
+#endif
       if (ref == 0) 
 	first_get();
       ref++;
+#ifdef MDS_REF_SET
       ref_set.insert(by);
       assert(ref == (int)ref_set.size());
     }
+#endif
   }
 
   void print_pin_set(ostream& out) {
+#ifdef MDS_REF_SET
     multiset<int>::iterator it = ref_set.begin();
     while (it != ref_set.end()) {
       out << " " << pin_name(*it);
@@ -516,6 +534,7 @@ protected:
       if (c > 1)
 	out << "*" << c;
     }
+#endif
   }
 
 

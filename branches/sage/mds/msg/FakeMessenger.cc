@@ -218,7 +218,7 @@ int fakemessenger_do_loop_2()
           // encode
           if (m->empty_payload()) 
             m->encode_payload();
-          msg_envelope_t env = m->get_envelope();
+          ceph_message_header env = m->get_envelope();
           bufferlist bl;
           bl.claim( m->get_payload() );
           //bl.c_str();   // condense into 1 buffer
@@ -273,9 +273,9 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
   {
     // assign rank
     _myinst.name = me;
-    _myinst.addr.port = nranks++;
+    _myinst.addr.v.port = nranks++;
     //if (!me.is_mon())
-    _myinst.addr.nonce = getpid();
+    _myinst.addr.v.nonce = getpid();
 
     // add to directory
     directory[ _myinst.addr ] = this;

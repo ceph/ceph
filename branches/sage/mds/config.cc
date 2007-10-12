@@ -450,9 +450,9 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     s++; off++;
 
     if (count <= 3)
-      a.ipq[count] = val;
+      a.v.ipq[count] = val;
     else
-      a.port = val;
+      a.v.port = val;
     
     count++;
     if (count == 4 && *s != ':') break;
