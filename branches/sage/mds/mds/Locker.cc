@@ -1598,7 +1598,8 @@ void Locker::scatter_eval(ScatterLock *lock)
   if (in->has_subtree_root_dirfrag() && !in->is_base()) {
     // i _should_ be scattered.
     if (!lock->is_rdlocked() &&
-	!lock->is_xlocked()) {
+	!lock->is_xlocked() &&
+	lock->get_state() != LOCK_SCATTER) {
       dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << dendl;
       scatter_scatter(lock);
       autoscattered.push_back(&lock->xlistitem_autoscattered);
@@ -1607,7 +1608,8 @@ void Locker::scatter_eval(ScatterLock *lock)
     // i _should_ be sync.
     lock->xlistitem_autoscattered.remove_myself(); 
     if (!lock->is_wrlocked() &&
-	!lock->is_xlocked()) {
+	!lock->is_xlocked() &&
+	lock->get_state() != LOCK_SYNC) {
       dout(10) << "scatter_eval no wrlocks|xlocks, not subtree root inode, syncing" << dendl;
       scatter_sync(lock);
     }
@@ -1946,13 +1948,15 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQUNSCATTER:
-    if (lock->is_stable() &&
-	lock->get_parent()->can_auth_pin()) {
+    if (!lock->is_stable()) {
+      dout(7) << "handle_scatter_lock ignoring now-unnecessary unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    } else if (lock->get_parent()->can_auth_pin()) {
       dout(7) << "handle_scatter_lock got unscatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       scatter_lock(lock);
     } else {
-      dout(7) << "handle_scatter_lock ignoring unscatter request on " << *lock
+      dout(7) << "handle_scatter_lock DROPPING unscatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       /* FIXME: if we can't auth_pin here, this request is effectively lost... */
     }
