@@ -3372,6 +3372,10 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   } else {
     // don't journal.
     dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << dendl;
+
+    // prepare anyway; this may twiddle dir_auth
+    EMetaBlob blah;
+    _rename_prepare(mdr, &blah, srcdn, destdn, straydn);
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 }
