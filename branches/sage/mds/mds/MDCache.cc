@@ -428,6 +428,10 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
  */
 void MDCache::adjust_export_state(CDir *dir)
 {
+  dout(15) << "adjust_export_state, me " << mds->get_nodeid() << dendl;
+  dout(15) << " inode " << dir->get_inode()->authority().first << " " << *dir->get_inode() << dendl;
+  dout(15) << "   dir " << dir->authority().first << " " << *dir << dendl;
+
   // be auth bit agnostic, so that we work during recovery
   //  (before recalc_auth_bits)
   if (dir->authority().first        != mds->get_nodeid() &&
@@ -1145,6 +1149,13 @@ void MDCache::handle_mds_failure(int who)
 
   rejoin_sent.erase(who);        // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
+
+  dout(10) << " wants_resolve " << wants_resolve << dendl;
+  dout(10) << " got_resolve " << got_resolve << dendl;
+  dout(10) << " rejoin_sent " << rejoin_sent << dendl;
+  dout(10) << " rejoin_gather " << rejoin_gather << dendl;
+  dout(10) << " rejoin_ack_gather " << rejoin_ack_gather << dendl;
+
  
   // tell the migrator too.
   migrator->handle_mds_failure_or_stop(who);
@@ -1393,9 +1404,9 @@ void MDCache::maybe_resolve_finish()
   else {
     dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
     disambiguate_imports();
-
     if (mds->is_resolve()) {
       recalc_auth_bits();
+      show_subtrees(0);
       trim_non_auth(); 
       mds->resolve_done();
     }
@@ -1670,6 +1681,8 @@ void MDCache::rejoin_send_rejoins()
 
   map<int, MMDSCacheRejoin*> rejoins;
 
+  show_subtrees(0);
+
   // encode cap list once.
   bufferlist cap_export_bl;
   if (mds->is_rejoin()) {
@@ -1841,13 +1854,14 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
-      assert(dn->is_primary());
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
+      assert(dn->is_primary());
+      assert(dn->inode->is_dir());
       rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
 
       if (dn->get_inode()->dirlock.is_updated()) {
-	// include full inode to shed our dirtyscattered state
+	// include full inode to shed any dirtyscattered state
 	rejoin->add_full_inode(dn->get_inode()->inode, 
 			       dn->get_inode()->symlink,
 			       dn->get_inode()->dirfragtree);
@@ -2014,6 +2028,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
        p != weak->weak.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
+    if (!dir) dout(0) << " missing dirfrag " << p->first << dendl;
     assert(dir);
 
     int nonce = dir->add_replica(from);
@@ -3133,8 +3148,11 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expire
     }
   }
   
-  if (dir->is_subtree_root())
+  if (dir->is_subtree_root()) {
+    assert(!dir->is_auth() ||
+	   (!dir->is_replicated() && dir->inode->is_base()));
     remove_subtree(dir);	// remove from subtree map
+  }
   in->close_dirfrag(dir->dirfrag().frag);
 }
 
@@ -3215,6 +3233,12 @@ void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << dendl;
   
+  // temporarily pin all subtree roots
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       p++) 
+    p->first->get(CDir::PIN_SUBTREETEMP);
+
   // note first auth item we see.  
   // when we see it the second time, stop.
   CDentry *first_auth = 0;
@@ -3293,6 +3317,12 @@ void MDCache::trim_non_auth()
 
   // move everything in the pintail to the top bit of the lru.
   lru.lru_touch_entire_pintail();
+
+  // unpin all subtrees
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       p++) 
+    p->first->put(CDir::PIN_SUBTREETEMP);
 
   show_subtrees();
 }

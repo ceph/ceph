@@ -498,23 +498,13 @@ void MDS::handle_mds_map(MMDSMap *m)
     return;
   }
 
-  // note some old state
+  // keep old map, for a moment
+  MDSMap *oldmap = mdsmap;
   int oldwhoami = whoami;
   int oldstate = state;
-  set<int> oldresolve;
-  mdsmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
-  bool wasrejoining = mdsmap->is_rejoining();
-  set<int> oldfailed;
-  mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
-  set<int> oldactive;
-  mdsmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
-  set<int> oldcreating;
-  mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
-  set<int> oldstopped;
-  mdsmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
-  bool wasdegraded = mdsmap->is_degraded();
 
   // decode and process
+  mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
   
   // see who i am
@@ -546,7 +536,6 @@ void MDS::handle_mds_map(MMDSMap *m)
       messenger->send_message(new MOSDGetMap(0),
 			      monmap->get_inst(mon));
     }
-    
   }
 
   // tell objecter my incarnation
@@ -596,20 +585,20 @@ void MDS::handle_mds_map(MMDSMap *m)
       return;
     }
   }
-  
+
   
   // RESOLVE
   // is someone else newly resolving?
   if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
-    set<int> resolve;
+    set<int> oldresolve, resolve;
+    oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
     if (oldresolve != resolve) {
       dout(10) << "resolve set is " << resolve << ", was " << oldresolve << dendl;
-      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
-	if (*p == whoami) continue;
-	if (oldresolve.count(*p)) continue;
-	mdcache->send_resolve(*p);  // now or later.
-      }
+      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) 
+	if (*p != whoami &&
+	    oldresolve.count(*p) == 0)
+	  mdcache->send_resolve(*p);  // now or later.
     }
   }
   
@@ -617,54 +606,55 @@ void MDS::handle_mds_map(MMDSMap *m)
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
     // did we start?
-    if (!wasrejoining && mdsmap->is_rejoining())
+    if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
 
     // did we finish?
     if (g_conf.mds_dump_cache_after_rejoin &&
-	wasrejoining && !mdsmap->is_rejoining()) 
+	oldmap->is_rejoining() && !mdsmap->is_rejoining()) 
       mdcache->dump_cache();      // for DEBUG only
   }
-  if (wasdegraded && !mdsmap->is_degraded()) 
+  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
     dout(1) << "cluster recovered." << dendl;
-
+  
   // did someone go active?
   if (is_active() || is_stopping()) {
-    set<int> active;
+    set<int> oldactive, active;
+    oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
-    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) {
-      if (*p == whoami) continue;         // not me
-      if (oldactive.count(*p)) continue;  // newly so?
-      handle_mds_recovery(*p);
-    }
+    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
+      if (*p != whoami &&            // not me
+	  oldactive.count(*p) == 0)  // newly so?
+	handle_mds_recovery(*p);
   }
 
+  // did someone fail or stop?
   if (is_active() || is_stopping()) {
-    // did anyone go down?
-    set<int> failed;
+    // new failed?
+    set<int> oldfailed, failed;
+    oldmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
     mdsmap->get_mds_set(failed, MDSMap::STATE_FAILED);
-    for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
-      if (oldfailed.count(*p)) continue;       // newly so?
-      mdcache->handle_mds_failure(*p);
-    }
+    for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
+      if (oldfailed.count(*p) == 0)
+	mdcache->handle_mds_failure(*p);
+
+    // or down then up?
+    //  did their addr/inst change?
+    set<int> up;
+    mdsmap->get_up_mds_set(up);
+    for (set<int>::iterator p = up.begin(); p != up.end(); ++p) 
+      if (oldmap->have_inst(*p) &&
+	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
+	mdcache->handle_mds_failure(*p);
 
     // did anyone stop?
-    set<int> stopped;
+    set<int> oldstopped, stopped;
+    oldmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
     mdsmap->get_mds_set(stopped, MDSMap::STATE_STOPPED);
-    for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) {
-      if (oldstopped.count(*p)) continue;       // newly so?
-      mdcache->migrator->handle_mds_failure_or_stop(*p);
-    }
+    for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
+      if (oldstopped.count(*p) == 0)      // newly so?
+	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
-
-
-  // in set set changed?
-  /*
-  if (state >= MDSMap::STATE_ACTIVE &&   // only if i'm active+.  otherwise they'll get map during reconnect.
-      mdsmap->get_same_in_set_since() > last_client_mdsmap_bcast) {
-    bcast_mds_map();
-  }
-  */
 
   // just got mdsmap+osdmap?
   if (hadepoch == 0 && 
@@ -677,6 +667,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   delete m;
+  delete oldmap;
 }
 
 void MDS::bcast_mds_map()

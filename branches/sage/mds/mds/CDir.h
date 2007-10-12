@@ -61,6 +61,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_IMPORTBOUND =  9;
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
+  static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
   const char *pin_name(int p) {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
@@ -73,6 +74,7 @@ class CDir : public MDSCacheObject {
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
     case PIN_STICKY: return "sticky";
+    case PIN_SUBTREETEMP: return "subtreetemp";
     default: return generic_pin_name(p);
     }
   }

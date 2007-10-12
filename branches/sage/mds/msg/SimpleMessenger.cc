@@ -86,6 +86,7 @@ int Rank::Accepter::start()
   dout(10) << "accepter.start" << dendl;
   
   char hostname[100];
+  memset(hostname, 0, 100);
   gethostname(hostname, 100);
   dout(2) << "accepter.start my hostname is " << hostname << dendl;
 

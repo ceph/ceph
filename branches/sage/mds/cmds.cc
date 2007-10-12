@@ -101,7 +101,7 @@ int main(int argc, char **argv)
   mds->mds_lock.Unlock();
 
   // done
-  delete mds;
+  //delete mds;
 
   return 0;
 }

@@ -1627,9 +1627,11 @@ void Locker::scatter_try_unscatter(ScatterLock *lock, Context *c)
   assert(!lock->get_parent()->is_ambiguous_auth());
 
   // request unscatter?
-  if (lock->get_state() == LOCK_SCATTER) 
+  int auth = lock->get_parent()->authority().first;
+  if (lock->get_state() == LOCK_SCATTER &&
+      mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) 
     mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()),
-			  lock->get_parent()->authority().first, MDS_PORT_LOCKER);
+			  auth, MDS_PORT_LOCKER);
   
   // wait...
   lock->add_waiter(SimpleLock::WAIT_STABLE, c);
