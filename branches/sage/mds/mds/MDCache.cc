@@ -1364,7 +1364,6 @@ void MDCache::maybe_resolve_finish()
     disambiguate_imports();
     if (mds->is_resolve()) {
       recalc_auth_bits();
-      show_subtrees(0);
       trim_non_auth(); 
       mds->resolve_done();
     }
@@ -1638,8 +1637,6 @@ void MDCache::rejoin_send_rejoins()
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
 
   map<int, MMDSCacheRejoin*> rejoins;
-
-  show_subtrees(0);
 
   // encode cap list once.
   bufferlist cap_export_bl;
