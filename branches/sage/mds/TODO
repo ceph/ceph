@@ -52,27 +52,6 @@ mdsmon
 - per-mds, shared standby queues 
 
 
-fix rename
-if (0) {
-- who cares if dir items are dirtied out of order?
-  - continue to delay _apply
-  - need to make sure slave_prepare isn't trimmed before the commit commits
-  - put xlist_item in MDRequest, add to LogSegment for duration of delay before change is applied to
-    the cache
-  - dirtying has to be attached to teh _original_ logsegment.. mdr->ls
-} else {
-- witnesses
-/ - rename_apply immediately after _prepare (preserve journal pipelining)
-/ - srci auth do versionlock on inode to avoid mention in journal prior to commit|rollback
-/   - this is to avoid some event between the prepare and rollback with incorrect linkage
- - add in-memory rollback in the _commit (on failure)
-/ - do separate get_srci_replicas slave op first, then wrap inode export into actual prepare last, so that srci auth can apply immediately.
-}
-/- srci auth needs to freeze inode before exporting it
-/  *** hrm, what about misdirected lock requests.. singleauth won't capture a rename export!
-/  -> inode ambiguous_auth bit+waiter; set on prepare, clear on mdr finish.
-
-
 
 mds bugs
 - open file rejournaling vs capped log...

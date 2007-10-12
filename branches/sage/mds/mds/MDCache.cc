@@ -167,8 +167,13 @@ void MDCache::add_inode(CInode *in)
   assert(inode_map.count(in->ino()) == 0);  // should be no dup inos!
   inode_map[ in->ino() ] = in;
 
-  if (in->ino() < MDS_INO_BASE)
+  if (in->ino() < MDS_INO_BASE) {
     base_inodes.insert(in);
+    if (in->ino() == MDS_INO_ROOT)
+      set_root(in);
+    if (in->ino() == MDS_INO_STRAY(mds->get_nodeid()))
+      stray = in;
+  }
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -216,7 +221,6 @@ CInode *MDCache::create_root_inode()
   
   root->force_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
-  set_root( root );
   add_inode( root );
 
   return root;
@@ -252,22 +256,23 @@ void MDCache::open_root(Context *c)
 CInode *MDCache::create_stray_inode(int whose)
 {
   if (whose < 0) whose = mds->get_nodeid();
-  stray = new CInode(this, whose == mds->get_nodeid());
-  memset(&stray->inode, 0, sizeof(inode_t));
-  stray->inode.ino = MDS_INO_STRAY(whose);
+
+  CInode *in = new CInode(this, whose == mds->get_nodeid());
+  memset(&in->inode, 0, sizeof(inode_t));
+  in->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
-  stray->inode.mode = 0755 | INODE_MODE_DIR;
-  stray->inode.size = 0;
-  stray->inode.ctime = 
-    stray->inode.mtime = g_clock.now();
+  in->inode.mode = 0755 | INODE_MODE_DIR;
+  in->inode.size = 0;
+  in->inode.ctime = 
+    in->inode.mtime = g_clock.now();
   
-  stray->inode.nlink = 1;
-  stray->inode.layout = g_OSD_MDDirLayout;
+  in->inode.nlink = 1;
+  in->inode.layout = g_OSD_MDDirLayout;
   
-  add_inode( stray );
+  add_inode( in );
 
-  return stray;
+  return in;
 }
 
 void MDCache::open_local_stray()
@@ -5203,7 +5208,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // starting point
   CInode *cur = get_inode(m->get_base_ino());
-  if (!cur) {
+
+  if (m->has_base_inode()) {
     assert(m->get_base_ino() < MDS_INO_BASE);
     assert(!m->has_base_dentry());
     assert(!m->has_base_dir());
@@ -5211,8 +5217,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // add base inode
     cur = add_replica_inode(m->get_inode(0), NULL, finished);
     cur->force_auth = pair<int,int>(m->get_source().num(), CDIR_AUTH_UNKNOWN);
-    if (cur->ino() == MDS_INO_ROOT) 
-      set_root(cur);
 
     dout(7) << "discover_reply got base inode " << *cur << dendl;
     
