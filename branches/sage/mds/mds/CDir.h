@@ -57,7 +57,6 @@ class CDir : public MDSCacheObject {
   static const int PIN_FROZEN =       4;
   static const int PIN_SUBTREE =      5;
   static const int PIN_IMPORTING =    7;
-  static const int PIN_EXPORTING =    8;
   static const int PIN_IMPORTBOUND =  9;
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
@@ -69,7 +68,6 @@ class CDir : public MDSCacheObject {
     case PIN_CHILD: return "child";
     case PIN_FROZEN: return "frozen";
     case PIN_SUBTREE: return "subtree";
-    case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
     case PIN_IMPORTBOUND: return "importbound";
     case PIN_EXPORTBOUND: return "exportbound";
