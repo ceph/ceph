@@ -9,14 +9,13 @@
 
 #include "kmsg.h"
 
-/* do these later
-#include "osdmap.h"
 #include "mdsmap.h"
 #include "monmap.h"
+
+/* do these later
+#include "osdmap.h"
 */
-struct ceph_monmap;
 struct ceph_osdmap;
-struct ceph_mdsmap;
 
 
 
@@ -28,6 +27,9 @@ struct ceph_mds_session {
 	/* wait queue? */
 };
 
+struct ceph_mds_request {
+
+};
 
 /*
  * CEPH file system in-core superblock info
@@ -43,6 +45,8 @@ struct ceph_sb_info {
 	/* mds sessions */
 	struct ceph_mds_session **s_mds_sessions;     /* sparse array; elements NULL if no session */
 	int                      s_max_mds_sessions;  /* size of s_mds_sessions array */
+	
+	
 
 	/* current requests */
 	/* ... */
