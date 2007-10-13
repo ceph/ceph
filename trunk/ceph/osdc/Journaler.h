@@ -183,7 +183,7 @@ public:
     // prefetch intelligently.
     // (watch out, this is big if you use big objects or weird striping)
     if (!fetch_len)
-      fetch_len = inode.layout.object_size*inode.layout.stripe_count *
+      fetch_len = inode.layout.fl_object_size*inode.layout.fl_stripe_count *
 	g_conf.journaler_prefetch_periods;
     if (!prefetch_from)
       prefetch_from = fetch_len / 2;

@@ -82,8 +82,8 @@ typedef uint8_t pruleset_t;
 // placement group id
 struct pg_t {
 public:
-  static const int TYPE_REP   = 1;
-  static const int TYPE_RAID4 = 2;
+  static const int TYPE_REP   = CEPH_PG_TYPE_REP;
+  static const int TYPE_RAID4 = CEPH_PG_TYPE_RAID4;
 
 private:
   union {
@@ -282,14 +282,12 @@ class ObjectExtent {
   off_t       start;     // in object
   size_t      length;    // in object
 
-  objectrev_t rev;       // which revision?
-
   ObjectLayout layout;   // object layout (pgid, etc.)
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : start(0), length(0), rev(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0) { }
+  ObjectExtent() : start(0), length(0) {}
+  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)

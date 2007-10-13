@@ -8,28 +8,11 @@
 /* #include <linux/ceph_fs.h> */
 
 #include "kmsg.h"
-
-#include "mdsmap.h"
 #include "monmap.h"
-
-/* do these later
-#include "osdmap.h"
-*/
-struct ceph_osdmap;
+#include "mds_client.h"
+#include "osd_client.h"
 
 
-
-/*
- * state associated with an individual MDS<->client session
- */
-struct ceph_mds_session {
-	__u64 s_push_seq;  
-	/* wait queue? */
-};
-
-struct ceph_mds_request {
-
-};
 
 /*
  * CEPH file system in-core superblock info
@@ -39,25 +22,17 @@ struct ceph_sb_info {
 	struct ceph_kmsg   *s_kmsg;    /* messenger instance */
 
 	struct ceph_monmap *s_monmap;  /* monitor map */
-	struct ceph_mdsmap *s_mdsmap;  /* mds map */
-	struct ceph_osdmap *s_osdmap;  /* osd map */
 
-	/* mds sessions */
-	struct ceph_mds_session **s_mds_sessions;     /* sparse array; elements NULL if no session */
-	int                      s_max_mds_sessions;  /* size of s_mds_sessions array */
+	struct ceph_mds_client *s_mds_client;
+	struct ceph_osd_client *s_osd_client;
 	
-	
-
-	/* current requests */
-	/* ... */
-	__u64 last_tid;
 };
 
 /*
  * CEPH file system in-core inode info
  */
 struct ceph_inode_info {
-	unsigned long val;  /* inode from types.h is uint64_t */
+	struct ceph_file_layout i_layout;
 	struct inode vfs_inode;
 };
 

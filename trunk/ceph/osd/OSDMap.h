@@ -316,7 +316,7 @@ private:
 
   // oid -> pg
   ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
-    return make_object_layout(oid, layout.pg_type, layout.pg_size, layout.preferred, layout.object_stripe_unit);
+    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_preferred, layout.fl_object_stripe_unit);
   }
 
   ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
@@ -328,16 +328,16 @@ private:
     // calculate ps (placement seed)
     ps_t ps;
     switch (g_conf.osd_object_layout) {
-    case OBJECT_LAYOUT_LINEAR:
+    case CEPH_OBJECT_LAYOUT_LINEAR:
       ps = stable_mod(oid.bno + oid.ino, num, num_mask);
       break;
       
-    case OBJECT_LAYOUT_HASHINO:
+    case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
       ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       break;
 
-    case OBJECT_LAYOUT_HASH:
+    case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
@@ -361,7 +361,7 @@ private:
                  vector<int>& osds) {       // list of osd addr's
     // map to osds[]
     switch (g_conf.osd_pg_layout) {
-    case PG_LAYOUT_CRUSH:
+    case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
 	int rule;
@@ -382,12 +382,12 @@ private:
       }
       break;
       
-    case PG_LAYOUT_LINEAR:
+    case CEPH_PG_LAYOUT_LINEAR:
       for (int i=0; i<pg.size(); i++) 
 	osds.push_back( (i + pg.ps()*pg.size()) % g_conf.num_osd );
       break;
       
-    case PG_LAYOUT_HYBRID:
+    case CEPH_PG_LAYOUT_HYBRID:
       {
 	static crush::Hash H(777);
 	int h = H(pg.ps());
@@ -396,7 +396,7 @@ private:
       }
       break;
       
-    case PG_LAYOUT_HASH:
+    case CEPH_PG_LAYOUT_HASH:
       {
 	static crush::Hash H(777);
 	for (int i=0; i<pg.size(); i++) {
@@ -420,7 +420,7 @@ private:
   
     // no crush, but forcefeeding?
     if (pg.preferred() >= 0 &&
-	g_conf.osd_pg_layout != PG_LAYOUT_CRUSH) {
+	g_conf.osd_pg_layout != CEPH_PG_LAYOUT_CRUSH) {
       int osd = pg.preferred();
       
       // already in there?

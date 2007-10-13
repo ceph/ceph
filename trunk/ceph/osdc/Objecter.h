@@ -213,16 +213,12 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
-             Context *onfinish, 
-	     objectrev_t rev=0);
+             Context *onfinish);
   tid_t write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
-              Context *onack, Context *oncommit, 
-	      objectrev_t rev=0);
+              Context *onack, Context *oncommit);
   tid_t zero(object_t oid, off_t off, size_t len, ObjectLayout ol,  
-             Context *onack, Context *oncommit, 
-	     objectrev_t rev=0);
-  tid_t stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish, 
-	     objectrev_t rev=0);  
+             Context *onack, Context *oncommit);
+  tid_t stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish);
   
   tid_t lock(int op, object_t oid, ObjectLayout ol, Context *onack, Context *oncommit);
 

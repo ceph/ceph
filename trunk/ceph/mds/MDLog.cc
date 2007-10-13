@@ -82,7 +82,7 @@ void MDLog::init_journaler()
   log_inode.layout = g_OSD_MDLogLayout;
   
   if (g_conf.mds_local_osd) 
-    log_inode.layout.preferred = mds->get_nodeid() + g_conf.mds_local_osd_offset;  // hack
+    log_inode.layout.fl_preferred = mds->get_nodeid() + g_conf.mds_local_osd_offset;  // hack
   
   // log streamer
   if (journaler) delete journaler;
@@ -191,8 +191,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   off_t last_seg = get_last_segment_offset();
   if (!segments.empty() && 
       !writing_subtree_map &&
-      (journaler->get_write_pos() / log_inode.layout.period()) != (last_seg / log_inode.layout.period()) &&
-      (journaler->get_write_pos() - last_seg > log_inode.layout.period()/2)) {
+      (journaler->get_write_pos() / ceph_file_layout_period(log_inode.layout) != (last_seg / ceph_file_layout_period(log_inode.layout)) &&
+       (journaler->get_write_pos() - last_seg > ceph_file_layout_period(log_inode.layout)/2))) {
     dout(10) << "submit_entry also starting new segment: last = " << last_seg
 	     << ", cur pos = " << journaler->get_write_pos() << dendl;
     start_new_segment();

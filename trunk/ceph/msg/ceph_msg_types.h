@@ -24,9 +24,9 @@ struct ceph_entity_name {
  * ipv4 only for now
  */
 struct ceph_entity_addr {
-	__u8  ipq[4];
+	__u64 nonce;
 	__u32 port;
-	__u32 nonce;
+	__u8  ipq[4];
 };
 
 
