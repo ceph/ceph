@@ -1,7 +1,3 @@
-/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
- * vim: ts=8 sw=8 smarttab
- */
-
 #ifndef _FS_CEPH_MDS_CLIENT_H
 #define _FS_CEPH_MDS_CLIENT_H
 

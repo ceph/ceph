@@ -1,7 +1,3 @@
-/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
- * vim: ts=8 sw=8 smarttab
- */
-
 #ifndef _FS_CEPH_CEPH_H
 #define _FS_CEPH_CEPH_H
 
@@ -18,7 +14,8 @@
  * CEPH file system in-core superblock info
  */
 struct ceph_sb_info {
-	__u32  s_whoami;               /* client number */
+	__u64 s_fsid;
+	__u32 s_whoami;               /* client number */
 	struct ceph_kmsg   *s_kmsg;    /* messenger instance */
 
 	struct ceph_monmap *s_monmap;  /* monitor map */
