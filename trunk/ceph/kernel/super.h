@@ -25,7 +25,17 @@ struct ceph_fs_client {
 
 	struct ceph_mds_client *s_mds_client;
 	struct ceph_osd_client *s_osd_client;
+
+	int s_ref;    /* reference count (for each sb_info that points to me) */
 };
+
+/*
+ * directory of filesystems mounted by this host
+ *
+ *   key: fsid?  ipquad of monitor?  hmm!
+ * value: struct ceph_fs_client*
+ */
+extern struct radix_tree ceph_fs_clients; 
 
 
 /*
