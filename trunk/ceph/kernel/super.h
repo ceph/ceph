@@ -9,20 +9,33 @@
 #include "osd_client.h"
 
 
-
-/*
- * CEPH file system in-core superblock info
+/* 
+ * CEPH per-filesystem client state
+ * 
+ * possibly shared by multiple mount points, if they are 
+ * mounting the same ceph filesystem/cluster.
  */
-struct ceph_sb_info {
-	__u64 s_fsid;
-	__u32 s_whoami;               /* client number */
+struct ceph_fs_client {
+	__u64 s_fsid;  /* hmm this should be part of the monmap? */
+
+	__u32 s_whoami;                /* my client number */
 	struct ceph_kmsg   *s_kmsg;    /* messenger instance */
 
 	struct ceph_monmap *s_monmap;  /* monitor map */
 
 	struct ceph_mds_client *s_mds_client;
 	struct ceph_osd_client *s_osd_client;
+};
+
+
+/*
+ * CEPH per-mount superblock info
+ */
+struct ceph_sb_info {
+	struct ceph_fs_client *sb_client;
 	
+	/* FIXME: add my relative offset into the filesystem,
+	   so we can appropriately mangle/adjust path names in requests, etc. */
 };
 
 /*

@@ -16,9 +16,9 @@ typedef __u64 ceph_ino_t;
  * object id
  */
 struct ceph_object {
-  ceph_ino_t ino;  /* inode "file" identifier */
-  __u32 bno;  /* "block" (object) in that "file" */
-  __u32 rev;  /* revision.  normally ctime (as epoch). */
+	ceph_ino_t ino;  /* inode "file" identifier */
+	__u32 bno;  /* "block" (object) in that "file" */
+	__u32 rev;  /* revision.  normally ctime (as epoch). */
 };
 typedef struct ceph_object ceph_object_t;
 
@@ -45,19 +45,18 @@ typedef struct ceph_object ceph_object_t;
  * ceph_file_layout - describe data layout for a file/inode
  */
 struct ceph_file_layout {
-  /* file -> object mapping */
-  __u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
-  __u32 fl_stripe_count;    /* over this many objects */
-  __u32 fl_object_size;     /* until objects are this big, then move to new objects */
+	/* file -> object mapping */
+	__u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
+	__u32 fl_stripe_count;    /* over this many objects */
+	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
+	
+	/* pg -> disk layout */
+	__u32 fl_object_stripe_unit;   /* for per-object raid */
 
-  /* object -> pg layout */
-  __u8 fl_pg_type;      /* pg type; see PG_TYPE_* */
-  __u8 fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
-  __u16 __pad;       
-  __u32 fl_preferred;   /* preferred primary for pg */
-
-  /* pg -> disk layout */
-  __u32 fl_object_stripe_unit;   /* for per-object raid */
+	/* object -> pg layout */
+	__u32 fl_pg_preferred; /* preferred primary for pg */
+	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
+	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
 };
 
 #define ceph_file_layout_stripe_width(l) (l.fl_stripe_unit * l.fl_stripe_count)
@@ -74,13 +73,13 @@ struct ceph_file_layout {
 #define CEPH_PG_TYPE_RAID4 2
 
 union ceph_pg {
-  __u64 pg64;
-  struct {
-    __s32 preferred; /* preferred primary osd */
-    __u16 ps;        /* placement seed */
-    __u8 type;
-    __u8 size;
-  } pg;
+	__u64 pg64;
+	struct {
+		__s32 preferred; /* preferred primary osd */
+		__u16 ps;        /* placement seed */
+		__u8 type;
+		__u8 size;
+	} pg;
 };
 typedef union ceph_pg ceph_pg_t;
 
@@ -93,8 +92,8 @@ typedef union ceph_pg ceph_pg_t;
  * describe how a given object should be stored.
  */
 struct ceph_object_layout {
-  ceph_pg_t ol_pgid;
-  __u32 ol_stripe_unit;  
+	ceph_pg_t ol_pgid;
+	__u32 ol_stripe_unit;  
 };
 
 
@@ -103,12 +102,12 @@ struct ceph_object_layout {
  * object extent
  */
 struct ceph_object_extent {
-  ceph_object_t oe_oid;
-  __u64 oe_start;
-  __u64 oe_length;
-  struct ceph_object_layout oe_object_layout;
-  
-  /* buffer extent reverse mapping? */
+	ceph_object_t oe_oid;
+	__u64 oe_start;
+	__u64 oe_length;
+	struct ceph_object_layout oe_object_layout;
+	
+	/* buffer extent reverse mapping? */
 };
 
 

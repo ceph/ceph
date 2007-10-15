@@ -45,6 +45,8 @@ struct ceph_file_layout g_OSD_FileLayout = {
  fl_stripe_unit: 1<<22,
  fl_stripe_count: 1,
  fl_object_size: 1<<22,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2
 };
@@ -53,6 +55,8 @@ struct ceph_file_layout g_OSD_MDDirLayout = {
  fl_stripe_unit: 1<<22,
  fl_stripe_count: 1,
  fl_object_size: 1<<22,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2
 };
@@ -61,6 +65,8 @@ struct ceph_file_layout g_OSD_MDLogLayout = {
  fl_stripe_unit: 1<<20,
  fl_stripe_count: 1,
  fl_object_size: 1<<20,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2
 };
@@ -69,6 +75,8 @@ struct ceph_file_layout g_OSD_MDAnchorTableLayout = {
  fl_stripe_unit: 1<<20,
  fl_stripe_count: 1,
  fl_object_size: 1<<20,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2
 };

@@ -316,7 +316,7 @@ private:
 
   // oid -> pg
   ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
-    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_preferred, layout.fl_object_stripe_unit);
+    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
   }
 
   ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
