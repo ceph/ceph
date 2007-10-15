@@ -1,7 +1,3 @@
-/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
- * vim: ts=8 sw=8 smarttab
- */
-
 /* ceph_fs.h
  *
  * C data types to share between kernel and userspace
@@ -10,15 +6,19 @@
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
 
-typedef u64 ceph_ino_t;
+#include <linux/types.h>
+
+
+typedef __u64 ceph_ino_t;
+
 
 /**
  * object id
  */
 struct ceph_object {
   ceph_ino_t ino;  /* inode "file" identifier */
-  u32 bno;  /* "block" (object) in that "file" */
-  u32 rev;  /* revision.  normally ctime (as epoch). */
+  __u32 bno;  /* "block" (object) in that "file" */
+  __u32 rev;  /* revision.  normally ctime (as epoch). */
 };
 typedef struct ceph_object ceph_object_t;
 
@@ -59,7 +59,6 @@ struct ceph_file_layout {
   /* pg -> disk layout */
   __u32 fl_object_stripe_unit;   /* for per-object raid */
 };
-typedef struct ceph_file_layout ceph_file_layout_t;
 
 #define ceph_file_layout_stripe_width(l) (l.fl_stripe_unit * l.fl_stripe_count)
 
@@ -75,12 +74,12 @@ typedef struct ceph_file_layout ceph_file_layout_t;
 #define CEPH_PG_TYPE_RAID4 2
 
 union ceph_pg {
-  u64 pg64;
+  __u64 pg64;
   struct {
-    s32 preferred; /* preferred primary osd */
-    u16 ps;        /* placement seed */
-    u8 type;
-    u8 size;
+    __s32 preferred; /* preferred primary osd */
+    __u16 ps;        /* placement seed */
+    __u8 type;
+    __u8 size;
   } pg;
 };
 typedef union ceph_pg ceph_pg_t;
@@ -97,7 +96,6 @@ struct ceph_object_layout {
   ceph_pg_t ol_pgid;
   __u32 ol_stripe_unit;  
 };
-typedef struct ceph_object_layout ceph_object_layout_t;
 
 
 
@@ -106,14 +104,61 @@ typedef struct ceph_object_layout ceph_object_layout_t;
  */
 struct ceph_object_extent {
   ceph_object_t oe_oid;
-  u64 oe_start;
-  u64 oe_length;
-  ceph_object_layout_t oe_object_layout;
+  __u64 oe_start;
+  __u64 oe_length;
+  struct ceph_object_layout oe_object_layout;
   
   /* buffer extent reverse mapping? */
 };
-typedef ceph_object_extent ceph_object_extent_t;
 
 
+
+
+
+/*********************************************
+ * message types
+ */
+
+/*
+ * entity_name
+ */
+struct ceph_entity_name {
+	__u32 type;
+	__u32 num;
+};
+
+#define CEPH_ENTITY_TYPE_MON    1
+#define CEPH_ENTITY_TYPE_MDS    2
+#define CEPH_ENTITY_TYPE_OSD    3
+#define CEPH_ENTITY_TYPE_CLIENT 4
+#define CEPH_ENTITY_TYPE_ADMIN  5
+
+
+/*
+ * entity_addr
+ * ipv4 only for now
+ */
+struct ceph_entity_addr {
+	__u64 nonce;
+	__u32 port;
+	__u8  ipq[4];
+};
+
+
+struct ceph_entity_inst {
+	struct ceph_entity_name name;
+	struct ceph_entity_addr addr;
+};
+
+
+/*
+ * message header
+ */
+struct ceph_message_header {
+	__u32 type;
+	struct ceph_entity_inst src, dst;
+	__u32 source_port, dest_port;
+	__u32 nchunks;
+};
 
 #endif

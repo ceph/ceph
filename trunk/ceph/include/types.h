@@ -36,8 +36,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-
-#include "ceph_inttypes.h" 
 #include "ceph_fs.h"
 
 
@@ -64,16 +62,6 @@ namespace __gnu_cxx {
       return H(x.c_str());
     }
   };
-
-#ifndef __LP64__
-  template<> struct hash<int64_t> {
-    size_t operator()(int64_t __x) const { 
-      static hash<int32_t> H;
-      return H((__x >> 32) ^ (__x & 0xffffffff)); 
-    }
-  };
-#endif
-
 }
 
 
@@ -109,8 +97,6 @@ typedef uint64_t version_t;
 typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 
-// object and pg layout
-// specified in g_conf.osd_*
 
 #define O_LAZY 01000000
 
@@ -122,7 +108,7 @@ typedef ceph_file_layout FileLayout;
 // --------------------------------------
 // inode
 
-typedef ceph_ino_t _inodeno_t;
+typedef __uint64_t _inodeno_t;
 
 struct inodeno_t {
   _inodeno_t val;

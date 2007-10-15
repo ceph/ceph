@@ -15,10 +15,6 @@
 #ifndef __MSG_TYPES_H
 #define __MSG_TYPES_H
 
-// raw C structs
-#include "include/ceph_inttypes.h"
-#include "ceph_msg_types.h"
-
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "tcp.h"
@@ -97,11 +93,7 @@ namespace __gnu_cxx {
   };
 }
 
-// get rid of these
-//#define MSG_ADDR_MDS(x)     entity_name_t(entity_name_t::TYPE_MDS,x)
-//#define MSG_ADDR_OSD(x)     entity_name_t(entity_name_t::TYPE_OSD,x)
-//#define MSG_ADDR_MON(x)     entity_name_t(entity_name_t::TYPE_MON,x)
-//#define MSG_ADDR_CLIENT(x)  entity_name_t(entity_name_t::TYPE_CLIENT,x)
+
 
 /*
  * an entity's network address.
