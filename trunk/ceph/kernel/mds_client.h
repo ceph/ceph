@@ -1,6 +1,9 @@
 #ifndef _FS_CEPH_MDS_CLIENT_H
 #define _FS_CEPH_MDS_CLIENT_H
 
+#include <linux/radix-tree.h>
+#include "kmsg.h"
+
 /*
  * state associated with an individual MDS<->client session
  */
@@ -11,7 +14,7 @@ struct ceph_mds_session {
 
 struct ceph_mds_request {
 	__u64 r_tid;
-	ceph_message *r_msg;
+	struct ceph_message *r_msg;
 	__u8  r_idempotent;
 	
 	__u32 r_mds[4];        /* set of mds's with whom request may be outstanding */
@@ -32,7 +35,7 @@ struct ceph_mds_client {
 	int s_max_mds_sessions;            /* size of s_mds_sessions array */
 
 	__u64 s_last_mds_tid;              /* id of last mds request */
-	struct radix_tree s_mds_requests;  /* in-flight mds requests */
+	struct radix_tree_root s_mds_requests;  /* in-flight mds requests */
 
 };
 
