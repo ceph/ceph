@@ -2,6 +2,7 @@
 #define __CEPH_KMSG_H
 
 #include <linux/uio.h>
+#include <linux/radix-tree.h>
 #include <include/ceph_fs.h>
 #include "ceph_kthread.h"
 
@@ -17,8 +18,8 @@ struct ceph_kthreadpool *msg_threadpool;  	/* thread pool */
 
 struct ceph_kmsgr {
 	void *m_parent;
-	struct radix_tree mpipes;		/* other nodes i talk to */
-	struct client_thread_info client_thread;	/* listener thread info */
+	struct radix_tree_root mpipes;		/* other nodes talk to */
+	struct client_thread_info cthread;	/* listener thread info */
 };
 
 struct ceph_message {
@@ -45,7 +46,4 @@ struct ceph_kmsg_pipe {
 	size_t p_in_parital_iovmax;  /* size of currently allocated m_iov array */
 	/* .. or something like that? .. */
 
-};
-
-struct dispatch_queue {
 };
