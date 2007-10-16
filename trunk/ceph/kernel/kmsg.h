@@ -3,16 +3,9 @@
 
 #include <linux/uio.h>
 #include <linux/radix-tree.h>
-#include <include/ceph_fs.h>
+#include <linux/ceph_fs.h>
 #include "ceph_kthread.h"
 
-/* 
- * function prototypes
- */
-void ceph_read_message(ceph_message *message );
-void ceph_write_message(ceph_message *message );
-void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
-void queue_message(ceph_message *);
 
 struct ceph_kthreadpool *msg_threadpool;  	/* thread pool */
 
@@ -47,3 +40,12 @@ struct ceph_kmsg_pipe {
 	/* .. or something like that? .. */
 
 };
+
+/* 
+ * function prototypes
+ */
+void ceph_read_message(struct ceph_message *message);
+void ceph_write_message(struct ceph_message *message);
+void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
+void queue_message(struct ceph_message *message);
+#endif
