@@ -21,7 +21,7 @@ struct ceph_kmsg {
 	/* possibly shared among multiple kmsg instances? */
 
 	/* other nodes i talk to */
-	struct radix_tree m_pipes;   /* key: dest addr, value: ceph_kmsg_pipe */
+	struct radix_tree_root m_pipes;   /* key: dest addr, value: ceph_kmsg_pipe */
 	
 	/* ... */
 };
@@ -45,4 +45,6 @@ struct ceph_kmsg_pipe {
 	/* .. or something like that? .. */
 
 };
+
+
 
