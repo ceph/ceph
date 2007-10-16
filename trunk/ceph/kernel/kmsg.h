@@ -18,7 +18,7 @@ struct ceph_kthreadpool *msg_threadpool;  	/* thread pool */
 struct ceph_kmsgr {
 	void *m_parent;
 	struct radix_tree mpipes;		/* other nodes i talk to */
-	struct listener_thread_info listener_thread;	/* listener thread info */
+	struct client_thread_info client_thread;	/* listener thread info */
 };
 
 struct ceph_message {
