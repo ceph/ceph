@@ -1729,11 +1729,12 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
  
     // verify fingerprint
     int bad = 0;
-    int64_t *p = (int64_t*)buf;
-    int64_t readoff, readclient;
+    uint64_t *p = (uint64_t*)buf;
+    uint64_t readoff;
+    int64_t readclient;
     while ((char*)p + 32 < buf + rdsize) {
       readoff = *p;
-      int64_t wantoff = i*rdsize + (int64_t)((char*)p - buf);
+      uint64_t wantoff = (uint64_t)i*(uint64_t)rdsize + (uint64_t)((char*)p - buf);
       p++;
       readclient = *p;
       p++;
