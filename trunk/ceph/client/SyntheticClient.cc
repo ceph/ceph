@@ -1683,7 +1683,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     // = 128 bits (16 bytes)
     uint64_t *p = (uint64_t*)buf;
     while ((char*)p < buf + wrsize) {
-      *p = i*wrsize + (char*)p - buf;      
+      *p = (uint64_t)i*(uint64_t)wrsize + (uint64_t)((char*)p - buf);      
       p++;
       *p = client->get_nodeid();
       p++;
