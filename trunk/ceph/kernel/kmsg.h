@@ -1,5 +1,5 @@
-#ifndef __CEPH_KMSG_H
-#define __CEPH_KMSG_H
+#ifndef __FS_CEPH_KMSG_H
+#define __FS_CEPH_KMSG_H
 
 #include <linux/uio.h>
 #include <linux/radix-tree.h>
@@ -44,8 +44,8 @@ struct ceph_kmsg_pipe {
 /* 
  * function prototypes
  */
-void ceph_read_message(struct ceph_message *message);
-void ceph_write_message(struct ceph_message *message);
-void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
-void queue_message(struct ceph_message *message);
+extern void ceph_read_message(struct ceph_message *message);
+extern void ceph_write_message(struct ceph_message *message);
+extern void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
+extern void queue_message(struct ceph_message *message);
 #endif
