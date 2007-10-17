@@ -54,7 +54,7 @@ struct ceph_file_layout {
 	__u32 fl_object_stripe_unit;   /* for per-object raid */
 
 	/* object -> pg layout */
-	__u32 fl_pg_preferred; /* preferred primary for pg */
+	__s32 fl_pg_preferred; /* preferred primary for pg */
 	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
 	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
 };
