@@ -53,6 +53,7 @@ public:
   version_t get_committing() { return committing; }
   version_t get_committed() { return committed; }
 
+  void set_version(version_t v) { version = v; }
   version_t inc_projected() { return ++projected; }
   void reset_projected() { projected = version; }
   void set_committing(version_t v) { committing = v; }
@@ -82,6 +83,7 @@ public:
   void add_opening(int c) { opening.insert(c); }
   bool is_closing(int c) { return closing.count(c); }
   void add_closing(int c) { closing.insert(c); }
+  void remove_closing(int c) { closing.erase(c); }
   bool have_session(int client) {
     return client_inst.count(client);
   }
@@ -95,6 +97,16 @@ public:
     closing.erase(client);
     sessions.erase(client);
     client_inst.erase(client);
+    version++;
+  }
+  void noop() {
+    version++;
+  }
+  void open_sessions(map<int,entity_inst_t>& cm) {
+    for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+      client_inst[p->first] = p->second;
+      sessions.insert(p->first);
+    }
     version++;
   }
   

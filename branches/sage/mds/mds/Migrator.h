@@ -223,14 +223,12 @@ public:
 
 public:
   void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
-			   map<int,entity_inst_t>& imported_client_map,
 			   LogSegment *ls,
 			   list<ScatterLock*>& updated_scatterlocks);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
-			map<int,entity_inst_t>& imported_client_map,
 			LogSegment *ls,
 			list<ScatterLock*>& updated_scatterlocks);
 

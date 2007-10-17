@@ -1048,6 +1048,20 @@ void EImportStart::replay(MDS *mds)
 
   // put in ambiguous import list
   mds->mdcache->add_ambiguous_import(base, bounds);
+
+  // open client sessions?
+  if (mds->clientmap.get_version() >= cmapv) {
+    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+	     << " >= " << cmapv << ", noop" << dendl;
+  } else {
+    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+	     << " < " << cmapv << dendl;
+    map<int,entity_inst_t> cm;
+    bufferlist::iterator blp = client_map.begin();
+    ::_decode_simple(cm, blp);
+    mds->clientmap.open_sessions(cm);
+    assert(mds->clientmap.get_version() == cmapv);
+  }
 }
 
 // -----------------------

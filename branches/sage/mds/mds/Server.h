@@ -56,6 +56,7 @@ public:
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void force_open_sessions(map<int,entity_inst_t> &cm);
   void terminate_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);

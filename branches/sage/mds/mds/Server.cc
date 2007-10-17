@@ -191,12 +191,15 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
   if (open) {
     assert(mds->clientmap.is_opening(from));
     mds->clientmap.open_session(client_inst);
-  } else {
-    assert(mds->clientmap.is_closing(from));
+  } else if (mds->clientmap.is_closing(from)) {
     mds->clientmap.close_session(from);
     
     // purge completed requests from clientmap
     mds->clientmap.trim_completed_requests(from, 0);
+  } else {
+    // close must have been canceled (by an import?) ...
+    assert(!open);
+    mds->clientmap.noop();
   }
   
   assert(cmapv == mds->clientmap.get_version());
@@ -206,6 +209,28 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
     mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), client_inst);
   else
     mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), client_inst);
+}
+
+void Server::force_open_sessions(map<int,entity_inst_t>& cm)
+{
+  dout(10) << "force_open_sessions on " << cm.size() << " clients" << dendl;
+  version_t v = mds->clientmap.get_version();
+  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    if (mds->clientmap.is_closing(p->first)) {
+      dout(15) << "force_open_sessions canceling close on " << p->second << dendl;
+      mds->clientmap.remove_closing(p->first);
+      continue;
+    }
+    if (mds->clientmap.have_session(p->first)) {
+      dout(15) << "force_open_sessions have session " << p->second << dendl;
+      continue;
+    }
+
+    dout(10) << "force_open_sessions opening " << p->second << dendl;
+    mds->clientmap.open_session(p->second);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), p->second);
+   }
+  mds->clientmap.set_version(v+1);
 }
 
 
@@ -2904,6 +2929,12 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
 
+  if (!srcdn->is_auth() && srcdn->is_primary()) {
+    // importing inode; also journal imported client map
+    
+    // ** DER FIXME **
+  }
+
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
 
@@ -3048,7 +3079,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	version_t siv;
 	if (srcdn->is_auth())
 	  siv = srcdn->inode->get_projected_version();
-	else
+	else 
 	  siv = mdr->more()->inode_import_v;
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
@@ -3196,9 +3227,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	map<int,entity_inst_t> imported_client_map;
 	list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
 	::_decode_simple(imported_client_map, blp);
+	force_open_sessions(imported_client_map);
 	mdcache->migrator->decode_import_inode(destdn, blp, 
 					       srcdn->authority().first,
-					       imported_client_map,
 					       mdr->ls,
 					       updated_scatterlocks);
 	destdn->inode->dirlock.clear_updated();   

@@ -20,6 +20,7 @@
 #include "Migrator.h"
 #include "Locker.h"
 #include "Migrator.h"
+#include "Server.h"
 
 #include "MDBalancer.h"
 #include "MDLog.h"
@@ -854,8 +855,7 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
                                              it->second.get_last_seq(), 
                                              it->second.pending(),
                                              it->second.wanted());
-    entity_inst_t inst = mds->clientmap.get_inst(it->first);
-    mds->send_message_client_maybe_open(m, inst);
+    mds->send_message_client(m, it->first);
   }
   in->clear_client_caps();
 
@@ -1602,6 +1602,8 @@ void Migrator::handle_export_dir(MExportDir *m)
   bufferlist::iterator blp = m->get_dirstate().begin();
   ::_decode_simple(imported_client_map, blp);
 
+  mds->server->force_open_sessions(imported_client_map);
+
   int num_imported_inodes = 0;
   while (!blp.end()) {
     num_imported_inodes += 
@@ -1609,12 +1611,14 @@ void Migrator::handle_export_dir(MExportDir *m)
 			oldauth, 
 			dir,                 // import root
 			le,
-			imported_client_map,
 			mds->mdlog->get_current_segment(),
 			import_updated_scatterlocks[dir]);
   }
   dout(10) << " " << m->get_bounds().size() << " imported bounds" << dendl;
   
+  // include imported sessions in EImportStart
+  le->client_map.claim(m->get_dirstate());
+
   // include bounds in EImportStart
   set<CDir*> import_bounds;
   cache->get_subtree_bounds(dir, import_bounds);
@@ -1875,7 +1879,6 @@ void Migrator::import_finish(CDir *dir)
 
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth,
-				   map<int,entity_inst_t>& imported_client_map, 
 				   LogSegment *ls,
 				   list<ScatterLock*>& updated_scatterlocks)
 {  
@@ -1923,7 +1926,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
-  in->add_replica( oldauth, CInode::EXPORT_NONCE );
+  in->add_replica(oldauth, CInode::EXPORT_NONCE);
   if (in->is_replica(mds->get_nodeid()))
     in->remove_replica(mds->get_nodeid());
   
@@ -1938,7 +1941,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
                                                 in->client_caps[*it].pending(),
                                                 in->client_caps[*it].wanted());
     caps->set_mds( oldauth ); // reap from whom?
-    mds->send_message_client_maybe_open(caps, imported_client_map[*it]);
+    mds->send_message_client(caps, *it);
   }
 }
 
@@ -1947,7 +1950,6 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 				int oldauth,
 				CDir *import_root,
 				EImportStart *le,
-				map<int,entity_inst_t>& imported_client_map,
 				LogSegment *ls,
 				list<ScatterLock*>& updated_scatterlocks)
 {
@@ -2043,7 +2045,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     }
     else if (icode == 'I') {
       // inode
-      decode_import_inode(dn, blp, oldauth, imported_client_map, ls, updated_scatterlocks);
+      decode_import_inode(dn, blp, oldauth, ls, updated_scatterlocks);
     }
     
     // add dentry to journal entry

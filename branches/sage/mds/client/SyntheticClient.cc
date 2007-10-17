@@ -118,6 +118,11 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"makefiles2") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_MAKEFILES2 );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"linktest") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_LINKTEST );
       } else if (strcmp(args[i],"createshared") == 0) {
@@ -1573,8 +1578,8 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
       if (more) {
         client->lstat(d, &st);
         int fd = client->open(d, O_RDONLY);
-        client->unlink(d);
-        client->close(fd);
+        //client->unlink(d);
+        //client->close(fd);
       }
 
       if (time_to_stop()) return 0;

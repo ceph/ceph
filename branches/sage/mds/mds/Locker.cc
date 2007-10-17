@@ -546,7 +546,7 @@ bool Locker::issue_caps(CInode *in)
       if (seq > 0 && 
           !it->second.is_suppress()) {
         dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << it->second.get_last_seq() << " new pending " << cap_string(it->second.pending()) << " was " << cap_string(before) << dendl;
-        mds->send_message_client_maybe_opening(new MClientFileCaps(MClientFileCaps::OP_GRANT,
+        mds->send_message_client(new MClientFileCaps(MClientFileCaps::OP_GRANT,
 						     in->inode,
 						     it->second.get_last_seq(),
 						     it->second.pending(),
@@ -729,7 +729,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(MClientFileCaps::OP_RELEASE,
 					     in->inode, 
                                              0, 0, 0);
-    mds->send_message_client_maybe_open(r, m->get_source_inst());
+    mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?

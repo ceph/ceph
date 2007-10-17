@@ -286,44 +286,6 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 }
 
 
-class C_MDS_SendMessageClientSession : public Context {
-  MDS *mds;
-  Message *msg;
-  entity_inst_t clientinst;
-public:
-  C_MDS_SendMessageClientSession(MDS *md, Message *ms, entity_inst_t& ci) :
-    mds(md), msg(ms), clientinst(ci) {}
-  void finish(int r) {
-    mds->clientmap.open_session(clientinst);
-    mds->send_message_client(msg, clientinst.name.num());
-  }
-};
-
-void MDS::send_message_client_maybe_opening(Message *m, int c)
-{
-  send_message_client_maybe_open(m, clientmap.get_inst(c));
-}
-
-void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
-{
-  // FIXME
-  //  _most_ ppl shoudl check for a client session, since migration may call this,
-  //  start opening, and then e.g. locker sends something else (through non-maybe_open 
-  //  version)
-  int client = clientinst.name.num();
-  if (!clientmap.have_session(client)) {
-    // no session!
-    dout(10) << "send_message_client opening session with " << clientinst << dendl;
-    clientmap.add_opening(client);
-    mdlog->submit_entry(new ESession(clientinst, true, clientmap.inc_projected()),
-			new C_MDS_SendMessageClientSession(this, m, clientinst));
-  } else {
-    // we have a session.
-    send_message_client(m, clientinst);
-  }
-}
-
-
 
 int MDS::init(bool standby)
 {

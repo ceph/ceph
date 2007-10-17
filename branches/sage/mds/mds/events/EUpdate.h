@@ -22,6 +22,7 @@ class EUpdate : public LogEvent {
 public:
   EMetaBlob metablob;
   string type;
+  bufferlist client_map;
 
   EUpdate() : LogEvent(EVENT_UPDATE) { }
   EUpdate(MDLog *mdlog, const char *s) : 
@@ -37,10 +38,12 @@ public:
   void encode_payload(bufferlist& bl) {
     ::_encode(type, bl);
     metablob._encode(bl);
+    ::_encode(client_map, bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
     ::_decode(type, bl, off);
     metablob._decode(bl, off);
+    ::_decode(client_map, bl, off);
   }
 
   void update_segment();

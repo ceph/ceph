@@ -30,6 +30,8 @@ protected:
 
  public:
   EMetaBlob metablob;
+  bufferlist client_map;  // encoded map<int,entity_inst_t>
+  version_t cmapv;
 
   EImportStart(dirfrag_t di,
 	       list<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
@@ -44,12 +46,16 @@ protected:
     bl.append((char*)&base, sizeof(base));
     metablob._encode(bl);
     ::_encode(bounds, bl);
+    ::_encode(cmapv, bl);
+    ::_encode(client_map, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(base), (char*)&base);
     off += sizeof(base);
     metablob._decode(bl, off);
     ::_decode(bounds, bl, off);
+    ::_decode(cmapv, bl, off);
+    ::_decode(client_map, bl, off);
   }
   
   bool has_expired(MDS *mds);
