@@ -68,6 +68,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_PURGING =         -12;	
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
+  static const int PIN_IMPORTINGCAPS =    15;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -83,6 +84,7 @@ class CInode : public MDSCacheObject {
     case PIN_STICKYDIRS: return "stickydirs";
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
+    case PIN_IMPORTINGCAPS: return "importingcaps";
     default: return generic_pin_name(p);
     }
   }
@@ -306,8 +308,10 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& p,
-		     set<int>& new_client_caps, 
+		     map<CInode*, map<int,Capability::Export> >& imported_cap_map,
 		     LogSegment *ls);
+  void import_caps(map<int,Capability::Export>& cap_map,
+		   set<int>& new_caps);
 
 
   // -- locks --

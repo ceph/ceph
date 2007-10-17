@@ -132,6 +132,9 @@ struct MDRequest {
     version_t inode_import_v;
     CInode* destdn_was_remote_inode;
     bool was_link_merge;
+
+    map<int,entity_inst_t> imported_client_map;
+    map<CInode*, map<int,Capability::Export> > cap_imports;
     
     // called when slave commits or aborts
     Context *slave_commit;

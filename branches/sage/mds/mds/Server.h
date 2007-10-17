@@ -22,6 +22,7 @@ class LogEvent;
 class C_MDS_rename_finish;
 class MDRequest;
 class EMetaBlob;
+class EUpdate;
 class PVList;
 class MMDSSlaveRequest;
 
@@ -56,7 +57,8 @@ public:
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
-  void force_open_sessions(map<int,entity_inst_t> &cm);
+  void prepare_force_open_sessions(map<int,entity_inst_t> &cm);
+  void finish_force_open_sessions(map<int,entity_inst_t> &cm);
   void terminate_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
@@ -167,7 +169,7 @@ public:
   void _rename_prepare_witness(MDRequest *mdr, int who,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _rename_prepare(MDRequest *mdr,
-		       EMetaBlob *metablob, 
+		       EMetaBlob *metablob, bufferlist *client_map_bl,
 		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
 

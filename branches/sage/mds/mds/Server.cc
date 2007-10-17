@@ -173,6 +173,7 @@ void Server::handle_client_session(MClientSession *m)
 
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
+  dout(10) << " clientmap v " << mds->clientmap.get_version() << " pv " << cmapv << dendl;
   mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
 		      new C_MDS_session_finish(mds, m->get_source_inst(), open, cmapv));
   delete m;
@@ -211,10 +212,21 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
     mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), client_inst);
 }
 
-void Server::force_open_sessions(map<int,entity_inst_t>& cm)
+void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
 {
-  dout(10) << "force_open_sessions on " << cm.size() << " clients" << dendl;
+  version_t cmapv = mds->clientmap.inc_projected();
+  dout(10) << "prepare_force_open_sessions " << cmapv 
+	   << " on " << cm.size() << " clients"
+	   << dendl;
+  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    mds->clientmap.add_opening(p->first);
+  }
+}
+
+void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
+{
   version_t v = mds->clientmap.get_version();
+  dout(10) << "finish_force_open_sessions on " << cm.size() << " clients, v " << v << " -> " << (v+1) << dendl;
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     if (mds->clientmap.is_closing(p->first)) {
       dout(15) << "force_open_sessions canceling close on " << p->second << dendl;
@@ -225,11 +237,11 @@ void Server::force_open_sessions(map<int,entity_inst_t>& cm)
       dout(15) << "force_open_sessions have session " << p->second << dendl;
       continue;
     }
-
+    
     dout(10) << "force_open_sessions opening " << p->second << dendl;
     mds->clientmap.open_session(p->second);
     mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), p->second);
-   }
+  }
   mds->clientmap.set_version(v+1);
 }
 
@@ -2927,7 +2939,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "rename");
   le->metablob.add_client_req(mdr->reqid);
   
-  _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
+  _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
 
   if (!srcdn->is_auth() && srcdn->is_primary()) {
     // importing inode; also journal imported client map
@@ -3013,7 +3025,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
 
 
 void Server::_rename_prepare(MDRequest *mdr,
-			     EMetaBlob *metablob, 
+			     EMetaBlob *metablob, bufferlist *client_map_bl,
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
@@ -3079,8 +3091,30 @@ void Server::_rename_prepare(MDRequest *mdr,
 	version_t siv;
 	if (srcdn->is_auth())
 	  siv = srcdn->inode->get_projected_version();
-	else 
+	else {
 	  siv = mdr->more()->inode_import_v;
+
+	  /* import node */
+	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
+	  
+	  // imported caps
+	  ::_decode_simple(mdr->more()->imported_client_map, blp);
+	  ::_encode_simple(mdr->more()->imported_client_map, *client_map_bl);
+	  prepare_force_open_sessions(mdr->more()->imported_client_map);
+
+	  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
+	  
+	  mdcache->migrator->decode_import_inode(srcdn, blp, 
+						 srcdn->authority().first,
+						 mdr->ls,
+						 mdr->more()->cap_imports, updated_scatterlocks);
+	  srcdn->inode->dirlock.clear_updated();  
+
+
+	  // hack: force back to !auth, temporarily
+	  srcdn->inode->state_clear(CInode::STATE_AUTH);
+
+	}
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
@@ -3223,16 +3257,16 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // srcdn inode import?
       if (!srcdn->is_auth() && destdn->is_auth()) {
 	assert(mdr->more()->inode_import.length() > 0);
-	bufferlist::iterator blp = mdr->more()->inode_import.begin();
-	map<int,entity_inst_t> imported_client_map;
-	list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
-	::_decode_simple(imported_client_map, blp);
-	force_open_sessions(imported_client_map);
-	mdcache->migrator->decode_import_inode(destdn, blp, 
-					       srcdn->authority().first,
-					       mdr->ls,
-					       updated_scatterlocks);
-	destdn->inode->dirlock.clear_updated();   
+	assert(destdn->inode->is_dirty());
+
+	// finish cap imports
+	finish_force_open_sessions(mdr->more()->imported_client_map);
+	if (mdr->more()->cap_imports.count(destdn->inode))
+	  mds->mdcache->migrator->finish_import_caps(destdn->inode, srcdn->authority().first, 
+						     mdr->more()->cap_imports[destdn->inode]);
+	
+	// hack: fix auth bit
+	destdn->inode->state_set(CInode::STATE_AUTH);
       }
       if (destdn->inode->is_auth())
 	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -3397,7 +3431,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     }
 
     // commit case
-    _rename_prepare(mdr, &le->commit, srcdn, destdn, straydn);
+    bufferlist blah;
+    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
 
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
@@ -3405,8 +3440,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << dendl;
 
     // prepare anyway; this may twiddle dir_auth
-    EMetaBlob blah;
-    _rename_prepare(mdr, &blah, srcdn, destdn, straydn);
+    EMetaBlob blob;
+    bufferlist blah;
+    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn);
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 }

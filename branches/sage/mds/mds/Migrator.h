@@ -114,14 +114,7 @@ protected:
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
   map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
-
-  /*
-  // -- hashing madness --
-  multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
-  multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
-  // maps frozen_dir_ino's to waiting-for-discover ino's.
-  multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-  */
+  map<CDir*, map<CInode*, map<int,Capability::Export> > > import_caps;
 
 
 public:
@@ -189,6 +182,8 @@ public:
   void encode_export_inode(CInode *in, bufferlist& enc_state, 
 			   map<int,entity_inst_t>& exported_client_map);
   void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
+  void finish_export_inode_caps(CInode *in);
+
   int encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<int,entity_inst_t>& exported_client_map,
@@ -224,13 +219,16 @@ public:
 public:
   void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
 			   LogSegment *ls,
+			   map<CInode*, map<int,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
 			LogSegment *ls,
+			map<CInode*, map<int,Capability::Export> >& cap_imports,
 			list<ScatterLock*>& updated_scatterlocks);
+  void finish_import_caps(CInode *in, int from, map<int,Capability::Export> &cap_map);
 
 public:
   void import_reverse(CDir *dir);
@@ -239,7 +237,8 @@ protected:
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, set<CDir*>& bounds);
-  void import_logged_start(CDir *dir, int from);
+  void import_logged_start(CDir *dir, int from,
+			   map<int,entity_inst_t> &imported_client_map);
   void handle_export_finish(MExportDirFinish *m);
 public:
   void import_finish(CDir *dir);
