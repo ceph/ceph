@@ -214,7 +214,6 @@ public:
       int        op;   // write, zero, trunc, remove
       object_t   oid;
       eversion_t version;
-      objectrev_t rev;
       
       osdreqid_t reqid;  // caller+tid to uniquely identify request
       

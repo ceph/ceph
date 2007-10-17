@@ -320,13 +320,11 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish,
-					 objectrev_t rev)
+tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish)
 {
   OSDStat *st = new OSDStat(size);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
   st->extents.front().layout = ol;
-  st->extents.front().rev = rev;
   st->onfinish = onfinish;
 
   return stat_submit(st);
@@ -424,14 +422,12 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
-                     Context *onfinish, 
-					 objectrev_t rev)
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl,
+                     Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().layout = ol;
-  rd->extents.front().rev = rev;
   readx(rd, onfinish);
   return last_tid;
 }
@@ -665,14 +661,12 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 // write ------------------------------------
 
 tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
-                      Context *onack, Context *oncommit,
-					  objectrev_t rev)
+                      Context *onack, Context *oncommit)
 {
   OSDWrite *wr = new OSDWrite(bl);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
-  wr->extents.front().rev = rev;
   modifyx(wr, onack, oncommit);
   return last_tid;
 }
@@ -681,13 +675,11 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, buff
 // zero
 
 tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
-                     Context *onack, Context *oncommit,
-					 objectrev_t rev)
+                     Context *onack, Context *oncommit)
 {
   OSDModify *z = new OSDModify(OSD_OP_ZERO);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
-  z->extents.front().rev = rev;
   modifyx(z, onack, oncommit);
   return last_tid;
 }
@@ -760,7 +752,6 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 			   wr->op);
     m->set_length(ex.length);
     m->set_offset(ex.start);
-    m->set_rev(ex.rev);
     if (usetid > 0)
       m->set_retry_attempt(true);
     

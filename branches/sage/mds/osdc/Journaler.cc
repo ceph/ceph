@@ -31,7 +31,7 @@ void Journaler::reset()
   state = STATE_ACTIVE;
   write_pos = flush_pos = ack_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = inode.layout.period();
+    expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(inode.layout);
 }
 
 
@@ -239,7 +239,7 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = inode.layout.stripe_unit;
+    int p = inode.layout.fl_stripe_unit;
     if (write_pos / p != (write_pos + (off_t)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
@@ -613,7 +613,7 @@ public:
 void Journaler::trim()
 {
   off_t trim_to = last_committed.expire_pos;
-  trim_to -= trim_to % inode.layout.period();
+  trim_to -= trim_to % ceph_file_layout_period(inode.layout);
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
 	   << dendl;

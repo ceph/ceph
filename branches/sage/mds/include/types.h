@@ -36,6 +36,8 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "ceph_fs.h"
+
 
 #include "object.h"
 #include "utime.h"
@@ -65,6 +67,12 @@ namespace __gnu_cxx {
   template<> struct hash<int64_t> {
     size_t operator()(int64_t __x) const { 
       static hash<int32_t> H;
+      return H((__x >> 32) ^ (__x & 0xffffffff)); 
+    }
+  };
+  template<> struct hash<uint64_t> {
+    size_t operator()(uint64_t __x) const { 
+      static hash<uint32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
@@ -105,76 +113,18 @@ typedef uint64_t version_t;
 typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 
-// object and pg layout
-// specified in g_conf.osd_*
 
 #define O_LAZY 01000000
 
 
-/** object layout
- * how objects are mapped into PGs
- */
-#define OBJECT_LAYOUT_HASH     1
-#define OBJECT_LAYOUT_LINEAR   2
-#define OBJECT_LAYOUT_HASHINO  3
 
-/** pg layout
- * how PGs are mapped into (sets of) OSDs
- */
-#define PG_LAYOUT_CRUSH  0   
-#define PG_LAYOUT_HASH   1
-#define PG_LAYOUT_LINEAR 2
-#define PG_LAYOUT_HYBRID 3
-
-
-
-// -----------------------
-// FileLayout
-
-/** FileLayout 
- * specifies a striping and replication strategy
- */
-
-//#define FILE_LAYOUT_CRUSH    0    // stripe via crush
-//#define FILE_LAYOUT_LINEAR   1    // stripe linearly across cluster
-
-struct FileLayout {
-  // -- file -> object mapping --
-  int32_t stripe_unit;     // stripe unit, in bytes
-  int32_t stripe_count;    // over this many objects
-  int32_t object_size;     // until objects are this big, then move to new objects
-
-  int stripe_width() { return stripe_unit * stripe_count; }
-
-  // period = bytes before i start on a new set of objects.
-  int period() { return object_size * stripe_count; }
-
-  // -- object -> pg layout --
-  char pg_type;        // pg type (replicated, raid, etc.) (see pg_t::TYPE_*)
-  char pg_size;        // pg size (num replicas, or raid4 stripe width)
-  int32_t  preferred;  // preferred primary osd?
-
-  // -- pg -> disk layout --
-  int32_t  object_stripe_unit;  // for per-object raid
-
-  FileLayout() { }
-  FileLayout(int su, int sc, int os, int pgt, int pgs, int o=-1) :
-    stripe_unit(su), stripe_count(sc), object_size(os), 
-    pg_type(pgt), pg_size(pgs), preferred(o),
-    object_stripe_unit(su)   // note: bad default, we pbly want su/(pgs-1)
-  {
-    assert(object_size % stripe_unit == 0);
-  }
-
-};
-
-
+typedef ceph_file_layout FileLayout;
 
 
 // --------------------------------------
 // inode
 
-typedef uint64_t _inodeno_t;
+typedef __uint64_t _inodeno_t;
 
 struct inodeno_t {
   _inodeno_t val;
@@ -228,14 +178,6 @@ namespace __gnu_cxx {
 
 inline int DT_TO_MODE(int dt) {
   return dt << 12;
-  /*
-  switch (dt) {
-  case DT_REG: return INODE_MODE_FILE;
-  case DT_DIR: return INODE_MODE_DIR;
-  case DT_LNK: return INODE_MODE_SYMLINK;
-  default: assert(0); return 0;
-  }
-  */
 }
 
 struct inode_t {
@@ -278,13 +220,6 @@ struct inode_t {
 
 inline unsigned char MODE_TO_DT(int mode) {
   return mode >> 12;
-  /*
-  if (S_ISREG(mode)) return inode_t::DT_REG;
-  if (S_ISLNK(mode)) return inode_t::DT_LNK;
-  if (S_ISDIR(mode)) return inode_t::DT_DIR;
-  assert(0);
-  return 0;
-  */
 }
 
 

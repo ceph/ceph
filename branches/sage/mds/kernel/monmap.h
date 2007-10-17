@@ -1,9 +1,7 @@
-/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
- * vim: ts=8 sw=8 smarttab
- */
-
 #ifndef _FS_CEPH_MONMAP_H
 #define _FS_CEPH_MONMAP_H
+
+#include <linux/uio.h>
 
 /*
  * monitor map
@@ -15,7 +13,7 @@ struct ceph_monmap {
   struct ceph_entity_inst m_mon_inst;
 };
 
-extern int ceph_monmap_pick_mon(ceph_monmap *m);
-extern int ceph_monmap_decode(ceph_monmap *m, iovec *v);
+extern int ceph_monmap_pick_mon(struct ceph_monmap *m);
+extern int ceph_monmap_decode(struct ceph_monmap *m, struct kvec *v);
 
 #endif

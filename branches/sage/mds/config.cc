@@ -41,10 +41,45 @@ ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
 
 // file layouts
-FileLayout g_OSD_FileLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );   // 4M objects, 2x replication
-FileLayout g_OSD_MDDirLayout( 1<<22, 1, 1<<22, pg_t::TYPE_REP, 2 );  // 4M objects, 2x replication.  (a lie, just object layout policy)
-FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects
-FileLayout g_OSD_MDAnchorTableLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // 1M objects.  (a lie, just object layout policy)
+struct ceph_file_layout g_OSD_FileLayout = {
+ fl_stripe_unit: 1<<22,
+ fl_stripe_count: 1,
+ fl_object_size: 1<<22,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
+ fl_pg_type: CEPH_PG_TYPE_REP,
+ fl_pg_size: 2
+};
+
+struct ceph_file_layout g_OSD_MDDirLayout = {
+ fl_stripe_unit: 1<<22,
+ fl_stripe_count: 1,
+ fl_object_size: 1<<22,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
+ fl_pg_type: CEPH_PG_TYPE_REP,
+ fl_pg_size: 2
+};
+
+struct ceph_file_layout g_OSD_MDLogLayout = {
+ fl_stripe_unit: 1<<20,
+ fl_stripe_count: 1,
+ fl_object_size: 1<<20,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
+ fl_pg_type: CEPH_PG_TYPE_REP,
+ fl_pg_size: 2
+};
+
+struct ceph_file_layout g_OSD_MDAnchorTableLayout = {
+ fl_stripe_unit: 1<<20,
+ fl_stripe_count: 1,
+ fl_object_size: 1<<20,
+ fl_object_stripe_unit: 0,
+ fl_pg_preferred: -1,
+ fl_pg_type: CEPH_PG_TYPE_REP,
+ fl_pg_size: 2
+};
 
 #include <msg/msg_types.h>
 
@@ -266,8 +301,8 @@ md_config_t g_conf = {
   osd_stat_refresh_interval: .5,
 
   osd_pg_bits: 4,  // bits per osd
-  osd_object_layout: OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
-  osd_pg_layout: PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
+  osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
+  osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_max_rep: 4,
   osd_min_raid_width: 4,
   osd_max_raid_width: 3, //6, 
@@ -896,18 +931,18 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--osd_object_layout") == 0) {
       i++;
-      if (strcmp(args[i], "linear") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_LINEAR;
-      else if (strcmp(args[i], "hashino") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_HASHINO;
-      else if (strcmp(args[i], "hash") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_HASH;
+      if (strcmp(args[i], "linear") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_LINEAR;
+      else if (strcmp(args[i], "hashino") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_HASHINO;
+      else if (strcmp(args[i], "hash") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_HASH;
       else assert(0);
     }
     
     else if (strcmp(args[i], "--osd_pg_layout") == 0) {
       i++;
-      if (strcmp(args[i], "linear") == 0) g_conf.osd_pg_layout = PG_LAYOUT_LINEAR;
-      else if (strcmp(args[i], "hash") == 0) g_conf.osd_pg_layout = PG_LAYOUT_HASH;
-      else if (strcmp(args[i], "hybrid") == 0) g_conf.osd_pg_layout = PG_LAYOUT_HYBRID;
-      else if (strcmp(args[i], "crush") == 0) g_conf.osd_pg_layout = PG_LAYOUT_CRUSH;
+      if (strcmp(args[i], "linear") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_LINEAR;
+      else if (strcmp(args[i], "hash") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_HASH;
+      else if (strcmp(args[i], "hybrid") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_HYBRID;
+      else if (strcmp(args[i], "crush") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_CRUSH;
       else assert(0);
     }
     
@@ -917,38 +952,38 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.tick = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_unit") == 0) 
-      g_OSD_FileLayout.stripe_unit = atoi(args[++i]);
+      g_OSD_FileLayout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_count") == 0) 
-      g_OSD_FileLayout.stripe_count = atoi(args[++i]);
+      g_OSD_FileLayout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_osize") == 0) 
-      g_OSD_FileLayout.object_size = atoi(args[++i]);
+      g_OSD_FileLayout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_type") == 0) 
-      g_OSD_FileLayout.pg_type = atoi(args[++i]);
+      g_OSD_FileLayout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_size") == 0) 
-      g_OSD_FileLayout.pg_size = atoi(args[++i]);
+      g_OSD_FileLayout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_dir_layout_unit") == 0) 
-      g_OSD_MDDirLayout.stripe_unit = atoi(args[++i]);
+      g_OSD_MDDirLayout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
-      g_OSD_MDDirLayout.stripe_count = atoi(args[++i]);
+      g_OSD_MDDirLayout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
-      g_OSD_MDDirLayout.object_size = atoi(args[++i]);
+      g_OSD_MDDirLayout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0) 
-      g_OSD_MDDirLayout.pg_type = atoi(args[++i]);
+      g_OSD_MDDirLayout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0) 
-      g_OSD_MDDirLayout.pg_size = atoi(args[++i]);
+      g_OSD_MDDirLayout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_log_layout_unit") == 0) 
-      g_OSD_MDLogLayout.stripe_unit = atoi(args[++i]);
+      g_OSD_MDLogLayout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
-      g_OSD_MDLogLayout.stripe_count = atoi(args[++i]);
+      g_OSD_MDLogLayout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
-      g_OSD_MDLogLayout.object_size = atoi(args[++i]);
+      g_OSD_MDLogLayout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0) 
-      g_OSD_MDLogLayout.pg_type = atoi(args[++i]);
+      g_OSD_MDLogLayout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0) {
-      g_OSD_MDLogLayout.pg_size = atoi(args[++i]);
-      if (!g_OSD_MDLogLayout.pg_size)
+      g_OSD_MDLogLayout.fl_pg_size = atoi(args[++i]);
+      if (!g_OSD_MDLogLayout.fl_pg_size)
         g_conf.mds_log = false;
     }
 

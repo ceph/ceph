@@ -82,41 +82,33 @@ typedef uint8_t pruleset_t;
 // placement group id
 struct pg_t {
 public:
-  static const int TYPE_REP   = 1;
-  static const int TYPE_RAID4 = 2;
+  static const int TYPE_REP   = CEPH_PG_TYPE_REP;
+  static const int TYPE_RAID4 = CEPH_PG_TYPE_RAID4;
 
 private:
-  union {
-    struct {
-      int32_t preferred;
-      uint8_t type;
-      uint8_t size;
-      uint16_t ps;
-    } fields;
-    uint64_t val;          // 64
-  } u;
+  union ceph_pg u;
 
 public:
-  pg_t() { u.val = 0; }
-  pg_t(const pg_t& o) { u.val = o.u.val; }
+  pg_t() { u.pg64 = 0; }
+  pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
   pg_t(int type, int size, ps_t seed, int pref) {//, pruleset_t r=0) {
-    u.fields.type = type;
-    u.fields.size = size;
-    u.fields.ps = seed;
-    u.fields.preferred = pref;   // hack: avoid negative.
-    //u.fields.ruleset = r;
-    assert(sizeof(u.fields) == sizeof(u.val));
+    u.pg.type = type;
+    u.pg.size = size;
+    u.pg.ps = seed;
+    u.pg.preferred = pref;   // hack: avoid negative.
+    //u.pg.ruleset = r;
+    assert(sizeof(u.pg) == sizeof(u.pg64));
   }
-  pg_t(uint64_t v) { u.val = v; }
+  pg_t(uint64_t v) { u.pg64 = v; }
 
-  int type()      { return u.fields.type; }
+  int type()      { return u.pg.type; }
   bool is_rep()   { return type() == TYPE_REP; }
   bool is_raid4() { return type() == TYPE_RAID4; }
 
-  int size() { return u.fields.size; }
-  ps_t ps() { return u.fields.ps; }
-  //pruleset_t ruleset() { return u.fields.ruleset; }
-  int preferred() { return u.fields.preferred; }   // hack: avoid negative.
+  int size() { return u.pg.size; }
+  ps_t ps() { return u.pg.ps; }
+  //pruleset_t ruleset() { return u.pg.ruleset; }
+  int preferred() { return u.pg.preferred; }   // hack: avoid negative.
   
   /*
   pg_t operator=(uint64_t v) { u.val = v; return *this; }
@@ -125,9 +117,9 @@ public:
   pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
   pg_t operator++() { ++u.val; return *this; }
   */
-  operator uint64_t() const { return u.val; }
+  operator uint64_t() const { return u.pg64; }
 
-  object_t to_object() const { return object_t(PG_INO, u.val >> 32, u.val & 0xffffffff); }
+  object_t to_object() const { return object_t(PG_INO, u.pg64 >> 32, u.pg64 & 0xffffffff); }
 };
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
@@ -282,14 +274,12 @@ class ObjectExtent {
   off_t       start;     // in object
   size_t      length;    // in object
 
-  objectrev_t rev;       // which revision?
-
   ObjectLayout layout;   // object layout (pgid, etc.)
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : start(0), length(0), rev(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0) { }
+  ObjectExtent() : start(0), length(0) {}
+  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)

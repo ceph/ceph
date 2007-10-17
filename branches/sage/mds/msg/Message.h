@@ -174,11 +174,11 @@ public:
 
  public:
   Message() { 
-    env.source_port = env.dest_port = -1;
+    env.source_port = env.dest_port = 0;
     env.nchunks = 0;
   };
   Message(int t) {
-    env.source_port = env.dest_port = -1;
+    env.source_port = env.dest_port = 0;
     env.nchunks = 0;
     env.type = t;
   }

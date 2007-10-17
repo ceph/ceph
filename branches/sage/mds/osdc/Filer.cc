@@ -57,7 +57,7 @@ int Filer::probe_fwd(inode_t& inode,
   Probe *probe = new Probe(inode, start_from, end, onfinish);
 
   // period (bytes before we jump unto a new set of object(s))
-  off_t period = inode.layout.period();
+  off_t period = ceph_file_layout_period(inode.layout);
 
   // start with 1+ periods.
   probe->probing_len = period;
@@ -132,7 +132,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   if (end == 0) {
     // keep probing!
     dout(10) << "_probed didn't find end, probing further" << dendl;
-    off_t period = probe->inode.layout.object_size * probe->inode.layout.stripe_count;
+    off_t period = probe->inode.layout.fl_object_size * probe->inode.layout.fl_stripe_count;
     probe->from += probe->probing_len;
     probe->probing_len = period;
     _probe(probe);
@@ -170,36 +170,35 @@ void Filer::file_to_extents(inode_t inode,
    */
   map< object_t, ObjectExtent > object_extents;
   
-  assert(inode.layout.object_size >= inode.layout.stripe_unit);
-  off_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_unit;
+  assert(inode.layout.fl_object_size >= inode.layout.fl_stripe_unit);
+  off_t stripes_per_object = inode.layout.fl_object_size / inode.layout.fl_stripe_unit;
   dout(20) << " stripes_per_object " << stripes_per_object << dendl;
 
   off_t cur = offset;
   off_t left = len;
   while (left > 0) {
     // layout into objects
-    off_t blockno = cur / inode.layout.stripe_unit;          // which block
-    off_t stripeno = blockno / inode.layout.stripe_count;    // which horizontal stripe        (Y)
-    off_t stripepos = blockno % inode.layout.stripe_count;   // which object in the object set (X)
+    off_t blockno = cur / inode.layout.fl_stripe_unit;          // which block
+    off_t stripeno = blockno / inode.layout.fl_stripe_count;    // which horizontal stripe        (Y)
+    off_t stripepos = blockno % inode.layout.fl_stripe_count;   // which object in the object set (X)
     off_t objectsetno = stripeno / stripes_per_object;       // which object set
-    off_t objectno = objectsetno * inode.layout.stripe_count + stripepos;  // object id
+    off_t objectno = objectsetno * inode.layout.fl_stripe_count + stripepos;  // object id
     
     // find oid, extent
     ObjectExtent *ex = 0;
-    object_t oid( inode.ino, objectno );
+    object_t oid( inode.ino, objectno, rev );
     if (object_extents.count(oid)) 
       ex = &object_extents[oid];
     else {
       ex = &object_extents[oid];
       ex->oid = oid;
-      ex->rev = rev;
       ex->layout = objecter->osdmap->file_to_object_layout( oid, inode.layout );
     }
     
     // map range into object
-    off_t block_start = (stripeno % stripes_per_object)*inode.layout.stripe_unit;
-    off_t block_off = cur % inode.layout.stripe_unit;
-    off_t max = inode.layout.stripe_unit - block_off;
+    off_t block_start = (stripeno % stripes_per_object)*inode.layout.fl_stripe_unit;
+    off_t block_off = cur % inode.layout.fl_stripe_unit;
+    off_t max = inode.layout.fl_stripe_unit - block_off;
     
     off_t x_offset = block_start + block_off;
     off_t x_len;

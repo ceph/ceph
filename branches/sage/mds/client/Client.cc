@@ -3847,21 +3847,21 @@ int Client::get_stripe_unit(int fd)
 {
   FileLayout layout;
   describe_layout(fd, &layout);
-  return layout.stripe_unit;
+  return layout.fl_stripe_unit;
 }
 
 int Client::get_stripe_width(int fd)
 {
   FileLayout layout;
   describe_layout(fd, &layout);
-  return layout.stripe_width();
+  return ceph_file_layout_stripe_width(layout);
 }
 
 int Client::get_stripe_period(int fd)
 {
   FileLayout layout;
   describe_layout(fd, &layout);
-  return layout.period();
+  return ceph_file_layout_period(layout);
 }
 
 int Client::enumerate_layout(int fd, list<ObjectExtent>& result,

@@ -1,7 +1,3 @@
-/* -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
- * vim: ts=8 sw=8 smarttab
- */
-
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/smp_lock.h>
