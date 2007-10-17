@@ -5,7 +5,7 @@ CFLAGS += -O3 -g
 LD = ld
 RM = rm
 
-all: depend libcrush.o
+all: depend builder.o libcrush.o
 
 clean:
 	rm -f *.o libcrush.o

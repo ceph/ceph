@@ -18,63 +18,63 @@
 #define crush_hash_seed 1315423911
 
 static __inline__ unsigned crush_hash32(unsigned a) {
-      unsigned hash = crush_hash_seed ^ a;
-      unsigned b = a;
-      unsigned x = 231232;
-      unsigned y = 1232;
-      hashmix(b, x, hash);
-      hashmix(y, a, hash);
-      return (hash & 0xFFFFFFFF);
+	unsigned hash = crush_hash_seed ^ a;
+	unsigned b = a;
+	unsigned x = 231232;
+	unsigned y = 1232;
+	hashmix(b, x, hash);
+	hashmix(y, a, hash);
+	return (hash & 0xFFFFFFFF);
 }
 
 static __inline__ unsigned crush_hash32_2(unsigned a, unsigned b) {
-      unsigned hash = crush_hash_seed ^ a ^ b;
-      unsigned x = 231232;
-      unsigned y = 1232;
-      hashmix(a, b, hash);
-      hashmix(x, a, hash);
-      hashmix(b, y, hash);
-      return (hash & 0xFFFFFFFF);
+	unsigned hash = crush_hash_seed ^ a ^ b;
+	unsigned x = 231232;
+	unsigned y = 1232;
+	hashmix(a, b, hash);
+	hashmix(x, a, hash);
+	hashmix(b, y, hash);
+	return (hash & 0xFFFFFFFF);
 }
 
 static __inline__ unsigned crush_hash32_3(unsigned a, unsigned b, unsigned c) {
-      unsigned int hash = crush_hash_seed ^ a ^ b ^ c;
-      unsigned x = 231232;
-      unsigned y = 1232;
-      hashmix(a, b, hash);
-      hashmix(c, x, hash);
-      hashmix(y, a, hash);
-      hashmix(b, x, hash);
-      hashmix(y, c, hash);
-      return (hash & 0xFFFFFFFF);
+	unsigned int hash = crush_hash_seed ^ a ^ b ^ c;
+	unsigned x = 231232;
+	unsigned y = 1232;
+	hashmix(a, b, hash);
+	hashmix(c, x, hash);
+	hashmix(y, a, hash);
+	hashmix(b, x, hash);
+	hashmix(y, c, hash);
+	return (hash & 0xFFFFFFFF);
 }
 
 static __inline__ unsigned crush_hash32_4(unsigned a, unsigned b, unsigned c, unsigned d) {
-      unsigned int hash = crush_hash_seed ^a ^ b ^ c ^ d;
-      unsigned x = 231232;
-      unsigned y = 1232;
-      hashmix(a, b, hash);
-      hashmix(c, d, hash);
-      hashmix(a, x, hash);
-      hashmix(y, b, hash);
-      hashmix(c, x, hash);
-      hashmix(y, d, hash);
-      return (hash & 0xFFFFFFFF);
+	unsigned int hash = crush_hash_seed ^a ^ b ^ c ^ d;
+	unsigned x = 231232;
+	unsigned y = 1232;
+	hashmix(a, b, hash);
+	hashmix(c, d, hash);
+	hashmix(a, x, hash);
+	hashmix(y, b, hash);
+	hashmix(c, x, hash);
+	hashmix(y, d, hash);
+	return (hash & 0xFFFFFFFF);
 }
 
 static __inline__ unsigned crush_hash32_5(unsigned a, unsigned b, unsigned c, unsigned d, unsigned e) {
-      unsigned int hash = crush_hash_seed ^ a ^ b ^ c ^ d ^ e;
-      unsigned x = 231232;
-      unsigned y = 1232;
-      hashmix(a, b, hash);
-      hashmix(c, d, hash);
-      hashmix(e, x, hash);
-      hashmix(y, a, hash);
-      hashmix(b, x, hash);
-      hashmix(y, c, hash);
-      hashmix(d, x, hash);
-      hashmix(y, e, hash);
-      return (hash & 0xFFFFFFFF);
+	unsigned int hash = crush_hash_seed ^ a ^ b ^ c ^ d ^ e;
+	unsigned x = 231232;
+	unsigned y = 1232;
+	hashmix(a, b, hash);
+	hashmix(c, d, hash);
+	hashmix(e, x, hash);
+	hashmix(y, a, hash);
+	hashmix(b, x, hash);
+	hashmix(y, c, hash);
+	hashmix(d, x, hash);
+	hashmix(y, e, hash);
+	return (hash & 0xFFFFFFFF);
 }
 
 #endif
