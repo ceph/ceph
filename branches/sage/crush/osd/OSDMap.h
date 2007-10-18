@@ -28,8 +28,7 @@
 #include "common/Mutex.h"
 #include "common/Clock.h"
 
-#include "crush2/hash.h"
-#include "crush2/CrushWrapper.h"
+#include "crush/CrushWrapper.h"
 
 #include <vector>
 #include <list>

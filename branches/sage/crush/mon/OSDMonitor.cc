@@ -18,7 +18,7 @@
 
 #include "MonitorStore.h"
 
-#include "crush2/CrushWrapper.h"
+#include "crush/CrushWrapper.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"

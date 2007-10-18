@@ -145,22 +145,22 @@ mkmonmap: mkmonmap.cc common.o
 extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.o mon.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+cmon: cmon.o mon.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -191,15 +191,15 @@ ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
 
 
 # fake*
-fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o crush2/libcrush.o
+fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crush2/libcrush.o
+fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crush2/libcrush.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
@@ -245,8 +245,8 @@ test_disk_bw: test/test_disk_bw.cc common.o
 
 # crush
 
-crush2/libcrush.o: force_look
-	cd crush2 ; make
+crush/libcrush.o: force_look
+	cd crush ; make
 
 force_look:
 	true
