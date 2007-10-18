@@ -5,6 +5,8 @@
 #define __CRUSH_WRAPPER_H
 
 #include "crush.h"
+#include "hash.h"
+#include "mapper.h"
 #include "builder.h"
 
 #include "include/encodable.h"
