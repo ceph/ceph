@@ -6,7 +6,7 @@ CFLAGS += -g
 LD = ld
 RM = rm
 
-all: depend libcrush.o
+all: depend libcrush.o test
 
 clean:
 	rm -f *.o libcrush.o
@@ -16,6 +16,9 @@ clean:
 
 libcrush.o: builder.o crush.o mapper.o
 	$(LD) -i -o $@ $^
+
+test: test.c libcrush.o
+	$(CC) ${CFLAGS} -lm $^ -o $@
 
 .depend:
 	touch .depend

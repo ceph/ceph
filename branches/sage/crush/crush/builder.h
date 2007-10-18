@@ -11,10 +11,10 @@ extern struct crush_map *crush_create();
 extern void crush_finalize(struct crush_map *map);
 
 /* rules */
+extern struct crush_rule *crush_make_rule();
 extern int crush_add_rule(struct crush_map *map,
 			  int ruleno,
 			  struct crush_rule *rule);
-extern struct crush_rule *crush_make_rule();
 extern void crush_rule_add_step(struct crush_rule *rule, int op, int arg1, int arg2);
 
 /* buckets */

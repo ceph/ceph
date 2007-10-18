@@ -2,6 +2,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "builder.h"
 #include "hash.h"
@@ -135,6 +136,8 @@ int crush_add_bucket(struct crush_map *map,
 }
 
 
+/* uniform bucket */
+
 struct crush_bucket_uniform *
 crush_make_uniform_bucket(int type, int size,
 			  int *items,
@@ -175,6 +178,9 @@ crush_make_uniform_bucket(int type, int size,
 	return bucket;
 }
 
+
+/* list bucket */
+
 struct crush_bucket_list*
 crush_make_list_bucket(int type, int size,
 		       int *items,
@@ -194,17 +200,22 @@ crush_make_list_bucket(int type, int size,
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->sum_weights = malloc(sizeof(__u32)*size);
 	w = 0;
-	for (i=0; i<size; i++) {
+	for (i=size-1; i>=0; i--) {
 		bucket->h.items[i] = items[i];
 		bucket->item_weights[i] = weights[i];
 		w += weights[i];
 		bucket->sum_weights[i] = w;
+		printf("%d item %d weight %d sum %d\n",
+		       i, items[i], weights[i], bucket->sum_weights[i]);
 	}
 	
 	bucket->h.weight = w;
 
 	return bucket;
 }
+
+
+/* tree bucket */
 
 static int height(int n) {
 	int h = 0;
@@ -259,7 +270,7 @@ crush_make_tree_bucket(int type, int size,
 	
 	for (i=0; i<size; i++) {
 		node = ((i+1) << 1)-1;
-		bucket->h.items[i] = items[i];
+		bucket->h.items[node] = items[i];
 		bucket->node_weights[node] = weights[i];
 		bucket->h.weight += weights[i];
 		for (j=1; j<depth; j++) {
@@ -272,6 +283,8 @@ crush_make_tree_bucket(int type, int size,
 	return bucket;
 }
 
+
+/* straw bucket */
 
 struct crush_bucket_straw *
 crush_make_straw_bucket(int type, 
@@ -301,20 +314,21 @@ crush_make_straw_bucket(int type,
 		bucket->h.weight += weights[i];
 	}
 	
-	/* reverse sort by weight */
+	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
-	reverse[0] = items[0];
+	reverse[0] = 0;
 	for (i=1; i<size; i++) {
 		for (j=0; j<i; j++) {
 			if (weights[i] < weights[reverse[j]]) {
 				/* insert here */
 				for (k=i; k>j; k--)
 					reverse[k] = reverse[k-1];
-				reverse[j] = items[i];
+				reverse[j] = i;
+				break;
 			}
 		}
 		if (j == i)
-			reverse[i] = items[i];
+			reverse[i] = i;
 	}
 	
 	numleft = size;
@@ -326,20 +340,30 @@ crush_make_straw_bucket(int type,
 	while (i < size) {
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
+		printf("item %d at %d weight %d straw %d (%lf)\n", 
+		       items[reverse[i]],
+		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);
 		i++;
 		if (i == size) break;
 		
 		/* same weight as previous? */
-		if (weights[reverse[i]] == weights[reverse[i-1]]) 
+		if (weights[reverse[i]] == weights[reverse[i-1]]) {
+			printf("same as previous\n");
 			continue;
+		}
 		
 		/* adjust straw for next guy */
-		wbelow += (((double)weights[reverse[i-1]] / (double)0x10000) - lastw) * numleft;
-		numleft--;
-		wnext = numleft * ((double)(weights[reverse[i]] - weights[reverse[i-1]]) / (double)0x10000);
+		wbelow += ((double)weights[reverse[i-1]] - lastw) * numleft;
+		for (j=i; j<size; j++)
+			if (weights[reverse[j]] == weights[reverse[i]])
+				numleft--;
+			else
+				break;
+		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
 		pbelow = wbelow / (wbelow + wnext);
+		printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);
 		
-		straw *= pow((double)1.0 / pbelow, (double)1.0 / numleft);
+		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
 		
 		lastw = weights[reverse[i-1]];
 	}

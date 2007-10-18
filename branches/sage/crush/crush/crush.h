@@ -98,7 +98,7 @@ struct crush_map {
 	
 	__u32 max_buckets;
 	__u32 max_rules;
-	__u32 max_devices;
+	__s32 max_devices;
 };
 
 
