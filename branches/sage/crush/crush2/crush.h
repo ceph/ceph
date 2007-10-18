@@ -1,6 +1,10 @@
 #ifndef _CRUSH_CRUSH_H
 #define _CRUSH_CRUSH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "types.h"
 #include "buckets.h"
 
@@ -45,11 +49,19 @@ struct crush_map {
 	__u32 max_devices;
 };
 
+
+extern void crush_index(struct crush_map *map); 
+
 extern int crush_do_rule(struct crush_map *map,
 			 int ruleno,
 			 int x, int *result, int result_max,
 			 int forcefeed); /* -1 for none */
 
+
 /*extern int crush_decode(struct crush_map *map, struct ceph_bufferlist *bl);*/
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

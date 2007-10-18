@@ -1,6 +1,6 @@
 
+#include "crush.h"
 #include "hash.h"
-#include "buckets.h"
 
 int 
 crush_bucket_uniform_choose(struct crush_bucket_uniform *bucket, int x, int r)
@@ -29,10 +29,52 @@ crush_bucket_list_choose(struct crush_bucket_list *bucket, int x, int r)
 	return 0;
 }
 
+
+static int height(int n) {
+	int h = 0;
+	while ((n & 1) == 0) {
+		h++; 
+		n = n >> 1;
+	}
+	return h;
+}
+static int left(int x) {
+	int h = height(x);
+	return x - (1 << (h-1));
+}
+static int right(int x) {
+	int h = height(x);
+	return x + (1 << (h-1));
+}
+static int terminal(int x) {
+	return x & 1;
+}
+
 int 
 crush_bucket_tree_choose(struct crush_bucket_tree *bucket, int x, int r)
 {
-	return 0;
+	int n, l;
+	__u32 w;
+	__u64 t;
+
+	/* start at root */
+	n = bucket->h.size >> 1;
+
+	while (!terminal(n)) {
+		/* pick point in [0, w) */
+		w = bucket->node_weights[n];
+		t = (__u64)crush_hash32_4(x, n, r, bucket->h.id) * (__u64)w;
+		t = t >> 32;
+		
+		/* left or right? */
+		l = left(n);
+		if (t < bucket->node_weights[l])
+			n = l;
+		else
+			n = right(n);
+	}
+
+	return bucket->h.items[n];
 }
 
 int 
@@ -72,7 +114,7 @@ void crush_destroy_bucket_list(struct crush_bucket_list *b)
 
 void crush_destroy_bucket_tree(struct crush_bucket_tree *b)
 {
-	free(b->h.items);
+	free(b->node_weights);
 }
 
 void crush_destroy_bucket_straw(struct crush_bucket_straw *b)

@@ -1,8 +1,6 @@
 #ifndef _CRUSH_BUCKETS_H
 #define _CRUSH_BUCKETS_H
 
-#include "types.h"
-
 enum {
 	CRUSH_BUCKET_UNIFORM = 1,
 	CRUSH_BUCKET_LIST = 2,
@@ -11,8 +9,9 @@ enum {
 };
 
 struct crush_bucket {
-	__u32 id;
-	__u32 type;
+	__s32 id;        /* this'll be negative */
+	__u16 type;
+	__u16 bucket_type;
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;
@@ -20,8 +19,8 @@ struct crush_bucket {
 
 struct crush_bucket_uniform {
 	struct crush_bucket h;
-	__u32 item_weight;  /* 16-bit fixed point */
 	__u32 *primes;
+	__u32 item_weight;  /* 16-bit fixed point */
 };
 
 struct crush_bucket_list {
@@ -31,8 +30,8 @@ struct crush_bucket_list {
 };
 
 struct crush_bucket_tree {
-	struct crush_bucket h;
-	
+	struct crush_bucket h;  /* note: h.size is tree size, not number of actual items */
+	__u32 *node_weights;
 };
 
 struct crush_bucket_straw {

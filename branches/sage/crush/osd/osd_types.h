@@ -74,8 +74,8 @@ typedef uint8_t pruleset_t;
 
 
 // crush rule ids
-#define CRUSH_REP_RULE(nrep) (100+nrep)  // replication
-#define CRUSH_RAID_RULE(num) (200+num)   // raid
+#define CRUSH_REP_RULE(nrep) (nrep)  // replication
+#define CRUSH_RAID_RULE(num) (10+num)   // raid
 
 
 

@@ -28,8 +28,8 @@
 #include "common/Mutex.h"
 #include "common/Clock.h"
 
-#include "crush/crush.h"
-using namespace crush;
+#include "crush2/hash.h"
+#include "crush2/CrushWrapper.h"
 
 #include <vector>
 #include <list>
@@ -144,7 +144,7 @@ private:
   map<int32_t,entity_inst_t> osd_inst;
 
  public:
-  Crush     crush;       // hierarchical map
+  CrushWrapper     crush;       // hierarchical map
 
   friend class OSDMonitor;
   friend class MDS;
@@ -207,9 +207,14 @@ private:
   
   void mark_down(int o, bool clean) { down_osds[o] = clean; }
   void mark_up(int o) { down_osds.erase(o); }
-  void mark_out(int o) { out_osds.insert(o); }
-  void mark_in(int o) { out_osds.erase(o); }
-
+  void mark_out(int o) { 
+    out_osds.insert(o); 
+    crush.update_offload_map(out_osds, overload_osds);
+  }
+  void mark_in(int o) { 
+    out_osds.erase(o); 
+    crush.update_offload_map(out_osds, overload_osds);
+  }
 
   void apply_incremental(Incremental &inc) {
     assert(inc.epoch == epoch+1);
@@ -223,8 +228,8 @@ private:
       return;
     }
     if (inc.crush.length()) {
-      int off = 0;
-      crush._decode(inc.crush, off);
+      bufferlist::iterator blp = inc.crush.begin();
+      crush._decode(blp);
     }
 
     // nope, incremental.
@@ -272,6 +277,8 @@ private:
          i++) {
       overload_osds[i->first] = i->second;
     }
+
+    crush.update_offload_map(out_osds, overload_osds);
   }
 
   // serialize, unserialize
@@ -288,7 +295,9 @@ private:
     ::_encode(overload_osds, blist);
     ::_encode(osd_inst, blist);
     
-    crush._encode(blist);
+    bufferlist cbl;
+    crush._encode(cbl);
+    ::_encode(cbl, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -306,7 +315,12 @@ private:
     ::_decode(overload_osds, blist, off);
     ::_decode(osd_inst, blist, off);
     
-    crush._decode(blist, off);
+    bufferlist cbl;
+    ::_decode(cbl, blist, off);
+    bufferlist::iterator cblp = cbl.begin();
+    crush._decode(cblp);
+
+    crush.update_offload_map(out_osds, overload_osds);
   }
  
 
@@ -320,8 +334,6 @@ private:
   }
 
   ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
-    static crush::Hash H(777);
-
     int num = preferred >= 0 ? localized_pg_num:pg_num;
     int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
 
@@ -334,14 +346,14 @@ private:
       
     case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
+      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + H(oid.ino)^H(oid.ino>>32), num, num_mask);
+      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     default:
@@ -374,10 +386,9 @@ private:
 	if (pg.preferred() >= 0 &&
 	    out_osds.count(pg.preferred()) == 0) 
 	  forcefeed = pg.preferred();
-	crush.do_rule(crush.rules[rule],
+	crush.do_rule(rule,
 		      pg.ps(),
-		      osds, 
-		      out_osds, overload_osds,
+		      osds, pg.size(),
 		      forcefeed);
       }
       break;
@@ -389,8 +400,7 @@ private:
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
-	static crush::Hash H(777);
-	int h = H(pg.ps());
+	int h = crush_hash32(pg.ps());
 	for (int i=0; i<pg.size(); i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
@@ -398,12 +408,11 @@ private:
       
     case CEPH_PG_LAYOUT_HASH:
       {
-	static crush::Hash H(777);
 	for (int i=0; i<pg.size(); i++) {
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = H(i, pg.ps(), t) % g_conf.num_osd;
+	    osd = crush_hash32_3(i, pg.ps(), t) % g_conf.num_osd;
 	    int j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;

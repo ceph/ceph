@@ -2,6 +2,9 @@
 #include "crush.h"
 #include "hash.h"
 
+#include <string.h>
+
+
 /*
  * choose numrep distinct items of given type
  */
@@ -12,7 +15,7 @@ static int crush_choose(struct crush_map *map,
 {
 	int rep;
 	int ftotal, flocal;
-	int retry_rep, skip_rep;
+	int retry_descent, retry_bucket, skip_rep;
 	struct crush_bucket *in = bucket;
 	int r;
 	int i;
@@ -26,16 +29,12 @@ static int crush_choose(struct crush_map *map,
 	for (rep = 0; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
-		skip_rep = 0;
-		
-		while (1) {
+		do {
 			in = bucket;               /* initial bucket */
 			
 			/* choose through intervening buckets */
 			flocal = 0;
-			retry_rep = 0;
-			
-			while (1) {
+			do {
 				r = rep;
 				if (in->type == CRUSH_BUCKET_UNIFORM) {
 					/* be careful */
@@ -75,13 +74,13 @@ static int crush_choose(struct crush_map *map,
 				
 				/* desired type? */
 				if (item < 0) 
-					itemtype = map->buckets[-item]->type;
+					itemtype = map->buckets[-1-item]->type;
 				else 
 					itemtype = 0;
 				
 				/* keep going? */
 				if (itemtype != type) {
-					in = map->buckets[-item];
+					in = map->buckets[-1-item];
 					continue;
 				}
 				
@@ -103,27 +102,25 @@ static int crush_choose(struct crush_map *map,
 						bad = 1;
 				}
 				
+				skip_rep = 0;
+				retry_descent = 0;
+				retry_bucket = 0;
 				if (bad || collide) {
 					ftotal++;
 					flocal++;
 					
 					if (collide && flocal < 3) 
-						continue;   /* locally a few times */
-					if (ftotal >= 10) {
-						/* give up, ignore dup, fixme */
-						skip_rep = 1;
-						break;
-					}
-					retry_rep = 1;
+						retry_bucket = 1;  /* retry locally a few times */
+					else if (ftotal < 10)
+						retry_descent = 1; /* then retry descent */
+					else
+						skip_rep = 1; 	   /* then give up */
 				}
-				break;
-			}
-			
-			if (retry_rep) continue;
-		}
+			} while (retry_bucket);
+		} while (retry_descent);
 		
 		if (skip_rep) continue;
-		
+
 		out[outpos] = item;
 		outpos++;
 	}
@@ -164,7 +161,7 @@ int crush_do_rule(struct crush_map *map,
 			if (forcefeed >= 0)
 				forcefeed = map->device_parents[forcefeed];
 			else
-				forcefeed = map->bucket_parents[-forcefeed];
+				forcefeed = map->bucket_parents[-1-forcefeed];
 			if (forcefeed == 0) break;
 		}
 	}
@@ -191,23 +188,22 @@ int crush_do_rule(struct crush_map *map,
 			
 			for (i = 0; i < wsize; i++) {
 				numrep = rule->steps[step].arg1;
-				
 				if (force_pos >= 0) {
 					o[osize++] = force_stack[force_pos];
 					force_pos--;
 					numrep--;
 				}
-				if (numrep)
-					crush_choose(map,
-						     map->buckets[-w[i]],
-						     x, numrep, rule->steps[step].arg2,
-						     o+osize, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
+				if (!numrep) continue;
+				osize += crush_choose(map,
+						      map->buckets[-1-w[i]],
+						      x, numrep, rule->steps[step].arg2,
+						      o+osize, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
 			}
 			
 			/* swap t and w arrays */
 			tmp = o;
 			o = w;
-			w = o;
+			w = tmp;
 			wsize = osize;
 			break;      
 			
@@ -229,3 +225,27 @@ int crush_do_rule(struct crush_map *map,
 	return result_len;
 }
 
+
+
+void crush_index(struct crush_map *map)
+{
+	int b, i, c;
+	
+	/* allocate arrays */
+	map->device_parents = malloc(sizeof(map->device_parents[0]) * map->max_devices);
+	memset(map->device_parents, 0, sizeof(map->device_parents[0]) * map->max_devices);
+	map->bucket_parents = malloc(sizeof(map->bucket_parents[0]) * map->max_buckets);
+	memset(map->bucket_parents, 0, sizeof(map->bucket_parents[0]) * map->max_buckets);
+	
+	/* build parent maps */
+	for (b=0; b<map->max_buckets; b++) {
+		if (map->buckets[b] == 0) continue;
+		for (i=0; i<map->buckets[b]->size; i++) {
+			c = map->buckets[b]->items[i];
+			if (c >= 0)
+				map->device_parents[c] = map->buckets[b]->id;
+			else
+				map->bucket_parents[-1-c] = map->buckets[b]->id;
+		}
+	}
+}

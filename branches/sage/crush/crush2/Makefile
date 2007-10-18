@@ -1,7 +1,8 @@
 
 CC = gcc
 CFLAGS = -Wall
-CFLAGS += -O3 -g
+CFLAGS += -g
+#CFLAGS += -O3
 LD = ld
 RM = rm
 
@@ -13,7 +14,7 @@ clean:
 %.o: %.c
 	${CC} ${CFLAGS} -c $< -o $@
 
-libcrush.o: crush.o buckets.o
+libcrush.o: crush.o buckets.o builder.o
 	$(LD) -i -o $@ $^
 
 .depend:
