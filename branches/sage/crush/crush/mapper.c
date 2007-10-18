@@ -4,6 +4,109 @@
 
 #include <string.h>
 
+/** bucket choose methods **/
+
+
+static int 
+crush_bucket_uniform_choose(struct crush_bucket_uniform *bucket, int x, int r)
+{
+	unsigned o, p, s;
+	o = crush_hash32_2(x, bucket->h.id);
+	p = bucket->primes[crush_hash32_2(bucket->h.id, x) % bucket->h.size];
+	s = (x + o + (r+1)*p) % bucket->h.size;
+	return bucket->h.items[s];
+}
+
+static int 
+crush_bucket_list_choose(struct crush_bucket_list *bucket, int x, int r)
+{
+	int i;
+	__u64 w;
+	
+	for (i=0; i<bucket->h.size; i++) {
+		w = crush_hash32_4(x, bucket->h.items[i], r, bucket->h.id) & 0xffff;
+		w = (w * bucket->sum_weights[i]) >> 32;
+		if (w < bucket->item_weights[i])
+			return bucket->h.items[i];
+	}
+	
+	BUG_ON(1);
+	return 0;
+}
+
+
+static int height(int n) {
+	int h = 0;
+	while ((n & 1) == 0) {
+		h++; 
+		n = n >> 1;
+	}
+	return h;
+}
+static int left(int x) {
+	int h = height(x);
+	return x - (1 << (h-1));
+}
+static int right(int x) {
+	int h = height(x);
+	return x + (1 << (h-1));
+}
+static int terminal(int x) {
+	return x & 1;
+}
+
+static int 
+crush_bucket_tree_choose(struct crush_bucket_tree *bucket, int x, int r)
+{
+	int n, l;
+	__u32 w;
+	__u64 t;
+
+	/* start at root */
+	n = bucket->h.size >> 1;
+
+	while (!terminal(n)) {
+		/* pick point in [0, w) */
+		w = bucket->node_weights[n];
+		t = (__u64)crush_hash32_4(x, n, r, bucket->h.id) * (__u64)w;
+		t = t >> 32;
+		
+		/* left or right? */
+		l = left(n);
+		if (t < bucket->node_weights[l])
+			n = l;
+		else
+			n = right(n);
+	}
+
+	return bucket->h.items[n];
+}
+
+static int 
+crush_bucket_straw_choose(struct crush_bucket_straw *bucket, int x, int r)
+{
+	int i;
+	int high = 0;
+	unsigned high_draw = 0;
+	__u64 draw;
+	
+	for (i=0; i<bucket->h.size; i++) {
+		draw = (crush_hash32_3(x, bucket->h.items[i], r) & 0xffff) * bucket->straws[i];
+		draw = draw >> 32;
+		if (i == 0 || draw > high_draw) {
+			high = i;
+			high_draw = draw;
+		}
+	}
+	
+	return high;
+}
+
+
+
+
+/** crush proper **/
+
 
 /*
  * choose numrep distinct items of given type
@@ -226,26 +329,3 @@ int crush_do_rule(struct crush_map *map,
 }
 
 
-
-void crush_index(struct crush_map *map)
-{
-	int b, i, c;
-	
-	/* allocate arrays */
-	map->device_parents = malloc(sizeof(map->device_parents[0]) * map->max_devices);
-	memset(map->device_parents, 0, sizeof(map->device_parents[0]) * map->max_devices);
-	map->bucket_parents = malloc(sizeof(map->bucket_parents[0]) * map->max_buckets);
-	memset(map->bucket_parents, 0, sizeof(map->bucket_parents[0]) * map->max_buckets);
-	
-	/* build parent maps */
-	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0) continue;
-		for (i=0; i<map->buckets[b]->size; i++) {
-			c = map->buckets[b]->items[i];
-			if (c >= 0)
-				map->device_parents[c] = map->buckets[b]->id;
-			else
-				map->bucket_parents[-1-c] = map->buckets[b]->id;
-		}
-	}
-}

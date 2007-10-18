@@ -5,9 +5,15 @@
 extern "C" {
 #endif
 
-#include "types.h"
-#include "buckets.h"
+#include <linux/types.h>  /* just for int types */
 
+#ifndef BUG_ON
+# include <assert.h>
+# define BUG_ON(x) assert(!(x))
+#endif
+
+
+/*** RULES ***/
 enum {
 	CRUSH_RULE_TAKE,
 	CRUSH_RULE_CHOOSE_FIRSTN,
@@ -28,6 +34,52 @@ struct crush_rule {
 	__u32 len;
 	struct crush_rule_step *steps;
 };
+
+
+
+/*** BUCKETS ***/
+
+enum {
+	CRUSH_BUCKET_UNIFORM = 1,
+	CRUSH_BUCKET_LIST = 2,
+	CRUSH_BUCKET_TREE = 3,
+	CRUSH_BUCKET_STRAW = 4
+};
+
+struct crush_bucket {
+	__s32 id;        /* this'll be negative */
+	__u16 type;
+	__u16 bucket_type;
+	__u32 weight;    /* 16-bit fixed point */
+	__u32 size;      /* num items */
+	__s32 *items;
+};
+
+struct crush_bucket_uniform {
+	struct crush_bucket h;
+	__u32 *primes;
+	__u32 item_weight;  /* 16-bit fixed point */
+};
+
+struct crush_bucket_list {
+	struct crush_bucket h;
+	__u32 *item_weights;  /* 16-bit fixed point */
+	__u32 *sum_weights;   /* 16-bit fixed point.  element i is sum of weights 0..i, inclusive */
+};
+
+struct crush_bucket_tree {
+	struct crush_bucket h;  /* note: h.size is tree size, not number of actual items */
+	__u32 *node_weights;
+};
+
+struct crush_bucket_straw {
+	struct crush_bucket h;
+	__u32 *straws;  /* 16-bit fixed point */
+};
+
+
+
+/*** CRUSH ***/
 
 struct crush_map {
 	struct crush_bucket **buckets;
@@ -50,15 +102,13 @@ struct crush_map {
 };
 
 
-extern void crush_index(struct crush_map *map); 
+/* common destructors */
+extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *);
+extern void crush_destroy_bucket_list(struct crush_bucket_list *);
+extern void crush_destroy_bucket_tree(struct crush_bucket_tree *);
+extern void crush_destroy_bucket_straw(struct crush_bucket_straw *);
+extern void crush_destroy(struct crush_map *map);
 
-extern int crush_do_rule(struct crush_map *map,
-			 int ruleno,
-			 int x, int *result, int result_max,
-			 int forcefeed); /* -1 for none */
-
-
-/*extern int crush_decode(struct crush_map *map, struct ceph_bufferlist *bl);*/
 
 #ifdef __cplusplus
 }
