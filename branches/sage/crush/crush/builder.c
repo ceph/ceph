@@ -205,8 +205,8 @@ crush_make_list_bucket(int type, int size,
 		bucket->item_weights[i] = weights[i];
 		w += weights[i];
 		bucket->sum_weights[i] = w;
-		printf("%d item %d weight %d sum %d\n",
-		       i, items[i], weights[i], bucket->sum_weights[i]);
+		/*printf("%d item %d weight %d sum %d\n",
+		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}
 	
 	bucket->h.weight = w;
@@ -340,15 +340,15 @@ crush_make_straw_bucket(int type,
 	while (i < size) {
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
-		printf("item %d at %d weight %d straw %d (%lf)\n", 
+		/*printf("item %d at %d weight %d straw %d (%lf)\n", 
 		       items[reverse[i]],
-		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);
+		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);*/
 		i++;
 		if (i == size) break;
 		
 		/* same weight as previous? */
 		if (weights[reverse[i]] == weights[reverse[i-1]]) {
-			printf("same as previous\n");
+			/*printf("same as previous\n");*/
 			continue;
 		}
 		
@@ -361,7 +361,7 @@ crush_make_straw_bucket(int type,
 				break;
 		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
 		pbelow = wbelow / (wbelow + wnext);
-		printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);
+		/*printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
 		
 		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
 		

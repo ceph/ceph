@@ -2,7 +2,7 @@
 CC = gcc
 CFLAGS = -Wall
 CFLAGS += -g
-#CFLAGS += -O3
+CFLAGS += -O3
 LD = ld
 RM = rm
 

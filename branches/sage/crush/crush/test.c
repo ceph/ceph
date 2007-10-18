@@ -46,13 +46,12 @@ int main()
   crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
   ruleno = crush_add_rule(map, -1, rule);
 
-  printf("finalize\n");
   crush_finalize(map);
   printf("built\n");
 
   /* test */
   memset(o, 0, 100*sizeof(o[0]));
-  for (i=0; i<10000; i++) {
+  for (i=0; i<10000000; i++) {
     crush_do_rule(map, ruleno, i, r, 3, -1);
     /*printf("%d %d %d\n", r[0], r[1], r[2]);*/
     for (j=0; j<3; j++)
