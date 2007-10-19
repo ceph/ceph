@@ -34,7 +34,7 @@ public:
 
   void update_offload_map(std::set<int32_t>& out_osds,
 			  std::map<int32_t,float>& overload_osds) {
-    for (unsigned i=0; i<map->max_devices; i++) {
+    for (int i=0; i<map->max_devices; i++) {
       if (out_osds.count(i))
 	map->device_offload[i] = 0x10000;
       else if (overload_osds.count(i)) 

@@ -145,28 +145,28 @@ static int crush_choose(struct crush_map *map,
 	int collide, bad;
 	
 	outpos = 0;
-	
+
 	for (rep = 0; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
+		skip_rep = 0;
 		do {
+			retry_descent = 0;
 			in = bucket;               /* initial bucket */
 			
 			/* choose through intervening buckets */
 			flocal = 0;
 			do {
+				retry_bucket = 0;
 				r = rep;
 				if (in->bucket_type == CRUSH_BUCKET_UNIFORM) {
 					/* be careful */
-					if (firstn || numrep >= in->size) {
+					if (firstn || numrep >= in->size) 
 						r += ftotal;           /* r' = r + f_total */
-					} else {
-						r += numrep * flocal;  /* r' = r + n*f_local */
-						/* make sure numrep is not a multiple of bucket size */
-						if (in->size % numrep == 0)
-							/* shift seq once per pass through the bucket */
-							r += numrep * flocal / in->size;  
-					}
+					else if (in->size % numrep == 0)
+						r += (numrep+1) * flocal; /* r'=r+(n+1)*f_local */
+					else
+						r += numrep * flocal; /* r' = r + n*f_local */						
 				} else {
 					if (firstn) 
 						r += ftotal;           /* r' = r + f_total */
@@ -223,9 +223,6 @@ static int crush_choose(struct crush_map *map,
 						bad = 1;
 				}
 				
-				skip_rep = 0;
-				retry_descent = 0;
-				retry_bucket = 0;
 				if (bad || collide) {
 					ftotal++;
 					flocal++;
@@ -235,7 +232,7 @@ static int crush_choose(struct crush_map *map,
 					else if (ftotal < 10)
 						retry_descent = 1; /* then retry descent */
 					else
-						skip_rep = 1; 	   /* then give up */
+						skip_rep = 1; 	   /* else give up */
 				}
 			} while (retry_bucket);
 		} while (retry_descent);

@@ -1,5 +1,5 @@
 
-#ifdef KERNEL
+#ifdef __KERNEL__
 # define free(x) kfree(x)
 #else
 # include <stdlib.h>
@@ -11,6 +11,7 @@ void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
 	free(b->primes);
 	free(b->h.items);
+	free(b);
 }
 
 void crush_destroy_bucket_list(struct crush_bucket_list *b)
@@ -18,17 +19,20 @@ void crush_destroy_bucket_list(struct crush_bucket_list *b)
 	free(b->item_weights);
 	free(b->sum_weights);
 	free(b->h.items);
+	free(b);
 }
 
 void crush_destroy_bucket_tree(struct crush_bucket_tree *b)
 {
 	free(b->node_weights);
+	free(b);
 }
 
 void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 {
 	free(b->straws);
 	free(b->h.items);
+	free(b);
 }
 
 
