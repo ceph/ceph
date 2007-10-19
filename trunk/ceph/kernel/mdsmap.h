@@ -1,6 +1,8 @@
 #ifndef _FS_CEPH_MDSMAP_H
 #define _FS_CEPH_MDSMAP_H
 
+#include <linux/ceph_fs.h>
+
 /* see mds/MDSMap.h */
 #define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
 #define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees. empty log. */
@@ -24,14 +26,14 @@
  * fields limited to those the client cares about
  */
 struct ceph_mdsmap {
-  __u64 m_epoch;
-  __u64 m_same_in_set_since;
-  struct timeval m_created;
-  __u32 m_anchortable;
-  __u32 m_root;
-  struct ceph_entity_addr *m_addr;  /* array of addresses */
-  __u8 *m_state;                    /* array of states */
-  __u32 m_max_mds;  /* size of m_addr, m_state arrays */
+	__u64 m_epoch;
+	__u64 m_same_in_set_since;
+	struct timeval m_created;
+	__u32 m_anchortable;
+	__u32 m_root;
+	struct ceph_entity_addr *m_addr;  /* array of addresses */
+	__u8 *m_state;                    /* array of states */
+	__u32 m_max_mds;  /* size of m_addr, m_state arrays */
 };
 
 extern int ceph_mdsmap_get_random_mds(ceph_mdsmap *m);

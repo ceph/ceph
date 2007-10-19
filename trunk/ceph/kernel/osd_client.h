@@ -3,7 +3,6 @@
 
 /* this will be equivalent to osdc/Objecter.h */
 
-
 /* do these later
 #include "osdmap.h"
 */

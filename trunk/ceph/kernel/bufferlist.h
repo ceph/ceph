@@ -2,6 +2,12 @@
 #define _FS_CEPH_BUFFERLIST_H
 
 
+/*
+ * quick and dirty bufferlist struct.
+ *
+ * preallocates memory in large chunks, allowing you to append small bits at a
+ * time in a reasonably efficient fashion...
+ */
 
 #define CEPH_BUFFERLIST_START_IOVLEN  8  /* embed some statically, for fast normal case */
 

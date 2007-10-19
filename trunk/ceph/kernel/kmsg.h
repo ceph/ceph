@@ -20,6 +20,7 @@ struct ceph_message {
 	struct kvec *m_iov;			/* data storage */
 	size_t m_iovlen;	/* is this kvec.iov_len why need it in kvec? */
 	struct list_head m_list_head;
+	atomic_t nref;
 };
 
 struct ceph_kmsg_pipe {
@@ -48,4 +49,16 @@ extern void ceph_read_message(struct ceph_message *message);
 extern void ceph_write_message(struct ceph_message *message);
 extern void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
 extern void queue_message(struct ceph_message *message);
+
+__inline__ void ceph_put_msg(struct ceph_message *msg) {
+	if (atomic_dec_and_test(&msg->nref)) {
+		/*ceph_bufferlist_destroy(msg->payload);*/
+		kfree(msg);
+	}
+}
+
+__inline__ void ceph_get_msg(struct ceph_message *msg) {
+	msg->nref++;
+}
+
 #endif
