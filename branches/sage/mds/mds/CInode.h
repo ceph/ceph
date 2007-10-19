@@ -98,6 +98,7 @@ class CInode : public MDSCacheObject {
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
+  static const int STATE_EXPORTINGCAPS = (1<<10);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -307,12 +308,8 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& p,
-		     map<CInode*, map<int,Capability::Export> >& imported_cap_map,
-		     LogSegment *ls);
-  void import_caps(map<int,Capability::Export>& cap_map,
-		   set<int>& new_caps);
-
+  void decode_import(bufferlist::iterator& p, LogSegment *ls);
+  
 
   // -- locks --
 public:

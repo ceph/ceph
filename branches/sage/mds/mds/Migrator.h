@@ -41,6 +41,9 @@ class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
 
+class MExportCaps;
+class MExportCapsAck;
+
 class EImportStart;
 
 
@@ -178,9 +181,11 @@ public:
   void clear_export_queue() {
     export_queue.clear();
   }
-
-  void encode_export_inode(CInode *in, bufferlist& enc_state, 
+  
+  void encode_export_inode(CInode *in, bufferlist& bl, 
 			   map<int,entity_inst_t>& exported_client_map);
+  void encode_export_inode_caps(CInode *in, bufferlist& bl,
+				map<int,entity_inst_t>& exported_client_map);
   void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
   void finish_export_inode_caps(CInode *in);
 
@@ -195,20 +200,25 @@ public:
   }
   void clear_export_proxy_pins(CDir *dir);
 
+  void export_caps(CInode *in, int dest);
+
  protected:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
+  void export_go_synced(CDir *dir);
   void export_reverse(CDir *dir);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
   void export_finish(CDir *dir);
 
+  void handle_export_caps_ack(MExportCapsAck *m);
+
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
-
+  friend class C_M_ExportGo;
 
   // importer
   void handle_export_discover(MExportDirDiscover *m);
@@ -221,6 +231,10 @@ public:
 			   LogSegment *ls,
 			   map<CInode*, map<int,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
+  void decode_import_inode_caps(CInode *in,
+				bufferlist::iterator &blp,
+				map<CInode*, map<int,Capability::Export> >& cap_imports);
+  void finish_import_inode_caps(CInode *in, int from, map<int,Capability::Export> &cap_map);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
@@ -228,7 +242,6 @@ public:
 			LogSegment *ls,
 			map<CInode*, map<int,Capability::Export> >& cap_imports,
 			list<ScatterLock*>& updated_scatterlocks);
-  void finish_import_caps(CInode *in, int from, map<int,Capability::Export> &cap_map);
 
 public:
   void import_reverse(CDir *dir);
@@ -244,8 +257,15 @@ public:
   void import_finish(CDir *dir);
 protected:
 
+  void handle_export_caps(MExportCaps *m);
+  void logged_import_caps(CInode *in, 
+			  int from,
+			  map<CInode*, map<int,Capability::Export> >& cap_imports);
+
+
   friend class C_MDS_ImportDirLoggedStart;
   friend class C_MDS_ImportDirLoggedFinish;
+  friend class C_M_LoggedImportCaps;
 
   // bystander
   void handle_export_notify(MExportDirNotify *m);

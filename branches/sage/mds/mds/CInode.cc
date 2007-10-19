@@ -779,10 +779,6 @@ void CInode::encode_export(bufferlist& bl)
  
   ::_encode_simple(replica_map, bl);
 
-  map<int,Capability::Export>  cap_map;
-  export_client_caps(cap_map);
-  ::_encode_simple(cap_map, bl);
-
   authlock._encode(bl);
   linklock._encode(bl);
   dirfragtreelock._encode(bl);
@@ -803,7 +799,6 @@ void CInode::finish_export(utime_t now)
 }
 
 void CInode::decode_import(bufferlist::iterator& p,
-			   map<CInode*, map<int,Capability::Export> >& imported_cap_map,
 			   LogSegment *ls)
 {
   utime_t old_mtime = inode.mtime;
@@ -826,13 +821,6 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::_decode_simple(replica_map, p);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
-  map<int,Capability::Export>  cap_map;
-  ::_decode_simple(cap_map, p);
-  if (!cap_map.empty()) {
-    imported_cap_map[this].swap(cap_map);
-    get(PIN_IMPORTINGCAPS);
-  }
-
   authlock._decode(p);
   linklock._decode(p);
   dirfragtreelock._decode(p);
@@ -840,14 +828,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   dirlock._decode(p);
 }
 
-/*
- * the cap import is delayed so that we can journal before 
- * contacting clients
- */
-void CInode::import_caps(map<int,Capability::Export>& cap_map,
-			 set<int>& new_caps)
-{
-  merge_client_caps(cap_map, new_caps);
-  put(PIN_IMPORTINGCAPS);
-}
+
 

@@ -321,7 +321,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_STALE,
+	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
@@ -3262,8 +3262,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	// finish cap imports
 	finish_force_open_sessions(mdr->more()->imported_client_map);
 	if (mdr->more()->cap_imports.count(destdn->inode))
-	  mds->mdcache->migrator->finish_import_caps(destdn->inode, srcdn->authority().first, 
-						     mdr->more()->cap_imports[destdn->inode]);
+	  mds->mdcache->migrator->finish_import_inode_caps(destdn->inode, srcdn->authority().first, 
+							   mdr->more()->cap_imports[destdn->inode]);
 	
 	// hack: fix auth bit
 	destdn->inode->state_set(CInode::STATE_AUTH);

@@ -12,29 +12,32 @@
  * 
  */
 
-#ifndef __MMDSGETMAP_H
-#define __MMDSGETMAP_H
+
+#ifndef __MEXPORTSTRAYS_H
+#define __MEXPORTSTRAYS_H
 
 #include "msg/Message.h"
 
-#include "include/types.h"
-#include "include/encodable.h"
 
-class MMDSGetMap : public Message {
- public:
-  epoch_t have;
+class MExportStrays : public Message {
+ public:  
+  bufferlist state;
 
-  MMDSGetMap(epoch_t h=0) : Message(MSG_MDS_GETMAP), have (h) { }
+  MExportStrays() :
+    Message(MSG_MDS_EXPORTSTRAYS) {}
 
-  char *get_type_name() { return "mdsgetmap"; }
-  
-  void encode_payload() {
-    ::_encode_simple(have, payload);
+  virtual char *get_type_name() { return "SEx"; }
+  void print(ostream& o) {
+    o << "export_strays";
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::_decode_simple(have, p);
+
+  virtual void decode_payload() {
+    state = payload;
   }
+  virtual void encode_payload() {
+    payload = state;
+  }
+
 };
 
 #endif

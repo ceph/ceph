@@ -41,7 +41,7 @@
 
 // my methods
 
-void MDSMonitor::print_map(MDSMap &m)
+void MDSMonitor::print_map(MDSMap &m, int dbl)
 {
   dout(7) << "print_map epoch " << m.get_epoch() << " target_num " << m.target_num << dendl;
   entity_inst_t blank;
@@ -50,7 +50,7 @@ void MDSMonitor::print_map(MDSMap &m)
   for (set<int>::iterator p = all.begin();
        p != all.end();
        ++p) {
-    dout(7) << " mds" << *p << "." << m.mds_inc[*p]
+    dout(dbl) << " mds" << *p << "." << m.mds_inc[*p]
 	    << " : " << MDSMap::get_state_name(m.get_state(*p))
 	    << " : " << (m.have_inst(*p) ? m.get_inst(*p) : blank)
 	    << dendl;
@@ -88,8 +88,8 @@ bool MDSMonitor::update_from_paxos()
   mdsmap.decode(mdsmap_bl);
 
   // new map
-  dout(7) << "new map:" << dendl;
-  print_map(mdsmap);
+  dout(0) << "new map" << dendl;
+  print_map(mdsmap, 0);
 
   // bcast map to mds, waiters
   if (mon->is_leader())
@@ -128,7 +128,7 @@ bool MDSMonitor::preprocess_query(Message *m)
     return preprocess_beacon((MMDSBeacon*)m);
     
   case MSG_MDS_GETMAP:
-    send_full(m->get_source_inst());
+    handle_mds_getmap((MMDSGetMap*)m);
     return true;
 
   case MSG_MON_COMMAND:
@@ -139,6 +139,14 @@ bool MDSMonitor::preprocess_query(Message *m)
     delete m;
     return true;
   }
+}
+
+void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
+{
+  if (m->have < mdsmap.get_epoch())
+    send_full(m->get_source_inst());
+  else
+    waiting_for_map.push_back(m->get_source_inst());
 }
 
 

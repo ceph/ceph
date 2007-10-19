@@ -2651,7 +2651,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   
   // send REAP
   // FIXME client session weirdness.
-  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_REAP,
+  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
 					      in->inode,
 					      in->client_caps[client].get_last_seq(),
 					      in->client_caps[client].pending(),
@@ -5683,6 +5683,14 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	dn->dir->unlink_inode(dn);
 	assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
+
+	// send caps to auth (if we're not already)
+	if (in->is_any_caps() &&
+	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
+	  migrator->export_caps(in, in->authority().first);
+	
+	lru.lru_bottouch(straydn);  // move stray to end of lru
+
       } else {
 	assert(dn->is_remote());
 	dn->dir->unlink_inode(dn);

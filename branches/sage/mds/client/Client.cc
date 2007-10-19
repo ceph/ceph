@@ -577,6 +577,7 @@ int Client::choose_target_mds(MClientRequest *req)
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
     mds = mdsmap->get_random_in_mds();
+    dout(0) << "random mds" << mds << dendl;
     if (mds < 0) mds = 0;
 
     if (0) {
@@ -673,15 +674,15 @@ MClientReply *Client::make_request(MClientRequest *req,
     if (mds_sessions.count(mds) == 0) {
       Cond cond;
 
-      if (!mdsmap->have_inst(mds)) {
+      if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
 	int mon = monmap->pick_mon();
-	messenger->send_message(new MMDSGetMap(),
+	messenger->send_message(new MMDSGetMap(mdsmap->get_epoch()),
 				monmap->get_inst(mon));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
-	if (!mdsmap->have_inst(mds)) {
+	if (!mdsmap->is_active(mds)) {
 	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << dendl;
 	  request.resend_mds = mdsmap->get_random_in_mds();
 	  continue;
@@ -1103,11 +1104,11 @@ void Client::handle_file_caps(MClientFileCaps *m)
   mds_sessions[mds]++;
 
   // reap?
-  if (m->get_op() == MClientFileCaps::OP_REAP) {
+  if (m->get_op() == MClientFileCaps::OP_IMPORT) {
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << dendl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " imported from mds" << other << dendl;
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
@@ -1122,7 +1123,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       
       // fall-thru!
     } else {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << dendl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) import from mds" << other << dendl;
       // delay!
       cap_reap_queue[in->ino()][other] = m;
       return;
@@ -1132,8 +1133,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_op() == MClientFileCaps::OP_STALE) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << dendl;
+  if (m->get_op() == MClientFileCaps::OP_EXPORT) {
+    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now exported/stale" << dendl;
     
     // move to stale list
     assert(in->caps.count(mds));

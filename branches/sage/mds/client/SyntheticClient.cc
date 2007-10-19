@@ -1578,8 +1578,8 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
       if (more) {
         client->lstat(d, &st);
         int fd = client->open(d, O_RDONLY);
-        //client->unlink(d);
-        //client->close(fd);
+        client->unlink(d);
+        client->close(fd);
       }
 
       if (time_to_stop()) return 0;
@@ -1652,6 +1652,12 @@ int SyntheticClient::open_shared(int num, int count)
       int fd = client->open(d,O_RDONLY);
       fds.push_back(fd);
     }
+
+    if (1)
+      for (int n=0; n<num; n++) {
+	sprintf(d,"file.%d", n);
+	client->unlink(d);
+      }
 
     while (!fds.empty()) {
       int fd = fds.front();

@@ -15,6 +15,7 @@
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
+#include "events/ESessions.h"
 
 #include "events/EMetaBlob.h"
 
@@ -771,6 +772,25 @@ void ESession::replay(MDS *mds)
   }
 }
 
+void ESessions::update_segment()
+{
+  _segment->clientmapv = cmapv;
+}
+
+void ESessions::replay(MDS *mds)
+{
+  if (mds->clientmap.get_version() >= cmapv) {
+    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+	     << " >= " << cmapv << ", noop" << dendl;
+  } else {
+    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+	     << " < " << cmapv << dendl;
+    mds->clientmap.open_sessions(client_map);
+    assert(mds->clientmap.get_version() == cmapv);
+    mds->clientmap.reset_projected(); // make it follow version.
+  }
+}
+
 
 
 // -----------------------
@@ -1061,6 +1081,7 @@ void EImportStart::replay(MDS *mds)
     ::_decode_simple(cm, blp);
     mds->clientmap.open_sessions(cm);
     assert(mds->clientmap.get_version() == cmapv);
+    mds->clientmap.reset_projected(); // make it follow version.
   }
 }
 

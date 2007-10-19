@@ -27,6 +27,7 @@ using namespace std;
 #include "PaxosService.h"
 
 class MMDSBeacon;
+class MMDSGetMap;
 
 class MDSMonitor : public PaxosService {
  public:
@@ -37,7 +38,7 @@ class MDSMonitor : public PaxosService {
   MDSMap pending_mdsmap;  // current + pending updates
 
   // my helpers
-  void print_map(MDSMap &m);
+  void print_map(MDSMap &m, int dbl=7);
 
   class C_Updated : public Context {
     MDSMonitor *mm;
@@ -72,6 +73,7 @@ class MDSMonitor : public PaxosService {
   bool preprocess_beacon(class MMDSBeacon *m);
   bool handle_beacon(class MMDSBeacon *m);
   bool handle_command(class MMonCommand *m);
+  void handle_mds_getmap(MMDSGetMap *m);
 
   // beacons
   map<int, utime_t> last_beacon;
