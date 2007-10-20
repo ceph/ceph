@@ -3,16 +3,20 @@
 
 #include <linux/uio.h>
 #include <linux/radix-tree.h>
+#include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
 #include "ceph_kthread.h"
 
-
-struct ceph_kthreadpool *msg_threadpool;  	/* thread pool */
+/* dispatch function type */
+typedef void (*ceph_kmsg_work_dispatch_t)(struct work_struct *);
 
 struct ceph_kmsgr {
 	void *m_parent;
 	struct radix_tree_root mpipes;		/* other nodes talk to */
-	struct client_thread_info cthread;	/* listener thread info */
+	struct ceph_client_info cthread;	/* listener or select thread info */
+	struct workqueue_struct *wq;		/* work queue (worker threads) */
+	struct work_struct *work;		/* received work */
+/* note: work->func = dispatch func */
 };
 
 struct ceph_message {
@@ -47,8 +51,6 @@ struct ceph_kmsg_pipe {
  */
 extern void ceph_read_message(struct ceph_message *message);
 extern void ceph_write_message(struct ceph_message *message);
-extern void ceph_client_dispatch(void *fs_client, struct ceph_message *message );
-extern void queue_message(struct ceph_message *message);
 
 __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {
@@ -58,7 +60,7 @@ __inline__ void ceph_put_msg(struct ceph_message *msg) {
 }
 
 __inline__ void ceph_get_msg(struct ceph_message *msg) {
-	msg->nref++;
+	atomic_inc(&msg->nref);
 }
 
 #endif
