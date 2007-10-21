@@ -329,13 +329,15 @@ int MDS::init(bool standby)
 {
   mds_lock.Lock();
 
-  objecter->init();
-  
-  want_state = MDSMap::STATE_BOOT;
-  
   // starting beacon.  this will induce an MDSMap from the monitor
+  want_state = MDSMap::STATE_BOOT;
+  want_rank = whoami;
   beacon_start();
-  
+  whoami = -1;
+  messenger->reset_myname(entity_name_t::MDS(whoami));
+
+  objecter->init();
+   
   // schedule tick
   reset_tick();
 
@@ -413,7 +415,7 @@ void MDS::beacon_send()
   
   int mon = monmap->pick_mon();
   messenger->send_message(new MMDSBeacon(messenger->get_myinst(), mdsmap->get_epoch(), 
-					 want_state, beacon_last_seq),
+					 want_state, beacon_last_seq, want_rank),
 			  monmap->get_inst(mon));
 
   // schedule next sender
@@ -510,15 +512,22 @@ void MDS::handle_mds_map(MMDSMap *m)
   // see who i am
   whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
   if (whoami < 0) {
+    if (mdsmap->is_standby(messenger->get_myaddr())) {
+      if (state != MDSMap::STATE_STANDBY) {
+	want_state = state = MDSMap::STATE_STANDBY;
+	dout(1) << "handle_mds_map standby" << dendl;
+      }
+      goto out;
+    }
     dout(1) << "handle_mds_map i'm not in the mdsmap, killing myself" << dendl;
     suicide();
-    return;
+    goto out;
   }
 
   // open logger?
   //  note that fakesyn/newsyn starts knowing who they are
   if (whoami >= 0 &&
-      mdsmap->is_up(whoami) && !mdsmap->is_standby(whoami) &&
+      mdsmap->is_up(whoami) &&
       (oldwhoami != whoami || !logger))
     reopen_logger(mdsmap->get_create());   // adopt mds cluster timeline
   
@@ -666,6 +675,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     beacon_send();
   }
 
+ out:
   delete m;
   delete oldmap;
 }

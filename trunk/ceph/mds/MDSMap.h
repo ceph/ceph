@@ -44,9 +44,28 @@ using namespace std;
     \         |
      \        v
       \--  STOPPING 
-               
 
 
+ new states:
+
+ boot  --> standby, creating, or starting.
+
+
+ dne  ---->   creating  ----->   active*
+ ^ ^___________/                /  ^ ^
+ |                             /  /  |
+ destroying                   /  /   |
+   ^                         /  /    |
+   |                        /  /     |
+ stopped <---- stopping* <-/  /      |
+      \                      /       |
+        ----- starting* ----/        |
+                                     |
+ failed                              |
+    \                                |
+     \--> replay*  --> reconnect* --> rejoin*
+
+     * = can fail
 
 */
 
@@ -54,41 +73,44 @@ using namespace std;
 class MDSMap {
  public:
   // mds states
-  static const int STATE_DNE =        0;  // down, never existed.
-  static const int STATE_STOPPED =   -1;  // down, once existed, but no subtrees. empty log.
-  static const int STATE_FAILED =     2;  // down, active subtrees; needs to be recovered.
+  static const int STATE_DNE =         0;  // down, never existed.
+  static const int STATE_DESTROYING = -1;  // down, existing, semi-destroyed.
+  static const int STATE_STOPPED =    -2;  // down, once existed, but no subtrees. empty log.
+  static const int STATE_FAILED =      3;  // down, active subtrees; needs to be recovered.
 
-  static const int STATE_BOOT     =  -3;  // up, boot announcement.  destiny unknown.
-  static const int STATE_STANDBY  =  -4;  // up, idle.  waiting for assignment by monitor.
-  static const int STATE_CREATING  = -5;  // up, creating MDS instance (new journal, idalloc..).
-  static const int STATE_STARTING  = -6;  // up, starting prior stopped MDS instance.
+  static const int STATE_BOOT     =   -4;  // up, boot announcement.  destiny unknown.
+  static const int STATE_STANDBY  =   -5;  // up, idle.  waiting for assignment by monitor.
 
-  static const int STATE_REPLAY    =  7;  // up, starting prior failed instance. scanning journal.
-  static const int STATE_RESOLVE   =  8;  // up, disambiguating distributed operations (import, rename, etc.)
-  static const int STATE_RECONNECT =  9;  // up, reconnect to clients
-  static const int STATE_REJOIN    =  10; // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =     11; // up, active
-  static const int STATE_STOPPING  =  12; // up, exporting metadata (-> standby or out)
+  static const int STATE_CREATING  =  -6;  // up, creating MDS instance (new journal, idalloc..).
+  static const int STATE_STARTING  =  -7;  // up, starting prior stopped MDS instance.
+
+  static const int STATE_REPLAY    =   8;  // up, starting prior failed instance. scanning journal.
+  static const int STATE_RESOLVE   =   9;  // up, disambiguating distributed operations (import, rename, etc.)
+  static const int STATE_RECONNECT =  10;  // up, reconnect to clients
+  static const int STATE_REJOIN    =  11; // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =     12; // up, active
+  static const int STATE_STOPPING  =  13; // up, exporting metadata (-> standby or out)
   
   static const char *get_state_name(int s) {
     switch (s) {
       // down and out
-    case STATE_DNE:       return "down:dne";
-    case STATE_STOPPED:   return "down:stopped";
+    case STATE_DNE:        return "down:dne";
+    case STATE_DESTROYING: return "down:destroying";
+    case STATE_STOPPED:    return "down:stopped";
       // down and in
-    case STATE_FAILED:    return "down:failed";
+    case STATE_FAILED:     return "down:failed";
       // up and out
-    case STATE_BOOT:      return "up:boot";
-    case STATE_CREATING:  return "up:creating";
-    case STATE_STARTING:  return "up:starting";
-    case STATE_STANDBY:   return "up:standby";
+    case STATE_BOOT:       return "up:boot";
+    case STATE_STANDBY:    return "up:standby";
+    case STATE_CREATING:   return "up:creating";
+    case STATE_STARTING:   return "up:starting";
       // up and in
-    case STATE_REPLAY:    return "up:replay";
-    case STATE_RESOLVE:   return "up:resolve";
-    case STATE_RECONNECT: return "up:reconnect";
-    case STATE_REJOIN:    return "up:rejoin";
-    case STATE_ACTIVE:    return "up:active";
-    case STATE_STOPPING:  return "up:stopping";
+    case STATE_REPLAY:     return "up:replay";
+    case STATE_RESOLVE:    return "up:resolve";
+    case STATE_RECONNECT:  return "up:reconnect";
+    case STATE_REJOIN:     return "up:rejoin";
+    case STATE_ACTIVE:     return "up:active";
+    case STATE_STOPPING:   return "up:stopping";
     default: assert(0);
     }
     return 0;
@@ -96,29 +118,31 @@ class MDSMap {
 
  protected:
   epoch_t epoch;
+  epoch_t client_epoch;       // incremented only when change is significant to client.
   utime_t created;
-  epoch_t same_in_set_since;  // note: this does not reflect exit-by-failure.
 
-  int target_num;
-  int anchortable;   // which MDS has anchortable (fixme someday)
-  int root;          // which MDS has root directory
+  int32_t max_mds;
+  int32_t anchortable;   // which MDS has anchortable (fixme someday)
+  int32_t root;          // which MDS has root directory
 
-  set<int>               mds_created;   // which mds ids have initialized journals and id tables.
-  map<int,int>           mds_state;     // MDS state
-  map<int,version_t>     mds_state_seq;
-  map<int,entity_inst_t> mds_inst;      // up instances
-  map<int,int>           mds_inc;       // incarnation count (monotonically increases)
+  map<int32_t,int32_t>       mds_state;     // MDS state
+  map<int32_t,version_t>     mds_state_seq;
+  map<int32_t,entity_inst_t> mds_inst;      // up instances
+  map<int32_t,int32_t>       mds_inc;       // incarnation count (monotonically increases)
+
+  map<entity_addr_t,int32_t> standby;    // -1 == any
+  map<int32_t, set<entity_addr_t> > standby_for;
+  set<entity_addr_t> standby_any;
 
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), same_in_set_since(0), anchortable(0), root(0) {}
+  MDSMap() : epoch(0), client_epoch(0), anchortable(0), root(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
   const utime_t& get_create() const { return created; }
-  epoch_t get_same_in_set_since() const { return same_in_set_since; }
 
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }
@@ -209,7 +233,6 @@ class MDSMap {
   bool is_failed(int m)    { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
 
   bool is_boot(int m)  { return mds_state.count(m) && mds_state[m] == STATE_BOOT; }
-  bool is_standby(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STANDBY; }
   bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
   bool is_replay(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REPLAY; }
@@ -221,11 +244,11 @@ class MDSMap {
   bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
 
-  bool has_created(int m) { return mds_created.count(m); }
+  bool is_standby(entity_addr_t a)  { return standby.count(a); }
 
   // cluster states
   bool is_full() {
-    return get_num_in_mds() >= target_num;
+    return get_num_in_mds() >= max_mds;
   }
   bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     return 
@@ -263,7 +286,7 @@ class MDSMap {
 	  p->second == STATE_CREATING) 
 	in++;
     }
-    return (in > target_num);
+    return (in > max_mds);
   }
 
   int get_state(int m) {
@@ -295,14 +318,8 @@ class MDSMap {
 	 ++p) {
       if (p->second.addr == addr) return p->first;
     }
-    /*else
-      for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
-	   p != mds_inst.end();
-	   ++p) {
-	if (memcmp(&p->second.addr,&inst.addr, sizeof(inst.addr)) == 0) return p->first;
-      }
-    */
-
+    if (standby.count(addr))
+      return -2;
     return -1;
   }
 
@@ -323,29 +340,35 @@ class MDSMap {
   // serialize, unserialize
   void encode(bufferlist& bl) {
     ::_encode(epoch, bl);
-    ::_encode(target_num, bl);
+    ::_encode(client_epoch, bl);
     ::_encode(created, bl);
-    ::_encode(same_in_set_since, bl);
     ::_encode(anchortable, bl);
     ::_encode(root, bl);
+    ::_encode(max_mds, bl);
     ::_encode(mds_state, bl);
     ::_encode(mds_state_seq, bl);
     ::_encode(mds_inst, bl);
     ::_encode(mds_inc, bl);
+    ::_encode(standby, bl);
+    ::_encode(standby_for, bl);
+    ::_encode(standby_any, bl);
   }
   
   void decode(bufferlist& bl) {
     int off = 0;
     ::_decode(epoch, bl, off);
-    ::_decode(target_num, bl, off);
+    ::_decode(client_epoch, bl, off);
     ::_decode(created, bl, off);
-    ::_decode(same_in_set_since, bl, off);
     ::_decode(anchortable, bl, off);
     ::_decode(root, bl, off);
+    ::_decode(max_mds, bl, off);
     ::_decode(mds_state, bl, off);
     ::_decode(mds_state_seq, bl, off);
     ::_decode(mds_inst, bl, off);
     ::_decode(mds_inc, bl, off);
+    ::_decode(standby, bl, off);
+    ::_decode(standby_for, bl, off);
+    ::_decode(standby_any, bl, off);
   }
 
 

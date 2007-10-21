@@ -112,6 +112,7 @@ class MDS : public Dispatcher {
   // -- MDS state --
   int state;         // my confirmed state
   int want_state;    // the state i want
+  int want_rank;     // the mds rank i want
 
   list<Context*> waiting_for_active;
   map<int, list<Context*> > waiting_for_active_peer;

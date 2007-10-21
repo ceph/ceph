@@ -26,18 +26,20 @@ class MMDSBeacon : public Message {
   epoch_t last_epoch_seen;  // include last mdsmap epoch mds has seen to avoid race with monitor decree
   int state;
   version_t seq;
+  int want_rank;
 
  public:
   MMDSBeacon() : Message(MSG_MDS_BEACON) {}
-  MMDSBeacon(entity_inst_t i, epoch_t les, int st, version_t se) : 
+  MMDSBeacon(entity_inst_t i, epoch_t les, int st, version_t se, int wr) : 
     Message(MSG_MDS_BEACON), 
-    inst(i), last_epoch_seen(les), state(st), seq(se) { }
+    inst(i), last_epoch_seen(les), state(st), seq(se), want_rank(wr) { }
 
   entity_inst_t& get_mds_inst() { return inst; }
   epoch_t get_last_epoch_seen() { return last_epoch_seen; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
   char *get_type_name() { return "mdsbeacon"; }
+  int get_want_rank() { return want_rank; }
 
   void print(ostream& out) {
     out << "mdsbeacon(" << inst
@@ -50,6 +52,7 @@ class MMDSBeacon : public Message {
     ::_encode(last_epoch_seen, payload);
     ::_encode(state, payload);
     ::_encode(seq, payload);
+    ::_encode(want_rank, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -57,6 +60,7 @@ class MMDSBeacon : public Message {
     ::_decode(last_epoch_seen, payload, off);
     ::_decode(state, payload, off);
     ::_decode(seq, payload, off);
+    ::_decode(want_rank, payload, off);
   }
 };
 

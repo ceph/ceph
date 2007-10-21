@@ -73,8 +73,10 @@ class MDSMonitor : public PaxosService {
   bool handle_beacon(class MMDSBeacon *m);
   bool handle_command(class MMonCommand *m);
 
+  void take_over(entity_addr_t addr, int mds);
+
   // beacons
-  map<int, utime_t> last_beacon;
+  map<entity_addr_t, utime_t> last_beacon;
 
 public:
   MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
