@@ -86,12 +86,12 @@ int main(int argc, char **argv)
 
     // start messenger
     rank.start_rank();
-    cout << "bound to " << rank.get_my_addr() << std::endl;
+    cout << "bound to " << rank.get_rank_addr() << std::endl;
 
     // add single mon0
     entity_inst_t inst;
     inst.name = entity_name_t::MON(0);
-    inst.addr = rank.my_addr;
+    inst.addr = rank.rank_addr;
     monmap.add_mon(inst);
     
     // write monmap
