@@ -1,3 +1,6 @@
+#include <linux/string.h>
+#include <linux/slab.h>
+#include <linux/uio.h>
 #include "bufferlist.h"
 
 void ceph_bl_init(struct ceph_bufferlist *bl)
@@ -10,8 +13,10 @@ void ceph_bl_init(struct ceph_bufferlist *bl)
 void ceph_bl_clear(struct ceph_bufferlist *bl)
 {
 	int i;
-	for (i=0; i<bl->b_kvlen; i++)
-		kfree(bl->b_kv[i]->iov_base);
+	/*  for (i=0; i<bl->b_kvlen; i++)
+		kfree(bl->b_kv[i]->iov_base); */
+	for (i=0; i<bl->b_kvlen; i++, bl->b_kv++)
+		kfree(bl->b_kv->iov_base);
 	bl->b_kvlen = 0;
 	if (bl->b_kv != bl->b_kv_array) {
 		kfree(bl->b_kv);
@@ -38,9 +43,9 @@ void ceph_bl_append_ref(struct ceph_bufferlist *bl, void *dp, int len)
 {
 	/* check for optimal case of dp being at end of our last kvec */
 	if (bl->b_kvlen) { 
-            struct kvec *lastVec = bl->b_kv[bl_kvlen-1];
-            if (dp == lastVec.iov_base + lastVec.iov_len) {
-		lastVec.iov_len += dlen;
+	    struct kvec lastvec = bl->b_kv[bl->b_kvlen-1];
+            if (dp == lastvec.iov_base + lastvec.iov_len) {
+		lastvec.iov_len += len;
                 return;
 	    }	
 	}
@@ -52,7 +57,7 @@ void ceph_bl_append_ref(struct ceph_bufferlist *bl, void *dp, int len)
 		bl->b_kvmax *= 2;
 
 		/* TBD: check result of kmalloc */
-		tmpvec = kmalloc(bl->b_kvmax);
+		tmpvec = kmalloc(bl->b_kvmax, GFP_KERNEL);
 		memcpy(tmpvec, bl->b_kv, sizeof(struct kvec)*bl->b_kvlen);
 
 		/* if the old array wasn't our original array (kmalloc'ed)  */
@@ -64,25 +69,25 @@ void ceph_bl_append_ref(struct ceph_bufferlist *bl, void *dp, int len)
 	}
 
 	bl->b_kv[bl->b_kvlen].iov_base = dp;
-	bl->b_kv[bl->b_kvlen].iov_len = dlen;
+	bl->b_kv[bl->b_kvlen].iov_len = len;
 	bl->b_kvlen++;
 }
 
-void ceph_bl_append_copy(struct ceph_bufferlist *bl, void *p, int len)
+void ceph_bl_append_copy(struct ceph_bufferlist *bl, void *p, size_t len)
 {
 	int s;
 	while (len > 0) {
 		/* allocate more space? */
-		if ( ! bl->b_append.kv_len) {
-			bl->b_append.kv_len = (len + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
+		if ( ! bl->b_append.iov_len) {
+			bl->b_append.iov_len = (len + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
 			/* TBD: check result of kmalloc */
-			bl->b_append.kv_base = kmalloc(bl->b_append.kv_len, GFP_KERNEL);
+			bl->b_append.iov_base = kmalloc(bl->b_append.iov_len, GFP_KERNEL);
 		}
 
 		/* copy what we can */
-		s = min(bl->b_append.kv_len, len);
-		memcpy(bl->b_append.kv_base, p, s);
-		ceph_bl_append_ref(bl, b_append.kv_base, b_append.kv_len);
+		s = min(bl->b_append.iov_len, len);
+		memcpy(bl->b_append.iov_base, p, s);
+		ceph_bl_append_ref(bl, bl->b_append.iov_base, bl->b_append.iov_len);
 
 		p += s;
 		len -= s;
@@ -91,12 +96,6 @@ void ceph_bl_append_copy(struct ceph_bufferlist *bl, void *p, int len)
 		bl->b_append.iov_len -= s;
 	}
 }
-
-
-
-
-
-
 
 
 void ceph_bl_iterator_init(struct ceph_bufferlist_iterator *bli)
@@ -111,7 +110,8 @@ void ceph_bl_iterator_advance(struct ceph_bufferlist *bl,
 
 }
 
-__u64 ceph_bl_decode_u64(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli)
+/* TBD:  comment until builds... 
+__u64 ceph_bl_decode_u64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__u64 r;
 	r = le64_to_cpu((__u64*)(bl->b_kv[bli->i_kv] + bli->i_off));
@@ -144,3 +144,4 @@ __u8 ceph_bl_decode_u8(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli
 	ceph_bl_iterator_advance(bl, bli, sizeof(__u8));
 }
 
+*/
