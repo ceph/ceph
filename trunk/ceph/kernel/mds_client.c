@@ -264,8 +264,24 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message 
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, 
 			  struct ceph_message *msg)
 {
-	/* write me */
-	
-	
+	struct ceph_bufferlist_iterator bli;
+	__u64 epoch;
+	__u32 left;
+
+	ceph_bl_iterator_init(&bli);
+	epoch = ceph_bl_decode_u64(&msg->payload, &bli);
+	left = ceph_bl_decode_u32(&msg->payload, &bli);
+
+	printk("ceph_mdsc_handle_map epoch %ld\n", epoch);
+
+	spin_lock(&mdsc->lock);
+	if (epoch > mdsc->mdsmap->m_epoch) {
+		ceph_mdsmap_decode(mdsc->mdsmap, &msg->payload, bli);
+		spin_unlock(&mdsc->lock);
+		complete(&mdsc->waiting_for_map);
+	} else {
+		spin_unlock(&mdsc->lock);
+	}
+
 	ceph_put_msg(msg);
 }

@@ -27,18 +27,20 @@
  */
 struct ceph_mdsmap {
 	__u64 m_epoch;
-	__u64 m_same_in_set_since;
-	struct timeval m_created;
+	struct ceph_timeval m_created;
 	__u32 m_anchortable;
 	__u32 m_root;
+	__u32 m_max_mds;  /* size of m_addr, m_state arrays */
 	struct ceph_entity_addr *m_addr;  /* array of addresses */
 	__u8 *m_state;                    /* array of states */
-	__u32 m_max_mds;  /* size of m_addr, m_state arrays */
 };
 
 extern int ceph_mdsmap_get_random_mds(ceph_mdsmap *m);
 extern int ceph_mdsmap_get_state(ceph_mdsmap *m, int w);
 extern struct ceph_entity_addr *ceph_mdsmap_get_addr(ceph_mdsmap *m, int w);
-extern int ceph_mdsmap_decode(ceph_mdsmap *m, iovec *v);
+
+extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, 
+			      struct ceph_bufferlist *bl, 
+			      struct ceph_bufferlist_iterator *bli);
 
 #endif

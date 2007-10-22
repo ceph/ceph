@@ -21,8 +21,7 @@ struct ceph_kmsgr {
 
 struct ceph_message {
 	struct ceph_message_header *msghdr;	/* header */
-	struct kvec *m_iov;			/* data storage */
-	size_t m_iovlen;	/* is this kvec.iov_len why need it in kvec? */
+	struct ceph_bufferlist payload;
 	struct list_head m_list_head;
 	atomic_t nref;
 };
@@ -35,15 +34,11 @@ struct ceph_kmsg_pipe {
 	/* out queue */
 	struct list_head p_out_queue;
 	struct ceph_message *p_out_partial;  /* partially sent message */
-	int p_out_partial_pos;
+	struct ceph_bufferlist_iterator p_out_pos;
 	struct list_head p_out_sent;  /* sent but unacked; may need resend if connection drops */
 
 	/* partially read message contents */
-	struct kvec *p_in_partial_iov;   /* hrm, this probably isn't what we want */
-	size_t p_in_partial_iovlen;
-	size_t p_in_parital_iovmax;  /* size of currently allocated m_iov array */
-	/* .. or something like that? .. */
-
+	struct ceph_message *p_in_partial;
 };
 
 /* 
@@ -54,7 +49,7 @@ extern void ceph_write_message(struct ceph_message *message);
 
 __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {
-		/*ceph_bufferlist_destroy(msg->payload);*/
+		ceph_bufferlist_clear(msg->payload);
 		kfree(msg);
 	}
 }
