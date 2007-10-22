@@ -5,28 +5,30 @@
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
-#include "ceph_kthread.h"
+#include "accepter.h"
+#include "bufferlist.h"
 
 /* dispatch function type */
 typedef void (*ceph_kmsg_work_dispatch_t)(struct work_struct *);
 
+extern struct workqueue_struct *wq;		/* work queue (worker threads) */
+
 struct ceph_kmsgr {
 	void *m_parent;
 	struct radix_tree_root mpipes;		/* other nodes talk to */
-	struct ceph_client_info cthread;	/* listener or select thread info */
-	struct workqueue_struct *wq;		/* work queue (worker threads) */
+	struct ceph_accepter accepter;		/* listener or select thread info */
 	struct work_struct *work;		/* received work */
 /* note: work->func = dispatch func */
 };
 
 struct ceph_message {
+	atomic_t nref;
 	struct ceph_message_header *msghdr;	/* header */
 	struct ceph_bufferlist payload;
 	struct list_head m_list_head;
-	atomic_t nref;
 };
 
-struct ceph_kmsg_pipe {
+struct ceph_connection {
 	int p_sd;         /* socket descriptor */
 	__u64 p_out_seq;  /* last message sent */
 	__u64 p_in_seq;   /* last message received */
