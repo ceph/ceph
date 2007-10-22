@@ -158,7 +158,6 @@ private:
   };
 
 
-
   // messenger interface
   class EntityMessenger : public Messenger {
     Mutex lock;
@@ -167,6 +166,8 @@ private:
     list<Message*> prio_dispatch_queue;
     bool stop;
     int qlen, pqlen;
+    int my_rank;
+    entity_addr_t my_addr;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
@@ -178,6 +179,8 @@ private:
       }
     } dispatch_thread;
     void dispatch_entry();
+
+    friend class Rank;
 
   public:
     void queue_message(Message *m) {
@@ -197,10 +200,11 @@ private:
     }
 
   public:
-    EntityMessenger(entity_name_t myaddr) : 
+    EntityMessenger(entity_name_t myaddr, int r) : 
       Messenger(myaddr),
       stop(false),
       qlen(0), pqlen(0),
+      my_rank(r),
       dispatch_thread(this) { }
     ~EntityMessenger() {
       // join dispatch thread
@@ -215,7 +219,7 @@ private:
       dispatch_thread.join();
     }
     
-    const entity_addr_t &get_myaddr();
+    const entity_addr_t &get_myaddr() { return my_addr; }
 
     int get_dispatch_queue_len() { return qlen + pqlen; }
 
@@ -235,26 +239,6 @@ private:
   };
 
 
-  class SingleDispatcher : public Thread {
-    Rank *rank;
-  public:
-    SingleDispatcher(Rank *r) : rank(r) {}
-    void *entry() {
-      rank->single_dispatcher_entry();
-      return 0;
-    }
-  } single_dispatcher;
-
-  Cond            single_dispatch_cond;
-  bool            single_dispatch_stop;
-  list<Message*>  single_dispatch_queue;
-
-  map<entity_name_t, list<Message*> > waiting_for_ready;
-
-  void single_dispatcher_entry();
-  void _submit_single_dispatch(Message *m);
-
-
   // Rank stuff
  public:
   Mutex lock;
@@ -262,12 +246,12 @@ private:
   bool started;
 
   // where i listen
-  entity_addr_t my_addr;
+  entity_addr_t rank_addr;
   
   // local
-  map<entity_name_t, EntityMessenger*> local;
-  set<entity_name_t>                   stopped;
-  //hash_set<entity_name_t>              entity_unstarted;
+  unsigned max_local, num_local;
+  vector<EntityMessenger*> local;
+  vector<bool>             stopped;
   
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
@@ -277,18 +261,16 @@ private:
         
   Pipe *connect_rank(const entity_addr_t& addr);
 
-  void mark_down(entity_addr_t addr);
-  //void mark_up(entity_name_t addr, entity_addr_t& i);
+  const entity_addr_t &get_rank_addr() { return rank_addr; }
 
-  entity_addr_t get_my_addr() { return my_addr; }
+  void mark_down(entity_addr_t addr);
 
   void reaper();
 
-  EntityMessenger *find_unnamed(entity_name_t a);
-
 public:
-  Rank();
-  ~Rank();
+  Rank() : started(false),
+	   max_local(0), num_local(0) { }
+  ~Rank() { }
 
   //void set_listen_addr(tcpaddr_t& a);
 

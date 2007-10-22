@@ -113,8 +113,6 @@ struct md_config_t {
   */
 
   bool ms_tcp_nodelay;
-  bool ms_single_dispatch;
-  bool ms_requeue_on_sender_fail;
 
   bool ms_stripe_osds;
   bool ms_skip_rank0;

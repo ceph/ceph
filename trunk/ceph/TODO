@@ -48,11 +48,6 @@ sage doc
 - metablob version semantics
 
 
-mdsmon
-- per-mds, shared standby queues 
-
-
-
 mds bugs
 - open file rejournaling vs capped log...
   - open files vs shutdown in general!  need to export any caps on replicated metadata

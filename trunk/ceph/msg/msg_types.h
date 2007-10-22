@@ -127,7 +127,8 @@ inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 	     << '.' << (int)addr.v.ipq[2]
 	     << '.' << (int)addr.v.ipq[3]
 	     << ':' << addr.v.port
-	     << '.' << addr.v.nonce;
+	     << '#' << addr.v.nonce
+	     << '@' << addr.v.erank;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }

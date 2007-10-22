@@ -23,6 +23,10 @@ struct ceph_object {
 typedef struct ceph_object ceph_object_t;
 
 
+struct ceph_timeval {
+	__u32 tv_sec;
+	__u32 tv_usec;
+};
 
 
 /** object layout
@@ -136,12 +140,22 @@ struct ceph_entity_name {
 /*
  * entity_addr
  * ipv4 only for now
+ * 16 bytes.
  */
 struct ceph_entity_addr {
-	__u64 nonce;
-	__u32 port;
-	__u8  ipq[4];
+	__u32 erank;  /* entity's rank in process */
+	__u32 nonce;  /* unique id for process (e.g. pid) */
+	__u32 port;   /* ip port */
+	__u8  ipq[4]; /* ipv4 addr quad */
 };
+
+#define ceph_entity_addr_is_local(a,b)		\
+	((a).nonce == (b).nonce &&		\
+         (a).port == (b).port &&		\
+         (a).ipq[0] == (b).ipq[0] &&		\
+         (a).ipq[1] == (b).ipq[1] &&		\
+         (a).ipq[2] == (b).ipq[2] &&		\
+         (a).ipq[3] == (b).ipq[3])
 
 
 struct ceph_entity_inst {

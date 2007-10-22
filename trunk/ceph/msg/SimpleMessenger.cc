@@ -31,8 +31,8 @@
 #include <iostream>
 #include <fstream>
 
-#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
-#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.my_addr << " "
+#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " "
+#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " "
 
 
 
@@ -142,7 +142,7 @@ int Rank::Accepter::start()
   // figure out my_addr
   if (g_my_addr != entity_addr_t()) {
     // user specified it, easy peasy.
-    rank.my_addr = g_my_addr;
+    rank.rank_addr = g_my_addr;
   } else {
     // my IP is... HELP!
     struct hostent *myhostname = gethostbyname(hostname); 
@@ -152,17 +152,18 @@ int Rank::Accepter::start()
     memcpy((char*)&listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.my_addr.set_addr(listen_addr);
-    rank.my_addr.v.port = 0;  // see below
+    rank.rank_addr.set_addr(listen_addr);
+    rank.rank_addr.v.port = 0;  // see below
   }
-  if (rank.my_addr.v.port == 0) {
+  if (rank.rank_addr.v.port == 0) {
     entity_addr_t tmp;
     tmp.set_addr(listen_addr);
-    rank.my_addr.v.port = tmp.v.port;
-    rank.my_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
+    rank.rank_addr.v.port = tmp.v.port;
+    rank.rank_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
+  rank.rank_addr.v.erank = 0;
 
-  dout(1) << "accepter.start my_addr is " << rank.my_addr << dendl;
+  dout(1) << "accepter.start rank_addr is " << rank.rank_addr << dendl;
 
   // set up signal handler
   //old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
@@ -203,7 +204,7 @@ void *Rank::Accepter::entry()
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
       rank.lock.Lock();
-      if (!rank.local.empty()) {
+      if (rank.num_local > 0) {
 	Pipe *p = new Pipe(sd);
 	rank.pipes.insert(p);
       }
@@ -236,7 +237,7 @@ int Rank::Pipe::accept()
   // my creater gave me sd via accept()
   
   // announce myself.
-  int rc = tcp_write(sd, (char*)&rank.my_addr, sizeof(rank.my_addr));
+  int rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
   if (rc < 0) {
     ::close(sd);
     done = true;
@@ -246,7 +247,7 @@ int Rank::Pipe::accept()
   // identify peer
   rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
   if (rc < 0) {
-    dout(10) << "pipe(? " << this << ").accept couldn't read peer inst" << dendl;
+    dout(10) << "pipe(? " << this << ").accept couldn't read peer addr" << dendl;
     ::close(sd);
     done = true;
     return -1;
@@ -321,18 +322,18 @@ int Rank::Pipe::connect()
   entity_addr_t paddr;
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (!rc) { // bool
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << dendl;
+    dout(0) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << dendl;
     return -1;
   }
-  if (peer_addr != paddr) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << dendl;
+  if (!ceph_entity_addr_is_local(peer_addr.v, paddr.v)) {
+    dout(0) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << dendl;
     ::close(sd);
     sd = 0;
     return -1;
   }
 
   // identify myself
-  rc = tcp_write(sd, (char*)&rank.my_addr, sizeof(rank.my_addr));
+  rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
   if (rc < 0) 
     return -1;
   
@@ -439,31 +440,12 @@ void Rank::Pipe::reader()
 
     rank.lock.Lock();
     {
-      if (g_conf.ms_single_dispatch) {
-	// submit to single dispatch queue
-	rank._submit_single_dispatch(m);
+      unsigned erank = m->get_dest_inst().addr.v.erank;
+      if (erank < rank.max_local && rank.local[erank]) {
+	// find entity
+	entity = rank.local[erank];
       } else {
-	if (rank.local.count(m->get_dest())) {
-	  // find entity
-	  entity = rank.local[m->get_dest()];
-	} else {
-	  entity = rank.find_unnamed(m->get_dest());
-	  if (entity) {
-	    dout(3) << "pipe(" << peer_addr << ' ' << this << ").reader blessing " << m->get_dest() << dendl;
-	    //entity->reset_myname(m->get_dest());
-	    rank.local.erase(entity->get_myname());
-	    rank.local[m->get_dest()] = entity;
-	    entity->_set_myname(m->get_dest());
-
-	  } else {
-	    if (rank.stopped.count(m->get_dest())) {
-	      // ignore it
-	    } else {
-	      derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
-	      //assert(0);  // FIXME do this differently
-	    }
-	  }
-	}
+	derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
       }
     }
     rank.lock.Unlock();
@@ -540,9 +522,6 @@ void Rank::Pipe::writer()
 
         dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sending " << m << " " << *m << dendl;
 
-        // stamp.
-        m->set_source_addr(rank.my_addr);
-        
         // marshall
         if (m->empty_payload())
           m->encode_payload();
@@ -848,11 +827,12 @@ void Rank::Pipe::fail(list<Message*>& out)
 
     // sort
     while (!q.empty()) {
+      unsigned srcrank = q.front()->get_source_inst().addr.v.erank;
       if (q.front()->get_type() == MSG_CLOSE) {
         delete q.front();
       } 
-      else if (rank.local.count(q.front()->get_source())) {
-	EntityMessenger *mgr = rank.local[q.front()->get_source()];
+      else if (srcrank < rank.max_local && rank.local[srcrank]) {
+	EntityMessenger *mgr = rank.local[srcrank];
         Dispatcher *dis = mgr->get_dispatcher();
 	if (mgr->is_stopped()) {
 	  // ignore.
@@ -896,69 +876,6 @@ void Rank::Pipe::fail(list<Message*>& out)
  * Rank
  */
 
-Rank::Rank() : 
-  single_dispatcher(this),
-  started(false) {
-}
-Rank::~Rank()
-{
-}
-
-/*
-void Rank::set_listen_addr(tcpaddr_t& a)
-{
-  dout(10) << "set_listen_addr " << a << dendl;
-  memcpy((char*)&listen_addr.sin_addr.s_addr, (char*)&a.sin_addr.s_addr, 4);
-  listen_addr.sin_port = a.sin_port;
-}
-*/
-
-void Rank::_submit_single_dispatch(Message *m)
-{
-  assert(lock.is_locked());
-
-  if (local.count(m->get_dest()) &&
-      local[m->get_dest()]->is_ready()) {
-    rank.single_dispatch_queue.push_back(m);
-    rank.single_dispatch_cond.Signal();
-  } else {
-    waiting_for_ready[m->get_dest()].push_back(m);
-  }
-}
-
-
-void Rank::single_dispatcher_entry()
-{
-  lock.Lock();
-  while (!single_dispatch_stop || !single_dispatch_queue.empty()) {
-    if (!single_dispatch_queue.empty()) {
-      list<Message*> ls;
-      ls.swap(single_dispatch_queue);
-
-      lock.Unlock();
-      {
-        while (!ls.empty()) {
-          Message *m = ls.front();
-          ls.pop_front();
-          
-          dout(1) << m->get_dest() 
-		  << " <-- " << m->get_source_inst()
-		  << " ---- " << *m
-                  << " -- " << m 
-                  << dendl;
-          
-	  assert(local.count(m->get_dest()));
-	  local[m->get_dest()]->dispatch(m);
-	}
-      }
-      lock.Lock();
-      continue;
-    }
-    single_dispatch_cond.Wait(lock);
-  }
-  lock.Unlock();
-}
-
 
 /*
  * note: assumes lock is held
@@ -996,15 +913,9 @@ int Rank::start_rank()
   if (accepter.start() < 0) 
     return -1;
 
-  // start single thread dispatcher?
-  if (g_conf.ms_single_dispatch) {
-    single_dispatch_stop = false;
-    single_dispatcher.create();
-  }
-
   lock.Lock();
 
-  dout(1) << "start_rank at " << my_addr << dendl;
+  dout(1) << "start_rank at " << rank_addr << dendl;
   started = true;
   lock.Unlock();
   return 0;
@@ -1018,7 +929,7 @@ int Rank::start_rank()
 Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
 {
   assert(rank.lock.is_locked());
-  assert(addr != rank.my_addr);
+  assert(addr != rank.rank_addr);
   
   dout(10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
@@ -1038,20 +949,6 @@ Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
 
 
 
-Rank::EntityMessenger *Rank::find_unnamed(entity_name_t a)
-{
-  // find an unnamed (and _ready_) local entity of the right type
-  for (map<entity_name_t, EntityMessenger*>::iterator p = local.begin();
-       p != local.end();
-       ++p) {
-    if (p->first.type() == a.type() && p->first.is_new() &&
-	p->second->is_ready()) 
-      return p->second;
-  }
-  return 0;
-}
-
-
 
 
 /* register_entity 
@@ -1062,11 +959,22 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   lock.Lock();
   
   // create messenger
-  EntityMessenger *msgr = new EntityMessenger(name);
+  int erank = max_local;
+  EntityMessenger *msgr = new EntityMessenger(name, erank);
 
   // add to directory
-  assert(local.count(name) == 0);
-  local[name] = msgr;
+  max_local++;
+  local.resize(max_local);
+  stopped.resize(max_local);
+
+  local[erank] = msgr;
+  stopped[erank] = false;
+  msgr->my_addr = rank_addr;
+  msgr->my_addr.v.erank = erank;
+
+  dout(0) << "register_entity " << name << " at " << msgr->my_addr << dendl;
+
+  num_local++;
   
   lock.Unlock();
   return msgr;
@@ -1079,11 +987,10 @@ void Rank::unregister_entity(EntityMessenger *msgr)
   dout(10) << "unregister_entity " << msgr->get_myname() << dendl;
   
   // remove from local directory.
-  entity_name_t name = msgr->get_myname();
-  assert(local.count(name));
-  local.erase(name);
-  
-  stopped.insert(name);
+  local[msgr->my_rank] = 0;
+  stopped[msgr->my_rank] = true;
+  num_local--;
+
   wait_cond.Signal();
 
   lock.Unlock();
@@ -1101,15 +1008,11 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
   lock.Lock();
   {
     // local?
-    if (dest_addr == my_addr) {
-      if (local.count(dest)) {
+    if (ceph_entity_addr_is_local(dest_addr.v, rank_addr.v)) {
+      if (dest_addr.v.erank < max_local && local[dest_addr.v.erank]) {
         // local
         dout(20) << "submit_message " << *m << " dest " << dest << " local" << dendl;
-        if (g_conf.ms_single_dispatch) {
-          _submit_single_dispatch(m);
-        } else {
-          entity = local[dest];
-        }
+	entity = local[dest_addr.v.erank];
       } else {
         derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
@@ -1155,7 +1058,7 @@ void Rank::wait()
     // reap dead pipes
     reaper();
 
-    if (local.empty()) {
+    if (num_local == 0) {
       dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
     } else {
@@ -1171,16 +1074,6 @@ void Rank::wait()
   accepter.stop();
   dout(20) << "wait: stopped accepter thread" << dendl;
 
-  // stop dispatch thread
-  if (g_conf.ms_single_dispatch) {
-    dout(10) << "wait: stopping dispatch thread" << dendl;
-    lock.Lock();
-    single_dispatch_stop = true;
-    single_dispatch_cond.Signal();
-    lock.Unlock();
-    single_dispatcher.join();
-  }
-  
   // close+reap all pipes
   lock.Lock();
   {
@@ -1276,19 +1169,8 @@ void Rank::EntityMessenger::ready()
   dout(10) << "ready " << get_myaddr() << dendl;
   assert(!dispatch_thread.is_started());
   
-  if (g_conf.ms_single_dispatch) {
-    rank.lock.Lock();
-    if (rank.waiting_for_ready.count(get_myname())) {
-      rank.single_dispatch_queue.splice(rank.single_dispatch_queue.end(),
-                                        rank.waiting_for_ready[get_myname()]);
-      rank.waiting_for_ready.erase(get_myname());
-      rank.single_dispatch_cond.Signal();
-    }
-    rank.lock.Unlock();
-  } else {
-    // start my dispatch thread
-    dispatch_thread.create();
-  }
+  // start my dispatch thread
+  dispatch_thread.create();
 }
 
 
@@ -1333,7 +1215,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
 {
   // set envelope
   m->set_source(get_myname(), fromport);
-  m->set_source_addr(rank.my_addr);
+  m->set_source_addr(my_addr);
   m->set_dest_inst(dest);
   m->set_dest_port(port);
  
@@ -1363,7 +1245,7 @@ int Rank::EntityMessenger::send_first_message(Dispatcher *d,
 
   // set envelope
   m->set_source(get_myname(), fromport);
-  m->set_source_addr(rank.my_addr);
+  m->set_source_addr(my_addr);
   m->set_dest_inst(dest);
   m->set_dest_port(port);
   rank.lock.Unlock();
@@ -1380,25 +1262,12 @@ int Rank::EntityMessenger::send_first_message(Dispatcher *d,
 }
 
 
-const entity_addr_t &Rank::EntityMessenger::get_myaddr()
-{
-  return rank.my_addr;
-}
-
 
 void Rank::EntityMessenger::reset_myname(entity_name_t newname)
 {
-  rank.lock.Lock();
-  {
-    entity_name_t oldname = get_myname();
-    dout(10) << "reset_myname " << oldname << " to " << newname << dendl;
-    
-    rank.local.erase(oldname);
-    rank.local[newname] = this;
-   
-    _set_myname(newname);
-  }
-  rank.lock.Unlock();
+  entity_name_t oldname = get_myname();
+  dout(10) << "reset_myname " << oldname << " to " << newname << dendl;
+  _set_myname(newname);
 }
 
 

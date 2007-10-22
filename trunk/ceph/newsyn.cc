@@ -81,7 +81,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   rank.start_rank();   // bind and listen
 
   if (mpi_rank < g_conf.num_mon) {
-    moninst[mpi_rank].addr = rank.my_addr;
+    moninst[mpi_rank].addr = rank.rank_addr;
     moninst[mpi_rank].name = entity_name_t(entity_name_t::TYPE_MON, mpi_rank);
 
     //cerr << mpi_rank << " at " << rank.get_listen_addr() << std::endl;
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
   // start up messenger via MPI
   MonMap *monmap = new MonMap(g_conf.num_mon);
   pair<int,int> mpiwho = mpi_bootstrap_new(argc, argv, monmap);
-  int myrank = mpiwho.first;
+  int mpirank = mpiwho.first;
   int world = mpiwho.second;
 
   int need = 0;
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
   }
   assert(need <= world);
 
-  if (myrank == 0)
+  if (mpirank == 0)
     cerr << "nummds " << start_mds << "  numosd " << start_osd << "  numclient " << start_client << " .. need " << need << ", have " << world << std::endl;
   
 
@@ -251,7 +251,7 @@ int main(int argc, char **argv)
 
   int started = 0;
 
-  //if (myrank == 0) g_conf.debug = 20;
+  //if (mpirank == 0) g_conf.debug = 20;
   
   // courtesy symlinks
   char ffrom[100];
@@ -260,11 +260,11 @@ int main(int argc, char **argv)
 
 
   // create mon
-  if (myrank < g_conf.num_mon) {
-    Monitor *mon = new Monitor(myrank, rank.register_entity(entity_name_t(entity_name_t::TYPE_MON, myrank)), monmap);
+  if (mpirank < g_conf.num_mon) {
+    Monitor *mon = new Monitor(mpirank, rank.register_entity(entity_name_t(entity_name_t::TYPE_MON, mpirank)), monmap);
     mon->init();
     if (g_conf.dout_dir) {
-      sprintf(ffrom, "%s/mon%d", g_conf.dout_dir, myrank);
+      sprintf(ffrom, "%s/mon%d", g_conf.dout_dir, mpirank);
       ::symlink(fto, ffrom);
     }
   }
@@ -280,9 +280,9 @@ int main(int argc, char **argv)
   map<int,MDS*> mds;
   map<int,OSD*> mdsosd;
   for (int i=0; i<start_mds; i++) {
-    if (myrank != g_conf.ms_skip_rank0+i) continue;
+    if (mpirank != g_conf.ms_skip_rank0+i) continue;
     Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_MDS, i));
-    cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
+    cerr << "mds" << i << " at " << m->get_myaddr() << " " << hostname << "." << pid << std::endl;
     if (g_conf.dout_dir) {
       sprintf(ffrom, "%s/mds%d", g_conf.dout_dir, i);
       ::symlink(fto, ffrom);
@@ -309,16 +309,16 @@ int main(int argc, char **argv)
   int osds_per_node = (start_osd-1)/max_osd_nodes + 1;
   for (int i=0; i<start_osd; i++) {
     if (g_conf.ms_stripe_osds) {
-      if (myrank != g_conf.ms_skip_rank0+start_mds + i / osds_per_node) continue;
+      if (mpirank != g_conf.ms_skip_rank0+start_mds + i / osds_per_node) continue;
     } else {
-      if (myrank != g_conf.ms_skip_rank0+start_mds + i) continue;
+      if (mpirank != g_conf.ms_skip_rank0+start_mds + i) continue;
     }
 
     if (kill_osd_after.count(i))
       g_timer.add_event_after(kill_osd_after[i], new C_Die);
 
     Messenger *m = rank.register_entity(entity_name_t(entity_name_t::TYPE_OSD, i));
-    cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << std::endl;
+    cerr << "osd" << i << " at " << m->get_myaddr() <<  " " << hostname << "." << pid << std::endl;
     if (g_conf.dout_dir) {
       sprintf(ffrom, "%s/osd%d", g_conf.dout_dir, i);
       ::symlink(fto, ffrom);
@@ -344,10 +344,10 @@ int main(int argc, char **argv)
   map<int,SyntheticClient *> syn;//[start_client];
   int nclients = 0;
   for (int i=0; i<start_client; i++) {
-    //if (myrank != start_mds + start_osd + i % client_nodes) continue;
+    //if (mpirank != start_mds + start_osd + i % client_nodes) continue;
     //int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node;
     int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i % client_nodes;
-    if (myrank != node) continue;
+    if (mpirank != node) continue;
     clientlist.insert(i);
     client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)),
 			   monmap, 
@@ -365,11 +365,11 @@ int main(int argc, char **argv)
        it++) {
     int i = *it;
 
-    //cerr << "starting synthetic client" << i << " on rank " << myrank << std::endl;
+    //cerr << "starting synthetic client" << i << " on rank " << mpirank << std::endl;
     syn[i]->start_thread();
   }
   if (nclients) {
-    cerr << nclients << " clients at " << rank.my_addr << " " << hostname << "." << pid << std::endl;
+    cerr << nclients << " clients at " << rank.rank_addr << " " << hostname << "." << pid << std::endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
@@ -384,9 +384,9 @@ int main(int argc, char **argv)
   }
   
 
-  if (myrank && !started) {
+  if (mpirank && !started) {
     //dout(1) << "IDLE" << dendl;
-    cerr << "idle at " << rank.my_addr << " rank " << myrank << " " << hostname << "." << pid << std::endl; 
+    cerr << "idle at " << rank.rank_addr << " mpirank " << mpirank << " " << hostname << "." << pid << std::endl; 
   } 
 
   // wait for everything to finish
@@ -396,7 +396,7 @@ int main(int argc, char **argv)
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
-  sprintf(s, "gmon/%d", myrank);
+  sprintf(s, "gmon/%d", mpirank);
   mkdir(s, 0755);
   chdir(s);
 
@@ -417,15 +417,15 @@ int main(int argc, char **argv)
   */
   /*
   for (int i=0; i<start_mds; i++) {
-    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
+    if (mpirank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
     delete mds[i];
   }
   for (int i=0; i<start_osd; i++) {
-    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
+    if (mpirank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
     delete osd[i];
   }
   for (int i=0; i<start_client; i++) {
-    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
+    if (mpirank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
     delete client[i];
   }
   */

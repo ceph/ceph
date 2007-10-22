@@ -158,23 +158,12 @@ md_config_t g_conf = {
   
   // --- messenger ---
   ms_tcp_nodelay: true,
-  ms_single_dispatch: false,
-  ms_requeue_on_sender_fail: false,
 
   ms_stripe_osds: false,
   ms_skip_rank0: false,
   ms_overlay_clients: false,
 
   ms_die_on_failure: false,
-
-  /*tcp_skip_rank0: false,
-  tcp_overlay_clients: false,  // over osds!
-  tcp_log: false,
-  tcp_serial_marshall: true,
-  tcp_serial_out: false,
-  tcp_multi_out: true,
-  tcp_multi_dispatch: false,  // not fully implemented yet
-  */
 
   // --- mon ---
   mon_tick_interval: 5,
@@ -186,7 +175,7 @@ md_config_t g_conf = {
   mon_accept_timeout: 10.0,    // on leader, if paxos update isn't accepted
   mon_stop_on_last_unmount: false,
   mon_stop_with_last_mds: false,
-  mon_allow_mds_bully: true,   // allow a booting mds to (forcibly) claim an mds #
+  mon_allow_mds_bully: false,   // allow a booting mds to (forcibly) claim an mds # .. FIXME
 
   paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
 
@@ -515,8 +504,6 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--numosd") == 0) 
       g_conf.num_osd = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--ms_single_dispatch") == 0) 
-      g_conf.ms_single_dispatch = atoi(args[++i]);
     else if (strcmp(args[i], "--ms_stripe_osds") == 0)
       g_conf.ms_stripe_osds = true;
     else if (strcmp(args[i], "--ms_skip_rank0") == 0)

@@ -273,8 +273,8 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
   {
     // assign rank
     _myinst.name = me;
-    _myinst.addr.v.port = nranks++;
-    //if (!me.is_mon())
+    _myinst.addr.v.port = 0;
+    _myinst.addr.v.erank = nranks++;
     _myinst.addr.v.nonce = getpid();
 
     // add to directory

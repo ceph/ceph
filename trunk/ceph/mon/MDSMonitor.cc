@@ -112,7 +112,8 @@ bool MDSMonitor::update_from_paxos()
   for (map<int32_t,entity_inst_t>::iterator p = mdsmap.mds_inst.begin();
        p != mdsmap.mds_inst.end();
        ++p) 
-    if (last_beacon.count(p->second.addr) == 0)
+    if (last_beacon.count(p->second.addr) == 0 &&
+	mdsmap.get_state(p->first) != MDSMap::STATE_DNE)
       last_beacon[p->second.addr] = g_clock.now();
   for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
        p != mdsmap.standby.end();
@@ -460,12 +461,6 @@ void MDSMonitor::take_over(entity_addr_t addr, int mds)
   pending_mdsmap.standby.erase(addr);
   pending_mdsmap.standby_for[mds].erase(addr);
   pending_mdsmap.standby_any.erase(addr);
-
-  // send new map to old inst/name
-  entity_inst_t oldinst;
-  oldinst.name = entity_name_t::MDS(-2);
-  oldinst.addr = addr;
-  waiting_for_map.push_back(oldinst);
 }
 
 
@@ -579,6 +574,7 @@ void MDSMonitor::tick()
       switch (pending_mdsmap.get_state(mds)) {
       case MDSMap::STATE_CREATING:
 	newstate = MDSMap::STATE_DNE;	// didn't finish creating
+	last_beacon.erase(addr);
 	break;
 
       case MDSMap::STATE_STARTING:
@@ -648,6 +644,7 @@ void MDSMonitor::do_stop()
       break;
     case MDSMap::STATE_CREATING:
       pending_mdsmap.mds_state[p->first] = MDSMap::STATE_DNE;
+      last_beacon.erase(pending_mdsmap.mds_inst[p->first].addr);
       break;
     case MDSMap::STATE_STARTING:
       pending_mdsmap.mds_state[p->first] = MDSMap::STATE_STOPPED;
