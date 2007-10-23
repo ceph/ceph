@@ -274,10 +274,10 @@ int crush_do_rule(struct crush_map *map,
 	
 	/* determine hierarchical context of forcefeed, if any */
 	if (forcefeed >= 0) {
-	  if (map->device_parents[forcefeed] == 0) {
-	    printf("CRUSH: forcefed device dne\n");
-	    return -1;  /* force fed device dne */
-	  }
+		if (map->device_parents[forcefeed] == 0) {
+			/*printf("CRUSH: forcefed device dne\n");*/
+			return -1;  /* force fed device dne */
+		}
 		while (1) {
 			force_stack[++force_pos] = forcefeed;
 			/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
