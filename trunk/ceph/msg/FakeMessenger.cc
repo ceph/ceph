@@ -48,9 +48,9 @@ using namespace __gnu_cxx;
 
 // global queue.
 
-int nranks = 0;  // this identify each entity_inst_t
+int num_entity;
+vector<FakeMessenger*> directory;
 
-map<entity_addr_t, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
@@ -77,7 +77,7 @@ void *fakemessenger_thread(void *ptr)
     if (fm_shutdown) break;
     fakemessenger_do_loop_2();
     
-    if (directory.empty() && nranks > 0) break;
+    if (num_entity == 0 && directory.size() > 0) break;
     
     dout(20) << "thread waiting" << dendl;
     if (fm_shutdown) break;
@@ -150,13 +150,12 @@ int fakemessenger_do_loop_2()
 
       dout(0) << "MUST FAKE KILL " << nm << dendl;
       
-      for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
-	   p != directory.end();
-	   ++p) {
-	if (p->second->get_myname() == nm) {
-	  dout(0) << "FAKING FAILURE of " << nm << " at " << p->first << dendl;
-	  directory.erase(p);
-	  p->second->failed = true;
+      for (unsigned i=0; i<directory.size(); i++) {
+	if (directory[i] && directory[i]->get_myname() == nm) {
+	  dout(0) << "FAKING FAILURE of " << nm << " at " << directory[i]->get_myaddr() << dendl;
+	  directory[i]->failed = true;
+	  directory[i] = 0;
+	  num_entity--;
 	  break;
 	}
       }
@@ -170,8 +169,10 @@ int fakemessenger_do_loop_2()
       Message *m = *p;
       FakeMessenger *mgr = 0;
       Dispatcher *dis = 0;
-      if (directory.count(m->get_source_addr())) {
-	mgr = directory[m->get_source_addr()];
+
+      unsigned drank = m->get_source_addr().v.erank;
+      if (drank < directory.size() && directory[drank]) {
+	mgr = directory[drank];
 	if (mgr) 
 	  dis = mgr->get_dispatcher();
       }
@@ -189,20 +190,18 @@ int fakemessenger_do_loop_2()
     }
 
     // messages
-    map<entity_addr_t, FakeMessenger*>::iterator it = directory.begin();
-    while (it != directory.end()) {
-      FakeMessenger *mgr = it->second;
+    for (unsigned i=0; i<directory.size(); i++) {
+      FakeMessenger *mgr = directory[i];
+      if (!mgr) continue;
 
       dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has " << mgr->num_incoming() << " queued" << dendl;
 
       if (!mgr->is_ready()) {
         dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has no dispatcher, skipping" << dendl;
-        it++;
         continue;
       }
 
       Message *m = mgr->get_message();
-      it++;
       
       if (m) {
 	m->set_recv_stamp(g_clock.now());
@@ -211,7 +210,7 @@ int fakemessenger_do_loop_2()
         dout(1) << "==== " << m->get_dest() 
 		<< " <- " << m->get_source()
                 << " ==== " << *m 
-		<< " ---- " << m
+		<< " ---- " << m 
                 << dendl;
         
         if (g_conf.fakemessenger_serialize) {
@@ -244,9 +243,11 @@ int fakemessenger_do_loop_2()
            it != shutdown_set.end();
            it++) {
         dout(7) << "fakemessenger: removing " << *it << " from directory" << dendl;
-        assert(directory.count(*it));
-        directory.erase(*it);
-        if (directory.empty()) {
+	int r = it->v.erank;
+        assert(directory[r]);
+        directory[r] = 0;
+	num_entity--;
+        if (num_entity == 0) {
           dout(1) << "fakemessenger: last shutdown" << dendl;
           ::fm_shutdown = true;
         }
@@ -272,13 +273,17 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
   lock.Lock();
   {
     // assign rank
+    unsigned r = directory.size();
     _myinst.name = me;
     _myinst.addr.v.port = 0;
-    _myinst.addr.v.erank = nranks++;
+    _myinst.addr.v.erank = r;
     _myinst.addr.v.nonce = getpid();
 
     // add to directory
-    directory[ _myinst.addr ] = this;
+    directory.push_back(this);
+    assert(directory.size() == r+1);
+
+    num_entity++;
     
     // put myself in the fail queue?
     if (g_fake_kill_after.count(me)) {
@@ -323,7 +328,7 @@ int FakeMessenger::shutdown()
 {
   dout(2) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
   lock.Lock();
-  assert(directory.count(_myinst.addr) == 1);
+  assert(directory[_myinst.addr.v.erank] == this);
   shutdown_set.insert(_myinst.addr);
   
   /*
@@ -343,9 +348,7 @@ void FakeMessenger::reset_myname(entity_name_t m)
   dout(1) << "reset_myname from " << get_myname() << " to " << m << dendl;
   _set_myname(m);
 
-  directory.erase(_myinst.addr);
   _myinst.name = m;
-  directory[_myinst.addr] = this;
   
   // put myself in the fail queue?
   if (g_fake_kill_after.count(m)) {
@@ -383,20 +386,16 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
 #endif
 
   // queue
-  if (directory.count(inst.addr) &&
+  unsigned drank = inst.addr.v.erank;
+  if (drank < directory.size() && directory[drank] &&
       shutdown_set.count(inst.addr) == 0) {
     dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << " -- " << m
 	    << dendl;
-    directory[inst.addr]->queue_incoming(m);
+    directory[drank]->queue_incoming(m);
   } else {
     dout(0) << "--> " << get_myname() << " -> " << inst.name << " " << *m << " -- " << m
 	    << " *** destination " << inst.addr << " DNE ***" 
 	    << dendl;
-    for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
-	 p != directory.end();
-	 ++p) {
-      dout(20) << "** have " << p->first << " to " << p->second << dendl;
-    }
 
     // do the failure callback
     sent_to_failed_queue.push_back(m);
