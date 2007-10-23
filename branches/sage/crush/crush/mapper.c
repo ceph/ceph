@@ -200,7 +200,7 @@ static int crush_choose(struct crush_map *map,
 				
 				/* keep going? */
 				if (itemtype != type) {
-					BUG_ON((-1-item) >= map->max_buckets);
+					BUG_ON(item >= 0 || (-1-item) >= map->max_buckets);
 					in = map->buckets[-1-item];
 					continue;
 				}
@@ -274,8 +274,13 @@ int crush_do_rule(struct crush_map *map,
 	
 	/* determine hierarchical context of forcefeed, if any */
 	if (forcefeed >= 0) {
+	  if (map->device_parents[forcefeed] == 0) {
+	    printf("CRUSH: forcefed device dne\n");
+	    return -1;  /* force fed device dne */
+	  }
 		while (1) {
 			force_stack[++force_pos] = forcefeed;
+			/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
 			if (forcefeed >= 0)
 				forcefeed = map->device_parents[forcefeed];
 			else
