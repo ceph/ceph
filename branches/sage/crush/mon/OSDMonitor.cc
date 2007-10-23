@@ -168,8 +168,6 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
 
   if (g_conf.num_osd >= 12) {
     int ndom = g_conf.osd_max_rep;
-    crush_bucket_uniform *domain[ndom];
-
     int ritems[ndom];
     int rweights[ndom];
 
@@ -182,28 +180,29 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       //int w[nper];
       int j;
       rweights[i] = 0;
-      for (j=0; j<nper; j++) {
+      for (j=0; j<nper; j++, o++) {
+	if (o == g_conf.num_osd) break;
+	dout(20) << "added osd" << o << dendl;
 	items[j] = o;
 	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
-	i++;
 	//rweights[i] += w[j];
-	if (i == g_conf.num_osd) break;
+	rweights[i] += 0x10000;
       }
 
-      rweights[i] = 0x10000 * j;
-      domain[i] = crush_make_uniform_bucket(1, j, items, 0x10000);
-      ritems[i] = crush_add_bucket(crush.map, (crush_bucket*)domain[i]);
+      crush_bucket_uniform *domain = crush_make_uniform_bucket(1, j, items, 0x10000);
+      ritems[i] = crush_add_bucket(crush.map, (crush_bucket*)domain);
+      dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
     }
     
     // root
     crush_bucket_list *root = crush_make_list_bucket(2, ndom, ritems, rweights);
-    int nroot = crush_add_bucket(crush.map, (crush_bucket*)root);
+    int rootid = crush_add_bucket(crush.map, (crush_bucket*)root);
     
     // rules
     // replication
     for (int i=1; i<=ndom; i++) {
       crush_rule *rule = crush_make_rule();
-      crush_rule_add_step(rule, CRUSH_RULE_TAKE, nroot, 0);
+      crush_rule_add_step(rule, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
       crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
       crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
@@ -260,6 +259,9 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     */
   }
   crush.finalize();
+  dout(20) << "crush max_devices " << crush.map->max_devices << dendl;
+  //vector<int> t;
+  //crush.do_rule(2, 132, t, 4, -1);
 }
 
 
