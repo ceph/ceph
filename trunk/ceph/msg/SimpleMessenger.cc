@@ -972,7 +972,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   msgr->my_addr = rank_addr;
   msgr->my_addr.v.erank = erank;
 
-  dout(0) << "register_entity " << name << " at " << msgr->my_addr << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->my_addr << dendl;
 
   num_local++;
   

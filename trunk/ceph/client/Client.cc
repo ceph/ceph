@@ -974,6 +974,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
     assert(m->get_source().is_mon());
     whoami = m->get_dest().num();
+    messenger->reset_myname(entity_name_t::CLIENT(whoami));
     dout(1) << "handle_mds_map i am now " << m->get_dest() << dendl;
     
     mount_cond.Signal();  // mount might be waiting for this.
