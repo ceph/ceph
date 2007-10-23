@@ -43,7 +43,7 @@ private:
 
   map<int,double> osd_weight;
 
-  void build_crush_map(Crush& crush,
+  void build_crush_map(CrushWrapper& crush,
 		       map<int,double>& weights);
 
   // svc

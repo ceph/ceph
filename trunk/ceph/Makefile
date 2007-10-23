@@ -16,7 +16,7 @@
 EXTRA_CFLAGS = #-I${HOME}/include -L${HOME}/lib
 EXTRA_CFLAGS += -g
 EXTRA_CFLAGS += -pg
-EXTRA_CFLAGS += -O3
+#EXTRA_CFLAGS += -O3
 
 # base
 CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
@@ -145,22 +145,22 @@ mkmonmap: mkmonmap.cc common.o
 extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.o mon.o msg/SimpleMessenger.o common.o
+cmon: cmon.o mon.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o
+cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o
+cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o
+csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o
+cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -191,15 +191,15 @@ ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
 
 
 # fake*
-fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o
+fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crush/libcrush.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
@@ -243,6 +243,14 @@ gprof-helper.so: test/gprof-helper.c
 test_disk_bw: test/test_disk_bw.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
+# crush
+
+crush/libcrush.o: force_look
+	cd crush ; make
+
+force_look:
+	true
+
 # bits
 common.o: ${COMMON_OBJS}
 	${LDINC} $@ $^
@@ -267,7 +275,6 @@ mon.o: ${MON_OBJS}
 
 osbdb.o: ${OSBDB_OBJS}
 	${LDINC} $@ $^
-
 
 # generic rules
 %.so: %.cc

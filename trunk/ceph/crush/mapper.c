@@ -2,6 +2,129 @@
 #include "crush.h"
 #include "hash.h"
 
+#include <string.h>
+#include <stdio.h>
+
+/** bucket choose methods **/
+
+/* uniform */
+
+static int 
+crush_bucket_uniform_choose(struct crush_bucket_uniform *bucket, int x, int r)
+{
+	unsigned o, p, s;
+	o = crush_hash32_2(x, bucket->h.id) & 0xffff;
+	p = bucket->primes[crush_hash32_2(bucket->h.id, x) % bucket->h.size];
+	s = (x + o + (r+1)*p) % bucket->h.size;
+	/*printf("%d %d %d %d\n", x, o, r, p);*/
+	return bucket->h.items[s];
+}
+
+
+/* list */
+
+static int 
+crush_bucket_list_choose(struct crush_bucket_list *bucket, int x, int r)
+{
+	int i;
+	__u64 w;
+	
+	for (i=0; i<bucket->h.size; i++) {
+		w = crush_hash32_4(x, bucket->h.items[i], r, bucket->h.id);
+		w &= 0xffff;
+		/*printf("%d item %d weight %d sum_weight %d r %lld", 
+		  i, bucket->h.items[i], bucket->item_weights[i], bucket->sum_weights[i], w);*/
+		w *= bucket->sum_weights[i];
+		w = w >> 16;
+		/*printf(" scaled %lld\n", w);*/
+		if (w < bucket->item_weights[i])
+			return bucket->h.items[i];
+	}
+	
+	BUG_ON(1);
+	return 0;
+}
+
+
+/* tree */
+
+static int height(int n) {
+	int h = 0;
+	while ((n & 1) == 0) {
+		h++; 
+		n = n >> 1;
+	}
+	return h;
+}
+static int left(int x) {
+	int h = height(x);
+	return x - (1 << (h-1));
+}
+static int right(int x) {
+	int h = height(x);
+	return x + (1 << (h-1));
+}
+static int terminal(int x) {
+	return x & 1;
+}
+
+static int 
+crush_bucket_tree_choose(struct crush_bucket_tree *bucket, int x, int r)
+{
+	int n, l;
+	__u32 w;
+	__u64 t;
+
+	/* start at root */
+	n = bucket->h.size >> 1;
+
+	while (!terminal(n)) {
+		/* pick point in [0, w) */
+		w = bucket->node_weights[n];
+		t = (__u64)crush_hash32_4(x, n, r, bucket->h.id) * (__u64)w;
+		t = t >> 32;
+		
+		/* left or right? */
+		l = left(n);
+		if (t < bucket->node_weights[l])
+			n = l;
+		else
+			n = right(n);
+	}
+
+	return bucket->h.items[n];
+}
+
+
+/* straw */
+
+static int 
+crush_bucket_straw_choose(struct crush_bucket_straw *bucket, int x, int r)
+{
+	int i;
+	int high = 0;
+	__u64 high_draw = 0;
+	__u64 draw;
+	
+	for (i=0; i<bucket->h.size; i++) {
+		draw = crush_hash32_3(x, bucket->h.items[i], r);
+		draw &= 0xffff;
+		draw *= bucket->straws[i];
+		if (i == 0 || draw > high_draw) {
+			high = i;
+			high_draw = draw;
+		}
+	}
+	
+	return bucket->h.items[high];
+}
+
+
+
+
+/** crush proper **/
+
+
 /*
  * choose numrep distinct items of given type
  */
@@ -12,7 +135,7 @@ static int crush_choose(struct crush_map *map,
 {
 	int rep;
 	int ftotal, flocal;
-	int retry_rep, skip_rep;
+	int retry_descent, retry_bucket, skip_rep;
 	struct crush_bucket *in = bucket;
 	int r;
 	int i;
@@ -22,32 +145,28 @@ static int crush_choose(struct crush_map *map,
 	int collide, bad;
 	
 	outpos = 0;
-	
+
 	for (rep = 0; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
 		skip_rep = 0;
-		
-		while (1) {
+		do {
+			retry_descent = 0;
 			in = bucket;               /* initial bucket */
 			
 			/* choose through intervening buckets */
 			flocal = 0;
-			retry_rep = 0;
-			
-			while (1) {
+			do {
+				retry_bucket = 0;
 				r = rep;
-				if (in->type == CRUSH_BUCKET_UNIFORM) {
+				if (in->bucket_type == CRUSH_BUCKET_UNIFORM) {
 					/* be careful */
-					if (firstn || numrep >= in->size) {
+					if (firstn || numrep >= in->size) 
 						r += ftotal;           /* r' = r + f_total */
-					} else {
-						r += numrep * flocal;  /* r' = r + n*f_local */
-						/* make sure numrep is not a multiple of bucket size */
-						if (in->size % numrep == 0)
-							/* shift seq once per pass through the bucket */
-							r += numrep * flocal / in->size;  
-					}
+					else if (in->size % numrep == 0)
+						r += (numrep+1) * flocal; /* r'=r+(n+1)*f_local */
+					else
+						r += numrep * flocal; /* r' = r + n*f_local */						
 				} else {
 					if (firstn) 
 						r += ftotal;           /* r' = r + f_total */
@@ -56,7 +175,7 @@ static int crush_choose(struct crush_map *map,
 				}
 
 				/* bucket choose */
-				switch (in->type) {
+				switch (in->bucket_type) {
 				case CRUSH_BUCKET_UNIFORM:
 					item = crush_bucket_uniform_choose((struct crush_bucket_uniform*)in, x, r);
 					break;
@@ -75,13 +194,14 @@ static int crush_choose(struct crush_map *map,
 				
 				/* desired type? */
 				if (item < 0) 
-					itemtype = map->buckets[-item]->type;
+					itemtype = map->buckets[-1-item]->type;
 				else 
 					itemtype = 0;
 				
 				/* keep going? */
 				if (itemtype != type) {
-					in = map->buckets[-item];
+					BUG_ON(item >= 0 || (-1-item) >= map->max_buckets);
+					in = map->buckets[-1-item];
 					continue;
 				}
 				
@@ -108,22 +228,17 @@ static int crush_choose(struct crush_map *map,
 					flocal++;
 					
 					if (collide && flocal < 3) 
-						continue;   /* locally a few times */
-					if (ftotal >= 10) {
-						/* give up, ignore dup, fixme */
-						skip_rep = 1;
-						break;
-					}
-					retry_rep = 1;
+						retry_bucket = 1;  /* retry locally a few times */
+					else if (ftotal < 10)
+						retry_descent = 1; /* then retry descent */
+					else
+						skip_rep = 1; 	   /* else give up */
 				}
-				break;
-			}
-			
-			if (retry_rep) continue;
-		}
+			} while (retry_bucket);
+		} while (retry_descent);
 		
 		if (skip_rep) continue;
-		
+
 		out[outpos] = item;
 		outpos++;
 	}
@@ -159,12 +274,17 @@ int crush_do_rule(struct crush_map *map,
 	
 	/* determine hierarchical context of forcefeed, if any */
 	if (forcefeed >= 0) {
+		if (map->device_parents[forcefeed] == 0) {
+			/*printf("CRUSH: forcefed device dne\n");*/
+			return -1;  /* force fed device dne */
+		}
 		while (1) {
 			force_stack[++force_pos] = forcefeed;
+			/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
 			if (forcefeed >= 0)
 				forcefeed = map->device_parents[forcefeed];
 			else
-				forcefeed = map->bucket_parents[-forcefeed];
+				forcefeed = map->bucket_parents[-1-forcefeed];
 			if (forcefeed == 0) break;
 		}
 	}
@@ -191,23 +311,22 @@ int crush_do_rule(struct crush_map *map,
 			
 			for (i = 0; i < wsize; i++) {
 				numrep = rule->steps[step].arg1;
-				
 				if (force_pos >= 0) {
 					o[osize++] = force_stack[force_pos];
 					force_pos--;
 					numrep--;
 				}
-				if (numrep)
-					crush_choose(map,
-						     map->buckets[-w[i]],
-						     x, numrep, rule->steps[step].arg2,
-						     o+osize, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
+				if (!numrep) continue;
+				osize += crush_choose(map,
+						      map->buckets[-1-w[i]],
+						      x, numrep, rule->steps[step].arg2,
+						      o+osize, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
 			}
 			
 			/* swap t and w arrays */
 			tmp = o;
 			o = w;
-			w = o;
+			w = tmp;
 			wsize = osize;
 			break;      
 			
@@ -228,4 +347,5 @@ int crush_do_rule(struct crush_map *map,
 	
 	return result_len;
 }
+
 

@@ -1,11 +1,12 @@
 
 CC = gcc
 CFLAGS = -Wall
-CFLAGS += -O3 -g
+CFLAGS += -g
+CFLAGS += -O3
 LD = ld
 RM = rm
 
-all: depend builder.o libcrush.o
+all: depend libcrush.o test
 
 clean:
 	rm -f *.o libcrush.o
@@ -13,8 +14,11 @@ clean:
 %.o: %.c
 	${CC} ${CFLAGS} -c $< -o $@
 
-libcrush.o: crush.o buckets.o
+libcrush.o: builder.o crush.o mapper.o
 	$(LD) -i -o $@ $^
+
+test: test.c libcrush.o
+	$(CC) ${CFLAGS} -lm $^ -o $@
 
 .depend:
 	touch .depend
