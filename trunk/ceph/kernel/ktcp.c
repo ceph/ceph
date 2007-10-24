@@ -6,23 +6,24 @@
 #include "ktcp.h"
 
 
-int  _kconnect(struct sockaddr *saddr, struct socket **sd)
+struct socket * _kconnect(struct sockaddr *saddr)
 {
 	int ret;
+	struct socket *sd = NULL;
 
-	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, sd);
+	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
         if (ret < 0) {
 		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
 	} else {
 	/* or could call kernel_connect(), opted to reduce call overhead */
-		ret = (*sd)->ops->connect(*sd, (struct sockaddr *) saddr,
+		ret = sd->ops->connect(sd, (struct sockaddr *) saddr,
 					  sizeof (struct sockaddr_in),0);
         	if (ret < 0) {
 			printk(KERN_INFO "kernel_connect error: %d\n", ret);
-			sock_release(*sd);
+			sock_release(sd);
 		}
 	}
-	return(ret);
+	return(sd);
 }
 
 struct socket * _klisten(struct sockaddr *saddr)
