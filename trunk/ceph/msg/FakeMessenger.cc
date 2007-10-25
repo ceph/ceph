@@ -361,15 +361,14 @@ void FakeMessenger::reset_myname(entity_name_t m)
 }
 
 
-int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fromport)
+int FakeMessenger::send_message(Message *m, entity_inst_t inst)
 {
   entity_name_t dest = inst.name;
   
-  m->set_source(get_myname(), fromport);
+  m->set_source(get_myname());
   m->set_source_addr(get_myaddr());
 
   m->set_dest_inst(inst);
-  m->set_dest_port(port);
 
   lock.Lock();
 

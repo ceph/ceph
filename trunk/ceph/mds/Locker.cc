@@ -90,7 +90,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg)
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
-    mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
+    mds->send_message_mds(m, it->first);
   }
 }
 
@@ -103,7 +103,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
     m->set_data(data);
-    mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
+    mds->send_message_mds(m, it->first);
   }
 }
 
@@ -238,7 +238,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	(*q)->set_object_info(info);
 	req->get_authpins().push_back(info);      
       }
-      mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
+      mds->send_message_mds(req, p->first);
 
       // put in waiting list
       assert(mdr->more()->waiting_on_slave.count(p->first) == 0);
@@ -625,7 +625,7 @@ void Locker::request_inode_file_caps(CInode *in)
     if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
       mds->send_message_mds(new MInodeFileCaps(in->ino(), mds->get_nodeid(),
 					       in->replica_caps_wanted),
-			    auth, MDS_PORT_LOCKER);
+			    auth);
   } else {
     in->replica_caps_wanted_keep_until.sec_ref() = 0;
   }
@@ -925,8 +925,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     } else {
       // update lock and reply
       lock->set_state(LOCK_LOCK);
-      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
-			    from, MDS_PORT_LOCKER);
+      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), from);
     }
     break;
 
@@ -1007,7 +1006,7 @@ void Locker::simple_eval_gather(SimpleLock *lock)
       int auth = lock->get_parent()->authority().first;
       if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) 
 	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
-			      lock->get_parent()->authority().first, MDS_PORT_LOCKER);
+			      lock->get_parent()->authority().first);
     }
     
     lock->set_state(LOCK_LOCK);
@@ -1200,7 +1199,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
-    mds->send_message_mds(r, auth, MDS_PORT_SERVER);
+    mds->send_message_mds(r, auth);
     
     // wait
     lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mdr));
@@ -1229,7 +1228,7 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
       MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNXLOCK);
       slavereq->set_lock_type(lock->get_type());
       lock->get_parent()->set_object_info(slavereq->get_object_info());
-      mds->send_message_mds(slavereq, auth, MDS_PORT_SERVER);
+      mds->send_message_mds(slavereq, auth);
     }
   }
 
@@ -1389,8 +1388,7 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
       int auth = lock->get_parent()->authority().first;
       dout(10) << "requesting scatter from auth on " 
 	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()),
-			    auth, MDS_PORT_LOCKER);
+      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
     }
   }
 
@@ -1467,8 +1465,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
       if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
 	bufferlist data;
 	lock->encode_locked_state(data);
-	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data),
-			      auth, MDS_PORT_LOCKER);
+	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data), auth);
       }
       lock->set_state(LOCK_LOCK);
     }
@@ -1638,8 +1635,7 @@ void Locker::scatter_try_unscatter(ScatterLock *lock, Context *c)
   int auth = lock->get_parent()->authority().first;
   if (lock->get_state() == LOCK_SCATTER &&
       mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) 
-    mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()),
-			  auth, MDS_PORT_LOCKER);
+    mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()), auth);
   
   // wait...
   lock->add_waiter(SimpleLock::WAIT_STABLE, c);
@@ -1895,8 +1891,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
       // encode and reply
       bufferlist data;
       lock->encode_locked_state(data);
-      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data),
-			    from, MDS_PORT_LOCKER);
+      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data), from);
       lock->set_state(LOCK_LOCK);
     }
     break;
@@ -2374,7 +2369,7 @@ void Locker::file_eval_gather(FileLock *lock)
 	
 	// ack
 	MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
-	mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
+	mds->send_message_mds(reply, in->authority().first);
       }
       break;
 
@@ -2384,7 +2379,7 @@ void Locker::file_eval_gather(FileLock *lock)
         
         // ack
         MLock *reply = new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid());
-        mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
+        mds->send_message_mds(reply, in->authority().first);
       }
       break;
 
@@ -2793,7 +2788,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
       lock->set_state(LOCK_LOCK);
       
       MLock *reply = new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid());
-      mds->send_message_mds(reply, from, MDS_PORT_LOCKER);
+      mds->send_message_mds(reply, from);
     }
     break;
     
@@ -2814,7 +2809,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
 
         // ack
         MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
-        mds->send_message_mds(reply, from, MDS_PORT_LOCKER);
+        mds->send_message_mds(reply, from);
       }
     } else {
       // LOCK

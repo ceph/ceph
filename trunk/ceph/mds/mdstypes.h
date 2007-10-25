@@ -21,16 +21,11 @@ using namespace std;
 
 #define MDS_REF_SET    // define me for improved debug output, sanity checking
 
-#define MDS_PORT_MAIN     0
-#define MDS_PORT_SERVER   1
-#define MDS_PORT_CACHE    2
-#define MDS_PORT_LOCKER   3
-#define MDS_PORT_STORE    4
-#define MDS_PORT_BALANCER 5
-#define MDS_PORT_MIGRATOR 6
-#define MDS_PORT_RENAMER  7
-#define MDS_PORT_ANCHORCLIENT 10
-#define MDS_PORT_ANCHORTABLE  11
+
+#define MDS_PORT_CACHE   0x200
+#define MDS_PORT_LOCKER  0x300
+#define MDS_PORT_MIGRATOR 0x400
+
 
 #define MAX_MDS                   0x100
 

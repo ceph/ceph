@@ -179,7 +179,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
-	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 	
       case EXPORT_FREEZING:
@@ -188,7 +188,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
-	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir], MDS_PORT_MIGRATOR);
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 
 	// NOTE: state order reversal, warning comes after loggingstart+prepping
@@ -573,7 +573,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   dir->state_set(CDir::STATE_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirDiscover(dir), dest);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin();
@@ -704,7 +704,7 @@ void Migrator::export_frozen(CDir *dir)
 
   // send.
   export_state[dir] = EXPORT_PREPPING;
-  mds->send_message_mds(prep, dest, MDS_PORT_MIGRATOR);
+  mds->send_message_mds(prep, dest);
 }
 
 void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
@@ -744,7 +744,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 						    pair<int,int>(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    pair<int,int>(mds->get_nodeid(),export_peer[dir]));
     notify->copy_bounds(bounds);
-    mds->send_message_mds(notify, p->first, MDS_PORT_MIGRATOR);
+    mds->send_message_mds(notify, p->first);
     
   }
   export_state[dir] = EXPORT_WARNING;
@@ -803,7 +803,7 @@ void Migrator::export_go(CDir *dir)
     req->add_export((*p)->dirfrag());
 
   // send
-  mds->send_message_mds(req, dest, MDS_PORT_MIGRATOR);
+  mds->send_message_mds(req, dest);
 
   // stats
   if (mds->logger) mds->logger->inc("ex");
@@ -1167,7 +1167,7 @@ void Migrator::export_logged_finish(CDir *dir)
 
     notify->copy_bounds(bounds);
     
-    mds->send_message_mds(notify, *p, MDS_PORT_MIGRATOR);
+    mds->send_message_mds(notify, *p);
   }
 
   // wait for notifyacks
@@ -1242,8 +1242,7 @@ void Migrator::export_finish(CDir *dir)
 
   // send finish/commit to new auth
   if (mds->mdsmap->is_active_or_stopping(export_peer[dir])) {
-    mds->send_message_mds(new MExportDirFinish(dir->dirfrag()), 
-			  export_peer[dir], MDS_PORT_MIGRATOR);
+    mds->send_message_mds(new MExportDirFinish(dir->dirfrag()), export_peer[dir]);
   } else {
     dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;
   }
@@ -1364,8 +1363,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
 
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
-  mds->send_message_mds(new MExportDirDiscoverAck(df),
-			import_peer[df], MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirDiscoverAck(df), import_peer[df]);
 }
 
 void Migrator::handle_export_cancel(MExportDirCancel *m)
@@ -1552,8 +1550,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
-  mds->send_message_mds(new MExportDirPrepAck(dir->dirfrag()),
-			m->get_source().num(), MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirPrepAck(dir->dirfrag()), m->get_source().num());
   
   // note new state
   import_state[dir->dirfrag()] = IMPORT_PREPPED;
@@ -1768,7 +1765,7 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
 			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 			   pair<int,int>(import_peer[dir->dirfrag()], CDIR_AUTH_UNKNOWN));
     notify->copy_bounds(bounds);
-    mds->send_message_mds(notify, *p, MDS_PORT_MIGRATOR);
+    mds->send_message_mds(notify, *p);
   }
 }
 
@@ -1808,8 +1805,7 @@ void Migrator::import_logged_start(CDir *dir, int from)
 
   // send notify's etc.
   dout(7) << "sending ack for " << *dir << " to old auth mds" << from << dendl;
-  mds->send_message_mds(new MExportDirAck(dir->dirfrag()),
-			from, MDS_PORT_MIGRATOR);
+  mds->send_message_mds(new MExportDirAck(dir->dirfrag()), from);
 
   cache->show_subtrees();
 }
@@ -2090,8 +2086,7 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
   
   // send ack
   if (m->wants_ack()) {
-    mds->send_message_mds(new MExportDirNotifyAck(m->get_dirfrag()),
-			  from, MDS_PORT_MIGRATOR);
+    mds->send_message_mds(new MExportDirNotifyAck(m->get_dirfrag()), from);
   } else {
     // aborted.  no ack.
     dout(7) << "handle_export_notify no ack requested" << dendl;

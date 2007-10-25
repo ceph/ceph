@@ -218,8 +218,8 @@ class MDS : public Dispatcher {
   MDSMap *get_mds_map() { return mdsmap; }
   OSDMap *get_osd_map() { return osdmap; }
 
-  void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
-  void forward_message_mds(Message *req, int mds, int port=0);
+  void send_message_mds(Message *m, int mds);
+  void forward_message_mds(Message *req, int mds);
 
   void send_message_client(Message *m, int client);
   void send_message_client(Message *m, entity_inst_t clientinst);

@@ -210,8 +210,7 @@ void MDBalancer::send_heartbeat()
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->messenger->send_message(hb,
-                                 mds->mdsmap->get_inst(*p),
-				 MDS_PORT_BALANCER, MDS_PORT_BALANCER);
+                                 mds->mdsmap->get_inst(*p));
   }
 }
 

@@ -691,7 +691,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << dendl;
 	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),
-				mdsmap->get_inst(mds), MDS_PORT_SERVER);
+				mdsmap->get_inst(mds));
       }
       
       // wait
@@ -803,7 +803,7 @@ void Client::send_request(MetaRequest *request, int mds)
   request->request = 0;
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
-  messenger->send_message(r, mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  messenger->send_message(r, mdsmap->get_inst(mds));
   
   request->mds.insert(mds);
 }
@@ -1051,7 +1051,7 @@ void Client::send_reconnect(int mds)
     m->closed = true;
   }
 
-  messenger->send_message(m, mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
 
@@ -1198,7 +1198,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << dendl;
     m->set_caps(0);
     m->set_wanted(0);
-    messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
+    messenger->send_message(m, m->get_source_inst());
     return;
   }
 
@@ -1308,7 +1308,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
     in->file_wr_size = 0;
   }
 
-  messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
+  messenger->send_message(m, m->get_source_inst());
 }
 
 
@@ -1334,7 +1334,7 @@ void Client::release_caps(Inode *in,
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
-      messenger->send_message(m, mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+      messenger->send_message(m, mdsmap->get_inst(it->first));
     }
   }
   
@@ -1359,8 +1359,7 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.seq,
                                              it->second.caps,
                                              in->file_caps_wanted());
-    messenger->send_message(m,
-                            mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+    messenger->send_message(m, mdsmap->get_inst(it->first));
   }
 }
 
@@ -1374,9 +1373,9 @@ void Client::_try_mount()
   dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
   dout(2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
-  messenger->send_first_message(this,  // simultaneously go active (if we haven't already)
-				new MClientMount(messenger->get_myaddr(), my_instance),
-				monmap->get_inst(mon));
+  messenger->set_dispatcher(this);
+  messenger->send_message(new MClientMount(messenger->get_myaddr(), my_instance),
+			  monmap->get_inst(mon));
 
   // schedule timeout?
   assert(mount_timeout_event == 0);
@@ -1528,7 +1527,7 @@ int Client::unmount()
     dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
     messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_CLOSE,
 					       p->second),
-			    mdsmap->get_inst(p->first), MDS_PORT_SERVER);
+			    mdsmap->get_inst(p->first));
   }
 
   // send unmount!

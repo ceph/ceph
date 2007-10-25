@@ -49,7 +49,6 @@
 #define MSG_OSD_MAP          44
 
 #define MSG_OSD_BOOT         45
-#define MSG_OSD_MKFS_ACK     46
 
 #define MSG_OSD_FAILURE      47
 
@@ -77,64 +76,58 @@
 #define MSG_CLIENT_REQUEST         80
 #define MSG_CLIENT_REQUEST_FORWARD 81
 #define MSG_CLIENT_REPLY           82
-#define MSG_CLIENT_FILECAPS        83
+#define MSG_CLIENT_FILECAPS        0x310  // 
 
 
 
 // *** MDS ***
 
+
+#define MSG_MDS_RESOLVE            0x200
+#define MSG_MDS_RESOLVEACK         0x201
+#define MSG_MDS_CACHEREJOIN        0x202
+#define MSG_MDS_DISCOVER           0x203
+#define MSG_MDS_DISCOVERREPLY      0x204
+#define MSG_MDS_INODEUPDATE  0x205
+#define MSG_MDS_DIRUPDATE    0x206
+#define MSG_MDS_CACHEEXPIRE  0x207
+#define MSG_MDS_DENTRYUNLINK      0x208
+#define MSG_MDS_FRAGMENTNOTIFY 0x209
+
+#define MSG_MDS_LOCK             0x300
+#define MSG_MDS_INODEFILECAPS    0x301
+
+#define MSG_MDS_EXPORTDIRDISCOVER     0x449
+#define MSG_MDS_EXPORTDIRDISCOVERACK  0x450
+#define MSG_MDS_EXPORTDIRCANCEL       0x451
+#define MSG_MDS_EXPORTDIRPREP         0x452
+#define MSG_MDS_EXPORTDIRPREPACK      0x453
+#define MSG_MDS_EXPORTDIRWARNING      0x454
+#define MSG_MDS_EXPORTDIRWARNINGACK   0x455
+#define MSG_MDS_EXPORTDIR             0x456
+#define MSG_MDS_EXPORTDIRACK          0x457
+#define MSG_MDS_EXPORTDIRNOTIFY       0x458
+#define MSG_MDS_EXPORTDIRNOTIFYACK    0x459
+#define MSG_MDS_EXPORTDIRFINISH       0x460
+
+
 #define MSG_MDS_GETMAP             102
 #define MSG_MDS_MAP                103
-#define MSG_MDS_HEARTBEAT          104  // for mds load balancer
 #define MSG_MDS_BEACON             105  // to monitor
 
-#define MSG_MDS_RESOLVE            106
-#define MSG_MDS_RESOLVEACK         107
-
-#define MSG_MDS_CACHEREJOIN        108
-
-#define MSG_MDS_DISCOVER           110
-#define MSG_MDS_DISCOVERREPLY      111
-
-#define MSG_MDS_INODEGETREPLICA    112
-#define MSG_MDS_INODEGETREPLICAACK 113
-
-#define MSG_MDS_INODEFILECAPS      115
-
-#define MSG_MDS_INODEUPDATE  120
-#define MSG_MDS_DIRUPDATE    121
-#define MSG_MDS_INODEEXPIRE  122
-#define MSG_MDS_DIREXPIRE    123
-
-#define MSG_MDS_DIREXPIREREQ 124
-
-#define MSG_MDS_CACHEEXPIRE  125
-
-#define MSG_MDS_ANCHOR 130
-
-#define MSG_MDS_FRAGMENTNOTIFY 140
-
-#define MSG_MDS_EXPORTDIRDISCOVER     149
-#define MSG_MDS_EXPORTDIRDISCOVERACK  150
-#define MSG_MDS_EXPORTDIRCANCEL       151
-#define MSG_MDS_EXPORTDIRPREP         152
-#define MSG_MDS_EXPORTDIRPREPACK      153
-#define MSG_MDS_EXPORTDIRWARNING      154
-#define MSG_MDS_EXPORTDIRWARNINGACK   155
-#define MSG_MDS_EXPORTDIR             156
-#define MSG_MDS_EXPORTDIRACK          157
-#define MSG_MDS_EXPORTDIRNOTIFY       158
-#define MSG_MDS_EXPORTDIRNOTIFYACK    159
-#define MSG_MDS_EXPORTDIRFINISH       160
+#define MSG_MDS_ANCHOR 0x100
+#define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
 #define MSG_MDS_SLAVE_REQUEST         170
 
-#define MSG_MDS_DENTRYUNLINK      200
+/*
+#define MSG_MDS_INODEGETREPLICA    112
+#define MSG_MDS_INODEGETREPLICAACK 113
 
-#define MSG_MDS_LOCK             500
+#define MSG_MDS_DIREXPIREREQ 124
+*/
 
-#define MSG_MDS_SHUTDOWNSTART  900
-#define MSG_MDS_SHUTDOWNFINISH 901
+
 
 
 #include <stdlib.h>
@@ -174,11 +167,9 @@ public:
 
  public:
   Message() { 
-    env.source_port = env.dest_port = 0;
     env.nchunks = 0;
   };
   Message(int t) {
-    env.source_port = env.dest_port = 0;
     env.nchunks = 0;
     env.type = t;
   }
@@ -225,13 +216,10 @@ public:
   void set_source_inst(entity_inst_t& inst) { env.src = *(ceph_entity_inst*)&inst; }
 
   entity_name_t& get_dest() { return *(entity_name_t*)&env.dst.name; }
-  void set_dest(entity_name_t a, int p) { env.dst.name = *(ceph_entity_name*)&a; env.dest_port = p; }
-  int get_dest_port() { return env.dest_port; }
-  void set_dest_port(int p) { env.dest_port = p; }
+  void set_dest(entity_name_t a) { env.dst.name = *(ceph_entity_name*)&a; }
   
   entity_name_t& get_source() { return *(entity_name_t*)&env.src.name; }
-  void set_source(entity_name_t a, int p) { env.src.name = *(ceph_entity_name*)&a; env.source_port = p; }
-  int get_source_port() { return env.source_port; }
+  void set_source(entity_name_t a) { env.src.name = *(ceph_entity_name*)&a; }
 
   entity_addr_t& get_source_addr() { return *(entity_addr_t*)&env.src.addr; }
   void set_source_addr(const entity_addr_t &i) { env.src.addr = *(ceph_entity_addr*)&i; }

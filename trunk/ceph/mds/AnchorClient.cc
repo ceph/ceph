@@ -92,8 +92,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     else {
       dout(10) << "stray create_agree on " << ino
@@ -102,8 +101,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     break;
 
@@ -126,8 +124,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     else {
       dout(10) << "stray destroy_agree on " << ino
@@ -136,8 +133,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     break;
 
@@ -160,8 +156,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     else {
       dout(10) << "stray update_agree on " << ino
@@ -170,8 +165,7 @@ void AnchorClient::handle_anchor_reply(class MAnchor *m)
 	       << dendl;      
       MAnchor *req = new MAnchor(ANCHOR_OP_ROLLBACK, 0, atid);
       mds->messenger->send_message(req, 
-				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-				   MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+				   mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
     }
     break;
 
@@ -237,8 +231,7 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinis
   pending_lookup[ino].trace = &trace;
 
   mds->send_message_mds(req, 
-			mds->mdsmap->get_anchortable(),
-			MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			mds->mdsmap->get_anchortable());
 }
 
 
@@ -258,8 +251,7 @@ void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace,
   pending_create_prepare[ino].onfinish = onfinish;
 
   mds->send_message_mds(req, 
-			mds->mdsmap->get_anchortable(),
-			MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			mds->mdsmap->get_anchortable());
 }
 
 void AnchorClient::prepare_destroy(inodeno_t ino, 
@@ -272,8 +264,7 @@ void AnchorClient::prepare_destroy(inodeno_t ino,
   pending_destroy_prepare[ino].onfinish = onfinish;
   pending_destroy_prepare[ino].patid = patid;
   mds->messenger->send_message(req, 
-			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			       mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
 }
 
 
@@ -291,8 +282,7 @@ void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace,
   pending_update_prepare[ino].onfinish = onfinish;
   
   mds->messenger->send_message(req, 
-			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			       mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
 }
 
 
@@ -309,8 +299,7 @@ void AnchorClient::commit(version_t atid, LogSegment *ls)
   // send message
   MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, atid);
   mds->messenger->send_message(req, 
-			  mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			       mds->mdsmap->get_inst(mds->mdsmap->get_anchortable()));
 }
 
 
@@ -332,8 +321,7 @@ void AnchorClient::resend_commits()
     dout(10) << "resending commit on " << p->first << dendl;
     MAnchor *req = new MAnchor(ANCHOR_OP_COMMIT, 0, p->first);
     mds->send_message_mds(req, 
-			  mds->mdsmap->get_anchortable(),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			  mds->mdsmap->get_anchortable());
   }
 }
 
@@ -346,8 +334,7 @@ void AnchorClient::resend_prepares(hash_map<inodeno_t, _pending_prepare>& prepar
     MAnchor *req = new MAnchor(op, p->first);
     req->set_trace(p->second.trace);
     mds->send_message_mds(req, 
-			  mds->mdsmap->get_anchortable(),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			  mds->mdsmap->get_anchortable());
   } 
 }
 
@@ -365,8 +352,7 @@ void AnchorClient::handle_mds_recovery(int who)
        p++) {
     dout(10) << "resending lookup on " << p->first << dendl;
     mds->send_message_mds(new MAnchor(ANCHOR_OP_LOOKUP, p->first),
-			  mds->mdsmap->get_anchortable(),
-			  MDS_PORT_ANCHORTABLE, MDS_PORT_ANCHORCLIENT);
+			  mds->mdsmap->get_anchortable());
   }
   
   // resend any pending prepares.

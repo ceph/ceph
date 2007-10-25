@@ -134,7 +134,7 @@ void AnchorTable::handle_lookup(MAnchor *req)
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_LOOKUP_REPLY, req->get_ino());
   reply->set_trace(trace);
-  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+  mds->messenger->send_message(reply, req->get_source_inst());
 
   delete req;
 }
@@ -284,7 +284,7 @@ void AnchorTable::_create_prepare_logged(MAnchor *req, version_t atid)
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, ino, atid);
-  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+  mds->messenger->send_message(reply, req->get_source_inst());
 
   delete req;
 }
@@ -324,7 +324,7 @@ void AnchorTable::_destroy_prepare_logged(MAnchor *req, version_t atid)
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, ino, atid);
-  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+  mds->messenger->send_message(reply, req->get_source_inst());
   delete req;
 }
 
@@ -367,7 +367,7 @@ void AnchorTable::_update_prepare_logged(MAnchor *req, version_t atid)
 
   // reply
   MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, ino, atid);
-  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+  mds->messenger->send_message(reply, req->get_source_inst());
   delete req;
 }
 
@@ -402,7 +402,7 @@ void AnchorTable::handle_commit(MAnchor *req)
 	    << ", already committed, sending ack." 
 	    << dendl;
     MAnchor *reply = new MAnchor(ANCHOR_OP_ACK, 0, atid);
-    mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+    mds->messenger->send_message(reply, req->get_source_inst());
     delete req;
     return;
   } 
@@ -421,7 +421,7 @@ void AnchorTable::_commit_logged(MAnchor *req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
   MAnchor *reply = new MAnchor(ANCHOR_OP_ACK, req->get_ino(), req->get_atid());
-  mds->messenger->send_message(reply, req->get_source_inst(), req->get_source_port());
+  mds->messenger->send_message(reply, req->get_source_inst());
   delete req;
 }
 
@@ -686,16 +686,16 @@ void AnchorTable::resend_agree(version_t v, int who)
 {
   if (pending_create.count(v)) {
     MAnchor *reply = new MAnchor(ANCHOR_OP_CREATE_AGREE, pending_create[v], v);
-    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+    mds->send_message_mds(reply, who);
   }
   else if (pending_destroy.count(v)) {
     MAnchor *reply = new MAnchor(ANCHOR_OP_DESTROY_AGREE, pending_destroy[v], v);
-    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+    mds->send_message_mds(reply, who);
   }
   else {
     assert(pending_update.count(v));
     MAnchor *reply = new MAnchor(ANCHOR_OP_UPDATE_AGREE, pending_update[v].first, v);
-    mds->send_message_mds(reply, who, MDS_PORT_ANCHORCLIENT);
+    mds->send_message_mds(reply, who);
   }
 }
 

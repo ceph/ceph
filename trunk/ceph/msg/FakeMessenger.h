@@ -52,7 +52,7 @@ class FakeMessenger : public Messenger {
   void reset_myname(entity_name_t m);
 
   // msg interface
-  virtual int send_message(Message *m, entity_inst_t dest, int port=0, int fromport=0);
+  int send_message(Message *m, entity_inst_t dest);
   
   // events
   //virtual void trigger_timer(Timer *t);

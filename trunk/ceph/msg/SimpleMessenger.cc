@@ -136,7 +136,7 @@ int Rank::Accepter::start()
   dout(10) << "accepter.start bound to " << listen_addr << dendl;
 
   // listen!
-  rc = ::listen(listen_sd, 1000);
+  rc = ::listen(listen_sd, 128);
   assert(rc >= 0);
   
   // figure out my_addr
@@ -431,8 +431,10 @@ void Rank::Pipe::reader()
       break;
     }
 
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader got message " 
-	     << m << " " << *m
+    in_seq++;
+
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader got message "
+	     << in_seq << " " << m << " " << *m
 	     << " for " << m->get_dest() << dendl;
 
     // deliver
@@ -1210,45 +1212,12 @@ void Rank::EntityMessenger::prepare_dest(const entity_addr_t& addr)
   rank.lock.Unlock();
 }
 
-int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
-					int port, int fromport)
+int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source(get_myname(), fromport);
+  m->set_source(get_myname());
   m->set_source_addr(my_addr);
   m->set_dest_inst(dest);
-  m->set_dest_port(port);
- 
-  dout(1) << m->get_source()
-          << " --> " << dest.name << " " << dest.addr
-          << " -- " << *m
-	  << " -- " << m
-          << dendl;
-
-  rank.submit_message(m, dest.addr);
-
-  return 0;
-}
-
-int Rank::EntityMessenger::send_first_message(Dispatcher *d,
-					      Message *m, entity_inst_t dest,
-					      int port, int fromport)
-{
-  /* hacky thing for csyn and newsyn:
-   * set dispatcher (go active) AND set sender for this 
-   * message while holding rank.lock.  this prevents any
-   * races against incoming unnamed messages naming us before
-   * we fire off our first message.  
-   */
-  rank.lock.Lock();
-  set_dispatcher(d);
-
-  // set envelope
-  m->set_source(get_myname(), fromport);
-  m->set_source_addr(my_addr);
-  m->set_dest_inst(dest);
-  m->set_dest_port(port);
-  rank.lock.Unlock();
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr

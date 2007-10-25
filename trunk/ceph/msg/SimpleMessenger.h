@@ -76,8 +76,12 @@ private:
     bool writer_running;
 
     list<Message*> q;
+    list<Message*> sent;
     Mutex lock;
     Cond cond;
+
+    int out_seq, out_acked;
+    int in_seq;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -111,6 +115,7 @@ private:
 		  done(false), server(true), 
 		  need_to_send_close(true),
 		  reader_running(false), writer_running(false),
+		  out_seq(0), out_acked(0), in_seq(0),
 		  reader_thread(this), writer_thread(this) {
       // server
       reader_running = true;
@@ -228,11 +233,7 @@ private:
     int shutdown();
     void suicide();
     void prepare_dest(const entity_addr_t& addr);
-    int send_message(Message *m, entity_inst_t dest,
-		     int port=0, int fromport=0);
-    int send_first_message(Dispatcher *d,
-			   Message *m, entity_inst_t dest,
-			   int port=0, int fromport=0);
+    int send_message(Message *m, entity_inst_t dest);
     
     void mark_down(entity_addr_t a);
     void mark_up(entity_name_t a, entity_addr_t& i);

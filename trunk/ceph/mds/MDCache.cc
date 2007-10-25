@@ -1093,7 +1093,7 @@ void MDCache::send_resolve_now(int who)
 
 
   // send
-  mds->send_message_mds(m, who, MDS_PORT_CACHE);
+  mds->send_message_mds(m, who);
 }
 
 
@@ -1263,7 +1263,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
       }
     }
 
-    mds->send_message_mds(ack, from, MDS_PORT_CACHE);
+    mds->send_message_mds(ack, from);
   }
 
   // am i a surviving ambiguous importer?
@@ -1773,7 +1773,7 @@ void MDCache::rejoin_send_rejoins()
     assert(rejoin_ack_gather.count(p->first) == 0);
     rejoin_sent.insert(p->first);
     rejoin_ack_gather.insert(p->first);
-    mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
+    mds->send_message_mds(p->second, p->first);
   }
 
   // nothing?
@@ -2065,7 +2065,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   if (survivor) {
     // survivor.  do everything now.
     rejoin_scour_survivor_replicas(from, ack);
-    mds->send_message_mds(ack, from, MDS_PORT_CACHE);
+    mds->send_message_mds(ack, from);
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -2356,7 +2356,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // send missing?
   if (missing) {
     // we expect a FULL soon.
-    mds->send_message_mds(missing, from, MDS_PORT_CACHE);
+    mds->send_message_mds(missing, from);
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -2487,7 +2487,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
   }
 
-  mds->send_message_mds(full, missing->get_source().num(), MDS_PORT_CACHE);
+  mds->send_message_mds(full, missing->get_source().num());
 }
 
 void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
@@ -2658,9 +2658,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      in->client_caps[client].wanted());
   
   reap->set_mds( frommds ); // reap from whom?
-  mds->messenger->send_message(reap, 
-			       mds->clientmap.get_inst(client),
-			       0, MDS_PORT_CACHE);
+  mds->messenger->send_message(reap, mds->clientmap.get_inst(client));
 }
 
 void MDCache::rejoin_send_acks()
@@ -2765,7 +2763,7 @@ void MDCache::rejoin_send_acks()
   for (map<int,MMDSCacheRejoin*>::iterator p = ack.begin();
        p != ack.end();
        ++p) 
-    mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
+    mds->send_message_mds(p->second, p->first);
   
 }
 
@@ -2976,7 +2974,7 @@ void MDCache::send_expire_messages(map<int, MCacheExpire*>& expiremap)
        it != expiremap.end();
        it++) {
     dout(7) << "sending cache_expire to " << it->first << dendl;
-    mds->send_message_mds(it->second, it->first, MDS_PORT_CACHE);
+    mds->send_message_mds(it->second, it->first);
   }
 }
 
@@ -3927,7 +3925,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    reply->add_dentry( dn->replicate_to( from ) );
 	    if (dn->is_primary())
 	      reply->add_inode( dn->inode->replicate_to( from ) );
-	    mds->send_message_mds(reply, req->get_source().num(), MDS_PORT_CACHE);
+	    mds->send_message_mds(reply, req->get_source().num());
 	  }
 	}
       }
@@ -3990,9 +3988,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	}
 	
 	if (mdr) 
-	  request_forward(mdr, dauth.first, req->get_dest_port());
+	  request_forward(mdr, dauth.first);
 	else
-	  mds->forward_message_mds(req, dauth.first, req->get_dest_port());
+	  mds->forward_message_mds(req, dauth.first);
 	
 	if (mds->logger) mds->logger->inc("tfw");
 	return 2;
@@ -4318,10 +4316,9 @@ void MDCache::request_finish(MDRequest *mdr)
 
 void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
-  if (!port) port = MDS_PORT_SERVER;
   dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << dendl;
   
-  mds->forward_message_mds(mdr->client_request, who, port);  
+  mds->forward_message_mds(mdr->client_request, who);  
   request_cleanup(mdr);
 
   if (mds->logger) mds->logger->inc("fw");
@@ -4372,7 +4369,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
        p != mdr->more()->slaves.end();
        ++p) {
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
-    mds->send_message_mds(r, *p, MDS_PORT_SERVER);
+    mds->send_message_mds(r, *p);
   }
   // strip foreign xlocks out of lock lists, since the OP_FINISH drops them implicitly.
   request_forget_foreign_locks(mdr);
@@ -4774,7 +4771,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
 				   want_ino,
 				   want_path,
 				   false);
-    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+    mds->send_message_mds(dis, from);
   }
 
   waiting_for_base_ino[from][want_ino].push_back(onfinish);
@@ -4798,7 +4795,7 @@ void MDCache::discover_dir_frag(CInode *base,
 				   want_path,
 				   true);  // need the base dir open
     dis->set_base_dir_frag(approx_fg);
-    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+    mds->send_message_mds(dis, from);
   }
 
   // register + wait
@@ -4831,7 +4828,7 @@ void MDCache::discover_path(CInode *base,
 				   want_path,
 				   true,        // we want the base dir; we are relative to ino.
 				   want_xlocked);
-    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+    mds->send_message_mds(dis, from);
   }
 
   // register + wait
@@ -4862,7 +4859,7 @@ void MDCache::discover_path(CDir *base,
 				   want_path,
 				   false,   // no base dir; we are relative to dir
 				   want_xlocked);
-    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+    mds->send_message_mds(dis, from);
   }
 
   // register + wait
@@ -4886,7 +4883,7 @@ void MDCache::discover_ino(CDir *base,
 				   base->dirfrag(),
 				   want_ino,
 				   want_xlocked);
-    mds->send_message_mds(dis, from, MDS_PORT_CACHE);
+    mds->send_message_mds(dis, from);
   }
   
   // register + wait
@@ -5187,7 +5184,7 @@ void MDCache::handle_discover(MDiscover *dis)
   // how did we do?
   assert(!reply->is_empty());
   dout(7) << "handle_discover sending result back to asker mds" << dis->get_asker() << dendl;
-  mds->send_message_mds(reply, dis->get_asker(), MDS_PORT_CACHE);
+  mds->send_message_mds(reply, dis->get_asker());
 
   delete dis;
 }
@@ -5522,7 +5519,7 @@ int MDCache::send_inode_updates(CInode *in)
        it++) {
     dout(7) << "sending inode_update on " << *in << " to " << *it << dendl;
     assert(*it != mds->get_nodeid());
-    mds->send_message_mds(new MInodeUpdate(in, in->get_cached_by_nonce(*it)), *it, MDS_PORT_CACHE);
+    mds->send_message_mds(new MInodeUpdate(in, in->get_cached_by_nonce(*it)), *it);
   }
 
   return 0;
@@ -5538,7 +5535,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
     dout(7) << "inode_update on " << m->get_ino() << ", don't have it, sending expire" << dendl;
     MCacheExpire *expire = new MCacheExpire(mds->get_nodeid());
     expire->add_inode(m->get_ino(), m->get_nonce());
-    mds->send_message_mds(expire, m->get_source().num(), MDS_PORT_CACHE);
+    mds->send_message_mds(expire, m->get_source().num());
     goto out;
   }
 
@@ -5595,7 +5592,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 					 dir->dir_rep_by,
 					 path,
 					 bcast),
-			  *it, MDS_PORT_CACHE);
+			  *it);
   }
 
   return 0;
@@ -6006,7 +6003,7 @@ void MDCache::fragment_stored(CInode *diri, frag_t basefrag, int bits,
       basedis->_encode(notify->basebl);
       delete basedis;
     }
-    mds->send_message_mds(notify, *p, MDS_PORT_CACHE);
+    mds->send_message_mds(notify, *p);
   }
 
 }

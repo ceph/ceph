@@ -25,19 +25,19 @@ using std::string;
 
 // anchor ops
 #define ANCHOR_OP_LOOKUP          1
-#define ANCHOR_OP_LOOKUP_REPLY    2
+#define ANCHOR_OP_LOOKUP_REPLY    -2
 
 #define ANCHOR_OP_CREATE_PREPARE  11
-#define ANCHOR_OP_CREATE_AGREE    12
+#define ANCHOR_OP_CREATE_AGREE    -12
 
 #define ANCHOR_OP_DESTROY_PREPARE 21
-#define ANCHOR_OP_DESTROY_AGREE   22
+#define ANCHOR_OP_DESTROY_AGREE   -22
 
 #define ANCHOR_OP_UPDATE_PREPARE  31
-#define ANCHOR_OP_UPDATE_AGREE    32
+#define ANCHOR_OP_UPDATE_AGREE    -32
 
 #define ANCHOR_OP_COMMIT   41
-#define ANCHOR_OP_ACK      42
+#define ANCHOR_OP_ACK      -42
 #define ANCHOR_OP_ROLLBACK 43
 
 

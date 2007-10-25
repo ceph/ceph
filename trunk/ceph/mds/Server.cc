@@ -471,8 +471,7 @@ void Server::handle_client_request(MClientRequest *req)
   if (req->get_retry_attempt()) {
     if (mds->clientmap.have_completed_request(req->get_reqid())) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0),
-				   req->get_client_inst());
+      mds->messenger->send_message(new MClientReply(req, 0), req->get_client_inst());
       delete req;
       return;
     }
@@ -721,7 +720,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
-	mds->send_message_mds(r, mdr->slave_request->get_source().num(), MDS_PORT_SERVER);
+	mds->send_message_mds(r, mdr->slave_request->get_source().num());
       } else {
 	if (lock) {
 	  dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -841,7 +840,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
     reply->get_authpins().push_back(info);
   }
 
-  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+  mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
   delete mdr->slave_request;
@@ -1995,7 +1994,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREP);
     targeti->set_object_info(req->get_object_info());
     req->now = mdr->now;
-    mds->send_message_mds(req, linkauth, MDS_PORT_SERVER);
+    mds->send_message_mds(req, linkauth);
 
     assert(mdr->more()->waiting_on_slave.count(linkauth) == 0);
     mdr->more()->waiting_on_slave.insert(linkauth);
@@ -2152,7 +2151,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_cti
 
   // ack
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
-  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+  mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti, old_ctime, old_version, inc);
@@ -2440,7 +2439,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
       unlink->straydir = straydn->dir->replicate_to(it->first);
       unlink->straydn = straydn->replicate_to(it->first);
     }
-    mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
+    mds->send_message_mds(unlink, it->first);
   }
   
   // commit anchor update?
@@ -2492,7 +2491,7 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNLINKPREP);
     dn->inode->set_object_info(req->get_object_info());
     req->now = mdr->now;
-    mds->send_message_mds(req, inauth, MDS_PORT_SERVER);
+    mds->send_message_mds(req, inauth);
 
     assert(mdr->more()->waiting_on_slave.count(inauth) == 0);
     mdr->more()->waiting_on_slave.insert(inauth);
@@ -2546,7 +2545,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
        it++) {
     dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
-    mds->send_message_mds(unlink, it->first, MDS_PORT_CACHE);
+    mds->send_message_mds(unlink, it->first);
   }
 
   // commit anchor update?
@@ -2974,7 +2973,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
   // srcdn auth will verify our current witness list is sufficient
   req->witnesses = mdr->more()->witnessed;
 
-  mds->send_message_mds(req, who, MDS_PORT_SERVER);
+  mds->send_message_mds(req, who);
   
   assert(mdr->more()->waiting_on_slave.count(who) == 0);
   mdr->more()->waiting_on_slave.insert(who);
@@ -3337,7 +3336,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       dout(10) << " witness list insufficient; providing srcdn replica list" << dendl;
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
-      mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+      mds->send_message_mds(reply, mdr->slave_to_mds);
       delete mdr->slave_request;
       mdr->slave_request = 0;
       return;	
@@ -3411,7 +3410,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);   
 
-  mds->send_message_mds(reply, mdr->slave_to_mds, MDS_PORT_SERVER);
+  mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // bump popularity
   //if (srcdn->is_auth())

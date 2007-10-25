@@ -58,6 +58,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 
+#include "messages/MAnchor.h"
 
 #include "config.h"
 
@@ -233,7 +234,7 @@ void MDS::reopen_logger(utime_t start)
   server->reopen_logger(start, append);
 }
 
-void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
+void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
@@ -243,12 +244,10 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
   }
 
   // send message
-  if (port && !fromport) 
-    fromport = port;
-  messenger->send_message(m, mdsmap->get_inst(mds), port, fromport);
+  messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
-void MDS::forward_message_mds(Message *req, int mds, int port)
+void MDS::forward_message_mds(Message *req, int mds)
 {
   // client request?
   if (req->get_type() == MSG_CLIENT_REQUEST) {
@@ -266,7 +265,7 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
   }
   
   // forward
-  send_message_mds(req, mds, port);
+  send_message_mds(req, mds);
 }
 
 
@@ -1097,18 +1096,12 @@ void MDS::my_dispatch(Message *m)
   }
 
 
-  switch (m->get_dest_port()) {
-    
-  case MDS_PORT_ANCHORTABLE:
-    anchortable->dispatch(m);
-    break;
-  case MDS_PORT_ANCHORCLIENT:
-    anchorclient->dispatch(m);
-    break;
-    
+  int port = m->get_type() & 0xff00;
+  switch (port) {
   case MDS_PORT_CACHE:
     mdcache->dispatch(m);
     break;
+
   case MDS_PORT_LOCKER:
     locker->dispatch(m);
     break;
@@ -1116,25 +1109,48 @@ void MDS::my_dispatch(Message *m)
   case MDS_PORT_MIGRATOR:
     mdcache->migrator->dispatch(m);
     break;
-  case MDS_PORT_RENAMER:
-    //mdcache->renamer->dispatch(m);
-    break;
-
-  case MDS_PORT_BALANCER:
-    balancer->proc_message(m);
-    break;
-    
-  case MDS_PORT_MAIN:
-    proc_message(m);
-    break;
-
-  case MDS_PORT_SERVER:
-    server->dispatch(m);
-    break;
 
   default:
-    dout(1) << "MDS dispatch unknown message port" << m->get_dest_port() << dendl;
-    assert(0);
+    switch (m->get_type()) {
+      // SERVER
+    case MSG_CLIENT_SESSION:
+    case MSG_CLIENT_REQUEST:
+    case MSG_MDS_SLAVE_REQUEST:
+      server->dispatch(m);
+      break;
+      
+    case MSG_MDS_HEARTBEAT:
+      balancer->proc_message(m);
+      break;
+
+      // anchor
+    case MSG_MDS_ANCHOR:
+      if (((MAnchor*)m)->get_op() < 0)
+	anchorclient->dispatch(m);
+      else
+	anchortable->dispatch(m);
+      break;
+
+      // OSD
+    case MSG_OSD_OPREPLY:
+      objecter->handle_osd_op_reply((class MOSDOpReply*)m);
+      break;
+    case MSG_OSD_MAP:
+      handle_osd_map((MOSDMap*)m);
+      break;
+      
+      // MDS
+    case MSG_MDS_MAP:
+      handle_mds_map((MMDSMap*)m);
+      break;
+    case MSG_MDS_BEACON:
+      handle_mds_beacon((MMDSBeacon*)m);
+      break;
+      
+    default:
+      dout(1) << "MDS unknown messge " << m->get_type() << dendl;
+      assert(0);
+    }
   }
   
   // finish any triggered contexts

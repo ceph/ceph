@@ -347,14 +347,11 @@ decode_message(ceph_message_header& env, bufferlist& payload)
 
   case MSG_CLOSE:
   case MSG_SHUTDOWN:
-  case MSG_MDS_SHUTDOWNSTART:
-  case MSG_MDS_SHUTDOWNFINISH:
-  case MSG_OSD_MKFS_ACK:
     m = new MGenericMessage(env.type);
     break;
 
   default:
-    dout(1) << "can't decode unknown message type " << env.type << dendl;
+    dout(0) << "can't decode unknown message type " << env.type << dendl;
     assert(0);
   }
   
