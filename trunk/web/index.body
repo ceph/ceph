@@ -35,26 +35,4 @@ Ceph is actively seeking experienced C/C++ and Linux kernel developers who are i
 	</div>
 </div>
 
-<div class="mainsegment">
-	<h3>News</h3>
-
-	<h4>LSW and FAST</h4>
-	<div>
-		I am very excited to be attending the <a href="http://www.usenix.org/events/lsf07/">Linux Storage and Filesystem Workshop</a> at <a href="http://www.usenix.org/events/fast07/">FAST '07</a>.  It's a pretty small workshop that will have a lot of key people working with file systems and storage in the Linux kernel.  I'll also be at FAST in San Jose for the rest of the week (Feb 13-16), and hope to generate some more interest in the project.
-		<p>-- <a href="mailto:sage@newdream.net">Sage Weil</a> (2/9/2007)
-	</div>
-
-	<h4>Upcoming Publications</h4>
-	<div>
-		A paper describing the Ceph filesystem will be presented at <a href="http://www.usenix.org/events/osdi06/">OSDI '06</a> (7th USENIX Symposium on Operating Systems Design and Implementation) in Seattle on November 8th.  The following week a paper describing CRUSH (the special-purpose mapping function used to distribute data) will be presented at <a href="http://sc06.supercomputing.org">SC'06</a>, the International Conference for High Performance Computing in Tampa on November 16th.  We hope to see you there!
-		<p>-- <a href="mailto:sage@newdream.net">Sage Weil</a> (10/25/2006)
-	</div>
-
-	<h4>Moved to SourceForge</h4>
-	<div>
-		After a few too many months of summer distractions, I've finally moved the Ceph CVS code base over from UCSC to Subversion on SourceForge, and created a Ceph home page.  This is largely in preparation for upcoming paper publications which will hopefully increase Ceph's exposure and attract some interest to the project.  Yay!
-		<p>-- <a href="mailto:sage@newdream.net">Sage Weil</a> (10/2/2006)
-	</div>
-</div>
-
 <b>Please feel free to <a href="mailto:sage@newdream.net">contact us</a> with any questions or comments.</b>
