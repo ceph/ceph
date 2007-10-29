@@ -1,0 +1,62 @@
+# some valgrind suppressions
+# to load these automagically,
+# cat > ~/.valgrindrc
+# --suppressions=valgrind.supp 
+# <control-d>
+
+
+# this one makes valgrind shut up about what appears to be a bug in libc's writev.
+{
+   writev uninit bytes thing -sage
+   Memcheck:Param
+   writev(vector[...])
+   fun:writev
+   fun:_ZN11BlockDevice6_writeEijjRN6buffer4listE
+   fun:_ZN11BlockDevice5do_ioEiRSt4listIPNS_6biovecESaIS2_EE
+   fun:_ZN11BlockDevice15io_thread_entryEv
+   fun:_ZN11BlockDevice8IOThread5entryEv
+   fun:_ZN6Thread11_entry_funcEPv
+   fun:start_thread
+   fun:clone
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+}
+
+# gethostbyname
+{
+   gethostbyname on issdm
+   Memcheck:Param
+   socketcall.sendto(msg)
+   fun:send
+   fun:get_mapping
+   fun:__nscd_get_map_ref
+   fun:nscd_gethst_r
+   fun:__nscd_gethostbyname_r
+   fun:gethostbyname_r@@GLIBC_2.2.5
+   fun:gethostbyname
+   fun:_ZN4Rank8Accepter5startEv
+   fun:_ZN4Rank10start_rankEv
+   fun:main
+}
+
+# gethostbyname
+
+{
+   gethostbyname on foil
+   Memcheck:Addr8
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   obj:/lib/libc-2.6.1.so
+   obj:/lib/ld-2.6.1.so
+   fun:__libc_dlopen_mode
+   fun:__nss_lookup_function
+   obj:/lib/libc-2.6.1.so
+}
+
