@@ -23,7 +23,7 @@ class atomic_t {
 public:
   atomic_t(int i=0) : nref(i) {}
   void get() { ++nref; }
-  int put() { --nref; }
+  int put() { return --nref; }
   int test() const { return nref; }
 };
 
