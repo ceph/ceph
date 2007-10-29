@@ -1,23 +1,9 @@
 
 some smallish projects:
 
-- crush rewrite in C
- - generalize any memory management etc. to allow use in kernel and userspace
 - userspace crush tools
  - xml import/export?  
  - ?
-
-- pg monitor service
- - to support statfs?
- - general pg health
- - some sort of (throttled) osd status reporting
- - dynamic pg creation (eventually!)
-
-- SimpleMessenger
- - clean up/merge Messenger/Dispatcher interfaces
- - auto close idle connections
- - delivery ack and buffering, and then reconnect
- - take a look at RDS?  http://oss.oracle.com/projects/rds/
 
 - generalize monitor client?
  - throttle message resend attempts
@@ -25,30 +11,17 @@ some smallish projects:
 - ENOSPC on client, OSD
 
 
-
-
 code cleanup
 - endian portability
 - word size
   - clean up all encoded structures
 
-general kernel planning
+kernel planning
 - soft consistency on (kernel) lookup?
 - accurate reconstruction of (syscall) path?
 
 
-
-sage doc
-- mdsmonitor beacon semantics
-- cache expiration, cache invariants
- - including dual expire states, transition, vs subtree grouping of expire messages
-- recovery states, implicit barrier are rejoin
-- journal content
- - importmaps and up:resolve
-- metablob version semantics
-
-
-mds bugs
+mds mustfix
 - open file rejournaling vs capped log...
   - open files vs shutdown in general!  need to export any caps on replicated metadata
 - export caps to auth on unlinked inodes
@@ -186,9 +159,8 @@ messenger
 
 simplemessenger
 - close idle connections
-- buffer sent messages until a receive is acknowledged (handshake!)
-  - retry, timeout on connection or transmission failure
-- exponential backoff on monitor resend attempts (actually, this should go outside the messenger!)
+- take a look at RDS?  http://oss.oracle.com/projects/rds/
+
 
 objectcacher
 - merge clean bh's

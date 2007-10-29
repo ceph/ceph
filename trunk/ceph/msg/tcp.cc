@@ -51,7 +51,7 @@ int tcp_write(int sd, char *buf, int len)
 }
 */
 
-int tcp_hostlookup(char *str, tcpaddr_t& ta)
+int tcp_hostlookup(char *str, sockaddr_in& ta)
 {
   char *host = str;
   char *port = 0;

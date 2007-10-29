@@ -108,25 +108,23 @@ struct entity_addr_t {
     memset(&v, 0, sizeof(v));
   }
 
-  void set_addr(tcpaddr_t a) {
-    memcpy((char*)v.ipq, (char*)&a.sin_addr.s_addr, 4);
-    v.port = ntohs(a.sin_port);
+  void set_addr(sockaddr_in& a) {
+    memcpy((char*)&v.ipaddr, (char*)&a, sizeof(a));
   }
-  void make_addr(tcpaddr_t& a) const {
-    memset(&a, 0, sizeof(a));
-    a.sin_family = AF_INET;
-    memcpy((char*)&a.sin_addr.s_addr, (char*)v.ipq, 4);
-    a.sin_port = htons(v.port);
+  void make_addr(sockaddr_in& a) const {
+    memcpy((char*)&a, (char*)&v.ipaddr, sizeof(a));
+  }
+  void set_port(int port) {
+    v.ipaddr.sin_port = htons(port);
+  }
+  int get_port() {
+    return ntohs(v.ipaddr.sin_port);
   }
 };
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << (int)addr.v.ipq[0]
-	     << '.' << (int)addr.v.ipq[1]
-	     << '.' << (int)addr.v.ipq[2]
-	     << '.' << (int)addr.v.ipq[3]
-	     << ':' << addr.v.port
+  return out << addr.v.ipaddr
 	     << '#' << addr.v.nonce
 	     << '@' << addr.v.erank;
 }

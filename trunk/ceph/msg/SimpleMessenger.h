@@ -65,23 +65,39 @@ private:
 
   // pipe
   class Pipe {
-  protected:
+  public:
+    enum {
+      STATE_ACCEPTING,
+      STATE_CONNECTING,
+      STATE_OPEN,
+      STATE_CLOSED,
+      STATE_CLOSING
+      //STATE_GOTCLOSE,  // got (but haven't sent) a close
+      //STATE_SENTCLOSE  // sent (but haven't got) a close
+    };
+
     int sd;
-    bool done;
+    int new_sd;
     entity_addr_t peer_addr;
-    bool server;
-    bool need_to_send_close;
+
+    Mutex lock;
+    int state;
+
+  protected:
+
+    utime_t first_fault;   // time of original failure
+    utime_t last_attempt;  // time of last reconnect attempt
 
     bool reader_running;
     bool writer_running;
 
     list<Message*> q;
     list<Message*> sent;
-    Mutex lock;
     Cond cond;
-
-    int out_seq, out_acked;
-    int in_seq;
+    
+    __u32 connect_seq;
+    __u32 out_seq;
+    __u32 in_seq, in_seq_acked;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -90,8 +106,16 @@ private:
 
     Message *read_message();
     int write_message(Message *m);
-    int do_sendmsg(Message *m, struct msghdr *msg, int len);
-    void fail(list<Message*>& ls);
+    int do_sendmsg(int sd, struct msghdr *msg, int len);
+    int write_ack(unsigned s);
+
+    void fault();
+    void fail();
+
+    void take_queue(list<Message*>& ls) {
+      ls.splice(ls.begin(), q);
+      ls.splice(ls.begin(), sent);
+    }
 
     // threads
     class Reader : public Thread {
@@ -111,22 +135,19 @@ private:
     friend class Writer;
     
   public:
-    Pipe(int s) : sd(s),
-		  done(false), server(true), 
-		  need_to_send_close(true),
-		  reader_running(false), writer_running(false),
-		  out_seq(0), out_acked(0), in_seq(0),
-		  reader_thread(this), writer_thread(this) {
-      // server
+    Pipe(int st) : 
+      sd(0),
+      state(st), 
+      reader_running(false), writer_running(false),
+      connect_seq(0),
+      out_seq(0), in_seq(0), in_seq_acked(0),
+      reader_thread(this), writer_thread(this) { }
+
+    void start_reader() {
       reader_running = true;
       reader_thread.create();
     }
-    Pipe(const entity_addr_t &pi) : sd(0),
-				    done(false), peer_addr(pi), server(false), 
-				    need_to_send_close(true),
-				    reader_running(false), writer_running(false),
-				    reader_thread(this), writer_thread(this) {
-      // client
+    void start_writer() {
       writer_running = true;
       writer_thread.create();
     }
@@ -137,24 +158,26 @@ private:
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
-    void unregister();
-    void close();
+    void register_pipe();
+    void unregister_pipe();
+    void dirty_close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
-      if (reader_thread.is_started()) reader_thread.join();
+      if (reader_thread.is_started()) {
+	reader_thread.kill(SIGUSR1);
+	reader_thread.join();
+      }
     }
 
     void send(Message *m) {
       lock.Lock();
-      q.push_back(m);
-      cond.Signal();
+      _send(m);
       lock.Unlock();
     }    
-    void send(list<Message*>& ls) {
-      lock.Lock();
-      q.splice(q.end(), ls);
+    void _send(Message *m) {
+      q.push_back(m);
+      m->set_seq(++out_seq);
       cond.Signal();
-      lock.Unlock();
     }
 
     void force_close() {

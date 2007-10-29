@@ -62,7 +62,8 @@ void Rank::sigint()
   derr(0) << "got control-c, exiting" << dendl;
   
   // force close listener socket
-  ::close(accepter.listen_sd);
+  if (accepter.listen_sd > 0) 
+    ::close(accepter.listen_sd);
 
   // force close all pipe sockets, too
   for (hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.begin();
@@ -116,7 +117,7 @@ int Rank::Accepter::start()
   }
 
   // use whatever user specified (if anything)
-  tcpaddr_t listen_addr;
+  sockaddr_in listen_addr;
   g_my_addr.make_addr(listen_addr);
 
   /* socket creation */
@@ -153,12 +154,12 @@ int Rank::Accepter::start()
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
     rank.rank_addr.set_addr(listen_addr);
-    rank.rank_addr.v.port = 0;  // see below
+    rank.rank_addr.set_port(0);
   }
-  if (rank.rank_addr.v.port == 0) {
+  if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
     tmp.set_addr(listen_addr);
-    rank.rank_addr.v.port = tmp.v.port;
+    rank.rank_addr.set_port(tmp.get_port());
     rank.rank_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
   rank.rank_addr.v.erank = 0;
@@ -203,9 +204,19 @@ void *Rank::Accepter::entry()
     if (sd > 0) {
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
+      // disable Nagle algorithm?
+      if (g_conf.ms_tcp_nodelay) {
+	int flag = 1;
+	int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+	if (r < 0) 
+	  dout(0) << "accepter could't set TCP_NODELAY: " << strerror(errno) << dendl;
+      }
+      
       rank.lock.Lock();
       if (rank.num_local > 0) {
-	Pipe *p = new Pipe(sd);
+	Pipe *p = new Pipe(Pipe::STATE_ACCEPTING);
+	p->sd = sd;
+	p->start_reader();
 	rank.pipes.insert(p);
       }
       rank.lock.Unlock();
@@ -215,7 +226,7 @@ void *Rank::Accepter::entry()
   }
 
   dout(20) << "accepter closing" << dendl;
-  ::close(listen_sd);
+  if (listen_sd > 0) ::close(listen_sd);
   dout(10) << "accepter stopping" << dendl;
   return 0;
 }
@@ -226,650 +237,6 @@ void Rank::Accepter::stop()
   this->kill(SIGUSR1);
   join();
 }
-
-
-/**************************************
- * Pipe
- */
-
-int Rank::Pipe::accept()
-{
-  // my creater gave me sd via accept()
-  
-  // announce myself.
-  int rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
-  if (rc < 0) {
-    ::close(sd);
-    done = true;
-    return -1;
-  }
-  
-  // identify peer
-  rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
-  if (rc < 0) {
-    dout(10) << "pipe(? " << this << ").accept couldn't read peer addr" << dendl;
-    ::close(sd);
-    done = true;
-    return -1;
-  }
-    
-  // register pipe.
-  rank.lock.Lock();
-  {
-    if (rank.rank_pipe.count(peer_addr) == 0) {
-      // install as outgoing pipe!
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr << dendl;
-      rank.rank_pipe[peer_addr] = this;
-
-      // create writer thread.
-      writer_running = true;
-      writer_thread.create();
-    } else {
-      // hrm, this may affect message delivery order.. keep both pipes!
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept already have a pipe for this peer (" << rank.rank_pipe[peer_addr] << "), will receive on this pipe only" << dendl;
-
-      // FIXME i could stop the receiver on the other pipe..
-      
-      /*
-      // low ranks' Pipes "win"
-      if (peer_addr < rank.my_addr) {
-	dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr 
-		 << ", already had pipe, but switching to this new one" << dendl;
-	// switch to this new Pipe
-	rank.rank_pipe[peer_addr]->unregister();  // close old one
-	rank.rank_pipe[peer_addr]->close();  // close old one
-	rank.rank_pipe[peer_addr] = this;
-      } else {
-	dout(10) << "pipe(" << peer_addr << ' ' << this << ").accept peer is " << peer_addr 
-		 << ", already had pipe, sticking with it" << dendl;
-      }
-      */      
-    }
-  }
-  rank.lock.Unlock();
-
-  return 0;   // success.
-}
-
-int Rank::Pipe::connect()
-{
-  dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect" << dendl;
-
-  // create socket?
-  sd = socket(AF_INET,SOCK_STREAM,0);
-  assert(sd > 0);
-  
-  // bind any port
-  struct sockaddr_in myAddr;
-  myAddr.sin_family = AF_INET;
-  myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  myAddr.sin_port = htons( 0 );    
-  
-  int rc = bind(sd, (struct sockaddr *) &myAddr, sizeof(myAddr));
-  assert(rc>=0);
-
-  // connect!
-  tcpaddr_t tcpaddr;
-  peer_addr.make_addr(tcpaddr);
-  rc = ::connect(sd, (sockaddr*)&tcpaddr, sizeof(myAddr));
-  if (rc < 0) {
-    dout(10) << "connect error " << peer_addr
-	     << ", " << errno << ": " << strerror(errno) << dendl;
-    return rc;
-  }
-
-  // identify peer ..... FIXME
-  entity_addr_t paddr;
-  rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
-  if (!rc) { // bool
-    dout(0) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << dendl;
-    return -1;
-  }
-  if (!ceph_entity_addr_is_local(peer_addr.v, paddr.v)) {
-    dout(0) << "pipe(" << peer_addr << ' ' << this << ").connect peer identifies itself as " << paddr << ", wrong guy!" << dendl;
-    ::close(sd);
-    sd = 0;
-    return -1;
-  }
-
-  // identify myself
-  rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
-  if (rc < 0) 
-    return -1;
-  
-  // register pipe
-  /*
-  rank.lock.Lock();
-  {
-    if (rank.rank_pipe.count(peer_addr) == 0) {
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect registering pipe" << dendl;
-      rank.rank_pipe[peer_addr] = this;
-    } else {
-      // this is normal.
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect pipe already registered." << dendl;
-    }
-  }
-  rank.lock.Unlock();
-  */
-
-  // start reader
-  reader_running = true;
-  reader_thread.create();  
-  
-  return 0;
-}
-
-
-void Rank::Pipe::unregister()
-{
-  assert(rank.lock.is_locked());
-  if (rank.rank_pipe.count(peer_addr) &&
-      rank.rank_pipe[peer_addr] == this) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").unregister" << dendl;
-    rank.rank_pipe.erase(peer_addr);
-  } else {
-    dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").unregister - not registerd" << dendl;
-  }
-}
-
-void Rank::Pipe::close()
-{
-  dout(10) << "pipe(" << peer_addr << ' ' << this << ").close" << dendl;
-
-  // queue close message?
-  if (!need_to_send_close) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close already closing/closed" << dendl;
-    return;
-  }
-  
-  if (!writer_running) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close not queueing MSG_CLOSE, no writer running" << dendl;  
-  } else {
-    dout(10) << "pipe(" << peer_addr << ' ' << this
-	     << ").close queueing MSG_CLOSE" << dendl;
-    lock.Lock();
-    q.push_back(new MGenericMessage(MSG_CLOSE));
-    cond.Signal();
-    need_to_send_close = false;
-    lock.Unlock();  
-  }
-}
-
-
-/* read msgs from socket.
- * also, server.
- *
- */
-void Rank::Pipe::reader()
-{
-  if (server) 
-    accept();
-
-  // loop.
-  while (!done) {
-    Message *m = read_message();
-    if (!m || m->get_type() == 0) {
-      if (m) {
-	delete m;
-	dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader read MSG_CLOSE message" << dendl;
-	need_to_send_close = false;
-      } else {
-	derr(10) << "pipe(" << peer_addr << ' ' << this << ").reader read null message" << dendl;
-      }
-
-      rank.lock.Lock();
-      unregister();
-      rank.lock.Unlock();
-      close();
-
-      done = true;
-      cond.Signal();  // wake up writer too.
-      break;
-    }
-
-    in_seq++;
-
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader got message "
-	     << in_seq << " " << m << " " << *m
-	     << " for " << m->get_dest() << dendl;
-
-    // deliver
-    EntityMessenger *entity = 0;
-
-    rank.lock.Lock();
-    {
-      unsigned erank = m->get_dest_inst().addr.v.erank;
-      if (erank < rank.max_local && rank.local[erank]) {
-	// find entity
-	entity = rank.local[erank];
-      } else {
-	derr(0) << "pipe(" << peer_addr << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
-      }
-    }
-    rank.lock.Unlock();
-    
-    if (entity)
-      entity->queue_message(m);        // queue
-  }
-
-  
-  // reap?
-  bool reap = false;
-  lock.Lock();
-  {
-    reader_running = false;
-    if (!writer_running) reap = true;
-  }
-  lock.Unlock();
-
-  if (reap) {
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader queueing for reap" << dendl;
-    ::close(sd);
-    rank.lock.Lock();
-    {
-      rank.pipe_reap_queue.push_back(this);
-      rank.wait_cond.Signal();
-    }
-    rank.lock.Unlock();
-  }
-}
-
-
-/* write msgs to socket.
- * also, client.
- */
-void Rank::Pipe::writer()
-{
-  if (!server) {
-    int rc = connect();
-    if (rc < 0) {
-      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error connecting, " 
-	      << errno << ": " << strerror(errno)
-	      << dendl;
-      done = true;
-      list<Message*> out;
-      fail(out);
-    }
-  }
-
-  // disable Nagle algorithm?
-  if (g_conf.ms_tcp_nodelay) {
-    int flag = 1;
-    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-    if (r < 0) 
-      dout(0) << "pipe(" << peer_addr << ' ' << this << ").writer couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
-  }
-
-  // loop.
-  lock.Lock();
-  while (!q.empty() || !done) {
-    
-    if (!q.empty()) {
-      dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer grabbing message(s)" << dendl;
-      
-      // grab outgoing list
-      list<Message*> out;
-      out.swap(q);
-      
-      // drop lock while i send these
-      lock.Unlock();
-      
-      while (!out.empty()) {
-        Message *m = out.front();
-        out.pop_front();
-
-        dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sending " << m << " " << *m << dendl;
-
-        // marshall
-        if (m->empty_payload())
-          m->encode_payload();
-        
-        if (write_message(m) < 0) {
-          // failed!
-          derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest()
-		  << ", " << errno << ": " << strerror(errno)
-		  << dendl;
-          out.push_front(m);
-          fail(out);
-          done = true;
-          break;
-        }
-
-        // did i just send a close?
-        if (m->get_type() == MSG_CLOSE) 
-          done = true;
-
-        // clean up
-        delete m;
-      }
-
-      lock.Lock();
-      continue;
-    }
-    
-    // wait
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer sleeping" << dendl;
-    cond.Wait(lock);
-  }
-  lock.Unlock(); 
-  
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer finishing" << dendl;
-
-  // reap?
-  bool reap = false;
-  lock.Lock();
-  {
-    writer_running = false;
-    if (!reader_running) reap = true;
-  }
-  lock.Unlock();
-  
-  if (reap) {
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer queueing for reap" << dendl;
-    ::close(sd);
-    rank.lock.Lock();
-    {
-      rank.pipe_reap_queue.push_back(this);
-      rank.wait_cond.Signal();
-    }
-    rank.lock.Unlock();
-  }
-}
-
-
-Message *Rank::Pipe::read_message()
-{
-  // envelope
-  //dout(10) << "receiver.read_message from sd " << sd  << dendl;
-  
-  ceph_message_header env; 
-  if (!tcp_read( sd, (char*)&env, sizeof(env) )) {
-    need_to_send_close = false;
-    return 0;
-  }
-  
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got envelope type=" << env.type 
-           << " src " << env.src << " dst " << env.dst
-           << " nchunks=" << env.nchunks
-           << dendl;
-  
-  // payload
-  bufferlist blist;
-  int32_t pos = 0;
-  list<int> chunk_at;
-  for (unsigned i=0; i<env.nchunks; i++) {
-    int32_t size;
-    if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
-      need_to_send_close = false;
-      return 0;
-    }
-
-    dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
-
-    if (pos) chunk_at.push_back(pos);
-    pos += size;
-
-    bufferptr bp;
-    if (size % 4096 == 0) {
-      dout(30) << "decoding page-aligned chunk of " << size << dendl;
-      bp = buffer::create_page_aligned(size);
-    } else {
-      bp = buffer::create(size);
-    }
-    
-    if (!tcp_read( sd, bp.c_str(), size )) {
-      need_to_send_close = false;
-      return 0;
-    }
-    
-    blist.push_back(bp);
-    
-    dout(30) << "pipe(" << peer_addr << ' ' << this << ").reader got frag " << i << " of " << env.nchunks 
-             << " len " << bp.length() << dendl;
-  }
-  
-  // unmarshall message
-  size_t s = blist.length();
-  Message *m = decode_message(env, blist);
-
-  m->set_chunk_payload_at(chunk_at);
-  
-  dout(20) << "pipe(" << peer_addr << ' ' << this << ").reader got " << s << " byte message from " 
-           << m->get_source() << dendl;
-  
-  return m;
-}
-
-
-int Rank::Pipe::do_sendmsg(Message *m, struct msghdr *msg, int len)
-{
-  while (len > 0) {
-    if (0) { // sanity
-      int l = 0;
-      for (unsigned i=0; i<msg->msg_iovlen; i++)
-	l += msg->msg_iov[i].iov_len;
-      assert(l == len);
-    }
-
-    int r = ::sendmsg(sd, msg, 0);
-    if (r < 0) { 
-      assert(r == -1);
-      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error on sendmsg for " << *m
-	      << " to " << m->get_dest() 
-	      << ", " << strerror(errno)
-	      << dendl; 
-      need_to_send_close = false;
-      return -1;
-    }
-    len -= r;
-    if (len == 0) break;
-    
-    // hrmph.  trim r bytes off the front of our message.
-    dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer partial sendmsg for " << *m
-	    << " to " << m->get_dest()
-	    << " did " << r << ", still have " << len
-	    << dendl;
-    while (r > 0) {
-      if (msg->msg_iov[0].iov_len <= (size_t)r) {
-	// lose this whole item
-	//dout(30) << "skipping " << msg->msg_iov[0].iov_len << ", " << (msg->msg_iovlen-1) << " v, " << r << " left" << dendl;
-	r -= msg->msg_iov[0].iov_len;
-	msg->msg_iov++;
-	msg->msg_iovlen--;
-      } else {
-	// partial!
-	//dout(30) << "adjusting " << msg->msg_iov[0].iov_len << ", " << msg->msg_iovlen << " v, " << r << " left" << dendl;
-	msg->msg_iov[0].iov_base = (void*)((long)msg->msg_iov[0].iov_base + r);
-	msg->msg_iov[0].iov_len -= r;
-	break;
-      }
-    }
-  }
-  return 0;
-}
-
-
-int Rank::Pipe::write_message(Message *m)
-{
-  // get envelope, buffers
-  ceph_message_header *env = &m->get_envelope();
-  bufferlist blist;
-  blist.claim( m->get_payload() );
-  
-  // chunk out page aligned buffers? 
-  if (blist.length() == 0) 
-    env->nchunks = 0; 
-  else {
-    env->nchunks = 1 + m->get_chunk_payload_at().size();  // header + explicit chunk points
-    if (!m->get_chunk_payload_at().empty())
-      dout(20) << "chunking at " << m->get_chunk_payload_at()
-	      << " in " << *m << " len " << blist.length()
-	      << dendl;
-  }
-
-  dout(20)  << "pipe(" << peer_addr << ' ' << this << ").write_message " << m << " " << *m 
-            << " to " << m->get_dest()
-	    << " in " << env->nchunks
-            << dendl;
-  
-  // set up msghdr and iovecs
-  struct msghdr msg;
-  memset(&msg, 0, sizeof(msg));
-  struct iovec msgvec[1 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
-  msg.msg_iov = msgvec;
-  int msglen = 0;
-  
-  // send envelope
-  msgvec[0].iov_base = (char*)env;
-  msgvec[0].iov_len = sizeof(*env);
-  msglen += sizeof(*env);
-  msg.msg_iovlen++;
-  
-  // payload
-  list<bufferptr>::const_iterator pb = blist.buffers().begin();
-  list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
-  int b_off = 0;  // carry-over buffer offset, if any
-  int bl_pos = 0; // blist pos
-  int nchunks = env->nchunks;
-  int32_t chunksizes[nchunks];
-
-  for (int curchunk=0; curchunk < nchunks; curchunk++) {
-    // start a chunk
-    int32_t size = blist.length() - bl_pos;
-    if (pc != m->get_chunk_payload_at().end()) {
-      assert(*pc > bl_pos);
-      size = *pc - bl_pos;
-      dout(30) << "pos " << bl_pos << " explicit chunk at " << *pc << " size " << size << " of " << blist.length() << dendl;
-      pc++;
-    }
-    assert(size > 0);
-    dout(30) << "chunk " << curchunk << " pos " << bl_pos << " size " << size << dendl;
-
-    // chunk size
-    chunksizes[curchunk] = size;
-    msgvec[msg.msg_iovlen].iov_base = &chunksizes[curchunk];
-    msgvec[msg.msg_iovlen].iov_len = sizeof(int32_t);
-    msglen += sizeof(int32_t);
-    msg.msg_iovlen++;
-
-    // chunk contents
-    int left = size;
-    while (left > 0) {
-      int donow = MIN(left, (int)pb->length()-b_off);
-      assert(donow > 0);
-      dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
-	      << " leftinchunk " << left
-	      << " buffer len " << pb->length()
-	      << " writing " << donow 
-	      << dendl;
-
-      if (msg.msg_iovlen >= IOV_MAX-1) {
-	if (do_sendmsg(m, &msg, msglen)) 
-	  return -1;	
-
-	// and restart the iov
-	msg.msg_iov = msgvec;
-	msg.msg_iovlen = 0;
-	msglen = 0;
-      }
-
-      msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str()+b_off);
-      msgvec[msg.msg_iovlen].iov_len = donow;
-      msglen += donow;
-      msg.msg_iovlen++;
-
-      left -= donow;
-      assert(left >= 0);
-      b_off += donow;
-      bl_pos += donow;
-      if (b_off != (int)pb->length()) 
-	break;
-      pb++;
-      b_off = 0;
-    }
-    assert(left == 0);
-  }
-  assert(pb == blist.buffers().end());
-  
-  // send
-  if (do_sendmsg(m, &msg, msglen)) 
-    return -1;	
-
-  return 0;
-}
-
-
-void Rank::Pipe::fail(list<Message*>& out)
-{
-  derr(10) << "pipe(" << peer_addr << ' ' << this << ").fail" << dendl;
-
-  // FIXME: possible race before i reclaim lock here?
-  
-  // deactivate myself
-  rank.lock.Lock();
-  {
-    if (rank.rank_pipe.count(peer_addr) &&
-        rank.rank_pipe[peer_addr] == this)
-      rank.rank_pipe.erase(peer_addr);
-  }
-  rank.lock.Unlock();
-
-  // what do i do about reader()?   FIXME
-
-  // sort my messages by (source) dispatcher, dest.
-  map<Dispatcher*, map<entity_name_t, list<Message*> > > by_dis;
-  lock.Lock();
-  {
-    // include out at front of queue
-    q.splice(q.begin(), out);  
-
-    // sort
-    while (!q.empty()) {
-      unsigned srcrank = q.front()->get_source_inst().addr.v.erank;
-      if (q.front()->get_type() == MSG_CLOSE) {
-        delete q.front();
-      } 
-      else if (srcrank < rank.max_local && rank.local[srcrank]) {
-	EntityMessenger *mgr = rank.local[srcrank];
-        Dispatcher *dis = mgr->get_dispatcher();
-	if (mgr->is_stopped()) {
-	  // ignore.
-	  dout(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << *q.front() << ", dispatcher stopping, ignoring." << dendl;
-	  delete q.front();
-	} else {
-	  by_dis[dis][q.front()->get_dest()].push_back(q.front());
-	}
-      } 
-      else {
-        // oh well.  sending entity musta just shut down?
-        delete q.front();
-      }
-      q.pop_front();
-    }
-  }
-  lock.Unlock();
-
-  // report failure(s) to dispatcher(s)
-  for (map<Dispatcher*, map<entity_name_t, list<Message*> > >::iterator i = by_dis.begin();
-       i != by_dis.end();
-       ++i) 
-    for (map<entity_name_t, list<Message*> >::iterator j = i->second.begin();
-         j != i->second.end();
-         ++j) 
-      for (list<Message*>::iterator k = j->second.begin();
-           k != j->second.end();
-           ++k) {
-	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << dendl;
-	if (i->first)
-	  i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
-      }
-}
-
-
 
 
 
@@ -889,12 +256,13 @@ void Rank::reaper()
 
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
-    dout(10) << "reaper reaping pipe " << p->get_peer_addr() << dendl;
+    dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
+    p->unregister_pipe();
     pipe_reap_queue.pop_front();
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
-    dout(10) << "reaper reaped pipe " << p->get_peer_addr() << dendl;
+    dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     delete p;
   }
 }
@@ -936,12 +304,11 @@ Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
   dout(10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
   // create pipe
-  Pipe *pipe = new Pipe(addr);
-  rank.rank_pipe[addr] = pipe;
+  Pipe *pipe = new Pipe(Pipe::STATE_CONNECTING);
+  pipe->peer_addr = addr;
+  pipe->start_writer();
+  pipe->register_pipe();
   pipes.insert(pipe);
-
-  // register
-  rank.rank_pipe[addr] = pipe;
 
   return pipe;
 }
@@ -1004,8 +371,8 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
   const entity_name_t dest = m->get_dest();
 
   // lookup
-  EntityMessenger *entity = 0;
-  Pipe *pipe = 0;
+  entity_addr_t dest_proc_addr = dest_addr;
+  dest_proc_addr.v.erank = 0;
 
   lock.Lock();
   {
@@ -1014,37 +381,39 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
       if (dest_addr.v.erank < max_local && local[dest_addr.v.erank]) {
         // local
         dout(20) << "submit_message " << *m << " dest " << dest << " local" << dendl;
-	entity = local[dest_addr.v.erank];
+	local[dest_addr.v.erank]->queue_message(m);
       } else {
-        derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << dendl;
+        derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?  dropping." << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
+	delete m;
       }
     }
     else {
       // remote.
-      if (rank_pipe.count( dest_addr )) {
-        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", already connected." << dendl;
-        // connected.
-        pipe = rank_pipe[ dest_addr ];
-      } else {
-        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", connecting." << dendl;
+      Pipe *pipe = 0;
+      if (rank_pipe.count( dest_proc_addr )) {
+        // connected?
+        pipe = rank_pipe[ dest_proc_addr ];
+	pipe->lock.Lock();
+	if (pipe->state == Pipe::STATE_CLOSED) {
+	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
+	  pipe->unregister_pipe();
+	  pipe->lock.Unlock();
+	  pipe = 0;
+	} else {
+	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", have pipe." << dendl;
+	  pipe->_send(m);
+	  pipe->lock.Unlock();
+	}
+      }
+      if (!pipe) {
+        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", new pipe." << dendl;
         // not connected.
-        pipe = connect_rank( dest_addr );
+        pipe = connect_rank( dest_proc_addr );
+	pipe->send(m);
       }
     }
   }
-  
-  // do it
-  if (entity) {  
-    // local!
-    dout(20) << "submit_message " << *m << " dest " << dest << " local, queueing" << dendl;
-    entity->queue_message(m);
-  } 
-  else if (pipe) {
-    // remote!
-    dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << dendl;
-    pipe->send(m);
-  } 
 
   lock.Unlock();
 }
@@ -1088,8 +457,8 @@ void Rank::wait()
     for (list<Pipe*>::iterator i = toclose.begin();
 	 i != toclose.end();
 	 i++) {
-      (*i)->unregister();
-      (*i)->close();
+      (*i)->unregister_pipe();
+      (*i)->dirty_close();
     }
 
     reaper();
@@ -1278,6 +647,849 @@ void Rank::mark_down(entity_addr_t addr)
   }
   */
   lock.Unlock();
+}
+
+
+
+
+
+/**************************************
+ * Pipe
+ */
+
+#undef dout
+#undef derr
+#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " >> " << peer_addr << " pipe(" << this << ")."
+#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " >> " << peer_addr << " pipe(" << this << ")."
+
+/*
+ * we have to be careful about connection races:
+ *  A initiates connection
+ *  B initiates connection
+ *  B accepts A's connection
+ *  A rejects B's connection   (or vice-versa)
+ * 
+ * this is controlled by whether accept uses the new incoming socket
+ * as the new pipe.  two cases:
+ *  old         new
+ *  connecting  connecting   -> use socket initiated by lower address
+ *  open        connecting 
+ *   -> use new socket _only_ if connect_seq matches.  that is, the
+ *      peer reconnected subsequent to the current open socket.  if
+ *      connect_seq _doesn't_ match, it means that it is an old attempt.
+ */
+
+int Rank::Pipe::accept()
+{
+  dout(10) << "accept" << dendl;
+
+  // my creater gave me sd via accept()
+  assert(state == STATE_ACCEPTING);
+  
+  // announce myself.
+  int rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
+  if (rc < 0) {
+    dout(10) << "accept couldn't write my addr" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+  
+  // identify peer
+  rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
+  if (rc < 0) {
+    dout(10) << "accept couldn't read peer addr" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+
+  __u32 cseq;
+  rc = tcp_read(sd, (char*)&cseq, sizeof(cseq));
+  if (rc < 0) {
+    dout(10) << "accept couldn't read connect seq" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+
+  dout(20) << "accept got connect_seq " << cseq << dendl;
+    
+  // register pipe.
+  rank.lock.Lock();
+  {
+    if (rank.rank_pipe.count(peer_addr) == 0) {
+      dout(10) << "accept new peer " << peer_addr << dendl;
+      register_pipe();
+    } else {
+      // hmm!
+      Pipe *other = rank.rank_pipe[peer_addr];
+      other->lock.Lock();
+
+      dout(10) << "accept got connect_seq " << cseq 
+	       << ", existing pipe connect_seq " << other->connect_seq
+	       << " state " << other->state
+	       << dendl;
+
+      // if open race, low addr's pipe "wins".
+      // otherwise, look at oseq vs out_seq
+      if ((other->state == STATE_CONNECTING && peer_addr < rank.rank_addr) ||
+	  (other->state == STATE_OPEN && cseq == other->connect_seq)) {
+	dout(10) << "accept already had pipe " << other
+		 << ", but switching to this new one" << dendl;
+	// switch to this new Pipe
+	other->state = STATE_CLOSED;
+	assert(q.empty());
+	other->cond.Signal();
+	other->unregister_pipe();
+	register_pipe();
+
+	// steal queue and out_seq
+	other->take_queue(q);
+	out_seq = other->out_seq;
+	//for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
+	//(*p)->set_seq(++out_seq);
+      } 
+      else {
+	dout(10) << "accept already had pipe " << other
+		 << ", closing other" << dendl;
+	state = STATE_CLOSED;
+      }
+      other->lock.Unlock();
+    } 
+  }
+  rank.lock.Unlock();
+
+  char tag;
+  if (state == STATE_CLOSED) {
+    dout(10) << "accept closed, sending REJECT tag" << dendl;
+    tag = CEPH_MSGR_TAG_REJECT;
+  } else {
+    dout(10) << "accept sending READY tag" << dendl;
+    tag = CEPH_MSGR_TAG_READY;
+    state = STATE_OPEN;
+  }
+
+  if (tcp_write(sd, &tag, 1) < 0 ||
+      tcp_write(sd, (char*)&connect_seq, sizeof(connect_seq)) < 0) {
+    // hrmpf
+    dout(10) << "accept couldn't send initial tag+seq: "
+	      << strerror(errno) << dendl;
+    fault();
+  }
+
+  if (state != STATE_CLOSED) {
+    dout(10) << "accept starting writer, "
+	     << "state=" << state << dendl;
+    start_writer();
+  }
+
+  return 0;   // success.
+}
+
+int Rank::Pipe::connect()
+{
+  dout(10) << "connect " << connect_seq << dendl;
+  assert(lock.is_locked());
+
+  if (sd > 0) {
+    ::close(sd);
+    sd = 0;
+  }
+  __u32 cseq = connect_seq;
+
+  lock.Unlock();
+
+  int newsd;
+  char tag;
+  int rc;
+  struct sockaddr_in myAddr;
+  sockaddr_in tcpaddr;
+  entity_addr_t paddr;
+  struct msghdr msg;
+  struct iovec msgvec[2];
+  int msglen;
+
+  // create socket?
+  newsd = ::socket(AF_INET,SOCK_STREAM,0);
+  if (newsd < 0) {
+    dout(-1) << "connect couldn't created socket " << strerror(errno) << dendl;
+    assert(0);
+    goto fail;
+  }
+  
+  // bind any port
+  myAddr.sin_family = AF_INET;
+  myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  myAddr.sin_port = htons( 0 );    
+  
+  rc = ::bind(newsd, (struct sockaddr *) &myAddr, sizeof(myAddr));
+  assert(rc>=0);
+
+  // connect!
+  peer_addr.make_addr(tcpaddr);
+  rc = ::connect(newsd, (sockaddr*)&tcpaddr, sizeof(myAddr));
+  if (rc < 0) {
+    dout(10) << "connect error " << peer_addr
+	     << ", " << errno << ": " << strerror(errno) << dendl;
+    goto fail;
+  }
+
+  // disable Nagle algorithm?
+  if (g_conf.ms_tcp_nodelay) {
+    int flag = 1;
+    int r = ::setsockopt(newsd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    if (r < 0) 
+      dout(0) << "connect couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
+  }
+
+  // identify peer
+  rc = tcp_read(newsd, (char*)&paddr, sizeof(paddr));
+  if (!rc) { // bool
+    dout(0) << "connect couldn't read peer addr" << dendl;
+    goto fail;
+  }
+  dout(20) << "connect read peer addr " << paddr << dendl;
+  if (!ceph_entity_addr_is_local(peer_addr.v, paddr.v)) {
+    dout(0) << "connect peer identifies itself as " 
+	    << paddr << "... wrong node!" << dendl;
+    goto fail;
+  }
+
+  // identify myself, and send open seq
+  memset(&msg, 0, sizeof(msg));
+  msgvec[0].iov_base = (char*)&rank.rank_addr;
+  msgvec[0].iov_len = sizeof(rank.rank_addr);
+  msgvec[1].iov_base = (char*)&cseq;
+  msgvec[1].iov_len = sizeof(cseq);
+  msg.msg_iov = msgvec;
+  msg.msg_iovlen = 2;
+  msglen = msgvec[0].iov_len + msgvec[1].iov_len;
+
+  if (do_sendmsg(newsd, &msg, msglen)) {
+    dout(20) << "connect couldn't write self, seq" << dendl;
+    goto fail;
+  }
+
+  dout(20) << "connect wrote self, seq, waiting for tag" << dendl;
+
+  // wait for tag
+  tag = -1;
+  if (tcp_read(newsd, &tag, 1) <= 0 ||
+      tcp_read(newsd, (char*)&cseq, sizeof(cseq)) <= 0)
+    goto fail;
+
+  dout(20) << "connect got initial tag " << (int)tag << " + seq " << cseq << dendl;
+
+  lock.Lock();
+
+  // FINISH
+  if (state != STATE_CONNECTING) {
+    dout(20) << "connect hmm, not connecting anymore, failing" << dendl;
+    goto fail2;  // hmm!
+  }
+  if (tag != CEPH_MSGR_TAG_READY) {
+    dout(20) << "connect didn't get READY tag, my connect_seq=" << connect_seq
+	      << ", got " << cseq << dendl;
+    if (connect_seq != cseq) {
+      dout(0) << "connect got REJECT tag, old connect_seq was " << connect_seq
+	      << ", taking new " << cseq << dendl;
+      connect_seq = cseq;
+    }
+    goto fail2;
+  }
+  state = STATE_OPEN;
+  this->sd = newsd;
+  connect_seq++;
+  first_fault = last_attempt = utime_t();
+  dout(20) << "connect success " << connect_seq << dendl;
+
+  if (!reader_running) {
+    dout(20) << "connect starting reader" << dendl;
+    start_reader();
+  }
+  return 0;
+
+ fail:
+  lock.Lock();
+ fail2:
+  if (newsd > 0) ::close(newsd);
+  fault();
+  return -1;
+}
+
+void Rank::Pipe::register_pipe()
+{
+  dout(10) << "register" << dendl;
+  assert(rank.lock.is_locked());
+  assert(rank.rank_pipe.count(peer_addr) == 0);
+  rank.rank_pipe[peer_addr] = this;
+}
+
+void Rank::Pipe::unregister_pipe()
+{
+  assert(rank.lock.is_locked());
+  if (rank.rank_pipe.count(peer_addr) &&
+      rank.rank_pipe[peer_addr] == this) {
+    dout(10) << "unregister" << dendl;
+    rank.rank_pipe.erase(peer_addr);
+  } else {
+    dout(10) << "unregister - not registered" << dendl;
+  }
+}
+
+void Rank::Pipe::fault()
+{
+  assert(lock.is_locked());
+
+  if (q.empty()) {
+    dout(0) << "fault nothing to send, closing" << dendl;
+    state = STATE_CLOSED;
+  } else {
+    utime_t now = g_clock.now();
+    if (state != STATE_CONNECTING) {
+      dout(0) << "fault initiating reconnect" << dendl;
+      connect_seq++;
+      state = STATE_CONNECTING;
+      first_fault = now;
+    } else if (first_fault.sec() == 0) {
+      dout(0) << "fault during connect" << dendl;
+      first_fault = now;
+    } else {
+      utime_t failinterval = now - first_fault;
+      utime_t retryinterval = now - last_attempt;
+      dout(10) << "fault failure was " << failinterval 
+		<< " ago, last attempt was at " << last_attempt
+		<< ", " << retryinterval << " ago" << dendl;
+      if (failinterval > g_conf.ms_fail_interval) {
+	// give up
+	dout(0) << "fault giving up" << dendl;
+	state = STATE_CLOSED;
+	fail();
+      } else if (retryinterval < g_conf.ms_retry_interval) {
+	// wait
+	now += (g_conf.ms_retry_interval - retryinterval);
+	dout(10) << "fault waiting until " << now << dendl;
+	cond.WaitUntil(lock, now);
+	dout(10) << "fault done waiting or woke up" << dendl;
+      }
+    }
+    last_attempt = now;
+  }
+  cond.Signal();
+}
+
+void Rank::Pipe::fail()
+{
+  derr(10) << "fail" << dendl;
+  assert(lock.is_locked());
+
+  cond.Signal();
+
+  // deactivate myself
+  lock.Unlock();
+  rank.lock.Lock();
+  unregister_pipe();
+  rank.lock.Unlock();
+  lock.Lock();
+
+  // report failures
+  q.splice(q.begin(), sent);
+  while (!q.empty()) {
+    Message *m = q.front();
+    q.pop_front();
+    unsigned srcrank = m->get_source_inst().addr.v.erank;
+    if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
+      dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
+      delete m;
+      continue;
+    }
+    if (rank.local[srcrank]->is_stopped()) {
+      dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
+      delete m;
+      continue;
+    } 
+    dout(10) << "fail on " << *m << dendl;
+    rank.local[srcrank]->get_dispatcher()->ms_handle_failure(m, m->get_dest_inst());
+  }
+}
+
+
+
+void Rank::Pipe::dirty_close()
+{
+  dout(10) << "dirty_close" << dendl;
+  lock.Lock();
+  state = STATE_CLOSING;
+  cond.Signal();
+  lock.Unlock();
+}
+
+
+/* read msgs from socket.
+ * also, server.
+ */
+void Rank::Pipe::reader()
+{
+  lock.Lock();
+
+  if (state == STATE_ACCEPTING) 
+    accept();
+
+  // loop.
+  while (state != STATE_CLOSED) {
+    assert(lock.is_locked());
+
+    // sleep if (re)connecting
+    if (state == STATE_CONNECTING) {
+      dout(20) << "reader sleeping during reconnect" << dendl;
+      cond.Wait(lock);
+      continue;
+    }
+
+    lock.Unlock();
+
+    char tag = -1;
+    dout(20) << "reader reading tag..." << dendl;
+    int rc = tcp_read(sd, (char*)&tag, 1);
+    if (rc <= 0) {
+      lock.Lock();
+      dout(20) << "reader couldn't read tag" << dendl;
+      fault();
+      continue;
+    }
+
+    // open ...
+    if (tag == CEPH_MSGR_TAG_ACK) {
+      dout(20) << "reader got ACK" << dendl;
+      __u32 seq;
+      int rc = tcp_read( sd, (char*)&seq, sizeof(seq));
+      lock.Lock();
+      if (rc < 0) {
+	dout(20) << "reader couldn't read ack seq" << dendl;
+	fault();
+      } else {
+	dout(15) << "reader got ack seq " << seq << dendl;
+	// trim sent list
+	while (!sent.empty() &&
+	       sent.front()->get_seq() <= seq) {
+	  Message *m = sent.front();
+	  sent.pop_front();
+	  dout(10) << "reader got ack seq " 
+		    << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
+	  delete m;
+	}
+      }
+      continue;
+    }
+
+    else if (tag == CEPH_MSGR_TAG_MSG) {
+      dout(20) << "reader got MSG" << dendl;
+      Message *m = read_message();
+      if (!m) {
+	derr(10) << "reader read null message" << dendl;
+	lock.Lock();
+	fault();
+	continue;
+      }
+
+      // note received seq#
+      lock.Lock();
+      if (m->get_seq() <= in_seq) {
+	dout(-10) << "reader got old message "
+		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
+		  << " for " << m->get_dest() 
+		  << ", discarding" << dendl;
+	delete m;
+	continue;
+      }
+      in_seq++;
+      assert(in_seq == m->get_seq());
+      cond.Signal();  // wake up writer, to ack this
+      lock.Unlock();
+      
+      dout(10) << "reader got message "
+	       << m->get_seq() << " " << m << " " << *m
+	       << " for " << m->get_dest() << dendl;
+      
+      // deliver
+      EntityMessenger *entity = 0;
+      
+      rank.lock.Lock();
+      {
+	unsigned erank = m->get_dest_inst().addr.v.erank;
+	if (erank < rank.max_local && rank.local[erank]) {
+	  // find entity
+	  entity = rank.local[erank];
+	} else {
+	  derr(0) << "reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
+	}
+      }
+      rank.lock.Unlock();
+      
+      if (entity)
+	entity->queue_message(m);        // queue
+
+      lock.Lock();
+    } 
+    
+    else if (tag == CEPH_MSGR_TAG_CLOSE) {
+      dout(20) << "reader got CLOSE" << dendl;
+      lock.Lock();
+      fault();  // treat as a fault; i.e. reconnect|close
+      continue;
+    }
+    else {
+      dout(0) << "reader bad tag " << (int)tag << dendl;
+      lock.Lock();
+      fault();
+    }
+  }
+
+ 
+  // reap?
+  bool reap = false;
+  reader_running = false;
+  if (!writer_running) reap = true;
+
+  lock.Unlock();
+
+  if (reap) {
+    dout(20) << "reader queueing for reap" << dendl;
+    if (sd > 0) ::close(sd);
+    rank.lock.Lock();
+    {
+      rank.pipe_reap_queue.push_back(this);
+      rank.wait_cond.Signal();
+    }
+    rank.lock.Unlock();
+  }
+}
+
+
+
+/* write msgs to socket.
+ * also, client.
+ */
+void Rank::Pipe::writer()
+{
+  lock.Lock();
+
+  while (state != STATE_CLOSED) {
+    // connect?
+    if (state == STATE_CONNECTING) {
+      connect();
+      continue;
+    }
+    
+    if (state == STATE_CLOSING) {
+      // write close tag
+      dout(20) << "writer writing CLOSE tag" << dendl;
+      char c = CEPH_MSGR_TAG_CLOSE;
+      lock.Unlock();
+      ::write(sd, &c, 1);
+      lock.Lock();
+      state = STATE_CLOSED;
+      continue;
+    }
+
+    if (state != STATE_CONNECTING &&
+	(!q.empty() || in_seq > in_seq_acked)) {
+
+      // send ack?
+      if (in_seq > in_seq_acked) {
+	int send_seq = in_seq;
+	lock.Unlock();
+	int rc = write_ack(send_seq);
+	lock.Lock();
+	if (rc < 0) {
+	  dout(20) << "writer couldn't write ack" << dendl;
+	  fault();
+ 	  continue;
+	}
+	in_seq_acked = send_seq;
+      }
+
+      // grab outgoing message
+      if (!q.empty()) {
+	Message *m = q.front();
+	q.pop_front();
+	sent.push_back(m); // move to sent list
+	lock.Unlock();
+        dout(20) << "writer sending " << m->get_seq() << " " << m << " " << *m << dendl;
+        if (m->empty_payload()) m->encode_payload();
+	int rc = write_message(m);
+	lock.Lock();
+	
+	if (rc < 0) {
+          derr(1) << "writer error sending " << *m << " to " << m->get_dest() << ", "
+		  << errno << ": " << strerror(errno) << dendl;
+	  fault();
+        }
+      }
+      continue;
+    }
+    
+    // wait
+    dout(20) << "writer sleeping" << dendl;
+    cond.Wait(lock);
+  }
+  
+  dout(20) << "writer finishing" << dendl;
+
+  // reap?
+  bool reap = false;
+  writer_running = false;
+  if (!reader_running) reap = true;
+
+  lock.Unlock();
+  
+  if (reap) {
+    dout(20) << "writer queueing for reap" << dendl;
+    if (sd > 0) ::close(sd);
+    rank.lock.Lock();
+    {
+      rank.pipe_reap_queue.push_back(this);
+      rank.wait_cond.Signal();
+    }
+    rank.lock.Unlock();
+  }
+}
+
+
+Message *Rank::Pipe::read_message()
+{
+  // envelope
+  //dout(10) << "receiver.read_message from sd " << sd  << dendl;
+  
+  ceph_message_header env; 
+  if (!tcp_read( sd, (char*)&env, sizeof(env) ))
+    return 0;
+  
+  dout(20) << "reader got envelope type=" << env.type 
+           << " src " << env.src << " dst " << env.dst
+           << " nchunks=" << env.nchunks
+           << dendl;
+  
+  // payload
+  bufferlist blist;
+  int32_t pos = 0;
+  list<int> chunk_at;
+  for (unsigned i=0; i<env.nchunks; i++) {
+    int32_t size;
+    if (!tcp_read( sd, (char*)&size, sizeof(size) )) 
+      return 0;
+
+    dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
+
+    if (pos) chunk_at.push_back(pos);
+    pos += size;
+
+    bufferptr bp;
+    if (size % 4096 == 0) {
+      dout(30) << "decoding page-aligned chunk of " << size << dendl;
+      bp = buffer::create_page_aligned(size);
+    } else {
+      bp = buffer::create(size);
+    }
+    
+    if (!tcp_read( sd, bp.c_str(), size )) 
+      return 0;
+    
+    blist.push_back(bp);
+    
+    dout(30) << "reader got frag "
+	     << i << " of " << env.nchunks << " len " << bp.length() << dendl;
+  }
+  
+  // unmarshall message
+  size_t s = blist.length();
+  Message *m = decode_message(env, blist);
+
+  m->set_chunk_payload_at(chunk_at);
+  
+  dout(20) << "reader got " << s << " byte message from " 
+           << m->get_source() << dendl;
+  
+  return m;
+}
+
+
+int Rank::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
+{
+  while (len > 0) {
+    if (0) { // sanity
+      int l = 0;
+      for (unsigned i=0; i<msg->msg_iovlen; i++)
+	l += msg->msg_iov[i].iov_len;
+      assert(l == len);
+    }
+
+    int r = ::sendmsg(sd, msg, 0);
+    if (r < 0) { 
+      assert(r == -1);
+      dout(1) << "error on sendmsg " << strerror(errno) << dendl;
+      return -1;
+    }
+    len -= r;
+    if (len == 0) break;
+    
+    // hrmph.  trim r bytes off the front of our message.
+    dout(20) << "partial sendmsg, did " << r << ", still have " << len << dendl;
+    while (r > 0) {
+      if (msg->msg_iov[0].iov_len <= (size_t)r) {
+	// lose this whole item
+	//dout(30) << "skipping " << msg->msg_iov[0].iov_len << ", " << (msg->msg_iovlen-1) << " v, " << r << " left" << dendl;
+	r -= msg->msg_iov[0].iov_len;
+	msg->msg_iov++;
+	msg->msg_iovlen--;
+      } else {
+	// partial!
+	//dout(30) << "adjusting " << msg->msg_iov[0].iov_len << ", " << msg->msg_iovlen << " v, " << r << " left" << dendl;
+	msg->msg_iov[0].iov_base = (void*)((long)msg->msg_iov[0].iov_base + r);
+	msg->msg_iov[0].iov_len -= r;
+	break;
+      }
+    }
+  }
+  return 0;
+}
+
+
+int Rank::Pipe::write_ack(unsigned seq)
+{
+  dout(10) << "write_ack " << seq << dendl;
+
+  char c = CEPH_MSGR_TAG_ACK;
+  __u32 s = seq;/*cpu_to_le32(seq);*/
+
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  struct iovec msgvec[2];
+  msgvec[0].iov_base = &c;
+  msgvec[0].iov_len = 1;
+  msgvec[1].iov_base = &s;
+  msgvec[1].iov_len = sizeof(s);
+  msg.msg_iov = msgvec;
+  msg.msg_iovlen = 2;
+  
+  if (do_sendmsg(sd, &msg, 5) < 0) 
+    return -1;	
+  return 0;
+}
+
+
+int Rank::Pipe::write_message(Message *m)
+{
+  // get envelope, buffers
+  ceph_message_header *env = &m->get_envelope();
+  bufferlist blist;
+  blist.claim( m->get_payload() );
+  
+  // chunk out page aligned buffers? 
+  if (blist.length() == 0) 
+    env->nchunks = 0; 
+  else {
+    env->nchunks = 1 + m->get_chunk_payload_at().size();  // header + explicit chunk points
+    if (!m->get_chunk_payload_at().empty())
+      dout(20) << "chunking at " << m->get_chunk_payload_at()
+	      << " in " << *m << " len " << blist.length()
+	      << dendl;
+  }
+
+  dout(20)  << "write_message " << m << " " << *m 
+            << " to " << m->get_dest()
+	    << " in " << env->nchunks
+            << dendl;
+  
+  // set up msghdr and iovecs
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  struct iovec msgvec[2 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
+  msg.msg_iov = msgvec;
+  int msglen = 0;
+  
+  // send tag
+  char tag = CEPH_MSGR_TAG_MSG;
+  msgvec[msg.msg_iovlen].iov_base = &tag;
+  msgvec[msg.msg_iovlen].iov_len = 1;
+  msglen++;
+  msg.msg_iovlen++;
+
+  // send envelope
+  msgvec[msg.msg_iovlen].iov_base = (char*)env;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(*env);
+  msglen += sizeof(*env);
+  msg.msg_iovlen++;
+  
+  // payload
+  list<bufferptr>::const_iterator pb = blist.buffers().begin();
+  list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
+  int b_off = 0;  // carry-over buffer offset, if any
+  int bl_pos = 0; // blist pos
+  int nchunks = env->nchunks;
+  int32_t chunksizes[nchunks];
+
+  for (int curchunk=0; curchunk < nchunks; curchunk++) {
+    // start a chunk
+    int32_t size = blist.length() - bl_pos;
+    if (pc != m->get_chunk_payload_at().end()) {
+      assert(*pc > bl_pos);
+      size = *pc - bl_pos;
+      dout(30) << "pos " << bl_pos << " explicit chunk at " << *pc << " size " << size << " of " << blist.length() << dendl;
+      pc++;
+    }
+    assert(size > 0);
+    dout(30) << "chunk " << curchunk << " pos " << bl_pos << " size " << size << dendl;
+
+    // chunk size
+    chunksizes[curchunk] = size;
+    msgvec[msg.msg_iovlen].iov_base = &chunksizes[curchunk];
+    msgvec[msg.msg_iovlen].iov_len = sizeof(int32_t);
+    msglen += sizeof(int32_t);
+    msg.msg_iovlen++;
+
+    // chunk contents
+    int left = size;
+    while (left > 0) {
+      int donow = MIN(left, (int)pb->length()-b_off);
+      assert(donow > 0);
+      dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
+	      << " leftinchunk " << left
+	      << " buffer len " << pb->length()
+	      << " writing " << donow 
+	      << dendl;
+
+      if (msg.msg_iovlen >= IOV_MAX-1) {
+	if (do_sendmsg(sd, &msg, msglen)) 
+	  return -1;	
+
+	// and restart the iov
+	msg.msg_iov = msgvec;
+	msg.msg_iovlen = 0;
+	msglen = 0;
+      }
+
+      msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str()+b_off);
+      msgvec[msg.msg_iovlen].iov_len = donow;
+      msglen += donow;
+      msg.msg_iovlen++;
+
+      left -= donow;
+      assert(left >= 0);
+      b_off += donow;
+      bl_pos += donow;
+      if (b_off != (int)pb->length()) 
+	break;
+      pb++;
+      b_off = 0;
+    }
+    assert(left == 0);
+  }
+  assert(pb == blist.buffers().end());
+  
+  // send
+  if (do_sendmsg(sd, &msg, msglen)) 
+    return -1;	
+
+  return 0;
 }
 
 

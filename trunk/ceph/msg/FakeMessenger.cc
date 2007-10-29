@@ -275,7 +275,7 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
     // assign rank
     unsigned r = directory.size();
     _myinst.name = me;
-    _myinst.addr.v.port = 0;
+    _myinst.addr.set_port(0);
     _myinst.addr.v.erank = r;
     _myinst.addr.v.nonce = getpid();
 

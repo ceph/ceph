@@ -158,12 +158,14 @@ md_config_t g_conf = {
   
   // --- messenger ---
   ms_tcp_nodelay: true,
+  ms_retry_interval: 2.0,  // how often to attempt reconnect 
+  ms_fail_interval: 15.0,  // fail after this long
+  ms_die_on_failure: false,
 
   ms_stripe_osds: false,
   ms_skip_rank0: false,
   ms_overlay_clients: false,
 
-  ms_die_on_failure: false,
 
   // --- mon ---
   mon_tick_interval: 5,
@@ -473,10 +475,11 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     }
     s++; off++;
 
+    unsigned char *ipq = (unsigned char*)&a.v.ipaddr.sin_addr.s_addr;
     if (count <= 3)
-      a.v.ipq[count] = val;
+      ipq[count] = val;
     else
-      a.v.port = val;
+      a.set_port(val);
     
     count++;
     if (count == 4 && *s != ':') break;

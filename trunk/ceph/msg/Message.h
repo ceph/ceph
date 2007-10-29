@@ -201,6 +201,9 @@ public:
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   utime_t get_recv_stamp() { return recv_stamp; }
 
+  unsigned get_seq() { return env.seq; }
+  void set_seq(unsigned s) { env.seq = s; }
+
   // ENVELOPE ----
 
   // type

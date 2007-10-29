@@ -7,6 +7,7 @@
 #define _FS_CEPH_CEPH_FS_H
 
 #include <linux/types.h>
+#include <netinet/in.h>
 
 
 typedef __u64 ceph_ino_t;
@@ -136,6 +137,12 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
 
+#define CEPH_MSGR_TAG_READY   0  // server -> client + oseq: ready for messages
+#define CEPH_MSGR_TAG_REJECT  1  // server -> client + oseq: decline socket
+#define CEPH_MSGR_TAG_MSG     2  // message
+#define CEPH_MSGR_TAG_ACK     3  // message ack
+#define CEPH_MSGR_TAG_CLOSE   4  // closing pipe
+
 
 /*
  * entity_addr
@@ -145,17 +152,12 @@ struct ceph_entity_name {
 struct ceph_entity_addr {
 	__u32 erank;  /* entity's rank in process */
 	__u32 nonce;  /* unique id for process (e.g. pid) */
-	__u32 port;   /* ip port */
-	__u8  ipq[4]; /* ipv4 addr quad */
+	struct sockaddr_in ipaddr;
 };
 
 #define ceph_entity_addr_is_local(a,b)		\
 	((a).nonce == (b).nonce &&		\
-         (a).port == (b).port &&		\
-         (a).ipq[0] == (b).ipq[0] &&		\
-         (a).ipq[1] == (b).ipq[1] &&		\
-         (a).ipq[2] == (b).ipq[2] &&		\
-         (a).ipq[3] == (b).ipq[3])
+	 (a).ipaddr == (b).ipaddr)
 
 
 struct ceph_entity_inst {

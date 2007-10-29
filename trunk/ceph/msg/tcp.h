@@ -8,11 +8,9 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-typedef struct sockaddr_in tcpaddr_t;
-
 using std::ostream;
 
-inline ostream& operator<<(ostream& out, const tcpaddr_t &a)
+inline ostream& operator<<(ostream& out, const sockaddr_in &a)
 {
   unsigned char addr[4];
   memcpy((char*)addr, (char*)&a.sin_addr.s_addr, 4);
@@ -56,12 +54,12 @@ inline int tcp_write(int sd, const char *buf, int len) {
 }
 
 
-extern int tcp_hostlookup(char *str, tcpaddr_t& ta);
+extern int tcp_hostlookup(char *str, sockaddr_in& ta);
 
-inline bool operator==(const tcpaddr_t& a, const tcpaddr_t& b) {
+inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;
 }
-inline bool operator!=(const tcpaddr_t& a, const tcpaddr_t& b) {
+inline bool operator!=(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) != 0;
 }
 
