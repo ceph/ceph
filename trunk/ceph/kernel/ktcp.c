@@ -36,10 +36,10 @@ struct socket * _klisten(struct sockaddr *saddr)
 	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
         if (ret < 0) {
 		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
-		return(sd);
+		return(NULL);
 	}
 
-	/* no user specified address given so create */
+	/* no user specified address given so create, will allow arg to mount */
 	if (!in_addr->sin_addr.s_addr) {
 		in_addr->sin_family = AF_INET;
 		in_addr->sin_addr.s_addr = htonl(INADDR_ANY);
@@ -53,8 +53,8 @@ struct socket * _klisten(struct sockaddr *saddr)
 		printk("Failed to set SO_REUSEADDR: %d\n", ret);
 	}  */
 	ret = sd->ops->bind(sd, saddr, sizeof(saddr));
-/* TBD: probaby want to lessen the backlog queue to prevent chewing up resources.. */
-	ret = sd->ops->listen(sd, SOMAXCONN);
+/* TBD: probaby want to tune the backlog queue .. */
+	ret = sd->ops->listen(sd, NUM_BACKUP);
 	if (ret < 0) {
 		printk(KERN_INFO "kernel_listen error: %d\n", ret);
 		sock_release(sd);
@@ -63,9 +63,24 @@ struct socket * _klisten(struct sockaddr *saddr)
 	return(sd);
 }
 
-void _kaccept(struct sockaddr *saddr, struct socket **sd)
+/*
+ * Note: Maybe don't need this, or make inline... keep for now for debugging..
+ * we may need to add more functionality
+ */
+struct socket *_kaccept(struct socket *sd)
 {
-	return;
+	struct socket *new_sd = NULL;
+	int ret;
+
+
+/* TBD: somewhere check for a connection already established to this node? */
+	ret = kernel_accept(sd, &new_sd, sd->file->f_flags);
+        if (ret < 0) {
+		printk(KERN_INFO "kernel_accept error: %d\n", ret);
+		return(new_sd);
+	}
+/* TBD:  shall we check name for validity?  */
+	return(new_sd);
 }
 
 /*
@@ -106,4 +121,18 @@ int _ksendmsg(struct socket *sd, struct kvec *iov,
 		printk(KERN_INFO "kernel_sendmsg error: %d\n", rlen);
         }
 	return(rlen);
+}
+
+struct sockaddr *_kgetname(struct socket *sd)
+{
+	struct sockaddr *saddr = NULL;
+	int len;
+	int ret;
+
+	if ((ret = sd->ops->getname(sd, (struct sockaddr *)saddr,
+					&len, 2) < 0)) {
+		printk(KERN_INFO "kernel getname error: %d\n", ret);
+	}
+	return(saddr);
+
 }
