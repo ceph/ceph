@@ -28,7 +28,19 @@ void ceph_bl_clear(struct ceph_bufferlist *bl)
 		bl->b_append.iov_base = 0;
 	}	
 }
+void * ceph_buffer_create(u32 size)
+{
+	void *buf;
+	unsigned order = get_order(size);
+	size_t numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT; 
 
+	if (PAGE_SIZE && numpages) {
+		buf = (void *)__get_free_pages(GFP_KERNEL, order);
+	} else {
+		buf = kmalloc(size, GFP_KERNEL);
+	}
+	return(buf);
+}
 
 /*
  * add referenced memory to the bufferlist.
