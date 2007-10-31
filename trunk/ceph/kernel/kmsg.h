@@ -2,22 +2,19 @@
 #define __FS_CEPH_KMSG_H
 
 #include <linux/uio.h>
+#include <linux/net.h>
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
-#include "accepter.h"
 #include "bufferlist.h"
 
-/* dispatch function type */
-typedef void (*ceph_kmsg_work_dispatch_t)(struct work_struct *);
-
-extern struct workqueue_struct *rwq;		/* receive work queue (worker threads) */
-extern struct workqueue_struct *swq;		/* send work queue (worker threads) */
+/* TBD:  this will be filled into ceph_kmsgr.athread during mount */
+extern struct task_struct *athread;
 
 struct ceph_kmsgr {
 	void *m_parent;
+	struct task_struct *athread;
 	struct radix_tree_root mpipes;		/* other nodes talk to */
-	struct ceph_accepter accepter;		/* listener or select thread info */
 };
 
 struct ceph_message {
@@ -28,12 +25,36 @@ struct ceph_message {
 	struct list_head m_list_head;
 };
 
+/* current state of connection, probably won't need all these.. */
+enum ceph_con_state {
+	READ_PENDING,
+	READING,
+	READ_DONE,
+	SEND_PENDING,
+	SENDING,
+	SEND_DONE,
+	CONNECTING,
+	CONNECT_RETRY,
+	CONNECTED,
+	CONNECT_FAIL,
+	CONNECT_KEEPALIVE,
+	DISPATCH_READY,
+	DISPATCH_DONE,
+	CLOSE_PENDING,
+	CLOSING,
+	CLOSED
+};
+
 struct ceph_connection {
-	struct socket sock;	/* connection socket */
+	struct socket *sock;	/* connection socket */
+	/* TDB: may need a mutex here depending if */
+	spinlock_t con_lock;
+	enum ceph_con_state state;
 	__u64 out_seq;		/* last message sent */
 	__u64 in_seq;		/* last message received */
 
 	/* out queue */
+/* note: need to adjust queues because we have a work queue for the message */ 
 	struct list_head out_queue;
 	spinlock_t out_queue_lock;
 	struct ceph_message *out_partial;	/* partially sent message */
@@ -42,17 +63,14 @@ struct ceph_connection {
 
 	/* partially read message contents */
 	struct ceph_message *in_partial;
-	struct work_struct *rwork;		/* received work */
-	struct work_struct *swork;		/* send work */
-/* note: work->func = dispatch func */
+	struct work_struct rwork;		/* received work */
+	struct work_struct swork;		/* send work */
 	int retries;
 };
 
 /* 
  * function prototypes
  */
-extern struct ceph_message *ceph_read_message(void);
-extern int ceph_send_message(struct ceph_message *message);
 
 static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {
