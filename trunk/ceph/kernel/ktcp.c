@@ -11,6 +11,8 @@ struct socket * _kconnect(struct sockaddr *saddr)
 	int ret;
 	struct socket *sd = NULL;
 
+/* TBD: somewhere check for a connection already established to this node? */
+/*      if we are keeping connections alive for a period of time           */
 	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
         if (ret < 0) {
 		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
@@ -44,6 +46,7 @@ struct socket * _klisten(struct sockaddr *saddr)
 		in_addr->sin_family = AF_INET;
 		in_addr->sin_addr.s_addr = htonl(INADDR_ANY);
 		in_addr->sin_port = htons(CEPH_PORT);  /* known port for now */
+		/* in_addr->sin_port = htons(0); */  /* any port */
 	}
 
 /* TBD: set sock options... */
@@ -73,7 +76,6 @@ struct socket *_kaccept(struct socket *sd)
 	int ret;
 
 
-/* TBD: somewhere check for a connection already established to this node? */
 	ret = kernel_accept(sd, &new_sd, sd->file->f_flags);
         if (ret < 0) {
 		printk(KERN_INFO "kernel_accept error: %d\n", ret);
@@ -108,7 +110,7 @@ int _krecvmsg(struct socket *sd, void *buf, size_t len, unsigned msgflags)
  * Send a message this may return after partial send
  */
 int _ksendmsg(struct socket *sd, struct kvec *iov, 
-		size_t len, size_t kvlen, unsigned msgflags)
+		size_t kvlen, size_t len, unsigned msgflags)
 {
 	struct msghdr msg = {.msg_flags = msgflags};
 	int rlen = 0;
