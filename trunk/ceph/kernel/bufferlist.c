@@ -34,7 +34,7 @@ void * ceph_buffer_create(u32 size)
 	unsigned order = get_order(size);
 	size_t numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT; 
 
-	if (PAGE_SIZE && numpages) {
+	if ((PAGE_SIZE == 4096) && numpages) {
 		buf = (void *)__get_free_pages(GFP_KERNEL, order);
 	} else {
 		buf = kmalloc(size, GFP_KERNEL);
