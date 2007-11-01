@@ -1190,7 +1190,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       t.write( get_osdmap_object_name(cur+1), 0, bl.length(), bl);
 
       // notify messenger
-      for (map<int,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
+      for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
            i != inc.new_down.end();
            i++) {
         int osd = i->first;
@@ -1209,7 +1209,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  pg->unlock();
         }
       }
-      for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+      for (map<int32_t,entity_inst_t>::iterator i = inc.new_up.begin();
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;

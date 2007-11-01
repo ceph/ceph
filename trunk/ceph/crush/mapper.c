@@ -190,6 +190,7 @@ static int crush_choose(struct crush_map *map,
 					break;
 				default:
 					BUG_ON(1);
+					item = in->items[0];
 				}
 				
 				/* desired type? */

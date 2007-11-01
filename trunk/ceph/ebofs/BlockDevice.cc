@@ -281,6 +281,7 @@ block_t BlockDevice::get_num_blocks()
 	       << bytes << " bytes" 
 	       << dendl;
 #else
+# ifdef BLKGETSIZE
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
     r = ioctl(fd, BLKGETSIZE, &sectors);
@@ -289,6 +290,12 @@ block_t BlockDevice::get_num_blocks()
     if (r == 0) {
       dout(10) << "get_num_blocks ioctl BLKGETSIZE reports " << sectors << " sectors, "
 	       << num_blocks << " 4k blocks, " << bytes << " bytes" << dendl;
+# else
+    // probably CYGWIN or similar lame plaform...
+    unsigned long sectors = 0;
+    r = sectors;  // shut up compiler
+    if (0) {
+# endif
 #endif
     } else {
       // hmm, try stat!

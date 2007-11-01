@@ -634,7 +634,7 @@ void MDSMonitor::do_stop()
   dout(7) << "do_stop stopping active mds nodes" << dendl;
   print_map(mdsmap);
 
-  for (map<int,int>::iterator p = mdsmap.mds_state.begin();
+  for (map<int32_t,int32_t>::iterator p = mdsmap.mds_state.begin();
        p != mdsmap.mds_state.end();
        ++p) {
     switch (p->second) {

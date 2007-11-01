@@ -6248,7 +6248,7 @@ void MDCache::dump_cache()
   if (g_conf.debug_mds < 2) return;
 
   char fn[20];
-  sprintf(fn, "cachedump.%d.mds%d", mds->mdsmap->get_epoch(), mds->get_nodeid());
+  sprintf(fn, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
 
   dout(1) << "dump_cache to " << fn << dendl;
 

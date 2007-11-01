@@ -94,7 +94,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
         osdmap->apply_incremental(inc);
     
         // notify messenger
-        for (map<int,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
+        for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
              i != inc.new_down.end();
              i++) 
           messenger->mark_down(i->second.first.addr);

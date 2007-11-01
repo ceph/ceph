@@ -112,9 +112,9 @@ Logger::Logger(string fn, LogType *type, bool append)
   {
     filename = "";
     if (g_conf.use_abspaths) {
-      char *cwd = get_current_dir_name(); 
+      char cwd[200];
+      getcwd(cwd, 200);
       filename = cwd;
-      free(cwd);
       filename += "/";
     }
 

@@ -180,7 +180,7 @@ class fragtree_t {
     return _splits.empty();
   }
   int get_split(const frag_t hb) const {
-    std::map<frag_t,__int32_t>::const_iterator p = _splits.find(hb);
+    std::map<frag_t,int32_t>::const_iterator p = _splits.find(hb);
     if (p == _splits.end())
       return 0;
     else
@@ -440,7 +440,7 @@ class fragtree_t {
 
   // verify that we describe a legal partition of the namespace.
   void verify() const {
-    std::map<frag_t,__int32_t> copy;
+    std::map<frag_t,int32_t> copy;
     std::list<frag_t> q;
     q.push_back(frag_t());
     

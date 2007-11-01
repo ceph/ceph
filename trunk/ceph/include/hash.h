@@ -63,6 +63,19 @@ template<> struct rjhash<uint64_t> {
   }
 };
   
+#ifdef __CYGWIN__
+template<> struct rjhash<size_t> {
+  inline size_t operator()(const size_t x) const {
+#ifdef __LP64__
+    return rjhash64(x);
+#else
+    return rjhash32(x);
+#endif
+  }
+};
+#endif
+
+
 //}
 
 

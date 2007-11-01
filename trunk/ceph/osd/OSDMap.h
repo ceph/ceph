@@ -175,7 +175,7 @@ private:
 
   /***** cluster state *****/
   int num_osds() { return osds.size(); }
-  void get_all_osds(set<int>& ls) { ls = osds; }
+  void get_all_osds(set<int32_t>& ls) { ls = osds; }
 
   const set<int32_t>& get_osds() { return osds; }
   const map<int32_t,bool>& get_down_osds() { return down_osds; }

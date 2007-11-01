@@ -131,7 +131,8 @@ int main(int argc, char **argv) {
     // use my argc, argv (make sure you pass a mount point!)
     client[i]->mount();
 
-    char *oldcwd = get_current_dir_name();  // note previous wd
+    char oldcwd[200];
+    getcwd(oldcwd, 200);
     cout << "starting fuse on pid " << getpid() << std::endl;
     if (g_conf.fuse_ll)
       ceph_fuse_ll_main(client[i], argc, argv);
@@ -139,7 +140,6 @@ int main(int argc, char **argv) {
       ceph_fuse_main(client[i], argc, argv);
     cout << "fuse finished on pid " << getpid() << std::endl;
     ::chdir(oldcwd);                        // return to previous wd
-    free(oldcwd);
 
     client[i]->unmount();
     client[i]->shutdown();

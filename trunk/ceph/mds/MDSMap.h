@@ -153,7 +153,7 @@ class MDSMap {
   }
   int get_num_mds(int state) {
     int n = 0;
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (p->second == state) ++n;
@@ -162,7 +162,7 @@ class MDSMap {
 
   int get_num_in_mds() { 
     int n = 0;
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (p->second > 0) ++n;
@@ -171,26 +171,26 @@ class MDSMap {
 
   // sets
   void get_mds_set(set<int>& s) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       s.insert(p->first);
   }
   void get_mds_set(set<int>& s, int state) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (p->second == state)
 	s.insert(p->first);
   } 
   void get_up_mds_set(set<int>& s) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (is_up(p->first)) s.insert(p->first);
   }
   void get_in_mds_set(set<int>& s) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (is_in(p->first)) s.insert(p->first);
@@ -202,7 +202,7 @@ class MDSMap {
     get_mds_set(s, MDSMap::STATE_FAILED);
   }
   void get_recovery_mds_set(set<int>& s) {
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (is_failed(p->first) || 
@@ -212,7 +212,7 @@ class MDSMap {
 
   int get_random_in_mds() {
     vector<int> v;
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       if (p->second > 0) v.push_back(p->first);
@@ -277,7 +277,7 @@ class MDSMap {
 
   bool would_be_overfull_with(int mds) {
     int in = 1;  // mds!
-    for (map<int,int>::const_iterator p = mds_state.begin();
+    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++) {
       if (p->first == mds) continue;
@@ -313,7 +313,7 @@ class MDSMap {
   }
   
   int get_addr_rank(const entity_addr_t& addr) {
-    for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
+    for (map<int32_t,entity_inst_t>::iterator p = mds_inst.begin();
 	 p != mds_inst.end();
 	 ++p) {
       if (p->second.addr == addr) return p->first;

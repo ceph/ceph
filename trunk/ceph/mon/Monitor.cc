@@ -103,7 +103,7 @@ void Monitor::shutdown()
   
   if (is_leader()) {
     // stop osds.
-    for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
+    for (set<int32_t>::iterator it = osdmon->osdmap.get_osds().begin();
 	 it != osdmon->osdmap.get_osds().end();
 	 it++) {
       if (osdmon->osdmap.is_down(*it)) continue;

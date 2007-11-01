@@ -175,7 +175,11 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->stfs.f_ffree   = 1024 * 1024;
   reply->stfs.f_favail  = 1024 * 1024;
   reply->stfs.f_namemax = 1024;
+#ifdef __CYGWIN__
+  reply->stfs.f_flag = 0;
+#else
   reply->stfs.f_flag = ST_NOATIME|ST_NODIRATIME;  // for now.
+#endif
 
   // reply
   mon->messenger->send_message(reply, statfs->get_source_inst());

@@ -6,7 +6,12 @@
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
 
-#include <linux/types.h>
+#ifdef __CYGWIN__
+# include <asm/types.h>
+typedef uint64_t __u64;
+#else
+# include <linux/types.h>
+#endif
 #include <netinet/in.h>
 
 

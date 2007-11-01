@@ -2230,13 +2230,15 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 //};
 void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
 {
+  strncpy(de->d_name, entry->d_name.c_str(), 256);
+#ifndef __CYGWIN__
   de->d_ino = entry->st.st_ino;
   de->d_off = off + 1;
   de->d_reclen = 1;
   de->d_type = MODE_TO_DT(entry->st.st_mode);
-  strncpy(de->d_name, entry->d_name.c_str(), 256);
   dout(10) << "_readdir_fill_dirent '" << de->d_name << "' -> " << de->d_ino
 	   << " type " << (int)de->d_type << " at off " << off << dendl;
+#endif
 }
 
 void Client::_readdir_next_frag(DirResult *dirp)

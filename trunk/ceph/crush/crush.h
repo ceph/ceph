@@ -5,7 +5,13 @@
 extern "C" {
 #endif
 
-#include <linux/types.h>  /* just for int types */
+#ifdef __CYGWIN__
+# include <asm/types.h>
+# include <inttypes.h>
+typedef uint64_t __u64;
+#else 
+# include <linux/types.h>  /* just for int types */
+#endif
 
 #ifndef BUG_ON
 # include <assert.h>

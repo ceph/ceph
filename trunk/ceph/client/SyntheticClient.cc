@@ -1423,7 +1423,7 @@ int SyntheticClient::full_walk(string& basedir)
 	     (st.st_mode & 02) ? 'w':'-',
 	     (st.st_mode & 01) ? 'x':'-',
 	     (int)st.st_nlink,
-	     st.st_uid, st.st_gid,
+	     (int)st.st_uid, (int)st.st_gid,
 	     (int)st.st_size,
 	     tm,
 	     file.c_str());

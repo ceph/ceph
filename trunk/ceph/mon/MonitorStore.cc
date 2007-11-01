@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
 
 void MonitorStore::mount()
 {
@@ -40,9 +41,9 @@ void MonitorStore::mount()
   if (g_conf.use_abspaths) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
-    char *cwd = get_current_dir_name();
+    char cwd[200];
+    getcwd(cwd, 200);
     dir = cwd;
-    free(cwd);
     dir += "/";
     dir += old;
   }

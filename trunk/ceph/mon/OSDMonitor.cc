@@ -337,26 +337,26 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   pending_inc.mon_epoch = mon->mon_epoch;
   
   // tell me about it
-  for (map<int,pair<entity_inst_t,bool> >::iterator i = pending_inc.new_down.begin();
+  for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
        i++) {
     dout(2) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
     derr(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
     mon->messenger->mark_down(i->second.first.addr);
   }
-  for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
+  for (map<int32_t,entity_inst_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
        i++) { 
     dout(2) << " osd" << i->first << " UP " << i->second << dendl;
     derr(0) << " osd" << i->first << " UP " << i->second << dendl;
   }
-  for (list<int>::iterator i = pending_inc.new_out.begin();
+  for (list<int32_t>::iterator i = pending_inc.new_out.begin();
        i != pending_inc.new_out.end();
        i++) {
     dout(2) << " osd" << *i << " OUT" << dendl;
     derr(0) << " osd" << *i << " OUT" << dendl;
   }
-  for (list<int>::iterator i = pending_inc.new_in.begin();
+  for (list<int32_t>::iterator i = pending_inc.new_in.begin();
        i != pending_inc.new_in.end();
        i++) {
     dout(2) << " osd" << *i << " IN" << dendl;
@@ -700,9 +700,9 @@ void OSDMonitor::bcast_latest_osd()
   dout(1) << "bcast_latest_osd epoch " << e << dendl;
 
   // tell osds
-  set<int> osds;
+  set<int32_t> osds;
   osdmap.get_all_osds(osds);
-  for (set<int>::iterator it = osds.begin();
+  for (set<int32_t>::iterator it = osds.begin();
        it != osds.end();
        it++) {
     if (osdmap.is_down(*it)) continue;
@@ -717,9 +717,9 @@ void OSDMonitor::bcast_full_osd()
   dout(1) << "bcast_full_osd epoch " << e << dendl;
 
   // tell osds
-  set<int> osds;
+  set<int32_t> osds;
   osdmap.get_all_osds(osds);
-  for (set<int>::iterator it = osds.begin();
+  for (set<int32_t>::iterator it = osds.begin();
        it != osds.end();
        it++) {
     if (osdmap.is_down(*it)) continue;
@@ -789,7 +789,7 @@ void OSDMonitor::mark_all_down()
 
   dout(7) << "mark_all_down" << dendl;
 
-  for (set<int>::iterator it = osdmap.get_osds().begin();
+  for (set<int32_t>::iterator it = osdmap.get_osds().begin();
        it != osdmap.get_osds().end();
        it++) {
     if (osdmap.is_down(*it)) continue;
