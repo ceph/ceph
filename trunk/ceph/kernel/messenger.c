@@ -23,30 +23,28 @@ static struct ceph_message *ceph_read_message(struct socket *sd)
 	int ret;
 	int received = 0;
 	struct ceph_message *message;
-	struct ceph_message_header env;
 	struct kvec *iov;
 	int i;
 
 	message = kmalloc(sizeof(struct ceph_message), GFP_KERNEL);
-	message->payload = kmalloc(sizeof(struct ceph_bufferlist),GFP_KERNEL);
-	if (message == NULL || message->payload == NULL){
+	if (message == NULL){
 		printk(KERN_INFO "malloc failure\n");
 		return NULL;
 	}
 
-	ceph_bl_init(message->payload);
-	iov = message->payload->b_kv;
+	ceph_bl_init(&message->payload);
+	iov = message->payload.b_kv;
 
 	/* first read in the message header */
-	if (!_krecvmsg(sd, (char*)&env, sizeof(env), 0 )) {
+	if (!_krecvmsg(sd, (char*)&message->env, sizeof(message->env), 0 )) {
     		return(NULL);
 	}
-	printk(KERN_INFO "reader got envelope type = %d \n" , env.type);
-	printk(KERN_INFO "num chunks = %d \n" , env.nchunks);
+	printk(KERN_INFO "reader got envelope type = %d \n" , message->env.type);
+	printk(KERN_INFO "num chunks = %d \n" , message->env.nchunks);
 /* TBD: print to info file rest of env */
 
 	/* receive request in chunks */
-	for (i = 0; i < env.nchunks; i++) {
+	for (i = 0; i < message->env.nchunks; i++) {
 		u32 size = 0;
 		void *iov_base = NULL;
 		ret = _krecvmsg(sd, (char*)&size, sizeof(size), 0);
@@ -63,7 +61,7 @@ static struct ceph_message *ceph_read_message(struct socket *sd)
 		/* TBD:  place in bufferlist (payload) */
 		received += ret;  /* keep track of complete size?? */
 	}
-	message->payload->b_kvlen = i;
+	message->payload.b_kvlen = i;
 	/* unmarshall message */
 
 	return(message);
@@ -76,14 +74,26 @@ static int ceph_send_message(struct ceph_message *message, struct socket *sd)
 {
 	int ret;
 	int sent = 0;
-	int len = message->payload->b_kvlen;
-	struct kvec *iov = message->payload->b_kv;
-	struct ceph_message_header *msghdr = message->msghdr;
-	struct ceph_bufferlist blist;
+	__u32 chunklen;
+	struct kvec *iov = message->payload.b_kv;
+	int len = message->payload.b_kvlen;
+	int i;
 
-	/* marshall/encode message */
-	/* send in chunks */
-	return sent;
+	/* add error handling */
+
+	/* header */
+	message->env.nchunks = 1;  /* for now */
+
+	_ksendmsg(sd, (char*)&message->env, sizeof(message->env));
+
+	/* send in in single large chunk */
+	chunklen = message->payload.b_len;
+	_ksendmsg(sd, (char*)&chunklen, sizeof(chunklen));
+	for (i=0; i<len; i++) {
+		_ksendmsg(sd, (char&)iov[i].iov_base, iov[i].iov_len);
+	}
+
+	return 0;
 }
 /*
  * The following functions are just for testing the comms stuff...

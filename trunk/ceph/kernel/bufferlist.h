@@ -18,6 +18,7 @@ struct ceph_bufferlist {
 	struct kvec b_kv_array[CEPH_BUFFERLIST_START_KVLEN];  
 	size_t b_kvlen;          /* used/defined elements in b_kv */         
 	size_t b_kvmax;          /* allocated size of b_kv array */
+	size_t b_len;            /* size in bytes of _entire_ bufferlist */
 	struct kvec b_append; /* preallocated memory for appending data to this bufferlist */
 };
 

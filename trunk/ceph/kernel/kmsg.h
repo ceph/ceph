@@ -21,7 +21,7 @@ struct ceph_message {
 	atomic_t nref;
 	int mflags;
 	struct ceph_message_header *msghdr;	/* header */
-	struct ceph_bufferlist *payload;
+	struct ceph_bufferlist payload;
 	struct list_head m_list_head;
 };
 
