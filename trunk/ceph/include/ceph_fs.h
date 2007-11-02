@@ -151,8 +151,6 @@ struct ceph_entity_name {
 
 /*
  * entity_addr
- * ipv4 only for now
- * 16 bytes.
  */
 struct ceph_entity_addr {
 	__u32 erank;  /* entity's rank in process */
@@ -175,8 +173,8 @@ struct ceph_entity_inst {
  * message header
  */
 struct ceph_message_header {
-	__u32 seq;
-	__u32 type;
+	__u32 seq;    /* message seq# for this session */
+	__u32 type;   /* message type */
 	struct ceph_entity_inst src, dst;
 	__u32 nchunks;
 };

@@ -21,17 +21,22 @@ struct ceph_message {
 	atomic_t nref;
 	int mflags;
 	struct ceph_message_header *msghdr;	/* header */
+	__u32 chunklens[2];
 	struct ceph_bufferlist payload;
 	struct list_head m_list_head;
 };
 
 /* current state of connection, probably won't need all these.. */
 enum ceph_con_state {
+	ACCEPTING,
+	CONNECTING,
+	OPEN,
+
 	READ_PENDING,
 	READING,
 	READ_DONE,
 	SEND_PENDING,
-	SENDING,
+	/*SENDING,*/
 	SEND_DONE,
 	CONNECTING,
 	CONNECT_RETRY,
@@ -49,17 +54,20 @@ struct ceph_connection {
 	struct socket *sock;	/* connection socket */
 	/* TDB: may need a mutex here depending if */
 	spinlock_t con_lock;
-	enum ceph_con_state state;
-	__u64 out_seq;		/* last message sent */
-	__u64 in_seq;		/* last message received */
 
+	enum ceph_con_state state;
+	__u32 connect_seq;     
+	__u32 out_seq;		     /* last message queued for send */
+	__u32 in_seq, in_seq_acked;  /* last message received, acked */
+
+	
 	/* out queue */
 /* note: need to adjust queues because we have a work queue for the message */ 
 	struct list_head out_queue;
 	spinlock_t out_queue_lock;
-	struct ceph_message *out_partial;	/* partially sent message */
+	struct ceph_bufferlist out_partial;
 	struct ceph_bufferlist_iterator out_pos;
-	struct list_head out_sent;  /* sent but unacked; may need resend if connection drops */
+	struct list_head out_sent;  /* sending/sent but unacked; resend if connection drops */
 
 	/* partially read message contents */
 	struct ceph_message *in_partial;

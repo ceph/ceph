@@ -3,7 +3,6 @@
 
 #include <linux/uio.h>
 
-
 /*
  * quick and dirty bufferlist struct.
  *

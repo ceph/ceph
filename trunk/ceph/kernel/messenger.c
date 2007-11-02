@@ -16,8 +16,9 @@ static void ceph_writer(struct work_struct *);
 struct task_struct *athread;  /* accepter thread, TBD: fill into kmsgr */
 
 /*
- *  TBD: Not finished Still needs tons and tons of work....
+ * blocking versions
  */
+
 static struct ceph_message *ceph_read_message(struct socket *sd)
 {
 	int ret;
@@ -95,6 +96,128 @@ static int ceph_send_message(struct ceph_message *message, struct socket *sd)
 
 	return 0;
 }
+
+
+
+/*
+ * non-blocking versions
+ *
+ * these are called while holding a lock on the connection
+ */
+static char tag_ready = CEPH_MSGR_TAG_READY;
+static char tag_reject = CEPH_MSGR_TAG_REJECT;
+static char tag_msg = CEPH_MSGR_TAG_MSG;
+static char tag_ack = CEPH_MSGR_TAG_ACK;
+static char tag_close = CEPH_MSGR_TAG_CLOSE;
+
+/*
+ * write as much of con->out_partial to the socket as we can.
+ *  1 -> done; and cleaned up out_partial
+ *  0 -> socket full, but more to do
+ * <0 -> error
+ */
+static int ceph_write_partial(struct ceph_connection *con)
+{
+	struct ceph_bufferlist *bl = &con->out_partial;
+	struct ceph_bufferlist_iterator *p = &con->out_pos;
+	int len, ret;
+
+more:
+	len = bl->b_kv[p->i_kv].iov_len - p->i_off;
+	/* FIXME */
+	ret = kernel_send(con->socket, bl->b_kv[p->i_kv].iov_base + p->i_off, len);
+	if (ret < 0) return sent;
+	if (ret == 0) return 0;   /* socket full */
+	if (ret + p->i_off == bl->b_kv[p->i_kv].iov_len) {
+		p->i_kv++;
+		p->i_off = 0;
+		if (p->i_kv == bl->b_kvlen) 
+			return 1;
+	} else {
+		p->i_off += ret;
+	}
+	goto more;
+}
+
+/*
+ * build out_partial based on the next outgoing message in the queue.
+ */
+static void ceph_prepare_write_message(struct ceph_connection *con)
+{
+	struct ceph_message *m = con->out_queue.next;
+	
+	/* move to sending/sent list */
+	list_del(&m->list_head);
+	list_add(&m->list_head, &con->out_sent);
+	
+	ceph_bl_clear(&con->out_partial);  
+	ceph_bl_iterator_init(&con->out_pos);
+
+	/* always one chunk, for now */
+	m->hdr.nchunks = 1;  
+	m->chunklen[0] = m->payload.b_len;
+
+	/* tag + header */
+	ceph_bl_append_ref(&con->out_partial, &tag_msg, 1);
+	ceph_bl_append_ref(&con->out_partial, &m->hdr, sizeof(m->hdr));
+	
+	/* payload */
+	ceph_bl_append_ref(&con->out_partial, &m->chunklen[0], sizeof(__u32));
+	for (int i=0; i<m->payload.b_kvlen; i++) 
+		ceph_bl_append(&con->out_partial, m->payload.b_kv[i].iov_base, 
+			       m->payload.b_kv[i].iov_len);
+}
+
+/* 
+ * prepare an ack for send
+ */
+static void ceph_prepare_write_ack(struct ceph_connection *con)
+{
+	con->in_seq_acked = con->in_seq;
+	
+	ceph_bl_clear(&con->out_partial);  
+	ceph_bl_iterator_init(&con->out_pos);
+	ceph_bl_append_ref(&con->out_partial, &tag_ack, 1);
+	ceph_bl_append_ref(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
+}
+
+/*
+ * call when socket is writeable
+ */
+static int ceph_try_write(struct ceph_connection *con)
+{
+	int ret;
+
+more:
+	if (con->out_partial.b_kvlen) {
+		ret = ceph_write_partial(con);
+		if (ret == 0) return 0;
+
+		/* clean up */
+		ceph_bl_clear(&con->out_partial);  
+		ceph_bl_iterator_init(&con->out_pos);
+
+		if (ret < 0) return ret; /* error */
+	}
+	
+	/* what next? */
+	if (con->in_seq > con->in_seq_acked) {
+		ceph_prepare_write_ack(con);
+		goto more;
+	}
+	if (!list_empty(&con->out_queue)) {
+		ceph_prepare_write_message(con);
+		goto more;
+	}
+	
+	/* hmm, nothing to do! */
+	return 0;
+}
+
+
+
+
+
 /*
  * The following functions are just for testing the comms stuff...
  */
