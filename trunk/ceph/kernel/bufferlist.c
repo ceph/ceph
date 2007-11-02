@@ -1,6 +1,8 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/uio.h>
+#include <linux/jiffies.h>
+#include <linux/sched.h>
 #include "bufferlist.h"
 
 void ceph_bl_init(struct ceph_bufferlist *bl)
@@ -30,12 +32,18 @@ void ceph_bl_clear(struct ceph_bufferlist *bl)
 }
 void * ceph_buffer_create(u32 size)
 {
-	void *buf;
+	void *buf = NULL;
 	unsigned order = get_order(size);
 	size_t numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT; 
 
 	if ((PAGE_SIZE == 4096) && numpages) {
-		buf = (void *)__get_free_pages(GFP_KERNEL, order);
+		/* note should we do this outside if to include the kmalloc? */
+		while (buf == NULL) {
+			buf = (void *)__get_free_pages(GFP_KERNEL, order);
+			/* If fail, sleep for a bit and try again */
+			if (buf == NULL)
+				schedule_timeout_uninterruptible(msecs_to_jiffies(500));
+		}
 	} else {
 		buf = kmalloc(size, GFP_KERNEL);
 	}
