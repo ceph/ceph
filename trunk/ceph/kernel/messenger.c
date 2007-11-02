@@ -15,6 +15,15 @@ static void ceph_writer(struct work_struct *);
 
 struct task_struct *athread;  /* accepter thread, TBD: fill into kmsgr */
 
+/* static tag bytes */
+static char tag_ready = CEPH_MSGR_TAG_READY;
+static char tag_reject = CEPH_MSGR_TAG_REJECT;
+static char tag_msg = CEPH_MSGR_TAG_MSG;
+static char tag_ack = CEPH_MSGR_TAG_ACK;
+static char tag_close = CEPH_MSGR_TAG_CLOSE;
+
+
+
 /*
  * blocking versions
  */
@@ -104,11 +113,6 @@ static int ceph_send_message(struct ceph_message *message, struct socket *sd)
  *
  * these are called while holding a lock on the connection
  */
-static char tag_ready = CEPH_MSGR_TAG_READY;
-static char tag_reject = CEPH_MSGR_TAG_REJECT;
-static char tag_msg = CEPH_MSGR_TAG_MSG;
-static char tag_ack = CEPH_MSGR_TAG_ACK;
-static char tag_close = CEPH_MSGR_TAG_CLOSE;
 
 /*
  * write as much of con->out_partial to the socket as we can.
@@ -116,7 +120,7 @@ static char tag_close = CEPH_MSGR_TAG_CLOSE;
  *  0 -> socket full, but more to do
  * <0 -> error
  */
-static int ceph_write_partial(struct ceph_connection *con)
+static int write_partial(struct ceph_connection *con)
 {
 	struct ceph_bufferlist *bl = &con->out_partial;
 	struct ceph_bufferlist_iterator *p = &con->out_pos;
@@ -142,7 +146,7 @@ more:
 /*
  * build out_partial based on the next outgoing message in the queue.
  */
-static void ceph_prepare_write_message(struct ceph_connection *con)
+static void prepare_write_message(struct ceph_connection *con)
 {
 	struct ceph_message *m = con->out_queue.next;
 	
@@ -150,7 +154,7 @@ static void ceph_prepare_write_message(struct ceph_connection *con)
 	list_del(&m->list_head);
 	list_add(&m->list_head, &con->out_sent);
 	
-	ceph_bl_clear(&con->out_partial);  
+	ceph_bl_init(&con->out_partial);  
 	ceph_bl_iterator_init(&con->out_pos);
 
 	/* always one chunk, for now */
@@ -164,37 +168,37 @@ static void ceph_prepare_write_message(struct ceph_connection *con)
 	/* payload */
 	ceph_bl_append_ref(&con->out_partial, &m->chunklen[0], sizeof(__u32));
 	for (int i=0; i<m->payload.b_kvlen; i++) 
-		ceph_bl_append(&con->out_partial, m->payload.b_kv[i].iov_base, 
-			       m->payload.b_kv[i].iov_len);
+		ceph_bl_append_ref(&con->out_partial, m->payload.b_kv[i].iov_base, 
+				   m->payload.b_kv[i].iov_len);
 }
 
 /* 
  * prepare an ack for send
  */
-static void ceph_prepare_write_ack(struct ceph_connection *con)
+static void prepare_write_ack(struct ceph_connection *con)
 {
 	con->in_seq_acked = con->in_seq;
 	
-	ceph_bl_clear(&con->out_partial);  
+	ceph_bl_init(&con->out_partial);  
 	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &tag_ack, 1);
-	ceph_bl_append_ref(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
+	ceph_bl_append_copy(&con->out_partial, &tag_ack, 1);
+	ceph_bl_append_copy(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
 }
 
 /*
  * call when socket is writeable
  */
-static int ceph_try_write(struct ceph_connection *con)
+static int try_write(struct ceph_connection *con)
 {
 	int ret;
 
 more:
 	if (con->out_partial.b_kvlen) {
-		ret = ceph_write_partial(con);
+		ret = write_partial(con);
 		if (ret == 0) return 0;
 
 		/* clean up */
-		ceph_bl_clear(&con->out_partial);  
+		ceph_bl_init(&con->out_partial);  
 		ceph_bl_iterator_init(&con->out_pos);
 
 		if (ret < 0) return ret; /* error */
@@ -202,11 +206,11 @@ more:
 	
 	/* what next? */
 	if (con->in_seq > con->in_seq_acked) {
-		ceph_prepare_write_ack(con);
+		prepare_write_ack(con);
 		goto more;
 	}
 	if (!list_empty(&con->out_queue)) {
-		ceph_prepare_write_message(con);
+		prepare_write_message(con);
 		goto more;
 	}
 	
@@ -215,25 +219,143 @@ more:
 }
 
 
+/*
+ * read (part of) a message
+ */
+static int read_message_partial(struct ceph_connection *con)
+{
+	struct ceph_message *m = con->in_partial;
+	int left, ret, s, chunkbytes, c, did;
 
+	while (con->in_base_pos < sizeof(struct ceph_message_header)) {
+		left = sizeof(struct ceph_message_header) - con->in_base_pos;
+		ret = _read(socket, &m->hdr + con->in_base_pos, left);
+		if (ret <= 0) return ret;
+		con->in_base_pos += ret;
+	}
+	if (m->hdr.nchunks == 0) return 1; /* done */
 
+	chunkbytes = sizeof(__u32)*m->hdr.nchunks;
+	while (con->in_base_pos < sizeof(struct ceph_message_header) + chunkbytes) {
+		int off = in_base_pos - sizeof(struct ceph_message_header);
+		left = chunkbytes + sizeof(struct ceph_message_header) - in_base_pos;
+		ret = _read(socket, (char*)m->hdr.chunklen + off, left);
+		if (ret <= 0) return ret;
+		con->in_base_pos += ret;
+	}
+	
+	did = 0;
+	for (c = 0; c<m->hdr.nchunks; c++) {
+	more:
+		left = did + m->hdr.chunklen[c] - m->payload.b_len;
+		if (left <= 0) {
+			did += m->hdr.chunklen[c];
+			continue;
+		}
+		ceph_bl_prepare_append(&m->payload, left);
+		s = min(m->payload.b_append.iov_len, left);
+		ret = _read(socket, m->payload.b_append.iov_base, s);
+		if (ret <= 0) return ret;
+		ceph_bl_append_copied(&m->payload, s);
+		goto more;
+	}
+	return 1; /* done! */
+}
 
 /*
- * The following functions are just for testing the comms stuff...
+ * read (part of) an ack
  */
-static char *read_response(struct socket *sd)
+static int read_ack_partial(struct ceph_connection *con)
 {
-	char *response;
-	/* response = kmalloc(RECBUF, GFP_KERNEL); */
-
-	return (response);
+	while (con->in_base_pos < sizeof(con->in_partial_ack)) {
+		int left = sizeof(con->in_partial_ack) - con->in_base_pos;
+		ret = _read(socket, (char*)&con->in_partial_ack + con->in_base_pos, left);
+		if (ret <= 0) return ret;
+		con->in_base_pos += ret;
+	}
+	return 1; /* done */
 }
-static void send_reply(struct socket *sd, char *reply)
+
+/* 
+ * prepare to read a message
+ */
+static int prepare_read_message(struct ceph_connection *con)
 {
-	/* char *reply = kmalloc(SENDBUF, GFP_KERNEL); */
-
-	return;
+	con->in_tag = CEPH_MSGR_TAG_MSG;
+	con->in_base_pos = 0;
+	con->in_partial = kmalloc(sizeof(struct ceph_message));
+	if (!con->in_partial) return -1;  /* crap */
+	ceph_get_msg(con->in_partial);
+	ceph_bl_init(&con->payload);
+	ceph_bl_iterator_init(&con->in_pos);
 }
+
+/* 
+ * prepare to read an ack
+ */
+static int prepare_read_ack(struct ceph_connection *con)
+{
+	con->in_tag = CEPH_MSGR_TAG_ACK;
+	con->in_base_pos = 0;
+}
+
+static void process_ack(struct ceph_connection *con, __u32 ack)
+{
+	struct ceph_message *m;
+	while (!list_empty(&con->out_sent)) {
+		m = con->out_sent.next;
+		if (m->hdr.seq > ack) break;
+		printk(KERN_INFO "got ack for %d type %d at %lx\n", m->hdr.seq, m->hdr.type, m);
+		list_del(&m->list_head);
+		ceph_put_msg(m);
+	}
+}
+
+static int try_read(struct ceph_connection *con)
+{
+	int ret = -1;
+
+more:
+	if (con->in_tag == CEPH_MSGR_TAG_READY) {
+		ret = _read(socket, &con->in_tag, 1);
+		if (ret <= 0) return ret;
+		if (con->in_tag == CEPH_MSGR_TAG_MSG) 
+			prepare_read_message(con);
+		else if (con->in_tag == CEPH_MSGR_TAG_ACK)
+			prepare_read_ack(con);
+		else {
+			printk(KERN_INFO "bad tag %d\n", (int)con->in_tag);
+			goto bad;
+		}
+		goto more;
+	}
+	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
+		ret = read_message_partial(con);
+		if (ret <= 0) return ret;
+		/* got a full message! */
+		ceph_dispatch(con->msgr, con->in_partial);
+		cphe_put_msg(con->in_partial);
+		con->in_partial = 0;
+		con->in_tag = CEPH_MSGR_TAG_READY;
+		goto more;
+	}
+	if (con->in_tag == CEPH_MSGR_TAG_ACK) {
+		ret = read_ack_partial(con);
+		if (ret <= 0) return ret;
+		/* got an ack */
+		process_ack(con, con->in_partial_ack);
+		con->in_tag = CEPH_MSGR_TAG_READY;
+		goto more;
+	}
+bad:
+	BUG_ON(1); /* shouldn't get here */
+	return ret;
+}
+
+
+
+
+
 /*
  * Accepter thread
  */
@@ -286,6 +408,12 @@ void ceph_dispatch(struct ceph_message *msg)
 	/* also maybe keep connection alive with timeout for further
          * communication with server... not sure if we should use connection
          * then for dispatching ?? */
+
+	ceph_get_msg(msg);  /* grab a reference */
+	/*add_to_work_queue(...);*/
+
+	/* or, we can just do this from the connection worker threads.. in general, message
+	 * processing will be fast (never block), and we're already threaded per proc... */
 }
 
 

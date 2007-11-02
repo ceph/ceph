@@ -733,6 +733,9 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
+  if (!mon->is_leader()) return;
+  if (!paxos->is_active()) return;
+
   // mark down osds out?
   utime_t now = g_clock.now();
   list<int> mark_out;

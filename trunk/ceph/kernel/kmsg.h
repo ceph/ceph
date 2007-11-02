@@ -63,14 +63,20 @@ struct ceph_connection {
 	
 	/* out queue */
 /* note: need to adjust queues because we have a work queue for the message */ 
-	struct list_head out_queue;
 	spinlock_t out_queue_lock;
+	struct list_head out_queue;
 	struct ceph_bufferlist out_partial;
 	struct ceph_bufferlist_iterator out_pos;
-	struct list_head out_sent;  /* sending/sent but unacked; resend if connection drops */
+	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	/* partially read message contents */
+	char in_tag;  /* ack or msg */
+	__u32 in_partial_ack;  
+	int in_base_pos;   /* for ack seq, or msg header */
 	struct ceph_message *in_partial;
+	struct ceph_bufferlist_iterator in_pos;  /* for msg payload */
+
+
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */
 	int retries;

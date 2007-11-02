@@ -98,22 +98,29 @@ void ceph_bl_append_copy(struct ceph_bufferlist *bl, void *p, size_t len)
 	int s;
 	while (len > 0) {
 		/* allocate more space? */
-		if ( ! bl->b_append.iov_len) {
-			bl->b_append.iov_len = (len + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
-			/* TBD: check result of kmalloc */
-			bl->b_append.iov_base = kmalloc(bl->b_append.iov_len, GFP_KERNEL);
-		}
+		ceph_bl_prepare_append(bl, len);
 
 		/* copy what we can */
 		s = min(bl->b_append.iov_len, len);
 		memcpy(bl->b_append.iov_base, p, s);
-		ceph_bl_append_ref(bl, bl->b_append.iov_base, bl->b_append.iov_len);
-
 		p += s;
 		len -= s;
+		ceph_bl_append_copied(bl, s);
+	}
+}
+void ceph_bl_append_copied(struct ceph_bufferlist *bl, size_t len)
+{
+	ceph_bl_append_ref(bl, bl->b_append.iov_base, len);
+	bl->b_append.iov_base += len;
+	bl->b_append.iov_len -= len;
+}
 
-		bl->b_append.iov_base += s;
-		bl->b_append.iov_len -= s;
+void ceph_bl_prepare_append(struct ceph_bufferlist *bl, int len)
+{
+	if ( ! bl->b_append.iov_len) {
+		bl->b_append.iov_len = (len + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
+		/* TBD: check result of kmalloc */
+		bl->b_append.iov_base = kmalloc(bl->b_append.iov_len, GFP_KERNEL);
 	}
 }
 

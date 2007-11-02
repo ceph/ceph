@@ -26,4 +26,13 @@ struct ceph_bufferlist_iterator {
 	int i_off;  /* offset in that kv */
 };
 
+extern void ceph_bl_init(struct ceph_bufferlist *bl);
+extern void ceph_bl_clear(struct ceph_bufferlist *bl);
+extern void ceph_bl_append_ref(struct ceph_bufferlist *bl, void *dp, int len);
+extern void ceph_bl_append_copy(struct ceph_bufferlist *bl, void *p, size_t len);
+extern void ceph_bl_append_copied(struct ceph_bufferlist *bl, size_t len);
+extern void ceph_bl_prepare_append(struct ceph_bufferlist *bl, int len);
+
+extern void ceph_bl_iterator_init(struct ceph_bufferlist_iterator *bli);
+
 #endif

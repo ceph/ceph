@@ -149,7 +149,6 @@ public:
   const ObjectLayout& get_layout() { return st.layout; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
-  //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   const eversion_t  get_version() { return st.version; }
   //const eversion_t  get_old_version() { return st.old_version; }
   
@@ -208,9 +207,6 @@ public:
     this->st.want_commit = true;
   }
   MOSDOp() {}
-
-  //void set_pg_role(int r) { st.pg_role = r; }
-  //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_layout(const ObjectLayout& l) { st.layout = l; }
 
