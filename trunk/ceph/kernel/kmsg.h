@@ -14,23 +14,27 @@ extern struct task_struct *athread;
 struct ceph_kmsgr {
 	void *m_parent;
 	struct task_struct *athread;
-	struct radix_tree_root mpipes;		/* other nodes talk to */
+	struct radix_tree_root connections; /* see get_connection() */
+	struct list_head accepting;         /* connections that aren't open yet */
 };
 
 struct ceph_message {
-	atomic_t nref;
-	int mflags;
-	struct ceph_message_header *msghdr;	/* header */
-	__u32 chunklens[2];
+	struct ceph_message_header hdr;	/* header */
+	__u32 chunklen[2];
 	struct ceph_bufferlist payload;
-	struct list_head m_list_head;
+
+	struct list_head list_head;
+	atomic_t nref;
 };
 
 /* current state of connection, probably won't need all these.. */
 enum ceph_con_state {
+	NEW,
 	ACCEPTING,
 	CONNECTING,
 	OPEN,
+	REJECTING,
+	CLOSED,
 
 	READ_PENDING,
 	READING,
@@ -52,30 +56,30 @@ enum ceph_con_state {
 
 struct ceph_connection {
 	struct socket *sock;	/* connection socket */
-	/* TDB: may need a mutex here depending if */
-	spinlock_t con_lock;
+	
+	atomic_t nref;
+	spinlock_t con_lock;    /* TDB: may need a mutex here depending if */
 
+	struct ceph_message_addr peer_addr; /* peer address */
+	struct list_head list_head;
 	enum ceph_con_state state;
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
-	
 	/* out queue */
-/* note: need to adjust queues because we have a work queue for the message */ 
-	spinlock_t out_queue_lock;
+	/* note: need to adjust queues because we have a work queue for the message */ 
 	struct list_head out_queue;
-	struct ceph_bufferlist out_partial;
+	struct ceph_bufferlist out_partial;  /* refereces existing bufferlists; do not free() */
 	struct ceph_bufferlist_iterator out_pos;
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	/* partially read message contents */
-	char in_tag;  /* ack or msg */
+	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
+	int in_base_pos;   /* for ack seq, or msg headers, or accept handshake */
 	__u32 in_partial_ack;  
-	int in_base_pos;   /* for ack seq, or msg header */
 	struct ceph_message *in_partial;
 	struct ceph_bufferlist_iterator in_pos;  /* for msg payload */
-
 
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */

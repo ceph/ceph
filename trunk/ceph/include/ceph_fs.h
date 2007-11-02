@@ -142,11 +142,11 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
 
-#define CEPH_MSGR_TAG_READY   0  // server -> client + oseq: ready for messages
-#define CEPH_MSGR_TAG_REJECT  1  // server -> client + oseq: decline socket
-#define CEPH_MSGR_TAG_MSG     2  // message
-#define CEPH_MSGR_TAG_ACK     3  // message ack
-#define CEPH_MSGR_TAG_CLOSE   4  // closing pipe
+#define CEPH_MSGR_TAG_READY   1  // server -> client + cseq: ready for messages
+#define CEPH_MSGR_TAG_REJECT  2  // server -> client + cseq: decline socket
+#define CEPH_MSGR_TAG_MSG     3  // message
+#define CEPH_MSGR_TAG_ACK     4  // message ack
+#define CEPH_MSGR_TAG_CLOSE   5  // closing pipe
 
 
 /*
