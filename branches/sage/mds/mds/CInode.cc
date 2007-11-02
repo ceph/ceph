@@ -46,7 +46,7 @@ ostream& CInode::print_db_line_prefix(ostream& out)
 
 ostream& operator<<(ostream& out, CInode& in)
 {
-  string path;
+  filepath path;
   in.make_path(path);
   out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
   if (in.is_auth()) {
@@ -351,10 +351,10 @@ CInode *CInode::get_parent_inode()
 
 
 
-void CInode::make_path(string& s)
+void CInode::make_path_string(string& s)
 {
   if (parent) {
-    parent->make_path(s);
+    parent->make_path_string(s);
   } 
   else if (is_root()) {
     s = "";  // root
@@ -368,6 +368,14 @@ void CInode::make_path(string& s)
   else {
     s = "(dangling)";  // dangling
   }
+}
+
+void CInode::make_path(filepath& fp)
+{
+  if (parent) 
+    parent->make_path(fp);
+  else
+    fp.set_ino(ino());
 }
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
@@ -738,8 +746,8 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  if (force_auth.first >= 0) 
-    return force_auth;
+  if (inode_auth.first >= 0) 
+    return inode_auth;
 
   if (parent)
     return parent->dir->authority();

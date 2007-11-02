@@ -54,30 +54,30 @@ using namespace std;
 
 
 struct metareqid_t {
+  entity_name_t name;
   uint64_t tid;
-  int32_t client;
-  int32_t _pad;
-  metareqid_t() : tid(0), client(-1), _pad(0) {}
-  metareqid_t(int c, tid_t t) : tid(t), client(c), _pad(0) {}
+  metareqid_t() : tid(0) {}
+  //metareqid_t(int c, tid_t t) : tid(t) { name = entity_name_t::CLIENT(c); }
+  metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
 };
 
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
-  return out << "client" << r.client << ":" << r.tid;
+  return out << r.name << ":" << r.tid;
 }
 
 inline bool operator==(const metareqid_t& l, const metareqid_t& r) {
-  return (l.client == r.client) && (l.tid == r.tid);
+  return (l.name == r.name) && (l.tid == r.tid);
 }
 inline bool operator!=(const metareqid_t& l, const metareqid_t& r) {
-  return (l.client != r.client) || (l.tid != r.tid);
+  return (l.name != r.name) || (l.tid != r.tid);
 }
 inline bool operator<(const metareqid_t& l, const metareqid_t& r) {
-  return (l.client < r.client) || 
-    (l.client == r.client && l.tid < r.tid);
+  return (l.name < r.name) || 
+    (l.name == r.name && l.tid < r.tid);
 }
 inline bool operator<=(const metareqid_t& l, const metareqid_t& r) {
-  return (l.client < r.client) ||
-    (l.client == r.client && l.tid <= r.tid);
+  return (l.name < r.name) ||
+    (l.name == r.name && l.tid <= r.tid);
 }
 inline bool operator>(const metareqid_t& l, const metareqid_t& r) { return !(l <= r); }
 inline bool operator>=(const metareqid_t& l, const metareqid_t& r) { return !(l < r); }
@@ -86,7 +86,7 @@ namespace __gnu_cxx {
   template<> struct hash<metareqid_t> {
     size_t operator()(const metareqid_t &r) const { 
       hash<uint64_t> H;
-      return H(r.client) ^ H(r.tid);
+      return H(r.name.num()) ^ H(r.name.type()) ^ H(r.tid);
     }
   };
 }

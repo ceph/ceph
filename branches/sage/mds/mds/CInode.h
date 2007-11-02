@@ -185,7 +185,7 @@ public:
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
-  pair<int,int> force_auth;
+  pair<int,int> inode_auth;
 
   // -- distributed state --
 protected:
@@ -229,7 +229,7 @@ public:
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
-    parent(0), force_auth(CDIR_AUTH_DEFAULT),
+    parent(0), inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
@@ -280,7 +280,8 @@ public:
   }
 
   // -- misc -- 
-  void make_path(string& s);
+  void make_path_string(string& s);
+  void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
 

@@ -41,7 +41,7 @@ ostream& CDentry::print_db_line_prefix(ostream& out)
 
 ostream& operator<<(ostream& out, CDentry& dn)
 {
-  string path;
+  filepath path;
   dn.make_path(path);
   
   out << "[dentry " << path;
@@ -59,10 +59,10 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_null()) out << " NULL";
   if (dn.is_remote()) {
     out << " REMOTE(";
-    switch (dn.get_remote_d_type()) {
-    case inode_t::DT_REG: out << "reg"; break;
-    case inode_t::DT_DIR: out << "dir"; break;
-    case inode_t::DT_LNK: out << "lnk"; break;
+    switch (dn.get_remote_d_type() << 12) {
+    case S_IFREG: out << "reg"; break;
+    case S_IFDIR: out << "dir"; break;
+    case S_IFLNK: out << "lnk"; break;
     default: assert(0);
     }
     out << ")";
@@ -186,10 +186,10 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-void CDentry::make_path(string& s)
+void CDentry::make_path_string(string& s)
 {
   if (dir) {
-    dir->inode->make_path(s);
+    dir->inode->make_path_string(s);
   } else {
     s = "???";
   }
@@ -197,6 +197,19 @@ void CDentry::make_path(string& s)
   s += name;
 }
 
+void CDentry::make_path(filepath& fp)
+{
+  assert(dir);
+  if (dir->inode->is_base())
+    fp.set_ino(dir->inode->ino());               // base case
+  else if (dir->inode->get_parent_dn())
+    dir->inode->get_parent_dn()->make_path(fp);  // recurse
+  else
+    fp.set_ino(dir->inode->ino());               // relative but not base?  hrm!
+  fp.push_dentry(name);
+}
+
+/*
 void CDentry::make_path(string& s, inodeno_t tobase)
 {
   assert(dir);
@@ -211,6 +224,7 @@ void CDentry::make_path(string& s, inodeno_t tobase)
   }
   s += name;
 }
+*/
 
 /** make_anchor_trace
  * construct an anchor trace for this dentry, as if it were linked to *in.

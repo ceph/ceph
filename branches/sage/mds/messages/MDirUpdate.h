@@ -25,14 +25,14 @@ class MDirUpdate : public Message {
     int discover;
   } st;
   set<int> dir_rep_by;
-  string path;
+  filepath path;
 
  public:
   dirfrag_t get_dirfrag() { return st.dirfrag; }
   int get_dir_rep() { return st.dir_rep; }
   set<int>& get_dir_rep_by() { return dir_rep_by; } 
   bool should_discover() { return st.discover > 0; }
-  string& get_path() { return path; }
+  filepath& get_path() { return path; }
 
   void tried_discover() {
     if (st.discover) st.discover--;
@@ -42,7 +42,7 @@ class MDirUpdate : public Message {
   MDirUpdate(dirfrag_t dirfrag,
              int dir_rep,
              set<int>& dir_rep_by,
-             string& path,
+             filepath& path,
              bool discover = false) :
     Message(MSG_MDS_DIRUPDATE) {
     this->st.dirfrag = dirfrag;
@@ -52,19 +52,22 @@ class MDirUpdate : public Message {
     this->path = path;
   }
   virtual char *get_type_name() { return "dir_update"; }
+  void print(ostream& out) {
+    out << "dir_update(" << get_dirfrag() << ")";
+  }
 
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
     ::_decode(dir_rep_by, payload, off);
-    ::_decode(path, payload, off);
+    path._decode(payload, off);
   }
 
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     ::_encode(dir_rep_by, payload);
-    ::_encode(path, payload);
+    path._encode(payload);
   }
 };
 

@@ -200,7 +200,7 @@ public:
   }
   void clear_export_proxy_pins(CDir *dir);
 
-  void export_caps(CInode *in, int dest);
+  void export_caps(CInode *in);
 
  protected:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
@@ -215,6 +215,7 @@ public:
   void export_finish(CDir *dir);
 
   void handle_export_caps_ack(MExportCapsAck *m);
+
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
@@ -269,7 +270,6 @@ protected:
 
   // bystander
   void handle_export_notify(MExportDirNotify *m);
-
 
 };
 

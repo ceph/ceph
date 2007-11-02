@@ -508,8 +508,7 @@ Dentry *Client::lookup(filepath& path)
   Dentry *dn = 0;
   for (unsigned i=0; i<path.depth(); i++) {
     dout(14) << " seg " << i << " = " << path[i] << dendl;
-    if (cur->inode.mode & INODE_MODE_DIR &&
-        cur->dir) {
+    if (cur->inode.is_dir() && cur->dir) {
       // dir, we can descend
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
@@ -548,7 +547,7 @@ int Client::choose_target_mds(MClientRequest *req)
   unsigned i;
   for (i=0; i<depth; i++) {
     // dir?
-    if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
+    if (diri && diri->inode.is_dir() && diri->dir) {
       Dir *dir = diri->dir;
       
       // do we have the next dentry?
@@ -802,6 +801,8 @@ void Client::send_request(MetaRequest *request, int mds)
     r->set_retry_attempt(request->retry_attempt);
   }
   request->request = 0;
+
+  r->set_mdsmap_epoch(mdsmap->get_epoch());
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds), MDS_PORT_SERVER);
@@ -1107,6 +1108,17 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (m->get_op() == MClientFileCaps::OP_IMPORT) {
     int other = m->get_mds();
 
+    /*
+     * FIXME: there is a race here.. if the caps are exported twice in succession,
+     *  you may get the second import before the first, in which case the middle MDS's
+     *  import and then export won't be handled properly.
+     *  there should be a sequence number attached to the cap, incremented each time
+     *  it is exported... 
+     */
+    /*
+     * FIXME: handle mds failures
+     */
+
     if (in && in->stale_caps.count(other)) {
       dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " imported from mds" << other << dendl;
 
@@ -1196,6 +1208,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << dendl;
+    m->set_op(MClientFileCaps::OP_ACK);
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst(), MDS_PORT_LOCKER);
@@ -1585,7 +1598,7 @@ int Client::_link(const char *existing, const char *newname)
 
   MClientRequest *req = new MClientRequest(MDS_OP_LINK, messenger->get_myinst());
   req->set_path(newname);
-  req->set_sarg(existing);
+  req->set_path2(existing);
   
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1664,7 +1677,7 @@ int Client::_rename(const char *from, const char *to)
 {
   MClientRequest *req = new MClientRequest(MDS_OP_RENAME, messenger->get_myinst());
   req->set_path(from);
-  req->set_sarg(to);
+  req->set_path2(to);
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1792,7 +1805,7 @@ int Client::_symlink(const char *target, const char *link)
 {
   MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, messenger->get_myinst());
   req->set_path(link);
-  req->set_sarg(target);
+  req->set_path2(target);
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1879,7 +1892,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
     
     req = new MClientRequest(MDS_OP_LSTAT, messenger->get_myinst());
     req->args.stat.mask = mask;
-    req->set_path(fpath);
+    req->set_filepath(fpath);
 
     MClientReply *reply = make_request(req);
     res = reply->get_result();
@@ -2297,7 +2310,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
     diri = inode_map[ino];
     dout(10) << "_readdir_get_frag got diri " << diri << " " << diri->inode.ino << dendl;
     assert(diri);
-    assert(diri->inode.mode & INODE_MODE_DIR);
+    assert(diri->inode.is_dir());
   }
   
   if (!dirp->inode && diri) {

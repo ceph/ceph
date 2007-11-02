@@ -237,6 +237,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	MDSCacheObjectInfo info;
 	(*q)->set_object_info(info);
 	req->get_authpins().push_back(info);      
+	mdr->pin(*q);
       }
       mds->send_message_mds(req, p->first, MDS_PORT_SERVER);
 
@@ -452,7 +453,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
   // my needs
-  int my_client = req->get_client();
+  int my_client = req->get_client().num();
   int my_want = 0;
   if (mode & FILE_MODE_R) my_want |= CAP_FILE_RDCACHE  | CAP_FILE_RD;
   if (mode & FILE_MODE_W) my_want |= CAP_FILE_WRBUFFER | CAP_FILE_WR;
@@ -1564,6 +1565,14 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
+
+  // hack:
+  if (in->is_base()) {
+    dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
+    lock->clear_updated();
+    scatter_eval_gather(lock);
+    return;
+  }
 
   // journal write-behind.
   inode_t *pi = in->project_inode();

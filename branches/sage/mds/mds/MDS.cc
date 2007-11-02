@@ -75,6 +75,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
 
   this->whoami = whoami;
 
+  last_tid = 0;
+
   monmap = mm;
   messenger = m;
 
@@ -251,7 +253,8 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
 void MDS::forward_message_mds(Message *req, int mds, int port)
 {
   // client request?
-  if (req->get_type() == MSG_CLIENT_REQUEST) {
+  if (req->get_type() == MSG_CLIENT_REQUEST &&
+      ((MClientRequest*)req)->get_client_inst().name.is_client()) {
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
 
@@ -260,8 +263,13 @@ void MDS::forward_message_mds(Message *req, int mds, int port)
 			    creq->get_client_inst());
     
     if (!creq->is_idempotent()) {
+      /* don't actually forward if non-idempotent!
+       * client has to do it.  although the MDS will ignore duplicate requests,
+       * the affected metadata may migrate, in which case the new authority
+       * won't have the metareq_id in the completed request map.
+       */
       delete req;
-      return;  // don't actually forward if non-idempotent!  client has to do it.
+      return; 
     }
   }
   

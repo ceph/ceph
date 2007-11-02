@@ -21,12 +21,12 @@
 
 class MExportDirDiscover : public Message {
   dirfrag_t dirfrag;
-  string path;
+  filepath path;
 
  public:
   inodeno_t get_ino() { return dirfrag.ino; }
   dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_path() { return path; }
+  filepath& get_path() { return path; }
 
   bool started;
 
@@ -47,12 +47,12 @@ class MExportDirDiscover : public Message {
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::_decode_simple(dirfrag, p);
-    ::_decode_simple(path, p);
+    path._decode(p);
   }
 
   virtual void encode_payload() {
     ::_encode_simple(dirfrag, payload);
-    ::_encode_simple(path, payload);
+    path._encode(payload);
   }
 };
 

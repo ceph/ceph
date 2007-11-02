@@ -210,9 +210,7 @@ class Inode {
 
   inodeno_t ino() { return inode.ino; }
 
-  bool is_dir() {
-    return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
-  }
+  bool is_dir() { return inode.is_dir(); }
 
   int file_caps() {
     int c = 0;

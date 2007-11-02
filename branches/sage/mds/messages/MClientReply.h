@@ -127,6 +127,7 @@ class MClientReply : public Message {
   // reply data
   struct st_ {
     long tid;
+    epoch_t mdsmap_epoch;
     int op;
     int result;  // error code
     unsigned char file_caps;  // for open
@@ -149,6 +150,9 @@ class MClientReply : public Message {
  public:
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
+
+  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
 
   int get_result() { return st.result; }
   const string& get_path() { return path; }

@@ -52,6 +52,10 @@
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
 
+
+
+
+
 #include "config.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
@@ -1394,9 +1398,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     // must discover it!
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
-    int r = cache->path_traverse(0, m,
-				 0, fpath, trace, true,
-				 MDS_TRAVERSE_DISCOVER);
+    int r = cache->path_traverse(0, m, fpath, trace, true, MDS_TRAVERSE_DISCOVER);
     if (r > 0) return; // wait
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
@@ -2223,8 +2225,9 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
 
 
 
-void Migrator::export_caps(CInode *in, int dest)
+void Migrator::export_caps(CInode *in)
 {
+  int dest = in->authority().first;
   dout(7) << "export_caps to mds" << dest << " " << *in << dendl;
 
   assert(in->is_any_caps());
@@ -2305,4 +2308,8 @@ void Migrator::logged_import_caps(CInode *in,
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from, MDS_PORT_MIGRATOR);
 }
+
+
+
+
 

@@ -582,8 +582,7 @@ public:
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
-  int path_traverse(MDRequest *mdr, Message *req, 
-		    CInode *base, filepath& path, 
+  int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
 		    vector<CDentry*>& trace, bool follow_trailing_sym,
                     int onfail);
   bool path_is_mine(filepath& path);

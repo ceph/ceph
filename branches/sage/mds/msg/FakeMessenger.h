@@ -32,8 +32,6 @@ class FakeMessenger : public Messenger {
   int    qlen;
   list<Message*>       incoming;        // incoming queue
 
-  entity_inst_t _myinst;
-
  public:
   bool failed;
 
@@ -41,13 +39,6 @@ class FakeMessenger : public Messenger {
   ~FakeMessenger();
 
   virtual int shutdown();
-
-  const entity_inst_t& get_myinst() {
-    return _myinst;
-  };
-  const entity_addr_t& get_myaddr() {
-    return _myinst.addr;
-  }
 
   void reset_myname(entity_name_t m);
 

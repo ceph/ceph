@@ -30,13 +30,13 @@
 using namespace std;
 
 #include "buffer.h"
-
+#include "encodable.h"
 
 class filepath {
   /** path
-   * can be relative "a/b/c" or absolute "/a/b/c".
    */
-  string path;
+  inodeno_t ino;   // base inode
+  string path;     // relative path
 
   /** bits - path segemtns
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -74,40 +74,29 @@ class filepath {
   }
 
  public:
-  filepath() {}
-  filepath(const string& s) {
-    set_path(s);
-  }
-  filepath(const char* s) {
-    set_path(s);
-  }
+  filepath() : ino(0) {}
+  filepath(const string& s, inodeno_t i=1) : ino(i), path(s) { }
+  filepath(const char* s, inodeno_t i=1) : ino(i), path(s) { }
   filepath(const filepath& o) {
-    set_path(o.get_path());
+    ino = o.ino;
+    path = o.path;
+    bits = o.bits;
   }
-
 
   // accessors
-  const string& get_path() const {
-    return path;
-  }
-  const char *c_str() const {
-    return path.c_str();
-  }
+  inodeno_t get_ino() const { return ino; }
+  const string& get_path() const { return path; }
+  const char *c_str() const { return path.c_str(); }
 
-  int length() const {
-    return path.length();
-  }
+  int length() const { return path.length(); }
   unsigned depth() const {
     if (bits.empty() && path.length() > 0) parse_bits();
     return bits.size();
   }
-  bool empty() const {
-    return path.length() == 0;
-  }
+  bool empty() const { return path.length() == 0; }
 
-  // FIXME: const-edness
-  bool absolute() { return path.length() && path[0] == '/'; }
-  bool relative() { return !absolute(); }
+  bool absolute() const { return ino > 0; }
+  bool relative() const { return !absolute(); }
   
   const string& operator[](int i) const {
     if (bits.empty() && path.length() > 0) parse_bits();
@@ -121,6 +110,7 @@ class filepath {
 
   filepath prefixpath(int s) const {
     filepath t;
+    t.ino = ino;    
     for (int i=0; i<s; i++)
       t.push_dentry(bits[i]);
     return t;
@@ -133,17 +123,31 @@ class filepath {
   }
 
 
-
   // modifiers
+  //  string can be relative "a/b/c" (ino=0) or absolute "/a/b/c" (ino=1)
   void set_path(const string& s) {
-    path = s;
+    if (s.length() && s[0] == '/') {
+      ino = 1;  // relative to root
+      path = string(s, 1);
+    } else {
+      ino = 0;  // strictly relative   
+      path = s;
+    }
     bits.clear();
   }
   void set_path(const char *s) {
-    path = s;
+    if (s[0] == '/') {
+      ino = 1;  // relative to root
+      path = s + 1;
+    } else {
+      ino = 0;  // strictly relative   
+      path = s;
+    }
     bits.clear();
   }
+  void set_ino(inodeno_t i) { ino = i; }
   void clear() {
+    ino = 0;
     path = "";
     bits.clear();
   }
@@ -167,17 +171,28 @@ class filepath {
 
   // encoding
   void _encode(bufferlist& bl) {
-    ::_encode(path, bl);
+    ::_encode_simple(ino, bl);
+    ::_encode_simple(path, bl);
   }
   void _decode(bufferlist& bl, int& off) {
-    ::_decode(path, bl, off);
     bits.clear();
+    ::_decode(ino, bl, off);
+    ::_decode(path, bl, off);
+  }
+  void _decode(bufferlist::iterator& blp) {
+    bits.clear();
+    ::_decode_simple(ino, blp);
+    ::_decode_simple(path, blp);
   }
 
 };
 
 inline ostream& operator<<(ostream& out, filepath& path)
 {
+  if (path.get_ino() > 1)
+    out << '#' << hex << path.get_ino() << dec;
+  if (path.get_ino() > 0 && path.depth())
+    out << '/';
   return out << path.get_path();
 }
 

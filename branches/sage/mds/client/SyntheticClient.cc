@@ -264,7 +264,7 @@ string SyntheticClient::get_sarg(int seq)
   }
   if (a.length() == 0 || a == "~") {
     char s[20];
-    sprintf(s,"syn.%d.%d", client->whoami, seq);
+    sprintf(s,"/syn.%d.%d", client->whoami, seq);
     a = s;
   } 
   return a;
@@ -1365,7 +1365,7 @@ int SyntheticClient::clean_dir(string& basedir)
       continue;
     }
 
-    if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
+    if ((st.st_mode & S_IFMT) == S_IFDIR) {
       clean_dir(file);
       client->rmdir(file.c_str());
     } else {
@@ -1434,7 +1434,7 @@ int SyntheticClient::full_walk(string& basedir)
 	     file.c_str());
 
       
-      if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
+      if ((st.st_mode & S_IFMT) == S_IFDIR) {
 	dirq.push_back(file);
       }
     }
@@ -1650,10 +1650,10 @@ int SyntheticClient::open_shared(int num, int count)
     for (int n=0; n<num; n++) {
       sprintf(d,"file.%d", n);
       int fd = client->open(d,O_RDONLY);
-      fds.push_back(fd);
+      if (fd > 0) fds.push_back(fd);
     }
 
-    if (1)
+    if (false && client->get_nodeid() == 0)
       for (int n=0; n<num; n++) {
 	sprintf(d,"file.%d", n);
 	client->unlink(d);
@@ -2825,10 +2825,10 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     assert(modestring.length() == 10);
     mode_t mode = 0;
     switch (modestring[0]) {
-    case 'd': mode |= INODE_MODE_DIR; break;
-    case 'l': mode |= INODE_MODE_SYMLINK; break;
+    case 'd': mode |= S_IFDIR; break;
+    case 'l': mode |= S_IFLNK; break;
     default:
-    case '-': mode |= INODE_MODE_FILE; break;
+    case '-': mode |= S_IFREG; break;
     }
     if (modestring[1] == 'r') mode |= 0400;
     if (modestring[2] == 'w') mode |= 0200;

@@ -33,7 +33,7 @@ public:
 
   // cons
   entity_name_t() { v.type = v.num = 0; }
-  entity_name_t(int t, int n=NEW) { v.type = t; v.num = n; }
+  entity_name_t(int t, int n) { v.type = t; v.num = n; }
 
   // static cons
   static entity_name_t MON(int i=NEW) { return entity_name_t(TYPE_MON, i); }
