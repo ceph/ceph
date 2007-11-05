@@ -12,8 +12,8 @@ using std::ostream;
 
 inline ostream& operator<<(ostream& out, const sockaddr_in &a)
 {
-  unsigned char addr[4];
-  memcpy((char*)addr, (char*)&a.sin_addr.s_addr, 4);
+  unsigned char *addr = (unsigned char*)&a.sin_addr.s_addr;
+  out << "(" << a.sin_family << ")";
   out << (unsigned)addr[0] << "."
       << (unsigned)addr[1] << "."
       << (unsigned)addr[2] << "."
@@ -22,18 +22,18 @@ inline ostream& operator<<(ostream& out, const sockaddr_in &a)
   return out;
 }
 
-inline bool tcp_read(int sd, char *buf, int len) {
+inline int tcp_read(int sd, char *buf, int len) {
   while (len > 0) {
     int got = ::recv( sd, buf, len, 0 );
     if (got <= 0) {
       //generic_dout(18) << "tcp_read socket " << sd << " closed" << dendl;
-      return false;
+      return -1;
     }
     len -= got;
     buf += got;
     //generic_dout(DBL) << "tcp_read got " << got << ", " << len << " left" << dendl;
   }
-  return true;
+  return len;
 }
 
 inline int tcp_write(int sd, const char *buf, int len) {

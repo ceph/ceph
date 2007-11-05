@@ -463,8 +463,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       numdigits++;
       s++; off++;
     }
-    //cout << "val " << val << endl;
-    
+
     if (numdigits == 0) {
       cerr << "no digits at off " << off << std::endl;
       return false;           // no digits
@@ -475,14 +474,13 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     }
     s++; off++;
 
-    unsigned char *ipq = (unsigned char*)&a.v.ipaddr.sin_addr.s_addr;
     if (count <= 3)
-      ipq[count] = val;
-    else
+      a.set_ipquad(count, val);
+    else 
       a.set_port(val);
     
     count++;
-    if (count == 4 && *s != ':') break;
+    if (count == 4 && *(s-1) != ':') break;
     if (count == 5) break;  
   }
   

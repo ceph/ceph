@@ -117,17 +117,16 @@ int Rank::Accepter::start()
   }
 
   // use whatever user specified (if anything)
-  sockaddr_in listen_addr;
-  g_my_addr.make_addr(listen_addr);
+  sockaddr_in listen_addr = g_my_addr.v.ipaddr;
 
   /* socket creation */
-  listen_sd = socket(AF_INET,SOCK_STREAM,0);
+  listen_sd = socket(AF_INET, SOCK_STREAM, 0);
   assert(listen_sd > 0);
   
   /* bind to port */
   int rc = bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
   if (rc < 0) 
-    derr(0) << "accepter.start unable to bind to " << listen_addr << dendl;
+    derr(0) << "accepter.start unable to bind to " << g_my_addr.v.ipaddr << dendl;
   assert(rc >= 0);
 
   // what port did we get?
@@ -153,12 +152,12 @@ int Rank::Accepter::start()
     memcpy((char*)&listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.rank_addr.set_addr(listen_addr);
+    rank.rank_addr.v.ipaddr = listen_addr;
     rank.rank_addr.set_port(0);
   }
   if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
-    tmp.set_addr(listen_addr);
+    tmp.v.ipaddr = listen_addr;
     rank.rank_addr.set_port(tmp.get_port());
     rank.rank_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
@@ -801,14 +800,13 @@ int Rank::Pipe::connect()
   char tag;
   int rc;
   struct sockaddr_in myAddr;
-  sockaddr_in tcpaddr;
   entity_addr_t paddr;
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
 
   // create socket?
-  newsd = ::socket(AF_INET,SOCK_STREAM,0);
+  newsd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (newsd < 0) {
     dout(-1) << "connect couldn't created socket " << strerror(errno) << dendl;
     assert(0);
@@ -824,10 +822,10 @@ int Rank::Pipe::connect()
   assert(rc>=0);
 
   // connect!
-  peer_addr.make_addr(tcpaddr);
-  rc = ::connect(newsd, (sockaddr*)&tcpaddr, sizeof(myAddr));
+  dout(10) << "connecting to " << peer_addr.v.ipaddr << dendl;
+  rc = ::connect(newsd, (sockaddr*)&peer_addr.v.ipaddr, sizeof(peer_addr.v.ipaddr));
   if (rc < 0) {
-    dout(10) << "connect error " << peer_addr
+    dout(10) << "connect error " << peer_addr.v.ipaddr
 	     << ", " << errno << ": " << strerror(errno) << dendl;
     goto fail;
   }
@@ -842,8 +840,8 @@ int Rank::Pipe::connect()
 
   // identify peer
   rc = tcp_read(newsd, (char*)&paddr, sizeof(paddr));
-  if (!rc) { // bool
-    dout(0) << "connect couldn't read peer addr" << dendl;
+  if (rc < 0) {
+    dout(0) << "connect couldn't read peer addr, " << strerror(errno) << dendl;
     goto fail;
   }
   dout(20) << "connect read peer addr " << paddr << dendl;
@@ -872,8 +870,8 @@ int Rank::Pipe::connect()
 
   // wait for tag
   tag = -1;
-  if (tcp_read(newsd, &tag, 1) <= 0 ||
-      tcp_read(newsd, (char*)&cseq, sizeof(cseq)) <= 0)
+  if (tcp_read(newsd, &tag, 1) < 0 ||
+      tcp_read(newsd, (char*)&cseq, sizeof(cseq)) < 0)
     goto fail;
 
   dout(20) << "connect got initial tag " << (int)tag << " + seq " << cseq << dendl;
@@ -1049,7 +1047,7 @@ void Rank::Pipe::reader()
     char tag = -1;
     dout(20) << "reader reading tag..." << dendl;
     int rc = tcp_read(sd, (char*)&tag, 1);
-    if (rc <= 0) {
+    if (rc < 0) {
       lock.Lock();
       dout(20) << "reader couldn't read tag" << dendl;
       fault();
@@ -1260,7 +1258,7 @@ Message *Rank::Pipe::read_message()
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
   ceph_message_header env; 
-  if (!tcp_read( sd, (char*)&env, sizeof(env) ))
+  if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
   dout(20) << "reader got envelope type=" << env.type 
@@ -1274,7 +1272,7 @@ Message *Rank::Pipe::read_message()
   list<int> chunk_at;
   for (unsigned i=0; i<env.nchunks; i++) {
     int32_t size;
-    if (!tcp_read( sd, (char*)&size, sizeof(size) )) 
+    if (tcp_read( sd, (char*)&size, sizeof(size) ) < 0) 
       return 0;
 
     dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
@@ -1290,7 +1288,7 @@ Message *Rank::Pipe::read_message()
       bp = buffer::create(size);
     }
     
-    if (!tcp_read( sd, bp.c_str(), size )) 
+    if (tcp_read( sd, bp.c_str(), size ) < 0) 
       return 0;
     
     blist.push_back(bp);
