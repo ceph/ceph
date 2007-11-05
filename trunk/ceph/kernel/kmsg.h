@@ -14,6 +14,8 @@ extern struct task_struct *athread;
 struct ceph_kmsgr {
 	void *m_parent;
 	struct task_struct *athread;
+
+	spinlock_t con_lock;
 	struct radix_tree_root connections; /* see get_connection() */
 	struct list_head accepting;         /* connections that aren't open yet */
 };

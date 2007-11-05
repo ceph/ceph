@@ -16,11 +16,11 @@
  * possibly shared by multiple mount points, if they are 
  * mounting the same ceph filesystem/cluster.
  */
-struct ceph_fs_client {
+struct ceph_client {
 	__u64 s_fsid;  /* hmm this should be part of the monmap? */
 
 	__u32 s_whoami;                /* my client number */
-	struct ceph_kmsg   *s_kmsg;    /* messenger instance */
+	struct ceph_kmsg   *s_kmsgr;   /* messenger instance */
 
 	struct ceph_monmap *s_monmap;  /* monitor map */
 

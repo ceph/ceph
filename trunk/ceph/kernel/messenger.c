@@ -477,6 +477,8 @@ static void process_ack(struct ceph_connection *con, __u32 ack)
 static void process_accept(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
 	struct ceph_connection *existing;
+
+	/* do we already have a connection for this peer? */
 	spin_lock(&msgr->lock);
 	existing = get_connection(msgr, &con->peer_addr);
 	if (existing) {
@@ -593,7 +595,7 @@ static int ceph_accepter(void *unusedfornow)
 		new_sd = _kaccept(sd);
                 printk(KERN_INFO "accepted connection \n");
                 set_current_state(TASK_INTERRUPTIBLE);
-		/* initialize the ceph connection */
+		/* initialize the msgr connection */
 		con = new_connection(NULL);
 		if (con == NULL) {
                 	printk(KERN_INFO "malloc failure\n");
@@ -616,19 +618,33 @@ static int ceph_accepter(void *unusedfornow)
         return(0);
 }
 
-void ceph_dispatch(struct ceph_message *msg)
+void ceph_dispatch(struct ceph_client *client, struct ceph_message *msg)
 {
-	/* probably change the state and function of the recv worker *
-         * and requeue the work */ 
-	/* also maybe keep connection alive with timeout for further
-         * communication with server... not sure if we should use connection
-         * then for dispatching ?? */
+	/* deliver the message */
+	switch (msg->hdr.type) {
+		/* osd client */
+	case CEPH_MSG_OSDMAP:
+		ceph_osdc_handle_map(client->osd_client, msg);
+		break;
+	case CEPH_MSG_OSD_OPREPLY:
+		ceph_osdc_handle_reply(client->osd_client, msg);
+		break;
 
-	ceph_get_msg(msg);  /* grab a reference */
-	/*add_to_work_queue(...);*/
-
-	/* or, we can just do this from the connection worker threads.. in general, message
-	 * processing will be fast (never block), and we're already threaded per proc... */
+		/* mds client */
+	case CEPH_MSG_MDSMAP:
+		ceph_mdsc_handle_map(client->mds_client, msg);
+		break;
+	case CEPH_MSG_CLIENT_REPLY:
+		ceph_mdsc_handle_reply(client->mds_client, msg);
+		break;
+	case CEPH_MSG_CLIENT_FORWARD:
+		ceph_mdsc_handle_forward(client->mds_client, msg);
+		break;
+		
+	default:
+		printk(KERN_INFO "unknown message type %d\n", msg->hdr.type);
+		ceph_put_msg(msg);
+	}
 }
 
 
