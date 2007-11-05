@@ -11,8 +11,12 @@
 /* TBD:  this will be filled into ceph_kmsgr.athread during mount */
 extern struct task_struct *athread;
 
+typedef void (*ceph_kmsgr_dispatch_t)(void *, struct ceph_message *);
+
 struct ceph_kmsgr {
-	void *m_parent;
+	void *parent;
+	ceph_kmsgr_dispatch_t dispatch;
+
 	struct task_struct *athread;
 
 	spinlock_t con_lock;
@@ -31,7 +35,7 @@ struct ceph_message {
 };
 
 /* current state of connection, probably won't need all these.. */
-enum ceph_con_state {
+enum ceph_connection_state {
 	NEW,
 	ACCEPTING,
 	CONNECTING,
@@ -46,9 +50,11 @@ struct ceph_connection {
 	atomic_t nref;
 	spinlock_t con_lock;    /* TDB: may need a mutex here depending if */
 
+	struct list_head list_all;   /* msgr->con_all */
+	struct list_head list_peer;  /* msgr->con_open or con_accepting */
+
 	struct ceph_message_addr peer_addr; /* peer address */
-	struct list_head list_head;
-	enum ceph_con_state state;
+	enum ceph_connection_state state;
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */

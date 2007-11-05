@@ -20,7 +20,7 @@ struct ceph_client {
 	__u64 s_fsid;  /* hmm this should be part of the monmap? */
 
 	__u32 s_whoami;                /* my client number */
-	struct ceph_kmsg   *s_kmsgr;   /* messenger instance */
+	struct ceph_kmsgr  *s_kmsgr;   /* messenger instance */
 
 	struct ceph_monmap *s_monmap;  /* monitor map */
 
@@ -43,7 +43,7 @@ extern struct radix_tree ceph_fs_clients;
  * CEPH per-mount superblock info
  */
 struct ceph_sb_info {
-	struct ceph_fs_client *sb_client;
+	struct ceph_client *sb_client;
 	
 	/* FIXME: add my relative offset into the filesystem,
 	   so we can appropriately mangle/adjust path names in requests, etc. */
@@ -54,6 +54,7 @@ struct ceph_sb_info {
  */
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
+	int i_dir_auth;
 	struct inode vfs_inode;
 };
 
