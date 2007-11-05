@@ -22,8 +22,8 @@ class MStatfs : public Message {
 public:
   tid_t tid;
 
-  MStatfs() : Message(MSG_STATFS) {}
-  MStatfs(tid_t t) : Message(MSG_STATFS), tid(t) {}
+  MStatfs() : Message(CEPH_MSG_STATFS) {}
+  MStatfs(tid_t t) : Message(CEPH_MSG_STATFS), tid(t) {}
 
   char *get_type_name() { return "statfs"; }
   void print(ostream& out) {

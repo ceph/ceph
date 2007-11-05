@@ -22,9 +22,9 @@ class MClientRequestForward : public Message {
   int32_t num_fwd;
 
  public:
-  MClientRequestForward() : Message(MSG_CLIENT_REQUEST_FORWARD) {}
+  MClientRequestForward() : Message(CEPH_MSG_CLIENT_REQUEST_FORWARD) {}
   MClientRequestForward(tid_t t, int dm, int nf) : 
-    Message(MSG_CLIENT_REQUEST_FORWARD),
+    Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     tid(t), dest_mds(dm), num_fwd(nf) { }
 
   tid_t get_tid() { return tid; }

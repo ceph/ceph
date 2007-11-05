@@ -189,7 +189,7 @@ public:
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
          object_t oid, ObjectLayout ol, epoch_t mapepoch, int op) :
-    Message(MSG_OSD_OP) {
+    Message(CEPH_MSG_OSD_OP) {
     memset(&st, 0, sizeof(st));
     this->st.client = asker;
     this->st.reqid.name = asker.name;

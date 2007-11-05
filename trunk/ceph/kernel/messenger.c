@@ -121,6 +121,7 @@ static void add_connection(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 
 /*
  * replace another connection
+ *  (old and new should be for the _same_ peer, and thus in the same pos in the radix tree)
  */
 static void replace_connection(struct ceph_kmsgr *msgr, struct ceph_connection *old, struct ceph_connection *new)
 {
@@ -132,91 +133,6 @@ static void replace_connection(struct ceph_kmsgr *msgr, struct ceph_connection *
 }
 
 
-
-
-
-
-/*
- * blocking versions
- */
-
-static struct ceph_message *ceph_read_message(struct socket *sd)
-{
-	int ret;
-	int received = 0;
-	struct ceph_message *message;
-	struct kvec *iov;
-	int i;
-
-	message = kmalloc(sizeof(struct ceph_message), GFP_KERNEL);
-	if (message == NULL){
-		printk(KERN_INFO "malloc failure\n");
-		return NULL;
-	}
-
-	ceph_bl_init(&message->payload);
-	iov = message->payload.b_kv;
-
-	/* first read in the message header */
-	if (!_krecvmsg(sd, (char*)&message->env, sizeof(message->env), 0 )) {
-    		return(NULL);
-	}
-	printk(KERN_INFO "reader got envelope type = %d \n" , message->env.type);
-	printk(KERN_INFO "num chunks = %d \n" , message->env.nchunks);
-/* TBD: print to info file rest of env */
-
-	/* receive request in chunks */
-	for (i = 0; i < message->env.nchunks; i++) {
-		u32 size = 0;
-		void *iov_base = NULL;
-		ret = _krecvmsg(sd, (char*)&size, sizeof(size), 0);
-		if (ret <= 0) {
-			return(NULL);
-		}
-		/* try to allocate enough contiguous pages for this chunk */
-		iov_base = ceph_buffer_create(size);
-		if (iov_base == NULL) {
-			printk(KERN_INFO "memory allocation error\n" );
-			/* TBD: cleanup */
-		}
-		ret = _krecvmsg(sd, iov_base, size, 0);
-		/* TBD:  place in bufferlist (payload) */
-		received += ret;  /* keep track of complete size?? */
-	}
-	message->payload.b_kvlen = i;
-	/* unmarshall message */
-
-	return(message);
-}
-
-/*
- *  TBD: Not finished Still needs a lot of work....
- */
-static int ceph_send_message(struct ceph_message *message, struct socket *sd)
-{
-	int ret;
-	int sent = 0;
-	__u32 chunklen;
-	struct kvec *iov = message->payload.b_kv;
-	int len = message->payload.b_kvlen;
-	int i;
-
-	/* add error handling */
-
-	/* header */
-	message->env.nchunks = 1;  /* for now */
-
-	_ksendmsg(sd, (char*)&message->env, sizeof(message->env));
-
-	/* send in in single large chunk */
-	chunklen = message->payload.b_len;
-	_ksendmsg(sd, (char*)&chunklen, sizeof(chunklen));
-	for (i=0; i<len; i++) {
-		_ksendmsg(sd, (char&)iov[i].iov_base, iov[i].iov_len);
-	}
-
-	return 0;
-}
 
 
 
@@ -474,6 +390,9 @@ static void process_ack(struct ceph_connection *con, __u32 ack)
 	}
 }
 
+/*
+ * call after a new connection's handshake has completed
+ */
 static void process_accept(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
 	struct ceph_connection *existing;
@@ -622,14 +541,6 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_message *msg)
 {
 	/* deliver the message */
 	switch (msg->hdr.type) {
-		/* osd client */
-	case CEPH_MSG_OSDMAP:
-		ceph_osdc_handle_map(client->osd_client, msg);
-		break;
-	case CEPH_MSG_OSD_OPREPLY:
-		ceph_osdc_handle_reply(client->osd_client, msg);
-		break;
-
 		/* mds client */
 	case CEPH_MSG_MDSMAP:
 		ceph_mdsc_handle_map(client->mds_client, msg);
@@ -640,7 +551,15 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_message *msg)
 	case CEPH_MSG_CLIENT_FORWARD:
 		ceph_mdsc_handle_forward(client->mds_client, msg);
 		break;
-		
+
+		/* osd client */
+	case CEPH_MSG_OSDMAP:
+		ceph_osdc_handle_map(client->osd_client, msg);
+		break;
+	case CEPH_MSG_OSD_OPREPLY:
+		ceph_osdc_handle_reply(client->osd_client, msg);
+		break;
+
 	default:
 		printk(KERN_INFO "unknown message type %d\n", msg->hdr.type);
 		ceph_put_msg(msg);
@@ -693,42 +612,4 @@ void ceph_work_shutdown(void)
 	wake_up_process(athread);
 	destroy_workqueue(send_wq);
 	destroy_workqueue(recv_wq);
-}
-
-/*
-static void make_addr(struct sockaddr *saddr, struct ceph_entity_addr *v)
-{
-	struct sockaddr_in *in_addr = (struct sockaddr_in *)saddr;
-
-	memset(in_addr,0,sizeof(struct sockaddr_in));
-	in_addr->sin_family = AF_INET;
-	in_addr->sin_addr.s_addr = 
-		htonl(create_address(v.ipq[0],v.ipq[1],v.ipq[2],v.ipq[3]));
-	memcpy((char*)in_addr->sin_addr.s_addr, (char*)v.ipq, 4);
-	in_addr->sin_port = htons(v.port);
-}
-static void set_addr()
-{
-}
-*/
-
-static void ceph_reader(struct work_struct *work)
-{
-	struct ceph_connection *con = 
-		container_of(work, struct ceph_connection, rwork);
-	/* char *reply = kmalloc(RCVBUF, GFP_KERNEL); */
-	char *response = NULL;
-
-/*	send_reply(con->socket, reply); */
-	return;
-}
-static void ceph_writer(struct work_struct *work)
-{
-	struct ceph_connection *con = 
-		container_of(work, struct ceph_connection, swork);
-	/* char *reply = kmalloc(RCVBUF, GFP_KERNEL); */
-	char *response = NULL;
-
-/*	response = read_response(con->socket); */
-	return;
 }

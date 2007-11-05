@@ -104,7 +104,7 @@ class MOSDOpReply : public Message {
 
 public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
-    Message(MSG_OSD_OPREPLY) {
+    Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&st, 0, sizeof(st));
     this->st.reqid = req->st.reqid;
     this->st.op = req->st.op;

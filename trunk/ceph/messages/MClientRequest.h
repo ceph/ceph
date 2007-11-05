@@ -138,8 +138,8 @@ class MClientRequest : public Message {
   } args;
 
   // cons
-  MClientRequest() : Message(MSG_CLIENT_REQUEST) {}
-  MClientRequest(int op, entity_inst_t ci) : Message(MSG_CLIENT_REQUEST) {
+  MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
+  MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&st, 0, sizeof(st));
     memset(&args, 0, sizeof(args));
     this->st.op = op;

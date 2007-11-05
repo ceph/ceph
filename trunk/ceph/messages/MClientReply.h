@@ -165,9 +165,9 @@ class MClientReply : public Message {
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
-  MClientReply() : dir_dir(0) {};
+  MClientReply() : dir_dir(0) {}
   MClientReply(MClientRequest *req, int result = 0) : 
-    Message(MSG_CLIENT_REPLY), dir_dir(0) {
+    Message(CEPH_MSG_CLIENT_REPLY), dir_dir(0) {
     memset(&st, 0, sizeof(st));
     this->st.tid = req->get_tid();
     this->st.op = req->get_op();

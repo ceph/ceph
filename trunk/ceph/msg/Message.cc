@@ -117,17 +117,17 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     m = new MPGStats;
     break;
 
-  case MSG_STATFS:
+  case CEPH_MSG_STATFS:
     m = new MStatfs;
     break;
-  case MSG_STATFS_REPLY:
+  case CEPH_MSG_STATFS_REPLY:
     m = new MStatfsReply;
     break;
 
-  case MSG_MON_COMMAND:
+  case CEPH_MSG_MON_COMMAND:
     m = new MMonCommand;
     break;
-  case MSG_MON_COMMAND_ACK:
+  case CEPH_MSG_MON_COMMAND_ACK:
     m = new MMonCommandAck;
     break;
   case MSG_MON_PAXOS:
@@ -138,12 +138,13 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     m = new MMonElection;
     break;
 
-  case MSG_PING:
+  case CEPH_MSG_PING:
     m = new MPing();
     break;
-  case MSG_PING_ACK:
+  case CEPH_MSG_PING_ACK:
     m = new MPingAck();
     break;
+    
 	/*
   case MSG_FAILURE:
     m = new MFailure();
@@ -168,17 +169,17 @@ decode_message(ceph_message_header& env, bufferlist& payload)
   case MSG_OSD_PING:
     m = new MOSDPing();
     break;
-  case MSG_OSD_OP:
+  case CEPH_MSG_OSD_OP:
     m = new MOSDOp();
     break;
-  case MSG_OSD_OPREPLY:
+  case CEPH_MSG_OSD_OPREPLY:
     m = new MOSDOpReply();
     break;
 
-  case MSG_OSD_MAP:
+  case CEPH_MSG_OSD_MAP:
     m = new MOSDMap();
     break;
-  case MSG_OSD_GETMAP:
+  case CEPH_MSG_OSD_GETMAP:
     m = new MOSDGetMap();
     break;
 
@@ -199,28 +200,28 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     break;
 
     // clients
-  case MSG_CLIENT_MOUNT:
+  case CEPH_MSG_CLIENT_MOUNT:
     m = new MClientMount;
     break;
-  case MSG_CLIENT_UNMOUNT:
+  case CEPH_MSG_CLIENT_UNMOUNT:
     m = new MClientUnmount;
     break;
-  case MSG_CLIENT_SESSION:
+  case CEPH_MSG_CLIENT_SESSION:
     m = new MClientSession;
     break;
-  case MSG_CLIENT_RECONNECT:
+  case CEPH_MSG_CLIENT_RECONNECT:
     m = new MClientReconnect;
     break;
-  case MSG_CLIENT_REQUEST:
+  case CEPH_MSG_CLIENT_REQUEST:
     m = new MClientRequest;
     break;
-  case MSG_CLIENT_REQUEST_FORWARD:
+  case CEPH_MSG_CLIENT_REQUEST_FORWARD:
     m = new MClientRequestForward;
     break;
-  case MSG_CLIENT_REPLY:
+  case CEPH_MSG_CLIENT_REPLY:
     m = new MClientReply;
     break;
-  case MSG_CLIENT_FILECAPS:
+  case CEPH_MSG_CLIENT_FILECAPS:
     m = new MClientFileCaps;
     break;
 
@@ -229,10 +230,10 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     m = new MMDSSlaveRequest;
     break;
 
-  case MSG_MDS_GETMAP:
+  case CEPH_MSG_MDS_GETMAP:
 	m = new MMDSGetMap();
 	break;
-  case MSG_MDS_MAP:
+  case CEPH_MSG_MDS_MAP:
 	m = new MMDSMap();
 	break;
   case MSG_MDS_BEACON:
@@ -345,8 +346,7 @@ decode_message(ceph_message_header& env, bufferlist& payload)
 
     // -- simple messages without payload --
 
-  case MSG_CLOSE:
-  case MSG_SHUTDOWN:
+  case CEPH_MSG_SHUTDOWN:
     m = new MGenericMessage(env.type);
     break;
 

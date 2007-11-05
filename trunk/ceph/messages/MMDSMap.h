@@ -52,9 +52,9 @@ class MMDSMap : public Message {
   bufferlist& get_encoded() { return encoded; }
 
   MMDSMap() : 
-    Message(MSG_MDS_MAP) {}
+    Message(CEPH_MSG_MDS_MAP) {}
   MMDSMap(MDSMap *mm) :
-    Message(MSG_MDS_MAP) {
+    Message(CEPH_MSG_MDS_MAP) {
     epoch = mm->get_epoch();
     mm->encode(encoded);
   }

@@ -36,9 +36,9 @@ public:
   int32_t op;
   version_t seq;
 
-  MClientSession() : Message(MSG_CLIENT_SESSION) { }
+  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(MSG_CLIENT_SESSION),
+    Message(CEPH_MSG_CLIENT_SESSION),
     op(o), seq(s) { }
 
   char *get_type_name() { return "client_session"; }

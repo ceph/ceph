@@ -45,8 +45,8 @@ class MOSDMap : public Message {
   }
 
 
-  MOSDMap() : Message(MSG_OSD_MAP) { }
-  MOSDMap(OSDMap *oc) : Message(MSG_OSD_MAP) {
+  MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
+  MOSDMap(OSDMap *oc) : Message(CEPH_MSG_OSD_MAP) {
     oc->encode(maps[oc->get_epoch()]);
   }
 

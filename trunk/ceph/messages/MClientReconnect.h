@@ -24,7 +24,7 @@ public:
   map<inodeno_t, string> inode_path;
   bool closed;  // true if this session was closed by the client.
 
-  MClientReconnect() : Message(MSG_CLIENT_RECONNECT),
+  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT),
 		       closed(false) { }
 
   char *get_type_name() { return "client_reconnect"; }

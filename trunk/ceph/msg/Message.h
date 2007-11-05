@@ -15,73 +15,36 @@
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
  
-#define MSG_CLOSE 0
-
-#define MSG_STATFS       1
-#define MSG_STATFS_REPLY 2
-#define MSG_PGSTATS      3
-
-#define MSG_PING        10
-#define MSG_PING_ACK    11
-
-#define MSG_SHUTDOWN    99999
-
-#define MSG_MON_COMMAND            13
-#define MSG_MON_COMMAND_ACK        14
-
-
-#define MSG_MON_ELECTION           15
-
-#define MSG_MON_OSDMAP_INFO            20
-#define MSG_MON_OSDMAP_LEASE           21
-#define MSG_MON_OSDMAP_LEASE_ACK       22
-#define MSG_MON_OSDMAP_UPDATE_PREPARE  23
-#define MSG_MON_OSDMAP_UPDATE_ACK      24
-#define MSG_MON_OSDMAP_UPDATE_COMMIT   25
-
-#define MSG_MON_PAXOS              30
-
-#define MSG_OSD_OP           40    // delete, etc.
-#define MSG_OSD_OPREPLY      41    // delete, etc.
-#define MSG_OSD_PING         42
-
-#define MSG_OSD_GETMAP       43
-#define MSG_OSD_MAP          44
-
-#define MSG_OSD_BOOT         45
-
-#define MSG_OSD_FAILURE      47
-
-#define MSG_OSD_IN           48
-#define MSG_OSD_OUT          49
+/* public message types */
+#include "include/ceph_fs_msgs.h"
 
 
 
-#define MSG_OSD_PG_NOTIFY      50
-#define MSG_OSD_PG_QUERY       51
-#define MSG_OSD_PG_SUMMARY     52
-#define MSG_OSD_PG_LOG         53
-#define MSG_OSD_PG_REMOVE      54
-#define MSG_OSD_PG_ACTIVATE_SET 55
+//#define MSG_SHUTDOWN    99999
 
-// -- client --
-// to monitor
-#define MSG_CLIENT_MOUNT           60
-#define MSG_CLIENT_UNMOUNT         61
+// monitor internal
+#define MSG_MON_ELECTION           60
+#define MSG_MON_PAXOS              61
 
-// to mds
-#define MSG_CLIENT_SESSION         70   // start or stop
-#define MSG_CLIENT_RECONNECT       71
+// osd internal
+#define MSG_OSD_PING         70
+#define MSG_OSD_BOOT         71
+#define MSG_OSD_FAILURE      72
+#define MSG_OSD_IN           73
+#define MSG_OSD_OUT          74
 
-#define MSG_CLIENT_REQUEST         80
-#define MSG_CLIENT_REQUEST_FORWARD 81
-#define MSG_CLIENT_REPLY           82
-#define MSG_CLIENT_FILECAPS        0x310  // 
+#define MSG_OSD_PG_NOTIFY      80
+#define MSG_OSD_PG_QUERY       81
+#define MSG_OSD_PG_SUMMARY     82
+#define MSG_OSD_PG_LOG         83
+#define MSG_OSD_PG_REMOVE      84
+#define MSG_OSD_PG_ACTIVATE_SET 85
+
+#define MSG_PGSTATS    86
 
 
 
 // *** MDS ***
-
 
 #define MSG_MDS_RESOLVE            0x200
 #define MSG_MDS_RESOLVEACK         0x201
@@ -110,15 +73,12 @@
 #define MSG_MDS_EXPORTDIRNOTIFYACK    0x459
 #define MSG_MDS_EXPORTDIRFINISH       0x460
 
+#define MSG_MDS_BEACON             90  // to monitor
+#define MSG_MDS_SLAVE_REQUEST      91
 
-#define MSG_MDS_GETMAP             102
-#define MSG_MDS_MAP                103
-#define MSG_MDS_BEACON             105  // to monitor
-
-#define MSG_MDS_ANCHOR 0x100
+#define MSG_MDS_ANCHOR             0x100
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
-#define MSG_MDS_SLAVE_REQUEST         170
 
 /*
 #define MSG_MDS_INODEGETREPLICA    112

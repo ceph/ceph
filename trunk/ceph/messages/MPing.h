@@ -23,10 +23,10 @@
 class MPing : public Message {
  public:
   int seq;
-  MPing(int s) : Message(MSG_PING) {
+  MPing(int s) : Message(CEPH_MSG_PING) {
     seq = s;
   }
-  MPing() : Message(MSG_PING) {}
+  MPing() : Message(CEPH_MSG_PING) {}
 
   virtual void decode_payload() {
     int off = 0;

@@ -69,7 +69,7 @@ class MClientFileCaps : public Message {
                   int caps_,
                   int wanted_,
                   int mds_=0) :
-    Message(MSG_CLIENT_FILECAPS),
+    Message(CEPH_MSG_CLIENT_FILECAPS),
     op(op_),
     inode(inode_),
     seq(seq_),

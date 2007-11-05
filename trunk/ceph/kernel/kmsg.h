@@ -16,8 +16,9 @@ struct ceph_kmsgr {
 	struct task_struct *athread;
 
 	spinlock_t con_lock;
-	struct radix_tree_root connections; /* see get_connection() */
-	struct list_head accepting;         /* connections that aren't open yet */
+	struct list_head con_all;        /* all connections */
+	struct list_head con_accepting;  /* doing handshake */
+	struct radix_tree_root con_open; /* established. see get_connection() */
 };
 
 struct ceph_message {
@@ -36,23 +37,6 @@ enum ceph_con_state {
 	CONNECTING,
 	OPEN,
 	REJECTING,
-	CLOSED,
-
-	READ_PENDING,
-	READING,
-	READ_DONE,
-	SEND_PENDING,
-	/*SENDING,*/
-	SEND_DONE,
-	CONNECTING,
-	CONNECT_RETRY,
-	CONNECTED,
-	CONNECT_FAIL,
-	CONNECT_KEEPALIVE,
-	DISPATCH_READY,
-	DISPATCH_DONE,
-	CLOSE_PENDING,
-	CLOSING,
 	CLOSED
 };
 

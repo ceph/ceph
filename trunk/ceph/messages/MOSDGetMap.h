@@ -24,7 +24,7 @@ class MOSDGetMap : public Message {
   epoch_t start, want;
 
   MOSDGetMap(epoch_t s=0, epoch_t w=0) : 
-    Message(MSG_OSD_GETMAP),
+    Message(CEPH_MSG_OSD_GETMAP),
     start(s), want(w) { }
 
   epoch_t get_start_epoch() { return start; }

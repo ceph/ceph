@@ -22,9 +22,9 @@ public:
   entity_addr_t addr;
   int32_t instance;  // on this node
 
-  MClientMount() : Message(MSG_CLIENT_MOUNT) { }
+  MClientMount() : Message(CEPH_MSG_CLIENT_MOUNT) { }
   MClientMount(entity_addr_t a, int i = 0) : 
-    Message(MSG_CLIENT_MOUNT),
+    Message(CEPH_MSG_CLIENT_MOUNT),
     addr(a), instance(i) { }
 
   char *get_type_name() { return "client_mount"; }

@@ -23,7 +23,7 @@ class MPingAck : public Message {
  public:
   int seq;
   MPingAck() {}
-  MPingAck(MPing *p) : Message(MSG_PING_ACK) {
+  MPingAck(MPing *p) : Message(CEPH_MSG_PING_ACK) {
     this->seq = p->seq;
   }
 

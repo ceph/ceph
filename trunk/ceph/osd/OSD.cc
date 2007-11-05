@@ -902,7 +902,7 @@ void OSD::dispatch(Message *m)
   switch (m->get_type()) {
 
     // -- don't need lock -- 
-  case MSG_PING:
+  case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
     delete m;
     break;
@@ -910,12 +910,12 @@ void OSD::dispatch(Message *m)
     // -- don't need OSDMap --
 
     // map and replication
-  case MSG_OSD_MAP:
+  case CEPH_MSG_OSD_MAP:
     handle_osd_map((MOSDMap*)m);
     break;
 
     // osd
-  case MSG_SHUTDOWN:
+  case CEPH_MSG_SHUTDOWN:
     shutdown();
     delete m;
     break;
@@ -967,12 +967,12 @@ void OSD::dispatch(Message *m)
         handle_pg_activate_set((MOSDPGActivateSet*)m);
         break;
 
-      case MSG_OSD_OP:
+      case CEPH_MSG_OSD_OP:
         handle_op((MOSDOp*)m);
         break;
         
         // for replication etc.
-      case MSG_OSD_OPREPLY:
+      case CEPH_MSG_OSD_OPREPLY:
         handle_op_reply((MOSDOpReply*)m);
         break;
         
@@ -2234,9 +2234,9 @@ void OSD::handle_op(MOSDOp *op)
 
   if (g_conf.osd_maxthreads < 1) {
     // do it now.
-    if (op->get_type() == MSG_OSD_OP)
+    if (op->get_type() == CEPH_MSG_OSD_OP)
       pg->do_op((MOSDOp*)op);
-    else if (op->get_type() == MSG_OSD_OPREPLY)
+    else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
       pg->do_op_reply((MOSDOpReply*)op);
     else 
       assert(0);
@@ -2329,9 +2329,9 @@ void OSD::dequeue_op(PG *pg)
   osd_lock.Unlock();
 
   // do it
-  if (op->get_type() == MSG_OSD_OP)
+  if (op->get_type() == CEPH_MSG_OSD_OP)
     pg->do_op((MOSDOp*)op); // do it now
-  else if (op->get_type() == MSG_OSD_OPREPLY)
+  else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
     pg->do_op_reply((MOSDOpReply*)op);
   else 
     assert(0);
