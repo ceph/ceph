@@ -22,8 +22,8 @@ class MMonCommandAck : public Message {
   int r;
   string rs;
   
-  MMonCommandAck() : Message(CEPH_MSG_MON_COMMAND_ACK) {}
-  MMonCommandAck(int _r, string s) : Message(CEPH_MSG_MON_COMMAND_ACK),
+  MMonCommandAck() : Message(MSG_MON_COMMAND_ACK) {}
+  MMonCommandAck(int _r, string s) : Message(MSG_MON_COMMAND_ACK),
 				     r(_r), rs(s) { }
   
   virtual char *get_type_name() { return "mon_command"; }

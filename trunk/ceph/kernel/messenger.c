@@ -1,17 +1,17 @@
 #include <linux/kthread.h>
 #include <linux/socket.h>
 #include <linux/net.h>
-#include <linux/ceph_fs.h>
 #include <linux/string.h>
 #include <net/tcp.h>
+
+#include <linux/ceph_fs.h>
+#include <linux/ceph_fs_msgs.h>
 #include "kmsg.h"
 #include "ktcp.h"
 
+
 static struct workqueue_struct *recv_wq;        /* receive work queue ) */
 static struct workqueue_struct *send_wq;        /* send work queue */
-
-static void ceph_reader(struct work_struct *);
-static void ceph_writer(struct work_struct *);
 
 struct task_struct *athread;  /* accepter thread, TBD: fill into kmsgr */
 

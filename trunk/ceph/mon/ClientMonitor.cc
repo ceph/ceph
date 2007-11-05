@@ -123,7 +123,7 @@ bool ClientMonitor::preprocess_query(Message *m)
   dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
 
   switch (m->get_type()) {
-  case MSG_CLIENT_MOUNT:
+  case CEPH_MSG_CLIENT_MOUNT:
     {
       // already mounted?
       MClientMount *mount = (MClientMount*)m;
@@ -138,7 +138,7 @@ bool ClientMonitor::preprocess_query(Message *m)
     }
     return false;
     
-  case MSG_CLIENT_UNMOUNT:
+  case CEPH_MSG_CLIENT_UNMOUNT:
     {
       // already unmounted?
       int client = m->get_source().num();
@@ -163,7 +163,7 @@ bool ClientMonitor::prepare_update(Message *m)
   dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
   
   switch (m->get_type()) {
-  case MSG_CLIENT_MOUNT:
+  case CEPH_MSG_CLIENT_MOUNT:
     {
       MClientMount *mount = (MClientMount*)m;
       pair<entity_addr_t,int> addrinst(mount->addr, mount->instance);
@@ -194,7 +194,7 @@ bool ClientMonitor::prepare_update(Message *m)
     }
     return true;
 
-  case MSG_CLIENT_UNMOUNT:
+  case CEPH_MSG_CLIENT_UNMOUNT:
     {
       MClientUnmount *unmount = (MClientUnmount*)m;
       assert(unmount->inst.name.is_client());

@@ -27,13 +27,6 @@
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 
-#include "messages/MMonOSDMapInfo.h"
-#include "messages/MMonOSDMapLease.h"
-#include "messages/MMonOSDMapLeaseAck.h"
-#include "messages/MMonOSDMapUpdatePrepare.h"
-#include "messages/MMonOSDMapUpdateAck.h"
-#include "messages/MMonOSDMapUpdateCommit.h"
-
 #include "common/Timer.h"
 
 #include "config.h"
@@ -383,7 +376,7 @@ bool OSDMonitor::preprocess_query(Message *m)
 
   switch (m->get_type()) {
     // READs
-  case MSG_OSD_GETMAP:
+  case CEPH_MSG_OSD_GETMAP:
     handle_osd_getmap((MOSDGetMap*)m);
     return true;
     

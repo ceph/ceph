@@ -35,9 +35,4 @@
 #define CEPH_MSG_OSD_OP           42    // delete, etc.
 #define CEPH_MSG_OSD_OPREPLY      43    // delete, etc.
 
-/* monitor <-> mon admin tool */
-#define CEPH_MSG_MON_COMMAND            50
-#define CEPH_MSG_MON_COMMAND_ACK        51
-
-
 #endif

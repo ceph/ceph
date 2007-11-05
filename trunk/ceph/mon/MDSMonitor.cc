@@ -152,7 +152,7 @@ bool MDSMonitor::preprocess_query(Message *m)
   case MSG_MDS_BEACON:
     return preprocess_beacon((MMDSBeacon*)m);
     
-  case MSG_MDS_GETMAP:
+  case CEPH_MSG_MDS_GETMAP:
     send_full(m->get_source_inst());
     return true;
 
@@ -445,7 +445,7 @@ void MDSMonitor::committed()
       g_conf.mon_stop_with_last_mds &&
       mdsmap.get_epoch() > 1 &&
       mdsmap.is_stopped()) 
-    mon->messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+    mon->messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
 }
 

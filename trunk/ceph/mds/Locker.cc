@@ -70,7 +70,7 @@ void Locker::dispatch(Message *m)
     handle_inode_file_caps((MInodeFileCaps*)m);
     break;
 
-  case MSG_CLIENT_FILECAPS:
+  case CEPH_MSG_CLIENT_FILECAPS:
     handle_client_file_caps((MClientFileCaps*)m);
     break;
 

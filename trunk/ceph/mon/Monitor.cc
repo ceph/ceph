@@ -108,7 +108,7 @@ void Monitor::shutdown()
 	 it++) {
       if (osdmon->osdmap.is_down(*it)) continue;
       dout(10) << "sending shutdown to osd" << *it << dendl;
-      messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+      messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
 			      osdmon->osdmap.get_inst(*it));
     }
     osdmon->mark_all_down();
@@ -116,7 +116,7 @@ void Monitor::shutdown()
     // monitors too.
     for (int i=0; i<monmap->num_mon; i++)
       if (i != whoami)
-	messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				monmap->get_inst(i));
   }
   
@@ -244,11 +244,11 @@ void Monitor::dispatch(Message *m)
     switch (m->get_type()) {
       
       // misc
-    case MSG_PING_ACK:
+    case CEPH_MSG_PING_ACK:
       handle_ping_ack((MPingAck*)m);
       break;
       
-    case MSG_SHUTDOWN:
+    case CEPH_MSG_SHUTDOWN:
       if (m->get_source().is_osd()) 
 	osdmon->dispatch(m);
       else
@@ -261,7 +261,7 @@ void Monitor::dispatch(Message *m)
 
 
       // OSDs
-    case MSG_OSD_GETMAP:
+    case CEPH_MSG_OSD_GETMAP:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_IN:
@@ -272,18 +272,18 @@ void Monitor::dispatch(Message *m)
       
       // MDSs
     case MSG_MDS_BEACON:
-    case MSG_MDS_GETMAP:
+    case CEPH_MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
       break;
 
       // clients
-    case MSG_CLIENT_MOUNT:
-    case MSG_CLIENT_UNMOUNT:
+    case CEPH_MSG_CLIENT_MOUNT:
+    case CEPH_MSG_CLIENT_UNMOUNT:
       clientmon->dispatch(m);
       break;
 
       // pg
-    case MSG_STATFS:
+    case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
       pgmon->dispatch(m);
       break;

@@ -52,11 +52,11 @@ void Objecter::shutdown()
 void Objecter::dispatch(Message *m)
 {
   switch (m->get_type()) {
-  case MSG_OSD_OPREPLY:
+  case CEPH_MSG_OSD_OPREPLY:
     handle_osd_op_reply((MOSDOpReply*)m);
     break;
     
-  case MSG_OSD_MAP:
+  case CEPH_MSG_OSD_MAP:
     handle_osd_map((MOSDMap*)m);
     break;
 

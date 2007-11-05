@@ -115,7 +115,7 @@ bool PGMonitor::preprocess_query(Message *m)
   dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
 
   switch (m->get_type()) {
-  case MSG_STATFS:
+  case CEPH_MSG_STATFS:
     handle_statfs((MStatfs*)m);
     return true;
     

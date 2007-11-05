@@ -902,39 +902,39 @@ void Client::dispatch(Message *m)
 
   switch (m->get_type()) {
     // osd
-  case MSG_OSD_OPREPLY:
+  case CEPH_MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((MOSDOpReply*)m);
     break;
 
-  case MSG_OSD_MAP:
+  case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
     if (!mounted) mount_cond.Signal();
     break;
     
     // mounting and mds sessions
-  case MSG_MDS_MAP:
+  case CEPH_MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
     break;
-  case MSG_CLIENT_UNMOUNT:
+  case CEPH_MSG_CLIENT_UNMOUNT:
     handle_unmount(m);
     break;
-  case MSG_CLIENT_SESSION:
+  case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
     break;
 
     // requests
-  case MSG_CLIENT_REQUEST_FORWARD:
+  case CEPH_MSG_CLIENT_REQUEST_FORWARD:
     handle_client_request_forward((MClientRequestForward*)m);
     break;
-  case MSG_CLIENT_REPLY:
+  case CEPH_MSG_CLIENT_REPLY:
     handle_client_reply((MClientReply*)m);
     break;
 
-  case MSG_CLIENT_FILECAPS:
+  case CEPH_MSG_CLIENT_FILECAPS:
     handle_file_caps((MClientFileCaps*)m);
     break;
 
-  case MSG_STATFS_REPLY:
+  case CEPH_MSG_STATFS_REPLY:
     handle_statfs_reply((MStatfsReply*)m);
     break;
 

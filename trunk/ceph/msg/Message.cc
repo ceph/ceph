@@ -124,10 +124,10 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     m = new MStatfsReply;
     break;
 
-  case CEPH_MSG_MON_COMMAND:
+  case MSG_MON_COMMAND:
     m = new MMonCommand;
     break;
-  case CEPH_MSG_MON_COMMAND_ACK:
+  case MSG_MON_COMMAND_ACK:
     m = new MMonCommandAck;
     break;
   case MSG_MON_PAXOS:

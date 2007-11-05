@@ -87,7 +87,7 @@ void Server::reopen_logger(utime_t start, bool append)
 void Server::dispatch(Message *m) 
 {
   switch (m->get_type()) {
-  case MSG_CLIENT_RECONNECT:
+  case CEPH_MSG_CLIENT_RECONNECT:
     handle_client_reconnect((MClientReconnect*)m);
     return;
   }
@@ -100,10 +100,10 @@ void Server::dispatch(Message *m)
   }
 
   switch (m->get_type()) {
-  case MSG_CLIENT_SESSION:
+  case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
     return;
-  case MSG_CLIENT_REQUEST:
+  case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
     return;
   case MSG_MDS_SLAVE_REQUEST:

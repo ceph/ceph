@@ -25,9 +25,9 @@ class MMonCommand : public Message {
   entity_inst_t inst;
   vector<string> cmd;
 
-  MMonCommand() : Message(CEPH_MSG_MON_COMMAND) {}
+  MMonCommand() : Message(MSG_MON_COMMAND) {}
   MMonCommand(entity_inst_t i) : 
-    Message(CEPH_MSG_MON_COMMAND),
+    Message(MSG_MON_COMMAND),
     inst(i) { }
   
   virtual char *get_type_name() { return "mon_command"; }

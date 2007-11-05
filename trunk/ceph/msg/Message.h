@@ -19,12 +19,13 @@
 #include "include/ceph_fs_msgs.h"
 
 
-
-//#define MSG_SHUTDOWN    99999
-
 // monitor internal
 #define MSG_MON_ELECTION           60
 #define MSG_MON_PAXOS              61
+
+/* monitor <-> mon admin tool */
+#define MSG_MON_COMMAND            50
+#define MSG_MON_COMMAND_ACK        51
 
 // osd internal
 #define MSG_OSD_PING         70
@@ -78,15 +79,6 @@
 
 #define MSG_MDS_ANCHOR             0x100
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
-
-
-/*
-#define MSG_MDS_INODEGETREPLICA    112
-#define MSG_MDS_INODEGETREPLICAACK 113
-
-#define MSG_MDS_DIREXPIREREQ 124
-*/
-
 
 
 

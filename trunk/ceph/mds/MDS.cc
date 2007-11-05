@@ -250,7 +250,7 @@ void MDS::send_message_mds(Message *m, int mds)
 void MDS::forward_message_mds(Message *req, int mds)
 {
   // client request?
-  if (req->get_type() == MSG_CLIENT_REQUEST) {
+  if (req->get_type() == CEPH_MSG_CLIENT_REQUEST) {
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
 
@@ -1079,7 +1079,7 @@ void MDS::my_dispatch(Message *m)
 	mdsmap->get_inst(from) != m->get_source_inst() ||
 	mdsmap->is_down(from)) {
       // bogus mds?
-      if (m->get_type() == MSG_MDS_MAP) {
+      if (m->get_type() == CEPH_MSG_MDS_MAP) {
 	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
 		<< ", but it's an mdsmap, looking at it" << dendl;
       } else if (m->get_type() == MSG_MDS_CACHEEXPIRE &&
@@ -1113,8 +1113,8 @@ void MDS::my_dispatch(Message *m)
   default:
     switch (m->get_type()) {
       // SERVER
-    case MSG_CLIENT_SESSION:
-    case MSG_CLIENT_REQUEST:
+    case CEPH_MSG_CLIENT_SESSION:
+    case CEPH_MSG_CLIENT_REQUEST:
     case MSG_MDS_SLAVE_REQUEST:
       server->dispatch(m);
       break;
@@ -1132,15 +1132,15 @@ void MDS::my_dispatch(Message *m)
       break;
 
       // OSD
-    case MSG_OSD_OPREPLY:
+    case CEPH_MSG_OSD_OPREPLY:
       objecter->handle_osd_op_reply((class MOSDOpReply*)m);
       break;
-    case MSG_OSD_MAP:
+    case CEPH_MSG_OSD_MAP:
       handle_osd_map((MOSDMap*)m);
       break;
       
       // MDS
-    case MSG_MDS_MAP:
+    case CEPH_MSG_MDS_MAP:
       handle_mds_map((MMDSMap*)m);
       break;
     case MSG_MDS_BEACON:
@@ -1257,16 +1257,16 @@ void MDS::proc_message(Message *m)
   switch (m->get_type()) {
 
     // OSD
-  case MSG_OSD_OPREPLY:
+  case CEPH_MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((class MOSDOpReply*)m);
     return;
-  case MSG_OSD_MAP:
+  case CEPH_MSG_OSD_MAP:
     handle_osd_map((MOSDMap*)m);
     return;
 
 
     // MDS
-  case MSG_MDS_MAP:
+  case CEPH_MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
     return;
   case MSG_MDS_BEACON:
@@ -1286,7 +1286,7 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Lock();
   dout(10) << "handle_ms_failure to " << inst << " on " << *m << dendl;
   
-  if (m->get_type() == MSG_MDS_MAP && m->get_dest().is_client()) 
+  if (m->get_type() == CEPH_MSG_MDS_MAP && m->get_dest().is_client()) 
     server->client_reconnect_failure(m->get_dest().num());
 
   delete m;
