@@ -61,7 +61,8 @@ struct ceph_mds_client {
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, 
 			   struct ceph_kmessenger *kmessenger);
 extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds);
-extern void ceph_mdsc_got_reply(struct ceph_mds_client *mdsc, __u64 tid);
+extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *msg);
+extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message *msg);
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_message *msg);
 
 #endif

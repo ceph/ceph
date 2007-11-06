@@ -2,7 +2,8 @@
 #include <linux/fs.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
-#include "ceph_fs.h"
+
+#include <linux/ceph_fs.h>
 
 MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_DESCRIPTION("Ceph filesystem for Linux");

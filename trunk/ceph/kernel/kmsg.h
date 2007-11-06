@@ -8,22 +8,23 @@
 #include <linux/ceph_fs.h>
 #include "bufferlist.h"
 
+struct ceph_message;
 
-typedef void (*ceph_kmsgr_dispatch_t)(void *, struct ceph_message *);
+typedef void (*ceph_kmsgr_dispatch_t) (void *p, struct ceph_message *m);
 
 /* list of pollable file descriptors , this will probably change a bit */
 struct ceph_pollable {
         struct list_head poll_list;
 	struct pollfd *pollfd;
 	struct file *file;
-	poll_table *pwait;
+	struct poll_table *pwait;
 };
 
 struct ceph_poll_task {
         struct task_struct *poll_task;
 	struct ceph_pollable pds;
         int nfds;
-}
+};
 
 struct ceph_kmsgr {
 	void *parent;
@@ -31,8 +32,8 @@ struct ceph_kmsgr {
         struct ceph_poll_task *poll_task;
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
-	struct list_head con_accepting;  /* doing handshake */
-	struct radix_tree_root con_open; /* established. see get_connection() */
+	struct list_head con_accepting;  /*  doing handshake, or */
+	struct radix_tree_root con_open; /*  established. see get_connection() */
 };
 
 struct ceph_message {
@@ -61,9 +62,9 @@ struct ceph_connection {
 	spinlock_t con_lock;    /* connection lock */
 
 	struct list_head list_all;   /* msgr->con_all */
-	struct list_head list_peer;  /* msgr->con_open or con_accepting */
+	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
 
-	struct ceph_message_addr peer_addr; /* peer address */
+	struct ceph_entity_addr peer_addr; /* peer address */
 	enum ceph_connection_state state;
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
@@ -93,7 +94,7 @@ struct ceph_connection {
 
 static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {
-		ceph_bl_clear(msg->payload);
+		ceph_bl_clear(&msg->payload);
 		kfree(msg);
 	}
 }

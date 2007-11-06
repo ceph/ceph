@@ -8,7 +8,7 @@
 #include <linux/ceph_fs_msgs.h>
 #include "kmsg.h"
 #include "ktcp.h"
-
+#include "debug.h"
 
 static struct workqueue_struct *recv_wq;        /* receive work queue ) */
 static struct workqueue_struct *send_wq;        /* send work queue */
@@ -68,7 +68,7 @@ static struct ceph_connection *get_connection(struct ceph_kmsgr *msgr, struct ce
 	head = radix_lookup(&msgr->con_open, key);
 	if (head) {
 		list_for_each(p, head) {
-			con = list_entry(p, struct ceph_connection, list_peer);
+			con = list_entry(p, struct ceph_connection, list_bucket);
 			if (con->peer_addr == addr) {
 				atomic_inc(&con->nref);
 				goto out;
@@ -109,10 +109,10 @@ static void add_connection_accepted(struct ceph_kmsgr *msgr, struct ceph_connect
 	spin_lock(&msgr->con_lock);
 	head = radix_lookup(&msgr->con_open, key);
 	if (head) {
-		list_add(&head, &con->list_peer);
+		list_add(&head, &con->list_bucket);
 	} else {
-		list_init(&con->list_peer); /* empty */
-		radix_insert(&msgr->connections, key, &con->list_peer);
+		list_init(&con->list_bucket); /* empty */
+		radix_insert(&msgr->connections, key, &con->list_bucket);
 	}
 	spin_unlock(&msgr->con_lock);
 
@@ -128,6 +128,34 @@ static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connec
 	spin_unlock(&msgr->con_lock);
 }
 
+/*
+ * remove connection from all list.
+ * also, from con_open radix tree, if it should have been there
+ */
+static void remove_connection(struct ceph_kmsgr *msgr, struct ceph_connection *con)
+{
+	struct list_head *head;
+	unsigned long key;
+
+	spin_lock(&msgr->con_lock);
+	list_remove(&con->list_all);
+	if (con->state == CONNECTING ||
+	    con->state == OPEN) {
+		/* remove from con_open too */
+		if (list_empty(&con->list_bucket)) {
+			/* last one */
+			key = *(unsigned long*)&addr->addr.sin_addr.s_addr;
+			key ^= addr->addr.sin_port;
+			radix_tree_delete(&msgr->con_open, key);
+		} else {
+			list_remove(&con->list_bucket);
+		}
+	}
+	spin_unlock(&msgr->con_lock);
+
+	put_connection(con);
+}
+
 
 /*
  * replace another connection
@@ -136,13 +164,11 @@ static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connec
 static void replace_connection(struct ceph_kmsgr *msgr, struct ceph_connection *old, struct ceph_connection *new)
 {
 	spin_lock(&msgr->con_lock);
-	list_add(&new->list_peer, &old->list_peer);
-	list_remove(&old->list_peer);
+	list_add(&new->list_bucket, &old->list_bucket);
+	list_remove(&old->list_bucket);
 	spin_unlock(&msgr->con_lock);
 	put_connection(old); /* dec reference count */
 }
-
-
 
 
 
@@ -264,8 +290,7 @@ more:
 
 		if (con->state == REJECTING) {
 			/* FIXME do something else here, pbly? */
-			list_remove(&con->list_peer);
-			list_remove(&con->list_all);
+			remove_connection(con);
 			con->state = CLOSED;  
 			put_connection(con);
 		}

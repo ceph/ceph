@@ -3,8 +3,8 @@
 
 
 struct ceph_mon_client {
-
-
+	int last_mon;  /* last monitor i contacted */
+	
 };
 
 

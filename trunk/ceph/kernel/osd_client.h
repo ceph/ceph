@@ -10,8 +10,12 @@ struct ceph_osdmap;
 
 
 struct ceph_osd_client {
-	struct ceph_osdmap *s_osdmap;  /* osd map */
+	struct ceph_osdmap *osdmap;  /* osd map */
 
 };
 
+extern void ceph_osdc_handle_reply(struct ceph_osd_client *mdsc, struct ceph_message *msg);
+extern void ceph_osdc_handle_map(struct ceph_osd_client *mdsc, struct ceph_message *msg);
+
 #endif
+

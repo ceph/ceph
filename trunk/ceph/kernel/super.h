@@ -1,7 +1,8 @@
 #ifndef _FS_CEPH_CEPH_H
 #define _FS_CEPH_CEPH_H
 
-/* #include <linux/ceph_fs.h> */
+#include <linux/ceph_fs.h>
+#include <linux/fs.h>
 
 #include "kmsg.h"
 #include "monmap.h"
@@ -20,12 +21,12 @@ struct ceph_client {
 	__u64 s_fsid;  /* hmm this should be part of the monmap? */
 
 	__u32 s_whoami;                /* my client number */
-	struct ceph_kmsgr  *s_kmsgr;   /* messenger instance */
+	struct ceph_kmsgr  *kmsgr;   /* messenger instance */
 
-	struct ceph_monmap *s_monmap;  /* monitor map */
+	struct ceph_monmap *monmap;  /* monitor map */
 
-	struct ceph_mds_client *s_mds_client;
-	struct ceph_osd_client *s_osd_client;
+	struct ceph_mds_client mds_client;
+	struct ceph_osd_client osd_client;
 
 	int s_ref;    /* reference count (for each sb_info that points to me) */
 };
