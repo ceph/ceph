@@ -543,6 +543,7 @@ protected:
   virtual bool can_auth_pin() = 0;
   virtual void auth_pin() = 0;
   virtual void auth_unpin() = 0;
+  virtual bool is_frozen() = 0;
 
 
   // --------------------------------------------

@@ -316,6 +316,11 @@ void CDentry::adjust_nested_auth_pins(int by)
   dir->adjust_nested_auth_pins(by);
 }
 
+bool CDentry::is_frozen()
+{
+  return dir->is_frozen();
+}
+
 
 // ----------------------------
 // locking

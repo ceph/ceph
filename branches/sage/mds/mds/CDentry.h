@@ -167,6 +167,7 @@ public:
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int by);
+  bool is_frozen();
   
 
   // dentry type is primary || remote || null

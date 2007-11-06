@@ -2731,6 +2731,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   dout(10) << " srcdn " << *srcdn << dendl;
   CInode *srci = mdcache->get_dentry_inode(srcdn, mdr);
   dout(10) << " srci " << *srci << dendl;
+  mdr->pin(srci);
 
   // -- some sanity checks --
   // src == dest?
@@ -2788,7 +2789,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   dout(10) << " destdn " << *destdn << dendl;
-
 
   // -- locks --
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -3121,9 +3121,9 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srcdn->inode->dirlock.clear_updated();  
 
 
-	  // hack: force back to !auth, temporarily
+	  // hack: force back to !auth and clean, temporarily
 	  srcdn->inode->state_clear(CInode::STATE_AUTH);
-
+	  srcdn->inode->mark_clean();
 	}
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
@@ -3331,7 +3331,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 	   << " " << mdr->slave_request->srcdnpath 
 	   << " to " << mdr->slave_request->destdnpath
 	   << dendl;
-
+  
   // discover destdn
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
@@ -3346,7 +3346,6 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " destdn " << *destdn << dendl;
   mdr->pin(destdn);
   
-      
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
@@ -3354,7 +3353,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 			     srcpath, trace, false,  
 			     MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
-  assert(r == 0);  // we shouldn't get an error here!
+  assert(r == 0);
       
   CDentry *srcdn = trace[trace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;

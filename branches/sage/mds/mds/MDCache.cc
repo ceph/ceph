@@ -3539,6 +3539,12 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
+  if (!shutdown_export_strays()) {
+    dout(7) << "waiting for strays to migrate" << dendl;
+    return false;
+  }
+
+  // trim cache
   trim(0);
   dout(5) << "lru size now " << lru.lru_get_size() << dendl;
 
@@ -3570,60 +3576,9 @@ bool MDCache::shutdown_pass()
     }
   }
 
-  // export caps?
-  //  note: this runs more often than it should.
-  static bool exported_caps = false;
-  static set<CDir*> exported_caps_in;
-  if (!exported_caps) {
-    dout(7) << "searching for caps to export" << dendl;
-    exported_caps = true;
-
-    list<CDir*> dirq;
-    for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-	 p != subtrees.end();
-	 ++p) {
-      if (exported_caps_in.count(p->first)) continue;
-      if (p->first->is_auth() ||
-	  p->first->is_ambiguous_auth())
-	exported_caps = false; // we'll have to try again
-      else {
-	dirq.push_back(p->first);
-	exported_caps_in.insert(p->first);
-      }
-    }
-    while (!dirq.empty()) {
-      CDir *dir = dirq.front();
-      dirq.pop_front();
-      for (CDir::map_t::iterator p = dir->items.begin();
-	   p != dir->items.end();
-	   ++p) {
-	CDentry *dn = p->second;
-	if (!dn->is_primary()) continue;
-	CInode *in = dn->get_inode();
-	if (in->is_dir())
-	  in->get_nested_dirfrags(dirq);
-	if (in->is_any_caps() &&
-	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
-	  migrator->export_caps(in);
-      }
-    }
-  }
-
-  static bool exported_strays = false;
-  if (!exported_strays && stray && mds->get_nodeid() > 0) {
-    list<CDir*> dfs;
-    stray->get_dirfrags(dfs);
-    while (!dfs.empty()) {
-      CDir *dir = dfs.front();
-      dfs.pop_front();
-      for (CDir::map_t::iterator p = dir->items.begin();
-	   p != dir->items.end();
-	   p++) {
-	CDentry *dn = p->second;
-	migrate_stray(dn, 0);  // send to root!
-      }
-    }
-    exported_strays = true;
+  if (!shutdown_export_caps()) {
+    dout(7) << "waiting for residual caps to export" << dendl;
+    return false;
   }
 
   // subtrees map not empty yet?
@@ -3688,9 +3643,85 @@ bool MDCache::shutdown_pass()
   return true;
 }
 
+bool MDCache::shutdown_export_strays()
+{
+  if (mds->get_nodeid() == 0) return true;
+  if (!stray) return true;
+  
+  bool done = true;
+  static set<inodeno_t> exported_strays;
+  list<CDir*> dfs;
 
+  stray->get_dirfrags(dfs);
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
 
+    if (!dir->is_complete()) {
+      dir->fetch(0);
+      done = false;
+    }
+    
+    for (CDir::map_t::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 p++) {
+      CDentry *dn = p->second;
+      if (dn->is_null()) continue;
+      done = false;
+      
+      // FIXME: we'll deadlock if a rename fails.
+      if (exported_strays.count(dn->get_inode()->ino()) == 0) {
+	exported_strays.insert(dn->get_inode()->ino());
+	migrate_stray(dn, 0);  // send to root!
+      }
+    }
+  }
 
+  return done;
+}
+
+bool MDCache::shutdown_export_caps()
+{
+  // export caps?
+  //  note: this runs more often than it should.
+  static bool exported_caps = false;
+  static set<CDir*> exported_caps_in;
+  if (!exported_caps) {
+    dout(7) << "searching for caps to export" << dendl;
+    exported_caps = true;
+
+    list<CDir*> dirq;
+    for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+	 p != subtrees.end();
+	 ++p) {
+      if (exported_caps_in.count(p->first)) continue;
+      if (p->first->is_auth() ||
+	  p->first->is_ambiguous_auth())
+	exported_caps = false; // we'll have to try again
+      else {
+	dirq.push_back(p->first);
+	exported_caps_in.insert(p->first);
+      }
+    }
+    while (!dirq.empty()) {
+      CDir *dir = dirq.front();
+      dirq.pop_front();
+      for (CDir::map_t::iterator p = dir->items.begin();
+	   p != dir->items.end();
+	   ++p) {
+	CDentry *dn = p->second;
+	if (!dn->is_primary()) continue;
+	CInode *in = dn->get_inode();
+	if (in->is_dir())
+	  in->get_nested_dirfrags(dirq);
+	if (in->is_any_caps() && !in->state_test(CInode::STATE_EXPORTINGCAPS))
+	  migrator->export_caps(in);
+      }
+    }
+  }
+
+  return true;
+}
 
 
 
@@ -3791,11 +3822,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
                            int onfail)
 {
   assert(mdr || req);
-  bool null_okay = onfail == MDS_TRAVERSE_DISCOVERXLOCK;
-  bool noperm = false;
-  if (onfail == MDS_TRAVERSE_DISCOVER ||
-      onfail == MDS_TRAVERSE_DISCOVERXLOCK) 
-    noperm = true;
+  bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+  bool noperm = (onfail == MDS_TRAVERSE_DISCOVER ||
+		 onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
@@ -5211,9 +5240,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // xlocked dentry?
     //  ...always block on non-tail items (they are unrelated)
     //  ...allow xlocked tail disocvery _only_ if explicitly requested
+    bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
     if (dn->lock.is_xlocked()) {
       // is this the last (tail) item in the discover traversal?
-      bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << dendl;
       } else {
@@ -5225,9 +5254,10 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // frozen inode?
-    if (dn->is_primary() &&
-	dn->inode->is_frozen()) {
-      if (reply->is_empty()) {
+    if (dn->is_primary() && dn->inode->is_frozen()) {
+      if (tailitem && dis->wants_xlocked()) {
+	dout(7) << "handle_discover allowing discovery of frozen tail " << *dn->inode << dendl;
+      } else if (reply->is_empty()) {
 	dout(7) << *dn->inode << " is frozen, empty reply, waiting" << dendl;
 	dn->inode->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
 	delete reply;

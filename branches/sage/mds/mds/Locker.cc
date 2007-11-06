@@ -1030,6 +1030,8 @@ void Locker::simple_eval(SimpleLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
+  if (lock->get_parent()->is_frozen()) return;
+
   // stable -> sync?
   if (!lock->is_xlocked() &&
       lock->get_state() != LOCK_SYNC &&
@@ -1602,6 +1604,8 @@ void Locker::scatter_eval(ScatterLock *lock)
 
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
+
+  if (lock->get_parent()->is_frozen()) return;
 
   CInode *in = (CInode*)lock->get_parent();
   if (in->has_subtree_root_dirfrag() && !in->is_base()) {
@@ -2419,7 +2423,7 @@ void Locker::file_eval(FileLock *lock)
   assert(lock->is_stable());
 
   // not xlocked!
-  if (lock->is_xlocked()) return;
+  if (lock->is_xlocked() || lock->get_parent()->is_frozen()) return;
   
   // * -> loner?
   if (!lock->is_rdlocked() &&

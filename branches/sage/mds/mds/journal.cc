@@ -74,12 +74,18 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
   // commit dirs
-  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) 
+  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert(*p);
-  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) 
+  }
+  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
-  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) 
+  }
+  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert((*p)->get_parent_dn()->get_dir());
+  }
 
   if (!commit.empty()) {
     if (!gather) gather = new C_Gather;
@@ -88,6 +94,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 p != commit.end();
 	 ++p) {
       CDir *dir = *p;
+      assert(dir->is_auth());
       if (dir->can_auth_pin()) {
 	dout(15) << "try_to_expire committing " << *dir << dendl;
 	dir->commit(0, gather->new_sub());
