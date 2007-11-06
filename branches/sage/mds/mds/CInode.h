@@ -82,6 +82,7 @@ class CInode : public MDSCacheObject {
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
     case PIN_STICKYDIRS: return "stickydirs";
+    case PIN_PURGING: return "purging";
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
     case PIN_IMPORTINGCAPS: return "importingcaps";

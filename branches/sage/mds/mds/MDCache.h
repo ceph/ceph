@@ -623,12 +623,13 @@ protected:
   // -- stray --
 public:
   void eval_stray(CDentry *dn);
+  void eval_remote(CDentry *dn);
 protected:
   void _purge_stray(CDentry *dn);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   friend class C_MDC_PurgeStray;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
-  void migrate_stray(CDentry *dn, int dest);
+  void migrate_stray(CDentry *dn, int src, int dest);
 
 
   // == messages ==

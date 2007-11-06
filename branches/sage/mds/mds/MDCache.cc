@@ -2888,6 +2888,10 @@ void MDCache::purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize)
       waiting_for_purge.erase(in);
     finish_contexts(ls, 0);
   }
+
+  // done with inode?
+  if (in->get_num_ref() == 0) 
+    remove_inode(in);
 }
 
 void MDCache::add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
@@ -3672,7 +3676,7 @@ bool MDCache::shutdown_export_strays()
       // FIXME: we'll deadlock if a rename fails.
       if (exported_strays.count(dn->get_inode()->ino()) == 0) {
 	exported_strays.insert(dn->get_inode()->ino());
-	migrate_stray(dn, 0);  // send to root!
+	migrate_stray(dn, mds->get_nodeid(), 0);  // send to root!
       }
     }
   }
@@ -4745,7 +4749,7 @@ void MDCache::eval_stray(CDentry *dn)
   CInode *in = dn->inode;
   assert(in);
 
-  return;  // FIXME or test me rather, there is a bug here somewhere!
+  if (!dn->is_auth()) return;  // has to be mine
 
   // purge?
   if (in->inode.nlink == 0) {
@@ -4757,16 +4761,30 @@ void MDCache::eval_stray(CDentry *dn)
     // trivial reintegrate?
     if (!in->remote_parents.empty()) {
       CDentry *rlink = *in->remote_parents.begin();
-      if (rlink->is_auth() &&
-	  rlink->dir->can_auth_pin())
+      if (rlink->is_auth() && rlink->dir->can_auth_pin())
 	reintegrate_stray(dn, rlink);
       
-      if (!rlink->is_auth() &&
-	  !in->is_ambiguous_auth()) 
-	migrate_stray(dn, rlink->authority().first);
+      if (!rlink->is_auth() && dn->is_auth())
+	migrate_stray(dn, mds->get_nodeid(), rlink->authority().first);
     }
   } else {
     // wait for next use.
+  }
+}
+
+void MDCache::eval_remote(CDentry *dn)
+{
+  dout(10) << "eval_remote " << *dn << dendl;
+  assert(dn->is_remote());
+  CInode *in = dn->get_inode();
+  if (!in) return;
+
+  // refers to stray?
+  if (in->get_parent_dn()->get_dir()->get_inode()->is_stray()) {
+    if (in->is_auth())
+      eval_stray(in->get_parent_dn());
+    else
+      migrate_stray(in->get_parent_dn(), in->authority().first, mds->get_nodeid());
   }
 }
 
@@ -4813,35 +4831,48 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->dir->remove_dentry(dn);
 
   // purge+remove inode
+  in->mark_clean();
   purge_inode(in, 0, in->inode.size, ls);
-  remove_inode(in);
 }
 
 
 
-void MDCache::reintegrate_stray(CDentry *dn, CDentry *rlink)
+void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
-  dout(10) << "reintegrate_stray " << *dn << " into " << *rlink << dendl;
+  dout(10) << "reintegrate_stray " << *straydn << " into " << *rdn << dendl;
   
-}
- 
-
-void MDCache::migrate_stray(CDentry *dn, int dest)
-{
-  dout(10) << "migrate_stray to mds" << dest << " " << *dn << " " << *dn->inode << dendl;
-
   // rename it to another mds.
-  string dname;
-  dn->get_inode()->name_stray_dentry(dname);
-  filepath src(dname, MDS_INO_STRAY(mds->get_nodeid()));
-  filepath dst(dname, MDS_INO_STRAY(dest));
+  filepath src;
+  straydn->make_path(src);
+  filepath dst;
+  rdn->make_path(dst);
 
   MClientRequest *req = new MClientRequest(MDS_OP_RENAME, mds->messenger->get_myinst());
   req->set_filepath(src);
   req->set_filepath2(dst);
   req->set_tid(mds->issue_tid());
 
-  mds->send_message_mds(req, dest, MDS_PORT_SERVER);
+  mds->send_message_mds(req, rdn->authority().first, MDS_PORT_SERVER);
+}
+ 
+
+void MDCache::migrate_stray(CDentry *dn, int from, int to)
+{
+  dout(10) << "migrate_stray from mds" << from << " to mds" << to 
+	   << " " << *dn << " " << *dn->inode << dendl;
+
+  // rename it to another mds.
+  string dname;
+  dn->get_inode()->name_stray_dentry(dname);
+  filepath src(dname, MDS_INO_STRAY(from));
+  filepath dst(dname, MDS_INO_STRAY(to));
+
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, mds->messenger->get_myinst());
+  req->set_filepath(src);
+  req->set_filepath2(dst);
+  req->set_tid(mds->issue_tid());
+
+  mds->send_message_mds(req, to, MDS_PORT_SERVER);
 }
 
 

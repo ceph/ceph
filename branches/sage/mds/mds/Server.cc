@@ -456,10 +456,9 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   */
 
   // include trace
-  if (tracei) {
+  if (tracei)
     reply->set_trace_dist( tracei, mds->get_nodeid() );
-  }
-
+  
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   
   // send reply
@@ -470,6 +469,11 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   
   // finish request
   mdcache->request_finish(mdr);
+
+  if (tracei && 
+      tracei->get_parent_dn() &&
+      tracei->get_parent_dn()->is_remote())
+    mdcache->eval_remote(tracei->get_parent_dn());
 }
 
 
