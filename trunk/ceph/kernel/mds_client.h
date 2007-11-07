@@ -6,7 +6,7 @@
 #include <linux/completion.h>
 #include <linux/spinlock.h>
 
-#include "kmsg.h"
+#include "messenger.h"
 #include "mdsmap.h"
 
 struct ceph_client;

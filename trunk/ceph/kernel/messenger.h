@@ -10,7 +10,7 @@
 
 struct ceph_message;
 
-typedef void (*ceph_kmsgr_dispatch_t) (void *p, struct ceph_message *m);
+typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 
 /* list of pollable files */
 struct ceph_pollable {
@@ -26,9 +26,9 @@ struct ceph_poll_task {
         int nfds;
 };
 
-struct ceph_kmsgr {
+struct ceph_messenger {
 	void *parent;
-	ceph_kmsgr_dispatch_t dispatch;
+	ceph_messenger_dispatch_t dispatch;
         struct ceph_poll_task *poll_task;
 	struct ceph_entity_addr addr;    /* my address */
 	spinlock_t con_lock;
@@ -58,7 +58,7 @@ enum ceph_connection_state {
 };
 
 struct ceph_connection {
-	struct ceph_kmsgr *msgr;
+	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
 	
 	atomic_t nref;
@@ -96,7 +96,7 @@ struct ceph_connection {
  *  Inline functions..
  */
 
-extern void ceph_kmsgr_send(struct ceph_kmsgr *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
+extern void ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
 
 static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {

@@ -2,7 +2,7 @@
 #include "mds_client.h"
 #include "mon_client.h"
 #include "super.h"
-#include "kmsg.h"
+#include "messenger.h"
 
 
 static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds)
@@ -11,7 +11,7 @@ static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_message *msg,
 	inst.addr = *ceph_mdsmap_get_addr(mdsc->mdsmap, mds);
 	inst.name.type = CEPH_ENTITY_TYPE_MDS;
 	inst.name.num = mds;
-	ceph_kmsgr_send(mdsc->client->msgr, msg, &inst);
+	ceph_messenger_send(mdsc->client->msgr, msg, &inst);
 }
 
 

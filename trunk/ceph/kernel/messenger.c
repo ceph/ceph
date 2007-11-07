@@ -6,7 +6,7 @@
 
 #include <linux/ceph_fs.h>
 #include <linux/ceph_fs_msgs.h>
-#include "kmsg.h"
+#include "messenger.h"
 #include "ktcp.h"
 
 static struct workqueue_struct *recv_wq;        /* receive work queue ) */
@@ -29,7 +29,7 @@ static char tag_close = CEPH_MSGR_TAG_CLOSE;
 /* 
  * create a new connection.  initial state is NEW.
  */
-static struct ceph_connection *new_connection(struct ceph_kmsgr *msgr)
+static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 	con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
@@ -63,7 +63,7 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
 /* 
  * get an existing connection, if any, for given addr
  */
-static struct ceph_connection *get_connection(struct ceph_kmsgr *msgr, struct ceph_entity_addr *addr)
+static struct ceph_connection *get_connection(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
 {
 	struct ceph_connection *con;
 	struct list_head *head, *p;
@@ -101,7 +101,7 @@ static void put_connection(struct ceph_connection *con)
 /* 
  * add to connections tree
  */
-static void add_connection_accepted(struct ceph_kmsgr *msgr, struct ceph_connection *con)
+static void add_connection_accepted(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	struct list_head *head;
 	unsigned long key = hash_addr(&con->peer_addr);
@@ -120,7 +120,7 @@ static void add_connection_accepted(struct ceph_kmsgr *msgr, struct ceph_connect
 	spin_unlock(&msgr->con_lock);
 }
 
-static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connection *con)
+static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	atomic_inc(&con->nref);
 	spin_lock(&msgr->con_lock);
@@ -133,7 +133,7 @@ static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connec
  * remove connection from all list.
  * also, from con_open radix tree, if it should have been there
  */
-static void remove_connection(struct ceph_kmsgr *msgr, struct ceph_connection *con)
+static void remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	unsigned long key = hash_addr(&con->peer_addr);
 
@@ -159,7 +159,7 @@ static void remove_connection(struct ceph_kmsgr *msgr, struct ceph_connection *c
  * replace another connection
  *  (old and new should be for the _same_ peer, and thus in the same pos in the radix tree)
  */
-static void replace_connection(struct ceph_kmsgr *msgr, struct ceph_connection *old, struct ceph_connection *new)
+static void replace_connection(struct ceph_messenger *msgr, struct ceph_connection *old, struct ceph_connection *new)
 {
 	spin_lock(&msgr->con_lock);
 	list_add(&new->list_bucket, &old->list_bucket);
@@ -248,7 +248,7 @@ static void prepare_write_ack(struct ceph_connection *con)
 	ceph_bl_append_ref(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
 }
 
-static void prepare_write_accept_announce(struct ceph_kmsgr *msgr, struct ceph_connection *con)
+static void prepare_write_accept_announce(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	ceph_bl_init(&con->out_partial);  
 	ceph_bl_iterator_init(&con->out_pos);
@@ -272,7 +272,7 @@ static void prepare_write_accept_reject(struct ceph_connection *con)
 /*
  * call when socket is writeable
  */
-static int try_write(struct ceph_kmsgr *msgr, struct work_struct *work)
+static int try_write(struct ceph_messenger *msgr, struct work_struct *work)
 {
 	int ret;
 	struct ceph_connection *con;
@@ -534,7 +534,7 @@ bad:
 /*
  * Accepter thread
  */
-static int ceph_accepter(struct ceph_kmsgr *msgr)
+static int ceph_accepter(struct ceph_messenger *msgr)
 {
 	struct socket *sd, *new_sd;
 	struct sockaddr saddr;
