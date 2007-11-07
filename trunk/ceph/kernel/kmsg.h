@@ -57,6 +57,7 @@ enum ceph_connection_state {
 };
 
 struct ceph_connection {
+	struct ceph_kmsgr *msgr;
 	struct socket *sock;	/* connection socket */
 	
 	atomic_t nref;
