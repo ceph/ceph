@@ -12,17 +12,17 @@ struct ceph_message;
 
 typedef void (*ceph_kmsgr_dispatch_t) (void *p, struct ceph_message *m);
 
-/* list of pollable file descriptors , this will probably change a bit */
+/* list of pollable files */
 struct ceph_pollable {
+	spinlock_t plock;
         struct list_head poll_list;
-	struct pollfd *pollfd;
 	struct file *file;
-	struct poll_table *pwait;
+	struct ceph_connection *con;
 };
 
 struct ceph_poll_task {
         struct task_struct *poll_task;
-	struct ceph_pollable pds;
+	struct ceph_pollable pfiles;
         int nfds;
 };
 
@@ -49,11 +49,12 @@ struct ceph_message {
 /* current state of connection */
 enum ceph_connection_state {
 	NEW = 1,
-	ACCEPTING = 2,
-	CONNECTING = 4,
-	OPEN = 8,
-	REJECTING = 16,
-	CLOSED = 32
+	LISTENING = 2,
+	ACCEPTING = 4,
+	CONNECTING = 8,
+	OPEN = 16,
+	REJECTING = 32,
+	CLOSED = 64
 };
 
 struct ceph_connection {
@@ -85,13 +86,14 @@ struct ceph_connection {
 	struct ceph_message *in_partial;
 	struct ceph_bufferlist_iterator in_pos;  /* for msg payload */
 
+	struct work_struct awork;		/* accept work */
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */
 	int retries;
 };
 
 /* 
- * function prototypes
+ *  Inline functions..
  */
 
 extern void ceph_kmsgr_send(struct ceph_kmsgr *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
