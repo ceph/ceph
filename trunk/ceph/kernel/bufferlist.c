@@ -3,6 +3,8 @@
 #include <linux/uio.h>
 #include <linux/jiffies.h>
 #include <linux/sched.h>
+#include <linux/types.h>
+
 #include "bufferlist.h"
 
 void ceph_bl_init(struct ceph_bufferlist *bl)
@@ -137,38 +139,41 @@ void ceph_bl_iterator_advance(struct ceph_bufferlist *bl,
 
 }
 
-/* TBD:  comment until builds... 
 __u64 ceph_bl_decode_u64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__u64 r;
-	r = le64_to_cpu((__u64*)(bl->b_kv[bli->i_kv] + bli->i_off));
+	r = le64_to_cpu((__u64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(__u64));
+	return r;
 }
-__s64 ceph_bl_decode_s64(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli)
+__s64 ceph_bl_decode_s64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__s64 r;
-	r = le64_to_cpu((__s64*)(bl->b_kv[bli->i_kv] + bli->i_off));
+	r = le64_to_cpu((__s64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(__s64));
+	return r;
 }
 
-__u32 ceph_bl_decode_u32(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli)
+__u32 ceph_bl_decode_u32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__u32 r;
-	r = le32_to_cpu((__u32*)(bl->b_kv[bli->i_kv] + bli->i_off));
+	r = le32_to_cpu(*(__u32*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(__u32));
+	return r;
 }
-__s32 ceph_bl_decode_s32(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli)
+__s32 ceph_bl_decode_s32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__s32 r;
-	r = le32_to_cpu((__s32*)(bl->b_kv[bli->i_kv] + bli->i_off));
+	r = le32_to_cpu(*(__s32*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(__s32));
+	return r;
 }
 
-__u8 ceph_bl_decode_u8(struct ceph_bufferlist *bl, ceph_bufferlist_iterator *bli)
+__u8 ceph_bl_decode_u8(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli)
 {
 	__u8 r;
-	r = (__u8*)(bl->b_kv[bli->i_kv] + bli->i_off);
+	r = *(__u8*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off);
 	ceph_bl_iterator_advance(bl, bli, sizeof(__u8));
+	return r;
 }
 
-*/

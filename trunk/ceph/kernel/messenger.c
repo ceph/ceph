@@ -8,7 +8,6 @@
 #include <linux/ceph_fs_msgs.h>
 #include "kmsg.h"
 #include "ktcp.h"
-#include "debug.h"
 
 static struct workqueue_struct *recv_wq;        /* receive work queue ) */
 static struct workqueue_struct *send_wq;        /* send work queue */
@@ -33,11 +32,30 @@ static char tag_close = CEPH_MSGR_TAG_CLOSE;
 static struct ceph_connection *new_connection()
 {
 	struct ceph_connection *con;
-	con = kmalloc(sizeof(struct ceph_connection));
+	con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
 	if (con == NULL) return 0;
 	memset(&con, 0, sizeof(con));
+
+	spin_lock_init(&con->con_lock);
+	/*INIT_WORK(&con->rwork, ceph_reader);*/	/* setup work structure */
+
 	atomic_inc(&con->nref);
 	return con;
+}
+
+/*
+ * the radix_tree has an unsigned long key and void * value.  since
+ * ceph_entity_addr is bigger than that, we use a trivial hash key, and
+ * point to a list_head in ceph_connection, as you would with a hash
+ * table.  in the rare event that the trivial hash collides, we just
+ * traverse the (short) list.
+ */
+static unsigned long hash_addr(struct ceph_entity_addr *addr) 
+{
+	unsigned long key;
+	key = *(unsigned long*)&addr->ipaddr.sin_addr.s_addr;
+	key ^= addr->ipaddr.sin_port;
+	return key;
 }
 
 /* 
@@ -45,27 +63,17 @@ static struct ceph_connection *new_connection()
  */
 static struct ceph_connection *get_connection(struct ceph_kmsgr *msgr, struct ceph_entity_addr *addr)
 {
-	unsigned long key;
 	struct ceph_connection *con;
 	struct list_head *head, *p;
-
-	/*
-	 * the radix_tree has an unsigned long key and void * value.  since
-	 * ceph_entity_addr is bigger than that, we use a trivial hash key, and
-	 * point to a list_head in ceph_connection, as you would with a hash
-	 * table.  in the rare event that the trivial hash collides, we just
-	 * traverse the (short) list.
-	 */
-	key = *(unsigned long*)&addr->addr.sin_addr.s_addr;
-	key ^= addr->addr.sin_port;
+	unsigned long key = hash_addr(addr);
 
 	/* existing? */
 	spin_lock(&msgr->con_lock);
-	head = radix_lookup(&msgr->con_open, key);
+	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
 		list_for_each(p, head) {
 			con = list_entry(p, struct ceph_connection, list_bucket);
-			if (con->peer_addr == addr) {
+			if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
 				atomic_inc(&con->nref);
 				goto out;
 			}
@@ -83,7 +91,7 @@ out:
 static void put_connection(struct ceph_connection *con) 
 {
 	if (atomic_dec_and_test(&con->nref)) {
-		sock_release(con->socket);
+		sock_release(con->sock);
 		kfree(con);
 	}
 }
@@ -93,34 +101,29 @@ static void put_connection(struct ceph_connection *con)
  */
 static void add_connection_accepted(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
-	unsigned long key;
-	struct list_head *head, *p;
-
-	key = *(unsigned long*)&addr->addr.sin_addr.s_addr;
-	key ^= addr->addr.sin_port;
+	struct list_head *head;
+	unsigned long key = hash_addr(&con->peer_addr);
 
 	/* inc ref count */
 	atomic_inc(&con->nref);
 
 	spin_lock(&msgr->con_lock);
-	head = radix_lookup(&msgr->con_open, key);
+	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
-		list_add(&head, &con->list_bucket);
+		list_add(head, &con->list_bucket);
 	} else {
-		list_init(&con->list_bucket); /* empty */
-		radix_insert(&msgr->connections, key, &con->list_bucket);
+		INIT_LIST_HEAD(&con->list_bucket); /* empty */
+		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
 	}
 	spin_unlock(&msgr->con_lock);
-
-	return con;
 }
 
 static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
 	atomic_inc(&con->nref);
 	spin_lock(&msgr->con_lock);
-	list_add(&msgr->con_accepting, &con->list_head);
-	list_add(&msgr->con_all, &con->list_head);
+	list_add(&msgr->con_all, &con->list_all);
+	list_add(&msgr->con_accepting, &con->list_bucket);
 	spin_unlock(&msgr->con_lock);
 }
 
@@ -130,21 +133,18 @@ static void add_connection_accepting(struct ceph_kmsgr *msgr, struct ceph_connec
  */
 static void remove_connection(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
-	struct list_head *head;
-	unsigned long key;
+	unsigned long key = hash_addr(&con->peer_addr);
 
 	spin_lock(&msgr->con_lock);
-	list_remove(&con->list_all);
+	list_del(&con->list_all);
 	if (con->state == CONNECTING ||
 	    con->state == OPEN) {
 		/* remove from con_open too */
 		if (list_empty(&con->list_bucket)) {
 			/* last one */
-			key = *(unsigned long*)&addr->addr.sin_addr.s_addr;
-			key ^= addr->addr.sin_port;
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
-			list_remove(&con->list_bucket);
+			list_del(&con->list_bucket);
 		}
 	}
 	spin_unlock(&msgr->con_lock);
@@ -161,7 +161,7 @@ static void replace_connection(struct ceph_kmsgr *msgr, struct ceph_connection *
 {
 	spin_lock(&msgr->con_lock);
 	list_add(&new->list_bucket, &old->list_bucket);
-	list_remove(&old->list_bucket);
+	list_del(&old->list_bucket);
 	spin_unlock(&msgr->con_lock);
 	put_connection(old); /* dec reference count */
 }
@@ -189,8 +189,8 @@ static int write_partial(struct ceph_connection *con)
 more:
 	len = bl->b_kv[p->i_kv].iov_len - p->i_off;
 	/* FIXME */
-	ret = kernel_send(con->socket, bl->b_kv[p->i_kv].iov_base + p->i_off, len);
-	if (ret < 0) return sent;
+	ret = kernel_send(con->sock, bl->b_kv[p->i_kv].iov_base + p->i_off, len);
+	if (ret < 0) return ret;
 	if (ret == 0) return 0;   /* socket full */
 	if (ret + p->i_off == bl->b_kv[p->i_kv].iov_len) {
 		p->i_kv++;
@@ -208,8 +208,9 @@ more:
  */
 static void prepare_write_message(struct ceph_connection *con)
 {
-	struct ceph_message *m = con->out_queue.next;
-	
+	struct ceph_message *m = list_entry(con->out_queue.next, struct ceph_message, list_head);
+	int i;
+
 	/* move to sending/sent list */
 	list_del(&m->list_head);
 	list_add(&m->list_head, &con->out_sent);
@@ -219,15 +220,15 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	/* always one chunk, for now */
 	m->hdr.nchunks = 1;  
-	m->chunklen[0] = m->payload.b_len;
+	m->chunklens[0] = m->payload.b_len;
 
 	/* tag + header */
 	ceph_bl_append_ref(&con->out_partial, &tag_msg, 1);
 	ceph_bl_append_ref(&con->out_partial, &m->hdr, sizeof(m->hdr));
 	
 	/* payload */
-	ceph_bl_append_ref(&con->out_partial, &m->chunklen[0], sizeof(__u32));
-	for (int i=0; i<m->payload.b_kvlen; i++) 
+	ceph_bl_append_ref(&con->out_partial, &m->chunklens[0], sizeof(__u32));
+	for (i=0; i<m->payload.b_kvlen; i++) 
 		ceph_bl_append_ref(&con->out_partial, m->payload.b_kv[i].iov_base, 
 				   m->payload.b_kv[i].iov_len);
 }
@@ -245,11 +246,11 @@ static void prepare_write_ack(struct ceph_connection *con)
 	ceph_bl_append_ref(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
 }
 
-static void prepare_write_accept_announce(struct ceph_connection *con)
+static void prepare_write_accept_announce(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 {
 	ceph_bl_init(&con->out_partial);  
 	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &con->msgr->addr, sizeof(con->msgr->addr));
+	ceph_bl_append_ref(&con->out_partial, &msgr->addr, sizeof(msgr->addr));
 }
 
 static void prepare_write_accept_ready(struct ceph_connection *con)
@@ -269,13 +270,14 @@ static void prepare_write_accept_reject(struct ceph_connection *con)
 /*
  * call when socket is writeable
  */
-static int try_write(struct work_struct *work)
+static int try_write(struct ceph_kmsgr *msgr, struct work_struct *work)
 {
 	int ret;
 	struct ceph_connection *con;
 
 	con = container_of(work, struct ceph_connection, swork);
 
+more:
 	/* data queued? */
 	if (con->out_partial.b_kvlen) {
 		ret = write_partial(con);
@@ -288,7 +290,7 @@ static int try_write(struct work_struct *work)
 
 		if (con->state == REJECTING) {
 			/* FIXME do something else here, pbly? */
-			remove_connection(con);
+			remove_connection(msgr, con);
 			con->state = CLOSED;  
 			put_connection(con);
 		}
@@ -321,7 +323,7 @@ static int read_message_partial(struct ceph_connection *con)
 
 	while (con->in_base_pos < sizeof(struct ceph_message_header)) {
 		left = sizeof(struct ceph_message_header) - con->in_base_pos;
-		ret = _read(socket, &m->hdr + con->in_base_pos, left);
+		ret = _read(con->sock, &m->hdr + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -329,9 +331,9 @@ static int read_message_partial(struct ceph_connection *con)
 
 	chunkbytes = sizeof(__u32)*m->hdr.nchunks;
 	while (con->in_base_pos < sizeof(struct ceph_message_header) + chunkbytes) {
-		int off = in_base_pos - sizeof(struct ceph_message_header);
-		left = chunkbytes + sizeof(struct ceph_message_header) - in_base_pos;
-		ret = _read(socket, (char*)m->hdr.chunklen + off, left);
+		int off = con->in_base_pos - sizeof(struct ceph_message_header);
+		left = chunkbytes + sizeof(struct ceph_message_header) - con->in_base_pos;
+		ret = _read(con->sock, (char*)m->hdr.chunklens + off, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -339,14 +341,14 @@ static int read_message_partial(struct ceph_connection *con)
 	did = 0;
 	for (c = 0; c<m->hdr.nchunks; c++) {
 	more:
-		left = did + m->hdr.chunklen[c] - m->payload.b_len;
+		left = did + m->chunklens[c] - m->payload.b_len;
 		if (left <= 0) {
-			did += m->hdr.chunklen[c];
+			did += m->chunklens[c];
 			continue;
 		}
 		ceph_bl_prepare_append(&m->payload, left);
 		s = min(m->payload.b_append.iov_len, left);
-		ret = _read(socket, m->payload.b_append.iov_base, s);
+		ret = _read(con->sock, m->payload.b_append.iov_base, s);
 		if (ret <= 0) return ret;
 		ceph_bl_append_copied(&m->payload, s);
 		goto more;
@@ -361,7 +363,7 @@ static int read_ack_partial(struct ceph_connection *con)
 {
 	while (con->in_base_pos < sizeof(con->in_partial_ack)) {
 		int left = sizeof(con->in_partial_ack) - con->in_base_pos;
-		ret = _read(socket, (char*)&con->in_partial_ack + con->in_base_pos, left);
+		ret = _read(con->sock, (char*)&con->in_partial_ack + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -374,16 +376,16 @@ static int read_accept_partial(struct ceph_connection *con)
 	/* peer addr */
 	while (con->in_base_pos < sizeof(con->peer_addr)) {
 		int left = sizeof(con->peer_addr) - con->in_base_pos;
-		ret = _read(socket, (char*)&con->peer_addr + con->in_base_pos, left);
+		ret = _read(con->sock, (char*)&con->peer_addr + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
 
 	/* connect_seq */
 	while (con->in_base_pos < sizeof(con->peer_addr) + sizeof(con->connect_seq)) {
-		int off = in_base_pos - sizeof(con->peer_addr);
-		left = sizeof(con->peer_addr) + sizeof(con->connect_seq) - in_base_pos;
-		ret = _read(socket, (char*)&m->connect_seq + off, left);
+		int off = con->in_base_pos - sizeof(con->peer_addr);
+		left = sizeof(con->peer_addr) + sizeof(con->connect_seq) - con->in_base_pos;
+		ret = _read(con->sock, (char*)&con->connect_seq + off, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -397,17 +399,17 @@ static int prepare_read_message(struct ceph_connection *con)
 {
 	con->in_tag = CEPH_MSGR_TAG_MSG;
 	con->in_base_pos = 0;
-	con->in_partial = kmalloc(sizeof(struct ceph_message));
+	con->in_partial = kmalloc(sizeof(struct ceph_message), GFP_KERNEL);
 	if (!con->in_partial) return -1;  /* crap */
 	ceph_get_msg(con->in_partial);
-	ceph_bl_init(&con->payload);
+	ceph_bl_init(&con->in_partial->payload);
 	ceph_bl_iterator_init(&con->in_pos);
 }
 
 /* 
  * prepare to read an ack
  */
-static int prepare_read_ack(struct ceph_connection *con)
+static void prepare_read_ack(struct ceph_connection *con)
 {
 	con->in_tag = CEPH_MSGR_TAG_ACK;
 	con->in_base_pos = 0;
@@ -417,9 +419,9 @@ static void process_ack(struct ceph_connection *con, __u32 ack)
 {
 	struct ceph_message *m;
 	while (!list_empty(&con->out_sent)) {
-		m = con->out_sent.next;
+		m = list_entry(con->out_sent.next, struct ceph_message, list_head);
 		if (m->hdr.seq > ack) break;
-		printk(KERN_INFO "got ack for %d type %d at %lx\n", m->hdr.seq, m->hdr.type, m);
+		dout(5, "got ack for %d type %d at %p\n", m->hdr.seq, m->hdr.type, m);
 		list_del(&m->list_head);
 		ceph_put_msg(m);
 	}
@@ -454,9 +456,9 @@ static void process_accept(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 		spin_unlock(&existing->con_lock);
 		put_connection(existing);
 	} else {
-		add_connection_accepted(con);
+		add_connection_accepted(msgr, con);
 		con->state = OPEN;
-	}	
+	}
 	spin_unlock(&msgr->con_lock);
 
 	/* the result? */
@@ -470,7 +472,7 @@ static void process_accept(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 /*
  * call when data is available on the socket
  */
-static int try_read(struct  work_struct *work)
+static int try_read(struct work_struct *work)
 {
 	int ret = -1;
 	struct ceph_connection *con;
@@ -483,12 +485,12 @@ more:
 		ret = read_accept_partial(con);
 		if (ret <= 0) return ret;
 		/* accepted */
-		process_accept(con);
+		process_accept(msgr, con);
 		goto more;
 	}
 
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
-		ret = _read(socket, &con->in_tag, 1);
+		ret = _read(con->sock, &con->in_tag, 1);
 		if (ret <= 0) return ret;
 		if (con->in_tag == CEPH_MSGR_TAG_MSG) 
 			prepare_read_message(con);
@@ -505,7 +507,7 @@ more:
 		if (ret <= 0) return ret;
 		/* got a full message! */
 		msgr->dispatch(msgr->parent, con->in_partial);
-		cphe_put_msg(con->in_partial);
+		ceph_put_msg(con->in_partial);
 		con->in_partial = 0;
 		con->in_tag = CEPH_MSGR_TAG_READY;
 		goto more;
@@ -530,7 +532,7 @@ bad:
 /*
  * Accepter thread
  */
-static int ceph_accepter(void *unusedfornow)
+static int ceph_accepter(struct ceph_kmsgr *msgr)
 {
 	struct socket *sd, *new_sd;
 	struct sockaddr saddr;
@@ -559,11 +561,11 @@ static int ceph_accepter(void *unusedfornow)
 			sock_release(new_sd);
 			break;
         	}
-		con->socket = new_sd;
+		con->sock = new_sd;
 		con->state = ACCEPTING;
 		con->in_tag = CEPH_MSGR_TAG_READY;
 
-		prepare_write_accept_announce(con);
+		prepare_write_accept_announce(msgr, con);
 
 		add_connection_accepting(msgr, con);
 

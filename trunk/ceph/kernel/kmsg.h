@@ -30,6 +30,7 @@ struct ceph_kmsgr {
 	void *parent;
 	ceph_kmsgr_dispatch_t dispatch;
         struct ceph_poll_task *poll_task;
+	struct ceph_entity_addr addr;    /* my address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
@@ -38,7 +39,7 @@ struct ceph_kmsgr {
 
 struct ceph_message {
 	struct ceph_message_header hdr;	/* header */
-	__u32 chunklen[2];
+	__u32 chunklens[2];
 	struct ceph_bufferlist payload;
 
 	struct list_head list_head;
@@ -91,6 +92,8 @@ struct ceph_connection {
 /* 
  * function prototypes
  */
+
+extern void ceph_kmsgr_send(struct ceph_kmsgr *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
 
 static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {

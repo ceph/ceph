@@ -7,6 +7,9 @@
 #include <linux/spinlock.h>
 
 #include "kmsg.h"
+#include "mdsmap.h"
+
+struct ceph_client;
 
 /*
  * state associated with an individual MDS<->client session
@@ -44,7 +47,7 @@ struct ceph_mds_request {
 struct ceph_mds_client {
 	spinlock_t lock;
 
-	struct ceph_kmessenger *kmessenger;
+	struct ceph_client *client;
 	struct ceph_mdsmap *mdsmap;  /* mds map */
 
 	/* mds sessions */
@@ -59,7 +62,7 @@ struct ceph_mds_client {
 };
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, 
-			   struct ceph_kmessenger *kmessenger);
+			   struct ceph_client *client);
 extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds);
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message *msg);

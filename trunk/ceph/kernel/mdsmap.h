@@ -35,12 +35,10 @@ struct ceph_mdsmap {
 	__u8 *m_state;                    /* array of states */
 };
 
-extern int ceph_mdsmap_get_random_mds(ceph_mdsmap *m);
-extern int ceph_mdsmap_get_state(ceph_mdsmap *m, int w);
-extern struct ceph_entity_addr *ceph_mdsmap_get_addr(ceph_mdsmap *m, int w);
+extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);
+extern int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w);
+extern struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w);
 
-extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, 
-			      struct ceph_bufferlist *bl, 
-			      struct ceph_bufferlist_iterator *bli);
+extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
 
 #endif

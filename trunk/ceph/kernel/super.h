@@ -6,6 +6,8 @@
 
 #include "kmsg.h"
 #include "monmap.h"
+
+#include "mon_client.h"
 #include "mds_client.h"
 #include "osd_client.h"
 
@@ -21,10 +23,11 @@ struct ceph_client {
 	__u64 s_fsid;  /* hmm this should be part of the monmap? */
 
 	__u32 s_whoami;                /* my client number */
-	struct ceph_kmsgr  *kmsgr;   /* messenger instance */
+	struct ceph_kmsgr  *msgr;   /* messenger instance */
 
 	struct ceph_monmap *monmap;  /* monitor map */
 
+	struct ceph_mon_client mon_client;
 	struct ceph_mds_client mds_client;
 	struct ceph_osd_client osd_client;
 
