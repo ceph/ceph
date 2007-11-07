@@ -36,10 +36,6 @@ static struct ceph_connection *new_connection()
 	con = kmalloc(sizeof(struct ceph_connection));
 	if (con == NULL) return 0;
 	memset(&con, 0, sizeof(con));
-
-	spin_init(&con->con_lock);
-	INIT_WORK(&con->rwork, ceph_reader);	/* setup work structure */
-
 	atomic_inc(&con->nref);
 	return con;
 }
@@ -87,7 +83,7 @@ out:
 static void put_connection(struct ceph_connection *con) 
 {
 	if (atomic_dec_and_test(&con->nref)) {
-		/* FIXME close socket? */
+		sock_release(con->socket);
 		kfree(con);
 	}
 }
@@ -273,11 +269,13 @@ static void prepare_write_accept_reject(struct ceph_connection *con)
 /*
  * call when socket is writeable
  */
-static int try_write(struct ceph_connection *con)
+static int try_write(struct work_struct *work)
 {
 	int ret;
+	struct ceph_connection *con;
 
-more:
+	con = container_of(work, struct ceph_connection, swork);
+
 	/* data queued? */
 	if (con->out_partial.b_kvlen) {
 		ret = write_partial(con);
@@ -472,9 +470,12 @@ static void process_accept(struct ceph_kmsgr *msgr, struct ceph_connection *con)
 /*
  * call when data is available on the socket
  */
-static int try_read(struct ceph_connection *con)
+static int try_read(struct  work_struct *work)
 {
 	int ret = -1;
+	struct ceph_connection *con;
+
+	con = container_of(work, struct ceph_connection, rwork);
 
 more:
 	if (con->state == CLOSED) return -1;
