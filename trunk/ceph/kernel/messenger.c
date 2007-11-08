@@ -12,8 +12,6 @@
 static struct workqueue_struct *recv_wq;        /* receive work queue ) */
 static struct workqueue_struct *send_wq;        /* send work queue */
 
-struct task_struct *athread;  /* accepter thread, TBD: fill into kmsgr */
-
 /* static tag bytes */
 static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reject = CEPH_MSGR_TAG_REJECT;
@@ -620,13 +618,6 @@ int ceph_work_init(void)
 
 void ceph_work_shutdown(void)
 {
-/* TBD: need to do this during unmount*/
-/*
-	kthread_stop(msgr->athread);
-	wake_up_process(msgr->athread);
-*/
-	kthread_stop(athread);
-	wake_up_process(athread);
 	destroy_workqueue(send_wq);
 	destroy_workqueue(recv_wq);
 }
@@ -661,36 +652,32 @@ static struct ceph_messenger *new_messenger()
 {
         struct ceph_messenger *msgr;
         struct ceph_connection *con;
-	struct ceph_poll_task ptsk;
-	struct ceph_poll_task pfiles;
+	struct ceph_pollable *pfile;
 
         msgr = kmalloc(sizeof(struct ceph_messenger), GFP_KERNEL);
         if (msgr == NULL) return 0;
         memset(&msgr, 0, sizeof(msgr));
 
-        ptsk = kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
-        if (ptsk == NULL) {
-		kfree(msgr);
-		return 0;
-	}
-        memset(&ptsk, 0, sizeof(ptsk));
+	spin_lock_init(&msgr->con_lock);
 
-	pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
+        pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
         if (pfiles == NULL) {
-		kfree(msgr);
-		kfree(ptsk);
-		return 0;
-	}
-        memset(pfiles, 0, sizeof(pfiles));
+                kfree(msgr);
+                return 0;
+        }
 
 	/* create listener connection */
 	con = new_listener(msgr);
+
+	/* start polling */
+	msgr->poll_task = start_poll();
+
+
+	/* add listener to pollable files 
+         * TBD: maybe do this before start polling */
 	pfiles->con = con;
 	pfiles->file = con->sock->file;
-	ptsk->pfiles = pfiles
+	list_add(&pfiles->poll_list);  /* add to poll list */
 
-	/* start up poll thread */
-	ptsk->poll_task = kthread_run(ceph_poll, msgr, "ceph-poll");
-	msgr->poll_task = ptsk;
         return msgr;
 }
