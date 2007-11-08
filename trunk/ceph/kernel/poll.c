@@ -24,11 +24,12 @@ static int do_ceph_pollfd(struct file *file)
         if (mask & POLLIN) {
 		printk(KERN_INFO "socket read ready: %d\n", mask);
                 /* if (sk->sk_state == TCP_LISTEN) */
-		if (test_bit(LISTENING, &con>state) {
-			set_bit(ACCEPTING, &con>state);
+		if (test_bit(LISTENING, &con->state) {
+			set_bit(ACCEPTING, &con->state);
                         queue_work(recvwq, &con->awork)
+			return(0); /* don't want to delete.. */
 		} else {
-			/* set_bit(READ_SCHED, &con>state); */
+			/* set_bit(READ_SCHED, &con->state); */
 			queue_work(recvwq, &con->rwork);
 		}
         }
@@ -49,7 +50,7 @@ static int do_ceph_pollfd(struct file *file)
 /*
  * Poll thread function, start after creating listener connection
  */
-static int ceph_poll(struct ceph_messenger *msgr)
+int ceph_poll(struct ceph_messenger *msgr)
 {
 	struct ceph_pollable *pos, *tmp;
 	struct ceph_pollable *plist = msgr->poll_task->pfiles->poll_list;
