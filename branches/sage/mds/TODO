@@ -76,6 +76,9 @@ mds
 - detect and deal with client failure
   - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
 
+- inode.rmtime (recursive mtime)
+- make inode.size reflect directory size (number of entries)
+
 - inode.max_size
 - inode.allocated_size
  

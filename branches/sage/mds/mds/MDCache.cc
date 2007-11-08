@@ -2813,8 +2813,8 @@ public:
 };
 
 /* purge_inode in
- * will be called by on unlink or rmdir or truncate
- * caller responsible for journaling an appropriate EUpdate
+ * will be called by on unlink or rmdir or truncate or purge
+ * caller responsible for journaling a matching EUpdate
  */
 void MDCache::purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
 {

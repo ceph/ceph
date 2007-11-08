@@ -1642,9 +1642,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
     }
     assert(in);
 
-    
-    assert(in);
-
     dout(12) << "including inode " << *in << dendl;
     
     // add this dentry + inodeinfo

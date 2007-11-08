@@ -1109,7 +1109,7 @@ void MDS::my_dispatch(Message *m)
 
 
   // HACK FOR NOW
-  if (is_active()) {
+  if (is_active() || is_stopping()) {
     // flush log to disk after every op.  for now.
     mdlog->flush();
 

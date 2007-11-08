@@ -170,9 +170,11 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
     // journal it.
     journaler->append_entry(bl);  // bl is destroyed.
   }
-  
+
+  le->_segment->end = journaler->get_write_pos();
+
   delete le;
-  
+
   if (logger) {
     logger->inc("evadd");
     logger->set("ev", num_events);
@@ -343,6 +345,9 @@ void MDLog::_expired(LogSegment *ls)
 
   if (!capped && ls == get_current_segment()) {
     dout(5) << "_expired not expiring " << ls->offset << ", last one and !capped" << dendl;
+  } else if (ls->end > journaler->get_write_ack_pos()) {
+    dout(5) << "_expired not expiring " << ls->offset << ", not fully flushed yet, ack "
+	    << journaler->get_write_ack_pos() << " < end " << ls->end << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
@@ -467,6 +472,7 @@ void MDLog::_replay_thread()
 	       << " : " << *le << dendl;
       le->_segment = get_current_segment();    // replay may need this
       le->_segment->num_events++;
+      le->_segment->end = journaler->get_read_pos();
       num_events++;
 
       le->replay(mds);
