@@ -661,27 +661,36 @@ static struct ceph_messenger *new_messenger()
 {
         struct ceph_messenger *msgr;
         struct ceph_connection *con;
+	struct ceph_poll_task ptsk;
+	struct ceph_poll_task pfiles;
 
         msgr = kmalloc(sizeof(struct ceph_messenger), GFP_KERNEL);
         if (msgr == NULL) return 0;
         memset(&msgr, 0, sizeof(msgr));
 
-        con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
-        if (con == NULL) return 0;
-        memset(&con, 0, sizeof(con));
+        ptsk = kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
+        if (ptsk == NULL) {
+		kfree(msgr);
+		return 0;
+	}
+        memset(&ptsk, 0, sizeof(ptsk));
+
+	pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
+        if (pfiles == NULL) {
+		kfree(msgr);
+		kfree(ptsk);
+		return 0;
+	}
+        memset(pfiles, 0, sizeof(pfiles));
 
 	/* create listener connection */
-        spin_lock_init(&con->con_lock);
-        INIT_WORK(&con->awork, try_accept);       /* setup work structure */
-        con->msgr = msgr;
-        atomic_inc(&con->nref);
+	con = new_listener(msgr);
+	pfiles->con = con;
+	pfiles->file = con->sock->file;
+	ptsk->pfiles = pfiles
 
 	/* start up poll thread */
-	athread = kthread_run(ceph_poll, NULL, "ceph poll thread"); */
+	ptsk->poll_task = kthread_run(ceph_poll, msgr, "ceph-poll");
+	msgr->poll_task = ptsk;
         return msgr;
-}
-
-struct ceph_messenger *init_messenger()
-{
-
 }
