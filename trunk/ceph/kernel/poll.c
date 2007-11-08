@@ -50,10 +50,9 @@ static int do_ceph_pollfd(struct file *file)
 /*
  * Poll thread function, start after creating listener connection
  */
-int ceph_poll(struct ceph_messenger *msgr)
+static int ceph_poll(struct ceph_pollable *plist)
 {
 	struct ceph_pollable *pos, *tmp;
-	struct ceph_pollable *plist = msgr->poll_task->pfiles->poll_list;
 
         printk(KERN_INFO "starting kernel poll thread\n");
 
@@ -83,4 +82,36 @@ int ceph_poll(struct ceph_messenger *msgr)
         set_current_state(TASK_RUNNING);
         printk(KERN_INFO "kernel thread exiting\n");
         return(0);
+}
+
+struct ceph_poll_task *start_poll()
+{
+        struct ceph_poll_task ptsk;
+        struct ceph_pollable pfiles;
+
+        ptsk = kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
+        if (ptsk == NULL) {
+                return 0;
+        }
+        memset(&ptsk, 0, sizeof(ptsk));
+
+        pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
+        if (pfiles == NULL) {
+                kfree(ptsk);
+                return 0;
+        }
+        memset(pfiles, 0, sizeof(pfiles));
+	INIT_LIST_HEAD(&pfiles->poll_list)
+
+        /* start up poll thread */
+        ptsk->poll_task = kthread_run(ceph_poll, pfiles, "ceph-poll");
+	
+	return(ptsk);
+}
+
+int stop_poll(struct ceph_poll_task *ptsk)
+{
+        kthread_stop(ptsk->poll_task);
+        wake_up_process(ptsk->poll_task);
+	/* Free up poll structures.. */
 }
