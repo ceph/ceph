@@ -22,7 +22,7 @@ struct ceph_pollable {
 
 struct ceph_poll_task {
         struct task_struct *poll_task;
-	struct ceph_pollable pfiles;
+	struct ceph_pollable *pfiles;
         int nfds;
 };
 
@@ -30,6 +30,7 @@ struct ceph_messenger {
 	void *parent;
 	ceph_messenger_dispatch_t dispatch;
         struct ceph_poll_task *poll_task;
+	struct ceph_connection *listen_con; /* listening connection */
 	struct ceph_entity_addr addr;    /* my address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
