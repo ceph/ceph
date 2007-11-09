@@ -941,6 +941,8 @@ void Rank::Pipe::unregister_pipe()
 void Rank::Pipe::fault(bool silent)
 {
   assert(lock.is_locked());
+  
+  if (!silent) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
 
   if (q.empty()) {
     if (!silent) dout(0) << "fault nothing to send, closing" << dendl;

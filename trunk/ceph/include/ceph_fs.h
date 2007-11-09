@@ -6,16 +6,20 @@
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
 
-#ifdef __CYGWIN__
-# include <asm/types.h>
-typedef uint64_t __u64;
+#ifdef __KERNEL__
+# include <linux/in.h>
 #else
-# include <linux/types.h>
+# include <netinet/in.h>
 #endif
-#include <netinet/in.h>
-
+#include <linux/types.h>
 
 typedef __u64 ceph_ino_t;
+
+#ifdef __KERNEL__
+extern int ceph_debug;
+# define dout(x, args...) do { if (x >= ceph_debug) printk(KERN_INFO "ceph: " args); } while (0);
+# define derr(x, args...) do { if (x >= ceph_debug) printk(KERN_ERR "ceph: " args); } while (0);
+#endif
 
 
 /**
@@ -161,6 +165,12 @@ struct ceph_entity_addr {
 #define ceph_entity_addr_is_local(a,b)		\
 	((a).nonce == (b).nonce &&		\
 	 (a).ipaddr == (b).ipaddr)
+
+#define compare_addr(a, b)			\
+	((a)->erank == (b)->erank &&		\
+	 (a)->nonce == (b)->nonce &&		\
+	 memcmp((a), (b), sizeof(*(a)) == 0))
+
 
 
 struct ceph_entity_inst {
