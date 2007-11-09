@@ -109,7 +109,7 @@ private:
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
 
-    void fault();
+    void fault(bool silent=false);
     void fail();
 
     void take_queue(list<Message*>& ls) {
