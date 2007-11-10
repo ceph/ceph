@@ -21,6 +21,19 @@ extern int ceph_debug;
 # define derr(x, args...) do { if (x >= ceph_debug) printk(KERN_ERR "ceph: " args); } while (0);
 #endif
 
+/**
+ * fs id
+ */
+struct ceph_fsid {
+	__u64 major;
+	__u64 minor;
+};
+typedef struct ceph_fsid ceph_fsid_t;
+
+static inline int ceph_fsid_equal(const ceph_fsid_t *a, const ceph_fsid_t *b) {
+	return a->major == b->major && a->minor == b->minor;
+}
+
 
 /**
  * object id

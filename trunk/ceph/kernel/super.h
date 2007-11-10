@@ -4,54 +4,39 @@
 #include <linux/ceph_fs.h>
 #include <linux/fs.h>
 
-#include "messenger.h"
-#include "monmap.h"
-
-#include "mon_client.h"
-#include "mds_client.h"
-#include "osd_client.h"
-
-
-
-/* 
- * CEPH per-filesystem client state
- * 
- * possibly shared by multiple mount points, if they are 
- * mounting the same ceph filesystem/cluster.
- */
-struct ceph_client {
-	__u64 s_fsid;  /* hmm this should be part of the monmap? */
-
-	__u32 s_whoami;                /* my client number */
-	struct ceph_messenger  *msgr;   /* messenger instance */
-
-	struct ceph_monmap *monmap;  /* monitor map */
-
-	struct ceph_mon_client mon_client;
-	struct ceph_mds_client mds_client;
-	struct ceph_osd_client osd_client;
-
-	int s_ref;    /* reference count (for each sb_info that points to me) */
-};
+#include "client.h"
 
 /*
- * directory of filesystems mounted by this host
- *
- *   key: fsid?  ipquad of monitor?  hmm!
- * value: struct ceph_fs_client*
+ * mount options
  */
-extern struct radix_tree ceph_fs_clients; 
+#define CEPH_MOUNT_FSID     1
+#define CEPH_MOUNT_NOSHARE  2  /* don't share client with other mounts */
+
+struct ceph_mount_args {
+	int mntflags;
+	int flags;
+	struct ceph_fsid fsid;
+	int num_mon;
+	struct ceph_entity_addr mon_addr[5];
+	char path[100];
+};
 
 
 /*
  * CEPH per-mount superblock info
  */
-struct ceph_sb_info {
+struct ceph_super_info {
+	struct ceph_mount_args mount_args;
 	struct ceph_client *sb_client;
 	
-	/* FIXME: add my relative offset into the filesystem,
-	   so we can appropriately mangle/adjust path names in requests, etc. */
+	/* FIXME: ptr to inode of my relative offset into the filesystem,
+	   so we can appropriately mangle/adjust path names in requests, etc...? */
 };
+
+static inline struct ceph_super_info *ceph_sbinfo(struct super_block *sb)
+{
+	return sb->s_fs_info;
+}
 
 /*
  * CEPH file system in-core inode info
@@ -66,6 +51,7 @@ static inline struct ceph_inode_info *CEPH_I(struct inode *inode)
 {
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
+
 
 
 /* file.c */
