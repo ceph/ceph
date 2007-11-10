@@ -10,6 +10,8 @@
 
 struct ceph_message;
 
+struct ceph_poll_task *start_poll(void);
+
 typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 
 /* list of pollable files */
@@ -24,6 +26,7 @@ struct ceph_poll_task {
         struct task_struct *poll_task;
 	struct ceph_pollable *pfiles;
         int nfds;
+	u64 timeout;
 };
 
 struct ceph_messenger {
@@ -91,6 +94,7 @@ struct ceph_connection {
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */
 	int retries;
+	int error;				/* error on connection */
 };
 
 /* 
