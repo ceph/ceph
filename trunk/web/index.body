@@ -1,7 +1,7 @@
 <div class="mainsegment">
-	<h3>We are hiring!</h3>
+	<h3>Intersted in working on Ceph?</h3>
 	<div>
-Ceph is actively seeking experienced C/C++ and Linux kernel developers who are interested in helping turn Ceph into a stable production-grade storage system.  Competitive salaries, benefits, etc.  If interested, please contact sage at newdream dot net.
+We are actively seeking experienced C/C++ and Linux kernel developers who are interested in helping turn Ceph into a stable production-grade storage system.  Competitive salaries, benefits, etc.  If interested, please contact sage at newdream dot net.
 	</div>
 </div>
 
@@ -29,10 +29,10 @@ Ceph is actively seeking experienced C/C++ and Linux kernel developers who are i
 
 	<h3>Current Status</h3>
 	<div>
-		Ceph is currently in the prototype stage, and is under very active development.  The file system is mountable and more or less usable, but a variety of subsystems are not yet fully functional (most notably MDS failure recovery, reliable failure monitoring).  Other key features are planned but not yet implemented, including snapshots.
+		Ceph is roughly alpha quality, and is under very active development.  The file system is mountable and more or less usable using a FUSE-based client, and development is underway on a native Linux kernel client.  Many features are planned but not yet implemented, including snapshots.
 
-		<p>The Ceph project is actively seeking participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
+		<p>The Ceph project is actively seeking participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join the mailing list</a>.
 	</div>
 </div>
 
-<b>Please feel free to <a href="mailto:sage@newdream.net">contact us</a> with any questions or comments.</b>
+<b>Please feel free to <a href="mailto:sage@newdream.net">contact me</a> with any questions or comments.</b>
