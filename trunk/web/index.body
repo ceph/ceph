@@ -29,7 +29,7 @@ We are actively seeking experienced C/C++ and Linux kernel developers who are in
 
 	<h3>Current Status</h3>
 	<div>
-		Ceph is roughly alpha quality, and is under very active development.  The file system is mountable and more or less usable using a FUSE-based client, and development is underway on a native Linux kernel client.  Many features are planned but not yet implemented, including snapshots.
+		Ceph is roughly alpha quality, and is under very active development.  <b>Ceph is not yet suitable for any uses other than testing and review.</b>  The file system is mountable and more or less usable using a FUSE-based client, and development is underway on a native Linux kernel client.  Many features are planned but not yet implemented, including snapshots.
 
 		<p>The Ceph project is actively seeking participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join the mailing list</a>.
 	</div>
