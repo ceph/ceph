@@ -1,5 +1,5 @@
-#ifndef __FS_CEPH_KMSG_H
-#define __FS_CEPH_KMSG_H
+#ifndef __FS_CEPH_MESSENGER_H
+#define __FS_CEPH_MESSENGER_H
 
 #include <linux/uio.h>
 #include <linux/net.h>
@@ -7,27 +7,12 @@
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
 #include "bufferlist.h"
+#include "poll.h"
 
 struct ceph_message;
 
-struct ceph_poll_task *start_poll(void);
-
 typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 
-/* list of pollable files */
-struct ceph_pollable {
-	spinlock_t plock;
-        struct list_head poll_list;
-	struct file *file;
-	struct ceph_connection *con;
-};
-
-struct ceph_poll_task {
-        struct task_struct *poll_task;
-	struct ceph_pollable *pfiles;
-        int nfds;
-	u64 timeout;
-};
 
 struct ceph_messenger {
 	void *parent;
