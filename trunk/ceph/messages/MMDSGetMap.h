@@ -21,8 +21,7 @@
 
 class MMDSGetMap : public Message {
  public:
-  MMDSGetMap() : Message(CEPH_MSG_MDS_GETMAP) {
-  }
+  MMDSGetMap() : Message(CEPH_MSG_MDS_GETMAP) { }
 
   char *get_type_name() { return "mdsgetmap"; }
   

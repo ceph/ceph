@@ -102,10 +102,11 @@ void OSDMonitor::create_initial()
   assert(mon->is_leader());
   assert(paxos->get_version() == 0);
 
-  dout(1) << "create_initial -- creating initial osdmap from g_conf" << dendl;
+  dout(1) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
 
   // <HACK set up OSDMap from g_conf>
   OSDMap newmap;
+  newmap.set_fsid(mon->monmap->fsid);
   newmap.mon_epoch = mon->mon_epoch;
   newmap.ctime = g_clock.now();
 
@@ -316,8 +317,9 @@ bool OSDMonitor::update_from_paxos()
 void OSDMonitor::create_pending()
 {
   pending_inc = OSDMap::Incremental(osdmap.epoch+1);
-  dout(10) << "create_pending e " << pending_inc.epoch
-	   << dendl;
+  pending_inc.fsid = mon->monmap->fsid;
+  
+  dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 }
 
 void OSDMonitor::encode_pending(bufferlist &bl)

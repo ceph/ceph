@@ -827,7 +827,7 @@ int Rank::Pipe::connect()
   dout(10) << "connecting to " << peer_addr.v.ipaddr << dendl;
   rc = ::connect(newsd, (sockaddr*)&peer_addr.v.ipaddr, sizeof(peer_addr.v.ipaddr));
   if (rc < 0) {
-    dout(10) << "connect error " << peer_addr.v.ipaddr
+    dout(2) << "connect error " << peer_addr.v.ipaddr
 	     << ", " << errno << ": " << strerror(errno) << dendl;
     goto fail;
   }
@@ -843,7 +843,7 @@ int Rank::Pipe::connect()
   // identify peer
   rc = tcp_read(newsd, (char*)&paddr, sizeof(paddr));
   if (rc < 0) {
-    dout(0) << "connect couldn't read peer addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read peer addr, " << strerror(errno) << dendl;
     goto fail;
   }
   dout(20) << "connect read peer addr " << paddr << dendl;
@@ -885,7 +885,7 @@ int Rank::Pipe::connect()
   // FINISH
   if (state != STATE_CONNECTING) {
     dout(2) << "connect hmm, race durring connect(), not connecting anymore, failing" << dendl;
-    goto fail2;  // hmm!
+    goto fail_locked;  // hmm!
   }
   if (tag == CEPH_MSGR_TAG_REJECT) {
     if (connect_seq != cseq) {
@@ -895,7 +895,7 @@ int Rank::Pipe::connect()
     } else {
       dout(0) << "connect got REJECT, connection race (harmless), connect_seq=" << connect_seq << dendl;
     }
-    goto fail2;
+    goto fail_locked;
   }
   assert(tag == CEPH_MSGR_TAG_READY);
   state = STATE_OPEN;
@@ -912,9 +912,9 @@ int Rank::Pipe::connect()
 
  fail:
   lock.Lock();
- fail2:
+ fail_locked:
   if (newsd > 0) ::close(newsd);
-  fault(tag == CEPH_MSGR_TAG_REJECT);
+  fault(tag == CEPH_MSGR_TAG_REJECT); // quiet if reject (not socket error)
   return -1;
 }
 

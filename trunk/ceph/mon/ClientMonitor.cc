@@ -126,11 +126,9 @@ bool ClientMonitor::preprocess_query(Message *m)
   case CEPH_MSG_CLIENT_MOUNT:
     {
       // already mounted?
-      MClientMount *mount = (MClientMount*)m;
       entity_addr_t addr = m->get_source_addr();
-      pair<entity_addr_t,int> addrinst(addr, mount->instance);
-      if (client_map.addr_client.count(addrinst)) {
-	int client = client_map.addr_client[addrinst];
+      if (client_map.addr_client.count(addr)) {
+	int client = client_map.addr_client[addr];
 	dout(7) << " client" << client << " already mounted" << dendl;
 	_mounted(client, (MClientMount*)m);
 	return true;
@@ -165,45 +163,38 @@ bool ClientMonitor::prepare_update(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
     {
-      MClientMount *mount = (MClientMount*)m;
-      pair<entity_addr_t,int> addrinst(mount->addr, mount->instance);
+      entity_addr_t addr = m->get_source_addr();
       int client = -1;
-      if (mount->get_source().is_client())
-	client = mount->get_source().num();
+      if (m->get_source().is_client())
+	client = m->get_source().num();
 
       // choose a client id
       if (client < 0) {
 	client = pending_inc.next_client;
-	dout(10) << "mount: assigned client" << client << " to " << mount->addr << dendl;
+	dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
       } else {
-	dout(10) << "mount: client" << client << " requested by " 
-		 << mount->addr << "i" << mount->instance
-		 << dendl;
+	dout(10) << "mount: client" << client << " requested by " << addr << dendl;
 	if (client_map.client_addr.count(client)) {
-	  assert(client_map.client_addr[client] != addrinst);
-	  dout(0) << "mount: WARNING: client" << client << " requested by " 
-		  << mount->addr << "." << mount->instance
-		  << ", which used to be " 
-		  << client_map.client_addr[client].first << "i" << client_map.client_addr[client].second
-		  << dendl;
+	  assert(client_map.client_addr[client] != addr);
+	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
+		  << ", which used to be "  << client_map.client_addr[client] << dendl;
 	}
       }
       
-      pending_inc.add_mount(client, mount->addr, mount->instance);
-      paxos->wait_for_commit(new C_Mounted(this, client, mount));
+      pending_inc.add_mount(client, addr);
+      paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
     }
     return true;
 
   case CEPH_MSG_CLIENT_UNMOUNT:
     {
-      MClientUnmount *unmount = (MClientUnmount*)m;
-      assert(unmount->inst.name.is_client());
-      int client = unmount->inst.name.num();
+      assert(m->get_source().is_client());
+      int client = m->get_source().num();
 
       assert(client_map.client_addr.count(client));
       
       pending_inc.add_unmount(client);
-      paxos->wait_for_commit(new C_Unmounted(this, unmount));
+      paxos->wait_for_commit(new C_Unmounted(this, (MClientUnmount*)m));
     }
     return true;
   
@@ -222,7 +213,7 @@ bool ClientMonitor::prepare_update(Message *m)
 void ClientMonitor::_mounted(int client, MClientMount *m)
 {
   entity_inst_t to;
-  to.addr = m->addr;
+  to.addr = m->get_source_addr();
   to.name = entity_name_t::CLIENT(client);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
@@ -236,10 +227,10 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 
 void ClientMonitor::_unmounted(MClientUnmount *m)
 {
-  dout(10) << "_unmounted " << m->inst << dendl;
+  dout(10) << "_unmounted " << m->get_source_inst() << dendl;
   
   // reply with (same) unmount message
-  mon->messenger->send_message(m, m->inst);
+  mon->messenger->send_message(m, m->get_source_inst());
 
   // auto-shutdown?
   // (hack for fakesyn/newsyn, mostly)

@@ -231,6 +231,12 @@ inline unsigned char MODE_TO_DT(int mode) {
 #define MAX_DENTRY_LEN 255
 
 
+// --
+
+inline ostream& operator<<(ostream& out, ceph_fsid_t& f) {
+  return out << hex << f.major << '.' << f.minor << dec;
+}
+
 
 
 // -- io helpers --

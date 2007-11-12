@@ -25,12 +25,15 @@
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
+  ceph_fsid_t fsid;
   int32_t num_mon;
   vector<entity_inst_t> mon_inst;
 
   int       last_mon;    // last mon i talked to
 
-  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {}
+  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {
+    generate_fsid();
+  }
 
   void add_mon(entity_inst_t inst) {
     mon_inst.push_back(inst);
@@ -53,6 +56,7 @@ class MonMap {
 
   void encode(bufferlist& blist) {
     ::_encode(epoch, blist);
+    ::_encode(fsid, blist);
     ::_encode(num_mon, blist);
     ::_encode(mon_inst, blist);
   }
@@ -60,8 +64,15 @@ class MonMap {
   void decode(bufferlist& blist) {
     int off = 0;
     ::_decode(epoch, blist, off);
+    ::_decode(fsid, blist, off);
     ::_decode(num_mon, blist, off);
     ::_decode(mon_inst, blist, off);
+  }
+
+
+  void generate_fsid() {
+    fsid.major = ((uint64_t)rand() << 32) + rand();
+    fsid.minor = ((uint64_t)rand() << 32) + rand();
   }
 
   // read from/write to a file

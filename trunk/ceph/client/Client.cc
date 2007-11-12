@@ -1374,8 +1374,7 @@ void Client::_try_mount()
   int mon = monmap->pick_mon();
   dout(2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
   messenger->set_dispatcher(this);
-  messenger->send_message(new MClientMount(messenger->get_myaddr(), my_instance),
-			  monmap->get_inst(mon));
+  messenger->send_message(new MClientMount, monmap->get_inst(mon));
 
   // schedule timeout?
   assert(mount_timeout_event == 0);
@@ -1533,8 +1532,7 @@ int Client::unmount()
   // send unmount!
   int mon = monmap->pick_mon();
   dout(2) << "sending client_unmount to mon" << mon << dendl;
-  messenger->send_message(new MClientUnmount(messenger->get_myinst()), 
-			  monmap->get_inst(mon));
+  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
   
   while (mounted)
     mount_cond.Wait(client_lock);
