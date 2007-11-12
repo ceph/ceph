@@ -1,5 +1,8 @@
 
+#include <linux/parser.h>
 #include "super.h"
+
+
 
 
 /*
@@ -41,6 +44,28 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 static void ceph_write_super(struct super_block *s)
 {
 	return;
+}
+
+
+/**
+ * ceph_show_options - Show mount options in /proc/mounts
+ * @m: seq_file to write to
+ * @mnt: mount descriptor
+ */
+static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
+{
+	struct ceph_super_info *sbinfo = mnt->mnt_sb->s_fs_info;
+	struct ceph_mount_args *args = &sbinfo->mount_args;
+
+	if (ceph_debug != 0)
+		seq_printf(",debug=%d", ceph_debug);		
+	if (args->flags & CEPH_MOUNT_FSID) 
+		seq_printf(",fsidmajor=%ld,fsidminor%ld", 
+			   args->fsid.major, args->fsid.minor);
+	if (args->flags & CEPH_MOUNT_NOSHARE)
+		seq_puts(",noshare");
+	seq_printf(",monport=%d", args->mon_port);
+	return 0;
 }
 
 
@@ -98,6 +123,7 @@ static const struct super_operations ceph_sops = {
 	.delete_inode	= ceph_delete_inode,
 	.put_super	= ceph_put_super,
 	.write_super	= ceph_write_super,
+	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
 };
 
@@ -152,15 +178,32 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 }
 
 
-static int parse_mount_args(int flags, void *data, char *dev_name, struct ceph_mount_args *args)
+enum {
+	Opt_fsid, 
+	Opt_debug,
+	Opt_monport	
+};
+
+static match_table_t arg_tokens = {
+	{Opt_fsidmajor, "fsidmajor=%ld"},
+	{Opt_fsidminor, "fsidminor=%ld"},
+	{Opt_debug, "debug=%d"},
+	{Opt_monport, "monport=%d"}
+};
+
+
+static int parse_mount_args(int flags, char *options, char *dev_name, struct ceph_mount_args *args)
 {
 	char *c;
 	int len;
-	
+	substring_t args[MAX_OPT_ARGS];
+		
 	dout(1, "parse_mount_args dev_name %s\n", dev_name);
 
+	/* defaults */
 	args->mntflags = flags;
 	args->flags = 0;
+	args->mon_port = CEPH_MON_PORT;
 	
 	/* get mon hostname, relative path */
 	c = strchr(dev_name, ":");
@@ -178,7 +221,36 @@ static int parse_mount_args(int flags, void *data, char *dev_name, struct ceph_m
 	
 	dout(1, "mon %s, path %s\n", args->mon_hostname, args->path);
 	
-	/* FIXME parse mount options too? */
+	/* parse mount options */
+	while ((c = strsep(&options, ",")) != NULL) {
+		int token;
+		int intval;
+		int ret;
+		if (!*p) 
+			continue;
+		token = match_token(p, arg_tokens, args);
+		ret = match_int(&args[0], &intval);
+		if (ret < 0) {
+			dout(0, "bad mount arg\n");
+			continue;
+		}
+		switch (token) {
+		case Opt_fsidmajor:
+			args->fsid.major = intval;
+			break;
+		case Opt_fsidminor:
+			args->fsid.minor = intval;
+			break;
+		case Opt_monport:
+			args->mon_port = intval;
+			break;
+		case Opt_debug:
+			ceph_debug = intval;
+			break;
+		default:
+			continue;
+		}
+	}
 	
 	return 0;
 }
@@ -232,9 +304,13 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
 	dout(1, "ceph_kill_sb\n");
+
+	kill_anon_super(s);
+
 	ceph_put_client(sbinfo->sb_client);
 	kfree(sbinfo);
 }
+
 
 
 /************************************/

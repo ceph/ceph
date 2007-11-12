@@ -21,6 +21,10 @@ extern int ceph_debug;
 # define derr(x, args...) do { if (x >= ceph_debug) printk(KERN_ERR "ceph: " args); } while (0);
 #endif
 
+
+#define CEPH_MON_PORT 02138
+
+
 /**
  * fs id
  */

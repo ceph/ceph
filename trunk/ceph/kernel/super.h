@@ -18,6 +18,7 @@ struct ceph_mount_args {
 	struct ceph_fsid fsid;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
+	int mon_port;
 	char path[100];
 };
 
