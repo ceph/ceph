@@ -524,7 +524,7 @@ void PG::build_prior()
     omap.pg_to_acting_osds(get_pgid(), acting);
     
     for (unsigned i=0; i<acting.size(); i++) {
-      //dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << dendl;
+      dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << dendl;
       if (osd->osdmap->is_up(acting[i]) &&  // is up now
           acting[i] != osd->whoami)         // and is not me
         prior_set.insert(acting[i]);
@@ -843,8 +843,8 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(STATE_CRASHED);
     state_clear(STATE_REPLAY);
   }
-  info.last_epoch_started = osd->osdmap->get_epoch();
-
+  last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
+  
   if (role == 0) {    // primary state
     peers_complete_thru = 0;  // we don't know (yet)!
   }

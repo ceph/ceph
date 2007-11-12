@@ -83,6 +83,7 @@ class OSDMap {
 public:
   class Incremental {
   public:
+    ceph_fsid_t fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
@@ -100,6 +101,7 @@ public:
     list<int32_t>      old_overload;  // no longer overload
     
     void encode(bufferlist& bl) {
+      ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
       ::_encode(mon_epoch, bl);
       ::_encode(ctime, bl);
@@ -112,6 +114,7 @@ public:
       ::_encode(crush, bl);
     }
     void decode(bufferlist& bl, int& off) {
+      ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
       ::_decode(mon_epoch, bl, off);
       ::_decode(ctime, bl, off);
@@ -128,6 +131,7 @@ public:
   };
 
 private:
+  ceph_fsid_t fsid;
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
@@ -156,6 +160,9 @@ private:
   }
 
   // map info
+  ceph_fsid_t& get_fsid() { return fsid; }
+  void set_fsid(ceph_fsid_t& f) { fsid = f; }
+
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
@@ -216,6 +223,7 @@ private:
   }
 
   void apply_incremental(Incremental &inc) {
+    assert(ceph_fsid_equal(&inc.fsid, &fsid) || inc.epoch == 1);
     assert(inc.epoch == epoch+1);
     epoch++;
     mon_epoch = inc.mon_epoch;
@@ -282,6 +290,7 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
+    ::_encode(fsid, blist);
     ::_encode(epoch, blist);
     ::_encode(mon_epoch, blist);
     ::_encode(ctime, blist);
@@ -301,6 +310,7 @@ private:
   
   void decode(bufferlist& blist) {
     int off = 0;
+    ::_decode(fsid, blist, off);
     ::_decode(epoch, blist, off);
     ::_decode(mon_epoch, blist, off);
     ::_decode(ctime, blist, off);

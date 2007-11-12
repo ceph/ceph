@@ -298,14 +298,16 @@ class OSDSuperblock {
 public:
   const static uint64_t MAGIC = 0xeb0f505dULL;
   uint64_t magic;
-  uint64_t fsid;      // unique fs id (random number)
-  int32_t    whoami;    // my role in this fs.
-  epoch_t    current_epoch;             // most recent epoch
-  epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
+  ceph_fsid_t fsid;
+  int32_t whoami;    // my role in this fs.
+  epoch_t current_epoch;             // most recent epoch
+  epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
-  OSDSuperblock(uint64_t f=0, int w=0) : 
-    magic(MAGIC), fsid(f), whoami(w), 
-    current_epoch(0), oldest_map(0), newest_map(0), weight(0) {}
+  OSDSuperblock(int w=0) : 
+    magic(MAGIC), whoami(w), 
+    current_epoch(0), oldest_map(0), newest_map(0), weight(0) {
+    memset(&fsid, 0, sizeof(fsid));
+  }
 };
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)

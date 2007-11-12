@@ -198,7 +198,6 @@ int OSD::init()
       return -1;
     
     // make up a superblock
-    //superblock.fsid = ???;
     superblock.whoami = whoami;
   }
   
@@ -1280,9 +1279,24 @@ void OSD::advance_map(ObjectStore::Transaction& t)
           << dendl;
   
   if (osdmap->is_mkfs()) {
+
+    // is this okay?
+    assert(superblock.current_epoch == 2);
+    ceph_fsid_t nullfsid;
+    memset(&nullfsid, 0, sizeof(nullfsid));
+    if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {
+      derr(0) << "will not mkfs, my superblock fsid is not zeroed" << dendl;
+      assert(0);
+    }
+    superblock.fsid = osdmap->get_fsid();
+    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
+
+    // ok!
     ps_t numps = osdmap->get_pg_num();
     ps_t numlps = osdmap->get_localized_pg_num();
-    dout(1) << "mkfs on " << numps << " normal, " << numlps << " localized pg sets" << dendl;
+    dout(1) << "mkfs " << osdmap->get_fsid() << " on " 
+	    << numps << " normal, " 
+	    << numlps << " localized pg sets" << dendl;
     int minrep = 1;
     int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
     int minraid = g_conf.osd_min_raid_width;
@@ -1292,8 +1306,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     //derr(0) << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
     logger->set_start( osdmap->get_ctime() );
-
-    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // create PGs
     //  replicated
@@ -1722,8 +1734,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->acting.swap(acting);
       pg->set_role(role);
       pg->info.history = history;
-      pg->last_epoch_started_any = it->last_epoch_started;
       pg->clear_primary_state();  // yep, notably, set hml=false
+      pg->last_epoch_started_any = it->last_epoch_started;  // _after_ clear_primary_state()
       pg->build_prior();      
       pg->write_log(t);
       
