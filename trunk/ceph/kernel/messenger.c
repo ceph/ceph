@@ -680,3 +680,22 @@ static struct ceph_messenger *new_messenger(void)
 
         return msgr;
 }
+
+
+struct ceph_message *ceph_new_message(int type, int size)
+{
+	struct ceph_message *m;
+
+	m = kmalloc(sizeof(*m), GFP_KERNEL);
+	if (m == NULL)
+		return ERR_PTR(-ENOMEM);
+	memset(m, 0, sizeof(*m));
+	m.hdr.type = type;
+	
+	if (size) {
+		BUG_ON(size);  /* implement me */
+	}
+
+	return m;
+}
+

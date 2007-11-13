@@ -61,7 +61,7 @@ struct ceph_mds_client {
 	struct completion map_waiters;
 };
 
-extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
 extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds);
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *msg);

@@ -82,11 +82,13 @@ struct ceph_connection {
 	int error;				/* error on connection */
 };
 
-/* 
- *  Inline functions..
- */
 
+/* messenger */
 extern void ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
+
+
+/* messages */
+extern struct ceph_message *ceph_new_message(int type, int size);
 
 static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 	if (atomic_dec_and_test(&msg->nref)) {
@@ -98,5 +100,6 @@ static __inline__ void ceph_put_msg(struct ceph_message *msg) {
 static __inline__ void ceph_get_msg(struct ceph_message *msg) {
 	atomic_inc(&msg->nref);
 }
+
 
 #endif

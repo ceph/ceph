@@ -1,19 +1,18 @@
 #ifndef _FS_CEPH_MONMAP_H
 #define _FS_CEPH_MONMAP_H
 
-#include <linux/uio.h>
+#include <linux/ceph_fs.h>
+#include "bufferlist.h"
 
 /*
  * monitor map
  */
 struct ceph_monmap {
-  __u64 m_epoch;
-  __u32 m_num_mon;
-  __u32 m_last_mon;
-  struct ceph_entity_inst m_mon_inst;
+  __u64 epoch;
+  __u32 num_mon;
+  struct ceph_entity_inst *mon_inst;
 };
 
-extern int ceph_monmap_pick_mon(struct ceph_monmap *m);
-extern int ceph_monmap_decode(struct ceph_monmap *m, struct kvec *v);
+extern int ceph_monmap_decode(struct ceph_monmap *m, struct ceph_bufferlist *bl);
 
 #endif

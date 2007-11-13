@@ -35,11 +35,11 @@ extern void ceph_bl_prepare_append(struct ceph_bufferlist *bl, int len);
 
 extern void ceph_bl_iterator_init(struct ceph_bufferlist_iterator *bli);
 
-extern __u64 ceph_bl_decode_u64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
-extern __s64 ceph_bl_decode_s64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
-extern __u32 ceph_bl_decode_u32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
-extern __s32 ceph_bl_decode_s32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
-extern __u8 ceph_bl_decode_u8(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
+extern int ceph_bl_decode_64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, __u64 *v);
+extern int ceph_bl_decode_32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, __u32 *v);
+extern int ceph_bl_decode_16(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, __u16 *v);
+extern int ceph_bl_decode_8(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, __u8 *v);
 
+extern int ceph_bl_copy(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, void *p, int len);
 
 #endif
