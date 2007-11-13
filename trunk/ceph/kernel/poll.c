@@ -16,14 +16,10 @@ static struct workqueue_struct *send_wq;        /* send work queue */
 /* TBD: probably remove pwait, but may play around with it some.. 
  * null for now.. No timeout, timeout maybe ignored if O_NONBLOCK anyway..
 */
-static int do_ceph_pollfd(struct file *file, poll_table *pwait)
+static int do_ceph_poll(struct ceph_connection *con, poll_table *pwait)
 {
         int mask;
-	struct socket *sock = (struct socket *)file->private_data;
-	struct sock *sk = sock->sk;
-	/* may keep connection in poll list instead of using this field */
-	struct ceph_connection *con = 
-		(struct ceph_connection *)sk->sk_user_data;
+	struct file *file = con->sock->file;
 
 
 	mask = file->f_op->poll(file, pwait);
@@ -57,10 +53,10 @@ static int do_ceph_pollfd(struct file *file, poll_table *pwait)
 /*
  * Poll thread function, start after creating listener connection
  */
-static int ceph_poll(void *arg)
+int start_polling(void *arg)
 {
-	struct ceph_pollable *pos, *next;
-	struct ceph_pollable *pollables = arg;
+	struct ceph_connection *pos, *next;
+	struct ceph_messenger *pollables = arg;
 
         printk(KERN_INFO "starting kernel poll thread\n");
 
@@ -75,14 +71,14 @@ static int ceph_poll(void *arg)
          * this will work better for a large number of file descriptors
          */
         	list_for_each_entry_safe(pos, next, &pollables->poll_list, poll_list) {
-                	if (do_ceph_pollfd(pos->file, NULL)) {
-				spin_lock(&pos->plock);
+                	if (do_ceph_poll(pos, NULL)) {
+				spin_lock(&pos->con_lock);
                         	/* remove file from poll_list */
 				list_del(&pos->poll_list);
-				spin_unlock(&pos->plock);
+				spin_unlock(&pos->con_lock);
 				/* TBD: free list entry or reuse..Need reuse list */
 				/* double check not freeing out from undermyself*/
-				kfree(pos);
+				/* kfree(pos); */
                 	}
         	}
         	schedule_timeout(5*HZ);  /* TBD: make configurable */
@@ -92,39 +88,10 @@ static int ceph_poll(void *arg)
         return(0);
 }
 
-struct ceph_poll_task *start_poll()
+void stop_polling(struct ceph_messenger *msgr)
 {
-        struct ceph_poll_task *ptsk;
-        struct ceph_pollable *pfiles;
-
-        ptsk = kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
-        if (ptsk == NULL) {
-                return 0;
-        }
-        memset(&ptsk, 0, sizeof(ptsk));
-
-        pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
-        if (pfiles == NULL) {
-                kfree(ptsk);
-                return 0;
-        }
-        memset(pfiles, 0, sizeof(pfiles));
-	INIT_LIST_HEAD(&pfiles->poll_list);
-
-        /* start up poll thread */
-        ptsk->poll_task = kthread_run(ceph_poll, pfiles, "ceph-poll");
-	if (IS_ERR(ptsk->poll_task)) {
-		/* cleanup */
-	}
-	
-	return(ptsk);
-}
-
-void stop_poll(struct ceph_poll_task *ptsk)
-{
-        kthread_stop(ptsk->poll_task);
-        wake_up_process(ptsk->poll_task);
-	/* Free up poll structures.. */
+        kthread_stop(msgr->poll_task);
+        wake_up_process(msgr->poll_task);
 }
 
 /*

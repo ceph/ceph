@@ -17,12 +17,13 @@ typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 struct ceph_messenger {
 	void *parent;
 	ceph_messenger_dispatch_t dispatch;
-        struct ceph_poll_task *poll_task;
+        struct task_struct *poll_task;
 	struct ceph_connection *listen_con; /* listening connection */
 	struct ceph_entity_addr addr;    /* my address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
+	struct list_head poll_list;      /*  connections polling */
 	struct radix_tree_root con_open; /*  established. see get_connection() */
 };
 
@@ -55,6 +56,7 @@ struct ceph_connection {
 
 	struct list_head list_all;   /* msgr->con_all */
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
+	struct list_head poll_list;  /* msgr->poll_list */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	enum ceph_connection_state state;

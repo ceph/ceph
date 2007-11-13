@@ -606,8 +606,6 @@ static void try_accept(struct work_struct *work)
 	new_con->in_tag = CEPH_MSGR_TAG_READY;
 	/* TBD: fill in part of peers address */
 	/* new_con->peeraddr = saddr; */
-/* TBD: may not use this.. */
-	new_sd->sk->sk_user_data = con;
 
 	prepare_write_accept_announce(msgr, con);
 
@@ -628,7 +626,7 @@ struct ceph_connection *new_listener(struct ceph_messenger *msgr)
         memset(&saddr, 0, sizeof(saddr));
 
         con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
-        if (con == NULL) return 0;
+        if (con == NULL) return NULL;
         memset(&con, 0, sizeof(con));
 
 	/* create listener connection */
@@ -650,35 +648,34 @@ struct ceph_connection *new_listener(struct ceph_messenger *msgr)
 static struct ceph_messenger *new_messenger(void)
 {
         struct ceph_messenger *msgr;
-        struct ceph_connection *con;
-	struct ceph_pollable *pfiles;
+        struct ceph_connection *listener;
 
         msgr = kmalloc(sizeof(struct ceph_messenger), GFP_KERNEL);
-        if (msgr == NULL) return 0;
+        if (msgr == NULL) 
+		goto done;
         memset(&msgr, 0, sizeof(msgr));
 
 	spin_lock_init(&msgr->con_lock);
-
-        pfiles =  kmalloc(sizeof(struct ceph_poll_task), GFP_KERNEL);
-        if (pfiles == NULL) {
-                kfree(msgr);
-                return 0;
-        }
+	INIT_LIST_HEAD(&msgr->poll_list);
 
 	/* create listener connection */
-	con = new_listener(msgr);
+	listener = new_listener(msgr);
+	if (listener == NULL) 
+		goto err;
 
-	/* start polling */
-	msgr->poll_task = start_poll();
+	list_add(&msgr->poll_list, &listener->poll_list);
 
+        /* start up poll thread */
+        msgr->poll_task = kthread_run(start_poll, msgr, "ceph-poll");
+	if (IS_ERR(msgr->poll_task))
+		goto err;
 
-	/* add listener to pollable files 
-         * TBD: maybe do this before start polling */
-	pfiles->con = con;
-	pfiles->file = con->sock->file;
-	list_add(&pfiles->poll_list, &msgr->poll_task->pfiles->poll_list);  /* add to poll list */
-
+done:
         return msgr;
+err:
+	kfree(msgr);
+	msgr = NULL;
+	goto done;
 }
 
 
