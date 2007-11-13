@@ -1,6 +1,8 @@
 #ifndef _FS_CEPH_MON_CLIENT_H
 #define _FS_CEPH_MON_CLIENT_H
 
+#include "monmap.h"
+
 struct ceph_mount_args;
 
 struct ceph_mon_client {

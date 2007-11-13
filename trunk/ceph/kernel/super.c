@@ -1,5 +1,9 @@
 
 #include <linux/parser.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
+#include <linux/seq_file.h>
+#include <linux/string.h>
 #include "super.h"
 
 
@@ -16,8 +20,6 @@ static void ceph_read_inode(struct inode * inode)
 
 static int ceph_write_inode(struct inode * inode, int unused)
 {
-	lock_kernel();
-	unlock_kernel();
 	return 0;
 }
 
@@ -26,7 +28,7 @@ static void ceph_delete_inode(struct inode * inode)
 	return;
 }
 
-static void ceph_clear_inode(struct inode * inode, int unused)
+static void ceph_clear_inode(struct inode * inode)
 {
 
 }
@@ -58,13 +60,13 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 	struct ceph_mount_args *args = &sbinfo->mount_args;
 
 	if (ceph_debug != 0)
-		seq_printf(",debug=%d", ceph_debug);		
+		seq_printf(m, ",debug=%d", ceph_debug);		
 	if (args->flags & CEPH_MOUNT_FSID) 
-		seq_printf(",fsidmajor=%ld,fsidminor%ld", 
+		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu", 
 			   args->fsid.major, args->fsid.minor);
 	if (args->flags & CEPH_MOUNT_NOSHARE)
-		seq_puts(",noshare");
-	seq_printf(",monport=%d", args->mon_port);
+		seq_puts(m, ",noshare");
+	seq_printf(m, ",monport=%d", args->mon_port);
 	return 0;
 }
 
@@ -88,22 +90,19 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, CEPH_I(inode));
 }
 
-static void ceph_icache_init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
+static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
-	struct ceph_inode_info *ci = (struct ceph_inode_info *) foo;
-	
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR)
-		inode_init_once(&ci->vfs_inode);
+	struct ceph_inode_info *ci = foo;
+	inode_init_once(&ci->vfs_inode);
 }
- 
-static int init_inodecache(void)
+
+static int init_inodecache(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
-					      ceph_icache_init_once, NULL);
+					      init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -131,6 +130,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 {
 	struct ceph_mount_args *args = data;
 	struct ceph_super_info *sbinfo;
+	int ret;
 
 	s->s_flags = args->mntflags;
 	
@@ -140,7 +140,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	memset(sbinfo, 0, sizeof(*sbinfo));
 	s->s_fs_info = sbinfo;
 
-	memcpy(sbinfo->mount_args, args, sizeof(*args));
+	memcpy(&sbinfo->mount_args, args, sizeof(*args));
 	
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)
@@ -164,11 +164,12 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	
 	/* either compare fsid, or specified mon_hostname */
 	if (args->flags & CEPH_MOUNT_FSID) {
-		if (!ceph_fsid_equal(&args->fsid, other->sb_client->fsid))
+		if (!ceph_fsid_equal(&args->fsid, &other->sb_client->fsid))
 			return 1;
 	} else {
-		if (strcmp(args->mon_hostname, other->mount_args.mon_hostname) != 0)
+		/*if (strcmp(args->mon_hostname, other->mount_args.mon_hostname) != 0)
 			return 1;
+		*/
 	}
 	if (strcmp(args->path, other->mount_args.path) != 0)
 		return 1;
@@ -179,7 +180,8 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 
 
 enum {
-	Opt_fsid, 
+	Opt_fsidmajor, 
+	Opt_fsidminor,
 	Opt_debug,
 	Opt_monport	
 };
@@ -196,7 +198,7 @@ static int parse_mount_args(int flags, char *options, char *dev_name, struct cep
 {
 	char *c;
 	int len;
-	substring_t args[MAX_OPT_ARGS];
+	substring_t argstr[MAX_OPT_ARGS];
 		
 	dout(1, "parse_mount_args dev_name %s\n", dev_name);
 
@@ -206,7 +208,7 @@ static int parse_mount_args(int flags, char *options, char *dev_name, struct cep
 	args->mon_port = CEPH_MON_PORT;
 	
 	/* get mon hostname, relative path */
-	c = strchr(dev_name, ":");
+	c = strchr(dev_name, ':');
 	if (c == NULL)
 		return -EINVAL;
 	len = c - dev_name;
@@ -228,8 +230,8 @@ static int parse_mount_args(int flags, char *options, char *dev_name, struct cep
 		int ret;
 		if (!*p) 
 			continue;
-		token = match_token(p, arg_tokens, args);
-		ret = match_int(&args[0], &intval);
+		token = match_token(p, arg_tokens, argstr);
+		ret = match_int(&argstr[0], &intval);
 		if (ret < 0) {
 			dout(0, "bad mount arg\n");
 			continue;

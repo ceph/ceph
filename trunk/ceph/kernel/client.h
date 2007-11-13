@@ -9,7 +9,8 @@
  * different relative server paths)
  */
 
-#include <include/ceph_fs.h>
+#include <linux/ceph_fs.h>
+#include <linux/wait.h>
 
 #include "messenger.h"
 #include "monmap.h"
@@ -35,10 +36,11 @@ enum {
  */
 struct ceph_client {
 	__u32 whoami;                   /* my client number */
+	struct ceph_fsid fsid;
 	atomic_t nref;
 
 	atomic_t mounting;
-	struct wait_queue mount_wq;
+	wait_queue_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;
@@ -51,7 +53,7 @@ struct ceph_client {
 	struct list_head sb_list;
 };
 
-extern struct ceph_client *ceph_get_client(ceph_mount_args *args);
+extern struct ceph_client *ceph_get_client(struct ceph_mount_args *args);
 extern void ceph_put_client(struct ceph_client *cl);
 
 #endif

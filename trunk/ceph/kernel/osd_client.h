@@ -14,7 +14,7 @@ struct ceph_osd_client {
 
 };
 
-extern void ceph_osdc_init(struct ceph_osdc_init *osdc);
+extern void ceph_osdc_init(struct ceph_osd_client *osdc);
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_message *msg);
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_message *msg);
 

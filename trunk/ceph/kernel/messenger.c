@@ -31,8 +31,9 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 	con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
-	if (con == NULL) return 0;
-	memset(&con, 0, sizeof(con));
+	if (con == NULL) 
+		return NULL;
+	memset(con, 0, sizeof(*con));
 
 	con->msgr = msgr;
 
@@ -408,7 +409,7 @@ static void prepare_read_message(struct ceph_connection *con)
 	con->in_tag = CEPH_MSGR_TAG_MSG;
 	con->in_base_pos = 0;
 	con->in_partial = kmalloc(sizeof(struct ceph_message), GFP_KERNEL);
-	if (!con->in_partial) {
+	if (con->in_partial == NULL) {
 		/* TBD: we don't check for error in caller, handle error */
 		printk(KERN_INFO "malloc failure\n");
 		goto done;
@@ -625,9 +626,10 @@ struct ceph_connection *new_listener(struct ceph_messenger *msgr)
         struct sockaddr saddr;
         memset(&saddr, 0, sizeof(saddr));
 
-        con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
-        if (con == NULL) return NULL;
-        memset(&con, 0, sizeof(con));
+        con = kmalloc(sizeof(*con), GFP_KERNEL);
+        if (con == NULL) 
+		return NULL;
+        memset(con, 0, sizeof(*con));
 
 	/* create listener connection */
         spin_lock_init(&con->con_lock);
@@ -650,10 +652,10 @@ static struct ceph_messenger *new_messenger(void)
         struct ceph_messenger *msgr;
         struct ceph_connection *listener;
 
-        msgr = kmalloc(sizeof(struct ceph_messenger), GFP_KERNEL);
+        msgr = kmalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
 		goto done;
-        memset(&msgr, 0, sizeof(msgr));
+        memset(msgr, 0, sizeof(*msgr));
 
 	spin_lock_init(&msgr->con_lock);
 	INIT_LIST_HEAD(&msgr->poll_list);
@@ -687,7 +689,7 @@ struct ceph_message *ceph_new_message(int type, int size)
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 	memset(m, 0, sizeof(*m));
-	m.hdr.type = type;
+	m->hdr.type = type;
 	
 	if (size) {
 		BUG_ON(size);  /* implement me */

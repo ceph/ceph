@@ -108,7 +108,7 @@ static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *
 
 	/* connect */
 	if (ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
-		ceph_monc_request_mdsmap(&mdsc->client->mon_client, mdsc->mdsmap->m_epoch); /* race fixme */
+		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch); /* race fixme */
 		return;
 	} 
 	
@@ -123,7 +123,7 @@ static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *
 static void wait_for_new_map(struct ceph_mds_client *mdsc)
 {
 	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch)
-		ceph_monc_request_mdsmap(&mdsc->client->mon_client, mdsc->mdsmap->m_epoch);
+		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
 
 	wait_for_completion(&mdsc->map_waiters);
 }
@@ -284,10 +284,13 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
 	struct ceph_bufferlist_iterator bli;
 	__u64 epoch;
 	__u32 left;
+	int err;
 
 	ceph_bl_iterator_init(&bli);
-	epoch = ceph_bl_decode_u64(&msg->payload, &bli);
-	left = ceph_bl_decode_u32(&msg->payload, &bli);
+	if ((err = ceph_bl_decode_64(&msg->payload, &bli, &epoch)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(&msg->payload, &bli, &left)) != 0)
+		goto bad;
 
 	dout(2, "ceph_mdsc_handle_map epoch %llu\n", epoch);
 
@@ -300,5 +303,10 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
 		spin_unlock(&mdsc->lock);
 	}
 
+out:
 	ceph_put_msg(msg);
+	return;
+bad:
+	dout(1, "corrupt map\n");
+	goto out;
 }
