@@ -55,6 +55,7 @@ class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
+class MMonMap;
 
 class Filer;
 class Objecter;
@@ -667,6 +668,7 @@ protected:
   // messaging
   void dispatch(Message *m);
 
+  void handle_mon_map(MMonMap *m);
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 

@@ -35,6 +35,8 @@ using namespace std;
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
+#include "messages/MMonMap.h"
+
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
@@ -900,6 +902,10 @@ void Client::dispatch(Message *m)
   client_lock.Lock();
 
   switch (m->get_type()) {
+  case CEPH_MSG_MON_MAP:
+    handle_mon_map((MMonMap*)m);
+    break;
+
     // osd
   case CEPH_MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((MOSDOpReply*)m);
@@ -1440,6 +1446,13 @@ int Client::mount()
   dout(3) << "op: int fd;" << dendl;
   */
   return 0;
+}
+
+void Client::handle_mon_map(MMonMap *m)
+{
+  dout(10) << "handle_mon_map " << *m << dendl;
+  // just ignore it for now.
+  delete m;
 }
 
 

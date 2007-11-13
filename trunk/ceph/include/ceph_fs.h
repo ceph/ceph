@@ -22,7 +22,7 @@ extern int ceph_debug;
 #endif
 
 
-#define CEPH_MON_PORT 02138
+#define CEPH_MON_PORT 2138
 
 
 /**
