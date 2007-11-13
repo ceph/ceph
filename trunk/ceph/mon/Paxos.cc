@@ -244,7 +244,7 @@ void Paxos::begin(bufferlist& v)
 
   // we must already have a majority for this to work.
   assert(mon->get_quorum().size() == 1 ||
-	 num_last > (unsigned)mon->monmap->num_mon/2);
+	 num_last > (unsigned)mon->monmap->size()/2);
   
   // and no value, yet.
   assert(new_value.length() == 0);
@@ -345,7 +345,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
   // new majority?
-  if (accepted.size() == (unsigned)mon->monmap->num_mon/2+1) {
+  if (accepted.size() == (unsigned)mon->monmap->size()/2+1) {
     // yay, commit!
     // note: this may happen before the lease is reextended (below)
     dout(10) << " got majority, committing" << dendl;

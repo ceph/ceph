@@ -24,8 +24,6 @@ using namespace std;
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
-//#include "messages/MFailure.h"
-//#include "messages/MFailureAck.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
@@ -42,6 +40,8 @@ using namespace std;
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGActivateSet.h"
+
+#include "messages/MMonMap.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
@@ -145,6 +145,10 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     m = new MPingAck();
     break;
     
+  case CEPH_MSG_MON_MAP:
+    m = new MMonMap;
+    break;
+
 	/*
   case MSG_FAILURE:
     m = new MFailure();
@@ -198,6 +202,7 @@ decode_message(ceph_message_header& env, bufferlist& payload)
   case MSG_OSD_PG_ACTIVATE_SET:
     m = new MOSDPGActivateSet();
     break;
+
 
     // clients
   case CEPH_MSG_CLIENT_MOUNT:

@@ -480,7 +480,6 @@ class Client : public Dispatcher {
   bool   mounted;
   bool   unmounting;
   Cond   mount_cond;  
-  int my_instance;
 
   int    unsafe_sync_write;
 public:
@@ -656,7 +655,7 @@ protected:
   friend class SyntheticClient;
 
  public:
-  Client(Messenger *m, MonMap *mm, int i=0);
+  Client(Messenger *m, MonMap *mm);
   ~Client();
   void tear_down_cache();   
 

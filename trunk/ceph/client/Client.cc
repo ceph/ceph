@@ -101,11 +101,10 @@ public:
 
 // cons/des
 
-Client::Client(Messenger *m, MonMap *mm, int in) : timer(client_lock)
+Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
 {
   // which client am i?
   whoami = m->get_myname().num();
-  my_instance = in;
   monmap = mm;
   
   mounted = false;
@@ -1372,7 +1371,7 @@ void Client::_try_mount()
 {
   dout(10) << "_try_mount" << dendl;
   int mon = monmap->pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << " as instance " << my_instance << dendl;
+  dout(2) << "sending client_mount to mon" << mon << dendl;
   messenger->set_dispatcher(this);
   messenger->send_message(new MClientMount, monmap->get_inst(mon));
 
@@ -1397,7 +1396,6 @@ int Client::mount()
   objecter->init();
     
   _try_mount();
-  //messenger->set_dispatcher(this);   // FIXME: there is still a race condition here!
   
   while (!mdsmap ||
 	 !osdmap || 

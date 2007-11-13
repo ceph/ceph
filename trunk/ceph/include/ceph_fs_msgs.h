@@ -12,6 +12,7 @@
 #define CEPH_MSG_PING_ACK               3
 
 /* client <-> monitor */
+#define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_CLIENT_MOUNT           10
 #define CEPH_MSG_CLIENT_UNMOUNT         11
 #define CEPH_MSG_STATFS                 12

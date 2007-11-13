@@ -82,8 +82,8 @@ void Monitor::init()
   reset_tick();
   
   // call election?
-  if (monmap->num_mon > 1) {
-    assert(monmap->num_mon != 2); 
+  if (monmap->size() > 1) {
+    assert(monmap->size() != 2); 
     call_election();
   } else {
     // we're standalone.
@@ -114,8 +114,8 @@ void Monitor::shutdown()
     osdmon->mark_all_down();
     
     // monitors too.
-    for (int i=0; i<monmap->num_mon; i++)
-      if (i != whoami)
+    for (unsigned i=0; i<monmap->size(); i++)
+      if ((int)i != whoami)
 	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				monmap->get_inst(i));
   }
@@ -142,7 +142,7 @@ void Monitor::shutdown()
 
 void Monitor::call_election()
 {
-  if (monmap->num_mon == 1) return;
+  if (monmap->size() == 1) return;
   
   dout(10) << "call_election" << dendl;
   state = STATE_STARTING;

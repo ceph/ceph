@@ -26,38 +26,39 @@ class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
   ceph_fsid_t fsid;
-  int32_t num_mon;
   vector<entity_inst_t> mon_inst;
 
   int       last_mon;    // last mon i talked to
 
-  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {
+  MonMap(int s=0) : epoch(0), mon_inst(s), last_mon(-1) {
     generate_fsid();
+  }
+
+  unsigned size() {
+    return mon_inst.size();
   }
 
   void add_mon(entity_inst_t inst) {
     mon_inst.push_back(inst);
-    num_mon++;
   }
 
   // pick a mon.  
   // choice should be stable, unless we explicitly ask for a new one.
   int pick_mon(bool newmon=false) { 
     if (newmon || (last_mon < 0)) {
-      last_mon = rand() % num_mon;
+      last_mon = rand() % mon_inst.size();
     }
     return last_mon;    
   }
 
-  const entity_inst_t &get_inst(int m) {
-    assert(m < num_mon);
+  const entity_inst_t &get_inst(unsigned m) {
+    assert(m < mon_inst.size());
     return mon_inst[m];
   }
 
   void encode(bufferlist& blist) {
     ::_encode(epoch, blist);
     ::_encode(fsid, blist);
-    ::_encode(num_mon, blist);
     ::_encode(mon_inst, blist);
   }
   
@@ -65,7 +66,6 @@ class MonMap {
     int off = 0;
     ::_decode(epoch, blist, off);
     ::_decode(fsid, blist, off);
-    ::_decode(num_mon, blist, off);
     ::_decode(mon_inst, blist, off);
   }
 

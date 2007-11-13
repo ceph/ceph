@@ -344,14 +344,10 @@ int main(int argc, char **argv)
   map<int,SyntheticClient *> syn;//[start_client];
   int nclients = 0;
   for (int i=0; i<start_client; i++) {
-    //if (mpirank != start_mds + start_osd + i % client_nodes) continue;
-    //int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i / clients_per_node;
     int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i % client_nodes;
     if (mpirank != node) continue;
     clientlist.insert(i);
-    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1-i)),
-			   monmap, 
-			   i+1);
+    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)), monmap);
     syn[i] = new SyntheticClient(client[i]);
     
     started++;
