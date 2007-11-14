@@ -1,4 +1,5 @@
 
+#include <linux/ceph_fs.h>
 #include "mds_client.h"
 #include "mon_client.h"
 #include "super.h"
@@ -31,16 +32,6 @@ static void put_request(struct ceph_mds_request *req)
 	} 
 }
 
-static void get_session(struct ceph_mds_session *s)
-{
-	atomic_inc(&s->s_ref);
-}
-
-static void put_session(struct ceph_mds_session *s)
-{
-	if (atomic_dec_and_test(&s->s_ref)) 
-		kfree(s);
-}
 
 /*
  * register an in-flight request
@@ -102,6 +93,44 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 	atomic_set(&mdsc->sessions[mds]->s_ref, 1);
 }
 
+static struct ceph_mds_session *get_session(struct ceph_mds_client *mdsc, int mds)
+{
+	struct ceph_mds_session *session;
+	
+	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == 0) 
+		register_session(mdsc, mds);
+	session = mdsc->sessions[mds];
+
+	atomic_inc(&session->s_ref);
+	return session;
+}
+
+static void put_session(struct ceph_mds_session *s)
+{
+	if (atomic_dec_and_test(&s->s_ref)) 
+		kfree(s);
+}
+
+static void unregister_session(struct ceph_mds_client *mdsc, int mds)
+{
+	put_session(mdsc->sessions[mds]);
+	mdsc->sessions[mds] = 0;
+}
+
+static struct ceph_message *create_session_msg(__u32 op, __u64 seq)
+{
+	struct ceph_message *msg;
+
+	msg = ceph_new_message(CEPH_MSG_CLIENT_SESSION, sizeof(__u32)+sizeof(__u64));
+	if (IS_ERR(msg))
+		return ERR_PTR(-ENOMEM);  /* fixme */
+	op = cpu_to_le32(op);
+	ceph_bl_append_copy(&msg->payload, &op, sizeof(op));
+	seq = cpu_to_le64(op);
+	ceph_bl_append_copy(&msg->payload, &seq, sizeof(seq));
+	return msg;
+}
+
 static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *session, int mds)
 {
 	struct ceph_message *msg;
@@ -112,12 +141,67 @@ static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *
 		return;
 	} 
 	
-	/* prepare connect message */
-	
-	/* send */
+	/* send connect message */
+	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_cap_seq);
+	if (IS_ERR(msg))
+		return;  /* fixme */
 	send_msg_mds(mdsc, msg, mds);
 }
 
+void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_message *msg)
+{
+	__u32 op;
+	__u64 seq;
+	int err;
+	struct ceph_mds_session *session;
+	struct ceph_bufferlist_iterator bli = {0, 0};
+	int from = msg->hdr.src.name.num;
+	
+	/* decode */
+	if ((err = ceph_bl_decode_32(&msg->payload, &bli, &op)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_64(&msg->payload, &bli, &seq)) != 0)
+		goto bad;
+	
+	/* handle */
+	dout(1, "handle_session op %d seq %llu\n", op, seq);
+	spin_lock(&mdsc->lock);
+	switch (op) {
+	case CEPH_SESSION_OPEN:
+		dout(1, "session open from mds%d\n", from);
+		session = get_session(mdsc, from);
+		session->s_state = CEPH_MDS_SESSION_OPEN;
+		complete(&session->s_completion);
+		put_session(session);
+		break;
+
+	case CEPH_SESSION_CLOSE:
+		session = get_session(mdsc, from);
+		if (session->s_cap_seq == seq) {
+			dout(1, "session close from mds%d\n", from);
+			complete(&session->s_completion); /* for good measure */
+			unregister_session(mdsc, from);
+		} else {
+			dout(1, "ignoring session close from mds%d, seq %llu < my seq %llu\n", 
+			     msg->hdr.src.name.num, seq, session->s_cap_seq);
+		}
+		put_session(session);
+		break;
+
+	default:
+		dout(0, "bad session op %d\n", op);
+		BUG_ON(1);
+	}
+	spin_unlock(&mdsc->lock);
+
+out:
+	ceph_put_msg(msg);
+	return;
+	
+bad:
+	dout(1, "corrupt session message\n");
+	goto out;
+}
 
 
 static void wait_for_new_map(struct ceph_mds_client *mdsc)
@@ -163,10 +247,7 @@ retry:
 	}
 
 	/* get session */
-	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == 0) 
-		register_session(mdsc, mds);
-	session = mdsc->sessions[mds];
-	get_session(session);
+	session = get_session(mdsc, mds);
 	
 	/* open? */
 	if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
@@ -214,8 +295,10 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *m
 	struct ceph_mds_request *req;
 	__u64 tid;
 
-	/* parse reply */
+	/* decode */
+	
 
+	/* handle */
 	spin_lock(&mdsc->lock);
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
 	if (!req) {
@@ -235,14 +318,21 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *m
 void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message *msg)
 {
 	struct ceph_mds_request *req;
-	int next_mds;
-	int fwd_seq;
 	__u64 tid;
-
-	/* parse reply */
+	__u32 next_mds;
+	__u32 fwd_seq;
+	int err;
+	struct ceph_bufferlist_iterator bli = {0, 0};
 	
+	/* decode */
+	if ((err = ceph_bl_decode_64(&msg->payload, &bli, &tid)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(&msg->payload, &bli, &next_mds)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(&msg->payload, &bli, &fwd_seq)) != 0)
+		goto bad;
 
-	
+	/* handle */
 	spin_lock(&mdsc->lock);
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
 	if (req) get_request(req);
@@ -274,7 +364,14 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message 
 	}
 
 	put_request(req);
+
+out:
 	ceph_put_msg(msg);
+	return;
+
+bad:
+	derr(0, "corrupt forward message\n");
+	goto out;
 }
 
 

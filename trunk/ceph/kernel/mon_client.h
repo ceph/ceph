@@ -2,6 +2,7 @@
 #define _FS_CEPH_MON_CLIENT_H
 
 #include "monmap.h"
+#include "messenger.h"
 
 struct ceph_mount_args;
 

@@ -136,7 +136,7 @@ void ceph_bl_iterator_advance(struct ceph_bufferlist *bl,
 			      struct ceph_bufferlist_iterator *bli, 
 			      int off)
 {
-
+	
 }
 int ceph_bl_decode_have(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, int s)
 {
@@ -155,7 +155,7 @@ int ceph_bl_decode_64(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterato
 {
 	if (!ceph_bl_decode_have(bl, bli, sizeof(*v)))
 		return -EINVAL;
-	*v = le64_to_cpu((__u64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
+	*v = le64_to_cpu(*(__u64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(*v));
 	return 0;
 }
@@ -163,7 +163,7 @@ int ceph_bl_decode_32(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterato
 {
 	if (!ceph_bl_decode_have(bl, bli, sizeof(*v)))
 		return -EINVAL;
-	*v = le32_to_cpu((__u64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
+	*v = le32_to_cpu(*(__u32*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(*v));
 	return 0;
 }
@@ -171,7 +171,7 @@ int ceph_bl_decode_16(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterato
 {
 	if (!ceph_bl_decode_have(bl, bli, sizeof(*v)))
 		return -EINVAL;
-	*v = le16_to_cpu((__u64*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
+	*v = le16_to_cpu(*(__u16*)(bl->b_kv[bli->i_kv].iov_base + bli->i_off));
 	ceph_bl_iterator_advance(bl, bli, sizeof(*v));
 	return 0;
 }
@@ -182,3 +182,5 @@ int ceph_bl_decode_8(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator
 	ceph_bl_copy(bl, bli, v, sizeof(v));
 	return 0;
 }
+
+

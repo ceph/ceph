@@ -104,4 +104,6 @@ static __inline__ void ceph_get_msg(struct ceph_message *msg) {
 }
 
 
+extern int ceph_bl_decode_addr(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, struct ceph_entity_addr *v);
+
 #endif

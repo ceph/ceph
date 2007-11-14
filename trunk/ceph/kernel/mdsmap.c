@@ -1,16 +1,21 @@
 
-#include "mdsmap.h"
+#include <linux/types.h>
 #include <linux/random.h>
+#include <linux/slab.h>
+#include <asm/bug.h>
 
-int ceph_mdsmap_get_state(ceph_mdsmap *m, int w)
+#include "mdsmap.h"
+#include "messenger.h"
+
+int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
 {
 	BUG_ON(w < 0);
 	if (w >= m->m_max_mds)
 		return CEPH_MDS_STATE_DNE;
-	return = m->m_state[w];
+	return m->m_state[w];
 }
 
-int ceph_mdsmap_get_random_mds(ceph_mdsmap *m)
+int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 {
 	int n = 0;
 	int i;
@@ -25,17 +30,18 @@ int ceph_mdsmap_get_random_mds(ceph_mdsmap *m)
 	n = get_random_int() % n;
 	i = 0;
 	for (i=0; n>0; i++, n--)
-		while (m->state[i] <= 0) i++;
+		while (m->m_state[i] <= 0) 
+			i++;
 
 	return i;
 }
 
 
-struct ceph_entity_addr *ceph_mdsmap_get_addr(ceph_mdsmap *m, int w)
+struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
 {
 	if (w >= m->m_max_mds)
 		return NULL;
-	return m->m_addr[w];
+	return &m->m_addr[w];
 }
 
 int ceph_mdsmap_decode(struct ceph_mdsmap *m, 
@@ -44,53 +50,59 @@ int ceph_mdsmap_decode(struct ceph_mdsmap *m,
 {
 	int i, n;
 	__u32 mds;
-	struct ceph_entity_inst *inst;
+	int err;
 	
-	m->m_epoch = ceph_bl_decode_u64(bl, bli);
-	ceph_bl_decode_u32(bl, bli); /* target_num */
-	m->m_created.tv_sec = ceph_bl_decode_u32(bl, bli);
-	m->m_created.tv_usec = ceph_bl_decode_u32(bl, bli);
-	ceph_bl_decode_u64(bl, bli); /* same_in_set_since */
-	m->m_anchortable = ceph_bl_decode_s32(bl, bli);
-	m->m_root = ceph_bl_decode_s32(bl, bli);
-	m->m_max_mds = ceph_bl_decode_u32(bl, bli);
+	if ((err = ceph_bl_decode_64(bl, bli, &m->m_epoch)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_64(bl, bli, &m->m_client_epoch)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(bl, bli, &m->m_created.tv_sec)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(bl, bli, &m->m_created.tv_usec)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(bl, bli, &m->m_anchortable)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(bl, bli, &m->m_root)) != 0)
+		goto bad;
+	if ((err = ceph_bl_decode_32(bl, bli, &m->m_max_mds)) != 0)
+		goto bad;
 
-	m->m_addr = kmalloc(sizeof(struct ceph_entity_addr)*m->m_max_mds, GFP_KERNEL);
-	m->m_state = kmalloc(sizeof(__u8)*m->m_max_mds, GFP_KERNEL);
-	memset(m->m_state, 0, sizeof(__u8)*m->m_max_mds);
-	
-	/* created */
-	n = ceph_bl_decode_u32(bl, bli);
-	ceph_bl_iterator_advance(bli, n*sizeof(__u32));
+	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_KERNEL);
+	m->m_state = kmalloc(m->m_max_mds*sizeof(*m->m_state), GFP_KERNEL);
+	memset(m->m_state, 0, m->m_max_mds);
 	
 	/* state */
-	n = ceph_bl_decode_u32(bl, bli);
+	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+		goto bad;
 	for (i=0; i<n; i++) {
-		mds = ceph_bl_decode_u32(bl, bli);
-		m->m_state[mds] = ceph_bl_decode_s32(bl, bli);
+		if ((err = ceph_bl_decode_32(bl, bli, &mds)) != 0)
+			goto bad;
+		if ((err = ceph_bl_decode_32(bl, bli, &m->m_state[mds])) != 0)
+			goto bad;
 	}
 
 	/* state_seq */
-	n = ceph_bl_decode_u32(bl, bli);
-	ceph_bl_iterator_advance(bli, n*2*sizeof(__u32));
-
+	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+		goto bad;
+	ceph_bl_iterator_advance(bl, bli, n*(sizeof(__u32)+sizeof(__u64)));
+	
 	/* mds_inst */
-	n = ceph_bl_decode_u32(bl, bli);
+	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+		goto bad;
 	for (i=0; i<n; i++) {
-		mds = ceph_bl_decode_u32(bl, bli);
-		inst = ceph
-		ceph_bl_iterator_advance(bli, sizeof(struct ceph_entity_name));
-		m->m_addr[mds].nonce = ceph_bl_decode_u64(bl, bli);
-		m->m_addr[mds].port = ceph_bl_decode_u32(bl, bli);
-		m->m_addr[mds].ipq[0] = ceph_bl_decode_u8(bl, bli);
-		m->m_addr[mds].ipq[1] = ceph_bl_decode_u8(bl, bli);
-		m->m_addr[mds].ipq[2] = ceph_bl_decode_u8(bl, bli);
-		m->m_addr[mds].ipq[3] = ceph_bl_decode_u8(bl, bli);
+		if ((err = ceph_bl_decode_32(bl, bli, &mds)) != 0)
+			goto bad;
+		ceph_bl_iterator_advance(bl, bli, sizeof(struct ceph_entity_name));
+		if ((err = ceph_bl_decode_addr(bl, bli, &m->m_addr[mds])) != 0)
+			goto bad;
 	}
 
-	/* mds_inc */
-
+	/* ok, we don't care about the rest. */
 	return 0;
+
+bad:
+	derr(0, "corrupt mdsmap");
+	return -EINVAL;
 }
 
 

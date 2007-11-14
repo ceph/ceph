@@ -1,4 +1,5 @@
 
+#include <linux/module.h>
 #include <linux/parser.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
@@ -96,7 +97,7 @@ static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_inodecache(void *foo, struct kmem_cache *cachep, unsigned long flags)
+static int init_inodecache(void)
 {
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
@@ -193,8 +194,14 @@ static match_table_t arg_tokens = {
 	{Opt_monport, "monport=%d"}
 };
 
+static int parse_ip(char *c, int len, struct ceph_entity_addr *addr)
+{
+	dout(1, "parse_ip on %s len %d\n", c, len);
 
-static int parse_mount_args(int flags, char *options, char *dev_name, struct ceph_mount_args *args)
+	return 0;
+}
+
+static int parse_mount_args(int flags, char *options, const char *dev_name, struct ceph_mount_args *args)
 {
 	char *c;
 	int len;
@@ -206,31 +213,38 @@ static int parse_mount_args(int flags, char *options, char *dev_name, struct cep
 	args->mntflags = flags;
 	args->flags = 0;
 	args->mon_port = CEPH_MON_PORT;
-	
-	/* get mon hostname, relative path */
+
+	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
 	if (c == NULL)
 		return -EINVAL;
+
+	/* get mon ip */
+	/* er, just one for now. later, comma-separate... */	
 	len = c - dev_name;
-	if (len >= sizeof(args->mon_hostname))
-		return -ENAMETOOLONG;
-	strncpy(args->mon_hostname, dev_name, len);
+	parse_ip(c, len, &args->mon_addr[0]);
+	args->mon_addr[0].ipaddr.sin_family = AF_INET;
+	args->mon_addr[0].ipaddr.sin_port = CEPH_MON_PORT;
+	args->mon_addr[0].erank = 0;
+	args->mon_addr[0].nonce = 0;
+	args->num_mon = 1;
 	
+	/* path on server */
 	c++;
-	if (strlen(c) >= sizeof(data->path))
+	if (strlen(c) >= sizeof(args->path))
 		return -ENAMETOOLONG;
-	strcpy(args.path, c);
+	strcpy(args->path, c);
 	
-	dout(1, "mon %s, path %s\n", args->mon_hostname, args->path);
+	dout(1, "server path %s\n", args->path);
 	
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
 		int token;
 		int intval;
 		int ret;
-		if (!*p) 
+		if (!*c) 
 			continue;
-		token = match_token(p, arg_tokens, argstr);
+		token = match_token(c, arg_tokens, argstr);
 		ret = match_int(&argstr[0], &intval);
 		if (ret < 0) {
 			dout(0, "bad mount arg\n");
@@ -264,12 +278,12 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct super_block *s;
 	struct ceph_mount_args mount_args;
 	struct ceph_super_info *sbinfo;
-	int ret;
+	int error;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 
 	dout(1, "ceph_get_sb\n");
 	
-	error = parse_mount_args(data, dev_name, &mount_args);
+	error = parse_mount_args(flags, data, dev_name, &mount_args);
 	if (error < 0) 
 		goto out;
 
@@ -287,7 +301,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	/* client */
 	if (!sbinfo->sb_client) {
 		sbinfo->sb_client = ceph_get_client(&mount_args);
-		if (PTR_ERR(!sbinfo->sb_client)) {
+		if (PTR_ERR(sbinfo->sb_client)) {
 			error = PTR_ERR(sbinfo->sb_client);
 			goto out_splat;
 		}

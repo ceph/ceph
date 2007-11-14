@@ -2,6 +2,7 @@
 #define _FS_CEPH_MDSMAP_H
 
 #include <linux/ceph_fs.h>
+#include "bufferlist.h"
 
 /* see mds/MDSMap.h */
 #define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
@@ -26,13 +27,13 @@
  * fields limited to those the client cares about
  */
 struct ceph_mdsmap {
-	__u64 m_epoch;
+	__u64 m_epoch, m_client_epoch;
 	struct ceph_timeval m_created;
 	__u32 m_anchortable;
 	__u32 m_root;
 	__u32 m_max_mds;  /* size of m_addr, m_state arrays */
 	struct ceph_entity_addr *m_addr;  /* array of addresses */
-	__u8 *m_state;                    /* array of states */
+	__s32 *m_state;                   /* array of states */
 };
 
 extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);

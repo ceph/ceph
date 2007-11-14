@@ -5,7 +5,6 @@
 #include <net/tcp.h>
 
 #include <linux/ceph_fs.h>
-#include <linux/ceph_fs_msgs.h>
 #include "messenger.h"
 #include "ktcp.h"
 
@@ -698,3 +697,17 @@ struct ceph_message *ceph_new_message(int type, int size)
 	return m;
 }
 
+
+
+int ceph_bl_decode_addr(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, struct ceph_entity_addr *v)
+{
+	int err;
+	if (!ceph_bl_decode_have(bl, bli, sizeof(*v)))
+		return -EINVAL;
+	if ((err = ceph_bl_decode_32(bl, bli, &v->erank)) != 0)
+		return -EINVAL;
+	if ((err = ceph_bl_decode_32(bl, bli, &v->nonce)) != 0)
+		return -EINVAL;
+	ceph_bl_copy(bl, bli, &v->ipaddr, sizeof(v->ipaddr));
+	return 0;
+}
