@@ -8,11 +8,10 @@
 
 static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds)
 {
-	struct ceph_entity_inst inst;
-	inst.addr = *ceph_mdsmap_get_addr(mdsc->mdsmap, mds);
-	inst.name.type = CEPH_ENTITY_TYPE_MDS;
-	inst.name.num = mds;
-	ceph_messenger_send(mdsc->client->msgr, msg, &inst);
+	msg->hdr.dst.addr = *ceph_mdsmap_get_addr(mdsc->mdsmap, mds);
+	msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MDS;
+	msg->hdr.dst.name.num = mds;
+	ceph_messenger_send(mdsc->client->msgr, msg);
 }
 
 

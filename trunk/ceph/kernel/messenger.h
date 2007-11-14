@@ -12,6 +12,18 @@ struct ceph_message;
 
 typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 
+__inline__ const char *ceph_name_type_str(int t) {
+	switch (t) {
+	case CEPH_ENTITY_TYPE_MON: return "mon";
+	case CEPH_ENTITY_TYPE_MDS: return "mds";
+	case CEPH_ENTITY_TYPE_OSD: return "osd";
+	case CEPH_ENTITY_TYPE_CLIENT: return "client";
+	case CEPH_ENTITY_TYPE_ADMIN: return "admin";
+	default: return "???";
+	}
+}
+
+
 struct ceph_messenger {
 	void *parent;
 	ceph_messenger_dispatch_t dispatch;
@@ -82,7 +94,7 @@ struct ceph_connection {
 
 
 /* messenger */
-extern void ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg, struct ceph_entity_inst *dest);
+extern int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg);
 
 
 /* messages */

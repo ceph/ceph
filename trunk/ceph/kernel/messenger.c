@@ -100,7 +100,7 @@ static void put_connection(struct ceph_connection *con)
 /* 
  * add to connections tree
  */
-static void add_connection_accepted(struct ceph_messenger *msgr, struct ceph_connection *con)
+static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	struct list_head *head;
 	unsigned long key = hash_addr(&con->peer_addr);
@@ -166,36 +166,29 @@ static void replace_connection(struct ceph_messenger *msgr, struct ceph_connecti
 	spin_unlock(&msgr->con_lock);
 	put_connection(old); /* dec reference count */
 }
+		
 
 /*
- *  Sets up connection to peer address, if already exist return that connection
+ * initiate connection to a remote socket.
+ *
+ * TBD: make this async, somehow!
  */
-
-struct ceph_connection *ceph_connect_to_peer(struct ceph_messenger *msgr,
-                                             struct ceph_entity_addr *peer_addr)
+static int do_connect(struct ceph_connection *con)
 {
-	struct sockaddr *paddr = (struct sockaddr *)&peer_addr->ipaddr;
-	struct ceph_connection *con;
+	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
 
-	/* check for open connection already existing and use that */
-	if (!(con = get_connection(msgr, peer_addr))) {
-
-        	con = new_connection(msgr); 
-
-        	con->sock = _kconnect(paddr);
-        	if (con->sock == NULL) {
-                	kfree(con);
-                	con = NULL;
-        	{
-		con->peer_addr.erank = peer_addr->erank;
-		con->peer_addr.nonce = peer_addr->nonce;
-		con->peer_addr.ipaddr = peer_addr->ipaddr;
-		/* setup callbacks */
+	dout(1, "do_connect on %p\n", con);
+	con->sock = _kconnect(paddr);
+	if (IS_ERR(con->sock)) {
+		con->sock = 0;
+		return PTR_ERR(con->sock);
 	}
-	/* TBD: add connection to connection list */
-        return con;
-}
 
+	/* setup callbacks */
+	
+
+	return 0;
+}
 
 
 /*
@@ -500,7 +493,7 @@ static void process_accept(struct ceph_connection *con)
 		spin_unlock(&existing->con_lock);
 		put_connection(existing);
 	} else {
-		add_connection_accepted(con->msgr, con);
+		add_connection(con->msgr, con);
 		con->state = OPEN;
 	}
 	spin_unlock(&con->msgr->con_lock);
@@ -606,7 +599,7 @@ static void try_accept(struct work_struct *work)
         printk(KERN_INFO "Entered try_accept\n");
 
 
-        if(kernel_accept(sd, &new_sd, sd->file->f_flags) < 0) {
+        if (kernel_accept(sd, &new_sd, sd->file->f_flags) < 0) {
         	printk(KERN_INFO "error accepting connection \n");
                 goto done;
         }
@@ -670,6 +663,49 @@ struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
 	INIT_WORK(&msgr->awork, try_accept);       /* setup work structure */
         return msgr;
 }
+
+
+/*
+ * queue up an outgoing message
+ */
+int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg)
+{
+	struct ceph_connection *con;
+	
+	/* do we have the connection? */
+	spin_lock(&msgr->con_lock);
+	con = get_connection(msgr, &msg->hdr.dst.addr);
+	if (!con) {
+		con = new_connection(msgr);
+		if (IS_ERR(con))
+			return PTR_ERR(con);
+		dout(5, "opening new connection to peer %x:%d\n",
+		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), msg->hdr.dst.addr.ipaddr.sin_port);
+		con->peer_addr = msg->hdr.dst.addr;
+		con->state = CONNECTING;
+		add_connection(msgr, con);
+	} else {
+		dout(5, "had connection to peer %x:%d\n",
+		     msg->hdr.dst.addr.ipaddr.sin_addr.s_addr, msg->hdr.dst.addr.ipaddr.sin_port);
+	}		     
+	spin_unlock(&msgr->con_lock);
+
+	spin_lock(&con->con_lock);
+
+	/* initiate connect? */
+	if (con->state == CONNECTING)
+		do_connect(con);
+	
+	/* queue */
+	dout(1, "queuing outgoing message for %s.%d\n",
+	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
+	ceph_get_msg(msg);
+	list_add(&con->out_queue, &msg->list_head);
+
+	spin_unlock(&con->con_lock);
+	put_connection(con);
+}
+
 
 
 struct ceph_message *ceph_new_message(int type, int size)
