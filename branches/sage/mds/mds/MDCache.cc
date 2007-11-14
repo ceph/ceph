@@ -2382,7 +2382,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        p != ack->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    if (!dir) continue;
+    if (!dir) continue;  // must have trimmed?
 
     dir->set_replica_nonce(p->second.nonce);
     dir->state_clear(CDir::STATE_REJOINING);
@@ -2393,7 +2393,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	 q != ack->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
-      if (!dn) continue;
+      if (!dn) continue;  // must have trimmed?
 
       // hmm, did we have the proper linkage here?
       if (dn->is_null() &&
@@ -2414,7 +2414,13 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       else if (!dn->is_null() &&
 	       q->second.is_null()) {
 	dout(-10) << " had bad linkage for " << *dn << dendl;
-	assert(0);  // hrmpf.  unlink should use slave requests to clean this up during resolve.
+	/* 
+	 * this should happen:
+	 *  if we're a survivor, any unlink should commit or rollback during
+	 * the resolve stage.
+	 *  if we failed, we shouldn't have non-auth leaf dentries at all
+	 */
+	assert(0);  // uh oh.	
       }
       dn->set_replica_nonce(q->second.nonce);
       mds->locker->rejoin_set_state(&dn->lock, q->second.lock, waiters);
@@ -2932,6 +2938,11 @@ void MDCache::start_recovered_purges()
 // cache trimming
 
 
+/*
+ * note: only called while MDS is active or stopping... NOT during recovery.
+ * however, we may expire a replica whose authority is recovering.
+ * 
+ */
 bool MDCache::trim(int max) 
 {
   // trim LRU
@@ -3317,7 +3328,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       int nonce = it->second;
       
       if (!in) {
-	dout(0) << " inode expire on " << it->first << " from " << from << ", don't have it" << dendl;
+	dout(0) << " inode expire on " << it->first << " from " << from 
+		<< ", don't have it" << dendl;
 	assert(in);
       }        
       assert(in->is_auth());
@@ -3325,13 +3337,15 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       // check nonce
       if (nonce == in->get_replica_nonce(from)) {
 	// remove from our cached_by
-	dout(7) << " inode expire on " << *in << " from mds" << from << " cached_by was " << in->get_replicas() << dendl;
+	dout(7) << " inode expire on " << *in << " from mds" << from 
+		<< " cached_by was " << in->get_replicas() << dendl;
 	inode_remove_replica(in, from);
       } 
       else {
 	// this is an old nonce, ignore expire.
 	dout(7) << " inode expire on " << *in << " from mds" << from
-		<< " with old nonce " << nonce << " (current " << in->get_replica_nonce(from) << "), dropping" 
+		<< " with old nonce " << nonce
+		<< " (current " << in->get_replica_nonce(from) << "), dropping" 
 		<< dendl;
 	assert(in->get_replica_nonce(from) > nonce);
       }
@@ -3345,7 +3359,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       int nonce = it->second;
       
       if (!dir) {
-	dout(0) << " dir expire on " << it->first << " from " << from << ", don't have it" << dendl;
+	dout(0) << " dir expire on " << it->first << " from " << from 
+		<< ", don't have it" << dendl;
 	assert(dir);
       }  
       assert(dir->is_auth());
@@ -3376,7 +3391,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       CDir *dir = diri->get_dirfrag(pd->first.frag);
       
       if (!dir) {
-	dout(0) << " dn expires on " << pd->first << " from " << from << ", must have refragmented" << dendl;
+	dout(0) << " dn expires on " << pd->first << " from " << from
+		<< ", must have refragmented" << dendl;
       } else {
 	assert(dir->is_auth());
       }

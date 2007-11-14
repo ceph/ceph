@@ -494,8 +494,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       list<CDir*> dfls;
       get_dirfrags(dfls);
       for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
-	if ((*p)->is_auth())
-	  myfrags.insert((*p)->get_frag());
+	if ((*p)->is_auth()) {
+	  frag_t fg = (*p)->get_frag();
+	  myfrags.insert(fg);
+	}
       _encode(myfrags, bl);
     }
     break;
@@ -509,13 +511,15 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case LOCK_OTYPE_IDIR:
     _encode(inode.mtime, bl);
     if (0) {
-      map<frag_t,int> dfsz;
+      map<frag_t,int> frag_sizes;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
-	if (p->second->is_auth())
-	  dfsz[p->first] = p->second->get_nitems();
-      _encode(dfsz, bl);
+	if (p->second->is_auth()) {
+	  //frag_t fg = (*p)->get_frag();
+	  //frag_sizes[f] = dirfrag_size[fg];
+	}
+      _encode(frag_sizes, bl);
     }
     break;
   

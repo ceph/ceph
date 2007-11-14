@@ -130,7 +130,7 @@ class CInode : public MDSCacheObject {
   inode_t          inode;        // the inode itself
   string           symlink;      // symlink dest, if symlink
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  //map<frag_t,int>  dirfrag_size; // size of each dirfrag
+  map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
