@@ -16,8 +16,7 @@
 #define __MESSAGE_H
  
 /* public message types */
-#include "include/ceph_fs_msgs.h"
-
+#include "include/ceph_fs.h"
 
 // monitor internal
 #define MSG_MON_ELECTION           60

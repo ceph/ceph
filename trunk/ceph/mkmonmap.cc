@@ -48,19 +48,19 @@ int main(int argc, char **argv)
 	cerr << "mkmonmap: invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
-      inst.name = entity_name_t::MON(monmap.num_mon);
+      inst.name = entity_name_t::MON(monmap.size());
       cout << "mkmonmap: adding " << inst << std::endl;
       monmap.add_mon(inst);
     }
   }
 
-  if (monmap.num_mon == 0) {
+  if (monmap.size() == 0) {
     cerr << "usage: mkmonmap ip:port [...]" << std::endl;
     return -1;
   }
 
   // write it out
-  cout << "mkmonmap: writing monmap to " << outfn << " (" << monmap.num_mon << " monitors)" << std::endl;
+  cout << "mkmonmap: writing monmap to " << outfn << " (" << monmap.size() << " monitors)" << std::endl;
   int r = monmap.write(outfn);
   assert(r >= 0);
   

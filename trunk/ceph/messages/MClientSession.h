@@ -19,10 +19,10 @@
 
 class MClientSession : public Message {
 public:
-  const static int OP_REQUEST_OPEN  = 1;
-  const static int OP_OPEN          = 2;
-  const static int OP_REQUEST_CLOSE = 3;
-  const static int OP_CLOSE         = 4;
+  const static int OP_REQUEST_OPEN  = CEPH_SESSION_REQUEST_OPEN;
+  const static int OP_OPEN          = CEPH_SESSION_OPEN;
+  const static int OP_REQUEST_CLOSE = CEPH_SESSION_REQUEST_CLOSE;
+  const static int OP_CLOSE         = CEPH_SESSION_CLOSE;
   static const char *get_opname(int o) {
     switch (o) {
     case OP_REQUEST_OPEN: return "request_open";
