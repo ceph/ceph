@@ -167,6 +167,35 @@ static void replace_connection(struct ceph_messenger *msgr, struct ceph_connecti
 	put_connection(old); /* dec reference count */
 }
 
+/*
+ *  Sets up connection to peer address, if already exist return that connection
+ */
+
+struct ceph_connection *ceph_connect_to_peer(struct ceph_messenger *msgr,
+                                             struct ceph_entity_addr *peer_addr)
+{
+	struct sockaddr *paddr = (struct sockaddr *)&peer_addr->ipaddr;
+	struct ceph_connection *con;
+
+	/* check for open connection already existing and use that */
+	if (!(con = get_connection(msgr, peer_addr))) {
+
+        	con = new_connection(msgr); 
+
+        	con->sock = _kconnect(paddr);
+        	if (con->sock == NULL) {
+                	kfree(con);
+                	con = NULL;
+        	{
+		con->peer_addr.erank = peer_addr->erank;
+		con->peer_addr.nonce = peer_addr->nonce;
+		con->peer_addr.ipaddr = peer_addr->ipaddr;
+		/* setup callbacks */
+	}
+	/* TBD: add connection to connection list */
+        return con;
+}
+
 
 
 /*
@@ -499,9 +528,6 @@ static void try_read(struct work_struct *work)
 more:
 	/*
 	 * TBD: maybe store error in ceph_connection
-	 * since this is run in a workqueue, we probably need to notify
-         * whoever added the connection to poll list of completion for 
-	 * dispatching.  Or error
          */
 	/* if (con->state == CLOSED) return -1; */
 
@@ -619,64 +645,30 @@ done:
         return;
 }
 
-struct ceph_connection *new_listener(struct ceph_messenger *msgr)
-{
-	struct ceph_connection *con;
-        struct sockaddr saddr;
-        memset(&saddr, 0, sizeof(saddr));
-
-        con = kmalloc(sizeof(*con), GFP_KERNEL);
-        if (con == NULL) 
-		return NULL;
-        memset(con, 0, sizeof(*con));
-
-	/* create listener connection */
-        spin_lock_init(&con->con_lock);
-        INIT_WORK(&con->awork, try_accept);       /* setup work structure */
-        con->msgr = msgr;
-        atomic_inc(&con->nref);
-
-        /* TBD: if address specified by mount */
-                /* make my address from user specified address, fill in saddr */
-
-        con->sock = _klisten(&saddr);
-	return(con);
-}
-
 /*
- * create a new messenger
+ * create a new messenger instance, saddr is address specified from mount arg.
+ * If null, will get created by _klisten()
  */
-static struct ceph_messenger *new_messenger(void)
+struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
 {
         struct ceph_messenger *msgr;
-        struct ceph_connection *listener;
 
         msgr = kmalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
-		goto done;
+		return NULL;
         memset(msgr, 0, sizeof(*msgr));
 
 	spin_lock_init(&msgr->con_lock);
-	INIT_LIST_HEAD(&msgr->poll_list);
 
-	/* create listener connection */
-	listener = new_listener(msgr);
-	if (listener == NULL) 
-		goto err;
-
-	list_add(&msgr->poll_list, &listener->poll_list);
-
-        /* start up poll thread */
-        msgr->poll_task = kthread_run(start_poll, msgr, "ceph-poll");
-	if (IS_ERR(msgr->poll_task))
-		goto err;
-
-done:
+	/* create listening socket */
+	msgr->listen_sock = _klisten(&saddr);
+	if (msgr->listen_sock == NULL) {
+		kfree(msgr);
+		return NULL;
+	}
+	/* TBD: setup callback for accept */
+	INIT_WORK(&msgr->awork, try_accept);       /* setup work structure */
         return msgr;
-err:
-	kfree(msgr);
-	msgr = NULL;
-	goto done;
 }
 
 

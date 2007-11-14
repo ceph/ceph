@@ -7,23 +7,20 @@
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
 #include "bufferlist.h"
-#include "poll.h"
 
 struct ceph_message;
 
 typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
 
-
 struct ceph_messenger {
 	void *parent;
 	ceph_messenger_dispatch_t dispatch;
-        struct task_struct *poll_task;
-	struct ceph_connection *listen_con; /* listening connection */
+	struct socket *listen_sock; 	 /* listening socket */
+	struct work_struct awork;	 /* accept work */
 	struct ceph_entity_addr addr;    /* my address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
-	struct list_head poll_list;      /*  connections polling */
 	struct radix_tree_root con_open; /*  established. see get_connection() */
 };
 
@@ -39,12 +36,13 @@ struct ceph_message {
 /* current state of connection */
 enum ceph_connection_state {
 	NEW = 1,
-	LISTENING = 2,
-	ACCEPTING = 4,
-	CONNECTING = 8,
-	OPEN = 16,
-	REJECTING = 32,
-	CLOSED = 64
+	ACCEPTING = 2,
+	CONNECTING = 4,
+	OPEN = 8,
+	REJECTING = 16,
+	CLOSED = 32,
+	READ_PEND = 64,
+	WRITE_PEND = 128
 };
 
 struct ceph_connection {
@@ -56,7 +54,6 @@ struct ceph_connection {
 
 	struct list_head list_all;   /* msgr->con_all */
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
-	struct list_head poll_list;  /* msgr->poll_list */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	enum ceph_connection_state state;
@@ -77,7 +74,6 @@ struct ceph_connection {
 	struct ceph_message *in_partial;
 	struct ceph_bufferlist_iterator in_pos;  /* for msg payload */
 
-	struct work_struct awork;		/* accept work */
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */
 	int retries;
