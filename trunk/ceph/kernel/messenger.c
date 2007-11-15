@@ -584,22 +584,20 @@ done:
  */
 static void try_accept(struct work_struct *work)
 {
-	struct socket *sd, *new_sd;
-	struct sockaddr saddr;
-	struct ceph_connection *con;
+	struct socket *sock, *new_sock;
+	struct sockaddr_in saddr;
         struct ceph_connection *new_con = NULL;
 	struct ceph_messenger *msgr;
 	int len;
 
-	con = container_of(work, struct ceph_connection, awork);
-	msgr = con->msgr;
-	sd = con->sock;
+	msgr = container_of(work, struct ceph_messenger, awork);
+	sock = msgr->listen_sock;
 
 
         printk(KERN_INFO "Entered try_accept\n");
 
 
-        if (kernel_accept(sd, &new_sd, sd->file->f_flags) < 0) {
+        if (kernel_accept(sock, &new_sock, sock->file->f_flags) < 0) {
         	printk(KERN_INFO "error accepting connection \n");
                 goto done;
         }
@@ -607,9 +605,9 @@ static void try_accept(struct work_struct *work)
 
         /* get the address at the other end */
         memset(&saddr, 0, sizeof(saddr));
-        if (new_sd->ops->getname(new_sd, &saddr, &len, 2)) {
+        if (new_sock->ops->getname(new_sock, (struct sockaddr *)&saddr, &len, 2)) {
                 printk(KERN_INFO "getname error connection aborted\n");
-                sock_release(new_sd);
+                sock_release(new_sock);
                 goto done;
         }
 
@@ -617,20 +615,18 @@ static void try_accept(struct work_struct *work)
 	new_con = new_connection(msgr);
 	if (new_con == NULL) {
                	printk(KERN_INFO "malloc failure\n");
-		sock_release(new_sd);
+		sock_release(new_sock);
 		goto done;
        	}
-	new_con->sock = new_sd;
-	set_bit(ACCEPTING, &con->state);
+	new_con->sock = new_sock;
+	set_bit(ACCEPTING, &new_con->state);
 	new_con->in_tag = CEPH_MSGR_TAG_READY;
-	/* TBD: fill in part of peers address */
-	/* new_con->peeraddr = saddr; */
+	/* fill in part of peers address */
+	new_con->peer_addr.ipaddr = saddr;
 
-	prepare_write_accept_announce(msgr, con);
+	prepare_write_accept_announce(msgr, new_con);
 
-	add_connection_accepting(msgr, con);
-
-/* add to poll list? or hand off to send workqueue? */
+	add_connection_accepting(msgr, new_con);
 
 	/* hand off to worker threads , send pending */
 	/*?? queue_work(send_wq, &new_con->swork);*/
@@ -654,7 +650,7 @@ struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
 	spin_lock_init(&msgr->con_lock);
 
 	/* create listening socket */
-	msgr->listen_sock = _klisten(&saddr);
+	msgr->listen_sock = _klisten(saddr);
 	if (msgr->listen_sock == NULL) {
 		kfree(msgr);
 		return NULL;
