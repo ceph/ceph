@@ -20,6 +20,7 @@
 #include "tcp.h"
 
 class entity_name_t {
+public:
   struct ceph_entity_name v;
 
 public:
@@ -163,6 +164,10 @@ struct entity_inst_t {
   entity_addr_t addr;
   entity_inst_t() {}
   entity_inst_t(entity_name_t n, const entity_addr_t& a) : name(n), addr(a) {}
+  entity_inst_t(const ceph_entity_inst& i) {
+    name.v = i.name;
+    addr.v = i.addr;
+  }
 };
 
 

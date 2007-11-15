@@ -1294,15 +1294,18 @@ Message *Rank::Pipe::read_message()
            << " src " << env.src << " dst " << env.dst
            << " nchunks=" << env.nchunks
            << dendl;
+
+  // read chunk lens
+  __u32 chunklens[4];
+  if (tcp_read(sd, (char*)chunklens, sizeof(__u32)*env.nchunks) < 0)
+    return 0;
   
-  // payload
+  // read chunks
   bufferlist blist;
   int32_t pos = 0;
   list<int> chunk_at;
   for (unsigned i=0; i<env.nchunks; i++) {
-    int32_t size;
-    if (tcp_read( sd, (char*)&size, sizeof(size) ) < 0) 
-      return 0;
+    int32_t size = chunklens[i];
 
     dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
 
@@ -1411,12 +1414,27 @@ int Rank::Pipe::write_message(Message *m)
   blist.claim( m->get_payload() );
   
   // chunk out page aligned buffers? 
+  __u32 chunklens[4];
   if (blist.length() == 0) 
     env->nchunks = 0; 
   else {
     env->nchunks = 1 + m->get_chunk_payload_at().size();  // header + explicit chunk points
+
+    int pos = 0;
+    int c = 0;
+    for (list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
+	 pc != m->get_chunk_payload_at().end();
+	 pc++) {
+      chunklens[c] = *pc - pos;
+      dout(20) << "chunk bound at " << *pc << ", chunklen[" << c << "] = " << chunklens[c] << dendl;
+      pos = *pc;
+      c++;
+    }
+    chunklens[c] = blist.length() - pos;
+    dout(20) << "tail chunklen[" << c << "] = " << chunklens[c] << dendl;
+    
     if (!m->get_chunk_payload_at().empty())
-      dout(20) << "chunking at " << m->get_chunk_payload_at()
+      dout(20) << "chunk bounds at " << m->get_chunk_payload_at()
 	      << " in " << *m << " len " << blist.length()
 	      << dendl;
   }
@@ -1429,7 +1447,7 @@ int Rank::Pipe::write_message(Message *m)
   // set up msghdr and iovecs
   struct msghdr msg;
   memset(&msg, 0, sizeof(msg));
-  struct iovec msgvec[2 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
+  struct iovec msgvec[3 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
   msg.msg_iov = msgvec;
   int msglen = 0;
   
@@ -1445,6 +1463,12 @@ int Rank::Pipe::write_message(Message *m)
   msgvec[msg.msg_iovlen].iov_len = sizeof(*env);
   msglen += sizeof(*env);
   msg.msg_iovlen++;
+
+  // send chunk sizes
+  msgvec[msg.msg_iovlen].iov_base = &chunklens;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(__u32) * env->nchunks;
+  msglen += sizeof(__u32) * env->nchunks;
+  msg.msg_iovlen++;
   
   // payload
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
@@ -1452,29 +1476,14 @@ int Rank::Pipe::write_message(Message *m)
   int b_off = 0;  // carry-over buffer offset, if any
   int bl_pos = 0; // blist pos
   int nchunks = env->nchunks;
-  int32_t chunksizes[nchunks];
 
   for (int curchunk=0; curchunk < nchunks; curchunk++) {
     // start a chunk
-    int32_t size = blist.length() - bl_pos;
-    if (pc != m->get_chunk_payload_at().end()) {
-      assert(*pc > bl_pos);
-      size = *pc - bl_pos;
-      dout(30) << "pos " << bl_pos << " explicit chunk at " << *pc << " size " << size << " of " << blist.length() << dendl;
-      pc++;
-    }
-    assert(size > 0);
-    dout(30) << "chunk " << curchunk << " pos " << bl_pos << " size " << size << dendl;
-
-    // chunk size
-    chunksizes[curchunk] = size;
-    msgvec[msg.msg_iovlen].iov_base = &chunksizes[curchunk];
-    msgvec[msg.msg_iovlen].iov_len = sizeof(int32_t);
-    msglen += sizeof(int32_t);
-    msg.msg_iovlen++;
+    int left = chunklens[curchunk];
+    assert(left > 0);
+    dout(30) << "chunk " << curchunk << " pos " << bl_pos << "/" << blist.length() << " size " << left << dendl;
 
     // chunk contents
-    int left = size;
     while (left > 0) {
       int donow = MIN(left, (int)pb->length()-b_off);
       assert(donow > 0);
