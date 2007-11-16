@@ -40,11 +40,11 @@ struct ceph_client {
 	atomic_t nref;
 
 	int mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
-	wait_queue_t mount_wq;
+	wait_queue_head_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;
-	struct ceph_mds_client mdss;
+	struct ceph_mds_client mdsc;
 	struct ceph_osd_client osdc;
 
 	/* lets ignore all this until later */

@@ -39,7 +39,8 @@ extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);
 extern int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w);
 extern struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w);
 
-extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, void **p, void *end);
+extern struct ceph_mdsmap * ceph_mdsmap_decode(void **p, void *end);
+extern void ceph_mdsmap_destroy(struct ceph_mdsmap *m);
 
 
 #endif

@@ -1,5 +1,7 @@
 
 #include <linux/ceph_fs.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 #include "mds_client.h"
 #include "mon_client.h"
 #include "super.h"
@@ -230,7 +232,42 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 
 
 struct ceph_msg *
-ceph_mdsc_make_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
+ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
+			 ceph_ino_t baseino, const char *path, const char *path2)
+{
+	struct ceph_msg *req;
+	struct ceph_client_request_head *head;
+	void *p, *end;
+
+	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
+			   sizeof(struct ceph_client_request_head) +
+			   sizeof(baseino) + strlen(path) + 1 + strlen(path2) + 1,
+			   0, 0);
+	if (IS_ERR(req))
+		return req;
+	memset(req->front.iov_base, 0, req->front.iov_len);
+	head = req->front.iov_base;
+	p = req->front.iov_base + sizeof(*head);
+	end = req->front.iov_base + req->front.iov_len;
+
+	/* encode head */
+	head->op = cpu_to_le32(op);
+	ceph_encode_inst(&head->client_inst, &mdsc->client->msgr->inst);
+	/*FIXME: head->oldest_client_tid = cpu_to_le64(....);*/  
+
+	/* encode paths */
+	ceph_encode_64(&p, end, baseino);
+	memcpy(p, path, strlen(path)+1);
+	p += strlen(path)+1;
+	memcpy(p, path2, strlen(path2)+1);
+	p += strlen(path2)+1;
+	BUG_ON(p != end);
+	
+	return req;
+}
+
+struct ceph_msg *
+ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 {
 	struct ceph_mds_request *req;
 	struct ceph_mds_session *session;
@@ -382,31 +419,62 @@ bad:
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	__u64 epoch;
-	__u32 left;
+	__u32 maplen;
 	int err;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
+	struct ceph_mdsmap *newmap, *oldmap;
 
 	if ((err = ceph_decode_64(&p, end, &epoch)) != 0)
 		goto bad;
-	if ((err = ceph_decode_32(&p, end, &left)) != 0)
+	if ((err = ceph_decode_32(&p, end, &maplen)) != 0)
 		goto bad;
 
-	dout(2, "ceph_mdsc_handle_map epoch %llu\n", epoch);
+	dout(2, "ceph_mdsc_handle_map epoch %llu len %d\n", epoch, (int)maplen);
 
+	/* do we need it? */
 	spin_lock(&mdsc->lock);
-	if (epoch > mdsc->mdsmap->m_epoch) {
-		ceph_mdsmap_decode(mdsc->mdsmap, &p, end);
+	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
+		dout(2, "ceph_mdsc_handle_map epoch %llu < our %llu\n", epoch, mdsc->mdsmap->m_epoch);
 		spin_unlock(&mdsc->lock);
-		complete(&mdsc->map_waiters);
-	} else {
-		spin_unlock(&mdsc->lock);
+		goto out;
 	}
+	spin_unlock(&mdsc->lock);
+
+	/* decode */
+	newmap = ceph_mdsmap_decode(&p, end);
+	if (IS_ERR(newmap))
+		goto bad2;
+	
+	/* swap into place */
+	spin_lock(&mdsc->lock);
+	if (mdsc->mdsmap) {
+		if (mdsc->mdsmap->m_epoch < newmap->m_epoch) {
+			oldmap = mdsc->mdsmap;
+			mdsc->mdsmap = newmap;
+			spin_unlock(&mdsc->lock);
+			ceph_mdsmap_destroy(oldmap);
+		} else {
+			spin_unlock(&mdsc->lock);
+			dout(2, "ceph_mdsc_handle_map lost decode race?\n");
+			ceph_mdsmap_destroy(newmap);
+		}
+	} else {
+		mdsc->mdsmap = newmap;
+		spin_unlock(&mdsc->lock);
+		clear_bit(2, &mdsc->client->mounting);
+		if (mdsc->client->mounting == 0)
+			wake_up(&mdsc->client->mount_wq);
+	}
+	complete(&mdsc->map_waiters);
 
 out:
 	ceph_msg_put(msg);
 	return;
 bad:
 	dout(1, "corrupt map\n");
+	goto out;
+bad2:
+	dout(1, "no memory to decode new mdsmap\n");
 	goto out;
 }

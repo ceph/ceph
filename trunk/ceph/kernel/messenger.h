@@ -205,4 +205,12 @@ static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
 }
 
 
+static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
+	BUG_ON(*p + sizeof(v) > end);
+	*(__u64*)p = cpu_to_le64(v);
+	p += sizeof(v);
+	return 0;
+}
+
+
 #endif
