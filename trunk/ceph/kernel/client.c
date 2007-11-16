@@ -44,7 +44,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int attempts = 10;
 	int which;
 	
-	client->mounting = 7;
+	client->mounting = 6;  /* FIXME don't wait for osd map, for now */
 
 	/* send mount request */
 	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0);

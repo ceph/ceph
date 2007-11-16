@@ -7,10 +7,10 @@
 #include "osdmap.h"
 */
 struct ceph_osdmap;
-
+struct ceph_msg;
 
 struct ceph_osd_client {
-	struct ceph_osdmap *osdmap;  /* osd map */
+	struct ceph_osdmap *osdmap;  /* current osd map */
 
 };
 

@@ -8,4 +8,5 @@ ceph-objs := super.o inode.o \
 	bufferlist.o ktcp.o messenger.o \
 	client.o \
 	mds_client.o mdsmap.o \
-	mon_client.o monmap.o
+	mon_client.o monmap.o \
+	osd_client.o 
