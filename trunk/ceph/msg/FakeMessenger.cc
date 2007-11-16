@@ -217,15 +217,17 @@ int fakemessenger_do_loop_2()
           // encode
           if (m->empty_payload()) 
             m->encode_payload();
-          ceph_message_header env = m->get_envelope();
-          bufferlist bl;
-          bl.claim( m->get_payload() );
+          ceph_msg_header env = m->get_env();
+          bufferlist front;
+          front.claim( m->get_payload() );
+	  bufferlist data;
+	  data.claim( m->get_data() );
           //bl.c_str();   // condense into 1 buffer
 
           delete m;
           
           // decode
-          m = decode_message(env, bl);
+          m = decode_message(env, front, data);
           assert(m);
         } 
         

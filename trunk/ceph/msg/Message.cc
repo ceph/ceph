@@ -60,7 +60,6 @@ using namespace std;
 #include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
-//#include "messages/MMDSCacheRejoinAck.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -105,7 +104,7 @@ using namespace std;
 
 
 Message *
-decode_message(ceph_message_header& env, bufferlist& payload)
+decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
 {
   // make message
   Message *m = 0;
@@ -148,15 +147,6 @@ decode_message(ceph_message_header& env, bufferlist& payload)
   case CEPH_MSG_MON_MAP:
     m = new MMonMap;
     break;
-
-	/*
-  case MSG_FAILURE:
-    m = new MFailure();
-    break;
-  case MSG_FAILURE_ACK:
-    m = new MFailureAck();
-    break;
-	*/
 
   case MSG_OSD_BOOT:
     m = new MOSDBoot();
@@ -360,11 +350,10 @@ decode_message(ceph_message_header& env, bufferlist& payload)
     assert(0);
   }
   
-  // env
-  m->set_envelope(env);
+  m->set_env(env);
+  m->set_payload(front);
+  m->set_data(data);
 
-  // decode
-  m->set_payload(payload);
   m->decode_payload();
 
   // done!

@@ -28,17 +28,16 @@ struct socket * _kconnect(struct sockaddr *saddr)
 	return(sd);
 }
 
-struct socket * _klisten(struct sockaddr *saddr)
+struct socket * _klisten(struct sockaddr_in *in_addr)
 {
 	int ret;
 	struct socket *sd = NULL;
-	struct sockaddr_in *in_addr = (struct sockaddr_in *)saddr;
 
 
 	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
         if (ret < 0) {
 		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
-		return(NULL);
+		return ERR_PTR(ret);
 	}
 
 	/* no user specified address given so create, will allow arg to mount */
@@ -55,7 +54,7 @@ struct socket * _klisten(struct sockaddr *saddr)
 	if (ret < 0) {
 		printk("Failed to set SO_REUSEADDR: %d\n", ret);
 	}  */
-	ret = sd->ops->bind(sd, saddr, sizeof(saddr));
+	ret = sd->ops->bind(sd, (struct sockaddr*)in_addr, sizeof(in_addr));
 /* TBD: probaby want to tune the backlog queue .. */
 	ret = sd->ops->listen(sd, NUM_BACKUP);
 	if (ret < 0) {

@@ -10,6 +10,8 @@
 int ceph_debug = 10;
 
 
+void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg);
+
 
 /*
  * create a fresh client instance
@@ -17,6 +19,7 @@ int ceph_debug = 10;
 static struct ceph_client *create_client(struct ceph_mount_args *args)
 {
 	struct ceph_client *cl;
+	int err;
 
 	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
 	if (cl == NULL)
@@ -26,12 +29,25 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
 
+	/* messenger */
+	cl->msgr = ceph_messenger_create();
+	if (IS_ERR(cl->msgr)) {
+		err = PTR_ERR(cl->msgr);
+		goto fail;
+	}
+	cl->msgr->parent = cl;
+	cl->msgr->dispatch = (ceph_messenger_dispatch_t)ceph_dispatch;
+	
 	cl->whoami = -1;
 	ceph_monc_init(&cl->monc);
 	ceph_mdsc_init(&cl->mdsc, cl);
 	ceph_osdc_init(&cl->osdc);
 
 	return cl;
+
+fail:
+	kfree(cl);
+	return ERR_PTR(err);
 }
 
 /*
@@ -175,7 +191,7 @@ void ceph_put_client(struct ceph_client *cl)
  *
  * should be fast and non-blocking, as it is called with locks held.
  */
-static void dispatch(struct ceph_client *client, struct ceph_msg *msg)
+void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 {
 	dout(5, "dispatch %p type %d\n", (void*)msg, msg->hdr.type);
 

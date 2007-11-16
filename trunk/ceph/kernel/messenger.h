@@ -106,6 +106,8 @@ struct ceph_connection {
 };
 
 
+extern struct ceph_messenger *ceph_messenger_create(void);
+
 extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);

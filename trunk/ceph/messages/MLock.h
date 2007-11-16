@@ -62,10 +62,10 @@ class MLock : public Message {
   char      lock_type;  // lock object type
   MDSCacheObjectInfo object_info;  
   
-  bufferlist data;  // and possibly some data
+  bufferlist lockdata;  // and possibly some data
 
  public:
-  bufferlist& get_data() { return data; }
+  bufferlist& get_data() { return lockdata; }
   int get_asker() { return asker; }
   int get_action() { return action; }
   metareqid_t get_reqid() { return reqid; }
@@ -88,7 +88,7 @@ class MLock : public Message {
     Message(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
-    data.claim(bl);
+    lockdata.claim(bl);
   }
   virtual char *get_type_name() { return "ILock"; }
   void print(ostream& out) {
@@ -99,8 +99,8 @@ class MLock : public Message {
   }
   
   void set_reqid(metareqid_t ri) { reqid = ri; }
-  void set_data(const bufferlist& data) {
-    this->data = data;
+  void set_data(const bufferlist& lockdata) {
+    this->lockdata = lockdata;
   }
   
   void decode_payload() {
@@ -110,7 +110,7 @@ class MLock : public Message {
     ::_decode(reqid, payload, off);
     ::_decode(lock_type, payload, off);
     object_info._decode(payload, off);
-    ::_decode(data, payload, off);
+    ::_decode(lockdata, payload, off);
   }
   virtual void encode_payload() {
     ::_encode(asker, payload);
@@ -118,7 +118,7 @@ class MLock : public Message {
     ::_encode(reqid, payload);
     ::_encode(lock_type, payload);
     object_info._encode(payload);
-    ::_encode(data, payload);
+    ::_encode(lockdata, payload);
   }
 
 };

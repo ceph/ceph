@@ -206,14 +206,6 @@ struct ceph_entity_inst {
 /*
  * message header
  */
-struct ceph_message_header {  /* old one, just for now */
-	__u32 seq;    /* message seq# for this session */
-	__u32 type;   /* message type */
-	struct ceph_entity_inst src, dst;
-	__u32 nchunks;
-};
-
-/* new way */
 struct ceph_msg_header {
 	__u32 seq;    /* message seq# for this session */
 	__u32 type;   /* message type */
@@ -278,49 +270,51 @@ struct ceph_client_request_head {
 	__u32 op;
 	__u32 caller_uid, caller_gid;
 	ceph_ino_t cwd_ino;
+
+	// fixed size arguments.  in a union.
+	union { 
+		struct {
+			__u32 mask;
+		} stat;
+		struct {
+			ceph_ino_t ino;
+			__u32 mask;
+		} fstat;
+		struct {
+			ceph_frag_t frag;
+		} readdir;
+		struct {
+			struct ceph_timeval mtime;
+			struct ceph_timeval atime;
+		} utime;
+		struct {
+			__u32 mode;
+		} chmod; 
+		struct {
+			uid_t uid;
+			gid_t gid;
+		} chown;
+		struct {
+			__u32 mode;
+			__u32 rdev;
+		} mknod; 
+		struct {
+			__u32 mode;
+		} mkdir; 
+		struct {
+			__u32 flags;
+			__u32 mode;
+		} open;
+		struct {
+			ceph_ino_t ino;  // optional
+			__s64 length;
+		} truncate;
+		struct {
+			ceph_ino_t ino;
+		} fsync;
+	} args;
 };
 
-union ceph_client_request_args {
-	struct {
-		__u32 mask;
-	} stat;
-	struct {
-		ceph_ino_t ino;
-		__u32 mask;
-	} fstat;
-	struct {
-		ceph_frag_t frag;
-	} readdir;
-	struct {
-		struct ceph_timeval mtime;
-		struct ceph_timeval atime;
-	} utime;
-	struct {
-		__u32 mode;
-	} chmod; 
-	struct {
-		uid_t uid;
-		gid_t gid;
-	} chown;
-	struct {
-		__u32 mode;
-		__u32 rdev;
-	} mknod; 
-	struct {
-		__u32 mode;
-	} mkdir; 
-	struct {
-		__u32 flags;
-		__u32 mode;
-	} open;
-	struct {
-		ceph_ino_t ino;  // optional
-		__s64 length;
-	} truncate;
-	struct {
-		ceph_ino_t ino;
-	} fsync;
-};
 
 /* client reply */
 
@@ -342,7 +336,6 @@ struct ceph_client_reply_inode {
 	__u32 rdev;
 	__u32 mask;
 	char *symlink;
-	struct ceph_frag_tree dirfragdir;
 };
 /* followed by symlink string, then dirfragtree */
 

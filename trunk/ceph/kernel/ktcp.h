@@ -3,7 +3,7 @@
 
 /* prototype definitions */
 struct socket * _kconnect(struct sockaddr *);
-struct socket * _klisten(struct sockaddr *);
+struct socket * _klisten(struct sockaddr_in *);
 struct socket *_kaccept(struct socket *);
 int _krecvmsg(struct socket *, void *, size_t , unsigned);
 int _ksendmsg(struct socket *, struct kvec *, size_t, size_t, unsigned);

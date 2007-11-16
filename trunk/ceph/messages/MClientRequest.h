@@ -73,39 +73,36 @@
 
 
 class MClientRequest : public Message {
-  struct ceph_client_request_head st;
+public:
+  struct ceph_client_request_head head;
 
   // path arguments
   filepath path;
   string sarg;
 
  public:
-  // fixed size arguments.  in a union.
-  union ceph_client_request_args args;
-
   // cons
   MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
   MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
-    memset(&st, 0, sizeof(st));
-    memset(&args, 0, sizeof(args));
-    this->st.op = op;
-    this->st.client_inst.name = ci.name.v;
-    this->st.client_inst.addr = ci.addr.v;
+    memset(&head, 0, sizeof(head));
+    this->head.op = op;
+    this->head.client_inst.name = ci.name.v;
+    this->head.client_inst.addr = ci.addr.v;
   }
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(st.client_inst.name.num, st.tid); 
+    return metareqid_t(head.client_inst.name.num, head.tid); 
   }
 
   int get_open_file_mode() {
-    if (args.open.flags & O_LAZY) 
+    if (head.args.open.flags & O_LAZY) 
       return FILE_MODE_LAZY;
-    if (args.open.flags & O_WRONLY) 
+    if (head.args.open.flags & O_WRONLY) 
       return FILE_MODE_W;
-    if (args.open.flags & O_RDWR) 
+    if (head.args.open.flags & O_RDWR) 
       return FILE_MODE_RW;
-    if (args.open.flags & O_APPEND) 
+    if (head.args.open.flags & O_APPEND) 
       return FILE_MODE_W;
     return FILE_MODE_R;
   }
@@ -113,17 +110,17 @@ class MClientRequest : public Message {
     return get_open_file_mode() == FILE_MODE_R;
   }
   bool is_idempotent() {
-    if (st.op == MDS_OP_OPEN) 
+    if (head.op == MDS_OP_OPEN) 
       return open_file_mode_is_readonly();
-    return (st.op < 1000);
+    return (head.op < 1000);
   }
   bool auth_is_best() {
     if (!is_idempotent()) return true;
-    if (st.op == MDS_OP_READDIR) return true;
+    if (head.op == MDS_OP_READDIR) return true;
     return false;    
   }
   bool follow_trailing_symlink() {
-    switch (st.op) {
+    switch (head.op) {
     case MDS_OP_LSTAT:
     case MDS_OP_FSTAT:
     case MDS_OP_LINK:
@@ -155,58 +152,55 @@ class MClientRequest : public Message {
 
 
   // normal fields
-  void set_tid(tid_t t) { st.tid = t; }
-  void set_oldest_client_tid(tid_t t) { st.oldest_client_tid = t; }
-  void inc_num_fwd() { st.num_fwd++; }
-  void set_retry_attempt(int a) { st.retry_attempt = a; }
+  void set_tid(tid_t t) { head.tid = t; }
+  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void inc_num_fwd() { head.num_fwd++; }
+  void set_retry_attempt(int a) { head.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_path(const filepath& fp) { path = fp; }
-  void set_caller_uid(int u) { st.caller_uid = u; }
-  void set_caller_gid(int g) { st.caller_gid = g; }
+  void set_caller_uid(int u) { head.caller_uid = u; }
+  void set_caller_gid(int g) { head.caller_gid = g; }
   void set_sarg(string& arg) { this->sarg = arg; }
   void set_sarg(const char *arg) { this->sarg = arg; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
-    st.mds_wants_replica_in_dirino = dirino; }
+    head.mds_wants_replica_in_dirino = dirino; }
   
   void set_client_inst(const entity_inst_t& i) { 
-    st.client_inst.name = i.name.v; 
-    st.client_inst.addr = i.addr.v; 
+    head.client_inst.name = i.name.v; 
+    head.client_inst.addr = i.addr.v; 
   }
   entity_inst_t get_client_inst() { 
-    return entity_inst_t(st.client_inst);
+    return entity_inst_t(head.client_inst);
   }
 
-  int get_client() { return st.client_inst.name.num; }
-  tid_t get_tid() { return st.tid; }
-  tid_t get_oldest_client_tid() { return st.oldest_client_tid; }
-  int get_num_fwd() { return st.num_fwd; }
-  int get_retry_attempt() { return st.retry_attempt; }
-  int get_op() { return st.op; }
-  int get_caller_uid() { return st.caller_uid; }
-  int get_caller_gid() { return st.caller_gid; }
-  //inodeno_t get_ino() { return st.ino; }
+  int get_client() { return head.client_inst.name.num; }
+  tid_t get_tid() { return head.tid; }
+  tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
+  int get_num_fwd() { return head.num_fwd; }
+  int get_retry_attempt() { return head.retry_attempt; }
+  int get_op() { return head.op; }
+  int get_caller_uid() { return head.caller_uid; }
+  int get_caller_gid() { return head.caller_gid; }
+  //inodeno_t get_ino() { return head.ino; }
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
   string& get_sarg() { return sarg; }
   inodeno_t get_mds_wants_replica_in_dirino() { 
-    return st.mds_wants_replica_in_dirino; }
+    return head.mds_wants_replica_in_dirino; }
 
-  inodeno_t get_cwd_ino() { return st.cwd_ino ? st.cwd_ino:MDS_INO_ROOT; }
+  inodeno_t get_cwd_ino() { return head.cwd_ino ? head.cwd_ino:MDS_INO_ROOT; }
 
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
-    payload.copy(off, sizeof(args), (char*)&args);
-    off += sizeof(args);
+    payload.copy(off, sizeof(head), (char*)&head);
+    off += sizeof(head);
     path._decode(payload, off);
     ::_decode(sarg, payload, off);
   }
 
   void encode_payload() {
-    payload.append((char*)&st, sizeof(st));
-    payload.append((char*)&args, sizeof(args));
+    payload.append((char*)&head, sizeof(head));
     path._encode(payload);
     ::_encode(sarg, payload);
   }
@@ -267,8 +261,8 @@ class MClientRequest : public Message {
       out << " " << get_path();
     if (get_sarg().length())
       out << " " << get_sarg();
-    if (st.retry_attempt)
-      out << " RETRY=" << st.retry_attempt;
+    if (head.retry_attempt)
+      out << " RETRY=" << head.retry_attempt;
     out << ")";
   }
 

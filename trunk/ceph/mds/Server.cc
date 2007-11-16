@@ -488,19 +488,19 @@ void Server::handle_client_request(MClientRequest *req)
   // some ops are on ino's
   switch (req->get_op()) {
   case MDS_OP_FSTAT:
-    ref = mdcache->get_inode(req->args.fstat.ino);
+    ref = mdcache->get_inode(req->head.args.fstat.ino);
     assert(ref);
     break;
     
   case MDS_OP_TRUNCATE:
-    if (!req->args.truncate.ino) 
+    if (!req->head.args.truncate.ino) 
       break;   // can be called w/ either fh OR path
-    ref = mdcache->get_inode(req->args.truncate.ino);
+    ref = mdcache->get_inode(req->head.args.truncate.ino);
     assert(ref);
     break;
     
   case MDS_OP_FSYNC:
-    ref = mdcache->get_inode(req->args.fsync.ino);   // fixme someday no ino needed?
+    ref = mdcache->get_inode(req->head.args.fsync.ino);   // fixme someday no ino needed?
     assert(ref);
     break;
   }
@@ -563,7 +563,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // funky.
   case MDS_OP_OPEN:
-    if (req->args.open.flags & O_CREAT)
+    if (req->head.args.open.flags & O_CREAT)
       handle_client_openc(mdr);
     else 
       handle_client_open(mdr);
@@ -1331,7 +1331,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   
-  int mask = req->args.stat.mask;
+  int mask = req->head.args.stat.mask;
   if (mask & STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
   if (mask & STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
@@ -1407,8 +1407,8 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->mtime = req->args.utime.mtime;
-  pi->atime = req->args.utime.atime;
+  pi->mtime = req->head.args.utime.mtime;
+  pi->atime = req->head.args.utime.atime;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
 
@@ -1448,7 +1448,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->mode = 
     (pi->mode & ~04777) | 
-    (req->args.chmod.mode & 04777);
+    (req->head.args.chmod.mode & 04777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
 
@@ -1486,8 +1486,8 @@ void Server::handle_client_chown(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->uid = MAX(req->args.chown.uid, 0);
-  pi->gid = MAX(req->args.chown.gid, 0);
+  pi->uid = MAX(req->head.args.chown.uid, 0);
+  pi->gid = MAX(req->head.args.chown.gid, 0);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   
@@ -1525,7 +1525,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // which frag?
-  frag_t fg = req->args.readdir.frag;
+  frag_t fg = req->head.args.readdir.frag;
 
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
@@ -1677,8 +1677,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   assert(newi);
 
   // it's a file.
-  newi->inode.rdev = req->args.mknod.rdev;
-  newi->inode.mode = req->args.mknod.mode;
+  newi->inode.rdev = req->head.args.mknod.rdev;
+  newi->inode.mode = req->head.args.mknod.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   newi->inode.version = dn->pre_dirty() - 1;
@@ -1713,7 +1713,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   assert(newi);
 
   // it's a directory.
-  newi->inode.mode = req->args.mkdir.mode;
+  newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_DIR;
   newi->inode.layout = g_OSD_MDDirLayout;
@@ -3624,7 +3624,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   
   // already small enough?
-  if (cur->inode.size <= req->args.truncate.length) {
+  if (cur->inode.size <= req->head.args.truncate.length) {
     reply_request(mdr, 0);
     return;
   }
@@ -3633,19 +3633,19 @@ void Server::handle_client_truncate(MDRequest *mdr)
   version_t pdv = cur->pre_dirty();
   utime_t ctime = g_clock.real_now();
   Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
-					   pdv, req->args.truncate.length, ctime);
+					   pdv, req->head.args.truncate.length, ctime);
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
-  le->metablob.add_inode_truncate(cur->ino(), req->args.truncate.length, cur->inode.size);
+  le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  pi->size = req->args.truncate.length;
+  pi->size = req->head.args.truncate.length;
   
 
   mdlog->submit_entry(le, fin);
@@ -3659,7 +3659,7 @@ void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  int flags = req->args.open.flags;
+  int flags = req->head.args.open.flags;
   int cmode = req->get_open_file_mode();
   bool need_auth = ((cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY) ||
 		    (flags & O_TRUNC));
@@ -3913,13 +3913,13 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
   
-  bool excl = (req->args.open.flags & O_EXCL);
+  bool excl = (req->head.args.open.flags & O_EXCL);
   CDentry *dn = rdlock_path_xlock_dentry(mdr, !excl, false);
   if (!dn) return;
 
   if (!dn->is_null()) {
     // it existed.  
-    if (req->args.open.flags & O_EXCL) {
+    if (req->head.args.open.flags & O_EXCL) {
       dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
       reply_request(mdr, -EEXIST, dn->get_dir()->get_inode());
       return;
@@ -3938,7 +3938,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   assert(in);
   
   // it's a file.
-  in->inode.mode = req->args.open.mode;
+  in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= INODE_MODE_FILE;
   in->inode.version = dn->pre_dirty() - 1;
   

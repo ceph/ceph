@@ -30,7 +30,7 @@
  */
 
 class MOSDOpReply : public Message {
-  struct {
+  struct st_t {
     // req
     osdreqid_t reqid;
 
@@ -55,7 +55,6 @@ class MOSDOpReply : public Message {
     osd_peer_stat_t peer_stat;
   } st;
 
-  bufferlist data;
   map<string,bufferptr> attrset;
 
  public:
@@ -90,14 +89,6 @@ class MOSDOpReply : public Message {
   void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
 
-  // data payload
-  void set_data(bufferlist &d) {
-    data.claim(d);
-  }
-  bufferlist& get_data() {
-    return data;
-  }
-
   // osdmap
   epoch_t get_map_epoch() { return st.map_epoch; }
 
@@ -126,19 +117,14 @@ public:
 
   // marshalling
   virtual void decode_payload() {
-    payload.copy(0, sizeof(st), (char*)&st);
-    payload.splice(0, sizeof(st));
     int off = 0;
+    ::_decode(st, payload, off);
     ::_decode(attrset, payload, off);
-    ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
-    payload.append((char*)&st, sizeof(st));
+    ::_encode(st, payload);
     ::_encode(attrset, payload);
-    MOSDOp::add_payload_chunk_breaks(payload.length() + 4, 
-				     st.offset, data.length(),
-				     chunk_payload_at);
-    ::_encode(data, payload);
+    env.data_off = st.offset;
   }
 
   virtual char *get_type_name() { return "osd_op_reply"; }

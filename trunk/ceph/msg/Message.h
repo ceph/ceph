@@ -104,63 +104,47 @@ using std::list;
 
 
 class Message {
- private:
-  
- protected:
-  ceph_message_header  env;    // envelope
-  bufferlist      payload;        // payload
-  list<int> chunk_payload_at;
+protected:
+  ceph_msg_header  env;      // envelope
+  bufferlist       payload;  // "front" unaligned blob
+  bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
   utime_t recv_stamp;
 
   friend class Messenger;
-public:
 
- public:
-  Message() { 
-    env.nchunks = 0;
-  };
+public:
+  Message() { };
   Message(int t) {
-    env.nchunks = 0;
     env.type = t;
   }
-  virtual ~Message() {
-  }
+  virtual ~Message() { }
 
+  ceph_msg_header &get_env() { return env; }
+  void set_env(const ceph_msg_header &e) { env = e; }
 
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
-  bufferlist& get_payload() {
-    return payload;
-  }
-  void set_payload(bufferlist& bl) {
-    payload.claim(bl);
-  }
-  void copy_payload(const bufferlist& bl) {
-    payload = bl;
-  }
-  const list<int>& get_chunk_payload_at() const { return chunk_payload_at; }
-  void set_chunk_payload_at(list<int>& o) { chunk_payload_at.swap(o); }
-  ceph_message_header& get_envelope() {
-    return env;
-  }
-  void set_envelope(ceph_message_header& env) {
-    this->env = env;
-  }
+  bufferlist& get_payload() { return payload; }
+  void set_payload(bufferlist& bl) { payload.claim(bl); }
+  void copy_payload(const bufferlist& bl) { payload = bl; }
 
+  void set_data(bufferlist &d) { data.claim(d); }
+  void copy_data(const bufferlist &d) { data = d; }
+  bufferlist& get_data() { return data; }
+  off_t get_data_len() { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   utime_t get_recv_stamp() { return recv_stamp; }
-
-  unsigned get_seq() { return env.seq; }
-  void set_seq(unsigned s) { env.seq = s; }
 
   // ENVELOPE ----
 
   // type
   int get_type() { return env.type; }
   void set_type(int t) { env.type = t; }
-  virtual char *get_type_name() = 0;
+
+  unsigned get_seq() { return env.seq; }
+  void set_seq(unsigned s) { env.seq = s; }
 
   // source/dest
   entity_inst_t& get_dest_inst() { return *(entity_inst_t*)&env.dst; }
@@ -178,21 +162,17 @@ public:
   entity_addr_t& get_source_addr() { return *(entity_addr_t*)&env.src.addr; }
   void set_source_addr(const entity_addr_t &i) { env.src.addr = *(ceph_entity_addr*)&i; }
 
-  // PAYLOAD ----
-  void reset_payload() {
-    payload.clear();
-  }
-
+  // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload() = 0;
-
+  virtual char *get_type_name() = 0;
   virtual void print(ostream& out) {
     out << get_type_name();
   }
   
 };
 
-extern Message *decode_message(ceph_message_header &env, bufferlist& bl);
+extern Message *decode_message(ceph_msg_header &env, bufferlist& front, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;

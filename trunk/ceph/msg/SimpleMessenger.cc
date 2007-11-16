@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 
+#include <asm/page.h>
+
 #include "config.h"
 
 #include "messages/MGenericMessage.h"
@@ -1229,7 +1231,8 @@ void Rank::Pipe::writer()
 	sent.push_back(m); // move to sent list
 	lock.Unlock();
         dout(20) << "writer sending " << m->get_seq() << " " << m << " " << *m << dendl;
-        if (m->empty_payload()) m->encode_payload();
+        if (m->empty_payload()) 
+	  m->encode_payload();
 	int rc = write_message(m);
 	lock.Lock();
 	
@@ -1286,56 +1289,67 @@ Message *Rank::Pipe::read_message()
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
-  ceph_message_header env; 
+  ceph_msg_header env; 
   if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
   dout(20) << "reader got envelope type=" << env.type 
            << " src " << env.src << " dst " << env.dst
-           << " nchunks=" << env.nchunks
+           << " front=" << env.front_len 
+	   << " data=" << env.data_len << " at " << env.data_off
            << dendl;
-
-  // read chunk lens
-  __u32 chunklens[4];
-  if (tcp_read(sd, (char*)chunklens, sizeof(__u32)*env.nchunks) < 0)
-    return 0;
   
-  // read chunks
-  bufferlist blist;
-  int32_t pos = 0;
-  list<int> chunk_at;
-  for (unsigned i=0; i<env.nchunks; i++) {
-    int32_t size = chunklens[i];
-
-    dout(30) << "decode chunk " << i << "/" << env.nchunks << " size " << size << dendl;
-
-    if (pos) chunk_at.push_back(pos);
-    pos += size;
-
-    bufferptr bp;
-    if (size % 4096 == 0) {
-      dout(30) << "decoding page-aligned chunk of " << size << dendl;
-      bp = buffer::create_page_aligned(size);
-    } else {
-      bp = buffer::create(size);
-    }
-    
-    if (tcp_read( sd, bp.c_str(), size ) < 0) 
+  // read front
+  bufferlist front;
+  bufferptr bp;
+  if (env.front_len) {
+    bp = buffer::create(env.front_len);
+    if (tcp_read( sd, bp.c_str(), env.front_len ) < 0) 
       return 0;
-    
-    blist.push_back(bp);
-    
-    dout(30) << "reader got frag "
-	     << i << " of " << env.nchunks << " len " << bp.length() << dendl;
+    front.push_back(bp);
+    dout(20) << "reader got front " << front.length() << dendl;
+  }
+
+  // read data
+  bufferlist data;
+  if (env.data_len) {
+    int left = env.data_len;
+    if (env.data_off & PAGE_MASK) {
+      // head
+      int head = MIN(PAGE_SIZE - (env.data_off & PAGE_MASK),
+		     (unsigned)left);
+      bp = buffer::create(head);
+      if (tcp_read( sd, bp.c_str(), head ) < 0) 
+	return 0;
+      data.push_back(bp);
+      left -= head;
+      dout(20) << "reader got data head " << head << dendl;
+    }
+
+    // middle
+    int middle = left & ~PAGE_MASK;
+    if (middle > 0) {
+      bp = buffer::create_page_aligned(middle);
+      if (tcp_read( sd, bp.c_str(), middle ) < 0) 
+	return 0;
+      data.push_back(bp);
+      left -= middle;
+      dout(20) << "reader got data page-aligned middle " << middle << dendl;
+    }
+
+    if (left) {
+      bp = buffer::create(left);
+      if (tcp_read( sd, bp.c_str(), left ) < 0) 
+	return 0;
+      data.push_back(bp);
+      dout(20) << "reader got data tail " << left << dendl;
+    }
   }
   
   // unmarshall message
-  size_t s = blist.length();
-  Message *m = decode_message(env, blist);
+  Message *m = decode_message(env, front, data);
 
-  m->set_chunk_payload_at(chunk_at);
-  
-  dout(20) << "reader got " << s << " byte message from " 
+  dout(20) << "reader got " << front.length() << " + " << data.length() << " byte message from " 
            << m->get_source() << dendl;
   
   return m;
@@ -1409,45 +1423,20 @@ int Rank::Pipe::write_ack(unsigned seq)
 int Rank::Pipe::write_message(Message *m)
 {
   // get envelope, buffers
-  ceph_message_header *env = &m->get_envelope();
+  ceph_msg_header *env = &m->get_env();
+  env->front_len = m->get_payload().length();
+  env->data_len = m->get_data().length();
+
   bufferlist blist;
   blist.claim( m->get_payload() );
+  blist.append( m->get_data() );
   
-  // chunk out page aligned buffers? 
-  __u32 chunklens[4];
-  if (blist.length() == 0) 
-    env->nchunks = 0; 
-  else {
-    env->nchunks = 1 + m->get_chunk_payload_at().size();  // header + explicit chunk points
-
-    int pos = 0;
-    int c = 0;
-    for (list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
-	 pc != m->get_chunk_payload_at().end();
-	 pc++) {
-      chunklens[c] = *pc - pos;
-      dout(20) << "chunk bound at " << *pc << ", chunklen[" << c << "] = " << chunklens[c] << dendl;
-      pos = *pc;
-      c++;
-    }
-    chunklens[c] = blist.length() - pos;
-    dout(20) << "tail chunklen[" << c << "] = " << chunklens[c] << dendl;
-    
-    if (!m->get_chunk_payload_at().empty())
-      dout(20) << "chunk bounds at " << m->get_chunk_payload_at()
-	      << " in " << *m << " len " << blist.length()
-	      << dendl;
-  }
-
-  dout(20)  << "write_message " << m << " " << *m 
-            << " to " << m->get_dest()
-	    << " in " << env->nchunks
-            << dendl;
+  dout(20)  << "write_message " << m << " " << *m << " to " << m->get_dest() << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;
   memset(&msg, 0, sizeof(msg));
-  struct iovec msgvec[3 + blist.buffers().size() + env->nchunks*2];  // conservative upper bound
+  struct iovec msgvec[3 + blist.buffers().size()];  // conservative upper bound
   msg.msg_iov = msgvec;
   int msglen = 0;
   
@@ -1464,62 +1453,46 @@ int Rank::Pipe::write_message(Message *m)
   msglen += sizeof(*env);
   msg.msg_iovlen++;
 
-  // send chunk sizes
-  msgvec[msg.msg_iovlen].iov_base = &chunklens;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(__u32) * env->nchunks;
-  msglen += sizeof(__u32) * env->nchunks;
-  msg.msg_iovlen++;
-  
-  // payload
+  // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
-  list<int>::const_iterator pc = m->get_chunk_payload_at().begin();
   int b_off = 0;  // carry-over buffer offset, if any
   int bl_pos = 0; // blist pos
-  int nchunks = env->nchunks;
+  int left = blist.length();
 
-  for (int curchunk=0; curchunk < nchunks; curchunk++) {
-    // start a chunk
-    int left = chunklens[curchunk];
-    assert(left > 0);
-    dout(30) << "chunk " << curchunk << " pos " << bl_pos << "/" << blist.length() << " size " << left << dendl;
-
-    // chunk contents
-    while (left > 0) {
-      int donow = MIN(left, (int)pb->length()-b_off);
-      assert(donow > 0);
-      dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
-	      << " leftinchunk " << left
-	      << " buffer len " << pb->length()
-	      << " writing " << donow 
-	      << dendl;
-
-      if (msg.msg_iovlen >= IOV_MAX-1) {
-	if (do_sendmsg(sd, &msg, msglen)) 
-	  return -1;	
-
-	// and restart the iov
-	msg.msg_iov = msgvec;
-	msg.msg_iovlen = 0;
-	msglen = 0;
-      }
-
-      msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str()+b_off);
-      msgvec[msg.msg_iovlen].iov_len = donow;
-      msglen += donow;
-      msg.msg_iovlen++;
-
-      left -= donow;
-      assert(left >= 0);
-      b_off += donow;
-      bl_pos += donow;
-      if (b_off != (int)pb->length()) 
-	break;
-      pb++;
-      b_off = 0;
+  while (left > 0) {
+    int donow = MIN(left, (int)pb->length()-b_off);
+    assert(donow > 0);
+    dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
+	     << " leftinchunk " << left
+	     << " buffer len " << pb->length()
+	     << " writing " << donow 
+	     << dendl;
+    
+    if (msg.msg_iovlen >= IOV_MAX-1) {
+      if (do_sendmsg(sd, &msg, msglen)) 
+	return -1;	
+      
+      // and restart the iov
+      msg.msg_iov = msgvec;
+      msg.msg_iovlen = 0;
+      msglen = 0;
     }
-    assert(left == 0);
+    
+    msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str()+b_off);
+    msgvec[msg.msg_iovlen].iov_len = donow;
+    msglen += donow;
+    msg.msg_iovlen++;
+    
+    left -= donow;
+    assert(left >= 0);
+    b_off += donow;
+    bl_pos += donow;
+    if (b_off != (int)pb->length()) 
+      break;
+    pb++;
+    b_off = 0;
   }
-  assert(pb == blist.buffers().end());
+  assert(left == 0);
   
   // send
   if (do_sendmsg(sd, &msg, msglen)) 

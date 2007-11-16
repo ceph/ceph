@@ -118,7 +118,6 @@ private:
     osd_peer_stat_t peer_stat;
   } st;
 
-  bufferlist data;
   map<string,bufferptr> attrset;
 
 
@@ -178,13 +177,6 @@ public:
   void inc_shed_count() { st.shed_count++; }
   int get_shed_count() { return st.shed_count; }
   
-  void set_data(bufferlist &d) {
-    data.claim(d);
-  }
-  bufferlist& get_data() {
-    return data;
-  }
-  off_t get_data_len() { return data.length(); }
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
@@ -221,44 +213,14 @@ public:
   // marshalling
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
+    ::_decode(st, payload, off);
     ::_decode(attrset, payload, off);
-    ::_decode(data, payload, off);
-  }
-
-  static void add_payload_chunk_breaks(int from, int off, int len,
-				       list<int>& breaks) {
-    if (len > 0 &&
-	len & 4095 == 0 && 
-	off & 4095 == 0) {
-      // page-sized and aligned data?  easy.
-      breaks.push_back(from);
-    } else if (len > 8192) {
-      // there is at least 1 full page in there.  somewhere.
-      int p = 0;
-
-      // leading partial page?
-      if (off & 4095 != 0) 
-	p = 4096 - (off & 4095);  
-
-      // full page(s)
-      breaks.push_back(from + p);
-      p += (len - p) & (~4095);
-
-      // tail bit?
-      if (p != len)
-	breaks.push_back(from + p);
-    }
   }
 
   virtual void encode_payload() {
     ::_encode(st, payload);
     ::_encode(attrset, payload);
-    add_payload_chunk_breaks(payload.length() + 4, 
-			     st.offset, data.length(),
-			     chunk_payload_at);
-    ::_encode(data, payload);
+    env.data_off = st.offset;
   }
 
   virtual char *get_type_name() { return "osd_op"; }

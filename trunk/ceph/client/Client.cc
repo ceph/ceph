@@ -1720,7 +1720,7 @@ int Client::_mkdir(const char *path, mode_t mode)
 {
   MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, messenger->get_myinst());
   req->set_path(path);
-  req->args.mkdir.mode = mode;
+  req->head.args.mkdir.mode = mode;
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -1886,7 +1886,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
     //req->set_caller_gid(fc->gid);
     
     req = new MClientRequest(MDS_OP_LSTAT, messenger->get_myinst());
-    req->args.stat.mask = mask;
+    req->head.args.stat.mask = mask;
     req->set_path(fpath);
 
     MClientReply *reply = make_request(req);
@@ -2022,7 +2022,7 @@ int Client::_chmod(const char *path, mode_t mode)
   dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
-  req->args.chmod.mode = mode;
+  req->head.args.chmod.mode = mode;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2056,8 +2056,8 @@ int Client::_chown(const char *path, uid_t uid, gid_t gid)
   dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
-  req->args.chown.uid = uid;
-  req->args.chown.gid = gid;
+  req->head.args.chown.uid = uid;
+  req->head.args.chown.gid = gid;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2094,8 +2094,8 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->args.utime.mtime = mtime.tv_ref();
-  req->args.utime.atime = atime.tv_ref();
+  req->head.args.utime.mtime = mtime.tv_ref();
+  req->head.args.utime.atime = atime.tv_ref();
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2132,8 +2132,8 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
 
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
-  req->args.mknod.mode = mode;
-  req->args.mknod.rdev = rdev;
+  req->head.args.mknod.mode = mode;
+  req->head.args.mknod.rdev = rdev;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2289,7 +2289,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
   req->set_path(dirp->path); 
-  req->args.readdir.frag = fg;
+  req->head.args.readdir.frag = fg;
   
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2516,8 +2516,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   // go
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, messenger->get_myinst());
   req->set_path(path); 
-  req->args.open.flags = flags;
-  req->args.open.mode = mode;
+  req->head.args.open.flags = flags;
+  req->head.args.open.mode = mode;
 
   int cmode = req->get_open_file_mode();
 
@@ -3073,7 +3073,7 @@ int Client::_truncate(const char *file, off_t length)
 {
   MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
   req->set_path(file); 
-  req->args.truncate.length = length;
+  req->head.args.truncate.length = length;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -3103,8 +3103,8 @@ int Client::ftruncate(int fd, off_t length)
 int Client::_ftruncate(Fh *fh, off_t length) 
 {
   MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
-  req->args.truncate.ino = fh->inode->inode.ino;
-  req->args.truncate.length = length;
+  req->head.args.truncate.ino = fh->inode->inode.ino;
+  req->head.args.truncate.length = length;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());

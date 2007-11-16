@@ -730,25 +730,37 @@ done:
  * create a new messenger instance, saddr is address specified from mount arg.
  * If null, will get created by _klisten()
  */
-struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
+struct ceph_messenger *ceph_messenger_create()
 {
         struct ceph_messenger *msgr;
+	struct sockaddr_in saddr;
 
         msgr = kzalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	spin_lock_init(&msgr->con_lock);
 
 	/* create listening socket */
-	msgr->listen_sock = _klisten(saddr);
-	if (msgr->listen_sock == NULL) {
+	msgr->listen_sock = _klisten(&saddr);
+	if (IS_ERR(msgr->listen_sock)) {
+		int err = PTR_ERR(msgr->listen_sock);
 		kfree(msgr);
-		return NULL;
+		return ERR_PTR(err);
 	}
+
+	/* determine my ip:port */
+	msgr->inst.addr.ipaddr.sin_family = saddr.sin_family;
+	msgr->inst.addr.ipaddr.sin_port = saddr.sin_port;
+	msgr->inst.addr.ipaddr.sin_addr = saddr.sin_addr;
+
 	/* TBD: setup callback for accept */
 	INIT_WORK(&msgr->awork, try_accept);       /* setup work structure */
-        return msgr;
+
+	dout(1, "ceph_messenger_create listening on %x:%d\n", 
+	     ntohl(msgr->inst.addr.ipaddr.sin_addr.s_addr), 
+	     ntohl(msgr->inst.addr.ipaddr.sin_port));
+	return msgr;
 }
 
 
@@ -773,14 +785,14 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 			return PTR_ERR(con);
 		dout(5, "opening new connection to peer %x:%d\n",
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
-		     msg->hdr.dst.addr.ipaddr.sin_port);
+		     ntohl(msg->hdr.dst.addr.ipaddr.sin_port));
 		con->peer_addr = msg->hdr.dst.addr;
 		con->state = CONNECTING;
 		add_connection(msgr, con);
 	} else {
 		dout(5, "had connection to peer %x:%d\n",
-		     msg->hdr.dst.addr.ipaddr.sin_addr.s_addr,
-		     msg->hdr.dst.addr.ipaddr.sin_port);
+		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
+		     ntohl(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     
 	spin_unlock(&msgr->con_lock);
 
