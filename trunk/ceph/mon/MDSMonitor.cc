@@ -113,7 +113,8 @@ bool MDSMonitor::update_from_paxos()
        p != mdsmap.mds_inst.end();
        ++p) 
     if (last_beacon.count(p->second.addr) == 0 &&
-	mdsmap.get_state(p->first) != MDSMap::STATE_DNE)
+	mdsmap.get_state(p->first) != MDSMap::STATE_DNE &&
+	mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
       last_beacon[p->second.addr] = g_clock.now();
   for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
        p != mdsmap.standby.end();
@@ -579,7 +580,8 @@ void MDSMonitor::tick()
     if (mds >= 0) {
       // failure!
       int newstate;
-      switch (pending_mdsmap.get_state(mds)) {
+      int curstate = pending_mdsmap.get_state(mds);
+      switch (curstate) {
       case MDSMap::STATE_CREATING:
 	newstate = MDSMap::STATE_DNE;	// didn't finish creating
 	last_beacon.erase(addr);
