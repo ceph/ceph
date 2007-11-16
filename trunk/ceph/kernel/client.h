@@ -39,7 +39,7 @@ struct ceph_client {
 	struct ceph_fsid fsid;
 	atomic_t nref;
 
-	atomic_t mounting;
+	int mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
 	wait_queue_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */

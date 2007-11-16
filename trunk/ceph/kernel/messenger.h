@@ -6,13 +6,12 @@
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
-#include "bufferlist.h"
 
-struct ceph_message;
+struct ceph_msg;
 
-typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_message *m);
+typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_msg *m);
 
-__inline__ const char *ceph_name_type_str(int t) {
+static __inline__ const char *ceph_name_type_str(int t) {
 	switch (t) {
 	case CEPH_ENTITY_TYPE_MON: return "mon";
 	case CEPH_ENTITY_TYPE_MDS: return "mds";
@@ -29,21 +28,28 @@ struct ceph_messenger {
 	ceph_messenger_dispatch_t dispatch;
 	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
-	struct ceph_entity_addr addr;    /* my address */
+	struct ceph_entity_inst inst;    /* my name+address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
 	struct radix_tree_root con_open; /*  established. see get_connection() */
 };
 
-struct ceph_message {
-	struct ceph_message_header hdr;	/* header */
-	__u32 chunklens[2];
-	struct ceph_bufferlist payload;
+struct ceph_msg {
+	struct ceph_msg_header hdr;	/* header */
+	struct kvec front;              /* first bit of message */
+	struct page **pages;            /* data payload */
+	unsigned nr_pages;              /* size of page array */
 
 	struct list_head list_head;
 	atomic_t nref;
 };
+
+struct ceph_msg_pos {
+	int page, page_pos;        /* which page; -3=tag, -2=hdr, -1=front */
+	int data_pos;
+};
+
 
 /* current state of connection */
 enum ceph_connection_state {
@@ -75,16 +81,23 @@ struct ceph_connection {
 
 	/* out queue */
 	struct list_head out_queue;
-	struct ceph_bufferlist out_partial;  /* refereces existing bufferlists; do not free() */
-	struct ceph_bufferlist_iterator out_pos;
+
+	struct kvec out_kvec[4],
+		*out_kvec_cur;
+	int out_kvec_left;   /* kvec's left */
+	int out_kvec_bytes;  /* bytes left */
+
+	struct ceph_msg *out_msg;
+	struct ceph_msg_pos out_msg_pos;
+
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
 	int in_base_pos;   /* for ack seq, or msg headers, or accept handshake */
 	__u32 in_partial_ack;  
-	struct ceph_message *in_partial;
-	struct ceph_bufferlist_iterator in_pos;  /* for msg payload */
+	struct ceph_msg *in_msg;
+	struct ceph_msg_pos in_msg_pos;
 
 	struct work_struct rwork;		/* received work */
 	struct work_struct swork;		/* send work */
@@ -93,25 +106,55 @@ struct ceph_connection {
 };
 
 
-/* messenger */
-extern int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg);
-
-
-/* messages */
-extern struct ceph_message *ceph_new_message(int type, int size);
-
-static __inline__ void ceph_put_msg(struct ceph_message *msg) {
-	if (atomic_dec_and_test(&msg->nref)) {
-		ceph_bl_clear(&msg->payload);
-		kfree(msg);
-	}
-}
-
-static __inline__ void ceph_get_msg(struct ceph_message *msg) {
+extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
+static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);
 }
+extern void ceph_msg_put(struct ceph_msg *msg);
+extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg);
 
 
-extern int ceph_bl_decode_addr(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, struct ceph_entity_addr *v);
+static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
+	if (*p + sizeof(v) > end)
+		return -EINVAL;
+	*v = le64_to_cpu(*(__u64*)p);
+	p += sizeof(*v);
+	return 0;
+}
+static __inline__ int ceph_decode_32(void **p, void *end, __u32 *v) {
+	if (*p + sizeof(v) > end)
+		return -EINVAL;
+	*v = le32_to_cpu(*(__u32*)p);
+	p += sizeof(*v);
+	return 0;
+}
+static __inline__ int ceph_decode_16(void **p, void *end, __u16 *v) {
+	if (*p + sizeof(v) > end)
+		return -EINVAL;
+	*v = le16_to_cpu(*(__u16*)p);
+	p += sizeof(*v);
+	return 0;
+}
+static __inline__ int ceph_decode_copy(void **p, void *end, void *v, int len) {
+	if (*p + len > end) 
+		return -EINVAL;
+	memcpy(v, *p, len);
+	*p += len;
+	return 0;
+}
+
+static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_addr *v) {
+	int err;
+	if (*p + sizeof(*v) > end) 
+		return -EINVAL;
+	if ((err = ceph_decode_32(p, end, &v->erank)) != 0)
+		return -EINVAL;
+	if ((err = ceph_decode_32(p, end, &v->nonce)) != 0)
+		return -EINVAL;
+	ceph_decode_copy(p, end, &v->ipaddr, sizeof(v->ipaddr));
+	return 0;
+}
+
+
 
 #endif

@@ -135,10 +135,9 @@ static int ceph_set_super(struct super_block *s, void *data)
 
 	s->s_flags = args->mntflags;
 	
-	sbinfo = kmalloc(sizeof(struct ceph_super_info), GFP_KERNEL);
+	sbinfo = kzalloc(sizeof(struct ceph_super_info), GFP_KERNEL);
 	if (!sbinfo)
 		return -ENOMEM;
-	memset(sbinfo, 0, sizeof(*sbinfo));
 	s->s_fs_info = sbinfo;
 
 	memcpy(&sbinfo->mount_args, args, sizeof(*args));
@@ -247,7 +246,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 		token = match_token(c, arg_tokens, argstr);
 		ret = match_int(&argstr[0], &intval);
 		if (ret < 0) {
-			dout(0, "bad mount arg\n");
+			dout(0, "bad mount arg, not int\n");
 			continue;
 		}
 		switch (token) {
@@ -264,6 +263,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			ceph_debug = intval;
 			break;
 		default:
+			derr(1, "bad mount option %s\n", c);
 			continue;
 		}
 	}

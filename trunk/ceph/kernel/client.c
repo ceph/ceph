@@ -39,7 +39,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int ret;
 	int attempts = 10;
 	
-	atomic_set(&client->mounting, 1);
+	client->mounting = 7;
 
 	/* send mount request */
 	mount_msg = ceph_new_message(CEPH_MSG_CLIENT_MOUNT, 0);
@@ -50,13 +50,13 @@ trymount:
 	inst.name.type = CEPH_ENTITY_TYPE_MON;
 	inst.name.num = get_random_int() % args->num_mon;
 	inst.addr = args->mon_addr[inst.name.num];
-	dout(1, "ceph_get_client requesting mount from mon%d, %d attempts left\n", 
+	dout(1, "mount from mon%d, %d attempts left\n", 
 	     inst.name.num, attempts);
 	ceph_messenger_send(client->msgr, mount_msg, &inst);
 
 	/* wait */
 	err = wait_event_interruptible_timeout(client->mounted_wq, 
-					       atomic_read(&client->mounting) == 0,
+					       client->mounting == 0,
 					       6*HZ);
 	if (err == -EINTR)
 		return err; 
@@ -85,9 +85,13 @@ static void handle_mon_map(struct ceph_client *client, struct ceph_message *msg)
 	if (err != 0) 
 		return;
 	
-	/* mounted! */
-	client->whoami = msg->dst.name.num;
-	if (atomic_dec_and_test(&client->mounting))
+	if (client->whoami < 0) {
+		client->whoami = msg->dst.name.num;
+		client->msgr->inst.name = msg->dst.name;
+	}
+
+	clear_bit(4, &client->mounting);
+	if (client->mounting == 0)
 		wake_up(&client->mount_wq);
 }
 

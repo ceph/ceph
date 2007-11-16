@@ -44,27 +44,25 @@ struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
 	return &m->m_addr[w];
 }
 
-int ceph_mdsmap_decode(struct ceph_mdsmap *m, 
-		       struct ceph_bufferlist *bl, 
-		       struct ceph_bufferlist_iterator *bli)
+int ceph_mdsmap_decode(struct ceph_mdsmap *m, void **p, void *end)
 {
 	int i, n;
 	__u32 mds;
 	int err;
 	
-	if ((err = ceph_bl_decode_64(bl, bli, &m->m_epoch)) != 0)
+	if ((err = ceph_decode_64(p, end, &m->m_epoch)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_64(bl, bli, &m->m_client_epoch)) != 0)
+	if ((err = ceph_decode_64(p, end, &m->m_client_epoch)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_32(bl, bli, &m->m_created.tv_sec)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_created.tv_sec)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_32(bl, bli, &m->m_created.tv_usec)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_created.tv_usec)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_32(bl, bli, &m->m_anchortable)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_anchortable)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_32(bl, bli, &m->m_root)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_root)) != 0)
 		goto bad;
-	if ((err = ceph_bl_decode_32(bl, bli, &m->m_max_mds)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_max_mds)) != 0)
 		goto bad;
 
 	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_KERNEL);
@@ -72,28 +70,28 @@ int ceph_mdsmap_decode(struct ceph_mdsmap *m,
 	memset(m->m_state, 0, m->m_max_mds);
 	
 	/* state */
-	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+	if ((err = ceph_decode_32(p, end, &n)) != 0)
 		goto bad;
 	for (i=0; i<n; i++) {
-		if ((err = ceph_bl_decode_32(bl, bli, &mds)) != 0)
+		if ((err = ceph_decode_32(p, end, &mds)) != 0)
 			goto bad;
-		if ((err = ceph_bl_decode_32(bl, bli, &m->m_state[mds])) != 0)
+		if ((err = ceph_decode_32(p, end, &m->m_state[mds])) != 0)
 			goto bad;
 	}
 
 	/* state_seq */
-	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+	if ((err = ceph_decode_32(p, end, &n)) != 0)
 		goto bad;
-	ceph_bl_iterator_advance(bl, bli, n*(sizeof(__u32)+sizeof(__u64)));
+	*p += n*(sizeof(__u32)+sizeof(__u64));
 	
 	/* mds_inst */
-	if ((err = ceph_bl_decode_32(bl, bli, &n)) != 0)
+	if ((err = ceph_decode_32(p, end, &n)) != 0)
 		goto bad;
 	for (i=0; i<n; i++) {
-		if ((err = ceph_bl_decode_32(bl, bli, &mds)) != 0)
+		if ((err = ceph_decode_32(p, end, &mds)) != 0)
 			goto bad;
-		ceph_bl_iterator_advance(bl, bli, sizeof(struct ceph_entity_name));
-		if ((err = ceph_bl_decode_addr(bl, bli, &m->m_addr[mds])) != 0)
+		*p += sizeof(struct ceph_entity_name);
+		if ((err = ceph_decode_addr(p, end, &m->m_addr[mds])) != 0)
 			goto bad;
 	}
 

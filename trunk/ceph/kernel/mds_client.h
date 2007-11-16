@@ -29,8 +29,8 @@ struct ceph_mds_session {
 
 struct ceph_mds_request {
 	__u64 r_tid;
-	struct ceph_message *r_request;
-	struct ceph_message *r_reply;
+	struct ceph_msg *r_request;
+	struct ceph_msg *r_reply;
 	
 	__u32 r_mds[4];      /* set of mds's with whom request may be outstanding */
         int r_num_mds;       /* items in r_mds */
@@ -63,9 +63,9 @@ struct ceph_mds_client {
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
-extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct ceph_message *msg, int mds);
-extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_message *msg);
-extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_message *msg);
-extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_message *msg);
+extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds);
+extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 
 #endif

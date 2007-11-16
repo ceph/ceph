@@ -2,9 +2,9 @@
 #include <linux/socket.h>
 #include <linux/net.h>
 #include <linux/string.h>
-#include <net/tcp.h>
-
+#include <linux/highmem.h>
 #include <linux/ceph_fs.h>
+#include <net/tcp.h>
 #include "messenger.h"
 #include "ktcp.h"
 
@@ -19,6 +19,31 @@ static void try_read(struct work_struct *);
 static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
+
+
+/*
+ * calculate the number of pages a given length and offset map onto,
+ * if we align the data.
+ */
+static int calc_pages_for(int len, int off)
+{
+	int nr = 0;
+	if (len == 0) 
+		return 0;
+	if (off + len < PAGE_SIZE)
+		return 1;
+	if (off) {
+		nr++;
+		len -= off;
+	}
+	nr += len >> PAGE_SHIFT;
+	if (len & PAGE_MASK)
+		nr++;
+	return nr;
+}
+
+
+
 /*
  * connections
  */
@@ -29,10 +54,9 @@ static void try_accept(struct work_struct *);
 static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
-	con = kmalloc(sizeof(struct ceph_connection), GFP_KERNEL);
+	con = kzalloc(sizeof(struct ceph_connection), GFP_KERNEL);
 	if (con == NULL) 
 		return NULL;
-	memset(con, 0, sizeof(*con));
 
 	con->msgr = msgr;
 
@@ -199,61 +223,89 @@ static int do_connect(struct ceph_connection *con)
 
 /*
  * write as much of con->out_partial to the socket as we can.
- *  1 -> done; and cleaned up out_partial
+ *  1 -> done
  *  0 -> socket full, but more to do
  * <0 -> error
  */
-static int write_partial(struct ceph_connection *con)
+static int write_partial_kvec(struct ceph_connection *con)
 {
-	struct ceph_bufferlist *bl = &con->out_partial;
-	struct ceph_bufferlist_iterator *p = &con->out_pos;
-	int len, ret;
+	int ret;
 
-more:
-	len = bl->b_kv[p->i_kv].iov_len - p->i_off;
-	/* FIXME */
-	/* ret = kernel_send(con->sock, bl->b_kv[p->i_kv].iov_base + p->i_off, len); */
-	if (ret < 0) return ret;
-	if (ret == 0) return 0;   /* socket full */
-	if (ret + p->i_off == bl->b_kv[p->i_kv].iov_len) {
-		p->i_kv++;
-		p->i_off = 0;
-		if (p->i_kv == bl->b_kvlen) 
-			return 1;
-	} else {
-		p->i_off += ret;
+	while (con->out_kvec_bytes > 0) {
+		ret = _ksendmsg(con->sock, con->out_kvec_cur, con->out_kvec_left, con->out_kvec_bytes, 0);
+		if (ret < 0) return ret;  /* error */
+		if (ret == 0) return 0;   /* socket full */
+		con->out_kvec_bytes -= ret;
+		if (con->out_kvec_bytes == 0)
+			break;            /* done */
+		while (ret > 0) {
+			if (ret >= con->out_kvec_cur->iov_len) {
+				ret -= con->out_kvec_cur->iov_len;
+				con->out_kvec_cur++;
+			} else {
+				con->out_kvec_cur->iov_len -= ret;
+				con->out_kvec_cur->iov_base += ret;
+				ret = 0;
+				break;
+			}
+		}
 	}
-	goto more;
+	con->out_kvec_left = 0;
+	return 1;  /* done! */
 }
+
+static int write_partial_msg_pages(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	struct kvec kv;
+	int ret;
+
+	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
+		kv.iov_base = kmap(msg->pages[con->out_msg_pos.page]) + con->out_msg_pos.page_pos;
+		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos), 
+				 (int)(msg->hdr.data_len - con->out_msg_pos.data_pos));
+		ret = _ksendmsg(con->sock, &kv, 1, kv.iov_len, 0);
+		if (ret < 0) return ret;
+		if (ret == 0) return 0;   /* socket full */
+		con->out_msg_pos.data_pos += ret;
+		con->out_msg_pos.page_pos += ret;
+		if (ret == kv.iov_len) {
+			con->out_msg_pos.page_pos = 0;
+			con->out_msg_pos.page++;
+		}		
+	}
+
+	/* done */
+	con->out_msg = 0;
+	return 1;
+}
+
 
 /*
  * build out_partial based on the next outgoing message in the queue.
  */
 static void prepare_write_message(struct ceph_connection *con)
 {
-	struct ceph_message *m = list_entry(con->out_queue.next, struct ceph_message, list_head);
-	int i;
+	struct ceph_msg *m = list_entry(con->out_queue.next, struct ceph_msg, list_head);
 
 	/* move to sending/sent list */
 	list_del(&m->list_head);
 	list_add(&m->list_head, &con->out_sent);
-	
-	ceph_bl_init(&con->out_partial);  
-	ceph_bl_iterator_init(&con->out_pos);
+	con->out_msg = m;
 
-	/* always one chunk, for now */
-	m->hdr.nchunks = 1;  
-	m->chunklens[0] = m->payload.b_len;
+	/* tag + hdr + front */
+	con->out_kvec[0].iov_base = &tag_msg;
+	con->out_kvec[0].iov_len = 1;
+	con->out_kvec[1].iov_base = &m->hdr;
+	con->out_kvec[1].iov_len = sizeof(m->hdr);
+	con->out_kvec[2] = m->front;
+	con->out_kvec_left = 3;
+	con->out_kvec_bytes = 1 + sizeof(m->hdr) + m->front.iov_len;
+	con->out_kvec_cur = con->out_kvec;
 
-	/* tag + header */
-	ceph_bl_append_ref(&con->out_partial, &tag_msg, 1);
-	ceph_bl_append_ref(&con->out_partial, &m->hdr, sizeof(m->hdr));
-	
-	/* payload */
-	ceph_bl_append_ref(&con->out_partial, &m->chunklens[0], sizeof(__u32));
-	for (i=0; i<m->payload.b_kvlen; i++) 
-		ceph_bl_append_ref(&con->out_partial, m->payload.b_kv[i].iov_base, 
-				   m->payload.b_kv[i].iov_len);
+	/* pages */
+	con->out_msg_pos.page = 0;
+	con->out_msg_pos.page_pos = m->hdr.data_off & PAGE_MASK;
+	con->out_msg_pos.data_pos = 0;
 }
 
 /* 
@@ -262,32 +314,42 @@ static void prepare_write_message(struct ceph_connection *con)
 static void prepare_write_ack(struct ceph_connection *con)
 {
 	con->in_seq_acked = con->in_seq;
-	
-	ceph_bl_init(&con->out_partial);  
-	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &tag_ack, 1);
-	ceph_bl_append_ref(&con->out_partial, &con->in_seq_acked, sizeof(con->in_seq_acked));
+
+	con->out_kvec[0].iov_base = &tag_ack;
+	con->out_kvec[0].iov_len = 1;
+	con->out_kvec[1].iov_base = &con->in_seq_acked;
+	con->out_kvec[1].iov_len = sizeof(con->in_seq_acked);
+	con->out_kvec_left = 2;
+	con->out_kvec_bytes = 1 + sizeof(con->in_seq_acked);
+	con->out_kvec_cur = con->out_kvec;
 }
 
 static void prepare_write_accept_announce(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	ceph_bl_init(&con->out_partial);  
-	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &msgr->addr, sizeof(msgr->addr));
+	con->out_kvec[0].iov_base = &msgr->inst.addr;
+	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
+	con->out_kvec_left = 1;
+	con->out_kvec_bytes = sizeof(msgr->inst.addr);
+	con->out_kvec_cur = con->out_kvec;
 }
 
 static void prepare_write_accept_ready(struct ceph_connection *con)
 {
-	ceph_bl_init(&con->out_partial);  
-	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &tag_ready, 1);
+	con->out_kvec[0].iov_base = &tag_ready;
+	con->out_kvec[0].iov_len = 1;
+	con->out_kvec_left = 1;
+	con->out_kvec_bytes = 1;
+	con->out_kvec_cur = con->out_kvec;
 }
 static void prepare_write_accept_reject(struct ceph_connection *con)
 {
-	ceph_bl_init(&con->out_partial);  
-	ceph_bl_iterator_init(&con->out_pos);
-	ceph_bl_append_ref(&con->out_partial, &tag_reject, 1);
-	ceph_bl_append_ref(&con->out_partial, &con->connect_seq, sizeof(con->connect_seq));
+	con->out_kvec[0].iov_base = &tag_reject;
+	con->out_kvec[0].iov_len = 1;
+	con->out_kvec[1].iov_base = &con->connect_seq;
+	con->out_kvec[1].iov_len = sizeof(con->connect_seq);
+	con->out_kvec_left = 2;
+	con->out_kvec_bytes = 1 + sizeof(con->connect_seq);
+	con->out_kvec_cur = con->out_kvec;
 }
 
 /*
@@ -295,24 +357,20 @@ static void prepare_write_accept_reject(struct ceph_connection *con)
  */
 static void try_write(struct work_struct *work)
 {
-	int ret;
 	struct ceph_connection *con;
 	struct ceph_messenger *msgr;
+	int ret;
 
 	con = container_of(work, struct ceph_connection, swork);
 	msgr = con->msgr;
 
 more:
-	/* data queued? */
-	if (con->out_partial.b_kvlen) {
-		ret = write_partial(con);
-		if (ret == 0) goto done;
-
-		/* error or success */
-		/* clean up */
-		ceph_bl_init(&con->out_partial);  
-		ceph_bl_iterator_init(&con->out_pos);
-
+	/* kvec data queued? */
+	if (con->out_kvec_left) {
+		ret = write_partial_kvec(con);
+		if (ret == 0) 
+			goto done;
+		
 		if (con->state == REJECTING) {
 			/* FIXME do something else here, pbly? */
 			remove_connection(msgr, con);
@@ -321,7 +379,15 @@ more:
 		}
 		
 		/* TBD: handle error; return for now */
-		if (ret < 0) goto done; /* error */
+		if (ret < 0) 
+			goto done; /* error */
+	}
+
+	/* msg pages? */
+	if (con->out_msg) {
+		ret = write_partial_msg_pages(con, con->out_msg);
+		if (ret == 0) 
+			goto done;
 	}
 	
 	/* anything else pending? */
@@ -340,48 +406,94 @@ done:
 }
 
 
+/* 
+ * prepare to read a message
+ */
+static int prepare_read_message(struct ceph_connection *con)
+{
+	con->in_tag = CEPH_MSGR_TAG_MSG;
+	con->in_base_pos = 0;
+	con->in_msg = kzalloc(sizeof(*con->in_msg), GFP_KERNEL);
+	if (con->in_msg == NULL) {
+		/* TBD: we don't check for error in caller, handle error */
+		derr(1, "kmalloc failure on incoming message\n");
+		return -ENOMEM;
+	}
+	
+	ceph_msg_get(con->in_msg);
+	return 0;
+}
+
 /*
  * read (part of) a message
  */
 static int read_message_partial(struct ceph_connection *con)
 {
-	struct ceph_message *m = con->in_partial;
-	int ret, s, chunkbytes, c, did;
-	size_t left;
+	struct ceph_msg *m = con->in_msg;
+	void *p;
+	int ret;
+	int want, left;
 
-	while (con->in_base_pos < sizeof(struct ceph_message_header)) {
-		left = sizeof(struct ceph_message_header) - con->in_base_pos;
+	/* header */
+	while (con->in_base_pos < sizeof(struct ceph_msg_header)) {
+		left = sizeof(struct ceph_msg_header) - con->in_base_pos;
 		ret = _krecvmsg(con->sock, &m->hdr + con->in_base_pos, left, 0);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
-	if (m->hdr.nchunks == 0) return 1; /* done */
 
-	chunkbytes = sizeof(__u32)*m->hdr.nchunks;
-	while (con->in_base_pos < sizeof(struct ceph_message_header) + chunkbytes) {
-		int off = con->in_base_pos - sizeof(struct ceph_message_header);
-		left = chunkbytes + sizeof(struct ceph_message_header) - con->in_base_pos;
-		ret = _krecvmsg(con->sock, (char*)m->chunklens + off, left, 0);
-		if (ret <= 0) return ret;
-		con->in_base_pos += ret;
-	}
-	
-	did = 0;
-	for (c = 0; c<m->hdr.nchunks; c++) {
-	more:
-		left = did + m->chunklens[c] - m->payload.b_len;
-		if (left <= 0) {
-			did += m->chunklens[c];
-			continue;
+	/* front */
+	if (m->front.iov_len < m->hdr.front_len) {
+		if (m->front.iov_base == NULL) {
+			m->front.iov_base = kmalloc(m->hdr.front_len, GFP_KERNEL);
+			if (m->front.iov_base == NULL)
+				return -ENOMEM;
 		}
-		ceph_bl_prepare_append(&m->payload, left);
-		s = min(m->payload.b_append.iov_len, left);
-		ret = _krecvmsg(con->sock, m->payload.b_append.iov_base, s, 0);
+		left = m->hdr.front_len - m->front.iov_len;
+		ret = _krecvmsg(con->sock, (char*)m->front.iov_base + m->front.iov_len, left, 0);
 		if (ret <= 0) return ret;
-		ceph_bl_append_copied(&m->payload, s);
-		goto more;
+		m->front.iov_len += ret;
 	}
+
+	/* (page) data */
+	if (m->hdr.data_len == 0) 
+		goto done;
+	if (m->nr_pages == 0) {
+		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off);
+		m->pages = kmalloc(want * sizeof(*m->pages), GFP_KERNEL);
+		if (m->pages == NULL)
+			return -ENOMEM;
+		m->nr_pages = want;
+		con->in_msg_pos.page = 0;
+		con->in_msg_pos.page_pos = m->hdr.data_off;
+		con->in_msg_pos.data_pos = 0;
+	}
+	while (con->in_msg_pos.data_pos < m->hdr.data_len) {
+		left = min((int)(m->hdr.data_len - con->in_msg_pos.data_pos),
+			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
+		p = kmap(m->pages[con->in_msg_pos.page]);
+		ret = _krecvmsg(con->sock, p + con->in_msg_pos.page_pos, left, 0);
+		if (ret <= 0) return ret;
+		con->in_msg_pos.data_pos += ret;
+		con->in_msg_pos.page_pos += ret;
+		if (con->in_msg_pos.page_pos == PAGE_SIZE) {
+			con->in_msg_pos.page_pos = 0;
+			con->in_msg_pos.page++;
+		}
+	}
+
+done:
 	return 1; /* done! */
+}
+
+
+/* 
+ * prepare to read an ack
+ */
+static void prepare_read_ack(struct ceph_connection *con)
+{
+	con->in_tag = CEPH_MSGR_TAG_ACK;
+	con->in_base_pos = 0;
 }
 
 /*
@@ -398,7 +510,22 @@ static int read_ack_partial(struct ceph_connection *con)
 	return 1; /* done */
 }
 
+static void process_ack(struct ceph_connection *con, __u32 ack)
+{
+	struct ceph_msg *m;
+	while (!list_empty(&con->out_sent)) {
+		m = list_entry(con->out_sent.next, struct ceph_msg, list_head);
+		if (m->hdr.seq > ack) break;
+		dout(5, "got ack for %d type %d at %p\n", m->hdr.seq, m->hdr.type, m);
+		list_del(&m->list_head);
+		ceph_msg_put(m);
+	}
+}
 
+
+/*
+ * read portion of handshake on a newly accepted connection
+ */
 static int read_accept_partial(struct ceph_connection *con)
 {
 	int ret;
@@ -422,48 +549,6 @@ static int read_accept_partial(struct ceph_connection *con)
 	return 1; /* done */
 }
 
-/* 
- * prepare to read a message
- */
-static void prepare_read_message(struct ceph_connection *con)
-{
-	con->in_tag = CEPH_MSGR_TAG_MSG;
-	con->in_base_pos = 0;
-	con->in_partial = kmalloc(sizeof(struct ceph_message), GFP_KERNEL);
-	if (con->in_partial == NULL) {
-		/* TBD: we don't check for error in caller, handle error */
-		printk(KERN_INFO "malloc failure\n");
-		goto done;
-	}
-
-	ceph_get_msg(con->in_partial);
-	ceph_bl_init(&con->in_partial->payload);
-	ceph_bl_iterator_init(&con->in_pos);
-done:
-	return;
-}
-
-/* 
- * prepare to read an ack
- */
-static void prepare_read_ack(struct ceph_connection *con)
-{
-	con->in_tag = CEPH_MSGR_TAG_ACK;
-	con->in_base_pos = 0;
-}
-
-static void process_ack(struct ceph_connection *con, __u32 ack)
-{
-	struct ceph_message *m;
-	while (!list_empty(&con->out_sent)) {
-		m = list_entry(con->out_sent.next, struct ceph_message, list_head);
-		if (m->hdr.seq > ack) break;
-		dout(5, "got ack for %d type %d at %p\n", m->hdr.seq, m->hdr.type, m);
-		list_del(&m->list_head);
-		ceph_put_msg(m);
-	}
-}
-
 /*
  * call after a new connection's handshake has completed
  */
@@ -476,7 +561,7 @@ static void process_accept(struct ceph_connection *con)
 	existing = get_connection(con->msgr, &con->peer_addr);
 	if (existing) {
 		spin_lock(&existing->con_lock);
-		if ((existing->state == CONNECTING && compare_addr(&con->msgr->addr, &con->peer_addr)) ||
+		if ((existing->state == CONNECTING && compare_addr(&con->msgr->inst.addr, &con->peer_addr)) ||
 		    (existing->state == OPEN && con->connect_seq == existing->connect_seq)) {
 			/* replace existing with new connection */
 			replace_connection(con->msgr, existing, con);
@@ -556,9 +641,9 @@ more:
 		/* TBD: do something with error */
 		if (ret <= 0) goto done;
 		/* got a full message! */
-		msgr->dispatch(con->msgr->parent, con->in_partial);
-		ceph_put_msg(con->in_partial);
-		con->in_partial = 0;
+		msgr->dispatch(con->msgr->parent, con->in_msg);
+		ceph_msg_put(con->in_msg);
+		con->in_msg = 0;
 		con->in_tag = CEPH_MSGR_TAG_READY;
 		goto more;
 	}
@@ -593,20 +678,19 @@ static void try_accept(struct work_struct *work)
 	msgr = container_of(work, struct ceph_messenger, awork);
 	sock = msgr->listen_sock;
 
-
-        printk(KERN_INFO "Entered try_accept\n");
+        dout(5, "Entered try_accept\n");
 
 
         if (kernel_accept(sock, &new_sock, sock->file->f_flags) < 0) {
-        	printk(KERN_INFO "error accepting connection \n");
+        	derr(1, "error accepting connection\n");
                 goto done;
         }
-        printk(KERN_INFO "accepted connection \n");
+	dout(5, "accepted connection \n");
 
         /* get the address at the other end */
         memset(&saddr, 0, sizeof(saddr));
         if (new_sock->ops->getname(new_sock, (struct sockaddr *)&saddr, &len, 2)) {
-                printk(KERN_INFO "getname error connection aborted\n");
+                derr(1, "getname error connection aborted\n");
                 sock_release(new_sock);
                 goto done;
         }
@@ -614,7 +698,7 @@ static void try_accept(struct work_struct *work)
 	/* initialize the msgr connection */
 	new_con = new_connection(msgr);
 	if (new_con == NULL) {
-               	printk(KERN_INFO "malloc failure\n");
+               	derr(1, "malloc failure\n");
 		sock_release(new_sock);
 		goto done;
        	}
@@ -642,10 +726,9 @@ struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
 {
         struct ceph_messenger *msgr;
 
-        msgr = kmalloc(sizeof(*msgr), GFP_KERNEL);
+        msgr = kzalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
 		return NULL;
-        memset(msgr, 0, sizeof(*msgr));
 
 	spin_lock_init(&msgr->con_lock);
 
@@ -663,11 +746,16 @@ struct ceph_messenger *ceph_create_messenger(struct sockaddr *saddr)
 
 /*
  * queue up an outgoing message
+ *
+ * will take+drop msgr, then connection locks.
  */
-int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg)
+int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 {
 	struct ceph_connection *con;
 	
+	/* set source */
+	msg->hdr.src = msgr->inst;
+
 	/* do we have the connection? */
 	spin_lock(&msgr->con_lock);
 	con = get_connection(msgr, &msg->hdr.dst.addr);
@@ -676,13 +764,15 @@ int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg)
 		if (IS_ERR(con))
 			return PTR_ERR(con);
 		dout(5, "opening new connection to peer %x:%d\n",
-		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), msg->hdr.dst.addr.ipaddr.sin_port);
+		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
+		     msg->hdr.dst.addr.ipaddr.sin_port);
 		con->peer_addr = msg->hdr.dst.addr;
 		con->state = CONNECTING;
 		add_connection(msgr, con);
 	} else {
 		dout(5, "had connection to peer %x:%d\n",
-		     msg->hdr.dst.addr.ipaddr.sin_addr.s_addr, msg->hdr.dst.addr.ipaddr.sin_port);
+		     msg->hdr.dst.addr.ipaddr.sin_addr.s_addr,
+		     msg->hdr.dst.addr.ipaddr.sin_port);
 	}		     
 	spin_unlock(&msgr->con_lock);
 
@@ -695,43 +785,68 @@ int ceph_messenger_send(struct ceph_messenger *msgr, struct ceph_message *msg)
 	/* queue */
 	dout(1, "queuing outgoing message for %s.%d\n",
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
-	ceph_get_msg(msg);
+	ceph_msg_get(msg);
 	list_add(&con->out_queue, &msg->list_head);
-
+	
 	spin_unlock(&con->con_lock);
 	put_connection(con);
-}
-
-
-
-struct ceph_message *ceph_new_message(int type, int size)
-{
-	struct ceph_message *m;
-
-	m = kmalloc(sizeof(*m), GFP_KERNEL);
-	if (m == NULL)
-		return ERR_PTR(-ENOMEM);
-	memset(m, 0, sizeof(*m));
-	m->hdr.type = type;
-	
-	if (size) {
-		BUG_ON(size);  /* implement me */
-	}
-
-	return m;
-}
-
-
-
-int ceph_bl_decode_addr(struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli, struct ceph_entity_addr *v)
-{
-	int err;
-	if (!ceph_bl_decode_have(bl, bli, sizeof(*v)))
-		return -EINVAL;
-	if ((err = ceph_bl_decode_32(bl, bli, &v->erank)) != 0)
-		return -EINVAL;
-	if ((err = ceph_bl_decode_32(bl, bli, &v->nonce)) != 0)
-		return -EINVAL;
-	ceph_bl_copy(bl, bli, &v->ipaddr, sizeof(v->ipaddr));
 	return 0;
 }
+
+
+
+struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off)
+{
+	struct ceph_msg *m;
+	int i;
+
+	m = kzalloc(sizeof(*m), GFP_KERNEL);
+	if (m == NULL)
+		goto out;
+	atomic_set(&m->nref, 1);
+	m->hdr.type = type;
+	m->hdr.front_len = front_len;
+	m->hdr.data_len = page_len;
+	m->hdr.data_off = page_off;
+
+	/* front */
+	m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
+	if (m->front.iov_base == NULL)
+		goto out2;
+	m->front.iov_len = front_len;
+
+	/* pages */
+	m->nr_pages = calc_pages_for(page_len, page_off);
+	if (m->nr_pages) {
+		m->pages = kzalloc(m->nr_pages*sizeof(*m->pages), GFP_KERNEL);
+		for (i=0; i<m->nr_pages; i++) {
+			m->pages[i] = alloc_page(GFP_KERNEL);
+			if (m->pages[i] == NULL)
+				goto out2;
+		}
+	}
+	return m;
+
+out2:
+	ceph_msg_put(m);
+out:
+	return ERR_PTR(-ENOMEM);
+}
+
+void ceph_msg_put(struct ceph_msg *m)
+{
+	if (atomic_dec_and_test(&m->nref)) {
+		int i;
+		if (m->pages) {
+			for (i=0; i<m->nr_pages; i++)
+				if (m->pages[i])
+					kfree(m->pages[i]);
+			kfree(m->pages);
+		}
+		if (m->front.iov_base)
+			kfree(m->front.iov_base);
+		kfree(m);
+	}
+}
+
+

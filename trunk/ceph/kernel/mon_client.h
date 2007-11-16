@@ -12,7 +12,7 @@ struct ceph_mon_client {
 };
 
 extern void ceph_monc_init(struct ceph_mon_client *monc);
-extern void ceph_monc_handle_monmap(struct ceph_mon_client *monc, struct ceph_message *m);
+extern void ceph_monc_handle_monmap(struct ceph_mon_client *monc, struct ceph_msg *m);
 
 extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have);
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u64 have);

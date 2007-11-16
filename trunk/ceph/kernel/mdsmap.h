@@ -2,7 +2,6 @@
 #define _FS_CEPH_MDSMAP_H
 
 #include <linux/ceph_fs.h>
-#include "bufferlist.h"
 
 /* see mds/MDSMap.h */
 #define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
@@ -40,6 +39,7 @@ extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);
 extern int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w);
 extern struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w);
 
-extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, struct ceph_bufferlist *bl, struct ceph_bufferlist_iterator *bli);
+extern int ceph_mdsmap_decode(struct ceph_mdsmap *m, void **p, void *end);
+
 
 #endif
