@@ -16,47 +16,31 @@ code cleanup
 - word size
   - clean up all encoded structures
 
-kernel planning
-- soft consistency on (kernel) lookup?
-- accurate reconstruction of (syscall) path?
 
 
 mds mustfix
-- open file rejournaling vs capped log...
-  - open files vs shutdown in general!  need to export any caps on replicated metadata
-- export caps to auth on unlinked inodes
-- stray purge on shutdown
-
 - rename slave in-memory rollback on failure
-
-- fix purge_stray bug
+- proper handling of cache expire messages during rejoin phase?
+  -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
 
-- client session open from locker.. doesn't work properly with delays
- -> journal the session open _with_ the import(start)
-
-- proper handling of cache expire messages during rejoin phase?
-
-- verify once-per-segment jouranl context is working...
+- rerun destro trace against latest, with various journal lengths
 
 mds
+- stray reintegration
 - extend/clean up filepath to allow paths relative to an ino
   - fix path_traverse
   - fix reconnect/rejoin open file weirdness
-
-- get rid of replicate objects for replicate_to .. encode to bufferlists directly
-
-- stray reintegration
-- verify stray is empty on shutdown
-
 - real chdir (directory "open")
   - relative metadata ops
-
+- get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-
 - detect and deal with client failure
   - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
+
+- inode.rmtime (recursive mtime)
+- make inode.size reflect directory size (number of entries)
 
 - inode.max_size
 - inode.allocated_size
@@ -84,6 +68,13 @@ mds
 - only share osdmap updates with clients holding capabilities
 - delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 
+
+client
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
+- fstat
 
 
 osdmon
@@ -173,11 +164,14 @@ reliability
 
 ebofs
 - allow holes
+- allow btree sets
+- optionally scrub deallocated extents
+- clone()
+
+- map ObjectStore
 
 - verify proper behavior of conflicting/overlapping reads of clones
 - combine inodes and/or cnodes into same blocks
-- allow btree sets instead of maps
-- eliminate nodepools
 - nonblocking write on missing onodes?
 - fix bug in node rotation on insert (and reenable)
 - fix NEAR_LAST_FWD (?)
@@ -226,11 +220,6 @@ crush
 
 
 
-client
-- fstat
-- mixed lazy and non-lazy io will clobber each others' caps in the buffer cache.. how to isolate..
-- test client caps migration w/ mds exports
-- some heuristic behavior to consolidate caps to inode auth?
 
 
 

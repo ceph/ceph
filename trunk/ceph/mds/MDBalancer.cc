@@ -1000,7 +1000,7 @@ void MDBalancer::dump_pop_map()
 
 	// filename last
 	string p;
-	in->make_path(p);
+	in->make_path_string(p);
 	myfile << "." << p;
 	if (dir->get_frag() != frag_t()) 
 	  myfile << "___" << (unsigned)dir->get_frag();

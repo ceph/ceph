@@ -77,8 +77,8 @@ class MMDSSlaveRequest : public Message {
 
  public:
   // for rename prep
-  string srcdnpath;
-  string destdnpath;
+  filepath srcdnpath;
+  filepath destdnpath;
   set<int> witnesses;
   bufferlist inode_export;
   version_t inode_export_v;
@@ -110,8 +110,8 @@ public:
     ::_encode(lock_type, payload);
     object_info._encode(payload);
     ::_encode_complex(authpins, payload);
-    ::_encode(srcdnpath, payload);
-    ::_encode(destdnpath, payload);
+    srcdnpath._encode(payload);
+    destdnpath._encode(payload);
     ::_encode(witnesses, payload);
     ::_encode(now, payload);
     ::_encode(inode_export, payload);
@@ -126,8 +126,8 @@ public:
     ::_decode_simple(lock_type, p);
     object_info._decode(p);
     ::_decode_complex(authpins, p);
-    ::_decode_simple(srcdnpath, p);
-    ::_decode_simple(destdnpath, p);
+    srcdnpath._decode(p);
+    destdnpath._decode(p);
     ::_decode_simple(witnesses, p);
     ::_decode_simple(now, p);
     ::_decode_simple(inode_export, p);

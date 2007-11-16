@@ -228,8 +228,8 @@ private:
     }
 
   public:
-    EntityMessenger(entity_name_t myaddr, int r) : 
-      Messenger(myaddr),
+      EntityMessenger(entity_name_t name, int r) : 
+      Messenger(name),
       stop(false),
       qlen(0), pqlen(0),
       my_rank(r),
@@ -247,8 +247,6 @@ private:
       dispatch_thread.join();
     }
     
-    const entity_addr_t &get_myaddr() { return my_addr; }
-
     int get_dispatch_queue_len() { return qlen + pqlen; }
 
     void reset_myname(entity_name_t m);

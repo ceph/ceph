@@ -211,7 +211,7 @@ CInode *MDCache::create_root_inode()
   root->inode.ino = MDS_INO_ROOT;
   
   // make it up (FIXME)
-  root->inode.mode = 0755 | INODE_MODE_DIR;
+  root->inode.mode = 0755 | S_IFDIR;
   root->inode.size = 0;
   root->inode.ctime = 
     root->inode.mtime = g_clock.now();
@@ -219,7 +219,7 @@ CInode *MDCache::create_root_inode()
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;
   
-  root->force_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
+  root->inode_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
   add_inode( root );
 
@@ -262,7 +262,7 @@ CInode *MDCache::create_stray_inode(int whose)
   in->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
-  in->inode.mode = 0755 | INODE_MODE_DIR;
+  in->inode.mode = 0755 | S_IFDIR;
   in->inode.size = 0;
   in->inode.ctime = 
     in->inode.mtime = g_clock.now();
@@ -2224,7 +2224,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       if (!in) in = rejoin_invent_inode(p->first.ino);
       if (!in->is_dir()) {
 	assert(in->state_test(CInode::STATE_REJOINUNDEF));
-	in->inode.mode = INODE_MODE_DIR;
+	in->inode.mode = S_IFDIR;
       }
       dir = in->get_or_open_dirfrag(this, p->first.frag);
     } else {
@@ -2382,7 +2382,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        p != ack->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    if (!dir) continue;
+    if (!dir) continue;  // must have trimmed?
 
     dir->set_replica_nonce(p->second.nonce);
     dir->state_clear(CDir::STATE_REJOINING);
@@ -2393,7 +2393,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	 q != ack->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
-      if (!dn) continue;
+      if (!dn) continue;  // must have trimmed?
 
       // hmm, did we have the proper linkage here?
       if (dn->is_null() &&
@@ -2414,7 +2414,13 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       else if (!dn->is_null() &&
 	       q->second.is_null()) {
 	dout(-10) << " had bad linkage for " << *dn << dendl;
-	assert(0);  // hrmpf.  unlink should use slave requests to clean this up during resolve.
+	/* 
+	 * this should happen:
+	 *  if we're a survivor, any unlink should commit or rollback during
+	 * the resolve stage.
+	 *  if we failed, we shouldn't have non-auth leaf dentries at all
+	 */
+	assert(0);  // uh oh.	
       }
       dn->set_replica_nonce(q->second.nonce);
       mds->locker->rejoin_set_state(&dn->lock, q->second.lock, waiters);
@@ -2651,7 +2657,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   
   // send REAP
   // FIXME client session weirdness.
-  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_REAP,
+  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
 					      in->inode,
 					      in->client_caps[client].get_last_seq(),
 					      in->client_caps[client].pending(),
@@ -2811,8 +2817,8 @@ public:
 };
 
 /* purge_inode in
- * will be called by on unlink or rmdir or truncate
- * caller responsible for journaling an appropriate EUpdate
+ * will be called by on unlink or rmdir or truncate or purge
+ * caller responsible for journaling a matching EUpdate
  */
 void MDCache::purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
 {
@@ -2886,6 +2892,10 @@ void MDCache::purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize)
       waiting_for_purge.erase(in);
     finish_contexts(ls, 0);
   }
+
+  // done with inode?
+  if (in->get_num_ref() == 0) 
+    remove_inode(in);
 }
 
 void MDCache::add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
@@ -2926,6 +2936,11 @@ void MDCache::start_recovered_purges()
 // cache trimming
 
 
+/*
+ * note: only called while MDS is active or stopping... NOT during recovery.
+ * however, we may expire a replica whose authority is recovering.
+ * 
+ */
 bool MDCache::trim(int max) 
 {
   // trim LRU
@@ -3311,7 +3326,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       int nonce = it->second;
       
       if (!in) {
-	dout(0) << " inode expire on " << it->first << " from " << from << ", don't have it" << dendl;
+	dout(0) << " inode expire on " << it->first << " from " << from 
+		<< ", don't have it" << dendl;
 	assert(in);
       }        
       assert(in->is_auth());
@@ -3319,13 +3335,15 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       // check nonce
       if (nonce == in->get_replica_nonce(from)) {
 	// remove from our cached_by
-	dout(7) << " inode expire on " << *in << " from mds" << from << " cached_by was " << in->get_replicas() << dendl;
+	dout(7) << " inode expire on " << *in << " from mds" << from 
+		<< " cached_by was " << in->get_replicas() << dendl;
 	inode_remove_replica(in, from);
       } 
       else {
 	// this is an old nonce, ignore expire.
 	dout(7) << " inode expire on " << *in << " from mds" << from
-		<< " with old nonce " << nonce << " (current " << in->get_replica_nonce(from) << "), dropping" 
+		<< " with old nonce " << nonce
+		<< " (current " << in->get_replica_nonce(from) << "), dropping" 
 		<< dendl;
 	assert(in->get_replica_nonce(from) > nonce);
       }
@@ -3339,7 +3357,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       int nonce = it->second;
       
       if (!dir) {
-	dout(0) << " dir expire on " << it->first << " from " << from << ", don't have it" << dendl;
+	dout(0) << " dir expire on " << it->first << " from " << from 
+		<< ", don't have it" << dendl;
 	assert(dir);
       }  
       assert(dir->is_auth());
@@ -3370,7 +3389,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       CDir *dir = diri->get_dirfrag(pd->first.frag);
       
       if (!dir) {
-	dout(0) << " dn expires on " << pd->first << " from " << from << ", must have refragmented" << dendl;
+	dout(0) << " dn expires on " << pd->first << " from " << from
+		<< ", must have refragmented" << dendl;
       } else {
 	assert(dir->is_auth());
       }
@@ -3537,6 +3557,12 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
+  if (!shutdown_export_strays()) {
+    dout(7) << "waiting for strays to migrate" << dendl;
+    return false;
+  }
+
+  // trim cache
   trim(0);
   dout(5) << "lru size now " << lru.lru_get_size() << dendl;
 
@@ -3568,6 +3594,10 @@ bool MDCache::shutdown_pass()
     }
   }
 
+  if (!shutdown_export_caps()) {
+    dout(7) << "waiting for residual caps to export" << dendl;
+    return false;
+  }
 
   // subtrees map not empty yet?
   if (!subtrees.empty()) {
@@ -3631,9 +3661,85 @@ bool MDCache::shutdown_pass()
   return true;
 }
 
+bool MDCache::shutdown_export_strays()
+{
+  if (mds->get_nodeid() == 0) return true;
+  if (!stray) return true;
+  
+  bool done = true;
+  static set<inodeno_t> exported_strays;
+  list<CDir*> dfs;
 
+  stray->get_dirfrags(dfs);
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
 
+    if (!dir->is_complete()) {
+      dir->fetch(0);
+      done = false;
+    }
+    
+    for (CDir::map_t::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 p++) {
+      CDentry *dn = p->second;
+      if (dn->is_null()) continue;
+      done = false;
+      
+      // FIXME: we'll deadlock if a rename fails.
+      if (exported_strays.count(dn->get_inode()->ino()) == 0) {
+	exported_strays.insert(dn->get_inode()->ino());
+	migrate_stray(dn, mds->get_nodeid(), 0);  // send to root!
+      }
+    }
+  }
 
+  return done;
+}
+
+bool MDCache::shutdown_export_caps()
+{
+  // export caps?
+  //  note: this runs more often than it should.
+  static bool exported_caps = false;
+  static set<CDir*> exported_caps_in;
+  if (!exported_caps) {
+    dout(7) << "searching for caps to export" << dendl;
+    exported_caps = true;
+
+    list<CDir*> dirq;
+    for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+	 p != subtrees.end();
+	 ++p) {
+      if (exported_caps_in.count(p->first)) continue;
+      if (p->first->is_auth() ||
+	  p->first->is_ambiguous_auth())
+	exported_caps = false; // we'll have to try again
+      else {
+	dirq.push_back(p->first);
+	exported_caps_in.insert(p->first);
+      }
+    }
+    while (!dirq.empty()) {
+      CDir *dir = dirq.front();
+      dirq.pop_front();
+      for (CDir::map_t::iterator p = dir->items.begin();
+	   p != dir->items.end();
+	   ++p) {
+	CDentry *dn = p->second;
+	if (!dn->is_primary()) continue;
+	CInode *in = dn->get_inode();
+	if (in->is_dir())
+	  in->get_nested_dirfrags(dirq);
+	if (in->is_any_caps() && !in->state_test(CInode::STATE_EXPORTINGCAPS))
+	  migrator->export_caps(in);
+      }
+    }
+  }
+
+  return true;
+}
 
 
 
@@ -3728,27 +3834,31 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 }
 
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
-			   CInode *base, filepath& origpath, // what
+			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
                            bool follow_trailing_symlink,     // how
                            int onfail)
 {
   assert(mdr || req);
-  bool null_okay = onfail == MDS_TRAVERSE_DISCOVERXLOCK;
-  bool noperm = false;
-  if (onfail == MDS_TRAVERSE_DISCOVER ||
-      onfail == MDS_TRAVERSE_DISCOVERXLOCK) 
-    noperm = true;
+  bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+  bool noperm = (onfail == MDS_TRAVERSE_DISCOVER ||
+		 onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
 
   // root
-  CInode *cur = base;
-  if (!cur) cur = get_root();
+  CInode *cur = get_inode(origpath.get_ino());
   if (cur == NULL) {
-    dout(7) << "traverse: i don't have root" << dendl;
-    open_root(_get_waiter(mdr, req));
+    dout(7) << "traverse: opening base ino " << origpath.get_ino() << dendl;
+    if (origpath.get_ino() == MDS_INO_ROOT)
+      open_root(_get_waiter(mdr, req));
+    else if (MDS_INO_IS_STRAY(origpath.get_ino())) 
+      open_foreign_stray(origpath.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
+    else {
+      assert(0);  // hrm.. broken
+      return -EIO;
+    }
     return 1;
   }
 
@@ -3764,7 +3874,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   while (depth < path.depth()) {
     dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << dendl;
     
-    // ENOTDIR?
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << dendl;
       return -ENOTDIR;
@@ -4653,7 +4762,7 @@ void MDCache::eval_stray(CDentry *dn)
   CInode *in = dn->inode;
   assert(in);
 
-  return;  // FIXME or test me rather, there is a bug here somewhere!
+  if (!dn->is_auth()) return;  // has to be mine
 
   // purge?
   if (in->inode.nlink == 0) {
@@ -4665,16 +4774,30 @@ void MDCache::eval_stray(CDentry *dn)
     // trivial reintegrate?
     if (!in->remote_parents.empty()) {
       CDentry *rlink = *in->remote_parents.begin();
-      if (rlink->is_auth() &&
-	  rlink->dir->can_auth_pin())
+      if (rlink->is_auth() && rlink->dir->can_auth_pin())
 	reintegrate_stray(dn, rlink);
       
-      if (!rlink->is_auth() &&
-	  !in->is_ambiguous_auth()) 
-	migrate_stray(dn, rlink->authority().first);
+      if (!rlink->is_auth() && dn->is_auth())
+	migrate_stray(dn, mds->get_nodeid(), rlink->authority().first);
     }
   } else {
     // wait for next use.
+  }
+}
+
+void MDCache::eval_remote(CDentry *dn)
+{
+  dout(10) << "eval_remote " << *dn << dendl;
+  assert(dn->is_remote());
+  CInode *in = dn->get_inode();
+  if (!in) return;
+
+  // refers to stray?
+  if (in->get_parent_dn()->get_dir()->get_inode()->is_stray()) {
+    if (in->is_auth())
+      eval_stray(in->get_parent_dn());
+    else
+      migrate_stray(in->get_parent_dn(), in->authority().first, mds->get_nodeid());
   }
 }
 
@@ -4721,23 +4844,48 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->dir->remove_dentry(dn);
 
   // purge+remove inode
+  in->mark_clean();
   purge_inode(in, 0, in->inode.size, ls);
-  remove_inode(in);
 }
 
 
 
-void MDCache::reintegrate_stray(CDentry *dn, CDentry *rlink)
+void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
-  dout(10) << "reintegrate_stray " << *dn << " into " << *rlink << dendl;
+  dout(10) << "reintegrate_stray " << *straydn << " into " << *rdn << dendl;
   
+  // rename it to another mds.
+  filepath src;
+  straydn->make_path(src);
+  filepath dst;
+  rdn->make_path(dst);
+
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, mds->messenger->get_myinst());
+  req->set_filepath(src);
+  req->set_filepath2(dst);
+  req->set_tid(mds->issue_tid());
+
+  mds->send_message_mds(req, rdn->authority().first);
 }
  
 
-void MDCache::migrate_stray(CDentry *dn, int dest)
+void MDCache::migrate_stray(CDentry *dn, int from, int to)
 {
-  dout(10) << "migrate_stray to mds" << dest << " " << *dn << dendl;
+  dout(10) << "migrate_stray from mds" << from << " to mds" << to 
+	   << " " << *dn << " " << *dn->inode << dendl;
 
+  // rename it to another mds.
+  string dname;
+  dn->get_inode()->name_stray_dentry(dname);
+  filepath src(dname, MDS_INO_STRAY(from));
+  filepath dst(dname, MDS_INO_STRAY(to));
+
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, mds->messenger->get_myinst());
+  req->set_filepath(src);
+  req->set_filepath2(dst);
+  req->set_tid(mds->issue_tid());
+
+  mds->send_message_mds(req, to);
 }
 
 
@@ -5136,9 +5284,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // xlocked dentry?
     //  ...always block on non-tail items (they are unrelated)
     //  ...allow xlocked tail disocvery _only_ if explicitly requested
+    bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
     if (dn->lock.is_xlocked()) {
       // is this the last (tail) item in the discover traversal?
-      bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << dendl;
       } else {
@@ -5150,9 +5298,10 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // frozen inode?
-    if (dn->is_primary() &&
-	dn->inode->is_frozen()) {
-      if (reply->is_empty()) {
+    if (dn->is_primary() && dn->inode->is_frozen()) {
+      if (tailitem && dis->wants_xlocked()) {
+	dout(7) << "handle_discover allowing discovery of frozen tail " << *dn->inode << dendl;
+      } else if (reply->is_empty()) {
 	dout(7) << *dn->inode << " is frozen, empty reply, waiting" << dendl;
 	dn->inode->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
 	delete reply;
@@ -5213,7 +5362,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
     // add base inode
     cur = add_replica_inode(m->get_inode(0), NULL, finished);
-    cur->force_auth = pair<int,int>(m->get_source().num(), CDIR_AUTH_UNKNOWN);
 
     dout(7) << "discover_reply got base inode " << *cur << dendl;
     
@@ -5457,12 +5605,20 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
     dis.update_inode(in);
     dis.init_inode_locks(in);
     add_inode(in);
-    dout(10) << "add_replica_inode had " << *in << dendl;
+    if (in->is_base()) {
+      if (in->ino() == MDS_INO_ROOT)
+	in->inode_auth.first = 0;
+      else if (MDS_INO_IS_STRAY(in->ino())) 
+	in->inode_auth.first = in->ino() - MDS_INO_STRAY_OFFSET;
+      else
+	assert(0);
+    }
+    dout(10) << "add_replica_inode added " << *in << dendl;
     if (dn && dn->is_null()) 
       dn->dir->link_primary_inode(dn, in);
   } else {
     dis.update_inode(in);
-    dout(10) << "add_replica_inode added " << *in << dendl;
+    dout(10) << "add_replica_inode had " << *in << dendl;
   }
 
   if (dn) {
@@ -5485,7 +5641,6 @@ CDentry *MDCache::add_replica_stray(bufferlist &bl, CInode *in, int from)
   CInodeDiscover indis;
   indis._decode(bl, off);
   CInode *strayin = add_replica_inode(indis, NULL, finished);
-  strayin->force_auth = pair<int,int>(from, CDIR_AUTH_UNKNOWN);
   dout(15) << "strayin " << *strayin << dendl;
   
   // dir
@@ -5576,7 +5731,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   
   dout(7) << "sending dir_update on " << *dir << " bcast " << bcast << " to " << who << dendl;
 
-  string path;
+  filepath path;
   dir->inode->make_path(path);
 
   int whoami = mds->get_nodeid();
@@ -5616,7 +5771,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
       int r = path_traverse(0, m,
-			    0, path, trace, true,
+			    path, trace, true,
                             MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
@@ -5680,6 +5835,14 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	dn->dir->unlink_inode(dn);
 	assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
+
+	// send caps to auth (if we're not already)
+	if (in->is_any_caps() &&
+	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
+	  migrator->export_caps(in);
+	
+	lru.lru_bottouch(straydn);  // move stray to end of lru
+
       } else {
 	assert(dn->is_remote());
 	dn->dir->unlink_inode(dn);

@@ -76,6 +76,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
 
   this->whoami = whoami;
 
+  last_tid = 0;
+
   monmap = mm;
   messenger = m;
 
@@ -250,7 +252,8 @@ void MDS::send_message_mds(Message *m, int mds)
 void MDS::forward_message_mds(Message *req, int mds)
 {
   // client request?
-  if (req->get_type() == CEPH_MSG_CLIENT_REQUEST) {
+  if (req->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+      ((MClientRequest*)req)->get_client_inst().name.is_client()) {
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
 
@@ -259,8 +262,13 @@ void MDS::forward_message_mds(Message *req, int mds)
 			    creq->get_client_inst());
     
     if (!creq->is_idempotent()) {
+      /* don't actually forward if non-idempotent!
+       * client has to do it.  although the MDS will ignore duplicate requests,
+       * the affected metadata may migrate, in which case the new authority
+       * won't have the metareq_id in the completed request map.
+       */
       delete req;
-      return;  // don't actually forward if non-idempotent!  client has to do it.
+      return; 
     }
   }
   
@@ -282,44 +290,6 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
   version_t seq = clientmap.inc_push_seq(clientinst.name.num());
   dout(10) << "send_message_client client" << clientinst.name.num() << " seq " << seq << " " << *m << dendl;
   messenger->send_message(m, clientinst);
-}
-
-
-class C_MDS_SendMessageClientSession : public Context {
-  MDS *mds;
-  Message *msg;
-  entity_inst_t clientinst;
-public:
-  C_MDS_SendMessageClientSession(MDS *md, Message *ms, entity_inst_t& ci) :
-    mds(md), msg(ms), clientinst(ci) {}
-  void finish(int r) {
-    mds->clientmap.open_session(clientinst);
-    mds->send_message_client(msg, clientinst.name.num());
-  }
-};
-
-void MDS::send_message_client_maybe_opening(Message *m, int c)
-{
-  send_message_client_maybe_open(m, clientmap.get_inst(c));
-}
-
-void MDS::send_message_client_maybe_open(Message *m, entity_inst_t clientinst)
-{
-  // FIXME
-  //  _most_ ppl shoudl check for a client session, since migration may call this,
-  //  start opening, and then e.g. locker sends something else (through non-maybe_open 
-  //  version)
-  int client = clientinst.name.num();
-  if (!clientmap.have_session(client)) {
-    // no session!
-    dout(10) << "send_message_client opening session with " << clientinst << dendl;
-    clientmap.add_opening(client);
-    mdlog->submit_entry(new ESession(clientinst, true, clientmap.inc_projected()),
-			new C_MDS_SendMessageClientSession(this, m, clientinst));
-  } else {
-    // we have a session.
-    send_message_client(m, clientinst);
-  }
 }
 
 
@@ -1165,7 +1135,7 @@ void MDS::my_dispatch(Message *m)
 
 
   // HACK FOR NOW
-  if (is_active()) {
+  if (is_active() || is_stopping()) {
     // flush log to disk after every op.  for now.
     mdlog->flush();
 

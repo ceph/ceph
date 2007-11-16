@@ -80,6 +80,10 @@ using namespace std;
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
 
+#include "messages/MExportCaps.h"
+#include "messages/MExportCapsAck.h"
+
+
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MHeartbeat.h"
@@ -307,6 +311,13 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     m = new MExportDirWarningAck;
     break;
 
+    
+  case MSG_MDS_EXPORTCAPS:
+    m = new MExportCaps;
+    break;
+  case MSG_MDS_EXPORTCAPSACK:
+    m = new MExportCapsAck;
+    break;
 
 
   case MSG_MDS_DENTRYUNLINK:

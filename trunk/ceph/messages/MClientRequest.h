@@ -77,8 +77,7 @@ public:
   struct ceph_client_request_head head;
 
   // path arguments
-  filepath path;
-  string sarg;
+  filepath path, path2;
 
  public:
   // cons
@@ -90,9 +89,12 @@ public:
     this->head.client_inst.addr = ci.addr.v;
   }
 
+  void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
+
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(head.client_inst.name.num, head.tid); 
+    return metareqid_t(head.client_inst.name, head.tid); 
   }
 
   int get_open_file_mode() {
@@ -158,11 +160,12 @@ public:
   void set_retry_attempt(int a) { head.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
-  void set_path(const filepath& fp) { path = fp; }
+  void set_filepath(const filepath& fp) { path = fp; }
+  void set_path2(string& p) { path2.set_path(p); }
+  void set_path2(const char *p) { path2.set_path(p); }
+  void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_caller_uid(int u) { head.caller_uid = u; }
   void set_caller_gid(int g) { head.caller_gid = g; }
-  void set_sarg(string& arg) { this->sarg = arg; }
-  void set_sarg(const char *arg) { this->sarg = arg; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     head.mds_wants_replica_in_dirino = dirino; }
   
@@ -173,8 +176,7 @@ public:
   entity_inst_t get_client_inst() { 
     return entity_inst_t(head.client_inst);
   }
-
-  int get_client() { return head.client_inst.name.num; }
+  entity_name_t get_client() { return head.client_inst.name; }
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
@@ -182,10 +184,12 @@ public:
   int get_op() { return head.op; }
   int get_caller_uid() { return head.caller_uid; }
   int get_caller_gid() { return head.caller_gid; }
-  //inodeno_t get_ino() { return head.ino; }
+
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
-  string& get_sarg() { return sarg; }
+  const string& get_path2() { return path.get_path(); }
+  filepath& get_filepath2() { return path2; }
+
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return head.mds_wants_replica_in_dirino; }
 
@@ -196,18 +200,18 @@ public:
     payload.copy(off, sizeof(head), (char*)&head);
     off += sizeof(head);
     path._decode(payload, off);
-    ::_decode(sarg, payload, off);
+    path2._decode(payload, off);
   }
 
   void encode_payload() {
     payload.append((char*)&head, sizeof(head));
     path._encode(payload);
-    ::_encode(sarg, payload);
+    path2._encode(payload);
   }
 
   char *get_type_name() { return "creq"; }
   void print(ostream& out) {
-    out << "clientreq(client" << get_client() 
+    out << "clientreq(" << get_client() 
 	<< "." << get_tid() 
 	<< " ";
     switch(get_op()) {
@@ -257,10 +261,10 @@ public:
       out << "unknown=" << get_op();
       assert(0);
     }
-    if (get_path().length()) 
-      out << " " << get_path();
-    if (get_sarg().length())
-      out << " " << get_sarg();
+    if (!get_filepath().empty()) 
+      out << " " << get_filepath();
+    if (!get_filepath2().empty())
+      out << " " << get_filepath2();
     if (head.retry_attempt)
       out << " RETRY=" << head.retry_attempt;
     out << ")";

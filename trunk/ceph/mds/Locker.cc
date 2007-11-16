@@ -237,6 +237,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	MDSCacheObjectInfo info;
 	(*q)->set_object_info(info);
 	req->get_authpins().push_back(info);      
+	mdr->pin(*q);
       }
       mds->send_message_mds(req, p->first);
 
@@ -452,7 +453,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
   // my needs
-  int my_client = req->get_client();
+  int my_client = req->get_client().num();
   int my_want = 0;
   if (mode & FILE_MODE_R) my_want |= CAP_FILE_RDCACHE  | CAP_FILE_RD;
   if (mode & FILE_MODE_W) my_want |= CAP_FILE_WRBUFFER | CAP_FILE_WR;
@@ -546,7 +547,7 @@ bool Locker::issue_caps(CInode *in)
       if (seq > 0 && 
           !it->second.is_suppress()) {
         dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << it->second.get_last_seq() << " new pending " << cap_string(it->second.pending()) << " was " << cap_string(before) << dendl;
-        mds->send_message_client_maybe_opening(new MClientFileCaps(MClientFileCaps::OP_GRANT,
+        mds->send_message_client(new MClientFileCaps(MClientFileCaps::OP_GRANT,
 						     in->inode,
 						     it->second.get_last_seq(),
 						     it->second.pending(),
@@ -729,7 +730,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(MClientFileCaps::OP_RELEASE,
 					     in->inode, 
                                              0, 0, 0);
-    mds->send_message_client_maybe_open(r, m->get_source_inst());
+    mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?
@@ -1027,6 +1028,8 @@ void Locker::simple_eval(SimpleLock *lock)
 
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
+
+  if (lock->get_parent()->is_frozen()) return;
 
   // stable -> sync?
   if (!lock->is_xlocked() &&
@@ -1562,6 +1565,14 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
+  // hack:
+  if (in->is_base()) {
+    dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
+    lock->clear_updated();
+    scatter_eval_gather(lock);
+    return;
+  }
+
   // journal write-behind.
   inode_t *pi = in->project_inode();
   pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
@@ -1590,6 +1601,8 @@ void Locker::scatter_eval(ScatterLock *lock)
 
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
+
+  if (lock->get_parent()->is_frozen()) return;
 
   CInode *in = (CInode*)lock->get_parent();
   if (in->has_subtree_root_dirfrag() && !in->is_base()) {
@@ -2405,7 +2418,7 @@ void Locker::file_eval(FileLock *lock)
   assert(lock->is_stable());
 
   // not xlocked!
-  if (lock->is_xlocked()) return;
+  if (lock->is_xlocked() || lock->get_parent()->is_frozen()) return;
   
   // * -> loner?
   if (!lock->is_rdlocked() &&

@@ -143,6 +143,9 @@ class MClientReply : public Message {
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
 
+  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
+
   int get_result() { return st.result; }
   const string& get_path() { return path; }
 

@@ -53,6 +53,7 @@ public:
   version_t get_committing() { return committing; }
   version_t get_committed() { return committed; }
 
+  void set_version(version_t v) { version = v; }
   version_t inc_projected() { return ++projected; }
   void reset_projected() { projected = version; }
   void set_committing(version_t v) { committing = v; }
@@ -82,6 +83,7 @@ public:
   void add_opening(int c) { opening.insert(c); }
   bool is_closing(int c) { return closing.count(c); }
   void add_closing(int c) { closing.insert(c); }
+  void remove_closing(int c) { closing.erase(c); }
   bool have_session(int client) {
     return client_inst.count(client);
   }
@@ -95,6 +97,16 @@ public:
     closing.erase(client);
     sessions.erase(client);
     client_inst.erase(client);
+    version++;
+  }
+  void noop() {
+    version++;
+  }
+  void open_sessions(map<int,entity_inst_t>& cm) {
+    for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+      client_inst[p->first] = p->second;
+      sessions.insert(p->first);
+    }
     version++;
   }
   
@@ -113,19 +125,18 @@ public:
 
 private:
   // -- completed requests --
-  // client id -> tid -> result code
-  map<int, set<tid_t> > completed_requests;  // completed client requests
-  map<int, map<tid_t, Context*> > waiting_for_trim;
+  // who -> { tid set ... }
+  map<entity_name_t, set<tid_t> >           completed_requests;
+  map<entity_name_t, map<tid_t, Context*> > waiting_for_trim;
   version_t requestmapv;
  
 public:
   void add_completed_request(metareqid_t ri) {
-    completed_requests[ri.client].insert(ri.tid);
+    completed_requests[ri.name].insert(ri.tid);
     requestmapv++;
   }
-  void trim_completed_requests(int client, 
-			       tid_t mintid) {  // zero means trim all!
-    map<int, set<tid_t> >::iterator p = completed_requests.find(client);
+  void trim_completed_requests(entity_name_t who, tid_t mintid) {  // zero means trim all!
+    map<entity_name_t, set<tid_t> >::iterator p = completed_requests.find(who);
     if (p == completed_requests.end())
       return;
 
@@ -136,7 +147,7 @@ public:
       completed_requests.erase(p);
 
     // kick waiters
-    map<int, map<tid_t,Context*> >::iterator q = waiting_for_trim.find(client);
+    map<entity_name_t, map<tid_t,Context*> >::iterator q = waiting_for_trim.find(who);
     if (q != waiting_for_trim.end()) {
       list<Context*> fls;
       while (!q->second.empty() &&
@@ -150,11 +161,11 @@ public:
     }
   }
   void add_trim_waiter(metareqid_t ri, Context *c) {
-    waiting_for_trim[ri.client][ri.tid] = c;
+    waiting_for_trim[ri.name][ri.tid] = c;
   }
   bool have_completed_request(metareqid_t ri) {
-    return completed_requests.count(ri.client) &&
-      completed_requests[ri.client].count(ri.tid);
+    return completed_requests.count(ri.name) &&
+      completed_requests[ri.name].count(ri.tid);
   }
 
 

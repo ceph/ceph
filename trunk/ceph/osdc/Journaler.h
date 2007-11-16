@@ -205,6 +205,7 @@ public:
   bool is_active() { return state == STATE_ACTIVE; }
 
   off_t get_write_pos() const { return write_pos; }
+  off_t get_write_ack_pos() const { return ack_pos; }
   off_t get_read_pos() const { return read_pos; }
   off_t get_expire_pos() const { return expire_pos; }
   off_t get_trimmed_pos() const { return trimmed_pos; }

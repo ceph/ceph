@@ -18,20 +18,26 @@
 #include "msg/Message.h"
 #include "mds/Capability.h"
 
+
 class MClientFileCaps : public Message {
  public:
   static const int OP_GRANT   = 0;  // mds->client grant.
   static const int OP_ACK     = 1;  // client->mds ack (if prior grant was a recall)
-  static const int OP_RELEASE = 2;  // mds closed the cap
-  static const int OP_STALE   = 3;  // mds has exported the cap
-  static const int OP_REAP    = 4;  // mds has imported the cap from get_mds()
+  static const int OP_RELEASE = 2;  // mds->client release cap (*)
+  static const int OP_EXPORT  = 3;  // mds has exported the cap
+  static const int OP_IMPORT  = 4;  // mds has imported the cap from get_mds()
+  /* 
+   * (*) it's a bit counterintuitive, but the mds has to 
+   *  close the cap because the client isn't able to tell
+   *  if a concurrent open() would map to the same inode.
+   */
   static const char* get_opname(int op) {
     switch (op) {
     case OP_GRANT: return "grant";
     case OP_ACK: return "ack";
     case OP_RELEASE: return "release";
-    case OP_STALE: return "stale";
-    case OP_REAP: return "reap";
+    case OP_EXPORT: return "export";
+    case OP_IMPORT: return "import";
     default: assert(0); return 0;
     }
   }

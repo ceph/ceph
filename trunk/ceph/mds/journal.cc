@@ -15,6 +15,7 @@
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
+#include "events/ESessions.h"
 
 #include "events/EMetaBlob.h"
 
@@ -73,12 +74,18 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
   // commit dirs
-  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) 
+  for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert(*p);
-  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) 
+  }
+  for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
-  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) 
+  }
+  for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
     commit.insert((*p)->get_parent_dn()->get_dir());
+  }
 
   if (!commit.empty()) {
     if (!gather) gather = new C_Gather;
@@ -87,6 +94,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 p != commit.end();
 	 ++p) {
       CDir *dir = *p;
+      assert(dir->is_auth());
       if (dir->can_auth_pin()) {
 	dout(15) << "try_to_expire committing " << *dir << dendl;
 	dir->commit(0, gather->new_sub());
@@ -755,7 +763,7 @@ void ESession::replay(MDS *mds)
 
     // hrm, this isn't very pretty.
     if (!open)
-      mds->clientmap.trim_completed_requests(client_inst.name.num(), 0);
+      mds->clientmap.trim_completed_requests(client_inst.name, 0);
 
   } else {
     dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
@@ -765,8 +773,27 @@ void ESession::replay(MDS *mds)
       mds->clientmap.open_session(client_inst);
     } else {
       mds->clientmap.close_session(client_inst.name.num());
-      mds->clientmap.trim_completed_requests(client_inst.name.num(), 0);
+      mds->clientmap.trim_completed_requests(client_inst.name, 0);
     }
+    mds->clientmap.reset_projected(); // make it follow version.
+  }
+}
+
+void ESessions::update_segment()
+{
+  _segment->clientmapv = cmapv;
+}
+
+void ESessions::replay(MDS *mds)
+{
+  if (mds->clientmap.get_version() >= cmapv) {
+    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+	     << " >= " << cmapv << ", noop" << dendl;
+  } else {
+    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+	     << " < " << cmapv << dendl;
+    mds->clientmap.open_sessions(client_map);
+    assert(mds->clientmap.get_version() == cmapv);
     mds->clientmap.reset_projected(); // make it follow version.
   }
 }
@@ -1048,6 +1075,21 @@ void EImportStart::replay(MDS *mds)
 
   // put in ambiguous import list
   mds->mdcache->add_ambiguous_import(base, bounds);
+
+  // open client sessions?
+  if (mds->clientmap.get_version() >= cmapv) {
+    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+	     << " >= " << cmapv << ", noop" << dendl;
+  } else {
+    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+	     << " < " << cmapv << dendl;
+    map<int,entity_inst_t> cm;
+    bufferlist::iterator blp = client_map.begin();
+    ::_decode_simple(cm, blp);
+    mds->clientmap.open_sessions(cm);
+    assert(mds->clientmap.get_version() == cmapv);
+    mds->clientmap.reset_projected(); // make it follow version.
+  }
 }
 
 // -----------------------

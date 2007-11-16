@@ -150,11 +150,6 @@ namespace __gnu_cxx {
 }
 
 
-#define INODE_MODE_FILE     0100000 // S_IFREG
-#define INODE_MODE_SYMLINK  0120000 // S_IFLNK
-#define INODE_MODE_DIR      0040000 // S_IFDIR
-#define INODE_TYPE_MASK     0170000
-
 #define FILE_MODE_R          1
 #define FILE_MODE_W          2
 #define FILE_MODE_RW         (1|2)
@@ -179,6 +174,9 @@ namespace __gnu_cxx {
 inline int DT_TO_MODE(int dt) {
   return dt << 12;
 }
+inline unsigned char MODE_TO_DT(int mode) {
+  return mode >> 12;
+}
 
 struct inode_t {
   // base (immutable)
@@ -202,25 +200,18 @@ struct inode_t {
   int64_t    size, max_size, allocated_size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
+  utime_t    rmtime;  // recursive mtime
  
   // special stuff
   version_t version;           // auth only
   version_t file_data_version; // auth only
 
   // file type
-  bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
-  bool is_dir()     { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
-  bool is_file()    { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
-
-  // corresponding d_types
-  static const unsigned char DT_REG = 8;
-  static const unsigned char DT_DIR = 4;
-  static const unsigned char DT_LNK = 10;
+  bool is_symlink() { return (mode & S_IFMT) == S_IFLNK; }
+  bool is_dir()     { return (mode & S_IFMT) == S_IFDIR; }
+  bool is_file()    { return (mode & S_IFMT) == S_IFREG; }
 };
 
-inline unsigned char MODE_TO_DT(int mode) {
-  return mode >> 12;
-}
 
 
 

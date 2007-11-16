@@ -34,21 +34,23 @@ class Timer;
 class Messenger {
  private:
   Dispatcher          *dispatcher;
-  entity_name_t           _myname;
+
+protected:
+  entity_inst_t _myinst;
 
  public:
-  Messenger(entity_name_t w) : dispatcher(0), _myname(w) { }
+  Messenger(entity_name_t w) : dispatcher(0) {
+    _myinst.name = w;
+  }
   virtual ~Messenger() { }
   
   // accessors
-  entity_name_t get_myname() { return _myname; }
-  void _set_myname(entity_name_t m) { _myname = m; }
-
+  entity_name_t get_myname() { return _myinst.name; }
+  const entity_addr_t& get_myaddr() { return _myinst.addr; }
+  const entity_inst_t& get_myinst() { return _myinst; }
+  
+  void _set_myname(entity_name_t m) { _myinst.name = m; }
   virtual void reset_myname(entity_name_t m) = 0;
-
-  virtual const entity_addr_t &get_myaddr() = 0;
-
-  entity_inst_t get_myinst() { return entity_inst_t(_myname, get_myaddr()); }
   
   // hrmpf.
   virtual int get_dispatch_queue_len() { return 0; };

@@ -68,6 +68,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_PURGING =         -12;	
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
+  static const int PIN_IMPORTINGCAPS =    15;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -81,8 +82,10 @@ class CInode : public MDSCacheObject {
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
     case PIN_STICKYDIRS: return "stickydirs";
+    case PIN_PURGING: return "purging";
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
+    case PIN_IMPORTINGCAPS: return "importingcaps";
     default: return generic_pin_name(p);
     }
   }
@@ -96,6 +99,7 @@ class CInode : public MDSCacheObject {
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
+  static const int STATE_EXPORTINGCAPS = (1<<10);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -126,7 +130,7 @@ class CInode : public MDSCacheObject {
   inode_t          inode;        // the inode itself
   string           symlink;      // symlink dest, if symlink
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  //map<frag_t,int>  dirfrag_size; // size of each dirfrag
+  map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
@@ -182,7 +186,7 @@ public:
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
-  pair<int,int> force_auth;
+  pair<int,int> inode_auth;
 
   // -- distributed state --
 protected:
@@ -226,7 +230,7 @@ public:
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
-    parent(0), force_auth(CDIR_AUTH_DEFAULT),
+    parent(0), inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
@@ -277,7 +281,8 @@ public:
   }
 
   // -- misc -- 
-  void make_path(string& s);
+  void make_path_string(string& s);
+  void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
 
@@ -305,10 +310,8 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& p,
-		     set<int>& new_client_caps, 
-		     LogSegment *ls);
-
+  void decode_import(bufferlist::iterator& p, LogSegment *ls);
+  
 
   // -- locks --
 public:

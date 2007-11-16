@@ -163,6 +163,9 @@ public:
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );
   void flush();
+  bool is_flushed() {
+    return unflushed == 0;
+  }
 
 private:
   class C_MaybeExpiredSegment : public Context {

@@ -93,7 +93,7 @@ void Server::dispatch(Message *m)
   }
 
   // active?
-  if (!mds->is_active()) {
+  if (!mds->is_active() && !mds->is_stopping()) {
     dout(3) << "not active yet, waiting" << dendl;
     mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
     return;
@@ -173,6 +173,7 @@ void Server::handle_client_session(MClientSession *m)
 
   // journal it
   version_t cmapv = mds->clientmap.inc_projected();
+  dout(10) << " clientmap v " << mds->clientmap.get_version() << " pv " << cmapv << dendl;
   mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
 		      new C_MDS_session_finish(mds, m->get_source_inst(), open, cmapv));
   delete m;
@@ -191,12 +192,15 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
   if (open) {
     assert(mds->clientmap.is_opening(from));
     mds->clientmap.open_session(client_inst);
-  } else {
-    assert(mds->clientmap.is_closing(from));
+  } else if (mds->clientmap.is_closing(from)) {
     mds->clientmap.close_session(from);
     
     // purge completed requests from clientmap
-    mds->clientmap.trim_completed_requests(from, 0);
+    mds->clientmap.trim_completed_requests(client_inst.name, 0);
+  } else {
+    // close must have been canceled (by an import?) ...
+    assert(!open);
+    mds->clientmap.noop();
   }
   
   assert(cmapv == mds->clientmap.get_version());
@@ -206,6 +210,39 @@ void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cma
     mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), client_inst);
   else
     mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), client_inst);
+}
+
+void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
+{
+  version_t cmapv = mds->clientmap.inc_projected();
+  dout(10) << "prepare_force_open_sessions " << cmapv 
+	   << " on " << cm.size() << " clients"
+	   << dendl;
+  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    mds->clientmap.add_opening(p->first);
+  }
+}
+
+void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
+{
+  version_t v = mds->clientmap.get_version();
+  dout(10) << "finish_force_open_sessions on " << cm.size() << " clients, v " << v << " -> " << (v+1) << dendl;
+  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    if (mds->clientmap.is_closing(p->first)) {
+      dout(15) << "force_open_sessions canceling close on " << p->second << dendl;
+      mds->clientmap.remove_closing(p->first);
+      continue;
+    }
+    if (mds->clientmap.have_session(p->first)) {
+      dout(15) << "force_open_sessions have session " << p->second << dendl;
+      continue;
+    }
+    
+    dout(10) << "force_open_sessions opening " << p->second << dendl;
+    mds->clientmap.open_session(p->second);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), p->second);
+  }
+  mds->clientmap.set_version(v+1);
 }
 
 
@@ -284,7 +321,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_STALE,
+	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
@@ -419,15 +456,24 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   */
 
   // include trace
-  if (tracei) {
+  if (tracei)
     reply->set_trace_dist( tracei, mds->get_nodeid() );
-  }
+  
+  reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   
   // send reply
-  messenger->send_message(reply, req->get_client_inst());
+  if (req->get_client_inst().name.is_mds())
+    delete reply;   // mds doesn't need a reply
+  else
+    messenger->send_message(reply, req->get_client_inst());
   
   // finish request
   mdcache->request_finish(mdr);
+
+  if (tracei && 
+      tracei->get_parent_dn() &&
+      tracei->get_parent_dn()->is_remote())
+    mdcache->eval_remote(tracei->get_parent_dn());
 }
 
 
@@ -440,12 +486,12 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
-  int client = req->get_client();
 
   if (logger) logger->inc("hcreq");
 
-  if (!mds->is_active()) {
-    dout(5) << " not active, discarding client request." << dendl;
+  if (!mds->is_active() &&
+      !(mds->is_stopping() && req->get_client_inst().name.is_mds())) {
+    dout(5) << " not active (or stopping+mds), discarding request." << dendl;
     delete req;
     return;
   }
@@ -457,12 +503,18 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // active session?
-  if (!mds->clientmap.have_session(client)) {
-    dout(5) << "no session for client" << client << ", dropping" << dendl;
+  if (req->get_client_inst().name.is_client() && 
+      !mds->clientmap.have_session(req->get_client_inst().name.num())) {
+    dout(5) << "no session for " << req->get_client_inst().name << ", dropping" << dendl;
     delete req;
     return;
   }
 
+  // old mdsmap?
+  if (req->get_mdsmap_epoch() < mds->mdsmap->get_epoch()) {
+    // send it?  hrm, this isn't ideal; they may get a lot of copies if
+    // they have a high request rate.
+  }
 
   // okay, i want
   CInode *ref = 0;
@@ -479,7 +531,7 @@ void Server::handle_client_request(MClientRequest *req)
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
-    mds->clientmap.trim_completed_requests(client,
+    mds->clientmap.trim_completed_requests(req->get_client_inst().name, 
 					   req->get_oldest_client_tid());
   }
 
@@ -1008,7 +1060,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
   // traverse to parent dir
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 0, refpath, trace, true,
+				 refpath, trace, true,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
@@ -1019,7 +1071,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   // open inode
   CInode *diri;
   if (trace.empty())
-    diri = mdcache->get_root();
+    diri = mdcache->get_inode(refpath.get_ino());
   else
     diri = mdcache->get_dentry_inode(trace[trace.size()-1], mdr);
   if (!diri) 
@@ -1048,7 +1100,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   filepath refpath = req->get_filepath();
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
-				 0, refpath, 
+				 refpath, 
 				 trace, req->follow_trailing_symlink(),
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
@@ -1258,7 +1310,7 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
   version_t dirpv = 0;
   CInode *diri = dn->dir->inode;
   
-  if (diri->is_root()) return 0;
+  if (diri->is_base()) return 0;
 
   if (diri->is_auth()) {
     assert(mdr->wrlocks.count(&diri->dirlock));
@@ -1590,9 +1642,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
     }
     assert(in);
 
-    
-    assert(in);
-
     dout(12) << "including inode " << *in << dendl;
     
     // add this dentry + inodeinfo
@@ -1679,8 +1728,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
-  newi->inode.mode &= ~INODE_TYPE_MASK;
-  newi->inode.mode |= INODE_MODE_FILE;
+  newi->inode.mode &= ~S_IFMT;
+  newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
   // prepare finisher
@@ -1714,8 +1763,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
   // it's a directory.
   newi->inode.mode = req->head.args.mkdir.mode;
-  newi->inode.mode &= ~INODE_TYPE_MASK;
-  newi->inode.mode |= INODE_MODE_DIR;
+  newi->inode.mode &= ~S_IFMT;
+  newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_OSD_MDDirLayout;
   newi->inode.version = dn->pre_dirty() - 1;
 
@@ -1770,9 +1819,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   assert(newi);
 
   // it's a symlink
-  newi->inode.mode &= ~INODE_TYPE_MASK;
-  newi->inode.mode |= INODE_MODE_SYMLINK;
-  newi->symlink = req->get_sarg();
+  newi->inode.mode &= ~S_IFMT;
+  newi->inode.mode |= S_IFLNK;
+  newi->symlink = req->get_path2();
   newi->inode.version = dn->pre_dirty() - 1;
 
   // prepare finisher
@@ -1799,7 +1848,7 @@ void Server::handle_client_link(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   dout(7) << "handle_client_link " << req->get_filepath()
-	  << " to " << req->get_sarg()
+	  << " to " << req->get_filepath2()
 	  << dendl;
 
   // traverse to dest dir, make sure it's ours.
@@ -1811,11 +1860,11 @@ void Server::handle_client_link(MDRequest *mdr)
   dout(7) << "handle_client_link link " << dname << " in " << *dir << dendl;
   
   // traverse to link target
-  filepath targetpath = req->get_sarg();
+  filepath targetpath = req->get_filepath2();
   dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
-				 0, targetpath, targettrace, false,
+				 targetpath, targettrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
@@ -2229,7 +2278,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 0, req->get_filepath(), trace, false,
+				 req->get_filepath(), trace, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't unlink root
@@ -2659,7 +2708,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // traverse to dest dir (not dest)
   //  we do this FIRST, because the rename should occur on the 
   //  destdn's auth.
-  const filepath &destpath = req->get_sarg();
+  const filepath &destpath = req->get_filepath2();
   const string &destname = destpath.last_dentry();
   vector<CDentry*> desttrace;
   CDir *destdir = traverse_to_auth_dir(mdr, desttrace, destpath);
@@ -2671,7 +2720,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   filepath srcpath = req->get_filepath();
   vector<CDentry*> srctrace;
   int r = mdcache->path_traverse(mdr, req,
-				 0, srcpath, srctrace, false,
+				 srcpath, srctrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (srctrace.empty()) r = -EINVAL;  // can't rename root
@@ -2683,6 +2732,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   dout(10) << " srcdn " << *srcdn << dendl;
   CInode *srci = mdcache->get_dentry_inode(srcdn, mdr);
   dout(10) << " srci " << *srci << dendl;
+  mdr->pin(srci);
 
   // -- some sanity checks --
   // src == dest?
@@ -2740,7 +2790,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   dout(10) << " destdn " << *destdn << dendl;
-
 
   // -- locks --
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -2901,7 +2950,13 @@ void Server::handle_client_rename(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "rename");
   le->metablob.add_client_req(mdr->reqid);
   
-  _rename_prepare(mdr, &le->metablob, srcdn, destdn, straydn);
+  _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
+
+  if (!srcdn->is_auth() && srcdn->is_primary()) {
+    // importing inode; also journal imported client map
+    
+    // ** DER FIXME **
+  }
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
@@ -2981,7 +3036,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
 
 
 void Server::_rename_prepare(MDRequest *mdr,
-			     EMetaBlob *metablob, 
+			     EMetaBlob *metablob, bufferlist *client_map_bl,
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
@@ -3047,8 +3102,30 @@ void Server::_rename_prepare(MDRequest *mdr,
 	version_t siv;
 	if (srcdn->is_auth())
 	  siv = srcdn->inode->get_projected_version();
-	else
+	else {
 	  siv = mdr->more()->inode_import_v;
+
+	  /* import node */
+	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
+	  
+	  // imported caps
+	  ::_decode_simple(mdr->more()->imported_client_map, blp);
+	  ::_encode_simple(mdr->more()->imported_client_map, *client_map_bl);
+	  prepare_force_open_sessions(mdr->more()->imported_client_map);
+
+	  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
+	  
+	  mdcache->migrator->decode_import_inode(srcdn, blp, 
+						 srcdn->authority().first,
+						 mdr->ls,
+						 mdr->more()->cap_imports, updated_scatterlocks);
+	  srcdn->inode->dirlock.clear_updated();  
+
+
+	  // hack: force back to !auth and clean, temporarily
+	  srcdn->inode->state_clear(CInode::STATE_AUTH);
+	  srcdn->inode->mark_clean();
+	}
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
@@ -3191,16 +3268,15 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // srcdn inode import?
       if (!srcdn->is_auth() && destdn->is_auth()) {
 	assert(mdr->more()->inode_import.length() > 0);
-	bufferlist::iterator blp = mdr->more()->inode_import.begin();
-	map<int,entity_inst_t> imported_client_map;
-	list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
-	::_decode_simple(imported_client_map, blp);
-	mdcache->migrator->decode_import_inode(destdn, blp, 
-					       srcdn->authority().first,
-					       imported_client_map,
-					       mdr->ls,
-					       updated_scatterlocks);
-	destdn->inode->dirlock.clear_updated();   
+
+	// finish cap imports
+	finish_force_open_sessions(mdr->more()->imported_client_map);
+	if (mdr->more()->cap_imports.count(destdn->inode))
+	  mds->mdcache->migrator->finish_import_inode_caps(destdn->inode, srcdn->authority().first, 
+							   mdr->more()->cap_imports[destdn->inode]);
+	
+	// hack: fix auth bit
+	destdn->inode->state_set(CInode::STATE_AUTH);
       }
       if (destdn->inode->is_auth())
 	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -3256,13 +3332,13 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 	   << " " << mdr->slave_request->srcdnpath 
 	   << " to " << mdr->slave_request->destdnpath
 	   << dendl;
-
+  
   // discover destdn
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, mdr->slave_request, 
-				 0, destpath, trace, false,
+				 destpath, trace, false,
 				 MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
@@ -3271,15 +3347,14 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " destdn " << *destdn << dendl;
   mdr->pin(destdn);
   
-      
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   r = mdcache->path_traverse(mdr, mdr->slave_request,
-			     0, srcpath, trace, false,  
+			     srcpath, trace, false,  
 			     MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
-  assert(r == 0);  // we shouldn't get an error here!
+  assert(r == 0);
       
   CDentry *srcdn = trace[trace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;
@@ -3365,7 +3440,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     }
 
     // commit case
-    _rename_prepare(mdr, &le->commit, srcdn, destdn, straydn);
+    bufferlist blah;
+    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
 
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
@@ -3373,8 +3449,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << dendl;
 
     // prepare anyway; this may twiddle dir_auth
-    EMetaBlob blah;
-    _rename_prepare(mdr, &blah, srcdn, destdn, straydn);
+    EMetaBlob blob;
+    bufferlist blah;
+    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn);
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 }
@@ -3672,9 +3749,14 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur) return;
   
   // regular file?
-  if ((cur->inode.mode & INODE_TYPE_MASK) != INODE_MODE_FILE) {
-    dout(7) << "not a regular file " << *cur << dendl;
+  if (!cur->inode.is_file() && !cur->inode.is_dir()) {
+    dout(7) << "not a file or dir " << *cur << dendl;
     reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
+    return;
+  }
+  // can only open a dir rdonly, no flags.
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != 0)) {
+    reply_request(mdr, -EINVAL);
     return;
   }
 
@@ -3939,7 +4021,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   
   // it's a file.
   in->inode.mode = req->head.args.open.mode;
-  in->inode.mode |= INODE_MODE_FILE;
+  in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   
   // prepare finisher

@@ -46,7 +46,7 @@ ostream& CInode::print_db_line_prefix(ostream& out)
 
 ostream& operator<<(ostream& out, CInode& in)
 {
-  string path;
+  filepath path;
   in.make_path(path);
   out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
   if (in.is_auth()) {
@@ -351,10 +351,10 @@ CInode *CInode::get_parent_inode()
 
 
 
-void CInode::make_path(string& s)
+void CInode::make_path_string(string& s)
 {
   if (parent) {
-    parent->make_path(s);
+    parent->make_path_string(s);
   } 
   else if (is_root()) {
     s = "";  // root
@@ -368,6 +368,14 @@ void CInode::make_path(string& s)
   else {
     s = "(dangling)";  // dangling
   }
+}
+
+void CInode::make_path(filepath& fp)
+{
+  if (parent) 
+    parent->make_path(fp);
+  else
+    fp.set_ino(ino());
 }
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
@@ -486,8 +494,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       list<CDir*> dfls;
       get_dirfrags(dfls);
       for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
-	if ((*p)->is_auth())
-	  myfrags.insert((*p)->get_frag());
+	if ((*p)->is_auth()) {
+	  frag_t fg = (*p)->get_frag();
+	  myfrags.insert(fg);
+	}
       _encode(myfrags, bl);
     }
     break;
@@ -501,13 +511,15 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case LOCK_OTYPE_IDIR:
     _encode(inode.mtime, bl);
     if (0) {
-      map<frag_t,int> dfsz;
+      map<frag_t,int> frag_sizes;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
-	if (p->second->is_auth())
-	  dfsz[p->first] = p->second->get_nitems();
-      _encode(dfsz, bl);
+	if (p->second->is_auth()) {
+	  //frag_t fg = (*p)->get_frag();
+	  //frag_sizes[f] = dirfrag_size[fg];
+	}
+      _encode(frag_sizes, bl);
     }
     break;
   
@@ -738,8 +750,8 @@ void CInode::adjust_nested_auth_pins(int a)
 
 pair<int,int> CInode::authority() 
 {
-  if (force_auth.first >= 0) 
-    return force_auth;
+  if (inode_auth.first >= 0) 
+    return inode_auth;
 
   if (parent)
     return parent->dir->authority();
@@ -779,10 +791,6 @@ void CInode::encode_export(bufferlist& bl)
  
   ::_encode_simple(replica_map, bl);
 
-  map<int,Capability::Export>  cap_map;
-  export_client_caps(cap_map);
-  ::_encode_simple(cap_map, bl);
-
   authlock._encode(bl);
   linklock._encode(bl);
   dirfragtreelock._encode(bl);
@@ -803,7 +811,6 @@ void CInode::finish_export(utime_t now)
 }
 
 void CInode::decode_import(bufferlist::iterator& p,
-			   set<int>& new_client_caps, 
 			   LogSegment *ls)
 {
   utime_t old_mtime = inode.mtime;
@@ -826,13 +833,12 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::_decode_simple(replica_map, p);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
-  map<int,Capability::Export>  cap_map;
-  ::_decode_simple(cap_map, p);
-  merge_client_caps(cap_map, new_client_caps);
-
   authlock._decode(p);
   linklock._decode(p);
   dirfragtreelock._decode(p);
   filelock._decode(p);
   dirlock._decode(p);
 }
+
+
+

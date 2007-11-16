@@ -12,42 +12,44 @@
  * 
  */
 
-#ifndef __MDS_EUPDATE_H
-#define __MDS_EUPDATE_H
+#ifndef __MDS_ESESSIONS_H
+#define __MDS_ESESSIONS_H
+
+#include <assert.h>
+#include "config.h"
+#include "include/types.h"
 
 #include "../LogEvent.h"
-#include "EMetaBlob.h"
 
-class EUpdate : public LogEvent {
+class ESessions : public LogEvent {
+protected:
+  version_t cmapv;  // client map version
+
 public:
-  EMetaBlob metablob;
-  string type;
-  bufferlist client_map;
+  map<int,entity_inst_t> client_map;
 
-  EUpdate() : LogEvent(EVENT_UPDATE) { }
-  EUpdate(MDLog *mdlog, const char *s) : 
-    LogEvent(EVENT_UPDATE), metablob(mdlog),
-    type(s) { }
+  ESessions() : LogEvent(EVENT_SESSION) { }
+  ESessions(version_t v) :
+    LogEvent(EVENT_SESSION),
+    cmapv(v) {
+  }
   
-  void print(ostream& out) {
-    if (type.length())
-      out << type << " ";
-    out << metablob;
-  }
-
   void encode_payload(bufferlist& bl) {
-    ::_encode(type, bl);
-    metablob._encode(bl);
     ::_encode(client_map, bl);
-  } 
+    ::_encode(cmapv, bl);
+  }
   void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(type, bl, off);
-    metablob._decode(bl, off);
     ::_decode(client_map, bl, off);
+    ::_decode(cmapv, bl, off);
   }
 
+
+  void print(ostream& out) {
+    out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;
+  }
+  
   void update_segment();
-  void replay(MDS *mds);
+  void replay(MDS *mds);  
 };
 
 #endif

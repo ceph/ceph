@@ -73,6 +73,9 @@
 #define MSG_MDS_EXPORTDIRNOTIFYACK    0x459
 #define MSG_MDS_EXPORTDIRFINISH       0x460
 
+#define MSG_MDS_EXPORTCAPS            0x470
+#define MSG_MDS_EXPORTCAPSACK         0x471
+
 #define MSG_MDS_BEACON             90  // to monitor
 #define MSG_MDS_SLAVE_REQUEST      91
 

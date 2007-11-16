@@ -37,14 +37,14 @@ class ESession : public LogEvent {
   }
   
   void encode_payload(bufferlist& bl) {
-	::_encode(client_inst, bl);
-	::_encode(open, bl);
-	::_encode(cmapv, bl);
+    ::_encode(client_inst, bl);
+    ::_encode(open, bl);
+    ::_encode(cmapv, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
-	::_decode(client_inst, bl, off);
-	::_decode(open, bl, off);
-	::_decode(cmapv, bl, off);
+    ::_decode(client_inst, bl, off);
+    ::_decode(open, bl, off);
+    ::_decode(cmapv, bl, off);
   }
 
 

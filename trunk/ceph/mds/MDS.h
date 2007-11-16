@@ -119,6 +119,8 @@ class MDS : public Dispatcher {
 
   map<int,version_t> peer_mdsmap_epoch;
 
+  tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
+
  public:
   void wait_for_active(Context *c) { 
     waiting_for_active.push_back(c); 
@@ -143,6 +145,8 @@ class MDS : public Dispatcher {
 
   void set_want_state(int s);
 
+  tid_t issue_tid() { return ++last_tid; }
+    
 
   // -- waiters --
   list<Context*> finished_queue;
@@ -223,8 +227,6 @@ class MDS : public Dispatcher {
 
   void send_message_client(Message *m, int client);
   void send_message_client(Message *m, entity_inst_t clientinst);
-  void send_message_client_maybe_opening(Message *m, int);
-  void send_message_client_maybe_open(Message *m, entity_inst_t clientinst);
 
 
   // start up, shutdown

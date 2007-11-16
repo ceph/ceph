@@ -26,6 +26,7 @@ using namespace std;
 #include "include/buffer.h"
 #include "include/lru.h"
 #include "include/xlist.h"
+#include "include/filepath.h"
 #include "mdstypes.h"
 
 #include "SimpleLock.h"
@@ -166,6 +167,7 @@ public:
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int by);
+  bool is_frozen();
   
 
   // dentry type is primary || remote || null
@@ -184,8 +186,8 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path(string& p);
-  void make_path(string& p, inodeno_t tobase);
+  void make_path_string(string& s);
+  void make_path(filepath& fp);
   void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
 
   // -- version --

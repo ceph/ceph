@@ -298,7 +298,8 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
   lock.Unlock();
 
 
-  dout(0) << "fakemessenger " << get_myname() << " messenger is " << this << " at " << _myinst << dendl;
+  dout(0) << "fakemessenger " << get_myname() << " messenger is " << this 
+	  << " at " << get_myaddr() << dendl;
 
   qlen = 0;
 
@@ -348,10 +349,8 @@ int FakeMessenger::shutdown()
 void FakeMessenger::reset_myname(entity_name_t m)
 {
   dout(1) << "reset_myname from " << get_myname() << " to " << m << dendl;
-  _set_myname(m);
-
   _myinst.name = m;
-  
+
   // put myself in the fail queue?
   if (g_fake_kill_after.count(m)) {
     utime_t w = start_time;

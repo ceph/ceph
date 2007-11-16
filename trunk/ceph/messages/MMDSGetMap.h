@@ -18,20 +18,22 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
+#include "include/encodable.h"
 
 class MMDSGetMap : public Message {
  public:
-  MMDSGetMap() : Message(CEPH_MSG_MDS_GETMAP) { }
+  epoch_t have;
+
+  MMDSGetMap(epoch_t h=0) : Message(CEPH_MSG_MDS_GETMAP), have (h) { }
 
   char *get_type_name() { return "mdsgetmap"; }
   
   void encode_payload() {
-    //payload.append((char*)&sb, sizeof(sb));
+    ::_encode_simple(have, payload);
   }
   void decode_payload() {
-    //int off = 0;
-    //payload.copy(off, sizeof(sb), (char*)&sb);
-    //off += sizeof(sb);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(have, p);
   }
 };
 

@@ -264,6 +264,7 @@ enum {
 struct ceph_client_request_head {
 	struct ceph_entity_inst client_inst;
 	__u64 tid, oldest_client_tid;
+	__u64 mdsmap_epoch; /* on client */
 	__u32 num_fwd;
 	__u32 retry_attempt;
 	ceph_ino_t mds_wants_replica_in_dirino;
@@ -324,6 +325,7 @@ struct ceph_client_reply_head {
 	__s32 result;
 	__u32 file_caps;
 	__u64 file_caps_seq;
+	__u64 mdsmap_epoch;
 };
 
 struct ceph_client_reply_inode {

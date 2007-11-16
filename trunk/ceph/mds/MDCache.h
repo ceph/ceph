@@ -132,6 +132,9 @@ struct MDRequest {
     version_t inode_import_v;
     CInode* destdn_was_remote_inode;
     bool was_link_merge;
+
+    map<int,entity_inst_t> imported_client_map;
+    map<CInode*, map<int,Capability::Export> > cap_imports;
     
     // called when slave commits or aborts
     Context *slave_commit;
@@ -493,6 +496,8 @@ public:
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
+  bool shutdown_export_strays();
+  bool shutdown_export_caps();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
   bool did_shutdown_log_cap;
@@ -579,8 +584,7 @@ public:
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
-  int path_traverse(MDRequest *mdr, Message *req, 
-		    CInode *base, filepath& path, 
+  int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
 		    vector<CDentry*>& trace, bool follow_trailing_sym,
                     int onfail);
   bool path_is_mine(filepath& path);
@@ -619,12 +623,13 @@ protected:
   // -- stray --
 public:
   void eval_stray(CDentry *dn);
+  void eval_remote(CDentry *dn);
 protected:
   void _purge_stray(CDentry *dn);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   friend class C_MDC_PurgeStray;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
-  void migrate_stray(CDentry *dn, int dest);
+  void migrate_stray(CDentry *dn, int src, int dest);
 
 
   // == messages ==

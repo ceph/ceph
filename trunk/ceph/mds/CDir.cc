@@ -45,7 +45,7 @@
 
 ostream& operator<<(ostream& out, CDir& dir)
 {
-  string path;
+  filepath path;
   dir.get_inode()->make_path(path);
   out << "[dir " << dir.dirfrag() << " " << path << "/";
   if (dir.is_auth()) {

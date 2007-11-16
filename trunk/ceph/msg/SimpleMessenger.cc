@@ -612,8 +612,6 @@ void Rank::EntityMessenger::reset_myname(entity_name_t newname)
 }
 
 
-
-
 void Rank::EntityMessenger::mark_down(entity_addr_t a)
 {
   rank.mark_down(a);
@@ -621,34 +619,8 @@ void Rank::EntityMessenger::mark_down(entity_addr_t a)
 
 void Rank::mark_down(entity_addr_t addr)
 {
-  //if (my_rank == 0) return;   // ugh.. rank0 already handles this stuff in the namer
   lock.Lock();
-  /*
-  if (entity_map.count(a) &&
-      entity_map[a] > inst) {
-    dout(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << dendl;
-    derr(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << dendl;
-    // do nothing!
-  } else {
-    if (entity_map.count(a) == 0) {
-      // don't know it
-      dout(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << dendl;
-      derr(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << dendl;
-    } else {
-      // know it
-      assert(entity_map[a] <= inst);
-      dout(10) << "mark_down " << a << " inst " << inst << dendl;
-      derr(10) << "mark_down " << a << " inst " << inst << dendl;
-      
-      entity_map.erase(a);
-      
-      if (rank_pipe.count(inst)) {
-	rank_pipe[inst]->close();
-	rank_pipe.erase(inst);
-      }
-    }
-  }
-  */
+  // FIXME
   lock.Unlock();
 }
 

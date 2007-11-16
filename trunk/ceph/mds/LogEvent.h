@@ -17,18 +17,20 @@
 
 #define EVENT_STRING       1
 
-#define EVENT_SESSION      7
 #define EVENT_SUBTREEMAP   2
-#define EVENT_EXPORT       30
-#define EVENT_IMPORTSTART  31
-#define EVENT_IMPORTFINISH 32
-#define EVENT_FRAGMENT     33
+#define EVENT_EXPORT       3
+#define EVENT_IMPORTSTART  4
+#define EVENT_IMPORTFINISH 5
+#define EVENT_FRAGMENT     6
 
-#define EVENT_UPDATE       3
-#define EVENT_SLAVEUPDATE  4
-#define EVENT_OPEN         5
+#define EVENT_SESSION      10
+#define EVENT_SESSIONS     11
 
-#define EVENT_PURGEFINISH  22
+#define EVENT_UPDATE       20
+#define EVENT_SLAVEUPDATE  21
+#define EVENT_OPEN         22
+
+#define EVENT_PURGEFINISH  30
 
 #define EVENT_ANCHOR       40
 #define EVENT_ANCHORCLIENT 41

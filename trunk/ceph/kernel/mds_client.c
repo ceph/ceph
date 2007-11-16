@@ -233,7 +233,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 
 struct ceph_msg *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
-			 ceph_ino_t baseino, const char *path, const char *path2)
+			 ceph_ino_t ino1, const char *path1, 
+			 ceph_ino_t ino2, const char *path2)
 {
 	struct ceph_msg *req;
 	struct ceph_client_request_head *head;
@@ -241,7 +242,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
 			   sizeof(struct ceph_client_request_head) +
-			   sizeof(baseino) + strlen(path) + 1 + strlen(path2) + 1,
+			   sizeof(ino1)*2 + strlen(path) + strlen(path2) + 2
 			   0, 0);
 	if (IS_ERR(req))
 		return req;
@@ -256,9 +257,10 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/*FIXME: head->oldest_client_tid = cpu_to_le64(....);*/  
 
 	/* encode paths */
-	ceph_encode_64(&p, end, baseino);
-	memcpy(p, path, strlen(path)+1);
-	p += strlen(path)+1;
+	ceph_encode_64(&p, end, ino1);
+	memcpy(p, path1, strlen(path1)+1);
+	p += strlen(path1)+1;
+	ceph_encode_64(&p, end, ino2);
 	memcpy(p, path2, strlen(path2)+1);
 	p += strlen(path2)+1;
 	BUG_ON(p != end);

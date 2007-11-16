@@ -19,12 +19,14 @@
 // events i know of
 #include "events/EString.h"
 
-#include "events/ESession.h"
 #include "events/ESubtreeMap.h"
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
+
+#include "events/ESession.h"
+#include "events/ESessions.h"
 
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
@@ -55,12 +57,14 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   switch (type) {
   case EVENT_STRING: le = new EString; break;
 
-  case EVENT_SESSION: le = new ESession; break;
   case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
   case EVENT_EXPORT: le = new EExport; break;
   case EVENT_IMPORTSTART: le = new EImportStart; break;
   case EVENT_IMPORTFINISH: le = new EImportFinish; break;
   case EVENT_FRAGMENT: le = new EFragment; break;
+
+  case EVENT_SESSION: le = new ESession; break;
+  case EVENT_SESSIONS: le = new ESessions; break;
 
   case EVENT_UPDATE: le = new EUpdate; break;
   case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
