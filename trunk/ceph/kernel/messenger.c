@@ -292,14 +292,17 @@ static void prepare_write_message(struct ceph_connection *con)
 	list_add(&m->list_head, &con->out_sent);
 	con->out_msg = m;
 
+	/* encode header */
+	ceph_encode_header(&con->out_hdr, &m->hdr);
+
 	/* tag + hdr + front */
 	con->out_kvec[0].iov_base = &tag_msg;
 	con->out_kvec[0].iov_len = 1;
-	con->out_kvec[1].iov_base = &m->hdr;
-	con->out_kvec[1].iov_len = sizeof(m->hdr);
+	con->out_kvec[1].iov_base = &con->out_hdr;
+	con->out_kvec[1].iov_len = sizeof(con->out_hdr);
 	con->out_kvec[2] = m->front;
 	con->out_kvec_left = 3;
-	con->out_kvec_bytes = 1 + sizeof(m->hdr) + m->front.iov_len;
+	con->out_kvec_bytes = 1 + sizeof(con->out_hdr) + m->front.iov_len;
 	con->out_kvec_cur = con->out_kvec;
 
 	/* pages */
@@ -440,6 +443,11 @@ static int read_message_partial(struct ceph_connection *con)
 		ret = _krecvmsg(con->sock, &m->hdr + con->in_base_pos, left, 0);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
+		if (con->in_base_pos == sizeof(struct ceph_msg_header)) {
+			/* decode/swab */
+			ceph_decode_header(&m->hdr);
+			break;
+		}
 	}
 
 	/* front */

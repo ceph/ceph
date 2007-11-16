@@ -81,7 +81,7 @@ struct ceph_connection {
 
 	/* out queue */
 	struct list_head out_queue;
-
+	struct ceph_msg_header out_hdr;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
@@ -114,22 +114,23 @@ extern void ceph_msg_put(struct ceph_msg *msg);
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg);
 
 
+/* encoding/decoding helpers */
 static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
-	if (*p + sizeof(v) > end)
+	if (*p + sizeof(*v) > end)
 		return -EINVAL;
 	*v = le64_to_cpu(*(__u64*)p);
 	p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_32(void **p, void *end, __u32 *v) {
-	if (*p + sizeof(v) > end)
+	if (*p + sizeof(*v) > end)
 		return -EINVAL;
 	*v = le32_to_cpu(*(__u32*)p);
 	p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_16(void **p, void *end, __u16 *v) {
-	if (*p + sizeof(v) > end)
+	if (*p + sizeof(*v) > end)
 		return -EINVAL;
 	*v = le16_to_cpu(*(__u16*)p);
 	p += sizeof(*v);
@@ -155,6 +156,53 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 	return 0;
 }
 
+static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
+	if (*p + sizeof(*v) > end)
+		return -EINVAL;
+	v->type = le32_to_cpu(*(__u32*)p);
+	p += sizeof(__u32);
+	v->num = le32_to_cpu(*(__u32*)p);
+	p += sizeof(__u32);
+	return 0;
+}
+
+/* hmm, these are actually identical, yeah? */
+static __inline__ void ceph_decode_inst(struct ceph_entity_inst *to)
+{
+	to->name.type = le32_to_cpu(to->name.type);
+	to->name.num = le32_to_cpu(to->name.num);
+	to->addr.erank = le32_to_cpu(to->addr.erank);
+	to->addr.nonce = le32_to_cpu(to->addr.nonce);
+}
+static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph_entity_inst *from)
+{
+	to->name.type = cpu_to_le32(from->name.type);
+	to->name.num = cpu_to_le32(from->name.num);
+	to->addr.erank = cpu_to_le32(from->addr.erank);
+	to->addr.nonce = cpu_to_le32(from->addr.nonce);
+	to->addr.ipaddr = from->addr.ipaddr;
+}
+
+static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct ceph_msg_header *from)
+{
+	to->seq = cpu_to_le32(from->seq);
+	to->type = cpu_to_le32(from->type);
+	ceph_encode_inst(&to->src, &from->src);
+	ceph_encode_inst(&to->dst, &from->dst);
+	to->front_len = cpu_to_le16(from->front_len);
+	to->data_off = cpu_to_le16(from->data_off);
+	to->data_len = cpu_to_le16(from->data_len);
+}
+static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
+{
+	to->seq = cpu_to_le32(to->seq);
+	to->type = cpu_to_le32(to->type);
+	ceph_decode_inst(&to->src);
+	ceph_decode_inst(&to->dst);
+	to->front_len = cpu_to_le16(to->front_len);
+	to->data_off = cpu_to_le16(to->data_off);
+	to->data_len = cpu_to_le16(to->data_len);
+}
 
 
 #endif
