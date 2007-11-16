@@ -125,14 +125,7 @@ struct InodeStat {
 
 class MClientReply : public Message {
   // reply data
-  struct st_ {
-    long tid;
-    int op;
-    int result;  // error code
-    unsigned char file_caps;  // for open
-    long          file_caps_seq;
-    uint64_t file_data_version;  // for client buffercache consistency
-  } st;
+  struct ceph_client_reply_head st;
  
   string path;
 
@@ -158,12 +151,12 @@ class MClientReply : public Message {
 
   unsigned char get_file_caps() { return st.file_caps; }
   long get_file_caps_seq() { return st.file_caps_seq; }
-  uint64_t get_file_data_version() { return st.file_data_version; }
+  //uint64_t get_file_data_version() { return st.file_data_version; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
-  void set_file_data_version(uint64_t v) { st.file_data_version = v; }
+  //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   MClientReply() : dir_dir(0) {}
   MClientReply(MClientRequest *req, int result = 0) : 

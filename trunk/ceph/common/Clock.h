@@ -55,15 +55,18 @@ class Clock {
 
   // relative time (from startup)
   void tare() {
-    gettimeofday(&zero.timeval(), NULL);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    zero.set_from_timeval(&tv);
   }
   void tare(utime_t z) {
     zero = z;
   }
   utime_t now() {
     //lock.Lock();  
-    utime_t n;
-    gettimeofday(&n.timeval(), NULL);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    utime_t n(&tv);
     n -= zero;
     if (n < last) {
       //std::cerr << "WARNING: clock jumped backwards from " << last << " to " << n << std::endl;

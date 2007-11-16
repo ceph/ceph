@@ -18,19 +18,17 @@
 #include <math.h>
 #include <sys/time.h>
 #include <time.h>
+#include "ceph_fs.h"
 
 // --------
 // utime_t
 
-typedef struct timeval _utime_t;
+typedef struct ceph_timeval _utime_t;
 
 class utime_t {
- private:
-  struct timeval tv;
+  _utime_t tv;
 
-  struct timeval& timeval()  { return tv; }
   friend class Clock;
-
  
  public:
   void normalize() {
@@ -45,12 +43,17 @@ class utime_t {
   //utime_t(time_t s) { tv.tv_sec = s; tv.tv_usec = 0; }
   utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
   utime_t(const _utime_t &v) : tv(v) {}
-  /*
-  utime_t(double d) { 
-    tv.tv_sec = (time_t)trunc(d);
-    tv.tv_usec = (__suseconds_t)((d - tv.tv_sec) / (double)1000000.0);
+  utime_t(const struct timeval &v) {
+    set_from_timeval(&v);
   }
-  */
+  utime_t(const struct timeval *v) {
+    set_from_timeval(v);
+  }
+
+  void set_from_double(double d) { 
+    tv.tv_sec = (__u32)trunc(d);
+    tv.tv_usec = (__u32)((d - tv.tv_sec) / (double)1000000.0);
+  }
 
   // accessors
   time_t        sec()  const { return tv.tv_sec; } 
@@ -58,12 +61,21 @@ class utime_t {
   int           nsec() const { return tv.tv_usec*1000; }
 
   // ref accessors/modifiers
-  time_t&         sec_ref()  { return tv.tv_sec; }
-  // FIXME: tv.tv_usec is a __darwin_suseconds_t on Darwin.
-  // is just casting it to long& OK? 
-  long&           usec_ref() { return (long&) tv.tv_usec; }
+  __u32&         sec_ref()  { return tv.tv_sec; }
+  __u32&         usec_ref() { return tv.tv_usec; }
 
-  struct timeval& tv_ref() { return tv; }
+  void copy_to_timeval(struct timeval *v) const {
+    v->tv_sec = tv.tv_sec;
+    v->tv_usec = tv.tv_usec;
+  }
+  void set_from_timeval(const struct timeval *v) {
+    tv.tv_sec = v->tv_sec;
+    tv.tv_usec = v->tv_usec;
+  }
+  //struct timeval& timeval()  { return tv; }
+  //struct timeval& tv_ref() { return tv; }
+
+  struct ceph_timeval& tv_ref() { return tv; }
 
   // cast to double
   operator double() {

@@ -3709,7 +3709,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   int cmode = req->get_open_file_mode();
 
   // can we issue the caps they want?
-  version_t fdv = mds->locker->issue_file_data_version(cur);
+  //version_t fdv = mds->locker->issue_file_data_version(cur);
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, req);
   if (!cap) return; // can't issue (yet), so wait!
   
@@ -3730,7 +3730,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
-  reply->set_file_data_version(fdv);
+  //reply->set_file_data_version(fdv);
   reply_request(mdr, reply, cur);
 
   // journal?

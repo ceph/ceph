@@ -73,19 +73,7 @@
 
 
 class MClientRequest : public Message {
-  struct {
-    tid_t tid;
-    tid_t oldest_client_tid;
-    int num_fwd;
-    int retry_attempt;
-    inodeno_t  mds_wants_replica_in_dirino;
-
-    entity_inst_t client_inst;
-
-    int op;
-    int caller_uid, caller_gid;
-    inodeno_t cwd_ino;
-  } st;
+  struct ceph_client_request_head st;
 
   // path arguments
   filepath path;
@@ -93,49 +81,7 @@ class MClientRequest : public Message {
 
  public:
   // fixed size arguments.  in a union.
-  // note: nothing with a constructor can go here; use underlying base 
-  // types for _inodeno_t, _frag_t.
-  union {
-    struct {
-      int mask;
-    } stat;
-    struct {
-      _inodeno_t ino;
-      int mask;
-    } fstat;
-    struct {
-      _frag_t frag;
-    } readdir;
-    struct {
-      _utime_t mtime;
-      _utime_t atime;
-    } utime;
-    struct {
-      mode_t mode;
-    } chmod; 
-    struct {
-      uid_t uid;
-      gid_t gid;
-    } chown;
-    struct {
-      mode_t mode;
-      dev_t rdev;
-    } mknod; 
-    struct {
-      mode_t mode;
-    } mkdir; 
-    struct {
-      int flags;
-      mode_t mode;
-    } open;
-    struct {
-      _inodeno_t ino;  // optional
-      off_t length;
-    } truncate;
-    struct {
-      _inodeno_t ino;
-    } fsync;
-  } args;
+  union ceph_client_request_args args;
 
   // cons
   MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
@@ -143,12 +89,13 @@ class MClientRequest : public Message {
     memset(&st, 0, sizeof(st));
     memset(&args, 0, sizeof(args));
     this->st.op = op;
-    this->st.client_inst = ci;
+    this->st.client_inst.name = ci.name.v;
+    this->st.client_inst.addr = ci.addr.v;
   }
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(st.client_inst.name.num(), st.tid); 
+    return metareqid_t(st.client_inst.name.num, st.tid); 
   }
 
   int get_open_file_mode() {
@@ -222,10 +169,15 @@ class MClientRequest : public Message {
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     st.mds_wants_replica_in_dirino = dirino; }
   
-  void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
-  const entity_inst_t& get_client_inst() { return st.client_inst; }
+  void set_client_inst(const entity_inst_t& i) { 
+    st.client_inst.name = i.name.v; 
+    st.client_inst.addr = i.addr.v; 
+  }
+  entity_inst_t get_client_inst() { 
+    return entity_inst_t(st.client_inst);
+  }
 
-  int get_client() { return st.client_inst.name.num(); }
+  int get_client() { return st.client_inst.name.num; }
   tid_t get_tid() { return st.tid; }
   tid_t get_oldest_client_tid() { return st.oldest_client_tid; }
   int get_num_fwd() { return st.num_fwd; }
@@ -240,7 +192,7 @@ class MClientRequest : public Message {
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return st.mds_wants_replica_in_dirino; }
 
-  inodeno_t get_cwd_ino() { return st.cwd_ino ? st.cwd_ino:inodeno_t(MDS_INO_ROOT); }
+  inodeno_t get_cwd_ino() { return st.cwd_ino ? st.cwd_ino:MDS_INO_ROOT; }
 
   void decode_payload() {
     int off = 0;
