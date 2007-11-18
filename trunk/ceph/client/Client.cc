@@ -2207,11 +2207,11 @@ int Client::opendir(const char *name, DIR **dirpp)
 
 int Client::_opendir(const char *name, DirResult **dirpp) 
 {
-  *dirpp = new DirResult(name);
+  filepath path(name, 1);   // FIXME: always relative to root, for now.
+  *dirpp = new DirResult(path);
 
   // do we have the inode in our cache?  
   // if so, should be we ask for a different dirfrag?
-  filepath path(name);
   Dentry *dn = lookup(path);
   if (dn && dn->inode) {
     (*dirpp)->inode = dn->inode;
@@ -2302,7 +2302,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << dendl;
 
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
-  req->set_path(dirp->path); 
+  req->set_filepath(dirp->path); 
   req->head.args.readdir.frag = fg;
   
   // FIXME where does FUSE maintain user information

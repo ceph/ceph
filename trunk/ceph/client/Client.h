@@ -383,15 +383,12 @@ class Client : public Dispatcher {
     static const int64_t MASK = (1 << SHIFT) - 1;
     static const off_t END = 1ULL << (SHIFT + 32);
 
-    string path;
+    filepath path;
     Inode *inode;
     int64_t offset;   // high bits: frag_t, low bits: an offset
     map<frag_t, vector<DirEntry> > buffer;
 
-    DirResult(const char *p, Inode *in=0) : path(p), inode(in), offset(0) { 
-      if (inode) inode->get();
-    }
-    DirResult(const string &p, Inode *in=0) : path(p), inode(in), offset(0) { 
+    DirResult(const filepath &fp, Inode *in=0) : path(fp), inode(in), offset(0) { 
       if (inode) inode->get();
     }
 
