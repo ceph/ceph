@@ -214,5 +214,24 @@ static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 	return 0;
 }
 
+static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
+	BUG_ON(*p + sizeof(v) > end);
+	*(__u32*)p = cpu_to_le64(v);
+	p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, const char *path)
+{
+	__u32 len = strlen(path);
+	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
+	ceph_encode_64(p, end, ino);
+	ceph_encode_32(p, end, len);
+	memcpy(*p, path, len);
+	*p += len;
+}
+
+
+
 
 #endif

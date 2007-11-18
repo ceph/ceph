@@ -232,9 +232,9 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 
 
 struct ceph_msg *
-ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
-			 ceph_ino_t ino1, const char *path1, 
-			 ceph_ino_t ino2, const char *path2)
+ceph_mdsc_create_request_msg(struct ceph_mds_client *mdsc, int op, 
+			     ceph_ino_t ino1, const char *path1, 
+			     ceph_ino_t ino2, const char *path2)
 {
 	struct ceph_msg *req;
 	struct ceph_client_request_head *head;
@@ -242,7 +242,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
 			   sizeof(struct ceph_client_request_head) +
-			   sizeof(ino1)*2 + strlen(path) + strlen(path2) + 2
+			   sizeof(ino1)*2 + sizeof(__u32)*2 + strlen(path) + strlen(path2)
 			   0, 0);
 	if (IS_ERR(req))
 		return req;
@@ -257,12 +257,9 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/*FIXME: head->oldest_client_tid = cpu_to_le64(....);*/  
 
 	/* encode paths */
-	ceph_encode_64(&p, end, ino1);
-	memcpy(p, path1, strlen(path1)+1);
-	p += strlen(path1)+1;
-	ceph_encode_64(&p, end, ino2);
-	memcpy(p, path2, strlen(path2)+1);
-	p += strlen(path2)+1;
+	ceph_encode_filepath(&p, end, ino1, path1);
+	ceph_encode_filepath(&p, end, ino2, path2);
+
 	BUG_ON(p != end);
 	
 	return req;
@@ -335,17 +332,24 @@ retry:
 void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
+	struct ceph_client_reply_head *head = msg->front.iov_base;
 	__u64 tid;
+	int result;
 
-	/* decode */
-	
+	/* extract tid */
+	if (msg->front.iov_len < sizeof(*head)) {
+		dout(1, "got corrupt (short) reply\n");
+		goto done;
+	}
+	tid = le64_to_cpu(head->tid);
 
-	/* handle */
+	/* pass to blocked caller */
 	spin_lock(&mdsc->lock);
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
 	if (!req) {
 		spin_unlock(&mdsc->lock);
-		return;
+		dout(1, "got reply on unknown tid %llu\n", tid);
+		goto done;
 	}
 
 	get_request(req);
@@ -355,6 +359,152 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	complete(&req->r_completion);
 	put_request(req);
+	
+done:
+	ceph_msg_put(msg);
+	return;
+}
+
+struct reply_info {
+	int trace_nr;
+	struct ceph_client_reply_inode **trace_in;
+	struct ceph_client_reply_dir **trace_dir;
+	char **trace_dname;
+	__u32 *trace_dname_len;
+
+	struct ceph_client_reply_dir *dir_dir;
+	int dir_nr;
+	struct ceph_client_reply_inode **dir_in;
+	char **dir_dname;
+	__u32 *dir_dname_len;
+};
+
+int parse_reply_info_trace(void **p, void *end, struct reply_info *info)
+{
+	__u32 numi, i = 0;
+	int err = -EINVAL;
+
+	if ((err = ceph_decode_32(&p, end, &numi)) < 0)
+		goto bad;
+	if (numi == 0) 
+		goto done;   /* hrm, this shouldn't actually happen, but.. */
+	
+	/* alloc one longer shared array */
+	info->trace_nr = numi;
+	info->trace_in = kmalloc(4 * numi * sizeof(void*), GFP_KERNEL);
+	if (info->trace_in == NULL)
+		return -ENOMEM;
+	info->trace_dir = info->trace_in + numi;
+	info->trace_dname = info->trace_in + numi*2;
+	info->trace_dname_len = info->trace_in + numi*3;
+
+	while (1) {
+		/* inode */
+		info->trace_in[numi-1] = p;
+		p += sizeof(struct ceph_client_reply_inode);
+		if (--numi == 0)
+			break;
+		
+		if ((err == ceph_decode_32(&p, end, &info->trace_dname_len[numi])) < 0)
+			goto bad;
+		info->trace_dname[numi] = p;
+		p += info->trace_dname_len[numi];
+		if (p > end)
+			goto bad;
+	}
+
+done:
+	if (p != end)
+		return bad;
+	return 0;
+	
+bad:
+	derr(1, "problem parsing trace %d %s\n", err, strerror(err));
+	return err;
+}
+
+int parse_reply_info_dir(void **p, void *end, struct reply_info *info)
+{
+	__u32 num, i = 0;
+	int err = -EINVAL;
+
+	info->dir_dir = p;
+	p += sizeof(*info->dir_dir);
+	if (p > end) 
+		goto bad;
+
+	if ((err = ceph_decode_32(&p, end, &num)) < 0)
+		goto bad;
+	if (num == 0)
+		goto done;
+
+	/* alloc large array */
+	info->dir_nr = num;
+	info->dir_in = kmalloc(3 * num * sizeof(void*), GFP_KERNEL);
+	if (info->dir_in == NULL)
+		return -ENOMEM;
+	info->dir_dname = info->trace_in + num;
+	info->dir_dname_len = info->trace_in + num*2;
+
+	while (num) {
+		if ((err == ceph_decode_32(&p, end, &info->dir_dname_len[i])) < 0)
+			goto bad;
+		info->dir_dname[i] = p;
+		p += info->dir_dname_len[i];
+		if (p > end)
+			goto bad;
+		info->dir_in[i] = p;
+		p += sizeof(struct ceph_reply_inode_info);
+		if (p > end)
+			goto bad;
+		i++;
+		num--;
+	}
+
+done:
+	return 0;
+
+bad:
+	derr(1, "problem parsing dir contents %d %s\n", err, strerror(err));
+	return err;
+}
+
+
+int parse_reply_info(struct ceph_msg *msg, struct reply_info *info)
+{
+	void *p, *end;
+	__u32 len, numi = 0;
+	int err = -EINVAL;
+
+	memset(info, 0, sizeof(*info));
+	
+	/* trace */
+	p = msg->front.iov_base + sizeof(struct ceph_client_reply_head);
+	if ((err = ceph_decode_32(&p, end, &len)) < 0)
+		goto bad;
+	if (len > 0 &&
+	    (p + len > end ||
+	     (err = parse_reply_info_trace(&p, p+len, info)) < 0))
+		goto bad;
+
+	/* dir content */
+	if ((err = ceph_decode_32(&p, end, &len)) < 0)
+		goto bad;
+	if (len > 0 &&
+	    (p + len > end ||
+	     (err = parse_reply_info_dir(&p, p+len, info)) < 0))
+		goto bad;
+
+	return 0;
+bad:
+	derr(1, "problem parsing reply info %d %s\n", err, strerror(err));
+	return err;
+}
+
+void destroy_reply_info(struct reply_info *info)
+{
+	if (info->trace_in) kfree(info->trace_in);
+	if (info->dir_in) kfree(info->dir_in);
 }
 
 void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
