@@ -1607,11 +1607,10 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // build dir contents
-  bufferlist dirbl;
-
+  bufferlist dirbl, dnbl;
   DirStat::_encode(dirbl, dir, mds->get_nodeid());
 
-  int numfiles = 0;
+  __u32 numfiles = 0;
   for (CDir::map_t::iterator it = dir->begin(); 
        it != dir->end(); 
        it++) {
@@ -1645,12 +1644,15 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(12) << "including inode " << *in << dendl;
     
     // add this dentry + inodeinfo
-    ::_encode(it->first, dirbl);
-    InodeStat::_encode(dirbl, in);
+    ::_encode(it->first, dnbl);
+    InodeStat::_encode(dnbl, in);
+    numfiles++;
 
     // touch it
     mdcache->lru.lru_touch(dn);
   }
+  ::_encode_simple(numfiles, dirbl);
+  dirbl.claim_append(dnbl);
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);

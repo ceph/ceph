@@ -127,8 +127,6 @@ class MClientReply : public Message {
   // reply data
   struct ceph_client_reply_head st;
  
-  string path;
-
   list<InodeStat*> trace_in;
   list<DirStat*>   trace_dir;
   list<string>     trace_dn;
@@ -147,7 +145,6 @@ class MClientReply : public Message {
   epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
 
   int get_result() { return st.result; }
-  const string& get_path() { return path; }
 
   inodeno_t get_ino() { return trace_in.back()->inode.ino; }
   const inode_t& get_inode() { return trace_in.back()->inode; }
@@ -167,7 +164,6 @@ class MClientReply : public Message {
     memset(&st, 0, sizeof(st));
     this->st.tid = req->get_tid();
     this->st.op = req->get_op();
-    this->path = req->get_path();
 
     this->st.result = result;
   }
@@ -192,14 +188,12 @@ class MClientReply : public Message {
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::_decode_simple(st, p);
-    ::_decode_simple(path, p);
     ::_decode_simple(trace_bl, p);
     ::_decode_simple(dir_bl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
     ::_encode_simple(st, payload);
-    ::_encode_simple(path, payload);
     ::_encode_simple(trace_bl, payload);
     ::_encode_simple(dir_bl, payload);
   }
@@ -212,12 +206,15 @@ class MClientReply : public Message {
   void _decode_dir() {
     bufferlist::iterator p = dir_bl.begin();
     dir_dir = new DirStat(p);
-    while (!p.end()) {
+    __u32 num;
+    ::_decode_simple(num, p);
+    while (num--) {
       string dn;
       ::_decode_simple(dn, p);
       dir_dn.push_back(dn);
       dir_in.push_back(new InodeStat(p));
     }
+    assert(p.end());
   }
 
   const list<InodeStat*>& get_dir_in() { 
@@ -236,30 +233,41 @@ class MClientReply : public Message {
   // trace
   void set_trace_dist(CInode *in, int whoami) {
     // inode, dentry, dir, ..., inode
-    while (in) {
-      InodeStat::_encode(trace_bl, in);
-      CDentry *dn = in->get_parent_dn();
-      if (!dn) break;
-      ::_encode_simple(in->get_parent_dn()->get_name(), trace_bl);
-      DirStat::_encode(trace_bl, dn->get_dir(), whoami);
-      in = dn->get_dir()->get_inode();
-    }
+    bufferlist bl;
+    __u32 numi = 0;
+    if (in) 
+      while (true) {
+	// inode
+	InodeStat::_encode(bl, in);
+	numi++;
+	CDentry *dn = in->get_parent_dn();
+	if (!dn) break;
+
+	// dentry, dir
+	::_encode_simple(in->get_parent_dn()->get_name(), bl);
+	DirStat::_encode(bl, dn->get_dir(), whoami);
+	in = dn->get_dir()->get_inode();
+      }
+    ::_encode_simple(numi, trace_bl);
+    trace_bl.claim_append(bl);
   }
   void _decode_trace() {
     bufferlist::iterator p = trace_bl.begin();
-    while (!p.end()) {
-      // inode
-      trace_in.push_front(new InodeStat(p));
-      if (!p.end()) {
-	// dentry
+    __u32 numi;
+    ::_decode_simple(numi, p);
+    if (numi) 
+      while (1) {
+	// inode
+	trace_in.push_front(new InodeStat(p));
+	if (--numi == 0) break;
+
+	// dentry, dir
 	string ref_dn;
 	::_decode_simple(ref_dn, p);
 	trace_dn.push_front(ref_dn);
-
-	// dir
 	trace_dir.push_front(new DirStat(p));
       }
-    }
+    assert(p.end());
   }
 
   const list<InodeStat*>& get_trace_in() { 
