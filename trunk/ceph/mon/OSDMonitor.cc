@@ -479,19 +479,22 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   // weird?
   if (!osdmap.have_inst(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << dendl;
-    send_incremental(m->get_from(), m->get_epoch()+1);
+    if (m->get_epoch() < osdmap.get_epoch())
+      send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
   if (osdmap.get_inst(badboy) != m->get_failed()) {
     dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_from() << dendl;
-    send_incremental(m->get_from(), m->get_epoch()+1);
+    if (m->get_epoch() < osdmap.get_epoch())
+      send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
   // already reported?
   if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << dendl;
-    send_incremental(m->get_from(), m->get_epoch()+1);
+    if (m->get_epoch() < osdmap.get_epoch())
+      send_incremental(m->get_from(), m->get_epoch()+1);
     return true;
   }
 
@@ -758,29 +761,6 @@ void OSDMonitor::tick()
 
 
 
-
-
-/*
-void OSDMonitor::init()
-{
-  // start with blank map
-
-  // load my last state from the store
-  bufferlist bl;
-  if (get_map_bl(0, bl)) {  // FIXME
-    // yay!
-    osdmap.decode(bl);
-    dout(1) << "init got epoch " << osdmap.get_epoch() << " from store" << dendl;
-
-    // set up pending_inc
-    pending_inc.epoch = osdmap.get_epoch()+1;
-  }
-}
-*/
-
-
-
-
 void OSDMonitor::mark_all_down()
 {
   assert(mon->is_leader());
@@ -799,47 +779,3 @@ void OSDMonitor::mark_all_down()
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-
-
-void OSDMonitor::election_finished()
-{
-  dout(10) << "election_finished" << dendl;
-
-  if (mon->is_leader()) {
-    if (g_conf.mkfs) {
-      create_initial();
-      save_map();
-    } else {
-      //
-      epoch_t epoch = mon->store->get_int("osd_epoch");
-      dout(10) << " last epoch was " << epoch << dendl;
-      bufferlist bl, blinc;
-      int r = mon->store->get_bl_sn(bl, "osdmap_full", epoch);
-      assert(r>0);
-      osdmap.decode(bl);
-
-      // pending_inc
-      pending_inc.epoch = epoch+1;
-    }
-
-  }
-
-}
-
-
-
-*/

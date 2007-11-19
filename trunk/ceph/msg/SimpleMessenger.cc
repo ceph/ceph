@@ -587,8 +587,7 @@ void Rank::EntityMessenger::prepare_dest(const entity_addr_t& addr)
 int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source(get_myname());
-  m->set_source_addr(_myinst.addr);
+  m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
  
   dout(1) << m->get_source()

@@ -898,12 +898,18 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
     messenger->send_message(m, monmap->get_inst(mon));
   } 
   else if (dest.is_osd()) {
-    int mon = monmap->pick_mon();
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping and reporting to mon" << mon 
-            << dendl;
-    messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
-                            monmap->get_inst(mon));
+    if (!osdmap->have_inst(dest.num()) ||
+	(osdmap->get_inst(dest.num()) != inst)) {
+      dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+	      << ", dropping, already have newer osdmap" << dendl;
+    } else {
+      int mon = monmap->pick_mon();
+      dout(0) << "ms_handle_failure " << dest << " inst " << inst 
+	      << ", dropping, reporting to mon" << mon 
+	      << dendl;
+      messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
+			      monmap->get_inst(mon));
+    }
     delete m;
   } else {
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 

@@ -1021,13 +1021,20 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 
   if (dest.is_osd()) {
     // failed osd.  drop message, report to mon.
-    int mon = monmap->pick_mon();
-    dout(1) << "ms_handle_failure " << inst 
-            << ", dropping and reporting to mon" << mon 
-	    << " " << *m
-            << dendl;
-    messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()),
-                            monmap->get_inst(mon));
+    if (!osdmap->have_inst(dest.num()) ||
+	(osdmap->get_inst(dest.num()) != inst)) {
+      dout(1) << "ms_handle_failure " << inst 
+	      << ", already dropped/changed in osdmap, dropping " << *m
+	      << dendl;
+    } else {
+      int mon = monmap->pick_mon();
+      dout(1) << "ms_handle_failure " << inst 
+	      << ", dropping and reporting to mon" << mon 
+	      << " " << *m
+	      << dendl;
+      messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()),
+			      monmap->get_inst(mon));
+    }
     delete m;
   } else if (dest.is_mon()) {
     // resend to a different monitor.

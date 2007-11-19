@@ -13,7 +13,7 @@ using std::ostream;
 inline ostream& operator<<(ostream& out, const sockaddr_in &a)
 {
   unsigned char *addr = (unsigned char*)&a.sin_addr.s_addr;
-  out << "(" << a.sin_family << ")";
+  //out << "(" << a.sin_family << ")";
   out << (unsigned)addr[0] << "."
       << (unsigned)addr[1] << "."
       << (unsigned)addr[2] << "."
