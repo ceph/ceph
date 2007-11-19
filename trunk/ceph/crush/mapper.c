@@ -131,7 +131,7 @@ crush_bucket_straw_choose(struct crush_bucket_straw *bucket, int x, int r)
 static int crush_choose(struct crush_map *map,
 			struct crush_bucket *bucket,
 			int x, int numrep, int type,
-			int *out, int firstn)
+			int *out, int outpos, int firstn)
 {
 	int rep;
 	int ftotal, flocal;
@@ -141,12 +141,9 @@ static int crush_choose(struct crush_map *map,
 	int i;
 	int item;
 	int itemtype;
-	int outpos;
 	int collide, bad;
 	
-	outpos = 0;
-
-	for (rep = 0; rep < numrep; rep++) {
+	for (rep = outpos; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
 		skip_rep = 0;
@@ -265,7 +262,7 @@ int crush_do_rule(struct crush_map *map,
 	int *tmp;
 	struct crush_rule *rule;
 	int step;
-	int i;
+	int i,j;
 	int numrep;
 	
 	rule = map->rules[ruleno];
@@ -312,16 +309,17 @@ int crush_do_rule(struct crush_map *map,
 			
 			for (i = 0; i < wsize; i++) {
 				numrep = rule->steps[step].arg1;
-				if (force_pos >= 0) {
+				j = 0;
+				if (osize == 0 && force_pos >= 0) {
 					o[osize++] = force_stack[force_pos];
 					force_pos--;
-					numrep--;
+					j++;
+					if (j == numrep) continue;  /* apparently numrep == 1 */
 				}
-				if (!numrep) continue;
 				osize += crush_choose(map,
 						      map->buckets[-1-w[i]],
 						      x, numrep, rule->steps[step].arg2,
-						      o+osize, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
+						      o+osize-j, j, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
 			}
 			
 			/* swap t and w arrays */
