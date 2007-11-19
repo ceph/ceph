@@ -311,15 +311,14 @@ int crush_do_rule(struct crush_map *map,
 				numrep = rule->steps[step].arg1;
 				j = 0;
 				if (osize == 0 && force_pos >= 0) {
-					o[osize++] = force_stack[force_pos];
+					o[osize] = force_stack[force_pos];
 					force_pos--;
 					j++;
-					if (j == numrep) continue;  /* apparently numrep == 1 */
 				}
 				osize += crush_choose(map,
 						      map->buckets[-1-w[i]],
 						      x, numrep, rule->steps[step].arg2,
-						      o+osize-j, j, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
+						      o+osize, j, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
 			}
 			
 			/* swap t and w arrays */
