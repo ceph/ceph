@@ -42,9 +42,31 @@ static inline struct ceph_super_info *ceph_sbinfo(struct super_block *sb)
 /*
  * CEPH file system in-core inode info
  */
+struct ceph_inode_cap {
+	int mds;
+	int caps;
+	__u64 seq;
+	int flags;  /* stale, etc.? */
+};	
+struct ceph_inode_frag_map_item {
+	__u32 frag;
+	__u32 mds;
+};
+
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
+
 	int i_dir_auth;
+	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static;
+	int i_frag_map_nr;
+	struct ceph_inode_frag_map_item *i_frag_map;
+	
+	int i_nr_caps;
+	struct ceph_inode_cap *i_caps;
+	struct ceph_inode_cap i_caps_static[2];
+	off_t i_wr_size;
+	struct ceph_timeval i_wr_mtime;
+	
 	struct inode vfs_inode;
 };
 

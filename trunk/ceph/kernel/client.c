@@ -88,6 +88,12 @@ trymount:
 			goto trymount;
 		return -EIO;
 	}
+
+	/* get handle for mount path */
+	/*err = ceph_open_dir(CEPH_INO_ROOT, args->path);
+	if (err)
+		return err;
+	*/
 	
 	return 0;
 }
