@@ -120,7 +120,7 @@ void OSDMonitor::create_initial()
   build_crush_map(newmap.crush, weights);
 
   // -- test --
-#if 1
+#if 0
   {
     //vector<int> t;
     //crush.do_rule(2, 132, t, 4, -1);
