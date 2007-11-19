@@ -92,7 +92,11 @@ public:
 
 private:
 
-  // heartbeat
+  // -- heartbeat --
+  set<int> heartbeat_to, heartbeat_from;
+  map<int, utime_t> heartbeat_from_stamp;
+
+  void update_heartbeat_sets();
   void heartbeat();
 
   class C_Heartbeat : public Context {

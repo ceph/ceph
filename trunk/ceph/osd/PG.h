@@ -451,7 +451,6 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
-  utime_t     last_heartbeat;  // 
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.

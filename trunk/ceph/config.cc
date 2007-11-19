@@ -304,6 +304,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
+  osd_heartbeat_grace: 30,
   osd_pg_stats_interval:  5,
   osd_replay_window: 5,
   osd_max_pull: 2,

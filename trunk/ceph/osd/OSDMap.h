@@ -211,6 +211,16 @@ private:
     return false;
   }
   
+  int get_any_up_osd() {
+    for (set<int>::iterator p = osds.begin();
+	 p != osds.end();
+	 p++) {
+      if (is_up(*p))
+	return *p;
+    }
+    return -1;
+  }
+
   void mark_down(int o, bool clean) { down_osds[o] = clean; }
   void mark_up(int o) { down_osds.erase(o); }
   void mark_out(int o) { 

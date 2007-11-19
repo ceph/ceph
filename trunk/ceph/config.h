@@ -268,7 +268,8 @@ struct md_config_t {
   bool  osd_mkfs;
   float   osd_age;
   int   osd_age_time;
-  int   osd_heartbeat_interval;
+  int   osd_heartbeat_interval;  
+  int   osd_heartbeat_grace;
   int   osd_pg_stats_interval;
   int   osd_replay_window;
   int   osd_max_pull;
