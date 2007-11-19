@@ -150,7 +150,7 @@ public:
   void note_failed_osd(int o);
   void on_acker_change();
   void on_role_change();
-
+  void on_change();
 };
 
 

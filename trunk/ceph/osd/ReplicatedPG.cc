@@ -1673,34 +1673,30 @@ void ReplicatedPG::note_failed_osd(int o)
 void ReplicatedPG::on_acker_change()
 {
   dout(10) << "on_acker_change" << dendl;
+}
 
-  if (g_conf.osd_rep == OSD_REP_PRIMARY) {
-    // we're fine.
-    // note that note_failed_osd() above shoudl ahve implicitly acked/committed
-    // from the failed guy.
-  } else {
-    // for splay or chain replication, any change is significant. 
-    // apply repops
-    for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
-	 p != rep_gather.end();
-	 p++) {
-      if (!p->second->applied)
-	apply_repop(p->second);
-      delete p->second->op;
-      delete p->second;
-    }
-    rep_gather.clear();
-    
-    // and repop waiters
-    for (hash_map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
-	 p != waiting_for_repop.end();
-	 p++)
-      for (list<Message*>::iterator pm = p->second.begin();
-	   pm != p->second.end();
-	   pm++)
-	delete *pm;
-    waiting_for_repop.clear();
+void ReplicatedPG::on_change()
+{
+  // apply repops
+  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+       p != rep_gather.end();
+       p++) {
+    if (!p->second->applied)
+      apply_repop(p->second);
+    delete p->second->op;
+    delete p->second;
   }
+  rep_gather.clear();
+  
+  // and discard repop waiters (chain/splay artifact)
+  for (hash_map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
+       p != waiting_for_repop.end();
+       p++)
+    for (list<Message*>::iterator pm = p->second.begin();
+	 pm != p->second.end();
+	 pm++)
+      delete *pm;
+  waiting_for_repop.clear();
 }
 
 

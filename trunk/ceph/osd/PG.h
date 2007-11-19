@@ -660,6 +660,7 @@ public:
 
   virtual void on_acker_change() = 0;
   virtual void on_role_change() = 0;
+  virtual void on_change() = 0;
 };
 
 

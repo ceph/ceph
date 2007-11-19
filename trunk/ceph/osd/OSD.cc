@@ -1390,7 +1390,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
       // -- there was a change! --
       pg->lock();
-      
+
       int oldrole = pg->get_role();
       int oldprimary = pg->get_primary();
       int oldacker = pg->get_acker();
@@ -1416,9 +1416,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       // reset primary state?
       if (oldrole == 0 || pg->get_role() == 0)
         pg->clear_primary_state();
-      
-      // apply any repops in progress.
-      if (oldacker == whoami) {
+
+      pg->on_change();
+      if (oldacker != pg->get_acker() && oldacker == whoami) {
 	pg->on_acker_change();
       }
 
