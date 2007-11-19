@@ -119,6 +119,24 @@ void OSDMonitor::create_initial()
   map<int,double> weights;
   build_crush_map(newmap.crush, weights);
 
+  // -- test --
+#if 1
+  {
+    //vector<int> t;
+    //crush.do_rule(2, 132, t, 4, -1);
+
+    // 3x5p2
+    int n = 4;
+    int x = 0;
+    int p = 2;
+    vector<int> r(n);
+    newmap.mark_down(0, false);
+    newmap.mark_out(0);
+    newmap.crush.do_rule(CRUSH_REP_RULE(n), x, r, n, p);
+    dout(0) << "test out " << r << dendl;
+  }
+#endif
+
   for (int i=0; i<g_conf.num_osd; i++) {
     newmap.osds.insert(i);
     newmap.down_osds[i] = true;
@@ -219,10 +237,6 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     }
     */
     
-    // test
-    //vector<int> out;
-    //pg_to_osds(0x40200000110ULL, out);
-    
   } else {
     // one bucket
 
@@ -254,8 +268,6 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
   }
   crush.finalize();
   dout(20) << "crush max_devices " << crush.map->max_devices << dendl;
-  //vector<int> t;
-  //crush.do_rule(2, 132, t, 4, -1);
 }
 
 
@@ -366,7 +378,10 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
 void OSDMonitor::committed()
 {
-
+  // tell any osd
+  int r = osdmap.get_any_up_osd();
+  if (r >= 0)
+    send_latest(osdmap.get_inst(r));
 }
 
 
