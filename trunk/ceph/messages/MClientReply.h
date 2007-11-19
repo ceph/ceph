@@ -53,9 +53,9 @@ class CInode;
 struct DirStat {
   // mds distribution hints
   frag_t frag;
-  int auth;
-  set<int> dist;
-  bool is_rep;
+  __s32 auth;
+  set<__s32> dist;
+  __u8 is_rep;
   
   DirStat() {}
   DirStat(bufferlist::iterator& p) {
@@ -65,15 +65,18 @@ struct DirStat {
   void _decode(bufferlist::iterator& p) {
     ::_decode_simple(frag, p);
     ::_decode_simple(auth, p);
-    ::_decode_simple(dist, p);
     ::_decode_simple(is_rep, p);
+    ::_decode_simple(dist, p);
   }
 
   static void _encode(bufferlist& bl, CDir *dir, int whoami) {
+    /*
+     * note: encoding matches struct ceph_client_reply_dirfrag
+     */
     frag_t frag = dir->get_frag();
-    int auth;
-    set<int> dist;
-    bool is_rep;
+    __s32 auth;
+    set<__s32> dist;
+    __u8 is_rep;
     
     auth = dir->get_dir_auth().first;
     if (dir->is_auth()) 
@@ -82,8 +85,8 @@ struct DirStat {
 
     ::_encode_simple(frag, bl);
     ::_encode_simple(auth, bl);
-    ::_encode_simple(dist, bl);
     ::_encode_simple(is_rep, bl);
+    ::_encode_simple(dist, bl);
   }  
 };
 

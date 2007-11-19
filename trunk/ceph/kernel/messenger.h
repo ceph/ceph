@@ -118,28 +118,28 @@ extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg);
 
 /* encoding/decoding helpers */
 static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
-	if (*p + sizeof(*v) > end)
+	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
 	*v = le64_to_cpu(*(__u64*)p);
 	p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_32(void **p, void *end, __u32 *v) {
-	if (*p + sizeof(*v) > end)
+	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
 	*v = le32_to_cpu(*(__u32*)p);
 	p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_16(void **p, void *end, __u16 *v) {
-	if (*p + sizeof(*v) > end)
+	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
 	*v = le16_to_cpu(*(__u16*)p);
 	p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_copy(void **p, void *end, void *v, int len) {
-	if (*p + len > end) 
+	if (unlikely(*p + len > end)) 
 		return -EINVAL;
 	memcpy(v, *p, len);
 	*p += len;
@@ -159,7 +159,7 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 }
 
 static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
-	if (*p + sizeof(*v) > end)
+	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
 	v->type = le32_to_cpu(*(__u32*)p);
 	p += sizeof(__u32);
@@ -229,6 +229,7 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 	ceph_encode_32(p, end, len);
 	memcpy(*p, path, len);
 	*p += len;
+	return 0;
 }
 
 

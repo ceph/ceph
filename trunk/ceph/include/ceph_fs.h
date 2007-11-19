@@ -146,11 +146,6 @@ struct ceph_object_extent {
 
 
 
-struct ceph_frag_tree {
-
-};
-
-
 
 /*********************************************
  * message types
@@ -328,6 +323,11 @@ struct ceph_client_reply_head {
 	__u64 mdsmap_epoch;
 };
 
+struct ceph_frag_tree_head {
+	__u32 nsplits;
+	__s32 splits[0];
+};
+
 struct ceph_client_reply_inode {
 	ceph_ino_t ino;
 	struct ceph_file_layout layout;
@@ -337,15 +337,15 @@ struct ceph_client_reply_inode {
 	__u64 size;
 	__u32 rdev;
 	__u32 mask;
-	char *symlink;
+	struct ceph_frag_tree_head fragtree;
 };
-/* followed by symlink string, then dirfragtree */
+/* followed by frag array, then symlink string */
 
 struct ceph_client_reply_dirfrag {
 	__u32 frag;
 	__s32 auth;
-	unsigned char is_rep;
-	int ndist;
+	__u8 is_rep;
+	__u32 ndist;
 	__u32 dist[];
 };
 
