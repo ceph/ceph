@@ -341,10 +341,10 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
 
   local[erank] = msgr;
   stopped[erank] = false;
-  msgr->my_addr = rank_addr;
-  msgr->my_addr.v.erank = erank;
+  msgr->_myinst.addr = rank_addr;
+  msgr->_myinst.addr.v.erank = erank;
 
-  dout(10) << "register_entity " << name << " at " << msgr->my_addr << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr << dendl;
 
   num_local++;
   
@@ -588,7 +588,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
   m->set_source(get_myname());
-  m->set_source_addr(my_addr);
+  m->set_source_addr(_myinst.addr);
   m->set_dest_inst(dest);
  
   dout(1) << m->get_source()

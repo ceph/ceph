@@ -195,7 +195,6 @@ private:
     bool stop;
     int qlen, pqlen;
     int my_rank;
-    entity_addr_t my_addr;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
