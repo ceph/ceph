@@ -197,14 +197,13 @@ public:
 
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(head), (char*)&head);
-    off += sizeof(head);
+    ::_decode(head, payload, off);
     path._decode(payload, off);
     path2._decode(payload, off);
   }
 
   void encode_payload() {
-    payload.append((char*)&head, sizeof(head));
+    ::_encode(head, payload);
     path._encode(payload);
     path2._encode(payload);
   }

@@ -103,10 +103,30 @@ struct InodeStat {
   }
 
   void _decode(bufferlist::iterator &p) {
-    ::_decode_simple(mask, p);
-    ::_decode_simple(inode, p);
+    struct ceph_client_reply_inode e;
+    ::_decode_simple(e, p);
+    inode.ino = e.ino;
+    inode.layout = e.layout;
+    inode.ctime.tv_ref() = e.ctime;
+    inode.mtime.tv_ref() = e.mtime;
+    inode.atime.tv_ref() = e.atime;
+    inode.mode = e.mode;
+    inode.uid = e.uid;
+    inode.gid = e.gid;
+    inode.nlink = e.nlink;
+    inode.size = e.size;
+    inode.rdev = e.rdev;
+
+    int n = e.fragtree.nsplits;
+    while (n) {
+      __u32 s, by;
+      ::_decode_simple(s, p);
+      ::_decode_simple(by, p);
+      dirfragtree._splits[s] = by;
+      n--;
+    }
     ::_decode_simple(symlink, p);
-    dirfragtree._decode(p);
+    mask = e.mask;
   }
 
   static void _encode(bufferlist &bl, CInode *in) {
@@ -117,10 +137,31 @@ struct InodeStat {
     if (in->linklock.can_rdlock(0)) mask |= STAT_MASK_LINK;
     if (in->filelock.can_rdlock(0)) mask |= STAT_MASK_FILE;
 
-    ::_encode_simple(mask, bl);
-    ::_encode_simple(in->inode, bl);
+    /*
+     * note: encoding matches struct ceph_client_reply_inode
+     */
+    struct ceph_client_reply_inode e;
+    e.ino = in->inode.ino;
+    e.layout = in->inode.layout;
+    e.ctime = in->inode.ctime.tv_ref();
+    e.mtime = in->inode.mtime.tv_ref();
+    e.atime = in->inode.atime.tv_ref();
+    e.mode = in->inode.mode;
+    e.uid = in->inode.uid;
+    e.gid = in->inode.gid;
+    e.nlink = in->inode.nlink;
+    e.size = in->inode.size;
+    e.rdev = in->inode.rdev;
+    e.mask = mask;
+    e.fragtree.nsplits = in->dirfragtree._splits.size();
+    ::_encode_simple(e, bl);
+    for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
+	 p != in->dirfragtree._splits.end();
+	 p++) {
+      ::_encode_simple(p->first, bl);
+      ::_encode_simple(p->second, bl);
+    }
     ::_encode_simple(in->symlink, bl);
-    in->dirfragtree._encode(bl);
   }
   
 };
