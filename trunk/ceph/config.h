@@ -231,7 +231,6 @@ struct md_config_t {
   bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;
-  int  mds_local_osd_offset;
 
   int mds_thrash_exports;
   int mds_thrash_fragments;

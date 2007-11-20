@@ -3,7 +3,6 @@ some smallish projects:
 
 - userspace crush tools
  - xml import/export?  
- - ?
 
 - generalize monitor client?
  - throttle message resend attempts
@@ -12,10 +11,21 @@ some smallish projects:
 
 
 code cleanup
-- endian portability
-- word size
-  - clean up all encoded structures
+- userspace encoding/decoding needs major cleanup
+  - endian macros
+  - use le32 etc annotation
+  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
+  - specify word size in all encoded structures
 
+
+kernel client
+- msg layer (patience)
+- mds client
+- mount
+  - get handle on root mount point
+- osd client
+- mon client
+  - work out message resend logic..
 
 
 mds mustfix
@@ -27,9 +37,8 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
-- stray reintegration
 - extend/clean up filepath to allow paths relative to an ino
-  - fix path_traverse
+/  - fix path_traverse
   - fix reconnect/rejoin open file weirdness
 - real chdir (directory "open")
   - relative metadata ops
@@ -127,6 +136,24 @@ objecter
 - read+floor_lockout
 
 osd/rados
+- fix build_prior_set behavior.  needs to not always exclude currently down nodes.  e.g.,
+
+  1: A B
+  2:   B
+  3: A    -> prior_set should be <A,B>, bc B may have independently applied updates.
+
+  1: A B C
+  2:   B C
+  3: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
+
+  1: A B C
+  2:   B C
+  3: A   C  -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
+
+ -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
+
+- paxos replication (i.e. majority voting)?
+
 - transaction prepare/commit
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)

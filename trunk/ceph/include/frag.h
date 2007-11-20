@@ -165,9 +165,10 @@ class fragtree_t {
   // pairs <f, b>:
   //  frag_t f is split by b bits.
   //  if child frag_t does not appear, it is not split.
+public:
   std::map<frag_t,int32_t> _splits;  
 
- public:
+public:
   // -------------
   // basics
   void swap(fragtree_t& other) {

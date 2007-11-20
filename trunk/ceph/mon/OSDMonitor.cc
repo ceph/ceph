@@ -53,11 +53,10 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
 {
   if (down) {
     dout(1) << "fake_osd_failure DOWN osd" << osd << dendl;
-    pending_inc.new_down[osd].first = osdmap.osd_inst[osd];
-    pending_inc.new_down[osd].second = false;
+    pending_inc.new_down[osd] = false;
   } else {
     dout(1) << "fake_osd_failure OUT osd" << osd << dendl;
-    pending_inc.new_out.push_back(osd);
+    pending_inc.new_offload[osd] = CEPH_OSD_OUT;
   }
   propose_pending();
 
@@ -83,10 +82,10 @@ void OSDMonitor::fake_reorg()
   
   if (osdmap.is_out(r)) {
     dout(1) << "fake_reorg marking osd" << r << " in" << dendl;
-    pending_inc.new_in.push_back(r);
+    pending_inc.new_offload[r] = CEPH_OSD_IN;
   } else {
     dout(1) << "fake_reorg marking osd" << r << " out" << dendl;
-    pending_inc.new_out.push_back(r);
+    pending_inc.new_offload[r] = CEPH_OSD_OUT;
   }
 
   propose_pending();
@@ -137,17 +136,20 @@ void OSDMonitor::create_initial()
   }
 #endif
 
+  newmap.set_max_osd(g_conf.num_osd);
   for (int i=0; i<g_conf.num_osd; i++) {
-    newmap.osds.insert(i);
-    newmap.down_osds[i] = true;
+    newmap.set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
+    newmap.set_offload(i, CEPH_OSD_IN);
   }
   
   if (g_conf.mds_local_osd) {
+    newmap.set_max_osd(g_conf.num_mds+g_conf.num_osd);
+
     // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<g_conf.num_mds; i++) {
-      int o = i+g_conf.mds_local_osd_offset;
-      newmap.osds.insert(o);
-      newmap.down_osds[o] = true;
+      newmap.set_max_osd(i+g_conf.num_osd);
+      newmap.set_state(i, CEPH_OSD_EXISTS);
+      newmap.set_offload(i, CEPH_OSD_IN);
     }
   }
   
@@ -266,7 +268,13 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     }
     */
   }
+  
   crush.finalize();
+
+  // mark all in
+  for (int i=0; i<g_conf.num_osd; i++)
+    crush.set_offload(i, CEPH_OSD_IN);
+
   dout(20) << "crush max_devices " << crush.map->max_devices << dendl;
 }
 
@@ -311,9 +319,9 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(1) << osdmap.osds.size() << " osds, "
-	    << osdmap.down_osds.size() << " down, " 
-	    << osdmap.out_osds.size() << " out" 
+    dout(1) << osdmap.get_num_osds() << " osds, "
+	    << osdmap.get_num_up_osds() << " up, " 
+	    << osdmap.get_num_in_osds() << " in" 
 	    << dendl;
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
@@ -344,30 +352,32 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   pending_inc.mon_epoch = mon->mon_epoch;
   
   // tell me about it
-  for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = pending_inc.new_down.begin();
+  for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
        i++) {
-    dout(2) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
-    derr(0) << " osd" << i->first << " DOWN " << i->second.first << " clean=" << i->second.second << dendl;
-    mon->messenger->mark_down(i->second.first.addr);
+    dout(2) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
+    derr(0) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
+    mon->messenger->mark_down(osdmap.get_addr(i->first));
   }
-  for (map<int32_t,entity_inst_t>::iterator i = pending_inc.new_up.begin();
+  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
        i++) { 
     dout(2) << " osd" << i->first << " UP " << i->second << dendl;
     derr(0) << " osd" << i->first << " UP " << i->second << dendl;
   }
-  for (list<int32_t>::iterator i = pending_inc.new_out.begin();
-       i != pending_inc.new_out.end();
+  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_offload.begin();
+       i != pending_inc.new_offload.end();
        i++) {
-    dout(2) << " osd" << *i << " OUT" << dendl;
-    derr(0) << " osd" << *i << " OUT" << dendl;
-  }
-  for (list<int32_t>::iterator i = pending_inc.new_in.begin();
-       i != pending_inc.new_in.end();
-       i++) {
-    dout(2) << " osd" << *i << " IN" << dendl;
-    derr(0) << " osd" << *i << " IN" << dendl;
+    if (i->second == CEPH_OSD_OUT) {
+      dout(2) << " osd" << i->first << " OUT" << dendl;
+      derr(0) << " osd" << i->first << " OUT" << dendl;
+    } else if (i->second == CEPH_OSD_IN) {
+      dout(2) << " osd" << i->first << " IN" << dendl;
+      derr(0) << " osd" << i->first << " IN" << dendl;
+    } else {
+      dout(2) << " osd" << i->first << " OFFLOAD " << i->second << dendl;
+      derr(0) << " osd" << i->first << " OFFLOAD " << i->second << dendl;
+    }
   }
 
   // encode
@@ -445,7 +455,7 @@ bool OSDMonitor::prepare_update(Message *m)
 bool OSDMonitor::should_propose(double& delay)
 {
   if (osdmap.epoch == 1) {
-    if (pending_inc.new_up.size() == osdmap.get_osds().size()) {
+    if (pending_inc.new_up.size() == (unsigned)g_conf.num_osd) {
       delay = 0.0;
       if (g_conf.osd_auto_weight) {
 	CrushWrapper crush;
@@ -489,6 +499,28 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
+  /*
+   * FIXME
+   * this whole thing needs a rework of some sort.  we shouldn't
+   * be taking any failure report on faith.  if A and B can't talk
+   * to each other either A or B should be killed, but we should
+   * make some attempt to make sure we choose the right one.
+   */
+
+  // first, verify the reporting host is valid
+  if (m->get_source().is_osd()) {
+    int from = m->get_source().num();
+    if (!osdmap.exists(from) ||
+	osdmap.get_addr(from) != m->get_source_inst().addr ||
+	osdmap.is_down(from)) {
+      dout(5) << "preprocess_failure from dead osd" << from << ", ignoring" << dendl;
+      send_incremental(m->get_from(), m->get_epoch()+1);
+      delete m;
+      return true;
+    }
+  }
+  
+  // who is failed
   int badboy = m->get_failed().name.num();
 
   // weird?
@@ -525,10 +557,9 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   // take their word for it
   int badboy = m->get_failed().name.num();
   assert(osdmap.is_up(badboy));
-  assert(osdmap.osd_inst[badboy] == m->get_failed());
+  assert(osdmap.get_addr(badboy) == m->get_failed().addr);
   
-  pending_inc.new_down[badboy].first = m->get_failed();
-  pending_inc.new_down[badboy].second = false;
+  pending_inc.new_down[badboy] = false;
   
   if (osdmap.is_in(badboy))
     down_pending_out[badboy] = g_clock.now();
@@ -584,18 +615,16 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     assert(osdmap.get_inst(from) != m->inst);  // preproces should have caught it
     
     // mark previous guy down
-    pending_inc.new_down[from].first = osdmap.osd_inst[from];
-    pending_inc.new_down[from].second = false;
+    pending_inc.new_down[from] = false;
     
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
-    pending_inc.new_up[from] = m->inst;
+    pending_inc.new_up[from] = m->inst.addr;
     
     // mark in?
-    if (osdmap.out_osds.count(from)) 
-      pending_inc.new_in.push_back(from);
+    pending_inc.new_offload[from] = CEPH_OSD_IN;
     
     osd_weight[from] = m->sb.weight;
 
@@ -767,7 +796,7 @@ void OSDMonitor::tick()
        i != mark_out.end();
        i++) {
     down_pending_out.erase(*i);
-    pending_inc.new_out.push_back( *i );
+    pending_inc.new_offload[*i] = CEPH_OSD_OUT;
   }
   if (!mark_out.empty()) {
     propose_pending();
@@ -782,12 +811,13 @@ void OSDMonitor::mark_all_down()
 
   dout(7) << "mark_all_down" << dendl;
 
-  for (set<int32_t>::iterator it = osdmap.get_osds().begin();
-       it != osdmap.get_osds().end();
+  set<int32_t> ls;
+  osdmap.get_all_osds(ls);
+  for (set<int32_t>::iterator it = ls.begin();
+       it != ls.end();
        it++) {
     if (osdmap.is_down(*it)) continue;
-    pending_inc.new_down[*it].first = osdmap.get_inst(*it);
-    pending_inc.new_down[*it].second = true;   // FIXME: am i sure it's clean? we need a proper osd shutdown sequence!
+    pending_inc.new_down[*it] = true;  // FIXME: am i sure it's clean? we need a proper osd shutdown sequence!
   }
 
   propose_pending();

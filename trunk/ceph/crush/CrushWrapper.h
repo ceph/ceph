@@ -32,16 +32,13 @@ public:
     crush_finalize(map);
   }
 
-  void update_offload_map(std::set<int32_t>& out_osds,
-			  std::map<int32_t,float>& overload_osds) {
-    for (int i=0; i<map->max_devices; i++) {
-      if (out_osds.count(i))
-	map->device_offload[i] = 0x10000;
-      else if (overload_osds.count(i)) 
-	map->device_offload[i] = (int)(0x10000 * overload_osds[i]); // FIXME: reverse?
-      else
-	map->device_offload[i] = 0;  // normal.
-    }
+  void set_offload(int i, unsigned o) {
+    assert(i < map->max_devices);
+    map->device_offload[i] = o;
+  }
+  unsigned get_offload(int i) {
+    assert(i < map->max_devices);
+    return map->device_offload[i];
   }
 
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed) {

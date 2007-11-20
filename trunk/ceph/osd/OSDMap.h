@@ -93,59 +93,53 @@ public:
     bufferlist crush;
 
     // incremental
-    map<int32_t,entity_inst_t> new_up;
-    map<int32_t,pair<entity_inst_t,bool> > new_down;
-    list<int32_t> new_in;
-    list<int32_t> new_out;
-    map<int32_t,float> new_overload;  // updated overload value
-    list<int32_t>      old_overload;  // no longer overload
+    int32_t new_max_osd;
+    map<int32_t,entity_addr_t> new_up;
+    map<int32_t,uint8_t> new_down;
+    map<int32_t,uint32_t> new_offload;
     
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
       ::_encode(mon_epoch, bl);
       ::_encode(ctime, bl);
-      ::_encode(new_up, bl);
-      ::_encode(new_down, bl);
-      ::_encode(new_in, bl);
-      ::_encode(new_out, bl);
-      ::_encode(new_overload, bl);
       ::_encode(fullmap, bl);
       ::_encode(crush, bl);
+      ::_encode(new_max_osd, bl);
+      ::_encode(new_up, bl);
+      ::_encode(new_down, bl);
+      ::_encode(new_offload, bl);
     }
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
       ::_decode(mon_epoch, bl, off);
       ::_decode(ctime, bl, off);
-      ::_decode(new_up, bl, off);
-      ::_decode(new_down, bl, off);
-      ::_decode(new_in, bl, off);
-      ::_decode(new_out, bl, off);
-      ::_decode(new_overload, bl, off);
       ::_decode(fullmap, bl, off);
       ::_decode(crush, bl, off);
+      ::_decode(new_max_osd, bl, off);
+      ::_decode(new_up, bl, off);
+      ::_decode(new_down, bl, off);
+      ::_decode(new_offload, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
+    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {}
   };
 
 private:
   ceph_fsid_t fsid;
-  epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
-  epoch_t   mon_epoch;  // monitor epoch (election iteration)
-  utime_t   ctime;       // epoch start time
+  epoch_t epoch;       // what epoch of the osd cluster descriptor is this
+  epoch_t mon_epoch;  // monitor epoch (election iteration)
+  utime_t ctime, mtime;       // epoch start time
   int32_t pg_num;       // placement group count
   int32_t pg_num_mask;  // bitmask for above
   int32_t localized_pg_num;      // localized place group count
   int32_t localized_pg_num_mask; // ditto
 
-  set<int32_t>  osds;        // all osds
-  map<int32_t, bool> down_osds;   // list of down disks, -> clean shutdown (true/false)
-  set<int32_t>  out_osds;    // list of unmapped disks
-  map<int32_t,float> overload_osds; 
-  map<int32_t,entity_inst_t> osd_inst;
-
+  int32_t max_osd;
+  vector<uint8_t>  osd_state;
+  vector<entity_addr_t> osd_addr;
+  
  public:
   CrushWrapper     crush;       // hierarchical map
 
@@ -155,7 +149,8 @@ private:
  public:
   OSDMap() : epoch(0), mon_epoch(0), 
 	     pg_num(1<<5),
-	     localized_pg_num(1<<3) { 
+	     localized_pg_num(1<<3),
+	     max_osd(0) { 
     calc_pg_masks();
   }
 
@@ -166,6 +161,7 @@ private:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
+  /* pg num / masks */
   void calc_pg_masks() {
     pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
     localized_pg_num_mask = (1 << calc_bits_of(localized_pg_num-1)) - 1;
@@ -175,61 +171,108 @@ private:
   void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
   int get_localized_pg_num() const { return localized_pg_num; }
 
+  /* stamps etc */
   const utime_t& get_ctime() const { return ctime; }
+  const utime_t& get_mtime() const { return mtime; }
 
   bool is_mkfs() const { return epoch == 2; }
   bool post_mkfs() const { return epoch > 2; }
 
   /***** cluster state *****/
-  int num_osds() { return osds.size(); }
-  void get_all_osds(set<int32_t>& ls) { ls = osds; }
+  /* osds */
+  int get_max_osd() const { return max_osd; }
+  void set_max_osd(int m) { 
+    int o = max_osd;
+    max_osd = m;
+    osd_state.resize(m);
+    for (; o<max_osd; o++) 
+      osd_state[o] = 0;
+    osd_addr.resize(m);
+  }
 
-  const set<int32_t>& get_osds() { return osds; }
-  const map<int32_t,bool>& get_down_osds() { return down_osds; }
-  const set<int32_t>& get_out_osds() { return out_osds; }
-  const map<int32_t,float>& get_overload_osds() { return overload_osds; }
-  
-  bool exists(int osd) { return osds.count(osd); }
-  bool is_down(int osd) { return down_osds.count(osd); }
-  bool is_down_clean(int osd) { return down_osds.count(osd) && down_osds[osd]; }
-  bool is_up(int osd) { return exists(osd) && !is_down(osd); }
-  bool is_out(int osd) { return out_osds.count(osd); }
+  void get_all_osds(set<int32_t>& ls) { 
+    for (int i=0; i<max_osd; i++)
+      if (exists(i))
+	ls.insert(i);
+  }
+  int get_num_osds() { 
+    int n = 0;
+    for (int i=0; i<max_osd; i++)
+      if (osd_state[i] & CEPH_OSD_EXISTS) n++;
+    return n;
+  }
+  int get_num_up_osds() {
+    int n = 0;
+    for (int i=0; i<max_osd; i++)
+      if (osd_state[i] & CEPH_OSD_EXISTS &&
+	  osd_state[i] & CEPH_OSD_UP) n++;
+    return n;
+  }
+  int get_num_in_osds() {
+    int n = 0;
+    for (int i=0; i<max_osd; i++)
+      if (osd_state[i] & CEPH_OSD_EXISTS &&
+	  crush.get_offload(i) != CEPH_OSD_OUT) n++;
+    return n;
+  }
+
+  void set_state(int o, unsigned s) {
+    assert(o < max_osd);
+    osd_state[o] = s;
+  }
+  void set_offload(int o, unsigned off) {
+    crush.set_offload(o, off);
+  }
+
+  bool exists(int osd) { return osd < max_osd && osd_state[osd] & CEPH_OSD_EXISTS; }
+  bool is_up(int osd) { assert(exists(osd)); return osd_state[osd] & CEPH_OSD_UP; }
+  bool is_down(int osd) { assert(exists(osd)); return !is_up(osd); }
+  bool is_down_clean(int osd) { 
+    assert(exists(osd)); 
+    return is_down(osd) && osd_state[osd] & CEPH_OSD_CLEAN; 
+  }
+  bool is_out(int osd) { return !exists(osd) || crush.get_offload(osd) == CEPH_OSD_OUT; }
   bool is_in(int osd) { return exists(osd) && !is_out(osd); }
   
   bool have_inst(int osd) {
-    return osd_inst.count(osd);
+    return exists(osd) && is_up(osd); 
   }
-  const entity_inst_t& get_inst(int osd) {
-    assert(osd_inst.count(osd));
-    return osd_inst[osd];
+  const entity_addr_t &get_addr(int osd) {
+    assert(exists(osd));
+    return osd_addr[osd];
+  }
+  entity_inst_t get_inst(int osd) {
+    assert(have_inst(osd));
+    return entity_inst_t(entity_name_t::OSD(osd),
+			 osd_addr[osd]);
   }
   bool get_inst(int osd, entity_inst_t& inst) { 
-    if (osd_inst.count(osd)) {
-      inst = osd_inst[osd];
+    if (have_inst(osd)) {
+      inst.name = entity_name_t::OSD(osd);
+      inst.addr = osd_addr[osd];
       return true;
     } 
     return false;
   }
   
   int get_any_up_osd() {
-    for (set<int>::iterator p = osds.begin();
-	 p != osds.end();
-	 p++) {
-      if (is_up(*p))
-	return *p;
-    }
+    for (int i=0; i<max_osd; i++)
+      if (is_up(i))
+	return i;
     return -1;
   }
 
-  void mark_down(int o, bool clean) { down_osds[o] = clean; }
-  void mark_up(int o) { down_osds.erase(o); }
+  void mark_down(int o, bool clean) { 
+    osd_state[o] &= ~CEPH_OSD_UP;
+  }
+  void mark_up(int o) { 
+    osd_state[o] |= CEPH_OSD_UP;
+  }
   void mark_out(int o) { 
-    out_osds.insert(o); 
-    crush.update_offload_map(out_osds, overload_osds);
+    set_offload(o, CEPH_OSD_OUT);
   }
   void mark_in(int o) { 
-    out_osds.erase(o); 
-    crush.update_offload_map(out_osds, overload_osds);
+    set_offload(o, CEPH_OSD_IN);
   }
 
   void apply_incremental(Incremental &inc) {
@@ -250,52 +293,29 @@ private:
     }
 
     // nope, incremental.
-    for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
+    if (inc.new_max_osd >= 0) 
+      set_max_osd(inc.new_max_osd);
+
+    for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
          i != inc.new_down.end();
          i++) {
-      assert(down_osds.count(i->first) == 0);
-      down_osds[i->first] = i->second.second;
-      //assert(osd_inst.count(i->first) == 0 || osd_inst[i->first] == i->second.first);
-      osd_inst.erase(i->first);
+      assert(osd_state[i->first] & CEPH_OSD_UP);
+      osd_state[i->first] &= ~CEPH_OSD_UP;
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (list<int32_t>::iterator i = inc.new_out.begin();
-         i != inc.new_out.end();
+    for (map<int32_t,uint32_t>::iterator i = inc.new_offload.begin();
+         i != inc.new_offload.end();
          i++) {
-      assert(out_osds.count(*i) == 0);
-      out_osds.insert(*i);
-      //cout << "epoch " << epoch << " out osd" << *i << endl;
-    }
-    for (list<int32_t>::iterator i = inc.old_overload.begin();
-         i != inc.old_overload.end();
-         i++) {
-      assert(overload_osds.count(*i));
-      overload_osds.erase(*i);
+      crush.set_offload(i->first, i->second);
     }
 
-    for (map<int32_t,entity_inst_t>::iterator i = inc.new_up.begin();
+    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end(); 
          i++) {
-      assert(down_osds.count(i->first));
-      down_osds.erase(i->first);
-      assert(osd_inst.count(i->first) == 0);
-      osd_inst[i->first] = i->second;
-      //cout << "epoch " << epoch << " up osd" << i->first << endl;
+      osd_state[i->first] |= CEPH_OSD_UP;
+      osd_addr[i->first] = i->second;
+      //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << endl;
     }
-    for (list<int32_t>::iterator i = inc.new_in.begin();
-         i != inc.new_in.end();
-         i++) {
-      assert(out_osds.count(*i));
-      out_osds.erase(*i);
-      //cout << "epoch " << epoch << " in osd" << *i << endl;
-    }
-    for (map<int32_t,float>::iterator i = inc.new_overload.begin();
-         i != inc.new_overload.end();
-         i++) {
-      overload_osds[i->first] = i->second;
-    }
-
-    crush.update_offload_map(out_osds, overload_osds);
   }
 
   // serialize, unserialize
@@ -304,14 +324,13 @@ private:
     ::_encode(epoch, blist);
     ::_encode(mon_epoch, blist);
     ::_encode(ctime, blist);
+    ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
     ::_encode(localized_pg_num, blist);
     
-    ::_encode(osds, blist);
-    ::_encode(down_osds, blist);
-    ::_encode(out_osds, blist);
-    ::_encode(overload_osds, blist);
-    ::_encode(osd_inst, blist);
+    ::_encode(max_osd, blist);
+    ::_encode(osd_state, blist);
+    ::_encode(osd_addr, blist);
     
     bufferlist cbl;
     crush._encode(cbl);
@@ -324,22 +343,21 @@ private:
     ::_decode(epoch, blist, off);
     ::_decode(mon_epoch, blist, off);
     ::_decode(ctime, blist, off);
+    ::_decode(mtime, blist, off);
     ::_decode(pg_num, blist, off);
     ::_decode(localized_pg_num, blist, off);
     calc_pg_masks();
 
-    ::_decode(osds, blist, off);
-    ::_decode(down_osds, blist, off);
-    ::_decode(out_osds, blist, off);
-    ::_decode(overload_osds, blist, off);
-    ::_decode(osd_inst, blist, off);
+    ::_decode(max_osd, blist, off);
+    ::_decode(osd_state, blist, off);
+    ::_decode(osd_addr, blist, off);
     
     bufferlist cbl;
     ::_decode(cbl, blist, off);
     bufferlist::iterator cblp = cbl.begin();
     crush._decode(cblp);
 
-    crush.update_offload_map(out_osds, overload_osds);
+    //crush.update_offload_map(out_osds, overload_osds);
   }
  
 
@@ -403,7 +421,7 @@ private:
 	// forcefeed?
 	int forcefeed = -1;
 	if (pg.preferred() >= 0 &&
-	    out_osds.count(pg.preferred()) == 0) 
+	    exists(pg.preferred())) 
 	  forcefeed = pg.preferred();
 	crush.do_rule(rule,
 		      pg.ps(),

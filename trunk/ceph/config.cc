@@ -264,7 +264,6 @@ md_config_t g_conf = {
   mds_verify_export_dirauth: true,
 
   mds_local_osd: false,
-  mds_local_osd_offset: 1000,
 
   mds_thrash_exports: 0,
   mds_thrash_fragments: 0,

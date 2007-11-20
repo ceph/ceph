@@ -905,19 +905,17 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 {
   assert(inst.name.is_osd());
 
-  if (inst.name.is_osd()) {
-    // send map?
-    if (peer_map_epoch.count(inst.name)) {
-      epoch_t pe = peer_map_epoch[inst.name];
-      if (pe < osdmap->get_epoch()) {
-        send_incremental_map(pe, inst, true);
-        peer_map_epoch[inst.name] = osdmap->get_epoch();
-      }
-    } else {
-      // no idea about peer's epoch.
-      // ??? send recent ???
-      // do nothing.
+  // send map?
+  if (peer_map_epoch.count(inst.name)) {
+    epoch_t pe = peer_map_epoch[inst.name];
+    if (pe < osdmap->get_epoch()) {
+      send_incremental_map(pe, inst, true);
+      peer_map_epoch[inst.name] = osdmap->get_epoch();
     }
+  } else {
+    // no idea about peer's epoch.
+    // ??? send recent ???
+    // do nothing.
   }
 }
 
@@ -963,16 +961,6 @@ void OSD::dispatch(Message *m)
         break;
       }
       
-      // down?
-      if (osdmap->is_down(whoami)) {
-        dout(7) << "i am marked down, dropping " << *m << dendl;
-        delete m;
-        break;
-      }
-
-
-      
-
       // need OSDMap
       switch (m->get_type()) {
 
@@ -1228,13 +1216,13 @@ void OSD::handle_osd_map(MOSDMap *m)
       t.write( get_osdmap_object_name(cur+1), 0, bl.length(), bl);
 
       // notify messenger
-      for (map<int32_t,pair<entity_inst_t,bool> >::iterator i = inc.new_down.begin();
+      for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
            i != inc.new_down.end();
            i++) {
         int osd = i->first;
         if (osd == whoami) continue;
-        messenger->mark_down(i->second.first.addr);
-        peer_map_epoch.erase(i->second.first.name);
+        messenger->mark_down(osdmap->get_addr(i->first));
+        peer_map_epoch.erase(entity_name_t::OSD(i->first));
       
         // kick any replica ops
         for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -1247,11 +1235,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  pg->unlock();
         }
       }
-      for (map<int32_t,entity_inst_t>::iterator i = inc.new_up.begin();
+      for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;
-        peer_map_epoch.erase(i->second.name);
+        peer_map_epoch.erase(entity_name_t::OSD(i->first));
       }
     }
     else if (m->maps.count(cur+1) ||
@@ -1281,11 +1269,14 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // all the way?
   if (advanced && cur == superblock.newest_map) {
-    // yay!
-    activate_map(t);
+    if (osdmap->is_up(whoami) &&
+	osdmap->get_addr(whoami) == messenger->get_myaddr()) {
+      // yay!
+      activate_map(t);
     
-    // process waiters
-    take_waiters(waiting_for_osdmap);
+      // process waiters
+      take_waiters(waiting_for_osdmap);
+    }
   }
 
   // write updated pg state to store
@@ -1304,6 +1295,14 @@ void OSD::handle_osd_map(MOSDMap *m)
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
   delete m;
+
+  if (osdmap->get_epoch() > 0 &&
+      (!osdmap->exists(whoami) || 
+       !osdmap->is_up(whoami) ||
+       osdmap->get_addr(whoami) != messenger->get_myaddr())) {
+    dout(0) << "map says i am dead" << dendl;
+    shutdown();
+  }
 }
 
 
@@ -1654,7 +1653,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 {
   dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
-  // newer map?
+  // do they have a newer map?
   if (epoch > osdmap->get_epoch()) {
     dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << " with " << m << dendl;
     wait_for_new_map(m);
@@ -1665,6 +1664,21 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     dout(7) << "from pre-boot epoch " << epoch << " < " << boot_epoch << dendl;
     delete m;
     return false;
+  }
+
+  // ok, our map is same or newer.. do they still exist?
+  if (m->get_source().is_osd()) {
+    int from = m->get_source().num();
+    if (!osdmap->have_inst(from) ||
+	osdmap->get_addr(from) != m->get_source_inst().addr) {
+      dout(-7) << "from dead osd" << from << ", dropping, sharing our map" << dendl;
+      if (osdmap->have_inst(from))
+	dout(-7) << "have addr " << osdmap->get_addr(from) << " != " << m->get_source_inst() << dendl;
+
+      send_incremental_map(epoch, m->get_source_inst(), true);
+      delete m;
+      return false;
+    }
   }
 
   return true;

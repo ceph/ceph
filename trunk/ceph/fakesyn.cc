@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << std::endl;
     mds[i] = new MDS(-1, new FakeMessenger(entity_name_t::MDS(i)), monmap);
     if (g_conf.mds_local_osd)
-      mdsosd[i] = new OSD(i+g_conf.mds_local_osd_offset, new FakeMessenger(entity_name_t::OSD(i+g_conf.mds_local_osd_offset)), monmap);
+      mdsosd[i] = new OSD(i+g_conf.num_osd, new FakeMessenger(entity_name_t::OSD(i+g_conf.num_osd)), monmap);
     start++;
   }
   

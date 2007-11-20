@@ -103,9 +103,9 @@ void Monitor::shutdown()
   
   if (is_leader()) {
     // stop osds.
-    for (set<int32_t>::iterator it = osdmon->osdmap.get_osds().begin();
-	 it != osdmon->osdmap.get_osds().end();
-	 it++) {
+    set<int32_t> ls;
+    osdmon->osdmap.get_all_osds(ls);
+    for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
       if (osdmon->osdmap.is_down(*it)) continue;
       dout(10) << "sending shutdown to osd" << *it << dendl;
       messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),

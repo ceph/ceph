@@ -145,6 +145,19 @@ struct ceph_object_extent {
 };
 
 
+/*
+ * osd map bits
+ */
+
+/* status bits */
+#define CEPH_OSD_EXISTS 1
+#define CEPH_OSD_UP     2
+#define CEPH_OSD_CLEAN  4  /* as in, clean shutdown */
+
+/* offload weights */
+#define CEPH_OSD_IN  0
+#define CEPH_OSD_OUT 0x10000
+
 
 
 /*********************************************
