@@ -204,8 +204,6 @@ int fakemessenger_do_loop_2()
       Message *m = mgr->get_message();
       
       if (m) {
-	m->set_recv_stamp(g_clock.now());
-
         //dout(18) << "got " << m << dendl;
         dout(1) << "==== " << m->get_dest() 
 		<< " <- " << m->get_source()
@@ -230,6 +228,8 @@ int fakemessenger_do_loop_2()
           m = decode_message(env, front, data);
           assert(m);
         } 
+
+	m->set_recv_stamp(g_clock.now());
         
         didone = true;
 
