@@ -46,31 +46,6 @@
 
 // metadata ops.
 //  >=1000 --> an update, non-idempotent (i.e. an update)
-#define MDS_OP_STATFS   1
-
-#define MDS_OP_STAT     100
-#define MDS_OP_LSTAT    101
-#define MDS_OP_FSTAT    102
-#define MDS_OP_UTIME    1102
-#define MDS_OP_CHMOD    1104
-#define MDS_OP_CHOWN    1105  
-
-#define MDS_OP_READDIR  200
-#define MDS_OP_MKNOD    1201
-#define MDS_OP_LINK     1202
-#define MDS_OP_UNLINK   1203
-#define MDS_OP_RENAME   1204
-
-#define MDS_OP_MKDIR    1220
-#define MDS_OP_RMDIR    1221
-#define MDS_OP_SYMLINK  1222
-
-#define MDS_OP_OPEN     301
-#define MDS_OP_TRUNCATE 1306
-#define MDS_OP_FSYNC    307
-
-#define MDS_OP_RELEASE  308  // used only by SyntheticClient op_dist thinger
-
 
 class MClientRequest : public Message {
 public:
@@ -112,37 +87,37 @@ public:
     return get_open_file_mode() == FILE_MODE_R;
   }
   bool is_idempotent() {
-    if (head.op == MDS_OP_OPEN) 
+    if (head.op == CEPH_MDS_OP_OPEN) 
       return open_file_mode_is_readonly();
     return (head.op < 1000);
   }
   bool auth_is_best() {
     if (!is_idempotent()) return true;
-    if (head.op == MDS_OP_READDIR) return true;
+    if (head.op == CEPH_MDS_OP_READDIR) return true;
     return false;    
   }
   bool follow_trailing_symlink() {
     switch (head.op) {
-    case MDS_OP_LSTAT:
-    case MDS_OP_FSTAT:
-    case MDS_OP_LINK:
-    case MDS_OP_UNLINK:
-    case MDS_OP_RENAME:
+    case CEPH_MDS_OP_LSTAT:
+    case CEPH_MDS_OP_FSTAT:
+    case CEPH_MDS_OP_LINK:
+    case CEPH_MDS_OP_UNLINK:
+    case CEPH_MDS_OP_RENAME:
       return false;
       
-    case MDS_OP_STAT:
-    case MDS_OP_UTIME:
-    case MDS_OP_CHMOD:
-    case MDS_OP_CHOWN:
-    case MDS_OP_READDIR:
-    case MDS_OP_OPEN:
-    case MDS_OP_TRUNCATE:
+    case CEPH_MDS_OP_STAT:
+    case CEPH_MDS_OP_UTIME:
+    case CEPH_MDS_OP_CHMOD:
+    case CEPH_MDS_OP_CHOWN:
+    case CEPH_MDS_OP_READDIR:
+    case CEPH_MDS_OP_OPEN:
+    case CEPH_MDS_OP_TRUNCATE:
 
-    case MDS_OP_FSYNC:
-    case MDS_OP_MKNOD:
-    case MDS_OP_MKDIR:
-    case MDS_OP_RMDIR:
-    case MDS_OP_SYMLINK:
+    case CEPH_MDS_OP_FSYNC:
+    case CEPH_MDS_OP_MKNOD:
+    case CEPH_MDS_OP_MKDIR:
+    case CEPH_MDS_OP_RMDIR:
+    case CEPH_MDS_OP_SYMLINK:
       return true;
 
     default:
@@ -214,47 +189,44 @@ public:
 	<< "." << get_tid() 
 	<< " ";
     switch(get_op()) {
-    case MDS_OP_STATFS: 
-      out << "statfs"; break;
-
-    case MDS_OP_STAT: 
+    case CEPH_MDS_OP_STAT: 
       out << "stat"; break;
-    case MDS_OP_LSTAT: 
+    case CEPH_MDS_OP_LSTAT: 
       out << "lstat"; break;
-    case MDS_OP_FSTAT: 
+    case CEPH_MDS_OP_FSTAT: 
       out << "fstat"; break;
-    case MDS_OP_UTIME: 
+    case CEPH_MDS_OP_UTIME: 
       out << "utime"; break;
-    case MDS_OP_CHMOD: 
+    case CEPH_MDS_OP_CHMOD: 
       out << "chmod"; break;
-    case MDS_OP_CHOWN: 
+    case CEPH_MDS_OP_CHOWN: 
       out << "chown"; break;
       
-    case MDS_OP_READDIR: 
+    case CEPH_MDS_OP_READDIR: 
       out << "readdir"; break;
-    case MDS_OP_MKNOD: 
+    case CEPH_MDS_OP_MKNOD: 
       out << "mknod"; break;
-    case MDS_OP_LINK: 
+    case CEPH_MDS_OP_LINK: 
       out << "link"; break;
-    case MDS_OP_UNLINK:
+    case CEPH_MDS_OP_UNLINK:
       out << "unlink"; break;
-    case MDS_OP_RENAME:
+    case CEPH_MDS_OP_RENAME:
       out << "rename"; break;
       
-    case MDS_OP_MKDIR: 
+    case CEPH_MDS_OP_MKDIR: 
       out << "mkdir"; break;
-    case MDS_OP_RMDIR: 
+    case CEPH_MDS_OP_RMDIR: 
       out << "rmdir"; break;
-    case MDS_OP_SYMLINK: 
+    case CEPH_MDS_OP_SYMLINK: 
       out << "symlink"; break;
       
-    case MDS_OP_OPEN: 
+    case CEPH_MDS_OP_OPEN: 
       out << "open"; break;
-    case MDS_OP_TRUNCATE: 
+    case CEPH_MDS_OP_TRUNCATE: 
       out << "truncate"; break;
-    case MDS_OP_FSYNC: 
+    case CEPH_MDS_OP_FSYNC: 
       out << "fsync"; break;
-      //    case MDS_OP_RELEASE: 
+      //    case CEPH_MDS_OP_RELEASE: 
       //out << "release"; break;
     default: 
       out << "unknown=" << get_op();

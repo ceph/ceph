@@ -808,27 +808,27 @@ bool roll_die(float p)
 void SyntheticClient::init_op_dist()
 {
   op_dist.clear();
-  op_dist.add( MDS_OP_STAT, g_conf.fakeclient_op_stat );
-  op_dist.add( MDS_OP_UTIME, g_conf.fakeclient_op_utime );
-  op_dist.add( MDS_OP_CHMOD, g_conf.fakeclient_op_chmod );
-  op_dist.add( MDS_OP_CHOWN, g_conf.fakeclient_op_chown );
+  op_dist.add( CEPH_MDS_OP_STAT, g_conf.fakeclient_op_stat );
+  op_dist.add( CEPH_MDS_OP_UTIME, g_conf.fakeclient_op_utime );
+  op_dist.add( CEPH_MDS_OP_CHMOD, g_conf.fakeclient_op_chmod );
+  op_dist.add( CEPH_MDS_OP_CHOWN, g_conf.fakeclient_op_chown );
 
-  op_dist.add( MDS_OP_READDIR, g_conf.fakeclient_op_readdir );
-  op_dist.add( MDS_OP_MKNOD, g_conf.fakeclient_op_mknod );
-  op_dist.add( MDS_OP_LINK, g_conf.fakeclient_op_link );
-  op_dist.add( MDS_OP_UNLINK, g_conf.fakeclient_op_unlink );
-  op_dist.add( MDS_OP_RENAME, g_conf.fakeclient_op_rename );
+  op_dist.add( CEPH_MDS_OP_READDIR, g_conf.fakeclient_op_readdir );
+  op_dist.add( CEPH_MDS_OP_MKNOD, g_conf.fakeclient_op_mknod );
+  op_dist.add( CEPH_MDS_OP_LINK, g_conf.fakeclient_op_link );
+  op_dist.add( CEPH_MDS_OP_UNLINK, g_conf.fakeclient_op_unlink );
+  op_dist.add( CEPH_MDS_OP_RENAME, g_conf.fakeclient_op_rename );
 
-  op_dist.add( MDS_OP_MKDIR, g_conf.fakeclient_op_mkdir );
-  op_dist.add( MDS_OP_RMDIR, g_conf.fakeclient_op_rmdir );
-  op_dist.add( MDS_OP_SYMLINK, g_conf.fakeclient_op_symlink );
+  op_dist.add( CEPH_MDS_OP_MKDIR, g_conf.fakeclient_op_mkdir );
+  op_dist.add( CEPH_MDS_OP_RMDIR, g_conf.fakeclient_op_rmdir );
+  op_dist.add( CEPH_MDS_OP_SYMLINK, g_conf.fakeclient_op_symlink );
 
-  op_dist.add( MDS_OP_OPEN, g_conf.fakeclient_op_openrd );
-  //op_dist.add( MDS_OP_READ, g_conf.fakeclient_op_read );
-  //op_dist.add( MDS_OP_WRITE, g_conf.fakeclient_op_write );
-  op_dist.add( MDS_OP_TRUNCATE, g_conf.fakeclient_op_truncate );
-  op_dist.add( MDS_OP_FSYNC, g_conf.fakeclient_op_fsync );
-  op_dist.add( MDS_OP_RELEASE, g_conf.fakeclient_op_close );  // actually, close()
+  op_dist.add( CEPH_MDS_OP_OPEN, g_conf.fakeclient_op_openrd );
+  //op_dist.add( CEPH_MDS_OP_READ, g_conf.fakeclient_op_read );
+  //op_dist.add( CEPH_MDS_OP_WRITE, g_conf.fakeclient_op_write );
+  op_dist.add( CEPH_MDS_OP_TRUNCATE, g_conf.fakeclient_op_truncate );
+  op_dist.add( CEPH_MDS_OP_FSYNC, g_conf.fakeclient_op_fsync );
+  //op_dist.add( CEPH_MDS_OP_RELEASE, g_conf.fakeclient_op_close );  // actually, close()
   op_dist.normalize();
 }
 
@@ -2315,7 +2315,7 @@ int SyntheticClient::random_walk(int num_req)
         dout(DBL) << "empty dir, up" << dendl;
         up();
       } else
-        op = MDS_OP_READDIR;
+        op = CEPH_MDS_OP_READDIR;
     } else {
       op = op_dist.sample();
     }
@@ -2324,52 +2324,52 @@ int SyntheticClient::random_walk(int num_req)
     int r = 0;
 
     // do op
-    if (op == MDS_OP_UNLINK) {
+    if (op == CEPH_MDS_OP_UNLINK) {
       if (contents.empty())
-        op = MDS_OP_READDIR;
+        op = CEPH_MDS_OP_READDIR;
       else 
         r = client->unlink( get_random_sub() );   // will fail on dirs
     }
      
-    if (op == MDS_OP_RENAME) {
+    if (op == CEPH_MDS_OP_RENAME) {
       if (contents.empty())
-        op = MDS_OP_READDIR;
+        op = CEPH_MDS_OP_READDIR;
       else {
         r = client->rename( get_random_sub(), make_sub("ren") );
       }
     }
     
-    if (op == MDS_OP_MKDIR) {
+    if (op == CEPH_MDS_OP_MKDIR) {
       r = client->mkdir( make_sub("mkdir"), 0755);
     }
     
-    if (op == MDS_OP_RMDIR) {
+    if (op == CEPH_MDS_OP_RMDIR) {
       if (!subdirs.empty())
         r = client->rmdir( get_random_subdir() );
       else
         r = client->rmdir( cwd.c_str() );     // will pbly fail
     }
     
-    if (op == MDS_OP_SYMLINK) {
+    if (op == CEPH_MDS_OP_SYMLINK) {
     }
     
-    if (op == MDS_OP_CHMOD) {
+    if (op == CEPH_MDS_OP_CHMOD) {
       if (contents.empty())
-        op = MDS_OP_READDIR;
+        op = CEPH_MDS_OP_READDIR;
       else
         r = client->chmod( get_random_sub(), rand() & 0755 );
     }
     
-    if (op == MDS_OP_CHOWN) {
+    if (op == CEPH_MDS_OP_CHOWN) {
       if (contents.empty())         r = client->chown( cwd.c_str(), rand(), rand() );
       else
         r = client->chown( get_random_sub(), rand(), rand() );
     }
      
-    if (op == MDS_OP_LINK) {
+    if (op == CEPH_MDS_OP_LINK) {
     }
      
-    if (op == MDS_OP_UTIME) {
+    if (op == CEPH_MDS_OP_UTIME) {
       struct utimbuf b;
       memset(&b, 1, sizeof(b));
       if (contents.empty()) 
@@ -2378,13 +2378,13 @@ int SyntheticClient::random_walk(int num_req)
         r = client->utime( get_random_sub(), &b );
     }
     
-    if (op == MDS_OP_MKNOD) {
+    if (op == CEPH_MDS_OP_MKNOD) {
       r = client->mknod( make_sub("mknod"), 0644);
     }
      
-    if (op == MDS_OP_OPEN) {
+    if (op == CEPH_MDS_OP_OPEN) {
       if (contents.empty())
-        op = MDS_OP_READDIR;
+        op = CEPH_MDS_OP_READDIR;
       else {
         r = client->open( get_random_sub(), O_RDONLY );
         if (r > 0) {
@@ -2394,17 +2394,18 @@ int SyntheticClient::random_walk(int num_req)
       }
     }
 
-    if (op == MDS_OP_RELEASE) {   // actually, close
+    /*if (op == CEPH_MDS_OP_RELEASE) {   // actually, close
       if (open_files.empty())
-        op = MDS_OP_STAT;
+        op = CEPH_MDS_OP_STAT;
       else {
         int fh = get_random_fh();
         r = client->close( fh );
         if (r == 0) open_files.erase(fh);
       }
     }
+    */
     
-    if (op == MDS_OP_STAT) {
+    if (op == CEPH_MDS_OP_STAT) {
       struct stat st;
       if (contents.empty()) {
         if (did_readdir) {
@@ -2412,15 +2413,15 @@ int SyntheticClient::random_walk(int num_req)
             dout(DBL) << "stat in empty dir, up" << dendl;
             up();
           } else {
-            op = MDS_OP_MKNOD;
+            op = CEPH_MDS_OP_MKNOD;
           }
         } else
-          op = MDS_OP_READDIR;
+          op = CEPH_MDS_OP_READDIR;
       } else
         r = client->lstat(get_random_sub(), &st);
     }
 
-    if (op == MDS_OP_READDIR) {
+    if (op == CEPH_MDS_OP_READDIR) {
       clear_dir();
       
       list<string> c;

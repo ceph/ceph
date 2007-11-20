@@ -615,10 +615,10 @@ MClientReply *Client::make_request(MClientRequest *req,
   
   bool nojournal = false;
   int op = req->get_op();
-  if (op == MDS_OP_STAT ||
-      op == MDS_OP_LSTAT ||
-      op == MDS_OP_READDIR ||
-      op == MDS_OP_OPEN)
+  if (op == CEPH_MDS_OP_STAT ||
+      op == CEPH_MDS_OP_LSTAT ||
+      op == CEPH_MDS_OP_READDIR ||
+      op == CEPH_MDS_OP_OPEN)
     nojournal = true;
 
 
@@ -743,11 +743,11 @@ MClientReply *Client::make_request(MClientRequest *req,
       client_logger->inc("lwnum");
     }
     
-    if (op == MDS_OP_STAT) {
+    if (op == CEPH_MDS_OP_STAT) {
       client_logger->finc("lstatsum",(double)lat);
       client_logger->inc("lstatnum");
     }
-    else if (op == MDS_OP_READDIR) {
+    else if (op == CEPH_MDS_OP_READDIR) {
       client_logger->finc("ldirsum",(double)lat);
       client_logger->inc("ldirnum");
     }
@@ -1605,7 +1605,7 @@ int Client::_link(const char *existing, const char *newname)
   // main path arg is new link name
   // sarg is target (existing file)
 
-  MClientRequest *req = new MClientRequest(MDS_OP_LINK, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LINK, messenger->get_myinst());
   req->set_path(newname);
   req->set_path2(existing);
   
@@ -1640,7 +1640,7 @@ int Client::unlink(const char *relpath)
 int Client::_unlink(const char *path)
 {
 
-  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UNLINK, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1684,7 +1684,7 @@ int Client::rename(const char *relfrom, const char *relto)
 
 int Client::_rename(const char *from, const char *to)
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME, messenger->get_myinst());
   req->set_path(from);
   req->set_path2(to);
  
@@ -1732,7 +1732,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
 
 int Client::_mkdir(const char *path, mode_t mode)
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKDIR, messenger->get_myinst());
   req->set_path(path);
   req->head.args.mkdir.mode = mode;
  
@@ -1767,7 +1767,7 @@ int Client::rmdir(const char *relpath)
 
 int Client::_rmdir(const char *path)
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMDIR, messenger->get_myinst());
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -1812,7 +1812,7 @@ int Client::symlink(const char *target, const char *rellink)
 
 int Client::_symlink(const char *target, const char *link)
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK, messenger->get_myinst());
   req->set_path(link);
   req->set_path2(target);
  
@@ -1899,7 +1899,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
     //req->set_caller_uid(fc->uid);
     //req->set_caller_gid(fc->gid);
     
-    req = new MClientRequest(MDS_OP_LSTAT, messenger->get_myinst());
+    req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
     req->head.args.stat.mask = mask;
     req->set_filepath(fpath);
 
@@ -2034,7 +2034,7 @@ int Client::chmod(const char *relpath, mode_t mode)
 int Client::_chmod(const char *path, mode_t mode) 
 {
   dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << dendl;
-  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CHMOD, messenger->get_myinst());
   req->set_path(path); 
   req->head.args.chmod.mode = mode;
 
@@ -2068,7 +2068,7 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 int Client::_chown(const char *path, uid_t uid, gid_t gid)
 {
   dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
-  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CHOWN, messenger->get_myinst());
   req->set_path(path); 
   req->head.args.chown.uid = uid;
   req->head.args.chown.gid = gid;
@@ -2106,7 +2106,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 {
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
-  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
   req->head.args.utime.mtime = mtime.tv_ref();
   req->head.args.utime.atime = atime.tv_ref();
@@ -2144,7 +2144,7 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
 { 
   dout(3) << "_mknod(" << path << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
-  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD, messenger->get_myinst());
   req->set_path(path); 
   req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
@@ -2301,7 +2301,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   
   dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << dendl;
 
-  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_READDIR, messenger->get_myinst());
   req->set_filepath(dirp->path); 
   req->head.args.readdir.frag = fg;
   
@@ -2528,7 +2528,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
 int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp) 
 {
   // go
-  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN, messenger->get_myinst());
   req->set_path(path); 
   req->head.args.open.flags = flags;
   req->head.args.open.mode = mode;
@@ -3085,7 +3085,7 @@ int Client::truncate(const char *relpath, off_t length)
 
 int Client::_truncate(const char *file, off_t length) 
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_TRUNCATE, messenger->get_myinst());
   req->set_path(file); 
   req->head.args.truncate.length = length;
 
@@ -3116,7 +3116,7 @@ int Client::ftruncate(int fd, off_t length)
 
 int Client::_ftruncate(Fh *fh, off_t length) 
 {
-  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_TRUNCATE, messenger->get_myinst());
   req->head.args.truncate.ino = fh->inode->inode.ino;
   req->head.args.truncate.length = length;
 

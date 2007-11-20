@@ -539,19 +539,19 @@ void Server::handle_client_request(MClientRequest *req)
   // -----
   // some ops are on ino's
   switch (req->get_op()) {
-  case MDS_OP_FSTAT:
+  case CEPH_MDS_OP_FSTAT:
     ref = mdcache->get_inode(req->head.args.fstat.ino);
     assert(ref);
     break;
     
-  case MDS_OP_TRUNCATE:
+  case CEPH_MDS_OP_TRUNCATE:
     if (!req->head.args.truncate.ino) 
       break;   // can be called w/ either fh OR path
     ref = mdcache->get_inode(req->head.args.truncate.ino);
     assert(ref);
     break;
     
-  case MDS_OP_FSYNC:
+  case CEPH_MDS_OP_FSYNC:
     ref = mdcache->get_inode(req->head.args.fsync.ino);   // fixme someday no ino needed?
     assert(ref);
     break;
@@ -590,31 +590,31 @@ void Server::dispatch_client_request(MDRequest *mdr)
   switch (req->get_op()) {
 
     // inodes ops.
-  case MDS_OP_STAT:
-  case MDS_OP_LSTAT:
+  case CEPH_MDS_OP_STAT:
+  case CEPH_MDS_OP_LSTAT:
     handle_client_stat(mdr);
     break;
-  case MDS_OP_UTIME:
+  case CEPH_MDS_OP_UTIME:
     handle_client_utime(mdr);
     break;
-  case MDS_OP_CHMOD:
+  case CEPH_MDS_OP_CHMOD:
     handle_client_chmod(mdr);
     break;
-  case MDS_OP_CHOWN:
+  case CEPH_MDS_OP_CHOWN:
     handle_client_chown(mdr);
     break;
-  case MDS_OP_TRUNCATE:
+  case CEPH_MDS_OP_TRUNCATE:
     handle_client_truncate(mdr);
     break;
-  case MDS_OP_READDIR:
+  case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
     break;
-  case MDS_OP_FSYNC:
+  case CEPH_MDS_OP_FSYNC:
     //handle_client_fsync(req, ref);
     break;
 
     // funky.
-  case MDS_OP_OPEN:
+  case CEPH_MDS_OP_OPEN:
     if (req->head.args.open.flags & O_CREAT)
       handle_client_openc(mdr);
     else 
@@ -623,23 +623,23 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // namespace.
     // no prior locks.
-  case MDS_OP_MKNOD:
+  case CEPH_MDS_OP_MKNOD:
     handle_client_mknod(mdr);
     break;
-  case MDS_OP_LINK:
+  case CEPH_MDS_OP_LINK:
     handle_client_link(mdr);
     break;
-  case MDS_OP_UNLINK:
-  case MDS_OP_RMDIR:
+  case CEPH_MDS_OP_UNLINK:
+  case CEPH_MDS_OP_RMDIR:
     handle_client_unlink(mdr);
     break;
-  case MDS_OP_RENAME:
+  case CEPH_MDS_OP_RENAME:
     handle_client_rename(mdr);
     break;
-  case MDS_OP_MKDIR:
+  case CEPH_MDS_OP_MKDIR:
     handle_client_mkdir(mdr);
     break;
-  case MDS_OP_SYMLINK:
+  case CEPH_MDS_OP_SYMLINK:
     handle_client_symlink(mdr);
     break;
 
@@ -2301,7 +2301,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // rmdir or unlink?
   bool rmdir = false;
-  if (req->get_op() == MDS_OP_RMDIR) rmdir = true;
+  if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
   
   if (rmdir) {
     dout(7) << "handle_client_rmdir on " << *dn << dendl;
