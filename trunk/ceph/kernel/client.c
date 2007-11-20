@@ -90,7 +90,7 @@ trymount:
 	}
 
 	/* get handle for mount path */
-	/*err = ceph_open_dir(CEPH_INO_ROOT, args->path);
+	/*err = ceph_mdsc_open_dir(&client->mdsc, CEPH_INO_ROOT, args->path);
 	if (err)
 		return err;
 	*/
@@ -121,7 +121,7 @@ static void handle_mon_map(struct ceph_client *client, struct ceph_msg *msg)
 
 	clear_bit(4, &client->mounting);
 	if (client->mounting == 0)
-		wake_up_all(&client->mount_wq);
+		wake_up(&client->mount_wq);
 }
 
 
