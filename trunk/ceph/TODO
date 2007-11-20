@@ -74,7 +74,6 @@ mds
 - efficient stat for single writers
 - lstat vs stat?
 - add FILE_CAP_EXTEND capability bit
-- only share osdmap updates with clients holding capabilities
 - delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 
 

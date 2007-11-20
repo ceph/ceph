@@ -54,12 +54,12 @@ class MOSDMap : public Message {
   // marshalling
   virtual void decode_payload() {
     int off = 0;
-    ::_decode(maps, payload, off);
     ::_decode(incremental_maps, payload, off);
+    ::_decode(maps, payload, off);
   }
   virtual void encode_payload() {
-    ::_encode(maps, payload);
     ::_encode(incremental_maps, payload);
+    ::_encode(maps, payload);
   }
 
   virtual char *get_type_name() { return "omap"; }
