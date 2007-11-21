@@ -538,9 +538,9 @@ int ObjectCache::map_read(block_t start, block_t len,
  * - break up bufferheads that don't fall completely within the range
  * - cancel rx ops we obsolete.
  *   - resubmit rx ops if we split bufferheads
- * - break over disk extent boundaries
+ * - cancel obsoleted tx ops
  *
- * - leave potentially obsoleted tx ops alone (for now)
+ * - DO NOT break over disk extent boundaries
  */
 int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
@@ -579,11 +579,13 @@ int ObjectCache::map_write(block_t start, block_t len,
     // max for this bh (bc of (re)alloc on disk)
     block_t max = left;
 
+    /*
     // based on disk extent boundary ...
     vector<Extent> exv;
     on->map_extents(cur, max, exv, 0);
     if (exv.size() > 1) 
       max = exv[0].length;
+    */
 
     dout(10) << "map_write " << cur << "~" << max << dendl;
     
@@ -593,8 +595,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       n->set_start( cur );
       n->set_length( max );
       bc->add_bh(n);
-      if (exv[0].start == 0)
-	n->set_state(BufferHead::STATE_CLEAN); // hole
+      //if (exv[0].start == 0)
+      //n->set_state(BufferHead::STATE_CLEAN); // hole
       hits[cur] = n;
       left -= max;
       cur += max;
@@ -668,7 +670,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       }
       
       // try to cancel tx?
-      if (bh->is_tx() && bh->epoch_modified == super_epoch) bc->bh_cancel_write(bh, super_epoch);
+      if (bh->is_tx() && bh->epoch_modified == super_epoch)
+	bc->bh_cancel_write(bh, super_epoch);
             
       // put in our map
       hits[cur] = bh;
@@ -687,8 +690,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       BufferHead *n = new BufferHead(this);
       n->set_start( cur );
       n->set_length( glen );
-      if (exv[0].start == 0)
-	n->set_state(BufferHead::STATE_CLEAN); // hole
+      //if (exv[0].start == 0)
+      //n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
       hits[cur] = n;
       
@@ -933,6 +936,37 @@ void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
     p = o;
 }
 
+
+void ObjectCache::scrub_csums()
+{
+  dout(10) << "scrub_csums on " << *this->on << dendl;
+  int bad = 0;
+  for (map<block_t, BufferHead*>::iterator p = data.begin();
+       p != data.end();
+       p++) {
+    BufferHead *bh = p->second;
+    if (bh->is_rx() || bh->is_missing()) continue;  // nothing to scrub
+    if (bh->is_clean() && bh->data.length() == 0) continue;  // hole.
+    if (bh->is_clean() || bh->is_tx()) {
+      for (unsigned i=0; i<bh->length(); i++) {
+	vector<Extent> exv;
+	on->map_extents(bh->start()+i, 1, exv, 0);
+	assert(exv.size() == 1);
+	if (exv[0].start == 0) continue;  // hole.
+	csum_t want = *on->get_extent_csum_ptr(bh->start()+i);
+	csum_t b = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
+	if (b != want) {
+	  dout(0) << "scrub_csums bad data at " << (bh->start()+i) << " have " 
+		  << hex << b << " should be " << want << dec
+		  << " in bh " << *bh
+		  << dendl;
+	  bad++;
+	}
+      }
+    }    
+  }
+  assert(bad == 0);
+}
 
 
 /************** BufferCache ***************/

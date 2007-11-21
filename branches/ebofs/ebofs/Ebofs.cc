@@ -1573,6 +1573,7 @@ void Ebofs::alloc_write(Onode *on,
 void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 {
   ObjectCache *oc = on->get_oc(&bc);
+  oc->scrub_csums();
 
   // map into blocks
   off_t opos = off;         // byte pos in object
@@ -1592,6 +1593,30 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   block_t blen = blast-bstart+1;
   block_t oldlastblock = on->last_block;
 
+
+  // map b range onto buffer_heads
+  map<block_t, BufferHead*> hits;
+  oc->map_write(bstart, blen, hits, super_epoch);
+
+  for (map<block_t, BufferHead*>::iterator i = hits.begin();
+       i != hits.end(); 
+       i++) {
+    BufferHead *bh = i->second;
+    
+    if (bh->start() < oldlastblock) {
+      vector<Extent> exv;
+      on->map_extents(bh->start(), bh->length(), exv, 0);
+      assert(exv.size() >= 1);
+      if (exv[0].start) continue; // not a hole.
+      assert(bh->is_missing() || bh->is_clean());
+      dout(10) << "apply_write marking old hole clean " << *bh << dendl;
+    } else {
+      assert(bh->is_missing());
+      dout(10) << "apply_write treating appended bh as a hole " << *bh << dendl;
+    }
+    bc.mark_clean(bh);
+  }
+
   // allocate write on disk.
   interval_set<block_t> alloc;
   block_t old_bfirst = 0;  // zero means not defined here (since we ultimately pass to bh_read)
@@ -1602,16 +1627,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   if (fake_writes) {
     on->uncommitted.clear();   // worst case!
     return;
-  }    
-
-  // map b range onto buffer_heads
-  map<block_t, BufferHead*> hits;
-  oc->map_write(bstart, blen, hits, super_epoch);
+  }
+  
   
   // get current versions
-  //version_t lowv, highv;
-  //oc->scan_versions(bstart, blen, lowv, highv);
-  //highv++;
   version_t highv = ++oc->write_count;
   
   // copy from bl into buffer cache
@@ -1624,14 +1643,18 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     BufferHead *bh = i->second;
     bh->set_version(highv);
     bh->epoch_modified = super_epoch;
-    
-    // newly allocated?
-    if (bh->start() >= oldlastblock) {
-      assert(bh->is_missing());
-      bc.mark_clean(bh);  // now a hole
-      dout(10) << "apply_write treating new (past old last_block) bh as a hole " << *bh << dendl;
-    }
 
+    // break over extent boundary?
+    vector<Extent> exv;
+    on->map_extents(bh->start(), bh->length(), exv, 0);
+    dout(10) << "apply_write bh " << *bh << " maps to " << exv << dendl;
+    if (exv.size() > 1) {
+      dout(10) << "apply_write breaking interior bh " << *bh << " over extent boundary " 
+	       << exv[0] << " " << exv[1] << dendl;
+      BufferHead *right = bc.split(bh, bh->start() + exv[0].length);
+      hits[right->start()] = right;
+    }
+    
     // old write in progress?
     if (bh->is_tx()) {      // copy the buffer to avoid munging up in-flight write
       dout(10) << "apply_write tx pending, copying buffer on " << *bh << dendl;
@@ -1737,14 +1760,23 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
 	// copy data into new buffers first (copy on write!)
 	//  FIXME: only do the modified pages?  this might be a big bh!
-	bufferlist temp;
-	temp.claim(bh->data);
-	//bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+	bufferlist oldbl;
+	oldbl.claim(bh->data);
 	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-	if (temp.length()) 
-	  bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
-	else
-	  bh->data.zero();  // was a hole
+	if (oldbl.length()) {
+	  // had data
+	  if (off_in_bh) 
+	    bh->data.copy_in(0, off_in_bh, oldbl);
+	  if (off_in_bh+len_in_bh < bh->data.length())
+	    bh->data.copy_in(off_in_bh+len_in_bh, bh->data.length()-off_in_bh-len_in_bh,
+			     oldbl.c_str()+off_in_bh+len_in_bh);
+	} else {
+	  // was a hole
+	  if (off_in_bh) 
+	    bh->data.zero(0, off_in_bh);
+	  if (off_in_bh+len_in_bh < bh->data.length())
+	    bh->data.zero(off_in_bh+len_in_bh, bh->data.length()-off_in_bh-len_in_bh);
+	}
 	
 	// new data
 	bufferlist sub;
@@ -1752,12 +1784,18 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 	bh->data.copy_in(off_in_bh, len_in_bh, sub);
 
 	// update csum
-	csum_t *csum = on->get_extent_csum_ptr(opos/EBOFS_BLOCK_SIZE);
-	unsigned blocks = (off_in_bh+len_in_bh+4095)/EBOFS_BLOCK_SIZE - off_in_bh/EBOFS_BLOCK_SIZE;
-	for (unsigned i=0; i<blocks; i++) {
+	block_t rbfirst = off_in_bh/EBOFS_BLOCK_SIZE;
+	block_t rblast = (off_in_bh+len_in_bh+4095)/EBOFS_BLOCK_SIZE;
+	block_t bnum = rblast-rbfirst;
+	csum_t *csum = on->get_extent_csum_ptr(bh->start()+rbfirst);
+	dout(10) << "calc csum for " << rbfirst << "~" << bnum << dendl;
+	for (unsigned i=0; i<bnum; i++) {
 	  on->data_csum -= csum[i];
-	  csum[i] = calc_csum(bh->data.c_str() + i*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
+	  dout(10) << "old csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
+	  csum[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
+	  dout(10) << "new csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
 	  on->data_csum += csum[i];
+	  dout(10) << "new data_csum is " << hex << on->data_csum << dec << dendl;
 	}
 
 	blpos += len_in_bh;
@@ -1804,11 +1842,15 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       bufferlist sub;
       sub.substr_of(bl, blpos, len_in_bh);
       bh->data.copy_in(0, len_in_bh, sub);
+
+      // zero the past-eof tail, too, to be tidy.
+      if (len_in_bh < bh->data.length())
+	bh->data.zero(len_in_bh, bh->data.length()-len_in_bh);
     }
 
     // fill in csums
     csum_t *csum = on->get_extent_csum_ptr(bh->start());
-    unsigned blocks = len_in_bh / EBOFS_BLOCK_SIZE;
+    unsigned blocks = (len_in_bh + 4095)/ EBOFS_BLOCK_SIZE;
     for (unsigned i=0; i<blocks; i++) {
       on->data_csum -= csum[i];
       csum[i] = calc_csum(bh->data.c_str() + i*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
@@ -1837,6 +1879,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   assert(left == 0);
   assert(opos == off+(off_t)len);
   //assert(blpos == bl.length());
+
+  oc->scrub_csums();
 }
 
 

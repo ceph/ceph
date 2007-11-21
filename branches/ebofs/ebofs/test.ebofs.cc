@@ -22,7 +22,7 @@ bool stop = false;
 
 char fingerprint_byte_at(int pos, int seed)
 {
-  __u64 big = ((pos & ~7) / 133) ^ big;
+  __u64 big = ((pos & ~7) / 133) ^ seed;
   return ((char*)&big)[pos & 7];
 }
 
@@ -32,7 +32,7 @@ class Tester : public Thread {
   Ebofs &fs;
   int t;
   
-  char b[1024*1024];
+  //char b[1024*1024];
 
 public:
   Tester(Ebofs &e) : fs(e), t(nt) { nt++; }
@@ -58,8 +58,7 @@ public:
           int l = MIN(len,bl.length());
           if (l) {
             cout << t << " got " << l << std::endl;
-            bl.copy(0, l, b);
-            char *p = b;
+            char *p = bl.c_str();
             while (l--) {
 	      char want = fingerprint_byte_at(off, oid.ino);
               if (*p != 0 && *p != want) {
@@ -76,11 +75,11 @@ public:
       case 1:
         {
           cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << std::endl;
-          for (int j=0;j<len;j++) 
+	  char b[len];
+          for (int j=0;j<len;j++)
             b[j] = fingerprint_byte_at(off+j, oid.ino);
-	  bufferptr wp(b, len);
           bufferlist w;
-          w.append(wp);
+	  w.append(b, len);
           fs.write(oid, off, len, w, 0);
         }
         break;

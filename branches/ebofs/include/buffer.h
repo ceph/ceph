@@ -399,6 +399,10 @@ public:
     void zero() {
       memset(c_str(), 0, _len);
     }
+    void zero(unsigned o, unsigned l) {
+      assert(o+l <= _len);
+      memset(c_str()+o, 0, l);
+    }
 
     void clean() {
       //raw *newraw = _raw->makesib(_len);
@@ -641,6 +645,24 @@ public:
 	   it != _buffers.end();
 	   it++)
         it->zero();
+    }
+    void zero(unsigned o, unsigned l) {
+      assert(o+l <= _len);
+      unsigned p = 0;
+      for (std::list<ptr>::iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) {
+	if (p + it->length() > o) {
+	  if (p >= o && p+it->length() >= o+l)
+	    it->zero();                         // all
+	  else if (p >= o) 
+	    it->zero(0, o+l-p);                 // head
+	  else
+	    it->zero(o-p, it->length()-(o-p));  // tail
+	}
+	p += it->length();
+	if (o+l >= p) break;  // done
+      }
     }
 
     // sort-of-like-assignment-op

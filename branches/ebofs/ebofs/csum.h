@@ -20,7 +20,7 @@ typedef __u64 csum_t;
 /*
  * physically and logically aligned buffer.  yay.
  */
-inline __u64 calc_csum(char *start, int len) {
+inline __u64 calc_csum(const char *start, int len) {
   // must be 64-bit aligned
   assert(((unsigned long)start & 7) == 0); 
   assert((len & 7) == 0);
@@ -38,8 +38,8 @@ inline __u64 calc_csum(char *start, int len) {
 /*
  * arbitrarily aligned buffer.  buffer alignment must match logical alignment.
  */
-inline __u64 calc_csum_unaligned(char *start, int len) {
-  char *end = start + len;
+inline __u64 calc_csum_unaligned(const char *start, int len) {
+  const char *end = start + len;
   __u64 csum = 0;
   
   // front
@@ -51,7 +51,7 @@ inline __u64 calc_csum_unaligned(char *start, int len) {
     return csum;  
 
   // middle, aligned
-  char *fastend = end - 7;
+  const char *fastend = end - 7;
   while (start < fastend) {
     csum += *(__u64*)start;
     start += sizeof(__u64);
@@ -69,8 +69,8 @@ inline __u64 calc_csum_unaligned(char *start, int len) {
 /*
  * arbitrarily aligned buffer, with arbitrary logical alignment
  */
-inline __u64 calc_csum_realign(char *start, int len, int off) {
-  char *end = start + len;
+inline __u64 calc_csum_realign(const char *start, int len, int off) {
+  const char *end = start + len;
   __u64 csum = 0;
   
   if (((unsigned long)start & 7) == (off & 7))

@@ -377,6 +377,8 @@ class ObjectCache {
       cout << "dump: " << i->first << ": " << *i->second << std::endl;
   }
 
+  void scrub_csums();
+
 };
 
 
