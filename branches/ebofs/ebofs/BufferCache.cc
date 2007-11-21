@@ -18,15 +18,120 @@
 #include "Onode.h"
 
 
+void do_apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) 
+{
+  assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
+  //assert(partial_is_complete());
+  //cout << "apply_partial" << std::endl;
+  for (map<off_t, bufferlist>::iterator i = pm.begin();
+       i != pm.end();
+       i++) {
+    int pos = i->first;
+    //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << std::endl;
+    bl.copy_in(pos, i->second.length(), i->second);
+  }
+  pm.clear();
+}
+
+
+
 /*********** BufferHead **************/
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.bh."
+#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs." << *this << "."
 
 
+void BufferHead::add_partial(off_t off, bufferlist& p) 
+{
+  unsigned len = p.length();
+  assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
+  assert(off >= 0);
+  assert(off + len <= EBOFS_BLOCK_SIZE);
+  
+  csum_t csum_diff = calc_csum_realign(p.c_str(), p.length(), off);
+  
+  // trim any existing that overlaps
+  map<off_t, bufferlist>::iterator i = partial.begin();
+  while (i != partial.end()) {
+    // is [off,off+len)...
+    // past i?
+    if (off >= i->first + i->second.length()) {  
+      i++; 
+      continue; 
+    }
+      // before i?
+    if (i->first >= off+len) break;   
+    
+    // does [off,off+len)...
+    // overlap all of i?
+    if (off <= i->first && off+len >= i->first + i->second.length()) {
+      // erase it and move on.
+      csum_diff -= calc_csum_realign(i->second.c_str(), i->second.length(), i->first);
+      partial.erase(i++);
+      continue;
+    }
+    // overlap tail of i?
+    if (off > i->first && off+len >= i->first + i->second.length()) {
+      // shorten i.
+      unsigned taillen = off - i->first;
+      csum_diff -= calc_csum_realign(i->second.c_str()+taillen, taillen, off);
+      bufferlist o;
+      o.claim( i->second );
+      i->second.substr_of(o, 0, taillen);
+      i++;
+      continue;
+    }
+    // overlap head of i?
+    if (off <= i->first && off+len < i->first + i->second.length()) {
+      // move i (make new tail).
+      off_t tailoff = off+len;
+      unsigned trim = tailoff - i->first;
+      csum_diff -= calc_csum_realign(i->second.c_str(), trim, i->first);
+      partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
+      partial.erase(i++);   // should now be at tailoff
+      i++;
+      continue;
+    } 
+    // split i?
+    if (off > i->first && off+len < i->first + i->second.length()) {
+      bufferlist o;
+      o.claim( i->second );
+      // shorten head
+      unsigned headlen = off - i->first;
+      i->second.substr_of(o, 0, headlen);
+      // new tail
+      unsigned tailoff = off+len - i->first;
+      unsigned taillen = o.length() - len - headlen;
+      partial[off+len].substr_of(o, tailoff, taillen);
+      csum_diff -= calc_csum_realign(o.c_str()+headlen, taillen, off);
+      break;
+    }
+    assert(0);
+  }
+  
+  // insert and adjust csum
+  partial[off] = p;
+  csum_t *csum = oc->on->get_extent_csum_ptr(start());
+  csum[0] += csum_diff;
+  oc->on->data_csum += csum_diff;
 
+  dout(10) << "add_partial off " << off << "~" << p.length()
+	   << " csum_diff " << hex << csum_diff << " now " 
+	   << csum[0] << dec << dendl;
+}
 
+void BufferHead::apply_partial() 
+{
+  do_apply_partial(data, partial);
+  csum_t new_csum = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
+  csum_t *oldp = oc->on->get_extent_csum_ptr(start());
+  if (new_csum != *oldp) {
+    dout(10) << "apply_partial old_csum " << hex << *oldp << " calced_csum " << new_csum << dec << dendl;
+    assert(*oldp == new_csum);
+  }
+  partial.clear();
+}
 
 
 /************ ObjectCache **************/
@@ -433,9 +538,9 @@ int ObjectCache::map_read(block_t start, block_t len,
  * - break up bufferheads that don't fall completely within the range
  * - cancel rx ops we obsolete.
  *   - resubmit rx ops if we split bufferheads
+ * - break over disk extent boundaries
  *
  * - leave potentially obsoleted tx ops alone (for now)
- * - don't worry about disk extent boundaries (yet)
  */
 int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
@@ -1091,7 +1196,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
       bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
       combined.push_back( bp );
       combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
-      BufferHead::apply_partial( combined, p->second.partial );
+      do_apply_partial( combined, p->second.partial );
 
       // write it!
       dev.write( pblock, 1, combined,

@@ -31,6 +31,7 @@ using namespace __gnu_cxx;
 
 #include "include/object.h"
 
+#include "csum.h"
 
 #ifndef MIN
 # define MIN(a,b)  ((a)<=(b) ? (a):(b))
@@ -39,8 +40,6 @@ using namespace __gnu_cxx;
 # define MAX(a,b)  ((a)>=(b) ? (a):(b))
 #endif
 
-
-typedef __u64 csum_t;
 
 // disk
 typedef uint64_t block_t;        // disk location/sector/block

@@ -147,11 +147,6 @@ class BufferHead : public LRUObject {
   bool is_rx() { return state == STATE_RX; }
   bool is_partial() { return state == STATE_PARTIAL; }
   
-  //bool is_partial_writes() { return !partial_write.empty(); }
-  //void finish_partials();
-  //void cancel_partials();
-  //void queue_partial_write(block_t b);
-
   void add_shadow(BufferHead *dup) {
     shadows.insert(dup);
     dup->shadow_of = this;
@@ -240,92 +235,10 @@ class BufferHead : public LRUObject {
 
   bool partial_is_complete(off_t size) {
     return have_partial_range( 0, MIN(size, EBOFS_BLOCK_SIZE) );
-    //(off_t)(start()*EBOFS_BLOCK_SIZE),
-    //MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) ) );
   }
-  void apply_partial() {
-    apply_partial(data, partial);
-    partial.clear();
-  }
-  static void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
-    assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
-    //assert(partial_is_complete());
-    //cout << "apply_partial" << std::endl;
-    for (map<off_t, bufferlist>::iterator i = pm.begin();
-         i != pm.end();
-         i++) {
-      int pos = i->first;
-      //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << std::endl;
-      bl.copy_in(pos, i->second.length(), i->second);
-    }
-    pm.clear();
-  }
-  void add_partial(off_t off, bufferlist& p) {
-    unsigned len = p.length();
-    assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
-    //assert(off >= (off_t)(start()*EBOFS_BLOCK_SIZE));
-    //assert(off + len <= (off_t)(end()*EBOFS_BLOCK_SIZE));
-    assert(off >= 0);
-    assert(off + len <= EBOFS_BLOCK_SIZE);
 
-    // trim any existing that overlaps
-    map<off_t, bufferlist>::iterator i = partial.begin();
-    while (i != partial.end()) {
-      // is [off,off+len)...
-      // past i?
-      if (off >= i->first + i->second.length()) {  
-        i++; 
-        continue; 
-      }
-      // before i?
-      if (i->first >= off+len) break;   
-      
-      // does [off,off+len)...
-      // overlap all of i?
-      if (off <= i->first && off+len >= i->first + i->second.length()) {
-        // erase it and move on.
-	partial.erase(i++);
-        continue;
-      }
-      // overlap tail of i?
-      if (off > i->first && off+len >= i->first + i->second.length()) {
-        // shorten i.
-        bufferlist o;
-        o.claim( i->second );
-        unsigned taillen = off - i->first;
-        i->second.substr_of(o, 0, taillen);
-        i++;
-        continue;
-      }
-      // overlap head of i?
-      if (off <= i->first && off+len < i->first + i->second.length()) {
-        // move i (make new tail).
-        off_t tailoff = off+len;
-        unsigned trim = tailoff - i->first;
-        partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
-        partial.erase(i++);   // should now be at tailoff
-        i++;
-        continue;
-      } 
-      // split i?
-      if (off > i->first && off+len < i->first + i->second.length()) {
-	bufferlist o;
-	o.claim( i->second );
-	// shorten head
-	unsigned headlen = off - i->first;
-	i->second.substr_of(o, 0, headlen);
-	// new tail
-	unsigned tailoff = off+len - i->first;
-	unsigned taillen = o.length() - len - headlen;
-	partial[off+len].substr_of(o, tailoff, taillen);
-	break;
-      }
-      assert(0);
-    }
-
-    // insert
-    partial[off] = p;
-  }
+  void apply_partial();
+  void add_partial(off_t off, bufferlist& p);
 
 };
 
