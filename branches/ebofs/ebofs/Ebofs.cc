@@ -736,7 +736,7 @@ Onode* Ebofs::get_onode(object_t oid)
       dout(0) << " wrong oid in onode block: " << eo->object_id << " != " << oid << dendl;
       dout(0) << " onode_loc is " << eo->onode_loc << dendl;
       dout(0) << " object_size " << eo->object_size << dendl;
-      dout(0) << " object_blocks " << eo->object_blocks << dendl;
+      dout(0) << " alloc_blocks " << eo->alloc_blocks << dendl;
       dout(0) << " " << eo->num_collections << " coll + " 
 	      << eo->num_attr << " attr + " 
 	      << eo->num_extents << " extents" << dendl;
@@ -745,7 +745,7 @@ Onode* Ebofs::get_onode(object_t oid)
     on->readonly = eo->readonly;
     on->onode_loc = eo->onode_loc;
     on->object_size = eo->object_size;
-    on->object_blocks = eo->object_blocks;
+    on->alloc_blocks = eo->alloc_blocks;
 
     // parse
     char *p = bl.c_str() + sizeof(*eo);
@@ -758,7 +758,7 @@ Onode* Ebofs::get_onode(object_t oid)
     }
 
     // parse attributes
-    for (int i=0; i<eo->num_attr; i++) {
+    for (unsigned i=0; i<eo->num_attr; i++) {
       string key = p;
       p += key.length() + 1;
       int len = *(int*)(p);
@@ -771,14 +771,19 @@ Onode* Ebofs::get_onode(object_t oid)
     // parse extents
     on->extent_map.clear();
     block_t n = 0;
-    for (int i=0; i<eo->num_extents; i++) {
+    for (unsigned i=0; i<eo->num_extents; i++) {
       Extent ex = *((Extent*)p);
-      on->extent_map[n] = ex;
+      p += sizeof(Extent);
+      on->extent_map[n].ex = ex;
+      if (ex.start) {
+	on->extent_map[n].csum.resize(ex.length);
+	memcpy(&on->extent_map[n].csum[0], p, sizeof(__u64)*ex.length);
+	p += sizeof(__u64)*ex.length;
+      }
       dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << dendl;
       n += ex.length;
-      p += sizeof(Extent);
     }
-    assert(n == on->object_blocks);
+    on->last_block = n;
 
     // wake up other waiters
     for (list<Cond*>::iterator i = waitfor_onode[oid].begin();
@@ -812,7 +817,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   eo.onode_loc = on->onode_loc;
   eo.object_id = on->object_id;
   eo.object_size = on->object_size;
-  eo.object_blocks = on->object_blocks;
+  eo.alloc_blocks = on->alloc_blocks;
   eo.num_collections = on->collections.size();
   eo.num_attr = on->attr.size();
   eo.num_extents = on->extent_map.size();
@@ -842,12 +847,17 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   }
   
   // extents
-  for (map<block_t,Extent>::iterator i = on->extent_map.begin();
+  for (map<block_t,ExtentCsum>::iterator i = on->extent_map.begin();
        i != on->extent_map.end();
        i++) {
-    bl.copy_in(off, sizeof(Extent), (char*)&(i->second));
+    ExtentCsum &o = i->second;
+    bl.copy_in(off, sizeof(Extent), (char*)&(o.ex));
     off += sizeof(Extent);
-    dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << i->second << dendl;
+    if (o.ex.start) {
+      bl.copy_in(off, sizeof(__u64)*o.ex.length, (char*)&o.csum[0]);
+      off += sizeof(__u64)*o.ex.length;
+    }
+    dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << o.ex << dendl;
   }
 }
 
@@ -866,8 +876,8 @@ void Ebofs::write_onode(Onode *on)
       allocator.release(on->onode_loc);
     
     block_t first = 0;
-    if (on->extent_map.size()) 
-      first = on->extent_map.begin()->second.start;
+    if (on->alloc_blocks)
+      first = on->get_first_block();
     
     allocator.allocate(on->onode_loc, blocks, first);
     object_tab->remove( on->object_id );
@@ -913,10 +923,11 @@ void Ebofs::remove_onode(Onode *on)
     allocator.release(on->onode_loc);
   
   // free data space
-  for (map<block_t,Extent>::iterator i = on->extent_map.begin();
+  for (map<block_t,ExtentCsum>::iterator i = on->extent_map.begin();
        i != on->extent_map.end();
        i++)
-    allocator.release(i->second);
+    if (i->second.ex.start)
+      allocator.release(i->second.ex);
   on->extent_map.clear();
 
   // remove from collections
@@ -1083,7 +1094,7 @@ Cnode* Ebofs::get_cnode(coll_t cid)
     
     // parse attributes
     char *p = bl.c_str() + sizeof(*ec);
-    for (int i=0; i<ec->num_attr; i++) {
+    for (unsigned i=0; i<ec->num_attr; i++) {
       string key = p;
       p += key.length() + 1;
       int len = *(int*)(p);
@@ -1443,9 +1454,10 @@ void Ebofs::alloc_write(Onode *on,
        i++) {
     // get old region
     vector<Extent> old;
-    on->map_extents(i->first, i->second, old);
+    on->map_extents(i->first, i->second, old, 0);
     for (unsigned o=0; o<old.size(); o++) 
-      allocator.release(old[o]);
+      if (old[o].start)
+	allocator.release(old[o]);
 
     // take note if first/last blocks in write range are remapped.. in case we need to do a partial read/write thing
     // these are for partial, so we don't care about TX bh's, so don't worry about bits canceling stuff below.
@@ -1481,7 +1493,7 @@ void Ebofs::alloc_write(Onode *on,
       }
 
       vector<Extent> old;
-      on->map_extents(bh->start(), bh->length(), old);
+      on->map_extents(bh->start(), bh->length(), old, 0);
       assert(old.size() == 1);
 
       if (bh->start() >= start && bh->end() <= start+len) {
@@ -1564,31 +1576,17 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
   // map into blocks
   off_t opos = off;         // byte pos in object
-  size_t zleft = 0;         // zeros left to write
   size_t left = len;        // bytes left
 
   block_t bstart = off / EBOFS_BLOCK_SIZE;
 
-  if (off > on->object_size) {
-    zleft = off - on->object_size;
-    opos = on->object_size;
-    bstart = on->object_size / EBOFS_BLOCK_SIZE;
-  }
   if (off+(off_t)len > on->object_size) {
     dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
              << " -> " << off+len << dendl;
     on->object_size = off+len;
     dirty_onode(on);
   }
-  if (bl.length() == 0) {
-    zleft += len;
-    left = 0;
-  } else {
-    assert(bl.length() == len);
-  }
-  if (zleft)
-    dout(10) << "apply_write zeroing " << zleft << " bytes before " << off << "~" << len 
-	      << " in " << *on << dendl;
+  assert(bl.length() == len);
 
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
@@ -1657,7 +1655,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       // locate ourselves in bh
       unsigned off_in_bh = opos - bh->start()*EBOFS_BLOCK_SIZE;
       assert(off_in_bh >= 0);
-      unsigned len_in_bh = MIN( (off_t)(zleft+left),
+      unsigned len_in_bh = MIN( (off_t)(left),
                                 (off_t)(bh->end()*EBOFS_BLOCK_SIZE)-opos );
       
       if (bh->is_partial() || bh->is_rx() || bh->is_missing()) {
@@ -1669,25 +1667,14 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
                  << " off_in_bh " << off_in_bh 
                  << " len_in_bh " << len_in_bh
                  << dendl;
-        unsigned z = MIN( zleft, len_in_bh );
-        if (z) {
-	  bufferptr zp(z);
-	  zp.zero();
-          bufferlist zb;
-          zb.push_back(zp);
-          bh->add_partial(off_in_bh, zb);
-	  zleft -= z;
-          opos += z;
-        }
-
         bufferlist sb;
-        sb.substr_of(bl, blpos, len_in_bh-z);  // substr in existing buffer
+        sb.substr_of(bl, blpos, len_in_bh);  // substr in existing buffer
         bufferlist cp;
-        cp.append(sb.c_str(), len_in_bh-z);    // copy the partial bit!
+        cp.append(sb.c_str(), len_in_bh);    // copy the partial bit!
         bh->add_partial(off_in_bh, cp);
-        left -= len_in_bh-z;
-        blpos += len_in_bh-z;
-        opos += len_in_bh-z;
+        left -= len_in_bh;
+        blpos += len_in_bh;
+        opos += len_in_bh;
 
         if (bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
           dout(10) << "apply_write  completed partial " << *bh << dendl;
@@ -1744,24 +1731,13 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
 	bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
 	
-	unsigned z = MIN( zleft, len_in_bh );
-	if (z) {
-	  bufferptr zp(z);
-	  zp.zero();
-	  bufferlist zb;
-	  zb.push_back(zp);
-	  bh->data.copy_in(off_in_bh, z, zb);
-	  zleft -= z;
-	  opos += z;
-	}
-	
 	bufferlist sub;
-	sub.substr_of(bl, blpos, len_in_bh-z);
-	bh->data.copy_in(off_in_bh+z, len_in_bh-z, sub);
+	sub.substr_of(bl, blpos, len_in_bh);
+	bh->data.copy_in(off_in_bh, len_in_bh, sub);
 
-	blpos += len_in_bh-z;
-	left -= len_in_bh-z;
-        opos += len_in_bh-z;
+	blpos += len_in_bh;
+	left -= len_in_bh;
+        opos += len_in_bh;
 
         if (!bh->is_dirty())
           bc.mark_dirty(bh);
@@ -1773,49 +1749,38 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
     // ok, we're talking full block(s) now (modulo last block of the object)
     assert(opos % EBOFS_BLOCK_SIZE == 0);
-    assert((off_t)(zleft+left) >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
-           opos+(off_t)(zleft+left) == on->object_size);
+    assert((off_t)(left) >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
+           opos+(off_t)(left) == on->object_size);
 
-    unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, zleft+left);
-    assert(len_in_bh <= zleft+left);
+    unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, left);
+    assert(len_in_bh <= left);
 
     dout(10) << "apply_write writing into " << *bh << ":"
 	     << " len_in_bh " << len_in_bh
 	     << dendl;
 
     // i will write:
-    unsigned z = MIN(len_in_bh, zleft);
     bufferlist sub;
-    sub.substr_of(bl, blpos, len_in_bh-z);
+    sub.substr_of(bl, blpos, len_in_bh);
 
-    if (!z && 
-	sub.is_page_aligned() &&
+    if (sub.is_page_aligned() &&
 	sub.is_n_page_sized()) {
       // assume caller isn't going to modify written buffers.
       // just refrence them!
       dout(10) << "apply_write yippee, written buffer already page aligned" << dendl;
       bh->data.claim(sub);
     } else {
-      // alloc new buffers.
+      // alloc new buffer.
       bh->data.clear();
       bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
       
-      if (z) {
-	bufferptr zp(z);
-	zp.zero();
-	bufferlist zb;
-	zb.push_back(zp);
-	bh->data.copy_in(0, z, zb);
-	zleft -= z;
-      }
-      
       bufferlist sub;
-      sub.substr_of(bl, blpos, len_in_bh-z);
-      bh->data.copy_in(z, len_in_bh-z, sub);
+      sub.substr_of(bl, blpos, len_in_bh);
+      bh->data.copy_in(0, len_in_bh, sub);
     }
 
-    blpos += len_in_bh-z;
-    left -= len_in_bh-z;
+    blpos += len_in_bh;
+    left -= len_in_bh;
     opos += len_in_bh;
 
     // old partial?
@@ -1830,12 +1795,76 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     bc.bh_write(on, bh);
   }
 
-  assert(zleft == 0);
   assert(left == 0);
   assert(opos == off+(off_t)len);
   //assert(blpos == bl.length());
 }
 
+
+void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
+{
+  ObjectCache *oc = on->get_oc(&bc);
+
+  // zero edges
+  // head?
+  if (off & (EBOFS_BLOCK_SIZE-1)) {
+    size_t l = EBOFS_BLOCK_SIZE - (off & (EBOFS_BLOCK_SIZE-1));
+    if (l > len) l = len;
+    bufferptr bp(l);
+    bp.zero();
+    bufferlist bl;
+    bl.push_back(bp);
+    apply_write(on, off, bl.length(), bl);
+    off += l;
+    len -= l;
+  }
+  if (len == 0) return;  // done!
+
+  // tail?
+  if ((off+len) & (EBOFS_BLOCK_SIZE-1)) {
+    int l = (off+len) & (EBOFS_BLOCK_SIZE-1);
+    bufferptr bp(l);
+    bp.zero();
+    bufferlist bl;
+    bl.push_back(bp);
+    apply_write(on, off+len-bl.length(), bp.length(), bl);
+    len -= l;
+  }
+  if (len == 0) return;  // done!
+
+  // map middle onto buffers
+  assert(len > 0);
+  block_t bstart = 0;
+  if (off) bstart = 1 + (off-1) / EBOFS_BLOCK_SIZE;
+  block_t blen = (off+len) / EBOFS_BLOCK_SIZE;
+  assert(blen > 0);
+
+  map<block_t,BufferHead*> hits;
+  oc->map_write(bstart, blen, hits, super_epoch);
+
+  list<Context*> finished;
+  map<block_t,BufferHead*>::iterator p = hits.begin();
+  while (p != hits.end()) {
+    map<block_t,BufferHead*>::iterator next = p;
+    next++;
+    BufferHead *bh = p->second;
+    oc->discard_bh(bh, super_epoch);
+    p = next;
+  }
+
+  // free old blocks?
+  if (blen) {
+    vector<Extent> old;
+    on->map_extents(bstart, blen, old, 0);
+    for (unsigned i=0; i<old.size(); i++)
+      if (old[i].start)
+	allocator.release(old[i]);
+    Extent hole(0, blen);      
+    on->set_extent(bstart, hole);
+  }
+
+  finish_contexts(finished, -1);
+}
 
 
 
@@ -2473,6 +2502,35 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& b
   return length;
 }
 
+int Ebofs::_zero(object_t oid, off_t offset, size_t length)
+{
+  dout(7) << "_zero " << oid << " " << offset << "~" << length << dendl;
+
+  // get|create inode
+  Onode *on = get_onode(oid);
+  if (!on) on = new_onode(oid);    // new inode!
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
+
+  if (length > 0 &&
+      offset < on->object_size) {
+    if (offset + (off_t)length >= on->object_size) {
+      _truncate(oid, offset);
+    } else {
+      dirty_onode(on);  
+      apply_zero(on, offset, length);
+    }
+  }
+
+  // done.
+  put_onode(on);
+  trim_bc();
+
+  return length;
+}
+
 
 int Ebofs::write(object_t oid, 
                  off_t off, size_t len,
@@ -2490,6 +2548,35 @@ int Ebofs::write(object_t oid,
       if (journal) {
 	Transaction t;
 	t.write(oid, off, len, bl);
+	bufferlist tbl;
+	t._encode(tbl);
+	if (journal->submit_entry(tbl, onsafe)) break;
+      }
+      if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+      break;
+    }
+  } else {
+    if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::zero(object_t oid, off_t off, size_t len, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  
+  // go
+  int r = _zero(oid, off, len);
+
+  // commit waiter
+  if (r > 0) {
+    assert((size_t)r == len);
+    while (1) {
+      if (journal) {
+	Transaction t;
+	t.zero(oid, off, len);
 	bufferlist tbl;
 	t._encode(tbl);
 	if (journal->submit_entry(tbl, onsafe)) break;
@@ -2573,16 +2660,17 @@ int Ebofs::_truncate(object_t oid, off_t size)
     // free blocks
     block_t nblocks = 0;
     if (size) nblocks = 1 + (size-1) / EBOFS_BLOCK_SIZE;
-    if (on->object_blocks > nblocks) {
+    if (on->last_block > nblocks) {
       vector<Extent> extra;
       on->truncate_extents(nblocks, extra);
       for (unsigned i=0; i<extra.size(); i++)
-        allocator.release(extra[i]);
+	if (extra[i].start)
+	  allocator.release(extra[i]);
     }
 
     // truncate buffer cache
     if (on->oc) {
-      on->oc->truncate(on->object_blocks, super_epoch);
+      on->oc->truncate(on->last_block, super_epoch);
       if (on->oc->is_empty())
 	on->close_oc();
     }
@@ -2684,7 +2772,8 @@ int Ebofs::_clone(object_t from, object_t to)
   // copy easy bits
   ton->readonly = true;
   ton->object_size = fon->object_size;
-  ton->object_blocks = fon->object_blocks;
+  ton->alloc_blocks = fon->alloc_blocks;
+  ton->last_block = fon->last_block;
   ton->attr = fon->attr;
 
   // collections
@@ -2695,12 +2784,12 @@ int Ebofs::_clone(object_t from, object_t to)
   
   // extents
   ton->extent_map = fon->extent_map;
-  for (map<block_t, Extent>::iterator p = ton->extent_map.begin();
+  for (map<block_t, ExtentCsum>::iterator p = ton->extent_map.begin();
        p != ton->extent_map.end();
-       ++p) {
-    allocator.alloc_inc(p->second);
-  }
-
+       ++p) 
+    if (p->second.ex.start)
+      allocator.alloc_inc(p->second.ex);
+  
   // clear uncommitted
   fon->uncommitted.clear();
 
@@ -3597,10 +3686,11 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
     nobj++;    
     st.avg_extent_per_object += on->extent_map.size();
 
-    for (map<block_t,Extent>::iterator p = on->extent_map.begin();
+    for (map<block_t,ExtentCsum>::iterator p = on->extent_map.begin();
          p != on->extent_map.end();
          p++) {
-      block_t l = p->second.length;
+      if (p->second.ex.start == 0) continue; // ignore holes
+      block_t l = p->second.ex.length;
 
       st.num_extent++;
       st.avg_extent += l;
@@ -3615,7 +3705,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
         b++; 
       } while (l);
       st.extent_dist[b]++;
-      st.extent_dist_sum[b] += p->second.length;
+      st.extent_dist_sum[b] += p->second.ex.length;
     }
     put_onode(on);
     if (cursor.move_right() <= 0) break;

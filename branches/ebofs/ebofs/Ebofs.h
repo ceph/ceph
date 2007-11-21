@@ -185,12 +185,12 @@ protected:
 
 
  protected:
-  //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void alloc_write(Onode *on, 
                    block_t start, block_t len, 
                    interval_set<block_t>& alloc,
                    block_t& old_bfirst, block_t& old_blast);
   void apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl);
+  void apply_zero(Onode *on, off_t off, size_t len);
   bool attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
                     Cond *will_wait_on, bool *will_wait_on_bool);
 
@@ -278,11 +278,11 @@ protected:
   int is_cached(object_t oid, off_t off, size_t len);
 
   int write(object_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
-  void trim_from_cache(object_t oid, off_t off, size_t len);
+  int zero(object_t oid, off_t off, size_t len, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
-  int truncate_front(object_t oid, off_t size, Context *onsafe=0);
   int remove(object_t oid, Context *onsafe=0);
   bool write_will_block();
+  void trim_from_cache(object_t oid, off_t off, size_t len);
 
   int rename(object_t from, object_t to);
   int clone(object_t from, object_t to, Context *onsafe);
@@ -350,7 +350,7 @@ private:
   int _write(object_t oid, off_t off, size_t len, const bufferlist& bl);
   void _trim_from_cache(object_t oid, off_t off, size_t len);
   int _truncate(object_t oid, off_t size);
-  int _truncate_front(object_t oid, off_t size);
+  int _zero(object_t oid, off_t offset, size_t length);
   int _remove(object_t oid);
   int _clone(object_t from, object_t to);
   int _setattr(object_t oid, const char *name, const void *value, size_t size);

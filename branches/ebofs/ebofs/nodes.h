@@ -236,7 +236,7 @@ class NodePool {
     // regions
     assert(region_loc.empty());
     num_nodes = 0;
-    for (int i=0; i<np->num_regions; i++) {
+    for (unsigned i=0; i<np->num_regions; i++) {
       debofs(3) << "init region " << i << " at " << np->region_loc[i] << std::endl;
       region_loc.push_back( np->region_loc[i] );
       num_nodes += np->region_loc[i].length;

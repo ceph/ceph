@@ -41,7 +41,7 @@ public:
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;
 
-      switch (rand() % 10) {
+      switch (rand() % 4) {//10) {
       case 0:
         {
 	  oid.rev = rand() % 10;
@@ -76,31 +76,38 @@ public:
         break;
 
       case 2:
+        {
+          cout << t << " zero " << hex << oid << dec << " at " << off << " len " << len << std::endl;
+          fs.zero(oid, off, len, 0);
+        }
+        break;
+
+      case 3:
         cout << t << " remove " << hex << oid << dec <<  std::endl;
         fs.remove(oid);
         break;
 
-      case 3:
+      case 4:
         cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << std::endl;
         fs.collection_add(cid, oid, 0);
         break;
 
-      case 4:
+      case 5:
         cout << t << " collection_remove " << hex << oid << dec <<  " from " << cid << std::endl;
         fs.collection_remove(cid, oid, 0);
         break;
 
-      case 5:
+      case 6:
         cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << std::endl;
         fs.setattr(oid, a, (void*)a, l, 0);
         break;
         
-      case 6:
+      case 7:
         cout << t << " rmattr " << hex << oid << dec <<  " " << a << std::endl;
         fs.rmattr(oid,a);
         break;
 
-      case 7:
+      case 8:
         {
           char v[4];
           cout << t << " getattr " << hex << oid << dec <<  " " << a << std::endl;
@@ -111,14 +118,14 @@ public:
         }
         break;
         
-      case 8:
+      case 9:
         {
           cout << t << " truncate " << hex << oid << dec <<  " " << off << std::endl;
           fs.truncate(oid, 0);
         }
         break;
 
-      case 9:
+      case 10:
 	{
 	  object_t newoid = oid;
 	  newoid.rev = rand() % 10;

@@ -34,6 +34,33 @@
  *
  */
 
+struct ExtentCsum {
+  Extent ex;
+  vector<__u64> csum;
+  
+  void resize_tail() {
+    unsigned old = csum.size();
+    csum.resize(ex.length);
+    for (block_t j=old; j<ex.length; j++)
+      csum[j] = 0;
+  }
+  void resize_head() {
+    if (ex.length < csum.size()) {
+      memmove(&csum[0], &csum[csum.size()-ex.length], ex.length*sizeof(__u64));
+      csum.resize(ex.length);
+    } else if (ex.length > csum.size()) {
+      int old = csum.size();
+      csum.resize(ex.length);
+      memmove(&csum[ex.length-old], &csum[0], ex.length*sizeof(__u64));
+      for (block_t b = 0; b<ex.length-old; b++)
+	csum[b] = 0;
+    }
+  }
+};
+inline ostream& operator<<(ostream& out, ExtentCsum &ec) {
+  return out << ec.ex << '=' << ec.csum;
+}
+
 class Onode : public LRUObject {
 private:
   int ref;
@@ -43,16 +70,17 @@ public:
   version_t version;      // incremented on each modify.
 
   // data
-  bool     readonly;
-  Extent   onode_loc;
-  off_t    object_size;
-  unsigned object_blocks;
+  Extent onode_loc;
+  __s64 object_size;
+  __u64 alloc_blocks, last_block;
+  __u64 data_csum;
+  bool readonly;
 
   // onode
   set<coll_t>            collections;
   map<string, bufferptr> attr;
-  //vector<Extent>        extents;
-  map<block_t, Extent>  extent_map;
+
+  map<block_t, ExtentCsum>   extent_map;
 
   interval_set<block_t> uncommitted;
 
@@ -66,8 +94,8 @@ public:
 
  public:
   Onode(object_t oid) : ref(0), object_id(oid), version(0),
-			readonly(false),
-			object_size(0), object_blocks(0),
+			object_size(0), alloc_blocks(0), last_block(0), data_csum(0),
+			readonly(0),
 			oc(0),
 			dirty(false), dangling(false), deleted(false) { 
     onode_loc.length = 0;
@@ -135,123 +163,182 @@ public:
 
   // allocation
   void verify_extents() {
-    if (0) {  // do crazy stupid sanity checking
-      block_t count = 0;
+    if (1) {  // do crazy stupid sanity checking
+      block_t count = 0, pos = 0;
       interval_set<block_t> is;    
+      __u64 csum = 0;
           
       set<block_t> s;
       cout << "verifying" << std::endl;
 
-      for (map<block_t,Extent>::iterator p = extent_map.begin();
+      for (map<block_t,ExtentCsum>::iterator p = extent_map.begin();
            p != extent_map.end();
            p++) {
         cout << " " << p->first << ": " << p->second << std::endl;
-        assert(count == p->first);
-        count += p->second.length;
-        for (unsigned j=0;j<p->second.length;j++) {
-          assert(s.count(p->second.start+j) == 0);
-          s.insert(p->second.start+j);
-        }
+        assert(pos == p->first);
+	pos += p->second.ex.length;
+	if (p->second.ex.start) {
+	  count += p->second.ex.length;
+	  for (unsigned j=0;j<p->second.ex.length;j++) {
+	    assert(s.count(p->second.ex.start+j) == 0);
+	    s.insert(p->second.ex.start+j);
+	    csum += p->second.csum[j];
+	  }
+	}
       }
 
       assert(s.size() == count);
-      assert(count == object_blocks);
+      assert(count == alloc_blocks);
+      assert(pos == last_block);
+      assert(csum == data_csum);
     }
   }
   void set_extent(block_t offset, Extent ex) {
-    //cout << "set_extent " << offset << " -> " << ex << " ... " << object_blocks << std::endl;
-    assert(offset <= object_blocks);
+    cout << "set_extent " << offset << " -> " << ex << " ... " << last_block << std::endl;
+
     verify_extents();
 
     // at the end?
-    if (offset == object_blocks) {
+    if (offset == last_block) {
       //cout << " appending " << ex << std::endl;
-      if (!extent_map.empty() && extent_map.rbegin()->second.end() == ex.start) {
-        //cout << "appending " << ex << " to " << extent_map.rbegin()->second << std::endl;
-        extent_map.rbegin()->second.length += ex.length;
-      } else
-        extent_map[object_blocks] = ex;
-      object_blocks += ex.length;
+      if (!extent_map.empty() && 
+	  ((extent_map.rbegin()->first && 
+	    ex.start &&
+	    extent_map.rbegin()->second.ex.end() == ex.start) ||
+	   (!extent_map.rbegin()->first && 
+	    !ex.start))) {
+        extent_map.rbegin()->second.ex.length += ex.length;
+	if (ex.start)
+	  extent_map.rbegin()->second.resize_tail();
+      } else {
+        extent_map[last_block].ex = ex;
+	if (ex.start)
+	  extent_map[last_block].resize_tail();
+      }
+      last_block += ex.length;
+      if (ex.start) 
+	alloc_blocks += ex.length;
       return;
     }
 
-    // removing any extent bits we overwrite
+    // past the end?
+    if (offset > last_block) {
+      if (ex.start) {
+	block_t skip = offset - last_block;
+
+	// hole
+	extent_map[last_block].ex.start = 0;
+	extent_map[last_block].ex.length = skip;
+	
+	extent_map[offset].ex = ex;
+	extent_map[offset].resize_tail();
+	last_block = offset+ex.length;
+	alloc_blocks += ex.length;
+      }
+      // else ignore trailing "hole"
+      return;
+    }
+
+    // remove any extent bits we overwrite
     if (!extent_map.empty()) {
       // preceeding extent?
-      map<block_t,Extent>::iterator p = extent_map.lower_bound(offset);
+      map<block_t,ExtentCsum>::iterator p = extent_map.lower_bound(offset);
       if (p != extent_map.begin()) {
         p--;
-        if (p->first + p->second.length > offset) {
-          //cout << " preceeding was " << p->second << std::endl;
-          if (p->first + p->second.length > offset+ex.length) {
-            // cutting chunk out of middle, add last bit
-            Extent &n = extent_map[offset+ex.length] = p->second;
-            n.start += offset+ex.length - p->first;
-            n.length -= offset+ex.length - p->first;
-            //cout << " tail frag is " << n << std::endl;
-          } 
-          p->second.length = offset - p->first;     // cut tail off preceeding extent
-          //cout << " preceeding now " << p->second << std::endl;
+	ExtentCsum &left = p->second;
+        if (p->first + left.ex.length > offset) {
+          cout << " preceeding left was " << left << std::endl;
+	  block_t newlen = offset - p->first;
+          if (p->first + left.ex.length > offset+ex.length) {
+            // cutting chunk out of middle, add trailing bit
+            ExtentCsum &right = extent_map[offset+ex.length] = left;
+            right.ex.length -= offset+ex.length - p->first;
+	    if (right.ex.start) {
+	      right.ex.start += offset+ex.length - p->first;
+	      alloc_blocks += right.ex.length;
+	      right.resize_head();
+	    }
+            cout << " tail right is " << right << std::endl;
+	  }
+	  if (left.ex.start)
+	    alloc_blocks -= left.ex.length - newlen;
+          left.ex.length = newlen;     // cut tail off preceeding extent
+	  if (left.ex.start) 
+	    left.resize_tail();
+          cout << " preceeding left now " << left << std::endl;
         }
         p++;
-      }      
+      }
       
       // overlapping extents
       while (p != extent_map.end() &&
              p->first < offset + ex.length) {
-        map<block_t,Extent>::iterator next = p;
+        map<block_t,ExtentCsum>::iterator next = p;
         next++;
 
         // completely subsumed?
-        if (p->first + p->second.length <= offset+ex.length) {
-          //cout << " erasing " << p->second << std::endl;
+	ExtentCsum &o = p->second;
+        if (p->first + o.ex.length <= offset+ex.length) {
+          cout << " erasing " << o << std::endl;
+	  if (o.ex.start) {
+	    alloc_blocks -= o.ex.length;
+	  }
           extent_map.erase(p);
           p = next;
           continue;
         }
 
-        // spans new extent, cut off head
-        Extent &n = extent_map[ offset+ex.length ] = p->second;
-        //cout << " cut head off " << p->second;
-        n.start += offset+ex.length - p->first;
-        n.length -= offset+ex.length - p->first;
+        // spans next extent, cut off head
+        ExtentCsum &n = extent_map[ offset+ex.length ] = o;
+        cout << " cutting head off " << o;
+	int overlap = offset+ex.length - p->first;
+        n.ex.length -= overlap;
+        if (n.ex.start) {
+	  n.ex.start += overlap;
+	  alloc_blocks -= overlap;
+	  n.resize_tail();
+	}
         extent_map.erase(p);
-        //cout << ", now " << n << std::endl;
+        cout << ", now " << n << std::endl;
         break;
       }
     }
 
-    extent_map[ offset ] = ex;
+    // add ourselves
+    ExtentCsum &n = extent_map[ offset ];
+    n.ex = ex;
+    if (ex.start) {
+      alloc_blocks += ex.length;
+      n.resize_tail();
+    }
 
     // extend object?
-    if (offset + ex.length > object_blocks)
-      object_blocks = offset+ex.length;
+    if (offset + ex.length > last_block)
+      last_block = offset+ex.length;
     
     verify_extents();
   }
   
 
   /* map_extents(start, len, ls)
-   *  map teh given page range into extents on disk.
+   *  map teh given page range into extents (and csums) on disk.
    */
-  int map_extents(block_t start, block_t len, vector<Extent>& ls) {
+  int map_extents(block_t start, block_t len, vector<Extent>& ls, vector<__u64> *csum) {
     //cout << "map_extents " << start << " " << len << std::endl;
     verify_extents();
 
     //assert(start+len <= object_blocks);
 
-    map<block_t,Extent>::iterator p;
+    map<block_t,ExtentCsum>::iterator p;
     
     // hack hack speed up common cases!
     if (start == 0) {
       p = extent_map.begin();
-    } else if (start+len == object_blocks && len == 1 && !extent_map.empty()) {
+    } else if (start+len == last_block && len == 1 && !extent_map.empty()) {
       // append hack.
       p = extent_map.end();
       p--;
       if (p->first < start) p++;
-      //while (p->first >= start) p--;
-      //p++;
     } else {
       // normal
       p = extent_map.lower_bound(start);
@@ -260,10 +347,17 @@ public:
     if (p != extent_map.begin() &&
         (p == extent_map.end() || p->first > start && p->first)) {
       p--;
-      if (p->second.length > start - p->first) {
+      if (p->second.ex.length > start - p->first) {
         Extent ex;
-        ex.start = p->second.start + (start - p->first);
-        ex.length = MIN(len, p->second.length - (start - p->first));
+	int off = (start - p->first);
+        ex.length = MIN(len, p->second.ex.length - off);
+	if (p->second.ex.start) {
+	  ex.start = p->second.ex.start + off;
+	  if (csum)
+	    for (unsigned i=off; i<ex.length; i++)
+	      csum->push_back(p->second.csum[i]);
+	} else
+	  ex.start = 0;
         ls.push_back(ex);
         
         //cout << " got (tail of?) " << p->second << " : " << ex << std::endl;
@@ -277,12 +371,15 @@ public:
     while (len > 0 &&
            p != extent_map.end()) {
       assert(p->first == start);
-      Extent ex = p->second;
-      ex.length = MIN(len, ex.length);
-      ls.push_back(ex);
+      ExtentCsum e = p->second;
+      e.ex.length = MIN(len, e.ex.length);
+      ls.push_back(e.ex);
+      if (e.ex.start && csum) 
+	for (unsigned i=0; i<e.ex.length; i++)
+	  csum->push_back(p->second.csum[i]);
       //cout << " got (head of?) " << p->second << " : " << ex << std::endl;
-      start += ex.length;
-      len -= ex.length;
+      start += e.ex.length;
+      len -= e.ex.length;
       p++;
     }    
 
@@ -290,66 +387,50 @@ public:
   }
 
   int truncate_extents(block_t len, vector<Extent>& extra) {
+    cout << " truncate to " << len << " .. last_block " << last_block << std::endl;
+
     verify_extents();
 
-    map<block_t,Extent>::iterator p = extent_map.lower_bound(len);
+    map<block_t,ExtentCsum>::iterator p = extent_map.lower_bound(len);
     if (p != extent_map.begin() &&
         (p == extent_map.end() || p->first > len && p->first)) {
       p--;
-      if (p->second.length > len - p->first) {
-        Extent ex;
-        ex.start = p->second.start + (len - p->first);
-        ex.length = p->second.length - (len - p->first);
-        extra.push_back(ex);
-
-        p->second.length = len - p->first;
-        assert(p->second.length > 0);
-        
-        //cout << " got (tail of?) " << p->second << " : " << ex << std::endl;
+      ExtentCsum &o = p->second;
+      if (o.ex.length > len - p->first) {
+	int newlen = len - p->first;
+	if (o.ex.start) {
+	  Extent ex;
+	  ex.start = o.ex.start + newlen;
+	  ex.length = o.ex.length - newlen;
+	  cout << " truncating ex " << p->second.ex << " to " << newlen << ", releasing " << ex << std::endl;
+	  o.ex.length = newlen;
+	  extra.push_back(ex);
+	  alloc_blocks -= ex.length;
+	  o.resize_tail();
+	} else
+	  o.ex.length = newlen;
+        assert(o.ex.length > 0);
       }
       p++;
     }
     
     while (p != extent_map.end()) {
       assert(p->first >= len);
-      extra.push_back(p->second);
-      map<block_t,Extent>::iterator n = p;
+      ExtentCsum &o = p->second;
+      if (o.ex.start) {
+	extra.push_back(o.ex);
+	alloc_blocks -= o.ex.length;
+      }
+      map<block_t,ExtentCsum>::iterator n = p;
       n++;
       extent_map.erase(p);
       p = n;
     }    
     
-    object_blocks = len;
+    last_block = len;
     verify_extents();
     return 0;
   }
-
-  int truncate_front_extents(block_t len, vector<Extent>& extra) {
-    verify_extents();
-    
-    while (len > 0) {
-      Extent& ex = extent_map.begin()->second;  // look, this is a reference!
-      if (ex.length > len) {
-        // partial first extent
-        Extent frontbit( ex.start, len );
-        extra.push_back(frontbit);
-        ex.length -= len;
-        ex.start += len;
-        break;
-      }
-
-      // pull off entire first extent.
-      assert(ex.length <= len);
-      len -= ex.length;
-      extra.push_back(ex);
-      extent_map.erase(extent_map.begin());
-    }
-
-    object_blocks -= len;
-    verify_extents();
-    return 0;
-  }
-
 
 
   /* map_alloc_regions(start, len, map)
@@ -366,6 +447,17 @@ public:
     alloc.subtract(already_uncom);   // take out the bits that aren't yet committed
   }
   */
+
+  block_t get_first_block() {
+    if (!alloc_blocks) return 0;
+    map<block_t,ExtentCsum>::iterator p = extent_map.begin();
+    while (1) {
+      if (p->second.ex.start)
+	return p->second.ex.start;
+      p++;
+    }
+    assert(0);
+  }
 
 
 
@@ -384,7 +476,7 @@ public:
     return s;
   }
   int get_extent_bytes() {
-    return sizeof(Extent) * extent_map.size();
+    return sizeof(Extent) * extent_map.size() + sizeof(__u64)*alloc_blocks;
   }
 
 };

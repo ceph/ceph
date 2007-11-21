@@ -47,7 +47,7 @@ class BufferHead : public LRUObject {
  public:
   ObjectCache *oc;
 
-  bufferlist data;
+  bufferlist data;   // if empty, defined as zero (hole)
 
   ioh_t     rx_ioh;         // 
   Extent    rx_from;
@@ -448,6 +448,7 @@ class ObjectCache {
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
 
   void truncate(block_t blocks, version_t super_epoch);
+  void discard_bh(BufferHead *bh, version_t super_epoch);
   //  void tear_down();
 
   void clone_to(Onode *other);

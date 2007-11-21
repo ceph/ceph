@@ -75,8 +75,9 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       if (1) {
         // double-check what block i am
         vector<Extent> exv;
-        on->map_extents(bh->start(), 1, exv);
+        on->map_extents(bh->start(), 1, exv, 0);
         assert(exv.size() == 1);
+	assert(exv[0].start != 0);
         block_t cur_block = exv[0].start;
         assert(cur_block == bh->partial_tx_to);
       }
@@ -239,11 +240,11 @@ int ObjectCache::try_map_read(block_t start, block_t len)
     if (p == data.end()) {
       // rest is a miss.
       vector<Extent> exv;
-      on->map_extents(cur, 
-                      left,   // no prefetch here!
-                      exv);
-
-      num_missing += exv.size();
+      on->map_extents(cur, left,   // no prefetch here!
+                      exv, 0);
+      for (unsigned i=0; i<exv.size(); i++)
+	if (exv[i].start)
+	  num_missing++;
       left = 0;
       cur = start+len;
       break;
@@ -282,11 +283,12 @@ int ObjectCache::try_map_read(block_t start, block_t len)
       vector<Extent> exv;
       on->map_extents(cur, 
                       MIN(next-cur, left),   // no prefetch
-                      exv);
-
-      dout(20) << "try_map_read gap of " << p->first-cur << " blocks, " 
-		<< exv.size() << " extents" << dendl;
-      num_missing += exv.size();
+                      exv, 0);
+      for (unsigned i=0; i<exv.size(); i++)
+	if (exv[i].start) {
+	  dout(20) << "try_map_read gap " << exv[i] << dendl;
+	  num_missing++;
+	}
       left -= (p->first - cur);
       cur = p->first;
       continue;    // more?
@@ -332,19 +334,24 @@ int ObjectCache::map_read(block_t start, block_t len,
     if (p == data.end()) {
       // rest is a miss.
       vector<Extent> exv;
-      //on->map_extents(cur, left, exv);          // we might consider some prefetch here.
       on->map_extents(cur, 
                       //MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //on->object_blocks-cur),  
                       left,   // no prefetch
-                      exv);
+                      exv, 0);
       for (unsigned i=0; i<exv.size() && left > 0; i++) {
         BufferHead *n = new BufferHead(this);
         n->set_start( cur );
         n->set_length( exv[i].length );
         bc->add_bh(n);
-        missing[cur] = n;
-        dout(20) << "map_read miss " << left << " left, " << *n << dendl;
+	if (exv[i].start) {
+	  missing[cur] = n;
+	  dout(20) << "map_read miss " << left << " left, " << *n << dendl;
+	} else {
+	  hits[cur] = n;
+	  n->set_state(BufferHead::STATE_CLEAN);
+	  dout(20) << "map_read hole " << left << " left, " << *n << dendl;
+	}
         cur += MIN(left,exv[i].length);
         left -= MIN(left,exv[i].length);
       }
@@ -390,17 +397,23 @@ int ObjectCache::map_read(block_t start, block_t len,
                       //MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //                on->object_blocks-cur)),  
                       MIN(next-cur, left),   // no prefetch
-                      exv);
+                      exv, 0);
       
       for (unsigned i=0; i<exv.size() && left>0; i++) {
         BufferHead *n = new BufferHead(this);
         n->set_start( cur );
         n->set_length( exv[i].length );
         bc->add_bh(n);
-        missing[cur] = n;
+	if (exv[i].start) {
+	  missing[cur] = n;
+	  dout(20) << "map_read gap " << *n << dendl;
+	} else {
+	  n->set_state(BufferHead::STATE_CLEAN);
+	  hits[cur] = n;
+	  dout(20) << "map_read hole " << *n << dendl;
+	}
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
-        dout(20) << "map_read gap " << *n << dendl;
       }
       continue;    // more?
     }
@@ -433,7 +446,7 @@ int ObjectCache::map_write(block_t start, block_t len,
   // hack speed up common cases
   if (start == 0) {
     p = data.begin();
-  } else if (start + len == on->object_blocks && len == 1 && !data.empty()) {
+  } else if (start + len == on->last_block && len == 1 && !data.empty()) {
     // append hack.
     p = data.end();
     p--;
@@ -463,7 +476,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 
     // based on disk extent boundary ...
     vector<Extent> exv;
-    on->map_extents(cur, max, exv);
+    on->map_extents(cur, max, exv, 0);
     if (exv.size() > 1) 
       max = exv[0].length;
 
@@ -475,6 +488,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       n->set_start( cur );
       n->set_length( max );
       bc->add_bh(n);
+      if (exv[0].start == 0)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       hits[cur] = n;
       left -= max;
       cur += max;
@@ -628,6 +643,39 @@ void ObjectCache::touch_bottom(block_t bstart, block_t blast)
   }
 }  
 
+void ObjectCache::discard_bh(BufferHead *bh, version_t super_epoch)
+{
+  bool uncom = on->uncommitted.contains(bh->start(), bh->length());
+  dout(10) << "discard_bh " << *bh << " uncom " << uncom 
+	   << " of " << on->uncommitted
+	   << dendl;
+  
+  // whole thing
+  // cancel any pending/queued io, if possible.
+  if (bh->is_rx())
+    bc->bh_cancel_read(bh);
+  if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch) 
+    bc->bh_cancel_write(bh, super_epoch);
+  if (bh->shadow_of) {
+    dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
+    // shadow
+    bh->shadow_of->remove_shadow(bh);
+    if (bh->is_partial()) 
+      bc->cancel_shadow_partial(bh->rx_from.start, bh);
+  } else {
+    // normal
+    if (bh->is_partial() && uncom)
+      bc->bh_cancel_partial_write(bh);
+  }
+  
+  for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
+       p != bh->waitfor_read.end();
+       p++) 
+    finish_contexts(p->second, -1);
+  
+  bc->remove_bh(bh);
+  delete bh;
+}
 
 void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
@@ -636,58 +684,27 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
            << dendl;
 
   while (!data.empty()) {
-    block_t bhoff = data.rbegin()->first;
     BufferHead *bh = data.rbegin()->second;
 
     if (bh->end() <= blocks) break;
 
-    bool uncom = on->uncommitted.contains(bh->start(), bh->length());
-    dout(10) << "truncate " << *bh << " uncom " << uncom 
-             << " of " << on->uncommitted
-             << dendl;
-    
-    if (bhoff < blocks) {
+    if (bh->start() < blocks) {
       // we want right bit (one splice)
       if (bh->is_rx() && bc->bh_cancel_read(bh)) {
-        BufferHead *right = bc->split(bh, blocks);
-        bc->bh_read(on, bh);          // reread left bit
-        bh = right;
-      } else if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
-        BufferHead *right = bc->split(bh, blocks);
-        bc->bh_write(on, bh);          // rewrite left bit
-        bh = right;
+	BufferHead *right = bc->split(bh, blocks);
+	bc->bh_read(on, bh);          // reread left bit
+	bh = right;
+      } else if (bh->is_tx() && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
+	BufferHead *right = bc->split(bh, blocks);
+	bc->bh_write(on, bh);          // rewrite left bit
+	bh = right;
       } else {
-        bh = bc->split(bh, blocks);   // just split it
+	bh = bc->split(bh, blocks);   // just split it
       }
       // no worries about partials up here, they're always 1 block (and thus never split)
-    } else {
-      // whole thing
-      // cancel any pending/queued io, if possible.
-      if (bh->is_rx())
-        bc->bh_cancel_read(bh);
-      if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch) 
-        bc->bh_cancel_write(bh, super_epoch);
-      if (bh->shadow_of) {
-	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
-	// shadow
-	bh->shadow_of->remove_shadow(bh);
-	if (bh->is_partial()) 
-	  bc->cancel_shadow_partial(bh->rx_from.start, bh);
-      } else {
-	// normal
-	if (bh->is_partial() && uncom)
-	  bc->bh_cancel_partial_write(bh);
-      }
-    }
-    
-    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-         p != bh->waitfor_read.end();
-         p++) {
-      finish_contexts(p->second, -1);
-    }
+    } 
 
-    bc->remove_bh(bh);
-    delete bh;
+    discard_bh(bh, super_epoch);
   }
 }
 
@@ -898,8 +915,9 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   
   // get extent.  there should be only one!
   vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
+  on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
+  assert(exv[0].start != 0); // not a hole.
   Extent ex = exv[0];
 
   if (from) {  // force behavior, used for reading partials
@@ -950,8 +968,9 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   
   // get extents
   vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
+  on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
+  assert(exv[0].start != 0);
   Extent ex = exv[0];
 
   if (shouldbe)
@@ -1154,8 +1173,9 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   
   // get the block no
   vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
+  on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
+  assert(exv[0].start != 0);
   block_t b = exv[0].start;
   assert(exv[0].length == 1);
   bh->partial_tx_to = exv[0].start;

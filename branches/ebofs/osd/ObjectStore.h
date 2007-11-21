@@ -79,7 +79,8 @@ public:
     static const int OP_GETATTRS =      4;  // oid, pattrset
 
     static const int OP_WRITE =        10;  // oid, offset, len, bl
-    static const int OP_TRUNCATE =     11;  // oid, len
+    static const int OP_ZERO =         11;  // oid, offset, len
+    static const int OP_TRUNCATE =     12;  // oid, len
     static const int OP_REMOVE =       13;  // oid
     static const int OP_SETATTR =      14;  // oid, attrname, attrval
     static const int OP_SETATTRS =     15;  // oid, attrset
@@ -193,6 +194,13 @@ public:
       lengths.push_back(off);
       lengths.push_back(len);
       bls.push_back(bl);
+    }
+    void zero(object_t oid, off_t off, size_t len) {
+      int op = OP_ZERO;
+      ops.push_back(op);
+      oids.push_back(oid);
+      lengths.push_back(off);
+      lengths.push_back(len);
     }
     void trim_from_cache(object_t oid, off_t off, size_t len) {
       int op = OP_TRIMCACHE;
@@ -364,6 +372,17 @@ public:
           bufferlist bl;
 	  t.get_bl(bl);
           write(oid, offset, len, bl, 0);
+        }
+        break;
+
+      case Transaction::OP_ZERO:
+        {
+          object_t oid;
+	  t.get_oid(oid);
+          off_t offset, len;
+	  t.get_length(offset);
+	  t.get_length(len);
+          zero(oid, offset, len, 0);
         }
         break;
 
@@ -541,6 +560,15 @@ public:
                     off_t offset, size_t len,
                     const bufferlist& bl, 
                     Context *onsafe) = 0;//{ return -1; }
+  virtual int zero(object_t oid, 
+		   off_t offset, size_t len,
+		   Context *onsafe) {
+    // write zeros.. yuck!
+    bufferptr bp(len);
+    bufferlist bl;
+    bl.push_back(bp);
+    return write(oid, offset, len, bl, onsafe);
+  }
   virtual void trim_from_cache(object_t oid, 
 			       off_t offset, size_t len) { }
   virtual int is_cached(object_t oid, 

@@ -40,26 +40,7 @@ using namespace __gnu_cxx;
 #endif
 
 
-/*
-namespace __gnu_cxx {
-  template<> struct hash<unsigned long long> {
-    size_t operator()(unsigned long long __x) const { 
-      static hash<unsigned long> H;
-      return H((__x >> 32) ^ (__x & 0xffffffff)); 
-    }
-  };
-  
-  template<> struct hash< std::string >
-  {
-    size_t operator()( const std::string& x ) const
-    {
-      static hash<const char*> H;
-      return H(x.c_str());
-    }
-  };
-}
-*/
-
+typedef __u64 csum_t;
 
 // disk
 typedef uint64_t block_t;        // disk location/sector/block
@@ -67,8 +48,7 @@ typedef uint64_t block_t;        // disk location/sector/block
 static const int EBOFS_BLOCK_SIZE = 4096;
 static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
-class Extent {
- public:
+struct Extent {
   block_t start, length;
 
   Extent() : start(0), length(0) {}
@@ -78,7 +58,7 @@ class Extent {
   block_t end() const { return start + length; }
 };
 
-inline ostream& operator<<(ostream& out, Extent& ex)
+inline ostream& operator<<(ostream& out, const Extent& ex)
 {
   return out << ex.start << "~" << ex.length;
 }
@@ -96,7 +76,7 @@ struct ebofs_nodepool {
   Extent node_usemap_even;   // for even sb versions
   Extent node_usemap_odd;    // for odd sb versions
   
-  int    num_regions;
+  __u32  num_regions;
   Extent region_loc[EBOFS_MAX_NODE_REGIONS];
 };
 
@@ -106,30 +86,34 @@ struct ebofs_nodepool {
 typedef uint64_t coll_t;
 
 struct ebofs_onode {
-  Extent     onode_loc;       /* this is actually the block we live in */
+  __u64 onode_csum;
+  __u64 data_csum;
 
-  object_t   object_id;       /* for kicks */
-  off_t      object_size;     /* file size in bytes.  should this be 64-bit? */
-  unsigned   object_blocks;
-  bool       readonly;
+  Extent onode_loc;       /* this is actually the block we live in */
+  object_t object_id;       /* for kicks */
+  __u8 readonly;
+
+  __s64 object_size;     /* file size in bytes.  should this be 64-bit? */
+  __u32 alloc_blocks;   // allocated
   
-  int        num_collections;
-  int        num_attr;        // num attr in onode
-  int        num_extents;     /* number of extents used.  if 0, data is in the onode */
+  __u16 inline_bytes;
+  __u16 num_collections;
+  __u32 num_attr;        // num attr in onode
+  __u32 num_extents;     /* number of extents used.  if 0, data is in the onode */
 };
 
 struct ebofs_cnode {
   Extent     cnode_loc;       /* this is actually the block we live in */
   coll_t     coll_id;
-  int        num_attr;        // num attr in cnode
+  __u32      num_attr;        // num attr in cnode
 };
 
 
 // table
 struct ebofs_table {
   nodeid_t root;      /* root node of btree */
-  int      num_keys;
-  int      depth;
+  __u32    num_keys;
+  __u32    depth;
 };
 
 
