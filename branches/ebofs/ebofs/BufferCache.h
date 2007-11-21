@@ -335,7 +335,11 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
   if (bh.is_missing()) out << " missing";
   if (bh.is_dirty()) out << " dirty";
-  if (bh.is_clean()) out << " clean";
+  if (bh.is_clean()) {
+    out << " clean";
+    if (bh.data.length() == 0)
+      out << " HOLE";
+  }
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";

@@ -755,6 +755,12 @@ public:
 	_buffers.push_back(*p);
     }
     
+    void append_zero(unsigned len) {
+      ptr bp(len);
+      bp.zero();
+      append(bp);
+    }
+
     
     /*
      * get a char

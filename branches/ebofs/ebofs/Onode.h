@@ -224,18 +224,15 @@ public:
     // past the end?
     if (offset > last_block) {
       if (ex.start) {
-	block_t skip = offset - last_block;
-
-	// hole
 	extent_map[last_block].ex.start = 0;
-	extent_map[last_block].ex.length = skip;
-	
+	extent_map[last_block].ex.length = offset - last_block;
 	extent_map[offset].ex = ex;
 	extent_map[offset].resize_tail();
 	last_block = offset+ex.length;
 	alloc_blocks += ex.length;
+      } else {
+	// ignore attempt to set a trailing "hole"
       }
-      // else ignore trailing "hole"
       return;
     }
 

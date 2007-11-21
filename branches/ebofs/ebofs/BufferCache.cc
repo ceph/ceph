@@ -343,7 +343,6 @@ int ObjectCache::map_read(block_t start, block_t len,
         BufferHead *n = new BufferHead(this);
         n->set_start( cur );
         n->set_length( exv[i].length );
-        bc->add_bh(n);
 	if (exv[i].start) {
 	  missing[cur] = n;
 	  dout(20) << "map_read miss " << left << " left, " << *n << dendl;
@@ -352,6 +351,7 @@ int ObjectCache::map_read(block_t start, block_t len,
 	  n->set_state(BufferHead::STATE_CLEAN);
 	  dout(20) << "map_read hole " << left << " left, " << *n << dendl;
 	}
+        bc->add_bh(n);
         cur += MIN(left,exv[i].length);
         left -= MIN(left,exv[i].length);
       }
@@ -403,7 +403,6 @@ int ObjectCache::map_read(block_t start, block_t len,
         BufferHead *n = new BufferHead(this);
         n->set_start( cur );
         n->set_length( exv[i].length );
-        bc->add_bh(n);
 	if (exv[i].start) {
 	  missing[cur] = n;
 	  dout(20) << "map_read gap " << *n << dendl;
@@ -412,6 +411,7 @@ int ObjectCache::map_read(block_t start, block_t len,
 	  hits[cur] = n;
 	  dout(20) << "map_read hole " << *n << dendl;
 	}
+        bc->add_bh(n);
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
       }
@@ -582,6 +582,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       BufferHead *n = new BufferHead(this);
       n->set_start( cur );
       n->set_length( glen );
+      if (exv[0].start == 0)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
       hits[cur] = n;
       

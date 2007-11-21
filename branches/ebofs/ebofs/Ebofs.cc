@@ -1729,7 +1729,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 	temp.claim(bh->data);
 	//bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
 	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-	bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+	if (temp.length())
+	  bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+	else
+	  bh->data.zero();  // was a hole
 	
 	bufferlist sub;
 	sub.substr_of(bl, blpos, len_in_bh);
@@ -1785,8 +1788,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
     // old partial?
     if (bh->is_partial() &&
-        bh->partial_tx_epoch == super_epoch) 
+        bh->partial_tx_epoch == super_epoch) {
       bc.bh_cancel_partial_write(bh);
+      bc.bh_cancel_read(bh);           // cancel rx (if any) too.
+    }
 
     // mark dirty
     if (!bh->is_dirty())
@@ -1852,8 +1857,8 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
     p = next;
   }
 
-  // free old blocks?
   if (blen) {
+    // free old blocks
     vector<Extent> old;
     on->map_extents(bstart, blen, old, 0);
     for (unsigned i=0; i<old.size(); i++)
@@ -1861,6 +1866,16 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 	allocator.release(old[i]);
     Extent hole(0, blen);      
     on->set_extent(bstart, hole);
+
+    // adjust uncom
+    interval_set<block_t> zeroed;
+    zeroed.insert(bstart, blen);
+    interval_set<block_t> olduncom;
+    olduncom.intersection_of(zeroed, on->uncommitted);
+    dout(10) << "_zeroed old uncom " << on->uncommitted << " zeroed " << zeroed 
+	     << " subtracting " << olduncom << dendl;
+    on->uncommitted.subtract(olduncom);
+    dout(10) << "_zeroed new uncom " << on->uncommitted << dendl;
   }
 
   finish_contexts(finished, -1);
@@ -1966,23 +1981,31 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     } else {
       // copy from a full block.
       if (bhstart == start && bhend == end) {
-        bl.append( bh->data );
-        pos += bh->data.length();
+	if (bh->data.length()) {
+	  dout(10) << "aligned " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << dendl;
+	  bl.append( bh->data );
+	  pos += bh->data.length();
+	} else {
+	  dout(10) << "aligned " << (start-bhstart) << "~" << (end-start) << " of hole in " << *bh << dendl;
+	  bl.append_zero(end-start);
+	  pos += end-start;
+	}
       } else {
-        bufferlist frag;
-        dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << dendl;
-        frag.substr_of(bh->data, start-bhstart, end-start);
-        pos += frag.length();
-        bl.claim_append( frag );
+	if (bh->data.length()) {
+	  dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << dendl;
+	  bufferlist frag;
+	  frag.substr_of(bh->data, start-bhstart, end-start);
+	  pos += frag.length();
+	  bl.claim_append( frag );
+	} else {
+	  dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of hole in " << *bh << dendl;
+	  bl.append_zero(end-start);
+	  pos += end-start;
+	}
       }
     }
 
     curblock = bh->end();
-    /* this assert is more trouble than it's worth
-    assert((off_t)(curblock*EBOFS_BLOCK_SIZE) == pos ||   // should be aligned with next block
-           end != bhend ||                                // or we ended midway through bh
-           (bh->last() == blast && end == bhend));        // ended last block       ** FIXME WRONG???
-    */
   }
 
   assert(bl.length() == len);
