@@ -20,7 +20,6 @@ static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
 
-
 /*
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
@@ -333,7 +332,7 @@ static void prepare_write_accept_reject(struct ceph_connection *con)
 }
 
 /*
- * call when socket is writeable
+ * worker function when socket is writeable
  */
 static void try_write(struct work_struct *work)
 {
@@ -583,7 +582,7 @@ static void process_accept(struct ceph_connection *con)
 
 
 /*
- * call when data is available on the socket
+ * worker function when data is available on the socket
  */
 static void try_read(struct work_struct *work)
 {
@@ -648,55 +647,43 @@ done:
 
 
 /*
- * Accepter thread
+ *  worker function when listener receives a connect
  */
 static void try_accept(struct work_struct *work)
 {
-	struct socket *sock, *new_sock;
-	struct sockaddr_in saddr;
         struct ceph_connection *new_con = NULL;
 	struct ceph_messenger *msgr;
-	int len;
 
 	msgr = container_of(work, struct ceph_messenger, awork);
-	sock = msgr->listen_sock;
 
         dout(5, "Entered try_accept\n");
-
-
-        if (kernel_accept(sock, &new_sock, sock->file->f_flags) < 0) {
-        	derr(1, "error accepting connection\n");
-                goto done;
-        }
-	dout(5, "accepted connection \n");
-
-        /* get the address at the other end */
-        memset(&saddr, 0, sizeof(saddr));
-        if (new_sock->ops->getname(new_sock, (struct sockaddr *)&saddr, &len, 2)) {
-                derr(1, "getname error connection aborted\n");
-                sock_release(new_sock);
-                goto done;
-        }
 
 	/* initialize the msgr connection */
 	new_con = new_connection(msgr);
 	if (new_con == NULL) {
                	derr(1, "malloc failure\n");
-		sock_release(new_sock);
 		goto done;
        	}
-	new_con->sock = new_sock;
-	set_bit(ACCEPTING, &new_con->state);
+
+	if(_kaccept(msgr->listen_sock, new_con) < 0) {
+        	derr(1, "error accepting connection\n");
+		kfree(new_con);
+                goto done;
+        }
+	dout(5, "accepted connection \n");
+
 	new_con->in_tag = CEPH_MSGR_TAG_READY;
-	/* fill in part of peers address */
-	new_con->peer_addr.ipaddr = saddr;
 
 	prepare_write_accept_announce(msgr, new_con);
 
 	add_connection_accepting(msgr, new_con);
 
-	/* hand off to worker threads , send pending */
-	/*?? queue_work(send_wq, &new_con->swork);*/
+	set_bit(WRITE_PEND, &new_con->state);
+	/*
+	 * hand off to worker threads ,should be able to write, we want to 
+	 * try to write right away, we may have missed socket state change
+	 */
+	queue_work(send_wq, &new_con->swork);
 done:
         return;
 }

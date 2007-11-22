@@ -5,8 +5,8 @@
 #include "messenger.h"
 #include "ktcp.h"
 
-static struct workqueue_struct *recv_wq;        /* receive work queue */
-static struct workqueue_struct *send_wq;        /* send work queue */
+struct workqueue_struct *recv_wq;       /* receive work queue */
+struct workqueue_struct *send_wq;      	/* send work queue */
 
 /*
  * socket callback functions 
@@ -47,7 +47,8 @@ static void ceph_state_change(struct sock *sk)
         printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
 
         if (sk->sk_state == TCP_ESTABLISHED) {
-                if (test_and_clear_bit(CONNECTING, &con->state))
+                if (test_and_clear_bit(CONNECTING, &con->state) ||
+		    test_bit(ACCEPTING, &con->state))
                         set_bit(OPEN, &con->state);
                 ceph_write_space(sk);
         }
@@ -158,22 +159,45 @@ err:
 }
 
 /*
- * Note: Maybe don't need this, or make inline... keep for now for debugging..
- * we may need to add more functionality
+ *  accept a connection
  */
-struct socket *_kaccept(struct socket *sock)
+int _kaccept(struct socket *sock, struct ceph_connection *con)
 {
-	struct socket *new_sock = NULL;
 	int ret;
+	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
+	int len;
 
-	
-	ret = kernel_accept(sock, &new_sock, sock->file->f_flags);
+
+        ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
-		printk(KERN_INFO "kernel_accept error: %d\n", ret);
-		return(new_sock);
+                printk(KERN_INFO "sock_create_kern error: %d\n", ret);
+                goto done;
+        }
+
+        /* setup callbacks */
+        add_sock_callbacks(con->sock, con);
+
+
+        ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
+	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
+        if (ret < 0) {
+		printk(KERN_INFO "accept error: %d\n", ret);
+		goto err;
 	}
-/* TBD:  shall we check name for validity?  */
-	return(new_sock);
+	con->sock->ops = sock->ops;
+	con->sock->type = sock->type;
+	ret = con->sock->ops->getname(con->sock, paddr, &len, 2);
+        if (ret < 0) {
+		printk(KERN_INFO "getname error: %d\n", ret);
+		goto err;
+	}
+
+        set_bit(ACCEPTING, &con->state);
+done:
+	return ret;
+err:
+	sock_release(con->sock);
+	return ret;
 }
 
 /*
@@ -217,19 +241,6 @@ int _ksendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
 	return(rlen);
 }
 
-struct sockaddr *_kgetname(struct socket *sock)
-{
-	struct sockaddr *saddr = NULL;
-	int len;
-	int ret;
-
-	if ((ret = sock->ops->getname(sock, (struct sockaddr *)saddr,
-					&len, 2) < 0)) {
-		printk(KERN_INFO "kernel getname error: %d\n", ret);
-	}
-	return(saddr);
-
-}
 /*
  *  workqueue initialization
  */
