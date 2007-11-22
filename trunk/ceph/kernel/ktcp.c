@@ -5,102 +5,190 @@
 #include "messenger.h"
 #include "ktcp.h"
 
+static struct workqueue_struct *recv_wq;        /* receive work queue */
+static struct workqueue_struct *send_wq;        /* send work queue */
 
-struct socket * _kconnect(struct sockaddr *saddr)
+/*
+ * socket callback functions 
+ */
+/* Data available on socket or listen socket received a connect */
+static void ceph_data_ready(struct sock *sk, int count_unused)
 {
-	int ret;
-	struct socket *sd = NULL;
+        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-/* TBD: somewhere check for a connection already established to this node? */
-/*      if we are keeping connections alive for a period of time           */
-	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
-        if (ret < 0) {
-		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
-	} else {
-	/* or could call kernel_connect(), opted to reduce call overhead */
-		ret = sd->ops->connect(sd, (struct sockaddr *) saddr,
-					  sizeof (struct sockaddr_in),0);
-        	if (ret < 0) {
-			printk(KERN_INFO "kernel_connect error: %d\n", ret);
-			sock_release(sd);
-		}
-	}
-	return(sd);
+        printk(KERN_INFO "Entered ceph_data_ready state = %u\n", con->state);
+	queue_work(recv_wq, &con->rwork);
 }
 
-struct socket * _klisten(struct sockaddr_in *in_addr)
+/* socket has bufferspace for writing */
+static void ceph_write_space(struct sock *sk)
+{
+        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+
+        printk(KERN_INFO "Entered ceph_write_space state = %u\n",con->state);
+        if (test_bit(WRITE_PEND, &con->state)) {
+                printk(KERN_INFO "WRITE_PEND set in connection\n");
+                queue_work(send_wq, &con->swork);
+        }
+}
+
+/* sockets state has change */
+static void ceph_state_change(struct sock *sk)
+{
+        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+        /* TBD: probably want to set our connection state to OPEN
+         * if state not set to READ or WRITE pending
+         */
+        printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
+        if (sk->sk_state == TCP_ESTABLISHED) {
+                if (test_and_clear_bit(CONNECTING, &con->state))
+                        set_bit(OPEN, &con->state);
+                ceph_write_space(sk);
+        }
+}
+
+/* make a socket active by setting up the call back functions */
+int add_sock_callbacks(struct socket *sock, struct ceph_connection *con)
+{
+        struct sock *sk = sock->sk;
+        sk->sk_user_data = con;
+        printk(KERN_INFO "Entered add_sock_callbacks\n");
+
+        /* Install callbacks */
+        sk->sk_data_ready = ceph_data_ready;
+        sk->sk_write_space = ceph_write_space;
+        sk->sk_state_change = ceph_state_change;
+
+        return 0;
+}
+/*
+ * initiate connection to a remote socket.
+ */
+int _kconnect(struct ceph_connection *con)
 {
 	int ret;
-	struct socket *sd = NULL;
+	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
+
+        set_bit(CONNECTING, &con->state);
+
+        ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
+        if (ret < 0) {
+                printk(KERN_INFO "sock_create_kern error: %d\n", ret);
+                goto done;
+        }
+
+        /* setup callbacks */
+        add_sock_callbacks(con->sock, con);
 
 
-	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sd);
+        ret = con->sock->ops->connect(con->sock, paddr,
+                                      sizeof(struct sockaddr_in), O_NONBLOCK);
+        if (ret == -EINPROGRESS) return 0;
+        if (ret < 0) {
+                /* TBD check for fatal errors, retry if not fatal.. */
+                printk(KERN_INFO "kernel_connect error: %d\n", ret);
+                sock_release(con->sock);
+                con->sock = NULL;
+        }
+done:
+        return ret;
+}
+
+int _klisten(struct ceph_messenger *msgr)
+{
+	int ret;
+	struct socket *sock = NULL;
+	int optval = 1;
+	struct sockaddr_in *myaddr = &msgr->inst.addr.ipaddr;
+
+
+	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
         if (ret < 0) {
 		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
-
-	/* no user specified address given so create, will allow arg to mount */
-	if (!in_addr->sin_addr.s_addr) {
-		in_addr->sin_family = AF_INET;
-		in_addr->sin_addr.s_addr = htonl(INADDR_ANY);
-		in_addr->sin_port = htons(CEPH_PORT);  /* known port for now */
-		/* in_addr->sin_port = htons(0); */  /* any port */
-	}
-
-/* TBD: set sock options... */
-	/*  ret = kernel_setsockopt(sd, SOL_SOCKET, SO_REUSEADDR,
-				(char *)optval, optlen); 
+	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
 		printk("Failed to set SO_REUSEADDR: %d\n", ret);
-	}  */
-	ret = sd->ops->bind(sd, (struct sockaddr*)in_addr, sizeof(in_addr));
-/* TBD: probaby want to tune the backlog queue .. */
-	ret = sd->ops->listen(sd, NUM_BACKUP);
+		goto err;
+	}
+
+	/* set user_data to be the messenger */
+	sock->sk->sk_user_data = msgr;
+
+	/* no user specified address given so create, will allow arg to mount */
+	myaddr->sin_family = AF_INET;
+	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
+	myaddr->sin_port = htons(CEPH_PORT);  /* known port for now */
+	/* myaddr->sin_port = htons(0); */  /* any port */
+	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, 
+				sizeof(struct sockaddr_in));
+	if (ret < 0) {
+		printk("Failed to bind to port %d\n", ret);
+		goto err;
+	}
+
+	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
+				(char *)&optval, sizeof(optval)); 
+	if (ret < 0) {
+		printk("Failed to set SO_KEEPALIVE: %d\n", ret);
+		goto err;
+	}
+
+	msgr->listen_sock = sock;
+
+	/* TBD: probaby want to tune the backlog queue .. */
+	ret = sock->ops->listen(sock, NUM_BACKUP);
 	if (ret < 0) {
 		printk(KERN_INFO "kernel_listen error: %d\n", ret);
-		sock_release(sd);
-		sd = NULL;
+		msgr->listen_sock = NULL;
+		goto err;
 	}
-	return(sd);
+	return ret;
+err:
+	sock_release(sock);
+	return ret;
 }
 
 /*
  * Note: Maybe don't need this, or make inline... keep for now for debugging..
  * we may need to add more functionality
  */
-struct socket *_kaccept(struct socket *sd)
+struct socket *_kaccept(struct socket *sock)
 {
-	struct socket *new_sd = NULL;
+	struct socket *new_sock = NULL;
 	int ret;
 
-
-	ret = kernel_accept(sd, &new_sd, sd->file->f_flags);
+	
+	ret = kernel_accept(sock, &new_sock, sock->file->f_flags);
         if (ret < 0) {
 		printk(KERN_INFO "kernel_accept error: %d\n", ret);
-		return(new_sd);
+		return(new_sock);
 	}
 /* TBD:  shall we check name for validity?  */
-	return(new_sd);
+	return(new_sock);
 }
 
 /*
  * receive a message this may return after partial send
  */
-int _krecvmsg(struct socket *sd, void *buf, size_t len, unsigned msgflags)
+int _krecvmsg(struct socket *sock, void *buf, size_t len)
 {
 	struct kvec iov = {buf, len};
-	struct msghdr msg = {.msg_flags = msgflags};
+	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;		/* length read */
 
 	printk(KERN_INFO "entered krevmsg\n");
 	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
 
 	/* receive one kvec for now...  */
-	rlen = kernel_recvmsg(sd, &msg, &iov, 1, len, msg.msg_flags);
+	rlen = kernel_recvmsg(sock, &msg, &iov, 1, len, msg.msg_flags);
         if (rlen < 0) {
 		printk(KERN_INFO "kernel_recvmsg error: %d\n", rlen);
         }
+	/* TBD: kernel_recvmsg doesn't fill in the name and namelen
+         */
 	return(rlen);
 
 }
@@ -108,32 +196,77 @@ int _krecvmsg(struct socket *sd, void *buf, size_t len, unsigned msgflags)
 /*
  * Send a message this may return after partial send
  */
-int _ksendmsg(struct socket *sd, struct kvec *iov, 
-		size_t kvlen, size_t len, unsigned msgflags)
+int _ksendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
 {
-	struct msghdr msg = {.msg_flags = msgflags};
+	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
 
 	printk(KERN_INFO "entered ksendmsg\n");
 	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
 
-	rlen = kernel_sendmsg(sd, &msg, iov, kvlen, len);
+	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
         if (rlen < 0) {
 		printk(KERN_INFO "kernel_sendmsg error: %d\n", rlen);
         }
 	return(rlen);
 }
 
-struct sockaddr *_kgetname(struct socket *sd)
+struct sockaddr *_kgetname(struct socket *sock)
 {
 	struct sockaddr *saddr = NULL;
 	int len;
 	int ret;
 
-	if ((ret = sd->ops->getname(sd, (struct sockaddr *)saddr,
+	if ((ret = sock->ops->getname(sock, (struct sockaddr *)saddr,
 					&len, 2) < 0)) {
 		printk(KERN_INFO "kernel getname error: %d\n", ret);
 	}
 	return(saddr);
 
+}
+/*
+ *  workqueue initialization
+ */
+
+int work_init(void)
+{
+        int ret = 0;
+
+        printk(KERN_INFO "entered work_init\n");
+        /*
+         * Create a num CPU threads to handle receive requests
+         * note: we can create more threads if needed to even out
+         * the scheduling of multiple requests..
+         */
+        recv_wq = create_workqueue("ceph-recv");
+        ret = IS_ERR(recv_wq);
+        if (ret) {
+                printk(KERN_INFO "receive worker failed to start: %d\n", ret);
+                destroy_workqueue(recv_wq);
+                return ret;
+        }
+
+        /*
+         * Create a single thread to handle send requests
+         * note: may use same thread pool as receive workers later...
+         */
+        send_wq = create_singlethread_workqueue("ceph-send");
+        ret = IS_ERR(send_wq);
+        if (ret) {
+                printk(KERN_INFO "send worker failed to start: %d\n", ret);
+                destroy_workqueue(send_wq);
+                return ret;
+        }
+        printk(KERN_INFO "successfully created wrkqueues\n");
+
+        return(ret);
+}
+
+/*
+ *  workqueue shutdown
+ */
+void shutdown_workqueues(void)
+{
+        destroy_workqueue(send_wq);
+        destroy_workqueue(recv_wq);
 }

@@ -52,20 +52,18 @@ struct ceph_msg_pos {
 
 
 /* current state of connection */
-enum ceph_connection_state {
-	NEW = 1,
-	ACCEPTING = 2,
-	CONNECTING = 4,
-	OPEN = 8,
-	REJECTING = 16,
-	CLOSED = 32,
-	READ_PEND = 64,
-	WRITE_PEND = 128
-};
+#define NEW 1
+#define CONNECTING 2
+#define ACCEPTING 3
+#define OPEN 4
+#define WRITE_PEND 5
+#define REJECTING 6
+#define CLOSED 7
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
+	__u32 state;		/* connection state */
 	
 	atomic_t nref;
 	spinlock_t con_lock;    /* connection lock */
@@ -74,7 +72,6 @@ struct ceph_connection {
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
-	enum ceph_connection_state state;
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
