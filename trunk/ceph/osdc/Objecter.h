@@ -88,10 +88,10 @@ class Objecter {
 
   class OSDStat : public OSDOp {
   public:
-	tid_t tid;
-	off_t *size;  // where the size goes.
+    tid_t tid;
+    off_t *size;  // where the size goes.
     Context *onfinish;
-	OSDStat(off_t *s) : tid(0), size(s), onfinish(0) { }
+    OSDStat(off_t *s) : tid(0), size(s), onfinish(0) { }
   };
 
   // generic modify

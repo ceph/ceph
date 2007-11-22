@@ -13,13 +13,12 @@
 #endif
 #include <linux/types.h>
 
-typedef __u64 ceph_ino_t;
-
 #ifdef __KERNEL__
 extern int ceph_debug;
 # define dout(x, args...) do { if (x >= ceph_debug) printk(KERN_INFO "ceph: " args); } while (0);
 # define derr(x, args...) do { if (x >= ceph_debug) printk(KERN_ERR "ceph: " args); } while (0);
 #endif
+
 
 
 #define CEPH_MON_PORT 2138
@@ -39,9 +38,11 @@ static inline int ceph_fsid_equal(const ceph_fsid_t *a, const ceph_fsid_t *b) {
 }
 
 
-/**
- * object id
+/*
+ * ino, object, etc.
  */
+typedef __u64 ceph_ino_t;
+
 struct ceph_object {
 	ceph_ino_t ino;  /* inode "file" identifier */
 	__u32 bno;  /* "block" (object) in that "file" */
@@ -49,24 +50,22 @@ struct ceph_object {
 };
 typedef struct ceph_object ceph_object_t;
 
-
-/* misc */
-typedef __u32 ceph_frag_t;
-
 struct ceph_timeval {
 	__u32 tv_sec;
 	__u32 tv_usec;
 };
 
+typedef __u32 ceph_frag_t;
 
-/** object layout
- * how objects are mapped into PGs
+
+/*
+ * object layout - how objects are mapped into PGs
  */
 #define CEPH_OBJECT_LAYOUT_HASH     1
 #define CEPH_OBJECT_LAYOUT_LINEAR   2
 #define CEPH_OBJECT_LAYOUT_HASHINO  3
 
-/**
+/*
  * pg layout -- how PGs are mapped into (sets of) OSDs
  */
 #define CEPH_PG_LAYOUT_CRUSH  0   
@@ -74,8 +73,7 @@ struct ceph_timeval {
 #define CEPH_PG_LAYOUT_LINEAR 2
 #define CEPH_PG_LAYOUT_HYBRID 3
 
-
-/**
+/*
  * ceph_file_layout - describe data layout for a file/inode
  */
 struct ceph_file_layout {
@@ -85,10 +83,10 @@ struct ceph_file_layout {
 	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
 	
 	/* pg -> disk layout */
-	__u32 fl_object_stripe_unit;   /* for per-object raid */
+	__u32 fl_object_stripe_unit;  /* for per-object parity, if any */
 
 	/* object -> pg layout */
-	__s32 fl_pg_preferred; /* preferred primary for pg */
+	__s32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
 	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
 	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
 };
@@ -98,10 +96,8 @@ struct ceph_file_layout {
 /* period = bytes before i start on a new set of objects */
 #define ceph_file_layout_period(l) (l.fl_object_size * l.fl_stripe_count)
 
-
-
-/**
- * placement group id
+/*
+ * placement group
  */
 #define CEPH_PG_TYPE_REP   1
 #define CEPH_PG_TYPE_RAID4 2
@@ -117,13 +113,11 @@ union ceph_pg {
 };
 typedef union ceph_pg ceph_pg_t;
 
-#define ceph_pg_is_rep(pg) (pg.pg.type == CEPH_PG_TYPE_REP)
+#define ceph_pg_is_rep(pg)   (pg.pg.type == CEPH_PG_TYPE_REP)
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
-/**
- * object layout
- *
- * describe how a given object should be stored.
+/*
+ * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
 	ceph_pg_t ol_pgid;
@@ -131,8 +125,7 @@ struct ceph_object_layout {
 };
 
 
-
-/**
+/*
  * object extent
  */
 struct ceph_object_extent {
@@ -267,6 +260,7 @@ enum {
 	CEPH_SESSION_CLOSE
 };
 
+/* client_request */
 enum {
 	CEPH_MDS_OP_STAT = 100,
 	CEPH_MDS_OP_LSTAT = 101,
@@ -289,9 +283,6 @@ enum {
 	CEPH_MDS_OP_TRUNCATE = 1303,
 	CEPH_MDS_OP_FSYNC = 303
 };
-
-
-/* client_request */
 
 struct ceph_client_request_head {
 	struct ceph_entity_inst client_inst;
@@ -350,7 +341,6 @@ struct ceph_client_request_head {
 
 
 /* client reply */
-
 struct ceph_client_reply_head {
 	__u64 tid;
 	__u32 op;
