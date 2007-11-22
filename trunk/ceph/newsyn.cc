@@ -35,6 +35,8 @@ using namespace std;
 
 #include "common/Timer.h"
 
+#define ALL_SYNCLIENTS_THROUGH_ONE_CLIENT 0
+
 class C_Test : public Context {
 public:
   void finish(int r) {
@@ -343,19 +345,37 @@ int main(int argc, char **argv)
   map<int,Client *> client;//[start_client];
   map<int,SyntheticClient *> syn;//[start_client];
   int nclients = 0;
+
+  Client* single_client;
+  if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT)
+    single_client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)),
+			       monmap);
+  
+  // create the synthetic clients, and one Ceph client per synthetic client
+  // (unless ALL_SYNCLIENTS_THROUGH_ONE_CLIENT is set)
   for (int i=0; i<start_client; i++) {
     int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i % client_nodes;
     if (mpirank != node) continue;
     clientlist.insert(i);
+    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) {
+        client[i] = single_client;
+    }
+    else {
     client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)), monmap);
+
+    }
     syn[i] = new SyntheticClient(client[i]);
     
     started++;
     nclients++;
   }
 
-  if (!clientlist.empty()) generic_dout(2) << "i have " << clientlist << dendl;
+  if (!clientlist.empty()) {
+    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) generic_dout(2) << "In one-client-per-synclient mode:";
+    generic_dout(2) << "i have " << clientlist << dendl;
+  }
 
+  // start all the synthetic clients
   for (set<int>::iterator it = clientlist.begin();
        it != clientlist.end();
        it++) {
@@ -364,21 +384,29 @@ int main(int argc, char **argv)
     //cerr << "starting synthetic client" << i << " on rank " << mpirank << std::endl;
     syn[i]->start_thread();
   }
+
+  // client status message
   if (nclients) {
+    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) cerr << "In one-client-per-synclient mode:";
     cerr << nclients << " clients at " << rank.rank_addr << " " << hostname << "." << pid << std::endl;
   }
 
+  // wait for the synthetic clients to finish
   for (set<int>::iterator it = clientlist.begin();
        it != clientlist.end();
        it++) {
     int i = *it;
     //      cout << "waiting for synthetic client" << i << " to finish" << std::endl;
     syn[i]->join_thread();
-    // fix simpelmeessenger race first!
-    //delete syn[i];
-    //delete client[i];
+
+    // fix simplemessenger race before deleting synclients and clients
+    // delete syn[i];
+
+    // if (!ALL_SYNCLIENTS_THROUGH_ONE_CLIENT)
+    // delete client[i];
   }
-  
+  // if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT)
+  // delete client[0];
 
   if (mpirank && !started) {
     //dout(1) << "IDLE" << dendl;

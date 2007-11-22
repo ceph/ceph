@@ -16,8 +16,6 @@ int main(int argc, const char* argv[]) {
   socklen_t clilen;
   struct sockaddr_in cli_addr, serv_addr;
 
-  //const char *pname = argv[0]; // process name
-
   // Open a TCP socket
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     cerr << "slave: can't open TCP socket. Exiting." << endl;
@@ -89,8 +87,7 @@ void process_request(int newsockfd) {
 
   // first, read the message type.
   int msg_type = readmsgtype(newsockfd);
-  
-  
+    
   // Second, call some function based on the message type to process
   // the rest of the message. The function is responsible for the rest
   // of the message; this includes checking the message footer.
@@ -107,7 +104,8 @@ void process_request(int newsockfd) {
     process_get_local(newsockfd);
     break;
   case SHIPCODE:
-    process_shipcode(newsockfd);
+    assert(0); // obsolete
+    //process_shipcode(newsockfd);
     break;
 
   case PINGREPLY:
@@ -151,27 +149,31 @@ void process_ping(int fd) {
 }
 
 
+// Process a start_task message. This reads the incoming message,
+// retrieves the necessary library, and starts the corresponding task.
 
-// Process a start_task message. This reads the incoming message and
-// starts the corresponding task.
-
-// Parameter format: taskID(int) command(string) 
+// Parameter format: taskID(int) library(string) 
 // cephinputfile(string) offset(long) length(long) localoutputfile
 
-// WARNING: currently has the trivial task hardwired. It
-// ignores the command and the output file.
 void process_start_task(int fd) {
 
-  char command[MAX_STRING_SIZE + 1];
+  char libraryname[MAX_STRING_SIZE + 1];
   char cephinputfile[MAX_STRING_SIZE + 1];
   char localoutputfile[MAX_STRING_SIZE + 1];
+  char options[MAX_STRING_SIZE + 1];
 
   cout << "in process_start_task: ";
   int taskID = read_positive_int(fd);
   cout << "read taskID " << taskID;
 
-  read_string(fd, command);
-  cout << ", command " << command;
+  // There may be multiple instances running on the same OSD. Cheap
+  // and dirty hack: append the taskID to the filename to avoid contention.
+
+  read_string(fd, libraryname);
+  string libraryfilename("lib");
+  libraryfilename += libraryname;
+  libraryfilename += ".so";
+  cout << ", library name " << libraryname << " -> " << libraryfilename;
 
   read_string(fd, cephinputfile);
   cout << ", cephinputfile " << cephinputfile;
@@ -181,7 +183,10 @@ void process_start_task(int fd) {
   cout << ", length " << length;
 
   read_string(fd, localoutputfile);
-  cout << ", localoutputfile " << localoutputfile << endl;
+  cout << ", localoutputfile " << localoutputfile;
+  read_string(fd, options);
+  cout << ", options: " << options << endl;
+
 
   // make sure the footer is valid
   if (!check_footer(fd)) {
@@ -189,26 +194,48 @@ void process_start_task(int fd) {
 	 << "Discarding message." << endl;
     exit(-1);
   }
-  
 
-  // To do: modify to load the task from a library instead of just
-  // using the hardwired one.
 
-  void (*task)(const char*, const char*, off_t, off_t) = 0;
-  task = start_trivial_task;
+  // copy the library over from Ceph
 
+  ostringstream locallibraryfilename;
+  locallibraryfilename << "/tmp/lib" << libraryname << "_" << taskID << ".so";
+
+  //string locallibraryfilename("lib");
+  //locallibraryfilename += libraryname;
+  //locallibraryfilename += "_";
+  //locallibraryfilename += taskID;
+  //locallibraryfilename += ".so";
+  cout << "Naming local library copy "  << locallibraryfilename.str() << endl;
+
+  Client* client = startCephClient();
+  copyCephFileToLocalFile(client, libraryfilename.c_str(), locallibraryfilename.str().c_str());
+  kill_client(client);
+  cout << "Local library copy acquired" << endl;
+
+  // load the task from the shared library
+  void (*task)(const char*, const char*, int,
+	       off_t, off_t, const char*) = 0;
+  void* dl_h = dlopen(locallibraryfilename.str().c_str(), RTLD_LAZY);
+  if (NULL == dl_h) {
+    cerr << "Dynamic linking error: " << dlerror() << endl;
+    exit(-1);
+  }
+  task = (void (*)(const char*, const char*, int, 
+		   off_t, off_t, const char*)
+	  ) dlsym(dl_h, "run_task");
+  if (NULL == dl_h) {
+    cerr << "Symbol lookup error: " << dlerror() << endl;
+    exit(-1);
+  }
 
  
-  // start a task; create an output filename that uses the task ID, 'cause we might
-  // end up with multiple pieces of a file on each OSD.
-  // WARNING: always does the trivial task; prints answer to stdout but
-  // does not write it to disk.
+  // start a task; create an output filename that uses the task ID,
+  // 'cause we might end up with multiple pieces of a file on each
+  // OSD.
   cerr << "starting task: " << endl;
-  //start_trivial_task(cephinputfile, localoutputfile, offset, length);
-  task(cephinputfile, localoutputfile, offset, length);
+  task(cephinputfile, localoutputfile, taskID, offset, length, options);
   cerr << "returned from task! Sending reply:" << endl;
-
-
 
   // send the reply
   send_msg_header(fd, FINISHEDTASK);
@@ -218,56 +245,6 @@ void process_start_task(int fd) {
   // done
   cout << "Done sending reply for taskID " << taskID << endl;
   return;
-}
-
-
-
-void start_trivial_task (const char* ceph_filename, const char* local_filename, 
-			 off_t offset, off_t length) {
-  // Don't bother to copy the file to disk. Read the file directly from Ceph,
-  // and add up all the bytes.
-  // Write the total to the local file as a string.
-    Client * client = startCephClient();
-
-    bufferptr bp(CHUNK);
-
-    // get the source file's size. Sanity-check the request range.
-    struct stat st;
-    int r = client->lstat(ceph_filename, &st);
-    assert (r == 0);
-    
-    off_t src_total_size = st.st_size;
-    if (src_total_size < offset + length) {
-      cerr << "Error in copy ExtentToLocalFile: offset + length = " << offset << " + " << length
-	   << " = " + (offset + length) << ", source file size is only " << src_total_size << endl;
-      exit(-1);
-    }
-    off_t remaining = length;
-    
-    // open the file and seek to the start position
-    cerr << "start_trivial_task: opening the source file and seeking " << endl;
-
-    int fh_ceph = client->open(ceph_filename, O_RDONLY);
-    assert (fh_ceph > -1); 
-    r = client->lseek(fh_ceph, offset, SEEK_SET);
-    assert (r == offset);
-    
-    int counter = 0;
-    // read through the extent and add up the bytes
-    cerr << "start_trivial_task: counting up bytes" << endl;
-    char* bp_c = bp.c_str();
-    while (remaining > 0) {
-      off_t got = client->read(fh_ceph, bp_c, MIN(remaining,CHUNK), -1);
-      assert(got > 0);
-      remaining -= got;
-      for (off_t i = 0; i < got; ++i) {
-	counter += (unsigned int)(bp_c[i]);
-      }
-    }
-    cerr << "start_trivial_task: Done! Answer is " << counter << endl;
-    client->close(fh_ceph);
-        
-    //assert(0);
 }
 
 
@@ -291,43 +268,12 @@ void start_sloppy_grepcount (const char* ceph_filename, const char* local_filena
   command.append(local_filename);
 
   assert(0);
-
 }
 
 
-// Processes a SHIPCODE message. The message will have a shared
-// library attached to it, which must be stored locally.
+// SHIPCODE messages have been removed.
 
-void process_shipcode(int fd) {
-
-
-  // get the size of the shared library
-  size_t library_size = read_size_t(fd);
-
-
-  // save the library to a file
-  cerr << "saving library..." << endl;
-  const char* libfile = "/tmp/libslavetask.so";
-  int local_fd = ::open(libfile, O_WRONLY | O_CREAT | O_TRUNC);
-  if (local_fd < 0) {
-    cerr << "Error opening " << libfile << " for writing." << endl;
-    exit(-1);
-  }
-
-  off_t remaining = library_size;
-
-  bufferptr bp(CHUNK);
-  char* bp_c = bp.c_str();
-  while (remaining > 0) {
-    off_t got = readn(fd, bp_c, MIN(remaining, CHUNK));
-    assert(got > 0);
-    remaining -= got;
-    ssize_t written = ::write(local_fd, bp_c, got);
-    assert (written == got);
-  }
-  cerr << "Received shared library and stored as " << libfile << endl;
-
-}
+void process_shipcode(int fd) { assert(0); }
 
 
 // Processes a get_local message. The message

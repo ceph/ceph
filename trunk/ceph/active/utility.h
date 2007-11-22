@@ -14,7 +14,6 @@
 Client* startCephClient();
 void kill_client(Client* client);
 
-
 int send_msg_header(int fd, int header_ID);
 int readmsgtype(int fd);
 bool check_footer(int fd);
@@ -74,7 +73,7 @@ void kill_client (Client * client)
 
 
 
-// read a message type from the socket, and print it.
+// reads a message type from the socket, and prints it.
 
 int readmsgtype(int fd) {
   int rc;
@@ -201,14 +200,71 @@ void copyExtentToLocalFile (Client* client, const char* ceph_source,
   const int chunk = 4*1024*1024;
   bufferptr bp(chunk);
 
-    while (remaining > 0) {
-      off_t got = client->read(fh_ceph, bp.c_str(), MIN(remaining,chunk), -1);
-      assert(got > 0);
-      remaining -= got;
-      off_t wrote = ::write(fh_local, bp.c_str(), got);
-      assert (got == wrote);
-    }
-    // close the files
-    client->close(fh_ceph);
-    ::close(fh_local);
+  while (remaining > 0) {
+    off_t got = client->read(fh_ceph, bp.c_str(), MIN(remaining,chunk), -1);
+    assert(got > 0);
+    remaining -= got;
+    off_t wrote = ::write(fh_local, bp.c_str(), got);
+    assert (got == wrote);
+  }
+  // close the files
+  client->close(fh_ceph);
+  ::close(fh_local);
+}
+
+
+// Copy a Ceph file to the local disk. Requires a running Ceph client.
+// Overwrites the destination if it exists.
+void copyCephFileToLocalFile (Client* client, const char* ceph_source,
+			      const char* local_destination) {
+
+  // get the source file's size.
+  struct stat st;
+  int r = client->lstat(ceph_source, &st);
+  assert (r == 0);
+  
+  copyExtentToLocalFile(client, ceph_source, 0, st.st_size,
+			local_destination);
+  
+
+}
+// Copies a file from the local disk to Ceph. Annihilates the
+// destination if it exists.
+
+void copyLocalFileToCeph(Client* client, const char* local_source,
+			 const char* ceph_destination) {
+
+  // Get the source file's size.
+  struct stat st;
+  int r = ::lstat(local_source, &st);
+  if (0 != r) {
+    cerr << "in copyLocalFileToCeph: error retrieving size for file " << local_source
+	 << ": is the file missing?" << endl;
+    assert(0);
+  }
+
+  off_t remaining = st.st_size;
+
+  // Open the source and destination files.
+  int fh_source = ::open(local_source, O_RDONLY);
+  assert (fh_source > -1);
+  int fh_dest = client->open(ceph_destination, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  assert (fh_dest > -1);
+
+  // Copy the file.
+  const int chunk = 4 * 1024* 1024; // 4 MB
+  bufferptr bp(chunk);
+
+  while(remaining > 0) {
+    off_t got = ::read(fh_source, bp.c_str(), MIN(remaining, chunk));
+    assert(got > 0);
+    remaining -= got;
+    off_t wrote = client->write(fh_dest, bp.c_str(), got);
+    assert (got == wrote);
+  }
+
+  // close the files
+  ::close(fh_source);
+  client->close(fh_dest);
+
 }

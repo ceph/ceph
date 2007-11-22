@@ -1,13 +1,12 @@
 /*
- * This test client tests the sending of message headers to the slave.
+ * This client invokes a distributed task across OSDs.
  *
- * Code is based off examples in Stevens' "Unix Network Programming".
+ * Networking code is based off examples in Stevens' "Unix Network Programming".
  */
 #include "msgtestclient.h"
-#define REQUIRED_ARGS 2
+#define REQUIRED_ARGS 5
 
-int main(int argc, char* argv[]) {
-  
+int main(int argc, char* argv[]) {  
 
   // make sure we have all the arguments we need
   if (argc < REQUIRED_ARGS) { usage(argv[0]);  exit(-1); }
@@ -17,81 +16,33 @@ int main(int argc, char* argv[]) {
   // name of the Ceph file that the test will be
   // run on; the second parameter specifies which of
   // four different tests will be run.
-  const char* input_filename = argv[1];
-  int test_number = atoi(argv[2]);
+  const char* library_name = argv[1];
+  const char* input_filename = argv[2];
+  const char* output_filename = argv[3];
+  int test_number = atoi(argv[4]);
   assert (test_number > 0);
   assert (test_number < 4);
+  const char* job_options = argv[5];
 
-  //const char* map_command = argv[2];
-  // These two variables aren't really used yet.
-  const char* map_command = "map_foo";
-  const char* output_filename = "out_foo";
-  //const char* output_filename = argv[3];
-  //const char* reduce_command = argv[4]; // not implemented yet
+  string library_filename("lib");
+  library_filename += library_name;
+  library_filename += ".so";
   
   // start up a Ceph client
   Client* client = startCephClient();
+  cerr << "loaded test client" << endl;
 
-  // open the input file as read_only
-  int fh = client->open(input_filename, O_RDONLY);
-  if (fh < 0)    {
-    cerr << "The input file " << input_filename << " could not be opened." << endl;
-    exit(-1);
-  }
-
-  // How big is the file?
-  off_t filesize;
-  struct stat stbuf;
-  if (0 > client->lstat(input_filename, &stbuf))    {
-    cerr << "Error: could not retrieve size of input file " << input_filename << endl;
-    exit(-1);
-  }
-  filesize = stbuf.st_size;
-  if (filesize < 1) {
-    cerr << "Error: input file size is " << filesize << endl;
-    exit(-1);
-  }
-
-  // retrieve all the object extents and close the file
-  list<ObjectExtent> extents;
-  off_t offset = 0;
-  client->enumerate_layout(fh, extents, filesize, offset);
-  client->close(fh);
-
-  list<ObjectExtent>::iterator i;
-  map<size_t, size_t>::iterator j;
-  int osd;
-  int taskID = 0;
-
-  // Pull out all the extents, and make a vector of
-  // (ip_address, start, length).
-
+  // generate the file extent tuples for each OSD
   vector<request_split> original_splits;
+  off_t filesize = generate_splits(client, input_filename, original_splits);
 
-  for (i = extents.begin(); i != extents.end(); i++) {
-
-    request_split split;
-    // find the primary and get its IP address
-    osd = client->osdmap->get_pg_primary(i->layout.pgid);      
-    entity_inst_t inst = client->osdmap->get_inst(osd); 
-    entity_addr_t entity_addr = inst.addr;
-    entity_addr.make_addr(split.ip_address);        
-
-    // iterate through each buffer_extent in the ObjectExtent
-    for (j = i->buffer_extents.begin();
-	 j != i->buffer_extents.end(); j++) {
-
-      // get the range of the buffer_extent
-      split.start = (*j).first;
-      split.length = (*j).second;
-      // throw the split onto the vector
-      original_splits.push_back(split);
-    }
-  }
+  // copy the library to Ceph
+  copyLocalFileToCeph(client, library_filename.c_str(), library_filename.c_str());
 
   // close the client - we're done with it
   kill_client(client);
-
+  cerr << "Closed Ceph client instance" << endl;
+  
   // sanity check: display the splits
   cerr << "Listing original splits:" << endl;
   for (vector<request_split>::iterator i = original_splits.begin();
@@ -146,11 +97,12 @@ int main(int argc, char* argv[]) {
   utime_t start_time = g_clock.now();
   int pending_tasks = 0;
 
+  int taskID = 0;
   // start up the tasks
   for (vector<request_split>::iterator i = test_splits.begin();
        i != test_splits.end(); i++) {
-    start_map_task(i->ip_address, taskID++, map_command, input_filename,
-		   i->start, i->length, output_filename);
+    start_map_task(i->ip_address, ++taskID, library_name, input_filename,
+		   i->start, i->length, output_filename, job_options);
     ++pending_tasks;
   }
 
@@ -220,52 +172,34 @@ void ping_test(int fd) {
   }
 }
 
-
-
-
-// send a test message for starting a task
-void start_task_test(int fd) {
-
-  // The test:
-  // TaskID 42
-  // command: "Burninate"
-  // input file: "countryside"
-  // offset: 8764 (TROG)
-  // length: 367 (DOR)
-
-  send_start_task_msg(fd, 42, strlen("Burninate"), "Burninate",
-		      strlen("countryside"), "countryside",
-		      8764, 367,
-		      strlen("toast"), "toast");
-}
-
-
 // sends a message to the fd telling it to start a task.
 // Remember: the message format requires any string to be
 // prefixed by its (unterminated) length.
 void send_start_task_msg(int fd,
 			 int taskID,
-			 int command_size, const char* command,
+			 int library_name_size, const char* library_name,
 			 int inputfilenamesize, const char* inputfilename,
 			 off_t offset,
 			 off_t length,
-			 int outputfilenamesize, const char* outputfilename) {
+			 int outputfilenamesize, const char* outputfilename,
+			 int options_size, const char* options) {
 
   // write the header and the message to the file descriptor.
 
   send_msg_header(fd, STARTTASK);
 
   write_positive_int(fd, taskID);
-  write_positive_int(fd, command_size);
-  write_string(fd, command);
+  write_positive_int(fd, library_name_size);
+  write_string(fd, library_name);
   write_positive_int(fd, inputfilenamesize);
   write_string(fd, inputfilename);
   //write_long(fd, offset);
   write_off_t (fd, offset);
-  //write_long(fd, length);
   write_off_t (fd, length);
   write_positive_int(fd, outputfilenamesize);
   write_string(fd, outputfilename);
+  write_positive_int(fd, options_size);
+  write_string(fd, options);
 
   // terminate the message
   send_msg_footer(fd);
@@ -328,12 +262,12 @@ void msg_type_sender(int sockfd) {
 
 }
 
-// Fires up the map task.
-// For the moment, all it does is echo the command line, not run it.
+// Fires up a task on a single OSD.
 int start_map_task(sockaddr_in ip_address, int taskID, 
-		   const char* command, const char* input_filename,
+		   const char* library_name, const char* input_filename,
 		   off_t start, off_t length, 
-		   const char* output_filename)
+		   const char* output_filename,
+		   const char* job_options)
 {
   int childpid;
   // fork off a child process to do the work, and return
@@ -347,8 +281,7 @@ int start_map_task(sockaddr_in ip_address, int taskID,
 	 << childpid << " to start task. " << endl;
     return 0;
   }
-      
-  
+
   string ip_addr_string(inet_ntoa(ip_address.sin_addr));
   //  cerr << "command: " << ip_addr_string << " taskID " 
   //   << taskID << ": " << command 
@@ -358,10 +291,11 @@ int start_map_task(sockaddr_in ip_address, int taskID,
   // open a socket to the slave, and send the message
   //cerr << "Sending message: " << endl;
   int sockfd = create_new_connection(ip_addr_string.c_str(), SERV_TCP_PORT);
-  send_start_task_msg(sockfd, taskID, strlen(command), command,
+  send_start_task_msg(sockfd, taskID, strlen(library_name), library_name,
 		      strlen(input_filename), input_filename,
 		      start, length,
-		      strlen(output_filename), output_filename);
+		      strlen(output_filename), output_filename,
+		      strlen(job_options), job_options);
 
   // wait for a reply
   cerr << "Sent message for taskID " << taskID << ". Waiting for reply..." << endl;
@@ -391,25 +325,87 @@ int start_map_task(sockaddr_in ip_address, int taskID,
   close(sockfd);
   cerr << "Task " << taskID << "/" << reply_taskID << 
     " complete! Ending child process." << endl;
-  exit(0);
-  //_exit(0);
+  //exit(0);
+  _exit(0);
   cerr << "exit(0) returned. Strange things are afoot." << endl;
 }
 
 
+// Creates a set of (ip address, start position, length) tuples giving
+// the location of each piece of the given Ceph file. Returns the size
+// of the file.
+
+
+off_t generate_splits(Client* client, const char* input_filename,
+				      vector<request_split>& original_splits) {
+
+  // Open the file and get its size
+  int fh = client->open(input_filename, O_RDONLY);
+  if (fh < 0)    {
+    cerr << "The input file " << input_filename << " could not be opened." << endl;
+    exit(-1);
+  }
+  cerr << "Opened file " << input_filename << endl;
+  off_t filesize;
+  struct stat stbuf;
+  if (0 > client->lstat(input_filename, &stbuf)) {
+    cerr << "Error: could not retrieve size of input file " << input_filename << endl;
+    exit(-1);
+  }
+  filesize = stbuf.st_size;
+  if (filesize < 1) {
+    cerr << "Error: input file size is " << filesize << endl;
+    exit(-1);
+  }
+
+  // grab all the object extents
+  list<ObjectExtent> extents;
+  off_t offset = 0;
+  client->enumerate_layout(fh, extents, filesize, offset);
+  client->close(fh);
+  cerr << "Retrieved all object extents" << endl;
+
+
+  // generate the tuples
+  list<ObjectExtent>::iterator i;
+  map<size_t, size_t>::iterator j;
+  int osd;
+
+  for (i = extents.begin(); i != extents.end(); i++) {
+
+    request_split split;
+    // find the primary and get its IP address
+    osd = client->osdmap->get_pg_primary(i->layout.pgid);      
+    entity_inst_t inst = client->osdmap->get_inst(osd); 
+    entity_addr_t entity_addr = inst.addr;
+    entity_addr.make_addr(split.ip_address);        
+
+    // iterate through each buffer_extent in the ObjectExtent
+    for (j = i->buffer_extents.begin();
+	 j != i->buffer_extents.end(); j++) {
+
+      // get the range of the buffer_extent
+      split.start = (*j).first;
+      split.length = (*j).second;
+      // throw the split onto the vector
+      original_splits.push_back(split);
+    }
+  }
+  return filesize;
+}
 
 
 void usage(const char* name) {
-  //cout << "usage: " << name << " inputfile map_task outputfile" << endl;
-  //cout << "inputfile must be a valid path in the running Ceph filesystem." << endl;
-  //cout << "map_task should be given with an absolute path, and be present on ";
-  //cout << "the REGULAR filesystem every node." << endl;
-  //cout << "output_file will be written locally to the node." << endl;
-
-  cout << "usage: " << name << " inputfile test_number" << endl;
+ 
+  cout << "usage: " << name << " libraryname inputfile outputfile test_number" << endl;
+  cout << "libraryname is the name of a proper shared task library in the _local_ filesystem. "
+       << "e.g. entering \"foo\" requires the presence of libfoo.so in the " 
+       << "working directory." << endl;
   cout << "inputfile must be a valid path in the running Ceph filesystem." << endl;
+  cout << "outputfile is a Ceph filename prefix for writing results. e.g. \"bar\" will give "
+       << "output files bar.1, bar.2, &c." << endl;
   cout << "test_number must be 1, 2, or 3." << endl;
-  cout << "    1: run the test task normally (one slave per OSD)" << endl;
+  cout << "    1: run the test task normally (one slave per OSD file extent)" << endl;
   cout << "    2: run the test task on the \"wrong\" OSDs" << endl;
   cout << "    3: run the entire task in a single process" << endl;
 }

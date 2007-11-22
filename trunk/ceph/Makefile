@@ -169,7 +169,7 @@ activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o commo
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} -ldl ${CFLAGS} ${LIBS} $^ -o $@
 
 echotestclient: active/echotestclient.cc
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
@@ -177,9 +177,19 @@ echotestclient: active/echotestclient.cc
 msgtestclient: active/msgtestclient.o client.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
+#libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
+#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+libtrivialtask.so: active/trivial_task_ipc.cc ceph_ipc/ipc_client.o
 	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
+
+libgreptask.so: active/grep_task.cc ceph_ipc/ipc_client.o
+	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+
+
+#libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
+#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
 
 # IPC interface
@@ -309,3 +319,4 @@ depend:
 
 # now add a line to include the dependency list.
 include .depend
+# DO NOT DELETE

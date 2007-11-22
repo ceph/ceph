@@ -37,7 +37,30 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
 
 
+/*
+ Tick function to update the map based on performance every N seconds
+*/
 
+/*
+void PGMonitor::tick() {
+
+  // magic incantation that Sage told me
+  if (!mon->is_leader()) return; 
+  if (!paxos->is_active()) return;
+
+
+  // Is it the nth second? If not, do nothing.
+  const int N = 10; //magic number! codify somewhere later
+  utime_t now = g_clock.now();
+  if (now % N) != 0 return;
+
+  if (mon->osdmon->paxos->is_readable()) {
+    // safely use mon->osdmon->osdmap
+  }
+
+}
+
+*/
 void PGMonitor::create_initial()
 {
   dout(1) << "create_initial -- creating initial map" << dendl;

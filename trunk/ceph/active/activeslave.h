@@ -1,8 +1,10 @@
+#include <dlfcn.h>
+#include <string>
+#include <sstream>
 #include "inet.h"
 #include "common.h"
 #include "utility.h"
 #include "client/Client.h"
-
 
 // The port number is "osdd" on a telephone keypad.
 #define SERV_TCP_PORT 6733

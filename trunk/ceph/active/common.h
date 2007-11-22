@@ -13,8 +13,6 @@
 #include <iostream>
 #include <string>
 
-// a bunch of string constants
-// for commands
 
 
 
@@ -29,22 +27,24 @@
 
  * PING/PINGREPLY: just what it sounds like.
 
- * STARTTASK: starts a task. Needs to be reworked to allow code
- * shipping. The slave attempts to perform the task, and replies with
- * FINISHEDTASK or TASKFAILED.
+ * STARTTASK: starts a task from the given library. The slave attempts
+ * to perform the task, and replies with FINISHEDTASK or TASKFAILED.
  *
  * RETRIEVELOCALFILE: requests a file that the slave has stored
  * locally. Slave replies with SENDLOCALFILE and the file, or with
  * LOCALFILENOTFOUND.
  * 
- * SHIPCODE: sends a shared library to the slave, containing a
+ * (deprecated) SHIPCODE: sends a shared library to the slave, containing a
  * function that is to be executed later by the STARTTASK
  * command. Slave replies with CODESAVED or SHIPFAILED.
- * 
+ *
+ * SHIPCODE is replaced by transport using Ceph.
  */ 
 
 
 const off_t CHUNK = 1024 * 1024 * 4;
+
+// a bunch of string constants for commands
 
 #define PING              0
 #define STARTTASK         1
@@ -57,7 +57,6 @@ const off_t CHUNK = 1024 * 1024 * 4;
 #define SHIPCODE          8
 #define CODESAVED         9
 #define SHIPFAILED        10
-
 
 #define FOOTER_LENGTH 7
 
@@ -75,20 +74,13 @@ const char* CMD_LIST[CMDCOUNT] = {"______PING",
 
 const char FOOTER[FOOTER_LENGTH + 1] = "MSG_END";
 
-
 // const char* strArray[] = {"string1", "string2", "string3"};
 //const char commands[2][4]  = {"foo", "bar"};
 
  
-
 // error codes
 #define ARGUMENTSINVALID 1001
 #define CEPHCLIENTSTARTUPFAILED 1002
 #define INPUTFILEREADFAILED 1003
-
-
-// const char* name = "Njal";
-
-
 
 #endif //COMMON_H
