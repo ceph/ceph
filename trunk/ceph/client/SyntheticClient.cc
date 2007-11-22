@@ -35,8 +35,8 @@ using namespace std;
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_dout << dbeginl << g_clock.now() << " synthetic" << client->get_nodeid() << " "
-#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_derr << dbeginl << g_clock.now() << " synthetic" << client->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_dout << dbeginl << g_clock.now() << " synthetic" << (this->whoami >= 0 ? this->whoami:client->get_nodeid()) << " "
+#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) *_derr << dbeginl << g_clock.now() << " synthetic" << (this->whoami >= 0 ? this->whoami:client->get_nodeid()) << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
@@ -225,9 +225,10 @@ void parse_syn_options(vector<char*>& args)
 }
 
 
-SyntheticClient::SyntheticClient(Client *client) 
+SyntheticClient::SyntheticClient(Client *client, int w) 
 {
   this->client = client;
+  whoami = w;
   thread_id = 0;
   
   did_readdir = false;
@@ -272,7 +273,9 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 { 
+  dout(15) << "initing" << dendl;
   client->init();
+  dout(15) << "mounting" << dendl;
   client->mount();
 
   //run_start = g_clock.now();
@@ -772,8 +775,8 @@ int SyntheticClient::run()
   }
   dout(1) << "syn done, unmounting " << dendl;
 
-  client->unmount();
-  client->shutdown();
+  if (client->unmount() == 0)
+    client->shutdown();
   return 0;
 }
 
@@ -1451,7 +1454,7 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   int r = client->mkdir(basedir, 0755);
   if (r != 0) {
     dout(1) << "can't make base dir? " << basedir << dendl;
-    return -1;
+    //return -1;
   }
 
   // children

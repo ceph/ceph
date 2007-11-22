@@ -110,6 +110,7 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   monmap = mm;
   
   mounted = false;
+  mounters = 0;
   mount_timeout_event = 0;
   unmounting = false;
 
@@ -232,6 +233,11 @@ void Client::dump_cache()
 
 void Client::init() 
 {
+  Mutex::Locker lock(client_lock);
+
+  static bool did_init = false;
+  if (did_init) return;
+  did_init = true;
   
   // logger?
   client_logger_lock.Lock();
@@ -1410,27 +1416,47 @@ void Client::_mount_timeout()
 
 int Client::mount()
 {
-  client_lock.Lock();
-  assert(!mounted);  // caller is confused?
+  Mutex::Locker lock(client_lock);
 
-  objecter->init();
-    
-  _try_mount();
+  if (mounted) {
+    dout(5) << "already mounted" << dendl;;
+    return 0;
+  }
+
+  // only first mounter does the work
+  bool itsme = false;
+  if (!mounters) {
+    itsme = true;
+    objecter->init();
+    _try_mount();
+  } else {
+    dout(5) << "additional mounter" << dendl;
+  }
+  mounters++;
   
   while (!mdsmap ||
 	 !osdmap || 
-	 osdmap->get_epoch() == 0)
+	 osdmap->get_epoch() == 0 ||
+	 (!itsme && !mounted))       // non-doers wait a little longer
     mount_cond.Wait(client_lock);
   
+  if (!itsme) {
+    dout(5) << "additional mounter returning" << dendl;
+    assert(mounted);
+    return 0; 
+  }
+
+  // finish.
   timer.cancel_event(mount_timeout_event);
   mount_timeout_event = 0;
   
   mounted = true;
-
+  mount_cond.SignalAll(); // wake up non-doers
+  
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
-
+  
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
   Inode *root;
@@ -1446,8 +1472,6 @@ int Client::mount()
       dout(1) << "FAILED to open trace file '" << g_conf.client_trace << "'" << dendl;
     }
   }
-
-  client_lock.Unlock();
 
   /*
   dout(3) << "op: // client trace data structs" << dendl;
@@ -1475,9 +1499,15 @@ void Client::handle_mon_map(MMonMap *m)
 
 int Client::unmount()
 {
-  client_lock.Lock();
+  Mutex::Locker lock(client_lock);
 
   assert(mounted);  // caller is confused?
+  assert(mounters > 0);
+  if (--mounters > 0) {
+    dout(0) << "umount -- still " << mounters << " others, doing nothing" << dendl;
+    return -1;  // i'm not the last mounter.
+  }
+
 
   dout(2) << "unmounting" << dendl;
   unmounting = true;
@@ -1566,7 +1596,6 @@ int Client::unmount()
 
   objecter->shutdown();
 
-  client_lock.Unlock();
   return 0;
 }
 

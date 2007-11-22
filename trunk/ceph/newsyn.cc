@@ -35,7 +35,6 @@ using namespace std;
 
 #include "common/Timer.h"
 
-#define ALL_SYNCLIENTS_THROUGH_ONE_CLIENT 0
 
 class C_Test : public Context {
 public:
@@ -165,6 +164,7 @@ int main(int argc, char **argv)
   argv_to_vec(argc, argv, args);
 
   map<int,int> kill_osd_after;
+  int share_single_client = 0;
   if (1) {
     vector<char*> nargs;
     for (unsigned i=0; i<args.size(); i++) {
@@ -173,7 +173,9 @@ int main(int argc, char **argv)
         int w = atoi(args[++i]);
         kill_osd_after[o] = w;
       }
-      else {
+      else if (strcmp(args[i], "--share_single_client") == 0) {
+	share_single_client = 1;
+      } else {
         nargs.push_back( args[i] );
       }
     }
@@ -342,36 +344,35 @@ int main(int argc, char **argv)
   int clients_per_node = 1;
   if (start_client && client_nodes > 0) clients_per_node = (start_client-1) / client_nodes + 1;
   set<int> clientlist;
-  map<int,Client *> client;//[start_client];
-  map<int,SyntheticClient *> syn;//[start_client];
+  map<int,Client*> client;
+  map<int,SyntheticClient*> syn;
   int nclients = 0;
-
-  Client* single_client;
-  if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT)
-    single_client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)),
-			       monmap);
   
   // create the synthetic clients, and one Ceph client per synthetic client
-  // (unless ALL_SYNCLIENTS_THROUGH_ONE_CLIENT is set)
+  Client* single_client = 0;   // unless share_single_client...
   for (int i=0; i<start_client; i++) {
     int node = g_conf.ms_skip_rank0+start_mds + skip_osd + i % client_nodes;
     if (mpirank != node) continue;
-    clientlist.insert(i);
-    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) {
-        client[i] = single_client;
-    }
-    else {
-    client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)), monmap);
 
+    clientlist.insert(i);
+    if (share_single_client) {
+      if (!single_client) {
+	single_client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)), monmap);
+	cout << "creating single shared client" << std::endl;
+      }
+      syn[i] = new SyntheticClient(single_client, i);
+      //cout << "creating synthetic" << i << std::endl;
+    } else {
+      clientlist.insert(i);
+      client[i] = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT, -1)), monmap);
+      syn[i] = new SyntheticClient(client[i]);
     }
-    syn[i] = new SyntheticClient(client[i]);
     
     started++;
     nclients++;
   }
 
   if (!clientlist.empty()) {
-    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) generic_dout(2) << "In one-client-per-synclient mode:";
     generic_dout(2) << "i have " << clientlist << dendl;
   }
 
@@ -381,13 +382,14 @@ int main(int argc, char **argv)
        it++) {
     int i = *it;
 
-    //cerr << "starting synthetic client" << i << " on rank " << mpirank << std::endl;
+    //cerr << "starting synthetic" << i << " on rank " << mpirank << std::endl;
     syn[i]->start_thread();
   }
 
   // client status message
   if (nclients) {
-    if (ALL_SYNCLIENTS_THROUGH_ONE_CLIENT) cerr << "In one-client-per-synclient mode:";
+    if (share_single_client) 
+      cerr << "In one-client-per-synclient mode:";
     cerr << nclients << " clients at " << rank.rank_addr << " " << hostname << "." << pid << std::endl;
   }
 
@@ -454,9 +456,6 @@ int main(int argc, char **argv)
   }
   */
 
-
-
-  
   return 0;
 }
 

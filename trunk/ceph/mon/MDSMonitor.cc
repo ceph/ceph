@@ -100,7 +100,7 @@ bool MDSMonitor::update_from_paxos()
   mdsmap.decode(mdsmap_bl);
 
   // new map
-  dout(0) << "new map" << dendl;
+  dout(4) << "new map" << dendl;
   print_map(mdsmap, 0);
 
   // bcast map to mds, waiters

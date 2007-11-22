@@ -474,6 +474,7 @@ class Client : public Dispatcher {
   void handle_statfs_reply(MStatfsReply *reply);
 
   bool   mounted;
+  int mounters;
   bool   unmounting;
   Cond   mount_cond;  
 
