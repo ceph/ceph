@@ -1,5 +1,6 @@
 
 #ifdef __KERNEL__
+# include <linux/slab.h>
 # define free(x) kfree(x)
 #else
 # include <stdlib.h>

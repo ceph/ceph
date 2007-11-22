@@ -2,8 +2,14 @@
 #include "crush.h"
 #include "hash.h"
 
-#include <string.h>
-#include <stdio.h>
+#ifdef __KERNEL__
+# include <linux/string.h>
+# include <linux/slab.h>
+# include <asm/bug.h>
+#else
+# include <string.h>
+# include <stdio.h>
+#endif
 
 /** bucket choose methods **/
 
