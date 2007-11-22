@@ -14,10 +14,18 @@ static struct workqueue_struct *send_wq;        /* send work queue */
 /* Data available on socket or listen socket received a connect */
 static void ceph_data_ready(struct sock *sk, int count_unused)
 {
-        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+        struct ceph_connection *con;
+        struct ceph_messenger *msgr;
 
-        printk(KERN_INFO "Entered ceph_data_ready state = %u\n", con->state);
-	queue_work(recv_wq, &con->rwork);
+        printk(KERN_INFO "Entered ceph_data_ready \n");
+
+	if (sk->sk_state == TCP_LISTEN) {
+		msgr = (struct ceph_messenger *)sk->sk_user_data;
+		queue_work(recv_wq, &msgr->awork);
+	} else {
+        	con = (struct ceph_connection *)sk->sk_user_data;
+		queue_work(recv_wq, &con->rwork);
+	}
 }
 
 /* socket has bufferspace for writing */
@@ -36,10 +44,8 @@ static void ceph_write_space(struct sock *sk)
 static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
-        /* TBD: probably want to set our connection state to OPEN
-         * if state not set to READ or WRITE pending
-         */
         printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
+
         if (sk->sk_state == TCP_ESTABLISHED) {
                 if (test_and_clear_bit(CONNECTING, &con->state))
                         set_bit(OPEN, &con->state);

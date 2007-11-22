@@ -339,7 +339,7 @@ static void try_write(struct work_struct *work)
 {
 	struct ceph_connection *con;
 	struct ceph_messenger *msgr;
-	int ret;
+	int ret = 1;
 
 	con = container_of(work, struct ceph_connection, swork);
 	msgr = con->msgr;
@@ -359,8 +359,10 @@ more:
 		}
 		
 		/* TBD: handle error; return for now */
-		if (ret < 0) 
+		if (ret < 0) {
+			con->error = ret;
 			goto done; /* error */
+		}
 	}
 
 	/* msg pages? */
@@ -380,7 +382,9 @@ more:
 		goto more;
 	}
 	
-	/* hmm, nothing to do! */
+	/* hmm, nothing to do! No more writes pending? */
+	if (ret)
+		clear_bit(WRITE_PEND, &con->state);
 done:
 	return;
 }
@@ -781,8 +785,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	dout(1, "queuing outgoing message for %s.%d\n",
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
 	ceph_msg_get(msg);
+
 	list_add(&con->out_queue, &msg->list_head);
-	
+	set_bit(WRITE_PEND, &con->state);
 	spin_unlock(&con->con_lock);
 	put_connection(con);
 	return ret;
