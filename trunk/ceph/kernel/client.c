@@ -59,6 +59,8 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int err;
 	int attempts = 10;
 	int which;
+	struct ceph_msg *open_msg;
+	struct ceph_msg *open_reply;
 	
 	client->mounting = 6;  /* FIXME don't wait for osd map, for now */
 
@@ -88,13 +90,15 @@ trymount:
 			goto trymount;
 		return -EIO;
 	}
+	ceph_msg_put(mount_msg);
 
 	/* get handle for mount path */
-	/*err = ceph_mdsc_open_dir(&client->mdsc, CEPH_INO_ROOT, args->path);
-	if (err)
+	err = ceph_mdsc_do(&client->mdsc, CEPH_MDS_OP_OPEN,
+			   CEPH_INO_ROOT, args->path, 0, 0);
+	if (err < 0)
 		return err;
-	*/
-	
+
+	/* yay */
 	return 0;
 }
 

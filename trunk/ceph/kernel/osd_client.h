@@ -4,6 +4,8 @@
 /* this will be equivalent to osdc/Objecter.h */
 
 #include <linux/ceph_fs.h>
+#include <linux/radix-tree.h>
+#include <linux/completion.h>
 
 struct ceph_msg;
 
@@ -23,9 +25,28 @@ struct ceph_osdmap {
 	struct crush_map *crush;
 };
 
+enum {
+	REQUEST_ACK, REQUEST_SAFE
+};
+
+struct ceph_osd_request {
+	__u64 r_tid;
+	ceph_pg_t r_pgid;
+	int r_flags;
+
+	atomic_t r_ref;
+	struct ceph_msg *r_request;
+	struct completion r_completion;
+};
+
 struct ceph_osd_client {
 	struct ceph_osdmap *osdmap;  /* current osd map */
 
+	__u64 last_tid;              /* id of last mds request */
+	struct radix_tree_root request_tree;  /* pending mds requests */
+
+	__u64 last_requested_map;
+	struct completion map_waiters;
 };
 
 extern void ceph_osdc_init(struct ceph_osd_client *osdc);

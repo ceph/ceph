@@ -9,4 +9,4 @@ ceph-objs := super.o inode.o \
 	client.o \
 	mds_client.o mdsmap.o \
 	mon_client.o monmap.o \
-	osd_client.o 
+	osd_client.o crush/crush.o crush/mapper.o

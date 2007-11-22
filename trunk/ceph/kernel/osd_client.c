@@ -2,7 +2,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 
-#include "../crush/crush.h"
+#include "crush/crush.h"
 #include "osd_client.h"
 #include "messenger.h"
 

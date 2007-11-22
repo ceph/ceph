@@ -328,6 +328,30 @@ retry:
 	return reply;
 }
 
+int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op, 
+		 ceph_ino_t ino1, const char *path1, 
+		 ceph_ino_t ino2, const char *path2)
+{
+	struct ceph_msg *req, *reply;
+	struct ceph_client_reply_head *head;
+	int ret;
+
+	req = ceph_mdsc_create_request_msg(&client->mdsc, op, ino1, path1, ino2, path2);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+
+	reply = ceph_mdsc_do_request(&client->mdsc, req, -1);
+	if (IS_ERR(reply))
+		return PTR_ERR(reply);
+
+	head = reply->front.iov_base;
+	ret = head->result;
+
+	ceph_msg_put(reply);
+	return ret;
+}
+
+
 
 void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
