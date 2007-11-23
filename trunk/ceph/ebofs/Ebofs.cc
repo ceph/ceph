@@ -1682,9 +1682,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
         bufferlist sb;
         sb.substr_of(bl, blpos, len_in_bh-z);  // substr in existing buffer
-        bufferlist cp;
-        cp.append(sb.c_str(), len_in_bh-z);    // copy the partial bit!
-        bh->add_partial(off_in_bh, cp);
+	sb.rebuild();  // recopy into properly sized buffer, so that we drop references to user buffer
+        bh->add_partial(off_in_bh, sb);
         left -= len_in_bh-z;
         blpos += len_in_bh-z;
         opos += len_in_bh-z;
@@ -1725,7 +1724,6 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
             bc.bh_cancel_partial_write(bh);
           bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
-
 
       } else {
         assert(bh->is_clean() || bh->is_dirty() || bh->is_tx());

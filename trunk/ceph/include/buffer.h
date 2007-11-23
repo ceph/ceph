@@ -287,13 +287,16 @@ public:
       return _raw->clone();
     }
     
+    void clone_in_place() {
+      raw *newraw = _raw->clone();
+      release();
+      newraw->nref++;
+      _raw = newraw;
+    }
     bool do_cow() {
       if (_raw->nref > 1) {
 	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
-	raw *newraw = _raw->clone();
-	release();
-	newraw->nref++;
-	_raw = newraw;
+	clone_in_place();
 	return true;
       } else
 	return false;
@@ -642,6 +645,33 @@ public:
 	   it++)
         it->zero();
     }
+    void do_cow() {
+      for (std::list<ptr>::iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++)
+	it->do_cow();
+    }
+    void clone_in_place() {
+      for (std::list<ptr>::iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++)
+	it->clone_in_place();
+    }
+
+
+    void rebuild() {
+      ptr nb(_len);
+      unsigned pos = 0;
+      for (std::list<ptr>::iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) {
+	nb.copy_in(pos, it->length(), it->c_str());
+	pos += it->length();
+      }
+      _buffers.clear();
+      _buffers.push_back(nb);
+    }
+
 
     // sort-of-like-assignment-op
     void claim(list& bl) {
@@ -777,19 +807,12 @@ public:
      * return a contiguous ptr to whole bufferlist contents.
      */
     char *c_str() {
-      if (_buffers.size() == 1) {
-	return _buffers.front().c_str();  // good, we're already contiguous.
-      }
-      else if (_buffers.size() == 0) {
+      if (_buffers.size() == 0) 
 	return 0;                         // no buffers
-      } 
-      else {
-	ptr newbuf = create(length());	     // make one new contiguous buffer.
-	copy(0, length(), newbuf.c_str());   // copy myself into it.
-	clear();
-	push_back(newbuf);
-	return newbuf.c_str();	// now it'll work.
-      }
+      if (_buffers.size() > 1) 
+	rebuild();
+      assert(_buffers.size() == 1);
+      return _buffers.front().c_str();  // good, we're already contiguous.
     }
 
     void substr_of(const list& other, unsigned off, unsigned len) {
