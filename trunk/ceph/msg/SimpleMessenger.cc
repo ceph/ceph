@@ -1432,6 +1432,9 @@ int Rank::Pipe::write_message(Message *m)
 
   while (left > 0) {
     int donow = MIN(left, (int)pb->length()-b_off);
+    if (donow == 0) {
+      dout(0) << "donow = " << donow << " left " << left << " pb->length " << pb->length() << " b_off " << b_off << dendl;
+    }
     assert(donow > 0);
     dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
 	     << " leftinchunk " << left
@@ -1458,10 +1461,11 @@ int Rank::Pipe::write_message(Message *m)
     assert(left >= 0);
     b_off += donow;
     bl_pos += donow;
-    if (b_off != (int)pb->length()) 
-      break;
-    pb++;
-    b_off = 0;
+    if (left == 0) break;
+    while (b_off == (int)pb->length()) {
+      pb++;
+      b_off = 0;
+    }
   }
   assert(left == 0);
   
