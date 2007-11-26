@@ -147,7 +147,7 @@ public:
   bool is_missing_object(object_t oid);
   void wait_for_missing_object(object_t oid, MOSDOp *op);
 
-  void note_failed_osd(int o);
+  void on_osd_failure(int o);
   void on_acker_change();
   void on_role_change();
   void on_change();

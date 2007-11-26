@@ -1223,17 +1223,6 @@ void OSD::handle_osd_map(MOSDMap *m)
         if (osd == whoami) continue;
         messenger->mark_down(osdmap->get_addr(i->first));
         peer_map_epoch.erase(entity_name_t::OSD(i->first));
-      
-        // kick any replica ops
-        for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-             it != pg_map.end();
-             it++) {
-          PG *pg = it->second;
-
-	  pg->lock();
-	  pg->note_failed_osd(osd);
-	  pg->unlock();
-        }
       }
       for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
            i != inc.new_up.end();
@@ -1416,10 +1405,13 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       if (oldrole == 0 || pg->get_role() == 0)
         pg->clear_primary_state();
 
+      // pg->on_*
+      for (int i=0; i<oldacting.size(); i++)
+	if (osdmap->is_down(oldacting[i]))
+	  pg->on_osd_failure(oldacting[i]);
       pg->on_change();
-      if (oldacker != pg->get_acker() && oldacker == whoami) {
+      if (oldacker != pg->get_acker() && oldacker == whoami)
 	pg->on_acker_change();
-      }
 
       if (role != oldrole) {
         // old primary?
@@ -2159,7 +2151,6 @@ void OSD::handle_op(MOSDOp *op)
     // REGULAR OP (non-replication)
 
     // note original source
-    op->set_client_inst( op->get_source_inst() );
     op->clear_payload();    // and hose encoded payload (in case we forward)
 
     // have pg?
@@ -2357,6 +2348,7 @@ void OSD::handle_op_reply(MOSDOpReply *op)
  */
 void OSD::enqueue_op(PG *pg, Message *op)
 {
+  dout(15) << *pg << " enqueue_op " << op << " " << *op << dendl;
   // add to pg's op_queue
   pg->op_queue.push_back(op);
   pending_ops++;

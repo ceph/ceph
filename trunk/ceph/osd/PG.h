@@ -656,8 +656,7 @@ public:
   virtual bool is_missing_object(object_t oid) = 0;
   virtual void wait_for_missing_object(object_t oid, MOSDOp *op) = 0;
 
-  virtual void note_failed_osd(int osd) = 0;
-
+  virtual void on_osd_failure(int osd) = 0;
   virtual void on_acker_change() = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;

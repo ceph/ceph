@@ -858,6 +858,8 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
       MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
       dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_client_inst());
+    } else {
+      dout(10) << "put_repop  NOT sending ack on " << *repop << dendl;
     }
     repop->sent_ack = true;
 
@@ -1650,15 +1652,15 @@ void ReplicatedPG::op_push(MOSDOp *op)
 
 
 
-void ReplicatedPG::note_failed_osd(int o)
+void ReplicatedPG::on_osd_failure(int o)
 {
-  dout(10) << "note_failed_osd " << o << dendl;
+  dout(10) << "on_osd_failure " << o << dendl;
   // do async; repop_ack() may modify pg->repop_gather
   list<RepGather*> ls;  
   for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
        p != rep_gather.end();
        p++) {
-    //dout(-1) << "checking repop tid " << p->first << dendl;
+    dout(-1) << "checking repop tid " << p->first << dendl;
     if (p->second->waitfor_ack.count(o) ||
 	p->second->waitfor_commit.count(o)) 
       ls.push_back(p->second);
@@ -1677,26 +1679,42 @@ void ReplicatedPG::on_acker_change()
 
 void ReplicatedPG::on_change()
 {
-  // apply repops
-  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
-       p != rep_gather.end();
-       p++) {
-    if (!p->second->applied)
-      apply_repop(p->second);
-    delete p->second->op;
-    delete p->second;
+  dout(10) << "on_change" << dendl;
+
+  if (g_conf.osd_rep == OSD_REP_PRIMARY ||
+      g_conf.osd_rep == OSD_REP_SPLAY) {
+    // apply all local repops
+    //  (pg is inactive; we will repeer)
+    for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+	 p != rep_gather.end();
+	 p++) 
+      if (!p->second->applied)
+	apply_repop(p->second);
   }
-  rep_gather.clear();
-  
-  // and discard repop waiters (chain/splay artifact)
-  for (hash_map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
-       p != waiting_for_repop.end();
-       p++)
-    for (list<Message*>::iterator pm = p->second.begin();
-	 pm != p->second.end();
-	 pm++)
-      delete *pm;
-  waiting_for_repop.clear();
+  else if (g_conf.osd_rep == OSD_REP_CHAIN) {
+    // apply all local repops
+    //  (pg is inactive; we will repeer)
+    //  note: because we hose rep_gather, clients must resubmit ops on ANY pg membership change.
+    for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+	 p != rep_gather.end();
+	 p++) {
+      if (!p->second->applied)
+	apply_repop(p->second);
+      delete p->second->op;
+      delete p->second;
+    }
+    rep_gather.clear();
+    
+    // and discard repop waiters (chain/splay artifact)
+    for (hash_map<tid_t, list<Message*> >::iterator p = waiting_for_repop.begin();
+	 p != waiting_for_repop.end();
+	 p++)
+      for (list<Message*>::iterator pm = p->second.begin();
+	   pm != p->second.end();
+	   pm++)
+	delete *pm;
+    waiting_for_repop.clear();
+  }
 }
 
 

@@ -583,7 +583,7 @@ int Client::choose_target_mds(MClientRequest *req)
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
     mds = mdsmap->get_random_in_mds();
-    dout(0) << "random mds" << mds << dendl;
+    dout(10) << "random mds" << mds << dendl;
     if (mds < 0) mds = 0;
 
     if (0) {

@@ -274,9 +274,9 @@ void Objecter::tick()
        i++) {
     if (!i->second.active_tids.empty() &&
 	i->second.last < cutoff) {
-      dout(10) << "tick pg " << i->first << " is laggy" << dendl;
+      dout(10) << "tick pg " << i->first << " is laggy: " << i->second.active_tids << dendl;
       maybe_request_map();
-      break;
+      //break;
     }
   }
 
@@ -295,8 +295,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     break;
 
   case OSD_OP_STAT:
-	handle_osd_stat_reply(m);
-	break;
+    handle_osd_stat_reply(m);
+    break;
     
   case OSD_OP_WRNOOP:
   case OSD_OP_WRITE:
@@ -801,7 +801,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   dout(7) << "handle_osd_modify_reply " << tid 
           << (m->get_commit() ? " commit":" ack")
-          << " v " << m->get_version()
+          << " v " << m->get_version() << " in " << m->get_pg()
           << dendl;
   OSDModify *wr = op_modify[ tid ];
 
@@ -828,6 +828,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     // remove from tid/osd maps
     assert(pg.active_tids.count(tid));
     pg.active_tids.erase(tid);
+    dout(15) << "handle_osd_modify_reply pg " << m->get_pg() << " still has " << pg.active_tids << dendl;
     if (pg.active_tids.empty()) close_pg( m->get_pg() );
 
     // commit.
