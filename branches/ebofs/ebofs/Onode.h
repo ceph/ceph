@@ -199,13 +199,13 @@ public:
     }
   }
 
-  csum_t *get_extent_csum_ptr(block_t offset) {
+  csum_t *get_extent_csum_ptr(block_t offset, block_t len) {
     map<block_t,ExtentCsum>::iterator p = extent_map.lower_bound(offset);
     if (p == extent_map.end() || p->first > offset)
       p--;
     assert(p->first <= offset);
     assert(p->second.ex.start != 0);
-    assert(offset < p->first + p->second.ex.length);
+    assert(offset+len <= p->first + p->second.ex.length);
     return &p->second.csum[offset-p->first];
   }
 

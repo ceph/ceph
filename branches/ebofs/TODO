@@ -190,6 +190,9 @@ reliability
 
 ebofs
 - allow holes
+- checksums
+  - validate checksums on read
+
 - allow btree sets
 - optionally scrub deallocated extents
 - clone()

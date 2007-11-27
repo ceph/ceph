@@ -1304,7 +1304,7 @@ void Ebofs::trim_bc(off_t max)
     if (!bh) break;
     
     dout(25) << "trim_bc trimming " << *bh << dendl;
-    assert(bh->is_clean());
+    assert(bh->is_clean() || bh->is_corrupt());
     
     ObjectCache *oc = bh->oc;
     bc.remove_bh(bh);
@@ -1434,7 +1434,8 @@ int Ebofs::statfs(struct statfs *buf)
 void Ebofs::alloc_write(Onode *on, 
                         block_t start, block_t len,
                         interval_set<block_t>& alloc,
-                        block_t& old_bfirst, block_t& old_blast)
+                        block_t& old_bfirst, block_t& old_blast,
+			csum_t& old_csum_first, csum_t& old_csum_last)
 {
   // first decide what pages to (re)allocate 
   alloc.insert(start, len);   // start with whole range
@@ -1461,14 +1462,21 @@ void Ebofs::alloc_write(Onode *on,
 
     // take note if first/last blocks in write range are remapped.. in case we need to do a partial read/write thing
     // these are for partial, so we don't care about TX bh's, so don't worry about bits canceling stuff below.
-    if (!old.empty() && old[0].start) { // ..if not a hole..
-      if (i->first == start) {
+    if (!old.empty()) {
+      if (old[0].start && 
+	  i->first == start) { // ..if not a hole..
         old_bfirst = old[0].start;
-        dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << dendl;
+	old_csum_first = *on->get_extent_csum_ptr(start, 1);
+        dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0]
+		 << " csum " << old_csum_first << dendl;
       }
-      if (i->first+i->second == start+len) {
+      if (old[old.size()-1].start && 
+	  i->first+i->second == start+len &&
+	  start+len <= on->last_block) {
         old_blast = old[old.size()-1].last();
-        dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << dendl;
+	old_csum_last = *on->get_extent_csum_ptr(start+len-1, 1);
+        dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] 
+		 << " csum " << old_csum_last << dendl;
       }
     }
   }
@@ -1621,7 +1629,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   interval_set<block_t> alloc;
   block_t old_bfirst = 0;  // zero means not defined here (since we ultimately pass to bh_read)
   block_t old_blast = 0; 
-  alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast);
+  csum_t old_csum_first, old_csum_last;
+  alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast, old_csum_first, old_csum_last);
   dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << dendl;
 
   if (fake_writes) {
@@ -1696,6 +1705,21 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       if (bh->is_partial() || bh->is_rx() || bh->is_missing()) {
         assert(bh->is_partial() || bh->is_rx() || bh->is_missing());
         assert(bh->length() == 1);
+
+	if (bh->is_missing()) {
+	  // newly realloc; carry old checksum over since we're only partially overwriting
+	  if (bh->start() == bstart) {
+	    dout(10) << "apply_write  carrying over starting csum " << hex << old_csum_first << dec
+		     << " for partial " << *bh << dendl;
+	    *on->get_extent_csum_ptr(bh->start(), 1) = old_csum_first;
+	    on->data_csum += old_csum_first;
+	  } else if (bh->end()-1 == blast) {
+	    dout(10) << "apply_write  carrying over ending csum " << hex << old_csum_last << dec
+		     << " for partial " << *bh << dendl;
+	    *on->get_extent_csum_ptr(bh->end()-1, 1) = old_csum_last;
+	    on->data_csum += old_csum_last;
+	  } else assert(0);
+	}
 
         // add frag to partial
         dout(10) << "apply_write writing into partial " << *bh << ":"
@@ -1787,15 +1811,15 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 	block_t rbfirst = off_in_bh/EBOFS_BLOCK_SIZE;
 	block_t rblast = (off_in_bh+len_in_bh+4095)/EBOFS_BLOCK_SIZE;
 	block_t bnum = rblast-rbfirst;
-	csum_t *csum = on->get_extent_csum_ptr(bh->start()+rbfirst);
-	dout(10) << "calc csum for " << rbfirst << "~" << bnum << dendl;
+	csum_t *csum = on->get_extent_csum_ptr(bh->start()+rbfirst, bnum);
+	dout(20) << "calc csum for " << rbfirst << "~" << bnum << dendl;
 	for (unsigned i=0; i<bnum; i++) {
 	  on->data_csum -= csum[i];
-	  dout(10) << "old csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
+	  dout(30) << "old csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
 	  csum[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
-	  dout(10) << "new csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
+	  dout(30) << "new csum for " << (i+rbfirst) << " is " << hex << csum[i] << dec << dendl;
 	  on->data_csum += csum[i];
-	  dout(10) << "new data_csum is " << hex << on->data_csum << dec << dendl;
+	  dout(30) << "new data_csum is " << hex << on->data_csum << dec << dendl;
 	}
 
 	blpos += len_in_bh;
@@ -1849,8 +1873,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     }
 
     // fill in csums
-    csum_t *csum = on->get_extent_csum_ptr(bh->start());
     unsigned blocks = (len_in_bh + 4095)/ EBOFS_BLOCK_SIZE;
+    csum_t *csum = on->get_extent_csum_ptr(bh->start(), blocks);
     for (unsigned i=0; i<blocks; i++) {
       on->data_csum -= csum[i];
       csum[i] = calc_csum(bh->data.c_str() + i*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
@@ -1963,8 +1987,8 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 
 // *** file i/o ***
 
-bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
-                         Cond *will_wait_on, bool *will_wait_on_bool)
+int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
+			Cond *will_wait_on, bool *will_wait_on_bool)
 {
   dout(10) << "attempt_read " << *on << " " << off << "~" << len << dendl;
   ObjectCache *oc = on->get_oc(&bc);
@@ -1978,7 +2002,8 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  oc->map_read(bstart, blen, hits, missing, rx, partials);
+  map<block_t, BufferHead*> corrupt;
+  oc->map_read(bstart, blen, hits, missing, rx, partials, corrupt);
 
   // missing buffers?
   if (!missing.empty()) {
@@ -1991,7 +2016,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     BufferHead *wait_on = missing.begin()->second;
     block_t b = MAX(wait_on->start(), bstart);
     wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on, will_wait_on_bool));
-    return false;
+    return 0;
   }
   
   // are partials sufficient?
@@ -2015,7 +2040,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
       partials_ok = false;
     }
   }
-  if (!partials_ok) return false;
+  if (!partials_ok) return 0;
 
   // wait on rx?
   if (!rx.empty()) {
@@ -2024,13 +2049,14 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     dout(20) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << dendl;
     block_t b = MAX(wait_on->start(), bstart);
     wait_on->waitfor_read[b].push_back(c);
-    return false;
+    return 0;
   }
 
   // yay, we have it all!
   // concurrently walk thru hits, partials.
   map<block_t,BufferHead*>::iterator h = hits.begin();
   map<block_t,BufferHead*>::iterator p = partials.begin();
+  map<block_t,BufferHead*>::iterator c = corrupt.begin();
 
   bl.clear();
   off_t pos = off;
@@ -2043,6 +2069,9 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     } else if (p->first == curblock) {
       bh = p->second;
       p++;
+    } else if (c->first == curblock) {
+      bh = c->second;
+      c++;
     } else assert(0);
     
     off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
@@ -2050,7 +2079,15 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     off_t start = MAX( pos, bhstart );
     off_t end = MIN( off+(off_t)len, bhend );
 
-    if (bh->is_partial()) {
+    if (bh->is_corrupt()) {
+      if (bl.length()) {
+	dout(10) << "attempt_read corrupt at " << *bh << ", returning short result" << dendl;
+	return 1; 
+      } else {
+	dout(10) << "attempt_read corrupt at " << *bh << ", returning -EIO" << dendl;
+	return -EIO;
+      }
+    } else if (bh->is_partial()) {
       // copy from a partial block.  yuck!
       bufferlist frag;
       bh->copy_partial_substr( start-bhstart, end-bhstart, frag );
@@ -2087,7 +2124,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   }
 
   assert(bl.length() == len);
-  return true;
+  return 1;
 }
 
 
@@ -2207,7 +2244,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
     // check size bound
     if (off >= on->object_size) {
       dout(7) << "_read " << oid << " " << off << "~" << len << " ... off past eof " << on->object_size << dendl;
-      r = -ESPIPE;   // FIXME better errno?
+      r = 0;
       break;
     }
 
@@ -2215,8 +2252,9 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
     size_t will_read = MIN(off+(off_t)try_len, on->object_size) - off;
     
     bool done;
-    if (attempt_read(on, off, will_read, bl, &cond, &done))
-      break;  // yay
+    r = attempt_read(on, off, will_read, bl, &cond, &done);
+    if (r != 0)
+      break;
     
     // wait
     while (!done) 

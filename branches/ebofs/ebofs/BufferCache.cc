@@ -26,9 +26,8 @@ void do_apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm)
   for (map<off_t, bufferlist>::iterator i = pm.begin();
        i != pm.end();
        i++) {
-    int pos = i->first;
-    //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << std::endl;
-    bl.copy_in(pos, i->second.length(), i->second);
+    cout << "do_apply_partial at " << i->first << "~" << i->second.length() << std::endl;
+    bl.copy_in(i->first, i->second.length(), i->second);
   }
   pm.clear();
 }
@@ -49,8 +48,6 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
   assert(off >= 0);
   assert(off + len <= EBOFS_BLOCK_SIZE);
   
-  csum_t csum_diff = calc_csum_realign(p.c_str(), p.length(), off);
-  
   // trim any existing that overlaps
   map<off_t, bufferlist>::iterator i = partial.begin();
   while (i != partial.end()) {
@@ -67,7 +64,6 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
     // overlap all of i?
     if (off <= i->first && off+len >= i->first + i->second.length()) {
       // erase it and move on.
-      csum_diff -= calc_csum_realign(i->second.c_str(), i->second.length(), i->first);
       partial.erase(i++);
       continue;
     }
@@ -75,7 +71,6 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
     if (off > i->first && off+len >= i->first + i->second.length()) {
       // shorten i.
       unsigned taillen = off - i->first;
-      csum_diff -= calc_csum_realign(i->second.c_str()+taillen, taillen, off);
       bufferlist o;
       o.claim( i->second );
       i->second.substr_of(o, 0, taillen);
@@ -87,7 +82,6 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
       // move i (make new tail).
       off_t tailoff = off+len;
       unsigned trim = tailoff - i->first;
-      csum_diff -= calc_csum_realign(i->second.c_str(), trim, i->first);
       partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
       partial.erase(i++);   // should now be at tailoff
       i++;
@@ -104,7 +98,6 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
       unsigned tailoff = off+len - i->first;
       unsigned taillen = o.length() - len - headlen;
       partial[off+len].substr_of(o, tailoff, taillen);
-      csum_diff -= calc_csum_realign(o.c_str()+headlen, taillen, off);
       break;
     }
     assert(0);
@@ -112,25 +105,23 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
   
   // insert and adjust csum
   partial[off] = p;
-  csum_t *csum = oc->on->get_extent_csum_ptr(start());
-  csum[0] += csum_diff;
-  oc->on->data_csum += csum_diff;
 
-  dout(10) << "add_partial off " << off << "~" << p.length()
-	   << " csum_diff " << hex << csum_diff << " now " 
-	   << csum[0] << dec << dendl;
+  dout(10) << "add_partial off " << off << "~" << p.length() << dendl;
 }
 
 void BufferHead::apply_partial() 
 {
+  assert(!partial.empty());
+  dout(10) << "apply_partial on " << partial.size() << " substrings" << dendl;
+  csum_t oldc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
   do_apply_partial(data, partial);
-  csum_t new_csum = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
-  csum_t *oldp = oc->on->get_extent_csum_ptr(start());
-  if (new_csum != *oldp) {
-    dout(10) << "apply_partial old_csum " << hex << *oldp << " calced_csum " << new_csum << dec << dendl;
-    assert(*oldp == new_csum);
-  }
-  partial.clear();
+  csum_t newc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
+  csum_t *p = oc->on->get_extent_csum_ptr(start(), 1);
+  dout(10) << "apply_partial was " << hex << oldc
+	   << " now " << newc << dec << dendl;
+  assert(*p == oldc);
+  *p = newc;
+  oc->on->data_csum += newc - oldc;
 }
 
 
@@ -147,9 +138,11 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
   list<Context*> waiters;
 
   dout(10) << "rx_finish " << start << "~" << length << dendl;
-  for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-       p != data.end(); 
-       p++) {
+  map<block_t, BufferHead*>::iterator p, next;
+  for (p = data.lower_bound(start); p != data.end(); p = next) {
+    next = p;
+    next++;
+
     BufferHead *bh = p->second;
     dout(10) << "rx_finish ?" << *bh << dendl;
     assert(p->first == bh->start());
@@ -166,13 +159,71 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
     if (bh->rx_ioh == ioh)
       bh->rx_ioh = 0;
 
+    // trigger waiters
+    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
+         p != bh->waitfor_read.end();
+         p++) {
+      assert(p->first >= bh->start() && p->first < bh->end());
+      waiters.splice(waiters.begin(), p->second);
+    }
+    bh->waitfor_read.clear();
+
     if (bh->is_rx()) {
       assert(bh->get_version() == 0);
       assert(bh->end() <= start+length);
       assert(bh->start() >= start);
-      dout(10) << "rx_finish  rx -> clean on " << *bh << dendl;
+
       bh->data.substr_of(bl, (bh->start()-start)*EBOFS_BLOCK_SIZE, bh->length()*EBOFS_BLOCK_SIZE);
-      bc->mark_clean(bh);
+
+      // verify checksum
+      int bad = 0;
+      if (g_conf.ebofs_verify_csum_on_read) {
+	csum_t *want = bh->oc->on->get_extent_csum_ptr(bh->start(), bh->length());
+	csum_t got[bh->length()];
+	for (unsigned i=0; i<bh->length(); i++) {
+	  got[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
+	  if (false && rand() % 10 == 0) {
+	    dout(0) << "rx_finish HACK INJECTING bad csum" << dendl;
+	    got[i] = 0;
+	  }
+	  if (got[i] != want[i]) {
+	    dout(0) << "rx_finish bad csum wanted " << hex << want[i] << " got " << got[i] << dec 
+		    << " for object block " << (i+bh->start()) 
+		    << dendl;
+	    bad++;
+	  }
+	}      
+	if (bad) {
+	  block_t ostart = bh->start();
+	  block_t olen = bh->length();
+	  for (unsigned s=0; s<olen; s++) {
+	    if (got[s] != want[s]) {
+	      unsigned e;
+	      for (e=s; e<olen; e++)
+		if (got[e] == want[e]) break;
+	      dout(0) << "rx_finish  bad csum over " << s << "~" << (e-s) << dendl;
+	      
+	      if (s) {
+		BufferHead *middle = bc->split(bh, ostart+s);
+		dout(0) << "rx_finish  rx -> clean on " << *bh << dendl;	      
+		bc->mark_clean(bh);
+		bh = middle;
+	      }
+	      BufferHead *right = bh;
+	      if (e < olen) 
+		right = bc->split(bh, ostart+e);
+	      dout(0) << "rx_finish  rx -> corrupt on " << *bh <<dendl;	      
+	      bc->mark_corrupt(bh);
+	      bh = right;
+	      s = e;
+	    }
+	  }
+	}
+      }
+      if (bh) {
+	dout(10) << "rx_finish  rx -> clean on " << *bh << dendl;
+	bc->mark_clean(bh);
+      }
     }
     else if (bh->is_partial()) {
       dout(10) << "rx_finish  partial -> tx on " << *bh << dendl;      
@@ -213,14 +264,6 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
              bh->is_clean());   // was overwritten, queued, _and_ flushed to disk
     }
 
-    // trigger waiters
-    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-         p != bh->waitfor_read.end();
-         p++) {
-      assert(p->first >= bh->start() && p->first < bh->end());
-      waiters.splice(waiters.begin(), p->second);
-    }
-    bh->waitfor_read.clear();
   }    
 
   finish_contexts(waiters);
@@ -364,6 +407,9 @@ int ObjectCache::try_map_read(block_t start, block_t len)
           e->is_tx()) {
         dout(20) << "try_map_read hit " << *e << dendl;
       } 
+      else if (e->is_corrupt()) {
+        dout(20) << "try_map_read corrupt " << *e << dendl;	
+      } 
       else if (e->is_rx()) {
         dout(20) << "try_map_read rx " << *e << dendl;
 	num_missing++;
@@ -420,7 +466,8 @@ int ObjectCache::map_read(block_t start, block_t len,
                           map<block_t, BufferHead*>& hits,
                           map<block_t, BufferHead*>& missing,
                           map<block_t, BufferHead*>& rx,
-                          map<block_t, BufferHead*>& partial) {
+                          map<block_t, BufferHead*>& partial,
+			  map<block_t, BufferHead*>& corrupt) {
   
   map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 
@@ -476,6 +523,10 @@ int ObjectCache::map_read(block_t start, block_t len,
         dout(20) << "map_read hit " << *e << dendl;
         bc->touch(e);
       } 
+      else if (e->is_corrupt()) {
+	corrupt[cur] = e;
+	dout(20) << "map_read corrupt " << *e << dendl;
+      }
       else if (e->is_rx()) {
         rx[cur] = e;       // missing, not readable.
         dout(20) << "map_read rx " << *e << dendl;
@@ -953,7 +1004,7 @@ void ObjectCache::scrub_csums()
 	on->map_extents(bh->start()+i, 1, exv, 0);
 	assert(exv.size() == 1);
 	if (exv[0].start == 0) continue;  // hole.
-	csum_t want = *on->get_extent_csum_ptr(bh->start()+i);
+	csum_t want = *on->get_extent_csum_ptr(bh->start()+i, 1);
 	csum_t b = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
 	if (b != want) {
 	  dout(0) << "scrub_csums bad data at " << (bh->start()+i) << " have " 
@@ -1220,11 +1271,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
          p++) {
       dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
                 << " for epoch " << p->second.epoch
-        //<< " (bh.epoch_modified is now " << bh->epoch_modified << ")"
                 << dendl;
-      // this had better be a past epoch
-      //assert(p->epoch == epoch_modified - 1);  // ??
-      
       // make the combined block
       bufferlist combined;
       bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);

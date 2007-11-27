@@ -43,6 +43,7 @@ class BufferHead : public LRUObject {
   const static int STATE_TX = 3;      // Rw  flushing to disk
   const static int STATE_RX = 4;      //  w  reading from disk
   const static int STATE_PARTIAL = 5; // reading from disk, + partial content map.  always 1 block.
+  const static int STATE_CORRUPT = 6; //     data on disk doesn't match onode checksum
 
  public:
   ObjectCache *oc;
@@ -146,6 +147,7 @@ class BufferHead : public LRUObject {
   bool is_tx() { return state == STATE_TX; }
   bool is_rx() { return state == STATE_RX; }
   bool is_partial() { return state == STATE_PARTIAL; }
+  bool is_corrupt() { return state == STATE_CORRUPT; }
   
   void add_shadow(BufferHead *dup) {
     shadows.insert(dup);
@@ -346,7 +348,8 @@ class ObjectCache {
                map<block_t, BufferHead*>& hits,     // hits
                map<block_t, BufferHead*>& missing,  // read these from disk
                map<block_t, BufferHead*>& rx,       // wait for these to finish reading from disk
-               map<block_t, BufferHead*>& partial); // (maybe) wait for these to read from disk
+               map<block_t, BufferHead*>& partial,  // (maybe) wait for these to read from disk
+               map<block_t, BufferHead*>& corrupt); // bad checksums
   int try_map_read(block_t start, block_t len);  // just tell us how many extents we're missing.
 
   
@@ -397,7 +400,7 @@ class BufferCache {
   Cond  flush_cond;
   int   stat_waiter;
 
-  off_t stat_clean;
+  off_t stat_clean, stat_corrupt;
   off_t stat_dirty;
   off_t stat_rx;
   off_t stat_tx;
@@ -433,7 +436,7 @@ class BufferCache {
   BufferCache(BlockDevice& d, Mutex& el) : 
     ebofs_lock(el), dev(d), 
     stat_waiter(0),
-    stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
+    stat_clean(0), stat_corrupt(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
     {}
 
 
@@ -483,6 +486,7 @@ class BufferCache {
     switch (bh->get_state()) {
     case BufferHead::STATE_MISSING: stat_missing += bh->length(); break;
     case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
+    case BufferHead::STATE_CORRUPT: stat_corrupt += bh->length(); break;
     case BufferHead::STATE_DIRTY: stat_dirty += bh->length(); break;
     case BufferHead::STATE_TX: stat_tx += bh->length(); break;
     case BufferHead::STATE_RX: stat_rx += bh->length(); break;
@@ -494,6 +498,7 @@ class BufferCache {
     switch (bh->get_state()) {
     case BufferHead::STATE_MISSING: stat_missing -= bh->length(); break;
     case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
+    case BufferHead::STATE_CORRUPT: stat_corrupt -= bh->length(); break;
     case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); break;
     case BufferHead::STATE_TX: stat_tx -= bh->length(); break;
     case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
@@ -564,6 +569,7 @@ class BufferCache {
   
   void mark_missing(BufferHead *bh) { set_state(bh, BufferHead::STATE_MISSING); };
   void mark_clean(BufferHead *bh) { set_state(bh, BufferHead::STATE_CLEAN); };
+  void mark_corrupt(BufferHead *bh) { set_state(bh, BufferHead::STATE_CORRUPT); };
   void mark_rx(BufferHead *bh) { set_state(bh, BufferHead::STATE_RX); };
   void mark_partial(BufferHead *bh) { set_state(bh, BufferHead::STATE_PARTIAL); };
   void mark_tx(BufferHead *bh) { set_state(bh, BufferHead::STATE_TX); };

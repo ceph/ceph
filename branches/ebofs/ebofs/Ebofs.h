@@ -188,11 +188,12 @@ protected:
   void alloc_write(Onode *on, 
                    block_t start, block_t len, 
                    interval_set<block_t>& alloc,
-                   block_t& old_bfirst, block_t& old_blast);
+                   block_t& old_bfirst, block_t& old_blast,
+		   csum_t& old_csum_first, csum_t& old_csum_last);
   void apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl);
   void apply_zero(Onode *on, off_t off, size_t len);
-  bool attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
-                    Cond *will_wait_on, bool *will_wait_on_bool);
+  int attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
+		   Cond *will_wait_on, bool *will_wait_on_bool);
 
   // ** finisher **
   // async write notification to users

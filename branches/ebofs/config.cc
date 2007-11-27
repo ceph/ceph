@@ -335,9 +335,7 @@ md_config_t g_conf = {
   ebofs_bc_max_dirty:   (30 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
-  
-  ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
-  ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
+  ebofs_verify_csum_on_read: true,
 
   // --- block device ---
   bdev_lock: true,
@@ -822,8 +820,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.ebofs_bc_size = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_bc_max_dirty") == 0)
       g_conf.ebofs_bc_max_dirty = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_abp_max_alloc") == 0)
-      g_conf.ebofs_abp_max_alloc = atoi(args[++i]);
+    else if (strcmp(args[i], "--ebofs_verify_csum_on_read") == 0)
+      g_conf.ebofs_verify_csum_on_read = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_max_prefetch") == 0)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
