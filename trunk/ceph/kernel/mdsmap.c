@@ -19,6 +19,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 {
 	int n = 0;
 	int i;
+	char r;
 
 	/* count */
 	for (i=0; i<m->m_max_mds; i++)
@@ -27,7 +28,8 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 		return -1;
 	
 	/* pick */
-	n = get_random_int() % n;
+	get_random_bytes(&r, 1);
+	n = r % n;
 	i = 0;
 	for (i=0; n>0; i++, n--)
 		while (m->m_state[i] <= 0) 

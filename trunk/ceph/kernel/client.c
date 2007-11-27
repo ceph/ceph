@@ -2,6 +2,7 @@
 #include <linux/ceph_fs.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/random.h>
 #include "client.h"
 #include "super.h"
 
@@ -59,6 +60,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int err;
 	int attempts = 10;
 	int which;
+	char r;
 	
 	client->mounting = 6;  /* FIXME don't wait for osd map, for now */
 
@@ -68,7 +70,8 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 		return PTR_ERR(mount_msg);
 	ceph_msg_get(mount_msg);  /* grab ref; we may retry */
 trymount:
-	which = get_random_int() % args->num_mon;
+	get_random_bytes(&r, 1);
+	which = r % args->num_mon;
 	mount_msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MON;
 	mount_msg->hdr.dst.name.num = which;
 	mount_msg->hdr.dst.addr = args->mon_addr[which];

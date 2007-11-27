@@ -310,8 +310,13 @@ bad:
 
 void ceph_osdc_init(struct ceph_osd_client *osdc)
 {
+	dout(5, "ceph_osdc_init\n");
 	osdc->osdmap = NULL;
 }
 
 
+void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
+{
+	dout(5, "ceph_osdc_handle_reply\n");
+}
 

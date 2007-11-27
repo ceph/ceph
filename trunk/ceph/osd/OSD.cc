@@ -1239,9 +1239,20 @@ void OSD::handle_osd_map(MOSDMap *m)
         bl = m->maps[cur+1];
       else
         get_map_bl(cur+1, bl);
-      osdmap->decode(bl);
 
-      // FIXME BUG: need to notify messenger of ups/downs!!
+      OSDMap *newmap = new OSDMap;
+      newmap->decode(bl);
+
+      // kill connections to newly down osds
+      set<int> old;
+      osdmap->get_all_osds(old);
+      for (set<int>::iterator p = old.begin(); p != old.end(); p++)
+	if (osdmap->is_up(*p) && 
+	    (!newmap->exists(*p) || !newmap->is_up(*p)))
+	  messenger->mark_down(osdmap->get_addr(*p));
+
+      delete osdmap;
+      osdmap = newmap;
     }
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
@@ -1406,7 +1417,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
         pg->clear_primary_state();
 
       // pg->on_*
-      for (int i=0; i<oldacting.size(); i++)
+      for (unsigned i=0; i<oldacting.size(); i++)
 	if (osdmap->is_down(oldacting[i]))
 	  pg->on_osd_failure(oldacting[i]);
       pg->on_change();

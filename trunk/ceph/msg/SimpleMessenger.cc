@@ -619,7 +619,15 @@ void Rank::EntityMessenger::mark_down(entity_addr_t a)
 void Rank::mark_down(entity_addr_t addr)
 {
   lock.Lock();
-  // FIXME
+  if (rank_pipe.count(addr)) {
+    Pipe *p = rank_pipe[addr];
+    dout(0) << "mark_down " << addr << " -- " << p << dendl;
+    p->lock.Lock();
+    p->kill();
+    p->lock.Unlock();
+  } else {
+    dout(0) << "mark_down " << addr << " -- pipe dne" << dendl;
+  }
   lock.Unlock();
 }
 
@@ -893,7 +901,7 @@ int Rank::Pipe::connect()
 
 void Rank::Pipe::register_pipe()
 {
-  dout(10) << "register" << dendl;
+  dout(10) << "register_pipe" << dendl;
   assert(rank.lock.is_locked());
   assert(rank.rank_pipe.count(peer_addr) == 0);
   rank.rank_pipe[peer_addr] = this;
@@ -904,10 +912,10 @@ void Rank::Pipe::unregister_pipe()
   assert(rank.lock.is_locked());
   if (rank.rank_pipe.count(peer_addr) &&
       rank.rank_pipe[peer_addr] == this) {
-    dout(10) << "unregister" << dendl;
+    dout(10) << "unregister_pipe" << dendl;
     rank.rank_pipe.erase(peer_addr);
   } else {
-    dout(10) << "unregister - not registered" << dendl;
+    dout(10) << "unregister_pipe - not registered" << dendl;
   }
 }
 
@@ -939,7 +947,6 @@ void Rank::Pipe::fault(bool silent)
       if (failinterval > g_conf.ms_fail_interval) {
 	// give up
 	dout(0) << "fault giving up" << dendl;
-	state = STATE_CLOSED;
 	fail();
       } else if (retryinterval < g_conf.ms_retry_interval) {
 	// wait
@@ -959,14 +966,7 @@ void Rank::Pipe::fail()
   derr(10) << "fail" << dendl;
   assert(lock.is_locked());
 
-  cond.Signal();
-
-  // deactivate myself
-  lock.Unlock();
-  rank.lock.Lock();
-  unregister_pipe();
-  rank.lock.Unlock();
-  lock.Lock();
+  kill();
 
   // report failures
   q.splice(q.begin(), sent);
@@ -987,6 +987,22 @@ void Rank::Pipe::fail()
     dout(10) << "fail on " << *m << dendl;
     rank.local[srcrank]->get_dispatcher()->ms_handle_failure(m, m->get_dest_inst());
   }
+}
+
+void Rank::Pipe::kill()
+{
+  dout(10) << "kill" << dendl;
+  assert(lock.is_locked());
+
+  cond.Signal();
+  state = STATE_CLOSED;
+
+  // deactivate myself
+  lock.Unlock();
+  rank.lock.Lock();
+  unregister_pipe();
+  rank.lock.Unlock();
+  lock.Lock();
 }
 
 
