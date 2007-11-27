@@ -18,6 +18,7 @@ MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_DESCRIPTION("kernel thread test for Linux");
 MODULE_LICENSE("GPL");
 
+struct ceph_messenger *ceph_messenger_create(void);
 int inet_aton (const char *cp, struct in_addr *addr);
 struct task_struct *thread;
 
@@ -29,10 +30,40 @@ struct task_struct *thread;
 {
 }
 */
+
 /*
- * Client socket thread
+ * Client connect thread
  */
-static int sock_thread(void *unusedfornow)
+static int listen_thread(void *unusedfornow)
+{
+	struct ceph_messenger *msgr = NULL;
+
+	printk(KERN_INFO "starting kernel listen thread\n");
+
+	msgr = ceph_messenger_create();
+	if (msgr == NULL) return 1;
+
+	printk(KERN_INFO "about to listen\n");
+
+	set_current_state(TASK_INTERRUPTIBLE);
+        /* an endless loop in which we are doing our work */
+	while (!kthread_should_stop())
+        {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+		printk(KERN_INFO "sock thread has been interrupted\n");
+	}
+
+	set_current_state(TASK_RUNNING);
+        sock_release(msgr->listen_sock);
+        kfree(msgr);
+	printk(KERN_INFO "kernel thread exiting\n");
+	return 0;
+}
+/*
+ * Client connect thread
+ */
+static int connect_thread(void *unusedfornow)
 {
 	struct ceph_messenger *msgr = NULL;
 	struct ceph_connection *con;
@@ -87,7 +118,7 @@ static int __init init_kst(void)
 	printk(KERN_INFO "kernel thread test init\n");
 	/* create new kernel threads */
 	ret = work_init();
-	thread = kthread_run(sock_thread, NULL, "sock-thread");
+	thread = kthread_run(listen_thread, NULL, "listen-thread");
        	if (IS_ERR(thread))
        	{
                	printk(KERN_INFO "failured to start kernel thread\n");

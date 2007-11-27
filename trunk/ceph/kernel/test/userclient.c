@@ -40,6 +40,15 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"connection error\n");
 		exit(1);	
 	}
+	printf("connected to kernel server\n");
+        bzero(buf,256);
+        len = read(sd,buf,255);
+        if (len < 0) {
+                fprintf(stderr,"read error\n");
+                exit(1);
+        }
+        printf("Message received: %s\n",buf);
+
 	printf("Please enter the message: ");
 	bzero(buf,256);
 	fgets(buf,255,stdin);
