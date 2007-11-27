@@ -5,8 +5,8 @@
 #include "messenger.h"
 #include "ktcp.h"
 
-struct workqueue_struct *recv_wq;       /* receive work queue */
-struct workqueue_struct *send_wq;      	/* send work queue */
+struct workqueue_struct *recv_wq = NULL;	/* receive work queue */
+struct workqueue_struct *send_wq = NULL;	/* send work queue */
 
 /*
  * socket callback functions 
@@ -55,11 +55,11 @@ static void ceph_state_change(struct sock *sk)
 }
 
 /* make a socket active by setting up the call back functions */
-int add_sock_callbacks(struct socket *sock, struct ceph_connection *con)
+static int set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 {
         struct sock *sk = sock->sk;
         sk->sk_user_data = con;
-        printk(KERN_INFO "Entered add_sock_callbacks\n");
+        printk(KERN_INFO "Entered set_sock_callbacks\n");
 
         /* Install callbacks */
         sk->sk_data_ready = ceph_data_ready;
@@ -71,7 +71,7 @@ int add_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 /*
  * initiate connection to a remote socket.
  */
-int _kconnect(struct ceph_connection *con)
+int ceph_tcp_connect(struct ceph_connection *con)
 {
 	int ret;
 	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
@@ -85,7 +85,7 @@ int _kconnect(struct ceph_connection *con)
         }
 
         /* setup callbacks */
-        add_sock_callbacks(con->sock, con);
+        set_sock_callbacks(con->sock, con);
 
 
         ret = con->sock->ops->connect(con->sock, paddr,
@@ -101,7 +101,10 @@ done:
         return ret;
 }
 
-int _klisten(struct ceph_messenger *msgr)
+/*
+ * setup listening socket
+ */
+int ceph_tcp_listen(struct ceph_messenger *msgr)
 {
 	int ret;
 	struct socket *sock = NULL;
@@ -124,7 +127,8 @@ int _klisten(struct ceph_messenger *msgr)
 	/* set user_data to be the messenger */
 	sock->sk->sk_user_data = msgr;
 
-	/* no user specified address given so create, will allow arg to mount */
+	/* currently no user specified address given so create */
+	/* if (!*myaddr) */
 	myaddr->sin_family = AF_INET;
 	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
 	myaddr->sin_port = htons(CEPH_PORT);  /* known port for now */
@@ -161,7 +165,7 @@ err:
 /*
  *  accept a connection
  */
-int _kaccept(struct socket *sock, struct ceph_connection *con)
+int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 {
 	int ret;
 	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
@@ -175,7 +179,7 @@ int _kaccept(struct socket *sock, struct ceph_connection *con)
         }
 
         /* setup callbacks */
-        add_sock_callbacks(con->sock, con);
+        set_sock_callbacks(con->sock, con);
 
 
         ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
@@ -203,7 +207,7 @@ err:
 /*
  * receive a message this may return after partial send
  */
-int _krecvmsg(struct socket *sock, void *buf, size_t len)
+int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 {
 	struct kvec iov = {buf, len};
 	struct msghdr msg = {.msg_flags = 0};
@@ -226,7 +230,7 @@ int _krecvmsg(struct socket *sock, void *buf, size_t len)
 /*
  * Send a message this may return after partial send
  */
-int _ksendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
+int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
 {
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
@@ -245,7 +249,7 @@ int _ksendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
  *  workqueue initialization
  */
 
-int work_init(void)
+int ceph_workqueue_init(void)
 {
         int ret = 0;
 
@@ -282,7 +286,7 @@ int work_init(void)
 /*
  *  workqueue shutdown
  */
-void shutdown_workqueues(void)
+void ceph_workqueue_shutdown(void)
 {
         destroy_workqueue(send_wq);
         destroy_workqueue(recv_wq);

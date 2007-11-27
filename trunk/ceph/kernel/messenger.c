@@ -208,7 +208,7 @@ static int write_partial_kvec(struct ceph_connection *con)
 	int ret;
 
 	while (con->out_kvec_bytes > 0) {
-		ret = _ksendmsg(con->sock, con->out_kvec_cur, con->out_kvec_left, con->out_kvec_bytes);
+		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, con->out_kvec_left, con->out_kvec_bytes);
 		if (ret < 0) return ret;  /* error */
 		if (ret == 0) return 0;   /* socket full */
 		con->out_kvec_bytes -= ret;
@@ -239,7 +239,7 @@ static int write_partial_msg_pages(struct ceph_connection *con, struct ceph_msg 
 		kv.iov_base = kmap(msg->pages[con->out_msg_pos.page]) + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos), 
 				 (int)(msg->hdr.data_len - con->out_msg_pos.data_pos));
-		ret = _ksendmsg(con->sock, &kv, 1, kv.iov_len);
+		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
 		if (ret < 0) return ret;
 		if (ret == 0) return 0;   /* socket full */
 		con->out_msg_pos.data_pos += ret;
@@ -420,7 +420,7 @@ static int read_message_partial(struct ceph_connection *con)
 	/* header */
 	while (con->in_base_pos < sizeof(struct ceph_msg_header)) {
 		left = sizeof(struct ceph_msg_header) - con->in_base_pos;
-		ret = _krecvmsg(con->sock, &m->hdr + con->in_base_pos, left);
+		ret = ceph_tcp_recvmsg(con->sock, &m->hdr + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 		if (con->in_base_pos == sizeof(struct ceph_msg_header)) {
@@ -438,7 +438,7 @@ static int read_message_partial(struct ceph_connection *con)
 				return -ENOMEM;
 		}
 		left = m->hdr.front_len - m->front.iov_len;
-		ret = _krecvmsg(con->sock, (char*)m->front.iov_base + m->front.iov_len, left);
+		ret = ceph_tcp_recvmsg(con->sock, (char*)m->front.iov_base + m->front.iov_len, left);
 		if (ret <= 0) return ret;
 		m->front.iov_len += ret;
 	}
@@ -460,7 +460,7 @@ static int read_message_partial(struct ceph_connection *con)
 		left = min((int)(m->hdr.data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
 		p = kmap(m->pages[con->in_msg_pos.page]);
-		ret = _krecvmsg(con->sock, p + con->in_msg_pos.page_pos, left);
+		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos, left);
 		if (ret <= 0) return ret;
 		con->in_msg_pos.data_pos += ret;
 		con->in_msg_pos.page_pos += ret;
@@ -491,7 +491,7 @@ static int read_ack_partial(struct ceph_connection *con)
 {
 	while (con->in_base_pos < sizeof(con->in_partial_ack)) {
 		int left = sizeof(con->in_partial_ack) - con->in_base_pos;
-		int ret = _krecvmsg(con->sock, (char*)&con->in_partial_ack + con->in_base_pos, left);
+		int ret = ceph_tcp_recvmsg(con->sock, (char*)&con->in_partial_ack + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -521,7 +521,7 @@ static int read_accept_partial(struct ceph_connection *con)
 	/* peer addr */
 	while (con->in_base_pos < sizeof(con->peer_addr)) {
 		int left = sizeof(con->peer_addr) - con->in_base_pos;
-		ret = _krecvmsg(con->sock, (char*)&con->peer_addr + con->in_base_pos, left);
+		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->peer_addr + con->in_base_pos, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -530,7 +530,7 @@ static int read_accept_partial(struct ceph_connection *con)
 	while (con->in_base_pos < sizeof(con->peer_addr) + sizeof(con->connect_seq)) {
 		int off = con->in_base_pos - sizeof(con->peer_addr);
 		int left = sizeof(con->peer_addr) + sizeof(con->connect_seq) - con->in_base_pos;
-		ret = _krecvmsg(con->sock, (char*)&con->connect_seq + off, left);
+		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->connect_seq + off, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -608,7 +608,7 @@ more:
 	}
 
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
-		ret = _krecvmsg(con->sock, &con->in_tag, 1);
+		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
 		if (ret <= 0) goto done;
 		if (con->in_tag == CEPH_MSGR_TAG_MSG) 
 			prepare_read_message(con);
@@ -665,7 +665,7 @@ static void try_accept(struct work_struct *work)
 		goto done;
        	}
 
-	if(_kaccept(msgr->listen_sock, new_con) < 0) {
+	if(ceph_tcp_accept(msgr->listen_sock, new_con) < 0) {
         	derr(1, "error accepting connection\n");
 		kfree(new_con);
                 goto done;
@@ -689,8 +689,7 @@ done:
 }
 
 /*
- * create a new messenger instance, saddr is address specified from mount arg.
- * If null, will get created by _klisten()
+ * create a new messenger instance, creates listening socket
  */
 struct ceph_messenger *ceph_messenger_create()
 {
@@ -704,13 +703,12 @@ struct ceph_messenger *ceph_messenger_create()
 	spin_lock_init(&msgr->con_lock);
 
 	/* create listening socket */
-	ret = _klisten(msgr);
+	ret = ceph_tcp_listen(msgr);
 	if(ret < 0) {
 		kfree(msgr);
 		return  ERR_PTR(ret);
 	}
 
-	/* TBD: setup callback for accept */
 	INIT_WORK(&msgr->awork, try_accept);       /* setup work structure */
 
 	dout(1, "ceph_messenger_create listening on %x:%d\n", 
@@ -756,7 +754,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 
 	/* initiate connect? */
 	if (test_bit(NEW, &con->state)) {
-		ret = _kconnect(con);
+		ret = ceph_tcp_connect(con);
 		if (ret < 0){
 			derr(1, "connection failure to peer %x:%d\n",
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),

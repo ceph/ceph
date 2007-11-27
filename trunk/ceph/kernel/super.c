@@ -6,6 +6,7 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include "super.h"
+#include "ktcp.h"
 
 
 
@@ -357,6 +358,8 @@ static void __exit exit_ceph(void)
 	dout(1, "exit_ceph\n");
 
 	unregister_filesystem(&ceph_fs_type);
+	if (send_wq)
+		ceph_workqueue_shutdown();
 }
 
 
