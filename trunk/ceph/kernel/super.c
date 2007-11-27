@@ -360,6 +360,8 @@ static void __exit exit_ceph(void)
 	unregister_filesystem(&ceph_fs_type);
 	if (send_wq)
 		ceph_workqueue_shutdown();
+
+	destroy_inodecache();
 }
 
 
