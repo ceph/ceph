@@ -59,8 +59,6 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int err;
 	int attempts = 10;
 	int which;
-	struct ceph_msg *open_msg;
-	struct ceph_msg *open_reply;
 	
 	client->mounting = 6;  /* FIXME don't wait for osd map, for now */
 

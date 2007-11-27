@@ -336,11 +336,11 @@ int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op,
 	struct ceph_client_reply_head *head;
 	int ret;
 
-	req = ceph_mdsc_create_request_msg(&client->mdsc, op, ino1, path1, ino2, path2);
+	req = ceph_mdsc_create_request_msg(mdsc, op, ino1, path1, ino2, path2);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 
-	reply = ceph_mdsc_do_request(&client->mdsc, req, -1);
+	reply = ceph_mdsc_do_request(mdsc, req, -1);
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
 
@@ -530,6 +530,7 @@ int parse_reply_info(struct ceph_msg *msg, struct reply_info *info)
 	
 	/* trace */
 	p = msg->front.iov_base + sizeof(struct ceph_client_reply_head);
+	end = p + msg->front.iov_len;
 	if ((err = ceph_decode_32(&p, end, &len)) < 0)
 		goto bad;
 	if (len > 0 &&

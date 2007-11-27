@@ -50,6 +50,8 @@ struct ceph_object {
 };
 typedef struct ceph_object ceph_object_t;
 
+#define CEPH_INO_ROOT 1
+
 struct ceph_timeval {
 	__u32 tv_sec;
 	__u32 tv_usec;
