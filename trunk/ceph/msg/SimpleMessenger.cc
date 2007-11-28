@@ -533,6 +533,7 @@ void Rank::EntityMessenger::dispatch_entry()
     cond.Wait(lock);
   }
   lock.Unlock();
+  dout(15) << "dispatch: ending loop " << dendl;
 
   // deregister
   rank.unregister_entity(this);
@@ -675,6 +676,7 @@ int Rank::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
+  dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
   rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
@@ -695,6 +697,7 @@ int Rank::Pipe::accept()
   dout(20) << "accept got connect_seq " << cseq << dendl;
     
   // register pipe.
+  __u32 myseq = connect_seq;
   rank.lock.Lock();
   {
     if (rank.rank_pipe.count(peer_addr) == 0) {
@@ -711,7 +714,7 @@ int Rank::Pipe::accept()
 	       << dendl;
 
       // if open race, low addr's pipe "wins".
-      // otherwise, look at oseq vs out_seq
+      // otherwise, look at connect_seq
       if ((other->state == STATE_CONNECTING && peer_addr < rank.rank_addr) ||
 	  (other->state == STATE_OPEN && cseq == other->connect_seq)) {
 	dout(10) << "accept already had pipe " << other
@@ -726,12 +729,11 @@ int Rank::Pipe::accept()
 	// steal queue and out_seq
 	other->take_queue(q);
 	out_seq = other->out_seq;
-	//for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
-	//(*p)->set_seq(++out_seq);
       } 
       else {
 	dout(10) << "accept already had pipe " << other
-		 << ", closing other" << dendl;
+		 << ", closing this one" << dendl;
+	myseq = other->connect_seq;
 	state = STATE_CLOSED;
       }
       other->lock.Unlock();
@@ -747,13 +749,13 @@ int Rank::Pipe::accept()
     dout(10) << "accept sending READY tag" << dendl;
     tag = CEPH_MSGR_TAG_READY;
     state = STATE_OPEN;
+    kick_reader_on_join = true;
   }
 
   if (tcp_write(sd, &tag, 1) < 0 ||
-      tcp_write(sd, (char*)&connect_seq, sizeof(connect_seq)) < 0) {
-    // hrmpf
+      tcp_write(sd, (char*)&myseq, sizeof(myseq)) < 0) {
     dout(2) << "accept couldn't send initial tag+seq: "
-	      << strerror(errno) << dendl;
+	    << strerror(errno) << dendl;
     fault();
   }
 
@@ -763,6 +765,7 @@ int Rank::Pipe::accept()
     start_writer();
   }
 
+  dout(20) << "accept done" << dendl;
   return 0;   // success.
 }
 
@@ -921,43 +924,48 @@ void Rank::Pipe::unregister_pipe()
 void Rank::Pipe::fault(bool silent)
 {
   assert(lock.is_locked());
-  
+  cond.Signal();
+
   if (!silent) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
 
+  if (state == STATE_CLOSED) {
+    dout(0) << "fault already closed" << dendl;
+    return;
+  }
   if (q.empty()) {
     if (!silent) dout(0) << "fault nothing to send, closing" << dendl;
     state = STATE_CLOSED;
+    return;
+  } 
+
+  utime_t now = g_clock.now();
+  if (state != STATE_CONNECTING) {
+    if (!silent) dout(0) << "fault initiating reconnect" << dendl;
+    connect_seq++;
+    state = STATE_CONNECTING;
+    first_fault = now;
+  } else if (first_fault.sec() == 0) {
+    if (!silent) dout(0) << "fault during connect" << dendl;
+    first_fault = now;
   } else {
-    utime_t now = g_clock.now();
-    if (state != STATE_CONNECTING) {
-      if (!silent) dout(0) << "fault initiating reconnect" << dendl;
-      connect_seq++;
-      state = STATE_CONNECTING;
-      first_fault = now;
-    } else if (first_fault.sec() == 0) {
-      if (!silent) dout(0) << "fault during connect" << dendl;
-      first_fault = now;
-    } else {
-      utime_t failinterval = now - first_fault;
-      utime_t retryinterval = now - last_attempt;
-      if (!silent) dout(10) << "fault failure was " << failinterval 
-			    << " ago, last attempt was at " << last_attempt
-			    << ", " << retryinterval << " ago" << dendl;
-      if (failinterval > g_conf.ms_fail_interval) {
-	// give up
-	dout(0) << "fault giving up" << dendl;
-	fail();
-      } else if (retryinterval < g_conf.ms_retry_interval) {
-	// wait
-	now += (g_conf.ms_retry_interval - retryinterval);
-	dout(10) << "fault waiting until " << now << dendl;
-	cond.WaitUntil(lock, now);
-	dout(10) << "fault done waiting or woke up" << dendl;
-      }
+    utime_t failinterval = now - first_fault;
+    utime_t retryinterval = now - last_attempt;
+    if (!silent) dout(10) << "fault failure was " << failinterval 
+			  << " ago, last attempt was at " << last_attempt
+			  << ", " << retryinterval << " ago" << dendl;
+    if (failinterval > g_conf.ms_fail_interval) {
+      // give up
+      dout(0) << "fault giving up" << dendl;
+      fail();
+    } else if (retryinterval < g_conf.ms_retry_interval) {
+      // wait
+      now += (g_conf.ms_retry_interval - retryinterval);
+      dout(10) << "fault waiting until " << now << dendl;
+      cond.WaitUntil(lock, now);
+      dout(10) << "fault done waiting or woke up" << dendl;
     }
-    last_attempt = now;
   }
-  cond.Signal();
+  last_attempt = now;
 }
 
 void Rank::Pipe::fail()
@@ -1227,18 +1235,6 @@ void Rank::Pipe::writer()
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
-
-	/*
-	// HACK
-	static bool did = false;
-	if (!did && 
-	    m->get_source() == entity_name_t::OSD(0) &&
-	    m->get_dest() == entity_name_t::OSD(1)) {
-	  did = true;
-	  dout(0) << "will fake socket error on " << sd << dendl;
-	  g_timer.add_event_after(15.0, new FakeSocketError(sd));
-	}
-	*/
       }
       continue;
     }
@@ -1353,16 +1349,22 @@ int Rank::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
     }
 
     int r = ::sendmsg(sd, msg, 0);
+    if (r == 0) 
+      dout(10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
-      assert(r == -1);
-      dout(1) << "error on sendmsg " << strerror(errno) << dendl;
+      dout(1) << "do_sendmsg error " << strerror(errno) << dendl;
       return -1;
+    }
+    if (state == STATE_CLOSED) {
+      dout(0) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
+      errno = EINTR;
+      return -1; // close enough
     }
     len -= r;
     if (len == 0) break;
     
     // hrmph.  trim r bytes off the front of our message.
-    dout(20) << "partial sendmsg, did " << r << ", still have " << len << dendl;
+    dout(20) << "do_sendmail short write did " << r << ", still have " << len << dendl;
     while (r > 0) {
       if (msg->msg_iov[0].iov_len <= (size_t)r) {
 	// lose this whole item

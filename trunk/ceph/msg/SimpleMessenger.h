@@ -89,6 +89,7 @@ private:
     utime_t last_attempt;  // time of last reconnect attempt
 
     bool reader_running;
+    bool kick_reader_on_join;
     bool writer_running;
 
     list<Message*> q;
@@ -138,10 +139,11 @@ private:
     Pipe(int st) : 
       sd(0),
       state(st), 
-      reader_running(false), writer_running(false),
+      reader_running(false), kick_reader_on_join(false), writer_running(false),
       connect_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
+    //~Pipe() { cout << "destructor on " << this << std::endl; }
 
     void start_reader() {
       reader_running = true;
@@ -164,7 +166,7 @@ private:
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
       if (reader_thread.is_started()) {
-	reader_thread.kill(SIGUSR1);
+	//if (kick_reader_on_join) reader_thread.kill(SIGUSR1);
 	reader_thread.join();
       }
     }
