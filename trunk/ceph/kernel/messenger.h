@@ -26,9 +26,9 @@ static __inline__ const char *ceph_name_type_str(int t) {
 struct ceph_messenger {
 	void *parent;
 	ceph_messenger_dispatch_t dispatch;
+	struct ceph_entity_inst inst;    /* my name+address */
 	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
-	struct ceph_entity_inst inst;    /* my name+address */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
@@ -104,6 +104,7 @@ struct ceph_connection {
 
 
 extern struct ceph_messenger *ceph_messenger_create(void);
+extern void ceph_messenger_destroy(struct ceph_messenger *);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {

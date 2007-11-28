@@ -172,15 +172,16 @@ static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_co
  * remove connection from all list.
  * also, from con_open radix tree, if it should have been there
  */
-static void remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
+static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	unsigned long key = hash_addr(&con->peer_addr);
+	unsigned long key;
 
-	spin_lock(&msgr->con_lock);
+	dout(20, "__remove_connection %p from %p\n", con, msgr);
 	list_del(&con->list_all);
 	if (test_bit(CONNECTING, &con->state) || 
 	    test_bit(OPEN, &con->state)) {
 		/* remove from con_open too */
+		key = hash_addr(&con->peer_addr);
 		if (list_empty(&con->list_bucket)) {
 			/* last one */
 			dout(20, "remove_connection %p and removing bucket %lu\n", con, key);
@@ -190,9 +191,14 @@ static void remove_connection(struct ceph_messenger *msgr, struct ceph_connectio
 			list_del(&con->list_bucket);
 		}
 	}
-	spin_unlock(&msgr->con_lock);
-
 	put_connection(con);
+}
+
+static void remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
+{
+	spin_lock(&msgr->con_lock);
+	__remove_connection(msgr, con);
+	spin_unlock(&msgr->con_lock);
 }
 
 
@@ -717,8 +723,11 @@ struct ceph_messenger *ceph_messenger_create()
         msgr = kzalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
 		return ERR_PTR(-ENOMEM);
-
+	INIT_WORK(&msgr->awork, try_accept);
 	spin_lock_init(&msgr->con_lock);
+	INIT_LIST_HEAD(&msgr->con_all);
+	INIT_LIST_HEAD(&msgr->con_accepting);
+	INIT_RADIX_TREE(&msgr->con_open, GFP_KERNEL);
 
 	/* create listening socket */
 	ret = ceph_tcp_listen(msgr);
@@ -727,12 +736,31 @@ struct ceph_messenger *ceph_messenger_create()
 		return  ERR_PTR(ret);
 	}
 
-	INIT_WORK(&msgr->awork, try_accept);       /* setup work structure */
 
-	dout(1, "ceph_messenger_create listening on %x:%d\n", 
+	dout(1, "ceph_messenger_create %p listening on %x:%d\n", msgr,
 	     ntohl(msgr->inst.addr.ipaddr.sin_addr.s_addr), 
 	     ntohs(msgr->inst.addr.ipaddr.sin_port));
 	return msgr;
+}
+
+void ceph_messenger_destroy(struct ceph_messenger *msgr)
+{
+	struct ceph_connection *con;
+
+	dout(1, "ceph_messenger_destroy %p\n", msgr);
+
+	/* kill off connections */
+	spin_lock(&msgr->con_lock);
+	while (!list_empty(&msgr->con_all)) {
+		con = list_entry(msgr->con_all.next, struct ceph_connection, list_all);
+		__remove_connection(msgr, con);
+	}
+	spin_unlock(&msgr->con_lock);
+
+	/* stop listener */
+	sock_release(msgr->listen_sock);
+
+	kfree(msgr);
 }
 
 
@@ -755,13 +783,13 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 		con = new_connection(msgr);
 		if (IS_ERR(con))
 			return PTR_ERR(con);
-		dout(5, "ceph_msg_send opening new connection %p to peer %x:%d\n", con,
+		dout(5, "ceph_msg_send new connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 		con->peer_addr = msg->hdr.dst.addr;
 		add_connection(msgr, con);
 	} else {
-		dout(5, "ceph_msg_send had connection %p to peer %x:%d\n", con,
+		dout(10, "ceph_msg_send had connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     

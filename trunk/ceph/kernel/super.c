@@ -202,7 +202,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 	int i;
 	int v;
 	unsigned ip = 0;
-	char *p = c;
+	const char *p = c;
 
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
 	for (i=0; *p && i<4; i++) {
@@ -334,6 +334,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		sbinfo->sb_client = ceph_get_client(&mount_args);
 		if (PTR_ERR(sbinfo->sb_client)) {
 			error = PTR_ERR(sbinfo->sb_client);
+			sbinfo->sb_client = 0;
 			goto out_splat;
 		}
 	}
@@ -351,10 +352,9 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
 	dout(5, "ceph_kill_sb\n");
-
 	kill_anon_super(s);
-
-	ceph_put_client(sbinfo->sb_client);
+	if (sbinfo->sb_client)
+		ceph_put_client(sbinfo->sb_client);
 	kfree(sbinfo);
 }
 

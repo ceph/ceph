@@ -94,11 +94,11 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 {
 	struct ceph_msg *mount_msg;
 	int err;
-	int attempts = 10;
+	int attempts = 3;
 	int which;
 	char r;
 	
-	client->mounting = 6;  /* FIXME don't wait for osd map, for now */
+	client->mounting = 06;  /* FIXME don't wait for osd map, for now */
 
 	/* send mount request */
 	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0);
@@ -123,7 +123,7 @@ trymount:
 	if (err == -EINTR)
 		return err; 
 	if (client->mounting) {
-		dout(10, "ceph_get_client still waiting for mount, attempts=%d\n", attempts);
+		dout(10, "mount still waiting for mount, attempts=%d\n", attempts);
 		if (--attempts)
 			goto trymount;
 		return -EIO;
@@ -212,11 +212,14 @@ struct ceph_client *ceph_get_client(struct ceph_mount_args *args)
 
 void ceph_put_client(struct ceph_client *cl)
 {
+	dout(10, "ceph_put_client %p\n", cl);
 	if (atomic_dec_and_test(&cl->nref)) {
 		dout(1, "ceph_put_client last put on %p\n", cl);
 
 		/* unmount */
 		/* ... */
+
+		ceph_messenger_destroy(cl->msgr);
 		put_client_counter();
 		kfree(cl);
 	}
