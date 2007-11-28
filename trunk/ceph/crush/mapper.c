@@ -211,7 +211,7 @@ static int crush_choose(struct crush_map *map,
 				
 				/* collision? */
 				collide = 0;
-				for (i=0; i<rep; i++) {
+				for (i=0; i<outpos; i++) {
 					if (out[i] == item) {
 						collide = 1;
 						break;
