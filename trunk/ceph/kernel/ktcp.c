@@ -55,10 +55,10 @@ static void ceph_state_change(struct sock *sk)
 }
 
 /* make a socket active by setting up the call back functions */
-static int set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
+static int set_sock_callbacks(struct socket *sock, void *user_data)
 {
         struct sock *sk = sock->sk;
-        sk->sk_user_data = con;
+        sk->sk_user_data = user_data;
         printk(KERN_INFO "Entered set_sock_callbacks\n");
 
         /* Install callbacks */
@@ -85,7 +85,7 @@ int ceph_tcp_connect(struct ceph_connection *con)
         }
 
         /* setup callbacks */
-        set_sock_callbacks(con->sock, con);
+        set_sock_callbacks(con->sock, (void *)con);
 
 
         ret = con->sock->ops->connect(con->sock, paddr,
@@ -131,7 +131,6 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	/* if (!*myaddr) */
 	myaddr->sin_family = AF_INET;
 	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-	//myaddr->sin_port = htons(CEPH_PORT);  /* known port for now */
 	myaddr->sin_port = htons(0);  /* any port */
 	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, sizeof(*myaddr));
 	if (ret < 0) {
@@ -166,6 +165,10 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		msgr->listen_sock = NULL;
 		goto err;
 	}
+
+        /* setup callbacks */
+        set_sock_callbacks(msgr->listen_sock, (void *)msgr);
+
 	return ret;
 err:
 	sock_release(sock);
@@ -188,16 +191,16 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
                 goto done;
         }
 
-        /* setup callbacks */
-        set_sock_callbacks(con->sock, con);
-
-
         ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
 	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
         if (ret < 0) {
 		printk(KERN_INFO "accept error: %d\n", ret);
 		goto err;
 	}
+
+        /* setup callbacks */
+        set_sock_callbacks(con->sock, (void *)con);
+
 	con->sock->ops = sock->ops;
 	con->sock->type = sock->type;
 	ret = con->sock->ops->getname(con->sock, paddr, &len, 2);
