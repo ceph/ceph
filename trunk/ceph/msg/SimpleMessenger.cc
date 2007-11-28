@@ -780,7 +780,7 @@ int Rank::Pipe::connect()
   lock.Unlock();
 
   int newsd;
-  char tag;
+  char tag = -1;
   int rc;
   struct sockaddr_in myAddr;
   entity_addr_t paddr;
@@ -852,7 +852,6 @@ int Rank::Pipe::connect()
   dout(20) << "connect wrote self, seq, waiting for tag" << dendl;
 
   // wait for tag
-  tag = -1;
   if (tcp_read(newsd, &tag, 1) < 0 ||
       tcp_read(newsd, (char*)&cseq, sizeof(cseq)) < 0) {
     dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
