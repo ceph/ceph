@@ -141,6 +141,7 @@ struct InodeStat {
      * note: encoding matches struct ceph_client_reply_inode
      */
     struct ceph_client_reply_inode e;
+    memset(&e, 0, sizeof(e));
     e.ino = in->inode.ino;
     e.layout = in->inode.layout;
     e.ctime = in->inode.ctime.tv_ref();

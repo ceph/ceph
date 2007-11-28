@@ -38,13 +38,12 @@ class MOSDPGQuery : public Message {
   char *get_type_name() { return "PGq"; }
 
   void encode_payload() {
-    payload.append((char*)&epoch, sizeof(epoch));
+    ::_encode(epoch, payload);
     ::_encode(pg_list, payload);
   }
   void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
+    ::_decode(epoch, payload, off);
     ::_decode(pg_list, payload, off);
   }
 };

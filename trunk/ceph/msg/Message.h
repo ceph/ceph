@@ -120,6 +120,7 @@ public:
   Message() { };
   Message(int t) {
     env.type = t;
+    env.data_off = 0;
   }
   virtual ~Message() { }
 
