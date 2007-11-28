@@ -370,7 +370,7 @@ static struct file_system_type ceph_fs_type = {
 /*	.fs_flags	=   */
 };
 
-static int __init init_ceph(void)
+int __init init_ceph(void)
 {
 	int ret = 0;
 
@@ -383,7 +383,7 @@ static int __init init_ceph(void)
 	return ret;
 }
 
-static void __exit exit_ceph(void)
+void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 

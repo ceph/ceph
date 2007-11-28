@@ -87,7 +87,6 @@ int ceph_tcp_connect(struct ceph_connection *con)
         /* setup callbacks */
         set_sock_callbacks(con->sock, (void *)con);
 
-
         ret = con->sock->ops->connect(con->sock, paddr,
                                       sizeof(struct sockaddr_in), O_NONBLOCK);
         if (ret == -EINPROGRESS) return 0;

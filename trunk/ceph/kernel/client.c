@@ -75,18 +75,19 @@ trymount:
 	mount_msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MON;
 	mount_msg->hdr.dst.name.num = which;
 	mount_msg->hdr.dst.addr = args->mon_addr[which];
-	dout(1, "mount from mon%d, %d attempts left\n", which, attempts);
+	dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
 	
 	ceph_msg_send(client->msgr, mount_msg);
 
 	/* wait */
+	dout(10, "mount waiting\n");
 	err = wait_event_interruptible_timeout(client->mount_wq, 
 					       (client->mounting == 0),
 					       6*HZ);
 	if (err == -EINTR)
 		return err; 
 	if (client->mounting) {
-		dout(1, "ceph_get_client still waiting for mount, attempts=%d\n", attempts);
+		dout(10, "ceph_get_client still waiting for mount, attempts=%d\n", attempts);
 		if (--attempts)
 			goto trymount;
 		return -EIO;

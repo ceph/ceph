@@ -140,7 +140,7 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 	spin_lock(&msgr->con_lock);
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
-		list_add(head, &con->list_bucket);
+		list_add(&con->list_bucket, head);
 	} else {
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
@@ -152,8 +152,8 @@ static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_co
 {
 	atomic_inc(&con->nref);
 	spin_lock(&msgr->con_lock);
-	list_add(&msgr->con_all, &con->list_all);
-	list_add(&msgr->con_accepting, &con->list_bucket);
+	list_add(&con->list_all, &msgr->con_all);
+	list_add(&con->list_bucket, &msgr->con_accepting);
 	spin_unlock(&msgr->con_lock);
 }
 
@@ -774,7 +774,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
 	ceph_msg_get(msg);
 
-	list_add(&con->out_queue, &msg->list_head);
+	list_add(&msg->list_head, &con->out_queue);
 	set_bit(WRITE_PEND, &con->state);
 	spin_unlock(&con->con_lock);
 	put_connection(con);
