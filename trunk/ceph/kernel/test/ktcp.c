@@ -55,10 +55,10 @@ static void ceph_state_change(struct sock *sk)
 }
 
 /* make a socket active by setting up the call back functions */
-int add_sock_callbacks(struct socket *sock, struct ceph_connection *con)
+int add_sock_callbacks(struct socket *sock, void *user_data)
 {
         struct sock *sk = sock->sk;
-        sk->sk_user_data = con;
+        sk->sk_user_data = user_data;
         printk(KERN_INFO "Entered add_sock_callbacks\n");
 
         /* Install callbacks */
@@ -85,7 +85,7 @@ int _kconnect(struct ceph_connection *con)
         }
 
         /* setup callbacks */
-        add_sock_callbacks(con->sock, con);
+        add_sock_callbacks(con->sock, (void *)con);
 
 
         ret = con->sock->ops->connect(con->sock, paddr,
@@ -155,6 +155,7 @@ int _klisten(struct ceph_messenger *msgr)
 		msgr->listen_sock = NULL;
 		goto err;
 	}
+        add_sock_callbacks(msgr->listen_sock, (void *)msgr);
 	return ret;
 err:
 	sock_release(sock);
@@ -177,16 +178,15 @@ int _kaccept(struct socket *sock, struct ceph_connection *con)
                 goto done;
         }
 
-        /* setup callbacks */
-        add_sock_callbacks(con->sock, con);
-
-
         ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
-	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
         if (ret < 0) {
 		printk(KERN_INFO "accept error: %d\n", ret);
 		goto err;
 	}
+
+        /* setup callbacks */
+        add_sock_callbacks(con->sock, (void *)con);
+
 	con->sock->ops = sock->ops;
 	con->sock->type = sock->type;
 	ret = con->sock->ops->getname(con->sock, paddr, &len, 2);
