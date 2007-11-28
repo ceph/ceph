@@ -269,6 +269,7 @@ int main(int argc, char **argv)
     mon->init();
     if (g_conf.dout_dir) {
       sprintf(ffrom, "%s/mon%d", g_conf.dout_dir, mpirank);
+      ::unlink(ffrom);
       ::symlink(fto, ffrom);
     }
   }
@@ -289,6 +290,7 @@ int main(int argc, char **argv)
     cerr << "mds" << i << " at " << m->get_myaddr() << " " << hostname << "." << pid << std::endl;
     if (g_conf.dout_dir) {
       sprintf(ffrom, "%s/mds%d", g_conf.dout_dir, i);
+      ::unlink(ffrom);
       ::symlink(fto, ffrom);
     }
     mds[i] = new MDS(i, m, monmap);
@@ -325,6 +327,7 @@ int main(int argc, char **argv)
     cerr << "osd" << i << " at " << m->get_myaddr() <<  " " << hostname << "." << pid << std::endl;
     if (g_conf.dout_dir) {
       sprintf(ffrom, "%s/osd%d", g_conf.dout_dir, i);
+      ::unlink(ffrom);
       ::symlink(fto, ffrom);
     }
 
