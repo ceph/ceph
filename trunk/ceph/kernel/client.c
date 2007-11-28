@@ -8,7 +8,7 @@
 
 
 /* debug level; defined in include/ceph_fs.h */
-int ceph_debug = 10;
+int ceph_debug = 20;
 
 
 void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg);

@@ -59,6 +59,11 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 
 	con->msgr = msgr;
 
+	INIT_LIST_HEAD(&con->list_all);
+	INIT_LIST_HEAD(&con->list_bucket);
+	INIT_LIST_HEAD(&con->out_queue);
+	INIT_LIST_HEAD(&con->out_sent);
+
 	spin_lock_init(&con->con_lock);
 	set_bit(NEW, &con->state);
 	INIT_WORK(&con->rwork, try_read);	/* setup work structure */
@@ -78,7 +83,7 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 static unsigned long hash_addr(struct ceph_entity_addr *addr) 
 {
 	unsigned long key;
-	key = *(unsigned long*)&addr->ipaddr.sin_addr.s_addr;
+	key = *(__u32*)&addr->ipaddr.sin_addr.s_addr;
 	key ^= addr->ipaddr.sin_port;
 	return key;
 }
@@ -713,7 +718,7 @@ struct ceph_messenger *ceph_messenger_create()
 
 	dout(1, "ceph_messenger_create listening on %x:%d\n", 
 	     ntohl(msgr->inst.addr.ipaddr.sin_addr.s_addr), 
-	     ntohl(msgr->inst.addr.ipaddr.sin_port));
+	     ntohs(msgr->inst.addr.ipaddr.sin_port));
 	return msgr;
 }
 
@@ -732,7 +737,6 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	msg->hdr.src = msgr->inst;
 
 	/* do we have the connection? */
-	spin_lock(&msgr->con_lock);
 	con = get_connection(msgr, &msg->hdr.dst.addr);
 	if (!con) {
 		con = new_connection(msgr);
@@ -740,15 +744,14 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 			return PTR_ERR(con);
 		dout(5, "opening new connection to peer %x:%d\n",
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
-		     ntohl(msg->hdr.dst.addr.ipaddr.sin_port));
+		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 		con->peer_addr = msg->hdr.dst.addr;
 		add_connection(msgr, con);
 	} else {
 		dout(5, "had connection to peer %x:%d\n",
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
-		     ntohl(msg->hdr.dst.addr.ipaddr.sin_port));
+		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     
-	spin_unlock(&msgr->con_lock);
 
 	spin_lock(&con->con_lock);
 
@@ -758,7 +761,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 		if (ret < 0){
 			derr(1, "connection failure to peer %x:%d\n",
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
-			     ntohl(msg->hdr.dst.addr.ipaddr.sin_port));
+			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 			remove_connection(msgr, con);
 			kfree(con);
 			return(ret);
@@ -767,7 +770,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	}
 	
 	/* queue */
-	dout(1, "queuing outgoing message for %s.%d\n",
+	dout(1, "queuing outgoing message for %s%d\n",
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
 	ceph_msg_get(msg);
 

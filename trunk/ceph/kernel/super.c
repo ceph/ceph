@@ -194,11 +194,41 @@ static match_table_t arg_tokens = {
 	{Opt_monport, "monport=%d"}
 };
 
-static int parse_ip(char *c, int len, struct ceph_entity_addr *addr)
+/*
+ * FIXME: add error checking to ip parsing
+ */
+static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 {
-	dout(1, "parse_ip on %s len %d\n", c, len);
+	int i;
+	int v;
+	unsigned ip = 0;
+	char *p = c;
 
+	dout(15, "parse_ip on '%s' len %d\n", c, len);
+	for (i=0; *p && i<4; i++) {
+		v = 0;
+		while (*p && *p != '.' && p < c+len) {
+			if (*p < '0' || *p > '9')
+				goto bad;
+			v = (v * 10) + (*p - '0');
+			p++;
+		}
+		ip = (ip << 8) + v;
+		if (!*p) 
+			break;
+		p++;
+	}
+	if (i < 4) 
+		goto bad;
+
+	*(__u32*)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
+	dout(15, "parse_ip got %u.%u.%u.%u\n", ip >> 24, (ip >> 16) & 0xff,
+	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
+
+bad:
+	dout(1, "parse_ip bad ip '%s'\n", c);
+	return -EINVAL;
 }
 
 static int parse_mount_args(int flags, char *options, const char *dev_name, struct ceph_mount_args *args)
@@ -207,7 +237,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	int len;
 	substring_t argstr[MAX_OPT_ARGS];
 		
-	dout(1, "parse_mount_args dev_name %s\n", dev_name);
+	dout(15, "parse_mount_args dev_name '%s'\n", dev_name);
 
 	/* defaults */
 	args->mntflags = flags;
@@ -222,7 +252,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	/* get mon ip */
 	/* er, just one for now. later, comma-separate... */	
 	len = c - dev_name;
-	parse_ip(c, len, &args->mon_addr[0]);
+	parse_ip(dev_name, len, &args->mon_addr[0]);
 	args->mon_addr[0].ipaddr.sin_family = AF_INET;
 	args->mon_addr[0].ipaddr.sin_port = CEPH_MON_PORT;
 	args->mon_addr[0].erank = 0;
@@ -235,7 +265,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 		return -ENAMETOOLONG;
 	strcpy(args->path, c);
 	
-	dout(1, "server path %s\n", args->path);
+	dout(15, "server path '%s'\n", args->path);
 	
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
@@ -282,7 +312,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	int error;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 
-	dout(1, "ceph_get_sb\n");
+	dout(5, "ceph_get_sb\n");
 	
 	error = parse_mount_args(flags, data, dev_name, &mount_args);
 	if (error < 0) 
@@ -320,7 +350,7 @@ out:
 static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
-	dout(1, "ceph_kill_sb\n");
+	dout(5, "ceph_kill_sb\n");
 
 	kill_anon_super(s);
 
@@ -367,3 +397,8 @@ static void __exit exit_ceph(void)
 
 module_init(init_ceph);
 module_exit(exit_ceph);
+
+MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
+MODULE_AUTHOR("Sage Weil <sage@newdream.net>");
+MODULE_DESCRIPTION("Ceph filesystem for Linux");
+MODULE_LICENSE("GPL");

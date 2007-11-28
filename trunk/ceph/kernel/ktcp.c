@@ -110,17 +110,17 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	struct socket *sock = NULL;
 	int optval = 1;
 	struct sockaddr_in *myaddr = &msgr->inst.addr.ipaddr;
-
+	int nlen;
 
 	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
         if (ret < 0) {
-		printk(KERN_INFO "sock_create_kern error: %d\n", ret);
+		derr(0, "sock_create_kern error: %d\n", ret);
 		return ret;
 	}
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
-		printk("Failed to set SO_REUSEADDR: %d\n", ret);
+		derr(0, "Failed to set SO_REUSEADDR: %d\n", ret);
 		goto err;
 	}
 
@@ -131,19 +131,29 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	/* if (!*myaddr) */
 	myaddr->sin_family = AF_INET;
 	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-	myaddr->sin_port = htons(CEPH_PORT);  /* known port for now */
-	/* myaddr->sin_port = htons(0); */  /* any port */
-	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, 
-				sizeof(struct sockaddr_in));
+	//myaddr->sin_port = htons(CEPH_PORT);  /* known port for now */
+	myaddr->sin_port = htons(0);  /* any port */
+	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, sizeof(*myaddr));
 	if (ret < 0) {
-		printk("Failed to bind to port %d\n", ret);
+		derr(0, "Failed to bind: %d\n", ret);
 		goto err;
 	}
+	
+	/* what port did we bind to? */
+	nlen = sizeof(*myaddr);
+	ret = sock->ops->getname(sock, (struct sockaddr *)myaddr, &nlen, 0);
+	if (ret < 0) {
+		derr(0, "failed to getsockname: %d\n", ret);
+		goto err;
+	}
+	dout(0, "ceph_tcp_listen on %x:%d\n",
+	     ntohl(myaddr->sin_addr.s_addr),
+	     ntohs(myaddr->sin_port));
 
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
-		printk("Failed to set SO_KEEPALIVE: %d\n", ret);
+		derr(0, "Failed to set SO_KEEPALIVE: %d\n", ret);
 		goto err;
 	}
 
@@ -152,7 +162,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	/* TBD: probaby want to tune the backlog queue .. */
 	ret = sock->ops->listen(sock, NUM_BACKUP);
 	if (ret < 0) {
-		printk(KERN_INFO "kernel_listen error: %d\n", ret);
+		derr(0, "kernel_listen error: %d\n", ret);
 		msgr->listen_sock = NULL;
 		goto err;
 	}
