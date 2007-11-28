@@ -1684,6 +1684,13 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
   if (fd < 0) return fd;
 
+#define CHEAP_HACK 0
+#if CHEAP_HACK
+  // START temporary hack piece 1 --Esteban
+  for (int foo = 0; foo < 10; ++foo) {
+  // END temporary hack piece 1 --Esteban
+#endif
+
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) {
       dout(0) << "stopping" << dendl;
@@ -1705,7 +1712,13 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
 
     client->write(fd, buf, wrsize, i*wrsize);
   }
-  
+#if CHEAP_HACK
+  // START temporary hack piece 2--Esteban
+  }
+  sleep(5);
+  // END temporary hack piece 2 --Esteban
+#endif
+
   client->close(fd);
   delete[] buf;
 
