@@ -590,8 +590,7 @@ int ObjectCache::map_read(block_t start, block_t len,
  * - cancel rx ops we obsolete.
  *   - resubmit rx ops if we split bufferheads
  * - cancel obsoleted tx ops
- *
- * - DO NOT break over disk extent boundaries
+ * - break over disk extent boundaries
  */
 int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
@@ -630,13 +629,14 @@ int ObjectCache::map_write(block_t start, block_t len,
     // max for this bh (bc of (re)alloc on disk)
     block_t max = left;
 
-    /*
     // based on disk extent boundary ...
     vector<Extent> exv;
     on->map_extents(cur, max, exv, 0);
     if (exv.size() > 1) 
       max = exv[0].length;
-    */
+    bool hole = false;
+    if (exv.size() > 0 && exv[0].start == 0)
+      hole = true;
 
     dout(10) << "map_write " << cur << "~" << max << dendl;
     
@@ -646,8 +646,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       n->set_start( cur );
       n->set_length( max );
       bc->add_bh(n);
-      //if (exv[0].start == 0)
-      //n->set_state(BufferHead::STATE_CLEAN); // hole
+      if (hole)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       hits[cur] = n;
       left -= max;
       cur += max;
@@ -741,8 +741,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       BufferHead *n = new BufferHead(this);
       n->set_start( cur );
       n->set_length( glen );
-      //if (exv[0].start == 0)
-      //n->set_state(BufferHead::STATE_CLEAN); // hole
+      if (hole)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
       hits[cur] = n;
       
@@ -913,7 +913,9 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
   dout(10) << "merge_bh_left " << *left << " " << *right << dendl;
   assert(left->end() == right->start());
   assert(left->is_clean());
+  assert(!left->is_hole());
   assert(right->is_clean());
+  assert(!right->is_hole());
   assert(right->get_num_ref() == 0);
 
   // hrm, is this right?
@@ -955,7 +957,9 @@ void ObjectCache::try_merge_bh_left(map<block_t, BufferHead*>::iterator& p)
     p--;
     if (p->second->end() == bh->start() &&
 	p->second->is_clean() && 
+	!p->second->is_hole() &&
 	bh->is_clean() &&
+	!bh->is_hole() &&
 	bh->get_num_ref() == 0 &&
 	bh->data.buffers().size() < 8 &&
 	p->second->data.buffers().size() < 8)
@@ -976,7 +980,9 @@ void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
   if (p != data.end() &&
       bh->end() == p->second->start() && 
       p->second->is_clean() && 
+      !p->second->is_hole() &&
       bh->is_clean() &&
+      !bh->is_hole() &&
       p->second->get_num_ref() == 0 &&
       bh->data.buffers().size() < 8 &&
       p->second->data.buffers().size() < 8) {

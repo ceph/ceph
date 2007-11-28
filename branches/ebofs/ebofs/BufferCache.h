@@ -148,6 +148,8 @@ class BufferHead : public LRUObject {
   bool is_rx() { return state == STATE_RX; }
   bool is_partial() { return state == STATE_PARTIAL; }
   bool is_corrupt() { return state == STATE_CORRUPT; }
+
+  bool is_hole() { return is_clean() && data.length() == 0; }
   
   void add_shadow(BufferHead *dup) {
     shadows.insert(dup);
@@ -427,6 +429,10 @@ class BufferCache {
   public:
     map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
     version_t              epoch;
+  };
+  class WriteSet {
+    csum_t csum;                       // expected csum
+    map<block_t, PartialWrite> writes;
   };
 
   map<block_t, map<block_t, PartialWrite> > partial_write;  // queued writes w/ partial content

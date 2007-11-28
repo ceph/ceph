@@ -63,30 +63,12 @@ inline ostream& operator<<(ostream& out, const Extent& ex)
 }
 
 
-// tree/set nodes
-//typedef int    nodeid_t;
-typedef int64_t nodeid_t;     // actually, a block number.  FIXME.
-
-static const unsigned EBOFS_NODE_BLOCKS = 1;
-static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
-static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
-
-struct ebofs_nodepool {
-  Extent node_usemap_even;   // for even sb versions
-  Extent node_usemap_odd;    // for odd sb versions
-  
-  __u32  num_regions;
-  Extent region_loc[EBOFS_MAX_NODE_REGIONS];
-};
-
-
 // objects
 
 typedef uint64_t coll_t;
 
 struct ebofs_onode {
-  __u64 onode_csum;
-  __u64 data_csum;
+  csum_t data_csum;
 
   Extent onode_loc;       /* this is actually the block we live in */
   object_t object_id;       /* for kicks */
@@ -99,6 +81,7 @@ struct ebofs_onode {
   __u16 num_collections;
   __u32 num_attr;        // num attr in onode
   __u32 num_extents;     /* number of extents used.  if 0, data is in the onode */
+  __u32 num_bad_byte_extents; // undefined partial byte extents over partial blocks; block checksums reflect zeroed data beneath these.
 };
 
 struct ebofs_cnode {
@@ -107,10 +90,40 @@ struct ebofs_cnode {
   __u32      num_attr;        // num attr in cnode
 };
 
+struct ebofs_onode_ptr {
+  Extent loc;
+  csum_t csum;
+};
+
+
+// tree/set nodes
+//typedef int    nodeid_t;
+typedef __s64 nodeid_t;     // actually, a block number.  FIXME.
+
+static const unsigned EBOFS_NODE_BLOCKS = 1;
+static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
+static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
+static const unsigned EBOFS_NODE_DUP = 3;
+
+struct ebofs_nodepool {
+  Extent node_usemap_even;   // for even sb versions
+  Extent node_usemap_odd;    // for odd sb versions
+  
+  __u32  num_regions;
+  Extent region_loc[EBOFS_MAX_NODE_REGIONS];
+};
 
 // table
+
+struct ebofs_node_ptr {
+  nodeid_t nodeid;
+  //__u64 start[EBOFS_NODE_DUP];
+  //__u64 length;
+  csum_t csum;
+};
+
 struct ebofs_table {
-  nodeid_t root;      /* root node of btree */
+  ebofs_node_ptr root;
   __u32    num_keys;
   __u32    depth;
 };
@@ -119,15 +132,14 @@ struct ebofs_table {
 // super
 typedef uint64_t version_t;
 
-static const unsigned EBOFS_MAGIC = 0x000EB0F5;
+static const __u64 EBOFS_MAGIC = 0x000EB0F5;
 
 static const int EBOFS_NUM_FREE_BUCKETS = 5;   /* see alloc.h for bucket constraints */
 static const int EBOFS_FREE_BUCKET_BITS = 2;
 
-
 struct ebofs_super {
-  uint64_t s_magic;
-  uint64_t fsid;
+  __u64 s_magic;
+  __u64 fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
 
   epoch_t epoch;             // version of this superblock.
 

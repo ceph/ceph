@@ -84,6 +84,7 @@ public:
   map<string, bufferptr> attr;
 
   map<block_t, ExtentCsum>   extent_map;
+  interval_set<off_t> bad_byte_extents;
 
   interval_set<block_t> uncommitted;
 
@@ -520,6 +521,7 @@ inline ostream& operator<<(ostream& out, Onode& on)
   if (on.is_dangling()) out << " dangling";
   if (on.is_deleted()) out << " deleted";
   out << " uncom=" << on.uncommitted;
+  if (!on.bad_byte_extents.empty()) out << " badbytes=" << on.bad_byte_extents;
   //  out << " " << &on;
   out << ")";
   return out;

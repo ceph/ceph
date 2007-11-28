@@ -219,7 +219,8 @@ int Ebofs::mkfs()
   // init tables
   struct ebofs_table empty;
   empty.num_keys = 0;
-  empty.root = -1;
+  empty.root.nodeid = -1;
+  empty.root.csum = 0;
   empty.depth = 0;
   
   object_tab = new Table<object_t, Extent>( nodepool, empty );
@@ -785,6 +786,14 @@ Onode* Ebofs::get_onode(object_t oid)
     }
     on->last_block = n;
 
+    // parse bad byte extents
+    for (unsigned i=0; i<eo->num_bad_byte_extents; i++) {
+      Extent ex = *((Extent*)p);
+      p += sizeof(ex);
+      on->bad_byte_extents.insert(ex.start, ex.length);
+      dout(15) << "get_onode " << *on << " bad byte ex " << ex << dendl;
+    }
+
     // wake up other waiters
     for (list<Cond*>::iterator i = waitfor_onode[oid].begin();
          i != waitfor_onode[oid].end();
@@ -818,9 +827,11 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   eo.object_id = on->object_id;
   eo.object_size = on->object_size;
   eo.alloc_blocks = on->alloc_blocks;
+  eo.inline_bytes = 0;  /* write me */
   eo.num_collections = on->collections.size();
   eo.num_attr = on->attr.size();
   eo.num_extents = on->extent_map.size();
+  eo.num_bad_byte_extents = on->bad_byte_extents.m.size();
   bl.copy_in(off, sizeof(eo), (char*)&eo);
   off += sizeof(eo);
 
@@ -858,6 +869,15 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
       off += sizeof(csum_t)*o.ex.length;
     }
     dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << o.ex << dendl;
+  }
+
+  // bad byte extents
+  for (map<off_t,off_t>::iterator p = on->bad_byte_extents.m.begin();
+       p != on->bad_byte_extents.m.end();
+       p++) {
+    Extent o(p->first, p->second);
+    bl.copy_in(off, sizeof(o), (char*)&o);
+    dout(15) << "write_onode " << *on  << " bad byte ex " << o << dendl;
   }
 }
 
@@ -1629,7 +1649,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   interval_set<block_t> alloc;
   block_t old_bfirst = 0;  // zero means not defined here (since we ultimately pass to bh_read)
   block_t old_blast = 0; 
-  csum_t old_csum_first, old_csum_last;
+  csum_t old_csum_first = 0;
+  csum_t old_csum_last = 0;
   alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast, old_csum_first, old_csum_last);
   dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << dendl;
 

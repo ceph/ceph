@@ -29,7 +29,7 @@ class Table {
  private:
   NodePool &pool;
   
-  nodeid_t root;
+  ebofs_node_ptr root;
   int      nkeys;
   int      depth;
 
@@ -41,7 +41,7 @@ class Table {
     dbtout << "cons" << std::endl;
   }
   
-  nodeid_t get_root() { return root; }
+  const ebofs_node_ptr &get_root() { return root; }
   int get_num_keys() { return nkeys; }
   int get_depth() { return depth; }
 
@@ -280,7 +280,7 @@ class Table {
         if (l > 0)
           open[l-1].index_item( pos[l-1] ).node = open[l].get_id();
         else
-          table->root = open[0].get_id();
+          table->root.nodeid = open[0].get_id();
       }
     }
   private:
@@ -430,7 +430,7 @@ class Table {
     cursor.level = 0;
     
     // start at root
-    Nodeptr curnode(pool, root);
+    Nodeptr curnode(pool, root.nodeid);
     cursor.open[0] = curnode;
 
     if (curnode.size() == 0) return -1;  // empty!
@@ -538,15 +538,15 @@ class Table {
     
     // empty?
     if (nkeys == 0) {
-      if (root == -1) {
+      if (root.nodeid == -1) {
 	// create a root node (leaf!)
 	assert(depth == 0);
 	Nodeptr newroot( pool.new_node(Node::TYPE_LEAF) );
-	root = newroot.get_id();
+	root.nodeid = newroot.get_id();
 	depth++;
       }
       assert(depth == 1);
-      assert(root >= 0);
+      assert(root.nodeid >= 0);
     }
 
     // start at/near key
@@ -629,19 +629,19 @@ class Table {
       /* are we at the root? */
       if (cursor.level == 0) {
         /* split root. */
-        dbtout << "that split was the root " << root << std::endl;
+        dbtout << "that split was the root " << root.nodeid << std::endl;
         Nodeptr newroot( pool.new_node(Node::TYPE_INDEX) );
         
         /* new root node */
         newroot.set_size(2);
         newroot.index_item(0).key = leftnode.key(0);
-        newroot.index_item(0).node = root;
+        newroot.index_item(0).node = root.nodeid;
         newroot.index_item(1).key = newnode.key(0);
         newroot.index_item(1).node = newnode.get_id();
         
         /* heighten tree */
         depth++;
-        root = newroot.get_id();
+        root.nodeid = newroot.get_id();
         verify("insert 3");
         return 0;
       }
@@ -687,7 +687,7 @@ class Table {
         if (cursor.open[0].size() == 1 &&
             depth > 1) {
           depth--;
-          root = cursor.open[0].index_item(0).node;
+          root.nodeid = cursor.open[0].index_item(0).node;
           pool.release( cursor.open[0].node );
         }
 
@@ -695,7 +695,7 @@ class Table {
         else if (nkeys == 0) {
           assert(cursor.open[cursor.level].size() == 0);
           assert(depth == 1);
-          root = -1;
+          root.nodeid = -1;
 	  depth = 0;
 	  if (cursor.open[0].node)
 	    pool.release(cursor.open[0].node);
@@ -797,9 +797,9 @@ class Table {
   
   void clear() {
     Cursor cursor(this);
-    if (root == -1 && depth == 0) return;   // already empty!
-    clear(cursor, root, 0);
-    root = -1;
+    if (root.nodeid == -1 && depth == 0) return;   // already empty!
+    clear(cursor, root.nodeid, 0);
+    root.nodeid = -1;
     depth = 0;
     nkeys = 0;
   }
@@ -861,7 +861,7 @@ class Table {
     strcpy(s,"           ");
     s[level+1] = 0;
     if (1) {
-      if (root == node_loc) {
+      if (root.nodeid == node_loc) {
         dbtout << s << "root " << node_loc << ": "
                << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
       } else if (level == depth-1) {
@@ -890,7 +890,7 @@ class Table {
     if (!g_conf.ebofs_verify) 
       return;
 
-    if (root == -1 && depth == 0) {
+    if (root.nodeid == -1 && depth == 0) {
       return;   // empty!
     }
 
@@ -901,7 +901,7 @@ class Table {
     int before = g_conf.debug_ebofs;
     g_conf.debug_ebofs = 0;
 
-    int err = verify_sub(cursor, root, 0, count, last, on);
+    int err = verify_sub(cursor, root.nodeid, 0, count, last, on);
     if (count != nkeys) {
       cerr << "** count " << count << " != nkeys " << nkeys << std::endl;
       err++;
@@ -917,7 +917,7 @@ class Table {
       int count = 0;
       Cursor cursor(this);
       K last;
-      verify_sub(cursor, root, 0, count, last, on);
+      verify_sub(cursor, root.nodeid, 0, count, last, on);
       assert(err == 0);
     }
   }
