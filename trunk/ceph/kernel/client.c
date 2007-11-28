@@ -5,10 +5,44 @@
 #include <linux/random.h>
 #include "client.h"
 #include "super.h"
+#include "ktcp.h"
 
 
 /* debug level; defined in include/ceph_fs.h */
 int ceph_debug = 20;
+
+/*
+ * directory of filesystems mounted by this host
+ *
+ *   key: fsid.major ^ fsid.minor
+ * value: struct ceph_client.fsid_item
+ */
+static spinlock_t ceph_client_spinlock = SPIN_LOCK_UNLOCKED;
+static int ceph_num_clients = 0;
+
+RADIX_TREE(ceph_clients, GFP_KERNEL);
+
+static void get_client_counter(void) 
+{
+	spin_lock(&ceph_client_spinlock);
+	if (ceph_num_clients == 0) {
+		dout(1, "first client, setting up workqueues\n");
+		ceph_workqueue_init();
+	}
+	ceph_num_clients++;
+	spin_unlock(&ceph_client_spinlock);
+}
+
+static void put_client_counter(void) 
+{
+	spin_lock(&ceph_client_spinlock);
+	ceph_num_clients--;
+	if (ceph_num_clients == 0) {
+		dout(1, "last client, shutting down workqueues\n");
+		ceph_workqueue_shutdown();
+	}
+	spin_unlock(&ceph_client_spinlock);
+}
 
 
 void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg);
@@ -29,6 +63,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	atomic_set(&cl->nref, 0);
 	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
+	get_client_counter();
 
 	/* messenger */
 	cl->msgr = ceph_messenger_create();
@@ -47,6 +82,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	return cl;
 
 fail:
+	put_client_counter();
 	kfree(cl);
 	return ERR_PTR(err);
 }
@@ -133,15 +169,6 @@ static void handle_mon_map(struct ceph_client *client, struct ceph_msg *msg)
 
 
 /*
- * directory of filesystems mounted by this host
- *
- *   key: fsid.major ^ fsid.minor
- * value: struct ceph_client.fsid_item
- */
-
-/* ignore all this until later
-RADIX_TREE(ceph_clients, GFP_KERNEL);
-
 static struct ceph_client *get_client_fsid(struct ceph_fsid *fsid)
 {
 
@@ -190,6 +217,7 @@ void ceph_put_client(struct ceph_client *cl)
 
 		/* unmount */
 		/* ... */
+		put_client_counter();
 		kfree(cl);
 	}
 }

@@ -59,7 +59,7 @@ static int set_sock_callbacks(struct socket *sock, void *user_data)
 {
         struct sock *sk = sock->sk;
         sk->sk_user_data = user_data;
-        printk(KERN_INFO "Entered set_sock_callbacks\n");
+        dout(20, "set_sock_callbacks\n");
 
         /* Install callbacks */
         sk->sk_data_ready = ceph_data_ready;
@@ -80,7 +80,7 @@ int ceph_tcp_connect(struct ceph_connection *con)
 
         ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
-                printk(KERN_INFO "sock_create_kern error: %d\n", ret);
+                derr(1, "ceph_tcp_connect sock_create_kern error: %d\n", ret);
                 goto done;
         }
 
@@ -92,7 +92,7 @@ int ceph_tcp_connect(struct ceph_connection *con)
         if (ret == -EINPROGRESS) return 0;
         if (ret < 0) {
                 /* TBD check for fatal errors, retry if not fatal.. */
-                printk(KERN_INFO "kernel_connect error: %d\n", ret);
+                derr(1, "ceph_tcp_connect kernel_connect error: %d\n", ret);
                 sock_release(con->sock);
                 con->sock = NULL;
         }

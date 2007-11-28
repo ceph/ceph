@@ -93,14 +93,22 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
  */
 static struct ceph_connection *get_connection(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
 {
-	struct ceph_connection *con;
+	struct ceph_connection *con = NULL;
 	struct list_head *head, *p;
 	unsigned long key = hash_addr(addr);
 
 	/* existing? */
 	spin_lock(&msgr->con_lock);
 	head = radix_tree_lookup(&msgr->con_open, key);
-	if (head) {
+	if (head == NULL) 
+		goto out;
+	if (list_empty(head)) {
+		con = list_entry(head, struct ceph_connection, list_bucket);
+		if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
+			atomic_inc(&con->nref);
+			goto out;
+		}
+	} else {
 		list_for_each(p, head) {
 			con = list_entry(p, struct ceph_connection, list_bucket);
 			if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
@@ -121,6 +129,7 @@ out:
 static void put_connection(struct ceph_connection *con) 
 {
 	if (atomic_dec_and_test(&con->nref)) {
+		dout(20, "put_connection destroying %p\n", con);
 		sock_release(con->sock);
 		kfree(con);
 	}
@@ -140,8 +149,10 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 	spin_lock(&msgr->con_lock);
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
+		dout(20, "add_connection %p in existing bucket %lu\n", con, key);
 		list_add(&con->list_bucket, head);
 	} else {
+		dout(20, "add_connection %p in new bucket %lu\n", con, key);
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
 	}
@@ -172,8 +183,10 @@ static void remove_connection(struct ceph_messenger *msgr, struct ceph_connectio
 		/* remove from con_open too */
 		if (list_empty(&con->list_bucket)) {
 			/* last one */
+			dout(20, "remove_connection %p and removing bucket %lu\n", con, key);
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
+			dout(20, "remove_connection %p from bucket %lu\n", con, key);
 			list_del(&con->list_bucket);
 		}
 	}
@@ -742,13 +755,13 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 		con = new_connection(msgr);
 		if (IS_ERR(con))
 			return PTR_ERR(con);
-		dout(5, "opening new connection to peer %x:%d\n",
+		dout(5, "ceph_msg_send opening new connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 		con->peer_addr = msg->hdr.dst.addr;
 		add_connection(msgr, con);
 	} else {
-		dout(5, "had connection to peer %x:%d\n",
+		dout(5, "ceph_msg_send had connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     
@@ -757,21 +770,21 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 
 	/* initiate connect? */
 	if (test_bit(NEW, &con->state)) {
+		dout(5, "ceph_msg_send initiating connect on %p\n", con);
 		ret = ceph_tcp_connect(con);
 		if (ret < 0){
 			derr(1, "connection failure to peer %x:%d\n",
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
 			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 			remove_connection(msgr, con);
-			kfree(con);
+			put_connection(con);
 			return(ret);
-
 		}
 	}
 	
 	/* queue */
-	dout(1, "queuing outgoing message for %s%d\n",
-	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num);
+	dout(1, "ceph_msg_send queuing outgoing message for %s%d on %p\n",
+	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num, con);
 	ceph_msg_get(msg);
 
 	list_add(&msg->list_head, &con->out_queue);
