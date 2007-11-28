@@ -882,6 +882,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_mkfs = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_heartbeat_interval") == 0) 
       g_conf.osd_heartbeat_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--osd_heartbeat_grace") == 0) 
+      g_conf.osd_heartbeat_grace = atoi(args[++i]);
     
     else if (strcmp(args[i], "--osd_age") == 0) 
       g_conf.osd_age = atof(args[++i]);
