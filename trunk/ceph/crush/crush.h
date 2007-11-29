@@ -103,6 +103,7 @@ struct crush_map {
 
 
 /* common destructors */
+extern void crush_calc_parents(struct crush_map *m);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *);

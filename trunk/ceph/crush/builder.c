@@ -37,17 +37,7 @@ void crush_finalize(struct crush_map *map)
 	memset(map->bucket_parents, 0, sizeof(map->bucket_parents[0]) * map->max_buckets);
 	
 	/* build parent maps */
-	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0) continue;
-		for (i=0; i<map->buckets[b]->size; i++) {
-			c = map->buckets[b]->items[i];
-			BUG_ON(c >= map->max_devices);
-			if (c >= 0)
-				map->device_parents[c] = map->buckets[b]->id;
-			else
-				map->bucket_parents[-1-c] = map->buckets[b]->id;
-		}
-	}
+	crush_calc_parents(map);
 
 	/* new device offload map? */
 	if (!map->device_offload) {
