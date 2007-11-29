@@ -845,7 +845,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	INIT_RADIX_TREE(&msgr->con_open, GFP_KERNEL);
 
 	/* create listening socket */
-	ret = ceph_tcp_listen(msgr);
+	ret = ceph_tcp_listen(msgr, myaddr ? ntohs(myaddr->inst.addr.ipaddr.sin_port):0);
 	if (ret < 0) {
 		kfree(msgr);
 		return ERR_PTR(ret);

@@ -103,7 +103,7 @@ done:
 /*
  * setup listening socket
  */
-int ceph_tcp_listen(struct ceph_messenger *msgr)
+int ceph_tcp_listen(struct ceph_messenger *msgr, int port)
 {
 	int ret;
 	struct socket *sock = NULL;
@@ -130,7 +130,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	/* if (!*myaddr) */
 	myaddr->sin_family = AF_INET;
 	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-	myaddr->sin_port = htons(0);  /* any port */
+	myaddr->sin_port = htons(port);  /* any port */
 	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, sizeof(*myaddr));
 	if (ret < 0) {
 		derr(0, "Failed to bind: %d\n", ret);
