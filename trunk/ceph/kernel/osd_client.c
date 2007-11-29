@@ -439,6 +439,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	/* incremental maps */
 	if ((err = ceph_decode_32(&p, end, &nr_maps)) < 0)
 		goto bad;
+	dout(10, " %d inc maps\n", nr_maps);
 	while (nr_maps--) {
 		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
 			goto bad;
@@ -446,6 +447,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			goto bad;
 		next = p + maplen;
 		if (osdc->osdmap && osdc->osdmap->epoch+1 == epoch) {
+			dout(10, "applying incremental map %llu len %d\n", epoch, maplen);
 			newmap = apply_incremental(p, min(p+maplen,end), osdc->osdmap);
 			if (IS_ERR(newmap)) {
 				err = PTR_ERR(newmap);
@@ -455,9 +457,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 				osdmap_destroy(osdc->osdmap);
 				osdc->osdmap = newmap;
 			}
-			dout(1, "applied incremental map %llu\n", epoch);
 		} else {
-			dout(1, "ignored incremental map %llu\n", epoch);
+			dout(10, "ignoring incremental map %llu len %d\n", epoch, maplen);
 		}
 		p = next;
 	}
@@ -465,25 +466,33 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		goto out;
 	
 	/* full maps */
+	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 	if ((err = ceph_decode_32(&p, end, &nr_maps)) < 0)
 		goto bad;
+	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
+	dout(30, " %d full maps\n", nr_maps);
 	while (nr_maps > 1) {
-		dout(5, "skipping non-latest full map\n");
 		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
+		dout(5, "skipping non-latest full map %lld len %d\n", epoch, maplen);
 		p += maplen;
 	}
 	if (nr_maps) {
 		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
 			goto bad;
+	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
+	dout(10, "got %llu\n", epoch);
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
+	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 		if (osdc->osdmap && osdc->osdmap->epoch >= epoch) {
-			dout(10, "full map %llu is older than our %llu\n", 
-			     epoch, osdc->osdmap->epoch);
+			dout(10, "skipping full map %llu len %d, older than our %llu\n", 
+			     epoch, maplen, osdc->osdmap->epoch);
+			p += maplen;
 		} else {
+			dout(10, "taking full map %llu len %d\n", epoch, maplen);
 			newmap = osdmap_decode(&p, min(p+maplen,end));
 			if (IS_ERR(newmap)) {
 				err = PTR_ERR(newmap);
@@ -492,9 +501,9 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			if (osdc->osdmap)
 				osdmap_destroy(osdc->osdmap);
 			osdc->osdmap = newmap;
-			dout(10, "took full map %llu\n", newmap->epoch);
 		}
 	}
+	dout(1, "done\n");
 	
 out:
 	return;

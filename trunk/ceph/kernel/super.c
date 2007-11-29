@@ -185,6 +185,7 @@ enum {
 	Opt_fsidminor,
 	Opt_debug,
 	Opt_monport,
+	Opt_port,
 	Opt_ip
 };
 
@@ -193,6 +194,7 @@ static match_table_t arg_tokens = {
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
 	{Opt_monport, "monport=%d"},
+	{Opt_port, "port=%d"}
 	{Opt_ip, "ip=%s"}
 };
 
@@ -300,6 +302,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			break;
 		case Opt_debug:
 			ceph_debug = intval;
+			break;
+		case Opt_port:
+			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
 		case Opt_ip:
 			parse_ip(argstr[0].from, argstr[0].to-argstr[0].from, &args->my_addr);
