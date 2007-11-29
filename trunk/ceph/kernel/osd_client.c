@@ -312,6 +312,10 @@ void ceph_osdc_init(struct ceph_osd_client *osdc)
 {
 	dout(5, "ceph_osdc_init\n");
 	osdc->osdmap = NULL;
+	osdc->last_tid = 0;
+	INIT_RADIX_TREE(&osdc->request_tree, GFP_KERNEL);
+	osdc->last_requested_map = 0;
+	init_completion(&osdc->map_waiters);
 }
 
 

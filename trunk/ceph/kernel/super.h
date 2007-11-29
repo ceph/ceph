@@ -16,6 +16,7 @@ struct ceph_mount_args {
 	int mntflags;
 	int flags;
 	struct ceph_fsid fsid;
+	struct ceph_entity_addr my_addr;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
 	int mon_port;

@@ -17,13 +17,14 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
         struct ceph_connection *con;
         struct ceph_messenger *msgr;
 
-        printk(KERN_INFO "Entered ceph_data_ready \n");
-
 	if (sk->sk_state == TCP_LISTEN) {
 		msgr = (struct ceph_messenger *)sk->sk_user_data;
+		dout(30, "ceph_data_ready listener %p\n", msgr);
 		queue_work(recv_wq, &msgr->awork);
 	} else {
         	con = (struct ceph_connection *)sk->sk_user_data;
+		dout(30, "ceph_data_ready connection %p state = %u, queuing rwork\n",
+		     con, con->state);
 		queue_work(recv_wq, &con->rwork);
 	}
 }
@@ -33,9 +34,9 @@ static void ceph_write_space(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-        printk(KERN_INFO "Entered ceph_write_space state = %u\n",con->state);
-        if (test_bit(WRITE_PEND, &con->state)) {
-                printk(KERN_INFO "WRITE_PEND set in connection\n");
+        dout(30, "ceph_write_space %p state = %u\n", con, con->state);
+        if (test_bit(WRITE_PENDING, &con->state)) {
+                dout(30, "ceph_write_space %p queueing write work\n", con);
                 queue_work(send_wq, &con->swork);
         }
 }
@@ -44,13 +45,14 @@ static void ceph_write_space(struct sock *sk)
 static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
-        printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
 
+        dout(30, "ceph_state_change %p state = %u\n", con, con->state);
         if (sk->sk_state == TCP_ESTABLISHED) {
-                if (test_and_clear_bit(CONNECTING, &con->state) ||
-		    test_bit(ACCEPTING, &con->state))
-                        set_bit(OPEN, &con->state);
-                ceph_write_space(sk);
+		/*if (test_bit(CONNECTING, &con->state) ||
+		  test_bit(ACCEPTING, &con->state)) {*/
+			dout(30, "ceph_state_change %p socket established, queuing swork\n", con);
+			queue_work(send_wq, &con->swork);
+			/*}*/
         }
 }
 
@@ -76,20 +78,18 @@ int ceph_tcp_connect(struct ceph_connection *con)
 	int ret;
 	struct sockaddr *paddr = (struct sockaddr *)&con->peer_addr.ipaddr;
 
-        set_bit(CONNECTING, &con->state);
-
         ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
                 derr(1, "ceph_tcp_connect sock_create_kern error: %d\n", ret);
                 goto done;
         }
 
-        /* setup callbacks */
         set_sock_callbacks(con->sock, (void *)con);
-
-        ret = con->sock->ops->connect(con->sock, paddr,
+        
+	ret = con->sock->ops->connect(con->sock, paddr,
                                       sizeof(struct sockaddr_in), O_NONBLOCK);
-        if (ret == -EINPROGRESS) return 0;
+        if (ret == -EINPROGRESS) 
+		return 0;
         if (ret < 0) {
                 /* TBD check for fatal errors, retry if not fatal.. */
                 derr(1, "ceph_tcp_connect kernel_connect error: %d\n", ret);
@@ -144,9 +144,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "failed to getsockname: %d\n", ret);
 		goto err;
 	}
-	dout(0, "ceph_tcp_listen on %x:%d\n",
-	     ntohl(myaddr->sin_addr.s_addr),
-	     ntohs(myaddr->sin_port));
+	dout(0, "ceph_tcp_listen on port %d\n", ntohs(myaddr->sin_port));
 
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
 				(char *)&optval, sizeof(optval)); 
@@ -208,7 +206,6 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 		goto err;
 	}
 
-        set_bit(ACCEPTING, &con->state);
 done:
 	return ret;
 err:
@@ -225,18 +222,12 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;		/* length read */
 
-	printk(KERN_INFO "entered krevmsg\n");
+	dout(30, "ceph_tcp_recvmsg %p len %d\n", sock, (int)len);
 	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
-
 	/* receive one kvec for now...  */
 	rlen = kernel_recvmsg(sock, &msg, &iov, 1, len, msg.msg_flags);
-        if (rlen < 0) {
-		printk(KERN_INFO "kernel_recvmsg error: %d\n", rlen);
-        }
-	/* TBD: kernel_recvmsg doesn't fill in the name and namelen
-         */
+	dout(30, "ceph_tcp_recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
-
 }
 
 /*
@@ -247,13 +238,10 @@ int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
 
-	printk(KERN_INFO "entered ksendmsg\n");
+	dout(30, "ceph_tcp_sendmsg %p len %d\n", sock, (int)len);
 	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
-
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
-        if (rlen < 0) {
-		printk(KERN_INFO "kernel_sendmsg error: %d\n", rlen);
-        }
+	dout(30, "ceph_tcp_sendmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
 

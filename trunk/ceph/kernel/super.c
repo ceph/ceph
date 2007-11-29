@@ -184,14 +184,16 @@ enum {
 	Opt_fsidmajor, 
 	Opt_fsidminor,
 	Opt_debug,
-	Opt_monport	
+	Opt_monport,
+	Opt_ip
 };
 
 static match_table_t arg_tokens = {
 	{Opt_fsidmajor, "fsidmajor=%ld"},
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
-	{Opt_monport, "monport=%d"}
+	{Opt_monport, "monport=%d"},
+	{Opt_ip, "ip=%s"}
 };
 
 /*
@@ -207,18 +209,20 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
 	for (i=0; *p && i<4; i++) {
 		v = 0;
+		//dout(30, " i=%d at %s\n", i, p);
 		while (*p && *p != '.' && p < c+len) {
 			if (*p < '0' || *p > '9')
 				goto bad;
 			v = (v * 10) + (*p - '0');
 			p++;
 		}
+		//dout(30, " v = %d\n", v);
 		ip = (ip << 8) + v;
 		if (!*p) 
 			break;
 		p++;
 	}
-	if (i < 4) 
+	if (p < c+len) 
 		goto bad;
 
 	*(__u32*)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
@@ -269,16 +273,17 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
-		int token;
-		int intval;
-		int ret;
+		int token, intval, ret, i;
 		if (!*c) 
 			continue;
 		token = match_token(c, arg_tokens, argstr);
-		ret = match_int(&argstr[0], &intval);
-		if (ret < 0) {
-			dout(0, "bad mount arg, not int\n");
-			continue;
+		if (token < Opt_ip) {
+			ret = match_int(&argstr[0], &intval);
+			if (ret < 0) {
+				dout(0, "bad mount arg, not int\n");
+				continue;
+			}
+			dout(30, "got token %d intval %d\n", token, intval);
 		}
 		switch (token) {
 		case Opt_fsidmajor:
@@ -288,17 +293,23 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			args->fsid.minor = intval;
 			break;
 		case Opt_monport:
+			dout(25, "parse_mount_args monport=%d\n", intval);
 			args->mon_port = intval;
+			for (i=0; i<args->num_mon; i++)
+				args->mon_addr[i].ipaddr.sin_port = htons(intval);
 			break;
 		case Opt_debug:
 			ceph_debug = intval;
 			break;
+		case Opt_ip:
+			parse_ip(argstr[0].from, argstr[0].to-argstr[0].from, &args->my_addr);
+			break;
 		default:
-			derr(1, "bad mount option %s\n", c);
+			derr(1, "parse_mount_args bad token %d\n", token);
 			continue;
 		}
 	}
-	
+
 	return 0;
 }
 

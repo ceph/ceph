@@ -52,13 +52,13 @@ struct ceph_msg_pos {
 
 
 /* current state of connection */
-#define NEW 1
-#define CONNECTING 2
-#define ACCEPTING 3
-#define OPEN 4
-#define WRITE_PEND 5
-#define REJECTING 6
-#define CLOSED 7
+#define NEW            1
+#define CONNECTING     2
+#define ACCEPTING      3
+#define OPEN           4
+#define WRITE_PENDING  5
+#define REJECTING      6
+#define CLOSED         7
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -66,7 +66,7 @@ struct ceph_connection {
 	__u32 state;		/* connection state */
 	
 	atomic_t nref;
-	spinlock_t con_lock;    /* connection lock */
+	spinlock_t lock;        /* connection lock */
 
 	struct list_head list_all;   /* msgr->con_all */
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
@@ -75,6 +75,10 @@ struct ceph_connection {
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
+
+	/* connect state */
+	struct ceph_entity_addr actual_peer_addr;
+	__u32 peer_connect_seq;
 
 	/* out queue */
 	struct list_head out_queue;
@@ -103,7 +107,7 @@ struct ceph_connection {
 };
 
 
-extern struct ceph_messenger *ceph_messenger_create(void);
+extern struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
@@ -118,22 +122,22 @@ extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg);
 static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
 	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
-	*v = le64_to_cpu(*(__u64*)p);
-	p += sizeof(*v);
+	*v = le64_to_cpu(*(__u64*)*p);
+	*p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_32(void **p, void *end, __u32 *v) {
 	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
-	*v = le32_to_cpu(*(__u32*)p);
-	p += sizeof(*v);
+	*v = le32_to_cpu(*(__u32*)*p);
+	*p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_16(void **p, void *end, __u16 *v) {
 	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
-	*v = le16_to_cpu(*(__u16*)p);
-	p += sizeof(*v);
+	*v = le16_to_cpu(*(__u16*)*p);
+	*p += sizeof(*v);
 	return 0;
 }
 static __inline__ int ceph_decode_copy(void **p, void *end, void *v, int len) {
@@ -159,10 +163,10 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
 	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;
-	v->type = le32_to_cpu(*(__u32*)p);
-	p += sizeof(__u32);
-	v->num = le32_to_cpu(*(__u32*)p);
-	p += sizeof(__u32);
+	v->type = le32_to_cpu(*(__u32*)*p);
+	*p += sizeof(__u32);
+	v->num = le32_to_cpu(*(__u32*)*p);
+	*p += sizeof(__u32);
 	return 0;
 }
 
@@ -207,15 +211,15 @@ static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
 
 static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 	BUG_ON(*p + sizeof(v) > end);
-	*(__u64*)p = cpu_to_le64(v);
-	p += sizeof(v);
+	*(__u64*)*p = cpu_to_le64(v);
+	*p += sizeof(v);
 	return 0;
 }
 
 static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
 	BUG_ON(*p + sizeof(v) > end);
-	*(__u32*)p = cpu_to_le64(v);
-	p += sizeof(v);
+	*(__u32*)*p = cpu_to_le64(v);
+	*p += sizeof(v);
 	return 0;
 }
 

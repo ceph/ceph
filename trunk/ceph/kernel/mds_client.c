@@ -221,12 +221,14 @@ static void wait_for_new_map(struct ceph_mds_client *mdsc)
 
 void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 {
+	spin_lock_init(&mdsc->lock);
 	mdsc->client = client;
 	mdsc->mdsmap = 0;  /* none yet */
 	mdsc->sessions = 0;
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
 	INIT_RADIX_TREE(&mdsc->request_tree, GFP_KERNEL);
+	mdsc->last_requested_map = 0;
 	init_completion(&mdsc->map_waiters);
 }
 

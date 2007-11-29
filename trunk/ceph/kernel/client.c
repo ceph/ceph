@@ -9,7 +9,7 @@
 
 
 /* debug level; defined in include/ceph_fs.h */
-int ceph_debug = 20;
+int ceph_debug = 200;
 
 /*
  * directory of filesystems mounted by this host
@@ -66,7 +66,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	get_client_counter();
 
 	/* messenger */
-	cl->msgr = ceph_messenger_create();
+	cl->msgr = ceph_messenger_create(&args->my_addr);
 	if (IS_ERR(cl->msgr)) {
 		err = PTR_ERR(cl->msgr);
 		goto fail;
@@ -236,7 +236,9 @@ void ceph_put_client(struct ceph_client *cl)
  */
 void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 {
-	dout(5, "dispatch %p type %d\n", (void*)msg, msg->hdr.type);
+	dout(5, "dispatch from %s%d type %d len %d+%d\n",
+	     ceph_name_type_str(msg->hdr.src.name.type), msg->hdr.src.name.num,
+	     msg->hdr.type, msg->hdr.front_len, msg->hdr.data_len);
 
 	/* deliver the message */
 	switch (msg->hdr.type) {

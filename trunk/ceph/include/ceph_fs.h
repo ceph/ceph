@@ -189,9 +189,9 @@ struct ceph_entity_addr {
 	struct sockaddr_in ipaddr;
 };
 
-#define ceph_entity_addr_is_local(a,b)		\
-	((a).nonce == (b).nonce &&		\
-	 (a).ipaddr == (b).ipaddr)
+#define ceph_entity_addr_is_local(a,b)					\
+	((a).nonce == (b).nonce &&					\
+	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
 
 #define compare_addr(a, b)			\
 	((a)->erank == (b)->erank &&		\
