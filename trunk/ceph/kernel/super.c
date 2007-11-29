@@ -194,7 +194,7 @@ static match_table_t arg_tokens = {
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
 	{Opt_monport, "monport=%d"},
-	{Opt_port, "port=%d"}
+	{Opt_port, "port=%d"},
 	{Opt_ip, "ip=%s"}
 };
 

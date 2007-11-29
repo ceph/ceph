@@ -270,9 +270,9 @@ static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_64(p, end, &map->fsid.minor)) < 0)
 		goto bad;
-	if ((err = ceph_decode_64(p, end, &map->epoch)) < 0)
+	if ((err = ceph_decode_32(p, end, &map->epoch)) < 0)
 		goto bad;
-	if ((err = ceph_decode_64(p, end, &map->mon_epoch)) < 0)
+	if ((err = ceph_decode_32(p, end, &map->mon_epoch)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->ctime.tv_sec)) < 0)
 		goto bad;
@@ -320,7 +320,7 @@ static struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_os
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
 	struct ceph_fsid fsid;
-	__u64 epoch, mon_epoch;
+	__u32 epoch, mon_epoch;
 	struct ceph_timeval ctime;
 	__u32 len;
 	__u32 max;
@@ -330,10 +330,10 @@ static struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_os
 		goto bad;
 	if ((err = ceph_decode_64(p, end, &fsid.minor)) < 0)
 		goto bad;
-	if ((err = ceph_decode_64(p, end, &epoch)) < 0)
+	if ((err = ceph_decode_32(p, end, &epoch)) < 0)
 		goto bad;
 	BUG_ON(epoch != map->epoch+1);
-	if ((err = ceph_decode_64(p, end, &mon_epoch)) < 0)
+	if ((err = ceph_decode_32(p, end, &mon_epoch)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &ctime.tv_sec)) < 0)
 		goto bad;
@@ -428,7 +428,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	void *p, *end, *next;
 	__u32 nr_maps, maplen;
-	__u64 epoch;
+	__u32 epoch;
 	struct ceph_osdmap *newmap = 0;
 	int err;
 
@@ -441,7 +441,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		goto bad;
 	dout(10, " %d inc maps\n", nr_maps);
 	while (nr_maps--) {
-		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+		if ((err = ceph_decode_32(&p, end, &epoch)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
@@ -472,7 +472,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 	dout(30, " %d full maps\n", nr_maps);
 	while (nr_maps > 1) {
-		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+		if ((err = ceph_decode_32(&p, end, &epoch)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
@@ -480,7 +480,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		p += maplen;
 	}
 	if (nr_maps) {
-		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+		if ((err = ceph_decode_32(&p, end, &epoch)) < 0)
 			goto bad;
 	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 	dout(10, "got %llu\n", epoch);
