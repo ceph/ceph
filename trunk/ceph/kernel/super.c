@@ -380,7 +380,7 @@ static struct file_system_type ceph_fs_type = {
 /*	.fs_flags	=   */
 };
 
-int __init init_ceph(void)
+static int __init init_ceph(void)
 {
 	int ret = 0;
 
@@ -393,14 +393,13 @@ int __init init_ceph(void)
 	return ret;
 }
 
-void __exit exit_ceph(void)
+static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 
 	unregister_filesystem(&ceph_fs_type);
 	destroy_inodecache();
 }
-
 
 module_init(init_ceph);
 module_exit(exit_ceph);

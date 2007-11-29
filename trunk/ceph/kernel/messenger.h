@@ -172,10 +172,10 @@ static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_n
 /* hmm, these are actually identical, yeah? */
 static __inline__ void ceph_decode_inst(struct ceph_entity_inst *to)
 {
-	to->name.type = le32_to_cpu(to->name.type);
-	to->name.num = le32_to_cpu(to->name.num);
-	to->addr.erank = le32_to_cpu(to->addr.erank);
-	to->addr.nonce = le32_to_cpu(to->addr.nonce);
+	le32_to_cpus(&to->name.type);
+	le32_to_cpus(&to->name.num);
+	le32_to_cpus(&to->addr.erank);
+	le32_to_cpus(&to->addr.nonce);
 }
 static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph_entity_inst *from)
 {
