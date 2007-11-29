@@ -128,7 +128,7 @@ int Rank::Accepter::start()
   assert(listen_sd > 0);
   
   /* bind to port */
-  int rc = bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+  int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
   if (rc < 0) 
     derr(0) << "accepter.start unable to bind to " << g_my_addr.v.ipaddr << dendl;
   assert(rc >= 0);

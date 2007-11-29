@@ -45,7 +45,7 @@ class MMDSMap : public Message {
   }
   */
 
-  version_t epoch;
+  epoch_t epoch;
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
