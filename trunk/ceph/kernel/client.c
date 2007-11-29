@@ -249,7 +249,8 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 
 		/* mds client */
 	case CEPH_MSG_MDS_MAP:
-		ceph_mdsc_handle_map(&client->mdsc, msg);
+		//ceph_mdsc_handle_map(&client->mdsc, msg);
+		ceph_msg_put(msg);
 		break;
 	case CEPH_MSG_CLIENT_REPLY:
 		ceph_mdsc_handle_reply(&client->mdsc, msg);

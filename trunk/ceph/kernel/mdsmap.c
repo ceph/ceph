@@ -81,6 +81,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	for (i=0; i<n; i++) {
 		if ((err = ceph_decode_32(p, end, &mds)) != 0)
 			goto bad;
+		if (mds >= m->m_max_mds)
+			goto bad;
 		if ((err = ceph_decode_32(p, end, &m->m_state[mds])) != 0)
 			goto bad;
 	}
@@ -96,12 +98,15 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	for (i=0; i<n; i++) {
 		if ((err = ceph_decode_32(p, end, &mds)) != 0)
 			goto bad;
+		if (mds >= m->m_max_mds)
+			goto bad;
 		*p += sizeof(struct ceph_entity_name);
 		if ((err = ceph_decode_addr(p, end, &m->m_addr[mds])) != 0)
 			goto bad;
 	}
 
 	/* ok, we don't care about the rest. */
+	dout(30, "mdsmap_decode success epoch %llu\n", m->m_epoch);
 	return m;
 
 bad:

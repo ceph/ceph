@@ -83,15 +83,27 @@ static int choose_mds(struct ceph_mds_client *mdsc, struct ceph_mds_request *req
 
 static void register_session(struct ceph_mds_client *mdsc, int mds)
 {
+	struct ceph_mds_session *s;
+
 	/* register */
 	if (mds >= mdsc->max_sessions) {
 		/* realloc */
+		struct ceph_mds_session **sa;
+		sa = kzalloc(mds * sizeof(struct ceph_mds_session), GFP_KERNEL);
+		BUG_ON(sa == NULL);  /* i am lazy */
+		if (mdsc->sessions) {
+			memcpy(sa, mdsc->sessions, 
+			       mdsc->max_sessions*sizeof(struct ceph_mds_session));
+			kfree(mdsc->sessions);
+		}
+		mdsc->sessions = sa;
 	}
-	mdsc->sessions[mds] = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
-	mdsc->sessions[mds]->s_state = 0;
-	mdsc->sessions[mds]->s_cap_seq = 0;
-	init_completion(&mdsc->sessions[mds]->s_completion);
-	atomic_set(&mdsc->sessions[mds]->s_ref, 1);
+	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
+	s->s_state = 0;
+	s->s_cap_seq = 0;
+	init_completion(&s->s_completion);
+	atomic_set(&s->s_ref, 1);
+	mdsc->sessions[mds] = s;
 }
 
 static struct ceph_mds_session *get_session(struct ceph_mds_client *mdsc, int mds)
@@ -223,7 +235,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 {
 	spin_lock_init(&mdsc->lock);
 	mdsc->client = client;
-	mdsc->mdsmap = 0;  /* none yet */
+	mdsc->mdsmap = 0;            /* none yet */
 	mdsc->sessions = 0;
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
@@ -640,7 +652,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	/* do we need it? */
 	spin_lock(&mdsc->lock);
 	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
-		dout(2, "ceph_mdsc_handle_map epoch %llu < our %llu\n", epoch, mdsc->mdsmap->m_epoch);
+		dout(2, "ceph_mdsc_handle_map epoch %llu < our %llu\n", 
+		     epoch, mdsc->mdsmap->m_epoch);
 		spin_unlock(&mdsc->lock);
 		goto out;
 	}
@@ -658,7 +671,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			oldmap = mdsc->mdsmap;
 			mdsc->mdsmap = newmap;
 			spin_unlock(&mdsc->lock);
-			ceph_mdsmap_destroy(oldmap);
+			if (oldmap)
+				ceph_mdsmap_destroy(oldmap);
 		} else {
 			spin_unlock(&mdsc->lock);
 			dout(2, "ceph_mdsc_handle_map lost decode race?\n");

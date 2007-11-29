@@ -145,11 +145,11 @@ static int ceph_set_super(struct super_block *s, void *data)
 	
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)
-		goto out; 
+		goto bail; 
 	
 	return ret;
 
-out:
+bail:
 	kfree(s->s_fs_info);
 	s->s_fs_info = 0;
 	return ret;

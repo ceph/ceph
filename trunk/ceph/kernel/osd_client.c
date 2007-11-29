@@ -149,6 +149,7 @@ static struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_os
 		goto bad;
 	if ((err = ceph_decode_64(p, end, &epoch)) < 0)
 		goto bad;
+	BUG_ON(epoch != map->epoch+1);
 	if ((err = ceph_decode_64(p, end, &mon_epoch)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &ctime.tv_sec)) < 0)
@@ -163,8 +164,6 @@ static struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_os
 		newmap = osdmap_decode(p, min(*p+len, end));
 		return newmap;  /* error or not */
 	}
-	if (!map || epoch != map->epoch+1) 
-		return 0; /* old or new, or no existing; done */
 
 	/* new crush? */
 	if ((err = ceph_decode_32(p, end, &len)) < 0)
@@ -246,6 +245,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	void *p, *end, *next;
 	__u32 nr_maps, maplen;
+	__u64 epoch;
 	struct ceph_osdmap *newmap = 0;
 	int err;
 
@@ -257,19 +257,25 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	if ((err = ceph_decode_32(&p, end, &nr_maps)) < 0)
 		goto bad;
 	while (nr_maps--) {
+		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
 		next = p + maplen;
-		newmap = apply_incremental(p, min(p+maplen,end), osdc->osdmap);
-		if (IS_ERR(newmap)) {
-			err = PTR_ERR(newmap);
-			goto bad;
+		if (osdc->osdmap && osdc->osdmap->epoch+1 == epoch) {
+			newmap = apply_incremental(p, min(p+maplen,end), osdc->osdmap);
+			if (IS_ERR(newmap)) {
+				err = PTR_ERR(newmap);
+				goto bad;
+			}
+			if (newmap != osdc->osdmap) {
+				osdmap_destroy(osdc->osdmap);
+				osdc->osdmap = newmap;
+			}
+			dout(1, "applied incremental map %llu\n", epoch);
+		} else {
+			dout(1, "ignored incremental map %llu\n", epoch);
 		}
-		if (newmap != osdc->osdmap) {
-			osdmap_destroy(osdc->osdmap);
-			osdc->osdmap = newmap;
-		}
-		dout(1, "got incremental map %llu\n", newmap->epoch);
 		p = next;
 	}
 	if (newmap) 
@@ -279,22 +285,32 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	if ((err = ceph_decode_32(&p, end, &nr_maps)) < 0)
 		goto bad;
 	while (nr_maps > 1) {
-		dout(5, "ignoring non-latest full map\n");
+		dout(5, "skipping non-latest full map\n");
+		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
 		p += maplen;
 	}
 	if (nr_maps) {
+		if ((err = ceph_decode_64(&p, end, &epoch)) < 0)
+			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
-		newmap = osdmap_decode(&p, min(p+maplen,end));
-		if (IS_ERR(newmap)) {
-			err = PTR_ERR(newmap);
-			goto bad;
+		if (osdc->osdmap && osdc->osdmap->epoch >= epoch) {
+			dout(10, "full map %llu is older than our %llu\n", 
+			     epoch, osdc->osdmap->epoch);
+		} else {
+			newmap = osdmap_decode(&p, min(p+maplen,end));
+			if (IS_ERR(newmap)) {
+				err = PTR_ERR(newmap);
+				goto bad;
+			}
+			if (osdc->osdmap)
+				osdmap_destroy(osdc->osdmap);
+			osdc->osdmap = newmap;
+			dout(10, "took full map %llu\n", newmap->epoch);
 		}
-		osdmap_destroy(osdc->osdmap);
-		osdc->osdmap = newmap;
-		dout(1, "got full map %llu\n", newmap->epoch);
 	}
 	
 out:

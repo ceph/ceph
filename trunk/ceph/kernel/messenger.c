@@ -234,7 +234,8 @@ static int write_partial_kvec(struct ceph_connection *con)
 	dout(30, "write_partial_kvec %p left %d vec %d bytes\n", con, 
 	     con->out_kvec_left, con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
-		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, con->out_kvec_left, con->out_kvec_bytes);
+		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, 
+				       con->out_kvec_left, con->out_kvec_bytes);
 		if (ret <= 0) goto out;
 		con->out_kvec_bytes -= ret;
 		if (con->out_kvec_bytes == 0)
@@ -295,7 +296,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	/* move to sending/sent list */
 	list_del(&m->list_head);
 	list_add_tail(&m->list_head, &con->out_sent);
-	con->out_msg = m;
+	con->out_msg = m;  /* FIXME: do we want to take a reference here? */
 
 	/* encode header */
 	ceph_encode_header(&con->out_hdr, &m->hdr);
@@ -443,6 +444,7 @@ done:
  */
 static int prepare_read_message(struct ceph_connection *con)
 {
+	BUG_ON(con->in_msg != NULL);
 	con->in_tag = CEPH_MSGR_TAG_MSG;
 	con->in_base_pos = 0;
 	con->in_msg = kzalloc(sizeof(*con->in_msg), GFP_KERNEL);
@@ -485,6 +487,7 @@ static int read_message_partial(struct ceph_connection *con)
 			m->front.iov_base = kmalloc(m->hdr.front_len, GFP_KERNEL);
 			if (m->front.iov_base == NULL)
 				return -ENOMEM;
+			dout(50, "front is %p\n", m->front.iov_base);
 		}
 		left = m->hdr.front_len - m->front.iov_len;
 		ret = ceph_tcp_recvmsg(con->sock, (char*)m->front.iov_base + m->front.iov_len, left);
@@ -633,20 +636,24 @@ static void process_connect(struct ceph_connection *con)
 static int read_accept_partial(struct ceph_connection *con)
 {
 	int ret;
+	int to;
 
 	/* peer addr */
-	while (con->in_base_pos < sizeof(con->peer_addr)) {
-		int left = sizeof(con->peer_addr) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->peer_addr + con->in_base_pos, left);
+	to = sizeof(con->peer_addr);
+	while (con->in_base_pos < to) {
+		int left = to - con->in_base_pos;
+		int have = con->in_base_pos;
+		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->peer_addr + have, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
 
 	/* connect_seq */
-	while (con->in_base_pos < sizeof(con->peer_addr) + sizeof(con->connect_seq)) {
-		int off = con->in_base_pos - sizeof(con->peer_addr);
-		int left = sizeof(con->peer_addr) + sizeof(con->connect_seq) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->connect_seq + off, left);
+	to += sizeof(con->connect_seq);
+	while (con->in_base_pos < to) {
+		int left = to - con->in_base_pos;
+		int have = sizeof(con->peer_addr) - left;
+		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->connect_seq + have, left);
 		if (ret <= 0) return ret;
 		con->in_base_pos += ret;
 	}
@@ -665,6 +672,7 @@ static void process_accept(struct ceph_connection *con)
 	existing = get_connection(con->msgr, &con->peer_addr);
 	if (existing) {
 		spin_lock(&existing->lock);
+		/* replace existing connection? */
 		if ((test_bit(CONNECTING, &existing->state) && 
 		     compare_addr(&con->msgr->inst.addr, &con->peer_addr)) ||
 		    (test_bit(OPEN, &existing->state) && 
@@ -834,9 +842,9 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 
 	/* create listening socket */
 	ret = ceph_tcp_listen(msgr);
-	if(ret < 0) {
+	if (ret < 0) {
 		kfree(msgr);
-		return  ERR_PTR(ret);
+		return ERR_PTR(ret);
 	}
 	if (myaddr) 
 		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
@@ -949,6 +957,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 	m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
 	if (m->front.iov_base == NULL)
 		goto out2;
+	dout(50, "ceph_msg_new front is %p\n", m->front.iov_base);
 	m->front.iov_len = front_len;
 
 	/* pages */
@@ -981,11 +990,12 @@ void ceph_msg_put(struct ceph_msg *m)
 		if (m->pages) {
 			for (i=0; i<m->nr_pages; i++)
 				if (m->pages[i])
-					kfree(m->pages[i]);
+					__free_pages(m->pages[i], 0);
 			kfree(m->pages);
 		}
-		if (m->front.iov_base)
+		if (m->front.iov_base) {
 			kfree(m->front.iov_base);
+		}
 		kfree(m);
 	}
 }
