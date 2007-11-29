@@ -101,19 +101,18 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	client->mounting = 06;  /* FIXME don't wait for osd map, for now */
 
 	/* send mount request */
-	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0);
-	if (IS_ERR(mount_msg))
-		return PTR_ERR(mount_msg);
-	ceph_msg_get(mount_msg);  /* grab ref; we may retry */
 trymount:
 	get_random_bytes(&r, 1);
 	which = r % args->num_mon;
+	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0);
+	if (IS_ERR(mount_msg))
+		return PTR_ERR(mount_msg);
 	mount_msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MON;
 	mount_msg->hdr.dst.name.num = which;
 	mount_msg->hdr.dst.addr = args->mon_addr[which];
-	dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
-	
+
 	ceph_msg_send(client->msgr, mount_msg);
+	dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
 
 	/* wait */
 	dout(10, "mount waiting\n");
@@ -128,7 +127,6 @@ trymount:
 			goto trymount;
 		return -EIO;
 	}
-	ceph_msg_put(mount_msg);
 
 	/* get handle for mount path */
 	err = ceph_mdsc_do(&client->mdsc, CEPH_MDS_OP_OPEN,

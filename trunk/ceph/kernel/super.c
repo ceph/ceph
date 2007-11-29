@@ -323,7 +323,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	int error;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 
-	dout(5, "ceph_get_sb\n");
+	dout(25, "ceph_get_sb\n");
 	
 	error = parse_mount_args(flags, data, dev_name, &mount_args);
 	if (error < 0) 
@@ -355,14 +355,13 @@ out_splat:
 	up_write(&s->s_umount);
 	deactivate_super(s);
 out:
-	kfree(data);
+	dout(25, "ceph_get_sb fail %d\n", error);
 	return error;
 }
 
 static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
-	dout(5, "ceph_kill_sb\n");
 	kill_anon_super(s);
 	if (sbinfo->sb_client)
 		ceph_put_client(sbinfo->sb_client);
@@ -399,9 +398,6 @@ void __exit exit_ceph(void)
 	dout(1, "exit_ceph\n");
 
 	unregister_filesystem(&ceph_fs_type);
-	if (send_wq)
-		ceph_workqueue_shutdown();
-
 	destroy_inodecache();
 }
 

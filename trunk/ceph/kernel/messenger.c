@@ -954,11 +954,15 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 	m->hdr.data_off = page_off;
 
 	/* front */
-	m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
-	if (m->front.iov_base == NULL)
-		goto out2;
-	dout(50, "ceph_msg_new front is %p\n", m->front.iov_base);
-	m->front.iov_len = front_len;
+	if (front_len) {
+		m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
+		if (m->front.iov_base == NULL)
+			goto out2;
+		dout(50, "ceph_msg_new front is %p len %d\n", m->front.iov_base, front_len);
+		m->front.iov_len = front_len;
+	} else {
+		m->front.iov_base = 0;
+	}
 
 	/* pages */
 	m->nr_pages = calc_pages_for(page_len, page_off);

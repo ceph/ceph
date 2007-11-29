@@ -40,7 +40,6 @@ struct ceph_msg {
 	struct kvec front;              /* first bit of message */
 	struct page **pages;            /* data payload */
 	unsigned nr_pages;              /* size of page array */
-
 	struct list_head list_head;
 	atomic_t nref;
 };
