@@ -212,7 +212,6 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 	spin_unlock(&mdsc->lock);
 
 out:
-	ceph_msg_put(msg);
 	return;
 	
 bad:
@@ -398,7 +397,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	put_request(req);
 	
 done:
-	ceph_msg_put(msg);
 	return;
 }
 
@@ -624,7 +622,6 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 	put_request(req);
 
 out:
-	ceph_msg_put(msg);
 	return;
 
 bad:
@@ -688,7 +685,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	complete(&mdsc->map_waiters);
 
 out:
-	ceph_msg_put(msg);
 	return;
 bad:
 	dout(1, "corrupt map\n");

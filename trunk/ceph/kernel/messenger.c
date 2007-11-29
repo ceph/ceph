@@ -13,7 +13,7 @@ static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reject = CEPH_MSGR_TAG_REJECT;
 static char tag_msg = CEPH_MSGR_TAG_MSG;
 static char tag_ack = CEPH_MSGR_TAG_ACK;
-static char tag_close = CEPH_MSGR_TAG_CLOSE;
+//static char tag_close = CEPH_MSGR_TAG_CLOSE;
 
 static void try_read(struct work_struct *);
 static void try_write(struct work_struct *);
@@ -396,6 +396,8 @@ static void try_write(struct work_struct *work)
 	msgr = con->msgr;
 
 more:
+	dout(30, "try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
+
 	/* kvec data queued? */
 	if (con->out_kvec_left) {
 		ret = write_partial_kvec(con);
@@ -444,17 +446,18 @@ done:
  */
 static int prepare_read_message(struct ceph_connection *con)
 {
+	int err;
 	BUG_ON(con->in_msg != NULL);
 	con->in_tag = CEPH_MSGR_TAG_MSG;
 	con->in_base_pos = 0;
-	con->in_msg = kzalloc(sizeof(*con->in_msg), GFP_KERNEL);
-	if (con->in_msg == NULL) {
-		/* TBD: we don't check for error in caller, handle error */
-		derr(1, "kmalloc failure on incoming message\n");
-		return -ENOMEM;
+	con->in_msg = ceph_msg_new(0, 0, 0, 0);
+	if (IS_ERR(con->in_msg)) {
+		/* TBD: we don't check for error in caller, handle error here? */
+		err = PTR_ERR(con->in_msg);
+		con->in_msg = 0;		
+		derr(1, "kmalloc failure on incoming message %d\n", err);
+		return err;
 	}
-	
-	ceph_msg_get(con->in_msg);
 	return 0;
 }
 
@@ -582,7 +585,7 @@ static int read_connect_partial(struct ceph_connection *con)
 	}
 
 	/* in_tag */
-	to = sizeof(con->actual_peer_addr) + 1;
+	to += 1;
 	if (con->in_base_pos < to) {
 		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
 		if (ret <= 0) goto out;
@@ -725,7 +728,10 @@ more:
 	 * TBD: maybe store error in ceph_connection
          */
 
-	if (test_bit(CLOSED, &con->state)) goto done;
+	if (test_bit(CLOSED, &con->state)) {
+		dout(20, "try_read closed\n");
+		goto done;
+	}
 	if (test_bit(ACCEPTING, &con->state)) {
 		dout(20, "try_read accepting\n");
 		ret = read_accept_partial(con);
@@ -759,9 +765,7 @@ more:
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
 		ret = read_message_partial(con);
 		if (ret <= 0) goto done;
-		/* got a full message! */
-		msgr->dispatch(con->msgr->parent, con->in_msg);
-		ceph_msg_put(con->in_msg);
+		msgr->dispatch(con->msgr->parent, con->in_msg); /* fixme: use a workqueue */
 		con->in_msg = 0;
 		con->in_tag = CEPH_MSGR_TAG_READY;
 		goto more;
@@ -912,6 +916,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	dout(5, "ceph_msg_send connection %p state is %u\n", con, con->state);
 	if (test_and_clear_bit(NEW, &con->state)) {
 		set_bit(CONNECTING, &con->state);
+		prepare_write_connect(msgr, con);
 		dout(5, "ceph_msg_send initiating connect on %p new state %u\n", con, con->state);
 		ret = ceph_tcp_connect(con);
 		if (ret < 0) {
@@ -919,10 +924,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
 			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 			remove_connection(msgr, con);
-			put_connection(con);
-			return(ret);
+			goto out;
 		}
-		prepare_write_connect(msgr, con);
 	}
 	
 	/* queue */
@@ -932,6 +935,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
 
+out:
 	spin_unlock(&con->lock);
 	put_connection(con);
 	return ret;
@@ -959,10 +963,10 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 		if (m->front.iov_base == NULL)
 			goto out2;
 		dout(50, "ceph_msg_new front is %p len %d\n", m->front.iov_base, front_len);
-		m->front.iov_len = front_len;
 	} else {
 		m->front.iov_base = 0;
 	}
+	m->front.iov_len = front_len;
 
 	/* pages */
 	m->nr_pages = calc_pages_for(page_len, page_off);
@@ -991,6 +995,7 @@ void ceph_msg_put(struct ceph_msg *m)
 	int i;
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(30, "ceph_msg_put last one on %p\n", m);
+		BUG_ON(!list_empty(&m->list_head));
 		if (m->pages) {
 			for (i=0; i<m->nr_pages; i++)
 				if (m->pages[i])

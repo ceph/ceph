@@ -314,7 +314,6 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	}
 	
 out:
-	ceph_msg_put(msg);
 	return;
 
 bad:

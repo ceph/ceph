@@ -48,11 +48,11 @@ static void ceph_state_change(struct sock *sk)
 
         dout(30, "ceph_state_change %p state = %u\n", con, con->state);
         if (sk->sk_state == TCP_ESTABLISHED) {
-		/*if (test_bit(CONNECTING, &con->state) ||
-		  test_bit(ACCEPTING, &con->state)) {*/
+		if (test_bit(CONNECTING, &con->state) ||
+		    test_bit(ACCEPTING, &con->state)) {
 			dout(30, "ceph_state_change %p socket established, queuing swork\n", con);
 			queue_work(send_wq, &con->swork);
-			/*}*/
+		}
         }
 }
 
@@ -222,7 +222,7 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;		/* length read */
 
-	//dout(30, "ceph_tcp_recvmsg %p len %d\n", sock, (int)len);
+	//dout(30, "ceph_tcp_recvmsg %p len %d %p-%p\n", sock, (int)len, buf, buf+len);
 	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
 	/* receive one kvec for now...  */
 	rlen = kernel_recvmsg(sock, &msg, &iov, 1, len, msg.msg_flags);
