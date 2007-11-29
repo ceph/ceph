@@ -24,20 +24,203 @@ static void calc_pg_masks(struct ceph_osdmap *map)
 	map->localized_pg_num_mask = (1 << calc_bits_of(map->localized_pg_num-1)) - 1;
 }
 
+static int crush_decode_uniform_bucket(void **p, void *end, struct crush_bucket_uniform *b)
+{
+	int j, err;
+	b->primes = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	if (b->primes == NULL)
+		return -ENOMEM;
+	for (j=0; j<b->h.size; j++)
+		if ((err = ceph_decode_32(p, end, &b->primes[j])) < 0)
+			return err;
+	if ((err = ceph_decode_32(p, end, &b->item_weight)) < 0)
+		return -EINVAL;
+	return 0;
+}
+
+static int crush_decode_list_bucket(void **p, void *end, struct crush_bucket_list *b)
+{
+	int j, err;
+	b->item_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	if (b->item_weights == NULL)
+		return -ENOMEM;
+	b->sum_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	if (b->sum_weights == NULL)
+		return -ENOMEM;
+	for (j=0; j<b->h.size; j++) {
+		if ((err = ceph_decode_32(p, end, &b->item_weights[j])) < 0)
+			return err;
+		if ((err = ceph_decode_32(p, end, &b->sum_weights[j])) < 0)
+			return err;
+	}
+	return 0;
+}
+
+static int crush_decode_tree_bucket(void **p, void *end, struct crush_bucket_tree *b)
+{
+	int j, err;
+	b->node_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	if (b->node_weights == NULL)
+		return -ENOMEM;
+	for (j=0; j<b->h.size; j++) 
+		if ((err = ceph_decode_32(p, end, &b->node_weights[j])) < 0)
+			return err;
+	return 0;
+}
+
+static int crush_decode_straw_bucket(void **p, void *end, struct crush_bucket_straw *b)
+{
+	int j, err;
+	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	if (b->straws == NULL)
+		return -ENOMEM;
+	for (j=0; j<b->h.size; j++) 
+		if ((err = ceph_decode_32(p, end, &b->straws[j])) < 0)
+			return err;
+	return 0;
+}
+
 static struct crush_map *crush_decode(void **p, void *end)
 {
 	struct crush_map *c;
 	int err = -EINVAL;
+	int i, j;
 	
-	c = kmalloc(sizeof(*c), GFP_KERNEL);
+	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	/* ... */
+	if ((err = ceph_decode_32(p, end, &c->max_buckets)) < 0)
+		goto bad;
+	if ((err = ceph_decode_32(p, end, &c->max_rules)) < 0)
+		goto bad;
+	if ((err = ceph_decode_32(p, end, &c->max_devices)) < 0)
+		goto bad;
+
+	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
+	if (c->device_offload == NULL) 
+		goto badmem;
+	c->device_parents = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
+	if (c->device_parents == NULL) 
+		goto badmem;
+	c->bucket_parents = kmalloc(c->max_buckets * sizeof(__u32), GFP_KERNEL);
+	if (c->bucket_parents == NULL) 
+		goto badmem;
+
+	c->buckets = kzalloc(c->max_buckets * sizeof(*c->buckets), GFP_KERNEL);
+	if (c->buckets == NULL) 
+		goto badmem;
+	c->rules = kzalloc(c->max_rules * sizeof(*c->rules), GFP_KERNEL);
+	if (c->rules == NULL)
+		goto badmem;
+
+	for (i=0; i<c->max_devices; i++)
+		if ((err = ceph_decode_32(p, end, &c->device_offload[i])) < 0)
+			goto bad;
+
+	/* buckets */
+	for (i=0; i<c->max_buckets; i++) {
+		int size = 0;
+		__u32 type;
+		struct crush_bucket *b;
+
+		if ((err = ceph_decode_32(p, end, &type)) < 0)
+			goto bad;
+
+		switch (type) {
+		case CRUSH_BUCKET_UNIFORM:
+			size = sizeof(struct crush_bucket_uniform);
+			break;
+		case CRUSH_BUCKET_LIST:
+			size = sizeof(struct crush_bucket_list);
+			break;
+		case CRUSH_BUCKET_TREE:
+			size = sizeof(struct crush_bucket_tree);
+			break;
+		case CRUSH_BUCKET_STRAW:
+			size = sizeof(struct crush_bucket_straw);
+			break;
+		}
+		BUG_ON(size == 0);
+		b = c->buckets[i] = kzalloc(size, GFP_KERNEL);
+		if (b == NULL)
+			goto badmem;
+
+		if ((err = ceph_decode_32(p, end, &b->id)) < 0)
+			goto bad;
+		if ((err = ceph_decode_16(p, end, &b->type)) < 0)
+			goto bad;
+		if ((err = ceph_decode_16(p, end, &b->bucket_type)) < 0)
+			goto bad;
+		if ((err = ceph_decode_32(p, end, &b->weight)) < 0)
+			goto bad;
+		if ((err = ceph_decode_32(p, end, &b->size)) < 0)
+			goto bad;
+
+		b->items = kmalloc(b->size * sizeof(__s32), GFP_KERNEL);
+		if (b->items == NULL)
+			goto badmem;
+		for (j=0; j<b->size; j++)
+			if ((err = ceph_decode_32(p, end, &b->items[j])) < 0)
+				goto bad;
+		
+		switch (b->type) {
+		case CRUSH_BUCKET_UNIFORM:
+			if ((err = crush_decode_uniform_bucket(p, end, 
+				      (struct crush_bucket_uniform*)b)) < 0)
+				goto bad;
+			break;
+		case CRUSH_BUCKET_LIST:
+			if ((err = crush_decode_list_bucket(p, end, 
+				      (struct crush_bucket_list*)b)) < 0)
+				goto bad;
+			break;
+		case CRUSH_BUCKET_TREE:
+			if ((err = crush_decode_tree_bucket(p, end, 
+				      (struct crush_bucket_tree*)b)) < 0)
+				goto bad;
+			break;
+		case CRUSH_BUCKET_STRAW:
+			if ((err = crush_decode_straw_bucket(p, end, 
+				      (struct crush_bucket_straw*)b)) < 0)
+				goto bad;
+			break;
+		}
+	}
+
+	/* rules */
+	for (i=0; i<c->max_rules; i++) {
+		__u32 yes;
+		if ((err = ceph_decode_32(p, end, &yes)) < 0)
+			goto bad;
+		if (!yes) {
+			c->rules[i] = 0;
+			continue;
+		}
+		c->rules[i] = kmalloc(sizeof(**c->rules), GFP_KERNEL);
+		if (c->rules[i] == NULL)
+			goto badmem;
+
+		if ((err = ceph_decode_32(p, end, &c->rules[i]->len)) < 0)
+			goto bad;
+		for (j=0; j<c->rules[i]->len; j++) {
+			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].op)) < 0)
+				goto bad;
+			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].arg1)) < 0)
+				goto bad;
+			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].arg2)) < 0)
+				goto bad;
+		}
+	}
+
+	
 
 	return c;
-
+	
+badmem:
+	err = -ENOMEM;
 bad:
+	crush_destroy(c);
 	return ERR_PTR(err);
 }
 
