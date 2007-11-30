@@ -11,18 +11,23 @@ struct workqueue_struct *send_wq = NULL;	/* send work queue */
 /*
  * socket callback functions 
  */
+
+/* listen socket received a connect */
+static void ceph_accept_ready(struct sock *sk, int count_unused)
+{
+	struct ceph_messenger *msgr = (struct ceph_messenger *)sk->sk_user_data;
+
+	dout(30, "ceph_accept_ready messenger %p sk_state = %u\n",
+	     msgr, sk->sk_state);
+	if (msgr && (sk->sk_state == TCP_LISTEN))
+		queue_work(recv_wq, &msgr->awork);
+}
+
 /* Data available on socket or listen socket received a connect */
 static void ceph_data_ready(struct sock *sk, int count_unused)
 {
-        struct ceph_connection *con;
-        struct ceph_messenger *msgr;
-
-	if (sk->sk_state == TCP_LISTEN) {
-		msgr = (struct ceph_messenger *)sk->sk_user_data;
-		dout(30, "ceph_data_ready listener %p\n", msgr);
-		queue_work(recv_wq, &msgr->awork);
-	} else {
-        	con = (struct ceph_connection *)sk->sk_user_data;
+        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
 		dout(30, "ceph_data_ready connection %p state = %u, queuing rwork\n",
 		     con, con->state);
 		queue_work(recv_wq, &con->rwork);
@@ -35,7 +40,7 @@ static void ceph_write_space(struct sock *sk)
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
         dout(30, "ceph_write_space %p state = %u\n", con, con->state);
-        if (test_bit(WRITE_PENDING, &con->state)) {
+        if (con && test_bit(WRITE_PENDING, &con->state)) {
                 dout(30, "ceph_write_space %p queueing write work\n", con);
                 queue_work(send_wq, &con->swork);
         }
@@ -46,18 +51,29 @@ static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-        dout(30, "ceph_state_change %p state = %u\n", con, con->state);
+        dout(30, "ceph_state_change %p state = %u sk_state = %u\n", 
+	     con, con->state, sk->sk_state);
         if (sk->sk_state == TCP_ESTABLISHED) {
-		if (test_bit(CONNECTING, &con->state) ||
-		    test_bit(ACCEPTING, &con->state)) {
-			dout(30, "ceph_state_change %p socket established, queuing swork\n", con);
-			queue_work(send_wq, &con->swork);
-		}
-        }
+		ceph_write_space(sk);
+	}
+	/* TBD: maybe set connection state to close if TCP_CLOSE
+	* simple case for now,
+	*/
+}
+
+/* make a listening socket active by setting up the data ready call back */
+static void listen_sock_callbacks(struct socket *sock, void *user_data)
+{
+	struct sock *sk = sock->sk;
+	sk->sk_user_data = user_data;
+        dout(20, "listen_sock_callbacks\n");
+
+	/* Install callback */
+	sk->sk_data_ready = ceph_accept_ready;
 }
 
 /* make a socket active by setting up the call back functions */
-static int set_sock_callbacks(struct socket *sock, void *user_data)
+static void set_sock_callbacks(struct socket *sock, void *user_data)
 {
         struct sock *sk = sock->sk;
         sk->sk_user_data = user_data;
@@ -67,8 +83,6 @@ static int set_sock_callbacks(struct socket *sock, void *user_data)
         sk->sk_data_ready = ceph_data_ready;
         sk->sk_write_space = ceph_write_space;
         sk->sk_state_change = ceph_state_change;
-
-        return 0;
 }
 /*
  * initiate connection to a remote socket.
@@ -164,7 +178,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr, int port)
 	}
 
         /* setup callbacks */
-        set_sock_callbacks(msgr->listen_sock, (void *)msgr);
+        listen_sock_callbacks(msgr->listen_sock, (void *)msgr);
 
 	return ret;
 err:
