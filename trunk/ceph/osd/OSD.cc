@@ -2132,7 +2132,7 @@ void OSD::handle_op(MOSDOp *op)
   const pg_t pgid = op->get_pg();
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
 
-  logger->set("buf", buffer_total_alloc);
+  logger->set("buf", buffer_total_alloc.test());
 
   utime_t now = g_clock.now();
 

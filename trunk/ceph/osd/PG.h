@@ -571,8 +571,6 @@ public:
     role(0),
     state(0),
     last_epoch_started_any(0),
-    last_complete_commit(0),
-    peers_complete_thru(0),
     have_master_log(true),
     stat_size(0), stat_num_blocks(0)
   { }
@@ -619,7 +617,7 @@ public:
   bool       is_clean() const { return state_test(STATE_CLEAN); }
   bool       is_stray() const { return state_test(STATE_STRAY); }
 
-  bool  is_empty() const { return info.last_update == 0; }
+  bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   int num_active_ops() const {
     return objects_pulling.size();

@@ -84,7 +84,7 @@ protected:
   RepGather *new_rep_gather(MOSDOp *op);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
-                 int fromosd, eversion_t pg_complete_thru=0);
+                 int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
   
   // push/pull
   int num_pulling;

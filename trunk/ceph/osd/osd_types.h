@@ -187,7 +187,8 @@ class eversion_t {
 public:
   epoch_t epoch;
   version_t version;
-  eversion_t(epoch_t e=0, version_t v=0) : epoch(e), version(v) {}
+  eversion_t() : epoch(0), version(0) {}
+  eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
 };
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
@@ -237,7 +238,7 @@ struct pg_stat_t {
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
-  pg_stat_t() : reported(0), state(0), size(0), num_blocks(0), num_objects(0) {}
+  pg_stat_t() : state(0), size(0), num_blocks(0), num_objects(0) {}
 };
 
 

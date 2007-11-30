@@ -20,12 +20,7 @@
 #include <list>
 #include <stdint.h>
 
-#include "common/Mutex.h"
-
-#ifdef BUFFER_USE_CCPP
-# include "cc++/thread.h"
-#endif
-
+#include "atomic.h"
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
@@ -35,11 +30,8 @@
 
 // <hack>
 //  these are in config.o
-extern Mutex bufferlock;
-extern long buffer_total_alloc;
+extern atomic_t buffer_total_alloc;
 // </hack>
-
-
 
 
 class buffer {
@@ -47,14 +39,10 @@ private:
   
   /* hack for memory utilization debugging. */
   static void inc_total_alloc(unsigned len) {
-    bufferlock.Lock();
-    buffer_total_alloc += len;
-    bufferlock.Unlock();
+    buffer_total_alloc.add(len);
   }
   static void dec_total_alloc(unsigned len) {
-    bufferlock.Lock();
-    buffer_total_alloc -= len;
-    bufferlock.Unlock();
+    buffer_total_alloc.sub(len);
   }
 
   /*
@@ -64,22 +52,11 @@ private:
   public:
     char *data;
     unsigned len;
-#ifdef BUFFER_USE_CCPP
-    mutable ost::AtomicCounter nref;    // mutable for const-ness of operator<<
-#else
-    int nref;
-    Mutex lock;  // we'll make it non-recursive.
-#endif
+    atomic_t nref;
 
     raw(unsigned l) : len(l), nref(0)
-#ifndef BUFFER_USE_CCPP
-		      , lock(false)
-#endif
     { }
     raw(char *c, unsigned l) : data(c), len(l), nref(0)
-#ifndef BUFFER_USE_CCPP
-			       , lock(false)
-#endif
     { }
     virtual ~raw() {};
 
@@ -226,48 +203,30 @@ public:
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
     ptr(raw *r) : _raw(r), _off(0), _len(r->len) {   // no lock needed; this is an unref raw.
-      ++r->nref;
+      r->nref.inc();
     }
     ptr(unsigned l) : _off(0), _len(l) {
       _raw = create(l);
-      ++_raw->nref;
+      _raw->nref.inc();
     }
     ptr(char *d, unsigned l) : _off(0), _len(l) {    // ditto.
       _raw = copy(d, l);
-      ++_raw->nref;
+      _raw->nref.inc();
     }
     ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len) {
       if (_raw) {
-#ifdef BUFFER_USE_CCPP
-	++_raw->nref;
-#else
-	_raw->lock.Lock();
-        ++_raw->nref;
-       _raw->lock.Unlock();
-#endif
+	_raw->nref.inc();
       }
     }
     ptr(const ptr& p, unsigned o, unsigned l) : _raw(p._raw), _off(p._off + o), _len(l) {
       assert(o+l <= p._len);
       assert(_raw);
-#ifdef BUFFER_USE_CCPP
-      ++_raw->nref;
-#else
-      _raw->lock.Lock();
-      ++_raw->nref;
-      _raw->lock.Unlock();
-#endif
+      _raw->nref.inc();
     }
     ptr& operator= (const ptr& p) {
       // be careful -- we need to properly handle self-assignment.
       if (p._raw) {
-#ifdef BUFFER_USE_CCPP
-	++p._raw->nref;                              // inc new
-#else
-	p._raw->lock.Lock();
-	++p._raw->nref;                              // inc new
-	p._raw->lock.Unlock();
-#endif
+	p._raw->nref.inc();                              // inc new
       }
       release();                                 // dec (+ dealloc) old (if any)
       _raw = p._raw;                               // change my ref
@@ -286,11 +245,11 @@ public:
     void clone_in_place() {
       raw *newraw = _raw->clone();
       release();
-      newraw->nref++;
+      newraw->nref.inc();
       _raw = newraw;
     }
     bool do_cow() {
-      if (_raw->nref > 1) {
+      if (_raw->nref.test() > 1) {
 	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
 	clone_in_place();
 	return true;
@@ -312,19 +271,9 @@ public:
 
     void release() {
       if (_raw) {
-#ifndef BUFFER_USE_CCPP
-	_raw->lock.Lock();
-#endif
-        if (--_raw->nref == 0) {
+        if (_raw->nref.dec() == 0) {
           //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-#ifndef BUFFER_USE_CCPP
-	  _raw->lock.Unlock();    
-#endif
           delete _raw;  // dealloc old (if any)
-	} else {
-#ifndef BUFFER_USE_CCPP
-	  _raw->lock.Unlock();    
-#endif
 	}
 	_raw = 0;
       }
@@ -363,7 +312,7 @@ public:
 
     const char *raw_c_str() const { assert(_raw); return _raw->data; }
     unsigned raw_length() const { assert(_raw); return _raw->len; }
-    int raw_nref() const { assert(_raw); return _raw->nref; }
+    int raw_nref() const { assert(_raw); return _raw->nref.test(); }
 
     void copy_out(unsigned o, unsigned l, char *dest) const {
       assert(_raw);
@@ -955,7 +904,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref << ")";
+  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.test() << ")";
 }
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {

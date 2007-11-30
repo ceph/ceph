@@ -29,9 +29,8 @@
 
 
 // hack hack hack ugly FIXME
-#include "common/Mutex.h"
-long buffer_total_alloc = 0;
-Mutex bufferlock;
+#include "include/atomic.h"
+atomic_t buffer_total_alloc;
 
 #include "osd/osd_types.h"
 

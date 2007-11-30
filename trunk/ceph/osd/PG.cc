@@ -846,7 +846,7 @@ void PG::activate(ObjectStore::Transaction& t,
   last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
   
   if (role == 0) {    // primary state
-    peers_complete_thru = 0;  // we don't know (yet)!
+    peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!
   }
 
   assert(info.last_complete >= log.bottom || log.backlog);
