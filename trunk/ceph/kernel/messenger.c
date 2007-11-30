@@ -935,6 +935,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 	ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
 
+	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0) 
+		queue_work(send_wq, &con->swork);
+
 out:
 	spin_unlock(&con->lock);
 	put_connection(con);
