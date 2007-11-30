@@ -106,14 +106,14 @@ int Ebofs::mount()
   
   // open tables
   dout(3) << "mount opening tables" << dendl;
-  object_tab = new Table<object_t, Extent>( nodepool, sb->object_tab );
+  object_tab = new Table<pobject_t, Extent>( nodepool, sb->object_tab );
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
     free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
   limbo_tab = new Table<block_t, block_t>( nodepool, sb->limbo_tab );
   alloc_tab = new Table<block_t, pair<block_t,int> >( nodepool, sb->alloc_tab );
   
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
-  co_tab = new Table<coll_object_t, bool>( nodepool, sb->co_tab );
+  co_tab = new Table<coll_pobject_t, bool>( nodepool, sb->co_tab );
 
   verify_tables();
 
@@ -223,7 +223,7 @@ int Ebofs::mkfs()
   empty.root.csum = 0;
   empty.depth = 0;
   
-  object_tab = new Table<object_t, Extent>( nodepool, empty );
+  object_tab = new Table<pobject_t, Extent>( nodepool, empty );
   collection_tab = new Table<coll_t, Extent>( nodepool, empty );
   
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
@@ -231,7 +231,7 @@ int Ebofs::mkfs()
   limbo_tab = new Table<block_t,block_t>( nodepool, empty );
   alloc_tab = new Table<block_t,pair<block_t,int> >( nodepool, empty );
   
-  co_tab = new Table<coll_object_t, bool>( nodepool, empty );
+  co_tab = new Table<coll_pobject_t, bool>( nodepool, empty );
 
   // add free space
   Extent left;
@@ -339,7 +339,7 @@ int Ebofs::umount()
   trim_bc(0);
   trim_inodes(0);
 
-  for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
+  for (hash_map<pobject_t,Onode*>::iterator i = onode_map.begin();
        i != onode_map.end();
        i++) {
     dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << dendl;
@@ -661,7 +661,7 @@ void *Ebofs::finisher_thread_entry()
 
 // *** onodes ***
 
-Onode* Ebofs::new_onode(object_t oid)
+Onode* Ebofs::new_onode(pobject_t oid)
 {
   Onode* on = new Onode(oid);
 
@@ -683,7 +683,7 @@ Onode* Ebofs::new_onode(object_t oid)
 }
 
 
-Onode* Ebofs::get_onode(object_t oid)
+Onode* Ebofs::get_onode(pobject_t oid)
 {
   while (1) {
     // in cache?
@@ -954,7 +954,7 @@ void Ebofs::remove_onode(Onode *on)
   for (set<coll_t>::iterator i = on->collections.begin();
        i != on->collections.end();
        i++) {
-    co_tab->remove(coll_object_t(*i,on->object_id));
+    co_tab->remove(coll_pobject_t(*i,on->object_id));
   }
   on->collections.clear();
 
@@ -2154,7 +2154,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
  * return value of -1 if onode isn't loaded.  otherwise, the number
  * of extents that need to be read (i.e. # of seeks)  
  */
-int Ebofs::is_cached(object_t oid, off_t off, size_t len)
+int Ebofs::is_cached(pobject_t oid, off_t off, size_t len)
 {
   ebofs_lock.Lock();
   int r = _is_cached(oid, off, len);
@@ -2162,7 +2162,7 @@ int Ebofs::is_cached(object_t oid, off_t off, size_t len)
   return r;
 }
 
-int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
+int Ebofs::_is_cached(pobject_t oid, off_t off, size_t len)
 {
   if (!have_onode(oid)) {
     dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << dendl;
@@ -2205,14 +2205,14 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   */
 }
 
-void Ebofs::trim_from_cache(object_t oid, off_t off, size_t len)
+void Ebofs::trim_from_cache(pobject_t oid, off_t off, size_t len)
 {
   ebofs_lock.Lock();
   _trim_from_cache(oid, off, len);
   ebofs_lock.Unlock();
 }
 
-void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
+void Ebofs::_trim_from_cache(pobject_t oid, off_t off, size_t len)
 {
   // be careful not to load it if we don't have it
   if (!have_onode(oid)) {
@@ -2237,7 +2237,7 @@ void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
 }
 
 
-int Ebofs::read(object_t oid, 
+int Ebofs::read(pobject_t oid, 
                 off_t off, size_t len,
                 bufferlist& bl)
 {
@@ -2247,7 +2247,7 @@ int Ebofs::read(object_t oid,
   return r;
 }
 
-int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
+int Ebofs::_read(pobject_t oid, off_t off, size_t len, bufferlist& bl)
 {
   dout(7) << "_read " << oid << " " << off << "~" << len << dendl;
 
@@ -2348,7 +2348,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
     switch (op) {
     case Transaction::OP_READ:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         off_t offset, len;
 	t.get_length(offset);
@@ -2364,7 +2364,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_STAT:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         struct stat *st;
 	t.get_pstat(st);
@@ -2377,7 +2377,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_GETATTR:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
 	t.get_attrname(attrname);
@@ -2392,7 +2392,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_GETATTRS:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         map<string,bufferptr> *pset;
 	t.get_pattrset(pset);
@@ -2406,7 +2406,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_WRITE:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         off_t offset, len;
 	t.get_length(offset);
@@ -2422,7 +2422,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRIMCACHE:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         off_t offset, len;
 	t.get_length(offset);
@@ -2433,7 +2433,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRUNCATE:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         off_t len;
 	t.get_length(len);
@@ -2446,7 +2446,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_REMOVE:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         if (_remove(oid) < 0) {
           dout(7) << "apply_transaction fail on _remove" << dendl;
@@ -2457,7 +2457,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_SETATTR:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
 	t.get_attrname(attrname);
@@ -2472,7 +2472,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_SETATTRS:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         map<string,bufferptr> *pattrset;
 	t.get_pattrset(pattrset);
@@ -2485,7 +2485,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_RMATTR:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
 	t.get_attrname(attrname);
@@ -2498,9 +2498,9 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_CLONE:
       {
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
-        object_t noid;
+        pobject_t noid;
 	t.get_oid(noid);
 	if (_clone(oid, noid) < 0) {
 	  dout(7) << "apply_transaction fail on _clone" << dendl;
@@ -2535,7 +2535,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         coll_t cid;
 	t.get_cid(cid);
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         if (_collection_add(cid, oid) < 0) {
           //dout(7) << "apply_transaction fail on _collection_add" << dendl;
@@ -2548,7 +2548,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         coll_t cid;
 	t.get_cid(cid);
-        object_t oid;
+        pobject_t oid;
 	t.get_oid(oid);
         if (_collection_remove(cid, oid) < 0) {
           dout(7) << "apply_transaction fail on _collection_remove" << dendl;
@@ -2600,7 +2600,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
 
 
-int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& bl)
+int Ebofs::_write(pobject_t oid, off_t offset, size_t length, const bufferlist& bl)
 {
   dout(7) << "_write " << oid << " " << offset << "~" << length << dendl;
   assert(bl.length() == length);
@@ -2662,7 +2662,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, const bufferlist& b
   return length;
 }
 
-int Ebofs::_zero(object_t oid, off_t offset, size_t length)
+int Ebofs::_zero(pobject_t oid, off_t offset, size_t length)
 {
   dout(7) << "_zero " << oid << " " << offset << "~" << length << dendl;
 
@@ -2692,7 +2692,7 @@ int Ebofs::_zero(object_t oid, off_t offset, size_t length)
 }
 
 
-int Ebofs::write(object_t oid, 
+int Ebofs::write(pobject_t oid, 
                  off_t off, size_t len,
                  const bufferlist& bl, Context *onsafe)
 {
@@ -2723,7 +2723,7 @@ int Ebofs::write(object_t oid,
   return r;
 }
 
-int Ebofs::zero(object_t oid, off_t off, size_t len, Context *onsafe)
+int Ebofs::zero(pobject_t oid, off_t off, size_t len, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -2753,7 +2753,7 @@ int Ebofs::zero(object_t oid, off_t off, size_t len, Context *onsafe)
 }
 
 
-int Ebofs::_remove(object_t oid)
+int Ebofs::_remove(pobject_t oid)
 {
   dout(7) << "_remove " << oid << dendl;
 
@@ -2768,7 +2768,7 @@ int Ebofs::_remove(object_t oid)
 }
 
 
-int Ebofs::remove(object_t oid, Context *onsafe)
+int Ebofs::remove(pobject_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
 
@@ -2796,7 +2796,7 @@ int Ebofs::remove(object_t oid, Context *onsafe)
   return r;
 }
 
-int Ebofs::_truncate(object_t oid, off_t size)
+int Ebofs::_truncate(pobject_t oid, off_t size)
 {
   dout(7) << "_truncate " << oid << " size " << size << dendl;
 
@@ -2855,7 +2855,7 @@ int Ebofs::_truncate(object_t oid, off_t size)
 }
 
 
-int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
+int Ebofs::truncate(pobject_t oid, off_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -2884,7 +2884,7 @@ int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
 
 
 
-int Ebofs::clone(object_t from, object_t to, Context *onsafe)
+int Ebofs::clone(pobject_t from, pobject_t to, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -2911,7 +2911,7 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
   return r;
 }
 
-int Ebofs::_clone(object_t from, object_t to)
+int Ebofs::_clone(pobject_t from, pobject_t to)
 {
   dout(7) << "_clone " << from << " -> " << to << dendl;
 
@@ -2971,34 +2971,34 @@ int Ebofs::_clone(object_t from, object_t to)
  *  (oid.rev is a noninclusive upper bound.)
  *
  */
-int Ebofs::pick_object_revision_lt(object_t& oid)
+int Ebofs::pick_object_revision_lt(pobject_t& oid)
 {
-  assert(oid.rev > 0);   // this is only useful for non-zero oid.rev
+  assert(oid.oid.rev > 0);   // this is only useful for non-zero oid.rev
 
   int r = -EEXIST;             // return code
   ebofs_lock.Lock();
   {
-    object_t orig = oid;
-    object_t live = oid;
-    live.rev = 0;
+    pobject_t orig = oid;
+    pobject_t live = oid;
+    live.oid.rev = 0;
     
     if (object_tab->get_num_keys() > 0) {
-      Table<object_t, Extent>::Cursor cursor(object_tab);
+      Table<pobject_t, Extent>::Cursor cursor(object_tab);
       
       object_tab->find(oid, cursor);  // this will be just _past_ highest eligible rev
       if (cursor.move_left() > 0) {
 	bool firstpass = true;
 	while (1) {
-	  object_t t = cursor.current().key;
-	  if (t.ino != oid.ino || 
-	      t.bno != oid.bno)                 // passed to previous object
+	  pobject_t t = cursor.current().key;
+	  if (t.oid.ino != oid.oid.ino || 
+	      t.oid.bno != oid.oid.bno)                 // passed to previous object
 	    break;
-	  if (oid.rev < t.rev) {                // rev < desired.  possible match.
+	  if (oid.oid.rev < t.oid.rev) {                // rev < desired.  possible match.
 	    r = 0;
 	    oid = t;
 	    break;
 	  }
-	  if (firstpass && oid.rev >= t.rev) {  // there is no old rev < desired.  try live.
+	  if (firstpass && oid.oid.rev >= t.oid.rev) {  // there is no old rev < desired.  try live.
 	    r = 0;
 	    oid = live;
 	    break;
@@ -3019,7 +3019,7 @@ int Ebofs::pick_object_revision_lt(object_t& oid)
 
 
 
-bool Ebofs::exists(object_t oid)
+bool Ebofs::exists(pobject_t oid)
 {
   ebofs_lock.Lock();
   dout(8) << "exists " << oid << dendl;
@@ -3028,7 +3028,7 @@ bool Ebofs::exists(object_t oid)
   return e;
 }
 
-int Ebofs::stat(object_t oid, struct stat *st)
+int Ebofs::stat(pobject_t oid, struct stat *st)
 {
   ebofs_lock.Lock();
   int r = _stat(oid,st);
@@ -3036,7 +3036,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
   return r;
 }
 
-int Ebofs::_stat(object_t oid, struct stat *st)
+int Ebofs::_stat(pobject_t oid, struct stat *st)
 {
   dout(7) << "_stat " << oid << dendl;
 
@@ -3051,7 +3051,7 @@ int Ebofs::_stat(object_t oid, struct stat *st)
 }
 
 
-int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t size) 
+int Ebofs::_setattr(pobject_t oid, const char *name, const void *value, size_t size) 
 {
   dout(8) << "setattr " << oid << " '" << name << "' len " << size << dendl;
 
@@ -3072,7 +3072,7 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   return 0;
 }
 
-int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe)
+int Ebofs::setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   int r = _setattr(oid, name, value, size);
@@ -3098,7 +3098,7 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
   return r;
 }
 
-int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
+int Ebofs::_setattrs(pobject_t oid, map<string,bufferptr>& attrset)
 {
   dout(8) << "setattrs " << oid << dendl;
 
@@ -3115,7 +3115,7 @@ int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
   return 0;
 }
 
-int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsafe)
+int Ebofs::setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe)
 {
   ebofs_lock.Lock();
   int r = _setattrs(oid, attrset);
@@ -3142,7 +3142,7 @@ int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsaf
 }
 
 
-int Ebofs::get_object_collections(object_t oid, set<coll_t>& ls)
+int Ebofs::get_object_collections(pobject_t oid, set<coll_t>& ls)
 {
   ebofs_lock.Lock();
   int r = _get_object_collections(oid, ls);
@@ -3150,7 +3150,7 @@ int Ebofs::get_object_collections(object_t oid, set<coll_t>& ls)
   return r;
 }
 
-int Ebofs::_get_object_collections(object_t oid, set<coll_t>& ls)
+int Ebofs::_get_object_collections(pobject_t oid, set<coll_t>& ls)
 {
   dout(8) << "_get_object_collections " << oid << dendl;
 
@@ -3161,7 +3161,7 @@ int Ebofs::_get_object_collections(object_t oid, set<coll_t>& ls)
   return 0;
 }
 
-int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
+int Ebofs::getattr(pobject_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
   int r = _getattr(oid, name, value, size);
@@ -3169,7 +3169,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
   return r;
 }
 
-int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
+int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
 {
   dout(8) << "_getattr " << oid << " '" << name << "' maxlen " << size << dendl;
 
@@ -3190,7 +3190,7 @@ int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
   return r;
 }
 
-int Ebofs::getattrs(object_t oid, map<string,bufferptr> &aset)
+int Ebofs::getattrs(pobject_t oid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
   int r = _getattrs(oid, aset);
@@ -3198,7 +3198,7 @@ int Ebofs::getattrs(object_t oid, map<string,bufferptr> &aset)
   return r;
 }
 
-int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
+int Ebofs::_getattrs(pobject_t oid, map<string,bufferptr> &aset)
 {
   dout(8) << "_getattrs " << oid << dendl;
 
@@ -3211,7 +3211,7 @@ int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
 
 
 
-int Ebofs::_rmattr(object_t oid, const char *name) 
+int Ebofs::_rmattr(pobject_t oid, const char *name) 
 {
   dout(8) << "_rmattr " << oid << " '" << name << "'" << dendl;
 
@@ -3229,7 +3229,7 @@ int Ebofs::_rmattr(object_t oid, const char *name)
   return 0;
 }
 
-int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe) 
+int Ebofs::rmattr(pobject_t oid, const char *name, Context *onsafe) 
 {
   ebofs_lock.Lock();
 
@@ -3256,7 +3256,7 @@ int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe)
   return r;
 }
 
-int Ebofs::listattr(object_t oid, vector<string>& attrs)
+int Ebofs::listattr(pobject_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
   dout(8) << "listattr " << oid << dendl;
@@ -3279,15 +3279,15 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
   return 0;
 }
 
-int Ebofs::list_objects(list<object_t>& ls)
+int Ebofs::list_objects(list<pobject_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "list_objects " << dendl;
 
-  Table<object_t, Extent>::Cursor cursor(object_tab);
+  Table<pobject_t, Extent>::Cursor cursor(object_tab);
 
   int num = 0;
-  if (object_tab->find(object_t(), cursor) >= 0) {
+  if (object_tab->find(pobject_t(), cursor) >= 0) {
     while (1) {
       ls.push_back(cursor.current().key);
       num++;
@@ -3373,12 +3373,12 @@ int Ebofs::_destroy_collection(coll_t cid)
   assert(cn);
 
   // hose mappings
-  list<object_t> objects;
+  list<pobject_t> objects;
   collection_list(cid, objects);
-  for (list<object_t>::iterator i = objects.begin(); 
+  for (list<pobject_t>::iterator i = objects.begin(); 
        i != objects.end();
        i++) {
-    co_tab->remove(coll_object_t(cid,*i));
+    co_tab->remove(coll_pobject_t(cid,*i));
 
     Onode *on = get_onode(*i);
     if (on) {
@@ -3432,7 +3432,7 @@ bool Ebofs::_collection_exists(coll_t cid)
   return (collection_tab->lookup(cid) == 0);
 }
 
-int Ebofs::_collection_add(coll_t cid, object_t oid)
+int Ebofs::_collection_add(coll_t cid, pobject_t oid)
 {
   dout(9) << "_collection_add " << hex << cid << " object " << oid << dec << dendl;
 
@@ -3447,7 +3447,7 @@ int Ebofs::_collection_add(coll_t cid, object_t oid)
   if (on->collections.count(cid) == 0) {
     on->collections.insert(cid);
     dirty_onode(on);
-    co_tab->insert(coll_object_t(cid,oid), true);
+    co_tab->insert(coll_pobject_t(cid,oid), true);
   } else {
     r = -ENOENT;  // FIXME?  already in collection.
   }
@@ -3456,7 +3456,7 @@ int Ebofs::_collection_add(coll_t cid, object_t oid)
   return r;
 }
 
-int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
+int Ebofs::collection_add(coll_t cid, pobject_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
 
@@ -3483,7 +3483,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
   return 0;
 }
 
-int Ebofs::_collection_remove(coll_t cid, object_t oid)
+int Ebofs::_collection_remove(coll_t cid, pobject_t oid)
 {
   dout(9) << "_collection_remove " << hex << cid << " object " << oid << dec << dendl;
 
@@ -3498,7 +3498,7 @@ int Ebofs::_collection_remove(coll_t cid, object_t oid)
   if (on->collections.count(cid)) {
     on->collections.erase(cid);
     dirty_onode(on);
-    co_tab->remove(coll_object_t(cid,oid));
+    co_tab->remove(coll_pobject_t(cid,oid));
   } else {
     r = -ENOENT;  // FIXME?
   } 
@@ -3507,7 +3507,7 @@ int Ebofs::_collection_remove(coll_t cid, object_t oid)
   return r;
 }
 
-int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
+int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
 
@@ -3534,7 +3534,7 @@ int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
   return 0;
 }
 
-int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
+int Ebofs::collection_list(coll_t cid, list<pobject_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "collection_list " << hex << cid << dec << dendl;
@@ -3544,13 +3544,13 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
     return -ENOENT;
   }
   
-  Table<coll_object_t, bool>::Cursor cursor(co_tab);
+  Table<coll_pobject_t, bool>::Cursor cursor(co_tab);
 
   int num = 0;
-  if (co_tab->find(coll_object_t(cid,object_t()), cursor) >= 0) {
+  if (co_tab->find(coll_pobject_t(cid,pobject_t()), cursor) >= 0) {
     while (1) {
       const coll_t c = cursor.current().key.first;
-      const object_t o = cursor.current().key.second;
+      const pobject_t o = cursor.current().key.second;
       if (c != cid) break;   // end!
       dout(10) << "collection_list  " << hex << cid << " includes " << o << dec << dendl;
       ls.push_back(o);
@@ -3835,8 +3835,8 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   st.avg_extent_per_object = 0;
   st.avg_extent_jump = 0;
 
-  Table<object_t,Extent>::Cursor cursor(object_tab);
-  object_tab->find(object_t(), cursor);
+  Table<pobject_t,Extent>::Cursor cursor(object_tab);
+  object_tab->find(pobject_t(), cursor);
   int nobj = 0;
   int njump = 0;
   while (object_tab->get_num_keys() > 0) {

@@ -69,7 +69,7 @@ private:
   int ref;
 
 public:
-  object_t object_id;
+  pobject_t object_id;
   version_t version;      // incremented on each modify.
 
   // data
@@ -97,7 +97,7 @@ public:
   list<Context*>   commit_waiters;
 
  public:
-  Onode(object_t oid) : ref(0), object_id(oid), version(0),
+  Onode(pobject_t oid) : ref(0), object_id(oid), version(0),
 			object_size(0), alloc_blocks(0), last_block(0), data_csum(0),
 			readonly(0),
 			oc(0),

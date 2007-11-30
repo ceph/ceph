@@ -38,7 +38,7 @@ using namespace __gnu_cxx;
 #include "osd/ObjectStore.h"
 
 //typedef pair<object_t,coll_t> object_coll_t;
-typedef pair<coll_t,object_t> coll_object_t;
+typedef pair<coll_t,pobject_t> coll_pobject_t;
 
 
 class Ebofs : public ObjectStore {
@@ -107,30 +107,30 @@ protected:
   NodePool     nodepool;   // for all tables...
 
   // tables
-  Table<object_t, Extent> *object_tab;
+  Table<pobject_t, Extent> *object_tab;
   Table<block_t,block_t>  *free_tab[EBOFS_NUM_FREE_BUCKETS];
   Table<block_t,block_t>  *limbo_tab;
   Table<block_t,pair<block_t,int> > *alloc_tab;
 
   // collections
   Table<coll_t, Extent>  *collection_tab;
-  Table<coll_object_t, bool>  *co_tab;
+  Table<coll_pobject_t, bool>  *co_tab;
 
   void close_tables();
   void verify_tables();
 
 
   // ** onodes **
-  hash_map<object_t, Onode*>  onode_map;  // onode cache
+  hash_map<pobject_t, Onode*>  onode_map;  // onode cache
   LRU                         onode_lru;
   set<Onode*>                 dirty_onodes;
-  map<object_t, list<Cond*> > waitfor_onode;
+  map<pobject_t, list<Cond*> > waitfor_onode;
 
-  Onode* new_onode(object_t oid);     // make new onode.  ref++.
-  bool have_onode(object_t oid) {
+  Onode* new_onode(pobject_t oid);     // make new onode.  ref++.
+  bool have_onode(pobject_t oid) {
     return onode_map.count(oid);
   }
-  Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
+  Onode* get_onode(pobject_t oid);     // get cached onode, or read from disk.  ref++.
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
   void dirty_onode(Onode* o);
@@ -270,35 +270,35 @@ protected:
   // atomic transaction
   unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
-  int pick_object_revision_lt(object_t& oid);
+  int pick_object_revision_lt(pobject_t& oid);
 
   // object interface
-  bool exists(object_t);
-  int stat(object_t, struct stat*);
-  int read(object_t, off_t off, size_t len, bufferlist& bl);
-  int is_cached(object_t oid, off_t off, size_t len);
+  bool exists(pobject_t);
+  int stat(pobject_t, struct stat*);
+  int read(pobject_t, off_t off, size_t len, bufferlist& bl);
+  int is_cached(pobject_t oid, off_t off, size_t len);
 
-  int write(object_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
-  int zero(object_t oid, off_t off, size_t len, Context *onsafe);
-  int truncate(object_t oid, off_t size, Context *onsafe=0);
-  int remove(object_t oid, Context *onsafe=0);
+  int write(pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
+  int zero(pobject_t oid, off_t off, size_t len, Context *onsafe);
+  int truncate(pobject_t oid, off_t size, Context *onsafe=0);
+  int remove(pobject_t oid, Context *onsafe=0);
   bool write_will_block();
-  void trim_from_cache(object_t oid, off_t off, size_t len);
+  void trim_from_cache(pobject_t oid, off_t off, size_t len);
 
-  int rename(object_t from, object_t to);
-  int clone(object_t from, object_t to, Context *onsafe);
+  int rename(pobject_t from, pobject_t to);
+  int clone(pobject_t from, pobject_t to, Context *onsafe);
 
-  int list_objects(list<object_t>& ls);
+  int list_objects(list<pobject_t>& ls);
 
   // object attr
-  int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
-  int getattr(object_t oid, const char *name, void *value, size_t size);
-  int getattrs(object_t oid, map<string,bufferptr> &aset);
-  int rmattr(object_t oid, const char *name, Context *onsafe=0);
-  int listattr(object_t oid, vector<string>& attrs);
+  int setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
+  int setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
+  int getattr(pobject_t oid, const char *name, void *value, size_t size);
+  int getattrs(pobject_t oid, map<string,bufferptr> &aset);
+  int rmattr(pobject_t oid, const char *name, Context *onsafe=0);
+  int listattr(pobject_t oid, vector<string>& attrs);
 
-  int get_object_collections(object_t oid, set<coll_t>& ls);
+  int get_object_collections(pobject_t oid, set<coll_t>& ls);
 
   // collections
   int list_collections(list<coll_t>& ls);
@@ -306,10 +306,10 @@ protected:
 
   int create_collection(coll_t c, Context *onsafe);
   int destroy_collection(coll_t c, Context *onsafe);
-  int collection_add(coll_t c, object_t o, Context *onsafe);
-  int collection_remove(coll_t c, object_t o, Context *onsafe);
+  int collection_add(coll_t c, pobject_t o, Context *onsafe);
+  int collection_remove(coll_t c, pobject_t o, Context *onsafe);
 
-  int collection_list(coll_t c, list<object_t>& o);
+  int collection_list(coll_t c, list<pobject_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
   int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
@@ -319,12 +319,12 @@ protected:
   int collection_listattr(coll_t oid, vector<string>& attrs);
   
   // maps
-  int map_lookup(object_t o, bufferlist& key, bufferlist& val);
-  int map_insert(object_t o, bufferlist& key, bufferlist& val);
-  int map_remove(object_t o, bufferlist& key);
-  int map_list(object_t o, list<bufferlist>& keys);
-  int map_list(object_t o, map<bufferlist,bufferlist>& vals);
-  int map_list(object_t o, 
+  int map_lookup(pobject_t o, bufferlist& key, bufferlist& val);
+  int map_insert(pobject_t o, bufferlist& key, bufferlist& val);
+  int map_remove(pobject_t o, bufferlist& key);
+  int map_list(pobject_t o, list<bufferlist>& keys);
+  int map_list(pobject_t o, map<bufferlist,bufferlist>& vals);
+  int map_list(pobject_t o, 
 	       bufferlist& start, bufferlist& end,
 	       map<bufferlist,bufferlist>& vals);
 
@@ -340,28 +340,28 @@ private:
   // private interface -- use if caller already holds lock
   unsigned _apply_transaction(Transaction& t);
 
-  int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
-  int _is_cached(object_t oid, off_t off, size_t len);
-  int _stat(object_t oid, struct stat *st);
-  int _getattr(object_t oid, const char *name, void *value, size_t size);
-  int _getattrs(object_t oid, map<string,bufferptr> &aset);
-  int _get_object_collections(object_t oid, set<coll_t>& ls);
+  int _read(pobject_t oid, off_t off, size_t len, bufferlist& bl);
+  int _is_cached(pobject_t oid, off_t off, size_t len);
+  int _stat(pobject_t oid, struct stat *st);
+  int _getattr(pobject_t oid, const char *name, void *value, size_t size);
+  int _getattrs(pobject_t oid, map<string,bufferptr> &aset);
+  int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 
   bool _write_will_block();
-  int _write(object_t oid, off_t off, size_t len, const bufferlist& bl);
-  void _trim_from_cache(object_t oid, off_t off, size_t len);
-  int _truncate(object_t oid, off_t size);
-  int _zero(object_t oid, off_t offset, size_t length);
-  int _remove(object_t oid);
-  int _clone(object_t from, object_t to);
-  int _setattr(object_t oid, const char *name, const void *value, size_t size);
-  int _setattrs(object_t oid, map<string,bufferptr>& attrset);
-  int _rmattr(object_t oid, const char *name);
+  int _write(pobject_t oid, off_t off, size_t len, const bufferlist& bl);
+  void _trim_from_cache(pobject_t oid, off_t off, size_t len);
+  int _truncate(pobject_t oid, off_t size);
+  int _zero(pobject_t oid, off_t offset, size_t length);
+  int _remove(pobject_t oid);
+  int _clone(pobject_t from, pobject_t to);
+  int _setattr(pobject_t oid, const char *name, const void *value, size_t size);
+  int _setattrs(pobject_t oid, map<string,bufferptr>& attrset);
+  int _rmattr(pobject_t oid, const char *name);
   bool _collection_exists(coll_t c);
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, object_t o);
-  int _collection_remove(coll_t c, object_t o);
+  int _collection_add(coll_t c, pobject_t o);
+  int _collection_remove(coll_t c, pobject_t o);
   int _collection_getattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
   int _collection_setattrs(coll_t oid, map<string,bufferptr> &aset);

@@ -19,6 +19,7 @@
 #include <cassert>
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "include/pobject.h"
 #include "common/Cond.h"
 
 #include <ext/hash_map>
@@ -71,7 +72,7 @@ struct ebofs_onode {
   csum_t data_csum;
 
   Extent onode_loc;       /* this is actually the block we live in */
-  object_t object_id;       /* for kicks */
+  pobject_t object_id;       /* for kicks */
   __u8 readonly;
 
   __s64 object_size;     /* file size in bytes.  should this be 64-bit? */

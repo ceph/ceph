@@ -31,8 +31,8 @@ typedef uint32_t objectrev_t;
 struct object_t {
   static const uint32_t MAXREV = 0xffffffffU;
 
-  uint64_t ino;  // "file" identifier
-  uint32_t bno;  // "block" in that "file"
+  uint64_t ino;    // "file" identifier
+  uint32_t bno;    // "block" in that "file"
   objectrev_t rev; // revision.  normally ctime (as epoch).
 
   object_t() : ino(0), bno(0), rev(0) {}
@@ -40,34 +40,23 @@ struct object_t {
   object_t(uint64_t i, uint32_t b, uint32_t r) : ino(i), bno(b), rev(r) {}
 };
 
-
 inline bool operator==(const object_t l, const object_t r) {
-  return (l.ino == r.ino) && (l.bno == r.bno) && (l.rev == r.rev);
+  return memcmp(&l, &r, sizeof(l)) == 0;
 }
 inline bool operator!=(const object_t l, const object_t r) {
-  return (l.ino != r.ino) || (l.bno != r.bno) || (l.rev != r.rev);
+  return memcmp(&l, &r, sizeof(l)) != 0;
 }
 inline bool operator>(const object_t l, const object_t r) {
-  if (l.ino > r.ino) return true;
-  if (l.ino < r.ino) return false;
-  if (l.bno > r.bno) return true;
-  if (l.bno < r.bno) return false;
-  if (l.rev > r.rev) return true;
-  return false;
+  return memcmp(&l, &r, sizeof(l)) > 0;
 }
 inline bool operator<(const object_t l, const object_t r) {
-  if (l.ino < r.ino) return true;
-  if (l.ino > r.ino) return false;
-  if (l.bno < r.bno) return true;
-  if (l.bno > r.bno) return false;
-  if (l.rev < r.rev) return true;
-  return false;
+  return memcmp(&l, &r, sizeof(l)) < 0;
 }
 inline bool operator>=(const object_t l, const object_t r) { 
-  return !(l < r);
+  return memcmp(&l, &r, sizeof(l)) >= 0;
 }
 inline bool operator<=(const object_t l, const object_t r) {
-  return !(l > r);
+  return memcmp(&l, &r, sizeof(l)) <= 0;
 }
 inline ostream& operator<<(ostream& out, const object_t o) {
   out << hex << o.ino << '.';
@@ -80,17 +69,11 @@ inline ostream& operator<<(ostream& out, const object_t o) {
   return out;
 }
 
-
-
-
-
 namespace __gnu_cxx {
   template<> struct hash<object_t> {
     size_t operator()(const object_t &r) const { 
       static rjhash<uint64_t> H;
       static rjhash<uint32_t> I;
-      //static hash<uint64_t> H;
-      //static hash<uint32_t> I;
       return H(r.ino) ^ I(r.bno) ^ I(r.rev);
     }
   };

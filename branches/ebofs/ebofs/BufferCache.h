@@ -274,7 +274,7 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
 
 class ObjectCache {
  public:
-  object_t object_id;
+  pobject_t object_id;
   Onode *on;
   BufferCache *bc;
 
@@ -287,7 +287,7 @@ class ObjectCache {
 
 
  public:
-  ObjectCache(object_t o, Onode *_on, BufferCache *b) : 
+  ObjectCache(pobject_t o, Onode *_on, BufferCache *b) : 
     object_id(o), on(_on), bc(b), ref(0),
     write_count(0) { }
   ~ObjectCache() {
@@ -307,7 +307,7 @@ class ObjectCache {
     return ref; 
   }
   
-  object_t get_object_id() { return object_id; }
+  pobject_t get_object_id() { return object_id; }
 
   void add_bh(BufferHead *bh) {
     // add to my map

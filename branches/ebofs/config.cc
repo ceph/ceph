@@ -331,8 +331,8 @@ md_config_t g_conf = {
   ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (50 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (30 *256), // before write() will block
+  ebofs_bc_size:        (5 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (3 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   ebofs_verify_csum_on_read: true,

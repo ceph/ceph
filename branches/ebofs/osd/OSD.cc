@@ -459,12 +459,12 @@ void OSD::_remove_unlock_pg(PG *pg)
   dout(10) << "_remove_unlock_pg " << pgid << dendl;
 
   // remove from store
-  list<object_t> olist;
+  list<pobject_t> olist;
   store->collection_list(pgid, olist);
   
   ObjectStore::Transaction t;
   {
-    for (list<object_t>::iterator p = olist.begin();
+    for (list<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(*p);
