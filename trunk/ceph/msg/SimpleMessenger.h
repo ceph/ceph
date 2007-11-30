@@ -170,7 +170,7 @@ private:
 	reader_thread.join();
       }
     }
-    void kill();
+    void stop();
 
     void send(Message *m) {
       lock.Lock();

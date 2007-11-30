@@ -624,7 +624,7 @@ void Rank::mark_down(entity_addr_t addr)
     Pipe *p = rank_pipe[addr];
     dout(0) << "mark_down " << addr << " -- " << p << dendl;
     p->lock.Lock();
-    p->kill();
+    p->stop();
     p->lock.Unlock();
   } else {
     dout(0) << "mark_down " << addr << " -- pipe dne" << dendl;
@@ -654,12 +654,12 @@ void Rank::mark_down(entity_addr_t addr)
  * 
  * this is controlled by whether accept uses the new incoming socket
  * as the new pipe.  two cases:
- *  old         new
+ *  old         new(incoming)
  *  connecting  connecting   -> use socket initiated by lower address
  *  open        connecting 
  *   -> use new socket _only_ if connect_seq matches.  that is, the
  *      peer reconnected subsequent to the current open socket.  if
- *      connect_seq _doesn't_ match, it means that it is an old attempt.
+ *      connect_seq _doesn't_ match, it means that it is an 'old' attempt.
  */
 
 int Rank::Pipe::accept()
@@ -973,7 +973,7 @@ void Rank::Pipe::fail()
   derr(10) << "fail" << dendl;
   assert(lock.is_locked());
 
-  kill();
+  stop();
 
   // report failures
   q.splice(q.begin(), sent);
@@ -996,9 +996,9 @@ void Rank::Pipe::fail()
   }
 }
 
-void Rank::Pipe::kill()
+void Rank::Pipe::stop()
 {
-  dout(10) << "kill" << dendl;
+  dout(10) << "stop" << dendl;
   assert(lock.is_locked());
 
   cond.Signal();
