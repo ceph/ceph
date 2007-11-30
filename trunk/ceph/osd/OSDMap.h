@@ -97,6 +97,8 @@ public:
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
+    map<pg_t,uint32_t> new_pg_swap_primary;
+    list<pg_t> old_pg_swap_primary;
     
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
@@ -109,6 +111,8 @@ public:
       ::_encode(new_up, bl);
       ::_encode(new_down, bl);
       ::_encode(new_offload, bl);
+      ::_encode(new_pg_swap_primary, bl);
+      ::_encode(old_pg_swap_primary, bl);
     }
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
@@ -121,6 +125,8 @@ public:
       ::_decode(new_up, bl, off);
       ::_decode(new_down, bl, off);
       ::_decode(new_offload, bl, off);
+      ::_decode(new_pg_swap_primary, bl, off);
+      ::_decode(old_pg_swap_primary, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {}
@@ -139,6 +145,7 @@ private:
   int32_t max_osd;
   vector<uint8_t>  osd_state;
   vector<entity_addr_t> osd_addr;
+  map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   
  public:
   CrushWrapper     crush;       // hierarchical map
@@ -316,6 +323,15 @@ private:
       osd_addr[i->first] = i->second;
       //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << endl;
     }
+
+    for (map<pg_t,uint32_t>::iterator i = inc.new_pg_swap_primary.begin();
+	 i != inc.new_pg_swap_primary.begin();
+	 i++)
+      pg_swap_primary[i->first] = i->second;
+    for (list<pg_t>::iterator i = inc.old_pg_swap_primary.begin();
+	 i != inc.old_pg_swap_primary.begin();
+	 i++)
+      pg_swap_primary.erase(*i);
   }
 
   // serialize, unserialize
@@ -331,6 +347,7 @@ private:
     ::_encode(max_osd, blist);
     ::_encode(osd_state, blist);
     ::_encode(osd_addr, blist);
+    ::_encode(pg_swap_primary, blist);
     
     bufferlist cbl;
     crush._encode(cbl);
@@ -351,6 +368,7 @@ private:
     ::_decode(max_osd, blist, off);
     ::_decode(osd_state, blist, off);
     ::_decode(osd_addr, blist, off);
+    ::_decode(pg_swap_primary, blist, off);
     
     bufferlist cbl;
     ::_decode(cbl, blist, off);
@@ -406,8 +424,7 @@ private:
 
 
   // pg -> (osd list)
-  int pg_to_osds(pg_t pg,
-                 vector<int>& osds) {       // list of osd addr's
+  int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
@@ -484,6 +501,18 @@ private:
       
       if (is_out(osd))
         osds.erase(osds.begin());  // oops, but it's out
+    }
+
+    // swap primary?
+    if (pg_swap_primary.count(pg)) {
+      for (unsigned i=1; i<osds.size(); i++) {
+	if (osds[i] == (int)pg_swap_primary[pg]) {
+	  uint32_t t = osds[0];	  // swap primary for this pg
+	  osds[0] = osds[i];
+	  osds[i] = t;
+	  break;
+	}
+      }
     }
     
     return osds.size();
