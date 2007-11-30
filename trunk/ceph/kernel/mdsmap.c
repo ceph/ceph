@@ -57,9 +57,9 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	if (m == NULL) 
 		return ERR_PTR(-ENOMEM);
 
-	if ((err = ceph_decode_64(p, end, &m->m_epoch)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_epoch)) != 0)
 		goto bad;
-	if ((err = ceph_decode_64(p, end, &m->m_client_epoch)) != 0)
+	if ((err = ceph_decode_32(p, end, &m->m_client_epoch)) != 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &m->m_created.tv_sec)) != 0)
 		goto bad;
@@ -106,7 +106,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	}
 
 	/* ok, we don't care about the rest. */
-	dout(30, "mdsmap_decode success epoch %llu\n", m->m_epoch);
+	dout(30, "mdsmap_decode success epoch %u\n", m->m_epoch);
 	return m;
 
 bad:

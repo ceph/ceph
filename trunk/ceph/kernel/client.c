@@ -98,7 +98,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int which;
 	char r;
 	
-	client->mounting = 06;  /* FIXME don't wait for osd map, for now */
+	client->mounting = 07;  /* wait for mon+mds+osd */
 
 	/* send mount request */
 trymount:
@@ -158,10 +158,6 @@ static void handle_mon_map(struct ceph_client *client, struct ceph_msg *msg)
 		client->whoami = msg->hdr.dst.name.num;
 		client->msgr->inst.name = msg->hdr.dst.name;
 	}
-
-	clear_bit(4, &client->mounting);
-	if (client->mounting == 0)
-		wake_up(&client->mount_wq);
 }
 
 
@@ -224,7 +220,13 @@ void ceph_put_client(struct ceph_client *cl)
 }
 
 
-
+void got_first_map(struct ceph_client *client, int type)
+{
+	dout(10, "got_first_map type %d\n", type);
+	clear_bit(type, &client->mounting);
+	if (client->mounting == 0)
+		wake_up(&client->mount_wq);
+}
 
 
 /*
@@ -234,6 +236,8 @@ void ceph_put_client(struct ceph_client *cl)
  */
 void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 {
+	int had;
+
 	dout(5, "dispatch from %s%d type %d len %d+%d\n",
 	     ceph_name_type_str(msg->hdr.src.name.type), msg->hdr.src.name.num,
 	     msg->hdr.type, msg->hdr.front_len, msg->hdr.data_len);
@@ -242,12 +246,18 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 	switch (msg->hdr.type) {
 		/* me */
 	case CEPH_MSG_MON_MAP:
+		had = client->monc.monmap.epoch ? 1:0;
 		handle_mon_map(client, msg);
+		if (!had && client->monc.monmap.epoch)
+			got_first_map(client, 4);
 		break;
 
 		/* mds client */
 	case CEPH_MSG_MDS_MAP:
+		had = client->mdsc.mdsmap ? 1:0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
+		if (!had && client->mdsc.mdsmap) 
+			got_first_map(client, 2);
 		break;
 	case CEPH_MSG_CLIENT_REPLY:
 		ceph_mdsc_handle_reply(&client->mdsc, msg);
@@ -258,7 +268,10 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 
 		/* osd client */
 	case CEPH_MSG_OSD_MAP:
+		had = client->osdc.osdmap ? 1:0;
 		ceph_osdc_handle_map(&client->osdc, msg);
+		if (!had && client->osdc.osdmap) 
+			got_first_map(client, 1);
 		break;
 	case CEPH_MSG_OSD_OPREPLY:
 		ceph_osdc_handle_reply(&client->osdc, msg);

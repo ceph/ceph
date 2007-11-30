@@ -26,7 +26,7 @@
  * fields limited to those the client cares about
  */
 struct ceph_mdsmap {
-	__u64 m_epoch, m_client_epoch;
+	ceph_epoch_t m_epoch, m_client_epoch;
 	struct ceph_timeval m_created;
 	__u32 m_anchortable;
 	__u32 m_root;

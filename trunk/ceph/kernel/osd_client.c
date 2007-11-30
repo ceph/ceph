@@ -8,7 +8,7 @@
 
 /* maps */
 
-static int calc_bits_of(int t) 
+static int calc_bits_of(unsigned t) 
 {
 	int b = 0;
 	while (t) {
@@ -27,6 +27,7 @@ static void calc_pg_masks(struct ceph_osdmap *map)
 static int crush_decode_uniform_bucket(void **p, void *end, struct crush_bucket_uniform *b)
 {
 	int j, err;
+	dout(30, "crush_decode_uniform_bucket %p to %p\n", *p, end);
 	b->primes = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
 	if (b->primes == NULL)
 		return -ENOMEM;
@@ -41,6 +42,7 @@ static int crush_decode_uniform_bucket(void **p, void *end, struct crush_bucket_
 static int crush_decode_list_bucket(void **p, void *end, struct crush_bucket_list *b)
 {
 	int j, err;
+	dout(30, "crush_decode_list_bucket %p to %p\n", *p, end);
 	b->item_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
 	if (b->item_weights == NULL)
 		return -ENOMEM;
@@ -59,6 +61,7 @@ static int crush_decode_list_bucket(void **p, void *end, struct crush_bucket_lis
 static int crush_decode_tree_bucket(void **p, void *end, struct crush_bucket_tree *b)
 {
 	int j, err;
+	dout(30, "crush_decode_tree_bucket %p to %p\n", *p, end);
 	b->node_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
 	if (b->node_weights == NULL)
 		return -ENOMEM;
@@ -71,6 +74,7 @@ static int crush_decode_tree_bucket(void **p, void *end, struct crush_bucket_tre
 static int crush_decode_straw_bucket(void **p, void *end, struct crush_bucket_straw *b)
 {
 	int j, err;
+	dout(30, "crush_decode_straw_bucket %p to %p\n", *p, end);
 	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
 	if (b->straws == NULL)
 		return -ENOMEM;
@@ -85,7 +89,10 @@ static struct crush_map *crush_decode(void **p, void *end)
 	struct crush_map *c;
 	int err = -EINVAL;
 	int i, j;
-	
+	void *start = *p;
+
+	dout(30, "crush_decode %p to %p\n", *p, end);
+
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -96,6 +103,10 @@ static struct crush_map *crush_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &c->max_devices)) < 0)
 		goto bad;
+	dout(30, "max-devices %d, max buckets %d, rules %d\n", c->max_devices, c->max_buckets, c->max_rules);
+
+
+	dout(30, "crush_decode 1 %x %p to %p\n", (int)(*p-start), *p, end);
 
 	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
 	if (c->device_offload == NULL) 
@@ -107,16 +118,22 @@ static struct crush_map *crush_decode(void **p, void *end)
 	if (c->bucket_parents == NULL) 
 		goto badmem;
 
-	c->buckets = kzalloc(c->max_buckets * sizeof(*c->buckets), GFP_KERNEL);
+	dout(30, "crush_decode 2 %x %p to %p\n", (int)(*p-start), *p, end);
+
+	c->buckets = kmalloc(c->max_buckets * sizeof(*c->buckets), GFP_KERNEL);
 	if (c->buckets == NULL) 
 		goto badmem;
-	c->rules = kzalloc(c->max_rules * sizeof(*c->rules), GFP_KERNEL);
+	c->rules = kmalloc(c->max_rules * sizeof(*c->rules), GFP_KERNEL);
 	if (c->rules == NULL)
 		goto badmem;
+
+	dout(30, "crush_decode 3 %x %p to %p\n", (int)(*p-start), *p, end);
 
 	for (i=0; i<c->max_devices; i++)
 		if ((err = ceph_decode_32(p, end, &c->device_offload[i])) < 0)
 			goto bad;
+
+	dout(30, "crush_decode 5 %x %p to %p\n", (int)(*p-start), *p, end);
 
 	/* buckets */
 	for (i=0; i<c->max_buckets; i++) {
@@ -124,8 +141,15 @@ static struct crush_map *crush_decode(void **p, void *end)
 		__u32 type;
 		struct crush_bucket *b;
 
+		dout(30, "crush_decode bucket %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
+
 		if ((err = ceph_decode_32(p, end, &type)) < 0)
 			goto bad;
+		dout(30, "crush_decode type %d\n", type);
+		if (type == 0) {
+			c->buckets[i] = 0;
+			continue;
+		}
 
 		switch (type) {
 		case CRUSH_BUCKET_UNIFORM:
@@ -156,6 +180,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 			goto bad;
 		if ((err = ceph_decode_32(p, end, &b->size)) < 0)
 			goto bad;
+
+		dout(30, "crush_decode bucket size %d off %x %p to %p\n", b->size, (int)(*p-start), *p, end);
 
 		b->items = kmalloc(b->size * sizeof(__s32), GFP_KERNEL);
 		if (b->items == NULL)
@@ -191,35 +217,45 @@ static struct crush_map *crush_decode(void **p, void *end)
 	/* rules */
 	for (i=0; i<c->max_rules; i++) {
 		__u32 yes;
+		struct crush_rule *r;
+
+		dout(30, "crush_decode rule %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
+
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
+		dout(30, "crush_decode yes = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
 		if (!yes) {
 			c->rules[i] = 0;
 			continue;
 		}
-		c->rules[i] = kmalloc(sizeof(**c->rules), GFP_KERNEL);
-		if (c->rules[i] == NULL)
-			goto badmem;
 
-		if ((err = ceph_decode_32(p, end, &c->rules[i]->len)) < 0)
+		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
-		for (j=0; j<c->rules[i]->len; j++) {
-			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].op)) < 0)
+		dout(30, "crush_decode len = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
+
+		r = c->rules[i] = kmalloc(sizeof(**c->rules) + yes*sizeof(struct crush_rule_step),
+					  GFP_KERNEL);
+		if (r == NULL)
+			goto badmem;
+		r->len = yes;
+		for (j=0; j<r->len; j++) {
+			if ((err = ceph_decode_32(p, end, &r->steps[j].op)) < 0)
 				goto bad;
-			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].arg1)) < 0)
+			if ((err = ceph_decode_32(p, end, &r->steps[j].arg1)) < 0)
 				goto bad;
-			if ((err = ceph_decode_32(p, end, &c->rules[i]->steps[j].arg2)) < 0)
+			if ((err = ceph_decode_32(p, end, &r->steps[j].arg2)) < 0)
 				goto bad;
 		}
 	}
 
 	
-
+	dout(30, "crush_decode done\n");
 	return c;
 	
 badmem:
 	err = -ENOMEM;
 bad:
+	dout(30, "crush_decode fail %d\n", err);
 	crush_destroy(c);
 	return ERR_PTR(err);
 }
@@ -261,8 +297,11 @@ static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	struct ceph_osdmap *map;
 	__u32 crushlen, max;
 	int err;
+	void *start = *p;
 
-	map = kmalloc(sizeof(*map), GFP_KERNEL);
+	dout(30, "osdmap_decode from %p to %p\n", *p, end);
+
+	map = kzalloc(sizeof(*map), GFP_KERNEL);
 	if (map == NULL) 
 		return ERR_PTR(-ENOMEM);
 
@@ -278,29 +317,38 @@ static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->ctime.tv_usec)) < 0)
 		goto bad;
+	if ((err = ceph_decode_32(p, end, &map->mtime.tv_sec)) < 0)
+		goto bad;
+	if ((err = ceph_decode_32(p, end, &map->mtime.tv_usec)) < 0)
+		goto bad;
 
 	if ((err = ceph_decode_32(p, end, &map->pg_num)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->localized_pg_num)) < 0)
 		goto bad;
+
 	calc_pg_masks(map);
 
 	if ((err = ceph_decode_32(p, end, &max)) < 0)
 		goto bad;
 
-	/* alloc */
+	/* (re)alloc osd arrays */
 	if ((err = osdmap_set_max_osd(map, max)) < 0)
 	    goto bad;
+	dout(30, "osdmap_decode max_osd = %d\n", map->max_osd);
 	
 	/* osds */
-	if ((err = ceph_decode_copy(p, end, &map->osd_state, map->max_osd)) < 0)
+	*p += 4; /* skip length field (should match max) */
+	if ((err = ceph_decode_copy(p, end, map->osd_state, map->max_osd)) < 0)
 		goto bad;
-	if ((err = ceph_decode_copy(p, end, &map->osd_addr, map->max_osd*sizeof(*map->osd_addr))) < 0)
+	*p += 4; /* skip length field (should match max) */
+	if ((err = ceph_decode_copy(p, end, map->osd_addr, map->max_osd*sizeof(*map->osd_addr))) < 0)
 		goto bad;
 
 	/* crush */
 	if ((err = ceph_decode_32(p, end, &crushlen)) < 0)
 		goto bad;
+	dout(30, "osdmap_decode crush len %d from off %x\n", crushlen, (int)(*p - start));
 	map->crush = crush_decode(p, end);
 	if (IS_ERR(map->crush)) {
 		err = PTR_ERR(map->crush);
@@ -308,9 +356,13 @@ static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	}
 
+	dout(30, "osdmap_decode done %p %p\n", *p, end);
+	BUG_ON(*p < end);
+
 	return map;
 
 bad:
+	dout(30, "osdmap_decode fail\n");
 	osdmap_destroy(map);
 	return ERR_PTR(err);
 }
@@ -447,7 +499,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			goto bad;
 		next = p + maplen;
 		if (osdc->osdmap && osdc->osdmap->epoch+1 == epoch) {
-			dout(10, "applying incremental map %llu len %d\n", epoch, maplen);
+			dout(10, "applying incremental map %u len %d\n", epoch, maplen);
 			newmap = apply_incremental(p, min(p+maplen,end), osdc->osdmap);
 			if (IS_ERR(newmap)) {
 				err = PTR_ERR(newmap);
@@ -458,7 +510,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 				osdc->osdmap = newmap;
 			}
 		} else {
-			dout(10, "ignoring incremental map %llu len %d\n", epoch, maplen);
+			dout(10, "ignoring incremental map %u len %d\n", epoch, maplen);
 		}
 		p = next;
 	}
@@ -466,33 +518,28 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		goto out;
 	
 	/* full maps */
-	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 	if ((err = ceph_decode_32(&p, end, &nr_maps)) < 0)
 		goto bad;
-	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 	dout(30, " %d full maps\n", nr_maps);
 	while (nr_maps > 1) {
 		if ((err = ceph_decode_32(&p, end, &epoch)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
-		dout(5, "skipping non-latest full map %lld len %d\n", epoch, maplen);
+		dout(5, "skipping non-latest full map %u len %d\n", epoch, maplen);
 		p += maplen;
 	}
 	if (nr_maps) {
 		if ((err = ceph_decode_32(&p, end, &epoch)) < 0)
 			goto bad;
-	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
-	dout(10, "got %llu\n", epoch);
 		if ((err = ceph_decode_32(&p, end, &maplen)) < 0)
 			goto bad;
-	dout(10, " at %p of %p offset %d\n", p, end, (int)(p - msg->front.iov_base));
 		if (osdc->osdmap && osdc->osdmap->epoch >= epoch) {
-			dout(10, "skipping full map %llu len %d, older than our %llu\n", 
+			dout(10, "skipping full map %u len %d, older than our %u\n", 
 			     epoch, maplen, osdc->osdmap->epoch);
 			p += maplen;
 		} else {
-			dout(10, "taking full map %llu len %d\n", epoch, maplen);
+			dout(10, "taking full map %u len %d\n", epoch, maplen);
 			newmap = osdmap_decode(&p, min(p+maplen,end));
 			if (IS_ERR(newmap)) {
 				err = PTR_ERR(newmap);

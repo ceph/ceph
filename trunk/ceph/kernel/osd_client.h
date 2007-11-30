@@ -11,8 +11,8 @@ struct ceph_msg;
 
 struct ceph_osdmap {
 	struct ceph_fsid fsid;
-	__u64 epoch;
-	__u64 mon_epoch;
+	ceph_epoch_t epoch;
+	ceph_epoch_t mon_epoch;
 	struct ceph_timeval ctime, mtime;
 	
 	__u32 pg_num, pg_num_mask;

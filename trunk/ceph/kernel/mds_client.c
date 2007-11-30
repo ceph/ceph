@@ -632,24 +632,24 @@ bad:
 
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
-	__u64 epoch;
+	ceph_epoch_t epoch;
 	__u32 maplen;
 	int err;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
 
-	if ((err = ceph_decode_64(&p, end, &epoch)) != 0)
+	if ((err = ceph_decode_32(&p, end, &epoch)) != 0)
 		goto bad;
 	if ((err = ceph_decode_32(&p, end, &maplen)) != 0)
 		goto bad;
 
-	dout(2, "ceph_mdsc_handle_map epoch %llu len %d\n", epoch, (int)maplen);
+	dout(2, "ceph_mdsc_handle_map epoch %u len %d\n", epoch, (int)maplen);
 
 	/* do we need it? */
 	spin_lock(&mdsc->lock);
 	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
-		dout(2, "ceph_mdsc_handle_map epoch %llu < our %llu\n", 
+		dout(2, "ceph_mdsc_handle_map epoch %u < our %u\n", 
 		     epoch, mdsc->mdsmap->m_epoch);
 		spin_unlock(&mdsc->lock);
 		goto out;
@@ -678,9 +678,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	} else {
 		mdsc->mdsmap = newmap;
 		spin_unlock(&mdsc->lock);
-		clear_bit(2, &mdsc->client->mounting);
-		if (mdsc->client->mounting == 0)
-			wake_up(&mdsc->client->mount_wq);
 	}
 	complete(&mdsc->map_waiters);
 
