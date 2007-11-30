@@ -11,19 +11,24 @@ struct workqueue_struct *send_wq;      	/* send work queue */
 /*
  * socket callback functions 
  */
+/* listen socket received a connect */
+static void ceph_accept_ready(struct sock *sk, int count_unused)
+{
+        struct ceph_messenger *msgr = (struct ceph_messenger *)sk->sk_user_data;
+
+        printk(KERN_INFO "Entered ceph_accept_ready \n");
+	if (msgr && (sk->sk_state == TCP_LISTEN))
+		queue_work(recv_wq, &msgr->awork); 
+}
+
 /* Data available on socket or listen socket received a connect */
 static void ceph_data_ready(struct sock *sk, int count_unused)
 {
-        struct ceph_connection *con;
-        struct ceph_messenger *msgr;
+        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
         printk(KERN_INFO "Entered ceph_data_ready \n");
 
-	if (sk->sk_state == TCP_LISTEN) {
-		msgr = (struct ceph_messenger *)sk->sk_user_data;
-		queue_work(recv_wq, &msgr->awork);
-	} else {
-        	con = (struct ceph_connection *)sk->sk_user_data;
+	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
 		queue_work(recv_wq, &con->rwork);
 	}
 }
@@ -34,7 +39,7 @@ static void ceph_write_space(struct sock *sk)
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
         printk(KERN_INFO "Entered ceph_write_space state = %u\n",con->state);
-        if (test_bit(WRITE_PEND, &con->state)) {
+        if (con && test_bit(WRITE_PEND, &con->state)) {
                 printk(KERN_INFO "WRITE_PEND set in connection\n");
                 queue_work(send_wq, &con->swork);
         }
@@ -44,14 +49,28 @@ static void ceph_write_space(struct sock *sk)
 static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
-        printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
+
+	printk(KERN_INFO "Entered ceph_state_change state = %u\n", con->state);
+        printk(KERN_INFO "Entered ceph_state_change sk_state = %u\n", sk->sk_state);
 
         if (sk->sk_state == TCP_ESTABLISHED) {
-                if (test_and_clear_bit(CONNECTING, &con->state) ||
-		    test_bit(ACCEPTING, &con->state))
-                        set_bit(OPEN, &con->state);
                 ceph_write_space(sk);
         }
+	/* TBD: maybe set connection state to close if TCP_CLOSE
+	 * simple case for now,                                  
+	 */
+}
+
+/* make a listening socket active by setting up the call back functions */
+int listen_sock_callbacks(struct socket *sock, void *user_data)
+{
+        struct sock *sk = sock->sk;
+        sk->sk_user_data = user_data;
+        printk(KERN_INFO "Entered listen_sock_callbacks\n");
+
+        /* Install callbacks */
+        sk->sk_data_ready = ceph_accept_ready;
+        return 0;
 }
 
 /* make a socket active by setting up the call back functions */
@@ -63,8 +82,8 @@ int add_sock_callbacks(struct socket *sock, void *user_data)
 
         /* Install callbacks */
         sk->sk_data_ready = ceph_data_ready;
-        sk->sk_write_space = ceph_write_space;
-        sk->sk_state_change = ceph_state_change;
+	sk->sk_state_change = ceph_state_change;
+	sk->sk_write_space = ceph_write_space;
 
         return 0;
 }
@@ -155,7 +174,7 @@ int _klisten(struct ceph_messenger *msgr)
 		msgr->listen_sock = NULL;
 		goto err;
 	}
-        add_sock_callbacks(msgr->listen_sock, (void *)msgr);
+        listen_sock_callbacks(msgr->listen_sock, (void *)msgr);
 	return ret;
 err:
 	sock_release(sock);
