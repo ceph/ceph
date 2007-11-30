@@ -215,11 +215,11 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     // rules
     // replication
     for (int i=1; i<=ndom; i++) {
-      crush_rule *rule = crush_make_rule();
-      crush_rule_add_step(rule, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
-      crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-      crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+      crush_rule *rule = crush_make_rule(4);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
+      crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
       crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
     }
     /*
@@ -252,10 +252,10 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     // rules
     // replication
     for (int i=1; i<=g_conf.osd_max_rep; i++) {
-      crush_rule *rule = crush_make_rule();
-      crush_rule_add_step(rule, CRUSH_RULE_TAKE, root, 0);
-      crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
-      crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+      crush_rule *rule = crush_make_rule(3);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
       crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
     }
     /*

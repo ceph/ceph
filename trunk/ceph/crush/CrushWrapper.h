@@ -55,6 +55,7 @@ public:
     ::_encode_simple(map->max_buckets, bl);
     ::_encode_simple(map->max_rules, bl);
     ::_encode_simple(map->max_devices, bl);
+    cout << "buckets/rules/devices " << map->max_buckets << " " << map->max_rules << " " << map->max_devices << std::endl;
 
     // simple arrays
     bl.append((char*)map->device_offload, sizeof(map->device_offload[0]) * map->max_devices);
@@ -208,11 +209,10 @@ public:
 	continue;
       }
 
-      map->rules[i] = (crush_rule*)malloc(sizeof(crush_rule));
-      memset(map->rules[i], 0, sizeof(crush_rule));
-
-      ::_decode_simple(map->rules[i]->len, blp);
-      map->rules[i]->steps = (crush_rule_step*)malloc(sizeof(crush_rule_step) * map->rules[i]->len);
+      __u32 len;
+      ::_decode_simple(len, blp);
+      map->rules[i] = (crush_rule*)malloc(crush_rule_size(len));
+      map->rules[i]->len = len;
       for (unsigned j=0; j<map->rules[i]->len; j++)
 	::_decode_simple(map->rules[i]->steps[j], blp);
     }

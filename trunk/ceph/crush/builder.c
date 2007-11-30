@@ -20,7 +20,7 @@ struct crush_map *crush_create()
  */
 void crush_finalize(struct crush_map *map)
 {
-	int b, i, c;
+	int b, i;
 	
 	/* calc max_devices */
 	for (b=0; b<map->max_buckets; b++) {
@@ -75,25 +75,23 @@ int crush_add_rule(struct crush_map *map,
 	return ruleno;
 }
 
-struct crush_rule *crush_make_rule()
+struct crush_rule *crush_make_rule(int len)
 {
 	struct crush_rule *rule;
-	
-	rule = malloc(sizeof(struct crush_rule));
-	memset(rule, 0, sizeof(*rule));
+	rule = malloc(crush_rule_size(len));
+	rule->len = len;
 	return rule;
 }
 
-void crush_rule_add_step(struct crush_rule *rule, int op, int arg1, int arg2)
+/*
+ * be careful; this doesn't verify that the buffer you allocated is big enough!
+ */
+void crush_rule_set_step(struct crush_rule *rule, int n, int op, int arg1, int arg2)
 {
-	rule->len++;
-	if (rule->steps)
-		rule->steps = realloc(rule->steps, sizeof(rule->steps[0])*rule->len);
-	else
-		rule->steps = malloc(sizeof(rule->steps[0])*rule->len);
-	rule->steps[rule->len-1].op = op;
-	rule->steps[rule->len-1].arg1 = arg1;
-	rule->steps[rule->len-1].arg2 = arg2;
+	assert(n < rule->len);
+	rule->steps[n].op = op;
+	rule->steps[n].arg1 = arg1;
+	rule->steps[n].arg2 = arg2;
 }
 
 

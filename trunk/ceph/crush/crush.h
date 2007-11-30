@@ -32,8 +32,10 @@ struct crush_rule_step {
 
 struct crush_rule {
 	__u32 len;
-	struct crush_rule_step *steps;
+	struct crush_rule_step steps[0];
 };
+
+#define crush_rule_size(len) (sizeof(struct crush_rule) + (len)*sizeof(struct crush_rule_step))
 
 
 

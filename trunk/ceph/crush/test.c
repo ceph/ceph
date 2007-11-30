@@ -39,11 +39,11 @@ int main()
 
   root = crush_add_bucket(map, (struct crush_bucket*)crush_make_tree_bucket(2, 10, sub, subw));
 
-  rule = crush_make_rule();
-  crush_rule_add_step(rule, CRUSH_RULE_TAKE, root, 0);
-  crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, 3, 1);
-  crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-  crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+  rule = crush_make_rule(4);
+  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, 3, 1);
+  crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
+  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
   ruleno = crush_add_rule(map, -1, rule);
 
   crush_finalize(map);

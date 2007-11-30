@@ -86,8 +86,6 @@ void crush_destroy(struct crush_map *map)
 	if (map->rules) {
 		for (b=0; b<map->max_rules; b++) {
 			if (map->rules[b] == 0) continue;
-			if (map->rules[b]->steps)
-				free(map->rules[b]->steps);
 			free(map->rules[b]);
 		}
 		free(map->rules);
