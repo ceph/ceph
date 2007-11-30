@@ -105,6 +105,8 @@ static void try_read(struct work_struct *work)
         printk(KERN_INFO "message length: %d\n", len);
 
 	kfree(con->buffer);
+        set_bit(WRITE_PEND, &con->state);
+        queue_work(send_wq, &con->swork);
 done:
 	return;
 }
