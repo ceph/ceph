@@ -15,21 +15,17 @@
 #ifndef __BUFFER_H
 #define __BUFFER_H
 
+#include <iostream>
+#include <iomanip>
+#include <list>
 #include <stdint.h>
 
 #include "common/Mutex.h"
-
-
-//#define BUFFER_USE_CCPP
 
 #ifdef BUFFER_USE_CCPP
 # include "cc++/thread.h"
 #endif
 
-#include <iostream>
-#include <list>
-
-using std::cout;
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
@@ -908,10 +904,24 @@ public:
       }
       
       // splice in *replace (implement me later?)
+    };
+
+    void hexdump(std::ostream &out) {
+      out.setf(std::ios::right);
+      out.fill('0');
+      out << std::hex;
+      for (unsigned i=0; i<length(); i++) {
+	if (i % 16 == 0) {
+	  if (i) out << std::endl;
+	  out << std::setw(4) << i << " :";
+	}
+	out << " " << std::setw(2) << ((unsigned)(*this)[i] & 0xff);
+      }
+      out << std::dec << std::endl;
+      out.unsetf(std::ios::right);
     }
 
   };
-
 };
 
 typedef buffer::ptr bufferptr;

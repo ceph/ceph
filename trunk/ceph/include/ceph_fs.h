@@ -24,6 +24,11 @@ extern int ceph_debug;
 #define CEPH_MON_PORT 2138
 
 
+typedef __u64 ceph_version_t;
+typedef __u64 ceph_tid_t;
+typedef __u32 ceph_epoch_t;
+
+
 /**
  * fs id
  */

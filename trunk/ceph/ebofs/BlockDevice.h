@@ -16,6 +16,7 @@
 #ifndef __EBOFS_BLOCKDEVICE_H
 #define __EBOFS_BLOCKDEVICE_H
 
+using namespace std;
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #include "include/Context.h"

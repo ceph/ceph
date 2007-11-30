@@ -16,11 +16,11 @@
 #ifndef __EBOFS_TYPES_H
 #define __EBOFS_TYPES_H
 
-#include <cassert>
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Cond.h"
 
+#include <cassert>
 #include <ext/hash_map>
 #include <set>
 #include <list>

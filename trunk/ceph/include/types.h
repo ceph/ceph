@@ -108,10 +108,10 @@ struct ltstr
 // ----------------------
 // some basic types
 
+// NOTE: these must match ceph_fs.h typedefs
 typedef uint64_t tid_t;         // transaction id
 typedef uint64_t version_t;
 typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
-
 
 
 #define O_LAZY 01000000

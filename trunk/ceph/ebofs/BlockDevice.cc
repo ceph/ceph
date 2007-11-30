@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #include "BlockDevice.h"
 
 #include "config.h"
