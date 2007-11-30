@@ -5,6 +5,9 @@
 #include <arpa/inet.h>
 #include <netinet/in.h> 
 
+#define HOST_ADDR "192.168.1.10"
+#define PORT 32222
+
 int main(int argc, char **argv) 
 {
 	int port, sd, len;
