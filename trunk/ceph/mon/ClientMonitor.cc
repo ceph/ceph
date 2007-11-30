@@ -19,6 +19,7 @@
 #include "OSDMonitor.h"
 #include "MonitorStore.h"
 
+#include "messages/MMonMap.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
 
@@ -221,6 +222,11 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   // reply with latest mds, osd maps
   mon->mdsmon->send_latest(to);
   mon->osdmon->send_latest(to);
+
+  dout(10) << "sending monmap to " << to << dendl;
+  bufferlist bl;
+  mon->monmap->encode(bl);
+  mon->messenger->send_message(new MMonMap(bl), to);
 
   delete m;
 }

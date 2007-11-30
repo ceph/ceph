@@ -60,7 +60,7 @@ int main(int argc, char **argv)
   }
 
   // write it out
-  cout << "mkmonmap: writing monmap to " << outfn << " (" << monmap.size() << " monitors)" << std::endl;
+  cout << "mkmonmap: writing monmap epoch " << monmap.epoch << " to " << outfn << " (" << monmap.size() << " monitors)" << std::endl;
   int r = monmap.write(outfn);
   assert(r >= 0);
   

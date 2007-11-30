@@ -23,6 +23,12 @@ struct ceph_osdmap {
 	__u32 *osd_offload;  /* 0 = normal, 0x10000 = 100% offload (failed) */
 	struct ceph_entity_addr *osd_addr;
 	struct crush_map *crush;
+
+	__u32 num_pg_swap_primary;
+	struct {
+		ceph_pg_t pg;
+		__u32 osd;
+	} *pg_swap_primary;
 };
 
 enum {

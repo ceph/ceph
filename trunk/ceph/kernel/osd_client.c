@@ -295,7 +295,8 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 {
 	struct ceph_osdmap *map;
-	__u32 crushlen, max;
+	__u32 len, max;
+	int i;
 	int err;
 	void *start = *p;
 
@@ -345,10 +346,28 @@ static struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if ((err = ceph_decode_copy(p, end, map->osd_addr, map->max_osd*sizeof(*map->osd_addr))) < 0)
 		goto bad;
 
-	/* crush */
-	if ((err = ceph_decode_32(p, end, &crushlen)) < 0)
+	/* pg primary swapping */
+	if ((err = ceph_decode_32(p, end, &len)) < 0)
 		goto bad;
-	dout(30, "osdmap_decode crush len %d from off %x\n", crushlen, (int)(*p - start));
+	if (len) {
+		map->pg_swap_primary = kmalloc(len * sizeof(*map->pg_swap_primary), GFP_KERNEL);
+		if (map->pg_swap_primary == NULL) {
+			err = -ENOMEM;
+			goto bad;
+		}
+		map->num_pg_swap_primary = len;
+		for (i=0; i<len; i++) {
+			if ((err = ceph_decode_64(p, end, &map->pg_swap_primary[i].pg.pg64)) < 0)
+				goto bad;
+			if ((err = ceph_decode_32(p, end, &map->pg_swap_primary[i].osd)) < 0)
+				goto bad;
+		}
+	}
+
+	/* crush */
+	if ((err = ceph_decode_32(p, end, &len)) < 0)
+		goto bad;
+	dout(30, "osdmap_decode crush len %d from off %x\n", len, (int)(*p - start));
 	map->crush = crush_decode(p, end);
 	if (IS_ERR(map->crush)) {
 		err = PTR_ERR(map->crush);
@@ -550,13 +569,13 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			osdc->osdmap = newmap;
 		}
 	}
-	dout(1, "done\n");
+	dout(1, "osdc handle_map done\n");
 	
 out:
 	return;
 
 bad:
-	derr(1, "corrupt osd map message\n");
+	derr(1, "osdc handle_map corrupt msg\n");
 	goto out;
 }
 

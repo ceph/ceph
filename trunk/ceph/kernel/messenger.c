@@ -392,7 +392,9 @@ static void try_write(struct work_struct *work)
 	struct ceph_messenger *msgr;
 	int ret = 1;
 
+	dout(30, "try_write start\n");
 	con = container_of(work, struct ceph_connection, swork);
+	spin_lock(&con->lock);
 	msgr = con->msgr;
 
 more:
@@ -437,6 +439,8 @@ more:
 	clear_bit(WRITE_PENDING, &con->state);
 
 done:
+	dout(30, "try_write done\n");
+	spin_unlock(&con->lock);
 	return;
 }
 
@@ -919,6 +923,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 		prepare_write_connect(msgr, con);
 		dout(5, "ceph_msg_send initiating connect on %p new state %u\n", con, con->state);
 		ret = ceph_tcp_connect(con);
+		dout(5, "ceph_msg_send done initiating connect on %p new state %u\n", con, con->state);
 		if (ret < 0) {
 			derr(1, "connection failure to peer %x:%d\n",
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
@@ -965,7 +970,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 		m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
 		if (m->front.iov_base == NULL)
 			goto out2;
-		dout(50, "ceph_msg_new front is %p len %d\n", m->front.iov_base, front_len);
 	} else {
 		m->front.iov_base = 0;
 	}

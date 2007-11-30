@@ -87,8 +87,9 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 
 	/* register */
 	if (mds >= mdsc->max_sessions) {
-		/* realloc */
 		struct ceph_mds_session **sa;
+		/* realloc */
+		dout(50, "mdsc register_session realloc to %d\n", mds);
 		sa = kzalloc(mds * sizeof(struct ceph_mds_session), GFP_KERNEL);
 		BUG_ON(sa == NULL);  /* i am lazy */
 		if (mdsc->sessions) {
@@ -293,14 +294,18 @@ retry:
 	if (mds < 0) {
 		/* wait for new mdsmap */
 		spin_unlock(&mdsc->lock);
+		dout(30, "mdsc_do_request waiting for new mdsmap\n");
 		wait_for_new_map(mdsc);
 		spin_lock(&mdsc->lock);
 		goto retry;
 	}
+	dout(30, "mdsc_do_request chose mds%d\n", mds);
 
 	/* get session */
 	session = get_session(mdsc, mds);
 	
+	dout(30, "mdsc_do_request got session %p\n", session);
+
 	/* open? */
 	if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
 		open_session(mdsc, session, mds);

@@ -98,7 +98,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 	int which;
 	char r;
 	
-	client->mounting = 07;  /* wait for mon+mds+osd */
+	client->mounting = 0;  /* wait for mon+mds+osd */
 
 	/* send mount request */
 trymount:
@@ -117,11 +117,11 @@ trymount:
 	/* wait */
 	dout(10, "mount waiting\n");
 	err = wait_event_interruptible_timeout(client->mount_wq, 
-					       (client->mounting == 0),
+					       (find_first_zero_bit(&client->mounting, 4) == 4),
 					       6*HZ);
 	if (err == -EINTR)
 		return err; 
-	if (client->mounting) {
+	if (client->mounting < 7) {
 		dout(10, "mount still waiting for mount, attempts=%d\n", attempts);
 		if (--attempts)
 			goto trymount;
@@ -129,6 +129,7 @@ trymount:
 	}
 
 	/* get handle for mount path */
+	dout(10, "mount got all maps; opening root directory\n");
 	err = ceph_mdsc_do(&client->mdsc, CEPH_MDS_OP_OPEN,
 			   CEPH_INO_ROOT, args->path, 0, 0);
 	if (err < 0)
@@ -142,16 +143,17 @@ trymount:
  * the monitor responds to monmap to indicate mount success.
  * (or, someday, to indicate a change in the monitor cluster?)
  */
-static void handle_mon_map(struct ceph_client *client, struct ceph_msg *msg)
+static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 {
 	int err;
 	
-	dout(1, "handle_mon_map");
+	dout(1, "handle_monmap had epoch %d\n", client->monc.monmap.epoch);
 
 	/* parse */
-	err = ceph_monmap_decode(&client->monc.monmap, msg->front.iov_base, 
+	err = ceph_monmap_decode(&client->monc.monmap, 
+				 msg->front.iov_base, 
 				 msg->front.iov_base + msg->front.iov_len);
-	if (err != 0) 
+	if (err != 0)
 		return;
 	
 	if (client->whoami < 0) {
@@ -220,11 +222,11 @@ void ceph_put_client(struct ceph_client *cl)
 }
 
 
-void got_first_map(struct ceph_client *client, int type)
+void got_first_map(struct ceph_client *client, int num)
 {
-	dout(10, "got_first_map type %d\n", type);
-	clear_bit(type, &client->mounting);
-	if (client->mounting == 0)
+	set_bit(num, &client->mounting);
+	dout(10, "got_first_map num %d mounting now %lu\n", num, client->mounting);
+	if (find_first_bit(&client->mounting, 4) == 4)
 		wake_up(&client->mount_wq);
 }
 
@@ -247,9 +249,9 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 		/* me */
 	case CEPH_MSG_MON_MAP:
 		had = client->monc.monmap.epoch ? 1:0;
-		handle_mon_map(client, msg);
+		handle_monmap(client, msg);
 		if (!had && client->monc.monmap.epoch)
-			got_first_map(client, 4);
+			got_first_map(client, 0);
 		break;
 
 		/* mds client */
@@ -257,7 +259,7 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 		had = client->mdsc.mdsmap ? 1:0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
 		if (!had && client->mdsc.mdsmap) 
-			got_first_map(client, 2);
+			got_first_map(client, 1);
 		break;
 	case CEPH_MSG_CLIENT_REPLY:
 		ceph_mdsc_handle_reply(&client->mdsc, msg);
@@ -271,7 +273,7 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 		had = client->osdc.osdmap ? 1:0;
 		ceph_osdc_handle_map(&client->osdc, msg);
 		if (!had && client->osdc.osdmap) 
-			got_first_map(client, 1);
+			got_first_map(client, 2);
 		break;
 	case CEPH_MSG_OSD_OPREPLY:
 		ceph_osdc_handle_reply(&client->osdc, msg);

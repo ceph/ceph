@@ -11,9 +11,9 @@
 
 #include <linux/ceph_fs.h>
 #include <linux/wait.h>
+#include <linux/completion.h>
 
 #include "messenger.h"
-#include "monmap.h"
 
 #include "mon_client.h"
 #include "mds_client.h"
@@ -39,7 +39,7 @@ struct ceph_client {
 	struct ceph_fsid fsid;
 	atomic_t nref;
 
-	int mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
+	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
 	wait_queue_head_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
