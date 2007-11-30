@@ -31,14 +31,16 @@
 
 
 
+bool RAID4PG::preprocess_op(MOSDOp *op, utime_t now)
+{
+  return false;
+}
 
 void RAID4PG::do_op(MOSDOp *op)
 {
 
 
 }
-
-
 
 void RAID4PG::do_op_reply(MOSDOpReply *reply)
 {
@@ -98,6 +100,14 @@ void RAID4PG::on_role_change()
   //assert(0);
 }
 
+void RAID4PG::on_change()
+{
+  dout(10) << "on_change" << dendl;
+  //assert(0);
+}
+
+
+// misc recovery crap
 
 void RAID4PG::clean_up_local(ObjectStore::Transaction&)
 {

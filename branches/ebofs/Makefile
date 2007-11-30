@@ -75,10 +75,10 @@ MDS_OBJS= \
 OSD_OBJS= \
 	osd/PG.o\
 	osd/ReplicatedPG.o\
+	osd/RAID4PG.o\
 	osd/Ager.o\
 	osd/FakeStore.o\
 	osd/OSD.o
-#	osd/RAID4PG.o\
 
 OSDC_OBJS= \
 	osdc/Objecter.o\

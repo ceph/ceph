@@ -222,22 +222,24 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
       crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
     }
-    /*
+
     // raid
     for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      int r = CRUSH_RAID_RULE(i);      
       if (ndom >= i) {
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 1));
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, 1, 0));      
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+	crush_rule *rule = crush_make_rule();
+	crush_rule_add_step(rule, CRUSH_RULE_TAKE, rootid, 0);
+	crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_INDEP, i, 1);
+	crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
+	crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+	crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
       } else {
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
-	crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+	crush_rule *rule = crush_make_rule();
+	crush_rule_add_step(rule, CRUSH_RULE_TAKE, rootid, 0);
+	crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_INDEP, i, 0);
+	crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+	crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
       }
     }
-    */
     
   } else {
     // one bucket
@@ -258,15 +260,14 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
       crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
     }
-    /*
-    // raid
+    // raid4
     for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      int r = CRUSH_RAID_RULE(i);      
-      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
-      crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      crush_rule *rule = crush_make_rule();
+      crush_rule_add_step(rule, CRUSH_RULE_TAKE, root, 0);
+      crush_rule_add_step(rule, CRUSH_RULE_CHOOSE_INDEP, i, 0);
+      crush_rule_add_step(rule, CRUSH_RULE_EMIT, 0, 0);
+      crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
     }
-    */
   }
   
   crush.finalize();

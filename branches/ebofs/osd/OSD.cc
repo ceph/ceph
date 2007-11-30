@@ -29,7 +29,7 @@
 
 
 #include "ReplicatedPG.h"
-//#include "RAID4PG.h"
+#include "RAID4PG.h"
 
 #include "Ager.h"
 
@@ -407,8 +407,8 @@ PG *OSD::_new_lock_pg(pg_t pgid)
   PG *pg;
   if (pgid.is_rep())
     pg = new ReplicatedPG(this, pgid);
-  //else if (pgid.is_raid4())
-  //pg = new RAID4PG(this, pgid);
+  else if (pgid.is_raid4())
+    pg = new RAID4PG(this, pgid);
   else 
     assert(0);
 
@@ -1355,14 +1355,13 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
 
     // raided
-    /*
     for (int size = minraid; size <= maxraid; size++) {
       for (ps_t ps = 0; ps < numps; ++ps) 
 	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, -1), t);
       for (ps_t ps = 0; ps < numlps; ++ps) 
 	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, whoami), t);
     }
-    */
+
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << dendl;
 
   } else {
