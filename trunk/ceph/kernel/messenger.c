@@ -918,12 +918,13 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 
 	/* initiate connect? */
 	dout(5, "ceph_msg_send connection %p state is %u\n", con, con->state);
-	if (test_and_clear_bit(NEW, &con->state)) {
-		set_bit(CONNECTING, &con->state);
+	if (test_bit(NEW, &con->state)) {
 		prepare_write_connect(msgr, con);
+		spin_unlock(&con->lock);   /* hrm */
 		dout(5, "ceph_msg_send initiating connect on %p new state %u\n", con, con->state);
 		ret = ceph_tcp_connect(con);
 		dout(5, "ceph_msg_send done initiating connect on %p new state %u\n", con, con->state);
+		spin_lock(&con->lock);
 		if (ret < 0) {
 			derr(1, "connection failure to peer %x:%d\n",
 			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
@@ -931,6 +932,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 			remove_connection(msgr, con);
 			goto out;
 		}
+		set_bit(CONNECTING, &con->state);
 	}
 	
 	/* queue */

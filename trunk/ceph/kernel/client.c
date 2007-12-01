@@ -117,7 +117,7 @@ trymount:
 	/* wait */
 	dout(10, "mount waiting\n");
 	err = wait_event_interruptible_timeout(client->mount_wq, 
-					       (find_first_zero_bit(&client->mounting, 4) == 4),
+					       (find_first_zero_bit(&client->mounting, 4) == 3),
 					       6*HZ);
 	if (err == -EINTR)
 		return err; 
@@ -225,9 +225,12 @@ void ceph_put_client(struct ceph_client *cl)
 void got_first_map(struct ceph_client *client, int num)
 {
 	set_bit(num, &client->mounting);
-	dout(10, "got_first_map num %d mounting now %lu\n", num, client->mounting);
-	if (find_first_bit(&client->mounting, 4) == 4)
+	dout(10, "got_first_map num %d mounting now %lu bits %d\n", 
+	     num, client->mounting, (int)find_first_zero_bit(&client->mounting, 4));
+	if (find_first_zero_bit(&client->mounting, 4) == 3) {
+		dout(10, "got_first_map kicking mount\n");
 		wake_up(&client->mount_wq);
+	}
 }
 
 
