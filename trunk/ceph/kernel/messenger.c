@@ -21,6 +21,16 @@ static void try_accept(struct work_struct *);
 
 
 /*
+ * failure case
+ * A retry mechanism is used with exponential backoff
+ */
+static void connection_fault(struct ceph_connection con, int error)
+{
+	return;
+	if (timeout)
+		abort_request()
+}
+/*
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
@@ -394,7 +404,6 @@ static void try_write(struct work_struct *work)
 
 	dout(30, "try_write start\n");
 	con = container_of(work, struct ceph_connection, swork);
-	spin_lock(&con->lock);
 	msgr = con->msgr;
 
 more:
@@ -412,6 +421,7 @@ more:
 		}
 		if (ret <= 0) {
 			/* TBD: handle error; return for now */
+			ceph_fault(con, ret);
 			con->error = ret;
 			goto done; /* error */
 		}
@@ -440,7 +450,6 @@ more:
 
 done:
 	dout(30, "try_write done\n");
-	spin_unlock(&con->lock);
 	return;
 }
 
@@ -717,7 +726,7 @@ static void process_accept(struct ceph_connection *con)
 /*
  * worker function when data is available on the socket
  */
-static void try_read(struct work_struct *work)
+void try_read(struct work_struct *work)
 {
 	int ret = -1;
 	struct ceph_connection *con;
@@ -726,6 +735,7 @@ static void try_read(struct work_struct *work)
 	con = container_of(work, struct ceph_connection, rwork);
 	spin_lock(&con->lock);
 	msgr = con->msgr;
+	dout(20, "Entered try_read\n");
 
 more:
 	/*
@@ -788,6 +798,7 @@ bad:
 done:
 	con->error = ret;
 	spin_unlock(&con->lock);
+	dout(20, "Exited try_read\n");
 	return;
 }
 
