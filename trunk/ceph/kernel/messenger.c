@@ -21,16 +21,6 @@ static void try_accept(struct work_struct *);
 
 
 /*
- * failure case
- * A retry mechanism is used with exponential backoff
- */
-static void connection_fault(struct ceph_connection con, int error)
-{
-	return;
-	if (timeout)
-		abort_request()
-}
-/*
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
@@ -421,7 +411,6 @@ more:
 		}
 		if (ret <= 0) {
 			/* TBD: handle error; return for now */
-			ceph_fault(con, ret);
 			con->error = ret;
 			goto done; /* error */
 		}
