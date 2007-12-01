@@ -42,7 +42,8 @@ static void ceph_write_space(struct sock *sk)
 
         dout(30, "ceph_write_space %p state = %u\n", con, con->state);
 	/* only queue to workqueue if not already queued */
-        if (con && test_bit(WRITE_PENDING, &con->state)) {
+        if (con && !work_pending(&con->swork) &&
+	    test_bit(WRITE_PENDING, &con->state)) {
                 dout(30, "ceph_write_space %p queueing write work\n", con);
                 queue_work(send_wq, &con->swork);
         }
