@@ -7,6 +7,7 @@
 
 struct workqueue_struct *recv_wq = NULL;	/* receive work queue */
 struct workqueue_struct *send_wq = NULL;	/* send work queue */
+struct workqueue_struct *accept_wq = NULL;	/* accept work queue */
 
 /*
  * socket callback functions 
@@ -20,7 +21,7 @@ static void ceph_accept_ready(struct sock *sk, int count_unused)
 	dout(30, "ceph_accept_ready messenger %p sk_state = %u\n",
 	     msgr, sk->sk_state);
 	if (msgr && (sk->sk_state == TCP_LISTEN))
-		queue_work(recv_wq, &msgr->awork);
+		queue_work(accept_wq, &msgr->awork);
 }
 
 /* Data available on socket or listen socket received a connect */
@@ -40,7 +41,8 @@ static void ceph_write_space(struct sock *sk)
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
         dout(30, "ceph_write_space %p state = %u\n", con, con->state);
-        if (con && test_bit(WRITE_PENDING, &con->state)) {
+	/* only queue to workqueue if not already queued */
+        if (con && !test_and_set_bit(WRITE_PENDING, &con->state)) {
                 dout(30, "ceph_write_space %p queueing write work\n", con);
                 queue_work(send_wq, &con->swork);
         }
@@ -292,6 +294,18 @@ int ceph_workqueue_init(void)
                 destroy_workqueue(send_wq);
                 return ret;
         }
+
+        /*
+         * Create a single thread to handle send requests
+         * note: may use same thread pool as receive workers later...
+         */
+        accept_wq = create_singlethread_workqueue("ceph-accept");
+        ret = IS_ERR(accept_wq);
+        if (ret) {
+                printk(KERN_INFO "accept worker failed to start: %d\n", ret);
+                destroy_workqueue(accept_wq);
+                return ret;
+        }
         printk(KERN_INFO "successfully created wrkqueues\n");
 
         return(ret);
@@ -302,6 +316,7 @@ int ceph_workqueue_init(void)
  */
 void ceph_workqueue_shutdown(void)
 {
+        destroy_workqueue(accept_wq);
         destroy_workqueue(send_wq);
         destroy_workqueue(recv_wq);
 }
