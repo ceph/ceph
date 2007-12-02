@@ -40,7 +40,7 @@ struct ceph_client {
 	atomic_t nref;
 
 	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
-	wait_queue_head_t mount_wq;
+	struct completion mount_completion;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;

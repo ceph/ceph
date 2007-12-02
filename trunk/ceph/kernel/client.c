@@ -61,7 +61,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 		return ERR_PTR(-ENOMEM);
 
 	atomic_set(&cl->nref, 0);
-	init_waitqueue_head(&cl->mount_wq);
+	init_completion(&cl->mount_completion);
 	spin_lock_init(&cl->sb_lock);
 	get_client_counter();
 
@@ -116,9 +116,7 @@ trymount:
 
 	/* wait */
 	dout(10, "mount waiting\n");
-	err = wait_event_interruptible_timeout(client->mount_wq, 
-					       (find_first_zero_bit(&client->mounting, 4) == 3),
-					       6*HZ);
+	err = wait_for_completion_timeout(&client->mount_completion, 6*HZ);
 	if (err == -EINTR)
 		return err; 
 	if (client->mounting < 7) {
@@ -129,7 +127,7 @@ trymount:
 	}
 
 	/* get handle for mount path */
-	dout(10, "mount got all maps; opening root directory\n");
+	dout(10, "mount got all maps; opening root directory '%s'\n", args->path);
 	err = ceph_mdsc_do(&client->mdsc, CEPH_MDS_OP_OPEN,
 			   CEPH_INO_ROOT, args->path, 0, 0);
 	if (err < 0)
@@ -229,7 +227,7 @@ void got_first_map(struct ceph_client *client, int num)
 	     num, client->mounting, (int)find_first_zero_bit(&client->mounting, 4));
 	if (find_first_zero_bit(&client->mounting, 4) == 3) {
 		dout(10, "got_first_map kicking mount\n");
-		wake_up(&client->mount_wq);
+		complete(&client->mount_completion);
 	}
 }
 
