@@ -179,6 +179,7 @@ int Rank::Accepter::start()
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
+  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // start thread
   create();
@@ -237,6 +238,7 @@ void *Rank::Accepter::entry()
 void Rank::Accepter::stop()
 {
   done = true;
+  dout(10) << "stop sending SIGUSR1" << dendl;
   this->kill(SIGUSR1);
   join();
 }
@@ -267,6 +269,7 @@ void Rank::reaper()
     p->join();
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     delete p;
+    dout(10) << "reaper deleted pipe " << p << dendl;
   }
 }
 
@@ -1153,7 +1156,7 @@ void Rank::Pipe::reader()
   lock.Unlock();
 
   if (reap) {
-    dout(20) << "reader queueing for reap" << dendl;
+    dout(10) << "reader queueing for reap" << dendl;
     if (sd > 0) ::close(sd);
     rank.lock.Lock();
     {
@@ -1254,7 +1257,7 @@ void Rank::Pipe::writer()
   lock.Unlock();
   
   if (reap) {
-    dout(20) << "writer queueing for reap" << dendl;
+    dout(10) << "writer queueing for reap" << dendl;
     if (sd > 0) ::close(sd);
     rank.lock.Lock();
     {
