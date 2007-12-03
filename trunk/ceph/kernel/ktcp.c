@@ -49,6 +49,8 @@ static void ceph_write_space(struct sock *sk)
 		set_bit(WRITEABLE, &con->state);
                 queue_work(send_wq, &con->swork);
         }
+	/* Since we have our own write_space, Clear the SOCK_NOSPACE flag */
+	clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 }
 
 /* sockets state has change */
