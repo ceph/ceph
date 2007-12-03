@@ -35,15 +35,17 @@ static void put_request(struct ceph_mds_request *req)
 
 
 /*
- * register an in-flight request
+ * register an in-flight request.
+ * fill in tid in msg request header
  */
 static struct ceph_mds_request *
 register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 {
 	struct ceph_mds_request *req;
+	struct ceph_client_request_head *head = msg->front.iov_base;
 
 	req = kmalloc(sizeof(*req), GFP_KERNEL);
-	req->r_tid = ++mdsc->last_tid;
+	req->r_tid = head->tid = ++mdsc->last_tid;
 	req->r_request = msg;
 	req->r_reply = 0;
 	req->r_num_mds = 0;
@@ -53,6 +55,7 @@ register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 
+	dout(30, "mdsc register_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void*)req);
 	ceph_msg_get(msg);  /* grab reference */
 	return req;
@@ -61,6 +64,7 @@ register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 void
 unregister_request(struct ceph_mds_client *mdsc, struct ceph_mds_request *req)
 {
+	dout(30, "mdsc unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
 	put_request(req);
 }
@@ -290,6 +294,8 @@ ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds
 	struct ceph_mds_session *session;
 	struct ceph_msg *reply = 0;
 
+	dout(30, "mdsc_do_request on %p type %d\n", msg, msg->hdr.type);
+
 	spin_lock(&mdsc->lock);
 	req = register_request(mdsc, msg, mds);
 
@@ -307,8 +313,7 @@ retry:
 
 	/* get session */
 	session = get_session(mdsc, mds);
-	
-	dout(30, "mdsc_do_request got session %p\n", session);
+	dout(30, "mdsc_do_request session %p\n", session);
 
 	/* open? */
 	if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
@@ -332,28 +337,22 @@ retry:
 	}
 
 	/* wait */
-	dout(30, "mdsc_do_request 1\n");
 	spin_unlock(&mdsc->lock);
-	dout(30, "mdsc_do_request 2\n");
 	wait_for_completion(&req->r_completion);
-	dout(30, "mdsc_do_request 3\n");
 
 	if (!req->r_reply) {
-		dout(30, "mdsc_do_request 4\n");
 		spin_lock(&mdsc->lock);
-		dout(30, "mdsc_do_request 5\n");
 		goto retry;
 	}
 	reply = req->r_reply;
 
-	dout(30, "mdsc_do_request 6\n");
 	spin_lock(&mdsc->lock);
-	dout(30, "mdsc_do_request 7\n");
 	unregister_request(mdsc, req);
 	spin_unlock(&mdsc->lock);
 
 	put_request(req);
 
+	dout(30, "mdsc_do_request done on %p reply %p\n", msg, reply);
 	return reply;
 }
 
@@ -374,7 +373,7 @@ int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op,
 	reply = ceph_mdsc_do_request(mdsc, req, -1);
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
-	dout(30, "mdsc do 3\n");
+	dout(30, "mdsc do 3 reply %p front_len %d\n", reply, reply->hdr.front_len);
 	head = reply->front.iov_base;
 	ret = head->result;
 	dout(30, "mdsc do 4\n");
@@ -405,12 +404,13 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(1, "got reply on unknown tid %llu\n", tid);
 		goto done;
 	}
-
 	get_request(req);
-	BUG_ON(req->r_reply);
-	req->r_reply = msg;
 	spin_unlock(&mdsc->lock);
 
+	/* FIXME: locking on request? */
+	BUG_ON(req->r_reply);
+	req->r_reply = msg;
+	ceph_msg_get(msg);
 	complete(&req->r_completion);
 	put_request(req);
 	

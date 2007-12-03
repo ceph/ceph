@@ -267,6 +267,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	
 	/* path on server */
 	c++;
+	while (*c == '/') c++;  /* remove leading '/'(s) */
 	if (strlen(c) >= sizeof(args->path))
 		return -ENAMETOOLONG;
 	strcpy(args->path, c);
