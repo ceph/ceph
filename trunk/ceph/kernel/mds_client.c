@@ -43,19 +43,18 @@ register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 	struct ceph_mds_request *req;
 
 	req = kmalloc(sizeof(*req), GFP_KERNEL);
-
+	req->r_tid = ++mdsc->last_tid;
 	req->r_request = msg;
-	ceph_msg_get(msg);  /* grab reference */
 	req->r_reply = 0;
 	req->r_num_mds = 0;
 	req->r_attempts = 0;
 	req->r_num_fwd = 0;
 	req->r_resend_mds = mds;
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
+	init_completion(&req->r_completion);
 
-	req->r_tid = ++mdsc->last_tid;
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void*)req);
-
+	ceph_msg_get(msg);  /* grab reference */
 	return req;
 }
 
@@ -89,8 +88,8 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 	if (mds >= mdsc->max_sessions) {
 		struct ceph_mds_session **sa;
 		/* realloc */
-		dout(50, "mdsc register_session realloc to %d\n", mds);
-		sa = kzalloc(mds * sizeof(struct ceph_mds_session), GFP_KERNEL);
+		dout(50, "mdsc register_session realloc to %d\n", mds+1);
+		sa = kzalloc((mds+1) * sizeof(struct ceph_mds_session), GFP_KERNEL);
 		BUG_ON(sa == NULL);  /* i am lazy */
 		if (mdsc->sessions) {
 			memcpy(sa, mdsc->sessions, 
@@ -98,12 +97,13 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 			kfree(mdsc->sessions);
 		}
 		mdsc->sessions = sa;
+		mdsc->max_sessions = mds+1;
 	}
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
 	s->s_state = 0;
 	s->s_cap_seq = 0;
-	init_completion(&s->s_completion);
 	atomic_set(&s->s_ref, 1);
+	init_completion(&s->s_completion);
 	mdsc->sessions[mds] = s;
 }
 
@@ -223,10 +223,12 @@ bad:
 
 static void wait_for_new_map(struct ceph_mds_client *mdsc)
 {
+	dout(30, "wait_for_new_map enter\n");
 	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch)
 		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
 
 	wait_for_completion(&mdsc->map_waiters);
+	dout(30, "wait_for_new_map exit\n");
 }
 
 /* exported functions */
@@ -253,10 +255,12 @@ ceph_mdsc_create_request_msg(struct ceph_mds_client *mdsc, int op,
 	struct ceph_msg *req;
 	struct ceph_client_request_head *head;
 	void *p, *end;
+	int pathlen = 2*(sizeof(ino1) + sizeof(__u32));
+	if (path1) pathlen += strlen(path1);
+	if (path2) pathlen += strlen(path2);
 
 	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
-			   sizeof(struct ceph_client_request_head) +
-			   sizeof(ino1)*2 + sizeof(__u32)*2 + strlen(path1) + strlen(path2),
+			   sizeof(struct ceph_client_request_head) + pathlen,
 			   0, 0);
 	if (IS_ERR(req))
 		return req;
@@ -328,16 +332,23 @@ retry:
 	}
 
 	/* wait */
+	dout(30, "mdsc_do_request 1\n");
 	spin_unlock(&mdsc->lock);
+	dout(30, "mdsc_do_request 2\n");
 	wait_for_completion(&req->r_completion);
+	dout(30, "mdsc_do_request 3\n");
 
 	if (!req->r_reply) {
+		dout(30, "mdsc_do_request 4\n");
 		spin_lock(&mdsc->lock);
+		dout(30, "mdsc_do_request 5\n");
 		goto retry;
 	}
 	reply = req->r_reply;
 
+	dout(30, "mdsc_do_request 6\n");
 	spin_lock(&mdsc->lock);
+	dout(30, "mdsc_do_request 7\n");
 	unregister_request(mdsc, req);
 	spin_unlock(&mdsc->lock);
 
@@ -354,17 +365,19 @@ int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op,
 	struct ceph_client_reply_head *head;
 	int ret;
 
+	dout(30, "mdsc do 1\n");
 	req = ceph_mdsc_create_request_msg(mdsc, op, ino1, path1, ino2, path2);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
+	dout(30, "mdsc do 2\n");
 
 	reply = ceph_mdsc_do_request(mdsc, req, -1);
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
-
+	dout(30, "mdsc do 3\n");
 	head = reply->front.iov_base;
 	ret = head->result;
-
+	dout(30, "mdsc do 4\n");
 	ceph_msg_put(reply);
 	return ret;
 }

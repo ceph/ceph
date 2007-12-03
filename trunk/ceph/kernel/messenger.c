@@ -58,18 +58,19 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 		return NULL;
 
 	con->msgr = msgr;
+	set_bit(NEW, &con->state);
+	atomic_set(&con->nref, 1);
 
 	INIT_LIST_HEAD(&con->list_all);
 	INIT_LIST_HEAD(&con->list_bucket);
+
+	spin_lock_init(&con->out_queue_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 
-	spin_lock_init(&con->lock);
-	set_bit(NEW, &con->state);
-	INIT_WORK(&con->rwork, try_read);	/* setup work structure */
-	INIT_WORK(&con->swork, try_write);	/* setup work structure */
+	INIT_WORK(&con->rwork, try_read);
+	INIT_WORK(&con->swork, try_write);
 
-	atomic_inc(&con->nref);
 	return con;
 }
 
@@ -392,16 +393,44 @@ static void try_write(struct work_struct *work)
 	struct ceph_messenger *msgr;
 	int ret = 1;
 
-	dout(30, "try_write start\n");
 	con = container_of(work, struct ceph_connection, swork);
 	msgr = con->msgr;
+	dout(30, "try_write start %p state %d\n", con, con->state);
+
+retry:
+	if (test_and_set_bit(WRITING, &con->state) != 0) {
+		dout(30, "try_write connection already writing\n");
+		return;
+	}
+	clear_bit(WRITEABLE, &con->state);
 
 more:
 	dout(30, "try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
 
+	/* initiate connect? */
+	if (test_and_clear_bit(NEW, &con->state)) {
+		prepare_write_connect(msgr, con);
+		set_bit(CONNECTING, &con->state);
+		dout(5, "try_write initiating connect on %p new state %u\n", con, con->state);
+		ret = ceph_tcp_connect(con);
+		dout(5, "try_write initiated connect\n");
+		if (ret < 0) {
+			/* fault */
+			derr(1, "connect error, FIXME\n");
+			goto done;
+		}
+	}
+	/*if (test_bit(CONNECTING, &con->state)) {
+		dout(30, "try_write still connecting, doing nothing for now\n");
+		goto done;
+	}
+	*/
+
 	/* kvec data queued? */
 	if (con->out_kvec_left) {
 		ret = write_partial_kvec(con);
+		if (ret == 0)
+			goto done;
 		if (test_and_clear_bit(REJECTING, &con->state)) {
 			dout(30, "try_write done rejecting, state %u, closing\n", con->state);
 			/* FIXME do something else here, pbly? */
@@ -409,7 +438,7 @@ more:
 			set_bit(CLOSED, &con->state);
 			put_connection(con);
 		}
-		if (ret <= 0) {
+		if (ret < 0) {
 			/* TBD: handle error; return for now */
 			con->error = ret;
 			goto done; /* error */
@@ -424,21 +453,40 @@ more:
 	}
 	
 	/* anything else pending? */
+	spin_lock(&con->out_queue_lock);
 	if (con->in_seq > con->in_seq_acked) {
 		prepare_write_ack(con);
-		goto more;
-	}
-	if (!list_empty(&con->out_queue)) {
+	} else if (!list_empty(&con->out_queue)) {
 		prepare_write_message(con);
-		goto more;
+	} else {
+		/* hmm, nothing to do! No more writes pending? */
+		dout(30, "try_write nothing else to write.\n");
+		clear_bit(WRITING, &con->state);         /* clear this first */
+		clear_bit(WRITE_PENDING, &con->state);   /* and this second, to avoid a race. */
+		spin_unlock(&con->out_queue_lock);
+		return;
 	}
-	
-	/* hmm, nothing to do! No more writes pending? */
-	dout(30, "try_write nothing else to write\n");
-	clear_bit(WRITE_PENDING, &con->state);
+	spin_unlock(&con->out_queue_lock);
+	goto more;
 
 done:
 	dout(30, "try_write done\n");
+	clear_bit(WRITING, &con->state);
+
+	/*
+	 * See if we became WRITEABLE again to avoid race against socket.  
+	 * Otherwise, this would be bad:
+	 *  A B
+	 *  -   enter try_write, do some work
+	 *  -   socket fills, we get -EAGAIN or whatever
+	 *    - socket becomes writeable again, work is queued
+	 *    - new try_write sees WRITING bit, exits
+	 *  -   original try_write clears WRITING bit
+	 */
+	if (test_bit(WRITEABLE, &con->state)) {
+		dout(30, "try_write writeable flag got set again, looping just in case\n");
+		goto retry;
+	}
 	return;
 }
 
@@ -676,7 +724,7 @@ static void process_accept(struct ceph_connection *con)
 	spin_lock(&con->msgr->con_lock);
 	existing = get_connection(con->msgr, &con->peer_addr);
 	if (existing) {
-		spin_lock(&existing->lock);
+		//spin_lock(&existing->lock);
 		/* replace existing connection? */
 		if ((test_bit(CONNECTING, &existing->state) && 
 		     compare_addr(&con->msgr->inst.addr, &con->peer_addr)) ||
@@ -695,7 +743,7 @@ static void process_accept(struct ceph_connection *con)
 			set_bit(REJECTING, &con->state);
 			con->connect_seq = existing->connect_seq; /* send this with the reject */
 		}
-		spin_unlock(&existing->lock);
+		//spin_unlock(&existing->lock);
 		put_connection(existing);
 	} else {
 		add_connection(con->msgr, con);
@@ -721,10 +769,16 @@ void try_read(struct work_struct *work)
 	struct ceph_connection *con;
 	struct ceph_messenger *msgr;
 
+	dout(20, "Entering try_read\n");
 	con = container_of(work, struct ceph_connection, rwork);
-	spin_lock(&con->lock);
 	msgr = con->msgr;
-	dout(20, "Entered try_read\n");
+
+retry:
+	if (test_and_set_bit(READING, &con->state)) {
+		dout(20, "try_read already reading\n");
+		return;
+	}
+	clear_bit(READABLE, &con->state);
 
 more:
 	/*
@@ -739,8 +793,7 @@ more:
 		dout(20, "try_read accepting\n");
 		ret = read_accept_partial(con);
 		if (ret <= 0) goto done;
-		/* accepted */
-		process_accept(con);
+		process_accept(con);		/* accepted */
 		goto more;
 	}
 	if (test_bit(CONNECTING, &con->state)) {
@@ -785,8 +838,11 @@ more:
 bad:
 	BUG_ON(1); /* shouldn't get here */
 done:
-	con->error = ret;
-	spin_unlock(&con->lock);
+	clear_bit(READING, &con->state);
+	if (test_bit(READABLE, &con->state)) {
+		dout(30, "try_read readable flag set again, looping\n");
+		goto retry;
+	}
 	dout(20, "Exited try_read\n");
 	return;
 }
@@ -914,40 +970,23 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg)
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     
 
-	spin_lock(&con->lock);
-
-	/* initiate connect? */
-	dout(5, "ceph_msg_send connection %p state is %u\n", con, con->state);
-	if (test_bit(NEW, &con->state)) {
-		prepare_write_connect(msgr, con);
-		spin_unlock(&con->lock);   /* hrm */
-		dout(5, "ceph_msg_send initiating connect on %p new state %u\n", con, con->state);
-		ret = ceph_tcp_connect(con);
-		dout(5, "ceph_msg_send done initiating connect on %p new state %u\n", con, con->state);
-		spin_lock(&con->lock);
-		if (ret < 0) {
-			derr(1, "connection failure to peer %x:%d\n",
-			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
-			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
-			remove_connection(msgr, con);
-			goto out;
-		}
-		set_bit(CONNECTING, &con->state);
-	}
-	
 	/* queue */
+	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = ++con->out_seq;
 	dout(1, "ceph_msg_send queuing %p seq %u for %s%d on %p\n", msg, msg->hdr.seq,
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num, con);
 	ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
-
-	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0) 
+	spin_unlock(&con->out_queue_lock);
+		
+	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0) {
+		dout(30, "ceph_msg_send queuing new swork on %p\n", con);
 		queue_work(send_wq, &con->swork);
+		dout(30, "ceph_msg_send queued\n");
+	}
 
-out:
-	spin_unlock(&con->lock);
 	put_connection(con);
+	dout(30, "ceph_msg_send done\n");
 	return ret;
 }
 

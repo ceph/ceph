@@ -50,14 +50,18 @@ struct ceph_msg_pos {
 };
 
 
-/* current state of connection */
-#define NEW            1
-#define CONNECTING     2
-#define ACCEPTING      3
-#define OPEN           4
-#define WRITE_PENDING  5
-#define REJECTING      6
-#define CLOSED         7
+/* ceph_connection state bit flags */
+#define NEW            0
+#define CONNECTING     1
+#define ACCEPTING      2
+#define OPEN           3
+#define WRITE_PENDING  4  /* we have data to send */
+#define WRITEABLE      5  /* set when socket becomes writeable */
+#define WRITING        6  /* provides mutual exclusion, protecting out_kvec, etc. */
+#define READABLE       7  /* set when socket gets new data */
+#define READING        8  /* provides mutual exclusion, protecting in_* */
+#define REJECTING      9
+#define CLOSED        10
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -65,7 +69,6 @@ struct ceph_connection {
 	__u32 state;		/* connection state */
 	
 	atomic_t nref;
-	spinlock_t lock;        /* connection lock */
 
 	struct list_head list_all;   /* msgr->con_all */
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
@@ -80,7 +83,10 @@ struct ceph_connection {
 	__u32 peer_connect_seq;
 
 	/* out queue */
+	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
 	struct list_head out_queue;
+	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
+
 	struct ceph_msg_header out_hdr;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
@@ -90,7 +96,6 @@ struct ceph_connection {
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
 
-	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
@@ -224,11 +229,11 @@ static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
 
 static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, const char *path)
 {
-	__u32 len = strlen(path);
+	__u32 len = path ? strlen(path):0;
 	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
 	ceph_encode_64(p, end, ino);
 	ceph_encode_32(p, end, len);
-	memcpy(*p, path, len);
+	if (len) memcpy(*p, path, len);
 	*p += len;
 	return 0;
 }

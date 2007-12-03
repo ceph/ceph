@@ -65,8 +65,9 @@ extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *cli
 struct ceph_msg *ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds);
 int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
 
+extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
-extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 
 #endif

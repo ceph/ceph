@@ -144,7 +144,8 @@ trymount:
 static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 {
 	int err;
-	
+	int first = (client->monc.monmap.epoch == 0);
+
 	dout(1, "handle_monmap had epoch %d\n", client->monc.monmap.epoch);
 
 	/* parse */
@@ -153,10 +154,11 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 				 msg->front.iov_base + msg->front.iov_len);
 	if (err != 0)
 		return;
-	
-	if (client->whoami < 0) {
+
+	if (first) {
 		client->whoami = msg->hdr.dst.name.num;
 		client->msgr->inst.name = msg->hdr.dst.name;
+		dout(1, "i am client%d\n", client->whoami);
 	}
 }
 
@@ -261,6 +263,9 @@ void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
 		ceph_mdsc_handle_map(&client->mdsc, msg);
 		if (!had && client->mdsc.mdsmap) 
 			got_first_map(client, 1);
+		break;
+	case CEPH_MSG_CLIENT_SESSION:
+		ceph_mdsc_handle_session(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_REPLY:
 		ceph_mdsc_handle_reply(&client->mdsc, msg);
