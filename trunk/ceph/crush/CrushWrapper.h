@@ -55,7 +55,6 @@ public:
     ::_encode_simple(map->max_buckets, bl);
     ::_encode_simple(map->max_rules, bl);
     ::_encode_simple(map->max_devices, bl);
-    cout << "buckets/rules/devices " << map->max_buckets << " " << map->max_rules << " " << map->max_devices << std::endl;
 
     // simple arrays
     bl.append((char*)map->device_offload, sizeof(map->device_offload[0]) * map->max_devices);
