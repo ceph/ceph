@@ -1,7 +1,9 @@
 #include "include/types.h"
 #include "common/Clock.h"
 
+#include <linux/fs.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -11,7 +13,15 @@
 int main(int argc, char **argv)
 {
   char *fn = argv[1];
-  uint64_t numblocks = atoll(argv[2]) / 4096;
+
+  int fd = ::open(fn, O_RDWR|O_DIRECT);//|O_SYNC|O_DIRECT);
+  if (fd < 0) return 1;
+
+  uint64_t bytes = 0;
+  int r = ioctl(fd, BLKGETSIZE64, &bytes);
+  uint64_t numblocks = bytes / 4096;
+
+  //uint64_t numblocks = atoll(argv[2]) * 4;// / 4096;
   int count = 400;
   
   cout << "fn " << fn << endl;
@@ -19,8 +29,6 @@ int main(int argc, char **argv)
   
   int blocks = 1;
   while (blocks <= 1024) {
-    int fd = ::open(fn, O_RDWR|O_DIRECT);//|O_SYNC|O_DIRECT);
-    if (fd < 0) return 1;
     //cout << "fd is " << fd << endl;
 
     void *buf;
@@ -30,10 +38,12 @@ int main(int argc, char **argv)
 
     utime_t start = g_clock.now();
     for (int i=0; i<count; i++) {
-      off_t o = (rand() % numblocks) * 4096;
+      off64_t so, o = (lrand48() % numblocks) * 4096;
       //cout << "s = " << s << " o = " << o << endl;
       //::lseek(fd, o, SEEK_SET);
-      int r = ::pread(fd, buf, blocks*4096, o);
+      lseek64(fd, o, SEEK_SET);
+      
+      int r = ::read(fd, buf, blocks*4096);
       //int r = ::read(fd, buf, s);
       if (r < 0) cout << "r = " << r << " " << strerror(errno) << endl;
     }
@@ -45,9 +55,9 @@ int main(int argc, char **argv)
 
     blocks *= 2;
     free(buf);
-    close(fd);  
   }
 
+  close(fd);  
 
 }
 
