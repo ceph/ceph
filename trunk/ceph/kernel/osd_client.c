@@ -103,10 +103,6 @@ static struct crush_map *crush_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &c->max_devices)) < 0)
 		goto bad;
-	dout(30, "max-devices %d, max buckets %d, rules %d\n", c->max_devices, c->max_buckets, c->max_rules);
-
-
-	dout(30, "crush_decode 1 %x %p to %p\n", (int)(*p-start), *p, end);
 
 	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
 	if (c->device_offload == NULL) 
@@ -118,8 +114,6 @@ static struct crush_map *crush_decode(void **p, void *end)
 	if (c->bucket_parents == NULL) 
 		goto badmem;
 
-	dout(30, "crush_decode 2 %x %p to %p\n", (int)(*p-start), *p, end);
-
 	c->buckets = kmalloc(c->max_buckets * sizeof(*c->buckets), GFP_KERNEL);
 	if (c->buckets == NULL) 
 		goto badmem;
@@ -127,13 +121,9 @@ static struct crush_map *crush_decode(void **p, void *end)
 	if (c->rules == NULL)
 		goto badmem;
 
-	dout(30, "crush_decode 3 %x %p to %p\n", (int)(*p-start), *p, end);
-
 	for (i=0; i<c->max_devices; i++)
 		if ((err = ceph_decode_32(p, end, &c->device_offload[i])) < 0)
 			goto bad;
-
-	dout(30, "crush_decode 5 %x %p to %p\n", (int)(*p-start), *p, end);
 
 	/* buckets */
 	for (i=0; i<c->max_buckets; i++) {
@@ -141,11 +131,11 @@ static struct crush_map *crush_decode(void **p, void *end)
 		__u32 type;
 		struct crush_bucket *b;
 
-		dout(30, "crush_decode bucket %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
+		//dout(30, "crush_decode bucket %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
 
 		if ((err = ceph_decode_32(p, end, &type)) < 0)
 			goto bad;
-		dout(30, "crush_decode type %d\n", type);
+		//dout(30, "crush_decode type %d\n", type);
 		if (type == 0) {
 			c->buckets[i] = 0;
 			continue;
@@ -181,7 +171,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 		if ((err = ceph_decode_32(p, end, &b->size)) < 0)
 			goto bad;
 
-		dout(30, "crush_decode bucket size %d off %x %p to %p\n", b->size, (int)(*p-start), *p, end);
+		//dout(30, "crush_decode bucket size %d off %x %p to %p\n", b->size, (int)(*p-start), *p, end);
 
 		b->items = kmalloc(b->size * sizeof(__s32), GFP_KERNEL);
 		if (b->items == NULL)
@@ -223,7 +213,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
-		dout(30, "crush_decode yes = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
+		//dout(30, "crush_decode yes = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
 		if (!yes) {
 			c->rules[i] = 0;
 			continue;
@@ -231,7 +221,6 @@ static struct crush_map *crush_decode(void **p, void *end)
 
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
-		dout(30, "crush_decode len = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
 
 		r = c->rules[i] = kmalloc(sizeof(**c->rules) + yes*sizeof(struct crush_rule_step),
 					  GFP_KERNEL);
@@ -249,7 +238,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 	}
 
 	
-	dout(30, "crush_decode done\n");
+	dout(30, "crush_decode success\n");
 	return c;
 	
 badmem:

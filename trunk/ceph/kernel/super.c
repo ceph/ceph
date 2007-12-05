@@ -17,36 +17,42 @@
 
 static void ceph_read_inode(struct inode * inode)
 {
+	dout(30, "ceph_read_inode\n");
 	return;
 }
 
 static int ceph_write_inode(struct inode * inode, int unused)
 {
+	dout(30, "ceph_write_inode\n");
 	return 0;
 }
 
 static void ceph_delete_inode(struct inode * inode)
 {
+	dout(30, "ceph_delete_inode\n");
 	return;
 }
 
 static void ceph_clear_inode(struct inode * inode)
 {
-
+	dout(30, "ceph_clear_inode\n");
 }
 
 static void ceph_put_super(struct super_block *s)
 {
+	dout(30, "ceph_put_super\n");
 	return;
 }
 
 static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
+	dout(30, "ceph_statfs\n");
 	return 0;
 }
 
 static void ceph_write_super(struct super_block *s)
 {
+	dout(30, "ceph_write_super\n");
 	return;
 }
 
@@ -349,12 +355,25 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	/* client */
 	if (!sbinfo->sb_client) {
 		sbinfo->sb_client = ceph_get_client(&mount_args);
-		if (PTR_ERR(sbinfo->sb_client)) {
+		if (IS_ERR(sbinfo->sb_client)) {
 			error = PTR_ERR(sbinfo->sb_client);
 			sbinfo->sb_client = 0;
 			goto out_splat;
 		}
+		dout(30, "ceph_get_sb client %p\n", sbinfo->sb_client);
 	}
+	
+	/* open root */
+	dout(30, "ceph_get_sb opening base mountpoing\n");
+	err = ceph_mdsc_do(&sbinfo->sb_client->mdsc, CEPH_MDS_OP_OPEN,
+			   CEPH_INO_ROOT, mount_args->path, 0, 0);
+	if (err < 0)
+		return err;
+
+	/* construct root inode */
+	dout(30, "ceph_get_sb constructing root inode\n");
+	
+	dout(30, "ceph_get_sb success\n");
         return 0;
 	
 out_splat:

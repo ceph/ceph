@@ -540,7 +540,6 @@ static int read_message_partial(struct ceph_connection *con)
 			m->front.iov_base = kmalloc(m->hdr.front_len, GFP_KERNEL);
 			if (m->front.iov_base == NULL)
 				return -ENOMEM;
-			dout(50, "front is %p\n", m->front.iov_base);
 		}
 		left = m->hdr.front_len - m->front.iov_len;
 		ret = ceph_tcp_recvmsg(con->sock, (char*)m->front.iov_base + m->front.iov_len, left);

@@ -125,15 +125,7 @@ trymount:
 			goto trymount;
 		return -EIO;
 	}
-
-	/* get handle for mount path */
-	dout(10, "mount got all maps; opening root directory '%s'\n", args->path);
-	err = ceph_mdsc_do(&client->mdsc, CEPH_MDS_OP_OPEN,
-			   CEPH_INO_ROOT, args->path, 0, 0);
-	if (err < 0)
-		return err;
-
-	/* yay */
+	dout(10, "mount got all maps.\n");
 	return 0;
 }
 

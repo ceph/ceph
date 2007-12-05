@@ -364,19 +364,18 @@ int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op,
 	struct ceph_client_reply_head *head;
 	int ret;
 
-	dout(30, "mdsc do 1\n");
+	dout(30, "mdsc do op %d on %llx/%s %llx/%s\n", op, ino1, 
+	     path1 ? path1:"", ino2, path2 ? path2:"");
 	req = ceph_mdsc_create_request_msg(mdsc, op, ino1, path1, ino2, path2);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	dout(30, "mdsc do 2\n");
 
 	reply = ceph_mdsc_do_request(mdsc, req, -1);
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
-	dout(30, "mdsc do 3 reply %p front_len %d\n", reply, reply->hdr.front_len);
 	head = reply->front.iov_base;
 	ret = head->result;
-	dout(30, "mdsc do 4\n");
+	dout(30, "mdsc do result=%d\n", ret);
 	ceph_msg_put(reply);
 	return ret;
 }
