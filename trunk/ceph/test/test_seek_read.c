@@ -22,7 +22,7 @@ int main(int argc, char **argv)
   uint64_t numblocks = bytes / 4096;
 
   //uint64_t numblocks = atoll(argv[2]) * 4;// / 4096;
-  int count = 400;
+  int count = 1000;
   
   cout << "fn " << fn << endl;
   cout << "numblocks " << numblocks << endl;
