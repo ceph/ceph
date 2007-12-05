@@ -332,13 +332,13 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct super_block *s;
 	struct ceph_mount_args mount_args;
 	struct ceph_super_info *sbinfo;
-	int error;
+	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 
 	dout(25, "ceph_get_sb\n");
 	
-	error = parse_mount_args(flags, data, dev_name, &mount_args);
-	if (error < 0) 
+	err = parse_mount_args(flags, data, dev_name, &mount_args);
+	if (err < 0) 
 		goto out;
 
 	if (mount_args.flags & CEPH_MOUNT_NOSHARE)
@@ -347,7 +347,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	/* superblock */
 	s = sget(fs_type, compare_super, ceph_set_super, &mount_args);
 	if (IS_ERR(s)) {
-		error = PTR_ERR(s);
+		err = PTR_ERR(s);
 		goto out;
 	}
 	sbinfo = ceph_sbinfo(s);
@@ -356,7 +356,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (!sbinfo->sb_client) {
 		sbinfo->sb_client = ceph_get_client(&mount_args);
 		if (IS_ERR(sbinfo->sb_client)) {
-			error = PTR_ERR(sbinfo->sb_client);
+			err = PTR_ERR(sbinfo->sb_client);
 			sbinfo->sb_client = 0;
 			goto out_splat;
 		}
@@ -366,7 +366,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	/* open root */
 	dout(30, "ceph_get_sb opening base mountpoing\n");
 	err = ceph_mdsc_do(&sbinfo->sb_client->mdsc, CEPH_MDS_OP_OPEN,
-			   CEPH_INO_ROOT, mount_args->path, 0, 0);
+			   CEPH_INO_ROOT, mount_args.path, 0, 0);
 	if (err < 0)
 		return err;
 
@@ -380,8 +380,8 @@ out_splat:
 	up_write(&s->s_umount);
 	deactivate_super(s);
 out:
-	dout(25, "ceph_get_sb fail %d\n", error);
-	return error;
+	dout(25, "ceph_get_sb fail %d\n", err);
+	return err;
 }
 
 static void ceph_kill_sb(struct super_block *s)
