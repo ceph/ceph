@@ -129,7 +129,9 @@ public:
       ::_decode(old_pg_swap_primary, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {}
+    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {
+      fsid.major = fsid.minor = 0;
+    }
   };
 
 private:
@@ -158,6 +160,7 @@ private:
 	     pg_num(1<<5),
 	     localized_pg_num(1<<3),
 	     max_osd(0) { 
+    fsid.major = fsid.minor = 0;
     calc_pg_masks();
   }
 
