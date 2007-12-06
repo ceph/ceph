@@ -42,7 +42,7 @@ static struct ceph_mds_request *
 register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 {
 	struct ceph_mds_request *req;
-	struct ceph_client_request_head *head = msg->front.iov_base;
+	struct ceph_mds_request_head *head = msg->front.iov_base;
 
 	req = kmalloc(sizeof(*req), GFP_KERNEL);
 	req->r_tid = head->tid = ++mdsc->last_tid;
@@ -252,19 +252,19 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 
 
 struct ceph_msg *
-ceph_mdsc_create_request_msg(struct ceph_mds_client *mdsc, int op, 
-			     ceph_ino_t ino1, const char *path1, 
-			     ceph_ino_t ino2, const char *path2)
+ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
+			 ceph_ino_t ino1, const char *path1, 
+			 ceph_ino_t ino2, const char *path2)
 {
 	struct ceph_msg *req;
-	struct ceph_client_request_head *head;
+	struct ceph_mds_request_head *head;
 	void *p, *end;
 	int pathlen = 2*(sizeof(ino1) + sizeof(__u32));
 	if (path1) pathlen += strlen(path1);
 	if (path2) pathlen += strlen(path2);
 
 	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
-			   sizeof(struct ceph_client_request_head) + pathlen,
+			   sizeof(struct ceph_mds_request_head) + pathlen,
 			   0, 0);
 	if (IS_ERR(req))
 		return req;
@@ -356,17 +356,18 @@ retry:
 	return reply;
 }
 
+/*
 int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op, 
 		 ceph_ino_t ino1, const char *path1, 
 		 ceph_ino_t ino2, const char *path2)
 {
 	struct ceph_msg *req, *reply;
-	struct ceph_client_reply_head *head;
+	struct ceph_mds_reply_head *head;
 	int ret;
 
 	dout(30, "mdsc do op %d on %llx/%s %llx/%s\n", op, ino1, 
 	     path1 ? path1:"", ino2, path2 ? path2:"");
-	req = ceph_mdsc_create_request_msg(mdsc, op, ino1, path1, ino2, path2);
+	req = ceph_mdsc_create_request(mdsc, op, ino1, path1, ino2, path2);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 
@@ -379,13 +380,14 @@ int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op,
 	ceph_msg_put(reply);
 	return ret;
 }
+*/
 
 
 
 void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
-	struct ceph_client_reply_head *head = msg->front.iov_base;
+	struct ceph_mds_reply_head *head = msg->front.iov_base;
 	__u64 tid;
 
 	/* extract tid */
@@ -418,42 +420,22 @@ done:
 }
 
 
-struct reply_info_in {
-	struct ceph_client_reply_inode *in;
-	__u32 symlink_len;
-	char *symlink;
-};
-
-int parse_reply_info_in(void **p, void *end, struct reply_info_in *in)
+int parse_reply_info_in(void **p, void *end, struct ceph_mds_reply_info_in *info)
 {
 	int err;
-	in->in = *p;
-	*p += sizeof(struct ceph_client_reply_inode) +
-		sizeof(__u32)*le32_to_cpu(in->in->fragtree.nsplits);
-	if ((err == ceph_decode_32(p, end, &in->symlink_len)) < 0)
+	info->in = *p;
+	*p += sizeof(struct ceph_mds_reply_inode) +
+		sizeof(__u32)*le32_to_cpu(info->in->fragtree.nsplits);
+	if ((err == ceph_decode_32(p, end, &info->symlink_len)) < 0)
 		return err;
-	in->symlink = *p;
-	*p += in->symlink_len;
+	info->symlink = *p;
+	*p += info->symlink_len;
 	if (unlikely(*p > end))
 		return -EINVAL;
 	return 0;
 }
 
-struct reply_info {
-	int trace_nr;
-	struct reply_info_in *trace_in;
-	struct ceph_client_reply_dirfrag **trace_dir;
-	char **trace_dname;
-	__u32 *trace_dname_len;
-
-	struct ceph_client_reply_dirfrag *dir_dir;
-	int dir_nr;
-	struct reply_info_in *dir_in;
-	char **dir_dname;
-	__u32 *dir_dname_len;
-};
-
-int parse_reply_info_trace(void **p, void *end, struct reply_info *info)
+int parse_reply_info_trace(void **p, void *end, struct ceph_mds_reply_info *info)
 {
 	__u32 numi;
 	int err = -EINVAL;
@@ -487,7 +469,7 @@ int parse_reply_info_trace(void **p, void *end, struct reply_info *info)
 			goto bad;
 		/* dir */
 		info->trace_dir[numi] = *p;
-		*p += sizeof(struct ceph_client_reply_dirfrag) +
+		*p += sizeof(struct ceph_mds_reply_dirfrag) +
 			sizeof(__u32)*le32_to_cpu(info->trace_dir[numi]->ndist);
 		if (unlikely(*p > end))
 			goto bad;
@@ -503,7 +485,7 @@ bad:
 	return err;
 }
 
-int parse_reply_info_dir(void **p, void *end, struct reply_info *info)
+int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 {
 	__u32 num, i = 0;
 	int err = -EINVAL;
@@ -549,7 +531,7 @@ bad:
 }
 
 
-int parse_reply_info(struct ceph_msg *msg, struct reply_info *info)
+int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info)
 {
 	void *p, *end;
 	__u32 len;
@@ -558,7 +540,7 @@ int parse_reply_info(struct ceph_msg *msg, struct reply_info *info)
 	memset(info, 0, sizeof(*info));
 	
 	/* trace */
-	p = msg->front.iov_base + sizeof(struct ceph_client_reply_head);
+	p = msg->front.iov_base + sizeof(struct ceph_mds_reply_head);
 	end = p + msg->front.iov_len;
 	if ((err = ceph_decode_32(&p, end, &len)) < 0)
 		goto bad;
@@ -581,11 +563,61 @@ bad:
 	return err;
 }
 
-void destroy_reply_info(struct reply_info *info)
+void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info)
 {
 	if (info->trace_in) kfree(info->trace_in);
 	if (info->dir_in) kfree(info->dir_in);
 }
+
+
+void ceph_mdsc_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
+{
+	struct ceph_inode_info *ci = CEPH_I(inode);
+	int mask = le32_to_cpu(info->mask);
+	int i;
+
+	/* vfs inode */
+	inode->i_ino = le64_to_cpu(info->ino);
+	inode->i_mode = le32_to_cpu(info->mode) | S_IFDIR;
+	inode->i_uid = le32_to_cpu(info->uid);
+	inode->i_gid = le32_to_cpu(info->gid);
+	inode->i_nlink = le32_to_cpu(info->nlink);
+	inode->i_size = le64_to_cpu(info->size);
+	inode->i_rdev = le32_to_cpu(info->rdev);
+
+	dout(30, "mdsc fill_inode ino=%lx by %d.%d sz=%llu\n", inode->i_ino,
+	     inode->i_uid, inode->i_gid, inode->i_size);
+	
+	ceph_decode_timespec(&inode->i_atime, &info->atime);
+	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
+	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
+	
+	/* ceph inode */
+	ci->i_layout = info->layout;  /* swab? */
+
+	if (le32_to_cpu(info->fragtree.nsplits) == 0) {
+		ci->i_fragtree = ci->i_fragtree_static;
+	} else {
+		//ci->i_fragtree = kmalloc(...);
+		BUG_ON(1); // write me
+	}
+	ci->i_fragtree->nsplits = le32_to_cpu(info->fragtree.nsplits);
+	for (i=0; i<ci->i_fragtree->nsplits; i++)
+		ci->i_fragtree->splits[i] = le32_to_cpu(info->fragtree.splits[i]);
+
+	ci->i_frag_map_nr = 1;
+	ci->i_frag_map = ci->i_frag_map_static;
+	ci->i_frag_map[0].frag = 0;
+	ci->i_frag_map[0].mds = 0; /* fixme */
+	
+	ci->i_nr_caps = 0;
+	ci->i_caps = ci->i_caps_static;
+	ci->i_wr_size = 0;
+	ci->i_wr_mtime.tv_sec = 0;
+	ci->i_wr_mtime.tv_usec = 0;
+}
+
+
 
 void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {

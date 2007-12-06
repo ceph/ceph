@@ -57,10 +57,9 @@ struct ceph_inode_frag_map_item {
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
 
-	int i_dir_auth;
-	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static;
+	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
-	struct ceph_inode_frag_map_item *i_frag_map;
+	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
 	
 	int i_nr_caps;
 	struct ceph_inode_cap *i_caps;

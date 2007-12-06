@@ -238,6 +238,12 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 	return 0;
 }
 
+static void __inline__ ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
+{
+	ts->tv_sec = le32_to_cpu(tv->tv_sec);
+	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
+}
+
 
 
 

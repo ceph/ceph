@@ -44,6 +44,9 @@ struct ceph_mds_request {
 };
 
 
+/* 
+ * mds client state
+ */
 struct ceph_mds_client {
 	spinlock_t lock;
 
@@ -61,13 +64,43 @@ struct ceph_mds_client {
 	struct completion map_waiters;
 };
 
+/*
+ * for mds reply parsing
+ */
+struct ceph_mds_reply_info_in {
+	struct ceph_mds_reply_inode *in;
+	__u32 symlink_len;
+	char *symlink;
+};
+
+struct ceph_mds_reply_info {
+	int trace_nr;
+	struct ceph_mds_reply_info_in *trace_in;
+	struct ceph_mds_reply_dirfrag **trace_dir;
+	char **trace_dname;
+	__u32 *trace_dname_len;
+
+	struct ceph_mds_reply_dirfrag *dir_dir;
+	int dir_nr;
+	struct ceph_mds_reply_info_in *dir_in;
+	char **dir_dname;
+	__u32 *dir_dname_len;
+};
+
+
+
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client);
-struct ceph_msg *ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds);
-int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
 
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+
+extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
+struct ceph_msg *ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds);
+
+
+extern int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info);
+extern void ceph_mdsc_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *i);
 
 #endif

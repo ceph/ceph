@@ -88,7 +88,7 @@ fail:
 }
 
 /*
- * try to mount
+ * mount: join the ceph cluster.
  */
 static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 {
