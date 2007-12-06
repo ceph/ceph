@@ -80,6 +80,11 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_RDWRRANDOM_EX );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"overloadosd0") == 0) {
+	syn_modes.push_back( SYNCLIENT_MODE_OVERLOAD_OSD_0 );
+	syn_iargs.push_back( atoi(args[++i]) );
+	syn_iargs.push_back( atoi(args[++i]) );
+	syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"readshared") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_READSHARED );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -596,6 +601,18 @@ int SyntheticClient::run()
 	did_run_me();
       }
       break;
+    case SYNCLIENT_MODE_OVERLOAD_OSD_0:
+      {
+	dout(1) << "OVERLOADING OSD 0" << dendl;
+	int iarg1 = iargs.front(); iargs.pop_front();
+	int iarg2 = iargs.front(); iargs.pop_front();
+	int iarg3 = iargs.front(); iargs.pop_front();
+	if (run_me()) {
+	  overload_osd_0(iarg1, iarg2, iarg3);
+	}
+	did_run_me();
+      }
+
     case SYNCLIENT_MODE_WRSHARED:
       {
         string sarg1 = "shared";
@@ -620,7 +637,7 @@ int SyntheticClient::run()
       break;
     case SYNCLIENT_MODE_WRITEBATCH:
       {
-          int iarg1 = iargs.front(); iargs.pop_front();
+	int iarg1 = iargs.front(); iargs.pop_front();
         int iarg2 = iargs.front(); iargs.pop_front();
         int iarg3 = iargs.front(); iargs.pop_front();
 
@@ -1673,6 +1690,49 @@ int SyntheticClient::open_shared(int num, int count)
 }
 
 
+// Hits OSD 0 with writes to various files with OSD 0 as the primary.
+int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
+
+  // collect a bunch of files starting on OSD 0
+  int left = n;
+  int tried = 0;
+  while (left < 0) {
+
+
+    // pull open a file
+    dout(-1) << "in OSD overload" << dendl;
+    string filename = get_sarg(tried);
+    dout(1) << "OSD Overload workload: trying file " << filename << dendl;
+    int fd = client->open(filename.c_str(), O_RDWR|O_CREAT);
+    ++tried;
+
+    // only use the file if its first primary is OSD 0
+    int primary_osd = check_first_primary(fd);
+    if (primary_osd != 0) {
+      client->close(fd);
+      dout(1) << "OSD Overload workload: SKIPPING file " << filename <<
+	" with OSD " << primary_osd << " as first primary. " << dendl;
+      continue;
+    }
+      dout(1) << "OSD Overload workload: USING file " << filename <<
+	" with OSD 0 as first primary. " << dendl;
+
+
+    --left;
+    // do whatever operation we want to do on the file. How about a write?
+    write_fd(fd, size, wrsize);
+  }
+  return 0;
+}
+
+
+// See what the primary is for the first object in this file.
+int SyntheticClient::check_first_primary(int fh) {
+  list<ObjectExtent> extents;
+  client->enumerate_layout(fh, extents, 1, 0);  
+  return client->osdmap->get_pg_primary((extents.begin())->layout.pgid);
+}
+
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
 {
   //uint64_t wrsize = 1024*256;
@@ -1724,6 +1784,44 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
 
   return 0;
 }
+
+int SyntheticClient::write_fd(int fd, int size, int wrsize)   // size is in MB, wrsize in bytes
+{
+  //uint64_t wrsize = 1024*256;
+  char *buf = new char[wrsize+100];   // 1 MB
+  memset(buf, 7, wrsize);
+  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
+
+  //dout(5) << "SyntheticClient::write_fd: writing to fd " << fd << dendl;
+  if (fd < 0) return fd;
+
+  for (unsigned i=0; i<chunks; i++) {
+    if (time_to_stop()) {
+      dout(0) << "stopping" << dendl;
+      break;
+    }
+    dout(2) << "writing block " << i << "/" << chunks << dendl;
+    
+    // fill buf with a 16 byte fingerprint
+    // 64 bits : file offset
+    // 64 bits : client id
+    // = 128 bits (16 bytes)
+    uint64_t *p = (uint64_t*)buf;
+    while ((char*)p < buf + wrsize) {
+      *p = (uint64_t)i*(uint64_t)wrsize + (uint64_t)((char*)p - buf);      
+      p++;
+      *p = client->get_nodeid();
+      p++;
+    }
+
+    client->write(fd, buf, wrsize, i*wrsize);
+  }
+  client->close(fd);
+  delete[] buf;
+
+  return 0;
+}
+
 
 int SyntheticClient::write_batch(int nfile, int size, int wrsize)
 {

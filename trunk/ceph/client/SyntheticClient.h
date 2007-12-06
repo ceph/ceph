@@ -47,6 +47,8 @@
 
 #define SYNCLIENT_MODE_LINKTEST   27
 
+#define SYNCLIENT_MODE_OVERLOAD_OSD_0 28 // two args
+
 #define SYNCLIENT_MODE_TRACE       30
 
 #define SYNCLIENT_MODE_CREATEOBJECTS 35
@@ -216,6 +218,8 @@ class SyntheticClient {
   int open_shared(int num, int count);
 
   int write_file(string& fn, int mb, int chunk);
+  int write_fd(int fd, int size, int wrsize);
+
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
 
@@ -225,6 +229,9 @@ class SyntheticClient {
 
   int read_random(string& fn, int mb, int chunk);
   int read_random_ex(string& fn, int mb, int chunk);
+  
+  int overload_osd_0(int n, int sie, int wrsize);
+  int check_first_primary(int fd);
 
   int clean_dir(string& basedir);
 

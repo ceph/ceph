@@ -802,6 +802,32 @@ void OSDMonitor::tick()
   if (!mark_out.empty()) {
     propose_pending();
   }
+
+#define SWAP_PRIMARIES_AT_START 0
+#define SWAP_TIME 1
+
+  if (!SWAP_PRIMARIES_AT_START) return;
+
+  // For all PGs that have OSD 0 as the primary,
+  // switch them to use the first replca
+
+
+  ps_t numps = osdmap.get_pg_num();
+  int minrep = 1; 
+  int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
+  for (int nrep = 1; nrep <= maxrep; nrep++) { 
+    for (ps_t ps = 0; ps < numps; ++ps) {
+      pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
+      vector<int> osds;
+      osdmap.pg_to_osds(pgid, osds); 
+      if (osds[0] = 0) {
+	pending_inc.new_pg_swap_primary[pgid] = osds[1];
+	dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
+		<< osds[1] << dendl;
+      }
+    }
+  }
+  propose_pending();
 }
 
 
