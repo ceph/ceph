@@ -357,7 +357,8 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i++) {
     dout(2) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
     derr(0) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
-    mon->messenger->mark_down(osdmap.get_addr(i->first));
+    // no: this screws up map delivery on shutdown
+    //mon->messenger->mark_down(osdmap.get_addr(i->first));
   }
   for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
