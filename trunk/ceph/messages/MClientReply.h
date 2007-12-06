@@ -103,7 +103,7 @@ struct InodeStat {
   }
 
   void _decode(bufferlist::iterator &p) {
-    struct ceph_client_reply_inode e;
+    struct ceph_mds_reply_inode e;
     ::_decode_simple(e, p);
     inode.ino = e.ino;
     inode.layout = e.layout;
@@ -140,7 +140,7 @@ struct InodeStat {
     /*
      * note: encoding matches struct ceph_client_reply_inode
      */
-    struct ceph_client_reply_inode e;
+    struct ceph_mds_reply_inode e;
     memset(&e, 0, sizeof(e));
     e.ino = in->inode.ino;
     e.layout = in->inode.layout;
@@ -170,7 +170,7 @@ struct InodeStat {
 
 class MClientReply : public Message {
   // reply data
-  struct ceph_client_reply_head st;
+  struct ceph_mds_reply_head st;
  
   list<InodeStat*> trace_in;
   list<DirStat*>   trace_dir;

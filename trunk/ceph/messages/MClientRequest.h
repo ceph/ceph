@@ -49,7 +49,7 @@
 
 class MClientRequest : public Message {
 public:
-  struct ceph_client_request_head head;
+  struct ceph_mds_request_head head;
 
   // path arguments
   filepath path, path2;
