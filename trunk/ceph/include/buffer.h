@@ -27,6 +27,7 @@
 #endif
 
 #define BUFFER_PAGE_SIZE 4096  // FIXME
+#define BUFFER_PAGE_MASK (BUFFER_PAGE_SIZE-1)  // FIXME
 
 // <hack>
 //  these are in config.o
@@ -72,7 +73,10 @@ private:
     }
 
     bool is_page_aligned() {
-      return (long)data % BUFFER_PAGE_SIZE == 0;
+      return ((long)data & BUFFER_PAGE_MASK) == 0;
+    }
+    bool is_n_page_sized() {
+      return (len & BUFFER_PAGE_MASK) == 0;
     }
   };
 
@@ -147,7 +151,7 @@ private:
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
       realdata = new char[len+BUFFER_PAGE_SIZE-1];
-      unsigned off = ((unsigned)realdata) % BUFFER_PAGE_SIZE;
+      unsigned off = ((unsigned)realdata) & BUFFER_PAGE_MASK;
       if (off) 
 	data = realdata + BUFFER_PAGE_SIZE - off;
       else
@@ -283,7 +287,8 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const { return _off + _len == _raw->len; }
 
-    bool is_page_aligned() const { return (long)c_str() % BUFFER_PAGE_SIZE == 0; }
+    bool is_page_aligned() const { return ((long)c_str() & BUFFER_PAGE_MASK) == 0; }
+    bool is_n_page_sized() const { return (length() & BUFFER_PAGE_MASK) == 0; }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -558,7 +563,11 @@ public:
       return true;
     }
     bool is_n_page_sized() const {
-      return length() % BUFFER_PAGE_SIZE == 0;
+      for (std::list<ptr>::const_iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) 
+	if (!it->is_n_page_sized()) return false;
+      return true;
     }
 
     // modifiers
