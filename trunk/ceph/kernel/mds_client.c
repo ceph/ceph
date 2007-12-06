@@ -570,55 +570,6 @@ void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info)
 }
 
 
-void ceph_mdsc_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
-{
-	struct ceph_inode_info *ci = CEPH_I(inode);
-	int mask = le32_to_cpu(info->mask);
-	int i;
-
-	/* vfs inode */
-	inode->i_ino = le64_to_cpu(info->ino);
-	inode->i_mode = le32_to_cpu(info->mode) | S_IFDIR;
-	inode->i_uid = le32_to_cpu(info->uid);
-	inode->i_gid = le32_to_cpu(info->gid);
-	inode->i_nlink = le32_to_cpu(info->nlink);
-	inode->i_size = le64_to_cpu(info->size);
-	inode->i_rdev = le32_to_cpu(info->rdev);
-
-	dout(30, "mdsc fill_inode ino=%lx by %d.%d sz=%llu\n", inode->i_ino,
-	     inode->i_uid, inode->i_gid, inode->i_size);
-	
-	ceph_decode_timespec(&inode->i_atime, &info->atime);
-	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
-	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
-	
-	/* ceph inode */
-	ci->i_layout = info->layout;  /* swab? */
-
-	if (le32_to_cpu(info->fragtree.nsplits) == 0) {
-		ci->i_fragtree = ci->i_fragtree_static;
-	} else {
-		//ci->i_fragtree = kmalloc(...);
-		BUG_ON(1); // write me
-	}
-	ci->i_fragtree->nsplits = le32_to_cpu(info->fragtree.nsplits);
-	for (i=0; i<ci->i_fragtree->nsplits; i++)
-		ci->i_fragtree->splits[i] = le32_to_cpu(info->fragtree.splits[i]);
-
-	ci->i_frag_map_nr = 1;
-	ci->i_frag_map = ci->i_frag_map_static;
-	ci->i_frag_map[0].frag = 0;
-	ci->i_frag_map[0].mds = 0; /* fixme */
-	
-	ci->i_nr_caps = 0;
-	ci->i_caps = ci->i_caps_static;
-	ci->i_wr_size = 0;
-	ci->i_wr_mtime.tv_sec = 0;
-	ci->i_wr_mtime.tv_usec = 0;
-}
-
-
-
 void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;

@@ -1,5 +1,5 @@
-#ifndef _FS_CEPH_CEPH_H
-#define _FS_CEPH_CEPH_H
+#ifndef _FS_CEPH_SUPER_H
+#define _FS_CEPH_SUPER_H
 
 #include <linux/ceph_fs.h>
 #include <linux/fs.h>
@@ -67,7 +67,7 @@ struct ceph_inode_info {
 	off_t i_wr_size;
 	struct ceph_timeval i_wr_mtime;
 	
-	struct inode vfs_inode;
+	struct inode vfs_inode; /* at end */
 };
 
 static inline struct ceph_inode_info *CEPH_I(struct inode *inode)
@@ -75,15 +75,20 @@ static inline struct ceph_inode_info *CEPH_I(struct inode *inode)
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
+/* inode.c */
+extern struct inode *ceph_new_inode(struct super_block *sb, 
+				    struct ceph_mds_reply_inode *info);
 
+/* addr.c */
+extern const struct address_space_operations ceph_aops;
 
 /* file.c */
-extern const struct inode_operations ceph_file_inops;
-extern const struct file_operations ceph_file_operations;
+extern const struct inode_operations ceph_file_iops;
+extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 
 /* dir.c */
-extern const struct inode_operations ceph_dir_inops;
-extern const struct file_operations ceph_dir_operations;
+extern const struct inode_operations ceph_dir_iops;
+extern const struct file_operations ceph_dir_fops;
 
 #endif /* _FS_CEPH_CEPH_H */

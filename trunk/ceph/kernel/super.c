@@ -363,13 +363,12 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	rootinfo = &rinfo.trace_in[rinfo.trace_nr-1];
 		
 	/* construct root inode */
-	inode = new_inode(sb);
+	inode = ceph_new_inode(sb, rootinfo->in);
 	if (!inode) {
 		err = -ENOMEM;
 		goto out;
 	}
-	dout(30, "open_root_inode filling inode\n");
-	ceph_mdsc_fill_inode(inode, rootinfo->in);
+
 	root = d_alloc_root(inode);
 	if (!root) {
 		err = -ENOMEM;
