@@ -32,15 +32,17 @@ svn co https://ceph.svn.sourceforge.net/svnroot/ceph/trunk/ceph
 
 		<h4>Runtime Environment</h4>
 		<div>
-			Few quick steps to get things started:
+			Few quick steps to get things started.  Note that these instructions assume either that you are running on one node, or have a shared directory (e.g. over NFS) mounted on each node.  
 
 			<ol>
 			<li>Checkout, change into the <tt>ceph/</tt> directory, and build.  E.g.,
 <pre>
 svn co https://ceph.svn.sourceforge.net/svnroot/ceph
 cd ~/ceph/trunk/ceph
-make
+make mpi=no fuse=no
 </pre>
+(You can omit the mpi=no or fuse=no if you happen to have those installed.)
+
 
 			<li>Create a <tt>log/</tt> dir for various runtime stats.
 <pre>
@@ -52,34 +54,32 @@ mkdir dev
 ln -s /dev/sda3 dev/osd.all   # all nodes use /dev/sda3
 ln -s /dev/sda4 dev/osd0      # except osd0, which should use /dev/sd4
 </pre>
-				These need not be "real" devices--they can be regular files too.  To get going with fakesyn, for example,
+				That is, when an osd starts up, it first looks for <tt>dev/osd$n</tt>, then <tt>dev/osd.all</tt>, in that order.  
+
+				These need not be "real" devices--they can be regular files too.  To get going with fakesyn, for example, or to test a whole "cluster" running on the same node,
 <pre>
 # create small "disks" for osd0-osd3
-for f in 0 1 2 3; do                                 # fakesyn defaults is 4 OSDs
+for f in 0 1 2 3; do                                 # default is 4 OSDs
 dd if=/dev/zero of=dev/osd$f bs=1048576 count=1024   # 1 GB each
 done
-
-# smaller devices for monitors too
-for f in 0 1 2 3 4 ; do
-dd if=/dev/zero of=dev/mon$f bs=1048576 count=10   # 10 MB each
-done
 </pre>
-				Note that if your home/working directory is mounted via NFS, you'll want to symlink <tt>dev/</tt> to a directory on a local disk.
+				Note that if your home/working directory is mounted via NFS or similar, you'll want to symlink <tt>dev/</tt> to a directory on a local disk.
 		</div>
 		
 
-		<h4>Running fakesyn -- everying one process</h4>
+		<h4>Running fakesyn -- everything one process</h4>
 		<div>
 			A quick example, assuming you've set up "fake" EBOFS devices as above:
 <pre>
-make fakesyn && ./fakesyn --mkfs --osd_pg_bits 4 --debug_ms 1 --debug_client 3 --syn rw 1 100000
+make fakesyn && ./fakesyn --mkfs --debug_ms 1 --debug_client 3 --syn rw 1 100000
 # where those options mean:
 #	--mkfs               # start with a fresh file system
-#	--osd_pg_bits 4      # we only need a few PGs (we don't care about load balancing)
 #	--debug_ms 1         # show message delivery
 #	--debug_client 3     # show limited client stuff
-#	--syn rw 1 100000    # write 1GB to a file in 100,000 byte chunks, then read it back
+#	--syn rw 1 100000    # write 1MB to a file in 100,000 byte chunks, then read it back
 </pre>
+			One the synthetic workload finishes, the synthetic client unmounts, and the whole system shuts down.
+
 			The full set of command line arguments can be found in <tt>config.cc</tt>.
 		</div>
 
