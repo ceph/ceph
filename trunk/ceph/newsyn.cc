@@ -45,7 +45,8 @@ public:
 
 extern std::map<entity_name_t,float> g_fake_kill_after;
 
-
+bool use_existing_monmap = false;
+char *monmap_fn = ".ceph_monmap";
 /*
  * start up NewMessenger via MPI.
  */ 
@@ -58,6 +59,14 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   int mpi_rank;
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_world);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+
+  if (use_existing_monmap && mpi_rank < g_conf.num_mon) {
+    int r = monmap->read(monmap_fn);
+    assert(r >= 0);
+    g_my_addr = monmap->get_inst(mpi_rank).addr;
+    cout << "i am monitor, will bind to " << g_my_addr 
+	 << " from existing " << monmap_fn << std::endl;
+  }
 
   // first, synchronize clocks.
   if (g_conf.clock_tare) {
@@ -104,7 +113,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   bufferlist bl;
   if (mpi_rank == 0) {
     monmap->encode(bl);
-    monmap->write(".ceph_monmap");
+    monmap->write(monmap_fn);
   } else {
     int l = g_conf.num_mon * 1000;   // nice'n big.
     bufferptr bp(l); 
@@ -172,6 +181,9 @@ int main(int argc, char **argv)
         int o = atoi(args[++i]);
         int w = atoi(args[++i]);
         kill_osd_after[o] = w;
+      }
+      else if (strcmp(args[i], "--use_existing_monmap") == 0) {
+	use_existing_monmap = true;
       }
       else if (strcmp(args[i], "--share_single_client") == 0) {
 	share_single_client = 1;
