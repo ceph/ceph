@@ -95,7 +95,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 static void ceph_destroy_inode(struct inode *inode)
 {
-	kmem_cache_free(ceph_inode_cachep, CEPH_I(inode));
+	kmem_cache_free(ceph_inode_cachep, ceph_inode(inode));
 }
 
 static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)

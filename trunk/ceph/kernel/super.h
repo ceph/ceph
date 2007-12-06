@@ -70,14 +70,22 @@ struct ceph_inode_info {
 	struct inode vfs_inode; /* at end */
 };
 
-static inline struct ceph_inode_info *CEPH_I(struct inode *inode)
+static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 {
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
+}
+
+static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
+{
+	return ((struct ceph_super_info*)inode->i_sb->s_fs_info)->sb_client;
 }
 
 /* inode.c */
 extern struct inode *ceph_new_inode(struct super_block *sb, 
 				    struct ceph_mds_reply_inode *info);
+extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
+			      struct kstat *stat);
+
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

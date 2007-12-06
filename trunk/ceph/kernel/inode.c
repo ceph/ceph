@@ -59,23 +59,27 @@ struct inode *ceph_new_inode(struct super_block *sb,
 	ci->i_wr_mtime.tv_usec = 0;
 #endif
 
-	inode->i_mapping->a_ops = &ceph_aops;
+	//inode->i_mapping->a_ops = &ceph_aops;
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFIFO:
 	case S_IFBLK:
 	case S_IFCHR:
 	case S_IFSOCK:
+		dout(20, "%p is special\n", inode);
 		init_special_inode(inode, inode->i_mode, inode->i_rdev);
 		break;
 	case S_IFREG:
+		dout(20, "%p is a file\n", inode);
 		inode->i_op = &ceph_file_iops;
 		inode->i_fop = &ceph_file_fops;
 		break;
 	case S_IFLNK:
+		dout(20, "%p is a symlink\n", inode);
 		inode->i_op = &ceph_symlink_iops;
 		break;
 	case S_IFDIR:
+		dout(20, "%p is a dir\n", inode);
 		inc_nlink(inode);
 		inode->i_op = &ceph_dir_iops;
 		inode->i_fop = &ceph_dir_fops;
@@ -89,41 +93,18 @@ struct inode *ceph_new_inode(struct super_block *sb,
 	return inode;
 }
 
+
+
+int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
+		       struct kstat *stat)
+{
+	dout(5, "getattr on dentry %p\n", dentry);
+	return 0;
+}
+
 /*
-static int
-ceph_vfs_create(struct inode *dir, struct dentry *dentry, int mode,
-		struct nameidata *nd)
-{
-}
 
-static int ceph_vfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
-{
-}
 
-static struct dentry *ceph_vfs_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nameidata)
-{
-}
-
-static int ceph_vfs_unlink(struct inode *i, struct dentry *d)
-{
-}
-
-static int ceph_vfs_rmdir(struct inode *i, struct dentry *d)
-{
-}
-
-static int
-ceph_vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
-		struct inode *new_dir, struct dentry *new_dentry)
-{
-}
-
-static int
-ceph_vfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		 struct kstat *stat)
-{
-}
 
 static int ceph_vfs_setattr(struct dentry *dentry, struct iattr *iattr)
 {
