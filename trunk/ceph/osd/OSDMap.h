@@ -328,11 +328,11 @@ private:
     }
 
     for (map<pg_t,uint32_t>::iterator i = inc.new_pg_swap_primary.begin();
-	 i != inc.new_pg_swap_primary.begin();
+	 i != inc.new_pg_swap_primary.end();
 	 i++)
       pg_swap_primary[i->first] = i->second;
     for (list<pg_t>::iterator i = inc.old_pg_swap_primary.begin();
-	 i != inc.old_pg_swap_primary.begin();
+	 i != inc.old_pg_swap_primary.end();
 	 i++)
       pg_swap_primary.erase(*i);
   }
