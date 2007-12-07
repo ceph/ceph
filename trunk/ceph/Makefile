@@ -21,7 +21,8 @@ EXTRA_CFLAGS += -pg
 # base
 CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
-CC = g++
+CXX = g++
+CC = gcc
 LIBS = -pthread
 
 # darwin?
@@ -140,93 +141,93 @@ test: depend ${TEST_TARGETS}
 
 # real bits
 mkmonmap: mkmonmap.cc common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 extractosdmaps: extractosdmaps.cc common.o osd.o mon.o ebofs.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.o mon.o msg/SimpleMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+cmon: cmon.o mon.o msg/SimpleMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+cosd: cosd.o osd.o ebofs.o msg/SimpleMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+cmds: cmds.o mds.o osdc.o msg/SimpleMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
-csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+csyn: csyn.o client.o osdc.o msg/SimpleMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+cfuse: cfuse.o client.o osdc.o client/fuse.o client/fuse_ll.o msg/SimpleMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
 # code shipping experiments
 activemaster: active/activemaster.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 activeslave: active/activeslave.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} -ldl ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} -ldl ${CFLAGS} ${LIBS} $^ -o $@
 
 echotestclient: active/echotestclient.cc
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 msgtestclient: active/msgtestclient.o client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 #libtrivialtask.so: active/trivial_task.cc client.o osdc.o msg/SimpleMessenger.o common.o
-#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+#	${CXX} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
 libtrivialtask.so: active/trivial_task_ipc.cc ceph_ipc/ipc_client.o
-	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+	${CXX} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
 
 libgreptask.so: active/grep_task.cc ceph_ipc/ipc_client.o
-	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+	${CXX} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
 
 #libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
-#	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
+#	${CXX} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS}  ${LIBS} $^ -o $@
 
 
 # IPC interface
 ipc_server: ceph_ipc/ipc_server.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 ipc_testclient: ceph_ipc/ipc_testclient.cc ceph_ipc/ipc_client.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # fake*
-fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+fakefuse: fakefuse.o mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o client/fuse_ll.o msg/FakeMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crush/libcrush.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crush.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crush/libcrush.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crush.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 
 # ebofs
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 
 # hadoop
 libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} -I/usr/local/java/include -I/usr/local/java/include/linux  ${LIBS} $^ -o $@
+	${CXX} -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} -I/usr/local/java/include -I/usr/local/java/include/linux  ${LIBS} $^ -o $@
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
@@ -243,7 +244,7 @@ mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 testos: test/testos.o ebofs.o osbdb.o common.o
-	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
+	${CXX} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
 
 
 # misc
@@ -251,15 +252,15 @@ gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
 test_disk_bw: test/test_disk_bw.cc common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
 # crush
+# lameness: use .co extension for .c files
+%.co: %.c
+	${CC} ${CFLAGS} -c $< -o $@
 
-crush/libcrush.o: force_look
-	cd crush ; make
-
-force_look:
-	true
+crush.o: crush/builder.co crush/mapper.co crush/crush.co
+	${LDINC} $@ $^
 
 # bits
 common.o: ${COMMON_OBJS}
@@ -288,18 +289,18 @@ osbdb.o: ${OSBDB_OBJS}
 
 # generic rules
 %.so: %.cc
-	${CC} -shared -fPIC ${CFLAGS} $< -o $@
+	${CXX} -shared -fPIC ${CFLAGS} $< -o $@
 
 %.o: %.cc
-	${CC} ${CFLAGS} -c $< -o $@
+	${CXX} ${CFLAGS} -c $< -o $@
 
 %.po: %.cc
-	${CC} -fPIC ${CFLAGS} -c $< -o $@
+	${CXX} -fPIC ${CFLAGS} -c $< -o $@
 
 
 # handy
 clean:
-	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
+	rm -f *.o */*.o crush/*.co ${TARGETS} ${TEST_TARGETS}
 
 count:
 	cat ${SRCS} | wc -l
