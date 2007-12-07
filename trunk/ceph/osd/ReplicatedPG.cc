@@ -851,7 +851,8 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
   else if (repop->can_send_ack() &&
            repop->op->wants_ack()) {
     // apply
-    apply_repop(repop);
+    if (!repop->applied)
+      apply_repop(repop);
 
     // send ack
     if (repop->op->wants_reply()) {
