@@ -7,6 +7,11 @@
 #include "mdsmap.h"
 #include "messenger.h"
 
+extern int ceph_mdsmap_debug = 50;
+#define DOUT_VAR ceph_mdsmap_debug
+#define DOUT_PREFIX "mdsmap: "
+#include "super.h"
+
 int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
 {
 	BUG_ON(w < 0);

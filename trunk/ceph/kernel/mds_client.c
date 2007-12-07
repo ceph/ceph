@@ -4,6 +4,9 @@
 #include <linux/sched.h>
 #include "mds_client.h"
 #include "mon_client.h"
+extern int ceph_mds_debug = 50;
+#define DOUT_VAR ceph_mds_debug
+#define DOUT_PREFIX "mds: "
 #include "super.h"
 #include "messenger.h"
 
@@ -13,7 +16,7 @@ static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int
 	msg->hdr.dst.addr = *ceph_mdsmap_get_addr(mdsc->mdsmap, mds);
 	msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MDS;
 	msg->hdr.dst.name.num = mds;
-	ceph_msg_send(mdsc->client->msgr, msg);
+	ceph_msg_send(mdsc->client->msgr, msg, BASE_RETRY_INTERVAL);
 }
 
 

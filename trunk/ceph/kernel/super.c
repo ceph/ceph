@@ -1,10 +1,12 @@
-
 #include <linux/module.h>
 #include <linux/parser.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
+extern int ceph_super_debug = 50;
+#define DOUT_VAR ceph_super_debug
+#define DOUT_PREFIX "super: "
 #include "super.h"
 #include "ktcp.h"
 

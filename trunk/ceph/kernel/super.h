@@ -6,6 +6,10 @@
 
 #include "client.h"
 
+extern int ceph_debug;
+# define dout(x, args...) do { if (x <= (ceph_debug ? ceph_debug : DOUT_VAR)) printk(KERN_INFO "ceph_" DOUT_PREFIX args); } while (0);
+# define derr(x, args...) do { if (x <= (ceph_debug ? ceph_debug : DOUT_VAR)) printk(KERN_ERR "ceph_" DOUT_PREFIX args); } while (0);
+
 /*
  * mount options
  */

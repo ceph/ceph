@@ -4,12 +4,15 @@
 #include <linux/sched.h>
 #include <linux/random.h>
 #include "client.h"
+extern int ceph_client_debug = 50;
+#define DOUT_VAR ceph_client_debug
+#define DOUT_PREFIX "client: "
 #include "super.h"
 #include "ktcp.h"
 
 
 /* debug level; defined in include/ceph_fs.h */
-int ceph_debug = 200;
+int ceph_debug = 0;
 
 /*
  * directory of filesystems mounted by this host
@@ -111,7 +114,7 @@ trymount:
 	mount_msg->hdr.dst.name.num = which;
 	mount_msg->hdr.dst.addr = args->mon_addr[which];
 
-	ceph_msg_send(client->msgr, mount_msg);
+	ceph_msg_send(client->msgr, mount_msg, 0);
 	dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
 
 	/* wait */

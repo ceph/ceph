@@ -49,6 +49,9 @@ struct ceph_msg_pos {
 	int data_pos;
 };
 
+/* ceph connection fault delay defaults */
+#define BASE_RETRY_INTERVAL	(3U * HZ)
+#define MAX_RETRY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
 #define NEW            0
@@ -105,9 +108,9 @@ struct ceph_connection {
 	struct ceph_msg_pos in_msg_pos;
 
 	struct work_struct rwork;		/* received work */
-	struct work_struct swork;		/* send work */
-	int retries;
-	int error;				/* error on connection */
+	struct delayed_work swork;		/* send work */
+        unsigned long           delay;          /* delay interval */
+        unsigned int            retries;        /* temp track of retries */
 };
 
 
@@ -119,7 +122,8 @@ static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);
 }
 extern void ceph_msg_put(struct ceph_msg *msg);
-extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg);
+extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, 
+			 unsigned long timeout);
 
 
 /* encoding/decoding helpers */

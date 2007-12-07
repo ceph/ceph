@@ -1,10 +1,13 @@
-
 #include <linux/slab.h>
 #include <linux/err.h>
 
 #include "crush/crush.h"
 #include "osd_client.h"
 #include "messenger.h"
+extern int ceph_osd_debug = 50;
+#define DOUT_VAR ceph_osd_debug
+#define DOUT_PREFIX "osd: "
+#include "super.h"
 
 /* maps */
 

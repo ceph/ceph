@@ -5,6 +5,9 @@
 
 #include <linux/ceph_fs.h>
 
+extern int ceph_inode_debug = 50;
+#define DOUT_VAR ceph_inode_debug
+#define DOUT_PREFIX "inode: "
 #include "super.h"
 
 const struct inode_operations ceph_symlink_iops;

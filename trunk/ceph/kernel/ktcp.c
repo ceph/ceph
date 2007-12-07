@@ -4,6 +4,11 @@
 #include <linux/string.h>
 #include "messenger.h"
 #include "ktcp.h"
+#include "ktcp.h"
+extern int ceph_tcp_debug = 50;
+#define DOUT_VAR ceph_tcp_debug
+#define DOUT_PREFIX "tcp: "
+#include "super.h"
 
 struct workqueue_struct *recv_wq = NULL;	/* receive work queue */
 struct workqueue_struct *send_wq = NULL;	/* send work queue */
@@ -42,12 +47,10 @@ static void ceph_write_space(struct sock *sk)
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
         dout(30, "ceph_write_space %p state = %u\n", con, con->state);
-	/* only queue to workqueue if not already queued */
-        if (con && !work_pending(&con->swork) &&
-	    test_bit(WRITE_PENDING, &con->state)) {
+	/* only queue to workqueue if a WRITE is pending */
+        if (con && test_bit(WRITE_PENDING, &con->state)) {
                 dout(30, "ceph_write_space %p queuing write work\n", con);
-		set_bit(WRITEABLE, &con->state);
-                queue_work(send_wq, &con->swork);
+                queue_work(send_wq, &con->swork.work);
         }
 	/* Since we have our own write_space, Clear the SOCK_NOSPACE flag */
 	clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);

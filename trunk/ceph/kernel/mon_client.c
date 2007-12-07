@@ -2,6 +2,10 @@
 #include <linux/types.h>
 #include <linux/random.h>
 #include "mon_client.h"
+extern int ceph_mon_debug = 50;
+#define DOUT_VAR ceph_mon_debug
+#define DOUT_PREFIX "mon: "
+#include "super.h"
 
 
 int ceph_monmap_decode(struct ceph_monmap *m, void *p, void *end)

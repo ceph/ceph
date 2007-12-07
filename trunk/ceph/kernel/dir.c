@@ -1,4 +1,6 @@
-
+extern int ceph_dir_debug = 50;
+#define DOUT_VAR ceph_dir_debug
+#define DOUT_PREFIX "dir: "
 #include "super.h"
 
 const struct inode_operations ceph_dir_iops;
