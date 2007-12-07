@@ -13,14 +13,6 @@
 #endif
 #include <linux/types.h>
 
-#ifdef __KERNEL__
-extern int ceph_debug;
-# define dout(x, args...) do { if (x <= ceph_debug) printk(KERN_INFO "ceph: " args); } while (0);
-# define derr(x, args...) do { if (x <= ceph_debug) printk(KERN_ERR "ceph: " args); } while (0);
-#endif
-
-
-
 #define CEPH_MON_PORT 2138
 
 
