@@ -4,9 +4,10 @@
 #include "crush/crush.h"
 #include "osd_client.h"
 #include "messenger.h"
-extern int ceph_osd_debug = 50;
-#define DOUT_VAR ceph_osd_debug
-#define DOUT_PREFIX "osd: "
+
+int ceph_osdc_debug = 50;
+#define DOUT_VAR ceph_osdc_debug
+#define DOUT_PREFIX "osdc: "
 #include "super.h"
 
 /* maps */
@@ -495,7 +496,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osdmap *newmap = 0;
 	int err;
 
-	dout(1, "ceph_osdc_handle_map\n");
+	dout(1, "handle_map\n");
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
 
@@ -575,7 +576,7 @@ bad:
 
 void ceph_osdc_init(struct ceph_osd_client *osdc)
 {
-	dout(5, "ceph_osdc_init\n");
+	dout(5, "init\n");
 	osdc->osdmap = NULL;
 	osdc->last_tid = 0;
 	INIT_RADIX_TREE(&osdc->request_tree, GFP_KERNEL);
@@ -586,6 +587,6 @@ void ceph_osdc_init(struct ceph_osd_client *osdc)
 
 void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
-	dout(5, "ceph_osdc_handle_reply\n");
+	dout(5, "handle_reply\n");
 }
 

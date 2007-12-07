@@ -4,7 +4,8 @@
 #include <linux/sched.h>
 #include <linux/random.h>
 #include "client.h"
-extern int ceph_client_debug = 50;
+
+int ceph_client_debug = 50;
 #define DOUT_VAR ceph_client_debug
 #define DOUT_PREFIX "client: "
 #include "super.h"

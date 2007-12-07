@@ -5,7 +5,8 @@
 #include "messenger.h"
 #include "ktcp.h"
 #include "ktcp.h"
-extern int ceph_tcp_debug = 50;
+
+int ceph_tcp_debug = 50;
 #define DOUT_VAR ceph_tcp_debug
 #define DOUT_PREFIX "tcp: "
 #include "super.h"
@@ -208,14 +209,14 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 
         ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
-                printk(KERN_INFO "sock_create_kern error: %d\n", ret);
+                derr(0, "sock_create_kern error: %d\n", ret);
                 goto done;
         }
 
         ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
 	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
         if (ret < 0) {
-		printk(KERN_INFO "accept error: %d\n", ret);
+		derr(0, "accept error: %d\n", ret);
 		goto err;
 	}
 
@@ -226,7 +227,7 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 	con->sock->type = sock->type;
 	ret = con->sock->ops->getname(con->sock, paddr, &len, 2);
         if (ret < 0) {
-		printk(KERN_INFO "getname error: %d\n", ret);
+		derr(0, "getname error: %d\n", ret);
 		goto err;
 	}
 
@@ -277,7 +278,7 @@ int ceph_workqueue_init(void)
 {
         int ret = 0;
 
-        printk(KERN_INFO "entered work_init\n");
+        dout(20, "entered work_init\n");
         /*
          * Create a num CPU threads to handle receive requests
          * note: we can create more threads if needed to even out
@@ -286,7 +287,7 @@ int ceph_workqueue_init(void)
         recv_wq = create_workqueue("ceph-recv");
         ret = IS_ERR(recv_wq);
         if (ret) {
-                printk(KERN_INFO "receive worker failed to start: %d\n", ret);
+                derr(0, "receive worker failed to start: %d\n", ret);
                 destroy_workqueue(recv_wq);
                 return ret;
         }
@@ -298,7 +299,7 @@ int ceph_workqueue_init(void)
         send_wq = create_singlethread_workqueue("ceph-send");
         ret = IS_ERR(send_wq);
         if (ret) {
-                printk(KERN_INFO "send worker failed to start: %d\n", ret);
+                derr(0, "send worker failed to start: %d\n", ret);
                 destroy_workqueue(send_wq);
                 return ret;
         }
@@ -310,11 +311,11 @@ int ceph_workqueue_init(void)
         accept_wq = create_singlethread_workqueue("ceph-accept");
         ret = IS_ERR(accept_wq);
         if (ret) {
-                printk(KERN_INFO "accept worker failed to start: %d\n", ret);
+                derr(0, "accept worker failed to start: %d\n", ret);
                 destroy_workqueue(accept_wq);
                 return ret;
         }
-        printk(KERN_INFO "successfully created wrkqueues\n");
+        dout(20, "successfully created wrkqueues\n");
 
         return(ret);
 }

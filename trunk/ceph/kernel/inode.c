@@ -5,21 +5,18 @@
 
 #include <linux/ceph_fs.h>
 
-extern int ceph_inode_debug = 50;
+int ceph_inode_debug = 50;
 #define DOUT_VAR ceph_inode_debug
 #define DOUT_PREFIX "inode: "
 #include "super.h"
 
 const struct inode_operations ceph_symlink_iops;
 
-struct inode *ceph_new_inode(struct super_block *sb, 
-			     struct ceph_mds_reply_inode *info) {
-	struct inode *inode;
-	
-	inode = new_inode(sb);
-	if (inode == NULL)
-		return ERR_PTR(-ENOMEM);
-	
+int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info) 
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int i;
+
 	inode->i_ino = le64_to_cpu(info->ino);
 	inode->i_mode = le32_to_cpu(info->mode) | S_IFDIR;
 	inode->i_uid = le32_to_cpu(info->uid);
@@ -36,13 +33,11 @@ struct inode *ceph_new_inode(struct super_block *sb,
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
 	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
 
-#if 0
 	/* ceph inode */
-	ci->i_layout = info->layout;  /* swab? */
+	dout(30, "inode %p, ci %p\n", inode, ci);
+	ci->i_layout = info->layout; //swab?
 
-	if (le32_to_cpu(info->fragtree.nsplits) == 0) {
-		ci->i_fragtree = ci->i_fragtree_static;
-	} else {
+	if (le32_to_cpu(info->fragtree.nsplits) > 0) {
 		//ci->i_fragtree = kmalloc(...);
 		BUG_ON(1); // write me
 	}
@@ -51,16 +46,14 @@ struct inode *ceph_new_inode(struct super_block *sb,
 		ci->i_fragtree->splits[i] = le32_to_cpu(info->fragtree.splits[i]);
 
 	ci->i_frag_map_nr = 1;
-	ci->i_frag_map = ci->i_frag_map_static;
 	ci->i_frag_map[0].frag = 0;
-	ci->i_frag_map[0].mds = 0; /* fixme */
+	ci->i_frag_map[0].mds = 0; // FIXME
 	
 	ci->i_nr_caps = 0;
-	ci->i_caps = ci->i_caps_static;
+
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_usec = 0;
-#endif
 
 	//inode->i_mapping->a_ops = &ceph_aops;
 
@@ -90,12 +83,62 @@ struct inode *ceph_new_inode(struct super_block *sb,
 	default:
 		derr(0, "BAD mode 0x%x S_IFMT 0x%x\n",
 		     inode->i_mode, inode->i_mode & S_IFMT);
-		return ERR_PTR(-EINVAL);
+		return -EINVAL;
 	}
 
-	return inode;
+	return 0;
 }
 
+struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	int i;
+	for (i=0; i<ci->i_nr_caps; i++) 
+		if ((ci->i_caps[i].caps & want) == want) {
+			dout(40, "find_cap found i=%d cap %d want %d\n", i, ci->i_caps[i].caps, want);
+			return &ci->i_caps[i];
+		}
+	return 0;
+}
+
+
+int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int i;
+
+	for (i=0; i<ci->i_nr_caps; i++) 
+		if (ci->i_caps[i].mds == mds) break;
+	if (i == ci->i_nr_caps) {
+		if (i == ci->i_max_caps) {
+			/* realloc */
+			void *o = ci->i_caps;
+			ci->i_caps = kmalloc(ci->i_max_caps*2*sizeof(*ci->i_caps), GFP_KERNEL);
+			if (ci->i_caps == NULL) {
+				ci->i_caps = o;
+				derr(0, "add_cap enomem\n");
+				return -ENOMEM;
+			}
+			memcpy(ci->i_caps, o, ci->i_nr_caps*sizeof(*ci->i_caps));
+			if (o != ci->i_caps_static)
+				kfree(o);
+			ci->i_max_caps *= 2;
+		}
+
+		ci->i_caps[i].caps = 0;
+		ci->i_caps[i].mds = mds;
+		ci->i_caps[i].seq = 0;
+		ci->i_caps[i].flags = 0;
+		ci->i_nr_caps++;
+	}
+
+	dout(10, "add_cap inode %p (%lu) got cap %d %xh now %xh seq %d from %d\n",
+	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
+	ci->i_caps[i].caps |= cap;
+	ci->i_caps[i].seq = seq;
+	return 0;
+}
 
 
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,

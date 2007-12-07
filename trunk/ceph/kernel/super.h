@@ -52,12 +52,14 @@ struct ceph_inode_cap {
 	int caps;
 	__u64 seq;
 	int flags;  /* stale, etc.? */
-};	
+};
+
 struct ceph_inode_frag_map_item {
 	__u32 frag;
 	__u32 mds;
 };
 
+#define STATIC_CAPS 2
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
 
@@ -65,9 +67,11 @@ struct ceph_inode_info {
 	int i_frag_map_nr;
 	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
 	
-	int i_nr_caps;
+	int i_nr_caps, i_max_caps;
 	struct ceph_inode_cap *i_caps;
-	struct ceph_inode_cap i_caps_static[2];
+	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
+	atomic_t i_cap_count;  /* ref count */
+
 	off_t i_wr_size;
 	struct ceph_timeval i_wr_mtime;
 	
@@ -84,9 +88,19 @@ static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 	return ((struct ceph_super_info*)inode->i_sb->s_fs_info)->sb_client;
 }
 
+/*
+ * keep readdir buffers attached to file->private_data
+ */
+struct ceph_file_info {
+	u32 frag;      /* just one frag at a time; screw seek_dir() on large dirs */
+	struct ceph_mds_reply_info rinfo;
+};
+
+
 /* inode.c */
-extern struct inode *ceph_new_inode(struct super_block *sb, 
-				    struct ceph_mds_reply_inode *info);
+extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
+extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
+extern int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			      struct kstat *stat);
 

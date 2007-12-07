@@ -7,7 +7,7 @@
 #include "mdsmap.h"
 #include "messenger.h"
 
-extern int ceph_mdsmap_debug = 50;
+int ceph_mdsmap_debug = 50;
 #define DOUT_VAR ceph_mdsmap_debug
 #define DOUT_PREFIX "mdsmap: "
 #include "super.h"

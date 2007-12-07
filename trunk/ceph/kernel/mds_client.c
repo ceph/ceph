@@ -4,7 +4,8 @@
 #include <linux/sched.h>
 #include "mds_client.h"
 #include "mon_client.h"
-extern int ceph_mds_debug = 50;
+
+int ceph_mds_debug = 50;
 #define DOUT_VAR ceph_mds_debug
 #define DOUT_PREFIX "mds: "
 #include "super.h"
@@ -560,9 +561,11 @@ int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info 
 	     (err = parse_reply_info_dir(&p, p+len, info)) < 0))
 		goto bad;
 
+	info->reply = msg;
+	ceph_msg_get(msg);
 	return 0;
 bad:
-	derr(1, "problem parsing reply info %d\n", err);
+	derr(1, "parse_reply err %d\n", err);
 	return err;
 }
 
@@ -570,6 +573,8 @@ void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info)
 {
 	if (info->trace_in) kfree(info->trace_in);
 	if (info->dir_in) kfree(info->dir_in);
+	ceph_msg_put(info->reply);
+	info->reply = 0;
 }
 
 

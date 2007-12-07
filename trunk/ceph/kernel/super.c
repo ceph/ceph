@@ -4,7 +4,8 @@
 #include <linux/mount.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
-extern int ceph_super_debug = 50;
+
+int ceph_super_debug = 50;
 #define DOUT_VAR ceph_super_debug
 #define DOUT_PREFIX "super: "
 #include "super.h"
@@ -92,12 +93,29 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_KERNEL);
 	if (!ci)
 		return NULL;
+
+	ci->i_fragtree = ci->i_fragtree_static;
+	ci->i_fragtree->nsplits = 0;
+
+	ci->i_frag_map_nr = 0;
+	ci->i_frag_map = ci->i_frag_map_static;
+
+	ci->i_nr_caps = 0;
+	ci->i_max_caps = STATIC_CAPS;
+	ci->i_caps = ci->i_caps_static;
+	atomic_set(&ci->i_cap_count, 0);
+
 	return &ci->vfs_inode;
 }
 
 static void ceph_destroy_inode(struct inode *inode)
 {
-	kmem_cache_free(ceph_inode_cachep, ceph_inode(inode));
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	if (ci->i_caps != ci->i_caps_static) 
+		kfree(ci->i_caps);
+
+	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
 static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
@@ -149,6 +167,8 @@ static int ceph_set_super(struct super_block *s, void *data)
 		return -ENOMEM;
 	s->s_fs_info = sbinfo;
 
+	/* fill sbinfo */
+	s->s_op = &ceph_sops;
 	memcpy(&sbinfo->mount_args, args, sizeof(*args));
 	
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
@@ -327,6 +347,35 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	return 0;
 }
 
+int parse_open_reply(struct ceph_mds_client *mdsc, struct ceph_msg *reply, struct inode *inode)
+{
+	struct ceph_mds_reply_head *head;
+	struct ceph_mds_reply_info rinfo;
+	int frommds = reply->hdr.src.name.num;
+	int err;
+
+	/* parse reply */
+	head = reply->front.iov_base;
+	err = le32_to_cpu(head->result);
+	dout(30, "open_root_inode mds%d reports %d\n", frommds, err);
+	if (err < 0) 
+		return err;
+	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0)
+		return err;
+	BUG_ON(rinfo.trace_nr == 0);
+	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+		return err;
+
+	/* fill in cap */
+	if ((err = ceph_add_cap(inode, frommds, 
+				le32_to_cpu(head->file_caps), 
+				le32_to_cpu(head->file_caps_seq))) < 0)
+		return err;
+
+	ceph_mdsc_destroy_reply_info(&rinfo);
+	return 0;
+}
+
 
 static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 {
@@ -334,10 +383,7 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
 	struct inode *inode;
 	struct dentry *root;
-	struct ceph_msg *req, *reply;
-	struct ceph_mds_reply_head *head;
-	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_reply_info_in *rootinfo;
+	struct ceph_msg *req = 0, *reply = 0;
 	int err;
 	
 	/* open dir */
@@ -349,31 +395,21 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
 	
-	/* parse reply */
-	head = reply->front.iov_base;
-	err = le32_to_cpu(head->result);
-	dout(30, "open_root_inode open result=%d\n", err);
-	if (err < 0) {
-		dout(30, "open_root_inode mds reports %d", err);
-		goto out;
-	}
-	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0) {
-		dout(30, "open_root_inode problem parsing reply %d", err);
-		goto out;
-	}
-	BUG_ON(rinfo.trace_nr == 0);
-	rootinfo = &rinfo.trace_in[rinfo.trace_nr-1];
-		
-	/* construct root inode */
-	inode = ceph_new_inode(sb, rootinfo->in);
-	if (!inode) {
+	inode = new_inode(sb);
+	if (inode == NULL) {
 		err = -ENOMEM;
 		goto out;
 	}
 
+	if ((err = parse_open_reply(mdsc, reply, inode)) < 0)
+		goto out2;
+	ceph_msg_put(reply);
+	reply = 0;
+
 	root = d_alloc_root(inode);
 	if (!root) {
 		err = -ENOMEM;
+		/* fixme: also close? */
 		goto out2;
 	}
 	sb->s_root = root;
@@ -381,9 +417,9 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	return 0;
 
 out2:
-	iput(inode);  /* ? */
+	iput(inode);
 out:
-	ceph_msg_put(reply);
+	if (reply) ceph_msg_put(reply);
 	return err;	
 }
 
