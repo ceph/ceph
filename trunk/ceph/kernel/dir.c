@@ -38,6 +38,12 @@ const struct file_operations ceph_dir_fops = {
 	.release = ceph_dir_release,
 };
 
+static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
+				      struct nameidata *nameidata)
+{
+	dout(5, "dir_lookup inode %p dentry %p\n", dir, dentry);
+	return NULL;
+}
 
 /*
 static int
@@ -46,10 +52,6 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 {
 }
 
-static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nameidata)
-{
-}
 
 static int ceph_dir_unlink(struct inode *i, struct dentry *d)
 {
@@ -70,11 +72,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 */
 
-
 const struct inode_operations ceph_dir_iops = {
-	.getattr = ceph_inode_getattr,
-/*	.create = ceph_dir_create,
 	.lookup = ceph_dir_lookup,
+//	.getattr = ceph_inode_getattr,
+/*	.create = ceph_dir_create,
 	.unlink = ceph_dir_unlink,
 	.mkdir = ceph_vfs_mkdir,
 	.rmdir = ceph_vfs_rmdir,
