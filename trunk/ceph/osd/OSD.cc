@@ -1298,8 +1298,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (osdmap->get_epoch() > 0 &&
       (!osdmap->exists(whoami) || 
-       !osdmap->is_up(whoami) ||
-       osdmap->get_addr(whoami) != messenger->get_myaddr())) {
+       (!osdmap->is_up(whoami) && osdmap->get_addr(whoami) == messenger->get_myaddr()))) {
     dout(0) << "map says i am dead" << dendl;
     shutdown();
   }
@@ -1724,9 +1723,7 @@ void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
     int who = pit->first;
     dout(7) << "do_queries querying osd" << who
             << " on " << pit->second.size() << " PGs" << dendl;
-
-    MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(),
-                                     pit->second);
+    MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(), pit->second);
     _share_map_outgoing(osdmap->get_inst(who));
     messenger->send_message(m, osdmap->get_inst(who));
   }
