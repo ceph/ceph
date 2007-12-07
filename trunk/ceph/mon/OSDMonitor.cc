@@ -820,7 +820,7 @@ void OSDMonitor::tick()
       pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
       vector<int> osds;
       osdmap.pg_to_osds(pgid, osds); 
-      if (osds[0] = 0) {
+      if (osds[0] == 0) {
 	pending_inc.new_pg_swap_primary[pgid] = osds[1];
 	dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
 		<< osds[1] << dendl;
