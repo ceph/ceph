@@ -308,7 +308,6 @@ struct ceph_mds_request_head {
 			__u32 mask;
 		} stat;
 		struct {
-			ceph_ino_t ino;
 			__u32 mask;
 		} fstat;
 		struct {
@@ -337,12 +336,8 @@ struct ceph_mds_request_head {
 			__u32 mode;
 		} open;
 		struct {
-			ceph_ino_t ino;  // optional
 			__s64 length;
 		} truncate;
-		struct {
-			ceph_ino_t ino;
-		} fsync;
 	} args;
 };
 

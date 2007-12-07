@@ -815,7 +815,7 @@ void OSDMonitor::tick()
   ps_t numps = osdmap.get_pg_num();
   int minrep = 1; 
   int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
-  for (int nrep = 1; nrep <= maxrep; nrep++) { 
+  for (int nrep = minrep; nrep <= maxrep; nrep++) { 
     for (ps_t ps = 0; ps < numps; ++ps) {
       pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
       vector<int> osds;

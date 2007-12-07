@@ -3146,7 +3146,7 @@ int Client::ftruncate(int fd, off_t length)
 int Client::_ftruncate(Fh *fh, off_t length) 
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_TRUNCATE, messenger->get_myinst());
-  req->head.args.truncate.ino = fh->inode->inode.ino;
+  req->set_filepath( filepath("", fh->inode->inode.ino) );
   req->head.args.truncate.length = length;
 
   // FIXME where does FUSE maintain user information

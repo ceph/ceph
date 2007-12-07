@@ -535,28 +535,6 @@ void Server::handle_client_request(MClientRequest *req)
 					   req->get_oldest_client_tid());
   }
 
-
-  // -----
-  // some ops are on ino's
-  switch (req->get_op()) {
-  case CEPH_MDS_OP_FSTAT:
-    ref = mdcache->get_inode(req->head.args.fstat.ino);
-    assert(ref);
-    break;
-    
-  case CEPH_MDS_OP_TRUNCATE:
-    if (!req->head.args.truncate.ino) 
-      break;   // can be called w/ either fh OR path
-    ref = mdcache->get_inode(req->head.args.truncate.ino);
-    assert(ref);
-    break;
-    
-  case CEPH_MDS_OP_FSYNC:
-    ref = mdcache->get_inode(req->head.args.fsync.ino);   // fixme someday no ino needed?
-    assert(ref);
-    break;
-  }
-
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) return;
@@ -592,6 +570,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // inodes ops.
   case CEPH_MDS_OP_STAT:
   case CEPH_MDS_OP_LSTAT:
+  case CEPH_MDS_OP_FSTAT:
     handle_client_stat(mdr);
     break;
   case CEPH_MDS_OP_UTIME:
@@ -610,7 +589,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     handle_client_readdir(mdr);
     break;
   case CEPH_MDS_OP_FSYNC:
-    //handle_client_fsync(req, ref);
+    //handle_client_fsync(req);
     break;
 
     // funky.
