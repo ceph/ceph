@@ -879,7 +879,7 @@ int Rank::Pipe::connect()
 	      << ", taking new " << cseq << dendl;
       connect_seq = cseq;
     } else {
-      dout(0) << "connect got REJECT, connection race (harmless), connect_seq=" << connect_seq << dendl;
+      dout(10) << "connect got REJECT, connection race (harmless), connect_seq=" << connect_seq << dendl;
     }
     goto fail_locked;
   }
@@ -932,7 +932,7 @@ void Rank::Pipe::fault(bool silent)
   if (!silent) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
 
   if (state == STATE_CLOSED) {
-    dout(0) << "fault already closed" << dendl;
+    dout(10) << "fault already closed" << dendl;
     return;
   }
   if (q.empty()) {
@@ -1359,7 +1359,7 @@ int Rank::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
       return -1;
     }
     if (state == STATE_CLOSED) {
-      dout(0) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
+      dout(10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
       errno = EINTR;
       return -1; // close enough
     }
