@@ -75,7 +75,8 @@ struct ceph_mds_reply_info_in {
 
 struct ceph_mds_reply_info {
 	struct ceph_msg *reply;
-	
+	struct ceph_mds_reply_head *head;
+
 	int trace_nr;
 	struct ceph_mds_reply_info_in *trace_in;
 	struct ceph_mds_reply_dirfrag **trace_dir;
@@ -99,7 +100,8 @@ extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 
 extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
-struct ceph_msg *ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds);
+extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
+				struct ceph_mds_reply_info *rinfo, int mds);
 
 extern int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info);
 extern void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info);

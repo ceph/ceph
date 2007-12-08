@@ -291,12 +291,13 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	return req;
 }
 
-struct ceph_msg *
-ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
+int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
+			 struct ceph_mds_reply_info *rinfo, int mds)
 {
 	struct ceph_mds_request *req;
 	struct ceph_mds_session *session;
 	struct ceph_msg *reply = 0;
+	int err;
 
 	dout(30, "mdsc_do_request on %p type %d\n", msg, msg->hdr.type);
 
@@ -356,35 +357,15 @@ retry:
 
 	put_request(req);
 
-	dout(30, "mdsc_do_request done on %p reply %p\n", msg, reply);
-	return reply;
+	/* parse reply */
+	err = ceph_mdsc_parse_reply_info(reply, rinfo);
+	if (err < 0) 
+		return err;
+
+	dout(30, "mdsc_do_request done on %p\n", msg);
+	return 0;
 }
 
-/*
-int ceph_mdsc_do(struct ceph_mds_client *mdsc, int op, 
-		 ceph_ino_t ino1, const char *path1, 
-		 ceph_ino_t ino2, const char *path2)
-{
-	struct ceph_msg *req, *reply;
-	struct ceph_mds_reply_head *head;
-	int ret;
-
-	dout(30, "mdsc do op %d on %llx/%s %llx/%s\n", op, ino1, 
-	     path1 ? path1:"", ino2, path2 ? path2:"");
-	req = ceph_mdsc_create_request(mdsc, op, ino1, path1, ino2, path2);
-	if (IS_ERR(req)) 
-		return PTR_ERR(req);
-
-	reply = ceph_mdsc_do_request(mdsc, req, -1);
-	if (IS_ERR(reply))
-		return PTR_ERR(reply);
-	head = reply->front.iov_base;
-	ret = head->result;
-	dout(30, "mdsc do result=%d\n", ret);
-	ceph_msg_put(reply);
-	return ret;
-}
-*/
 
 
 
@@ -495,6 +476,8 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 	int err = -EINVAL;
 
 	info->dir_dir = *p;
+	if (*p + sizeof(*info->dir_dir) > end) 
+		goto bad;
 	*p += sizeof(*info->dir_dir) + sizeof(__u32)*info->dir_dir->ndist;
 	if (*p > end) 
 		goto bad;
@@ -542,7 +525,8 @@ int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info 
 	int err = -EINVAL;
 
 	memset(info, 0, sizeof(*info));
-	
+	info->head = msg->front.iov_base;
+
 	/* trace */
 	p = msg->front.iov_base + sizeof(struct ceph_mds_reply_head);
 	end = p + msg->front.iov_len;
@@ -562,10 +546,10 @@ int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info 
 		goto bad;
 
 	info->reply = msg;
-	ceph_msg_get(msg);
 	return 0;
 bad:
 	derr(1, "parse_reply err %d\n", err);
+	ceph_msg_put(msg);
 	return err;
 }
 

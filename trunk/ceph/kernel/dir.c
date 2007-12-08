@@ -39,7 +39,8 @@ static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	dout(5, "dir_readdir filp %p at frag %u off %u\n", filp, frag, off);
 	if (fi->frag != frag || fi->rinfo.reply == NULL) {
-		struct ceph_msg *req, *reply;
+		struct ceph_msg *req;
+
 		/* query mds */
 		if (fi->rinfo.reply) 
 			ceph_mdsc_destroy_reply_info(&fi->rinfo);
@@ -49,17 +50,10 @@ static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 					       filp->f_dentry->d_inode->i_ino, "", 0, 0);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
-		reply = ceph_mdsc_do_request(mdsc, req, -1);
-		if (IS_ERR(reply))
-			return PTR_ERR(reply);
-		if ((err = ceph_mdsc_parse_reply_info(reply, &fi->rinfo)) < 0) {
-			ceph_mdsc_destroy_reply_info(&fi->rinfo);
-			return err;
-		}
+		if ((err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, -1)) < 0)
+		    return err;
 		dout(10, "dir_readdir got and parse readdir result on frag %u\n", frag);
-	}
-	
-	
+	}	
 	
 	return 0;
 }

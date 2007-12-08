@@ -357,7 +357,7 @@ int parse_open_reply(struct ceph_mds_client *mdsc, struct ceph_msg *reply, struc
 	/* parse reply */
 	head = reply->front.iov_base;
 	err = le32_to_cpu(head->result);
-	dout(30, "open_root_inode mds%d reports %d\n", frommds, err);
+	dout(30, "parse_open_reply mds%d reports %d\n", frommds, err);
 	if (err < 0) 
 		return err;
 	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0)
@@ -383,7 +383,9 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
 	struct inode *inode;
 	struct dentry *root;
-	struct ceph_msg *req = 0, *reply = 0;
+	struct ceph_msg *req = 0;
+	struct ceph_mds_reply_info rinfo;
+	int frommds;
 	int err;
 	
 	/* open dir */
@@ -391,36 +393,38 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	reply = ceph_mdsc_do_request(mdsc, req, -1);
-	if (IS_ERR(reply))
-		return PTR_ERR(reply);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return err;
 	
 	inode = new_inode(sb);
-	if (inode == NULL) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (inode == NULL) 
+		return -ENOMEM;
 
-	if ((err = parse_open_reply(mdsc, reply, inode)) < 0)
-		goto out2;
-	ceph_msg_put(reply);
-	reply = 0;
+	BUG_ON(rinfo.trace_nr == 0);
+	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+		goto out;
+	
+	/* fill in cap */
+	frommds = rinfo.reply->hdr.src.name.num;
+	if ((err = ceph_add_cap(inode, frommds, 
+				le32_to_cpu(rinfo.head->file_caps), 
+				le32_to_cpu(rinfo.head->file_caps_seq))) < 0) 
+		goto out;
 
 	root = d_alloc_root(inode);
-	if (!root) {
+	if (root == NULL) {
 		err = -ENOMEM;
 		/* fixme: also close? */
-		goto out2;
+		goto out;
 	}
 	sb->s_root = root;
 	dout(30, "open_root_inode success.\n");
 	return 0;
 
-out2:
-	iput(inode);
 out:
-	if (reply) ceph_msg_put(reply);
-	return err;	
+	dout(30, "open_root_inode failure %d\n", err);
+	iput(inode);
+	return err;
 }
 
 static int ceph_get_sb(struct file_system_type *fs_type,

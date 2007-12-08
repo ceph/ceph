@@ -331,7 +331,7 @@ struct ceph_mds_request_head {
 			__s64 length;
 		} truncate;
 	} args;
-};
+} __attribute__ ((packed));
 
 
 /* client reply */
@@ -342,12 +342,12 @@ struct ceph_mds_reply_head {
 	__u32 file_caps;
 	__u32 file_caps_seq;
 	__u64 mdsmap_epoch;
-};
+} __attribute__ ((packed));
 
 struct ceph_frag_tree_head {
 	__u32 nsplits;
 	__s32 splits[0];
-};
+} __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
@@ -359,7 +359,7 @@ struct ceph_mds_reply_inode {
 	__u32 rdev;
 	__u32 mask;
 	struct ceph_frag_tree_head fragtree;
-};
+} __attribute__ ((packed));
 /* followed by frag array, then symlink string */
 
 struct ceph_mds_reply_dirfrag {
@@ -368,6 +368,6 @@ struct ceph_mds_reply_dirfrag {
 	__u8 is_rep;
 	__u32 ndist;
 	__u32 dist[];
-};
+} __attribute__ ((packed));
 
 #endif
