@@ -129,6 +129,7 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 		return NULL;
 
 	con->msgr = msgr;
+	con->delay = BASE_RETRY_INTERVAL;
 	set_bit(NEW, &con->state);
 	atomic_set(&con->nref, 1);
 
@@ -919,6 +920,7 @@ static void try_accept(struct work_struct *work)
 
 	new_con->in_tag = CEPH_MSGR_TAG_READY;
 	set_bit(ACCEPTING, &new_con->state);
+	clear_bit(NEW,&new_con->state);
 	prepare_write_accept_announce(msgr, new_con);
 	add_connection_accepting(msgr, new_con);
 
@@ -1015,6 +1017,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 	}		     
 	con->delay = timeout;
+	dout(10, "ceph_msg_send delay = %lu\n", con->delay); 
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = ++con->out_seq;
