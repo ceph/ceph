@@ -792,7 +792,7 @@ static void process_accept(struct ceph_connection *con)
 		put_connection(existing);
 	} else {
 		add_connection(con->msgr, con);
-		con->state = OPEN;
+		set_bit(OPEN, &con->state);
 	}
 	spin_unlock(&con->msgr->con_lock);
 

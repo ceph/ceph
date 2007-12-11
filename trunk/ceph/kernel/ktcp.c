@@ -64,12 +64,15 @@ static void ceph_state_change(struct sock *sk)
 
         dout(30, "ceph_state_change %p state = %u sk_state = %u\n", 
 	     con, con->state, sk->sk_state);
-        if (sk->sk_state == TCP_ESTABLISHED) {
-		ceph_write_space(sk);
-	}
-	/* TBD: maybe set connection state to close if TCP_CLOSE
-	* simple case for now,
-	*/
+        switch (sk->sk_state) {
+		case TCP_CLOSE_WAIT:
+		case TCP_CLOSE:
+			set_bit(CLOSED,&con->state);
+			break;
+		case TCP_ESTABLISHED:
+			ceph_write_space(sk);
+			break;
+        }
 }
 
 /* make a listening socket active by setting up the data ready call back */

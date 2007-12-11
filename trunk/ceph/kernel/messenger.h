@@ -59,12 +59,10 @@ struct ceph_msg_pos {
 #define ACCEPTING      2
 #define OPEN           3
 #define WRITE_PENDING  4  /* we have data to send */
-#define WRITEABLE      5  /* set when socket becomes writeable */
-#define WRITING        6  /* provides mutual exclusion, protecting out_kvec, etc. */
-#define READABLE       7  /* set when socket gets new data */
-#define READING        8  /* provides mutual exclusion, protecting in_* */
-#define REJECTING      9
-#define CLOSED        10
+#define READABLE       5  /* set when socket gets new data */
+#define READING        6  /* provides mutual exclusion, protecting in_* */
+#define REJECTING      7
+#define CLOSED         8
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
