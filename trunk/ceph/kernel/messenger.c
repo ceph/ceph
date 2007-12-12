@@ -35,7 +35,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 	     ntohs(con->peer_addr.ipaddr.sin_port));
 
 	if (!con->delay) {
-		derr(1, "timeout not set\n");
+		derr(1, "ceph_send_fault timeout not set\n");
 		return;
 	}
 
@@ -57,8 +57,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 			list_splice_init(&con->out_sent, &con->out_queue);
 			spin_unlock(&con->out_queue_lock);
 			/* retry with delay */
-			queue_delayed_work(send_wq, &con->swork, 
-					   BASE_RETRY_INTERVAL);
+			queue_delayed_work(send_wq, &con->swork, con->delay);
 			break;
         	case -EPIPE:
         	case -ECONNREFUSED:
@@ -78,8 +77,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 			}
 			set_bit(NEW, &con->state);
 			/* retry with delay */
-			queue_delayed_work(send_wq, &con->swork, 
-					   BASE_RETRY_INTERVAL);
+			queue_delayed_work(send_wq, &con->swork, con->delay);
 			break;
 		case -EIO:
 			derr(1, "EIO set\n");
@@ -802,6 +800,8 @@ static void process_accept(struct ceph_connection *con)
 		prepare_write_accept_reject(con);
 	else
 		prepare_write_accept_ready(con);
+	/* queue write */
+	queue_work(send_wq, &con->swork.work);
 }
 
 
