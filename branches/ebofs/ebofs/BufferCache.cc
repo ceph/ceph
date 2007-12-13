@@ -38,7 +38,9 @@ void do_apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm)
 
 
 #undef dout
+#undef derr
 #define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs." << *this << "."
+#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs." << *this << "."
 
 
 void BufferHead::add_partial(off_t off, bufferlist& p) 
@@ -129,7 +131,9 @@ void BufferHead::apply_partial()
 
 
 #undef dout
+#undef derr
 #define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.oc."
+#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs.oc."
 
 
 
@@ -182,8 +186,9 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 	csum_t got[bh->length()];
 	for (unsigned i=0; i<bh->length(); i++) {
 	  got[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
-	  if (false && rand() % 10 == 0) {
+	  if (rand() % 10 == 0) {
 	    dout(0) << "rx_finish HACK INJECTING bad csum" << dendl;
+	    derr(0) << "rx_finish HACK INJECTING bad csum" << dendl;
 	    got[i] = 0;
 	  }
 	  if (got[i] != want[i]) {
@@ -201,7 +206,8 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 	      unsigned e;
 	      for (e=s; e<olen; e++)
 		if (got[e] == want[e]) break;
-	      dout(0) << "rx_finish  bad csum over " << s << "~" << (e-s) << dendl;
+	      dout(0) << "rx_finish  bad csum in " << bh->oc->on->object_id << " over " << s << "~" << (e-s) << dendl;
+	      derr(0) << "rx_finish  bad csum in " << bh->oc->on->object_id << " over " << s << "~" << (e-s) << dendl;
 	      
 	      if (s) {
 		BufferHead *middle = bc->split(bh, ostart+s);
@@ -1259,36 +1265,37 @@ void BufferCache::rx_finish(ObjectCache *oc,
   // finish any partials?
   //  note: these are partials that were re-written after a commit,
   //        or for whom the OC was destroyed (eg truncated after a commit)
-  map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(diskstart);
-  while (sp != partial_write.end()) {
-    if (sp->first >= diskstart+length) break;
-    assert(sp->first >= diskstart);
+  if (length == 1) {
+    map<block_t,PartialWriteSet>::iterator sp = partial_write.find(diskstart);
+    if (sp != partial_write.end()) {
+      block_t pblock = diskstart;
 
-    block_t pblock = sp->first;
-    map<block_t, PartialWrite> writes;
-    writes.swap( sp->second );
-
-    map<block_t, map<block_t, PartialWrite> >::iterator t = sp;
-    sp++;
-    partial_write.erase(t);
-
-    for (map<block_t, PartialWrite>::iterator p = writes.begin();
-         p != writes.end();
-         p++) {
-      dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
-                << " for epoch " << p->second.epoch
-                << dendl;
-      // make the combined block
-      bufferlist combined;
-      bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
-      combined.push_back( bp );
-      combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
-      do_apply_partial( combined, p->second.partial );
-
-      // write it!
-      dev.write( pblock, 1, combined,
-                 new C_OC_PartialTxFinish( this, p->second.epoch ),
-                 "finish_partials");
+      // verify csum
+      csum_t actual = calc_csum(bl.c_str(), bl.length());
+      if (actual != sp->second.csum) {
+	dout(0) << "rx_finish bad csum on partial block " << pblock << dendl;
+	derr(0) << "rx_finish bad csum on partial block " << pblock << dendl;
+      } 
+      
+      for (map<block_t, PartialWrite>::iterator p = sp->second.writes.begin();
+	   p != sp->second.writes.end();
+	   p++) {
+	dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
+		 << " for epoch " << p->second.epoch
+		 << dendl;
+	// make the combined block
+	bufferlist combined;
+	bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
+	combined.push_back( bp );
+	combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
+	do_apply_partial( combined, p->second.partial );
+	
+	// write it!
+	dev.write( pblock, 1, combined,
+		   new C_OC_PartialTxFinish( this, p->second.epoch ),
+		   "finish_partials");
+      }
+      partial_write.erase(sp);
     }
   }
 
@@ -1399,30 +1406,30 @@ void BufferCache::queue_partial(block_t from, block_t to,
            << " in epoch " << epoch 
            << dendl;
   
-  if (partial_write[from].count(to)) {
+  if (partial_write[from].writes.count(to)) {
     // this should be in the same epoch.
-    assert( partial_write[from][to].epoch == epoch);
+    assert( partial_write[from].writes[to].epoch == epoch);
     assert(0); // actually.. no!
   } else {
     inc_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
   }
   
-  partial_write[from][to].partial = partial;
-  partial_write[from][to].epoch = epoch;
+  partial_write[from].writes[to].partial = partial;
+  partial_write[from].writes[to].epoch = epoch;
 }
 
 void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
 {
   assert(partial_write.count(from));
-  assert(partial_write[from].count(to));
-  assert(partial_write[from][to].epoch == epoch);
+  assert(partial_write[from].writes.count(to));
+  assert(partial_write[from].writes[to].epoch == epoch);
 
   dout(10) << "cancel_partial " << from << " -> " << to 
-           << "  (was epoch " << partial_write[from][to].epoch << ")"
+           << "  (was epoch " << partial_write[from].writes[to].epoch << ")"
            << dendl;
 
-  partial_write[from].erase(to);
-  if (partial_write[from].empty())
+  partial_write[from].writes.erase(to);
+  if (partial_write[from].writes.empty())
     partial_write.erase(from);
 
   dec_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );

@@ -260,6 +260,7 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
+  if (bh.is_corrupt()) out << " corrupt";
 
   // include epoch modified?
   if (bh.is_dirty() || bh.is_tx() || bh.is_partial()) 
@@ -425,17 +426,16 @@ class BufferCache {
    *
    * really, at most there will only ever be two of these, for current+previous epochs.
    */
-  class PartialWrite {
-  public:
+  struct PartialWrite {
     map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
     version_t              epoch;
   };
-  class WriteSet {
+  struct PartialWriteSet {
     csum_t csum;                       // expected csum
     map<block_t, PartialWrite> writes;
   };
 
-  map<block_t, map<block_t, PartialWrite> > partial_write;  // queued writes w/ partial content
+  map<block_t, PartialWriteSet> partial_write;  // queued writes w/ partial content
   map<block_t, set<BufferHead*> >           shadow_partials;
 
  public:

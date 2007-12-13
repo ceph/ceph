@@ -190,8 +190,7 @@ public:
 	  }
 	}
       }
-      cout << " verify_extents got csum " 
-	   << hex << csum << " want " << data_csum << dec << std::endl;
+      cout << " verify_extents got csum " << hex << csum << " want " << data_csum << dec << std::endl;
 
       assert(s.size() == count);
       assert(count == alloc_blocks);

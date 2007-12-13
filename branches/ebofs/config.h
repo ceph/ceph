@@ -291,7 +291,6 @@ struct md_config_t {
   bool  ebofs_cloneable;
   bool  ebofs_verify;
   int   ebofs_commit_ms;
-  int   ebofs_idle_commit_ms;
   int   ebofs_oc_size;
   int   ebofs_cc_size;
   off_t ebofs_bc_size;

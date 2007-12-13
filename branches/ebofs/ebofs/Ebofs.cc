@@ -437,41 +437,9 @@ int Ebofs::commit_thread_entry()
     
     // wait for kick, or timeout
     if (g_conf.ebofs_commit_ms) {
-      if (g_conf.ebofs_idle_commit_ms > 0) {
-	// *** this is an ugly ugly hack ****
-	//     do not use
-        // periodically check for idle block device
-	utime_t idle_wait(0, g_conf.ebofs_idle_commit_ms*1000);
-        dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms, " 
-		  << idle_wait << " ms if idle" << dendl;
-	utime_t now = g_clock.now();
-	utime_t stop = now;
-	stop += (double)g_conf.ebofs_commit_ms / 1000.0;
-        do {
-	  utime_t wait = MIN(stop - now, idle_wait);
-          if (commit_cond.WaitInterval(ebofs_lock, wait) != ETIMEDOUT) {
-            dout(20) << "commit_thread i got kicked" << dendl;
-            break;   // we got kicked
-	  }
-          if (dev.is_idle()) {
-            dout(20) << "commit_thread bdev is idle, early commit" << dendl;
-            break;  // dev is idle
-          }
-	  now = g_clock.now();
-          dout(20) << "commit_thread now=" << now << ", stop at " << stop << dendl;
-
-          // hack hack
-          //if (!left) g_conf.debug_ebofs = 10;
-          // /hack hack
-	} while (now < stop);
-	dout(20) << "commit_thread done with idle loop" << dendl;
-
-      } else {
-        // normal wait+timeout
-        dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << dendl;
-        commit_cond.WaitInterval(ebofs_lock, utime_t(0, g_conf.ebofs_commit_ms*1000));   
-      }
-
+      // normal wait+timeout
+      dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << dendl;
+      commit_cond.WaitInterval(ebofs_lock, utime_t(0, g_conf.ebofs_commit_ms*1000));   
     } else {
       // DEBUG.. wait until kicked
       dout(10) << "commit_thread no commit_ms, waiting until kicked" << dendl;
@@ -490,6 +458,7 @@ int Ebofs::commit_thread_entry()
       dout(10) << "commit_thread not dirty" << dendl;
     }
     else {
+      // --- this all happens in one go, from here ---
       super_epoch++;
       dirty = false;
 
@@ -525,15 +494,18 @@ int Ebofs::commit_thread_entry()
       
       // (async) write btree nodes
       nodepool.commit_start( dev, super_epoch );
-      
-      // blockdev barrier (prioritize our writes!)
-      dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << dendl;
-      dev.barrier();
 
       // prepare super (before any changes get made!)
       bufferptr superbp;
       prepare_super(super_epoch, superbp);
       
+      // --- to here. ---
+      // now wait.
+      
+      // blockdev barrier (prioritize our writes!)
+      dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << dendl;
+      dev.barrier();
+
       // wait for it all to flush (drops global lock)
       commit_bc_wait(super_epoch-1);  
       dout(30) << "commit_thread bc flushed" << dendl;
@@ -566,10 +538,8 @@ int Ebofs::commit_thread_entry()
 
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
-      
       queue_finishers(commit_waiters[super_epoch-1]);
       commit_waiters.erase(super_epoch-1);
-
       sync_cond.Signal();
 
       dout(10) << "commit_thread commit finish" << dendl;
@@ -1723,23 +1693,37 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       unsigned len_in_bh = MIN( (off_t)(left),
                                 (off_t)(bh->end()*EBOFS_BLOCK_SIZE)-opos );
       
-      if (bh->is_partial() || bh->is_rx() || bh->is_missing()) {
-        assert(bh->is_partial() || bh->is_rx() || bh->is_missing());
+      if (bh->is_partial() || bh->is_rx() || bh->is_missing() || bh->is_corrupt()) {
         assert(bh->length() == 1);
 
 	if (bh->is_missing()) {
-	  // newly realloc; carry old checksum over since we're only partially overwriting
-	  if (bh->start() == bstart) {
+	  // newly realloc? carry old checksum over since we're only partially overwriting
+	  if (bh->start() == bstart && alloc.contains(bstart)) {
 	    dout(10) << "apply_write  carrying over starting csum " << hex << old_csum_first << dec
 		     << " for partial " << *bh << dendl;
 	    *on->get_extent_csum_ptr(bh->start(), 1) = old_csum_first;
 	    on->data_csum += old_csum_first;
-	  } else if (bh->end()-1 == blast) {
+	  } else if (bh->end()-1 == blast && alloc.contains(blast)) {
 	    dout(10) << "apply_write  carrying over ending csum " << hex << old_csum_last << dec
 		     << " for partial " << *bh << dendl;
 	    *on->get_extent_csum_ptr(bh->end()-1, 1) = old_csum_last;
 	    on->data_csum += old_csum_last;
-	  } else assert(0);
+	  } 
+	}
+	if (bh->is_corrupt()) {
+	  dout(10) << "apply_write  marking non-overwritten bytes bad on corrupt " << *bh << dendl;
+	  interval_set<off_t> bad;
+	  off_t bs = bh->start() * EBOFS_BLOCK_SIZE;
+	  if (off_in_bh) bad.insert(bs, bs+off_in_bh);
+	  if (off_in_bh+len_in_bh < (unsigned)EBOFS_BLOCK_SIZE)
+	    bad.insert(bs+off_in_bh+len_in_bh, bs+EBOFS_BLOCK_SIZE-off_in_bh-len_in_bh);
+	  dout(10) << "apply_write  marking non-overwritten bytes " << bad << " bad on corrupt " << *bh << dendl;
+	  bh->oc->on->bad_byte_extents.union_of(bad);
+	  csum_t csum = calc_csum(bh->data.c_str(), bh->data.length());
+	  dout(10) << "apply_write  marking corrupt bh csum " << hex << csum << dec << " clean " << *bh << dendl;
+	  *on->get_extent_csum_ptr(bh->start(), 1) = csum;
+	  on->data_csum += csum;
+	  bc.mark_clean(bh);
 	}
 
         // add frag to partial
@@ -1772,7 +1756,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
           bc.mark_partial(bh);
           bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
-        else if (bh->is_missing()) {
+        else if (bh->is_missing() || bh->is_corrupt()) {
           dout(10) << "apply_write  missing -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
@@ -2415,6 +2399,20 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	t.get_bl(bl);
         if (_write(oid, offset, len, bl) < 0) {
           dout(7) << "apply_transaction fail on _write" << dendl;
+          r &= bit;
+        }
+      }
+      break;
+
+    case Transaction::OP_ZERO:
+      {
+        pobject_t oid;
+	t.get_oid(oid);
+        off_t offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+        if (_zero(oid, offset, len) < 0) {
+          dout(7) << "apply_transaction fail on _zero" << dendl;
           r &= bit;
         }
       }
