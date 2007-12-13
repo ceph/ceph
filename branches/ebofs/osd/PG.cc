@@ -1087,7 +1087,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   // we can trim!
   off_t trim = p->first;
-  dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(-10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 
   assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
@@ -1098,6 +1098,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.zero(info.pgid.to_object(), 0, ondisklog.bottom);
 }
 
 
