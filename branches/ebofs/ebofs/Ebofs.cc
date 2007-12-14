@@ -70,13 +70,16 @@ int Ebofs::mount()
   struct ebofs_super *sb2 = (struct ebofs_super*)bp2.c_str();
 
   // valid superblocks?
-  if (sb1->s_magic != EBOFS_MAGIC ||
-      sb2->s_magic != EBOFS_MAGIC) {
+  if (!sb1->is_valid_magic() && !sb2->is_valid_magic()) {
     derr(0) << "mount bad magic, not a valid EBOFS file system" << dendl;
     return -EINVAL;
   }
-  if (sb1->num_blocks > dev.get_num_blocks() ||
-      sb2->num_blocks > dev.get_num_blocks()) {
+  if (sb1->is_corrupt() && sb2->is_corrupt()) {
+    derr(0) << "mount both superblocks are corrupt (bad csum)" << dendl;
+    return -EINVAL;
+  }
+  if ((sb1->is_valid() && sb1->num_blocks > dev.get_num_blocks()) ||
+      (sb2->is_valid() && sb2->num_blocks > dev.get_num_blocks())) {
     derr(0) << "mount superblock size exceeds actual device size" << dendl;
     return -EINVAL;
   }
@@ -374,7 +377,6 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.free_blocks = free_blocks;
   sb.limbo_blocks = limbo_blocks;
 
-
   // tables
   sb.object_tab.num_keys = object_tab->get_num_keys();
   sb.object_tab.root = object_tab->get_root();
@@ -408,6 +410,10 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   }
   sb.nodepool.node_usemap_even = nodepool.usemap_even;
   sb.nodepool.node_usemap_odd = nodepool.usemap_odd;
+
+  // csum
+  sb.super_csum = sb.calc_csum();
+  dout(20) << "super csum is " << sb.super_csum << " " << sb.calc_csum() << dendl;
   
   // put in a buffer
   bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);

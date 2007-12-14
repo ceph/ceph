@@ -1387,7 +1387,9 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
 
   // copy map state, queue for this block
   assert(bh->rx_from.length == 1);
-  queue_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial, bh->partial_tx_epoch );
+  csum_t csum = *on->get_extent_csum_ptr(bh->start(), 1);
+  queue_partial(on, bh->start(), csum,
+		bh->rx_from.start, bh->partial_tx_to, bh->partial, bh->partial_tx_epoch );
 }
 
 void BufferCache::bh_cancel_partial_write(BufferHead *bh)
@@ -1399,10 +1401,13 @@ void BufferCache::bh_cancel_partial_write(BufferHead *bh)
 }
 
 
-void BufferCache::queue_partial(block_t from, block_t to, 
-                                map<off_t, bufferlist>& partial, version_t epoch)
+void BufferCache::queue_partial(Onode *on, block_t opos, csum_t csum,
+				block_t from, block_t to, 
+                                map<off_t, bufferlist>& partial, 
+				version_t epoch)
 {
-  dout(10) << "queue_partial " << from << " -> " << to
+  dout(10) << "queue_partial " << on->object_id << " at " << opos
+	   << " from disk " << from << " -> " << to
            << " in epoch " << epoch 
            << dendl;
   
@@ -1414,6 +1419,10 @@ void BufferCache::queue_partial(block_t from, block_t to,
     inc_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
   }
   
+  on->get();  // one ref for each <from,to> pair.
+  partial_write[from].on = on;
+  partial_write[from].csum = csum;  
+  partial_write[from].opos = opos;
   partial_write[from].writes[to].partial = partial;
   partial_write[from].writes[to].epoch = epoch;
 }
@@ -1429,6 +1438,7 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
            << dendl;
 
   partial_write[from].writes.erase(to);
+  partial_write[from].on->put();  // one ref per <from,to> pair.
   if (partial_write[from].writes.empty())
     partial_write.erase(from);
 

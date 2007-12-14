@@ -431,7 +431,9 @@ class BufferCache {
     version_t              epoch;
   };
   struct PartialWriteSet {
-    csum_t csum;                       // expected csum
+    Onode *on;    // object
+    block_t opos;    // block in object
+    csum_t csum;     // expected csum
     map<block_t, PartialWrite> writes;
   };
 
@@ -595,7 +597,7 @@ class BufferCache {
   void bh_queue_partial_write(Onode *on, BufferHead *bh);
   void bh_cancel_partial_write(BufferHead *bh);
 
-  void queue_partial(block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
+  void queue_partial(Onode *on, block_t opos, csum_t csum, block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
   void cancel_partial(block_t from, block_t to, version_t epoch);
 
   void add_shadow_partial(block_t from, BufferHead *bh);

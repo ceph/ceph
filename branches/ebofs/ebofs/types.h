@@ -161,6 +161,22 @@ struct ebofs_super {
   struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table co_tab;
+
+  csum_t super_csum;
+
+  csum_t calc_csum() {
+    return ::calc_csum((char*)this, (unsigned long)&super_csum-(unsigned long)this);
+  }
+  bool is_corrupt() { 
+    csum_t actual = calc_csum();
+    if (actual != super_csum) {
+      cout << "actual " << actual << " expected " << super_csum << std::endl;
+      return true;
+    }
+    return false;
+  }
+  bool is_valid_magic() { return s_magic == EBOFS_MAGIC; }
+  bool is_valid() { return is_valid_magic() && !is_corrupt(); }
 };
 
 
