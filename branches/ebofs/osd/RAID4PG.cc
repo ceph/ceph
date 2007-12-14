@@ -39,6 +39,34 @@ bool RAID4PG::preprocess_op(MOSDOp *op, utime_t now)
 void RAID4PG::do_op(MOSDOp *op)
 {
 
+  // a write will do something like
+  object_t oid = op->get_oid();   // logical object
+  pg_t pg = op->get_pg();
+  ObjectLayout layout = op->get_layout();
+  bufferlist data = op->get_data();
+  off_t off = op->get_offset();
+  off_t left = op->get_length();
+
+  // map data onto pobjects
+  int n = pg.size() - 1;  // n+1 raid4
+  int rank = (off % layout.stripe_unit) % n;
+  off_t off_in_bl = 0;
+  while (left > 0) {
+    pobject_t po(0, rank, oid);
+    off_t off_in_po = off % layout.stripe_unit;
+    off_t stripe_unit_end = off - off_in_po + layout.stripe_unit;
+    off_t len_in_po = MAX(left, stripe_unit_end-off);
+    bufferlist data_in_po;
+    data_in_po.substr_of(data, off_in_bl, len_in_po);
+    
+    // next!
+    off_in_bl += len_in_po;
+    rank++;
+    if (rank == n) rank = 0;
+  }
+
+  
+  
 
 }
 
