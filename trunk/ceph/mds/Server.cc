@@ -1091,7 +1091,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   // open ref inode
   CInode *ref = 0;
   if (trace.empty())
-    ref = mdcache->get_root();
+    ref = mdcache->get_inode(refpath.get_ino());
   else {
     CDentry *dn = trace[trace.size()-1];
 
