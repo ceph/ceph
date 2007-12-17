@@ -95,7 +95,6 @@ int Ebofs::mount()
     sb = sb2;
   super_epoch = sb->epoch;
   dout(3) << "mount epoch " << super_epoch << dendl;
-  assert(super_epoch == sb->epoch);
 
   super_fsid = sb->fsid;
 
@@ -464,7 +463,7 @@ int Ebofs::commit_thread_entry()
       dout(10) << "commit_thread not dirty" << dendl;
     }
     else {
-      // --- this all happens in one go, from here ---
+      // --- get ready for a new epoch ---
       super_epoch++;
       dirty = false;
 
@@ -491,34 +490,39 @@ int Ebofs::commit_thread_entry()
               << ", max dirty " << g_conf.ebofs_bc_max_dirty
               << dendl;
       
-      if (journal) journal->commit_epoch_start();
-      
-      // (async) write onodes+condes  (do this first; it currently involves inode reallocation)
-      commit_inodes_start();
-      
-      allocator.commit_limbo();   // limbo -> limbo_tab
-      
-      // (async) write btree nodes
-      nodepool.commit_start( dev, super_epoch );
-
-      // prepare super (before any changes get made!)
       bufferptr superbp;
-      prepare_super(super_epoch, superbp);
+      int attempt = 1;
+      while (1) {
+	// --- queue up commit writes ---
+	bc.poison_commit = false;
+	if (journal) 
+	  journal->commit_epoch_start();  // FIXME: make loopable
+	commit_inodes_start();      // do this first; it currently involves inode reallocation
+	allocator.commit_limbo();   // limbo -> limbo_tab
+	nodepool.commit_start(dev, super_epoch);
+	prepare_super(super_epoch, superbp);	// prepare super (before any new changes get made!)
       
-      // --- to here. ---
-      // now wait.
-      
-      // blockdev barrier (prioritize our writes!)
-      dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << dendl;
-      dev.barrier();
+	// --- now (try to) flush everything ---
+	// (partial writes may fail if read block has a bad csum)
+	
+	// blockdev barrier (prioritize our writes!)
+	dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << dendl;
+	dev.barrier();
+	
+	// wait for it all to flush (drops global lock)
+	commit_bc_wait(super_epoch-1);  
+	dout(30) << "commit_thread bc flushed" << dendl;
+	commit_inodes_wait();
+	dout(30) << "commit_thread inodes flushed" << dendl;
+	nodepool.commit_wait();
+	dout(30) << "commit_thread btree nodes flushed" << dendl;
+	
+	if (!bc.poison_commit)
+	  break;  // ok!
 
-      // wait for it all to flush (drops global lock)
-      commit_bc_wait(super_epoch-1);  
-      dout(30) << "commit_thread bc flushed" << dendl;
-      commit_inodes_wait();
-      dout(30) << "commit_thread inodes flushed" << dendl;
-      nodepool.commit_wait();
-      dout(30) << "commit_thread btree nodes flushed" << dendl;
+	++attempt;
+	dout(1) << "commit_thread commit poisoned, retrying, attempt " << attempt << dendl;
+      }
 
       // ok, now (synchronously) write the prior super!
       dout(10) << "commit_thread commit flushed, writing super for prior epoch" << dendl;
@@ -532,6 +536,7 @@ int Ebofs::commit_thread_entry()
       // (since we're done allocating things, 
       //  AND we've flushed all previous epoch data)
       allocator.release_limbo();   // limbo_tab -> free_tabs
+      nodepool.commit_finish();
       
       // do we need more node space?
       if (nodepool.get_num_free() < nodepool.get_num_total() / 3) {
@@ -867,7 +872,7 @@ void Ebofs::write_onode(Onode *on)
   bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
 
   // (always) relocate onode
-  if (1) {
+  if (super_epoch > on->last_alloc_epoch) {
     if (on->onode_loc.length) 
       allocator.release(on->onode_loc);
     
@@ -1149,7 +1154,7 @@ void Ebofs::write_cnode(Cnode *cn)
   bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
 
   // (always) relocate cnode!
-  if (1) {
+  if (super_epoch > cn->last_alloc_epoch) {
     if (cn->cnode_loc.length) 
       allocator.release(cn->cnode_loc);
     
@@ -1244,8 +1249,7 @@ void Ebofs::commit_inodes_start()
     inodes_flushing++;
     write_onode(on);
     on->mark_clean();
-    on->uncommitted.clear();     // commit allocated blocks
-    on->commit_waiters.clear();  // these guys are gonna get taken care of, bc we committed.
+    on->uncommitted.clear();     // commit any newly allocated blocks
   }
   dirty_onodes.clear();
 

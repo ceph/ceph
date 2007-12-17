@@ -1274,7 +1274,24 @@ void BufferCache::rx_finish(ObjectCache *oc,
       csum_t actual = calc_csum(bl.c_str(), bl.length());
       if (actual != sp->second.csum) {
 	dout(0) << "rx_finish bad csum on partial block " << pblock << dendl;
-	derr(0) << "rx_finish bad csum on partial block " << pblock << dendl;
+	derr(0) << "rx_finish bad csum on partial block " << pblock << " ****************" << dendl;
+	poison_commit = true;
+	interval_set<off_t> overwritten;
+	for (map<block_t, PartialWrite>::iterator p = sp->second.writes.begin();
+	     p != sp->second.writes.end();
+	     p++) {
+	  interval_set<off_t> o;
+	  for (map<off_t,bufferlist>::iterator q = p->second.partial.begin();
+	       q != p->second.partial.end();
+	       q++)
+	    o.insert(q->first, q->second.length());
+	  overwritten.union_of(o);
+	}
+	interval_set<off_t> new_over;
+	new_over.intersection_of(sp->second.on->bad_byte_extents, overwritten);
+	sp->second.on->bad_byte_extents.subtract(new_over);
+	dout(10) << "rx_finish  overwrote " << overwritten << ", newly " << new_over 
+		 << ", now " << sp->second.on->bad_byte_extents.m << dendl;
       } 
       
       for (map<block_t, PartialWrite>::iterator p = sp->second.writes.begin();

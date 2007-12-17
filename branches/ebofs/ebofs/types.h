@@ -169,11 +169,10 @@ struct ebofs_super {
   }
   bool is_corrupt() { 
     csum_t actual = calc_csum();
-    if (actual != super_csum) {
-      cout << "actual " << actual << " expected " << super_csum << std::endl;
+    if (actual != super_csum) 
       return true;
-    }
-    return false;
+    else 
+      return false;
   }
   bool is_valid_magic() { return s_magic == EBOFS_MAGIC; }
   bool is_valid() { return is_valid_magic() && !is_corrupt(); }

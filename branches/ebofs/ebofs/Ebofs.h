@@ -55,7 +55,7 @@ protected:
   bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
-  bool         commit_thread_started, mid_commit;
+  bool         commit_thread_started;
   Cond         commit_cond;   // to wake up the commit thread
   Cond         sync_cond;
   uint64_t     super_fsid;
@@ -237,7 +237,7 @@ protected:
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 
-    super_epoch(0), commit_thread_started(false), mid_commit(false),
+    super_epoch(0), commit_thread_started(false),
     commit_thread(this),
     journalfn(jfn), journal(0),
     free_blocks(0), limbo_blocks(0),

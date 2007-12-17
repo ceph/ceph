@@ -424,6 +424,16 @@ class NodePool {
       flushing++;
     }
 
+    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
+  }
+
+  void commit_wait() {
+    while (flushing > 0) 
+      commit_cond.Wait(ebofs_lock);
+    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
+  }
+
+  void commit_finish() {
     // limbo -> free
     for (map<nodeid_t,nodeid_t>::iterator i = limbo.m.begin();
          i != limbo.m.end();
@@ -433,14 +443,6 @@ class NodePool {
       free.insert(i->first, i->second);
     }
     limbo.clear();
-
-    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
-  }
-
-  void commit_wait() {
-    while (flushing > 0) 
-      commit_cond.Wait(ebofs_lock);
-    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
   }
 
 

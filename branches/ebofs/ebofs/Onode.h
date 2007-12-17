@@ -74,6 +74,8 @@ public:
 
   // data
   Extent onode_loc;
+  epoch_t last_alloc_epoch; // epoch i last allocated for
+
   __s64 object_size;
   __u64 alloc_blocks, last_block;
   csum_t data_csum;
@@ -94,10 +96,10 @@ public:
   bool          dangling;   // not in onode_map
   bool          deleted;    // deleted
 
-  list<Context*>   commit_waiters;
+  //list<Context*>   commit_waiters;
 
  public:
-  Onode(pobject_t oid) : ref(0), object_id(oid), version(0),
+  Onode(pobject_t oid) : ref(0), object_id(oid), version(0), last_alloc_epoch(0),
 			object_size(0), alloc_blocks(0), last_block(0), data_csum(0),
 			readonly(0),
 			oc(0),

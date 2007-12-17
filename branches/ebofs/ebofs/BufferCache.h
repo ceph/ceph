@@ -398,6 +398,8 @@ class BufferCache {
 
   LRU   lru_dirty, lru_rest;
 
+  bool poison_commit;
+
  private:
   Cond  stat_cond;
   Cond  flush_cond;

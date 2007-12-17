@@ -34,11 +34,12 @@ class Cnode : public LRUObject
  public:
   coll_t coll_id;
   Extent cnode_loc;
+  epoch_t last_alloc_epoch;
 
   map<string,bufferptr> attr;
 
  public:
-  Cnode(coll_t cid) : ref(0), dirty(false), coll_id(cid) {
+  Cnode(coll_t cid) : ref(0), dirty(false), coll_id(cid), last_alloc_epoch(0) {
     cnode_loc.length = 0;
   }
   ~Cnode() {
