@@ -153,7 +153,7 @@ iface eth0 inet static
 auto eth0
 </pre>
 			Note that you need install uml-utilities (<tt>apt-get install uml-utilities</tt> on debian distros) and add yourself to the <tt>uml-net</tt> group on the host (or run the UML instance as root) for the network to start up properly.
-
+			<p>
 			Inside UML, you'll want an <tt>/etc/fstab</tt> line like
 <pre>
 none            /host           hostfs  defaults        0       0
@@ -191,7 +191,7 @@ touch mnt/asdf   # etc
 
 		<h4>Structure</h4>
 		<div>
-			Here's a somewhat crude table diagram that shows how the major pieces fit together.  Ingore the MDS bits; that's mostly wrong.
+			Here's a crude table diagram that shows how the major (user space) pieces fit together.  Ingore the MDS bits; that's mostly wrong.
 
 <table border=0>
 <tr> <td></td> <td>Application</td> </tr>
