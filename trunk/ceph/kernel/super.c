@@ -347,12 +347,13 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	return 0;
 }
 
-int parse_open_reply(struct ceph_mds_client *mdsc, struct ceph_msg *reply, struct inode *inode)
+int parse_open_reply(struct ceph_msg *reply, struct inode *inode)
 {
 	struct ceph_mds_reply_head *head;
 	struct ceph_mds_reply_info rinfo;
 	int frommds = reply->hdr.src.name.num;
 	int err;
+	struct ceph_inode_cap *cap;
 
 	/* parse reply */
 	head = reply->front.iov_base;
@@ -367,10 +368,11 @@ int parse_open_reply(struct ceph_mds_client *mdsc, struct ceph_msg *reply, struc
 		return err;
 
 	/* fill in cap */
-	if ((err = ceph_add_cap(inode, frommds, 
-				le32_to_cpu(head->file_caps), 
-				le32_to_cpu(head->file_caps_seq))) < 0)
-		return err;
+	cap = ceph_add_cap(inode, frommds, 
+			   le32_to_cpu(head->file_caps), 
+			   le32_to_cpu(head->file_caps_seq));
+	if (IS_ERR(cap))
+		return PTR_ERR(cap);
 
 	ceph_mdsc_destroy_reply_info(&rinfo);
 	return 0;
@@ -387,6 +389,7 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	struct ceph_mds_reply_info rinfo;
 	int frommds;
 	int err;
+	struct ceph_inode_cap *cap;
 	
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
@@ -406,10 +409,13 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	
 	/* fill in cap */
 	frommds = rinfo.reply->hdr.src.name.num;
-	if ((err = ceph_add_cap(inode, frommds, 
-				le32_to_cpu(rinfo.head->file_caps), 
-				le32_to_cpu(rinfo.head->file_caps_seq))) < 0) 
+	cap = ceph_add_cap(inode, frommds, 
+			   le32_to_cpu(rinfo.head->file_caps), 
+			   le32_to_cpu(rinfo.head->file_caps_seq));
+	if (IS_ERR(cap)) {
+		err = PTR_ERR(cap);
 		goto out;
+	}
 
 	root = d_alloc_root(inode);
 	if (root == NULL) {

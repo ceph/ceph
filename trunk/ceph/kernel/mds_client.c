@@ -432,7 +432,11 @@ int parse_reply_info_trace(void **p, void *end, struct ceph_mds_reply_info *info
 	
 	/* alloc one longer shared array */
 	info->trace_nr = numi;
-	info->trace_in = kmalloc(numi * (2*sizeof(void*)+sizeof(*info->trace_in)), GFP_KERNEL);
+	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
+					 sizeof(*info->trace_dir) +
+					 sizeof(*info->trace_dname) +
+					 sizeof(*info->trace_dname_len)),
+				 GFP_KERNEL);
 	if (info->trace_in == NULL)
 		return -ENOMEM;
 	info->trace_dir = (void*)(info->trace_in + numi);
@@ -489,11 +493,14 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 
 	/* alloc large array */
 	info->dir_nr = num;
-	info->dir_in = kmalloc(3 * num * sizeof(void*), GFP_KERNEL);
+	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) + 
+				      sizeof(*info->dir_dname) + 
+				      sizeof(*info->dir_dname_len)), 
+			       GFP_KERNEL);
 	if (info->dir_in == NULL)
 		return -ENOMEM;
-	info->dir_dname = (void*)(info->trace_in + num);
-	info->dir_dname_len = (void*)(info->trace_in + num*2);
+	info->dir_dname = (void*)(info->dir_in + num);
+	info->dir_dname_len = (void*)(info->dir_dname + num);
 
 	while (num) {
 		/* dentry, inode */

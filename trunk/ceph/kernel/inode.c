@@ -103,7 +103,7 @@ struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want)
 }
 
 
-int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
+struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
@@ -118,7 +118,7 @@ int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
 			if (ci->i_caps == NULL) {
 				ci->i_caps = o;
 				derr(0, "add_cap enomem\n");
-				return -ENOMEM;
+				return ERR_PTR(-ENOMEM);
 			}
 			memcpy(ci->i_caps, o, ci->i_nr_caps*sizeof(*ci->i_caps));
 			if (o != ci->i_caps_static)
@@ -137,7 +137,7 @@ int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
 	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
-	return 0;
+	return &ci->i_caps[i];
 }
 
 

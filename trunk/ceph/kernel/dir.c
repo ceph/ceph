@@ -6,6 +6,67 @@ int ceph_dir_debug = 50;
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
 
+/*
+ * ugly hack.  
+ * - no locking.  
+ * - should stop at mount root or current's CWD?
+ */
+static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
+{
+	int len;
+	dout(20, "get_dentry_path in dn %p bas %p\n", dn, base);
+	if (dn == base) 
+		return 0;	
+
+	len = get_dentry_path(dn->d_parent, buf, base);
+	dout(20, "get_dentry_path out dn %p bas %p len %d adding %s\n", 
+	     dn, base, len, dn->d_name.name);
+
+	buf[len++] = '/';
+	memcpy(buf+len, dn->d_name.name, dn->d_name.len);
+	len += dn->d_name.len;
+	buf[len] = 0;
+	return len;
+}
+
+struct ceph_inode_cap *ceph_open(struct inode *inode, struct file *file, int flags)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
+	char path[PATH_MAX];
+	int pathlen;
+	struct ceph_msg *req;
+	struct ceph_mds_request_head *rhead;
+	struct ceph_mds_reply_info rinfo;
+	struct dentry *dentry;
+	int frommds;
+	struct ceph_inode_cap *cap;
+	int err;
+
+	dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
+
+	dout(5, "open inode %p dentry %p name '%s' flags %d\n", inode, dentry, dentry->d_name.name, flags);
+	pathlen = get_dentry_path(dentry, path, inode->i_sb->s_root);
+	dout(5, "path is %s len %d\n", path, pathlen);
+
+	/* stat mds */
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
+				       inode->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	if (IS_ERR(req)) 
+		return ERR_PTR(PTR_ERR(req));
+	rhead = req->front.iov_base;
+	rhead->args.open.flags = cpu_to_le32(flags);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return ERR_PTR(err);
+	
+	dout(10, "open got and parsed result\n");
+	frommds = rinfo.reply->hdr.src.name.num;
+	cap = ceph_add_cap(inode, frommds, 
+			   le32_to_cpu(rinfo.head->file_caps), 
+			   le32_to_cpu(rinfo.head->file_caps_seq));
+	return cap;
+}
+
 static int ceph_dir_open(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -16,7 +77,9 @@ static int ceph_dir_open(struct inode *inode, struct file *file)
 	cap = ceph_find_cap(inode, 0);
 	if (!cap) {
 		/* open this inode */
-		BUG_ON(1);  // writeme
+		cap = ceph_open(inode, file, O_DIRECTORY);
+		if (IS_ERR(cap))
+			return PTR_ERR(cap);
 	}
 	
 	fi = kzalloc(sizeof(*fi), GFP_KERNEL);
@@ -51,7 +114,7 @@ static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	int err;
 	int i;
 	struct qstr dname;
-	struct dentry *dn;
+	struct dentry *parent, *dn;
 	struct inode *in;
 
 nextfrag:
@@ -64,7 +127,7 @@ nextfrag:
 		if (fi->rinfo.reply) 
 			ceph_mdsc_destroy_reply_info(&fi->rinfo);
 		
-		dout(10, "dir_readdir querying mds for frag %u\n", frag);
+		dout(10, "dir_readdir querying mds for ino %lu frag %u\n", filp->f_dentry->d_inode->i_ino, frag);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR, 
 					       filp->f_dentry->d_inode->i_ino, "", 0, 0);
 		if (IS_ERR(req)) 
@@ -76,19 +139,24 @@ nextfrag:
 		dout(10, "dir_readdir got and parsed readdir result on frag %u\n", frag);
 		
 		/* pre-populate dentry cache */
-		if (0) for (i=0; i<fi->rinfo.dir_nr; i++) {
+		parent = filp->f_dentry;
+		for (i=0; i<fi->rinfo.dir_nr; i++) {
 			dname.name = fi->rinfo.dir_dname[i];
 			dname.len = fi->rinfo.dir_dname_len[i];
 			dname.hash = full_name_hash(dname.name, dname.len);
-			dn = d_alloc(filp->f_dentry, &dname);
-			if (dn == NULL)
-				break;
+			dn = d_alloc(parent, &dname);
+			if (dn == NULL) {
+				dout(30, "d_alloc badness\n");
+				break; 
+			}
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
+				dout(30, "new_inode badness\n");
 				d_delete(dn);
 				break;
 			}
 			if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
+				dout(30, "ceph_fill_inode badness\n");
 				iput(in);
 				d_delete(dn);
 				break;
@@ -100,7 +168,7 @@ nextfrag:
 	}	
 	
 	while (off < fi->rinfo.dir_nr) {
-		dout(10, "dir_readdir off %d / %d\n", off, fi->rinfo.dir_nr);
+		dout(10, "dir_readdir off %d / %d name '%s'\n", off, fi->rinfo.dir_nr, fi->rinfo.dir_dname[off]);
 		if (filldir(dirent, 
 			    fi->rinfo.dir_dname[off], 
 			    fi->rinfo.dir_dname_len[off], 
@@ -113,9 +181,9 @@ nextfrag:
 		off++;
 		filp->f_pos++;
 	}
-	// next frag?
+
+	// next frag?  FIXME ***
 	
-	// done.
 	dout(20, "dir_readdir done.\n");
 	return 0;
 }
@@ -143,28 +211,6 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-/*
- * ugly hack.  
- * - no locking.  
- * - should stop at mount root or current's CWD?
- */
-static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
-{
-	int len;
-	dout(20, "get_dentry_path in dn %p bas %p\n", dn, base);
-	if (dn == base) 
-		return 0;	
-
-	len = get_dentry_path(dn->d_parent, buf, base);
-	dout(20, "get_dentry_path out dn %p bas %p len %d adding %s\n", 
-	     dn, base, len, dn->d_name.name);
-
-	buf[len++] = '/';
-	memcpy(buf+len, dn->d_name.name, dn->d_name.len);
-	len += dn->d_name.len;
-	buf[len] = 0;
-	return len;
-}
 
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nameidata)
@@ -187,7 +233,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_STAT, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
 	if (IS_ERR(req)) 
-		return req;
+		return ERR_PTR(PTR_ERR(req));
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return ERR_PTR(err);
 
@@ -197,7 +243,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if (!inode)
 		return ERR_PTR(-EACCES);
 	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		return err;
+		return ERR_PTR(err);
 	d_add(dentry, inode);
 	return NULL;
 }

@@ -100,7 +100,7 @@ struct ceph_file_info {
 /* inode.c */
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
-extern int ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
+extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			      struct kstat *stat);
 
