@@ -1846,7 +1846,6 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
           dout(10) << "apply_write  rx -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
-          bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
         else if (bh->is_missing() || bh->is_corrupt()) {
           dout(10) << "apply_write  missing -> partial " << *bh << dendl;
@@ -1859,14 +1858,9 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
           else if (bh->start() == blast)
             bc.bh_read(on, bh, old_blast);
           else assert(0);
-
-          bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
         else if (bh->is_partial()) {
           dout(10) << "apply_write  already partial, no need to submit rx on " << *bh << dendl;
-          if (bh->partial_tx_epoch == super_epoch)
-            bc.bh_cancel_partial_write(bh);
-          bc.bh_queue_partial_write(on, bh);          // queue the eventual write
         }
 
 
@@ -1999,11 +1993,8 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
     opos += len_in_bh;
 
     // old partial?
-    if (bh->is_partial() &&
-        bh->partial_tx_epoch == super_epoch) {
-      bc.bh_cancel_partial_write(bh);
+    if (bh->is_partial())
       bc.bh_cancel_read(bh);           // cancel rx (if any) too.
-    }
 
     // mark dirty
     if (!bh->is_dirty())
@@ -2014,7 +2005,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 
   assert(left == 0);
   assert(opos == off+len);
-  //assert(blpos == bl.length());
+  assert(blpos == bl.length());
 
   oc->scrub_csums();
 

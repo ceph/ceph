@@ -54,8 +54,6 @@ class BufferHead : public LRUObject {
   Extent    rx_from;
   ioh_t     tx_ioh;         // 
   block_t   tx_block;
-  block_t   partial_tx_to;
-  version_t partial_tx_epoch;
 
   map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
 
@@ -85,7 +83,7 @@ class BufferHead : public LRUObject {
  public:
   BufferHead(ObjectCache *o, block_t start, block_t len) :
     oc(o), //cancellable_ioh(0), tx_epoch(0),
-    rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
+    rx_ioh(0), tx_ioh(0), tx_block(0),
     shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
     object_loc(start, len),
@@ -655,18 +653,8 @@ class BufferCache {
   bool bh_cancel_read(BufferHead *bh);
   bool bh_cancel_write(BufferHead *bh, version_t cur_epoch);
 
-  void bh_queue_partial_write(Onode *on, BufferHead *bh);
-  void bh_cancel_partial_write(BufferHead *bh);
-  
-  void queue_partial(Onode *on, block_t opos, csum_t csum, block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
-  void cancel_partial(block_t from, block_t to, version_t epoch);
-  
-  void add_shadow_partial(block_t from, BufferHead *bh);
-  void cancel_shadow_partial(block_t from, BufferHead *bh);
-
   void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, block_t diskstart, bufferlist& bl);
   void tx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, version_t v, version_t e);
-  void partial_tx_finish(version_t epoch);
 
   friend class C_E_FlushPartial;
 
@@ -700,17 +688,6 @@ class C_OC_TxFinish : public BlockDevice::callback {
     lock(m), oc(o), start(s), length(l), version(v), epoch(e) {}
   void finish(ioh_t ioh, int r) {
     oc->bc->tx_finish(oc, ioh, start, length, version, epoch);
-  }  
-};
-
-class C_OC_PartialTxFinish : public BlockDevice::callback {
-  BufferCache *bc;
-  version_t epoch;
-public:
-  C_OC_PartialTxFinish(BufferCache *b, version_t e) :
-    bc(b), epoch(e) {}
-  void finish(ioh_t ioh, int r) {
-    bc->partial_tx_finish(epoch);
   }  
 };
 
