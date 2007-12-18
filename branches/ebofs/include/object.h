@@ -38,7 +38,7 @@ struct object_t {
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
   object_t(uint64_t i, uint32_t b, uint32_t r) : ino(i), bno(b), rev(r) {}
-};
+} __attribute__ ((packed));
 
 inline bool operator==(const object_t l, const object_t r) {
   return memcmp(&l, &r, sizeof(l)) == 0;

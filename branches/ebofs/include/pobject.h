@@ -30,7 +30,7 @@ struct pobject_t {
   pobject_t() : volume(0), rank(0) {}
   pobject_t(object_t o) : volume(0), rank(0), oid(o) {}  // this should go away eventually
   pobject_t(uint16_t v, uint16_t r, object_t o) : volume(v), rank(r), oid(o) {}
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, const pobject_t o) {
   return out << o.volume << '/' << o.rank << '/' << o.oid;

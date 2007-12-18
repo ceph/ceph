@@ -34,6 +34,8 @@ class interval_set {
  public:
   map<T,T> m;   // map start -> len  
   int _size;
+  
+  interval_set() : _size(0) {}
 
   // helpers
  private:
