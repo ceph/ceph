@@ -230,16 +230,17 @@ bool BlockDevice::BarrierQueue::bump()
 {
   assert(!qls.empty());
   
-  // is the front queue empty?
-  if (qls.front()->empty() &&
-      qls.front() != qls.back()) {
+  // is the front queue(s) empty?
+  bool did = false;
+  while (!qls.empty() &&
+	 qls.front()->empty() &&
+	 qls.front() != qls.back()) {
     delete qls.front();
     qls.pop_front();
     dout(10) << "dequeue_io front empty, moving to next queue (" << qls.front()->size() << ")" << dendl;
-    return true;
+    did = true;
   }
-
-  return false;
+  return did;
 }
 
 int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols, 
