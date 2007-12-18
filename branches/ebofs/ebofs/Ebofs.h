@@ -55,6 +55,7 @@ protected:
   bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
+  bool         commit_starting;
   bool         commit_thread_started;
   Cond         commit_cond;   // to wake up the commit thread
   Cond         sync_cond;
@@ -153,8 +154,8 @@ protected:
   void write_cnode(Cnode *cn);
 
   // ** onodes+cnodes = inodes **
-  int                         inodes_flushing;
-  Cond                        inode_commit_cond;                    
+  int  inodes_flushing;
+  Cond inode_commit_cond;
 
   void flush_inode_finish();
   void commit_inodes_start();
@@ -186,13 +187,16 @@ protected:
 
 
  protected:
+  int check_partial_edges(Onode *on, off_t off, off_t len, 
+			  bool &partial_head, bool &partial_tail);
+
   void alloc_write(Onode *on, 
                    block_t start, block_t len, 
                    interval_set<block_t>& alloc,
                    block_t& old_bfirst, block_t& old_blast,
 		   csum_t& old_csum_first, csum_t& old_csum_last);
-  void apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl);
-  void apply_zero(Onode *on, off_t off, size_t len);
+  int apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl);
+  int apply_zero(Onode *on, off_t off, size_t len);
   int attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
 		   Cond *will_wait_on, bool *will_wait_on_bool);
 
@@ -238,7 +242,7 @@ protected:
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 
-    super_epoch(0), commit_thread_started(false),
+    super_epoch(0), commit_starting(false), commit_thread_started(false),
     commit_thread(this),
     journalfn(jfn), journal(0),
     free_blocks(0), limbo_blocks(0),

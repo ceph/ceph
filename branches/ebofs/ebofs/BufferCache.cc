@@ -285,6 +285,8 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       bc->mark_dirty(bh);
       bc->bh_write(on, bh, bh->partial_tx_to);//cur_block);
 
+      assert(bh->oc->on->is_dirty()); 
+
       // clean up a bit
       bh->partial_tx_to = 0;
       bh->partial_tx_epoch = 0;
@@ -402,17 +404,9 @@ int ObjectCache::find_tx(block_t start, block_t len,
 
 int ObjectCache::try_map_read(block_t start, block_t len)
 {
-  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   int num_missing = 0;
 
@@ -502,17 +496,9 @@ int ObjectCache::map_read(block_t start, block_t len,
                           map<block_t, BufferHead*>& partial,
 			  map<block_t, BufferHead*>& corrupt) {
   
-  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   while (left > 0) {
     // at end?
@@ -616,41 +602,20 @@ int ObjectCache::map_read(block_t start, block_t len,
  * map a range of pages on an object's buffer cache.
  *
  * - break up bufferheads that don't fall completely within the range
- * - cancel rx ops we obsolete.
- *   - resubmit rx ops if we split bufferheads
+ * - cancel rx ops we contain
+ *   - resubmit non-contained rx ops if we split bufferheads
  * - cancel obsoleted tx ops
- * - break over disk extent boundaries
+ * - break contained bh's over disk extent boundaries
  */
 int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
                            version_t super_epoch)
 {
-  map<block_t, BufferHead*>::iterator p;
-
-  // hack speed up common cases
-  if (start == 0) {
-    p = data.begin();
-  } else if (start + len == on->last_block && len == 1 && !data.empty()) {
-    // append hack.
-    p = data.end();
-    p--;
-    if (p->first < start) p++;
-  } else {
-    p = data.lower_bound(start);  
-  }
-
   dout(10) << "map_write " << *on << " " << start << "~" << len << dendl;
-  // p->first >= start
-  
+
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);  // p->first >= start
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   //dump();
 

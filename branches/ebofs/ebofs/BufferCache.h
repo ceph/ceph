@@ -311,6 +311,48 @@ class ObjectCache {
   
   pobject_t get_object_id() { return object_id; }
 
+
+  /*
+   * will return bh containing pos.  
+   * if none, then the _next_ bh.
+   * if none, then data.end().
+   */
+  map<block_t, BufferHead*>::iterator find_bh(block_t start, block_t len=0) {
+    map<block_t, BufferHead*>::iterator p;
+     
+    // hack speed up common cases
+    if (start == 0) {
+      p = data.begin();
+    } else if (len == 1 &&
+	       !data.empty() &&
+	       data.rbegin()->first <= start) {
+      // append hack.
+      p = data.end();
+      p--;
+      if (p->first < start) p++;
+    } else {
+      p = data.lower_bound(start);  
+    }
+
+    if (p != data.begin() && 
+	(p == data.end() || p->first > start)) {
+      p--;     // might overlap!
+      if (p->first + p->second->length() <= start) 
+	p++;   // doesn't overlap.
+    }
+    return p;
+  }
+  
+  BufferHead *find_bh_containing(block_t b) {
+    map<block_t, BufferHead*>::iterator p = find_bh(b, 1);
+    if (p != data.end() &&
+	p->second->start() <= b &&
+	p->second->end() > b)
+      return p->second;
+    return 0;
+  }
+
+
   void add_oc_bh(BufferHead *bh) {
     // add to my map
     assert(data.count(bh->start()) == 0);
@@ -356,10 +398,10 @@ class ObjectCache {
                map<block_t, BufferHead*>& corrupt); // bad checksums
   int try_map_read(block_t start, block_t len);  // just tell us how many extents we're missing.
 
-  
   int map_write(block_t start, block_t len,
-                map<block_t, BufferHead*>& hits,
-                version_t super_epoch);   // can write to these.
+		map<block_t, BufferHead*>& hits,
+		version_t super_epoch);
+
   void touch_bottom(block_t bstart, block_t blast);
 
   BufferHead *split(BufferHead *bh, block_t off);
@@ -413,42 +455,21 @@ class BufferCache {
   off_t stat_tx;
   off_t stat_partial;
   off_t stat_missing;
+  
+  int partial_reads;
+
 
 #define EBOFS_BC_FLUSH_BHWRITE 0
 #define EBOFS_BC_FLUSH_PARTIAL 1
 
   map<version_t, int> epoch_unflushed[2];
   
-  /* partial writes - incomplete blocks that can't be written until
-   *  their prior content is read and overlayed with the new data.
-   *
-   * we put partial block management here because objects may be deleted
-   * before the read completes, but the write may have been committed in a 
-   * prior epoch.
-   *
-   * we map: src block -> dest block -> PartialWrite
-   *
-   * really, at most there will only ever be two of these, for current+previous epochs.
-   */
-  struct PartialWrite {
-    map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
-    version_t              epoch;
-  };
-  struct PartialWriteSet {
-    Onode *on;    // object
-    block_t oblock;    // block in object
-    csum_t csum;     // expected csum
-    map<block_t, PartialWrite> writes;
-  };
-
-  map<block_t, PartialWriteSet> partial_write;  // queued writes w/ partial content
-  map<block_t, set<BufferHead*> >           shadow_partials;
-
  public:
   BufferCache(BlockDevice& d, Mutex& el) : 
     ebofs_lock(el), dev(d), 
     stat_waiter(0),
-    stat_all(0), stat_clean(0), stat_corrupt(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
+    stat_all(0), stat_clean(0), stat_corrupt(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0),
+    partial_reads(0)
     {}
 
 
@@ -505,7 +526,10 @@ class BufferCache {
     case BufferHead::STATE_DIRTY: stat_dirty += bh->length(); break;
     case BufferHead::STATE_TX: stat_tx += bh->length(); break;
     case BufferHead::STATE_RX: stat_rx += bh->length(); break;
-    case BufferHead::STATE_PARTIAL: stat_partial += bh->length(); break;
+    case BufferHead::STATE_PARTIAL: 
+      stat_partial += bh->length(); 
+      inc_partial_read();
+      break;
     default: assert(0);
     }
     stat_all += bh->length();
@@ -520,7 +544,10 @@ class BufferCache {
     case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); assert(stat_dirty >= 0); break;
     case BufferHead::STATE_TX: stat_tx -= bh->length(); assert(stat_tx >= 0); break;
     case BufferHead::STATE_RX: stat_rx -= bh->length(); assert(stat_rx >= 0); break;
-    case BufferHead::STATE_PARTIAL: stat_partial -= bh->length(); assert(stat_partial >= 0); break;
+    case BufferHead::STATE_PARTIAL: 
+      stat_partial -= bh->length(); assert(stat_partial >= 0); 
+      dec_partial_read();
+      break;
     default: assert(0);
     }
     stat_all -= bh->length();
@@ -550,10 +577,32 @@ class BufferCache {
       flush_cond.Signal();
   }
 
+  bool get_num_partials() {
+    return partial_reads;
+  }
+  void inc_partial_read() {
+    partial_reads++;
+  }
+  void dec_partial_read() {
+    partial_reads--;
+    if (partial_reads == 0 && stat_waiter)
+      stat_cond.Signal();
+  }
+
   void waitfor_stat() {
     stat_waiter++;
     stat_cond.Wait(ebofs_lock);
     stat_waiter--;
+  }
+  void waitfor_partials() {
+    cout << "wait start " << partial_reads << std::endl;
+    stat_waiter++;
+    while (partial_reads > 0) {
+      cout << "wait " << partial_reads << std::endl;
+      stat_cond.Wait(ebofs_lock);
+    }
+    stat_waiter--;
+    cout << "wait finish " << partial_reads << std::endl;
   }
   void waitfor_flush() {
     flush_cond.Wait(ebofs_lock);
@@ -608,10 +657,10 @@ class BufferCache {
 
   void bh_queue_partial_write(Onode *on, BufferHead *bh);
   void bh_cancel_partial_write(BufferHead *bh);
-
+  
   void queue_partial(Onode *on, block_t opos, csum_t csum, block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
   void cancel_partial(block_t from, block_t to, version_t epoch);
-
+  
   void add_shadow_partial(block_t from, BufferHead *bh);
   void cancel_shadow_partial(block_t from, BufferHead *bh);
 
