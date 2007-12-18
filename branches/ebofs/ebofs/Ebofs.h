@@ -130,6 +130,7 @@ protected:
   bool have_onode(pobject_t oid) {
     return onode_map.count(oid);
   }
+  Onode* decode_onode(bufferlist& bl, unsigned& off);
   Onode* get_onode(pobject_t oid);     // get cached onode, or read from disk.  ref++.
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.

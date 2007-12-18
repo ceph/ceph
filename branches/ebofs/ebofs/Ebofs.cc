@@ -663,6 +663,81 @@ Onode* Ebofs::new_onode(pobject_t oid)
   return on;
 }
 
+Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off) 
+{
+  // verify csum
+  struct ebofs_onode *eo = (struct ebofs_onode*)(bl.c_str() + off);
+  if (eo->onode_bytes > bl.length() - off) {
+    derr(0) << "obviously corrupt onode (bad onode_bytes)" << dendl;
+    return 0;
+  }
+  csum_t actual = calc_csum(bl.c_str() + off + sizeof(csum_t),
+			    eo->onode_bytes - sizeof(csum_t));
+  if (actual != eo->onode_csum) {
+    derr(0) << "corrupt onode (bad csum actual " << actual << " != " << eo->onode_csum << ")" << dendl;
+    return 0;
+  }
+  
+  // add onode
+  Onode *on = new Onode(eo->object_id);
+  
+  // parse data block
+  on->readonly = eo->readonly;
+  on->onode_loc = eo->onode_loc;
+  on->object_size = eo->object_size;
+  on->alloc_blocks = eo->alloc_blocks;
+  on->data_csum = eo->data_csum;
+  
+  // parse
+  char *p = (char*)(eo + 1);
+
+  // parse collection list
+  for (int i=0; i<eo->num_collections; i++) {
+    coll_t c = *((coll_t*)p);
+    p += sizeof(c);
+    on->collections.insert(c);
+  }
+  
+  // parse attributes
+  for (unsigned i=0; i<eo->num_attr; i++) {
+    string key = p;
+    p += key.length() + 1;
+    int len = *(int*)(p);
+    p += sizeof(len);
+    on->attr[key] = buffer::copy(p, len);
+    p += len;
+    dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << dendl;
+  }
+  
+  // parse extents
+  on->extent_map.clear();
+  block_t n = 0;
+  for (unsigned i=0; i<eo->num_extents; i++) {
+    Extent ex = *((Extent*)p);
+    p += sizeof(Extent);
+    on->extent_map[n].ex = ex;
+    if (ex.start) {
+      on->extent_map[n].csum.resize(ex.length);
+      memcpy(&on->extent_map[n].csum[0], p, sizeof(csum_t)*ex.length);
+      p += sizeof(csum_t)*ex.length;
+    }
+    dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << dendl;
+    n += ex.length;
+  }
+  on->last_block = n;
+  
+  // parse bad byte extents
+  for (unsigned i=0; i<eo->num_bad_byte_extents; i++) {
+    Extent ex = *((Extent*)p);
+    p += sizeof(ex);
+    on->bad_byte_extents.insert(ex.start, ex.length);
+    dout(15) << "get_onode " << *on << " bad byte ex " << ex << dendl;
+  }
+
+  unsigned len = p - (char*)eo;
+  assert(len == eo->onode_bytes);
+  return on;
+}
 
 Onode* Ebofs::get_onode(pobject_t oid)
 {
@@ -706,74 +781,15 @@ Onode* Ebofs::get_onode(pobject_t oid)
     ebofs_lock.Unlock();
     dev.read( onode_loc.start, onode_loc.length, bl );
     ebofs_lock.Lock();
-    
-    // add onode
-    Onode *on = new Onode(oid);
+
+    unsigned off = 0;
+    Onode *on = decode_onode(bl, off);
+    if (!on) {
+      assert(0); // corrupt!
+    }
+    assert(on->object_id == oid);
     onode_map[oid] = on;
     onode_lru.lru_insert_top(on);
-    
-    // parse data block
-    struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
-    if (eo->object_id != oid) {
-      dout(0) << " wrong oid in onode block: " << eo->object_id << " != " << oid << dendl;
-      dout(0) << " onode_loc is " << eo->onode_loc << dendl;
-      dout(0) << " object_size " << eo->object_size << dendl;
-      dout(0) << " alloc_blocks " << eo->alloc_blocks << dendl;
-      dout(0) << " " << eo->num_collections << " coll + " 
-	      << eo->num_attr << " attr + " 
-	      << eo->num_extents << " extents" << dendl;
-      assert(eo->object_id == oid);
-    }
-    on->readonly = eo->readonly;
-    on->onode_loc = eo->onode_loc;
-    on->object_size = eo->object_size;
-    on->alloc_blocks = eo->alloc_blocks;
-
-    // parse
-    char *p = bl.c_str() + sizeof(*eo);
-
-    // parse collection list
-    for (int i=0; i<eo->num_collections; i++) {
-      coll_t c = *((coll_t*)p);
-      p += sizeof(c);
-      on->collections.insert(c);
-    }
-
-    // parse attributes
-    for (unsigned i=0; i<eo->num_attr; i++) {
-      string key = p;
-      p += key.length() + 1;
-      int len = *(int*)(p);
-      p += sizeof(len);
-      on->attr[key] = buffer::copy(p, len);
-      p += len;
-      dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << dendl;
-    }
-    
-    // parse extents
-    on->extent_map.clear();
-    block_t n = 0;
-    for (unsigned i=0; i<eo->num_extents; i++) {
-      Extent ex = *((Extent*)p);
-      p += sizeof(Extent);
-      on->extent_map[n].ex = ex;
-      if (ex.start) {
-	on->extent_map[n].csum.resize(ex.length);
-	memcpy(&on->extent_map[n].csum[0], p, sizeof(csum_t)*ex.length);
-	p += sizeof(csum_t)*ex.length;
-      }
-      dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << dendl;
-      n += ex.length;
-    }
-    on->last_block = n;
-
-    // parse bad byte extents
-    for (unsigned i=0; i<eo->num_bad_byte_extents; i++) {
-      Extent ex = *((Extent*)p);
-      p += sizeof(ex);
-      on->bad_byte_extents.insert(ex.start, ex.length);
-      dout(15) << "get_onode " << *on << " bad byte ex " << ex << dendl;
-    }
 
     // wake up other waiters
     for (list<Cond*>::iterator i = waitfor_onode[oid].begin();
@@ -801,6 +817,8 @@ public:
 
 void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 {
+  unsigned start_off = off;
+
   // onode
   struct ebofs_onode eo;
   eo.readonly = on->readonly;
@@ -808,6 +826,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   eo.object_id = on->object_id;
   eo.object_size = on->object_size;
   eo.alloc_blocks = on->alloc_blocks;
+  eo.data_csum = on->data_csum;
   eo.inline_bytes = 0;  /* write me */
   eo.num_collections = on->collections.size();
   eo.num_attr = on->attr.size();
@@ -835,7 +854,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
     off += sizeof(int);
     bl.copy_in(off, l, i->second.c_str());
     off += l;
-    dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << l << dendl;
+    dout(15) << "encode_onode " << *on  << " attr " << i->first << " len " << l << dendl;
   }
   
   // extents
@@ -849,7 +868,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
       bl.copy_in(off, sizeof(csum_t)*o.ex.length, (char*)&o.csum[0]);
       off += sizeof(csum_t)*o.ex.length;
     }
-    dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << o.ex << dendl;
+    dout(15) << "encode_onode " << *on  << " ex " << i->first << ": " << o.ex << dendl;
   }
 
   // bad byte extents
@@ -858,18 +877,25 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
        p++) {
     Extent o(p->first, p->second);
     bl.copy_in(off, sizeof(o), (char*)&o);
-    dout(15) << "write_onode " << *on  << " bad byte ex " << o << dendl;
+    dout(15) << "encode_onode " << *on  << " bad byte ex " << o << dendl;
   }
+
+  eo.onode_bytes = off - start_off;
+  bl.copy_in(start_off + sizeof(csum_t), sizeof(__u32), (char*)&eo.onode_bytes);
+  eo.onode_csum = calc_csum(bl.c_str() + start_off + sizeof(csum_t),
+			    eo.onode_bytes - sizeof(csum_t));
+  bl.copy_in(start_off, sizeof(csum_t), (char*)&eo);
+  dout(15) << "encode_onode len " << eo.onode_bytes << " csum " << eo.onode_csum << dendl;
 }
 
 void Ebofs::write_onode(Onode *on)
 {
   // buffer
-  unsigned bytes = sizeof(ebofs_onode) + on->get_collection_bytes() + on->get_attr_bytes() + on->get_extent_bytes();
-  unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
+  unsigned bytes = on->get_ondisk_bytes();
+  unsigned blocks = DIV_ROUND_UP(bytes, EBOFS_BLOCK_SIZE);
 
   bufferlist bl;
-  bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
+  bl.push_back(buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks));
 
   // (always) relocate onode
   if (super_epoch > on->last_alloc_epoch) {
@@ -881,8 +907,8 @@ void Ebofs::write_onode(Onode *on)
       first = on->get_first_block();
     
     allocator.allocate(on->onode_loc, blocks, first);
-    object_tab->remove( on->object_id );
-    object_tab->insert( on->object_id, on->onode_loc );
+    object_tab->remove(on->object_id);
+    object_tab->insert(on->object_id, on->onode_loc);
     //object_tab->verify();
   }
 
@@ -891,6 +917,8 @@ void Ebofs::write_onode(Onode *on)
   unsigned off = 0;
   encode_onode(on, bl, off);
   assert(off == bytes);
+  if (off < bl.length())
+    bl.zero(off, bl.length()-off);
 
   // write
   dev.write( on->onode_loc.start, on->onode_loc.length, bl, 
@@ -1147,7 +1175,7 @@ void Ebofs::write_cnode(Cnode *cn)
 {
   // allocate buffer
   unsigned bytes = sizeof(ebofs_cnode) + cn->get_attr_bytes();
-  unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
+  unsigned blocks = DIV_ROUND_UP(bytes, EBOFS_BLOCK_SIZE);
   
   bufferlist bl;
   //bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
@@ -1308,7 +1336,6 @@ void Ebofs::trim_bc(off_t max)
     
     ObjectCache *oc = bh->oc;
     bc.remove_bh(bh);
-    delete bh;
     
     if (oc->is_empty()) {
       Onode *on = oc->on;
@@ -1706,20 +1733,6 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
       if (bh->is_partial() || bh->is_rx() || bh->is_missing() || bh->is_corrupt()) {
         assert(bh->length() == 1);
 
-	if (bh->is_missing()) {
-	  // newly realloc? carry old checksum over since we're only partially overwriting
-	  if (bh->start() == bstart && alloc.contains(bstart)) {
-	    dout(10) << "apply_write  carrying over starting csum " << hex << old_csum_first << dec
-		     << " for partial " << *bh << dendl;
-	    *on->get_extent_csum_ptr(bh->start(), 1) = old_csum_first;
-	    on->data_csum += old_csum_first;
-	  } else if (bh->end()-1 == blast && alloc.contains(blast)) {
-	    dout(10) << "apply_write  carrying over ending csum " << hex << old_csum_last << dec
-		     << " for partial " << *bh << dendl;
-	    *on->get_extent_csum_ptr(bh->end()-1, 1) = old_csum_last;
-	    on->data_csum += old_csum_last;
-	  } 
-	}
 	if (bh->is_corrupt()) {
 	  dout(10) << "apply_write  marking non-overwritten bytes bad on corrupt " << *bh << dendl;
 	  interval_set<off_t> bad;
@@ -1734,7 +1747,20 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 	  *on->get_extent_csum_ptr(bh->start(), 1) = csum;
 	  on->data_csum += csum;
 	  bc.mark_clean(bh);
-	}
+	} else {
+	  // newly realloc? carry old checksum over since we're only partially overwriting
+	  if (bh->start() == bstart && alloc.contains(bstart)) {
+	    dout(10) << "apply_write  carrying over starting csum " << hex << old_csum_first << dec
+		     << " for partial " << *bh << dendl;
+	    *on->get_extent_csum_ptr(bh->start(), 1) = old_csum_first;
+	    on->data_csum += old_csum_first;
+	  } else if (bh->end()-1 == blast && alloc.contains(blast)) {
+	    dout(10) << "apply_write  carrying over ending csum " << hex << old_csum_last << dec
+		     << " for partial " << *bh << dendl;
+	    *on->get_extent_csum_ptr(bh->end()-1, 1) = old_csum_last;
+	    on->data_csum += old_csum_last;
+	  } 
+	}	  
 
         // add frag to partial
         dout(10) << "apply_write writing into partial " << *bh << ":"
@@ -1824,7 +1850,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
 	// update csum
 	block_t rbfirst = off_in_bh/EBOFS_BLOCK_SIZE;
-	block_t rblast = (off_in_bh+len_in_bh+4095)/EBOFS_BLOCK_SIZE;
+	block_t rblast = DIV_ROUND_UP(off_in_bh+len_in_bh, EBOFS_BLOCK_SIZE);
 	block_t bnum = rblast-rbfirst;
 	csum_t *csum = on->get_extent_csum_ptr(bh->start()+rbfirst, bnum);
 	dout(20) << "calc csum for " << rbfirst << "~" << bnum << dendl;
@@ -1888,7 +1914,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
     }
 
     // fill in csums
-    unsigned blocks = (len_in_bh + 4095)/ EBOFS_BLOCK_SIZE;
+    unsigned blocks = DIV_ROUND_UP(len_in_bh, EBOFS_BLOCK_SIZE);
     csum_t *csum = on->get_extent_csum_ptr(bh->start(), blocks);
     for (unsigned i=0; i<blocks; i++) {
       on->data_csum -= csum[i];
@@ -1929,8 +1955,8 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 
   // zero edges
   // head?
-  if (off & (EBOFS_BLOCK_SIZE-1)) {
-    size_t l = EBOFS_BLOCK_SIZE - (off & (EBOFS_BLOCK_SIZE-1));
+  if (off & EBOFS_BLOCK_MASK) {
+    size_t l = EBOFS_BLOCK_SIZE - (off & EBOFS_BLOCK_MASK);
     if (l > len) l = len;
     bufferptr bp(l);
     bp.zero();
@@ -1943,8 +1969,8 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
   if (len == 0) return;  // done!
 
   // tail?
-  if ((off+len) & (EBOFS_BLOCK_SIZE-1)) {
-    int l = (off+len) & (EBOFS_BLOCK_SIZE-1);
+  if ((off+len) & EBOFS_BLOCK_MASK) {
+    int l = (off+len) & EBOFS_BLOCK_MASK;
     bufferptr bp(l);
     bp.zero();
     bufferlist bl;
@@ -1956,9 +1982,10 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 
   // map middle onto buffers
   assert(len > 0);
-  block_t bstart = 0;
-  if (off) bstart = 1 + (off-1) / EBOFS_BLOCK_SIZE;
-  block_t blen = (off+len) / EBOFS_BLOCK_SIZE;
+  assert((off & EBOFS_BLOCK_MASK) == 0);
+  assert((len & EBOFS_BLOCK_MASK) == 0);
+  block_t bstart = off / EBOFS_BLOCK_SIZE;
+  block_t blen = len / EBOFS_BLOCK_SIZE;
   assert(blen > 0);
 
   map<block_t,BufferHead*> hits;
@@ -1974,26 +2001,24 @@ void Ebofs::apply_zero(Onode *on, off_t off, size_t len)
     p = next;
   }
 
-  if (blen) {
-    // free old blocks
-    vector<Extent> old;
-    on->map_extents(bstart, blen, old, 0);
-    for (unsigned i=0; i<old.size(); i++)
-      if (old[i].start)
-	allocator.release(old[i]);
-    Extent hole(0, blen);      
-    on->set_extent(bstart, hole);
-
-    // adjust uncom
-    interval_set<block_t> zeroed;
-    zeroed.insert(bstart, blen);
-    interval_set<block_t> olduncom;
-    olduncom.intersection_of(zeroed, on->uncommitted);
-    dout(10) << "_zeroed old uncom " << on->uncommitted << " zeroed " << zeroed 
-	     << " subtracting " << olduncom << dendl;
-    on->uncommitted.subtract(olduncom);
-    dout(10) << "_zeroed new uncom " << on->uncommitted << dendl;
-  }
+  // free old blocks
+  vector<Extent> old;
+  on->map_extents(bstart, blen, old, 0);
+  for (unsigned i=0; i<old.size(); i++)
+    if (old[i].start)
+      allocator.release(old[i]);
+  Extent hole(0, blen);      
+  on->set_extent(bstart, hole);
+  
+  // adjust uncom
+  interval_set<block_t> zeroed;
+  zeroed.insert(bstart, blen);
+  interval_set<block_t> olduncom;
+  olduncom.intersection_of(zeroed, on->uncommitted);
+  dout(10) << "_zeroed old uncom " << on->uncommitted << " zeroed " << zeroed 
+	   << " subtracting " << olduncom << dendl;
+  on->uncommitted.subtract(olduncom);
+  dout(10) << "_zeroed new uncom " << on->uncommitted << dendl;
 
   finish_contexts(finished, -1);
 }

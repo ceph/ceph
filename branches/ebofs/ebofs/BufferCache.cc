@@ -26,7 +26,7 @@ void do_apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm)
   for (map<off_t, bufferlist>::iterator i = pm.begin();
        i != pm.end();
        i++) {
-    cout << "do_apply_partial at " << i->first << "~" << i->second.length() << std::endl;
+    //cout << "do_apply_partial at " << i->first << "~" << i->second.length() << std::endl;
     bl.copy_in(i->first, i->second.length(), i->second);
   }
   pm.clear();
@@ -498,9 +498,7 @@ int ObjectCache::map_read(block_t start, block_t len,
                       left,   // no prefetch
                       exv, 0);
       for (unsigned i=0; i<exv.size() && left > 0; i++) {
-        BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( exv[i].length );
+        BufferHead *n = new BufferHead(this, cur, exv[i].length);
 	if (exv[i].start) {
 	  missing[cur] = n;
 	  dout(20) << "map_read miss " << left << " left, " << *n << dendl;
@@ -562,9 +560,7 @@ int ObjectCache::map_read(block_t start, block_t len,
                       exv, 0);
       
       for (unsigned i=0; i<exv.size() && left>0; i++) {
-        BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( exv[i].length );
+        BufferHead *n = new BufferHead(this, cur, exv[i].length);
 	if (exv[i].start) {
 	  missing[cur] = n;
 	  dout(20) << "map_read gap " << *n << dendl;
@@ -648,12 +644,10 @@ int ObjectCache::map_write(block_t start, block_t len,
     
     // at end?
     if (p == data.end()) {
-      BufferHead *n = new BufferHead(this);
-      n->set_start( cur );
-      n->set_length( max );
-      bc->add_bh(n);
+      BufferHead *n = new BufferHead(this, cur, max);
       if (hole)
 	n->set_state(BufferHead::STATE_CLEAN); // hole
+      bc->add_bh(n);
       hits[cur] = n;
       left -= max;
       cur += max;
@@ -744,9 +738,7 @@ int ObjectCache::map_write(block_t start, block_t len,
       block_t next = p->first;
       block_t glen = MIN(next-cur, max);
       dout(10) << "map_write gap " << cur << "~" << glen << dendl;
-      BufferHead *n = new BufferHead(this);
-      n->set_start( cur );
-      n->set_length( glen );
+      BufferHead *n = new BufferHead(this, cur, glen);
       if (hole)
 	n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
@@ -841,7 +833,6 @@ void ObjectCache::discard_bh(BufferHead *bh, version_t super_epoch)
     finish_contexts(p->second, -1);
   
   bc->remove_bh(bh);
-  delete bh;
 }
 
 void ObjectCache::truncate(block_t blocks, version_t super_epoch)
@@ -889,9 +880,7 @@ void ObjectCache::clone_to(Onode *other)
       // dup dirty or tx bh's
       if (!ton)
 	ton = other->get_oc(bc);
-      BufferHead *nbh = new BufferHead(ton);
-      nbh->set_start( bh->start() );
-      nbh->set_length( bh->length() );
+      BufferHead *nbh = new BufferHead(ton, bh->start(), bh->length());
       nbh->data = bh->data;      // just copy refs to underlying buffers. 
       bc->add_bh(nbh);
 
@@ -928,13 +917,13 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
   if (right->version > left->version) left->version = right->version;
   if (right->last_flushed > left->last_flushed) left->last_flushed = right->last_flushed;
 
-  left->set_length(left->length() + right->length());
+  bc->stat_sub(left);
+  left->reset_length(left->length() + right->length());
+  bc->stat_add(left);
   left->data.claim_append(right->data);
 
   // remove right
-  remove_bh(right);
-  bc->lru_rest.lru_remove(right);
-  delete right;  
+  bc->remove_bh(right);
   dout(10) << "merge_bh_left result " << *left << dendl;
   return left;
 }
@@ -1044,23 +1033,18 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   dout(20) << "split " << *orig << " at " << after << dendl;
 
   // split off right
-  BufferHead *right = new BufferHead(orig->get_oc());
+  block_t newleftlen = after - orig->start();
+  BufferHead *right = new BufferHead(orig->get_oc(), after, orig->length() - newleftlen);
   right->set_version(orig->get_version());
   right->epoch_modified = orig->epoch_modified;
   right->last_flushed = orig->last_flushed;
   right->set_state(orig->get_state());
-
-  block_t newleftlen = after - orig->start();
-  right->set_start( after );
-  right->set_length( orig->length() - newleftlen );
+  add_bh(right);
   
   // shorten left
   stat_sub(orig);
-  orig->set_length( newleftlen );
+  orig->reset_length( newleftlen );
   stat_add(orig);
-
-  // add right
-  add_bh(right);
 
   // adjust rx_from
   if (orig->is_rx()) {
@@ -1272,7 +1256,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
 
       // verify csum
       csum_t actual = calc_csum(bl.c_str(), bl.length());
-      if (actual != sp->second.csum) {
+      if (actual != sp->second.csum || rand() % 5 == 0) {
 	dout(0) << "rx_finish bad csum on partial block " << pblock << dendl;
 	derr(0) << "rx_finish bad csum on partial block " << pblock << " ****************" << dendl;
 	poison_commit = true;
@@ -1342,10 +1326,10 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	bh->data.clear();
 	bh->data.push_back( bp );
 	bh->data.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, 
-			 (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, 
+			 EBOFS_BLOCK_SIZE, 
 			 bl);
 	bh->apply_partial();
-	bh->set_state(BufferHead::STATE_CLEAN);
+	mark_clean(bh);
 	
 	// trigger waiters
 	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();

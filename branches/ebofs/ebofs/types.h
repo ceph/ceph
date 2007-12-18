@@ -41,11 +41,15 @@ using namespace __gnu_cxx;
 # define MAX(a,b)  ((a)>=(b) ? (a):(b))
 #endif
 
+#ifndef DIV_ROUND_UP
+# define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
+#endif
 
 // disk
 typedef uint64_t block_t;        // disk location/sector/block
 
 static const int EBOFS_BLOCK_SIZE = 4096;
+static const int EBOFS_BLOCK_MASK = 4095;
 static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
 struct Extent {
@@ -56,7 +60,7 @@ struct Extent {
 
   block_t last() const { return start + length - 1; }
   block_t end() const { return start + length; }
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, const Extent& ex)
 {
@@ -69,32 +73,34 @@ inline ostream& operator<<(ostream& out, const Extent& ex)
 typedef uint64_t coll_t;
 
 struct ebofs_onode {
-  csum_t data_csum;
+  csum_t onode_csum;  // from after onode_csum to base + onode_bytes
+  __u32 onode_bytes;    
 
   Extent onode_loc;       /* this is actually the block we live in */
-  pobject_t object_id;       /* for kicks */
-  __u8 readonly;
+  pobject_t object_id;    /* for kicks */
+  __u64 readonly;  
 
   __s64 object_size;     /* file size in bytes.  should this be 64-bit? */
   __u32 alloc_blocks;   // allocated
+  csum_t data_csum;
   
   __u16 inline_bytes;
   __u16 num_collections;
   __u32 num_attr;        // num attr in onode
   __u32 num_extents;     /* number of extents used.  if 0, data is in the onode */
-  __u32 num_bad_byte_extents; // undefined partial byte extents over partial blocks; block checksums reflect zeroed data beneath these.
-};
+  __u32 num_bad_byte_extents; // corrupt partial byte extents
+} __attribute__ ((packed));
 
 struct ebofs_cnode {
   Extent     cnode_loc;       /* this is actually the block we live in */
   coll_t     coll_id;
   __u32      num_attr;        // num attr in cnode
-};
+} __attribute__ ((packed));
 
 struct ebofs_onode_ptr {
   Extent loc;
   csum_t csum;
-};
+} __attribute__ ((packed));
 
 
 // tree/set nodes
@@ -112,7 +118,7 @@ struct ebofs_nodepool {
   
   __u32  num_regions;
   Extent region_loc[EBOFS_MAX_NODE_REGIONS];
-};
+} __attribute__ ((packed));
 
 // table
 
@@ -121,13 +127,13 @@ struct ebofs_node_ptr {
   //__u64 start[EBOFS_NODE_DUP];
   //__u64 length;
   csum_t csum;
-};
+} __attribute__ ((packed));
 
 struct ebofs_table {
   ebofs_node_ptr root;
   __u32    num_keys;
   __u32    depth;
-};
+} __attribute__ ((packed));
 
 
 // super
@@ -176,7 +182,7 @@ struct ebofs_super {
   }
   bool is_valid_magic() { return s_magic == EBOFS_MAGIC; }
   bool is_valid() { return is_valid_magic() && !is_corrupt(); }
-};
+} __attribute__ ((packed));
 
 
 #endif

@@ -83,11 +83,12 @@ class BufferHead : public LRUObject {
   bool       want_to_expire;  // wants to be at bottom of lru
 
  public:
-  BufferHead(ObjectCache *o) :
+  BufferHead(ObjectCache *o, block_t start, block_t len) :
     oc(o), //cancellable_ioh(0), tx_epoch(0),
     rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
     shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
+    object_loc(start, len),
     //xlist_dirty(this),
     want_to_expire(false)
     {}
@@ -111,9 +112,9 @@ class BufferHead : public LRUObject {
   int get_num_ref() { return ref; }
 
   block_t start() { return object_loc.start; }
-  void set_start(block_t s) { object_loc.start = s; }
+  //void set_start(block_t s) { object_loc.start = s; }
   block_t length() { return object_loc.length; }
-  void set_length(block_t l) { object_loc.length = l; }
+  void reset_length(block_t l) { object_loc.length = l; }
   block_t end() { return start() + length(); }
   block_t last() { return end()-1; }
   
@@ -310,7 +311,7 @@ class ObjectCache {
   
   pobject_t get_object_id() { return object_id; }
 
-  void add_bh(BufferHead *bh) {
+  void add_oc_bh(BufferHead *bh) {
     // add to my map
     assert(data.count(bh->start()) == 0);
 
@@ -333,7 +334,7 @@ class ObjectCache {
 
     data[bh->start()] = bh;
   }
-  void remove_bh(BufferHead *bh) {
+  void remove_oc_bh(BufferHead *bh) {
     assert(data.count(bh->start()));
     data.erase(bh->start());
   }
@@ -405,6 +406,7 @@ class BufferCache {
   Cond  flush_cond;
   int   stat_waiter;
 
+  off_t stat_all;
   off_t stat_clean, stat_corrupt;
   off_t stat_dirty;
   off_t stat_rx;
@@ -446,21 +448,22 @@ class BufferCache {
   BufferCache(BlockDevice& d, Mutex& el) : 
     ebofs_lock(el), dev(d), 
     stat_waiter(0),
-    stat_clean(0), stat_corrupt(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
+    stat_all(0), stat_clean(0), stat_corrupt(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
     {}
 
 
   off_t get_size() {
-    return stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial;
+    assert(stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial+stat_corrupt+stat_missing == stat_all);
+    return stat_all;
   }
   off_t get_trimmable() {
-    return stat_clean;
+    return stat_clean+stat_corrupt;
   }
 
 
   // bh's in cache
   void add_bh(BufferHead *bh) {
-    bh->get_oc()->add_bh(bh);
+    bh->get_oc()->add_oc_bh(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_insert_mid(bh);
       //dirty_bh.push_back(&bh->xlist_dirty);
@@ -482,17 +485,19 @@ class BufferCache {
       lru_rest.lru_bottouch(bh);
   }
   void remove_bh(BufferHead *bh) {
-    bh->get_oc()->remove_bh(bh);
+    bh->get_oc()->remove_oc_bh(bh);
     stat_sub(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_remove(bh);
       //dirty_bh.push_back(&bh->xlist_dirty);
     } else
       lru_rest.lru_remove(bh);
+    delete bh;
   }
 
   // stats
   void stat_add(BufferHead *bh) {
+    assert(stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial+stat_corrupt+stat_missing == stat_all);
     switch (bh->get_state()) {
     case BufferHead::STATE_MISSING: stat_missing += bh->length(); break;
     case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
@@ -501,19 +506,24 @@ class BufferCache {
     case BufferHead::STATE_TX: stat_tx += bh->length(); break;
     case BufferHead::STATE_RX: stat_rx += bh->length(); break;
     case BufferHead::STATE_PARTIAL: stat_partial += bh->length(); break;
+    default: assert(0);
     }
+    stat_all += bh->length();
     if (stat_waiter) stat_cond.Signal();
   }
   void stat_sub(BufferHead *bh) {
+    assert(stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial+stat_corrupt+stat_missing == stat_all);
     switch (bh->get_state()) {
-    case BufferHead::STATE_MISSING: stat_missing -= bh->length(); break;
-    case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
-    case BufferHead::STATE_CORRUPT: stat_corrupt -= bh->length(); break;
-    case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); break;
-    case BufferHead::STATE_TX: stat_tx -= bh->length(); break;
-    case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
-    case BufferHead::STATE_PARTIAL: stat_partial -= bh->length(); break;
+    case BufferHead::STATE_MISSING: stat_missing -= bh->length(); assert(stat_missing >= 0); break;
+    case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); assert(stat_clean >= 0); break;
+    case BufferHead::STATE_CORRUPT: stat_corrupt -= bh->length(); assert(stat_corrupt >= 0); break;
+    case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); assert(stat_dirty >= 0); break;
+    case BufferHead::STATE_TX: stat_tx -= bh->length(); assert(stat_tx >= 0); break;
+    case BufferHead::STATE_RX: stat_rx -= bh->length(); assert(stat_rx >= 0); break;
+    case BufferHead::STATE_PARTIAL: stat_partial -= bh->length(); assert(stat_partial >= 0); break;
+    default: assert(0);
     }
+    stat_all -= bh->length();
   }
   off_t get_stat_tx() { return stat_tx; }
   off_t get_stat_rx() { return stat_rx; }

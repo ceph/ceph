@@ -180,7 +180,7 @@ public:
       for (map<block_t,ExtentCsum>::iterator p = extent_map.begin();
            p != extent_map.end();
            p++) {
-        cout << " verify_extents " << p->first << ": " << p->second << std::endl;
+        //cout << " verify_extents " << p->first << ": " << p->second << std::endl;
         assert(pos == p->first);
 	pos += p->second.ex.length;
 	if (p->second.ex.start) {
@@ -192,7 +192,7 @@ public:
 	  }
 	}
       }
-      cout << " verify_extents got csum " << hex << csum << " want " << data_csum << dec << std::endl;
+      //cout << " verify_extents got csum " << hex << csum << " want " << data_csum << dec << std::endl;
 
       assert(s.size() == count);
       assert(count == alloc_blocks);
@@ -217,7 +217,7 @@ public:
    *  factor clobbered extents out of csums.
    */
   void set_extent(block_t offset, Extent ex) {
-    cout << "set_extent " << offset << " -> " << ex << " ... " << last_block << std::endl;
+    //cout << "set_extent " << offset << " -> " << ex << " ... " << last_block << std::endl;
 
     verify_extents();
 
@@ -267,7 +267,7 @@ public:
         p--;
 	ExtentCsum &left = p->second;
         if (p->first + left.ex.length > offset) {
-          cout << " preceeding left was " << left << std::endl;
+          //cout << " preceeding left was " << left << std::endl;
 	  block_t newlen = offset - p->first;
           if (p->first + left.ex.length > offset+ex.length) {
             // cutting chunk out of middle, add trailing bit
@@ -280,7 +280,7 @@ public:
 	      for (unsigned j=0; j<right.ex.length; j++)
 		data_csum += right.csum[j];
 	    }
-            cout << " tail right is " << right << std::endl;
+            //cout << " tail right is " << right << std::endl;
 	  }
 	  if (left.ex.start) {
 	    alloc_blocks -= left.ex.length - newlen;
@@ -290,7 +290,7 @@ public:
           left.ex.length = newlen;     // cut tail off preceeding extent
 	  if (left.ex.start) 
 	    left.resize_tail();
-          cout << " preceeding left now " << left << std::endl;
+          //cout << " preceeding left now " << left << std::endl;
         }
         p++;
       }
@@ -304,7 +304,7 @@ public:
         // completely subsumed?
 	ExtentCsum &o = p->second;
         if (p->first + o.ex.length <= offset+ex.length) {
-          cout << " erasing " << o << std::endl;
+          //cout << " erasing " << o << std::endl;
 	  if (o.ex.start) {
 	    alloc_blocks -= o.ex.length;
 	    for (unsigned i=0; i<o.ex.length; i++)
@@ -317,7 +317,7 @@ public:
 
         // spans next extent, cut off head
         ExtentCsum &n = extent_map[ offset+ex.length ] = o;
-        cout << " cutting head off " << o;
+        //cout << " cutting head off " << o;
 	unsigned overlap = offset+ex.length - p->first;
         n.ex.length -= overlap;
         if (n.ex.start) {
@@ -328,7 +328,7 @@ public:
 	  n.resize_head();
 	}
         extent_map.erase(p);
-        cout << ", now " << n << std::endl;
+        //cout << ", now " << n << std::endl;
         break;
       }
     }
@@ -349,7 +349,7 @@ public:
   }
   
   int truncate_extents(block_t len, vector<Extent>& extra) {
-    cout << " truncate to " << len << " .. last_block " << last_block << std::endl;
+    //cout << " truncate to " << len << " .. last_block " << last_block << std::endl;
 
     verify_extents();
 
@@ -364,7 +364,7 @@ public:
 	  Extent ex;
 	  ex.start = o.ex.start + newlen;
 	  ex.length = o.ex.length - newlen;
-	  cout << " truncating ex " << p->second.ex << " to " << newlen << ", releasing " << ex << std::endl;
+	  //cout << " truncating ex " << p->second.ex << " to " << newlen << ", releasing " << ex << std::endl;
 	  for (unsigned i=newlen; i<o.ex.length; i++)
 	    data_csum -= o.csum[i];
 	  o.ex.length = newlen;
@@ -494,6 +494,13 @@ public:
 
 
   // pack/unpack
+  int get_ondisk_bytes() {
+    return sizeof(ebofs_onode) + 
+      get_collection_bytes() + 
+      get_attr_bytes() + 
+      get_extent_bytes() +
+      get_bad_byte_bytes();
+  }
   int get_collection_bytes() {
     return sizeof(coll_t) * collections.size();
   }
@@ -510,7 +517,9 @@ public:
   int get_extent_bytes() {
     return sizeof(Extent) * extent_map.size() + sizeof(csum_t)*alloc_blocks;
   }
-
+  int get_bad_byte_bytes() {
+    return 2 * sizeof(off_t) * bad_byte_extents.m.size();
+  }
 };
 
 
