@@ -217,13 +217,13 @@ int main(int argc, char **argv)
   }
 
   utime_t now = g_clock.now();
-  utime_t dur(seconds,0);
+  utime_t dur(seconds, 0);
   utime_t end = now + dur;
   cout << "stop at " << end << std::endl;
   while (now < end) {
     sleep(1);
     now = g_clock.now();
-    cout << now << std::endl;
+    //cout << now << std::endl;
   }
 
   cout << "stopping" << std::endl;

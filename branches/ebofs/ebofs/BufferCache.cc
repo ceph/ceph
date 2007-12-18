@@ -115,15 +115,15 @@ void BufferHead::apply_partial()
 {
   assert(!partial.empty());
   dout(10) << "apply_partial on " << partial.size() << " substrings" << dendl;
+  csum_t *expect = oc->on->get_extent_csum_ptr(start(), 1);
   csum_t oldc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
   do_apply_partial(data, partial);
   csum_t newc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
-  csum_t *p = oc->on->get_extent_csum_ptr(start(), 1);
-  dout(10) << "apply_partial onode had " << hex << *p
+  dout(10) << "apply_partial onode expected " << hex << *expect
 	   << " bl was " << oldc
 	   << " now " << newc << dec << dendl;
-  assert(*p == oldc);
-  *p = newc;
+  assert(*expect == oldc);
+  *expect = newc;
   oc->on->data_csum += newc - oldc;
 }
 
@@ -165,13 +165,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       bh->rx_ioh = 0;
 
     // trigger waiters
-    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-         p != bh->waitfor_read.end();
-         p++) {
-      assert(p->first >= bh->start() && p->first < bh->end());
-      waiters.splice(waiters.begin(), p->second);
-    }
-    bh->waitfor_read.clear();
+    bh->take_read_waiters(waiters);
 
     if (bh->is_rx()) {
       assert(bh->get_version() == 0);
@@ -805,11 +799,11 @@ void ObjectCache::discard_bh(BufferHead *bh, version_t super_epoch)
     bh->shadow_of->remove_shadow(bh);
   }
   
-  for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-       p != bh->waitfor_read.end();
-       p++) 
-    finish_contexts(p->second, -1);
-  
+  // kick read waiters
+  list<Context*> finished;
+  bh->take_read_waiters(finished);
+  finish_contexts(finished, -1);
+
   bc->remove_bh(bh);
 }
 
@@ -1156,16 +1150,6 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 
   on->oc->get();
   inc_unflushed( EBOFS_BC_FLUSH_BHWRITE, bh->epoch_modified );
-
-  /*
-  // assert: no partials on the same block
-  // hose any partial on the same block
-  if (bh->partial_write.count(ex.start)) {
-    dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << dendl;
-    dec_unflushed( bh->partial_write[ex.start].epoch );
-    bh->partial_write.erase(ex.start);
-  }
-  */
 }
 
 

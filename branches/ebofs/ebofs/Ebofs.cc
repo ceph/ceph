@@ -1623,20 +1623,24 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 {
   // partial block overwrite at head or tail?
   off_t last_block_byte = on->last_block * EBOFS_BLOCK_SIZE;
-  partial_head = off < last_block_byte && (off & EBOFS_BLOCK_MASK);
-  partial_tail = (off+len) < on->object_size && ((off+len) & EBOFS_BLOCK_MASK);
+  partial_head = (off < last_block_byte) && (off & EBOFS_BLOCK_MASK);
+  partial_tail = ((off+len) < on->object_size) && ((off+len) & EBOFS_BLOCK_MASK);
+  dout(0) << "check_partial_edges on " << *on << " " << off << "~" << len 
+	   << " " << partial_head << "/" << partial_tail << dendl;
 
   if ((partial_head || partial_tail) && commit_starting) {
+    ObjectCache *oc = on->get_oc(&bc);
+
     // verify that partials don't depend on unread data!
     if (partial_head) {
       block_t bstart = off / EBOFS_BLOCK_SIZE;
-      BufferHead *bh = on->oc->find_bh_containing(bstart);
+      BufferHead *bh = oc->find_bh_containing(bstart);
       if (!bh) {
-	dout(0) << "check_partial_edges missing data for partial head, deferring" << dendl;
+	dout(10) << "check_partial_edges missing data for partial head, deferring" << dendl;
 	return -1;
       }
       if (bh->is_missing() || bh->is_rx()) {
-	dout(0) << "check_partial_edges missing data for partial head " << *bh << ", deferring" << dendl;
+	dout(10) << "check_partial_edges missing data for partial head " << *bh << ", deferring" << dendl;
 	return -1;
       }
       if (bh->is_partial()) {
@@ -1644,20 +1648,20 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 	int end_in_bh = MAX(EBOFS_BLOCK_SIZE, off_in_bh+len);
 	if (!(off_in_bh == 0 || bh->have_partial_range(0, off_in_bh)) ||
 	    !(end_in_bh == EBOFS_BLOCK_SIZE || bh->have_partial_range(end_in_bh, EBOFS_BLOCK_SIZE-end_in_bh))) {
-	  dout(0) << "check_partial_edges can't complete partial head " << *bh << ", deferring" << dendl;
+	  dout(10) << "check_partial_edges can't complete partial head " << *bh << ", deferring" << dendl;
 	  return -1;
 	}
       }      
     }
     if (partial_tail) {
       block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
-      BufferHead *bh = on->oc->find_bh_containing(blast);
+      BufferHead *bh = oc->find_bh_containing(blast);
       if (!bh) {
-	dout(0) << "check_partial_edges missing data for partial tail, deferring" << dendl;
+	dout(10) << "check_partial_edges missing data for partial tail, deferring" << dendl;
 	return -1;
       } 
       if (bh->is_missing() || bh->is_rx()) {
-	dout(0) << "check_partial_edges missing data for partial tail " << *bh << ", deferring" << dendl;
+	dout(10) << "check_partial_edges missing data for partial tail " << *bh << ", deferring" << dendl;
 	return -1;
       }
       if (bh->is_partial()) {
@@ -1668,7 +1672,7 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 	  end = last_block_byte & EBOFS_BLOCK_MASK;
 	if (!(off_in_bh == 0 || bh->have_partial_range(0, off_in_bh)) ||
 	    !(end_in_bh >= end || bh->have_partial_range(end_in_bh, end-end_in_bh))) {
-	  dout(0) << "check_partial_edges can't complete partial tail " << *bh << ", deferring" << dendl;
+	  dout(10) << "check_partial_edges can't complete partial tail " << *bh << ", deferring" << dendl;
 	  return -1;
 	}
       }      
@@ -1731,6 +1735,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
   version_t highv = ++oc->write_count;
   
   // copy from bl into buffer cache
+  list<Context*> finished;
   unsigned blpos = 0;       // byte pos in input buffer
   for (map<block_t, BufferHead*>::iterator i = hits.begin();
        i != hits.end(); 
@@ -1762,6 +1767,9 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 	bc.mark_clean(bh);
       }
     }
+
+    // take read waiters
+    bh->take_read_waiters(finished);  // this is a bit aggressive, since we kick waiters on partials
 
     // need to split off partial?  (partials can only be ONE block)
     if ((bh->is_missing() || bh->is_rx()) && bh->length() > 1) {
@@ -1846,11 +1854,13 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
           dout(10) << "apply_write  rx -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
+	  assert(!commit_starting);  // otherwise, but in check_partial_edges
         }
         else if (bh->is_missing() || bh->is_corrupt()) {
           dout(10) << "apply_write  missing -> partial " << *bh << dendl;
           assert(bh->length() == 1);
           bc.mark_partial(bh);
+	  assert(!commit_starting);  // otherwise, but in check_partial_edges
 
           // take care to read from _old_ disk block locations!
           if (bh->start() == bstart)
@@ -2010,13 +2020,14 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
   oc->scrub_csums();
 
   dirty_onode(on);
+  finish_contexts(finished);
   return 0;
 }
 
 
 int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 {
-  ObjectCache *oc = on->get_oc(&bc);
+  dout(10) << "apply_zero " << off << "~" << len << " on " << *on << dendl;
 
   bool partial_head, partial_tail;
   if (check_partial_edges(on, off, len, partial_head, partial_tail) < 0)
@@ -2024,15 +2035,17 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 
   // zero edges
   // head?
-  if (partial_head) {
-    assert(off & EBOFS_BLOCK_MASK);
+  if (off & EBOFS_BLOCK_MASK) {
     size_t l = EBOFS_BLOCK_SIZE - (off & EBOFS_BLOCK_MASK);
     if (l > len) l = len;
-    bufferptr bp(l);
-    bp.zero();
-    bufferlist bl;
-    bl.push_back(bp);
-    apply_write(on, off, bl.length(), bl);
+    if (partial_head) {
+      bufferptr bp(l);
+      bp.zero();
+      bufferlist bl;
+      bl.push_back(bp);
+      int r = apply_write(on, off, bl.length(), bl);
+      assert(r == 0);
+    }
     off += l;
     len -= l;
   }
@@ -2045,7 +2058,8 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
     bp.zero();
     bufferlist bl;
     bl.push_back(bp);
-    apply_write(on, off+len-bl.length(), bp.length(), bl);
+    int r = apply_write(on, off+len-bl.length(), bp.length(), bl);
+    assert(r == 0);
     len -= l;
   }
   if (len == 0) return 0;  // done!
@@ -2059,9 +2073,9 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
   assert(blen > 0);
 
   map<block_t,BufferHead*> hits;
+  ObjectCache *oc = on->get_oc(&bc);
   oc->map_write(bstart, blen, hits, super_epoch);
 
-  list<Context*> finished;
   map<block_t,BufferHead*>::iterator p = hits.begin();
   while (p != hits.end()) {
     map<block_t,BufferHead*>::iterator next = p;
@@ -2090,7 +2104,7 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
   on->uncommitted.subtract(olduncom);
   dout(10) << "_zeroed new uncom " << on->uncommitted << dendl;
 
-  finish_contexts(finished, -1);
+  dirty_onode(on);
   return 0;
 }
 
@@ -2773,7 +2787,6 @@ int Ebofs::_write(pobject_t oid, off_t offset, size_t length, const bufferlist& 
     // apply write to buffer cache
     if (length > 0) {
       int r = apply_write(on, offset, length, bl);
-      dout(1) << "apply_write returned " << r << dendl;
       if (r == 0) 
 	break; // yay!
       assert(r < 0);

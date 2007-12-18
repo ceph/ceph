@@ -57,7 +57,7 @@ class BufferHead : public LRUObject {
 
   map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
 
-  map< block_t, list<Context*> > waitfor_read;
+  map<block_t, list<Context*> > waitfor_read;
   
   set<BufferHead*>  shadows;     // shadow bh's that clone()ed me.
   BufferHead*       shadow_of;
@@ -242,6 +242,14 @@ class BufferHead : public LRUObject {
 
   void apply_partial();
   void add_partial(off_t off, bufferlist& p);
+
+  void take_read_waiters(list<Context*>& finished) {
+    for (map<block_t,list<Context*> >::iterator p = waitfor_read.begin();
+         p != waitfor_read.end();
+         p++)
+      finished.splice(finished.begin(), p->second);
+    waitfor_read.clear();
+  }
 
 };
 
@@ -566,11 +574,11 @@ class BufferCache {
   }
   void inc_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]++;
-    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
+    //cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[what][epoch] << std::endl;
   }
   void dec_unflushed(int what, version_t epoch) {
     epoch_unflushed[what][epoch]--;
-    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << std::endl;
+    //cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[what][epoch] << std::endl;
     if (epoch_unflushed[what][epoch] == 0) 
       flush_cond.Signal();
   }
@@ -593,14 +601,11 @@ class BufferCache {
     stat_waiter--;
   }
   void waitfor_partials() {
-    cout << "wait start " << partial_reads << std::endl;
     stat_waiter++;
-    while (partial_reads > 0) {
-      cout << "wait " << partial_reads << std::endl;
+    while (partial_reads > 0) 
       stat_cond.Wait(ebofs_lock);
-    }
     stat_waiter--;
-    cout << "wait finish " << partial_reads << std::endl;
+
   }
   void waitfor_flush() {
     flush_cond.Wait(ebofs_lock);
