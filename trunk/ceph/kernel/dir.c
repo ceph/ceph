@@ -33,6 +33,7 @@ struct ceph_inode_cap *ceph_open(struct inode *inode, struct file *file, int fla
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
+	ceph_ino_t pathbase;
 	char path[PATH_MAX];
 	int pathlen;
 	struct ceph_msg *req;
@@ -46,12 +47,11 @@ struct ceph_inode_cap *ceph_open(struct inode *inode, struct file *file, int fla
 	dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
 
 	dout(5, "open inode %p dentry %p name '%s' flags %d\n", inode, dentry, dentry->d_name.name, flags);
+	pathbase = inode->i_sb->s_root->d_inode->i_ino;
 	pathlen = get_dentry_path(dentry, path, inode->i_sb->s_root);
 	dout(5, "path is %s len %d\n", path, pathlen);
 
-	/* stat mds */
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
-				       inode->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	rhead = req->front.iov_base;
@@ -76,7 +76,6 @@ static int ceph_dir_open(struct inode *inode, struct file *file)
 	dout(5, "dir_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
 	cap = ceph_find_cap(inode, 0);
 	if (!cap) {
-		/* open this inode */
 		cap = ceph_open(inode, file, O_DIRECTORY);
 		if (IS_ERR(cap))
 			return PTR_ERR(cap);
@@ -92,6 +91,9 @@ static int ceph_dir_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/*
+ * build fpos from fragment id and offset within that fragment.
+ */
 static loff_t make_fpos(u32 frag, u32 off)
 {
 	return ((loff_t)frag << 32) | (loff_t)off;
