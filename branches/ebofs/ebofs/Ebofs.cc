@@ -1617,6 +1617,21 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
 
   block_t bstart = off / EBOFS_BLOCK_SIZE;
 
+  // partial?
+  off_t last_block_byte = on->last_block * EBOFS_BLOCK_SIZE;
+  bool partial_head = (off & EBOFS_BLOCK_MASK) && off < last_block_byte;
+  bool partial_tail = ((off+len) & EBOFS_BLOCK_MASK) && (off+len) < on->object_size;
+
+    partial_head
+    if ((bh->start() == bstart && 
+	 opos % EBOFS_BLOCK_SIZE != 0) ||
+        (bh->last() == blast && 
+	 ((off_t)len+off) % EBOFS_BLOCK_SIZE != 0 && 
+	 ((off_t)len+off) < on->object_size)) {
+
+
+
+      // extending object?
   if (off+(off_t)len > on->object_size) {
     dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
              << " -> " << off+len << dendl;
@@ -1628,7 +1643,6 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, const bufferlist& bl)
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
   block_t oldlastblock = on->last_block;
-
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;

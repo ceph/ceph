@@ -1282,14 +1282,14 @@ void BufferCache::rx_finish(ObjectCache *oc,
       block_t pblock = diskstart;
 
       // verify csum
+      csum_t want = sp->second.csum;
       csum_t actual = calc_csum(bl.c_str(), bl.length());
-      if (actual != sp->second.csum || rand() % 5 == 0) {
+      if (actual != want || rand() % 5 == 0) {
 	dout(0) << "rx_finish bad csum on partial block " << pblock << dendl;
 	derr(0) << "rx_finish bad csum on partial block " << pblock << " ****************" << dendl;
 	poison_commit = true;
 	*sp->second.on->get_extent_csum_ptr(sp->second.oblock, 1) = actual;
 	sp->second.on->data_csum += actual - want;
-
 
 	interval_set<off_t> bad;
 	bad.insert(sp->second.oblock*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
