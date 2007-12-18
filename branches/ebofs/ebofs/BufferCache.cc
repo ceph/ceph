@@ -119,7 +119,8 @@ void BufferHead::apply_partial()
   do_apply_partial(data, partial);
   csum_t newc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
   csum_t *p = oc->on->get_extent_csum_ptr(start(), 1);
-  dout(10) << "apply_partial was " << hex << oldc
+  dout(10) << "apply_partial onode had " << hex << *p
+	   << " bl was " << oldc
 	   << " now " << newc << dec << dendl;
   assert(*p == oldc);
   *p = newc;
@@ -186,7 +187,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 	csum_t got[bh->length()];
 	for (unsigned i=0; i<bh->length(); i++) {
 	  got[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
-	  if (rand() % 10 == 0) {
+	  if (false && rand() % 10 == 0) {
 	    dout(0) << "rx_finish HACK INJECTING bad csum" << dendl;
 	    derr(0) << "rx_finish HACK INJECTING bad csum" << dendl;
 	    got[i] = 0;
@@ -244,6 +245,32 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
         assert(cur_block == bh->partial_tx_to);
       }
       
+      // verify csum
+      assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
+      csum_t want = *bh->oc->on->get_extent_csum_ptr(bh->start(), 1);
+      csum_t got = calc_csum(bl.c_str(), bl.length());
+      if (want != got) {
+	derr(0) << "rx_finish  bad csum on partial readback, want " << hex << want
+		<< " got " << got << dec << dendl;
+	dout(0) << "rx_finish  bad csum on partial readback, want " << hex << want
+		<< " got " << got << dec << dendl;
+	*bh->oc->on->get_extent_csum_ptr(bh->start(), 1) = got;
+	bh->oc->on->data_csum += got - want;
+	
+	interval_set<off_t> bad;
+	bad.insert(bh->start()*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
+	bh->oc->on->bad_byte_extents.union_of(bad);
+
+	interval_set<off_t> over;
+	for (map<off_t,bufferlist>::iterator q = bh->partial.begin();
+	     q != bh->partial.end();
+	     q++)
+	  over.insert(bh->start()*EBOFS_BLOCK_SIZE+q->first, q->second.length());
+	interval_set<off_t> new_over;
+	new_over.intersection_of(over, bh->oc->on->bad_byte_extents);
+	bh->oc->on->bad_byte_extents.subtract(new_over);
+      }
+
       // ok, cancel my low-level partial (since we're still here, and can bh_write ourselves)
       bc->cancel_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial_tx_epoch );
       
@@ -1260,6 +1287,14 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	dout(0) << "rx_finish bad csum on partial block " << pblock << dendl;
 	derr(0) << "rx_finish bad csum on partial block " << pblock << " ****************" << dendl;
 	poison_commit = true;
+	*sp->second.on->get_extent_csum_ptr(sp->second.oblock, 1) = actual;
+	sp->second.on->data_csum += actual - want;
+
+
+	interval_set<off_t> bad;
+	bad.insert(sp->second.oblock*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
+	sp->second.on->bad_byte_extents.union_of(bad);
+
 	interval_set<off_t> overwritten;
 	for (map<block_t, PartialWrite>::iterator p = sp->second.writes.begin();
 	     p != sp->second.writes.end();
@@ -1268,12 +1303,13 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	  for (map<off_t,bufferlist>::iterator q = p->second.partial.begin();
 	       q != p->second.partial.end();
 	       q++)
-	    o.insert(q->first, q->second.length());
+	    o.insert(sp->second.oblock*EBOFS_BLOCK_SIZE+q->first, q->second.length());
 	  overwritten.union_of(o);
 	}
 	interval_set<off_t> new_over;
 	new_over.intersection_of(sp->second.on->bad_byte_extents, overwritten);
 	sp->second.on->bad_byte_extents.subtract(new_over);
+
 	dout(10) << "rx_finish  overwrote " << overwritten << ", newly " << new_over 
 		 << ", now " << sp->second.on->bad_byte_extents.m << dendl;
       } 
@@ -1292,9 +1328,9 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	do_apply_partial( combined, p->second.partial );
 	
 	// write it!
-	dev.write( pblock, 1, combined,
-		   new C_OC_PartialTxFinish( this, p->second.epoch ),
-		   "finish_partials");
+	dev.write(pblock, 1, combined,
+		  new C_OC_PartialTxFinish( this, p->second.epoch ),
+		  "finish_partials");
       }
       partial_write.erase(sp);
     }
@@ -1402,12 +1438,12 @@ void BufferCache::bh_cancel_partial_write(BufferHead *bh)
 }
 
 
-void BufferCache::queue_partial(Onode *on, block_t opos, csum_t csum,
+void BufferCache::queue_partial(Onode *on, block_t oblock, csum_t csum,
 				block_t from, block_t to, 
                                 map<off_t, bufferlist>& partial, 
 				version_t epoch)
 {
-  dout(10) << "queue_partial " << on->object_id << " at " << opos
+  dout(10) << "queue_partial " << on->object_id << " at " << oblock
 	   << " from disk " << from << " -> " << to
            << " in epoch " << epoch 
            << dendl;
@@ -1423,7 +1459,7 @@ void BufferCache::queue_partial(Onode *on, block_t opos, csum_t csum,
   on->get();  // one ref for each <from,to> pair.
   partial_write[from].on = on;
   partial_write[from].csum = csum;  
-  partial_write[from].opos = opos;
+  partial_write[from].oblock = oblock;
   partial_write[from].writes[to].partial = partial;
   partial_write[from].writes[to].epoch = epoch;
 }

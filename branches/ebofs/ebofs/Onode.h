@@ -180,7 +180,7 @@ public:
       for (map<block_t,ExtentCsum>::iterator p = extent_map.begin();
            p != extent_map.end();
            p++) {
-        //cout << " verify_extents " << p->first << ": " << p->second << std::endl;
+        cout << " verify_extents " << p->first << ": " << p->second << std::endl;
         assert(pos == p->first);
 	pos += p->second.ex.length;
 	if (p->second.ex.start) {
@@ -192,7 +192,7 @@ public:
 	  }
 	}
       }
-      //cout << " verify_extents got csum " << hex << csum << " want " << data_csum << dec << std::endl;
+      cout << " verify_extents got csum " << hex << csum << " want " << data_csum << dec << std::endl;
 
       assert(s.size() == count);
       assert(count == alloc_blocks);
@@ -518,7 +518,7 @@ public:
     return sizeof(Extent) * extent_map.size() + sizeof(csum_t)*alloc_blocks;
   }
   int get_bad_byte_bytes() {
-    return 2 * sizeof(off_t) * bad_byte_extents.m.size();
+    return sizeof(Extent) * bad_byte_extents.m.size();
   }
 };
 

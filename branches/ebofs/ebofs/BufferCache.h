@@ -436,7 +436,7 @@ class BufferCache {
   };
   struct PartialWriteSet {
     Onode *on;    // object
-    block_t opos;    // block in object
+    block_t oblock;    // block in object
     csum_t csum;     // expected csum
     map<block_t, PartialWrite> writes;
   };

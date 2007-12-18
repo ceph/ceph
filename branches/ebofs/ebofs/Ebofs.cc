@@ -877,6 +877,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
        p++) {
     Extent o(p->first, p->second);
     bl.copy_in(off, sizeof(o), (char*)&o);
+    off += sizeof(o);
     dout(15) << "encode_onode " << *on  << " bad byte ex " << o << dendl;
   }
 
@@ -2033,6 +2034,21 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   dout(10) << "attempt_read " << *on << " " << off << "~" << len << dendl;
   ObjectCache *oc = on->get_oc(&bc);
 
+  // overlapping bad byte extents?
+  if (!on->bad_byte_extents.empty()) {
+    if (on->bad_byte_extents.contains(off)) {
+      dout(10) << "attempt_read corrupt (bad byte extent) at off " << off << ", returning -EIO" << dendl;
+      return -EIO;
+    }
+    if (on->bad_byte_extents.end() > off) {
+      off_t bad = on->bad_byte_extents.start_after(off);
+      if (bad < off+(off_t)len) {
+	len = bad-off;
+	dout(10) << "attempt_read corrupt (bad byte extent) at " << bad << ", shortening read to " << len << dendl;
+      }
+    }
+  }
+
   // map
   block_t bstart = off / EBOFS_BLOCK_SIZE;
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
@@ -2103,13 +2119,13 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   block_t curblock = bstart;
   while (curblock <= blast) {
     BufferHead *bh = 0;
-    if (h->first == curblock) {
+    if (h != hits.end() && h->first == curblock) {
       bh = h->second;
       h++;
-    } else if (p->first == curblock) {
+    } else if (p != partials.end() && p->first == curblock) {
       bh = p->second;
       p++;
-    } else if (c->first == curblock) {
+    } else if (c != corrupt.end() && c->first == curblock) {
       bh = c->second;
       c++;
     } else assert(0);

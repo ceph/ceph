@@ -189,9 +189,13 @@ reliability
 - osdmonitor, filter
 
 ebofs
-- allow holes
+/- allow holes
 - checksums
-  - validate checksums on read
+/  - validate checksums on read
+/  - track partial zero regions
+/  - fix partial handling: barrier on commit so that any errors propagate into onode.
+  - fix onode csum: should be effective csum during commit?  can we delay apply_partial csum update in onode?  HMM!!!
+
 
 - allow btree sets
 - optionally scrub deallocated extents
