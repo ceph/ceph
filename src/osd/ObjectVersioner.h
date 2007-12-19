@@ -20,8 +20,9 @@ class ObjectVersioner {
   pobject_t oid;
 
   void get_versions(list<version_t>& ls);
-  version_t head();  // newest
-  version_t tail();  // oldest
+  version_t head();      // newest
+  version_t committed(); // last committed
+  version_t tail();      // oldest
 
   /* 
    * prepare a new version, starting wit "raw" transaction t.
