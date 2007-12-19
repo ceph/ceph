@@ -1841,11 +1841,12 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
         blpos += len_in_bh;
         opos += len_in_bh;
 
-        if (bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
+        if (bh->is_partial() &&
+	    bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
           dout(10) << "apply_write  completed partial " << *bh << dendl;
+	  bc.bh_cancel_read(bh);           // cancel old rx op, if we can.
 	  bh->data.clear();
-	  bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
-          bh->data.zero();
+	  bh->data.push_back(buffer::create_page_aligned(EBOFS_BLOCK_SIZE));
           bh->apply_partial();
           bc.mark_dirty(bh);
           bc.bh_write(on, bh);
@@ -2142,8 +2143,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  map<block_t, BufferHead*> corrupt;
-  oc->map_read(bstart, blen, hits, missing, rx, partials, corrupt);
+  oc->map_read(bstart, blen, hits, missing, rx, partials);
 
   // missing buffers?
   if (!missing.empty()) {
@@ -2159,29 +2159,6 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     return 0;
   }
   
-  // are partials sufficient?
-  bool partials_ok = true;
-  for (map<block_t,BufferHead*>::iterator i = partials.begin();
-       i != partials.end();
-       i++) {
-    BufferHead *bh = i->second;
-    off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
-    off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
-    off_t start = MAX( off, bhstart );
-    off_t end = MIN( off+(off_t)len, bhend );
-    
-    if (!i->second->have_partial_range(start-bhstart, end-bhend)) {
-      if (partials_ok) {
-        // wait on this one
-        Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
-        dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << dendl;
-        i->second->waitfor_read[i->second->start()].push_back(c);
-      }
-      partials_ok = false;
-    }
-  }
-  if (!partials_ok) return 0;
-
   // wait on rx?
   if (!rx.empty()) {
     BufferHead *wait_on = rx.begin()->second;
@@ -2192,11 +2169,30 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     return 0;
   }
 
+  // are partials sufficient?
+  for (map<block_t,BufferHead*>::iterator i = partials.begin();
+       i != partials.end();
+       i++) {
+    BufferHead *bh = i->second;
+    off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
+    off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
+    off_t start = MAX( off, bhstart );
+    off_t end = MIN( off+(off_t)len, bhend );
+    
+    if (!i->second->have_partial_range(start-bhstart, end-bhstart)) {
+      // wait on this one
+      Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
+      dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << dendl;
+      i->second->waitfor_read[i->second->start()].push_back(c);
+      return 0;
+    }
+    dout(10) << "attempt_read have partial range " << (start-bhstart) << "~" << (end-bhstart) << " on " << *bh << dendl;
+  }
+
   // yay, we have it all!
-  // concurrently walk thru hits, partials.
+  // concurrently walk thru hits, partials, corrupt.
   map<block_t,BufferHead*>::iterator h = hits.begin();
   map<block_t,BufferHead*>::iterator p = partials.begin();
-  map<block_t,BufferHead*>::iterator c = corrupt.begin();
 
   bl.clear();
   off_t pos = off;
@@ -2209,9 +2205,6 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     } else if (p != partials.end() && p->first == curblock) {
       bh = p->second;
       p++;
-    } else if (c != corrupt.end() && c->first == curblock) {
-      bh = c->second;
-      c++;
     } else assert(0);
     
     off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
@@ -2230,6 +2223,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
     } else if (bh->is_partial()) {
       // copy from a partial block.  yuck!
       bufferlist frag;
+      dout(10) << "attempt_read copying partial range " << (start-bhstart) << "~" << (end-bhstart) << " on " << *bh << dendl;
       bh->copy_partial_substr( start-bhstart, end-bhstart, frag );
       bl.claim_append( frag );
       pos += frag.length();

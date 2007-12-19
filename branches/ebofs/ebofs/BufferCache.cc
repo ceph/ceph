@@ -113,18 +113,13 @@ void BufferHead::add_partial(off_t off, bufferlist& p)
 
 void BufferHead::apply_partial() 
 {
-  assert(!partial.empty());
   dout(10) << "apply_partial on " << partial.size() << " substrings" << dendl;
-  csum_t *expect = oc->on->get_extent_csum_ptr(start(), 1);
-  csum_t oldc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
+  assert(!partial.empty());
+  csum_t *p = oc->on->get_extent_csum_ptr(start(), 1);
   do_apply_partial(data, partial);
   csum_t newc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
-  dout(10) << "apply_partial onode expected " << hex << *expect
-	   << " bl was " << oldc
-	   << " now " << newc << dec << dendl;
-  assert(*expect == oldc);
-  *expect = newc;
-  oc->on->data_csum += newc - oldc;
+  oc->on->data_csum += newc - *p;
+  *p = newc;
 }
 
 
@@ -236,10 +231,13 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       assert(exv[0].start != 0);
       block_t cur_block = exv[0].start;
       
+      off_t off_in_bl = (bh->start() - start) * EBOFS_BLOCK_SIZE;
+      assert(off_in_bl >= 0);
+      off_t len_in_bl = bh->length() * EBOFS_BLOCK_SIZE;
+
       // verify csum
-      assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
       csum_t want = *bh->oc->on->get_extent_csum_ptr(bh->start(), 1);
-      csum_t got = calc_csum(bl.c_str(), bl.length());
+      csum_t got = calc_csum(bl.c_str() + off_in_bl, len_in_bl);
       if (want != got) {
 	derr(0) << "rx_finish  bad csum on partial readback, want " << hex << want
 		<< " got " << got << dec << dendl;
@@ -266,7 +264,9 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       assert(bh->data.length() == 0);
       bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
       bh->data.push_back( bp );
-      bh->data.copy_in(0, EBOFS_BLOCK_SIZE, bl);
+      bufferlist sub;
+      sub.substr_of(bl, off_in_bl, len_in_bl);
+      bh->data.copy_in(0, EBOFS_BLOCK_SIZE, sub);
       bh->apply_partial();
       
       // write "normally"
@@ -479,8 +479,7 @@ int ObjectCache::map_read(block_t start, block_t len,
                           map<block_t, BufferHead*>& hits,
                           map<block_t, BufferHead*>& missing,
                           map<block_t, BufferHead*>& rx,
-                          map<block_t, BufferHead*>& partial,
-			  map<block_t, BufferHead*>& corrupt) {
+                          map<block_t, BufferHead*>& partial) {
   
   map<block_t, BufferHead*>::iterator p = find_bh(start, len);
   block_t cur = start;
@@ -521,15 +520,12 @@ int ObjectCache::map_read(block_t start, block_t len,
       
       if (e->is_clean() ||
           e->is_dirty() ||
-          e->is_tx()) {
+          e->is_tx() ||
+	  e->is_corrupt()) {
         hits[cur] = e;     // readable!
         dout(20) << "map_read hit " << *e << dendl;
         bc->touch(e);
       } 
-      else if (e->is_corrupt()) {
-	corrupt[cur] = e;
-	dout(20) << "map_read corrupt " << *e << dendl;
-      }
       else if (e->is_rx()) {
         rx[cur] = e;       // missing, not readable.
         dout(20) << "map_read rx " << *e << dendl;

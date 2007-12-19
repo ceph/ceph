@@ -400,8 +400,7 @@ class ObjectCache {
                map<block_t, BufferHead*>& hits,     // hits
                map<block_t, BufferHead*>& missing,  // read these from disk
                map<block_t, BufferHead*>& rx,       // wait for these to finish reading from disk
-               map<block_t, BufferHead*>& partial,  // (maybe) wait for these to read from disk
-               map<block_t, BufferHead*>& corrupt); // bad checksums
+               map<block_t, BufferHead*>& partial); // (maybe) wait for these to read from disk
   int try_map_read(block_t start, block_t len);  // just tell us how many extents we're missing.
 
   int map_write(block_t start, block_t len,
