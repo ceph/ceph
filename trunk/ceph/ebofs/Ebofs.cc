@@ -901,8 +901,8 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 
   eo.onode_bytes = off - start_off;
   bl.copy_in(start_off + sizeof(csum_t), sizeof(__u32), (char*)&eo.onode_bytes);
-  eo.onode_csum = calc_csum(bl.c_str() + start_off + sizeof(csum_t),
-			    eo.onode_bytes - sizeof(csum_t));
+  eo.onode_csum = calc_csum_unaligned(bl.c_str() + start_off + sizeof(csum_t),
+				      eo.onode_bytes - sizeof(csum_t));
   bl.copy_in(start_off, sizeof(csum_t), (char*)&eo);
   dout(15) << "encode_onode len " << eo.onode_bytes << " csum " << eo.onode_csum << dendl;
 
@@ -1227,8 +1227,8 @@ csum_t Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
 
   ec.cnode_bytes = off - start_off;
   bl.copy_in(start_off + sizeof(csum_t), sizeof(__u32), (char*)&ec.cnode_bytes);
-  ec.cnode_csum = calc_csum(bl.c_str() + start_off + sizeof(csum_t),
-			    ec.cnode_bytes - sizeof(csum_t));
+  ec.cnode_csum = calc_csum_unaligned(bl.c_str() + start_off + sizeof(csum_t),
+				      ec.cnode_bytes - sizeof(csum_t));
   bl.copy_in(start_off, sizeof(csum_t), (char*)&ec);
   dout(15) << "encode_cnode len " << ec.cnode_bytes << " csum " << ec.cnode_csum << dendl;
 
