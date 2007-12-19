@@ -28,6 +28,26 @@ kernel client
   - work out message resend logic..
 
 
+osdmon
+- allow fresh replacement osds.  add osd_created in osdmap, probably
+- actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
+- monitor needs to monitor some osds...
+- bootstrap crush map
+
+crush
+- xml import/export?
+ - named storage "pools"
+ - generic rule definition
+- crush tools
+
+pgmon
+- monitor pg states, notify on out?
+- watch osd utilization; adjust overload in cluster map
+
+mon
+- some sort of tester PaxosService...
+
+
 mds mustfix
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
@@ -85,11 +105,6 @@ client
 - fstat
 
 
-osdmon
-- allow fresh replacement osds.  add osd_created in osdmap, probably
-- monitor needs to monitor some osds...
-- monitor pg states, notify on out?
-- watch osd utilization; adjust overload in cluster map
 
 journaler
 - fix up for large events (e.g. imports)
@@ -100,9 +115,6 @@ journaler
 - need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
-crush
-- xml import/export?
-- crush tools
 
 
 rados snapshots
