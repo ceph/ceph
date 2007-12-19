@@ -21,8 +21,6 @@ code cleanup
 kernel client
 - msg layer (patience)
 - mds client
-- mount
-  - get handle on root mount point
 - osd client
 - mon client
   - work out message resend logic..
@@ -151,15 +149,17 @@ osd/rados
 
  -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
 
-- paxos replication (i.e. majority voting)?
+- generic low-level pboject wrapper that does versioning, for prepare/commit/rollback.
 
-- transaction prepare/commit
+- PaxosPG replication (i.e. majority voting)?
+
+- rados transaction prepare/commit
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
+
 - read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
 
 - consider implications of nvram writeahead logs
-- clean shutdown?
 - pgmonitor should supplement failure detection
 
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
