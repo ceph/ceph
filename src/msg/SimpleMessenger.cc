@@ -96,9 +96,9 @@ int Rank::Accepter::start()
   dout(2) << "accepter.start my hostname is " << hostname << dendl;
 
   // is there a .ceph_hosts file?
-  {
+  if (g_conf.ms_hosts) {
     ifstream fh;
-    fh.open(".ceph_hosts");
+    fh.open(g_conf.ms_hosts);
     if (fh.is_open()) {
       while (1) {
 	string line;
@@ -109,10 +109,10 @@ int Rank::Accepter::start()
 	if (!ospace) continue;
 	string host = line.substr(0, ospace);
 	string addr = line.substr(ospace+1);
-	dout(15) << ".ceph_hosts: host '" << host << "' -> '" << addr << "'" << dendl;
+	dout(15) << g_conf.ms_hosts << ": host '" << host << "' -> '" << addr << "'" << dendl;
 	if (host == hostname) {
 	  parse_ip_port(addr.c_str(), g_my_addr);
-	  dout(1) << ".ceph_hosts: my addr is " << g_my_addr << dendl;
+	  dout(1) << g_conf.ms_hosts << ": my addr is " << g_my_addr << dendl;
 	  break;
 	}
       }

@@ -156,6 +156,7 @@ md_config_t g_conf = {
   clock_tare: false,
   
   // --- messenger ---
+  ms_hosts: ".ceph_hosts",
   ms_tcp_nodelay: true,
   ms_retry_interval: 2.0,  // how often to attempt reconnect 
   ms_fail_interval: 15.0,  // fail after this long
@@ -501,6 +502,8 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--numosd") == 0) 
       g_conf.num_osd = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--ms_hosts") == 0)
+      g_conf.ms_hosts = args[++i];
     else if (strcmp(args[i], "--ms_stripe_osds") == 0)
       g_conf.ms_stripe_osds = true;
     else if (strcmp(args[i], "--ms_skip_rank0") == 0)
