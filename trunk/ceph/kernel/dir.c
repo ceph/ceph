@@ -31,7 +31,6 @@ static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 
 struct ceph_inode_cap *ceph_open(struct inode *inode, struct file *file, int flags)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	ceph_ino_t pathbase;
 	char path[PATH_MAX];
@@ -184,7 +183,14 @@ nextfrag:
 		filp->f_pos++;
 	}
 
-	// next frag?  FIXME ***
+	/* more frags? */
+	if (frag_value(frag) != frag_mask(frag)) {
+		frag = frag_next(frag);
+		off = 0;
+		filp->f_pos = make_fpos(frag, off);
+		dout(10, "dir_readdir next frag is %u\n", frag);
+		goto nextfrag;
+	}
 	
 	dout(20, "dir_readdir done.\n");
 	return 0;

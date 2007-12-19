@@ -21,7 +21,7 @@ typedef __u64 ceph_tid_t;
 typedef __u32 ceph_epoch_t;
 
 
-/**
+/*
  * fs id
  */
 struct ceph_fsid {
@@ -54,7 +54,16 @@ struct ceph_timeval {
 	__u32 tv_usec;
 };
 
+/*
+ * dir fragments
+ */ 
 typedef __u32 ceph_frag_t;
+
+static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffffull >> (32-b))); }
+static inline __u32 frag_bits(__u32 f) { return f >> 24; }
+static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
+static inline __u32 frag_mask(__u32 f) { return 0xffffffffull >> (32-frag_bits(f)); }
+static inline __u32 frag_next(__u32 f) { return (frag_bits(f) << 24) | (frag_value(f)+1); }
 
 
 /*
