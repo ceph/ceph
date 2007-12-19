@@ -2827,7 +2827,10 @@ int Ebofs::_write(pobject_t oid, off_t offset, size_t length, const bufferlist& 
     }
 
     // apply write to buffer cache
-    if (length > 0) {
+    if (length == 0) {
+      dirty_onode(on);
+      break;
+    } else {
       int r = apply_write(on, offset, length, bl);
       if (r == 0) 
 	break; // yay!
