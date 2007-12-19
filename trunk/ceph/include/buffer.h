@@ -352,6 +352,10 @@ public:
     void zero() {
       memset(c_str(), 0, _len);
     }
+    void zero(unsigned o, unsigned l) {
+      assert(o+l <= _len);
+      memset(c_str()+o, 0, l);
+    }
 
     void clean() {
       //raw *newraw = _raw->makesib(_len);
@@ -611,7 +615,24 @@ public:
 	   it++)
 	it->clone_in_place();
     }
-
+    void zero(unsigned o, unsigned l) {
+      assert(o+l <= _len);
+      unsigned p = 0;
+      for (std::list<ptr>::iterator it = _buffers.begin();
+	   it != _buffers.end();
+	   it++) {
+	if (p + it->length() > o) {
+	  if (p >= o && p+it->length() >= o+l)
+	    it->zero();                         // all
+	  else if (p >= o) 
+	    it->zero(0, o+l-p);                 // head
+	  else
+	    it->zero(o-p, it->length()-(o-p));  // tail
+	}
+	p += it->length();
+	if (o+l >= p) break;  // done
+      }
+    }
 
     void rebuild() {
       ptr nb(_len);
@@ -739,6 +760,12 @@ public:
 	_buffers.push_back(*p);
     }
     
+    void append_zero(unsigned len) {
+      ptr bp(len);
+      bp.zero();
+      append(bp);
+    }
+
     
     /*
      * get a char

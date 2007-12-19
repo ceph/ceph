@@ -327,16 +327,13 @@ md_config_t g_conf = {
   ebofs_cloneable: false,
   ebofs_verify: false,
   ebofs_commit_ms:      1000,       // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 0,         // 0 = no idle detection.  UGLY HACK.  use bdev_idle_kick_after_ms instead.
-  ebofs_oc_size:        10000,      // onode cache
-  ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (50 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (30 *256), // before write() will block
+  ebofs_oc_size:        10,      // onode cache
+  ebofs_cc_size:        10,      // cnode cache
+  ebofs_bc_size:        (5 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (3 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
-  
-  ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
-  ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
+  ebofs_verify_csum_on_read: true,
 
   // --- block device ---
   bdev_lock: true,
@@ -811,8 +808,6 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.ebofs_verify = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_commit_ms") == 0)
       g_conf.ebofs_commit_ms = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_idle_commit_ms") == 0)
-      g_conf.ebofs_idle_commit_ms = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_oc_size") == 0)
       g_conf.ebofs_oc_size = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_cc_size") == 0)
@@ -821,8 +816,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.ebofs_bc_size = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_bc_max_dirty") == 0)
       g_conf.ebofs_bc_max_dirty = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_abp_max_alloc") == 0)
-      g_conf.ebofs_abp_max_alloc = atoi(args[++i]);
+    else if (strcmp(args[i], "--ebofs_verify_csum_on_read") == 0)
+      g_conf.ebofs_verify_csum_on_read = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_max_prefetch") == 0)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)

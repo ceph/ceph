@@ -24,12 +24,12 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
   if (dst->mount() < 0) return 1;
 
   // objects
-  list<object_t> objects;
+  list<pobject_t> objects;
   src->list_objects(objects);
   int num = objects.size();
   cout << num << " objects" << std::endl;
   int i = 1;
-  for (list<object_t>::iterator p = objects.begin(); p != objects.end(); ++p) {
+  for (list<pobject_t>::iterator p = objects.begin(); p != objects.end(); ++p) {
     bufferlist bl;
     src->read(*p, 0, 0, bl);
     cout << "object " << i++ << "/" << num << " " << *p << " = " << bl.length() << " bytes" << std::endl;
@@ -52,10 +52,10 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
     map<string,bufferptr> attrs;
     src->collection_getattrs(*p, attrs);
     dst->collection_setattrs(*p, attrs);
-    list<object_t> o;
+    list<pobject_t> o;
     src->collection_list(*p, o);
     int numo = 0;
-    for (list<object_t>::iterator q = o.begin(); q != o.end(); q++) {
+    for (list<pobject_t>::iterator q = o.begin(); q != o.end(); q++) {
       dst->collection_add(*p, *q, 0);
       numo++;
     }

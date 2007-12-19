@@ -17,6 +17,7 @@
 
 #include "msg/msg_types.h"
 #include "include/types.h"
+#include "include/pobject.h"
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
@@ -66,8 +67,6 @@ namespace __gnu_cxx {
 typedef uint64_t coll_t;        // collection id
 
 // pg stuff
-
-#define PG_INO 4    // this should match mds/mdstypes.h MDS_INO_PG
 
 typedef uint16_t ps_t;
 typedef uint8_t pruleset_t;
@@ -119,7 +118,11 @@ public:
   */
   operator uint64_t() const { return u.pg64; }
 
-  object_t to_object() const { return object_t(PG_INO, u.pg64 >> 32, u.pg64 & 0xffffffff); }
+  pobject_t to_object() const { 
+    return pobject_t(1,  // volume 1 == osd metadata, for now
+		     0,
+		     object_t(u.pg64, 0));
+  }
 };
 
 inline ostream& operator<<(ostream& out, pg_t pg) 

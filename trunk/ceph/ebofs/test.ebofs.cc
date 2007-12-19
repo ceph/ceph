@@ -20,12 +20,19 @@
 bool stop = false;
 
 
+char fingerprint_byte_at(int pos, int seed)
+{
+  __u64 big = ((pos & ~7) / 133) ^ seed;
+  return ((char*)&big)[pos & 7];
+}
+
+
 int nt = 0;
 class Tester : public Thread {
   Ebofs &fs;
   int t;
   
-  char b[1024*1024];
+  //char b[1024*1024];
 
 public:
   Tester(Ebofs &e) : fs(e), t(nt) { nt++; }
@@ -33,7 +40,7 @@ public:
 
     while (!stop) {
       object_t oid;
-      oid.ino = (rand() % 10) + 0x10000000;
+      oid.ino = (rand() % 1000) + 0x10000000;
       coll_t cid = rand() % 50;
       off_t off = rand() % 10000;//0;//rand() % 1000000;
       off_t len = 1+rand() % 100000;
@@ -41,7 +48,7 @@ public:
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;
 
-      switch (rand() % 10) {
+      switch (rand() % 5) {//10) {
       case 0:
         {
 	  oid.rev = rand() % 10;
@@ -51,11 +58,13 @@ public:
           int l = MIN(len,bl.length());
           if (l) {
             cout << t << " got " << l << std::endl;
-            bl.copy(0, l, b);
-            char *p = b;
+            char *p = bl.c_str();
             while (l--) {
-              assert(*p == 0 ||
-                     *p == (char)(off ^ oid.ino));
+	      char want = fingerprint_byte_at(off, oid.ino);
+              if (*p != 0 && *p != want) {
+		cout << t << " bad fingerprint at " << off << " got " << (int)*p << " want " << (int)want << std::endl;
+		assert(0);
+	      }
               off++;
               p++;
             }
@@ -66,41 +75,55 @@ public:
       case 1:
         {
           cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << std::endl;
-          for (int j=0;j<len;j++) 
-            b[j] = (char)(oid.ino^(off+j));
-	  bufferptr wp(b, len);
+	  char b[len];
+          for (int j=0;j<len;j++)
+            b[j] = fingerprint_byte_at(off+j, oid.ino);
           bufferlist w;
-          w.append(wp);
+	  w.append(b, len);
           fs.write(oid, off, len, w, 0);
         }
         break;
 
       case 2:
+        {
+          cout << t << " zero " << hex << oid << dec << " at " << off << " len " << len << std::endl;
+          fs.zero(oid, off, len, 0);
+        }
+        break;
+
+      case 3:
+        {
+          cout << t << " truncate " << hex << oid << dec <<  " " << off << std::endl;
+          fs.truncate(oid, 0);
+        }
+        break;
+
+      case 4:
         cout << t << " remove " << hex << oid << dec <<  std::endl;
         fs.remove(oid);
         break;
 
-      case 3:
+      case 5:
         cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << std::endl;
         fs.collection_add(cid, oid, 0);
         break;
 
-      case 4:
+      case 6:
         cout << t << " collection_remove " << hex << oid << dec <<  " from " << cid << std::endl;
         fs.collection_remove(cid, oid, 0);
         break;
 
-      case 5:
+      case 7:
         cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << std::endl;
         fs.setattr(oid, a, (void*)a, l, 0);
         break;
         
-      case 6:
+      case 8:
         cout << t << " rmattr " << hex << oid << dec <<  " " << a << std::endl;
         fs.rmattr(oid,a);
         break;
 
-      case 7:
+      case 9:
         {
           char v[4];
           cout << t << " getattr " << hex << oid << dec <<  " " << a << std::endl;
@@ -111,14 +134,7 @@ public:
         }
         break;
         
-      case 8:
-        {
-          cout << t << " truncate " << hex << oid << dec <<  " " << off << std::endl;
-          fs.truncate(oid, 0);
-        }
-        break;
-
-      case 9:
+      case 10:
 	{
 	  object_t newoid = oid;
 	  newoid.rev = rand() % 10;
@@ -201,13 +217,13 @@ int main(int argc, char **argv)
   }
 
   utime_t now = g_clock.now();
-  utime_t dur(seconds,0);
+  utime_t dur(seconds, 0);
   utime_t end = now + dur;
   cout << "stop at " << end << std::endl;
   while (now < end) {
     sleep(1);
     now = g_clock.now();
-    cout << now << std::endl;
+    //cout << now << std::endl;
   }
 
   cout << "stopping" << std::endl;

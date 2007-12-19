@@ -18,22 +18,118 @@
 #include "Onode.h"
 
 
+void do_apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) 
+{
+  assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
+  //assert(partial_is_complete());
+  //cout << "apply_partial" << std::endl;
+  for (map<off_t, bufferlist>::iterator i = pm.begin();
+       i != pm.end();
+       i++) {
+    //cout << "do_apply_partial at " << i->first << "~" << i->second.length() << std::endl;
+    bl.copy_in(i->first, i->second.length(), i->second);
+  }
+  pm.clear();
+}
+
+
+
 /*********** BufferHead **************/
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.bh."
+#undef derr
+#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs." << *this << "."
+#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs." << *this << "."
 
 
+void BufferHead::add_partial(off_t off, bufferlist& p) 
+{
+  unsigned len = p.length();
+  assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
+  assert(off >= 0);
+  assert(off + len <= EBOFS_BLOCK_SIZE);
+  
+  // trim any existing that overlaps
+  map<off_t, bufferlist>::iterator i = partial.begin();
+  while (i != partial.end()) {
+    // is [off,off+len)...
+    // past i?
+    if (off >= i->first + i->second.length()) {  
+      i++; 
+      continue; 
+    }
+      // before i?
+    if (i->first >= off+len) break;   
+    
+    // does [off,off+len)...
+    // overlap all of i?
+    if (off <= i->first && off+len >= i->first + i->second.length()) {
+      // erase it and move on.
+      partial.erase(i++);
+      continue;
+    }
+    // overlap tail of i?
+    if (off > i->first && off+len >= i->first + i->second.length()) {
+      // shorten i.
+      unsigned taillen = off - i->first;
+      bufferlist o;
+      o.claim( i->second );
+      i->second.substr_of(o, 0, taillen);
+      i++;
+      continue;
+    }
+    // overlap head of i?
+    if (off <= i->first && off+len < i->first + i->second.length()) {
+      // move i (make new tail).
+      off_t tailoff = off+len;
+      unsigned trim = tailoff - i->first;
+      partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
+      partial.erase(i++);   // should now be at tailoff
+      i++;
+      continue;
+    } 
+    // split i?
+    if (off > i->first && off+len < i->first + i->second.length()) {
+      bufferlist o;
+      o.claim( i->second );
+      // shorten head
+      unsigned headlen = off - i->first;
+      i->second.substr_of(o, 0, headlen);
+      // new tail
+      unsigned tailoff = off+len - i->first;
+      unsigned taillen = o.length() - len - headlen;
+      partial[off+len].substr_of(o, tailoff, taillen);
+      break;
+    }
+    assert(0);
+  }
+  
+  // insert and adjust csum
+  partial[off] = p;
 
+  dout(10) << "add_partial off " << off << "~" << p.length() << dendl;
+}
 
+void BufferHead::apply_partial() 
+{
+  dout(10) << "apply_partial on " << partial.size() << " substrings" << dendl;
+  assert(!partial.empty());
+  csum_t *p = oc->on->get_extent_csum_ptr(start(), 1);
+  do_apply_partial(data, partial);
+  csum_t newc = calc_csum(data.c_str(), EBOFS_BLOCK_SIZE);
+  oc->on->data_csum += newc - *p;
+  *p = newc;
+}
 
 
 /************ ObjectCache **************/
 
 
 #undef dout
+#undef derr
 #define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.oc."
+#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs.oc."
 
 
 
@@ -42,9 +138,11 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
   list<Context*> waiters;
 
   dout(10) << "rx_finish " << start << "~" << length << dendl;
-  for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-       p != data.end(); 
-       p++) {
+  map<block_t, BufferHead*>::iterator p, next;
+  for (p = data.lower_bound(start); p != data.end(); p = next) {
+    next = p;
+    next++;
+
     BufferHead *bh = p->second;
     dout(10) << "rx_finish ?" << *bh << dendl;
     assert(p->first == bh->start());
@@ -61,43 +159,123 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
     if (bh->rx_ioh == ioh)
       bh->rx_ioh = 0;
 
+    // trigger waiters
+    bh->take_read_waiters(waiters);
+
     if (bh->is_rx()) {
       assert(bh->get_version() == 0);
       assert(bh->end() <= start+length);
       assert(bh->start() >= start);
-      dout(10) << "rx_finish  rx -> clean on " << *bh << dendl;
+
       bh->data.substr_of(bl, (bh->start()-start)*EBOFS_BLOCK_SIZE, bh->length()*EBOFS_BLOCK_SIZE);
-      bc->mark_clean(bh);
+
+      // verify checksum
+      int bad = 0;
+      if (g_conf.ebofs_verify_csum_on_read) {
+	csum_t *want = bh->oc->on->get_extent_csum_ptr(bh->start(), bh->length());
+	csum_t got[bh->length()];
+	for (unsigned i=0; i<bh->length(); i++) {
+	  got[i] = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
+	  if (false && rand() % 10 == 0) {
+	    dout(0) << "rx_finish HACK INJECTING bad csum" << dendl;
+	    derr(0) << "rx_finish HACK INJECTING bad csum" << dendl;
+	    got[i] = 0;
+	  }
+	  if (got[i] != want[i]) {
+	    dout(0) << "rx_finish bad csum wanted " << hex << want[i] << " got " << got[i] << dec 
+		    << " for object block " << (i+bh->start()) 
+		    << dendl;
+	    bad++;
+	  }
+	}      
+	if (bad) {
+	  block_t ostart = bh->start();
+	  block_t olen = bh->length();
+	  for (unsigned s=0; s<olen; s++) {
+	    if (got[s] != want[s]) {
+	      unsigned e;
+	      for (e=s; e<olen; e++)
+		if (got[e] == want[e]) break;
+	      dout(0) << "rx_finish  bad csum in " << bh->oc->on->object_id << " over " << s << "~" << (e-s) << dendl;
+	      derr(0) << "rx_finish  bad csum in " << bh->oc->on->object_id << " over " << s << "~" << (e-s) << dendl;
+	      
+	      if (s) {
+		BufferHead *middle = bc->split(bh, ostart+s);
+		dout(0) << "rx_finish  rx -> clean on " << *bh << dendl;	      
+		bc->mark_clean(bh);
+		bh = middle;
+	      }
+	      BufferHead *right = bh;
+	      if (e < olen) 
+		right = bc->split(bh, ostart+e);
+	      dout(0) << "rx_finish  rx -> corrupt on " << *bh <<dendl;	      
+	      bc->mark_corrupt(bh);
+	      bh = right;
+	      s = e;
+	    }
+	  }
+	}
+      }
+      if (bh) {
+	dout(10) << "rx_finish  rx -> clean on " << *bh << dendl;
+	bc->mark_clean(bh);
+      }
     }
     else if (bh->is_partial()) {
       dout(10) << "rx_finish  partial -> tx on " << *bh << dendl;      
 
-      if (1) {
-        // double-check what block i am
-        vector<Extent> exv;
-        on->map_extents(bh->start(), 1, exv);
-        assert(exv.size() == 1);
-        block_t cur_block = exv[0].start;
-        assert(cur_block == bh->partial_tx_to);
+      // see what block i am
+      vector<Extent> exv;
+      on->map_extents(bh->start(), 1, exv, 0);
+      assert(exv.size() == 1);
+      assert(exv[0].start != 0);
+      block_t cur_block = exv[0].start;
+      
+      off_t off_in_bl = (bh->start() - start) * EBOFS_BLOCK_SIZE;
+      assert(off_in_bl >= 0);
+      off_t len_in_bl = bh->length() * EBOFS_BLOCK_SIZE;
+
+      // verify csum
+      csum_t want = *bh->oc->on->get_extent_csum_ptr(bh->start(), 1);
+      csum_t got = calc_csum(bl.c_str() + off_in_bl, len_in_bl);
+      if (want != got) {
+	derr(0) << "rx_finish  bad csum on partial readback, want " << hex << want
+		<< " got " << got << dec << dendl;
+	dout(0) << "rx_finish  bad csum on partial readback, want " << hex << want
+		<< " got " << got << dec << dendl;
+	*bh->oc->on->get_extent_csum_ptr(bh->start(), 1) = got;
+	bh->oc->on->data_csum += got - want;
+	
+	interval_set<off_t> bad;
+	bad.insert(bh->start()*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
+	bh->oc->on->bad_byte_extents.union_of(bad);
+
+	interval_set<off_t> over;
+	for (map<off_t,bufferlist>::iterator q = bh->partial.begin();
+	     q != bh->partial.end();
+	     q++)
+	  over.insert(bh->start()*EBOFS_BLOCK_SIZE+q->first, q->second.length());
+	interval_set<off_t> new_over;
+	new_over.intersection_of(over, bh->oc->on->bad_byte_extents);
+	bh->oc->on->bad_byte_extents.subtract(new_over);
       }
-      
-      // ok, cancel my low-level partial (since we're still here, and can bh_write ourselves)
-      bc->cancel_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial_tx_epoch );
-      
+
       // apply partial to myself
       assert(bh->data.length() == 0);
       bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
       bh->data.push_back( bp );
-      bh->data.copy_in(0, EBOFS_BLOCK_SIZE, bl);
+      bufferlist sub;
+      sub.substr_of(bl, off_in_bl, len_in_bl);
+      bh->data.copy_in(0, EBOFS_BLOCK_SIZE, sub);
       bh->apply_partial();
       
       // write "normally"
       bc->mark_dirty(bh);
-      bc->bh_write(on, bh, bh->partial_tx_to);//cur_block);
+      bc->bh_write(on, bh, cur_block);
+
+      assert(bh->oc->on->is_dirty()); 
 
       // clean up a bit
-      bh->partial_tx_to = 0;
-      bh->partial_tx_epoch = 0;
       bh->partial.clear();
     }
     else {
@@ -107,14 +285,6 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
              bh->is_clean());   // was overwritten, queued, _and_ flushed to disk
     }
 
-    // trigger waiters
-    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-         p != bh->waitfor_read.end();
-         p++) {
-      assert(p->first >= bh->start() && p->first < bh->end());
-      waiters.splice(waiters.begin(), p->second);
-    }
-    bh->waitfor_read.clear();
   }    
 
   finish_contexts(waiters);
@@ -220,17 +390,9 @@ int ObjectCache::find_tx(block_t start, block_t len,
 
 int ObjectCache::try_map_read(block_t start, block_t len)
 {
-  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   int num_missing = 0;
 
@@ -239,11 +401,11 @@ int ObjectCache::try_map_read(block_t start, block_t len)
     if (p == data.end()) {
       // rest is a miss.
       vector<Extent> exv;
-      on->map_extents(cur, 
-                      left,   // no prefetch here!
-                      exv);
-
-      num_missing += exv.size();
+      on->map_extents(cur, left,   // no prefetch here!
+                      exv, 0);
+      for (unsigned i=0; i<exv.size(); i++)
+	if (exv[i].start)
+	  num_missing++;
       left = 0;
       cur = start+len;
       break;
@@ -257,6 +419,9 @@ int ObjectCache::try_map_read(block_t start, block_t len)
           e->is_dirty() ||
           e->is_tx()) {
         dout(20) << "try_map_read hit " << *e << dendl;
+      } 
+      else if (e->is_corrupt()) {
+        dout(20) << "try_map_read corrupt " << *e << dendl;	
       } 
       else if (e->is_rx()) {
         dout(20) << "try_map_read rx " << *e << dendl;
@@ -282,11 +447,12 @@ int ObjectCache::try_map_read(block_t start, block_t len)
       vector<Extent> exv;
       on->map_extents(cur, 
                       MIN(next-cur, left),   // no prefetch
-                      exv);
-
-      dout(20) << "try_map_read gap of " << p->first-cur << " blocks, " 
-		<< exv.size() << " extents" << dendl;
-      num_missing += exv.size();
+                      exv, 0);
+      for (unsigned i=0; i<exv.size(); i++)
+	if (exv[i].start) {
+	  dout(20) << "try_map_read gap " << exv[i] << dendl;
+	  num_missing++;
+	}
       left -= (p->first - cur);
       cur = p->first;
       continue;    // more?
@@ -315,36 +481,31 @@ int ObjectCache::map_read(block_t start, block_t len,
                           map<block_t, BufferHead*>& rx,
                           map<block_t, BufferHead*>& partial) {
   
-  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
-
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   while (left > 0) {
     // at end?
     if (p == data.end()) {
       // rest is a miss.
       vector<Extent> exv;
-      //on->map_extents(cur, left, exv);          // we might consider some prefetch here.
       on->map_extents(cur, 
                       //MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //on->object_blocks-cur),  
                       left,   // no prefetch
-                      exv);
+                      exv, 0);
       for (unsigned i=0; i<exv.size() && left > 0; i++) {
-        BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( exv[i].length );
+        BufferHead *n = new BufferHead(this, cur, exv[i].length);
+	if (exv[i].start) {
+	  missing[cur] = n;
+	  dout(20) << "map_read miss " << left << " left, " << *n << dendl;
+	} else {
+	  hits[cur] = n;
+	  n->set_state(BufferHead::STATE_CLEAN);
+	  dout(20) << "map_read hole " << left << " left, " << *n << dendl;
+	}
         bc->add_bh(n);
-        missing[cur] = n;
-        dout(20) << "map_read miss " << left << " left, " << *n << dendl;
         cur += MIN(left,exv[i].length);
         left -= MIN(left,exv[i].length);
       }
@@ -359,7 +520,8 @@ int ObjectCache::map_read(block_t start, block_t len,
       
       if (e->is_clean() ||
           e->is_dirty() ||
-          e->is_tx()) {
+          e->is_tx() ||
+	  e->is_corrupt()) {
         hits[cur] = e;     // readable!
         dout(20) << "map_read hit " << *e << dendl;
         bc->touch(e);
@@ -390,17 +552,21 @@ int ObjectCache::map_read(block_t start, block_t len,
                       //MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //                on->object_blocks-cur)),  
                       MIN(next-cur, left),   // no prefetch
-                      exv);
+                      exv, 0);
       
       for (unsigned i=0; i<exv.size() && left>0; i++) {
-        BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( exv[i].length );
+        BufferHead *n = new BufferHead(this, cur, exv[i].length);
+	if (exv[i].start) {
+	  missing[cur] = n;
+	  dout(20) << "map_read gap " << *n << dendl;
+	} else {
+	  n->set_state(BufferHead::STATE_CLEAN);
+	  hits[cur] = n;
+	  dout(20) << "map_read hole " << *n << dendl;
+	}
         bc->add_bh(n);
-        missing[cur] = n;
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
-        dout(20) << "map_read gap " << *n << dendl;
       }
       continue;    // more?
     }
@@ -418,42 +584,20 @@ int ObjectCache::map_read(block_t start, block_t len,
  * map a range of pages on an object's buffer cache.
  *
  * - break up bufferheads that don't fall completely within the range
- * - cancel rx ops we obsolete.
- *   - resubmit rx ops if we split bufferheads
- *
- * - leave potentially obsoleted tx ops alone (for now)
- * - don't worry about disk extent boundaries (yet)
+ * - cancel rx ops we contain
+ *   - resubmit non-contained rx ops if we split bufferheads
+ * - cancel obsoleted tx ops
+ * - break contained bh's over disk extent boundaries
  */
 int ObjectCache::map_write(block_t start, block_t len,
                            map<block_t, BufferHead*>& hits,
                            version_t super_epoch)
 {
-  map<block_t, BufferHead*>::iterator p;
-
-  // hack speed up common cases
-  if (start == 0) {
-    p = data.begin();
-  } else if (start + len == on->object_blocks && len == 1 && !data.empty()) {
-    // append hack.
-    p = data.end();
-    p--;
-    if (p->first < start) p++;
-  } else {
-    p = data.lower_bound(start);  
-  }
-
   dout(10) << "map_write " << *on << " " << start << "~" << len << dendl;
-  // p->first >= start
-  
+
+  map<block_t, BufferHead*>::iterator p = find_bh(start, len);  // p->first >= start
   block_t cur = start;
   block_t left = len;
-  
-  if (p != data.begin() && 
-      (p == data.end() || p->first > cur)) {
-    p--;     // might overlap!
-    if (p->first + p->second->length() <= cur) 
-      p++;   // doesn't overlap.
-  }
 
   //dump();
 
@@ -463,17 +607,20 @@ int ObjectCache::map_write(block_t start, block_t len,
 
     // based on disk extent boundary ...
     vector<Extent> exv;
-    on->map_extents(cur, max, exv);
+    on->map_extents(cur, max, exv, 0);
     if (exv.size() > 1) 
       max = exv[0].length;
+    bool hole = false;
+    if (exv.size() > 0 && exv[0].start == 0)
+      hole = true;
 
     dout(10) << "map_write " << cur << "~" << max << dendl;
     
     // at end?
     if (p == data.end()) {
-      BufferHead *n = new BufferHead(this);
-      n->set_start( cur );
-      n->set_length( max );
+      BufferHead *n = new BufferHead(this, cur, max);
+      if (hole)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
       hits[cur] = n;
       left -= max;
@@ -548,7 +695,8 @@ int ObjectCache::map_write(block_t start, block_t len,
       }
       
       // try to cancel tx?
-      if (bh->is_tx() && bh->epoch_modified == super_epoch) bc->bh_cancel_write(bh, super_epoch);
+      if (bh->is_tx() && bh->epoch_modified == super_epoch)
+	bc->bh_cancel_write(bh, super_epoch);
             
       // put in our map
       hits[cur] = bh;
@@ -564,9 +712,9 @@ int ObjectCache::map_write(block_t start, block_t len,
       block_t next = p->first;
       block_t glen = MIN(next-cur, max);
       dout(10) << "map_write gap " << cur << "~" << glen << dendl;
-      BufferHead *n = new BufferHead(this);
-      n->set_start( cur );
-      n->set_length( glen );
+      BufferHead *n = new BufferHead(this, cur, glen);
+      if (hole)
+	n->set_state(BufferHead::STATE_CLEAN); // hole
       bc->add_bh(n);
       hits[cur] = n;
       
@@ -628,6 +776,32 @@ void ObjectCache::touch_bottom(block_t bstart, block_t blast)
   }
 }  
 
+void ObjectCache::discard_bh(BufferHead *bh, version_t super_epoch)
+{
+  bool uncom = on->uncommitted.contains(bh->start(), bh->length());
+  dout(10) << "discard_bh " << *bh << " uncom " << uncom 
+	   << " of " << on->uncommitted
+	   << dendl;
+  
+  // whole thing
+  // cancel any pending/queued io, if possible.
+  if (bh->is_rx())
+    bc->bh_cancel_read(bh);
+  if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch) 
+    bc->bh_cancel_write(bh, super_epoch);
+  if (bh->shadow_of) {
+    dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
+    // shadow
+    bh->shadow_of->remove_shadow(bh);
+  }
+  
+  // kick read waiters
+  list<Context*> finished;
+  bh->take_read_waiters(finished);
+  finish_contexts(finished, -1);
+
+  bc->remove_bh(bh);
+}
 
 void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
@@ -636,58 +810,27 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
            << dendl;
 
   while (!data.empty()) {
-    block_t bhoff = data.rbegin()->first;
     BufferHead *bh = data.rbegin()->second;
 
     if (bh->end() <= blocks) break;
 
-    bool uncom = on->uncommitted.contains(bh->start(), bh->length());
-    dout(10) << "truncate " << *bh << " uncom " << uncom 
-             << " of " << on->uncommitted
-             << dendl;
-    
-    if (bhoff < blocks) {
+    if (bh->start() < blocks) {
       // we want right bit (one splice)
       if (bh->is_rx() && bc->bh_cancel_read(bh)) {
-        BufferHead *right = bc->split(bh, blocks);
-        bc->bh_read(on, bh);          // reread left bit
-        bh = right;
-      } else if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
-        BufferHead *right = bc->split(bh, blocks);
-        bc->bh_write(on, bh);          // rewrite left bit
-        bh = right;
+	BufferHead *right = bc->split(bh, blocks);
+	bc->bh_read(on, bh);          // reread left bit
+	bh = right;
+      } else if (bh->is_tx() && bh->epoch_modified == super_epoch && bc->bh_cancel_write(bh, super_epoch)) {
+	BufferHead *right = bc->split(bh, blocks);
+	bc->bh_write(on, bh);          // rewrite left bit
+	bh = right;
       } else {
-        bh = bc->split(bh, blocks);   // just split it
+	bh = bc->split(bh, blocks);   // just split it
       }
       // no worries about partials up here, they're always 1 block (and thus never split)
-    } else {
-      // whole thing
-      // cancel any pending/queued io, if possible.
-      if (bh->is_rx())
-        bc->bh_cancel_read(bh);
-      if (bh->is_tx() && uncom && bh->epoch_modified == super_epoch) 
-        bc->bh_cancel_write(bh, super_epoch);
-      if (bh->shadow_of) {
-	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << dendl;
-	// shadow
-	bh->shadow_of->remove_shadow(bh);
-	if (bh->is_partial()) 
-	  bc->cancel_shadow_partial(bh->rx_from.start, bh);
-      } else {
-	// normal
-	if (bh->is_partial() && uncom)
-	  bc->bh_cancel_partial_write(bh);
-      }
-    }
-    
-    for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-         p != bh->waitfor_read.end();
-         p++) {
-      finish_contexts(p->second, -1);
-    }
+    } 
 
-    bc->remove_bh(bh);
-    delete bh;
+    discard_bh(bh, super_epoch);
   }
 }
 
@@ -705,9 +848,7 @@ void ObjectCache::clone_to(Onode *other)
       // dup dirty or tx bh's
       if (!ton)
 	ton = other->get_oc(bc);
-      BufferHead *nbh = new BufferHead(ton);
-      nbh->set_start( bh->start() );
-      nbh->set_length( bh->length() );
+      BufferHead *nbh = new BufferHead(ton, bh->start(), bh->length());
       nbh->data = bh->data;      // just copy refs to underlying buffers. 
       bc->add_bh(nbh);
 
@@ -715,8 +856,6 @@ void ObjectCache::clone_to(Onode *other)
 	dout(0) << "clone_to PARTIAL FIXME NOT FULLY IMPLEMENTED ******" << dendl;
 	nbh->partial = bh->partial;
 	bc->mark_partial(nbh);
-	// register as shadow_partial
-	bc->add_shadow_partial(bh->rx_from.start, nbh);
       } else {
 	// clean buffer will shadow
 	bh->add_shadow(nbh);
@@ -735,20 +874,22 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
   dout(10) << "merge_bh_left " << *left << " " << *right << dendl;
   assert(left->end() == right->start());
   assert(left->is_clean());
+  assert(!left->is_hole());
   assert(right->is_clean());
+  assert(!right->is_hole());
   assert(right->get_num_ref() == 0);
 
   // hrm, is this right?
   if (right->version > left->version) left->version = right->version;
   if (right->last_flushed > left->last_flushed) left->last_flushed = right->last_flushed;
 
-  left->set_length(left->length() + right->length());
+  bc->stat_sub(left);
+  left->reset_length(left->length() + right->length());
+  bc->stat_add(left);
   left->data.claim_append(right->data);
 
   // remove right
-  remove_bh(right);
-  bc->lru_rest.lru_remove(right);
-  delete right;  
+  bc->remove_bh(right);
   dout(10) << "merge_bh_left result " << *left << dendl;
   return left;
 }
@@ -777,7 +918,9 @@ void ObjectCache::try_merge_bh_left(map<block_t, BufferHead*>::iterator& p)
     p--;
     if (p->second->end() == bh->start() &&
 	p->second->is_clean() && 
+	!p->second->is_hole() &&
 	bh->is_clean() &&
+	!bh->is_hole() &&
 	bh->get_num_ref() == 0 &&
 	bh->data.buffers().size() < 8 &&
 	p->second->data.buffers().size() < 8)
@@ -798,7 +941,9 @@ void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
   if (p != data.end() &&
       bh->end() == p->second->start() && 
       p->second->is_clean() && 
+      !p->second->is_hole() &&
       bh->is_clean() &&
+      !bh->is_hole() &&
       p->second->get_num_ref() == 0 &&
       bh->data.buffers().size() < 8 &&
       p->second->data.buffers().size() < 8) {
@@ -809,6 +954,37 @@ void ObjectCache::try_merge_bh_right(map<block_t, BufferHead*>::iterator& p)
     p = o;
 }
 
+
+void ObjectCache::scrub_csums()
+{
+  dout(10) << "scrub_csums on " << *this->on << dendl;
+  int bad = 0;
+  for (map<block_t, BufferHead*>::iterator p = data.begin();
+       p != data.end();
+       p++) {
+    BufferHead *bh = p->second;
+    if (bh->is_rx() || bh->is_missing()) continue;  // nothing to scrub
+    if (bh->is_clean() && bh->data.length() == 0) continue;  // hole.
+    if (bh->is_clean() || bh->is_tx()) {
+      for (unsigned i=0; i<bh->length(); i++) {
+	vector<Extent> exv;
+	on->map_extents(bh->start()+i, 1, exv, 0);
+	assert(exv.size() == 1);
+	if (exv[0].start == 0) continue;  // hole.
+	csum_t want = *on->get_extent_csum_ptr(bh->start()+i, 1);
+	csum_t b = calc_csum(&bh->data[i*EBOFS_BLOCK_SIZE], EBOFS_BLOCK_SIZE);
+	if (b != want) {
+	  dout(0) << "scrub_csums bad data at " << (bh->start()+i) << " have " 
+		  << hex << b << " should be " << want << dec
+		  << " in bh " << *bh
+		  << dendl;
+	  bad++;
+	}
+      }
+    }    
+  }
+  assert(bad == 0);
+}
 
 
 /************** BufferCache ***************/
@@ -823,23 +999,18 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   dout(20) << "split " << *orig << " at " << after << dendl;
 
   // split off right
-  BufferHead *right = new BufferHead(orig->get_oc());
+  block_t newleftlen = after - orig->start();
+  BufferHead *right = new BufferHead(orig->get_oc(), after, orig->length() - newleftlen);
   right->set_version(orig->get_version());
   right->epoch_modified = orig->epoch_modified;
   right->last_flushed = orig->last_flushed;
   right->set_state(orig->get_state());
-
-  block_t newleftlen = after - orig->start();
-  right->set_start( after );
-  right->set_length( orig->length() - newleftlen );
+  add_bh(right);
   
   // shorten left
   stat_sub(orig);
-  orig->set_length( newleftlen );
+  orig->reset_length( newleftlen );
   stat_add(orig);
-
-  // add right
-  add_bh(right);
 
   // adjust rx_from
   if (orig->is_rx()) {
@@ -898,8 +1069,9 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   
   // get extent.  there should be only one!
   vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
+  on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
+  assert(exv[0].start != 0); // not a hole.
   Extent ex = exv[0];
 
   if (from) {  // force behavior, used for reading partials
@@ -950,8 +1122,9 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   
   // get extents
   vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
+  on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
+  assert(exv[0].start != 0);
   Extent ex = exv[0];
 
   if (shouldbe)
@@ -973,16 +1146,6 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 
   on->oc->get();
   inc_unflushed( EBOFS_BC_FLUSH_BHWRITE, bh->epoch_modified );
-
-  /*
-  // assert: no partials on the same block
-  // hose any partial on the same block
-  if (bh->partial_write.count(ex.start)) {
-    dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << dendl;
-    dec_unflushed( bh->partial_write[ex.start].epoch );
-    bh->partial_write.erase(ex.start);
-  }
-  */
 }
 
 
@@ -1039,190 +1202,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
   else
     oc->rx_finish(ioh, start, length, bl);
 
-  // finish any partials?
-  //  note: these are partials that were re-written after a commit,
-  //        or for whom the OC was destroyed (eg truncated after a commit)
-  map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(diskstart);
-  while (sp != partial_write.end()) {
-    if (sp->first >= diskstart+length) break;
-    assert(sp->first >= diskstart);
-
-    block_t pblock = sp->first;
-    map<block_t, PartialWrite> writes;
-    writes.swap( sp->second );
-
-    map<block_t, map<block_t, PartialWrite> >::iterator t = sp;
-    sp++;
-    partial_write.erase(t);
-
-    for (map<block_t, PartialWrite>::iterator p = writes.begin();
-         p != writes.end();
-         p++) {
-      dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
-                << " for epoch " << p->second.epoch
-        //<< " (bh.epoch_modified is now " << bh->epoch_modified << ")"
-                << dendl;
-      // this had better be a past epoch
-      //assert(p->epoch == epoch_modified - 1);  // ??
-      
-      // make the combined block
-      bufferlist combined;
-      bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
-      combined.push_back( bp );
-      combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
-      BufferHead::apply_partial( combined, p->second.partial );
-
-      // write it!
-      dev.write( pblock, 1, combined,
-                 new C_OC_PartialTxFinish( this, p->second.epoch ),
-                 "finish_partials");
-    }
-  }
-
-  // shadow partials?
-  {
-    list<Context*> waiters;
-    map<block_t, set<BufferHead*> >::iterator sp = shadow_partials.lower_bound(diskstart);
-    while (sp != shadow_partials.end()) {
-      if (sp->first >= diskstart+length) break;
-      assert(sp->first >= diskstart);
-      
-      block_t pblock = sp->first;
-      set<BufferHead*> ls;
-      ls.swap( sp->second );
-      
-      map<block_t, set<BufferHead*> >::iterator t = sp;
-      sp++;
-      shadow_partials.erase(t);
-      
-      for (set<BufferHead*>::iterator p = ls.begin();
-	   p != ls.end();
-	   ++p) {
-	BufferHead *bh = *p;
-	dout(10) << "rx_finish applying shadow_partial for " << pblock
-		 << " to " << *bh << dendl;
-	bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
-	bh->data.clear();
-	bh->data.push_back( bp );
-	bh->data.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, 
-			 (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, 
-			 bl);
-	bh->apply_partial();
-	bh->set_state(BufferHead::STATE_CLEAN);
-	
-	// trigger waiters
-	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
-	     p != bh->waitfor_read.end();
-	     p++) {
-	  assert(p->first >= bh->start() && p->first < bh->end());
-	  waiters.splice(waiters.begin(), p->second);
-	}
-	bh->waitfor_read.clear();
-      }  
-    }
-
-    // kick waiters
-    finish_contexts(waiters);
-  }
-
   // done.
   ebofs_lock.Unlock();
 }
 
-void BufferCache::partial_tx_finish(version_t epoch)
-{
-  ebofs_lock.Lock();
-
-  dout(10) << "partial_tx_finish in epoch " << epoch << dendl;
-
-  // update unflushed counter
-  assert(get_unflushed(EBOFS_BC_FLUSH_PARTIAL, epoch) > 0);
-  dec_unflushed(EBOFS_BC_FLUSH_PARTIAL, epoch);
-
-  ebofs_lock.Unlock();
-}
-
-
-
-
-void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
-{
-  assert(bh->get_version() > 0);
-
-  assert(bh->is_partial());
-  assert(bh->length() == 1);
-  
-  // get the block no
-  vector<Extent> exv;
-  on->map_extents(bh->start(), bh->length(), exv);
-  assert(exv.size() == 1);
-  block_t b = exv[0].start;
-  assert(exv[0].length == 1);
-  bh->partial_tx_to = exv[0].start;
-  bh->partial_tx_epoch = bh->epoch_modified;
-
-  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << dendl;
-
-
-  // copy map state, queue for this block
-  assert(bh->rx_from.length == 1);
-  queue_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial, bh->partial_tx_epoch );
-}
-
-void BufferCache::bh_cancel_partial_write(BufferHead *bh)
-{
-  assert(bh->is_partial());
-  assert(bh->length() == 1);
-
-  cancel_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial_tx_epoch );
-}
-
-
-void BufferCache::queue_partial(block_t from, block_t to, 
-                                map<off_t, bufferlist>& partial, version_t epoch)
-{
-  dout(10) << "queue_partial " << from << " -> " << to
-           << " in epoch " << epoch 
-           << dendl;
-  
-  if (partial_write[from].count(to)) {
-    // this should be in the same epoch.
-    assert( partial_write[from][to].epoch == epoch);
-    assert(0); // actually.. no!
-  } else {
-    inc_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
-  }
-  
-  partial_write[from][to].partial = partial;
-  partial_write[from][to].epoch = epoch;
-}
-
-void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
-{
-  assert(partial_write.count(from));
-  assert(partial_write[from].count(to));
-  assert(partial_write[from][to].epoch == epoch);
-
-  dout(10) << "cancel_partial " << from << " -> " << to 
-           << "  (was epoch " << partial_write[from][to].epoch << ")"
-           << dendl;
-
-  partial_write[from].erase(to);
-  if (partial_write[from].empty())
-    partial_write.erase(from);
-
-  dec_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
-}
-
-
-void BufferCache::add_shadow_partial(block_t from, BufferHead *bh)
-{
-  dout(10) << "add_shadow_partial from " << from << " " << *bh << dendl;
-  shadow_partials[from].insert(bh);
-}
-
-void BufferCache::cancel_shadow_partial(block_t from, BufferHead *bh)
-{
-  dout(10) << "cancel_shadow_partial from " << from << " " << *bh << dendl;
-  shadow_partials[from].erase(bh);
-}

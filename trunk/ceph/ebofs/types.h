@@ -18,6 +18,7 @@
 
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "include/pobject.h"
 #include "common/Cond.h"
 
 #include <cassert>
@@ -31,6 +32,7 @@ using namespace __gnu_cxx;
 
 #include "include/object.h"
 
+#include "csum.h"
 
 #ifndef MIN
 # define MIN(a,b)  ((a)<=(b) ? (a):(b))
@@ -39,36 +41,18 @@ using namespace __gnu_cxx;
 # define MAX(a,b)  ((a)>=(b) ? (a):(b))
 #endif
 
-
-/*
-namespace __gnu_cxx {
-  template<> struct hash<unsigned long long> {
-    size_t operator()(unsigned long long __x) const { 
-      static hash<unsigned long> H;
-      return H((__x >> 32) ^ (__x & 0xffffffff)); 
-    }
-  };
-  
-  template<> struct hash< std::string >
-  {
-    size_t operator()( const std::string& x ) const
-    {
-      static hash<const char*> H;
-      return H(x.c_str());
-    }
-  };
-}
-*/
-
+#ifndef DIV_ROUND_UP
+# define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
+#endif
 
 // disk
 typedef uint64_t block_t;        // disk location/sector/block
 
 static const int EBOFS_BLOCK_SIZE = 4096;
+static const int EBOFS_BLOCK_MASK = 4095;
 static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
-class Extent {
- public:
+struct Extent {
   block_t start, length;
 
   Extent() : start(0), length(0) {}
@@ -76,29 +60,12 @@ class Extent {
 
   block_t last() const { return start + length - 1; }
   block_t end() const { return start + length; }
-};
+} __attribute__ ((packed));
 
-inline ostream& operator<<(ostream& out, Extent& ex)
+inline ostream& operator<<(ostream& out, const Extent& ex)
 {
   return out << ex.start << "~" << ex.length;
 }
-
-
-// tree/set nodes
-//typedef int    nodeid_t;
-typedef int64_t nodeid_t;     // actually, a block number.  FIXME.
-
-static const unsigned EBOFS_NODE_BLOCKS = 1;
-static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
-static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
-
-struct ebofs_nodepool {
-  Extent node_usemap_even;   // for even sb versions
-  Extent node_usemap_odd;    // for odd sb versions
-  
-  int    num_regions;
-  Extent region_loc[EBOFS_MAX_NODE_REGIONS];
-};
 
 
 // objects
@@ -106,45 +73,89 @@ struct ebofs_nodepool {
 typedef uint64_t coll_t;
 
 struct ebofs_onode {
-  Extent     onode_loc;       /* this is actually the block we live in */
+  csum_t onode_csum;  // from after onode_csum to base + onode_bytes
+  __u32 onode_bytes;    
 
-  object_t   object_id;       /* for kicks */
-  off_t      object_size;     /* file size in bytes.  should this be 64-bit? */
-  unsigned   object_blocks;
-  bool       readonly;
+  Extent onode_loc;       /* this is actually the block we live in */
+  pobject_t object_id;    /* for kicks */
+  __u64 readonly;  
+
+  __s64 object_size;     /* file size in bytes.  should this be 64-bit? */
+  __u32 alloc_blocks;   // allocated
+  csum_t data_csum;
   
-  int        num_collections;
-  int        num_attr;        // num attr in onode
-  int        num_extents;     /* number of extents used.  if 0, data is in the onode */
-};
+  __u16 inline_bytes;
+  __u16 num_collections;
+  __u32 num_attr;        // num attr in onode
+  __u32 num_extents;     /* number of extents used.  if 0, data is in the onode */
+  __u32 num_bad_byte_extents; // corrupt partial byte extents
+} __attribute__ ((packed));
 
 struct ebofs_cnode {
+  csum_t cnode_csum;
+  __u32  cnode_bytes;
+
   Extent     cnode_loc;       /* this is actually the block we live in */
   coll_t     coll_id;
-  int        num_attr;        // num attr in cnode
-};
+  __u32      num_attr;        // num attr in cnode
+} __attribute__ ((packed));
 
+struct ebofs_inode_ptr {
+  Extent loc;
+  csum_t csum;
+  ebofs_inode_ptr() {}
+  ebofs_inode_ptr(const Extent& l, csum_t c) : loc(l), csum(c) {}
+} __attribute__ ((packed));
+
+static inline ostream& operator<<(ostream& out, const ebofs_inode_ptr& ptr) {
+  return out << ptr.loc << "=" << hex << ptr.csum << dec;
+}
+
+
+// tree/set nodes
+//typedef int    nodeid_t;
+typedef __s64 nodeid_t;     // actually, a block number.  FIXME.
+
+static const unsigned EBOFS_NODE_BLOCKS = 1;
+static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
+static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
+static const unsigned EBOFS_NODE_DUP = 3;
+
+struct ebofs_nodepool {
+  Extent node_usemap_even;   // for even sb versions
+  Extent node_usemap_odd;    // for odd sb versions
+  
+  __u32  num_regions;
+  Extent region_loc[EBOFS_MAX_NODE_REGIONS];
+} __attribute__ ((packed));
 
 // table
+
+struct ebofs_node_ptr {
+  nodeid_t nodeid;
+  //__u64 start[EBOFS_NODE_DUP];
+  //__u64 length;
+  csum_t csum;
+} __attribute__ ((packed));
+
 struct ebofs_table {
-  nodeid_t root;      /* root node of btree */
-  int      num_keys;
-  int      depth;
-};
+  ebofs_node_ptr root;
+  __u32    num_keys;
+  __u32    depth;
+} __attribute__ ((packed));
 
 
 // super
 typedef uint64_t version_t;
 
-static const unsigned EBOFS_MAGIC = 0x000EB0F5;
+static const __u64 EBOFS_MAGIC = 0x000EB0F5;
 
 static const int EBOFS_NUM_FREE_BUCKETS = 5;   /* see alloc.h for bucket constraints */
 static const int EBOFS_FREE_BUCKET_BITS = 2;
 
-
 struct ebofs_super {
-  uint64_t s_magic;
-  uint64_t fsid;
+  __u64 s_magic;
+  __u64 fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
 
   epoch_t epoch;             // version of this superblock.
 
@@ -165,7 +176,22 @@ struct ebofs_super {
   struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table co_tab;
-};
+
+  csum_t super_csum;
+
+  csum_t calc_csum() {
+    return ::calc_csum((char*)this, (unsigned long)&super_csum-(unsigned long)this);
+  }
+  bool is_corrupt() { 
+    csum_t actual = calc_csum();
+    if (actual != super_csum) 
+      return true;
+    else 
+      return false;
+  }
+  bool is_valid_magic() { return s_magic == EBOFS_MAGIC; }
+  bool is_valid() { return is_valid_magic() && !is_corrupt(); }
+} __attribute__ ((packed));
 
 
 #endif

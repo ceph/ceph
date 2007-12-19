@@ -64,23 +64,46 @@ int FakeStore::statfs(struct statfs *buf)
 
 
 /* 
- * sorry, these are sentitive to the object_t and coll_t typing.
+ * sorry, these are sentitive to the pobject_t and coll_t typing.
  */ 
-void FakeStore::get_oname(object_t oid, char *s) 
+void FakeStore::get_oname(pobject_t oid, char *s) 
 {
-  //static hash<object_t> H;
-  assert(sizeof(oid) == 16);
+  //static hash<pobject_t> H;
+  assert(sizeof(oid) == 24);
 #ifdef __LP64__
   //sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
-  sprintf(s, "%s/objects/%016lx.%016lx", basedir.c_str(), 
-	  *((uint64_t*)&oid),
-	  *(((uint64_t*)&oid) + 1));
+  sprintf(s, "%s/objects/%04x.%04x.%016lx.%016lx", basedir.c_str(), 
+	  oid.volume, oid.rank,
+	  *((uint64_t*)&oid.oid),
+	  *(((uint64_t*)&oid.oid) + 1));
 #else
   //sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
-  sprintf(s, "%s/objects/%016llx.%016llx", basedir.c_str(), 
+  sprintf(s, "%s/objects/%04x.%04x.%016llx.%016llx", basedir.c_str(), 
+	  oid.volume, oisd.rank,
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #endif
+}
+
+pobject_t FakeStore::parse_object(char *s)
+{
+  pobject_t o;
+  assert(sizeof(o) == 24);
+  //cout << "  got object " << de->d_name << std::endl;
+  o.volume = strtoll(s, 0, 16);
+  assert(s[4] == '.');
+  o.rank = strtoll(s+5, 0, 16);
+  assert(s[9] == '.');
+  *(((uint64_t*)&o.oid) + 0) = strtoll(s+10, 0, 16);
+  assert(s[26] == '.');
+  *(((uint64_t*)&o.oid) + 1) = strtoll(s+27, 0, 16);
+  dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
+  return o;
+}
+
+coll_t FakeStore::parse_coll(char *s)
+{
+  return strtoll(s, 0, 16);
 }
 
 void FakeStore::get_cdir(coll_t cid, char *s) 
@@ -95,15 +118,17 @@ void FakeStore::get_cdir(coll_t cid, char *s)
 #endif
 }
 
-void FakeStore::get_coname(coll_t cid, object_t oid, char *s) 
+void FakeStore::get_coname(coll_t cid, pobject_t oid, char *s) 
 {
-  assert(sizeof(oid) == 16);
+  assert(sizeof(oid) == 24);
 #ifdef __LP64__
-  sprintf(s, "%s/collections/%016lx/%016lx.%016lx", basedir.c_str(), cid, 
-	  *((uint64_t*)&oid),
-	  *(((uint64_t*)&oid) + 1));
+  sprintf(s, "%s/collections/%016lx/%04x.%04x.%016lx.%016lx", basedir.c_str(), cid, 
+	  oid.volume, oid.rank,
+	  *((uint64_t*)&oid.oid),
+	  *(((uint64_t*)&oid.oid) + 1));
 #else
-  sprintf(s, "%s/collections/%016llx/%016llx.%016llx", basedir.c_str(), cid, 
+  sprintf(s, "%s/collections/%016llx/%04x.%04x.%016llx.%016llx", basedir.c_str(), cid, 
+	  oid.volume, oid.rank,
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #endif
@@ -226,7 +251,7 @@ int FakeStore::umount()
 // objects
 
 
-bool FakeStore::exists(object_t oid)
+bool FakeStore::exists(pobject_t oid)
 {
   struct stat st;
   if (stat(oid, &st) == 0)
@@ -236,7 +261,7 @@ bool FakeStore::exists(object_t oid)
 }
 
   
-int FakeStore::stat(object_t oid,
+int FakeStore::stat(pobject_t oid,
                     struct stat *st)
 {
   dout(20) << "stat " << oid << dendl;
@@ -248,7 +273,7 @@ int FakeStore::stat(object_t oid,
  
  
 
-int FakeStore::remove(object_t oid, Context *onsafe) 
+int FakeStore::remove(pobject_t oid, Context *onsafe) 
 {
   dout(20) << "remove " << oid << dendl;
   char fn[200];
@@ -258,7 +283,7 @@ int FakeStore::remove(object_t oid, Context *onsafe)
   return r;
 }
 
-int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
+int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
 {
   dout(20) << "truncate " << oid << " size " << size << dendl;
 
@@ -269,7 +294,7 @@ int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
   return r;
 }
 
-int FakeStore::read(object_t oid, 
+int FakeStore::read(pobject_t oid, 
                     off_t offset, size_t len,
                     bufferlist& bl) {
   dout(20) << "read " << oid << " len " << len << " off " << offset << dendl;
@@ -305,7 +330,7 @@ int FakeStore::read(object_t oid,
 }
 
 
-int FakeStore::write(object_t oid, 
+int FakeStore::write(pobject_t oid, 
                      off_t offset, size_t len,
                      const bufferlist& bl, 
                      Context *onsafe)
@@ -410,7 +435,7 @@ void FakeStore::sync(Context *onsafe)
 
 // objects
 
-int FakeStore::setattr(object_t oid, const char *name,
+int FakeStore::setattr(pobject_t oid, const char *name,
 		       const void *value, size_t size,
 		       Context *onsafe) 
 {
@@ -425,7 +450,7 @@ int FakeStore::setattr(object_t oid, const char *name,
   return r;
 }
 
-int FakeStore::setattrs(object_t oid, map<string,bufferptr>& aset) 
+int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.setattrs(oid, aset);
 
@@ -446,7 +471,7 @@ int FakeStore::setattrs(object_t oid, map<string,bufferptr>& aset)
   return r;
 }
 
-int FakeStore::getattr(object_t oid, const char *name,
+int FakeStore::getattr(pobject_t oid, const char *name,
 		       void *value, size_t size) 
 {
   if (fake_attrs) return attrs.getattr(oid, name, value, size);
@@ -459,7 +484,7 @@ int FakeStore::getattr(object_t oid, const char *name,
   return r;
 }
 
-int FakeStore::getattrs(object_t oid, map<string,bufferptr>& aset) 
+int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.getattrs(oid, aset);
 
@@ -483,7 +508,7 @@ int FakeStore::getattrs(object_t oid, map<string,bufferptr>& aset)
   return 0;
 }
 
-int FakeStore::rmattr(object_t oid, const char *name, Context *onsafe) 
+int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
 {
   if (fake_attrs) return attrs.rmattr(oid, name, onsafe);
   int r = 0;
@@ -496,7 +521,7 @@ int FakeStore::rmattr(object_t oid, const char *name, Context *onsafe)
 }
 
 /*
-int FakeStore::listattr(object_t oid, char *attrls, size_t size) 
+int FakeStore::listattr(pobject_t oid, char *attrls, size_t size) 
 {
   if (fake_attrs) return attrs.listattr(oid, attrls, size);
   char fn[100];
@@ -582,7 +607,7 @@ int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size)
 */
 
 
-int FakeStore::list_objects(list<object_t>& ls) 
+int FakeStore::list_objects(list<pobject_t>& ls) 
 {
   char fn[200];
   sprintf(fn, "%s/objects", basedir.c_str());
@@ -594,13 +619,7 @@ int FakeStore::list_objects(list<object_t>& ls)
   while ((de = ::readdir(dir)) != 0) {
     if (de->d_name[0] == '.') continue;
     // parse
-    object_t o;
-    assert(sizeof(o) == 16);
-    //cout << "  got object " << de->d_name << std::endl;
-    *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
-    assert(de->d_name[16] == '.');
-    *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
-    //dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << dendl;
+    pobject_t o = parse_object(de->d_name);
     if (errno) continue;
     ls.push_back(o);
   }
@@ -627,7 +646,7 @@ int FakeStore::list_collections(list<coll_t>& ls)
   while ((de = ::readdir(dir)) != 0) {
     // parse
     errno = 0;
-    coll_t c = strtoll(de->d_name, 0, 16);
+    coll_t c = parse_coll(de->d_name);
     if (c) ls.push_back(c);
   }
   
@@ -682,7 +701,7 @@ bool FakeStore::collection_exists(coll_t c)
 }
 
 
-int FakeStore::collection_add(coll_t c, object_t o,
+int FakeStore::collection_add(coll_t c, pobject_t o,
 			      Context *onsafe) 
 {
   if (fake_collections) return collections.collection_add(c, o, onsafe);
@@ -697,7 +716,7 @@ int FakeStore::collection_add(coll_t c, object_t o,
   return r;
 }
 
-int FakeStore::collection_remove(coll_t c, object_t o,
+int FakeStore::collection_remove(coll_t c, pobject_t o,
 				 Context *onsafe) 
 {
   if (fake_collections) return collections.collection_remove(c, o, onsafe);
@@ -710,7 +729,7 @@ int FakeStore::collection_remove(coll_t c, object_t o,
   return r;
 }
 
-int FakeStore::collection_list(coll_t c, list<object_t>& ls) 
+int FakeStore::collection_list(coll_t c, list<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -725,12 +744,7 @@ int FakeStore::collection_list(coll_t c, list<object_t>& ls)
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    object_t o;
-    assert(sizeof(o) == 16);
-    *(((uint64_t*)&o) + 0) = strtoll(de->d_name, 0, 16);
-    assert(de->d_name[16] == '.');
-    *(((uint64_t*)&o) + 1) = strtoll(de->d_name+17, 0, 16);
-    dout(0) << " got " << o << " errno " << errno << " on " << de->d_name << dendl;
+    pobject_t o = parse_object(de->d_name);
     if (errno) continue;
     ls.push_back(o);
   }

@@ -236,7 +236,7 @@ class NodePool {
     // regions
     assert(region_loc.empty());
     num_nodes = 0;
-    for (int i=0; i<np->num_regions; i++) {
+    for (unsigned i=0; i<np->num_regions; i++) {
       debofs(3) << "init region " << i << " at " << np->region_loc[i] << std::endl;
       region_loc.push_back( np->region_loc[i] );
       num_nodes += np->region_loc[i].length;
@@ -424,6 +424,16 @@ class NodePool {
       flushing++;
     }
 
+    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
+  }
+
+  void commit_wait() {
+    while (flushing > 0) 
+      commit_cond.Wait(ebofs_lock);
+    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
+  }
+
+  void commit_finish() {
     // limbo -> free
     for (map<nodeid_t,nodeid_t>::iterator i = limbo.m.begin();
          i != limbo.m.end();
@@ -433,14 +443,6 @@ class NodePool {
       free.insert(i->first, i->second);
     }
     limbo.clear();
-
-    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
-  }
-
-  void commit_wait() {
-    while (flushing > 0) 
-      commit_cond.Wait(ebofs_lock);
-    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
   }
 
 

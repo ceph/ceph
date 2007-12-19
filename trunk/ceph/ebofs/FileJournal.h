@@ -25,10 +25,11 @@
 class FileJournal : public Journal {
 public:
   /** log header
-   * we allow 3 pointers:
+   * we allow 4 pointers:
    *  top/initial,
-   *  one for an epoch boundary,
-   *  and one for a wrap in the ring buffer/journal file.
+   *  one for an epoch boundary (if any),
+   *  one for a wrap in the ring buffer/journal file,
+   *  one for a second epoch boundary (if any).
    * the epoch boundary one is useful only for speedier recovery in certain cases
    * (i.e. when ebofs committed, but the journal didn't rollover ... very small window!)
    */
@@ -37,8 +38,8 @@ public:
     int num;
     off_t wrap;
     off_t max_size;
-    epoch_t epoch[3];
-    off_t offset[3];
+    epoch_t epoch[4];
+    off_t offset[4];
 
     header_t() : fsid(0), num(0), wrap(0), max_size(0) {}
 
@@ -56,7 +57,11 @@ public:
       }
     }
     void push(epoch_t e, off_t o) {
-      assert(num < 3);
+      assert(num < 4);
+      if (num > 2 && 
+	  epoch[num-1] == e &&
+	  epoch[num-2] == (e-1)) 
+	num--;  // tail was an epoch boundary; replace it.
       epoch[num] = e;
       offset[num] = o;
       num++;

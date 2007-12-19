@@ -32,7 +32,7 @@ using namespace std;
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2
 #define MDS_INO_ANCHORTABLE       3
-#define MDS_INO_PG                4       // *** WARNING: this should match osd/osd_types.h PG_INO ***
+
 #define MDS_INO_LOG_OFFSET        (1*MAX_MDS)
 #define MDS_INO_IDS_OFFSET        (2*MAX_MDS)
 #define MDS_INO_CLIENTMAP_OFFSET  (3*MAX_MDS)

@@ -150,7 +150,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool is_balanced = false;
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
-      if (osd->store->getattr(oid, "balance-reads", &b, 1) >= 0)
+      if (osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
@@ -321,13 +321,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   // -- fastpath read?
   // if this is a read and the data is in the cache, do an immediate read.. 
   if ( g_conf.osd_immediate_read_from_cache ) {
-    if (osd->store->is_cached( oid , 
+    if (osd->store->is_cached( pobject_t(0,0,oid) , 
 			       op->get_offset(), 
 			       op->get_length() ) == 0) {
       if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
-	if (osd->store->getattr(oid, "balance-reads", &v, 1) < 0) {
+	if (osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
@@ -1750,15 +1750,18 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
   assert(info.last_update >= log.bottom);  // otherwise we need some help!
 
   if (log.backlog) {
+
+    // FIXME: sloppy pobject vs object conversions abound!  ***
+    
     // be thorough.
-    list<object_t> ls;
+    list<pobject_t> ls;
     osd->store->collection_list(info.pgid, ls);
     set<object_t> s;
     
-    for (list<object_t>::iterator i = ls.begin();
+    for (list<pobject_t>::iterator i = ls.begin();
          i != ls.end();
          i++) 
-      s.insert(*i);
+      s.insert(i->oid); 
 
     set<object_t> did;
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();

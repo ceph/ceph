@@ -291,16 +291,13 @@ struct md_config_t {
   bool  ebofs_cloneable;
   bool  ebofs_verify;
   int   ebofs_commit_ms;
-  int   ebofs_idle_commit_ms;
   int   ebofs_oc_size;
   int   ebofs_cc_size;
   off_t ebofs_bc_size;
   off_t ebofs_bc_max_dirty;
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
-
-  bool   ebofs_abp_zero;
-  size_t ebofs_abp_max_alloc;
+  bool ebofs_verify_csum_on_read;
 
   // block device
   bool  bdev_lock;

@@ -430,23 +430,24 @@ void PG::generate_backlog()
   assert(!log.backlog);
   log.backlog = true;
 
-  list<object_t> olist;
+  list<pobject_t> olist;
   osd->store->collection_list(info.pgid, olist);
   
   int local = 0;
   map<eversion_t,Log::Entry> add;
-  for (list<object_t>::iterator it = olist.begin();
+  for (list<pobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
     local++;
+    object_t oid = it->oid;
 
-    if (log.logged_object(*it)) continue; // already have it logged.
+    if (log.logged_object(oid)) continue; // already have it logged.
     
     // add entry
     Log::Entry e;
     e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
-    e.oid = *it;
-    osd->store->getattr(*it, 
+    e.oid = oid;
+    osd->store->getattr(pobject_t(0,0,oid), 
                         "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
@@ -1086,7 +1087,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   // we can trim!
   off_t trim = p->first;
-  dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(-10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 
   assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
@@ -1097,6 +1098,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.zero(info.pgid.to_object(), 0, ondisklog.bottom);
 }
 
 
@@ -1266,7 +1268,7 @@ bool PG::pick_missing_object_rev(object_t& oid)
 
 bool PG::pick_object_rev(object_t& oid)
 {
-  object_t t = oid;
+  pobject_t t = oid;
 
   if (!osd->store->pick_object_revision_lt(t))
     return false; // we have no revisions of this object!
@@ -1276,7 +1278,7 @@ bool PG::pick_object_rev(object_t& oid)
   assert(r >= 0);
   if (crev <= oid.rev) {
     dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;
-    oid = t;
+    oid = t.oid;
     return true;
   }
 

@@ -41,10 +41,16 @@ protected:
   void op_pull(MOSDOp *op);
 
 
+  void clean_up_local(ObjectStore::Transaction& t);
+  void cancel_recovery();
+  bool do_recovery();
+  void purge_strays();
+
   
 public:
   RAID4PG(OSD *o, pg_t p) : PG(o,p) { }
 
+  bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
   void do_op_reply(MOSDOpReply *r);
 
@@ -55,19 +61,10 @@ public:
   bool is_missing_object(object_t oid);
   void wait_for_missing_object(object_t oid, MOSDOp *op);
 
-  void note_failed_osd(int osd);
-
+  void on_osd_failure(int o);
   void on_acker_change();
   void on_role_change();
-
-  void clean_up_local(ObjectStore::Transaction& t);
-
-  void cancel_recovery();
-  bool do_recovery();
-
-  void purge_strays();
-
-
+  void on_change();
 };
 
 
