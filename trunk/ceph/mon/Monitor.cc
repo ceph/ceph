@@ -69,7 +69,6 @@ void Monitor::init()
   pgmon = new PGMonitor(this, &paxos_pgmap);
   
   // init paxos
-  paxos_test.init();
   paxos_osdmap.init();
   paxos_mdsmap.init();
   paxos_clientmap.init();
@@ -148,7 +147,6 @@ void Monitor::call_election()
   state = STATE_STARTING;
   
   // tell paxos
-  paxos_test.election_starting();
   paxos_mdsmap.election_starting();
   paxos_osdmap.election_starting();
   paxos_clientmap.election_starting();
@@ -166,7 +164,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
   
   // init paxos
-  paxos_test.leader_init();
   paxos_mdsmap.leader_init();
   paxos_osdmap.leader_init();
   paxos_clientmap.leader_init();
@@ -187,7 +184,6 @@ void Monitor::lose_election(epoch_t epoch, int l)
   dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << dendl;
   
   // init paxos
-  paxos_test.peon_init();
   paxos_mdsmap.peon_init();
   paxos_osdmap.peon_init();
   paxos_clientmap.peon_init();
@@ -201,37 +197,48 @@ void Monitor::lose_election(epoch_t epoch, int l)
 }
 
 
+int Monitor::do_command(vector<string>& cmd, bufferlist& data, 
+			bufferlist& rdata, string &rs)
+{
+  if (cmd.empty()) {
+    rs = "no command";
+    return -EINVAL;
+  }
+
+  if (cmd[0] == "stop") {
+    rs = "stopping";
+    do_stop();
+    return 0;
+  }
+  if (cmd[0] == "mds") 
+    return mdsmon->do_command(cmd, data, rdata, rs);
+
+  if (cmd[0] == "osd") 
+    return osdmon->do_command(cmd, data, rdata, rs);
+
+  // huh.
+  rs = "unrecognized subsystem '" + cmd[0] + "'";
+  return -EINVAL;
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   dout(0) << "handle_command " << *m << dendl;
   
-  int r = -1;
-  string rs = "unrecognized command";
-  
-  if (!m->cmd.empty()) {
-    if (m->cmd[0] == "stop") {
-      r = 0;
-      rs = "stopping";
-      do_stop();
-    }
-    else if (m->cmd[0] == "mds") {
-      mdsmon->dispatch(m);
-      return;
-    }
-    else if (m->cmd[0] == "osd") {
-      
-    }
-  }
-  
-  // reply
-  messenger->send_message(new MMonCommandAck(r, rs), m->get_source_inst());
+  string rs;         // return string
+  bufferlist rdata;  // return data
+  int rc = do_command(m->cmd, m->get_data(), rdata, rs);
+
+  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
+  reply->set_data(rdata);
+  messenger->send_message(reply, m->get_source_inst());
   delete m;
 }
 
 
 void Monitor::do_stop()
 {
-  dout(0) << "do_stop -- shutting down" << dendl;
+  dout(0) << "do_stop -- initiating shutdown" << dendl;
   stopping = true;
   mdsmon->do_stop();
 }
@@ -304,9 +311,6 @@ void Monitor::dispatch(Message *m)
 
 	// send it to the right paxos instance
 	switch (pm->machine_id) {
-	case PAXOS_TEST:
-	  paxos_test.dispatch(m);
-	  break;
 	case PAXOS_OSDMAP:
 	  paxos_osdmap.dispatch(m);
 	  break;

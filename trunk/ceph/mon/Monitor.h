@@ -88,7 +88,6 @@ public:
 
 
   // -- paxos --
-  Paxos paxos_test;
   Paxos paxos_mdsmap;
   Paxos paxos_osdmap;
   Paxos paxos_clientmap;
@@ -113,7 +112,8 @@ public:
   void handle_ping_ack(class MPingAck *m);
   void handle_command(class MMonCommand *m);
 
-
+  int do_command(vector<string>& cmd, bufferlist& data, 
+		 bufferlist& rdata, string &rs);
 
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
@@ -129,7 +129,6 @@ public:
     mon_epoch(0), 
     leader(0),
     
-    paxos_test(this, w, PAXOS_TEST),
     paxos_mdsmap(this, w, PAXOS_MDSMAP),
     paxos_osdmap(this, w, PAXOS_OSDMAP),
     paxos_clientmap(this, w, PAXOS_CLIENTMAP),

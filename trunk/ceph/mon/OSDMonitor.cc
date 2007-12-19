@@ -851,3 +851,9 @@ void OSDMonitor::mark_all_down()
 }
 
 
+int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data, 
+			   bufferlist& rdata, string &rs)
+{
+  rs = "unknown command";
+  return -EINVAL;
+}

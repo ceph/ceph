@@ -89,7 +89,7 @@ public:
   void propose_pending();     // propose current pending as new paxos state
 
   // you implement
-  virtual bool update_from_paxos() = 0;    // assimilate latest paxos state
+  virtual bool update_from_paxos() = 0;    // assimilate latest state from paxos
   virtual void create_pending() = 0;       // [leader] create new pending structures
   virtual void create_initial() = 0;       // [leader] populate pending with initial state (1)
   virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state
@@ -99,7 +99,7 @@ public:
   virtual bool prepare_update(Message *m) = 0;
   virtual bool should_propose(double &delay);
 
-  virtual void committed() = 0;
+  virtual void committed() = 0;            // [leader] called after a proposed value commits
 
 };
 

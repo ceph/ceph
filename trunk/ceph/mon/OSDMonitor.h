@@ -119,6 +119,9 @@ private:
 
   void tick();  // check state, take actions
 
+  int do_command(vector<string>& cmd, bufferlist& data, 
+		 bufferlist& rdata, string &rs);
+
   void mark_all_down();
 
   void send_latest(entity_inst_t i, epoch_t start=0);

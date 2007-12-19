@@ -44,6 +44,7 @@ e 12v
  *     "read" their copy of the last committed value.
  *
  * This provides a simple replication substrate that services can be built on top of.
+ * See PaxosService.h
  */
 
 #ifndef __MON_PAXOS_H
