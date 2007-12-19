@@ -6,8 +6,8 @@
 		<p>
 		The following publications are directly related to the current design of Ceph.
 		<ul>
-			<li>Sage Weil, Scott A. Brandt, Ethan L. Miller, Darrell D. E. Long, Carlos Maltzahn, <a href="http://www.usenix.org/events/osdi06/tech/weil.html">Ceph: A Scalable, High-Performance Distributed File System</a>, Proceedings of the 7th Conference on Operating Systems Design and Implementation (OSDI '06), November 2006.
-<br>
+			<li>Sage A. Weil, Andrew W. Leung, Scott A. Brandt, Carlos Maltzahn.  <a href="http://www.pdsi-scidac.org/SC07/resources/rados-pdsw.pdf">RADOS: A Fast, Scalable, and Reliable Storage Service for Petabyte-scale Storage Clusters</a>.  Petascale Data Storage Workshop SC07, November, 2007.  [ <a href="http://www.pdsi-scidac.org/SC07/resources/weil-20071111-rados-pdsw.pdf">slides</a> ]
+			<li>Sage Weil, Scott A. Brandt, Ethan L. Miller, Darrell D. E. Long, Carlos Maltzahn, <a href="http://www.usenix.org/events/osdi06/tech/weil.html"><b>Ceph: A Scalable, High-Performance Distributed File System</b></a>, Proceedings of the 7th Conference on Operating Systems Design and Implementation (OSDI '06), November 2006.
 			<li>Sage Weil, Scott A. Brandt, Ethan L. Miller, Carlos Maltzahn, <a href="http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf">CRUSH: Controlled, Scalable, Decentralized Placement of Replicated Data</a>, Proceedings of SC '06, November 2006.
 			<li>Sage Weil, Kristal Pollack, Scott A. Brandt, Ethan L. Miller, <a href="http://www.ssrc.ucsc.edu/Papers/weil-sc04.pdf">Dynamic Metadata Management for Petabyte-Scale File Systems</a>, Proceedings of the 2004 ACM/IEEE Conference on Supercomputing (SC '04), November 2004.
 			<li>Qin Xin, Ethan L. Miller, Thomas Schwarz, <a href="http://www.ssrc.ucsc.edu/Papers/xin-mss05.pdf">Evaluation of Distributed Recovery in Large-Scale Storage Systems</a>, Proceedings of the 13th IEEE International Symposium on High Performance Distributed Computing (HPDC 2004), June 2004, pages 172-181.
