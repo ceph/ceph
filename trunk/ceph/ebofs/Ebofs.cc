@@ -1736,7 +1736,7 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 {
   ObjectCache *oc = on->get_oc(&bc);
-  oc->scrub_csums();
+  //oc->scrub_csums();
 
   assert(bl.length() == len);
 
@@ -2066,7 +2066,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
   assert(opos == off+len);
   assert(blpos == bl.length());
 
-  oc->scrub_csums();
+  //  oc->scrub_csums();
 
   dirty_onode(on);
   finish_contexts(finished);
