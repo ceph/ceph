@@ -92,15 +92,24 @@ struct ebofs_onode {
 } __attribute__ ((packed));
 
 struct ebofs_cnode {
+  csum_t cnode_csum;
+  __u32  cnode_bytes;
+
   Extent     cnode_loc;       /* this is actually the block we live in */
   coll_t     coll_id;
   __u32      num_attr;        // num attr in cnode
 } __attribute__ ((packed));
 
-struct ebofs_onode_ptr {
+struct ebofs_inode_ptr {
   Extent loc;
   csum_t csum;
+  ebofs_inode_ptr() {}
+  ebofs_inode_ptr(const Extent& l, csum_t c) : loc(l), csum(c) {}
 } __attribute__ ((packed));
+
+static inline ostream& operator<<(ostream& out, const ebofs_inode_ptr& ptr) {
+  return out << ptr.loc << "=" << hex << ptr.csum << dec;
+}
 
 
 // tree/set nodes

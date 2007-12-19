@@ -108,13 +108,13 @@ protected:
   NodePool     nodepool;   // for all tables...
 
   // tables
-  Table<pobject_t, Extent> *object_tab;
+  Table<pobject_t, ebofs_inode_ptr> *object_tab;
   Table<block_t,block_t>  *free_tab[EBOFS_NUM_FREE_BUCKETS];
   Table<block_t,block_t>  *limbo_tab;
   Table<block_t,pair<block_t,int> > *alloc_tab;
 
   // collections
-  Table<coll_t, Extent>  *collection_tab;
+  Table<coll_t, ebofs_inode_ptr>  *collection_tab;
   Table<coll_pobject_t, bool>  *co_tab;
 
   void close_tables();
@@ -131,12 +131,12 @@ protected:
   bool have_onode(pobject_t oid) {
     return onode_map.count(oid);
   }
-  Onode* decode_onode(bufferlist& bl, unsigned& off);
+  Onode* decode_onode(bufferlist& bl, unsigned& off, csum_t csum);
+  csum_t encode_onode(Onode *on, bufferlist& bl, unsigned& off);
   Onode* get_onode(pobject_t oid);     // get cached onode, or read from disk.  ref++.
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
   void dirty_onode(Onode* o);
-  void encode_onode(Onode *on, bufferlist& bl, unsigned& off);
   void write_onode(Onode *on);
 
   // ** cnodes **
@@ -145,12 +145,13 @@ protected:
   set<Cnode*>                 dirty_cnodes;
   map<coll_t, list<Cond*> >   waitfor_cnode;
 
+  Cnode* decode_cnode(bufferlist& bl, unsigned& off, csum_t csum);
+  csum_t encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off);
   Cnode* new_cnode(coll_t cid);
   Cnode* get_cnode(coll_t cid);
   void remove_cnode(Cnode *cn);
   void put_cnode(Cnode *cn);
   void dirty_cnode(Cnode *cn);
-  void encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off);
   void write_cnode(Cnode *cn);
 
   // ** onodes+cnodes = inodes **

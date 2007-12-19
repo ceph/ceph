@@ -108,14 +108,14 @@ int Ebofs::mount()
   
   // open tables
   dout(3) << "mount opening tables" << dendl;
-  object_tab = new Table<pobject_t, Extent>( nodepool, sb->object_tab );
+  object_tab = new Table<pobject_t, ebofs_inode_ptr>( nodepool, sb->object_tab );
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
     free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
   limbo_tab = new Table<block_t, block_t>( nodepool, sb->limbo_tab );
   alloc_tab = new Table<block_t, pair<block_t,int> >( nodepool, sb->alloc_tab );
   
-  collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
-  co_tab = new Table<coll_pobject_t, bool>( nodepool, sb->co_tab );
+  collection_tab = new Table<coll_t,ebofs_inode_ptr>( nodepool, sb->collection_tab );
+  co_tab = new Table<coll_pobject_t,bool>( nodepool, sb->co_tab );
 
   verify_tables();
 
@@ -225,8 +225,8 @@ int Ebofs::mkfs()
   empty.root.csum = 0;
   empty.depth = 0;
   
-  object_tab = new Table<pobject_t, Extent>( nodepool, empty );
-  collection_tab = new Table<coll_t, Extent>( nodepool, empty );
+  object_tab = new Table<pobject_t, ebofs_inode_ptr>( nodepool, empty );
+  collection_tab = new Table<coll_t, ebofs_inode_ptr>( nodepool, empty );
   
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
     free_tab[i] = new Table<block_t,block_t>( nodepool, empty );
@@ -532,7 +532,11 @@ int Ebofs::commit_thread_entry()
 
 	++attempt;
 	dout(1) << "commit_thread commit poisoned, retrying, attempt " << attempt << dendl;
-	assert(0); // NONE OF THIS.
+	/* actually, poisoning isn't needed after all.
+	 * it's probably a bad idea, but i'll leave it in anyway, 
+	 * in case it becomes useful later.  for now,
+	 */
+	assert(0); // NO!
       }
 
       // ok, now (synchronously) write the prior super!
@@ -662,7 +666,8 @@ Onode* Ebofs::new_onode(pobject_t oid)
   onode_lru.lru_insert_top(on);
   
   assert(object_tab->lookup(oid) < 0);
-  object_tab->insert( oid, on->onode_loc );  // even tho i'm not placed yet
+  ebofs_inode_ptr ptr(on->onode_loc, 0);
+  object_tab->insert(oid, ptr);  // even tho i'm not placed yet
 
   on->get();
   on->onode_loc.start = 0;
@@ -674,7 +679,7 @@ Onode* Ebofs::new_onode(pobject_t oid)
   return on;
 }
 
-Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off) 
+Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off, csum_t csum) 
 {
   // verify csum
   struct ebofs_onode *eo = (struct ebofs_onode*)(bl.c_str() + off);
@@ -685,14 +690,16 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off)
   csum_t actual = calc_csum(bl.c_str() + off + sizeof(csum_t),
 			    eo->onode_bytes - sizeof(csum_t));
   if (actual != eo->onode_csum) {
-    derr(0) << "corrupt onode (bad csum actual " << actual << " != " << eo->onode_csum << ")" << dendl;
+    derr(0) << "corrupt onode (bad csum actual " << actual << " != onode's " << eo->onode_csum << ")" << dendl;
+    return 0;
+  }
+  if (actual != csum) {
+    derr(0) << "corrupt onode (bad csum actual " << actual << " != expected " << csum << ")" << dendl;
     return 0;
   }
   
-  // add onode
+  // build onode
   Onode *on = new Onode(eo->object_id);
-  
-  // parse data block
   on->readonly = eo->readonly;
   on->onode_loc = eo->onode_loc;
   on->object_size = eo->object_size;
@@ -717,7 +724,7 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off)
     p += sizeof(len);
     on->attr[key] = buffer::copy(p, len);
     p += len;
-    dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << dendl;
+    dout(15) << "decode_onode " << *on  << " attr " << key << " len " << len << dendl;
   }
   
   // parse extents
@@ -732,7 +739,7 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off)
       memcpy(&on->extent_map[n].csum[0], p, sizeof(csum_t)*ex.length);
       p += sizeof(csum_t)*ex.length;
     }
-    dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << dendl;
+    dout(15) << "decode_onode " << *on  << " ex " << i << ": " << ex << dendl;
     n += ex.length;
   }
   on->last_block = n;
@@ -742,7 +749,7 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off)
     Extent ex = *((Extent*)p);
     p += sizeof(ex);
     on->bad_byte_extents.insert(ex.start, ex.length);
-    dout(15) << "get_onode " << *on << " bad byte ex " << ex << dendl;
+    dout(15) << "decode_onode " << *on << " bad byte ex " << ex << dendl;
   }
 
   unsigned len = p - (char*)eo;
@@ -763,8 +770,8 @@ Onode* Ebofs::get_onode(pobject_t oid)
     }
     
     // on disk?
-    Extent onode_loc;
-    if (object_tab->lookup(oid, onode_loc) < 0) {
+    ebofs_inode_ptr ptr;
+    if (object_tab->lookup(oid, ptr) < 0) {
       dout(10) << "onode lookup failed on " << oid << dendl;
       // object dne.
       return 0;
@@ -780,21 +787,21 @@ Onode* Ebofs::get_onode(pobject_t oid)
       continue;
     }
 
-    dout(10) << "get_onode reading " << oid << " from " << onode_loc << dendl;
+    dout(10) << "get_onode reading " << oid << " from " << ptr.loc << dendl;
 
     assert(waitfor_onode.count(oid) == 0);
     waitfor_onode[oid].clear();  // this should be empty initially. 
 
     // read it!
     bufferlist bl;
-    bl.push_back( buffer::create_page_aligned( EBOFS_BLOCK_SIZE*onode_loc.length ) );
+    bl.push_back( buffer::create_page_aligned( EBOFS_BLOCK_SIZE*ptr.loc.length ) );
 
     ebofs_lock.Unlock();
-    dev.read( onode_loc.start, onode_loc.length, bl );
+    dev.read( ptr.loc.start, ptr.loc.length, bl );
     ebofs_lock.Lock();
 
     unsigned off = 0;
-    Onode *on = decode_onode(bl, off);
+    Onode *on = decode_onode(bl, off, ptr.csum);
     if (!on) {
       assert(0); // corrupt!
     }
@@ -826,7 +833,7 @@ public:
 };
 
 
-void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
+csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 {
   unsigned start_off = off;
 
@@ -898,6 +905,8 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 			    eo.onode_bytes - sizeof(csum_t));
   bl.copy_in(start_off, sizeof(csum_t), (char*)&eo);
   dout(15) << "encode_onode len " << eo.onode_bytes << " csum " << eo.onode_csum << dendl;
+
+  return eo.onode_csum;
 }
 
 void Ebofs::write_onode(Onode *on)
@@ -909,28 +918,28 @@ void Ebofs::write_onode(Onode *on)
   bufferlist bl;
   bl.push_back(buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks));
 
-  // (always) relocate onode
-  if (super_epoch > on->last_alloc_epoch) {
-    if (on->onode_loc.length) 
-      allocator.release(on->onode_loc);
-    
-    block_t first = 0;
-    if (on->alloc_blocks)
-      first = on->get_first_block();
-    
-    allocator.allocate(on->onode_loc, blocks, first);
-    object_tab->remove(on->object_id);
-    object_tab->insert(on->object_id, on->onode_loc);
-    //object_tab->verify();
-  }
+  // relocate onode
+  if (on->onode_loc.length) 
+    allocator.release(on->onode_loc);
+  block_t first = 0;
+  if (on->alloc_blocks)
+    first = on->get_first_block();   
+  allocator.allocate(on->onode_loc, blocks, first);
 
   dout(10) << "write_onode " << *on << " to " << on->onode_loc << dendl;
 
+  // encode
   unsigned off = 0;
-  encode_onode(on, bl, off);
+  csum_t csum = encode_onode(on, bl, off);
   assert(off == bytes);
   if (off < bl.length())
     bl.zero(off, bl.length()-off);
+
+  // update pointer
+  object_tab->remove(on->object_id);
+  ebofs_inode_ptr ptr(on->onode_loc, csum);
+  object_tab->insert(on->object_id, ptr);
+  //object_tab->verify();
 
   // write
   dev.write( on->onode_loc.start, on->onode_loc.length, bl, 
@@ -1074,7 +1083,8 @@ Cnode* Ebofs::new_cnode(coll_t cid)
   cnode_lru.lru_insert_top(cn);
   
   assert(collection_tab->lookup(cid) < 0);
-  collection_tab->insert( cid, cn->cnode_loc );  // even tho i'm not placed yet
+  ebofs_inode_ptr ptr(cn->cnode_loc, 0);
+  collection_tab->insert(cid, ptr);  // even tho i'm not placed yet
   
   cn->get();
   cn->cnode_loc.start = 0;
@@ -1082,6 +1092,46 @@ Cnode* Ebofs::new_cnode(coll_t cid)
 
   dirty_cnode(cn);
 
+  return cn;
+}
+
+Cnode* Ebofs::decode_cnode(bufferlist& bl, unsigned& off, csum_t csum) 
+{
+  // verify csum
+  struct ebofs_cnode *ec = (struct ebofs_cnode*)(bl.c_str() + off);
+  if (ec->cnode_bytes > bl.length() - off) {
+    derr(0) << "obviously corrupt cnode (bad cnode_bytes)" << dendl;
+    return 0;
+  }
+  csum_t actual = calc_csum(bl.c_str() + off + sizeof(csum_t),
+			    ec->cnode_bytes - sizeof(csum_t));
+  if (actual != ec->cnode_csum) {
+    derr(0) << "corrupt cnode (bad csum actual " << actual << " != cnode's " << ec->cnode_csum << ")" << dendl;
+    return 0;
+  }
+  if (actual != csum) {
+    derr(0) << "corrupt cnode (bad csum actual " << actual << " != expected " << csum << ")" << dendl;
+    return 0;
+  }
+
+  // build cnode
+  Cnode *cn = new Cnode(ec->coll_id);
+  cn->cnode_loc = ec->cnode_loc;
+  
+  // parse attributes
+  char *p = (char*)(ec + 1);
+  for (unsigned i=0; i<ec->num_attr; i++) {
+    string key = p;
+    p += key.length() + 1;
+    int len = *(int*)(p);
+    p += sizeof(len);
+    cn->attr[key] = buffer::copy(p, len);
+    p += len;
+    dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << dendl;
+  }
+
+  unsigned len = p - (char*)ec;
+  assert(len == ec->cnode_bytes);
   return cn;
 }
 
@@ -1097,8 +1147,8 @@ Cnode* Ebofs::get_cnode(coll_t cid)
     }
     
     // on disk?
-    Extent cnode_loc;
-    if (collection_tab->lookup(cid, cnode_loc) < 0) {
+    ebofs_inode_ptr ptr;
+    if (collection_tab->lookup(cid, ptr) < 0) {
       // object dne.
       return 0;
     }
@@ -1113,7 +1163,7 @@ Cnode* Ebofs::get_cnode(coll_t cid)
       continue;
     }
 
-    dout(10) << "get_cnode reading " << cid << " from " << cnode_loc << dendl;
+    dout(10) << "get_cnode reading " << cid << " from " << ptr.loc << dendl;
 
     assert(waitfor_cnode.count(cid) == 0);
     waitfor_cnode[cid].clear();  // this should be empty initially. 
@@ -1121,33 +1171,21 @@ Cnode* Ebofs::get_cnode(coll_t cid)
     // read it!
     bufferlist bl;
     //bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
-    bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*cnode_loc.length) );
+    bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*ptr.loc.length) );
 
     ebofs_lock.Unlock();
-    dev.read( cnode_loc.start, cnode_loc.length, bl );
+    dev.read( ptr.loc.start, ptr.loc.length, bl );
     ebofs_lock.Lock();
 
-    // parse data block
-    Cnode *cn = new Cnode(cid);
-
+    unsigned off = 0;
+    Cnode *cn = decode_cnode(bl, off, ptr.csum);
+    if (!cn) {
+      assert(0); // corrupt!
+    }
+    assert(cn->coll_id == cid);
     cnode_map[cid] = cn;
     cnode_lru.lru_insert_top(cn);
-    
-    struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
-    cn->cnode_loc = ec->cnode_loc;
-    
-    // parse attributes
-    char *p = bl.c_str() + sizeof(*ec);
-    for (unsigned i=0; i<ec->num_attr; i++) {
-      string key = p;
-      p += key.length() + 1;
-      int len = *(int*)(p);
-      p += sizeof(len);
-      cn->attr[key] = buffer::copy(p, len);
-      p += len;
-      dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << dendl;
-    }
-    
+
     // wake up other waiters
     for (list<Cond*>::iterator i = waitfor_cnode[cid].begin();
          i != waitfor_cnode[cid].end();
@@ -1160,8 +1198,10 @@ Cnode* Ebofs::get_cnode(coll_t cid)
   }
 }
 
-void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
+csum_t Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
 {
+  unsigned start_off = off;
+
   // cnode
   struct ebofs_cnode ec;
   ec.cnode_loc = cn->cnode_loc;
@@ -1182,8 +1222,17 @@ void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
     bl.copy_in(off, len, i->second.c_str());
     off += len;
 
-    dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << len << dendl;
+    dout(15) << "encode_cnode " << *cn  << " attr " << i->first << " len " << len << dendl;
   }
+
+  ec.cnode_bytes = off - start_off;
+  bl.copy_in(start_off + sizeof(csum_t), sizeof(__u32), (char*)&ec.cnode_bytes);
+  ec.cnode_csum = calc_csum(bl.c_str() + start_off + sizeof(csum_t),
+			    ec.cnode_bytes - sizeof(csum_t));
+  bl.copy_in(start_off, sizeof(csum_t), (char*)&ec);
+  dout(15) << "encode_cnode len " << ec.cnode_bytes << " csum " << ec.cnode_csum << dendl;
+
+  return ec.cnode_csum;
 }
 
 void Ebofs::write_cnode(Cnode *cn)
@@ -1196,21 +1245,22 @@ void Ebofs::write_cnode(Cnode *cn)
   //bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
   bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
 
-  // (always) relocate cnode!
-  if (super_epoch > cn->last_alloc_epoch) {
-    if (cn->cnode_loc.length) 
-      allocator.release(cn->cnode_loc);
-    
-    allocator.allocate(cn->cnode_loc, blocks, Allocator::NEAR_LAST_FWD);
-    collection_tab->remove( cn->coll_id );
-    collection_tab->insert( cn->coll_id, cn->cnode_loc );
-  }
+  // relocate cnode!
+  if (cn->cnode_loc.length) 
+    allocator.release(cn->cnode_loc);
+  allocator.allocate(cn->cnode_loc, blocks, Allocator::NEAR_LAST_FWD);
   
   dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << dendl;
 
+  // encode
   unsigned off = 0;
-  encode_cnode(cn, bl, off);
+  csum_t csum = encode_cnode(cn, bl, off);
   assert(off == bytes);
+
+  // update pointer
+  collection_tab->remove(cn->coll_id);
+  ebofs_inode_ptr ptr(cn->cnode_loc, csum);
+  collection_tab->insert(cn->coll_id, ptr);
 
   // write
   dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl, 
@@ -1625,7 +1675,7 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
   off_t last_block_byte = on->last_block * EBOFS_BLOCK_SIZE;
   partial_head = (off < last_block_byte) && (off & EBOFS_BLOCK_MASK);
   partial_tail = ((off+len) < on->object_size) && ((off+len) & EBOFS_BLOCK_MASK);
-  dout(0) << "check_partial_edges on " << *on << " " << off << "~" << len 
+  dout(10) << "check_partial_edges on " << *on << " " << off << "~" << len 
 	   << " " << partial_head << "/" << partial_tail << dendl;
 
   if ((partial_head || partial_tail) && commit_starting) {
@@ -3130,7 +3180,7 @@ int Ebofs::pick_object_revision_lt(pobject_t& oid)
     live.oid.rev = 0;
     
     if (object_tab->get_num_keys() > 0) {
-      Table<pobject_t, Extent>::Cursor cursor(object_tab);
+      Table<pobject_t, ebofs_inode_ptr>::Cursor cursor(object_tab);
       
       object_tab->find(oid, cursor);  // this will be just _past_ highest eligible rev
       if (cursor.move_left() > 0) {
@@ -3431,7 +3481,7 @@ int Ebofs::list_objects(list<pobject_t>& ls)
   ebofs_lock.Lock();
   dout(9) << "list_objects " << dendl;
 
-  Table<pobject_t, Extent>::Cursor cursor(object_tab);
+  Table<pobject_t, ebofs_inode_ptr>::Cursor cursor(object_tab);
 
   int num = 0;
   if (object_tab->find(pobject_t(), cursor) >= 0) {
@@ -3454,7 +3504,7 @@ int Ebofs::list_collections(list<coll_t>& ls)
   ebofs_lock.Lock();
   dout(9) << "list_collections " << dendl;
 
-  Table<coll_t, Extent>::Cursor cursor(collection_tab);
+  Table<coll_t, ebofs_inode_ptr>::Cursor cursor(collection_tab);
 
   int num = 0;
   if (collection_tab->find(0, cursor) >= 0) {
@@ -3982,7 +4032,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   st.avg_extent_per_object = 0;
   st.avg_extent_jump = 0;
 
-  Table<pobject_t,Extent>::Cursor cursor(object_tab);
+  Table<pobject_t,ebofs_inode_ptr>::Cursor cursor(object_tab);
   object_tab->find(pobject_t(), cursor);
   int nobj = 0;
   int njump = 0;
