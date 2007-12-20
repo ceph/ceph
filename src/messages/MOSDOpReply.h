@@ -34,8 +34,7 @@ class MOSDOpReply : public Message {
   map<string,bufferptr> attrset;
 
  public:
-  const ceph_osd_reqid_t& get_reqid() { return head.reqid; }
-  long     get_tid() { return head.reqid.tid; }
+  long     get_tid() { return head.tid; }
   object_t get_oid() { return head.oid; }
   pg_t     get_pg() { return head.layout.pgid; }
   int      get_op()  { return head.op; }
@@ -63,7 +62,7 @@ public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
-    head.reqid = req->head.reqid;
+    head.tid = req->head.tid;
     head.op = req->head.op;
     head.flags = commit ? CEPH_OSD_OP_SAFE:0;
     head.oid = req->head.oid;
@@ -92,7 +91,7 @@ public:
   virtual char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_op_reply(" << head.reqid
+    out << "osd_op_reply(" << get_tid()
 	<< " " << MOSDOp::get_opname(head.op)
 	<< " " << head.oid;
     if (head.length) out << " " << head.offset << "~" << head.length;

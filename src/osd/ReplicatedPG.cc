@@ -573,7 +573,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // MODIFY
 
 void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t, 
-					   ceph_osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
+					   osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
 					   objectrev_t crev, objectrev_t rev,
 					   eversion_t trim_to)
 {
@@ -612,7 +612,7 @@ void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t,
 /** prepare_op_transaction
  * apply an op to the store wrapped in a transaction.
  */
-void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const ceph_osd_reqid_t& reqid,
+void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
 					  pg_t pgid, int op, pobject_t poid, 
 					  off_t offset, off_t length, bufferlist& bl,
 					  eversion_t& version, objectrev_t crev, objectrev_t rev)
@@ -1340,7 +1340,7 @@ void ReplicatedPG::pull(pobject_t poid)
           << dendl;
 
   // send op
-  ceph_osd_reqid_t rid;
+  osd_reqid_t rid;
   tid_t tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PULL,
 				   0, 0, 
@@ -1382,7 +1382,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   osd->logger->inc("r_pushb", bl.length());
   
   // send
-  ceph_osd_reqid_t rid;  // useless?
+  osd_reqid_t rid;  // useless?
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
 				osd->osdmap->get_epoch(), osd->get_tid(), v);
   subop->set_data(bl);   // note: claims bl, set length above here!

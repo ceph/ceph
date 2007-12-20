@@ -81,7 +81,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	cl->whoami = -1;
 	ceph_monc_init(&cl->monc);
 	ceph_mdsc_init(&cl->mdsc, cl);
-	ceph_osdc_init(&cl->osdc);
+	ceph_osdc_init(&cl->osdc, cl);
 
 	return cl;
 

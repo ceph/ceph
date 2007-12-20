@@ -188,11 +188,11 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
 
-#define CEPH_MSGR_TAG_READY   1  // server -> client + cseq: ready for messages
-#define CEPH_MSGR_TAG_REJECT  2  // server -> client + cseq: decline socket
-#define CEPH_MSGR_TAG_MSG     3  // message
-#define CEPH_MSGR_TAG_ACK     4  // message ack
-#define CEPH_MSGR_TAG_CLOSE   5  // closing pipe
+#define CEPH_MSGR_TAG_READY   1  /* server -> client + cseq: ready for messages */
+#define CEPH_MSGR_TAG_REJECT  2  /* server -> client + cseq: decline socket */
+#define CEPH_MSGR_TAG_MSG     3  /* message */
+#define CEPH_MSGR_TAG_ACK     4  /* message ack */
+#define CEPH_MSGR_TAG_CLOSE   5  /* closing pipe */
 
 
 /*
@@ -254,19 +254,19 @@ struct ceph_msg_header {
 #define CEPH_MSG_MDS_GETMAP                  20
 #define CEPH_MSG_MDS_MAP                     21
 
-#define CEPH_MSG_CLIENT_SESSION         22   // start or stop
+#define CEPH_MSG_CLIENT_SESSION         22
 #define CEPH_MSG_CLIENT_RECONNECT       23
 
 #define CEPH_MSG_CLIENT_REQUEST         24
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
-#define CEPH_MSG_CLIENT_FILECAPS        0x310  // 
+#define CEPH_MSG_CLIENT_FILECAPS        0x310
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
 #define CEPH_MSG_OSD_MAP          41
-#define CEPH_MSG_OSD_OP           42    // delete, etc.
-#define CEPH_MSG_OSD_OPREPLY      43    // delete, etc.
+#define CEPH_MSG_OSD_OP           42
+#define CEPH_MSG_OSD_OPREPLY      43
 
 
 /* client_session message op values */
@@ -394,13 +394,6 @@ struct ceph_mds_reply_dirfrag {
 /*
  * osd ops
  */
-struct ceph_osd_reqid {
-	struct ceph_entity_name name; /* who */
-	__u32                   inc;  /* incarnation */
-	ceph_tid_t              tid;
-} __attribute__ ((packed));
-typedef struct ceph_osd_reqid ceph_osd_reqid_t;
-
 enum {
 	CEPH_OSD_OP_READ       = 1,
 	CEPH_OSD_OP_STAT       = 2,
@@ -418,7 +411,7 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = 23,
 	CEPH_OSD_OP_UPLOCK     = 24,
 	CEPH_OSD_OP_DNLOCK     = 25,
-	CEPH_OSD_OP_MININCLOCK = 26, // minimum incarnation lock
+	CEPH_OSD_OP_MININCLOCK = 26, /* minimum incarnation lock */
 
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,
@@ -427,14 +420,17 @@ enum {
 	CEPH_OSD_OP_UNBALANCEREADS = 102
 };
 
+/*
+ * osd op flags
+ */
 enum {
-	CEPH_OSD_OP_ACK = 1,
-	CEPH_OSD_OP_SAFE = 2,
-	CEPH_OSD_OP_RETRY = 4
+	CEPH_OSD_OP_ACK = 1,   /* want (or is) "ack" ack */
+	CEPH_OSD_OP_SAFE = 2,  /* want (or is) "safe" ack */
+	CEPH_OSD_OP_RETRY = 4  /* resend attempt */
 };
 
 struct ceph_osd_peer_stat {
-	ceph_timeval stamp;
+	struct ceph_timeval stamp;
 	float oprate;
 	float qlen;
 	float recent_qlen;
@@ -446,8 +442,9 @@ struct ceph_osd_peer_stat {
 typedef struct ceph_osd_peer_stat ceph_osd_peer_stat_t;
 
 struct ceph_osd_request_head {
-	struct ceph_entity_addr   client_addr;
-	ceph_osd_reqid_t          reqid;  /* fixme: this dups client.name */
+	struct ceph_entity_inst   client_inst;
+	ceph_tid_t                tid;
+	__u32                     client_inc;
 	__u32                     op;
 	__u64                     offset, length;
 	ceph_object_t             oid;
@@ -464,7 +461,7 @@ struct ceph_osd_request_head {
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
-	ceph_osd_reqid_t     reqid;
+	ceph_tid_t           tid;
 	__u32                op;
 	__u32                flags;
 	ceph_object_t        oid;

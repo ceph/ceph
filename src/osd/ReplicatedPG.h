@@ -100,10 +100,10 @@ protected:
   void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void prepare_log_transaction(ObjectStore::Transaction& t, 
-			       ceph_osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
+			       osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
 			       objectrev_t crev, objectrev_t rev,
 			       eversion_t trim_to);
-  void prepare_op_transaction(ObjectStore::Transaction& t, const ceph_osd_reqid_t& reqid,
+  void prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
 			      pg_t pgid, int op, pobject_t poid, 
 			      off_t offset, off_t length, bufferlist& bl,
 			      eversion_t& version, objectrev_t crev, objectrev_t rev);

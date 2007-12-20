@@ -22,31 +22,38 @@
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
  */
+struct osd_reqid_t {
+  entity_name_t name; // who
+  int32_t       inc;  // incarnation
+  tid_t         tid;
+  osd_reqid_t() : inc(0), tid(0) {}
+  osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), inc(i), tid(t) {}
+};
 
-inline ostream& operator<<(ostream& out, const ceph_osd_reqid_t& r) {
+inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
 }
 
-inline bool operator==(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
+inline bool operator==(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name == r.name) && (l.inc == r.inc) && (l.tid == r.tid);
 }
-inline bool operator!=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
+inline bool operator!=(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name != r.name) || (l.inc != r.inc) || (l.tid != r.tid);
 }
-inline bool operator<(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
+inline bool operator<(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name < r.name) || (l.inc < r.inc) || 
     (l.name == r.name && l.inc == r.inc && l.tid < r.tid);
 }
-inline bool operator<=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
+inline bool operator<=(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name < r.name) || (l.inc < r.inc) ||
     (l.name == r.name && l.inc == r.inc && l.tid <= r.tid);
 }
-inline bool operator>(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) { return !(l <= r); }
-inline bool operator>=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) { return !(l < r); }
+inline bool operator>(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l <= r); }
+inline bool operator>=(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l < r); }
 
 namespace __gnu_cxx {
-  template<> struct hash<ceph_osd_reqid_t> {
-    size_t operator()(const ceph_osd_reqid_t &r) const { 
+  template<> struct hash<osd_reqid_t> {
+    size_t operator()(const osd_reqid_t &r) const { 
       static blobhash H;
       return H((const char*)&r, sizeof(r));
     }

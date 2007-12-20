@@ -821,7 +821,6 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   // ack or safe?
   if (m->is_safe()) {
-    //dout(15) << " handle_osd_write_reply commit on " << tid << dendl;
     assert(wr->tid_version.count(tid) == 0 ||
            m->get_version() == wr->tid_version[tid]);
 
@@ -845,7 +844,6 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     }
   } else {
     // ack.
-    //dout(15) << " handle_osd_write_reply ack on " << tid << dendl;
     assert(wr->waitfor_ack.count(tid));
     wr->waitfor_ack.erase(tid);
     

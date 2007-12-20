@@ -9,10 +9,11 @@ int ceph_osdc_debug = 50;
 #define DOUT_PREFIX "osdc: "
 #include "super.h"
 
-void ceph_osdc_init(struct ceph_osd_client *osdc)
+void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 {
 	dout(5, "init\n");
 	spin_lock_init(&osdc->lock);
+	osdc->client = client;
 	osdc->osdmap = NULL;
 	osdc->last_requested_map = 0;
 	osdc->last_tid = 0;
@@ -118,5 +119,17 @@ ceph_osdc_create_request(struct ceph_osd_client *osdc, int op)
 {
 	struct ceph_msg *req;
 	struct ceph_osd_request_head *head;
+	
+	req = ceph_msg_new(CEPH_MSG_OSD_OP, sizeof(struct ceph_osd_request_head), 0, 0);
+	if (IS_ERR(req))
+		return req;
+	memset(req->front.iov_base, 0, req->front.iov_len);
+	head = req->front.iov_base;
 
+	/* encode head */
+	head->op = cpu_to_le32(op);
+	ceph_encode_inst(&head->client_inst, &osdc->client->msgr->inst);
+	head->client_inc = 1; /* always, for now. */
+	
+	return req;
 }

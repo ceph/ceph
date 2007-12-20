@@ -27,6 +27,7 @@ struct ceph_osd_request {
 
 struct ceph_osd_client {
 	spinlock_t             lock;
+	struct ceph_client      *client;
 	struct ceph_osdmap     *osdmap;       /* current map */
 	__u64                  last_requested_map;
 	__u64                  last_tid;      /* tid of last request */
@@ -34,7 +35,7 @@ struct ceph_osd_client {
 	struct completion      map_waiters;
 };
 
-extern void ceph_osdc_init(struct ceph_osd_client *osdc);
+extern void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client);
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg);
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg);
 

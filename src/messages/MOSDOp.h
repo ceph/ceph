@@ -66,15 +66,13 @@ private:
   friend class MOSDOpReply;
 
 public:
-  const ceph_osd_reqid_t& get_reqid() { return head.reqid; }
-  const tid_t          get_client_tid() { return head.reqid.tid; }
-  int                  get_client_inc() { return head.reqid.inc; }
-
-  entity_name_t get_client() { return head.reqid.name; }
-  entity_inst_t get_client_inst() { 
-    return entity_inst_t(head.reqid.name, head.client_addr); 
-  }
-  void set_client_addr(const entity_addr_t& a) { head.client_addr = a.v; }
+  osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, head.client_inc, head.tid); }
+  int get_client_inc() { return head.client_inc; }
+  tid_t get_client_tid() { return head.tid; }
+  
+  entity_name_t get_client() { return head.client_inst.name; }
+  entity_inst_t get_client_inst() { return head.client_inst; }
+  void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a.v; }
 
   object_t get_oid() { return object_t(head.oid); }
   pg_t     get_pg() { return head.layout.pgid; }
@@ -107,11 +105,10 @@ public:
          object_t oid, ceph_object_layout_t ol, epoch_t mapepoch, int op) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
-    head.client_addr = asker.addr.v;
-    head.reqid.name = asker.name.v;
-    head.reqid.inc = inc;
-    head.reqid.tid = tid;
-
+    head.client_inst.name = asker.name.v;
+    head.client_inst.addr = asker.addr.v;
+    head.tid = tid;
+    head.client_inc = inc;
     head.oid = oid;
     head.layout = ol;
     head.osdmap_epoch = mapepoch;
@@ -150,7 +147,7 @@ public:
 
   virtual char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
-    out << "osd_op(" << head.reqid
+    out << "osd_op(" << get_reqid()
 	<< " " << get_opname(head.op)
 	<< " " << head.oid;
     if (head.length) out << " " << head.offset << "~" << head.length;
