@@ -378,7 +378,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 
   dout(7) << "handle_osd_stat_reply " << tid 
 		  << " r=" << m->get_result()
-		  << " size=" << m->get_object_size()
+		  << " size=" << m->get_length()
 		  << dendl;
   OSDStat *st = op_stat[ tid ];
   op_stat.erase( tid );
@@ -402,7 +402,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (m->get_result() < 0) {
 	*st->size = -1;
   } else {
-	*st->size = m->get_object_size();
+	*st->size = m->get_length();
   }
 
   // finish, clean up
@@ -793,14 +793,14 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   if (op_modify.count(tid) == 0) {
     dout(7) << "handle_osd_modify_reply " << tid 
-            << (m->get_commit() ? " commit":" ack")
+            << (m->is_safe() ? " commit":" ack")
             << " ... stray" << dendl;
     delete m;
     return;
   }
 
   dout(7) << "handle_osd_modify_reply " << tid 
-          << (m->get_commit() ? " commit":" ack")
+          << (m->is_safe() ? " commit":" ack")
           << " v " << m->get_version() << " in " << m->get_pg()
           << dendl;
   OSDModify *wr = op_modify[ tid ];
@@ -819,8 +819,8 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   assert(m->get_result() >= 0);
 
-  // ack or commit?
-  if (m->get_commit()) {
+  // ack or safe?
+  if (m->is_safe()) {
     //dout(15) << " handle_osd_write_reply commit on " << tid << dendl;
     assert(wr->tid_version.count(tid) == 0 ||
            m->get_version() == wr->tid_version[tid]);

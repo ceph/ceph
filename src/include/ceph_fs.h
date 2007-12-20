@@ -428,9 +428,9 @@ enum {
 };
 
 enum {
-	CEPH_OSD_OP_WANT_ACK = 1,
-	CEPH_OSD_OP_WANT_SAFE = 2,
-	CEPH_OSD_OP_IS_RETRY = 4
+	CEPH_OSD_OP_ACK = 1,
+	CEPH_OSD_OP_SAFE = 2,
+	CEPH_OSD_OP_RETRY = 4
 };
 
 struct ceph_osd_peer_stat {
@@ -461,6 +461,18 @@ struct ceph_osd_request_head {
 	/* semi-hack, fix me */
 	__u32                shed_count;
 	ceph_osd_peer_stat_t peer_stat;
+} __attribute__ ((packed));
+
+struct ceph_osd_reply_head {
+	ceph_osd_reqid_t     reqid;
+	__u32                op;
+	__u32                flags;
+	ceph_object_t        oid;
+	ceph_object_layout_t layout;
+	ceph_epoch_t         osdmap_epoch;
+	__s32                result;
+	__u64                offset, length;
+	ceph_eversion_t      reassert_version;
 } __attribute__ ((packed));
 
 #endif

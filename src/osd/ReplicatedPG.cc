@@ -530,7 +530,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	memset(&st, sizeof(st), 0);
 	r = osd->store->stat(oid, &st);
 	if (r >= 0)
-	  reply->set_object_size(st.st_size);
+	  reply->set_length(st.st_size);
       }
       break;
 

@@ -117,7 +117,7 @@ public:
     head.osdmap_epoch = mapepoch;
     head.op = op;
     
-    head.flags = CEPH_OSD_OP_WANT_ACK | CEPH_OSD_OP_WANT_SAFE;
+    head.flags = CEPH_OSD_OP_ACK | CEPH_OSD_OP_SAFE;
   }
   MOSDOp() {}
 
@@ -127,13 +127,13 @@ public:
   void set_offset(off_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   
-  bool wants_ack() { return head.flags & CEPH_OSD_OP_WANT_ACK; }
-  bool wants_commit() { return head.flags & CEPH_OSD_OP_WANT_SAFE; }
-  bool is_retry_attempt() const { return head.flags & CEPH_OSD_OP_IS_RETRY; }
+  bool wants_ack() { return head.flags & CEPH_OSD_OP_ACK; }
+  bool wants_commit() { return head.flags & CEPH_OSD_OP_SAFE; }
+  bool is_retry_attempt() const { return head.flags & CEPH_OSD_OP_RETRY; }
 
-  void set_want_ack(bool b) { head.flags |= CEPH_OSD_OP_WANT_ACK; }
-  void set_want_commit(bool b) { head.flags |= CEPH_OSD_OP_WANT_SAFE; }
-  void set_retry_attempt(bool a) { head.flags |= CEPH_OSD_OP_IS_RETRY; }
+  void set_want_ack(bool b) { head.flags |= CEPH_OSD_OP_ACK; }
+  void set_want_commit(bool b) { head.flags |= CEPH_OSD_OP_SAFE; }
+  void set_retry_attempt(bool a) { head.flags |= CEPH_OSD_OP_RETRY; }
 
   // marshalling
   virtual void decode_payload() {

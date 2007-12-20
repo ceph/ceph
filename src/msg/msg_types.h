@@ -111,14 +111,6 @@ struct entity_addr_t {
     v.ipaddr.sin_family = AF_INET;
   }
 
-  /*
-  void set_addr(sockaddr_in& a) {
-    memcpy((char*)&v.ipaddr, (char*)&a, sizeof(a));
-  }
-  void make_addr(sockaddr_in& a) const {
-    memcpy((char*)&a, (char*)&v.ipaddr, sizeof(a));
-  }
-  */
   void set_ipquad(int pos, int val) {
     unsigned char *ipq = (unsigned char*)&v.ipaddr.sin_addr.s_addr;
     ipq[pos] = val;
