@@ -1,0 +1,6 @@
+*.o
+*~
+*.co
+.depend
+web/*.html
+gmon.out

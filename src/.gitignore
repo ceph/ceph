@@ -1,0 +1,15 @@
+cfuse
+cmds
+cmon
+cmonctl
+cosd
+csyn
+dupstore
+fakefuse
+fakesyn
+mkmonmap
+newsyn
+dev
+mondata
+log
+.ceph_monmap
