@@ -34,6 +34,7 @@ class MOSDSubOpReply : public Message {
     epoch_t map_epoch;
 
     // subop metadata
+    osdreqid_t reqid;
     pg_t pgid;
     tid_t rep_tid;
     int32_t op;
@@ -75,8 +76,9 @@ class MOSDSubOpReply : public Message {
 
 public:
   MOSDSubOpReply(MOSDSubOp *req, int result, epoch_t e, bool commit) :
-    Message(CEPH_MSG_OSD_OPREPLY) {
+    Message(MSG_OSD_SUBOPREPLY) {
     st.map_epoch = e;
+    st.reqid = req->get_reqid();
     st.pgid = req->get_pg();
     st.rep_tid = req->get_rep_tid();
     st.op = req->get_op();
@@ -104,9 +106,9 @@ public:
   virtual char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_op_reply(" << st.reqid
+    out << "osd_sub_op_reply(" << st.reqid
 	<< " " << MOSDOp::get_opname(st.op)
-	<< " " << st.oid;
+	<< " " << st.poid;
     if (st.length) out << " " << st.offset << "~" << st.length;
     if (st.op >= 10) {
       if (st.commit)

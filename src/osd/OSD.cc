@@ -44,6 +44,8 @@
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDSubOp.h"
+#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
@@ -965,7 +967,6 @@ void OSD::dispatch(Message *m)
       switch (m->get_type()) {
 
       case MSG_OSD_PING:
-        // take note.
         handle_osd_ping((MOSDPing*)m);
         break;
         
@@ -985,13 +986,17 @@ void OSD::dispatch(Message *m)
         handle_pg_activate_set((MOSDPGActivateSet*)m);
         break;
 
+	// client ops
       case CEPH_MSG_OSD_OP:
         handle_op((MOSDOp*)m);
         break;
         
         // for replication etc.
-      case CEPH_MSG_OSD_OPREPLY:
-        handle_op_reply((MOSDOpReply*)m);
+      case MSG_OSD_SUBOP:
+	handle_sub_op((MOSDSubOp*)m);
+	break;
+      case MSG_OSD_SUBOPREPLY:
+        handle_sub_op_reply((MOSDSubOpReply*)m);
         break;
         
         
@@ -2301,8 +2306,10 @@ void OSD::handle_op(MOSDOp *op)
     // do it now.
     if (op->get_type() == CEPH_MSG_OSD_OP)
       pg->do_op((MOSDOp*)op);
-    else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
-      pg->do_op_reply((MOSDOpReply*)op);
+    else if (op->get_type() == MSG_OSD_SUBOP)
+      pg->do_sub_op((MOSDSubOp*)op);
+    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
+      pg->do_sub_op_reply((MOSDSubOpReply*)op);
     else 
       assert(0);
   } else {
@@ -2314,7 +2321,42 @@ void OSD::handle_op(MOSDOp *op)
 }
 
 
-void OSD::handle_op_reply(MOSDOpReply *op)
+void OSD::handle_sub_op(MOSDSubOp *op)
+{
+  dout(10) << "handle_sub_op " << *op << " epoch " << op->get_map_epoch() << dendl;
+  if (op->get_map_epoch() < boot_epoch) {
+    dout(3) << "replica op from before boot" << dendl;
+    delete op;
+    return;
+  }
+
+  // must be a rep op.
+  assert(op->get_source().is_osd());
+  
+  // make sure we have the pg
+  const pg_t pgid = op->get_pg();
+
+  // require same or newer map
+  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+
+  // share our map with sender, if they're old
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+
+  if (!_have_pg(pgid)) {
+    // hmm.
+    delete op;
+    return;
+  } 
+
+  PG *pg = _lookup_lock_pg(pgid);
+  if (g_conf.osd_maxthreads < 1) {
+    pg->do_sub_op(op);    // do it now
+  } else {
+    enqueue_op(pg, op);     // queue for worker threads
+  }
+  pg->unlock();
+}
+void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
   if (op->get_map_epoch() < boot_epoch) {
     dout(3) << "replica op reply from before boot" << dendl;
@@ -2342,7 +2384,7 @@ void OSD::handle_op_reply(MOSDOpReply *op)
 
   PG *pg = _lookup_lock_pg(pgid);
   if (g_conf.osd_maxthreads < 1) {
-    pg->do_op_reply(op);    // do it now
+    pg->do_sub_op_reply(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
   }
@@ -2397,8 +2439,10 @@ void OSD::dequeue_op(PG *pg)
   // do it
   if (op->get_type() == CEPH_MSG_OSD_OP)
     pg->do_op((MOSDOp*)op); // do it now
-  else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
-    pg->do_op_reply((MOSDOpReply*)op);
+  else if (op->get_type() == MSG_OSD_SUBOP)
+    pg->do_sub_op((MOSDSubOp*)op);
+  else if (op->get_type() == MSG_OSD_SUBOPREPLY)
+    pg->do_sub_op_reply((MOSDSubOpReply*)op);
   else 
     assert(0);
 

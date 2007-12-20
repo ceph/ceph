@@ -38,6 +38,8 @@ using namespace __gnu_cxx;
 class OSD;
 class MOSDOp;
 class MOSDOpReply;
+class MOSDSubOp;
+class MOSDSubOpReply;
 class MOSDPGActivateSet;
 
 /** PG - Replica Placement Group
@@ -493,7 +495,6 @@ protected:
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 
-
   // stats
   off_t stat_size;
   off_t stat_num_blocks;
@@ -645,14 +646,15 @@ public:
   // abstract bits
   virtual bool preprocess_op(MOSDOp *op, utime_t now) { return false; } 
   virtual void do_op(MOSDOp *op) = 0;
-  virtual void do_op_reply(MOSDOpReply *op) = 0;
+  virtual void do_sub_op(MOSDSubOp *op) = 0;
+  virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual bool is_missing_object(object_t oid) = 0;
-  virtual void wait_for_missing_object(object_t oid, MOSDOp *op) = 0;
+  virtual void wait_for_missing_object(object_t oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_acker_change() = 0;

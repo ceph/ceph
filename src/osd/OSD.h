@@ -362,7 +362,8 @@ private:
 
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
-  void handle_op_reply(class MOSDOpReply *m);
+  void handle_sub_op(class MOSDSubOp *m);
+  void handle_sub_op_reply(class MOSDSubOpReply *m);
 
   void force_remount();
 };

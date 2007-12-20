@@ -79,20 +79,19 @@ public:
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
  
   MOSDSubOp(osdreqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
-	    epoch_t mape, tid_t rtid, eversion_t v, evertsion_t pgtt) :
-    Message(CEPH_MSG_OSD_SUBOP) {
+	    epoch_t mape, tid_t rtid, eversion_t v) :
+    Message(MSG_OSD_SUBOP) {
     memset(&st, 0, sizeof(st));
     st.reqid = r;
 
     st.pgid = p;
     st.poid = po;
-    st.o = op;
-    st.of = offset;
-    st.le = length;
+    st.op = o;
+    st.offset = of;
+    st.length = le;
     st.map_epoch = mape;
     st.rep_tid = rtid;
     st.version = v;
-    st.pg_trim_to = pgtt;
   }
   MOSDSubOp() {}
 
@@ -112,7 +111,7 @@ public:
   virtual char *get_type_name() { return "osd_sub_op"; }
   void print(ostream& out) {
     out << "osd_sub_op(" << st.reqid
-	<< " " << get_opname(st.op)
+	<< " " << MOSDOp::get_opname(st.op)
 	<< " " << st.poid
 	<< " v" << st.version;    
     if (st.length) out << " " << st.offset << "~" << st.length;

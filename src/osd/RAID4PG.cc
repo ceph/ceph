@@ -70,7 +70,12 @@ void RAID4PG::do_op(MOSDOp *op)
 
 }
 
-void RAID4PG::do_op_reply(MOSDOpReply *reply)
+void RAID4PG::do_sub_op(MOSDSubOp *op)
+{
+
+}
+
+void RAID4PG::do_sub_op_reply(MOSDSubOpReply *reply)
 {
 
 }
@@ -104,7 +109,7 @@ bool RAID4PG::is_missing_object(object_t oid)
   return false;
 }
 
-void RAID4PG::wait_for_missing_object(object_t oid, MOSDOp *op)
+void RAID4PG::wait_for_missing_object(object_t oid, Message *op)
 {
   //assert(0);
 }

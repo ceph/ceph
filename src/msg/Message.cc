@@ -175,10 +175,10 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   case CEPH_MSG_OSD_OPREPLY:
     m = new MOSDOpReply();
     break;
-  case CEPH_MSG_OSD_SUBOP:
+  case MSG_OSD_SUBOP:
     m = new MOSDSubOp();
     break;
-  case CEPH_MSG_OSD_SUBOPREPLY:
+  case MSG_OSD_SUBOPREPLY:
     m = new MOSDSubOpReply();
     break;
 

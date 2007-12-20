@@ -51,8 +51,6 @@ class MOSDOpReply : public Message {
     eversion_t pg_complete_thru;
     
     epoch_t map_epoch;
-
-    osd_peer_stat_t peer_stat;
   } st;
 
   map<string,bufferptr> attrset;
@@ -85,9 +83,6 @@ class MOSDOpReply : public Message {
 
   void set_op(int op) { st.op = op; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
-
-  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
-  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
 
   // osdmap
   epoch_t get_map_epoch() { return st.map_epoch; }
