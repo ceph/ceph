@@ -1121,7 +1121,7 @@ void ObjectCacher::rdlock(Object *o)
     commit->tid = 
       ack->tid = 
       o->last_write_tid = 
-      objecter->lock(OSD_OP_RDLOCK, o->get_oid(), o->get_layout(), ack, commit);
+      objecter->lock(CEPH_OSD_OP_RDLOCK, o->get_oid(), o->get_layout(), ack, commit);
   }
   
   // stake our claim.
@@ -1153,10 +1153,10 @@ void ObjectCacher::wrlock(Object *o)
     int op = 0;
     if (o->lock_state == Object::LOCK_RDLOCK) {
       o->lock_state = Object::LOCK_UPGRADING;
-      op = OSD_OP_UPLOCK;
+      op = CEPH_OSD_OP_UPLOCK;
     } else {
       o->lock_state = Object::LOCK_WRLOCKING;
-      op = OSD_OP_WRLOCK;
+      op = CEPH_OSD_OP_WRLOCK;
     }
     
     C_LockAck *ack = new C_LockAck(this, o->get_oid());
@@ -1209,7 +1209,7 @@ void ObjectCacher::rdunlock(Object *o)
   commit->tid = 
     lockack->tid = 
     o->last_write_tid = 
-    objecter->lock(OSD_OP_RDUNLOCK, o->get_oid(), o->get_layout(), lockack, commit);
+    objecter->lock(CEPH_OSD_OP_RDUNLOCK, o->get_oid(), o->get_layout(), lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1229,11 +1229,11 @@ void ObjectCacher::wrunlock(Object *o)
   int op = 0;
   if (o->rdlock_ref > 0) {
     dout(10) << "wrunlock rdlock " << *o << dendl;
-    op = OSD_OP_DNLOCK;
+    op = CEPH_OSD_OP_DNLOCK;
     o->lock_state = Object::LOCK_DOWNGRADING;
   } else {
     dout(10) << "wrunlock wrunlock " << *o << dendl;
-    op = OSD_OP_WRUNLOCK;
+    op = CEPH_OSD_OP_WRUNLOCK;
     o->lock_state = Object::LOCK_WRUNLOCKING;
   }
 

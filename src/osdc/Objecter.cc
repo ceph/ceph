@@ -219,7 +219,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         
         // WRITE
         if (wr->tid_version.count(tid)) {
-          if (wr->op == OSD_OP_WRITE &&
+          if (wr->op == CEPH_OSD_OP_WRITE &&
               !g_conf.objecter_buffer_uncommitted) {
             dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
           } else {
@@ -290,24 +290,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   // read or modify?
   switch (m->get_op()) {
-  case OSD_OP_READ:
+  case CEPH_OSD_OP_READ:
     handle_osd_read_reply(m);
     break;
 
-  case OSD_OP_STAT:
+  case CEPH_OSD_OP_STAT:
     handle_osd_stat_reply(m);
     break;
     
-  case OSD_OP_WRNOOP:
-  case OSD_OP_WRITE:
-  case OSD_OP_ZERO:
-  case OSD_OP_DELETE:
-  case OSD_OP_WRUNLOCK:
-  case OSD_OP_WRLOCK:
-  case OSD_OP_RDLOCK:
-  case OSD_OP_RDUNLOCK:
-  case OSD_OP_UPLOCK:
-  case OSD_OP_DNLOCK:
+  case CEPH_OSD_OP_WRNOOP:
+  case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_ZERO:
+  case CEPH_OSD_OP_DELETE:
+  case CEPH_OSD_OP_WRUNLOCK:
+  case CEPH_OSD_OP_WRLOCK:
+  case CEPH_OSD_OP_RDLOCK:
+  case CEPH_OSD_OP_RDUNLOCK:
+  case CEPH_OSD_OP_UPLOCK:
+  case CEPH_OSD_OP_DNLOCK:
     handle_osd_modify_reply(m);
     break;
 
@@ -357,7 +357,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
   if (pg.acker() >= 0) {
 	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 						   ex.oid, ex.layout, osdmap->get_epoch(), 
-						   OSD_OP_STAT);
+						   CEPH_OSD_OP_STAT);
 
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
   }
@@ -473,7 +473,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
   if (pg.acker() >= 0) {
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
-			   OSD_OP_READ);
+			   CEPH_OSD_OP_READ);
     m->set_length(ex.length);
     m->set_offset(ex.start);
     m->set_retry_attempt(retry);
@@ -677,7 +677,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, buff
 tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = new OSDModify(OSD_OP_ZERO);
+  OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -760,7 +760,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     
     // what type of op?
     switch (wr->op) {
-    case OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITE:
       {
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
@@ -864,7 +864,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
       
       // buffer uncommitted?
       if (!g_conf.objecter_buffer_uncommitted &&
-          wr->op == OSD_OP_WRITE) {
+          wr->op == CEPH_OSD_OP_WRITE) {
         // discard buffer!
         ((OSDWrite*)wr)->bl.clear();
       }

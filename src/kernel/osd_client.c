@@ -9,6 +9,17 @@ int ceph_osdc_debug = 50;
 #define DOUT_PREFIX "osdc: "
 #include "super.h"
 
+void ceph_osdc_init(struct ceph_osd_client *osdc)
+{
+	dout(5, "init\n");
+	spin_lock_init(&osdc->lock);
+	osdc->osdmap = NULL;
+	osdc->last_requested_map = 0;
+	osdc->last_tid = 0;
+	INIT_RADIX_TREE(&osdc->request_tree, GFP_KERNEL);
+	init_completion(&osdc->map_waiters);
+}
+
 void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	void *p, *end, *next;
@@ -95,19 +106,17 @@ bad:
 
 
 
-void ceph_osdc_init(struct ceph_osd_client *osdc)
-{
-	dout(5, "init\n");
-	osdc->osdmap = NULL;
-	osdc->last_tid = 0;
-	INIT_RADIX_TREE(&osdc->request_tree, GFP_KERNEL);
-	osdc->last_requested_map = 0;
-	init_completion(&osdc->map_waiters);
-}
-
-
 void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	dout(5, "handle_reply\n");
 }
 
+
+
+struct ceph_msg *
+ceph_osdc_create_request(struct ceph_osd_client *osdc, int op)
+{
+	struct ceph_msg *req;
+	struct ceph_osd_request_head *head;
+
+}

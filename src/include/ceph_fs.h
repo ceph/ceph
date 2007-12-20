@@ -129,7 +129,7 @@ typedef union ceph_pg ceph_pg_t;
  */
 struct ceph_object_layout {
 	ceph_pg_t ol_pgid;
-	__u32 ol_stripe_unit;  
+	__u32     ol_stripe_unit;  
 };
 
 
@@ -145,6 +145,14 @@ struct ceph_object_extent {
 	/* buffer extent reverse mapping? */
 };
 
+/*
+ * compound epoch+version, used by rados to serialize mutations
+ */
+struct ceph_eversion {
+	ceph_epoch_t epoch;
+	__u64        version;
+} __attribute__ ((packed));
+typedef struct ceph_eversion ceph_eversion_t;
 
 /*
  * osd map bits
@@ -294,7 +302,7 @@ enum {
 
 struct ceph_mds_request_head {
 	struct ceph_entity_inst client_inst;
-	__u64 tid, oldest_client_tid;
+	ceph_tid_t tid, oldest_client_tid;
 	__u64 mdsmap_epoch; /* on client */
 	__u32 num_fwd;
 	__u32 retry_attempt;
@@ -345,7 +353,7 @@ struct ceph_mds_request_head {
 
 /* client reply */
 struct ceph_mds_reply_head {
-	__u64 tid;
+	ceph_tid_t tid;
 	__u32 op;
 	__s32 result;
 	__u32 file_caps;
@@ -377,6 +385,69 @@ struct ceph_mds_reply_dirfrag {
 	__u8 is_rep;
 	__u32 ndist;
 	__u32 dist[];
+} __attribute__ ((packed));
+
+
+
+
+/*
+ * osd ops
+ */
+struct ceph_osd_reqid {
+	struct ceph_entity_name name; /* who */
+	__u32                   inc;  /* incarnation */
+	ceph_tid_t              tid;
+} __attribute__ ((packed));
+typedef struct ceph_osd_reqid ceph_osd_reqid_t;
+
+enum {
+	CEPH_OSD_OP_READ       = 1,
+	CEPH_OSD_OP_STAT       = 2,
+	CEPH_OSD_OP_REPLICATE  = 3,
+	CEPH_OSD_OP_UNREPLICATE = 4,
+	CEPH_OSD_OP_WRNOOP     = 10,
+	CEPH_OSD_OP_WRITE      = 11,
+	CEPH_OSD_OP_DELETE     = 12,
+	CEPH_OSD_OP_TRUNCATE   = 13,
+	CEPH_OSD_OP_ZERO       = 14,
+
+	CEPH_OSD_OP_WRLOCK     = 20,
+	CEPH_OSD_OP_WRUNLOCK   = 21,
+	CEPH_OSD_OP_RDLOCK     = 22,
+	CEPH_OSD_OP_RDUNLOCK   = 23,
+	CEPH_OSD_OP_UPLOCK     = 24,
+	CEPH_OSD_OP_DNLOCK     = 25,
+	CEPH_OSD_OP_MININCLOCK = 26, // minimum incarnation lock
+
+	CEPH_OSD_OP_PULL       = 30,
+	CEPH_OSD_OP_PUSH       = 31,
+
+	CEPH_OSD_OP_BALANCEREADS   = 101,
+	CEPH_OSD_OP_UNBALANCEREADS = 102
+};
+
+enum {
+	CEPH_OSD_OP_WANT_ACK,
+	CEPH_OSD_OP_WANT_SAFE,
+	CEPH_OSD_OP_IS_RETRY
+};
+
+struct ceph_osd_request_head {
+	struct ceph_entity_inst   client;
+	ceph_osd_reqid_t          reqid;
+	__u32                     op;
+	__u64                     offset, length;
+	ceph_object_t             oid;
+	struct ceph_object_layout layout;
+	ceph_epoch_t              osdmap_epoch;
+
+	__u32                     flags;
+
+	/* hack, fix me */
+	ceph_tid_t      rep_tid;   
+	ceph_eversion_t pg_trim_to;
+	__u32 shed_count;
+	//osd_peer_stat_t peer_stat;
 } __attribute__ ((packed));
 
 #endif
