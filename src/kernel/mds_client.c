@@ -162,7 +162,7 @@ static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *
 
 	/* connect */
 	if (ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
-		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch); /* race fixme */
+		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
 		return;
 	} 
 	
@@ -280,7 +280,6 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* encode head */
 	head->op = cpu_to_le32(op);
 	ceph_encode_inst(&head->client_inst, &mdsc->client->msgr->inst);
-	/*FIXME: head->oldest_client_tid = cpu_to_le64(....);*/  
 
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
@@ -291,10 +290,24 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	return req;
 }
 
+/*
+ * return oldest (lowest) tid in request tree, 0 if none.
+ */
+__u64 get_oldest_tid(struct ceph_mds_client *mdsc)
+{
+	struct ceph_mds_request *first;
+	if (radix_tree_gang_lookup(&mdsc->request_tree, 
+				   (void**)&first, 0, 1) <= 0)
+		return 0;
+	dout(10, "oldest tid is %llu\n", first->r_tid);
+	return first->r_tid;
+}
+
 int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
 			 struct ceph_mds_reply_info *rinfo, int mds)
 {
 	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *rhead;
 	struct ceph_mds_session *session;
 	struct ceph_msg *reply = 0;
 	int err;
@@ -326,7 +339,9 @@ retry:
 	if (mdsc->sessions[mds]->s_state != CEPH_MDS_SESSION_OPEN) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
+		dout(30, "mdsc_do_request waiting on session %p\n", session);
 		wait_for_completion(&session->s_completion);
+		dout(30, "mdsc_do_request done waiting on session %p\n", session);
 		put_session(session);
 		spin_lock(&mdsc->lock);
 		goto retry;
@@ -334,40 +349,33 @@ retry:
 	put_session(session);
 
 	/* make request? */
-	if (req->r_num_mds < 4) {
-		req->r_mds[req->r_num_mds++] = mds;
-		req->r_resend_mds = -1;  /* forget any specific mds hint */
-		req->r_attempts++;
-		send_msg_mds(mdsc, req->r_request, mds);
-	}
+	BUG_ON(req->r_num_mds >= 2);
+	req->r_mds[req->r_num_mds++] = mds;
+	req->r_resend_mds = -1;  /* forget any specific mds hint */
+	req->r_attempts++;
+	rhead = req->r_request->front.iov_base;
+	rhead->retry_attempt = cpu_to_le32(req->r_attempts);
+	rhead->oldest_client_tid = cpu_to_le64(get_oldest_tid(mdsc));
+	send_msg_mds(mdsc, req->r_request, mds);
 
 	/* wait */
 	spin_unlock(&mdsc->lock);
 	wait_for_completion(&req->r_completion);
-
-	if (!req->r_reply) {
-		spin_lock(&mdsc->lock);
-		goto retry;
-	}
-	reply = req->r_reply;
-
 	spin_lock(&mdsc->lock);
+
+	/* clean up request, parse reply */
+	if (!req->r_reply) 
+		goto retry;
+	reply = req->r_reply;
 	unregister_request(mdsc, req);
 	spin_unlock(&mdsc->lock);
-
 	put_request(req);
-
-	/* parse reply */
-	err = ceph_mdsc_parse_reply_info(reply, rinfo);
-	if (err < 0) 
+	if ((err = ceph_mdsc_parse_reply_info(reply, rinfo)) < 0)
 		return err;
 
 	dout(30, "mdsc_do_request done on %p\n", msg);
 	return 0;
 }
-
-
-
 
 void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
@@ -404,7 +412,9 @@ done:
 	return;
 }
 
-
+/*
+ * mds reply parsing
+ */
 int parse_reply_info_in(void **p, void *end, struct ceph_mds_reply_info_in *info)
 {
 	int err;
@@ -569,6 +579,9 @@ void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info)
 }
 
 
+/*
+ * handle mds notification that our request has been forwarded.
+ */
 void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
@@ -619,16 +632,16 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 	}
 
 	put_request(req);
-
-out:
 	return;
 
 bad:
-	derr(0, "corrupt forward message\n");
-	goto out;
+	derr(0, "problem decoding message, err=%d\n", err);
 }
 
 
+/*
+ * handle mds map update.
+ */
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	ceph_epoch_t epoch;
@@ -680,6 +693,9 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	complete(&mdsc->map_waiters);
 
+	/* kick any requests pending for failed/recovering mds's */
+	// FIXME
+
 out:
 	return;
 bad:
@@ -689,3 +705,5 @@ bad2:
 	dout(1, "no memory to decode new mdsmap\n");
 	goto out;
 }
+
+/* eof */
