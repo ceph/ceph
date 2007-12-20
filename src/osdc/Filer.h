@@ -115,7 +115,7 @@ class Filer {
            size_t len,
            Context *onack,
            Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_ZERO);
+    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
@@ -125,7 +125,7 @@ class Filer {
 	     size_t len,
 	     Context *onack,
 	     Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_DELETE);
+    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }

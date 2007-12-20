@@ -12,7 +12,7 @@
 struct ceph_client;
 
 /*
- * state associated with an individual MDS<->client session
+ * state associated with each MDS<->client session
  */
 enum {
 	CEPH_MDS_SESSION_IDLE,
@@ -21,47 +21,44 @@ enum {
 	CEPH_MDS_SESSION_CLOSING
 };
 struct ceph_mds_session {
-	int s_state;
-	__u64 s_cap_seq;    /* cap message count/seq from mds */
-	atomic_t s_ref;
+	int               s_state;
+	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	atomic_t          s_ref;
 	struct completion s_completion;
 };
 
+/*
+ * an in-flight request
+ */
 struct ceph_mds_request {
-	__u64 r_tid;
-	struct ceph_msg *r_request;
-	struct ceph_msg *r_reply;
+	__u64             r_tid;
+	struct ceph_msg * r_request;  /* original request */
+	struct ceph_msg * r_reply;   
 	
-	__u32 r_mds[4];      /* set of mds's with whom request may be outstanding */
-        int r_num_mds;       /* items in r_mds */
+	__u32             r_mds[2];   /* set of mds's with whom request may be outstanding */
+        int               r_num_mds;  /* items in r_mds */
 	
-	int r_attempts;
-	int r_num_fwd;       /* number of forward attempts */
-        int r_resend_mds;    /* mds to resend to next, if any*/
+	int               r_attempts;   /* resend attempts */
+	int               r_num_fwd;    /* number of forward attempts */
+        int               r_resend_mds; /* mds to resend to next, if any*/
 
-	atomic_t r_ref;
+	atomic_t          r_ref;
 	struct completion r_completion;
 };
-
 
 /* 
  * mds client state
  */
 struct ceph_mds_client {
-	spinlock_t lock;
-
-	struct ceph_client *client;
-	struct ceph_mdsmap *mdsmap;  /* mds map */
-
-	/* mds sessions */
-	struct ceph_mds_session **sessions;  /* NULL if no session */
-	int max_sessions;            /* size of s_mds_sessions array */
-
-	__u64 last_tid;              /* id of last mds request */
-	struct radix_tree_root request_tree;  /* pending mds requests */
-
-	__u64 last_requested_map;
-	struct completion map_waiters;
+	spinlock_t              lock;          /* protects all nested structures */
+	struct ceph_client      *client;
+	struct ceph_mdsmap      *mdsmap;
+	struct ceph_mds_session **sessions;    /* NULL if no session */
+	int                     max_sessions;  /* size of s_mds_sessions array */
+	__u64                   last_tid;      /* id of most recent mds request */
+	struct radix_tree_root  request_tree;  /* pending mds requests */
+	__u64                   last_requested_map;
+	struct completion       map_waiters;
 };
 
 /*
@@ -69,25 +66,25 @@ struct ceph_mds_client {
  */
 struct ceph_mds_reply_info_in {
 	struct ceph_mds_reply_inode *in;
-	__u32 symlink_len;
-	char *symlink;
+	__u32                       symlink_len;
+	char                        *symlink;
 };
 
 struct ceph_mds_reply_info {
-	struct ceph_msg *reply;
-	struct ceph_mds_reply_head *head;
+	struct ceph_msg               *reply;
+	struct ceph_mds_reply_head    *head;
 
-	int trace_nr;
+	int                           trace_nr; 
 	struct ceph_mds_reply_info_in *trace_in;
 	struct ceph_mds_reply_dirfrag **trace_dir;
-	char **trace_dname;
-	__u32 *trace_dname_len;
+	char                          **trace_dname;
+	__u32                         *trace_dname_len;
 
 	struct ceph_mds_reply_dirfrag *dir_dir;
-	int dir_nr;
+	int                           dir_nr;
 	struct ceph_mds_reply_info_in *dir_in;
-	char **dir_dname;
-	__u32 *dir_dname_len;
+	char                          **dir_dname;
+	__u32                         *dir_dname_len;
 };
 
 

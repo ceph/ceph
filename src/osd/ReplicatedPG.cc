@@ -161,7 +161,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 ObjectLayout(info.pgid),
 				 osd->osdmap->get_epoch(),
-				 OSD_OP_BALANCEREADS);
+				 CEPH_OSD_OP_BALANCEREADS);
 	do_op(pop);
       }
       if (is_balanced && !should_balance &&
@@ -172,7 +172,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 ObjectLayout(info.pgid),
 				 osd->osdmap->get_epoch(),
-				 OSD_OP_UNBALANCEREADS);
+				 CEPH_OSD_OP_UNBALANCEREADS);
 	do_op(pop);
       }
     }
@@ -359,33 +359,33 @@ void ReplicatedPG::do_op(MOSDOp *op)
   switch (op->get_op()) {
     
     // reads
-  case OSD_OP_READ:
-  case OSD_OP_STAT:
+  case CEPH_OSD_OP_READ:
+  case CEPH_OSD_OP_STAT:
     op_read(op);
     break;
     
     // rep stuff
-  case OSD_OP_PULL:
+  case CEPH_OSD_OP_PULL:
     op_pull(op);
     break;
-  case OSD_OP_PUSH:
+  case CEPH_OSD_OP_PUSH:
     op_push(op);
     break;
     
     // writes
-  case OSD_OP_WRNOOP:
-  case OSD_OP_WRITE:
-  case OSD_OP_ZERO:
-  case OSD_OP_DELETE:
-  case OSD_OP_TRUNCATE:
-  case OSD_OP_WRLOCK:
-  case OSD_OP_WRUNLOCK:
-  case OSD_OP_RDLOCK:
-  case OSD_OP_RDUNLOCK:
-  case OSD_OP_UPLOCK:
-  case OSD_OP_DNLOCK:
-  case OSD_OP_BALANCEREADS:
-  case OSD_OP_UNBALANCEREADS:
+  case CEPH_OSD_OP_WRNOOP:
+  case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_ZERO:
+  case CEPH_OSD_OP_DELETE:
+  case CEPH_OSD_OP_TRUNCATE:
+  case CEPH_OSD_OP_WRLOCK:
+  case CEPH_OSD_OP_WRUNLOCK:
+  case CEPH_OSD_OP_RDLOCK:
+  case CEPH_OSD_OP_RDUNLOCK:
+  case CEPH_OSD_OP_UPLOCK:
+  case CEPH_OSD_OP_DNLOCK:
+  case CEPH_OSD_OP_BALANCEREADS:
+  case CEPH_OSD_OP_UNBALANCEREADS:
     if (op->get_source().is_osd()) {
       op_rep_modify(op);
     } else {
@@ -401,7 +401,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
 void ReplicatedPG::do_op_reply(MOSDOpReply *r)
 {
-  if (r->get_op() == OSD_OP_PUSH) {
+  if (r->get_op() == CEPH_OSD_OP_PUSH) {
     // continue peer recovery
     op_push_reply(r);
   } else {
@@ -497,7 +497,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     r = -EEXIST;
   } else {
     switch (op->get_op()) {
-    case OSD_OP_READ:
+    case CEPH_OSD_OP_READ:
       {
 	// read into a buffer
 	bufferlist bl;
@@ -512,7 +512,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
       osd->logger->inc("c_rdb", op->get_length());
       break;
 
-    case OSD_OP_STAT:
+    case CEPH_OSD_OP_STAT:
       {
 	struct stat st;
 	memset(&st, sizeof(st), 0);
@@ -581,7 +581,7 @@ void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t,
 
   // actual op
   int opcode = Log::Entry::MODIFY;
-  if (op->get_op() == OSD_OP_DELETE) opcode = Log::Entry::DELETE;
+  if (op->get_op() == CEPH_OSD_OP_DELETE) opcode = Log::Entry::DELETE;
   Log::Entry logentry(opcode, oid, version, op->get_reqid());
 
   dout(10) << "prepare_log_transaction " << op->get_op()
@@ -619,7 +619,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
            << dendl;
   
   // WRNOOP does nothing.
-  if (op->get_op() == OSD_OP_WRNOOP) 
+  if (op->get_op() == CEPH_OSD_OP_WRNOOP) 
     return;
 
   // raise last_complete?
@@ -647,31 +647,31 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
 
     // -- locking --
 
-  case OSD_OP_WRLOCK:
+  case CEPH_OSD_OP_WRLOCK:
     { // lock object
       t.setattr(oid, "wrlock", &op->get_client(), sizeof(entity_name_t));
     }
     break;  
-  case OSD_OP_WRUNLOCK:
+  case CEPH_OSD_OP_WRUNLOCK:
     { // unlock objects
       t.rmattr(oid, "wrlock");
     }
     break;
 
-  case OSD_OP_MININCLOCK:
+  case CEPH_OSD_OP_MININCLOCK:
     {
       uint32_t mininc = op->get_length();
       t.setattr(oid, "mininclock", &mininc, sizeof(mininc));
     }
     break;
 
-  case OSD_OP_BALANCEREADS:
+  case CEPH_OSD_OP_BALANCEREADS:
     {
       bool bal = true;
       t.setattr(oid, "balance-reads", &bal, sizeof(bal));
     }
     break;
-  case OSD_OP_UNBALANCEREADS:
+  case CEPH_OSD_OP_UNBALANCEREADS:
     {
       t.rmattr(oid, "balance-reads");
     }
@@ -680,7 +680,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
 
     // -- modify --
 
-  case OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITE:
     { // write
       assert(op->get_data().length() == op->get_length());
       bufferlist bl;
@@ -691,7 +691,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
     }
     break;
     
-  case OSD_OP_ZERO:
+  case CEPH_OSD_OP_ZERO:
     {
       // zero, remove, or truncate?
       struct stat st;
@@ -718,13 +718,13 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
     }
     break;
 
-  case OSD_OP_TRUNCATE:
+  case CEPH_OSD_OP_TRUNCATE:
     { // truncate
       t.truncate(oid, op->get_length() );
     }
     break;
     
-  case OSD_OP_DELETE:
+  case CEPH_OSD_OP_DELETE:
     { // delete
       t.remove(oid);
     }
@@ -735,7 +735,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
   }
   
   // object collection, version
-  if (op->get_op() == OSD_OP_DELETE) {
+  if (op->get_op() == CEPH_OSD_OP_DELETE) {
     // remove object from c
     t.collection_remove(pgid, oid);
   } else {
@@ -800,7 +800,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   object_t oid = repop->op->get_oid();
 
   switch (repop->op->get_op()) { 
-  case OSD_OP_UNBALANCEREADS:
+  case CEPH_OSD_OP_UNBALANCEREADS:
     dout(-10) << "apply_repop  completed unbalance-reads on " << oid << dendl;
     unbalancing_reads.erase(oid);
     if (waiting_for_unbalanced_reads.count(oid)) {
@@ -809,7 +809,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     }
     break;
 
-  case OSD_OP_BALANCEREADS:
+  case CEPH_OSD_OP_BALANCEREADS:
     dout(-10) << "apply_repop  completed balance-reads on " << oid << dendl;
     /*
     if (waiting_for_balanced_reads.count(oid)) {
@@ -819,7 +819,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     */
     break;
     
-  case OSD_OP_WRUNLOCK:
+  case CEPH_OSD_OP_WRUNLOCK:
     dout(-10) << "apply_repop  completed wrunlock on " << oid << dendl;
     if (waiting_for_wr_unlock.count(oid)) {
       osd->take_waiters(waiting_for_wr_unlock[oid]);
@@ -1064,7 +1064,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
   // assign version
   eversion_t clone_version;
   eversion_t nv = log.top;
-  if (op->get_op() != OSD_OP_WRNOOP) {
+  if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
     nv.epoch = osd->osdmap->get_epoch();
     nv.version++;
     assert(nv > info.last_update);
@@ -1154,13 +1154,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // --- locking ---
 
   // wrlock?
-  if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
+  if (op->get_op() != CEPH_OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
       block_if_wrlocked(op)) 
     return; // op will be handled later, after the object unlocks
   
   // balance-reads set?
   char v;
-  if ((op->get_op() != OSD_OP_BALANCEREADS && op->get_op() != OSD_OP_UNBALANCEREADS) &&
+  if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
       (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) >= 0 ||
        balancing_reads.count(op->get_oid()))) {
     
@@ -1173,7 +1173,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 			       op->get_oid(),
 			       ObjectLayout(info.pgid),
 			       osd->osdmap->get_epoch(),
-			       OSD_OP_UNBALANCEREADS);
+			       CEPH_OSD_OP_UNBALANCEREADS);
       do_op(pop);
     }
 
@@ -1188,7 +1188,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (is_dup(op->get_reqid())) {
     dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
-    op->set_op(OSD_OP_WRNOOP);
+    op->set_op(CEPH_OSD_OP_WRNOOP);
     opname = MOSDOp::get_opname(op->get_op());
   }
 
@@ -1215,7 +1215,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
 
-  if (op->get_op() == OSD_OP_WRITE) {
+  if (op->get_op() == CEPH_OSD_OP_WRITE) {
     osd->logger->inc("c_wr");
     osd->logger->inc("c_wrb", op->get_length());
   }
@@ -1253,7 +1253,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   if (repop) {    
     // we are acker.
-    if (op->get_op() != OSD_OP_WRNOOP) {
+    if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
       // log and update later.
       prepare_log_transaction(repop->t, op, nv, crev, op->get_rev(), peers_complete_thru);
       prepare_op_transaction(repop->t, op, nv, crev, op->get_rev());
@@ -1373,13 +1373,13 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
   
   if (repop) {
     // acker.  we'll apply later.
-    if (op->get_op() != OSD_OP_WRNOOP) {
+    if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
       prepare_log_transaction(repop->t, op, nv, crev, op->get_rev(), op->get_pg_trim_to());
       prepare_op_transaction(repop->t, op, nv, crev, op->get_rev());
     }
   } else {
     // middle|replica.
-    if (op->get_op() != OSD_OP_WRNOOP) {
+    if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
       prepare_log_transaction(t, op, nv, crev, op->get_rev(), op->get_pg_trim_to());
       prepare_op_transaction(t, op, nv, crev, op->get_rev());
     }
@@ -1465,7 +1465,7 @@ void ReplicatedPG::pull(object_t oid)
   MOSDOp *op = new MOSDOp(osd->messenger->get_myinst(), 0, tid,
                           oid, info.pgid,
                           osd->osdmap->get_epoch(),
-                          OSD_OP_PULL);
+                          CEPH_OSD_OP_PULL);
   op->set_version(v);
   osd->messenger->send_message(op, osd->osdmap->get_inst(fromosd));
   
@@ -1506,7 +1506,7 @@ void ReplicatedPG::push(object_t oid, int peer)
   // send
   MOSDOp *op = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
                           oid, info.pgid, osd->osdmap->get_epoch(), 
-                          OSD_OP_PUSH); 
+                          CEPH_OSD_OP_PUSH); 
   op->set_offset(0);
   op->set_length(bl.length());
   op->set_data(bl);   // note: claims bl, set length above here!

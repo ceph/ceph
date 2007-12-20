@@ -2136,7 +2136,7 @@ void OSD::handle_op(MOSDOp *op)
   stat_oprate.hit(now);
   stat_ops++;
   stat_qlen += pending_ops;
-  if (op->get_op() == OSD_OP_READ) {
+  if (op->get_op() == CEPH_OSD_OP_READ) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {
       //derr(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
@@ -2292,7 +2292,7 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  if (op->get_op() == OSD_OP_READ) {
+  if (op->get_op() == CEPH_OSD_OP_READ) {
     Mutex::Locker lock(peer_stat_lock);
     stat_rd_ops_in_queue++;
   }

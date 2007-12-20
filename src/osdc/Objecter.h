@@ -112,7 +112,7 @@ class Objecter {
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
+    OSDWrite(bufferlist &b) : OSDModify(CEPH_OSD_OP_WRITE), bl(b) {}
   };
 
   
