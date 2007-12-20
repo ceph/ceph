@@ -32,12 +32,10 @@
 class MOSDOpReply : public Message {
   struct st_t {
     // req
-    osdreqid_t reqid;
+    ceph_osd_reqid_t reqid;
 
-    tid_t rep_tid;
-    
     object_t oid;
-    ObjectLayout layout;  // pgid, etc.
+    ceph_object_layout_t layout;  // pgid, etc.
     
     int32_t op;
     
@@ -56,9 +54,8 @@ class MOSDOpReply : public Message {
   map<string,bufferptr> attrset;
 
  public:
-  const osdreqid_t& get_reqid() { return st.reqid; }
+  const ceph_osd_reqid_t& get_reqid() { return st.reqid; }
   long     get_tid() { return st.reqid.tid; }
-  long     get_rep_tid() { return st.rep_tid; }
   object_t get_oid() { return st.oid; }
   pg_t     get_pg() { return st.layout.pgid; }
   int      get_op()  { return st.op; }
@@ -82,7 +79,6 @@ class MOSDOpReply : public Message {
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   void set_op(int op) { st.op = op; }
-  void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
   // osdmap
   epoch_t get_map_epoch() { return st.map_epoch; }
@@ -92,18 +88,17 @@ public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.reqid = req->st.reqid;
-    this->st.op = req->st.op;
-    this->st.rep_tid = req->st.rep_tid;
+    this->st.reqid = req->head.reqid;
+    this->st.op = req->head.op;
 
-    this->st.oid = req->st.oid;
-    this->st.layout = req->st.layout;
+    this->st.oid = req->head.oid;
+    this->st.layout = req->head.layout;
     this->st.result = result;
     this->st.commit = commit;
 
-    this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
-    this->st.offset = req->st.offset;
-    this->st.version = req->st.version;
+    this->st.length = req->head.length;   // speculative... OSD should ensure these are correct
+    this->st.offset = req->head.offset;
+    this->st.version = req->head.reassert_version;
 
     this->st.map_epoch = e;
   }

@@ -167,6 +167,10 @@ struct entity_inst_t {
     name.v = i.name;
     addr.v = i.addr;
   }
+  entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) {
+    name.v = n;
+    addr.v = a;
+  }
 };
 
 

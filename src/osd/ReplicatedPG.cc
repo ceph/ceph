@@ -153,9 +153,12 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	  balancing_reads.count(oid) == 0) {
 	dout(-10) << "preprocess_op balance-reads on " << oid << dendl;
 	balancing_reads.insert(oid);
+	ceph_object_layout_t layout;
+	layout.pgid = info.pgid.u;
+	layout.stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
-				 ObjectLayout(info.pgid),
+				 layout,
 				 osd->osdmap->get_epoch(),
 				 CEPH_OSD_OP_BALANCEREADS);
 	do_op(pop);
@@ -164,9 +167,12 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	  !unbalancing_reads.count(oid) == 0) {
 	dout(-10) << "preprocess_op unbalance-reads on " << oid << dendl;
 	unbalancing_reads.insert(oid);
+	ceph_object_layout_t layout;
+	layout.pgid = info.pgid.u;
+	layout.stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
-				 ObjectLayout(info.pgid),
+				 layout,
 				 osd->osdmap->get_epoch(),
 				 CEPH_OSD_OP_UNBALANCEREADS);
 	do_op(pop);
@@ -567,7 +573,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // MODIFY
 
 void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t, 
-					   osdreqid_t reqid, pobject_t poid, int op, eversion_t version,
+					   ceph_osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
 					   objectrev_t crev, objectrev_t rev,
 					   eversion_t trim_to)
 {
@@ -606,7 +612,7 @@ void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t,
 /** prepare_op_transaction
  * apply an op to the store wrapped in a transaction.
  */
-void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osdreqid_t& reqid,
+void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const ceph_osd_reqid_t& reqid,
 					  pg_t pgid, int op, pobject_t poid, 
 					  off_t offset, off_t length, bufferlist& bl,
 					  eversion_t& version, objectrev_t crev, objectrev_t rev)
@@ -830,11 +836,9 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
   if (repop->can_send_commit() &&
       repop->op->wants_commit()) {
     // send commit.
-    if (repop->op->wants_reply()) {
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
-      dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, repop->op->get_client_inst());
-    }
+    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
+    dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
+    osd->messenger->send_message(reply, repop->op->get_client_inst());
     repop->sent_commit = true;
   }
 
@@ -846,13 +850,9 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
       apply_repop(repop);
 
     // send ack
-    if (repop->op->wants_reply()) {
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
-      dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, repop->op->get_client_inst());
-    } else {
-      dout(10) << "put_repop  NOT sending ack on " << *repop << dendl;
-    }
+    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
+    dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
+    osd->messenger->send_message(reply, repop->op->get_client_inst());
     repop->sent_ack = true;
 
     utime_t now = g_clock.now();
@@ -912,7 +912,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 
 ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv)
 {
-  dout(10) << "new_rep_gather rep_tid " << op->get_rep_tid() << " on " << *op << dendl;
+  dout(10) << "new_rep_gather rep_tid " << rep_tid << " on " << *op << dendl;
   RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete);
   
   // osds. commits all come to me.
@@ -1032,7 +1032,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
     assert(nv > log.top);
 
     // will clone?
-    if (crev && op->get_rev() && op->get_rev() > crev) {
+    if (crev && op->get_oid().rev && op->get_oid().rev > crev) {
       clone_version = nv;
       nv.version++;
     }
@@ -1043,7 +1043,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
         nv.version = op->get_version().version; 
 
 	// clone?
-	if (crev && op->get_rev() && op->get_rev() > crev) {
+	if (crev && op->get_oid().rev && op->get_oid().rev > crev) {
 	  // backstep clone
 	  clone_version = nv;
 	  clone_version.version--;
@@ -1130,9 +1130,12 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       dout(-10) << "preprocess_op unbalancing-reads on " << op->get_oid() << dendl;
       unbalancing_reads.insert(op->get_oid());
       
+      ceph_object_layout_t layout;
+      layout.pgid = info.pgid.u;
+      layout.stripe_unit = 0;
       MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 			       op->get_oid(),
-			       ObjectLayout(info.pgid),
+			       layout,
 			       osd->osdmap->get_epoch(),
 			       CEPH_OSD_OP_UNBALANCEREADS);
       do_op(pop);
@@ -1172,7 +1175,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << " " << oid 
            << " v " << nv 
     //<< " crev " << crev
-	   << " rev " << op->get_rev()
+	   << " rev " << op->get_oid().rev
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
 
@@ -1195,11 +1198,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     // log and update later.
     pobject_t poid = oid;
     prepare_log_transaction(repop->t, op->get_reqid(), poid, op->get_op(), nv,
-			    crev, op->get_rev(), peers_complete_thru);
+			    crev, op->get_oid().rev, peers_complete_thru);
     prepare_op_transaction(repop->t, op->get_reqid(),
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, crev, op->get_rev());
+			   nv, crev, op->get_oid().rev);
   }
   
   // (logical) local ack.
@@ -1337,7 +1340,7 @@ void ReplicatedPG::pull(pobject_t poid)
           << dendl;
 
   // send op
-  osdreqid_t rid;
+  ceph_osd_reqid_t rid;
   tid_t tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PULL,
 				   0, 0, 
@@ -1379,7 +1382,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   osd->logger->inc("r_pushb", bl.length());
   
   // send
-  osdreqid_t rid;  // useless?
+  ceph_osd_reqid_t rid;  // useless?
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
 				osd->osdmap->get_epoch(), osd->get_tid(), v);
   subop->set_data(bl);   // note: claims bl, set length above here!

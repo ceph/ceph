@@ -101,7 +101,7 @@ class ObjectCacher {
     object_t  oid;   // this _always_ is oid.rev=0
     inodeno_t ino;
     objectrev_t rev; // last rev we're written
-    ObjectLayout layout;
+    ceph_object_layout_t layout;
     
   public:
     map<off_t, BufferHead*>     data;
@@ -130,7 +130,7 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
-    Object(ObjectCacher *_oc, object_t o, inodeno_t i, ObjectLayout& l) : 
+    Object(ObjectCacher *_oc, object_t o, inodeno_t i, ceph_object_layout_t& l) : 
       oc(_oc),
       oid(o), ino(i), layout(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
@@ -143,8 +143,8 @@ class ObjectCacher {
     object_t get_oid() { return oid; }
     inodeno_t get_ino() { return ino; }
 
-	ObjectLayout& get_layout() { return layout; }
-	void set_layout(ObjectLayout& l) { layout = l; }
+	ceph_object_layout_t& get_layout() { return layout; }
+	void set_layout(ceph_object_layout_t& l) { layout = l; }
 
     bool can_close() {
       return data.empty() && lock_state == LOCK_NONE &&
@@ -227,7 +227,7 @@ class ObjectCacher {
   
 
   // objects
-  Object *get_object(object_t oid, inodeno_t ino, ObjectLayout &l) {
+  Object *get_object(object_t oid, inodeno_t ino, ceph_object_layout_t &l) {
     // have it?
     if (objects.count(oid))
       return objects[oid];

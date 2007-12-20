@@ -59,148 +59,102 @@ public:
   }
 
 private:
-  struct st_ {
-    // who's asking?
-    entity_inst_t client;
-    osdreqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
-    
-    // for replication
-    tid_t rep_tid;
-    
-    object_t oid;
-    objectrev_t rev;
-    ObjectLayout layout;
-    
-    epoch_t map_epoch;
-    
-    eversion_t pg_trim_to;   // primary->replica: trim to here
-    
-    int32_t op;
-    off_t offset, length;
-
-    eversion_t version;
-    eversion_t old_version;
-    
-    bool   want_ack;
-    bool   want_commit;
-    bool   retry_attempt;
-    
-    int shed_count;
-    osd_peer_stat_t peer_stat;
-  } st;
-
+  ceph_osd_request_head head;
   map<string,bufferptr> attrset;
 
 
   friend class MOSDOpReply;
 
 public:
-  const osdreqid_t&    get_reqid() { return st.reqid; }
-  const tid_t          get_client_tid() { return st.reqid.tid; }
-  int                  get_client_inc() { return st.reqid.inc; }
+  const ceph_osd_reqid_t& get_reqid() { return head.reqid; }
+  const tid_t          get_client_tid() { return head.reqid.tid; }
+  int                  get_client_inc() { return head.reqid.inc; }
 
-  const entity_name_t& get_client() { return st.client.name; }
-  const entity_inst_t& get_client_inst() { return st.client; }
-  void set_client_inst(const entity_inst_t& i) { st.client = i; }
-
-  bool wants_reply() {
-    if (st.op < 100) return true;
-    return false;  // no reply needed for primary-lock, -unlock.
+  entity_name_t get_client() { return head.reqid.name; }
+  entity_inst_t get_client_inst() { 
+    return entity_inst_t(head.reqid.name, head.client_addr); 
   }
+  void set_client_addr(const entity_addr_t& a) { head.client_addr = a.v; }
 
-  const tid_t       get_rep_tid() { return st.rep_tid; }
-  void set_rep_tid(tid_t t) { st.rep_tid = t; }
+  object_t get_oid() { return object_t(head.oid); }
+  pg_t     get_pg() { return head.layout.pgid; }
+  ceph_object_layout_t get_layout() { return head.layout; }
+  epoch_t  get_map_epoch() { return head.osdmap_epoch; }
 
-  bool get_retry_attempt() const { return st.retry_attempt; }
-  void set_retry_attempt(bool a) { st.retry_attempt = a; }
-
-  const object_t get_oid() { return st.oid; }
-  const pg_t     get_pg() { return st.layout.pgid; }
-  const ObjectLayout& get_layout() { return st.layout; }
-  const epoch_t  get_map_epoch() { return st.map_epoch; }
-
-  const eversion_t  get_version() { return st.version; }
-  //const eversion_t  get_old_version() { return st.old_version; }
+  eversion_t get_version() { return head.reassert_version; }
   
-  void set_rev(objectrev_t r) { st.rev = r; }
-  objectrev_t get_rev() { return st.rev; }
-
-  const eversion_t get_pg_trim_to() { return st.pg_trim_to; }
-  void set_pg_trim_to(eversion_t v) { st.pg_trim_to = v; }
-  
-  const int    get_op() { return st.op; }
-  void set_op(int o) { st.op = o; }
+  const int    get_op() { return head.op; }
+  void set_op(int o) { head.op = o; }
   bool is_read() { 
-    return st.op < 10;
+    return head.op < 10;
   }
 
-  const off_t get_length() { return st.length; }
-  const off_t get_offset() { return st.offset; }
+  const off_t get_length() { return head.length; }
+  const off_t get_offset() { return head.offset; }
 
   map<string,bufferptr>& get_attrset() { return attrset; }
   void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
-  const bool wants_ack() { return st.want_ack; }
-  const bool wants_commit() { return st.want_commit; }
+  void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
+  const ceph_osd_peer_stat_t& get_peer_stat() { return head.peer_stat; }
 
-  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
-  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
-  void inc_shed_count() { st.shed_count++; }
-  int get_shed_count() { return st.shed_count; }
+  void inc_shed_count() { head.shed_count++; }
+  int get_shed_count() { return head.shed_count; }
   
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
-         object_t oid, ObjectLayout ol, epoch_t mapepoch, int op) :
+         object_t oid, ceph_object_layout_t ol, epoch_t mapepoch, int op) :
     Message(CEPH_MSG_OSD_OP) {
-    memset(&st, 0, sizeof(st));
-    this->st.client = asker;
-    this->st.reqid.name = asker.name;
-    this->st.reqid.inc = inc;
-    this->st.reqid.tid = tid;
+    memset(&head, 0, sizeof(head));
+    head.client_addr = asker.addr.v;
+    head.reqid.name = asker.name.v;
+    head.reqid.inc = inc;
+    head.reqid.tid = tid;
 
-    this->st.oid = oid;
-    this->st.layout = ol;
-    this->st.map_epoch = mapepoch;
-    this->st.op = op;
-
-    this->st.rep_tid = 0;
-
-    this->st.want_ack = true;
-    this->st.want_commit = true;
+    head.oid = oid;
+    head.layout = ol;
+    head.osdmap_epoch = mapepoch;
+    head.op = op;
+    
+    head.flags = CEPH_OSD_OP_WANT_ACK | CEPH_OSD_OP_WANT_SAFE;
   }
   MOSDOp() {}
 
-  void set_layout(const ObjectLayout& l) { st.layout = l; }
+  void set_layout(const ceph_object_layout_t& l) { head.layout = l; }
 
-  void set_length(off_t l) { st.length = l; }
-  void set_offset(off_t o) { st.offset = o; }
-  void set_version(eversion_t v) { st.version = v; }
-  void set_old_version(eversion_t ov) { st.old_version = ov; }
+  void set_length(off_t l) { head.length = l; }
+  void set_offset(off_t o) { head.offset = o; }
+  void set_version(eversion_t v) { head.reassert_version = v; }
   
-  void set_want_ack(bool b) { st.want_ack = b; }
-  void set_want_commit(bool b) { st.want_commit = b; }
+  bool wants_ack() { return head.flags & CEPH_OSD_OP_WANT_ACK; }
+  bool wants_commit() { return head.flags & CEPH_OSD_OP_WANT_SAFE; }
+  bool is_retry_attempt() const { return head.flags & CEPH_OSD_OP_IS_RETRY; }
+
+  void set_want_ack(bool b) { head.flags |= CEPH_OSD_OP_WANT_ACK; }
+  void set_want_commit(bool b) { head.flags |= CEPH_OSD_OP_WANT_SAFE; }
+  void set_retry_attempt(bool a) { head.flags |= CEPH_OSD_OP_IS_RETRY; }
 
   // marshalling
   virtual void decode_payload() {
     int off = 0;
-    ::_decode(st, payload, off);
+    ::_decode(head, payload, off);
     ::_decode(attrset, payload, off);
   }
 
   virtual void encode_payload() {
-    ::_encode(st, payload);
+    ::_encode(head, payload);
     ::_encode(attrset, payload);
-    env.data_off = st.offset;
+    env.data_off = head.offset;
   }
 
   virtual char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
-    out << "osd_op(" << st.reqid
-	<< " " << get_opname(st.op)
-	<< " " << st.oid;
-    if (st.length) out << " " << st.offset << "~" << st.length;
-    if (st.retry_attempt) out << " RETRY";
+    out << "osd_op(" << head.reqid
+	<< " " << get_opname(head.op)
+	<< " " << head.oid;
+    if (head.length) out << " " << head.offset << "~" << head.length;
+    if (is_retry_attempt()) out << " RETRY";
     out << ")";
   }
 };

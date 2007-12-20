@@ -22,39 +22,31 @@
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
  */
-class osdreqid_t {
-public:
-  entity_name_t name; // who
-  int32_t       inc;  // incarnation
-  tid_t         tid;
-  osdreqid_t() : inc(0), tid(0) {}
-  osdreqid_t(const entity_name_t& a, int i, tid_t t) : name(a), inc(i), tid(t) {}
-};
 
-inline ostream& operator<<(ostream& out, const osdreqid_t& r) {
+inline ostream& operator<<(ostream& out, const ceph_osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
 }
 
-inline bool operator==(const osdreqid_t& l, const osdreqid_t& r) {
+inline bool operator==(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
   return (l.name == r.name) && (l.inc == r.inc) && (l.tid == r.tid);
 }
-inline bool operator!=(const osdreqid_t& l, const osdreqid_t& r) {
+inline bool operator!=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
   return (l.name != r.name) || (l.inc != r.inc) || (l.tid != r.tid);
 }
-inline bool operator<(const osdreqid_t& l, const osdreqid_t& r) {
+inline bool operator<(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
   return (l.name < r.name) || (l.inc < r.inc) || 
     (l.name == r.name && l.inc == r.inc && l.tid < r.tid);
 }
-inline bool operator<=(const osdreqid_t& l, const osdreqid_t& r) {
+inline bool operator<=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) {
   return (l.name < r.name) || (l.inc < r.inc) ||
     (l.name == r.name && l.inc == r.inc && l.tid <= r.tid);
 }
-inline bool operator>(const osdreqid_t& l, const osdreqid_t& r) { return !(l <= r); }
-inline bool operator>=(const osdreqid_t& l, const osdreqid_t& r) { return !(l < r); }
+inline bool operator>(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) { return !(l <= r); }
+inline bool operator>=(const ceph_osd_reqid_t& l, const ceph_osd_reqid_t& r) { return !(l < r); }
 
 namespace __gnu_cxx {
-  template<> struct hash<osdreqid_t> {
-    size_t operator()(const osdreqid_t &r) const { 
+  template<> struct hash<ceph_osd_reqid_t> {
+    size_t operator()(const ceph_osd_reqid_t &r) const { 
       static blobhash H;
       return H((const char*)&r, sizeof(r));
     }
@@ -84,7 +76,7 @@ public:
   static const int TYPE_REP   = CEPH_PG_TYPE_REP;
   static const int TYPE_RAID4 = CEPH_PG_TYPE_RAID4;
 
-private:
+  //private:
   union ceph_pg u;
 
 public:
@@ -99,6 +91,9 @@ public:
     assert(sizeof(u.pg) == sizeof(u.pg64));
   }
   pg_t(uint64_t v) { u.pg64 = v; }
+  pg_t(const ceph_pg_t& cpg) {
+    u = cpg;
+  }
 
   int type()      { return u.pg.type; }
   bool is_rep()   { return type() == TYPE_REP; }
@@ -161,21 +156,7 @@ namespace __gnu_cxx {
 
 
 
-/** ObjectLayout
- *
- * describes an object's placement and layout in the storage cluster.  
- * most importatly, which pg it belongs to.
- * if that pg is raided, it also specifies the object's stripe_unit.
- */
-struct ObjectLayout {
-  pg_t pgid;            // what pg do i belong to
-  int32_t stripe_unit;     // for object raid in raid pgs
-
-  ObjectLayout() : pgid(0), stripe_unit(0) { }
-  ObjectLayout(pg_t p, int su=0) : pgid(p), stripe_unit(su) { }
-};
-
-inline ostream& operator<<(ostream& out, const ObjectLayout &ol)
+inline ostream& operator<<(ostream& out, const ceph_object_layout_t &ol)
 {
   out << "pg" << ol.pgid;
   if (ol.stripe_unit)
@@ -192,6 +173,14 @@ public:
   version_t version;
   eversion_t() : epoch(0), version(0) {}
   eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
+
+  eversion_t(const ceph_eversion& ce) : epoch(ce.epoch), version(ce.version) {}    
+  operator ceph_eversion_t() {
+    ceph_eversion_t c;
+    c.epoch = epoch;
+    c.version = version;
+    return c;
+  }
 };
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
@@ -244,21 +233,7 @@ struct pg_stat_t {
   pg_stat_t() : state(0), size(0), num_blocks(0), num_objects(0) {}
 };
 
-
-
-struct osd_peer_stat_t {
-  utime_t stamp;
-  double oprate;
-  double qlen;
-  double recent_qlen;
-  double read_latency;
-  double read_latency_mine;
-  double frac_rd_ops_shed_in;
-  double frac_rd_ops_shed_out;
-  osd_peer_stat_t() : oprate(0), qlen(0), recent_qlen(0), 
-		      read_latency(0), read_latency_mine(0), 
-		      frac_rd_ops_shed_in(0), frac_rd_ops_shed_out(0) {}
-};
+typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
@@ -278,7 +253,7 @@ class ObjectExtent {
   off_t       start;     // in object
   size_t      length;    // in object
 
-  ObjectLayout layout;   // object layout (pgid, etc.)
+  ceph_object_layout_t layout;   // object layout (pgid, etc.)
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   

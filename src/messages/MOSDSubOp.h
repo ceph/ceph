@@ -30,7 +30,7 @@ private:
     epoch_t map_epoch;
 
     // metadata from original request
-    osdreqid_t reqid;
+    ceph_osd_reqid_t reqid;
 
     // subop
     pg_t pgid;
@@ -53,7 +53,7 @@ private:
 public:
   const epoch_t get_map_epoch() { return st.map_epoch; }
 
-  const osdreqid_t&    get_reqid() { return st.reqid; }
+  const ceph_osd_reqid_t&    get_reqid() { return st.reqid; }
 
   bool wants_reply() {
     if (st.op < 100) return true;
@@ -78,7 +78,7 @@ public:
   void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
  
-  MOSDSubOp(osdreqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
+  MOSDSubOp(ceph_osd_reqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
 	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP) {
     memset(&st, 0, sizeof(st));

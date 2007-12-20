@@ -128,9 +128,10 @@ typedef union ceph_pg ceph_pg_t;
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	ceph_pg_t ol_pgid;
-	__u32     ol_stripe_unit;  
+	ceph_pg_t pgid;
+	__u32     stripe_unit;  
 };
+typedef struct ceph_object_layout ceph_object_layout_t;
 
 
 /*
@@ -427,27 +428,39 @@ enum {
 };
 
 enum {
-	CEPH_OSD_OP_WANT_ACK,
-	CEPH_OSD_OP_WANT_SAFE,
-	CEPH_OSD_OP_IS_RETRY
+	CEPH_OSD_OP_WANT_ACK = 1,
+	CEPH_OSD_OP_WANT_SAFE = 2,
+	CEPH_OSD_OP_IS_RETRY = 4
 };
 
+struct ceph_osd_peer_stat {
+	ceph_timeval stamp;
+	float oprate;
+	float qlen;
+	float recent_qlen;
+	float read_latency;
+	float read_latency_mine;
+	float frac_rd_ops_shed_in;
+	float frac_rd_ops_shed_out;
+} __attribute__ ((packed));
+typedef struct ceph_osd_peer_stat ceph_osd_peer_stat_t;
+
 struct ceph_osd_request_head {
-	struct ceph_entity_inst   client;
-	ceph_osd_reqid_t          reqid;
+	struct ceph_entity_addr   client_addr;
+	ceph_osd_reqid_t          reqid;  /* fixme: this dups client.name */
 	__u32                     op;
 	__u64                     offset, length;
 	ceph_object_t             oid;
-	struct ceph_object_layout layout;
+	ceph_object_layout_t      layout;
 	ceph_epoch_t              osdmap_epoch;
 
 	__u32                     flags;
 
-	/* hack, fix me */
-	ceph_tid_t      rep_tid;   
-	ceph_eversion_t pg_trim_to;
-	__u32 shed_count;
-	//osd_peer_stat_t peer_stat;
+	ceph_eversion_t           reassert_version;
+
+	/* semi-hack, fix me */
+	__u32                shed_count;
+	ceph_osd_peer_stat_t peer_stat;
 } __attribute__ ((packed));
 
 #endif

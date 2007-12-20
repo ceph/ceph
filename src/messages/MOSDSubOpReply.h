@@ -34,7 +34,7 @@ class MOSDSubOpReply : public Message {
     epoch_t map_epoch;
 
     // subop metadata
-    osdreqid_t reqid;
+    ceph_osd_reqid_t reqid;
     pg_t pgid;
     tid_t rep_tid;
     int32_t op;

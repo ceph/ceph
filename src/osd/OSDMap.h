@@ -387,11 +387,11 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
+  ceph_object_layout_t file_to_object_layout(object_t oid, FileLayout& layout) {
     return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
   }
 
-  ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout_t make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     int num = preferred >= 0 ? localized_pg_num:pg_num;
     int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
 
@@ -421,8 +421,11 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
-			object_stripe_unit);
+    pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
+    ceph_object_layout_t layout;
+    layout.pgid = pgid.u;
+    layout.stripe_unit = object_stripe_unit;
+    return layout;
   }
 
 

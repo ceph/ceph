@@ -218,11 +218,11 @@ public:
       object_t   oid;
       eversion_t version;
       
-      osdreqid_t reqid;  // caller+tid to uniquely identify request
+      ceph_osd_reqid_t reqid;  // caller+tid to uniquely identify request
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v, 
-	    const osdreqid_t& rid) :
+	    const ceph_osd_reqid_t& rid) :
         op(_op), oid(_oid), version(v), reqid(rid) {}
       
       bool is_delete() const { return op == DELETE; }
@@ -275,7 +275,7 @@ public:
   class IndexedLog : public Log {
   public:
     hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osdreqid_t>      caller_ops;
+    hash_set<ceph_osd_reqid_t>      caller_ops;
 
     // recovery pointers
     list<Entry>::iterator requested_to; // not inclusive of referenced item
@@ -293,7 +293,7 @@ public:
     bool logged_object(object_t oid) {
       return objects.count(oid);
     }
-    bool logged_req(const osdreqid_t &r) {
+    bool logged_req(const ceph_osd_reqid_t &r) {
       return caller_ops.count(r);
     }
 
@@ -633,7 +633,7 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
 
-  bool is_dup(osdreqid_t rid) {
+  bool is_dup(ceph_osd_reqid_t rid) {
     return log.logged_req(rid);
   }
 

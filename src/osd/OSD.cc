@@ -647,7 +647,7 @@ void OSD::_refresh_my_stat(utime_t now)
   if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval ||
       pending_ops > 2*my_stat.qlen) {
 
-    my_stat.stamp = now;
+    my_stat.stamp = now.tv_ref();
     my_stat.oprate = stat_oprate.get(now);
 
     //read_latency_calc.set_size( 20 );  // hrm.
