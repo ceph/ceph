@@ -4,3 +4,5 @@
 .depend
 web/*.html
 gmon.out
+core.*
+vgcore.*

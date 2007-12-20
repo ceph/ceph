@@ -29,25 +29,6 @@ using namespace std;
 
 /*
 
-  beautiful state diagram:  
-
-   STOPPED                     DNE              FAILED                    
-  / |  \                      / |                  |
- /  |   \________     _______/  |                  |               
-|   v            v   v          v                  |
-| STARTING <--> STANDBY <--> CREATING              |
-|      \                      /                    |
-|       \____    ____________/                     |
- \           v  v                                  |
-  \         ACTIVE  <-- REJOIN <-- RECONNECT <-- REPLAY
-   \          |
-    \         |
-     \        v
-      \--  STOPPING 
-
-
- new states:
-
  boot  --> standby, creating, or starting.
 
 
