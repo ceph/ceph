@@ -2,15 +2,19 @@
 <div class="mainsegment">
 	<h3>Getting Started</h3>
 	<div>
-		The Ceph source code is managed with Subversion.  For information on accessing the repository, please refer to the <a href="http://sourceforge.net/docs/E09">SourceForge's Subversion documentation</a>. 
+		The Ceph source code is managed with Git.  For a Git crash course, there is a <a href="http://www.kernel.org/pub/software/scm/git/docs/tutorial.html">tutorial</a> and more from the <a href="http://git.or.cz/#documentation">official Git site</a>.  Here is a quick <a href="http://git.or.cz/course/svn.html">crash course for Subversion users</a>.
 
 		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
 
 		<h4>Checking out</h4>
 		<div>
-			You can check out a working copy with
-			<pre>
-svn co https://ceph.svn.sourceforge.net/svnroot/ceph/trunk/ceph
+			You can check out a working copy (actually, clone the repository) with
+<pre>
+git clone git://ceph.newdream.net/ceph.git
+</pre>
+			To pull the latest,
+<pre>
+git pull
 </pre>
 		</div>
 
@@ -35,10 +39,10 @@ svn co https://ceph.svn.sourceforge.net/svnroot/ceph/trunk/ceph
 			Few quick steps to get things started.  Note that these instructions assume either that you are running on one node, or have a shared directory (e.g. over NFS) mounted on each node.  
 
 			<ol>
-			<li>Checkout, change into the <tt>ceph/</tt> directory, and build.  E.g.,
+			<li>Checkout, change into the <tt>ceph/src</tt> directory, and build.  E.g.,
 <pre>
-svn co https://ceph.svn.sourceforge.net/svnroot/ceph
-cd ~/ceph/trunk/ceph
+git clone git://ceph.newdream.net/ceph.git
+cd ceph/src
 make mpi=no fuse=no
 </pre>
 (You can omit the mpi=no or fuse=no if you happen to have those installed.)
@@ -128,12 +132,12 @@ make cfuse && ./cfuse mnt
 			Any recent mainline kernel will do here.
 <pre>
 $ cd linux
-$ patch -p1 < ~/ceph/trunk/ceph/kernel/kconfig.patch
+$ patch -p1 < ~/ceph/src/kernel/kconfig.patch
 patching file fs/Kconfig
 patching file fs/Makefile
-$ cp ~/ceph/trunk/ceph/kernel/sample.uml.config .config
-$ ln -s ~/ceph/trunk/ceph/kernel fs/ceph
-$ ln -s ~/ceph/trunk/ceph/include/ceph_fs.h include/linux
+$ cp ~/ceph/src/kernel/sample.uml.config .config
+$ ln -s ~/ceph/src/kernel fs/ceph
+$ ln -s ~/ceph/src/include/ceph_fs.h include/linux
 $ make ARCH=um
 </pre>
 			I am using <a href="http://uml.nagafix.co.uk/Debian-3.1/Debian-3.1-AMD64-root_fs.bz2">this x86_64 Debian UML root fs image</a>, but any image will do (see <a href="http://user-mode-linux.sf.net">http://user-mode-linux.sf.net</a>) as long as the architecture (e.g. x86_64 vs i386) matches your host.  Start up the UML instance with something like
@@ -160,7 +164,7 @@ none            /host           hostfs  defaults        0       0
 </pre>
 			You can then load the kernel client module and mount from the UML instance with
 <pre>
-insmod /host/path/to/ceph/trunk/ceph/kernel/ceph.ko
+insmod /host/path/to/ceph/src/kernel/ceph.ko
 mount -t ceph 1.2.3.4:/ -o monport=12345,ip=1.2.3.5 mnt # 1.2.3.4 is host, 1.2.3.5 is uml ip
 </pre>
 
@@ -193,6 +197,7 @@ touch mnt/asdf   # etc
 		<div>
 			Here's a crude table diagram that shows how the major (user space) pieces fit together.  Ingore the MDS bits; that's mostly wrong.
 
+			FIXME: this links to the <b>old</b> Subversion repository.
 <table border=0>
 <tr> <td></td> <td>Application</td> </tr>
 <tr> <td></td> <td class=kernel>kernel</td> </tr>

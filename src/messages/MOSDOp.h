@@ -27,61 +27,32 @@
  *
  */
 
-// osd client ops
-#define OSD_OP_READ       1
-#define OSD_OP_STAT       2
-
-#define OSD_OP_REPLICATE    3
-#define OSD_OP_UNREPLICATE  4
-
-#define OSD_OP_WRNOOP     10
-#define OSD_OP_WRITE      11
-#define OSD_OP_DELETE     12
-#define OSD_OP_TRUNCATE   13
-#define OSD_OP_ZERO       14
-
-#define OSD_OP_WRLOCK     20
-#define OSD_OP_WRUNLOCK   21
-#define OSD_OP_RDLOCK     22
-#define OSD_OP_RDUNLOCK   23
-#define OSD_OP_UPLOCK     24
-#define OSD_OP_DNLOCK     25
-#define OSD_OP_MININCLOCK 26 // minimum incarnation lock
-
-#define OSD_OP_PULL       30
-#define OSD_OP_PUSH       31
-
-#define OSD_OP_BALANCEREADS    101
-#define OSD_OP_UNBALANCEREADS  102
-
-
-
 class MOSDOp : public Message {
 public:
   static const char* get_opname(int op) {
     switch (op) {
-    case OSD_OP_READ: return "read";
-    case OSD_OP_STAT: return "stat";
+    case CEPH_OSD_OP_READ: return "read";
+    case CEPH_OSD_OP_STAT: return "stat";
 
-    case OSD_OP_WRNOOP: return "wrnoop"; 
-    case OSD_OP_WRITE: return "write"; 
-    case OSD_OP_ZERO: return "zero"; 
-    case OSD_OP_DELETE: return "delete"; 
-    case OSD_OP_TRUNCATE: return "truncate"; 
-    case OSD_OP_WRLOCK: return "wrlock"; 
-    case OSD_OP_WRUNLOCK: return "wrunlock"; 
-    case OSD_OP_RDLOCK: return "rdlock"; 
-    case OSD_OP_RDUNLOCK: return "rdunlock"; 
-    case OSD_OP_UPLOCK: return "uplock"; 
-    case OSD_OP_DNLOCK: return "dnlock"; 
+    case CEPH_OSD_OP_WRNOOP: return "wrnoop"; 
+    case CEPH_OSD_OP_WRITE: return "write"; 
+    case CEPH_OSD_OP_ZERO: return "zero"; 
+    case CEPH_OSD_OP_DELETE: return "delete"; 
+    case CEPH_OSD_OP_TRUNCATE: return "truncate"; 
+    case CEPH_OSD_OP_WRLOCK: return "wrlock"; 
+    case CEPH_OSD_OP_WRUNLOCK: return "wrunlock"; 
+    case CEPH_OSD_OP_RDLOCK: return "rdlock"; 
+    case CEPH_OSD_OP_RDUNLOCK: return "rdunlock"; 
+    case CEPH_OSD_OP_UPLOCK: return "uplock"; 
+    case CEPH_OSD_OP_DNLOCK: return "dnlock"; 
 
-    case OSD_OP_MININCLOCK: return "mininclock";
+    case CEPH_OSD_OP_MININCLOCK: return "mininclock";
 
-    case OSD_OP_BALANCEREADS: return "balance-reads";
-    case OSD_OP_UNBALANCEREADS: return "unbalance-reads";
+    case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
+    case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 
-    case OSD_OP_PULL: return "pull";
-    case OSD_OP_PUSH: return "push";
+    case CEPH_OSD_OP_PULL: return "pull";
+    case CEPH_OSD_OP_PUSH: return "push";
     default: assert(0);
     }
     return 0;
