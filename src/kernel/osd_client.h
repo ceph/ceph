@@ -11,6 +11,19 @@
 
 struct ceph_msg;
 
+/*
+ * object extent
+ */
+struct ceph_object_extent {
+	ceph_object_t oid;
+	__u64 start;
+	__u64 length;
+	ceph_object_layout_t layout;
+};
+
+/*
+ * pending request 
+ */
 enum {
 	REQUEST_ACK, REQUEST_SAFE
 };

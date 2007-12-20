@@ -312,7 +312,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 	struct ceph_msg *reply = 0;
 	int err;
 
-	dout(30, "mdsc_do_request on %p type %d\n", msg, msg->hdr.type);
+	dout(30, "do_request on %p type %d\n", msg, msg->hdr.type);
 
 	spin_lock(&mdsc->lock);
 	req = register_request(mdsc, msg, mds);
@@ -322,16 +322,16 @@ retry:
 	if (mds < 0) {
 		/* wait for new mdsmap */
 		spin_unlock(&mdsc->lock);
-		dout(30, "mdsc_do_request waiting for new mdsmap\n");
+		dout(30, "do_request waiting for new mdsmap\n");
 		wait_for_new_map(mdsc);
 		spin_lock(&mdsc->lock);
 		goto retry;
 	}
-	dout(30, "mdsc_do_request chose mds%d\n", mds);
+	dout(30, "do_request chose mds%d\n", mds);
 
 	/* get session */
 	session = get_session(mdsc, mds);
-	dout(30, "mdsc_do_request session %p\n", session);
+	dout(30, "do_request session %p\n", session);
 
 	/* open? */
 	if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
@@ -339,9 +339,9 @@ retry:
 	if (mdsc->sessions[mds]->s_state != CEPH_MDS_SESSION_OPEN) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
-		dout(30, "mdsc_do_request waiting on session %p\n", session);
+		dout(30, "do_request waiting on session %p\n", session);
 		wait_for_completion(&session->s_completion);
-		dout(30, "mdsc_do_request done waiting on session %p\n", session);
+		dout(30, "do_request done waiting on session %p\n", session);
 		put_session(session);
 		spin_lock(&mdsc->lock);
 		goto retry;
@@ -373,7 +373,7 @@ retry:
 	if ((err = ceph_mdsc_parse_reply_info(reply, rinfo)) < 0)
 		return err;
 
-	dout(30, "mdsc_do_request done on %p\n", msg);
+	dout(30, "do_request done on %p\n", msg);
 	return 0;
 }
 

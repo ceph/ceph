@@ -133,3 +133,4 @@ ceph_osdc_create_request(struct ceph_osd_client *osdc, int op)
 	
 	return req;
 }
+

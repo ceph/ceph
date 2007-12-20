@@ -130,21 +130,8 @@ typedef union ceph_pg ceph_pg_t;
 struct ceph_object_layout {
 	ceph_pg_t pgid;
 	__u32     stripe_unit;  
-};
+} __attribute__ ((packed));
 typedef struct ceph_object_layout ceph_object_layout_t;
-
-
-/*
- * object extent
- */
-struct ceph_object_extent {
-	ceph_object_t oe_oid;
-	__u64 oe_start;
-	__u64 oe_length;
-	struct ceph_object_layout oe_object_layout;
-	
-	/* buffer extent reverse mapping? */
-};
 
 /*
  * compound epoch+version, used by rados to serialize mutations
