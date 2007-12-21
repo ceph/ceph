@@ -257,19 +257,38 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 }
 
 
+static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
+{
+	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
+	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct inode *inode = dentry->d_inode;
+	struct ceph_msg *req;
+	struct ceph_mds_reply_info rinfo;
+	char path[200];
+	int pathlen;
+	int err;
+
+	dout(5, "dir_unlink dir %p dentry %p inode %p\n", dir, dentry, inode);
+	pathlen = get_dentry_path(dentry, path, dir->i_sb->s_root);
+	dout(5, "path is %s len %d\n", path, pathlen);
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_UNLINK, 
+				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return err;
+	
+	err = le32_to_cpu(rinfo.head->result);
+	if (err == 0) {
+		inode_dec_link_count(inode);
+		/* FIXME update dir mtime etc. from reply trace */
+	}
+	return err;
+}
+
 
 /*
-static int
-ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
-		struct nameidata *nd)
-{
-}
-
-
-static int ceph_dir_unlink(struct inode *i, struct dentry *d)
-{
-}
-
 static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 }
@@ -278,6 +297,15 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 static int ceph_dir_rmdir(struct inode *i, struct dentry *d)
 {
 }
+
+static int
+ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
+		struct nameidata *nd)
+{
+}
+
+
+
 
 static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   struct inode *new_dir, struct dentry *new_dentry)
@@ -288,10 +316,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
 //	.getattr = ceph_inode_getattr,
-/*	.create = ceph_dir_create,
 	.unlink = ceph_dir_unlink,
-	.mkdir = ceph_vfs_mkdir,
-	.rmdir = ceph_vfs_rmdir,
+//	.mkdir = ceph_vfs_mkdir,
+//	.rmdir = ceph_vfs_rmdir,
+/*	.create = ceph_dir_create,
 	.mknod = ceph_vfs_mknod,
 	.rename = ceph_vfs_rename,
 	.getattr = ceph_vfs_getattr,

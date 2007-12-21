@@ -21,11 +21,10 @@ code cleanup
 kernel client
 - msg layer (patience)
 - mds client
-- mount
-  - get handle on root mount point
+  - examine new mds maps to kick requests for failed nodes...
 - osd client
 - mon client
-  - work out message resend logic..
+  - work out message resend logic..?
 
 
 osdmon
