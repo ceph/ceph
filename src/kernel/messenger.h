@@ -9,7 +9,8 @@
 
 struct ceph_msg;
 
-typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_msg *m);
+typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
+typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
 	switch (t) {
@@ -25,7 +26,8 @@ static __inline__ const char *ceph_name_type_str(int t) {
 
 struct ceph_messenger {
 	void *parent;
-	ceph_messenger_dispatch_t dispatch;
+	ceph_msgr_dispatch_t dispatch;
+	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
 	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
@@ -38,7 +40,7 @@ struct ceph_messenger {
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
 	struct kvec front;              /* first bit of message */
-	struct page **pages;            /* data payload */
+	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
 	atomic_t nref;
@@ -115,7 +117,7 @@ struct ceph_connection {
 extern struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
 
-extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
+extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);
 }

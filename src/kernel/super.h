@@ -76,7 +76,7 @@ struct ceph_inode_info {
 	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
 	atomic_t i_cap_count;  /* ref count */
 
-	off_t i_wr_size;
+	loff_t i_wr_size;
 	struct ceph_timeval i_wr_mtime;
 	
 	struct inode vfs_inode; /* at end */
@@ -99,6 +99,30 @@ struct ceph_file_info {
 	u32 frag;      /* just one frag at a time; screw seek_dir() on large dirs */
 	struct ceph_mds_reply_info rinfo;
 };
+
+
+/*
+ * calculate the number of pages a given length and offset map onto,
+ * if we align the data.
+ */
+static inline int calc_pages_for(int len, int off)
+{
+	int nr = 0;
+	if (len == 0) 
+		return 0;
+	if (off + len < PAGE_SIZE)
+		return 1;
+	if (off) {
+		nr++;
+		len -= off;
+	}
+	nr += len >> PAGE_SHIFT;
+	if (len & PAGE_MASK)
+		nr++;
+	return nr;
+}
+
+
 
 
 /* inode.c */

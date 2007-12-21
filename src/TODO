@@ -34,6 +34,7 @@ osdmon
 - bootstrap crush map
 
 crush
+- properly mind osd_overload for forcefed values (caller no longer does any checking)
 - xml import/export?
  - named storage "pools"
  - generic rule definition

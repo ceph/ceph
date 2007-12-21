@@ -14,28 +14,33 @@ struct ceph_msg;
 /*
  * object extent
  */
-struct ceph_object_extent {
+struct ceph_osd_read {
 	struct ceph_object oid;
 	__u64 start;
 	__u64 length;
-	struct ceph_object_layout layout;
+	struct page **pages;
 };
 
 /*
  * pending request 
  */
 enum {
-	REQUEST_ACK, REQUEST_SAFE
+	REQUEST_ACK,   /* write serialized */
+	REQUEST_SAFE,  /* write committed */
+	REQUEST_DONE   /* read/stat/whatever completed */
 };
 
 struct ceph_osd_request {
 	__u64             r_tid;
-	union ceph_pg     r_pgid;
 	int               r_flags;
 	struct ceph_msg  *r_request;
+	union ceph_pg     r_pgid;
 	struct ceph_msg  *r_reply;
+	int               r_result;
 	atomic_t          r_ref;
-	struct completion r_completion;
+	struct completion r_completion;      /* on ack or commit or read? */
+	unsigned          r_nr_pages;        /* size of page array (follows) */
+	struct page      *r_pages[0];        /* pages for data payload */
 };
 
 struct ceph_osd_client {
@@ -51,6 +56,7 @@ struct ceph_osd_client {
 extern void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client);
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg);
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg);
+extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 
 #endif
 

@@ -59,16 +59,16 @@ register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 
-	dout(30, "mdsc register_request %p tid %lld\n", req, req->r_tid);
+	dout(30, "register_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void*)req);
 	ceph_msg_get(msg);  /* grab reference */
 	return req;
 }
 
-void
-unregister_request(struct ceph_mds_client *mdsc, struct ceph_mds_request *req)
+static void unregister_request(struct ceph_mds_client *mdsc, 
+			       struct ceph_mds_request *req)
 {
-	dout(30, "mdsc unregister_request %p tid %lld\n", req, req->r_tid);
+	dout(30, "unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
 	put_request(req);
 }
@@ -144,7 +144,7 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	struct ceph_msg *msg;
 	void *p;
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(__u32)+sizeof(__u64), 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(__u32)+sizeof(__u64), 0, 0, 0);
 	if (IS_ERR(msg))
 		return ERR_PTR(-ENOMEM);  /* fixme */
 	p = msg->front.iov_base;
@@ -271,7 +271,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	req = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, 
 			   sizeof(struct ceph_mds_request_head) + pathlen,
-			   0, 0);
+			   0, 0, 0);
 	if (IS_ERR(req))
 		return req;
 	memset(req->front.iov_base, 0, req->front.iov_len);

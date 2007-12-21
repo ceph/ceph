@@ -424,16 +424,10 @@ private:
 	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size());
 	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size());
 	else assert(0);
-
-	// forcefeed?
-	int forcefeed = -1;
-	if (pg.preferred() >= 0 &&
-	    exists(pg.preferred())) 
-	  forcefeed = pg.preferred();
 	crush.do_rule(rule,
 		      pg.ps(),
 		      osds, pg.size(),
-		      forcefeed);
+		      pg.preferred());
       }
       break;
       

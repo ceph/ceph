@@ -12,6 +12,9 @@ int ceph_client_debug = 50;
 #include "ktcp.h"
 
 
+void ceph_dispatch(void *p, struct ceph_msg *msg);
+
+
 /* debug level; defined in include/ceph_fs.h */
 int ceph_debug = 0;
 
@@ -49,7 +52,6 @@ static void put_client_counter(void)
 }
 
 
-void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg);
 
 
 /*
@@ -76,7 +78,8 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 		goto fail;
 	}
 	cl->msgr->parent = cl;
-	cl->msgr->dispatch = (ceph_messenger_dispatch_t)ceph_dispatch;
+	cl->msgr->dispatch = ceph_dispatch;
+	cl->msgr->prepare_pages = ceph_osdc_prepare_pages;
 	
 	cl->whoami = -1;
 	ceph_monc_init(&cl->monc);
@@ -108,7 +111,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 trymount:
 	get_random_bytes(&r, 1);
 	which = r % args->num_mon;
-	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0);
+	mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
 	if (IS_ERR(mount_msg))
 		return PTR_ERR(mount_msg);
 	mount_msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MON;
@@ -235,8 +238,9 @@ void got_first_map(struct ceph_client *client, int num)
  *
  * should be fast and non-blocking, as it is called with locks held.
  */
-void ceph_dispatch(struct ceph_client *client, struct ceph_msg *msg)
+void ceph_dispatch(void *p, struct ceph_msg *msg)
 {
+	struct ceph_client *client = p;
 	int had;
 
 	dout(5, "dispatch from %s%d type %d len %d+%d\n",

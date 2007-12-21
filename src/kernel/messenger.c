@@ -89,26 +89,6 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 	}
 }
 
-/*
- * calculate the number of pages a given length and offset map onto,
- * if we align the data.
- */
-static int calc_pages_for(int len, int off)
-{
-	int nr = 0;
-	if (len == 0) 
-		return 0;
-	if (off + len < PAGE_SIZE)
-		return 1;
-	if (off) {
-		nr++;
-		len -= off;
-	}
-	nr += len >> PAGE_SHIFT;
-	if (len & PAGE_MASK)
-		nr++;
-	return nr;
-}
 
 
 
@@ -544,7 +524,7 @@ static int prepare_read_message(struct ceph_connection *con)
 	BUG_ON(con->in_msg != NULL);
 	con->in_tag = CEPH_MSGR_TAG_MSG;
 	con->in_base_pos = 0;
-	con->in_msg = ceph_msg_new(0, 0, 0, 0);
+	con->in_msg = ceph_msg_new(0, 0, 0, 0, 0);
 	if (IS_ERR(con->in_msg)) {
 		/* TBD: we don't check for error in caller, handle error here? */
 		err = PTR_ERR(con->in_msg);
@@ -595,14 +575,19 @@ static int read_message_partial(struct ceph_connection *con)
 	if (m->hdr.data_len == 0) 
 		goto done;
 	if (m->nr_pages == 0) {
-		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off);
-		m->pages = kmalloc(want * sizeof(*m->pages), GFP_KERNEL);
-		if (m->pages == NULL)
-			return -ENOMEM;
-		m->nr_pages = want;
 		con->in_msg_pos.page = 0;
 		con->in_msg_pos.page_pos = m->hdr.data_off;
 		con->in_msg_pos.data_pos = 0;
+		/* find (or alloc) pages for data payload */
+		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off);
+		ret = 0;
+		BUG_ON(!con->msgr->prepare_pages);
+		ret = con->msgr->prepare_pages(con->msgr, m, want);
+		BUG_ON(ret != 0);
+		BUG_ON(m->nr_pages != want);
+		/*
+		 * FIXME: we should discard the data payload if ret 
+		 */
 	}
 	while (con->in_msg_pos.data_pos < m->hdr.data_len) {
 		left = min((int)(m->hdr.data_len - con->in_msg_pos.data_pos),
@@ -1040,10 +1025,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 
 
-struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off)
+struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages)
 {
 	struct ceph_msg *m;
-	int i;
 
 	m = kmalloc(sizeof(*m), GFP_KERNEL);
 	if (m == NULL)
@@ -1066,8 +1050,11 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 
 	/* pages */
 	m->nr_pages = calc_pages_for(page_len, page_off);
+	m->pages = pages;
+	/*
 	if (m->nr_pages) {
-		m->pages = kzalloc(m->nr_pages*sizeof(*m->pages), GFP_KERNEL);
+		int i;
+		kzalloc(m->nr_pages*sizeof(*m->pages), GFP_KERNEL);
 		for (i=0; i<m->nr_pages; i++) {
 			m->pages[i] = alloc_page(GFP_KERNEL);
 			if (m->pages[i] == NULL)
@@ -1076,6 +1063,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 	} else {
 		m->pages = 0;
 	}
+	*/
 
 	INIT_LIST_HEAD(&m->list_head);
 	return m;
@@ -1088,16 +1076,9 @@ out:
 
 void ceph_msg_put(struct ceph_msg *m)
 {
-	int i;
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(30, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));
-		if (m->pages) {
-			for (i=0; i<m->nr_pages; i++)
-				if (m->pages[i])
-					__free_pages(m->pages[i], 0);
-			kfree(m->pages);
-		}
 		if (m->front.iov_base) {
 			kfree(m->front.iov_base);
 		}

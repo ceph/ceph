@@ -1,10 +1,11 @@
 
-#include "osdmap.h"
-
 int ceph_osdmap_debug = 50;
 #define DOUT_VAR ceph_osdmap_debug
 #define DOUT_PREFIX "osdmap: "
 #include "super.h"
+
+#include "osdmap.h"
+#include "crush/hash.h"
 
 /* maps */
 
@@ -484,3 +485,65 @@ bad:
 	return ERR_PTR(err);
 }
 
+
+/*
+ * calculate file layout from given offset, length.
+ * fill in correct oid and off,len within object.
+ * update file offset,length to end of extent, or
+ * the next file extent not included in current mapping.
+ */
+void calc_file_object_mapping(struct ceph_file_layout *layout, 
+			      loff_t *off, loff_t *len,
+			      struct ceph_object *oid, __u64 *oxoff, __u64 *oxlen)
+{
+	unsigned su, stripeno, stripepos, objsetno;
+	unsigned su_per_object = layout->fl_object_size / layout->fl_stripe_unit;
+	unsigned stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
+	unsigned first_oxlen;
+	loff_t t;
+
+	BUG_ON(layout->fl_stripe_unit & PAGE_MASK);
+	su = *off / layout->fl_stripe_unit;
+	stripeno = su / layout->fl_stripe_count;
+	stripepos = su % layout->fl_stripe_count;
+	objsetno = stripeno / su_per_object;
+
+	oid->bno = objsetno * layout->fl_stripe_count + stripepos;
+	*oxoff = *off % layout->fl_stripe_unit;
+	first_oxlen = min_t(loff_t, *len, layout->fl_stripe_unit);
+	*oxlen = first_oxlen;
+
+	/* multiple stripe units in this object? */
+	t = *len;
+	while (t > stripe_len && *oxoff + *oxlen < layout->fl_object_size) {
+		*oxlen += min_t(loff_t, layout->fl_stripe_unit, t);
+		t -= stripe_len;
+	}
+		
+	*off += first_oxlen;
+	*len -= *oxlen;
+}
+
+/*
+ * calculate an object layout (i.e. pgid) from an oid, 
+ * file_layout, and osdmap
+ */
+void calc_object_layout(struct ceph_object_layout *ol,
+			struct ceph_object *oid,
+			struct ceph_file_layout *fl,
+			struct ceph_osdmap *osdmap)
+{
+	unsigned num, num_mask;
+	if (fl->fl_pg_preferred) {
+		num = osdmap->localized_pg_num;
+		num_mask = osdmap->localized_pg_num_mask;
+	} else {
+		num = osdmap->pg_num;
+		num_mask = osdmap->pg_num_mask;
+	}
+	ol->ol_pgid.pg.ps = ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, oid->ino>>32), num, num_mask);
+	ol->ol_pgid.pg.preferred = fl->fl_pg_preferred;
+	ol->ol_pgid.pg.type = fl->fl_pg_type;
+	ol->ol_pgid.pg.size = fl->fl_pg_size;
+	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
+}

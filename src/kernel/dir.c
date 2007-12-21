@@ -92,15 +92,15 @@ static int ceph_dir_open(struct inode *inode, struct file *file)
 /*
  * build fpos from fragment id and offset within that fragment.
  */
-static loff_t make_fpos(u32 frag, u32 off)
+static loff_t make_fpos(unsigned frag, unsigned off)
 {
 	return ((loff_t)frag << 32) | (loff_t)off;
 }
-static u32 fpos_frag(loff_t p)
+static unsigned fpos_frag(loff_t p)
 {
 	return p >> 32;
 }
-static u32 fpos_off(loff_t p)
+static unsigned fpos_off(loff_t p)
 {
 	return p & 0xffffffff;
 }
@@ -109,8 +109,8 @@ static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(filp->f_dentry->d_inode)->mdsc;
-	u32 frag = fpos_frag(filp->f_pos);
-	u32 off = fpos_off(filp->f_pos);
+	unsigned frag = fpos_frag(filp->f_pos);
+	unsigned off = fpos_off(filp->f_pos);
 	int err;
 	int i;
 	struct qstr dname;
