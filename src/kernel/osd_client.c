@@ -8,6 +8,7 @@ int ceph_debug_osdc = 50;
 
 #include "osd_client.h"
 #include "messenger.h"
+#include "crush/mapper.h"
 
 
 void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
@@ -192,18 +193,20 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	default:
 		BUG_ON(1);
 	}
-	int nr_all = crush_do_rule(osdmap->crush, rule, req->r_pgid.pg.ps, osds, 10, req->layout.ol_preferred);
+	nr_osds = crush_do_rule(osdc->osdmap->crush, rule, 
+				req->r_pgid.pg.ps, osds, 10, 
+				req->r_pgid.pg.preferred);
 	for (i=0; i<nr_osds; i++) {
 		if (ceph_osd_is_up(osdc->osdmap, osds[i]))
 			break;
 	}
-	if (i < nr_all) {
-		dout(10, "send_request %p tid %lu to osd%d\n", req, req->r_tid, osds[i]);
-		req->m_request->hdr.dst.name.type = CEPH_ENTITY_TYPE_OSD;
-		req->m_request->hdr.dst.name.num = osds[i];
-		req->m_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
-		ceph_msg_get(req->m_request); /* send consumes a ref */
-		ceph_msg_send(osdc->client->msgr, req->m_request);
+	if (i < nr_osds) {
+		dout(10, "send_request %p tid %llu to osd%d\n", req, req->r_tid, osds[i]);
+		req->r_request->hdr.dst.name.type = CEPH_ENTITY_TYPE_OSD;
+		req->r_request->hdr.dst.name.num = osds[i];
+		req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
+		ceph_msg_get(req->r_request); /* send consumes a ref */
+		ceph_msg_send(osdc->client->msgr, req->r_request, 0);
 	} else {
 		dout(10, "send_request no osds in pg are up\n");
 	}

@@ -122,6 +122,12 @@ union ceph_pg {
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
+ * crush rule ids.  fixme.
+ */
+#define CRUSH_REP_RULE(nrep) (nrep) 
+#define CRUSH_RAID_RULE(num) (10+num)
+
+/*
  * stable_mod func is used to control number of placement groups
  *  b <= bmask and bmask=(2**n)-1
  *  e.g., b=12 -> bmask=15, b=123 -> bmask=127
@@ -441,7 +447,7 @@ struct ceph_osd_request_head {
 	__u32                     op;
 	__u64                     offset, length;
 	struct ceph_object        oid;
-	struct ceph_object_layout  layout;
+	struct ceph_object_layout layout;
 	ceph_epoch_t              osdmap_epoch;
 
 	__u32                     flags;

@@ -71,11 +71,6 @@ typedef uint16_t ps_t;
 typedef uint8_t pruleset_t;
 
 
-// crush rule ids
-#define CRUSH_REP_RULE(nrep) (nrep)  // replication
-#define CRUSH_RAID_RULE(num) (10+num)   // raid
-
-
 
 // placement group id
 struct pg_t {
