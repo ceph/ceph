@@ -95,13 +95,13 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			osdc->osdmap = newmap;
 		}
 	}
-	dout(1, "osdc handle_map done\n");
+	dout(1, "handle_map done\n");
 	
 out:
 	return;
 
 bad:
-	derr(1, "osdc handle_map corrupt msg\n");
+	derr(1, "handle_map corrupt msg\n");
 	goto out;
 }
 
