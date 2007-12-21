@@ -28,9 +28,8 @@ struct ceph_fsid {
 	__u64 major;
 	__u64 minor;
 };
-typedef struct ceph_fsid ceph_fsid_t;
 
-static inline int ceph_fsid_equal(const ceph_fsid_t *a, const ceph_fsid_t *b) {
+static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
 	return a->major == b->major && a->minor == b->minor;
 }
 
@@ -45,7 +44,6 @@ struct ceph_object {
 	__u32 bno;  /* "block" (object) in that "file" */
 	__u32 rev;  /* revision.  normally ctime (as epoch). */
 };
-typedef struct ceph_object ceph_object_t;
 
 #define CEPH_INO_ROOT 1
 
@@ -119,7 +117,6 @@ union ceph_pg {
 		__u8 size;
 	} pg;
 };
-typedef union ceph_pg ceph_pg_t;
 
 #define ceph_pg_is_rep(pg)   (pg.pg.type == CEPH_PG_TYPE_REP)
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
@@ -128,10 +125,9 @@ typedef union ceph_pg ceph_pg_t;
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	ceph_pg_t pgid;
-	__u32     stripe_unit;  
+	union ceph_pg pgid;
+	__u32         stripe_unit;  
 } __attribute__ ((packed));
-typedef struct ceph_object_layout ceph_object_layout_t;
 
 /*
  * compound epoch+version, used by rados to serialize mutations
@@ -140,7 +136,6 @@ struct ceph_eversion {
 	ceph_epoch_t epoch;
 	__u64        version;
 } __attribute__ ((packed));
-typedef struct ceph_eversion ceph_eversion_t;
 
 /*
  * osd map bits
@@ -426,7 +421,6 @@ struct ceph_osd_peer_stat {
 	float frac_rd_ops_shed_in;
 	float frac_rd_ops_shed_out;
 } __attribute__ ((packed));
-typedef struct ceph_osd_peer_stat ceph_osd_peer_stat_t;
 
 struct ceph_osd_request_head {
 	struct ceph_entity_inst   client_inst;
@@ -434,29 +428,29 @@ struct ceph_osd_request_head {
 	__u32                     client_inc;
 	__u32                     op;
 	__u64                     offset, length;
-	ceph_object_t             oid;
-	ceph_object_layout_t      layout;
+	struct ceph_object        oid;
+	struct ceph_object_layout  layout;
 	ceph_epoch_t              osdmap_epoch;
 
 	__u32                     flags;
 
-	ceph_eversion_t           reassert_version;
+	struct ceph_eversion      reassert_version;
 
 	/* semi-hack, fix me */
-	__u32                shed_count;
-	ceph_osd_peer_stat_t peer_stat;
+	__u32                     shed_count;
+	struct ceph_osd_peer_stat peer_stat;
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
 	ceph_tid_t           tid;
 	__u32                op;
 	__u32                flags;
-	ceph_object_t        oid;
-	ceph_object_layout_t layout;
+	struct ceph_object   oid;
+	struct ceph_object_layout layout;
 	ceph_epoch_t         osdmap_epoch;
 	__s32                result;
 	__u64                offset, length;
-	ceph_eversion_t      reassert_version;
+	struct ceph_eversion reassert_version;
 } __attribute__ ((packed));
 
 #endif

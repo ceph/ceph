@@ -76,7 +76,7 @@ public:
 
   object_t get_oid() { return object_t(head.oid); }
   pg_t     get_pg() { return head.layout.pgid; }
-  ceph_object_layout_t get_layout() { return head.layout; }
+  ceph_object_layout get_layout() { return head.layout; }
   epoch_t  get_map_epoch() { return head.osdmap_epoch; }
 
   eversion_t get_version() { return head.reassert_version; }
@@ -94,7 +94,7 @@ public:
   void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
-  const ceph_osd_peer_stat_t& get_peer_stat() { return head.peer_stat; }
+  const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
 
   void inc_shed_count() { head.shed_count++; }
   int get_shed_count() { return head.shed_count; }
@@ -102,7 +102,7 @@ public:
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
-         object_t oid, ceph_object_layout_t ol, epoch_t mapepoch, int op) :
+         object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
     head.client_inst.name = asker.name.v;
@@ -118,7 +118,7 @@ public:
   }
   MOSDOp() {}
 
-  void set_layout(const ceph_object_layout_t& l) { head.layout = l; }
+  void set_layout(const ceph_object_layout& l) { head.layout = l; }
 
   void set_length(off_t l) { head.length = l; }
   void set_offset(off_t o) { head.offset = o; }

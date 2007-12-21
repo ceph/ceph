@@ -224,7 +224,7 @@ struct inode_t {
 
 // --
 
-inline ostream& operator<<(ostream& out, ceph_fsid_t& f) {
+inline ostream& operator<<(ostream& out, ceph_fsid& f) {
   return out << hex << f.major << '.' << f.minor << dec;
 }
 

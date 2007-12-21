@@ -40,7 +40,7 @@ struct ceph_osd_request {
 
 struct ceph_osd_client {
 	spinlock_t             lock;
-	struct ceph_client      *client;
+	struct ceph_client     *client;
 	struct ceph_osdmap     *osdmap;       /* current map */
 	__u64                  last_requested_map;
 	__u64                  last_tid;      /* tid of last request */

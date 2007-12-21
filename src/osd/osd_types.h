@@ -98,7 +98,7 @@ public:
     assert(sizeof(u.pg) == sizeof(u.pg64));
   }
   pg_t(uint64_t v) { u.pg64 = v; }
-  pg_t(const ceph_pg_t& cpg) {
+  pg_t(const ceph_pg& cpg) {
     u = cpg;
   }
 
@@ -163,7 +163,7 @@ namespace __gnu_cxx {
 
 
 
-inline ostream& operator<<(ostream& out, const ceph_object_layout_t &ol)
+inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
   out << "pg" << ol.pgid;
   if (ol.stripe_unit)
@@ -182,8 +182,8 @@ public:
   eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
 
   eversion_t(const ceph_eversion& ce) : epoch(ce.epoch), version(ce.version) {}    
-  operator ceph_eversion_t() {
-    ceph_eversion_t c;
+  operator ceph_eversion() {
+    ceph_eversion c;
     c.epoch = epoch;
     c.version = version;
     return c;
@@ -260,7 +260,7 @@ class ObjectExtent {
   off_t       start;     // in object
   size_t      length;    // in object
 
-  ceph_object_layout_t layout;   // object layout (pgid, etc.)
+  ceph_object_layout layout;   // object layout (pgid, etc.)
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
@@ -284,7 +284,7 @@ class OSDSuperblock {
 public:
   const static uint64_t MAGIC = 0xeb0f505dULL;
   uint64_t magic;
-  ceph_fsid_t fsid;
+  ceph_fsid fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.

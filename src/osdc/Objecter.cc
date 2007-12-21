@@ -320,7 +320,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout_t ol, Context *onfinish)
+tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish)
 {
   OSDStat *st = new OSDStat(size);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
@@ -422,7 +422,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout_t ol, bufferlist *bl,
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl,
                      Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
@@ -660,7 +660,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout_t ol, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
                       Context *onack, Context *oncommit)
 {
   OSDWrite *wr = new OSDWrite(bl);
@@ -674,7 +674,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout_t 
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout_t ol,
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
                      Context *onack, Context *oncommit)
 {
   OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO);
@@ -687,7 +687,7 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout_t o
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, ceph_object_layout_t ol, 
+tid_t Objecter::lock(int op, object_t oid, ceph_object_layout ol, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *l = new OSDModify(op);

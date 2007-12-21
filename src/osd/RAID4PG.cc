@@ -42,7 +42,7 @@ void RAID4PG::do_op(MOSDOp *op)
   // a write will do something like
   object_t oid = op->get_oid();   // logical object
   pg_t pg = op->get_pg();
-  ceph_object_layout_t layout = op->get_layout();
+  ceph_object_layout layout = op->get_layout();
   bufferlist data = op->get_data();
   off_t off = op->get_offset();
   off_t left = op->get_length();

@@ -1324,7 +1324,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     // is this okay?
     assert(superblock.current_epoch == 2);
-    ceph_fsid_t nullfsid;
+    ceph_fsid nullfsid;
     memset(&nullfsid, 0, sizeof(nullfsid));
     if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {
       derr(0) << "will not mkfs, my superblock fsid is not zeroed" << dendl;

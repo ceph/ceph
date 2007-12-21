@@ -83,7 +83,7 @@ class OSDMap {
 public:
   class Incremental {
   public:
-    ceph_fsid_t fsid;
+    ceph_fsid fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
@@ -135,7 +135,7 @@ public:
   };
 
 private:
-  ceph_fsid_t fsid;
+  ceph_fsid fsid;
   epoch_t epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t mon_epoch;  // monitor epoch (election iteration)
   utime_t ctime, mtime;       // epoch start time
@@ -165,8 +165,8 @@ private:
   }
 
   // map info
-  ceph_fsid_t& get_fsid() { return fsid; }
-  void set_fsid(ceph_fsid_t& f) { fsid = f; }
+  ceph_fsid& get_fsid() { return fsid; }
+  void set_fsid(ceph_fsid& f) { fsid = f; }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -387,11 +387,11 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  ceph_object_layout_t file_to_object_layout(object_t oid, FileLayout& layout) {
+  ceph_object_layout file_to_object_layout(object_t oid, FileLayout& layout) {
     return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
   }
 
-  ceph_object_layout_t make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     int num = preferred >= 0 ? localized_pg_num:pg_num;
     int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
 
@@ -422,7 +422,7 @@ private:
 
     // construct object layout
     pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
-    ceph_object_layout_t layout;
+    ceph_object_layout layout;
     layout.pgid = pgid.u;
     layout.stripe_unit = object_stripe_unit;
     return layout;

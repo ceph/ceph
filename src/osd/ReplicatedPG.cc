@@ -153,7 +153,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	  balancing_reads.count(oid) == 0) {
 	dout(-10) << "preprocess_op balance-reads on " << oid << dendl;
 	balancing_reads.insert(oid);
-	ceph_object_layout_t layout;
+	ceph_object_layout layout;
 	layout.pgid = info.pgid.u;
 	layout.stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
@@ -167,7 +167,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	  !unbalancing_reads.count(oid) == 0) {
 	dout(-10) << "preprocess_op unbalance-reads on " << oid << dendl;
 	unbalancing_reads.insert(oid);
-	ceph_object_layout_t layout;
+	ceph_object_layout layout;
 	layout.pgid = info.pgid.u;
 	layout.stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
@@ -1130,7 +1130,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       dout(-10) << "preprocess_op unbalancing-reads on " << op->get_oid() << dendl;
       unbalancing_reads.insert(op->get_oid());
       
-      ceph_object_layout_t layout;
+      ceph_object_layout layout;
       layout.pgid = info.pgid.u;
       layout.stripe_unit = 0;
       MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),

@@ -47,8 +47,8 @@ struct object_t {
     bno = co.bno;
     rev = co.rev;
   }  
-  operator ceph_object_t() {
-    ceph_object_t oid;
+  operator ceph_object() {
+    ceph_object oid;
     oid.ino = ino;
     oid.bno = bno;
     oid.rev = rev;
