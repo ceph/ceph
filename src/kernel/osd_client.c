@@ -4,8 +4,8 @@
 #include "osd_client.h"
 #include "messenger.h"
 
-int ceph_osdc_debug = 50;
-#define DOUT_VAR ceph_osdc_debug
+int ceph_debug_osdc = 50;
+#define DOUT_VAR ceph_debug_osdc
 #define DOUT_PREFIX "osdc: "
 #include "super.h"
 

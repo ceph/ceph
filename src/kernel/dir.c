@@ -22,7 +22,7 @@ static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 	dout(20, "get_dentry_path out dn %p bas %p len %d adding %s\n", 
 	     dn, base, len, dn->d_name.name);
 
-	buf[len++] = '/';
+	if (len) buf[len++] = '/';
 	memcpy(buf+len, dn->d_name.name, dn->d_name.len);
 	len += dn->d_name.len;
 	buf[len] = 0;
@@ -299,11 +299,12 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	char path[200];
 	int pathlen;
 	int err;
-
-	dout(5, "dir_unlink dir %p dentry %p inode %p\n", dir, dentry, inode);
+	int op = ((dentry->d_inode->i_mode & S_IFMT) == S_IFDIR) ? CEPH_MDS_OP_RMDIR:CEPH_MDS_OP_UNLINK;
+	
+	dout(5, "dir_unlink/rmdir dir %p dentry %p inode %p\n", dir, dentry, inode);
 	pathlen = get_dentry_path(dentry, path, dir->i_sb->s_root);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_UNLINK, 
+	req = ceph_mdsc_create_request(mdsc, op, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
@@ -318,13 +319,41 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	return err;
 }
 
+static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
+			   struct inode *new_dir, struct dentry *new_dentry)
+{
+	struct ceph_super_info *sbinfo = ceph_sbinfo(old_dir->i_sb);
+	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_msg *req;
+	struct ceph_mds_reply_info rinfo;
+	struct dentry *root = old_dir->i_sb->s_root;
+	char oldpath[200], newpath[200];
+	int oldpathlen, newpathlen;
+	int err;
+	
+	dout(5, "dir_newname dir %p dentry %p to dir %p dentry %p\n", 
+	     old_dir, old_dentry, new_dir, new_dentry);
+	oldpathlen = get_dentry_path(old_dentry, oldpath, root);
+	newpathlen = get_dentry_path(new_dentry, newpath, root);
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME,
+				       root->d_inode->i_ino, oldpath, 
+				       root->d_inode->i_ino, newpath);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return err;
+	
+	err = le32_to_cpu(rinfo.head->result);
+	if (err == 0) {
+		/* FIXME update dir mtime etc. from reply trace */
+	}
+	return err;
+}
+
 
 /*
 
-
-static int ceph_dir_rmdir(struct inode *i, struct dentry *d)
-{
-}
 
 static int
 ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
@@ -333,23 +362,17 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 }
 
 
-
-
-static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
-			   struct inode *new_dir, struct dentry *new_dentry)
-{
-}
 */
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
 //	.getattr = ceph_inode_getattr,
-	.unlink = ceph_dir_unlink,
 	.mkdir = ceph_dir_mkdir,
-//	.rmdir = ceph_vfs_rmdir,
+	.unlink = ceph_dir_unlink,
+	.rmdir = ceph_dir_unlink,
+	.rename = ceph_dir_rename,
 /*	.create = ceph_dir_create,
 	.mknod = ceph_vfs_mknod,
-	.rename = ceph_vfs_rename,
 	.getattr = ceph_vfs_getattr,
 	.setattr = ceph_vfs_setattr,
 */

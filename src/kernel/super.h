@@ -7,6 +7,10 @@
 #include "client.h"
 
 extern int ceph_debug;
+extern int ceph_debug_msgr;
+extern int ceph_debug_mdsc;
+extern int ceph_debug_osdc;
+
 # define dout(x, args...) do { if (x <= (ceph_debug ? ceph_debug : DOUT_VAR)) printk(KERN_INFO "ceph_" DOUT_PREFIX args); } while (0);
 # define derr(x, args...) do { if (x <= (ceph_debug ? ceph_debug : DOUT_VAR)) printk(KERN_ERR "ceph_" DOUT_PREFIX args); } while (0);
 
