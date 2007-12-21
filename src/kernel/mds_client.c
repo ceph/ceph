@@ -263,7 +263,9 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *head;
 	void *p, *end;
-	int pathlen = 2*(sizeof(ino1) + sizeof(__u32));
+	int pathlen;
+
+	pathlen = 2*(sizeof(ino1) + sizeof(__u32));
 	if (path1) pathlen += strlen(path1);
 	if (path2) pathlen += strlen(path2);
 
@@ -284,6 +286,11 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
 	ceph_encode_filepath(&p, end, ino2, path2);
+	dout(10, "create_request op %d -> %p\n", op, req);
+	if (path1) 
+		dout(10, "create_request  path1 %llx/%s\n", ino1, path1);
+	if (path2)
+		dout(10, "create_request  path2 %llx/%s\n", ino2, path2);
 
 	BUG_ON(p != end);
 	
