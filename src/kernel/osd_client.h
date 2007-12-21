@@ -15,10 +15,10 @@ struct ceph_msg;
  * object extent
  */
 struct ceph_object_extent {
-	ceph_object_t oid;
+	struct ceph_object oid;
 	__u64 start;
 	__u64 length;
-	ceph_object_layout_t layout;
+	struct ceph_object_layout layout;
 };
 
 /*
@@ -30,7 +30,7 @@ enum {
 
 struct ceph_osd_request {
 	__u64             r_tid;
-	ceph_pg_t         r_pgid;
+	union ceph_pg     r_pgid;
 	int               r_flags;
 	struct ceph_msg  *r_request;
 	struct ceph_msg  *r_reply;

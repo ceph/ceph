@@ -75,7 +75,7 @@ public:
   void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a.v; }
 
   object_t get_oid() { return object_t(head.oid); }
-  pg_t     get_pg() { return head.layout.pgid; }
+  pg_t     get_pg() { return head.layout.ol_pgid; }
   ceph_object_layout get_layout() { return head.layout; }
   epoch_t  get_map_epoch() { return head.osdmap_epoch; }
 

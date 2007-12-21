@@ -22,7 +22,7 @@ struct ceph_osdmap {
 
 	__u32 num_pg_swap_primary;
 	struct {
-		ceph_pg_t pg;
+		union ceph_pg pg;
 		__u32 osd;
 	} *pg_swap_primary;
 };

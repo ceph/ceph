@@ -1730,7 +1730,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh) {
   list<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
-  return client->osdmap->get_pg_primary((extents.begin())->layout.pgid);
+  return client->osdmap->get_pg_primary((extents.begin())->layout.ol_pgid);
 }
 
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes

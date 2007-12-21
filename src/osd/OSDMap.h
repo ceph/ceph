@@ -41,15 +41,6 @@ using namespace std;
  * some system constants
  */
 
-// from LSB to MSB,
-#define PG_PS_BITS         16  // max bits for placement seed/group portion of PG
-#define PG_REP_BITS        6   // up to 64 replicas   
-#define PG_TYPE_BITS       2
-#define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
-
-#define PG_TYPE_RAND     1   // default: distribution randomly
-#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD
-
 // pg roles
 #define PG_ROLE_STRAY   -1
 #define PG_ROLE_HEAD     0
@@ -57,13 +48,6 @@ using namespace std;
 #define PG_ROLE_MIDDLE   2  // der.. misnomer
 //#define PG_ROLE_TAIL     2
 
-
-inline int stable_mod(int x, int b, int bmask) {
-  if ((x & bmask) < b) 
-    return x & bmask;
-  else
-    return (x & (bmask>>1));
-}
 
 inline int calc_bits_of(int t) {
   int b = 0;
@@ -399,19 +383,19 @@ private:
     ps_t ps;
     switch (g_conf.osd_object_layout) {
     case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = stable_mod(oid.bno + oid.ino, num, num_mask);
+      ps = ceph_stable_mod(oid.bno + oid.ino, num, num_mask);
       break;
       
     case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     default:
@@ -423,8 +407,8 @@ private:
     // construct object layout
     pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
     ceph_object_layout layout;
-    layout.pgid = pgid.u;
-    layout.stripe_unit = object_stripe_unit;
+    layout.ol_pgid = pgid.u;
+    layout.ol_stripe_unit = object_stripe_unit;
     return layout;
   }
 

@@ -122,11 +122,23 @@ union ceph_pg {
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
+ * stable_mod func is used to control number of placement groups
+ *  b <= bmask and bmask=(2**n)-1
+ *  e.g., b=12 -> bmask=15, b=123 -> bmask=127
+ */
+static inline int ceph_stable_mod(int x, int b, int bmask) {
+  if ((x & bmask) < b) 
+    return x & bmask;
+  else
+    return (x & (bmask>>1));
+}
+
+/*
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	union ceph_pg pgid;
-	__u32         stripe_unit;  
+	union ceph_pg ol_pgid;
+	__u32         ol_stripe_unit;  
 } __attribute__ ((packed));
 
 /*

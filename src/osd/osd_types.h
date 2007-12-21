@@ -165,9 +165,9 @@ namespace __gnu_cxx {
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
-  out << "pg" << ol.pgid;
-  if (ol.stripe_unit)
-    out << ".su=" << ol.stripe_unit;
+  out << "pg" << ol.ol_pgid;
+  if (ol.ol_stripe_unit)
+    out << ".su=" << ol.ol_stripe_unit;
   return out;
 }
 

@@ -36,7 +36,7 @@ class MOSDOpReply : public Message {
  public:
   long     get_tid() { return head.tid; }
   object_t get_oid() { return head.oid; }
-  pg_t     get_pg() { return head.layout.pgid; }
+  pg_t     get_pg() { return head.layout.ol_pgid; }
   int      get_op()  { return head.op; }
   bool     is_safe() { return head.flags & CEPH_OSD_OP_SAFE; }
   
