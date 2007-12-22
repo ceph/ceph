@@ -502,7 +502,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	unsigned first_oxlen;
 	loff_t t;
 
-	BUG_ON(layout->fl_stripe_unit & PAGE_MASK);
+	BUG_ON((layout->fl_stripe_unit & ~PAGE_MASK) != 0);
 	su = *off / layout->fl_stripe_unit;
 	stripeno = su / layout->fl_stripe_count;
 	stripepos = su % layout->fl_stripe_count;
@@ -513,7 +513,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	first_oxlen = min_t(loff_t, *len, layout->fl_stripe_unit);
 	*oxlen = first_oxlen;
 
-	/* multiple stripe units in this object? */
+	/* multiple stripe units across this object? */
 	t = *len;
 	while (t > stripe_len && *oxoff + *oxlen < layout->fl_object_size) {
 		*oxlen += min_t(loff_t, layout->fl_stripe_unit, t);

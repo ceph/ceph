@@ -517,8 +517,11 @@ void ReplicatedPG::op_read(MOSDOp *op)
 			     op->get_offset(), op->get_length(),
 			     bl);
 	reply->set_data(bl);
-	reply->set_length(r);
-	dout(15) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
+	if (r >= 0) 
+	  reply->set_length(r);
+	else
+	  reply->set_length(0);
+	dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
       }
       osd->logger->inc("c_rd");
       osd->logger->inc("c_rdb", op->get_length());

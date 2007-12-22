@@ -18,7 +18,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	int i;
 
 	inode->i_ino = le64_to_cpu(info->ino);
-	inode->i_mode = le32_to_cpu(info->mode) | S_IFDIR;
+	inode->i_mode = le32_to_cpu(info->mode);
 	inode->i_uid = le32_to_cpu(info->uid);
 	inode->i_gid = le32_to_cpu(info->gid);
 	inode->i_nlink = le32_to_cpu(info->nlink);
@@ -26,8 +26,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	inode->i_blocks = 1;
 	inode->i_rdev = 0;
-	dout(30, "new_inode ino=%lx by %d.%d sz=%llu\n", inode->i_ino,
-	     inode->i_uid, inode->i_gid, inode->i_size);
+	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o\n", inode->i_ino,
+	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode);
 	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
@@ -35,7 +35,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	/* ceph inode */
 	dout(30, "inode %p, ci %p\n", inode, ci);
-	ci->i_layout = info->layout; //swab?
+	ci->i_layout = info->layout; 
+	dout(30, "inode layout %p su %d\n", &ci->i_layout, ci->i_layout.fl_stripe_unit);
 
 	if (le32_to_cpu(info->fragtree.nsplits) > 0) {
 		//ci->i_fragtree = kmalloc(...);
@@ -55,7 +56,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_usec = 0;
 
-	//inode->i_mapping->a_ops = &ceph_aops;
+	inode->i_mapping->a_ops = &ceph_aops;
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFIFO:

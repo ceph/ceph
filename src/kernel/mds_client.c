@@ -361,7 +361,7 @@ retry:
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
 	req->r_attempts++;
 	rhead = req->r_request->front.iov_base;
-	rhead->retry_attempt = cpu_to_le32(req->r_attempts);
+	rhead->retry_attempt = cpu_to_le32(req->r_attempts-1);
 	rhead->oldest_client_tid = cpu_to_le64(get_oldest_tid(mdsc));
 	send_msg_mds(mdsc, req->r_request, mds);
 

@@ -170,14 +170,18 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return ERR_PTR(err);
 
-	ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
-	dout(10, "got and parsed stat result, ino %lu\n", ino);
-	inode = iget(dir->i_sb, ino);
-	if (!inode)
-		return ERR_PTR(-EACCES);
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		return ERR_PTR(err);
-	d_add(dentry, inode);
+	if (rinfo.trace_nr > 0) {
+		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
+		dout(10, "got and parsed stat result, ino %lu\n", ino);
+		inode = iget(dir->i_sb, ino);
+		if (!inode)
+			return ERR_PTR(-EACCES);
+		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+			return ERR_PTR(err);
+		d_add(dentry, inode);
+	} else {
+		dout(10, "no trace in reply? wtf.\n");
+	}
 	return NULL;
 }
 

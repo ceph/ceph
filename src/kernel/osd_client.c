@@ -126,16 +126,14 @@ static void put_request(struct ceph_osd_request *req)
 	}
 }
 
-struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op, int nr_pages)
+struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op)
 {
 	struct ceph_msg *req;
 	struct ceph_osd_request_head *head;
 	
-	int size = sizeof(struct ceph_osd_request_head) + nr_pages*(sizeof(void*));
-	req = ceph_msg_new(CEPH_MSG_OSD_OP, size, 0, 0, 0);
+	req = ceph_msg_new(CEPH_MSG_OSD_OP, sizeof(struct ceph_osd_request_head), 0, 0, 0);
 	if (IS_ERR(req))
 		return req;
-	req->nr_pages = nr_pages;
 	memset(req->front.iov_base, 0, req->front.iov_len);
 	head = req->front.iov_base;
 
@@ -148,12 +146,13 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op, int nr_pa
 }
 
 struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
-					  struct ceph_msg *msg)
+					  struct ceph_msg *msg,
+					  int nr_pages)
 {
 	struct ceph_osd_request *req;
 	struct ceph_osd_request_head *head = msg->front.iov_base;
 
-	req = kmalloc(sizeof(*req), GFP_KERNEL);
+	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void*), GFP_KERNEL);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 	req->r_tid = head->tid = ++osdc->last_tid;
@@ -164,6 +163,7 @@ struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
 	req->r_result = 0;
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
+	req->r_nr_pages = nr_pages;
 
 	dout(30, "register_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_insert(&osdc->request_tree, req->r_tid, (void*)req);
@@ -302,10 +302,10 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	struct ceph_osd_request *req;
 	struct ceph_osd_reply_head *replyhead;
 
-	dout(10, "readpage on ino %llu at %lld~%lld\n", ino, off, len);
+	dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
 
 	/* request msg */
-	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ, 1);
+	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
 	reqhead = reqm->front.iov_base;
@@ -314,28 +314,25 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
 				 &reqhead->offset, &reqhead->length);
 	BUG_ON(len != 0);
-	reqm->pages[0] = page;
 	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
+	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
 	
-	/* register request */
+	/* register+send request */
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm);
+	req = register_request(osdc, reqm, 1);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		spin_unlock(&osdc->lock);
 		return PTR_ERR(req);
 	}
+	req->r_pages[0] = page;
 	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-
-	/* send */
 	send_request(osdc, req);
 	spin_unlock(&osdc->lock);
 	
 	/* wait */
 	dout(10, "readpage waiting for reply on %p\n", req);
-	while (!test_bit(REQUEST_DONE, &req->r_flags))
-		wait_for_completion(&req->r_completion);
+	wait_for_completion(&req->r_completion);
 	dout(10, "readpage got reply on %p\n", req);
 
 	spin_lock(&osdc->lock);
@@ -357,7 +354,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 {
 	struct ceph_object oid;
 
-	BUG_ON(layout->fl_stripe_unit & PAGE_MASK);
+	BUG_ON(layout->fl_stripe_unit & ~PAGE_MASK);
 	
 	/* map range onto objects */
 	oid.ino = ino;

@@ -367,7 +367,7 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	/* pages */
 	con->out_msg_pos.page = 0;
-	con->out_msg_pos.page_pos = m->hdr.data_off & PAGE_MASK;
+	con->out_msg_pos.page_pos = m->hdr.data_off & ~PAGE_MASK;
 	con->out_msg_pos.data_pos = 0;
 
 	set_bit(WRITE_PENDING, &con->state);

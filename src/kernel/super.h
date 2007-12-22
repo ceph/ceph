@@ -117,7 +117,7 @@ static inline int calc_pages_for(int len, int off)
 		len -= off;
 	}
 	nr += len >> PAGE_SHIFT;
-	if (len & PAGE_MASK)
+	if (len & ~PAGE_MASK)
 		nr++;
 	return nr;
 }
