@@ -60,7 +60,6 @@ public:
 
 private:
   ceph_osd_request_head head;
-  map<string,bufferptr> attrset;
 
 
   friend class MOSDOpReply;
@@ -89,9 +88,6 @@ public:
 
   const off_t get_length() { return head.length; }
   const off_t get_offset() { return head.offset; }
-
-  map<string,bufferptr>& get_attrset() { return attrset; }
-  void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
   const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
@@ -136,12 +132,10 @@ public:
   virtual void decode_payload() {
     int off = 0;
     ::_decode(head, payload, off);
-    ::_decode(attrset, payload, off);
   }
 
   virtual void encode_payload() {
     ::_encode(head, payload);
-    ::_encode(attrset, payload);
     env.data_off = head.offset;
   }
 

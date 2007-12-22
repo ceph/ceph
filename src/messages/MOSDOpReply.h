@@ -31,7 +31,6 @@
 
 class MOSDOpReply : public Message {
   ceph_osd_reply_head head;
-  map<string,bufferptr> attrset;
 
  public:
   long     get_tid() { return head.tid; }
@@ -44,13 +43,11 @@ class MOSDOpReply : public Message {
   off_t get_length() { return head.length; }
   off_t get_offset() { return head.offset; }
   eversion_t get_version() { return head.reassert_version; }
-  map<string,bufferptr>& get_attrset() { return attrset; }
 
   void set_result(int r) { head.result = r; }
   void set_length(off_t s) { head.length = s; }
   void set_offset(off_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
-  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   void set_op(int op) { head.op = op; }
 
@@ -80,11 +77,9 @@ public:
   virtual void decode_payload() {
     int off = 0;
     ::_decode(head, payload, off);
-    ::_decode(attrset, payload, off);
   }
   virtual void encode_payload() {
     ::_encode(head, payload);
-    ::_encode(attrset, payload);
     env.data_off = head.offset;
   }
 
