@@ -58,5 +58,10 @@ extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg);
 extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 
+extern int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			      struct ceph_file_layout *layout, 
+			      loff_t off, loff_t len,
+			      struct page *page);
+
 #endif
 

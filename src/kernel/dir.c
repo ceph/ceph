@@ -11,14 +11,14 @@ const struct file_operations ceph_dir_fops;
  * - no locking.  
  * - should stop at mount root or current's CWD?
  */
-static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
+int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 {
 	int len;
 	dout(20, "get_dentry_path in dn %p bas %p\n", dn, base);
 	if (dn == base) 
 		return 0;	
 
-	len = get_dentry_path(dn->d_parent, buf, base);
+	len = ceph_get_dentry_path(dn->d_parent, buf, base);
 	dout(20, "get_dentry_path out dn %p bas %p len %d adding %s\n", 
 	     dn, base, len, dn->d_name.name);
 
@@ -29,65 +29,6 @@ static int get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 	return len;
 }
 
-struct ceph_inode_cap *ceph_open(struct inode *inode, struct file *file, int flags)
-{
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
-	ceph_ino_t pathbase;
-	char path[PATH_MAX];
-	int pathlen;
-	struct ceph_msg *req;
-	struct ceph_mds_request_head *rhead;
-	struct ceph_mds_reply_info rinfo;
-	struct dentry *dentry;
-	int frommds;
-	struct ceph_inode_cap *cap;
-	int err;
-
-	dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
-
-	dout(5, "open inode %p dentry %p name '%s' flags %d\n", inode, dentry, dentry->d_name.name, flags);
-	pathbase = inode->i_sb->s_root->d_inode->i_ino;
-	pathlen = get_dentry_path(dentry, path, inode->i_sb->s_root);
-
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
-	if (IS_ERR(req)) 
-		return ERR_PTR(PTR_ERR(req));
-	rhead = req->front.iov_base;
-	rhead->args.open.flags = cpu_to_le32(flags);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
-		return ERR_PTR(err);
-	
-	dout(10, "open got and parsed result\n");
-	frommds = rinfo.reply->hdr.src.name.num;
-	cap = ceph_add_cap(inode, frommds, 
-			   le32_to_cpu(rinfo.head->file_caps), 
-			   le32_to_cpu(rinfo.head->file_caps_seq));
-	return cap;
-}
-
-static int ceph_dir_open(struct inode *inode, struct file *file)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_cap *cap;
-	struct ceph_file_info *fi;
-
-	dout(5, "dir_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
-	cap = ceph_find_cap(inode, 0);
-	if (!cap) {
-		cap = ceph_open(inode, file, O_DIRECTORY);
-		if (IS_ERR(cap))
-			return PTR_ERR(cap);
-	}
-	
-	fi = kzalloc(sizeof(*fi), GFP_KERNEL);
-	if (fi == NULL)
-		return -ENOMEM;
-	file->private_data = fi;
-
-	atomic_inc(&ci->i_cap_count);
-	dout(5, "open_dir success\n");
-	return 0;
-}
 
 /*
  * build fpos from fragment id and offset within that fragment.
@@ -195,26 +136,12 @@ nextfrag:
 	return 0;
 }
 
-int ceph_dir_release(struct inode *inode, struct file *filp)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_file_info *fi = filp->private_data;
-
-	dout(5, "dir_release inode %p filp %p\n", inode, filp);
-	atomic_dec(&ci->i_cap_count);
-
-	if (fi->rinfo.reply) 
-		ceph_mdsc_destroy_reply_info(&fi->rinfo);
-	kfree(fi);
-
-	return 0;
-}
 
 const struct file_operations ceph_dir_fops = {
 	.read = generic_read_dir,
 	.readdir = ceph_dir_readdir,
-	.open = ceph_dir_open,
-	.release = ceph_dir_release,
+	.open = ceph_open,
+	.release = ceph_release,
 };
 
 
@@ -233,7 +160,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	ino_t ino;
 
 	dout(5, "dir_lookup inode %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
-	pathlen = get_dentry_path(dentry, path, dir->i_sb->s_root);
+	pathlen = ceph_get_dentry_path(dentry, path, dir->i_sb->s_root);
 
 	/* stat mds */
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_STAT, 
@@ -269,7 +196,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	int err;
 
 	dout(5, "dir_mkdir dir %p dentry %p mode %d\n", dir, dentry, mode);
-	pathlen = get_dentry_path(dentry, path, dir->i_sb->s_root);
+	pathlen = ceph_get_dentry_path(dentry, path, dir->i_sb->s_root);
 	
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKDIR, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
@@ -302,7 +229,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	int op = ((dentry->d_inode->i_mode & S_IFMT) == S_IFDIR) ? CEPH_MDS_OP_RMDIR:CEPH_MDS_OP_UNLINK;
 	
 	dout(5, "dir_unlink/rmdir dir %p dentry %p inode %p\n", dir, dentry, inode);
-	pathlen = get_dentry_path(dentry, path, dir->i_sb->s_root);
+	pathlen = ceph_get_dentry_path(dentry, path, dir->i_sb->s_root);
 
 	req = ceph_mdsc_create_request(mdsc, op, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
@@ -333,8 +260,8 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	
 	dout(5, "dir_newname dir %p dentry %p to dir %p dentry %p\n", 
 	     old_dir, old_dentry, new_dir, new_dentry);
-	oldpathlen = get_dentry_path(old_dentry, oldpath, root);
-	newpathlen = get_dentry_path(new_dentry, newpath, root);
+	oldpathlen = ceph_get_dentry_path(old_dentry, oldpath, root);
+	newpathlen = ceph_get_dentry_path(new_dentry, newpath, root);
 
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME,
 				       root->d_inode->i_ino, oldpath, 

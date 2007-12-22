@@ -140,9 +140,13 @@ extern const struct address_space_operations ceph_aops;
 extern const struct inode_operations ceph_file_iops;
 extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
+extern int ceph_open(struct inode *inode, struct file *file);
+extern int ceph_release(struct inode *inode, struct file *filp);
 
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
+extern int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base);  /* move me */
+
 
 #endif /* _FS_CEPH_CEPH_H */

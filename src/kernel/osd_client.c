@@ -109,12 +109,6 @@ bad:
 
 
 
-void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
-{
-	dout(5, "handle_reply\n");
-}
-
-
 /* 
  * requests
  */
@@ -220,6 +214,41 @@ static void unregister_request(struct ceph_osd_client *osdc,
 	put_request(req);
 }
 
+/*
+ * handle osd op reply
+ */
+void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
+{
+	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
+	struct ceph_osd_request *req;
+	ceph_tid_t tid;
+
+	dout(10, "handle_reply %p tid %llu\n", msg, le64_to_cpu(rhead->tid));
+	
+	/* lookup */
+	tid = le64_to_cpu(rhead->tid);
+	spin_lock(&osdc->lock);
+	req = radix_tree_lookup(&osdc->request_tree, tid);
+	if (req == NULL) {
+		dout(10, "handle_reply tid %llu dne\n", tid);
+		spin_unlock(&osdc->lock);
+		return;
+	}
+	get_request(req);
+	
+	if (req->r_reply == NULL) {
+		dout(10, "handle_reply tid %llu saving reply\n", tid);
+		ceph_msg_get(msg);
+		req->r_reply = msg;
+	} else {
+		dout(10, "handle_reply tid %llu already had a reply\n", tid);
+	}
+	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags, rhead->flags);
+	req->r_flags |= rhead->flags;
+	spin_unlock(&osdc->lock);
+	complete(&req->r_completion);
+	put_request(req);
+}
 
 
 /*
