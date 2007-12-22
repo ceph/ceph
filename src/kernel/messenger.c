@@ -583,8 +583,16 @@ static int read_message_partial(struct ceph_connection *con)
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr, m, want);
-		BUG_ON(ret != 0);
-		BUG_ON(m->nr_pages != want);
+		if (ret < 0) {
+			dout(10, "prepare_pages failed, skipping+discarding message\n");
+			con->in_base_pos = -m->hdr.data_len; /* ignore rest of message */
+			ceph_msg_put(con->in_msg);
+			con->in_msg = 0;
+			con->in_tag = CEPH_MSGR_TAG_READY;
+			return 0;
+		} else {
+			BUG_ON(m->nr_pages != want);
+		}
 		/*
 		 * FIXME: we should discard the data payload if ret 
 		 */
@@ -834,6 +842,15 @@ more:
 		if (test_bit(CLOSED, &con->state)) goto done;
 	}
 
+	if (con->in_base_pos < 0) {
+		/* skipping + discarding content */
+		static char buf[1024];
+		ret = ceph_tcp_recvmsg(con->sock, buf, 
+				       min(1024, -con->in_base_pos));
+		if (ret <= 0) goto done;
+		con->in_base_pos += ret;
+		goto more;
+	}
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
 		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
 		if (ret <= 0) goto done;

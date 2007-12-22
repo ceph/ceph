@@ -258,6 +258,7 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	return(rlen);
 }
 
+
 /*
  * Send a message this may return after partial send
  */

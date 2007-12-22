@@ -103,7 +103,7 @@ struct ceph_connection {
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
 	int in_base_pos;   /* for ack seq, or msg headers, or accept handshake */
-	__u32 in_partial_ack;  
+	__u32 in_partial_ack; 
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
