@@ -22,9 +22,15 @@ code cleanup
 kernel client
 - msg layer (patience)
 - mds client
+  - handle map changes (check for mds failure)
 - mount
   - get handle on root mount point
 - osd client
+  - async (caching) mode
+  - sync mode (write-through)
+  - capability changes (flush)
+  - osd ack vs commit handling.  hmm!
+  - handle map changes (resubmit ops)
 - mon client
   - work out message resend logic..
 
