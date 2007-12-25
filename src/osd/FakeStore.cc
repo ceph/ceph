@@ -79,7 +79,7 @@ void FakeStore::get_oname(pobject_t oid, char *s)
 #else
   //sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
   sprintf(s, "%s/objects/%04x.%04x.%016llx.%016llx", basedir.c_str(), 
-	  oid.volume, oisd.rank,
+	  oid.volume, oid.rank,
 	  *((uint64_t*)&oid),
 	  *(((uint64_t*)&oid) + 1));
 #endif
