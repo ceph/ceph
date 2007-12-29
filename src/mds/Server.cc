@@ -140,9 +140,11 @@ void Server::handle_client_session(MClientSession *m)
 {
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
-  bool open = m->op == MClientSession::OP_REQUEST_OPEN;
+  bool open = false;
 
-  if (open) {
+  switch (m->op) {
+  case MClientSession::OP_REQUEST_OPEN;
+    open = true;
     if (mds->clientmap.have_session(from)) {
       dout(10) << "already open, dropping this req" << dendl;
       delete m;
@@ -154,7 +156,9 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
     mds->clientmap.add_opening(from);
-  } else {
+    break;
+
+  case MClientSession::OP_REQUEST_CLOSE:
     if (mds->clientmap.is_closing(from)) {
       dout(10) << "already closing, dropping this req" << dendl;
       delete m;
@@ -169,6 +173,10 @@ void Server::handle_client_session(MClientSession *m)
     assert(m->seq == mds->clientmap.get_push_seq(from));
 
     mds->clientmap.add_closing(from);
+    break;
+
+  default:
+    assert(0);
   }
 
   // journal it

@@ -17,6 +17,7 @@
 #define __CAPABILITY_H
 
 #include "include/buffer.h"
+#include "include/xlist.h"
 
 #include <map>
 using namespace std;
@@ -24,7 +25,7 @@ using namespace std;
 #include "config.h"
 
 
-// definite caps
+// define caps
 #define CAP_FILE_RDCACHE   1    // client can safely cache reads
 #define CAP_FILE_RD        2    // client can read
 #define CAP_FILE_WR        4    // client can write
@@ -69,17 +70,20 @@ private:
   capseq_t last_sent, last_recv;
   
   bool suppress;
-
 public:
+  xlist<Capability*>::item xlist_item;
+
   Capability(int want=0, capseq_t s=0) :
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
-    suppress(false) { 
+    suppress(false),
+    xlist_item(this) { 
   }
   Capability(Export& other) : 
     wanted_caps(other.wanted),
-    last_sent(0), last_recv(0) { 
+    last_sent(0), last_recv(0),
+    xlist_item(this) { 
     // issued vs pending
     if (other.issued & ~other.pending)
       issue(other.issued);
