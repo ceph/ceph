@@ -108,7 +108,7 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 		mdsc->max_sessions = mds+1;
 	}
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
-	s->s_state = 0;
+	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
@@ -341,9 +341,10 @@ retry:
 	dout(30, "do_request session %p\n", session);
 
 	/* open? */
-	//if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
-	//open_session(mdsc, session, mds);
-	if (mdsc->sessions[mds]->s_state != CEPH_MDS_SESSION_OPEN) {
+	if (session->s_state == CEPH_MDS_SESSION_NEW ||
+	    session->s_state == CEPH_MDS_SESSION_CLOSING) 
+		open_session(mdsc, session, mds);
+	if (session->s_state == CEPH_MDS_SESSION_OPENING) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
 		dout(30, "do_request waiting on session %p\n", session);
@@ -353,6 +354,7 @@ retry:
 		spin_lock(&mdsc->lock);
 		goto retry;
 	}
+	BUG_ON(session->s_state != CEPH_MDS_SESSION_OPEN);
 	put_session(session);
 
 	/* make request? */
@@ -650,36 +652,37 @@ bad:
 /*
  * kick outstanding requests
  */
-void kick_requests(struct ceph_mds_client *mdsc, int mds)
+void kick_requests(struct ceph_mds_client *mdsc, int m)
 {
 	struct ceph_mds_request *reqs[10];
-	u64 tid = 0;
+	u64 nexttid = 0;
 	int i, got;
 	
-	dout(20, "kick_requests mds%d\n", mds);
-	while (tid < mdsc->last_tid) {
-		got = radix_tree_gang_lookup(tid, reqs, 10);
+	dout(20, "kick_requests mds%d\n", m);
+	while (nexttid < mdsc->last_tid) {
+		got = radix_tree_gang_lookup(&mdsc->request_tree, (void**)&reqs,
+					     nexttid, 10);
 		if (got == 0) break;
+		nexttid = reqs[got-1]->r_tid + 1;
 		for (i=0; i<got; i++) {
-			if ((reqs[i]->r_num_mds >= 1 && r_mds[0] == mds) ||
-			    (reqs[i]->r_num_mds >= 2 && r_mds[1] == mds)) {
+			if ((reqs[i]->r_num_mds >= 1 && reqs[i]->r_mds[0] == m) ||
+			    (reqs[i]->r_num_mds >= 2 && reqs[i]->r_mds[1] == m)) {
 				dout(10, " kicking req %llu\n", reqs[i]->r_tid);
 				complete(&reqs[i]->r_completion);
 			}
 		}
-		tid = reqs[got-1]->r_tid + 1;
 	}
 }
 
 void check_new_map(struct ceph_mds_client *mdsc,
-		   struct ceph_mds_map *newmap,
-		   struct ceph_mds_map *oldmap)
+		   struct ceph_mdsmap *newmap,
+		   struct ceph_mdsmap *oldmap)
 {
 	int i;
-	int newstate;
+	int oldstate, newstate;
 	struct ceph_mds_session *session;
 
-	dout(20, "check_new_map new %lu old %lu\n",
+	dout(20, "check_new_map new %u old %u\n",
 	     newmap->m_epoch, oldmap->m_epoch);
 	
 	for (i=0; i<oldmap->m_max_mds; i++) {
@@ -700,7 +703,7 @@ void check_new_map(struct ceph_mds_client *mdsc,
 		/* kill session */
 		session = mdsc->sessions[i];
 		if (session->s_state == CEPH_MDS_SESSION_OPENING) 
-			complete(session->s_completion);
+			complete(&session->s_completion);
 		if (session->s_state == CEPH_MDS_SESSION_OPEN)
 			kick_requests(mdsc, i);
 		unregister_session(mdsc, i);
@@ -732,7 +735,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(2, "ceph_mdsc_handle_map epoch %u < our %u\n", 
 		     epoch, mdsc->mdsmap->m_epoch);
 		spin_unlock(&mdsc->lock);
-		goto out;
+		return;
 	}
 	spin_unlock(&mdsc->lock);
 
@@ -766,10 +769,10 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 bad:
 	dout(1, "corrupt map\n");
-	goto out;
+	return;
 bad2:
 	dout(1, "no memory to decode new mdsmap\n");
-	goto out;
+	return;
 }
 
 /* eof */

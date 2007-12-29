@@ -15,7 +15,7 @@ struct ceph_client;
  * state associated with each MDS<->client session
  */
 enum {
-//	CEPH_MDS_SESSION_IDLE,
+	CEPH_MDS_SESSION_NEW,
 	CEPH_MDS_SESSION_OPENING,
 	CEPH_MDS_SESSION_OPEN,
 	CEPH_MDS_SESSION_CLOSING
