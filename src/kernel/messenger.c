@@ -445,7 +445,7 @@ static void try_write(struct work_struct *work)
 
 	con = container_of(work, struct ceph_connection, swork.work);
 	msgr = con->msgr;
-	dout(30, "try_write start %p state %d\n", con, con->state);
+	dout(30, "try_write start %p state %lu\n", con, con->state);
 more:
 	dout(30, "try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
 
@@ -453,7 +453,7 @@ more:
 	if (test_and_clear_bit(NEW, &con->state)) {
 		prepare_write_connect(msgr, con);
 		set_bit(CONNECTING, &con->state);
-		dout(5, "try_write initiating connect on %p new state %u\n", con, con->state);
+		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
 		dout(5, "try_write initiated connect\n");
 		if (ret < 0) {
@@ -470,7 +470,7 @@ more:
 		if (ret == 0)
 			goto done;
 		if (test_and_clear_bit(REJECTING, &con->state)) {
-			dout(30, "try_write done rejecting, state %u, closing\n", con->state);
+			dout(30, "try_write done rejecting, state %lu, closing\n", con->state);
 			/* FIXME do something else here, pbly? */
 			remove_connection(msgr, con);
 			set_bit(CLOSED, &con->state);

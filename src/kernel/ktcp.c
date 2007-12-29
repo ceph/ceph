@@ -35,7 +35,7 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
-		dout(30, "ceph_data_ready on %p state = %u, queuing rwork\n",
+		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
 		set_bit(READABLE, &con->state);
 		queue_work(recv_wq, &con->rwork);
@@ -47,7 +47,7 @@ static void ceph_write_space(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-        dout(30, "ceph_write_space %p state = %u\n", con, con->state);
+        dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 	/* only queue to workqueue if a WRITE is pending */
         if (con && test_bit(WRITE_PENDING, &con->state)) {
                 dout(30, "ceph_write_space %p queuing write work\n", con);
@@ -62,7 +62,7 @@ static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-        dout(30, "ceph_state_change %p state = %u sk_state = %u\n", 
+        dout(30, "ceph_state_change %p state = %lu sk_state = %u\n", 
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
 		case TCP_CLOSE_WAIT:

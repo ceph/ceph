@@ -69,7 +69,7 @@ struct ceph_msg_pos {
 struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
-	__u32 state;		/* connection state */
+	unsigned long state;	/* connection state */
 	
 	atomic_t nref;
 
