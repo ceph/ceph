@@ -2686,10 +2686,18 @@ void Server::handle_client_rename(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
+  // src+dest _must_ share commont root for locking to prevent orphans
+  filepath destpath = req->get_filepath2();
+  filepath srcpath = req->get_filepath();
+  if (destpath.ino != srcpath.ino) {
+    // error out for now; eventually, we should find the deepest common root
+    derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
+    assert(0);
+  }
+
   // traverse to dest dir (not dest)
   //  we do this FIRST, because the rename should occur on the 
   //  destdn's auth.
-  const filepath &destpath = req->get_filepath2();
   const string &destname = destpath.last_dentry();
   vector<CDentry*> desttrace;
   CDir *destdir = traverse_to_auth_dir(mdr, desttrace, destpath);
@@ -2698,7 +2706,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   assert(destdir->is_auth());
 
   // traverse to src
-  filepath srcpath = req->get_filepath();
   vector<CDentry*> srctrace;
   int r = mdcache->path_traverse(mdr, req,
 				 srcpath, srctrace, false,
