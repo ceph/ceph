@@ -51,16 +51,17 @@ static inline struct ceph_super_info *ceph_sbinfo(struct super_block *sb)
 /*
  * CEPH file system in-core inode info
  */
+
 struct ceph_inode_cap {
 	int mds;
 	int caps;
-	__u64 seq;
+	u64 seq;
 	int flags;  /* stale, etc.? */
 };
 
 struct ceph_inode_frag_map_item {
-	__u32 frag;
-	__u32 mds;
+	u32 frag;
+	u32 mds;
 };
 
 #define STATIC_CAPS 2

@@ -116,6 +116,7 @@ struct ceph_connection {
 
 extern struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
+extern void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {

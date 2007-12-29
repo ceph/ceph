@@ -15,7 +15,7 @@ struct ceph_client;
  * state associated with each MDS<->client session
  */
 enum {
-	CEPH_MDS_SESSION_IDLE,
+//	CEPH_MDS_SESSION_IDLE,
 	CEPH_MDS_SESSION_OPENING,
 	CEPH_MDS_SESSION_OPEN,
 	CEPH_MDS_SESSION_CLOSING
@@ -37,7 +37,7 @@ struct ceph_mds_request {
 	
 	__u32             r_mds[2];   /* set of mds's with whom request may be outstanding */
         int               r_num_mds;  /* items in r_mds */
-	
+
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
         int               r_resend_mds; /* mds to resend to next, if any*/

@@ -341,8 +341,8 @@ retry:
 	dout(30, "do_request session %p\n", session);
 
 	/* open? */
-	if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
-		open_session(mdsc, session, mds);
+	//if (mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_IDLE) 
+	//open_session(mdsc, session, mds);
 	if (mdsc->sessions[mds]->s_state != CEPH_MDS_SESSION_OPEN) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
@@ -646,6 +646,67 @@ bad:
 }
 
 
+
+/*
+ * kick outstanding requests
+ */
+void kick_requests(struct ceph_mds_client *mdsc, int mds)
+{
+	struct ceph_mds_request *reqs[10];
+	u64 tid = 0;
+	int i, got;
+	
+	dout(20, "kick_requests mds%d\n", mds);
+	while (tid < mdsc->last_tid) {
+		got = radix_tree_gang_lookup(tid, reqs, 10);
+		if (got == 0) break;
+		for (i=0; i<got; i++) {
+			if ((reqs[i]->r_num_mds >= 1 && r_mds[0] == mds) ||
+			    (reqs[i]->r_num_mds >= 2 && r_mds[1] == mds)) {
+				dout(10, " kicking req %llu\n", reqs[i]->r_tid);
+				complete(&reqs[i]->r_completion);
+			}
+		}
+		tid = reqs[got-1]->r_tid + 1;
+	}
+}
+
+void check_new_map(struct ceph_mds_client *mdsc,
+		   struct ceph_mds_map *newmap,
+		   struct ceph_mds_map *oldmap)
+{
+	int i;
+	int newstate;
+	struct ceph_mds_session *session;
+
+	dout(20, "check_new_map new %lu old %lu\n",
+	     newmap->m_epoch, oldmap->m_epoch);
+	
+	for (i=0; i<oldmap->m_max_mds; i++) {
+		if (mdsc->sessions[i] == 0)
+			continue;
+		oldstate = ceph_mdsmap_get_state(oldmap, i);
+		newstate = ceph_mdsmap_get_state(newmap, i);
+		if (newstate >= oldstate)
+			continue;  /* no problem */
+		
+		dout(20, "check_new_map mds%d state %d -> %d\n",
+		     i, oldstate, newstate);
+
+		/* notify messenger */
+		ceph_messenger_mark_down(mdsc->client->msgr,
+					 &oldmap->m_addr[i]);
+
+		/* kill session */
+		session = mdsc->sessions[i];
+		if (session->s_state == CEPH_MDS_SESSION_OPENING) 
+			complete(session->s_completion);
+		if (session->s_state == CEPH_MDS_SESSION_OPEN)
+			kick_requests(mdsc, i);
+		unregister_session(mdsc, i);
+	}
+}
+
 /*
  * handle mds map update.
  */
@@ -686,25 +747,23 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		if (mdsc->mdsmap->m_epoch < newmap->m_epoch) {
 			oldmap = mdsc->mdsmap;
 			mdsc->mdsmap = newmap;
-			spin_unlock(&mdsc->lock);
-			if (oldmap)
+			if (oldmap) {
+				check_new_map(mdsc, newmap, oldmap);
 				ceph_mdsmap_destroy(oldmap);
+			}
 		} else {
-			spin_unlock(&mdsc->lock);
 			dout(2, "ceph_mdsc_handle_map lost decode race?\n");
 			ceph_mdsmap_destroy(newmap);
+			spin_unlock(&mdsc->lock);
+			return;
 		}
 	} else {
 		mdsc->mdsmap = newmap;
-		spin_unlock(&mdsc->lock);
 	}
+	spin_unlock(&mdsc->lock);
 	complete(&mdsc->map_waiters);
-
-	/* kick any requests pending for failed/recovering mds's */
-	// FIXME
-
-out:
 	return;
+
 bad:
 	dout(1, "corrupt map\n");
 	goto out;

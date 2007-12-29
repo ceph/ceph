@@ -141,7 +141,21 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 	return &ci->i_caps[i];
 }
 
+int ceph_get_caps(struct ceph_inode_info *ci)
+{
+	int i;
+	int have = 0;
+	for (i=0; i<ci->i_nr_caps; i++)
+		have |= ci->i_caps[i].caps;
+	return have;
+}
 
+
+
+
+/*
+ * vfs methods
+ */
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		       struct kstat *stat)
 {
@@ -149,8 +163,9 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	return 0;
 }
 
-/*
 
+
+/*
 
 
 static int ceph_vfs_setattr(struct dentry *dentry, struct iattr *iattr)
