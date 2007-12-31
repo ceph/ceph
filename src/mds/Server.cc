@@ -141,11 +141,12 @@ void Server::handle_client_session(MClientSession *m)
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
   bool open = false;
+  Session *session = mds->sessionmap.get_session(m->get_source());
 
   switch (m->op) {
-  case MClientSession::OP_REQUEST_OPEN;
+  case MClientSession::OP_REQUEST_OPEN:
     open = true;
-    if (mds->clientmap.have_session(from)) {
+    if (!session) {
       dout(10) << "already open, dropping this req" << dendl;
       delete m;
       return;

@@ -89,6 +89,7 @@ private:
   MDS *mds;
   hash_map<entity_name_t, Session> session_map;
   version_t version, projected, committing, committed;
+  map<version_t, list<Context*> > commit_waiters;
 
 public:
   SessionMap(MDS *m) : mds(m), 
@@ -102,19 +103,45 @@ public:
       return &session_map[w];
     return 0;
   }
-  entity_inst_t& get_inst(entity_name_t w) {
-    assert(session_map.count(w));
-    return session_map[w].inst;
-  }
-
   Session* add_session(entity_name_t w) {
     return &session_map[w];
   }
   void remove_session(entity_name_t w) {
     session_map.erase(w);
   }
+
+  void get_session_set(set<entity_name_t>& s) {
+    for (hash_map<entity_name_t,Session>::iterator p = session_map.begin();
+	 p != session_map.end();
+	 p++)
+      s.insert(p->first);
+  }
+
+  // helpers
+  entity_inst_t& get_inst(entity_name_t w) {
+    assert(session_map.count(w));
+    return session_map[w].inst;
+  }
+  version_t inc_push_seq(int client) {
+    return get_session(entity_name_t::CLIENT(client))->inc_push_seq();
+  }
+  version_t get_push_seq(int client) {
+    return get_session(entity_name_t::CLIENT(client))->get_push_seq();
+  }
   
-  
+  // -- loading, saving --
+  inode_t inode;
+  list<Context*> waiting_for_load;
+
+  void encode(bufferlist& bl);
+  void decode(bufferlist& bl);
+
+  void init_inode();
+  void load(Context *onload);
+  void _load_finish(bufferlist &bl);
+  void save(Context *onsave, version_t needv=0);
+  void _save_finish(version_t v);
+ 
 };
 
 

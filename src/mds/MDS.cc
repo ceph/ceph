@@ -33,7 +33,6 @@
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "Migrator.h"
-//#include "Renamer.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -72,7 +71,7 @@
 // cons/des
 MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
   timer(mds_lock), 
-  clientmap(this) {
+  clientmap(this), sessionmap(this) {
 
   this->whoami = whoami;
 
@@ -280,15 +279,15 @@ void MDS::forward_message_mds(Message *req, int mds)
 
 void MDS::send_message_client(Message *m, int client)
 {
-  version_t seq = clientmap.inc_push_seq(client);
+  version_t seq = sessionmap.inc_push_seq(client);
   dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, clientmap.get_inst(client));
+  messenger->send_message(m, sessionmap.get_inst(entity_name_t::CLIENT(client)));
 }
 
 void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 {
-  version_t seq = clientmap.inc_push_seq(clientinst.name.num());
-  dout(10) << "send_message_client client" << clientinst.name.num() << " seq " << seq << " " << *m << dendl;
+  version_t seq = sessionmap.inc_push_seq(clientinst.name.num());
+  dout(10) << "send_message_client " << clientinst.name << " seq " << seq << " " << *m << dendl;
   messenger->send_message(m, clientinst);
 }
 
@@ -654,12 +653,12 @@ void MDS::bcast_mds_map()
   dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
 
   // share the map with mounted clients
-  for (set<int>::const_iterator p = clientmap.get_session_set().begin();
-       p != clientmap.get_session_set().end();
-       ++p) {
-    messenger->send_message(new MMDSMap(mdsmap),
-			    clientmap.get_inst(*p));
-  }
+  set<entity_name_t> clients;
+  sessionmap.get_session_set(clients);
+  for (set<entity_name_t>::const_iterator p = clients.begin();
+       p != clients.end();
+       ++p) 
+    messenger->send_message(new MMDSMap(mdsmap), sessionmap.get_inst(*p));
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -756,7 +755,7 @@ void MDS::boot_create()
   idalloc->save(fin->new_sub());
 
   // write empty clientmap
-  clientmap.save(fin->new_sub());
+  sessionmap.save(fin->new_sub());
   
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
@@ -793,8 +792,8 @@ void MDS::boot_start(int step)
       dout(2) << "boot_start " << step << ": opening idalloc" << dendl;
       idalloc->load(gather->new_sub());
 
-      dout(2) << "boot_start " << step << ": opening clientmap" << dendl;
-      clientmap.load(gather->new_sub());
+      dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+      sessionmap.load(gather->new_sub());
 
       if (mdsmap->get_anchortable() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;

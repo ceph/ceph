@@ -42,6 +42,7 @@ using namespace __gnu_cxx;
 #include "MDSMap.h"
 
 #include "ClientMap.h"
+#include "SessionMap.h"
 
 
 
@@ -200,6 +201,7 @@ class MDS : public Dispatcher {
 
   // -- client map --
   ClientMap    clientmap;
+  SessionMap   sessionmap;
   epoch_t      last_client_mdsmap_bcast;
   //void log_clientmap(Context *c);
 
