@@ -218,9 +218,6 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
 
 void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
 {
-  /* 
-   * FIXME !
-   */
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
@@ -245,17 +242,6 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
-    /*
-    if (session->is_closing()) {
-      dout(15) << "force_open_sessions canceling close on " << session->inst << dendl;
-      mds->clientmap.remove_closing(p->first);
-      continue;
-    }
-    if (mds->clientmap.have_session(p->first)) {
-      dout(15) << "force_open_sessions have session " << p->second << dendl;
-      continue;
-    }
-    */
     if (session->is_opening()) {
       dout(10) << "force_open_sessions opening " << session->inst << dendl;
       session->state = Session::STATE_OPEN;

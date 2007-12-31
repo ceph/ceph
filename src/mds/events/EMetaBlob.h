@@ -487,8 +487,6 @@ private:
     out << "]";
   }
 
-  bool has_expired(MDS *mds);
-  void expire(MDS *mds, Context *c);
   void update_segment(LogSegment *ls);
   void replay(MDS *mds, LogSegment *ls=0);
 };

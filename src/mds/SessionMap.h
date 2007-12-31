@@ -145,11 +145,8 @@ public:
 	 p != client_map.end(); 
 	 ++p) {
       Session *session = get_or_add_session(p->second);
-      if (session->state == Session::STATE_UNDEF ||
-	  session->state == Session::STATE_CLOSING) {
-	session->inst = p->second;
-	session->state = Session::STATE_OPEN;
-      }
+      session->inst = p->second;
+      session->state = Session::STATE_OPEN;
     }
     version++;
   }

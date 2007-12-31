@@ -47,8 +47,6 @@ class EString : public LogEvent {
     out << '"' << event << '"';
   }
 
-  bool has_expired(MDS *mds);
-  void expire(MDS *mds, Context *c);
   void replay(MDS *mds);
 
 };
