@@ -961,7 +961,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	if (myaddr) 
 		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
 
-	dout(1, "ceph_messenger_create %p listening on %x:%d\n", msgr,
+	dout(1, "create %p listening on %x:%d\n", msgr,
 	     ntohl(msgr->inst.addr.ipaddr.sin_addr.s_addr), 
 	     ntohs(msgr->inst.addr.ipaddr.sin_port));
 	return msgr;
@@ -971,7 +971,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 
-	dout(1, "ceph_messenger_destroy %p\n", msgr);
+	dout(1, "destroy %p\n", msgr);
 
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
@@ -985,6 +985,12 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	sock_release(msgr->listen_sock);
 
 	kfree(msgr);
+}
+
+void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
+{
+	dout(1, "mark_down\n");
+	/* write me */
 }
 
 
