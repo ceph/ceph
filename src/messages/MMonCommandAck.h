@@ -26,7 +26,7 @@ class MMonCommandAck : public Message {
   MMonCommandAck(int _r, string s) : Message(MSG_MON_COMMAND_ACK),
 				     r(_r), rs(s) { }
   
-  virtual char *get_type_name() { return "mon_command"; }
+  const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
     o << "mon_command_ack(" << r << " " << rs << ")";
   }

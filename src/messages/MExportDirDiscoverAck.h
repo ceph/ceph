@@ -34,7 +34,7 @@ class MExportDirDiscoverAck : public Message {
     dirfrag(df),
     success(s) { }
 
-  virtual char *get_type_name() { return "ExDisA"; }
+  const char *get_type_name() { return "ExDisA"; }
   void print(ostream& o) {
     o << "export_discover_ack(" << dirfrag;
     if (success) 

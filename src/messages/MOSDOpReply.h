@@ -127,7 +127,7 @@ public:
     env.data_off = st.offset;
   }
 
-  virtual char *get_type_name() { return "osd_op_reply"; }
+  const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
     out << "osd_op_reply(" << st.reqid

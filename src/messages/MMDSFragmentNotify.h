@@ -36,7 +36,7 @@ class MMDSFragmentNotify : public Message {
 	Message(MSG_MDS_FRAGMENTNOTIFY),
     ino(i), basefrag(bf), bits(b) { }
   
-  virtual char *get_type_name() { return "fragment_notify"; }
+  const char *get_type_name() { return "fragment_notify"; }
   void print(ostream& o) {
     o << "fragment_notify(" << ino << "#" << basefrag
       << " " << (int)bits << ")";

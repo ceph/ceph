@@ -27,7 +27,7 @@ class MMDSResolveAck : public Message {
 
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
 
-  char *get_type_name() { return "resolve_ack"; }
+  const char *get_type_name() { return "resolve_ack"; }
   /*void print(ostream& out) {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()

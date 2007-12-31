@@ -31,7 +31,7 @@ class MClientRequestForward : public Message {
   int get_dest_mds() { return dest_mds; }
   int get_num_fwd() { return num_fwd; }
 
-  char *get_type_name() { return "cfwd"; }
+  const char *get_type_name() { return "cfwd"; }
   void print(ostream& o) {
     o << "client_request_forward(" << tid
       << " to " << dest_mds

@@ -26,7 +26,7 @@ class MMDSGetMap : public Message {
 
   MMDSGetMap(epoch_t h=0) : Message(CEPH_MSG_MDS_GETMAP), have (h) { }
 
-  char *get_type_name() { return "mdsgetmap"; }
+  const char *get_type_name() { return "mdsgetmap"; }
   
   void encode_payload() {
     ::_encode_simple(have, payload);

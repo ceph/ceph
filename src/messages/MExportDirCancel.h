@@ -30,7 +30,7 @@ class MExportDirCancel : public Message {
     Message(MSG_MDS_EXPORTDIRCANCEL),
 	dirfrag(df) { }
 
-  virtual char *get_type_name() { return "ExCancel"; }
+  const char *get_type_name() { return "ExCancel"; }
   void print(ostream& o) {
     o << "export_cancel(" << dirfrag << ")";
   }

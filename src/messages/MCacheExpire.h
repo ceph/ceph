@@ -37,7 +37,7 @@ public:
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
 
-  virtual char *get_type_name() { return "CEx";}
+  virtual const char *get_type_name() { return "CEx";}
   
   void add_inode(dirfrag_t r, inodeno_t ino, int nonce) {
     realms[r].inodes[ino] = nonce;

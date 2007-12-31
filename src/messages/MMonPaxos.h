@@ -61,7 +61,7 @@ class MMonPaxos : public Message {
     op(o), machine_id(mid),
     last_committed(0), pn_from(0), pn(0), uncommitted_pn(0) { }
   
-  virtual char *get_type_name() { return "paxos"; }
+  const char *get_type_name() { return "paxos"; }
   
   void print(ostream& out) {
     out << "paxos(" << get_paxos_name(machine_id)

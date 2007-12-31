@@ -36,7 +36,7 @@ class MInodeFileCaps : public Message {
     this->caps = caps;
   }
 
-  virtual char *get_type_name() { return "Icap";}
+  const char *get_type_name() { return "Icap";}
   
   virtual void decode_payload() {
     int off = 0;

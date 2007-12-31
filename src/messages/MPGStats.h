@@ -24,7 +24,7 @@ public:
   
   MPGStats() : Message(MSG_PGSTATS) {}
 
-  char *get_type_name() { return "pg_stats"; }
+  const char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
     out << "pg_stats";
   }
