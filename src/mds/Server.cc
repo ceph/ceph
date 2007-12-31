@@ -2689,7 +2689,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // src+dest _must_ share commont root for locking to prevent orphans
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
-  if (destpath.ino != srcpath.ino) {
+  if (destpath.get_ino() != srcpath.get_ino()) {
     // error out for now; eventually, we should find the deepest common root
     derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
     assert(0);
