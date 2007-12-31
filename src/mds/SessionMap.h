@@ -28,19 +28,22 @@ using __gnu_cxx::hash_map;
 class CInode;
 
 class Session {
-  // -- state --
+  // -- state etc --
 public:
+  static const int STATE_UNDEF = 0;
   static const int STATE_OPENING = 1;
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;
   static const int STATE_STALE = 4;   // ?
   static const int STATE_RECONNECTING = 5;
 
-private:
   int state;
   utime_t last_alive;         // last alive
-public:
   entity_inst_t inst;
+
+  bool is_opening() { return state == STATE_OPENING; }
+  bool is_open() { return state == STATE_OPEN; }
+  bool is_closing() { return state == STATE_CLOSING; }
 
   // -- caps --
 private:
@@ -75,19 +78,25 @@ public:
     }
     finish_contexts(fls);
   }
-  void add_trim_waiter(metareqid_t ri, Context *c) {
-    waiting_for_trim[ri.tid] = c;
+  void add_trim_waiter(tid_t tid, Context *c) {
+    waiting_for_trim[tid] = c;
   }
-  bool have_completed_request(metareqid_t ri) const {
-    return completed_requests.count(ri.tid);
+  bool have_completed_request(tid_t tid) const {
+    return completed_requests.count(tid);
   }
 
+
+  Session() : 
+    state(STATE_UNDEF), 
+    cap_push_seq(0) { }
 };
 
 class SessionMap {
 private:
   MDS *mds;
   hash_map<entity_name_t, Session> session_map;
+  
+public:  // i am lazy
   version_t version, projected, committing, committed;
   map<version_t, list<Context*> > commit_waiters;
 
@@ -96,25 +105,53 @@ public:
 		       version(0), projected(0), committing(0), committed(0) 
   { }
     
+  // sessions
   bool empty() { return session_map.empty(); }
-  
   Session* get_session(entity_name_t w) {
     if (session_map.count(w))
       return &session_map[w];
     return 0;
   }
-  Session* add_session(entity_name_t w) {
+  Session* get_or_add_session(entity_name_t w) {
     return &session_map[w];
   }
-  void remove_session(entity_name_t w) {
-    session_map.erase(w);
+  Session* get_or_add_session(entity_inst_t i) {
+    Session *s = get_or_add_session(i.name);
+    s->inst = i;
+    return s;
+  }
+  void remove_session(Session *s) {
+    s->trim_completed_requests(0);
+    session_map.erase(s->inst.name);
   }
 
-  void get_session_set(set<entity_name_t>& s) {
+  void get_client_set(set<int>& s) {
     for (hash_map<entity_name_t,Session>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
-      s.insert(p->first);
+      if (p->second.inst.name.is_client())
+	s.insert(p->second.inst.name.num());
+  }
+  void get_client_session_set(set<Session*>& s) {
+    for (hash_map<entity_name_t,Session>::iterator p = session_map.begin();
+	 p != session_map.end();
+	 p++)
+      if (p->second.inst.name.is_client())
+	s.insert(&p->second);
+  }
+
+  void open_sessions(map<int,entity_inst_t>& client_map) {
+    for (map<int,entity_inst_t>::iterator p = client_map.begin(); 
+	 p != client_map.end(); 
+	 ++p) {
+      Session *session = get_or_add_session(p->second);
+      if (session->state == Session::STATE_UNDEF ||
+	  session->state == Session::STATE_CLOSING) {
+	session->inst = p->second;
+	session->state = Session::STATE_OPEN;
+      }
+    }
+    version++;
   }
 
   // helpers
@@ -128,7 +165,21 @@ public:
   version_t get_push_seq(int client) {
     return get_session(entity_name_t::CLIENT(client))->get_push_seq();
   }
-  
+  bool have_completed_request(metareqid_t rid) {
+    Session *session = get_session(rid.name);
+    return session && session->have_completed_request(rid.tid);
+  }
+  void add_completed_request(metareqid_t rid) {
+    Session *session = get_session(rid.name);
+    assert(session);
+    session->add_completed_request(rid.tid);
+  }
+  void trim_completed_requests(entity_name_t c, tid_t tid) {
+    Session *session = get_session(c);
+    assert(session);
+    session->trim_completed_requests(tid);
+  }
+
   // -- loading, saving --
   inode_t inode;
   list<Context*> waiting_for_load;

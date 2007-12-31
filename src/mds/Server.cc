@@ -123,15 +123,15 @@ void Server::dispatch(Message *m)
 
 class C_MDS_session_finish : public Context {
   MDS *mds;
-  entity_inst_t client_inst;
+  Session *session;
   bool open;
   version_t cmapv;
 public:
-  C_MDS_session_finish(MDS *m, entity_inst_t ci, bool s, version_t mv) :
-    mds(m), client_inst(ci), open(s), cmapv(mv) { }
+  C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv) :
+    mds(m), session(se), open(s), cmapv(mv) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_session_logged(client_inst, open, cmapv);
+    mds->server->_session_logged(session, open, cmapv);
   }
 };
 
@@ -139,41 +139,38 @@ public:
 void Server::handle_client_session(MClientSession *m)
 {
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
-  int from = m->get_source().num();
   bool open = false;
   Session *session = mds->sessionmap.get_session(m->get_source());
+  assert(m->get_source().is_client()); // should _not_ come from an mds!
 
   switch (m->op) {
   case MClientSession::OP_REQUEST_OPEN:
     open = true;
-    if (!session) {
-      dout(10) << "already open, dropping this req" << dendl;
+    if (session && (session->is_opening() || session->is_open())) {
+      dout(10) << "already open|opening, dropping this req" << dendl;
       delete m;
       return;
     }
-    if (mds->clientmap.is_opening(from)) {
-      dout(10) << "already opening, dropping this req" << dendl;
-      delete m;
-      return;
-    }
-    mds->clientmap.add_opening(from);
+    assert(!session);  // ?
+    session = mds->sessionmap.get_or_add_session(m->get_source());
+    session->inst = m->get_source_inst();
+    session->state = Session::STATE_OPENING;
     break;
 
   case MClientSession::OP_REQUEST_CLOSE:
-    if (mds->clientmap.is_closing(from)) {
-      dout(10) << "already closing, dropping this req" << dendl;
+    if (!session || session->is_closing()) {
+      dout(10) << "already closing|dne, dropping this req" << dendl;
       delete m;
       return;
     }
-    if (m->seq < mds->clientmap.get_push_seq(from)) {
-      dout(10) << "old push seq " << m->seq << " < " << mds->clientmap.get_push_seq(from) 
+    if (m->seq < session->get_push_seq()) {
+      dout(10) << "old push seq " << m->seq << " < " << session->get_push_seq() 
 	       << ", dropping" << dendl;
       delete m;
       return;
     }
-    assert(m->seq == mds->clientmap.get_push_seq(from));
-
-    mds->clientmap.add_closing(from);
+    assert(m->seq == session->get_push_seq());
+    session->state = Session::STATE_CLOSING;
     break;
 
   default:
@@ -181,64 +178,76 @@ void Server::handle_client_session(MClientSession *m)
   }
 
   // journal it
-  version_t cmapv = mds->clientmap.inc_projected();
-  dout(10) << " clientmap v " << mds->clientmap.get_version() << " pv " << cmapv << dendl;
-  mdlog->submit_entry(new ESession(m->get_source_inst(), open, cmapv),
-		      new C_MDS_session_finish(mds, m->get_source_inst(), open, cmapv));
+  version_t pv = ++mds->sessionmap.projected;
+  dout(10) << " sessionmap v " << mds->sessionmap.version << " pv " << pv << dendl;
+  mdlog->submit_entry(new ESession(m->get_source_inst(), open, pv),
+		      new C_MDS_session_finish(mds, session, open, pv));
   delete m;
 
   if (logger) logger->inc("hcsess");
 }
 
-void Server::_session_logged(entity_inst_t client_inst, bool open, version_t cmapv)
+void Server::_session_logged(Session *session, bool open, version_t pv)
 {
-  dout(10) << "_session_logged " << client_inst << " " << (open ? "open":"close")
-	   << " " << cmapv 
+  dout(10) << "_session_logged " << session->inst << " " << (open ? "open":"close")
+	   << " " << pv 
 	   << dendl;
 
   // apply
-  int from = client_inst.name.num();
   if (open) {
-    assert(mds->clientmap.is_opening(from));
-    mds->clientmap.open_session(client_inst);
-  } else if (mds->clientmap.is_closing(from)) {
-    mds->clientmap.close_session(from);
-    
-    // purge completed requests from clientmap
-    mds->clientmap.trim_completed_requests(client_inst.name, 0);
+    assert(session->is_opening());
+    session->state = Session::STATE_OPEN;
+    mds->sessionmap.version++;
+  } else if (session->is_closing()) {
+    mds->sessionmap.remove_session(session);
+    mds->sessionmap.version++;
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
-    mds->clientmap.noop();
+    mds->sessionmap.version++;  // noop
   }
   
-  assert(cmapv == mds->clientmap.get_version());
+  assert(pv == mds->sessionmap.version);
   
   // reply
   if (open) 
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), client_inst);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), session->inst);
   else
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), client_inst);
+    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), session->inst);
 }
 
 void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
 {
-  version_t cmapv = mds->clientmap.inc_projected();
-  dout(10) << "prepare_force_open_sessions " << cmapv 
+  /* 
+   * FIXME !
+   */
+  version_t pv = ++mds->sessionmap.projected;
+  dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    mds->clientmap.add_opening(p->first);
+    Session *session = mds->sessionmap.get_or_add_session(p->second.name);
+    if (session->state == Session::STATE_UNDEF ||
+	session->state == Session::STATE_CLOSING)
+      session->state = Session::STATE_OPENING;
   }
 }
 
 void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
 {
-  version_t v = mds->clientmap.get_version();
-  dout(10) << "finish_force_open_sessions on " << cm.size() << " clients, v " << v << " -> " << (v+1) << dendl;
+  /*
+   * FIXME: need to carefully consider the race conditions between a
+   * client trying to close a session and an MDS doing an import
+   * trying to force open a session...  
+   */
+  dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
+	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    if (mds->clientmap.is_closing(p->first)) {
-      dout(15) << "force_open_sessions canceling close on " << p->second << dendl;
+    Session *session = mds->sessionmap.get_session(p->second.name);
+    assert(session);
+    /*
+    if (session->is_closing()) {
+      dout(15) << "force_open_sessions canceling close on " << session->inst << dendl;
       mds->clientmap.remove_closing(p->first);
       continue;
     }
@@ -246,12 +255,14 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
       dout(15) << "force_open_sessions have session " << p->second << dendl;
       continue;
     }
-    
-    dout(10) << "force_open_sessions opening " << p->second << dendl;
-    mds->clientmap.open_session(p->second);
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), p->second);
+    */
+    if (session->is_opening()) {
+      dout(10) << "force_open_sessions opening " << session->inst << dendl;
+      session->state = Session::STATE_OPEN;
+      mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), session->inst);
+    }
   }
-  mds->clientmap.set_version(v+1);
+  mds->sessionmap.version++;
 }
 
 
@@ -260,35 +271,34 @@ void Server::terminate_sessions()
   dout(2) << "terminate_sessions" << dendl;
 
   // kill them off.  clients will retry etc.
-  for (set<int>::const_iterator p = mds->clientmap.get_session_set().begin();
-       p != mds->clientmap.get_session_set().end();
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (set<Session*>::const_iterator p = sessions.begin();
+       p != sessions.end();
        ++p) {
-    if (mds->clientmap.is_closing(*p)) 
-      continue;
-    mds->clientmap.add_closing(*p);
-    version_t cmapv = mds->clientmap.inc_projected();
-    mdlog->submit_entry(new ESession(mds->clientmap.get_inst(*p), false, cmapv),
-			new C_MDS_session_finish(mds, mds->clientmap.get_inst(*p), false, cmapv));
+    Session *session = *p;
+    if (session->is_closing()) continue;
+    session->state = Session::STATE_CLOSING;
+    version_t pv = ++mds->sessionmap.projected;
+    mdlog->submit_entry(new ESession(session->inst, false, pv),
+			new C_MDS_session_finish(mds, session, false, pv));
   }
 }
 
 
 void Server::reconnect_clients()
 {
-  // reconnect with clients
-  if (mds->clientmap.get_session_set().empty()) {
+  mds->sessionmap.get_client_set(client_reconnect_gather);
+
+  if (client_reconnect_gather.empty()) {
     dout(7) << "reconnect_clients -- no sessions, doing nothing." << dendl;
     reconnect_gather_finish();
     return;
   }
   
   dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << dendl;
-  
   mds->bcast_mds_map();  // send mdsmap to all client sessions
-
-  // init gather list
   reconnect_start = g_clock.now();
-  client_reconnect_gather = mds->clientmap.get_session_set();
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
 }
 
@@ -296,15 +306,14 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
   int from = m->get_source().num();
+  Session *session = mds->sessionmap.get_session(m->get_source());
 
   if (m->closed) {
-    dout(7) << " client had no session, removing from clientmap" << dendl;
-
-    mds->clientmap.add_closing(from);
-    version_t cmapv = mds->clientmap.inc_projected();
-    mdlog->submit_entry(new ESession(mds->clientmap.get_inst(from), false, cmapv),
-			new C_MDS_session_finish(mds, mds->clientmap.get_inst(from), false, cmapv));
-
+    dout(7) << " client had no session, removing from session map" << dendl;
+    assert(session);  // ?
+    version_t pv = ++mds->sessionmap.projected;
+    mdlog->submit_entry(new ESession(session->inst, false, pv),
+			new C_MDS_session_finish(mds, session, false, pv));
   } else {
     
     // caps
@@ -439,9 +448,9 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 	   << " (" << strerror(-reply->get_result())
 	   << ") " << *req << dendl;
 
-  // note result code in clientmap?
+  // note result code in session map?
   if (!req->is_idempotent())
-    mds->clientmap.add_completed_request(mdr->reqid);
+    mdr->session->add_completed_request(mdr->reqid.tid);
 
   /*
   if (tracei && !tracei->hack_accessed) {
@@ -512,8 +521,9 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // active session?
+  Session *session = 0;
   if (req->get_client_inst().name.is_client() && 
-      !mds->clientmap.have_session(req->get_client_inst().name.num())) {
+      !(session = mds->sessionmap.get_session(req->get_client_inst().name))) {
     dout(5) << "no session for " << req->get_client_inst().name << ", dropping" << dendl;
     delete req;
     return;
@@ -530,7 +540,8 @@ void Server::handle_client_request(MClientRequest *req)
 
   // retry?
   if (req->get_retry_attempt()) {
-    if (mds->clientmap.have_completed_request(req->get_reqid())) {
+    assert(session);
+    if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
       mds->messenger->send_message(new MClientReply(req, 0), req->get_client_inst());
       delete req;
@@ -540,13 +551,13 @@ void Server::handle_client_request(MClientRequest *req)
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
-    mds->clientmap.trim_completed_requests(req->get_client_inst().name, 
-					   req->get_oldest_client_tid());
+    session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) return;
+  mdr->session = session;
 
   if (ref) {
     dout(10) << "inode op on ref " << *ref << dendl;

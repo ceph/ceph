@@ -71,7 +71,7 @@
 // cons/des
 MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
   timer(mds_lock), 
-  clientmap(this), sessionmap(this) {
+  sessionmap(this) {
 
   this->whoami = whoami;
 
@@ -281,7 +281,7 @@ void MDS::send_message_client(Message *m, int client)
 {
   version_t seq = sessionmap.inc_push_seq(client);
   dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, sessionmap.get_inst(entity_name_t::CLIENT(client)));
+  messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
 }
 
 void MDS::send_message_client(Message *m, entity_inst_t clientinst)
@@ -653,12 +653,12 @@ void MDS::bcast_mds_map()
   dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
 
   // share the map with mounted clients
-  set<entity_name_t> clients;
-  sessionmap.get_session_set(clients);
-  for (set<entity_name_t>::const_iterator p = clients.begin();
+  set<Session*> clients;
+  sessionmap.get_client_session_set(clients);
+  for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(mdsmap), sessionmap.get_inst(*p));
+    messenger->send_message(new MMDSMap(mdsmap), (*p)->inst);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -754,7 +754,7 @@ void MDS::boot_create()
   idalloc->reset();
   idalloc->save(fin->new_sub());
 
-  // write empty clientmap
+  // write empty sessionmap
   sessionmap.save(fin->new_sub());
   
   // fixme: fake out anchortable

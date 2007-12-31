@@ -200,7 +200,6 @@ class MDS : public Dispatcher {
   void     reset_tick();
 
   // -- client map --
-  ClientMap    clientmap;
   SessionMap   sessionmap;
   epoch_t      last_client_mdsmap_bcast;
   //void log_clientmap(Context *c);

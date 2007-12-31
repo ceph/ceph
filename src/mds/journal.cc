@@ -158,14 +158,14 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     mds->idalloc->save(gather->new_sub(), allocv);
   }
 
-  // clientmap
-  if (clientmapv > mds->clientmap.get_committed()) {
-    dout(10) << "try_to_expire saving clientmap, need " << clientmapv 
-	      << ", committed is " << mds->clientmap.get_committed()
-	      << " (" << mds->clientmap.get_committing() << ")"
+  // sessionmap
+  if (sessionmapv > mds->sessionmap.committed) {
+    dout(10) << "try_to_expire saving sessionmap, need " << sessionmapv 
+	      << ", committed is " << mds->sessionmap.committed
+	      << " (" << mds->sessionmap.committing << ")"
 	      << dendl;
     if (!gather) gather = new C_Gather;
-    mds->clientmap.save(gather->new_sub(), clientmapv);
+    mds->sessionmap.save(gather->new_sub(), sessionmapv);
   }
 
   // pending commit atids
@@ -362,7 +362,7 @@ bool EMetaBlob::has_expired(MDS *mds)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p) {
-    if (mds->clientmap.have_completed_request(*p)) {
+    if (mds->sessionmap.have_completed_request(*p)) {
       dout(10) << "EMetaBlob.has_expired still have completed request " << *p
 	       << dendl;
       return false;
@@ -504,10 +504,10 @@ void EMetaBlob::expire(MDS *mds, Context *c)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p) {
-    if (mds->clientmap.have_completed_request(*p)) {
+    if (mds->sessionmap.have_completed_request(*p)) {
       dout(10) << "EMetaBlob.expire waiting on completed request " << *p
 	       << dendl;
-      mds->clientmap.add_trim_waiter(*p, gather->new_sub());
+      mds->sessionmap.add_trim_waiter(*p, gather->new_sub());
     }
   }
 
@@ -740,7 +740,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
-    mds->clientmap.add_completed_request(*p);
+    mds->sessionmap.add_completed_request(*p);
 
 
   // update segment
@@ -752,49 +752,52 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
 void ESession::update_segment()
 {
-  _segment->clientmapv = cmapv;
+  _segment->sessionmapv = cmapv;
 }
 
 void ESession::replay(MDS *mds)
 {
-  if (mds->clientmap.get_version() >= cmapv) {
-    dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
+  if (mds->sessionmap.version >= cmapv) {
+    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version 
 	     << " >= " << cmapv << ", noop" << dendl;
 
     // hrm, this isn't very pretty.
     if (!open)
-      mds->clientmap.trim_completed_requests(client_inst.name, 0);
+      mds->sessionmap.trim_completed_requests(client_inst.name, 0);
 
   } else {
-    dout(10) << "ESession.replay clientmap " << mds->clientmap.get_version() 
+    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
 	     << " < " << cmapv << dendl;
-    assert(mds->clientmap.get_version() + 1 == cmapv);
+    mds->sessionmap.projected = ++mds->sessionmap.version;
+    assert(mds->sessionmap.version == cmapv);
     if (open) {
-      mds->clientmap.open_session(client_inst);
+      Session *session = mds->sessionmap.get_or_add_session(client_inst.name);
+      session->inst = client_inst;
+      session->state = Session::STATE_OPEN;
     } else {
-      mds->clientmap.close_session(client_inst.name.num());
-      mds->clientmap.trim_completed_requests(client_inst.name, 0);
+      Session *session = mds->sessionmap.get_session(client_inst.name);
+      if (session)
+	mds->sessionmap.remove_session(session);
     }
-    mds->clientmap.reset_projected(); // make it follow version.
   }
 }
 
 void ESessions::update_segment()
 {
-  _segment->clientmapv = cmapv;
+  _segment->sessionmapv = cmapv;
 }
 
 void ESessions::replay(MDS *mds)
 {
-  if (mds->clientmap.get_version() >= cmapv) {
-    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+  if (mds->sessionmap.version >= cmapv) {
+    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.version
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
-    dout(10) << "ESessions.replay clientmap " << mds->clientmap.get_version() 
+    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.version
 	     << " < " << cmapv << dendl;
-    mds->clientmap.open_sessions(client_map);
-    assert(mds->clientmap.get_version() == cmapv);
-    mds->clientmap.reset_projected(); // make it follow version.
+    mds->sessionmap.open_sessions(client_map);
+    assert(mds->sessionmap.version == cmapv);
+    mds->sessionmap.projected = mds->sessionmap.version;
   }
 }
 
@@ -1077,18 +1080,18 @@ void EImportStart::replay(MDS *mds)
   mds->mdcache->add_ambiguous_import(base, bounds);
 
   // open client sessions?
-  if (mds->clientmap.get_version() >= cmapv) {
-    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+  if (mds->sessionmap.version >= cmapv) {
+    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
-    dout(10) << "EImportStart.replay clientmap " << mds->clientmap.get_version() 
+    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
 	     << " < " << cmapv << dendl;
     map<int,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
     ::_decode_simple(cm, blp);
-    mds->clientmap.open_sessions(cm);
-    assert(mds->clientmap.get_version() == cmapv);
-    mds->clientmap.reset_projected(); // make it follow version.
+    mds->sessionmap.open_sessions(cm);
+    assert(mds->sessionmap.version == cmapv);
+    mds->sessionmap.projected = mds->sessionmap.version;
   }
 }
 

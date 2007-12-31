@@ -39,6 +39,7 @@ class Renamer;
 class Logger;
 
 class Message;
+class Session;
 
 class MMDSResolve;
 class MMDSResolveAck;
@@ -80,6 +81,7 @@ struct PVList {
  */
 struct MDRequest {
   metareqid_t reqid;
+  Session *session;
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -116,6 +118,8 @@ struct MDRequest {
   bool committing;
   bool aborted;
 
+  // break rarely-used fields into a separately allocated structure 
+  // to save memory for most ops
   struct More {
     set<int> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<int> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
@@ -148,19 +152,19 @@ struct MDRequest {
 
   // ---------------------------------------------------
   MDRequest() : 
-    client_request(0), ref(0), 
+    session(0), client_request(0), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     ls(0),
     done_locking(false), committing(false), aborted(false),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
-    reqid(ri), client_request(req), ref(0), 
+    reqid(ri), session(0), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     ls(0),
     done_locking(false), committing(false), aborted(false),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
-    reqid(ri), client_request(0), ref(0),
+    reqid(ri), session(0), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
     ls(0),
     done_locking(false), committing(false), aborted(false),

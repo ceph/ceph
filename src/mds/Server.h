@@ -56,7 +56,7 @@ public:
   set<CInode*> reconnected_caps;
 
   void handle_client_session(class MClientSession *m);
-  void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void _session_logged(Session *session, bool open, version_t cmapv);
   void prepare_force_open_sessions(map<int,entity_inst_t> &cm);
   void finish_force_open_sessions(map<int,entity_inst_t> &cm);
   void terminate_sessions();

@@ -885,7 +885,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   for (map<int, Capability>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) 
-    exported_client_map[it->first] = mds->clientmap.get_inst(it->first);
+    exported_client_map[it->first] = mds->sessionmap.get_inst(entity_name_t::CLIENT(it->first));
 }
 
 void Migrator::finish_export_inode_caps(CInode *in)
@@ -2276,7 +2276,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
    */
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(this, in, ex->get_source().num());
-  ESessions *le = new ESessions(mds->clientmap.inc_projected());
+  ESessions *le = new ESessions(++mds->sessionmap.projected);
 
   // decode new caps
   bufferlist::iterator blp = ex->cap_bl.begin();

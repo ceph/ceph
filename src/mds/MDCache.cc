@@ -1252,7 +1252,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     for (list<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
-      if (mds->clientmap.have_completed_request(*p)) {
+      if (mds->sessionmap.have_completed_request(*p)) {
 	// COMMIT
 	dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
 	ack->add_commit(*p);
@@ -2664,7 +2664,9 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      in->client_caps[client].wanted());
   
   reap->set_mds( frommds ); // reap from whom?
-  mds->messenger->send_message(reap, mds->clientmap.get_inst(client));
+  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
+  assert(session);
+  mds->messenger->send_message(reap, session->inst);
 }
 
 void MDCache::rejoin_send_acks()
