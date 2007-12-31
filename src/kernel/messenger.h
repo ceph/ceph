@@ -52,8 +52,8 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_RETRY_INTERVAL	(3U * HZ)
-#define MAX_RETRY_INTERVAL	(5U * 60 * HZ)
+#define BASE_DELAY_INTERVAL	(3U * HZ)
+#define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
 #define NEW            0
@@ -64,7 +64,8 @@ struct ceph_msg_pos {
 #define READABLE       5  /* set when socket gets new data */
 #define READING        6  /* provides mutual exclusion, protecting in_* */
 #define REJECTING      7
-#define CLOSED         8
+#define CLOSING        8
+#define CLOSED         9
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;

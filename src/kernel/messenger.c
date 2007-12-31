@@ -54,6 +54,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
         	case -ENETUNREACH:
 			derr(1, "ENETUNREACH set\n");
 			spin_lock(&con->out_queue_lock);
+			/* TBD: reset buffer correctly */
 			list_splice_init(&con->out_sent, &con->out_queue);
 			spin_unlock(&con->out_queue_lock);
 			/* retry with delay */
@@ -68,6 +69,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 			/* TBD: setup timeout here */
 			if (!test_and_clear_bit(CONNECTING, &con->state)){
 				derr(1, "CONNECTING bit not set\n");
+				/* TBD: reset buffer correctly */
 				/* reset buffer */
 				spin_lock(&con->out_queue_lock);
 				list_splice_init(&con->out_sent, 
@@ -87,6 +89,10 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 			/* if we ever hit here ... */
 			derr(1, "unrecognized error %d\n", error);
 	}
+	if (con->delay < MAX_DELAY_INTERVAL)
+		con->delay *= 2;
+	else
+		con->delay = MAX_DELAY_INTERVAL;
 }
 
 
@@ -107,7 +113,7 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 		return NULL;
 
 	con->msgr = msgr;
-	con->delay = BASE_RETRY_INTERVAL;
+	con->delay = BASE_DELAY_INTERVAL;
 	set_bit(NEW, &con->state);
 	atomic_set(&con->nref, 1);
 
@@ -446,6 +452,15 @@ static void try_write(struct work_struct *work)
 	con = container_of(work, struct ceph_connection, swork.work);
 	msgr = con->msgr;
 	dout(30, "try_write start %p state %lu\n", con, con->state);
+
+	/* Peer initiated close, other end is waiting for us to close */
+	if (test_and_clear_bit(CLOSING, &con->state)) {
+		dout(5, "try_write peer initiated close\n");
+		remove_connection(msgr, con);
+		set_bit(CLOSED, &con->state);
+		put_connection(con);
+		goto done;
+	}
 more:
 	dout(30, "try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
 
@@ -819,10 +834,6 @@ retry:
 	clear_bit(READABLE, &con->state);
 
 more:
-	/*
-	 * TBD: maybe store error in ceph_connection
-         */
-
 	if (test_bit(CLOSED, &con->state)) {
 		dout(20, "try_read closed\n");
 		goto done;

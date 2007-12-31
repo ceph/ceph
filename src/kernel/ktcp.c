@@ -4,7 +4,6 @@
 #include <linux/string.h>
 #include "messenger.h"
 #include "ktcp.h"
-#include "ktcp.h"
 
 int ceph_tcp_debug = 50;
 #define DOUT_VAR ceph_tcp_debug
@@ -49,7 +48,8 @@ static void ceph_write_space(struct sock *sk)
 
         dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 	/* only queue to workqueue if a WRITE is pending */
-        if (con && test_bit(WRITE_PENDING, &con->state)) {
+	if (con && (test_bit(WRITE_PENDING, &con->state) || 
+	    test_bit(CLOSING, &con->state))) {
                 dout(30, "ceph_write_space %p queuing write work\n", con);
                 queue_work(send_wq, &con->swork.work);
         }
@@ -65,10 +65,11 @@ static void ceph_state_change(struct sock *sk)
         dout(30, "ceph_state_change %p state = %lu sk_state = %u\n", 
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
-		case TCP_CLOSE_WAIT:
 		case TCP_CLOSE:
-			set_bit(CLOSED,&con->state);
+			set_bit(CLOSED, &con->state);
 			break;
+		case TCP_CLOSE_WAIT:
+			set_bit(CLOSING, &con->state);
 		case TCP_ESTABLISHED:
 			ceph_write_space(sk);
 			break;
