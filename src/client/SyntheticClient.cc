@@ -828,27 +828,27 @@ bool roll_die(float p)
 void SyntheticClient::init_op_dist()
 {
   op_dist.clear();
-  op_dist.add( CEPH_MDS_OP_STAT, g_conf.fakeclient_op_stat );
-  op_dist.add( CEPH_MDS_OP_UTIME, g_conf.fakeclient_op_utime );
-  op_dist.add( CEPH_MDS_OP_CHMOD, g_conf.fakeclient_op_chmod );
-  op_dist.add( CEPH_MDS_OP_CHOWN, g_conf.fakeclient_op_chown );
+  op_dist.add( CEPH_MDS_OP_STAT, 610 );
+  op_dist.add( CEPH_MDS_OP_UTIME, 0 );
+  op_dist.add( CEPH_MDS_OP_CHMOD, 1 );
+  op_dist.add( CEPH_MDS_OP_CHOWN, 1 );
 
-  op_dist.add( CEPH_MDS_OP_READDIR, g_conf.fakeclient_op_readdir );
-  op_dist.add( CEPH_MDS_OP_MKNOD, g_conf.fakeclient_op_mknod );
-  op_dist.add( CEPH_MDS_OP_LINK, g_conf.fakeclient_op_link );
-  op_dist.add( CEPH_MDS_OP_UNLINK, g_conf.fakeclient_op_unlink );
-  op_dist.add( CEPH_MDS_OP_RENAME, g_conf.fakeclient_op_rename );
+  op_dist.add( CEPH_MDS_OP_READDIR, 2 );
+  op_dist.add( CEPH_MDS_OP_MKNOD, 30 );
+  op_dist.add( CEPH_MDS_OP_LINK, 0 );
+  op_dist.add( CEPH_MDS_OP_UNLINK, 20 );
+  op_dist.add( CEPH_MDS_OP_RENAME, 40 );
 
-  op_dist.add( CEPH_MDS_OP_MKDIR, g_conf.fakeclient_op_mkdir );
-  op_dist.add( CEPH_MDS_OP_RMDIR, g_conf.fakeclient_op_rmdir );
-  op_dist.add( CEPH_MDS_OP_SYMLINK, g_conf.fakeclient_op_symlink );
+  op_dist.add( CEPH_MDS_OP_MKDIR, 10 );
+  op_dist.add( CEPH_MDS_OP_RMDIR, 20 );
+  op_dist.add( CEPH_MDS_OP_SYMLINK, 20 );
 
-  op_dist.add( CEPH_MDS_OP_OPEN, g_conf.fakeclient_op_openrd );
-  //op_dist.add( CEPH_MDS_OP_READ, g_conf.fakeclient_op_read );
-  //op_dist.add( CEPH_MDS_OP_WRITE, g_conf.fakeclient_op_write );
-  op_dist.add( CEPH_MDS_OP_TRUNCATE, g_conf.fakeclient_op_truncate );
-  op_dist.add( CEPH_MDS_OP_FSYNC, g_conf.fakeclient_op_fsync );
-  //op_dist.add( CEPH_MDS_OP_RELEASE, g_conf.fakeclient_op_close );  // actually, close()
+  op_dist.add( CEPH_MDS_OP_OPEN, 200 );
+  //op_dist.add( CEPH_MDS_OP_READ, 0 );
+  //op_dist.add( CEPH_MDS_OP_WRITE, 0 );
+  op_dist.add( CEPH_MDS_OP_TRUNCATE, 0 );
+  op_dist.add( CEPH_MDS_OP_FSYNC, 0 );
+  //op_dist.add( CEPH_MDS_OP_RELEASE, 200 );
   op_dist.normalize();
 }
 

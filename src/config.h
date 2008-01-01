@@ -142,28 +142,10 @@ struct md_config_t {
   int      client_cache_stat_ttl;
   int      client_cache_readdir_ttl;
   bool     client_use_random_mds;          // debug flag
-
-  bool     client_sync_writes;
-
   double   client_mount_timeout;
-
-  // hack
   bool client_hack_balance_reads;
-  
-
-  /*
-  bool     client_bcache;
-  int      client_bcache_alloc_minsize;
-  int      client_bcache_alloc_maxsize;
-  int      client_bcache_ttl;
-  off_t    client_bcache_size;
-  int      client_bcache_lowater;
-  int      client_bcache_hiwater;
-  size_t   client_bcache_align;
-  */
-
   const char *client_trace;
-  int      fuse_direct_io;
+  int fuse_direct_io;
   bool fuse_ll;
 
   // objectcacher
@@ -195,6 +177,9 @@ struct md_config_t {
 
   float mds_beacon_interval;
   float mds_beacon_grace;
+
+  float mds_cap_timeout;
+  float mds_session_autoclose;
 
   bool mds_log;
   int mds_log_max_events;
@@ -311,38 +296,6 @@ struct md_config_t {
   bool  bdev_debug_check_io_overlap;
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
-
-  // fake client
-  int      num_fakeclient;
-  unsigned fakeclient_requests;
-  bool     fakeclient_deterministic;     // debug flag
-
-  int fakeclient_op_statfs;
-
-  int fakeclient_op_stat;
-  int fakeclient_op_lstat;
-  int fakeclient_op_utime;
-  int fakeclient_op_chmod;
-  int fakeclient_op_chown;
-
-  int fakeclient_op_readdir;
-  int fakeclient_op_mknod;
-  int fakeclient_op_link;
-  int fakeclient_op_unlink;
-  int fakeclient_op_rename;
-
-  int fakeclient_op_mkdir;
-  int fakeclient_op_rmdir;
-  int fakeclient_op_symlink;
-
-  int fakeclient_op_openrd;
-  int fakeclient_op_openwr;
-  int fakeclient_op_openwrc;
-  int fakeclient_op_read;
-  int fakeclient_op_write;
-  int fakeclient_op_truncate;
-  int fakeclient_op_fsync;
-  int fakeclient_op_close;
 
 #ifdef USE_OSBDB
   bool bdbstore;

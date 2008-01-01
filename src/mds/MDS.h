@@ -41,7 +41,6 @@ using namespace __gnu_cxx;
 #include "mon/MonMap.h"
 #include "MDSMap.h"
 
-#include "ClientMap.h"
 #include "SessionMap.h"
 
 

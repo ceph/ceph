@@ -27,6 +27,10 @@ using __gnu_cxx::hash_map;
 
 class CInode;
 
+/* 
+ * session
+ */
+
 class Session {
   // -- state etc --
 public:
@@ -39,6 +43,7 @@ public:
 
   int state;
   utime_t last_alive;         // last alive
+  xlist<Session*>::item xlist_item;
   entity_inst_t inst;
 
   bool is_opening() { return state == STATE_OPENING; }
@@ -88,6 +93,7 @@ public:
 
   Session() : 
     state(STATE_UNDEF), 
+    xlist_item(this),
     cap_push_seq(0) { }
 
   void _encode(bufferlist& bl) const {
@@ -103,11 +109,17 @@ public:
 };
 
 
+/*
+ * session map
+ */
+
+class MDS;
 
 class SessionMap {
 private:
   MDS *mds;
   hash_map<entity_name_t, Session> session_map;
+  xlist<Session*> session_list;
   
 public:  // i am lazy
   version_t version, projected, committing, committed;
@@ -136,6 +148,9 @@ public:
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
     session_map.erase(s->inst.name);
+  }
+  void touch_session(Session *s) {
+    session_list.push_back(&s->xlist_item);
   }
 
   void get_client_set(set<int>& s) {

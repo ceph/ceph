@@ -64,6 +64,14 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- client cap timeouts
+  - cap bits expire unless client pings?
+  - caps expire unless client pings?
+  - variable timeouts?  e.g. dir rdcache w/ fast timeout vs file want bits (dont expire at all)
+  - open file bits: autorenew on client ping (timeout=0)
+  - dir rdcache bit: timeout=60s or something .. needs explicit renewal?
+
+
 - extend/clean up filepath to allow paths relative to an ino
 /  - fix path_traverse
   - fix reconnect/rejoin open file weirdness
