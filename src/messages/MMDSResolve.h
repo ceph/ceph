@@ -27,7 +27,7 @@ class MMDSResolve : public Message {
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 
-  char *get_type_name() { return "mds_resolve"; }
+  const char *get_type_name() { return "mds_resolve"; }
 
   void print(ostream& out) {
     out << "mds_resolve(" << subtrees.size()

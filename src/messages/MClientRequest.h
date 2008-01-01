@@ -206,7 +206,7 @@ public:
     path2._encode(payload);
   }
 
-  char *get_type_name() { return "creq"; }
+  const char *get_type_name() { return "creq"; }
   void print(ostream& out) {
     out << "clientreq(" << get_client() 
 	<< "." << get_tid() 

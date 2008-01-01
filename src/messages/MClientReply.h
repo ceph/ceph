@@ -220,7 +220,7 @@ class MClientReply : public Message {
     for (it = dir_in.begin(); it != dir_in.end(); ++it) 
       delete *it;
   }
-  virtual char *get_type_name() { return "creply"; }
+  const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
     o << "creply(" << env.dst.name << "." << st.tid;
     o << " = " << st.result;

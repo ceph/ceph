@@ -39,7 +39,7 @@ class MHeartbeat : public Message {
     this->beat = beat;
   }
 
-  virtual char *get_type_name() { return "HB"; }
+  const char *get_type_name() { return "HB"; }
 
   virtual void decode_payload() {
     int off = 0;

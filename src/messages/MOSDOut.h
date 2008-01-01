@@ -37,7 +37,7 @@ class MOSDOut : public Message {
     payload.append((char*)&map_epoch, sizeof(map_epoch));
   }
 
-  virtual char *get_type_name() { return "oout"; }
+  const char *get_type_name() { return "oout"; }
 };
 
 #endif

@@ -52,17 +52,17 @@ class MOSDMap : public Message {
 
 
   // marshalling
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
     ::_decode(incremental_maps, payload, off);
     ::_decode(maps, payload, off);
   }
-  virtual void encode_payload() {
+  void encode_payload() {
     ::_encode(incremental_maps, payload);
     ::_encode(maps, payload);
   }
 
-  virtual char *get_type_name() { return "omap"; }
+  const char *get_type_name() { return "omap"; }
   void print(ostream& out) {
     out << "osd_map(" << get_first() << "," << get_last() << ")";
   }

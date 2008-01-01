@@ -23,6 +23,11 @@ kernel client
 - mds client
   - examine new mds maps to kick requests for failed nodes...
 - osd client
+  - async (caching) mode
+  - sync mode (write-through)
+  - capability changes (flush)
+  - osd ack vs commit handling.  hmm!
+  - handle map changes (resubmit ops)
 - mon client
   - work out message resend logic..?
 

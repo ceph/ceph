@@ -27,16 +27,16 @@ class MPingAck : public Message {
     this->seq = p->seq;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
     payload.copy(0, sizeof(seq), (char*)&seq);
     off += sizeof(seq);
   }
-  virtual void encode_payload() {
+  void encode_payload() {
     payload.append((char*)&seq, sizeof(seq));
   }
 
-  virtual char *get_type_name() { return "pinga"; }
+  const char *get_type_name() { return "pinga"; }
 };
 
 #endif

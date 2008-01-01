@@ -139,7 +139,7 @@ public:
     env.data_off = head.offset;
   }
 
-  virtual char *get_type_name() { return "osd_op"; }
+  const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << get_reqid()
 	<< " " << get_opname(head.op)

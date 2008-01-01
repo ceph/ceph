@@ -34,7 +34,7 @@ public:
     Message(MSG_OSD_PG_LOG),
     epoch(mv), info(i) { }
 
-  char *get_type_name() { return "PGlog"; }
+  const char *get_type_name() { return "PGlog"; }
   void print(ostream& out) {
     out << "pg_log(" << info.pgid << " e" << epoch << ")";
   }

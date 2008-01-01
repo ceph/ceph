@@ -48,14 +48,14 @@ struct md_config_t {
   // profiling
   bool  log;
   int   log_interval;
-  char *log_name;
+  const char *log_name;
 
   bool log_messages;
   bool log_pins;
 
   bool logger_calc_variance;
 
-  char *dout_dir;
+  const char *dout_dir;
 
   bool fake_clock;
   bool fakemessenger_serialize;
@@ -112,7 +112,7 @@ struct md_config_t {
   bool tcp_multi_dispatch;
   */
 
-  char *ms_hosts;
+  const char *ms_hosts;
   bool ms_tcp_nodelay;
   double ms_retry_interval;
   double ms_fail_interval;
@@ -162,7 +162,7 @@ struct md_config_t {
   size_t   client_bcache_align;
   */
 
-  char *client_trace;
+  const char *client_trace;
   int      fuse_direct_io;
   bool fuse_ll;
 
@@ -285,8 +285,8 @@ struct md_config_t {
   int   fakestore_syncthreads;   // such crap
   bool  fakestore_fake_attrs;
   bool  fakestore_fake_collections;
-  char  *fakestore_dev;
-
+  const char  *fakestore_dev;
+  
   // ebofs
   int   ebofs;
   bool  ebofs_cloneable;
@@ -363,13 +363,13 @@ extern md_config_t g_debug_after_conf;
 /**
  * command line / environment argument parsing
  */
-void env_to_vec(std::vector<char*>& args);
-void argv_to_vec(int argc, char **argv,
-                 std::vector<char*>& args);
-void vec_to_argv(std::vector<char*>& args,
-                 int& argc, char **&argv);
+void env_to_vec(std::vector<const char*>& args);
+void argv_to_vec(int argc, const char **argv,
+                 std::vector<const char*>& args);
+void vec_to_argv(std::vector<const char*>& args,
+                 int& argc, const char **&argv);
 
-void parse_config_options(std::vector<char*>& args);
+void parse_config_options(std::vector<const char*>& args);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
 

@@ -38,7 +38,7 @@ class MOSDPGNotify : public Message {
     pg_list.splice(pg_list.begin(),l);
   }
   
-  char *get_type_name() { return "PGnot"; }
+  const char *get_type_name() { return "PGnot"; }
 
   void encode_payload() {
     payload.append((char*)&epoch, sizeof(epoch));

@@ -348,7 +348,7 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  bmap: 0
 };
 
-int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
+int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 {
   cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
 
@@ -356,7 +356,7 @@ int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
 
   // set up fuse argc/argv
   int newargc = 0;
-  char **newargv = (char **) malloc((argc + 10) * sizeof(char *));
+  const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
   newargv[newargc++] = argv[0];
   newargv[newargc++] = "-f";  // stay in foreground
 
@@ -366,7 +366,7 @@ int ceph_fuse_ll_main(Client *c, int argc, char *argv[])
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 
   // go go gadget fuse
-  struct fuse_args args = FUSE_ARGS_INIT(newargc, newargv);
+  struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
   struct fuse_chan *ch;
   char *mountpoint;
   int err = -1;

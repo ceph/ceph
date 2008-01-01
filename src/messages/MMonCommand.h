@@ -30,7 +30,7 @@ class MMonCommand : public Message {
     Message(MSG_MON_COMMAND),
     inst(i) { }
   
-  virtual char *get_type_name() { return "mon_command"; }
+  const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
     o << "mon_command(";
     for (unsigned i=0; i<cmd.size(); i++) {

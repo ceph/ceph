@@ -26,7 +26,7 @@ public:
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
   MStatfsReply(tid_t t) : Message(CEPH_MSG_STATFS_REPLY), tid(t) {}
 
-  char *get_type_name() { return "statfs_reply"; }
+  const char *get_type_name() { return "statfs_reply"; }
   void print(ostream& out) {
     out << "statfs_reply(" << tid << ")";
   }

@@ -90,7 +90,7 @@ class MExportDirPrep : public Message {
   }
 
 
-  virtual char *get_type_name() { return "ExP"; }
+  const char *get_type_name() { return "ExP"; }
   void print(ostream& o) {
     o << "export_prep(" << dirfrag << ")";
   }

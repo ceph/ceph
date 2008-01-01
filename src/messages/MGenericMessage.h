@@ -30,7 +30,7 @@ class MGenericMessage : public Message {
   //void set_pcid(long pcid) { this->pcid = pcid; }
   //long get_pcid() { return pcid; }
 
-  char *get_type_name() { return tname; }
+  const char *get_type_name() { return tname; }
 
   virtual void decode_payload() {
     //int off = 0;

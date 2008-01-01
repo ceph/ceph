@@ -90,7 +90,7 @@ class MLock : public Message {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
   }
-  virtual char *get_type_name() { return "ILock"; }
+  const char *get_type_name() { return "ILock"; }
   void print(ostream& out) {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)

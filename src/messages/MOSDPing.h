@@ -31,19 +31,19 @@ class MOSDPing : public Message {
     Message(MSG_OSD_PING), map_epoch(e), ack(a), peer_stat(ps) { }
   MOSDPing() {}
 
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
     ::_decode(map_epoch, payload, off);
     ::_decode(ack, payload, off);
     ::_decode(peer_stat, payload, off);
   }
-  virtual void encode_payload() {
+  void encode_payload() {
     ::_encode(map_epoch, payload);
     ::_encode(ack, payload);
     ::_encode(peer_stat, payload);
   }
 
-  virtual char *get_type_name() { return "osd_ping"; }
+  const char *get_type_name() { return "osd_ping"; }
 };
 
 #endif

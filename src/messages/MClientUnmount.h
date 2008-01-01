@@ -26,7 +26,7 @@ public:
     inst(i) { }
   */
   
-  char *get_type_name() { return "client_unmount"; }
+  const char *get_type_name() { return "client_unmount"; }
 
   void decode_payload() { 
     //int off = 0;

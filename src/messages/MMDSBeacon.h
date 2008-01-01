@@ -38,7 +38,7 @@ class MMDSBeacon : public Message {
   epoch_t get_last_epoch_seen() { return last_epoch_seen; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
-  char *get_type_name() { return "mdsbeacon"; }
+  const char *get_type_name() { return "mdsbeacon"; }
   int get_want_rank() { return want_rank; }
 
   void print(ostream& out) {

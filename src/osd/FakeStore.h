@@ -56,7 +56,7 @@ class FakeStore : public ObjectStore {
   coll_t parse_coll(char *s);
 
  public:
-  FakeStore(char *base) : 
+  FakeStore(const char *base) : 
     basedir(base),
     unsync(0),
     attrs(this), fake_attrs(false), 
