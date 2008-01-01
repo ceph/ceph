@@ -12,4 +12,4 @@
  * 
  */
 
-int ceph_fuse_ll_main(Client *c, int argc, char *argv[]);
+int ceph_fuse_ll_main(Client *c, int argc, const char *argv[]);

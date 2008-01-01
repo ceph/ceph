@@ -29,14 +29,14 @@ using namespace std;
 
 
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   
   MonMap monmap;
 
-  char *outfn = ".ceph_monmap";
+  const char *outfn = ".ceph_monmap";
 
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--out") == 0) 

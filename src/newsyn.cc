@@ -46,14 +46,14 @@ public:
 extern std::map<entity_name_t,float> g_fake_kill_after;
 
 bool use_existing_monmap = false;
-char *monmap_fn = ".ceph_monmap";
+const char *monmap_fn = ".ceph_monmap";
 /*
  * start up NewMessenger via MPI.
  */ 
 
-pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
+pair<int,int> mpi_bootstrap_new(int& argc, const char**& argv, MonMap *monmap)
 {
-  MPI_Init(&argc, &argv);
+  MPI_Init(&argc, (char***)&argv);
   
   int mpi_world;
   int mpi_rank;
@@ -167,15 +167,15 @@ class C_Debug : public Context {
 };
 
 
-int main(int argc, char **argv) 
+int main(int argc, const char **argv) 
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   map<int,int> kill_osd_after;
   int share_single_client = 0;
   if (1) {
-    vector<char*> nargs;
+    vector<const char*> nargs;
     for (unsigned i=0; i<args.size(); i++) {
       if (strcmp(args[i],"--kill_osd_after") == 0) {
         int o = atoi(args[++i]);
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
     g_timer.add_event_after(g_conf.tick, new C_Tick);
   }
 
-  vector<char*> nargs;
+  vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
     //cout << "a " << args[i] << std::endl;
     // unknown arg, pass it on.

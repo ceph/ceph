@@ -49,9 +49,9 @@ class C_Debug : public Context {
 };
 
 
-int main(int argc, char **argv) 
+int main(int argc, const char **argv) 
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   parse_config_options(args);
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 
   // args
   int whoami = -1;
-  char *monmap_fn = ".ceph_monmap";
+  const char *monmap_fn = ".ceph_monmap";
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--mon") == 0) 
       whoami = atoi(args[++i]);

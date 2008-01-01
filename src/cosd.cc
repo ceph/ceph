@@ -51,9 +51,9 @@ class C_Debug : public Context {
 };
 
 
-int main(int argc, char **argv) 
+int main(int argc, const char **argv) 
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   parse_config_options(args);
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
-  char *dev = 0;
+  const char *dev = 0;
   char dev_default[20];
   int whoami = -1;
   for (unsigned i=0; i<args.size(); i++) {

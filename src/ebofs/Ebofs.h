@@ -239,7 +239,7 @@ protected:
 
 
  public:
-  Ebofs(char *devfn, char *jfn=0) : 
+  Ebofs(const char *devfn, char *jfn=0) : 
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 

@@ -77,7 +77,7 @@ class MonMap {
   }
 
   // read from/write to a file
-  int write(char *fn) {
+  int write(const char *fn) {
     // encode
     bufferlist bl;
     encode(bl);
@@ -91,7 +91,7 @@ class MonMap {
     return 0;
   }
 
-  int read(char *fn) {
+  int read(const char *fn) {
     // read
     bufferlist bl;
     int fd = ::open(fn, O_RDONLY);
