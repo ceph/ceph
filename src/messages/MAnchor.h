@@ -34,7 +34,7 @@ class MAnchor : public Message {
     Message(MSG_MDS_ANCHOR),
     op(o), ino(i), atid(v) { }
   
-  virtual char *get_type_name() { return "anchor"; }
+  virtual const char *get_type_name() { return "anchor"; }
   void print(ostream& o) {
     o << "anchor(" << get_anchor_opname(op);
     if (ino) o << " " << ino;

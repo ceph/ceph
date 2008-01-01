@@ -46,7 +46,7 @@ class MOSDFailure : public Message {
     ::_encode(epoch, payload);
   }
 
-  virtual char *get_type_name() { return "osd_failure"; }
+  const char *get_type_name() { return "osd_failure"; }
   /*void print(ostream& out) {
     out << "osd_failure(" << failed << " e" << epoch << ")";
     }*/

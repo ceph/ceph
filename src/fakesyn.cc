@@ -49,13 +49,13 @@ public:
 };
 
 
-int main(int argc, char **argv) 
+int main(int argc, const char **argv) 
 {
   cerr << "fakesyn start" << std::endl;
 
   //cerr << "inode_t " << sizeof(inode_t) << std::endl;
 
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   // stop on our own (by default)
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 
   parse_syn_options(args);
 
-  vector<char*> nargs;
+  vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
     // unknown arg, pass it on.

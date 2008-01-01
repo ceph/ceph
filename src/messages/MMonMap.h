@@ -26,7 +26,7 @@ public:
     monmapbl.claim(bl);
   }
 
-  char *get_type_name() { return "mon_map"; }
+  const char *get_type_name() { return "mon_map"; }
 
   void encode_payload() { 
     payload = monmapbl;

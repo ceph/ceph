@@ -39,7 +39,7 @@ class MExportDirDiscover : public Message {
     dir->get_inode()->make_path(path);
     dirfrag = dir->dirfrag();
   }
-  virtual char *get_type_name() { return "ExDis"; }
+  const char *get_type_name() { return "ExDis"; }
   void print(ostream& o) {
     o << "export_discover(" << dirfrag << " " << path << ")";
   }

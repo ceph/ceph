@@ -28,7 +28,7 @@ class MExportCapsAck : public Message {
   MExportCapsAck(inodeno_t i) :
     Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
 
-  virtual char *get_type_name() { return "export_caps_ack"; }
+  const char *get_type_name() { return "export_caps_ack"; }
   void print(ostream& o) {
     o << "export_caps_ack(" << ino << ")";
   }

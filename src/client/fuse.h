@@ -21,4 +21,4 @@
  *   we will put fuse in the foreground so that it
  *   won't fork and we can see stdout.
  */
-int ceph_fuse_main(Client *cl, int argc, char *argv[]);
+int ceph_fuse_main(Client *cl, int argc, const char *argv[]);

@@ -75,7 +75,7 @@ class MDiscover : public Message {
     want_base_dir(want_base_dir_),
     want_xlocked(false) { }
 
-  char *get_type_name() { return "Dis"; }
+  const char *get_type_name() { return "Dis"; }
   void print(ostream &out) {
     out << "discover(" << base_ino << "." << base_dir_frag
 	<< " " << want;

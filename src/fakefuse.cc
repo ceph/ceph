@@ -57,14 +57,14 @@ public:
 
 
 
-int main(int argc, char **argv) {
+int main(int argc, const char **argv) {
   cerr << "fakefuse starting" << std::endl;
 
   // stop on our own (by default)
   g_conf.mon_stop_on_last_unmount = true;
   g_conf.mon_stop_with_last_mds = true;
 
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
   //g_timer.add_event_after(5.0, new C_Test2);
   //g_timer.add_event_after(10.0, new C_Test);
 
-  vector<char*> nargs;
+  vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
     nargs.push_back(args[i]);
   }

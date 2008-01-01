@@ -83,7 +83,7 @@ class MClientFileCaps : public Message {
     wanted(wanted_),
     mds(mds_) { }
 
-  char *get_type_name() { return "Cfcap";}
+  const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
     out << "client_file_caps(" << get_opname(op)
 	<< " " << inode.ino

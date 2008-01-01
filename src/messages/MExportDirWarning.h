@@ -32,7 +32,7 @@ class MExportDirWarning : public Message {
     Message(MSG_MDS_EXPORTDIRWARNING),
     ino(i), new_dir_auth(nda) {}
 
-  virtual char *get_type_name() { return "ExW"; }
+  const char *get_type_name() { return "ExW"; }
 
   virtual void decode_payload() {
     int off = 0;

@@ -27,7 +27,7 @@ public:
   MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT),
 		       closed(false) { }
 
-  char *get_type_name() { return "client_reconnect"; }
+  const char *get_type_name() { return "client_reconnect"; }
   void print(ostream& out) {
     out << "client_reconnect(" << inode_caps.size() << " caps)";
   }

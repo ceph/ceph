@@ -50,9 +50,9 @@ class Admin : public Dispatcher {
   }
 } dispatcher;
 
-int main(int argc, char **argv, char *envp[]) {
+int main(int argc, const char **argv, const char *envp[]) {
 
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 

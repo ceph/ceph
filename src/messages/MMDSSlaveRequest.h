@@ -136,7 +136,7 @@ public:
     ::_decode_simple(stray, p);
   }
 
-  char *get_type_name() { return "slave_request"; }
+  const char *get_type_name() { return "slave_request"; }
   void print(ostream& out) {
     out << "slave_request(" << reqid
 	<< " " << get_opname(op) 

@@ -43,7 +43,7 @@ public:
 	Message(MSG_MON_ELECTION), 
 	op(o), epoch(e) {}
   
-  char *get_type_name() { return "election"; }
+  const char *get_type_name() { return "election"; }
   void print(ostream& out) {
 	out << "election(" << get_opname(op) << " " << epoch << ")";
   }

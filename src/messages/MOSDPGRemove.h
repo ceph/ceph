@@ -34,7 +34,7 @@ class MOSDPGRemove : public Message {
     pg_list = l;
   }
   
-  char *get_type_name() { return "PGrm"; }
+  const char *get_type_name() { return "PGrm"; }
 
   void encode_payload() {
     payload.append((char*)&epoch, sizeof(epoch));

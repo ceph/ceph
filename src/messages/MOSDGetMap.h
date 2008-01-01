@@ -30,7 +30,7 @@ class MOSDGetMap : public Message {
   epoch_t get_start_epoch() { return start; }
   epoch_t get_want_epoch() { return want; }
 
-  char *get_type_name() { return "get_osd_map"; }
+  const char *get_type_name() { return "get_osd_map"; }
   void print(ostream& out) {
     out << "get_osd_map(have " << start;
     if (want) out << " want " << want;

@@ -31,7 +31,7 @@ public:
     Message(MSG_OSD_PG_ACTIVATE_SET),
     epoch(mv) { }
 
-  char *get_type_name() { return "pg_activate_set"; }
+  const char *get_type_name() { return "pg_activate_set"; }
   void print(ostream& out) {
     out << "pg_activate_set(" << pg_info.size() << " pgs e" << epoch << ")";
   }

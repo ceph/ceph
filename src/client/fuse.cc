@@ -258,14 +258,14 @@ static struct fuse_operations ceph_oper = {
 };
 
 
-int ceph_fuse_main(Client *c, int argc, char *argv[])
+int ceph_fuse_main(Client *c, int argc, const char *argv[])
 {
   // init client
   client = c;
 
   // set up fuse argc/argv
   int newargc = 0;
-  char **newargv = (char **) malloc((argc + 10) * sizeof(char *));
+  const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
   newargv[newargc++] = argv[0];
   
   // allow other (all!) users to see my file system
@@ -301,6 +301,6 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // go fuse go
   cout << "ok, calling fuse_main" << std::endl;
-  int r = fuse_main(newargc, newargv, &ceph_oper, 0);
+  int r = fuse_main(newargc, (char**)newargv, &ceph_oper, 0);
   return r;
 }

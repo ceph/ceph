@@ -399,7 +399,7 @@ md_config_t g_conf = {
 #include <string.h>
 
 
-void env_to_vec(std::vector<char*>& args) 
+void env_to_vec(std::vector<const char*>& args) 
 {
   const char *p = getenv("CEPH_ARGS");
   if (!p) return;
@@ -424,17 +424,17 @@ void env_to_vec(std::vector<char*>& args)
 }
 
 
-void argv_to_vec(int argc, char **argv,
-                 std::vector<char*>& args)
+void argv_to_vec(int argc, const char **argv,
+                 std::vector<const char*>& args)
 {
   for (int i=1; i<argc; i++)
     args.push_back(argv[i]);
 }
 
-void vec_to_argv(std::vector<char*>& args,
-                 int& argc, char **&argv)
+void vec_to_argv(std::vector<const char*>& args,
+                 int& argc, const char **&argv)
 {
-  argv = (char**)malloc(sizeof(char*) * argc);
+  argv = (const char**)malloc(sizeof(char*) * argc);
   argc = 1;
   argv[0] = "asdf";
 
@@ -486,9 +486,9 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
 
 
 
-void parse_config_options(std::vector<char*>& args)
+void parse_config_options(std::vector<const char*>& args)
 {
-  std::vector<char*> nargs;
+  std::vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--bind") == 0) 

@@ -74,8 +74,8 @@
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
-char *osd_base_path = "./osddata";
-char *ebofs_base_path = "./dev";
+const char *osd_base_path = "./osddata";
+const char *ebofs_base_path = "./dev";
 
 static const object_t SUPERBLOCK_OBJECT(0,0);
 
@@ -107,7 +107,7 @@ void OSD::force_remount()
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : 
+OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) : 
   timer(osd_lock),
   stat_oprate(5.0),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),

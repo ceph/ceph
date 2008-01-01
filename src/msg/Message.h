@@ -169,7 +169,7 @@ public:
   // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload() = 0;
-  virtual char *get_type_name() = 0;
+  virtual const char *get_type_name() = 0;
   virtual void print(ostream& out) {
     out << get_type_name();
   }

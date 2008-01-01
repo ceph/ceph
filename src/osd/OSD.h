@@ -349,7 +349,7 @@ private:
 
 
  public:
-  OSD(int id, Messenger *m, MonMap *mm, char *dev = 0);
+  OSD(int id, Messenger *m, MonMap *mm, const char *dev = 0);
   ~OSD();
 
   // startup/shutdown

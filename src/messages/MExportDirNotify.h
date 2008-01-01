@@ -37,7 +37,7 @@ class MExportDirNotify : public Message {
     Message(MSG_MDS_EXPORTDIRNOTIFY),
     base(i), ack(a), old_auth(oa), new_auth(na) { }
   
-  virtual char *get_type_name() { return "ExNot"; }
+  const char *get_type_name() { return "ExNot"; }
   void print(ostream& o) {
     o << "export_notify(" << base;
     o << " " << old_auth << " -> " << new_auth;

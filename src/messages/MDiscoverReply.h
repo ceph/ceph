@@ -173,7 +173,7 @@ class MDiscoverReply : public Message {
          it++) 
       delete *it;
   }
-  virtual char *get_type_name() { return "DisR"; }
+  const char *get_type_name() { return "DisR"; }
   
   // builders
   bool is_empty() {

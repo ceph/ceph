@@ -35,7 +35,7 @@ class MOSDPGQuery : public Message {
     epoch(e), pg_list(ls) {
   }
   
-  char *get_type_name() { return "PGq"; }
+  const char *get_type_name() { return "PGq"; }
 
   void encode_payload() {
     ::_encode(epoch, payload);

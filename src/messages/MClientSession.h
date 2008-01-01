@@ -41,7 +41,7 @@ public:
     Message(CEPH_MSG_CLIENT_SESSION),
     op(o), seq(s) { }
 
-  char *get_type_name() { return "client_session"; }
+  const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
     out << "client_session(" << get_opname(op);
     if (seq) out << " seq " << seq;

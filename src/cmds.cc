@@ -49,9 +49,9 @@ class C_Debug : public Context {
 };
 
 
-int main(int argc, char **argv) 
+int main(int argc, const char **argv) 
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   parse_config_options(args);

@@ -47,9 +47,9 @@ list<int> syn_modes;
 list<int> syn_iargs;
 list<string> syn_sargs;
 
-void parse_syn_options(vector<char*>& args)
+void parse_syn_options(vector<const char*>& args)
 {
-  vector<char*> nargs;
+  vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--syn") == 0) {

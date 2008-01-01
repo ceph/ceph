@@ -30,7 +30,7 @@ class MExportDirWarningAck : public Message {
     Message(MSG_MDS_EXPORTDIRWARNINGACK),
     ino(i) {}
 
-  virtual char *get_type_name() { return "ExWAck"; }
+  const char *get_type_name() { return "ExWAck"; }
 
   virtual void decode_payload() {
     int off = 0;

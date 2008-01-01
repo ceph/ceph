@@ -32,7 +32,7 @@ class MOSDBoot : public Message {
     sb(s) {
   }
 
-  char *get_type_name() { return "osd_boot"; }
+  const char *get_type_name() { return "osd_boot"; }
   void print(ostream& out) {
     out << "osd_boot(" << inst << ")";
   }

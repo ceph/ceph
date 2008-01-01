@@ -134,7 +134,7 @@ class MMDSCacheRejoin : public Message {
     Message(MSG_MDS_CACHEREJOIN),
     op(o) {}
 
-  char *get_type_name() { return "cache_rejoin"; }
+  const char *get_type_name() { return "cache_rejoin"; }
   void print(ostream& out) {
     out << "cache_rejoin " << get_opname(op);
   }

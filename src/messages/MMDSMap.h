@@ -59,7 +59,7 @@ class MMDSMap : public Message {
     mm->encode(encoded);
   }
 
-  char *get_type_name() { return "mdsmap"; }
+  const char *get_type_name() { return "mdsmap"; }
   void print(ostream& out) {
     out << "mdsmap(e " << epoch << ")";
   }

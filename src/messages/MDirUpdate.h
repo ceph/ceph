@@ -51,7 +51,7 @@ class MDirUpdate : public Message {
     if (discover) this->st.discover = 5;
     this->path = path;
   }
-  virtual char *get_type_name() { return "dir_update"; }
+  const char *get_type_name() { return "dir_update"; }
   void print(ostream& out) {
     out << "dir_update(" << get_dirfrag() << ")";
   }

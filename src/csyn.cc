@@ -21,7 +21,6 @@ using namespace std;
 
 #include "client/SyntheticClient.h"
 #include "client/Client.h"
-#include "client/fuse.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -35,15 +34,14 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int main(int argc, char **argv, char *envp[]) {
+int main(int argc, const char **argv, char *envp[]) {
 
-  //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
-  vector<char*> args;
+  //cerr << "csyn starting" << std::endl;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
   parse_syn_options(args);   // for SyntheticClient
 
-  // args for fuse
   vec_to_argv(args, argc, argv);
 
   if (g_conf.clock_tare) g_clock.tare();

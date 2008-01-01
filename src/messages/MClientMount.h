@@ -25,7 +25,7 @@ public:
     addr(a), instance(i) { }
   */
 
-  char *get_type_name() { return "client_mount"; }
+  const char *get_type_name() { return "client_mount"; }
 
   void decode_payload() { 
     /*

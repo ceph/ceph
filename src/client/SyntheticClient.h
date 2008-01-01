@@ -77,7 +77,7 @@
 
 
 
-void parse_syn_options(vector<char*>& args);
+void parse_syn_options(vector<const char*>& args);
 
 class SyntheticClient {
   Client *client;
@@ -142,7 +142,7 @@ class SyntheticClient {
   
   filepath sub;
   char sub_s[50];
-  const char *make_sub(char *base) {
+  const char *make_sub(const char *base) {
     sprintf(sub_s, "%s.%d", base, rand() % 100);
     string f = sub_s;
     sub = cwd;
