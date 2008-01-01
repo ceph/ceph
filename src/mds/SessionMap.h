@@ -65,7 +65,7 @@ public:
   }
   void trim_completed_requests(tid_t mintid) {
     // trim
-    while (completed_requests.empty() && 
+    while (!completed_requests.empty() && 
 	   (mintid == 0 || *completed_requests.begin() < mintid))
       completed_requests.erase(completed_requests.begin());
 
@@ -89,7 +89,20 @@ public:
   Session() : 
     state(STATE_UNDEF), 
     cap_push_seq(0) { }
+
+  void _encode(bufferlist& bl) const {
+    ::_encode_simple(inst, bl);
+    ::_encode_simple(cap_push_seq, bl);
+    ::_encode_simple(completed_requests, bl);
+  }
+  void _decode(bufferlist::iterator& p) {
+    ::_decode_simple(inst, p);
+    ::_decode_simple(cap_push_seq, p);
+    ::_decode_simple(completed_requests, p);
+  }
 };
+
+
 
 class SessionMap {
 private:
@@ -182,7 +195,7 @@ public:
   list<Context*> waiting_for_load;
 
   void encode(bufferlist& bl);
-  void decode(bufferlist& bl);
+  void decode(bufferlist::iterator& blp);
 
   void init_inode();
   void load(Context *onload);

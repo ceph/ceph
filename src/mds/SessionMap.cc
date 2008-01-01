@@ -60,11 +60,12 @@ void SessionMap::load(Context *onload)
 
 void SessionMap::_load_finish(bufferlist &bl)
 { 
-  decode(bl);
+  bufferlist::iterator blp = bl.begin();
+  decode(blp);
   dout(10) << "_load_finish v " << version 
-		   << ", " << session_map.size() << " sessions, "
-		   << bl.length() << " bytes"
-		   << dendl;
+	   << ", " << session_map.size() << " sessions, "
+	   << bl.length() << " bytes"
+	   << dendl;
   projected = committing = committed = version;
   finish_contexts(waiting_for_load);
 }
@@ -120,10 +121,12 @@ void SessionMap::_save_finish(version_t v)
 
 void SessionMap::encode(bufferlist& bl)
 {
-
+  ::_encode_simple(version, bl);
+  ::_encode_complex(session_map, bl);
 }
 
-void SessionMap::decode(bufferlist& bl)
+void SessionMap::decode(bufferlist::iterator& p)
 {
-
+  ::_decode_simple(version, p);
+  ::_decode_complex(session_map, p);
 }
