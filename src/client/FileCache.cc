@@ -123,10 +123,10 @@ void FileCache::set_caps(int caps, Context *onimplement)
 int FileCache::get_used_caps()
 {
   int used = 0;
-  if (num_reading) used |= CAP_FILE_RD;
-  if (oc->set_is_cached(inode.ino)) used |= CAP_FILE_RDCACHE;
-  if (num_writing) used |= CAP_FILE_WR;
-  if (oc->set_is_dirty_or_committing(inode.ino)) used |= CAP_FILE_WRBUFFER;
+  if (num_reading) used |= CEPH_CAP_RD;
+  if (oc->set_is_cached(inode.ino)) used |= CEPH_CAP_RDCACHE;
+  if (num_writing) used |= CEPH_CAP_WR;
+  if (oc->set_is_dirty_or_committing(inode.ino)) used |= CEPH_CAP_WRBUFFER;
   return used;
 }
 
@@ -138,11 +138,11 @@ void FileCache::check_caps()
 
   // try to implement caps?
   // BUG? latest_caps, not least caps i've seen?
-  if ((latest_caps & CAP_FILE_RDCACHE) == 0 &&
-      (used & CAP_FILE_RDCACHE))
+  if ((latest_caps & CEPH_CAP_RDCACHE) == 0 &&
+      (used & CEPH_CAP_RDCACHE))
     release_clean();
-  if ((latest_caps & CAP_FILE_WRBUFFER) == 0 &&
-      (used & CAP_FILE_WRBUFFER))
+  if ((latest_caps & CEPH_CAP_WRBUFFER) == 0 &&
+      (used & CEPH_CAP_WRBUFFER))
     flush_dirty(new C_FC_CheckCaps(this));
   
   used = get_used_caps();
@@ -176,7 +176,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
   int r = 0;
 
   // can i read?
-  while ((latest_caps & CAP_FILE_RD) == 0) {
+  while ((latest_caps & CEPH_CAP_RD) == 0) {
     dout(10) << "read doesn't have RD cap, blocking" << dendl;
     Cond c;
     waitfor_read.insert(&c);
@@ -187,7 +187,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
   // inc reading counter
   num_reading++;
   
-  if (latest_caps & CAP_FILE_RDCACHE) {
+  if (latest_caps & CEPH_CAP_RDCACHE) {
     // read (and block)
     Cond cond;
     bool done = false;
@@ -221,7 +221,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
 void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
   // can i write
-  while ((latest_caps & CAP_FILE_WR) == 0) {
+  while ((latest_caps & CEPH_CAP_WR) == 0) {
     dout(10) << "write doesn't have WR cap, blocking" << dendl;
     Cond c;
     waitfor_write.insert(&c);
@@ -233,7 +233,7 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
   num_writing++;
 
   if (size > 0) {
-    if (latest_caps & CAP_FILE_WRBUFFER) {   // caps buffered write?
+    if (latest_caps & CEPH_CAP_WRBUFFER) {   // caps buffered write?
       // wait? (this may block!)
       oc->wait_for_write(size, client_lock);
       

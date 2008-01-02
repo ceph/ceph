@@ -159,52 +159,52 @@ class FileLock : public SimpleLock {
   // client caps allowed
   int caps_allowed_ever() {
     if (parent->is_auth())
-      return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER | CAP_FILE_LAZYIO;
+      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
     else
-      return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
+      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
   }
   int caps_allowed() {
     if (parent->is_auth())
       switch (state) {
       case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
       case LOCK_GLOCKL:
-        return CAP_FILE_RDCACHE;
+        return CEPH_CAP_RDCACHE;
 
       case LOCK_GLOCKM:
         return 0;
 
       case LOCK_MIXED:
-        return CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDR:
-        return CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDL:
         return 0;
 
       case LOCK_LONER:  // single client writer, of course.
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
       case LOCK_GLONERR:
-        return CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLONERM:
-        return CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
 
       case LOCK_GSYNCL:
-        return CAP_FILE_RDCACHE | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
       case LOCK_GSYNCM:
-        return CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     else
       switch (state) {
       case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
-        return CAP_FILE_RDCACHE;
+        return CEPH_CAP_RDCACHE;
       case LOCK_GMIXEDR:
       case LOCK_MIXED:
-        return CAP_FILE_RD | CAP_FILE_LAZYIO;
+        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     assert(0);
     return 0;

@@ -16,7 +16,6 @@
 #define __MCLIENTFILECAPS_H
 
 #include "msg/Message.h"
-#include "mds/Capability.h"
 
 
 class MClientFileCaps : public Message {

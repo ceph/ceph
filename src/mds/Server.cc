@@ -310,7 +310,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open caps on " << *in << dendl;
-	in->reconnect_cap(from, p->second);
+	in->reconnect_cap(from, p->second, session->caps);
 	reconnected_caps.insert(in);
 	continue;
       }
@@ -366,8 +366,8 @@ void Server::process_reconnected_caps()
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
-      if (issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) {
-	if (issued & (CAP_FILE_RDCACHE|CAP_FILE_WRBUFFER)) {
+      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
 	  in->filelock.set_state(LOCK_LONER);
 	} else {
 	  in->filelock.set_state(LOCK_MIXED);
@@ -375,7 +375,7 @@ void Server::process_reconnected_caps()
       }
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
-      assert(issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0);   // ????
+      assert(issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER) == 0);   // ????
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else
@@ -3786,7 +3786,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 
   // can we issue the caps they want?
   //version_t fdv = mds->locker->issue_file_data_version(cur);
-  Capability *cap = mds->locker->issue_new_caps(cur, cmode, req);
+  Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
   if (!cap) return; // can't issue (yet), so wait!
   
   dout(12) << "_do_open issuing caps " << cap_string(cap->pending())

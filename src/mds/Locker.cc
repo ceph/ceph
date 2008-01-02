@@ -447,32 +447,30 @@ version_t Locker::issue_file_data_version(CInode *in)
 
 
 Capability* Locker::issue_new_caps(CInode *in,
-                                    int mode,
-                                    MClientRequest *req)
+				   int mode,
+				   Session *session)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
   // my needs
-  int my_client = req->get_client().num();
+  assert(session->inst.name.is_client());
+  int my_client = session->inst.name.num();
   int my_want = 0;
-  if (mode & FILE_MODE_R) my_want |= CAP_FILE_RDCACHE  | CAP_FILE_RD;
-  if (mode & FILE_MODE_W) my_want |= CAP_FILE_WRBUFFER | CAP_FILE_WR;
+  if (mode & FILE_MODE_R) my_want |= CEPH_CAP_RDCACHE  | CEPH_CAP_RD;
+  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR;
 
   // register a capability
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    Capability c(my_want);
-    in->add_client_cap(my_client, c);
-    cap = in->get_client_cap(my_client);
-
-    // suppress file cap messages for new cap (we'll bundle with the open() reply)
-    cap->set_suppress(true);
+    cap = in->add_client_cap(my_client, in, session->caps);
+    cap->set_wanted(my_want);
+    cap->set_suppress(true); // suppress file cap messages for new cap (we'll bundle with the open() reply)
   } else {
     // make sure it has sufficient caps
     if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
-      cap->set_wanted( cap->wanted() | my_want );
+      cap->set_wanted(cap->wanted() | my_want);
     }
   }
 
@@ -498,14 +496,14 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   int now = cap->pending();
   if (before != now &&
-      (before & CAP_FILE_WR) == 0 &&
-      (now & CAP_FILE_WR)) {
+      (before & CEPH_CAP_WR) == 0 &&
+      (now & CEPH_CAP_WR)) {
     // FIXME FIXME FIXME
   }
   
   // twiddle file_data_version?
-  if ((before & CAP_FILE_WRBUFFER) == 0 &&
-      (now & CAP_FILE_WRBUFFER)) {
+  if ((before & CEPH_CAP_WRBUFFER) == 0 &&
+      (now & CEPH_CAP_WRBUFFER)) {
     in->inode.file_data_version++;
     dout(7) << " incrementing file_data_version, now " << in->inode.file_data_version << " for " << *in << dendl;
   }
@@ -538,8 +536,8 @@ bool Locker::issue_caps(CInode *in)
       int after = it->second.pending();
 
       // twiddle file_data_version?
-      if (!(before & CAP_FILE_WRBUFFER) &&
-          (after & CAP_FILE_WRBUFFER)) {
+      if (!(before & CEPH_CAP_WRBUFFER) &&
+          (after & CEPH_CAP_WRBUFFER)) {
         dout(7) << "   incrementing file_data_version for " << *in << dendl;
         in->inode.file_data_version++;
       }
@@ -740,7 +738,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     in->inode.atime = m->get_inode().atime;
   }
   
-  if ((has|had) & CAP_FILE_WR) {
+  if ((has|had) & CEPH_CAP_WR) {
     bool dirty = false;
 
     // mtime
@@ -2423,7 +2421,7 @@ void Locker::file_eval(FileLock *lock)
   // * -> loner?
   if (!lock->is_rdlocked() &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-      (wanted & CAP_FILE_WR) &&
+      (wanted & CEPH_CAP_WR) &&
       loner &&
       lock->get_state() != LOCK_LONER) {
     dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << dendl;
@@ -2433,8 +2431,8 @@ void Locker::file_eval(FileLock *lock)
   // * -> mixed?
   else if (!lock->is_rdlocked() &&
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & CAP_FILE_RD) &&
-	   (wanted & CAP_FILE_WR) &&
+	   (wanted & CEPH_CAP_RD) &&
+	   (wanted & CEPH_CAP_WR) &&
 	   !(loner && lock->get_state() == LOCK_LONER) &&
 	   lock->get_state() != LOCK_MIXED) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
@@ -2443,8 +2441,8 @@ void Locker::file_eval(FileLock *lock)
   
   // * -> sync?
   else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) &&
-	   ((wanted & CAP_FILE_RD) || 
+	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	   ((wanted & CEPH_CAP_RD) || 
 	    in->is_replicated() || 
 	    (!loner && lock->get_state() == LOCK_LONER)) &&
 	   lock->get_state() != LOCK_SYNC) {
@@ -2473,7 +2471,7 @@ bool Locker::file_sync(FileLock *lock)
 
   int issued = in->get_caps_issued();
 
-  assert((in->get_caps_wanted() & CAP_FILE_WR) == 0);
+  assert((in->get_caps_wanted() & CEPH_CAP_WR) == 0);
 
   if (lock->get_state() == LOCK_LOCK) {
     if (in->is_replicated()) {
@@ -2491,7 +2489,7 @@ bool Locker::file_sync(FileLock *lock)
 
   else if (lock->get_state() == LOCK_MIXED) {
     // writers?
-    if (issued & CAP_FILE_WR) {
+    if (issued & CEPH_CAP_WR) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCM);
       lock->get_parent()->auth_pin();
@@ -2512,7 +2510,7 @@ bool Locker::file_sync(FileLock *lock)
 
   else if (lock->get_state() == LOCK_LONER) {
     // writers?
-    if (issued & CAP_FILE_WR) {
+    if (issued & CEPH_CAP_WR) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCL);
       lock->get_parent()->auth_pin();
@@ -2601,7 +2599,7 @@ void Locker::file_lock(FileLock *lock)
       
   }
   else if (lock->get_state() == LOCK_LONER) {
-    if (issued & CAP_FILE_WR) {
+    if (issued & CEPH_CAP_WR) {
       // change lock
       lock->set_state(LOCK_GLOCKL);
       lock->get_parent()->auth_pin();
@@ -2664,7 +2662,7 @@ void Locker::file_mixed(FileLock *lock)
   }
 
   else if (lock->get_state() == LOCK_LONER) {
-    if (issued & CAP_FILE_WRBUFFER) {
+    if (issued & CEPH_CAP_WRBUFFER) {
       // gather up WRBUFFER caps
       lock->set_state(LOCK_GMIXEDL);
       lock->get_parent()->auth_pin();
@@ -2786,7 +2784,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     lock->set_state(LOCK_GLOCKR);
     
     // call back caps?
-    if (issued & CAP_FILE_RD) {
+    if (issued & CEPH_CAP_RD) {
       dout(7) << "handle_file_lock client readers, gathering caps on " << *in << dendl;
       issue_caps(in);
       break;
@@ -2811,7 +2809,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
-      if (issued & CAP_FILE_RD) {
+      if (issued & CEPH_CAP_RD) {
         // call back client caps
         lock->set_state(LOCK_GMIXEDR);
         issue_caps(in);

@@ -178,7 +178,7 @@ protected:
   // -- file i/o --
  public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, MClientRequest *req);
+  Capability* issue_new_caps(CInode *in, int mode, Session *session);
   bool issue_caps(CInode *in);
 
  protected:

@@ -2651,21 +2651,20 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 {
   dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
 	   << " on " << *in << dendl;
-  
+
+  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
+  assert(session);
+
   // add cap
-  in->reconnect_cap(client, icr);
+  in->reconnect_cap(client, icr, session->caps);
   
   // send REAP
-  // FIXME client session weirdness.
   MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
 					      in->inode,
 					      in->client_caps[client].get_last_seq(),
 					      in->client_caps[client].pending(),
 					      in->client_caps[client].wanted());
-  
-  reap->set_mds( frommds ); // reap from whom?
-  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
-  assert(session);
+  reap->set_mds(frommds); // reap from whom?
   mds->messenger->send_message(reap, session->inst);
 }
 

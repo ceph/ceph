@@ -18,23 +18,26 @@
 #define __MPING_H
 
 #include "msg/Message.h"
-
+#include "include/encodable.h"
 
 class MPing : public Message {
  public:
-  int seq;
-  MPing(int s) : Message(CEPH_MSG_PING) {
+  __u64 seq;
+  utime_t stamp;
+  MPing(int s, utime_t w) : Message(CEPH_MSG_PING) {
     seq = s;
+    stamp = w;
   }
   MPing() : Message(CEPH_MSG_PING) {}
 
   void decode_payload() {
-    int off = 0;
-    payload.copy(0, sizeof(seq), (char*)&seq);
-    off += sizeof(seq);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(seq, p);
+    ::_decode_simple(stamp, p);
   }
   void encode_payload() {
-    payload.append((char*)&seq, sizeof(seq));
+    ::_encode_simple(seq, payload);
+    ::_encode_simple(stamp, payload);
   }
 
   const char *get_type_name() { return "ping"; }

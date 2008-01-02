@@ -26,6 +26,7 @@ using __gnu_cxx::hash_map;
 #include "mdstypes.h"
 
 class CInode;
+class Capability;
 
 /* 
  * session
@@ -43,8 +44,8 @@ public:
 
   int state;
   utime_t last_alive;         // last alive
-  xlist<Session*>::item xlist_item;
   entity_inst_t inst;
+  xlist<Session*>::item session_list_item;
 
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
@@ -52,8 +53,9 @@ public:
 
   // -- caps --
 private:
-  version_t cap_push_seq;     // cap push seq #
-  xlist<CInode*> cap_inodes;  // inodes with caps; front=most recently used
+  version_t cap_push_seq;        // cap push seq #
+public:
+  xlist<Capability*> caps;  // inodes with caps; front=most recently used
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -93,7 +95,7 @@ public:
 
   Session() : 
     state(STATE_UNDEF), 
-    xlist_item(this),
+    session_list_item(this),
     cap_push_seq(0) { }
 
   void _encode(bufferlist& bl) const {
@@ -150,7 +152,7 @@ public:
     session_map.erase(s->inst.name);
   }
   void touch_session(Session *s) {
-    session_list.push_back(&s->xlist_item);
+    session_list.push_back(&s->session_list_item);
   }
 
   void get_client_set(set<int>& s) {

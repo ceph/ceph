@@ -65,6 +65,16 @@ static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
 static inline __u32 frag_mask(__u32 f) { return 0xffffffffull >> (32-frag_bits(f)); }
 static inline __u32 frag_next(__u32 f) { return (frag_bits(f) << 24) | (frag_value(f)+1); }
 
+/*
+ * file caps 
+ */
+#define CEPH_CAP_RDCACHE   1    // client can safely cache reads
+#define CEPH_CAP_RD        2    // client can read
+#define CEPH_CAP_WR        4    // client can write
+#define CEPH_CAP_WREXTEND  8    // client can extend file
+#define CEPH_CAP_WRBUFFER  16   // client can safely buffer writes
+#define CEPH_CAP_LAZYIO    32   // client can perform lazy io
+
 
 /*
  * object layout - how objects are mapped into PGs

@@ -343,11 +343,19 @@ public:
   // client caps
   bool is_any_caps() { return !client_caps.empty(); }
   map<int,Capability>& get_client_caps() { return client_caps; }
-  void add_client_cap(int client, Capability& cap) {
+  Capability *get_client_cap(int client) {
+    if (client_caps.count(client))
+      return &client_caps[client];
+    return 0;
+  }
+  Capability *add_client_cap(int client, CInode *in, xlist<Capability*>& cls) {
     if (client_caps.empty())
       get(PIN_CAPS);
     assert(client_caps.count(client) == 0);
-    client_caps[client] = cap;
+    Capability *cap = &client_caps[client];
+    cap->set_inode(in);
+    cap->add_to_cap_list(cls);
+    return cap;
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
@@ -355,19 +363,14 @@ public:
     if (client_caps.empty())
       put(PIN_CAPS);
   }
-  Capability* get_client_cap(int client) {
-    if (client_caps.count(client))
-      return &client_caps[client];
-    return 0;
-  }
-  void reconnect_cap(int client, inode_caps_reconnect_t& icr) {
+  void reconnect_cap(int client, inode_caps_reconnect_t& icr, xlist<Capability*>& cls) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      Capability newcap(icr.wanted, 0);
-      newcap.issue(icr.issued);
-      add_client_cap(client, newcap);
+      cap = add_client_cap(client, this, cls);
+      cap->set_wanted(icr.wanted);
+      cap->issue(icr.issued);
     }
     inode.size = MAX(inode.size, icr.size);
     inode.mtime = MAX(inode.mtime, icr.mtime);
@@ -406,7 +409,7 @@ public:
         client_caps[it->first].merge(it->second);
       } else {
         // new
-        client_caps[it->first] = Capability(it->second);
+        client_caps[it->first] = Capability(this, it->second);
       }
     }      
   }
@@ -448,7 +451,7 @@ public:
     linklock.replicate_relax();
     dirfragtreelock.replicate_relax();
 
-    if (get_caps_issued() & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0) 
+    if ((get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) 
       filelock.replicate_relax();
 
     dirlock.replicate_relax();
