@@ -108,7 +108,7 @@ public:
     env.data_off = st.offset;
   }
 
-  virtual char *get_type_name() { return "osd_sub_op"; }
+  const char *get_type_name() { return "osd_sub_op"; }
   void print(ostream& out) {
     out << "osd_sub_op(" << st.reqid
 	<< " " << MOSDOp::get_opname(st.op)
