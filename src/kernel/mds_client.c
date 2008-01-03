@@ -170,6 +170,7 @@ static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *
 	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_cap_seq);
 	if (IS_ERR(msg))
 		return;  /* fixme */
+	session->s_state = CEPH_MDS_SESSION_OPENING;
 	send_msg_mds(mdsc, msg, mds);
 }
 
@@ -342,7 +343,7 @@ retry:
 
 	/* open? */
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
-	    session->s_state == CEPH_MDS_SESSION_CLOSING) 
+	    session->s_state == CEPH_MDS_SESSION_CLOSING)
 		open_session(mdsc, session, mds);
 	if (session->s_state == CEPH_MDS_SESSION_OPENING) {
 		/* wait for session to open (or fail, or close) */
