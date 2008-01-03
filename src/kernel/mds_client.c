@@ -343,9 +343,8 @@ retry:
 
 	/* open? */
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
-	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
+	    session->s_state == CEPH_MDS_SESSION_CLOSING)
 		open_session(mdsc, session, mds);
-	}
 	if (session->s_state == CEPH_MDS_SESSION_OPENING) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
