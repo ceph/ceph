@@ -120,7 +120,6 @@ void Server::dispatch(Message *m)
 // ----------------------------------------------------------
 // SESSION management
 
-
 class C_MDS_session_finish : public Context {
   MDS *mds;
   Session *session;
@@ -144,7 +143,19 @@ void Server::handle_client_session(MClientSession *m)
   assert(m->get_source().is_client()); // should _not_ come from an mds!
 
   switch (m->op) {
-  case MClientSession::OP_REQUEST_OPEN:
+
+  case CEPH_SESSION_REQUEST_RENEWCAPS:
+    if (!session) {
+      dout(10) << "dne, dropping this req" << dendl;
+      delete m;
+      return;
+    }
+    mds->sessionmap.touch_session(session);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS), session->inst);
+    delete m;
+    return;
+
+  case CEPH_SESSION_REQUEST_OPEN:
     open = true;
     if (session && (session->is_opening() || session->is_open())) {
       dout(10) << "already open|opening, dropping this req" << dendl;
@@ -157,7 +168,7 @@ void Server::handle_client_session(MClientSession *m)
     session->state = Session::STATE_OPENING;
     break;
 
-  case MClientSession::OP_REQUEST_CLOSE:
+  case CEPH_SESSION_REQUEST_CLOSE:
     if (!session || session->is_closing()) {
       dout(10) << "already closing|dne, dropping this req" << dendl;
       delete m;
@@ -211,9 +222,9 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   
   // reply
   if (open) 
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), session->inst);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
   else
-    mds->messenger->send_message(new MClientSession(MClientSession::OP_CLOSE), session->inst);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
 }
 
 void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
@@ -245,7 +256,7 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
     if (session->is_opening()) {
       dout(10) << "force_open_sessions opening " << session->inst << dendl;
       session->state = Session::STATE_OPEN;
-      mds->messenger->send_message(new MClientSession(MClientSession::OP_OPEN), session->inst);
+      mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
     }
   }
   mds->sessionmap.version++;

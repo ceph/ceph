@@ -19,16 +19,14 @@
 
 class MClientSession : public Message {
 public:
-  const static int OP_REQUEST_OPEN  = CEPH_SESSION_REQUEST_OPEN;
-  const static int OP_OPEN          = CEPH_SESSION_OPEN;
-  const static int OP_REQUEST_CLOSE = CEPH_SESSION_REQUEST_CLOSE;
-  const static int OP_CLOSE         = CEPH_SESSION_CLOSE;
   static const char *get_opname(int o) {
     switch (o) {
-    case OP_REQUEST_OPEN: return "request_open";
-    case OP_OPEN: return "open";
-    case OP_REQUEST_CLOSE: return "request_close";
-    case OP_CLOSE: return "close";
+    case CEPH_SESSION_REQUEST_OPEN: return "request_open";
+    case CEPH_SESSION_OPEN: return "open";
+    case CEPH_SESSION_REQUEST_CLOSE: return "request_close";
+    case CEPH_SESSION_CLOSE: return "close";
+    case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
+    case CEPH_SESSION_RENEWCAPS: return "renewcaps";
     default: assert(0); return 0;
     }
   }

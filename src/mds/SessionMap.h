@@ -43,7 +43,6 @@ public:
   static const int STATE_RECONNECTING = 5;
 
   int state;
-  utime_t last_alive;         // last alive
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
@@ -56,6 +55,7 @@ private:
   version_t cap_push_seq;        // cap push seq #
 public:
   xlist<Capability*> caps;  // inodes with caps; front=most recently used
+  utime_t last_renew;
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -152,6 +152,7 @@ public:
     session_map.erase(s->inst.name);
   }
   void touch_session(Session *s) {
+    s->last_renew = g_clock.now();
     session_list.push_back(&s->session_list_item);
   }
 

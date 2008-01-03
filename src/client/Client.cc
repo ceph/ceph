@@ -697,7 +697,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << dendl;
-	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),
+	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 				mdsmap->get_inst(mds));
       }
       
@@ -770,12 +770,12 @@ void Client::handle_client_session(MClientSession *m)
   int from = m->get_source().num();
 
   switch (m->op) {
-  case MClientSession::OP_OPEN:
+  case CEPH_SESSION_OPEN:
     assert(mds_sessions.count(from) == 0);
     mds_sessions[from] = 0;
     break;
 
-  case MClientSession::OP_CLOSE:
+  case CEPH_SESSION_CLOSE:
     mds_sessions.erase(from);
     // FIXME: kick requests (hard) so that they are redirected.  or fail.
     break;
@@ -1579,7 +1579,7 @@ int Client::unmount()
        p != mds_sessions.end();
        ++p) {
     dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
-    messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_CLOSE,
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE,
 					       p->second),
 			    mdsmap->get_inst(p->first));
   }

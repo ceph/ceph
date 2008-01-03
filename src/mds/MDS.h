@@ -268,7 +268,7 @@ class MDS : public Dispatcher {
   // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
-  void my_dispatch(Message *m);
+  void _dispatch(Message *m);
 
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
@@ -291,7 +291,7 @@ public:
     this->mds = mds;
   }
   virtual void finish(int r) {
-    mds->my_dispatch(m);
+    mds->_dispatch(m);
   }
 };
 

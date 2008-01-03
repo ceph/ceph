@@ -23,7 +23,6 @@ using namespace std;
 #include "include/buffer.h"
 
 #include "SimpleLock.h"
-#include "Capability.h"
 
 // states and such.
 //  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio

@@ -47,8 +47,6 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 
-#include "messages/MPing.h"
-#include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
 #include "messages/MOSDMap.h"
@@ -1033,13 +1031,13 @@ void MDS::suicide()
 void MDS::dispatch(Message *m)
 {
   mds_lock.Lock();
-  my_dispatch(m);
+  _dispatch(m);
   mds_lock.Unlock();
 }
 
 
 
-void MDS::my_dispatch(Message *m)
+void MDS::_dispatch(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {

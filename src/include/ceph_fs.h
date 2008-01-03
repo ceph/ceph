@@ -59,10 +59,10 @@ struct ceph_timeval {
  */ 
 typedef __u32 ceph_frag_t;
 
-static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffffull >> (32-b))); }
+static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
 static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
-static inline __u32 frag_mask(__u32 f) { return 0xffffffffull >> (32-frag_bits(f)); }
+static inline __u32 frag_mask(__u32 f) { return 0xffffffu >> (24-frag_bits(f)); }
 static inline __u32 frag_next(__u32 f) { return (frag_bits(f) << 24) | (frag_value(f)+1); }
 
 /*
@@ -283,7 +283,9 @@ enum {
 	CEPH_SESSION_REQUEST_OPEN,
 	CEPH_SESSION_OPEN,
 	CEPH_SESSION_REQUEST_CLOSE,
-	CEPH_SESSION_CLOSE
+	CEPH_SESSION_CLOSE,
+	CEPH_SESSION_REQUEST_RENEWCAPS,
+	CEPH_SESSION_RENEWCAPS
 };
 
 /* client_request */
