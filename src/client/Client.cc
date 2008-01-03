@@ -109,6 +109,8 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   whoami = m->get_myname().num();
   monmap = mm;
   
+  tick_event = 0;
+
   mounted = false;
   mounters = 0;
   mount_timeout_event = 0;
@@ -271,6 +273,7 @@ void Client::init()
   }
   client_logger_lock.Unlock();
 
+  tick();
 }
 
 void Client::shutdown() 
@@ -778,6 +781,10 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_CLOSE:
     mds_sessions.erase(from);
     // FIXME: kick requests (hard) so that they are redirected.  or fail.
+    break;
+
+  case CEPH_SESSION_RENEWCAPS:
+    last_cap_renew = g_clock.now();
     break;
 
   default:
@@ -1611,6 +1618,44 @@ void Client::handle_unmount(Message* m)
   mount_cond.Signal();
 
   delete m;
+}
+
+
+class C_C_Tick : public Context {
+  Client *client;
+public:
+  C_C_Tick(Client *c) : client(c) {}
+  void finish(int r) {
+    client->tick();
+  }
+};
+
+void Client::tick()
+{
+  dout(10) << "tick" << dendl;
+  tick_event = new C_C_Tick(this);
+  timer.add_event_after(g_conf.client_tick_interval, tick_event);
+  
+  utime_t now = g_clock.now();
+  utime_t el = now - last_cap_renew_request;
+  if (el > g_conf.mds_cap_timeout / 3.0) {
+    renew_caps();
+  }
+  
+}
+
+void Client::renew_caps()
+{
+  dout(10) << "renew_caps" << dendl;
+  last_cap_renew_request = g_clock.now();
+  
+  for (map<int,version_t>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++) {
+    dout(15) << "renew_caps requesting from mds" << p->first << dendl;
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
+				 mdsmap->get_inst(p->first));
+  }
 }
 
 

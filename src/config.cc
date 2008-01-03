@@ -188,6 +188,7 @@ md_config_t g_conf = {
   client_cache_readdir_ttl: 1,  // 1 second only
   client_use_random_mds:  false,
   client_mount_timeout: 10.0,  // retry every N seconds
+  client_tick_interval: 1.0,
   client_hack_balance_reads: false,
   client_trace: 0,
   fuse_direct_io: 0,

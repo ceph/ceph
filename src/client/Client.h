@@ -417,6 +417,13 @@ class Client : public Dispatcher {
 
   SafeTimer timer;
 
+  Context *tick_event;
+  utime_t last_cap_renew_request;
+  utime_t last_cap_renew;
+  void renew_caps();
+public:
+  void tick();
+
  protected:
   Messenger *messenger;  
   int whoami;
