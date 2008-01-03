@@ -60,6 +60,7 @@ public:
   void prepare_force_open_sessions(map<int,entity_inst_t> &cm);
   void finish_force_open_sessions(map<int,entity_inst_t> &cm);
   void terminate_sessions();
+  void find_idle_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   void process_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);

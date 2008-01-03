@@ -163,9 +163,9 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
     assert(!session);  // ?
-    session = mds->sessionmap.get_or_add_session(m->get_source());
-    session->inst = m->get_source_inst();
+    session = mds->sessionmap.get_or_add_session(m->get_source_inst());
     session->state = Session::STATE_OPENING;
+    mds->sessionmap.touch_session(session);
     break;
 
   case CEPH_SESSION_REQUEST_CLOSE:
@@ -234,7 +234,7 @@ void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    Session *session = mds->sessionmap.get_or_add_session(p->second.name);
+    Session *session = mds->sessionmap.get_or_add_session(p->second);
     if (session->state == Session::STATE_UNDEF ||
 	session->state == Session::STATE_CLOSING)
       session->state = Session::STATE_OPENING;
@@ -279,6 +279,29 @@ void Server::terminate_sessions()
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
+  }
+}
+
+
+void Server::find_idle_sessions()
+{
+  dout(10) << "find_idle_sessions " << mds->sessionmap.session_list.size() << dendl;
+  
+  utime_t cutoff = g_clock.now();
+  cutoff -= g_conf.mds_cap_timeout;  
+  while (1) {
+    Session *oldest = mds->sessionmap.get_oldest_session();
+    if (!oldest) break;
+    dout(20) << "oldest session is " << oldest->inst << dendl;
+    if (oldest->last_cap_renew >= cutoff) {
+      dout(20) << "oldest session is " << oldest->inst << " and sufficiently new (" 
+	       << oldest->last_cap_renew << ")" << dendl;
+      break;
+    }
+
+    dout(10) << " expiring caps for " << oldest << " " << oldest->inst << " last " << oldest->last_cap_renew << dendl;
+    // write me!!!
+    break;
   }
 }
 

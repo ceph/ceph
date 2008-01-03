@@ -55,7 +55,7 @@ private:
   version_t cap_push_seq;        // cap push seq #
 public:
   xlist<Capability*> caps;  // inodes with caps; front=most recently used
-  utime_t last_renew;
+  utime_t last_cap_renew;
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -120,7 +120,8 @@ class MDS;
 class SessionMap {
 private:
   MDS *mds;
-  hash_map<entity_name_t, Session> session_map;
+  hash_map<entity_name_t, Session*> session_map;
+public:
   xlist<Session*> session_list;
   
 public:  // i am lazy
@@ -136,39 +137,45 @@ public:
   bool empty() { return session_map.empty(); }
   Session* get_session(entity_name_t w) {
     if (session_map.count(w))
-      return &session_map[w];
+      return session_map[w];
     return 0;
   }
-  Session* get_or_add_session(entity_name_t w) {
-    return &session_map[w];
-  }
   Session* get_or_add_session(entity_inst_t i) {
-    Session *s = get_or_add_session(i.name);
+    if (session_map.count(i.name))
+      return session_map[i.name];
+    Session *s = session_map[i.name] = new Session;
     s->inst = i;
+    session_list.push_back(&s->session_list_item);
+    assert(session_list.back() == s);
     return s;
   }
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
     session_map.erase(s->inst.name);
+    delete s;
   }
   void touch_session(Session *s) {
-    s->last_renew = g_clock.now();
+    s->last_cap_renew = g_clock.now();
     session_list.push_back(&s->session_list_item);
+  }
+  Session *get_oldest_session() {
+    if (session_list.empty()) return 0;
+    return session_list.front();
   }
 
   void get_client_set(set<int>& s) {
-    for (hash_map<entity_name_t,Session>::iterator p = session_map.begin();
+    for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
-      if (p->second.inst.name.is_client())
-	s.insert(p->second.inst.name.num());
+      if (p->second->inst.name.is_client())
+	s.insert(p->second->inst.name.num());
   }
   void get_client_session_set(set<Session*>& s) {
-    for (hash_map<entity_name_t,Session>::iterator p = session_map.begin();
+    for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
-      if (p->second.inst.name.is_client())
-	s.insert(&p->second);
+      if (p->second->inst.name.is_client())
+	s.insert(p->second);
   }
 
   void open_sessions(map<int,entity_inst_t>& client_map) {
@@ -185,7 +192,7 @@ public:
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
     assert(session_map.count(w));
-    return session_map[w].inst;
+    return session_map[w]->inst;
   }
   version_t inc_push_seq(int client) {
     return get_session(entity_name_t::CLIENT(client))->inc_push_seq();

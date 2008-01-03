@@ -342,15 +342,14 @@ void MDS::tick()
     mdcache->log_stat(logger);
   }
 
-  if (is_active() || is_stopping())
+  // ...
+  if (is_active() || is_stopping()) {
     locker->scatter_unscatter_autoscattered();
+    server->find_idle_sessions();
+  }
 
-  // booted?
   if (is_active()) {
-    
-    // balancer
     balancer->tick();
-
   }
 }
 
