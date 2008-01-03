@@ -12,10 +12,15 @@
 <pre>
 git clone git://ceph.newdream.net/ceph.git
 </pre>
+or
+<pre>
+git clone http://ceph.newdream.net/git/ceph.git
+</pre>
 			To pull the latest,
 <pre>
 git pull
 </pre>
+			You can browse the git repo at <a href="http://ceph.newdream.net/git">http://ceph.newdream.net/git</a>.
 		</div>
 
 		<h4>Build Targets</h4>
