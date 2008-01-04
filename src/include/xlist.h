@@ -27,6 +27,10 @@ public:
     ~item() { 
       remove_myself();
     }
+    // no copying!
+    item(const item& other);
+    const item& operator= (const item& right);
+
     
     xlist* get_xlist() { return _list; }
     void remove_myself() {

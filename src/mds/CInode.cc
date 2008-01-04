@@ -78,7 +78,7 @@ ostream& operator<<(ostream& out, CInode& in)
   // hack: spit out crap on which clients have caps
   if (!in.get_client_caps().empty()) {
     out << " caps={";
-    for (map<int,Capability>::iterator it = in.get_client_caps().begin();
+    for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";

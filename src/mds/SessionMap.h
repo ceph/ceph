@@ -36,11 +36,11 @@ class Session {
   // -- state etc --
 public:
   static const int STATE_UNDEF = 0;
-  static const int STATE_OPENING = 1;
+  static const int STATE_OPENING = 1;   // journaling open
   static const int STATE_OPEN = 2;
-  static const int STATE_CLOSING = 3;
-  static const int STATE_STALE = 4;   // ?
-  static const int STATE_RECONNECTING = 5;
+  static const int STATE_CLOSING = 3;   // journaling close
+  static const int STATE_STALE = 4;
+  static const int STATE_RECONNECTING = 5; // ?
 
   int state;
   entity_inst_t inst;
@@ -164,6 +164,10 @@ public:
   }
   void mark_session_stale(Session *s) {
     stale_sessions.push_back(&s->session_list_item);
+  }
+  Session *get_oldest_stale_session() {
+    if (stale_sessions.empty()) return 0;
+    return stale_sessions.front();
   }
 
   void get_client_set(set<int>& s) {
