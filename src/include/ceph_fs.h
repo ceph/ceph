@@ -228,10 +228,10 @@ struct ceph_msg_header {
 	__u32 seq;    /* message seq# for this session */
 	__u32 type;   /* message type */
 	struct ceph_entity_inst src, dst;
-	__u16 front_len;
-	__u16 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
+	__u32 front_len;
+	__u32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__u32 data_len;  /* bytes of data payload */
-};
+} __attribute__ ((packed));
 
 
 /*

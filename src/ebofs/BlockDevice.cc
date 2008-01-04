@@ -269,9 +269,9 @@ block_t BlockDevice::get_num_blocks()
     assert(fd > 0);
 
     int r;
+    uint64_t bytes = 0;
 #ifdef BLKGETSIZE64
     // ioctl block device
-    uint64_t bytes = 0;
     r = ioctl(fd, BLKGETSIZE64, &bytes);
     num_blocks = bytes / (uint64_t)EBOFS_BLOCK_SIZE;
     if (r == 0) {

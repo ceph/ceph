@@ -203,9 +203,9 @@ static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct cep
 	to->type = cpu_to_le32(from->type);
 	ceph_encode_inst(&to->src, &from->src);
 	ceph_encode_inst(&to->dst, &from->dst);
-	to->front_len = cpu_to_le16(from->front_len);
-	to->data_off = cpu_to_le16(from->data_off);
-	to->data_len = cpu_to_le16(from->data_len);
+	to->front_len = cpu_to_le32(from->front_len);
+	to->data_off = cpu_to_le32(from->data_off);
+	to->data_len = cpu_to_le32(from->data_len);
 }
 static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
 {
@@ -213,9 +213,9 @@ static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
 	to->type = cpu_to_le32(to->type);
 	ceph_decode_inst(&to->src);
 	ceph_decode_inst(&to->dst);
-	to->front_len = cpu_to_le16(to->front_len);
-	to->data_off = cpu_to_le16(to->data_off);
-	to->data_len = cpu_to_le16(to->data_len);
+	to->front_len = cpu_to_le32(to->front_len);
+	to->data_off = cpu_to_le32(to->data_off);
+	to->data_len = cpu_to_le32(to->data_len);
 }
 
 
