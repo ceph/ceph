@@ -99,6 +99,9 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	}
 	dout(1, "handle_map done\n");
 	
+	/* kick any pending requests that need kicking */
+	/* WRITE ME */
+
 out:
 	return;
 
@@ -347,6 +350,9 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	return 0;
 }
 
+/*
+ * read multiple pages (readahead)
+ */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			struct ceph_file_layout *layout, 
 			loff_t off, loff_t len,
@@ -356,6 +362,10 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 
 	BUG_ON(layout->fl_stripe_unit & ~PAGE_MASK);
 	
+	/* this may do a scatter/gather type of thing... need to track
+	 * that mess somehow 
+	 */
+
 	/* map range onto objects */
 	oid.ino = ino;
 	oid.rev = 0;
