@@ -1302,9 +1302,9 @@ Message *Rank::Pipe::read_message()
   bufferlist data;
   if (env.data_len) {
     int left = env.data_len;
-    if (env.data_off & PAGE_MASK) {
+    if (env.data_off & ~PAGE_MASK) {
       // head
-      int head = MIN(PAGE_SIZE - (env.data_off & PAGE_MASK),
+      int head = MIN(PAGE_SIZE - (env.data_off & ~PAGE_MASK),
 		     (unsigned)left);
       bp = buffer::create(head);
       if (tcp_read( sd, bp.c_str(), head ) < 0) 
@@ -1315,7 +1315,7 @@ Message *Rank::Pipe::read_message()
     }
 
     // middle
-    int middle = left & ~PAGE_MASK;
+    int middle = left & PAGE_MASK;
     if (middle > 0) {
       bp = buffer::create_page_aligned(middle);
       if (tcp_read( sd, bp.c_str(), middle ) < 0) 
