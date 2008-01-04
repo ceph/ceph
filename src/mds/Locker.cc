@@ -524,16 +524,17 @@ bool Locker::issue_caps(CInode *in)
   int nissued = 0;        
 
   // client caps
-  for (map<int, Capability>::iterator it = in->client_caps.begin();
+  for (map<int, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    if (it->second.pending() != (it->second.wanted() & allowed)) {
+    Capability *cap = it->second;
+    if (cap->pending() != (cap->wanted() & allowed)) {
       // issue
       nissued++;
 
-      int before = it->second.pending();
-      long seq = it->second.issue(it->second.wanted() & allowed);
-      int after = it->second.pending();
+      int before = cap->pending();
+      long seq = cap->issue(cap->wanted() & allowed);
+      int after = cap->pending();
 
       // twiddle file_data_version?
       if (!(before & CEPH_CAP_WRBUFFER) &&
@@ -543,13 +544,15 @@ bool Locker::issue_caps(CInode *in)
       }
 
       if (seq > 0 && 
-          !it->second.is_suppress()) {
-        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << it->second.get_last_seq() << " new pending " << cap_string(it->second.pending()) << " was " << cap_string(before) << dendl;
+          !cap->is_suppress()) {
+        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << cap->get_last_seq()
+		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
+		<< dendl;
         mds->send_message_client(new MClientFileCaps(MClientFileCaps::OP_GRANT,
 						     in->inode,
-						     it->second.get_last_seq(),
-						     it->second.pending(),
-						     it->second.wanted()),
+						     cap->get_last_seq(),
+						     cap->pending(),
+						     cap->wanted()),
 				 it->first);
       }
     }
@@ -560,7 +563,7 @@ bool Locker::issue_caps(CInode *in)
 
 void Locker::revoke_stale_caps(Session *session)
 {
-  dout(10) << "revoke_stale_caps for client " << session->inst.name << dendl;
+  dout(10) << "revoke_stale_caps for " << session->inst.name << dendl;
   
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
@@ -574,7 +577,22 @@ void Locker::revoke_stale_caps(Session *session)
       dout(10) << " nothing issued on " << *in << dendl;
     }
     cap->set_stale(true);
-  }       
+  }
+}
+
+void Locker::resume_stale_caps(Session *session)
+{
+  dout(10) << "resume_stale_caps for " << session->inst.name << dendl;
+
+  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+    CInode *in = cap->get_inode();
+    if (cap->is_stale()) {
+      dout(10) << " clearing stale flag on " << *in << dendl;
+      cap->set_stale(false);
+      file_eval(&in->filelock);
+    }
+  }
 }
 
 class C_MDL_RequestInodeFileCaps : public Context {

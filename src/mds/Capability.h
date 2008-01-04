@@ -76,17 +76,6 @@ public:
     suppress(false), stale(false),
     session_caps_item(this) { 
   }
-  Capability(CInode *i, Export& other) : 
-    inode(i),
-    wanted_caps(other.wanted),
-    last_sent(0), last_recv(0),
-    suppress(false), stale(false),
-    session_caps_item(this) { 
-    // issued vs pending
-    if (other.issued & ~other.pending)
-      issue(other.issued);
-    issue(other.pending);
-  }
   
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }

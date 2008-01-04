@@ -882,7 +882,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   in->state_set(CInode::STATE_EXPORTINGCAPS);
 
   // make note of clients named by exported capabilities
-  for (map<int, Capability>::iterator it = in->client_caps.begin();
+  for (map<int, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) 
     exported_client_map[it->first] = mds->sessionmap.get_inst(entity_name_t::CLIENT(it->first));
@@ -893,16 +893,17 @@ void Migrator::finish_export_inode_caps(CInode *in)
   in->state_clear(CInode::STATE_EXPORTINGCAPS);
 
   // tell (all) clients about migrating caps.. 
-  for (map<int, Capability>::iterator it = in->client_caps.begin();
+  for (map<int, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
+    Capability *cap = it->second;
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
     MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
 					     in->inode, 
-                                             it->second.get_last_seq(), 
-                                             it->second.pending(),
-                                             it->second.wanted());
+                                             cap->get_last_seq(), 
+                                             cap->pending(),
+                                             cap->wanted());
     mds->send_message_client(m, it->first);
   }
   in->clear_client_caps();
@@ -2034,23 +2035,29 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 					map<int,Capability::Export> &cap_map)
 {
   assert(!cap_map.empty());
-
-  set<int> new_caps;
-  in->merge_client_caps(cap_map, new_caps);
-  in->put(CInode::PIN_IMPORTINGCAPS);
   
-  for (set<int>::iterator it = new_caps.begin();
-       it != new_caps.end();
+  for (map<int,Capability::Export>::iterator it = cap_map.begin();
+       it != cap_map.end();
        it++) {
-    dout(0) << "finish_import_inode_caps for client" << *it << " on " << *in << dendl;
+    dout(0) << "finish_import_inode_caps for client" << it->first << " on " << *in << dendl;
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(it->first));
+    assert(session);
+
+    Capability *cap = in->get_client_cap(it->first);
+    if (!cap) 
+      cap = in->add_client_cap(it->first, in, session->caps);
+    cap->merge(it->second);
+
     MClientFileCaps *caps = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
 						in->inode,
-						in->client_caps[*it].get_last_seq(),
-						in->client_caps[*it].pending(),
-						in->client_caps[*it].wanted());
+						cap->get_last_seq(),
+						cap->pending(),
+						cap->wanted());
     caps->set_mds(from); // from whom?
-    mds->send_message_client(caps, *it);
+    mds->send_message_client(caps, session->inst);
   }
+
+  in->put(CInode::PIN_IMPORTINGCAPS);
 }
 
 int Migrator::decode_import_dir(bufferlist::iterator& blp,

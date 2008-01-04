@@ -787,6 +787,12 @@ void Client::handle_client_session(MClientSession *m)
     last_cap_renew = g_clock.now();
     break;
 
+  case CEPH_SESSION_STALE:
+    // hmm, verify caps have been revoked?
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RESUME, g_clock.now()),
+			    m->get_source_inst());
+    break;
+
   default:
     assert(0);
   }
@@ -1586,8 +1592,7 @@ int Client::unmount()
        p != mds_sessions.end();
        ++p) {
     dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
-    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE,
-					       p->second),
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second),
 			    mdsmap->get_inst(p->first));
   }
 
@@ -1654,7 +1659,7 @@ void Client::renew_caps()
        p++) {
     dout(15) << "renew_caps requesting from mds" << p->first << dendl;
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
-				 mdsmap->get_inst(p->first));
+			    mdsmap->get_inst(p->first));
   }
 }
 

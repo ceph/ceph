@@ -182,6 +182,7 @@ protected:
   Capability* issue_new_caps(CInode *in, int mode, Session *session);
   bool issue_caps(CInode *in);
   void revoke_stale_caps(Session *session);
+  void resume_stale_caps(Session *session);
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);

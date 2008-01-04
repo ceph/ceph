@@ -191,7 +191,7 @@ public:
   // -- distributed state --
 protected:
   // file capabilities
-  map<int, Capability>  client_caps;         // client -> caps
+  map<int, Capability*>  client_caps;         // client -> caps
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -342,23 +342,24 @@ public:
   // -- caps -- (new)
   // client caps
   bool is_any_caps() { return !client_caps.empty(); }
-  map<int,Capability>& get_client_caps() { return client_caps; }
+  map<int,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(int client) {
     if (client_caps.count(client))
-      return &client_caps[client];
+      return client_caps[client];
     return 0;
   }
   Capability *add_client_cap(int client, CInode *in, xlist<Capability*>& cls) {
     if (client_caps.empty())
       get(PIN_CAPS);
     assert(client_caps.count(client) == 0);
-    Capability *cap = &client_caps[client];
+    Capability *cap = client_caps[client] = new Capability;
     cap->set_inode(in);
     cap->add_to_cap_list(cls);
     return cap;
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
+    delete client_caps[client];
     client_caps.erase(client);
     if (client_caps.empty())
       put(PIN_CAPS);
@@ -376,59 +377,33 @@ public:
     inode.mtime = MAX(inode.mtime, icr.mtime);
     inode.atime = MAX(inode.atime, icr.atime);
   }
-  /*
-  void set_client_caps(map<int,Capability>& cl) {
-    if (client_caps.empty() && !cl.empty())
-      get(PIN_CAPS);
-    client_caps.clear();
-    client_caps = cl;
-  }
-  */
   void clear_client_caps() {
-    if (!client_caps.empty())
-      put(PIN_CAPS);
-    client_caps.clear();
+    while (!client_caps.empty())
+      remove_client_cap(client_caps.begin()->first);
   }
   void export_client_caps(map<int,Capability::Export>& cl) {
-    for (map<int,Capability>::iterator it = client_caps.begin();
+    for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
-      cl[it->first] = it->second.make_export();
+      cl[it->first] = it->second->make_export();
     }
-  }
-  void merge_client_caps(map<int,Capability::Export>& cl, set<int>& new_client_caps) {
-    if (client_caps.empty() && !cl.empty())
-      get(PIN_CAPS);
-    
-    for (map<int,Capability::Export>::iterator it = cl.begin();
-         it != cl.end();
-         it++) {
-      new_client_caps.insert(it->first);
-      if (client_caps.count(it->first)) {
-        // merge
-        client_caps[it->first].merge(it->second);
-      } else {
-        // new
-        client_caps[it->first] = Capability(this, it->second);
-      }
-    }      
   }
 
   // caps issued, wanted
   int get_caps_issued() {
     int c = 0;
-    for (map<int,Capability>::iterator it = client_caps.begin();
+    for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
-      c |= it->second.issued();
+      c |= it->second->issued();
     return c;
   }
   int get_caps_wanted() {
     int w = 0;
-    for (map<int,Capability>::iterator it = client_caps.begin();
+    for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
-      w |= it->second.wanted();
+      w |= it->second->wanted();
       //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
     }
     if (is_auth())

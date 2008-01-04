@@ -27,17 +27,22 @@ public:
     case CEPH_SESSION_CLOSE: return "close";
     case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
     case CEPH_SESSION_RENEWCAPS: return "renewcaps";
+    case CEPH_SESSION_STALE: return "stale";
     default: assert(0); return 0;
     }
   }
 
   int32_t op;
-  version_t seq;
+  version_t seq;  // used when requesting close only
+  utime_t stamp;
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 
     Message(CEPH_MSG_CLIENT_SESSION),
     op(o), seq(s) { }
+  MClientSession(int o, utime_t st) : 
+    Message(CEPH_MSG_CLIENT_SESSION),
+    op(o), seq(0), stamp(st) { }
 
   const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
@@ -47,13 +52,15 @@ public:
   }
 
   void decode_payload() { 
-    int off = 0;
-    ::_decode(op, payload, off);
-    ::_decode(seq, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(op, p);
+    ::_decode_simple(seq, p);
+    ::_decode_simple(stamp, p);
   }
   void encode_payload() { 
-    ::_encode(op, payload);
-    ::_encode(seq, payload);
+    ::_encode_simple(op, payload);
+    ::_encode_simple(seq, payload);
+    ::_encode_simple(stamp, payload);
   }
 };
 

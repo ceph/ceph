@@ -102,6 +102,7 @@ void Server::dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
+    delete m;
     return;
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
@@ -137,72 +138,79 @@ public:
 
 void Server::handle_client_session(MClientSession *m)
 {
-  dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
-  bool open = false;
+  version_t pv;
   Session *session = mds->sessionmap.get_session(m->get_source());
+
+  dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   assert(m->get_source().is_client()); // should _not_ come from an mds!
 
   switch (m->op) {
-
-  case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (!session) {
-      dout(10) << "dne, dropping this req" << dendl;
-      delete m;
-      return;
-    }
-    mds->sessionmap.touch_session(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS), session->inst);
-    delete m;
-    return;
-
   case CEPH_SESSION_REQUEST_OPEN:
-    open = true;
     if (session && (session->is_opening() || session->is_open())) {
       dout(10) << "already open|opening, dropping this req" << dendl;
-      delete m;
       return;
     }
     assert(!session);  // ?
     session = mds->sessionmap.get_or_add_session(m->get_source_inst());
     session->state = Session::STATE_OPENING;
     mds->sessionmap.touch_session(session);
+    pv = ++mds->sessionmap.projected;
+    mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv),
+			new C_MDS_session_finish(mds, session, true, pv));
+    break;
+
+  case CEPH_SESSION_REQUEST_RENEWCAPS:
+    if (!session) {
+      dout(10) << "dne, dropping this req" << dendl;
+      return;
+    }
+    mds->sessionmap.touch_session(session);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), session->inst);
+    break;
+
+  case CEPH_SESSION_REQUEST_RESUME:
+    if (!session) {
+      dout(10) << "dne, replying with close" << dendl;
+      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());      
+      return;
+    }
+    if (!session->is_stale()) {
+      dout(10) << "hmm, got request_resume on non-stale session for " << session->inst << dendl;
+      assert(0);
+      return;
+    }
+    session->state = Session::STATE_OPEN;
+    mds->sessionmap.touch_session(session);
+    mds->locker->resume_stale_caps(session);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RESUME, m->stamp), session->inst);
     break;
 
   case CEPH_SESSION_REQUEST_CLOSE:
     if (!session || session->is_closing()) {
       dout(10) << "already closing|dne, dropping this req" << dendl;
-      delete m;
       return;
     }
     if (m->seq < session->get_push_seq()) {
       dout(10) << "old push seq " << m->seq << " < " << session->get_push_seq() 
 	       << ", dropping" << dendl;
-      delete m;
       return;
     }
     assert(m->seq == session->get_push_seq());
     session->state = Session::STATE_CLOSING;
+    pv = ++mds->sessionmap.projected;
+    mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv),
+			new C_MDS_session_finish(mds, session, false, pv));
     break;
 
   default:
     assert(0);
   }
-
-  // journal it
-  version_t pv = ++mds->sessionmap.projected;
-  dout(10) << " sessionmap v " << mds->sessionmap.version << " pv " << pv << dendl;
-  mdlog->submit_entry(new ESession(m->get_source_inst(), open, pv),
-		      new C_MDS_session_finish(mds, session, open, pv));
-  delete m;
-
-  if (logger) logger->inc("hcsess");
 }
 
 void Server::_session_logged(Session *session, bool open, version_t pv)
 {
   dout(10) << "_session_logged " << session->inst << " " << (open ? "open":"close")
-	   << " " << pv 
-	   << dendl;
+	   << " " << pv << dendl;
 
   // apply
   if (open) {
@@ -217,11 +225,8 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     assert(!open);
     mds->sessionmap.version++;  // noop
   }
-  
-  assert(pv == mds->sessionmap.version);
-  
-  // reply
-  if (open) 
+
+  if (open)
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
   else
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
@@ -287,14 +292,16 @@ void Server::find_idle_sessions()
 {
   dout(10) << "find_idle_sessions" << dendl;
   
-  utime_t cutoff = g_clock.now();
+  // stale
+  utime_t now = g_clock.now();
+  utime_t cutoff = now;
   cutoff -= g_conf.mds_cap_timeout;  
   while (1) {
     Session *session = mds->sessionmap.get_oldest_active_session();
     if (!session) break;
-    dout(20) << "laggiest session is " << session->inst << dendl;
+    dout(20) << "laggiest active session is " << session->inst << dendl;
     if (session->last_cap_renew >= cutoff) {
-      dout(20) << "laggiest session is " << session->inst << " and sufficiently new (" 
+      dout(20) << "laggiest active session is " << session->inst << " and sufficiently new (" 
 	       << session->last_cap_renew << ")" << dendl;
       break;
     }
@@ -302,7 +309,32 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.mark_session_stale(session);
     mds->locker->revoke_stale_caps(session);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, g_clock.now()),
+				 session->inst);
   }
+
+  // dead
+  cutoff = now;
+  cutoff -= g_conf.mds_session_autoclose;
+  while (1) {
+    Session *session = mds->sessionmap.get_oldest_stale_session();
+    if (!session) break;
+    dout(20) << "oldest stale session is " << session->inst << dendl;
+    if (session->last_cap_renew >= cutoff) {
+      dout(20) << "oldest stale session is " << session->inst << " and sufficiently new (" 
+	       << session->last_cap_renew << ")" << dendl;
+      break;
+    }
+
+    dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
+    
+    mds->sessionmap.mark_session_stale(session);
+    mds->locker->revoke_stale_caps(session);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE),
+				 session->inst);
+  }
+
+
 }
 
 

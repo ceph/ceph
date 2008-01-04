@@ -1082,7 +1082,7 @@ void MDCache::send_resolve_now(int who)
   }
   // [resolving]
   if (uncommitted_slave_updates.count(who)) {
-    for (map<metareqid_t, MDSlaveUpdate>::iterator p = uncommitted_slave_updates[who].begin();
+    for (map<metareqid_t, MDSlaveUpdate*>::iterator p = uncommitted_slave_updates[who].begin();
 	 p != uncommitted_slave_updates[who].end();
 	 ++p) {
       dout(10) << " including uncommitted " << p->first << dendl;
@@ -1388,7 +1388,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     if (mds->is_resolve()) {
       // replay
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p].commit.replay(mds);
+      uncommitted_slave_updates[from][*p]->commit.replay(mds);
+      delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
       // log commit
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_COMMIT));
@@ -1406,7 +1407,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
     if (mds->is_resolve()) {
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p].rollback.replay(mds);
+      uncommitted_slave_updates[from][*p]->rollback.replay(mds);
+      delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {
@@ -2659,11 +2661,13 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   in->reconnect_cap(client, icr, session->caps);
   
   // send REAP
+  Capability *cap = in->get_client_cap(client);
+  assert(cap); // ?
   MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
 					      in->inode,
-					      in->client_caps[client].get_last_seq(),
-					      in->client_caps[client].pending(),
-					      in->client_caps[client].wanted());
+					      cap->get_last_seq(),
+					      cap->pending(),
+					      cap->wanted());
   reap->set_mds(frommds); // reap from whom?
   mds->messenger->send_message(reap, session->inst);
 }

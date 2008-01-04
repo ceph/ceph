@@ -613,14 +613,15 @@ void ESlaveUpdate::replay(MDS *mds)
     commit._segment = _segment;  // may need this later
     rollback._segment = _segment;  // may need this later
     mds->mdcache->uncommitted_slave_updates[master][reqid] = 
-      MDSlaveUpdate(commit, rollback, _segment->slave_updates);
+      new MDSlaveUpdate(commit, rollback, _segment->slave_updates);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master
 	       << ": applying commit blob" << dendl;
-      mds->mdcache->uncommitted_slave_updates[master][reqid].commit.replay(mds, _segment);
+      mds->mdcache->uncommitted_slave_updates[master][reqid]->commit.replay(mds, _segment);
+      delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
@@ -633,7 +634,8 @@ void ESlaveUpdate::replay(MDS *mds)
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
 	       << ": applying rollback blob" << dendl;
       assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
-      mds->mdcache->uncommitted_slave_updates[master][reqid].rollback.replay(mds, _segment);
+      mds->mdcache->uncommitted_slave_updates[master][reqid]->rollback.replay(mds, _segment);
+      delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
