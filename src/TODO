@@ -1,4 +1,5 @@
 
+- learn git
 
 some smallish projects:
 
@@ -17,6 +18,7 @@ code cleanup
   - use le32 etc annotation
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
   - specify word size in all encoded structures
+
 
 
 kernel client
