@@ -285,23 +285,23 @@ void Server::terminate_sessions()
 
 void Server::find_idle_sessions()
 {
-  dout(10) << "find_idle_sessions " << mds->sessionmap.session_list.size() << dendl;
+  dout(10) << "find_idle_sessions" << dendl;
   
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.mds_cap_timeout;  
   while (1) {
-    Session *oldest = mds->sessionmap.get_oldest_session();
-    if (!oldest) break;
-    dout(20) << "oldest session is " << oldest->inst << dendl;
-    if (oldest->last_cap_renew >= cutoff) {
-      dout(20) << "oldest session is " << oldest->inst << " and sufficiently new (" 
-	       << oldest->last_cap_renew << ")" << dendl;
+    Session *session = mds->sessionmap.get_oldest_active_session();
+    if (!session) break;
+    dout(20) << "laggiest session is " << session->inst << dendl;
+    if (session->last_cap_renew >= cutoff) {
+      dout(20) << "laggiest session is " << session->inst << " and sufficiently new (" 
+	       << session->last_cap_renew << ")" << dendl;
       break;
     }
 
-    dout(10) << " expiring caps for " << oldest << " " << oldest->inst << " last " << oldest->last_cap_renew << dendl;
-    // write me!!!
-    break;
+    dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
+    mds->sessionmap.mark_session_stale(session);
+    mds->locker->revoke_stale_caps(session);
   }
 }
 

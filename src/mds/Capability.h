@@ -64,6 +64,7 @@ private:
   capseq_t last_sent, last_recv;
   
   bool suppress;
+  bool stale;
 public:
   xlist<Capability*>::item session_caps_item;
 
@@ -72,13 +73,14 @@ public:
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
-    suppress(false),
+    suppress(false), stale(false),
     session_caps_item(this) { 
   }
   Capability(CInode *i, Export& other) : 
     inode(i),
     wanted_caps(other.wanted),
     last_sent(0), last_recv(0),
+    suppress(false), stale(false),
     session_caps_item(this) { 
     // issued vs pending
     if (other.issued & ~other.pending)
@@ -88,6 +90,9 @@ public:
   
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
+
+  bool is_stale() { return stale; }
+  void set_stale(bool b) { stale = b; }
 
   CInode *get_inode() { return inode; }
   void set_inode(CInode *i) { inode = i; }
@@ -151,19 +156,8 @@ public:
 
   // issue caps; return seq number.
   capseq_t issue(int c) {
-    //int was = pending();
-    //no!  if (c == was && last_sent) return -1;  // repeat of previous?
-    
     ++last_sent;
     cap_history[last_sent] = c;
-
-    /* no!
-    // not recalling, just adding?
-    if (c & ~was &&
-        cap_history.count(last_sent-1)) { 
-      cap_history.erase(last_sent-1);
-    }
-    */
     return last_sent;
   }
   capseq_t get_last_seq() { return last_sent; }
@@ -223,6 +217,12 @@ public:
     }
 
     return r;
+  }
+
+  void revoke() {
+    if (pending())
+      issue(0);
+    confirm_receipt(last_sent, 0);
   }
 
   // serializers

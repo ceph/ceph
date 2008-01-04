@@ -558,6 +558,24 @@ bool Locker::issue_caps(CInode *in)
   return (nissued == 0);  // true if no re-issued, no callbacks
 }
 
+void Locker::revoke_stale_caps(Session *session)
+{
+  dout(10) << "revoke_stale_caps for client " << session->inst.name << dendl;
+  
+  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+    CInode *in = cap->get_inode();
+    int issued = cap->issued();
+    if (issued) {
+      dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
+      cap->revoke();
+      file_eval(&in->filelock);
+    } else {
+      dout(10) << " nothing issued on " << *in << dendl;
+    }
+    cap->set_stale(true);
+  }       
+}
 
 class C_MDL_RequestInodeFileCaps : public Context {
   Locker *locker;

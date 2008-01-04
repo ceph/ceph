@@ -25,6 +25,7 @@ using std::list;
 using std::set;
 
 class MDS;
+class Session;
 class CDir;
 class CInode;
 class CDentry;
@@ -180,6 +181,7 @@ protected:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session);
   bool issue_caps(CInode *in);
+  void revoke_stale_caps(Session *session);
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);

@@ -49,6 +49,7 @@ public:
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
+  bool is_stale() { return state == STATE_STALE; }
 
   // -- caps --
 private:
@@ -122,7 +123,8 @@ private:
   MDS *mds;
   hash_map<entity_name_t, Session*> session_map;
 public:
-  xlist<Session*> session_list;
+  xlist<Session*> active_sessions;
+  xlist<Session*> stale_sessions;
   
 public:  // i am lazy
   version_t version, projected, committing, committed;
@@ -145,8 +147,6 @@ public:
       return session_map[i.name];
     Session *s = session_map[i.name] = new Session;
     s->inst = i;
-    session_list.push_back(&s->session_list_item);
-    assert(session_list.back() == s);
     return s;
   }
   void remove_session(Session *s) {
@@ -156,11 +156,14 @@ public:
   }
   void touch_session(Session *s) {
     s->last_cap_renew = g_clock.now();
-    session_list.push_back(&s->session_list_item);
+    active_sessions.push_back(&s->session_list_item);
   }
-  Session *get_oldest_session() {
-    if (session_list.empty()) return 0;
-    return session_list.front();
+  Session *get_oldest_active_session() {
+    if (active_sessions.empty()) return 0;
+    return active_sessions.front();
+  }
+  void mark_session_stale(Session *s) {
+    stale_sessions.push_back(&s->session_list_item);
   }
 
   void get_client_set(set<int>& s) {
