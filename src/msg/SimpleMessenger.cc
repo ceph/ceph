@@ -22,7 +22,7 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 
-#include <asm/page.h>
+#include <sys/user.h>
 
 #include "config.h"
 
@@ -124,8 +124,11 @@ int Rank::Accepter::start()
   sockaddr_in listen_addr = g_my_addr.v.ipaddr;
 
   /* socket creation */
-  listen_sd = socket(AF_INET, SOCK_STREAM, 0);
+  listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   assert(listen_sd > 0);
+
+  int on = 1;
+  ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
   
   /* bind to port */
   int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
