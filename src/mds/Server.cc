@@ -216,23 +216,21 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   if (open) {
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
-    mds->sessionmap.version++;
   } else if (session->is_closing()) {
-    mds->sessionmap.remove_session(session);
-    mds->sessionmap.version++;
-
     // kill any lingering capabilities
-    for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
-      CInode *in = (*p)->get_inode();
+    while (!session->caps.empty()) {
+      Capability *cap = session->caps.front();
+      CInode *in = cap->get_inode();
       dout(10) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
 
+    mds->sessionmap.remove_session(session);
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
-    mds->sessionmap.version++;  // noop
   }
+  mds->sessionmap.version++;  // noop
 
   if (open)
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
