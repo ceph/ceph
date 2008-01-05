@@ -82,7 +82,7 @@ ostream& operator<<(ostream& out, CInode& in)
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";
-      out << it->first;
+      out << it->first << "=" << it->second->issued();
     }
     out << "}";
   }

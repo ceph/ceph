@@ -314,7 +314,7 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, g_clock.now()),
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
 				 session->inst);
   }
 

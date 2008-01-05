@@ -416,7 +416,20 @@ public:
       }
     return w;
   }
+  bool is_loner_cap() {
+    if (!mds_caps_wanted.empty())
+      return false;
 
+    int n = 0;
+    for (map<int,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) 
+      if (!it->second->is_stale()) {
+	if (n) return false;
+	n++;
+      }
+    return (n == 1);
+  }
 
   void replicate_relax_locks() {
     //dout(10) << " relaxing locks on " << *this << dendl;

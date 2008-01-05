@@ -35,7 +35,7 @@ public:
   }
 
   int32_t op;
-  version_t seq;  // used when requesting close only
+  version_t seq;  // used when requesting close, declaring stale
   utime_t stamp;
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }

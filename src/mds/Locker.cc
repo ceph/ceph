@@ -572,9 +572,13 @@ void Locker::revoke_stale_caps(Session *session)
     if (issued) {
       dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
-      file_eval(&in->filelock);
-      if (!in->is_auth())
+      file_eval_gather(&in->filelock);
+      if (in->is_auth()) {
+	if (in->filelock.is_stable())
+	  file_eval(&in->filelock);
+      } else {
 	request_inode_file_caps(in);
+      }
     } else {
       dout(10) << " nothing issued on " << *in << dendl;
     }
@@ -592,7 +596,8 @@ void Locker::resume_stale_caps(Session *session)
     if (cap->is_stale()) {
       dout(10) << " clearing stale flag on " << *in << dendl;
       cap->set_stale(false);
-      file_eval(&in->filelock);
+      if (in->is_auth() && in->filelock.is_stable())
+	file_eval(&in->filelock);
       issue_caps(in);
     }
   }
@@ -2447,7 +2452,7 @@ void Locker::file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   int wanted = in->get_caps_wanted();
-  bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+  bool loner = in->is_loner_cap();
   dout(7) << "file_eval wanted=" << cap_string(wanted)
 	  << "  filelock=" << *lock << " on " << *lock->get_parent()
 	  << "  loner=" << loner
