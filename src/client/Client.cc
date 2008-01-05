@@ -788,9 +788,13 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_STALE:
-    // hmm, verify caps have been revoked?
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RESUME, g_clock.now()),
 			    m->get_source_inst());
+    // hmm, verify caps have been revoked?
+    break;
+
+  case CEPH_SESSION_RESUME:
+    // ??
     break;
 
   default:

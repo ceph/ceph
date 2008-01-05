@@ -573,6 +573,8 @@ void Locker::revoke_stale_caps(Session *session)
       dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
       file_eval(&in->filelock);
+      if (!in->is_auth())
+	request_inode_file_caps(in);
     } else {
       dout(10) << " nothing issued on " << *in << dendl;
     }
@@ -591,6 +593,7 @@ void Locker::resume_stale_caps(Session *session)
       dout(10) << " clearing stale flag on " << *in << dendl;
       cap->set_stale(false);
       file_eval(&in->filelock);
+      issue_caps(in);
     }
   }
 }
@@ -609,6 +612,8 @@ public:
 
 void Locker::request_inode_file_caps(CInode *in)
 {
+  assert(!in->is_auth());
+
   int wanted = in->get_caps_wanted();
   if (wanted != in->replica_caps_wanted) {
 

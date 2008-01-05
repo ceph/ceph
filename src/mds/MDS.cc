@@ -318,7 +318,7 @@ void MDS::reset_tick()
 
   // schedule
   tick_event = new C_MDS_Tick(this);
-  timer.add_event_after(g_conf.mon_tick_interval, tick_event);
+  timer.add_event_after(g_conf.mds_tick_interval, tick_event);
 }
 
 void MDS::tick()

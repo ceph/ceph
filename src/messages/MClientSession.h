@@ -28,6 +28,8 @@ public:
     case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
     case CEPH_SESSION_RENEWCAPS: return "renewcaps";
     case CEPH_SESSION_STALE: return "stale";
+    case CEPH_SESSION_REQUEST_RESUME: return "request_resume";
+    case CEPH_SESSION_RESUME: return "resume";
     default: assert(0); return 0;
     }
   }

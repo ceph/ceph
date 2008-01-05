@@ -152,7 +152,7 @@ void Server::handle_client_session(MClientSession *m)
     }
     assert(!session);  // ?
     session = mds->sessionmap.get_or_add_session(m->get_source_inst());
-    session->state = Session::STATE_OPENING;
+    mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv),
@@ -179,7 +179,7 @@ void Server::handle_client_session(MClientSession *m)
       assert(0);
       return;
     }
-    session->state = Session::STATE_OPEN;
+    mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
     mds->locker->resume_stale_caps(session);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_RESUME, m->stamp), session->inst);
@@ -196,7 +196,7 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
     assert(m->seq == session->get_push_seq());
-    session->state = Session::STATE_CLOSING;
+    mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
@@ -215,11 +215,19 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   // apply
   if (open) {
     assert(session->is_opening());
-    session->state = Session::STATE_OPEN;
+    mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.version++;
   } else if (session->is_closing()) {
     mds->sessionmap.remove_session(session);
     mds->sessionmap.version++;
+
+    // kill any lingering capabilities
+    for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+      CInode *in = (*p)->get_inode();
+      dout(10) << " killing capability on " << *in << dendl;
+      in->remove_client_cap(session->inst.name.num());
+    }
+
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
@@ -240,9 +248,8 @@ void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
 	   << dendl;
   for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
-    if (session->state == Session::STATE_UNDEF ||
-	session->state == Session::STATE_CLOSING)
-      session->state = Session::STATE_OPENING;
+    if (session->is_undef() || session->is_closing())
+      mds->sessionmap.set_state(session, Session::STATE_OPENING);
   }
 }
 
@@ -260,7 +267,7 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
     assert(session);
     if (session->is_opening()) {
       dout(10) << "force_open_sessions opening " << session->inst << dendl;
-      session->state = Session::STATE_OPEN;
+      mds->sessionmap.set_state(session, Session::STATE_OPEN);
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
     }
   }
@@ -280,7 +287,7 @@ void Server::terminate_sessions()
        ++p) {
     Session *session = *p;
     if (session->is_closing()) continue;
-    session->state = Session::STATE_CLOSING;
+    mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
@@ -297,7 +304,7 @@ void Server::find_idle_sessions()
   utime_t cutoff = now;
   cutoff -= g_conf.mds_cap_timeout;  
   while (1) {
-    Session *session = mds->sessionmap.get_oldest_active_session();
+    Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
     dout(20) << "laggiest active session is " << session->inst << dendl;
     if (session->last_cap_renew >= cutoff) {
@@ -307,7 +314,7 @@ void Server::find_idle_sessions()
     }
 
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    mds->sessionmap.mark_session_stale(session);
+    mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, g_clock.now()),
 				 session->inst);
@@ -317,8 +324,9 @@ void Server::find_idle_sessions()
   cutoff = now;
   cutoff -= g_conf.mds_session_autoclose;
   while (1) {
-    Session *session = mds->sessionmap.get_oldest_stale_session();
+    Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
     if (!session) break;
+    assert(session->is_stale());
     dout(20) << "oldest stale session is " << session->inst << dendl;
     if (session->last_cap_renew >= cutoff) {
       dout(20) << "oldest stale session is " << session->inst << " and sufficiently new (" 
@@ -327,13 +335,11 @@ void Server::find_idle_sessions()
     }
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    
-    mds->sessionmap.mark_session_stale(session);
-    mds->locker->revoke_stale_caps(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE),
-				 session->inst);
+    mds->sessionmap.set_state(session, Session::STATE_CLOSING);
+    version_t pv = ++mds->sessionmap.projected;
+    mdlog->submit_entry(new ESession(session->inst, false, pv),
+			new C_MDS_session_finish(mds, session, false, pv));
   }
-
 
 }
 

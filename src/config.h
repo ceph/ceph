@@ -182,6 +182,8 @@ struct md_config_t {
   float mds_cap_timeout;
   float mds_session_autoclose;
 
+  float mds_tick_interval;
+
   bool mds_log;
   int mds_log_max_events;
   int mds_log_max_segments;

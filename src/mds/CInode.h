@@ -403,7 +403,8 @@ public:
     for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
-      w |= it->second->wanted();
+      if (!it->second->is_stale())
+	w |= it->second->wanted();
       //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
     }
     if (is_auth())

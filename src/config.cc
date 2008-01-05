@@ -227,6 +227,8 @@ md_config_t g_conf = {
   mds_cap_timeout: 10,        // cap bits time out if client idle
   mds_session_autoclose: 30, // autoclose idle session 
 
+  mds_tick_interval: 5,
+
   mds_log: true,
   mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
   mds_log_max_segments: 100,

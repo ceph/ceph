@@ -42,10 +42,14 @@ public:
   static const int STATE_STALE = 4;
   static const int STATE_RECONNECTING = 5; // ?
 
+private:
   int state;
+  friend class SessionMap;
+public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
+  bool is_undef() { return state == STATE_UNDEF; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
@@ -123,8 +127,7 @@ private:
   MDS *mds;
   hash_map<entity_name_t, Session*> session_map;
 public:
-  xlist<Session*> active_sessions;
-  xlist<Session*> stale_sessions;
+  map<int,xlist<Session*> > by_state;
   
 public:  // i am lazy
   version_t version, projected, committing, committed;
@@ -156,18 +159,16 @@ public:
   }
   void touch_session(Session *s) {
     s->last_cap_renew = g_clock.now();
-    active_sessions.push_back(&s->session_list_item);
   }
-  Session *get_oldest_active_session() {
-    if (active_sessions.empty()) return 0;
-    return active_sessions.front();
+  Session *get_oldest_session(int state) {
+    if (by_state[state].empty()) return 0;
+    return by_state[state].front();
   }
-  void mark_session_stale(Session *s) {
-    stale_sessions.push_back(&s->session_list_item);
-  }
-  Session *get_oldest_stale_session() {
-    if (stale_sessions.empty()) return 0;
-    return stale_sessions.front();
+  void set_state(Session *session, int s) {
+    if (session->state != s) {
+      session->state = s;
+      by_state[s].push_back(&session->session_list_item);
+    }
   }
 
   void get_client_set(set<int>& s) {
@@ -191,7 +192,7 @@ public:
 	 ++p) {
       Session *session = get_or_add_session(p->second);
       session->inst = p->second;
-      session->state = Session::STATE_OPEN;
+      set_state(session, Session::STATE_OPEN);
     }
     version++;
   }
