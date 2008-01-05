@@ -67,11 +67,11 @@ mds mustfix
 
 mds
 - client cap timeouts
-  - cap bits expire unless client pings?
-  - caps expire unless client pings?
-  - variable timeouts?  e.g. dir rdcache w/ fast timeout vs file want bits (dont expire at all)
-  - open file bits: autorenew on client ping (timeout=0)
-  - dir rdcache bit: timeout=60s or something .. needs explicit renewal?
+/  - stale -> resume
+  - tolerate connection break
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+  
 
 
 - extend/clean up filepath to allow paths relative to an ino
