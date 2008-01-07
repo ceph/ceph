@@ -735,8 +735,12 @@ int Rank::Pipe::accept()
 	register_pipe();
 
 	// steal queue and out_seq
-	other->take_queue(q);
 	out_seq = other->out_seq;
+	if (!other->sent.empty()) {
+	  out_seq = other->sent.front()->get_seq()-1;
+	  q.splice(q.begin(), other->sent);
+	}
+	q.splice(q.end(), other->q);
       } 
       else {
 	dout(10) << "accept already had pipe " << other
@@ -893,7 +897,6 @@ int Rank::Pipe::connect()
   state = STATE_OPEN;
   this->sd = newsd;
   connect_seq++;
-    dout(0) << "connect REMOTE RESET: my seq = " << connect_seq << ", remote seq = " << rseq << dendl;
   if (rseq != connect_seq) {
     dout(0) << "connect REMOTE RESET: my seq = " << connect_seq << ", remote seq = " << rseq << dendl;
     if (rseq < connect_seq) {
@@ -902,6 +905,10 @@ int Rank::Pipe::connect()
       for (unsigned i=0; i<rank.local.size(); i++) 
 	if (rank.local[i] && rank.local[i]->get_dispatcher())
 	  rank.local[i]->get_dispatcher()->ms_handle_remote_reset(peer_addr);
+      // renumber outgoing seqs
+      out_seq = 0;
+      for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
+	(*p)->set_seq(++out_seq);
     } else {
       dout(0) << "WTF" << dendl;
       assert(0);
@@ -944,38 +951,45 @@ void Rank::Pipe::unregister_pipe()
   }
 }
 
-void Rank::Pipe::fault(bool silent)
+void Rank::Pipe::fault(bool onconnect)
 {
   assert(lock.is_locked());
   cond.Signal();
 
-  if (!silent) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
+  if (!onconnect) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
 
   if (state == STATE_CLOSED) {
     dout(10) << "fault already closed" << dendl;
     return;
   }
   if (q.empty()) {
-    if (!silent) dout(0) << "fault nothing to send, closing" << dendl;
-    state = STATE_CLOSED;
+    if (state == STATE_CLOSING || onconnect) {
+      dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
+      state = STATE_CLOSED;
+    } else {
+      dout(0) << "fault nothing to send, going to standby" << dendl;
+      state = STATE_STANDBY;
+    }
+    ::close(sd);
+    sd = 0;
     return;
   } 
 
   utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
-    if (!silent) dout(0) << "fault initiating reconnect" << dendl;
+    if (!onconnect) dout(0) << "fault initiating reconnect" << dendl;
     connect_seq++;
     state = STATE_CONNECTING;
     first_fault = now;
   } else if (first_fault.sec() == 0) {
-    if (!silent) dout(0) << "fault during connect" << dendl;
+    if (!onconnect) dout(0) << "fault first fault" << dendl;
     first_fault = now;
   } else {
     utime_t failinterval = now - first_fault;
     utime_t retryinterval = now - last_attempt;
-    if (!silent) dout(10) << "fault failure was " << failinterval 
-			  << " ago, last attempt was at " << last_attempt
-			  << ", " << retryinterval << " ago" << dendl;
+    if (!onconnect) dout(10) << "fault failure was " << failinterval 
+			     << " ago, last attempt was at " << last_attempt
+			     << ", " << retryinterval << " ago" << dendl;
     if (policy.fail_interval > 0 && failinterval > policy.fail_interval) {
       // give up
       dout(0) << "fault giving up" << dendl;
@@ -1072,8 +1086,9 @@ void Rank::Pipe::reader()
     assert(lock.is_locked());
 
     // sleep if (re)connecting
-    if (state == STATE_CONNECTING) {
-      dout(20) << "reader sleeping during reconnect" << dendl;
+    if (state == STATE_CONNECTING ||
+	state == STATE_STANDBY) {
+      dout(20) << "reader sleeping during reconnect|standby" << dendl;
       cond.Wait(lock);
       continue;
     }
@@ -1217,6 +1232,10 @@ void Rank::Pipe::writer()
   lock.Lock();
 
   while (state != STATE_CLOSED) {
+    // standby?
+    if (!q.empty() && state == STATE_STANDBY)
+      state = STATE_CONNECTING;
+
     // connect?
     if (state == STATE_CONNECTING) {
       connect();
@@ -1228,7 +1247,7 @@ void Rank::Pipe::writer()
       dout(20) << "writer writing CLOSE tag" << dendl;
       char c = CEPH_MSGR_TAG_CLOSE;
       lock.Unlock();
-      ::write(sd, &c, 1);
+      if (sd) ::write(sd, &c, 1);
       lock.Lock();
       state = STATE_CLOSED;
       continue;
@@ -1255,6 +1274,7 @@ void Rank::Pipe::writer()
       if (!q.empty()) {
 	Message *m = q.front();
 	q.pop_front();
+	m->set_seq(++out_seq);
 	sent.push_back(m); // move to sent list
 	lock.Unlock();
         dout(20) << "writer sending " << m->get_seq() << " " << m << " " << *m << dendl;

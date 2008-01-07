@@ -4024,4 +4024,5 @@ void Client::ms_handle_reset(const entity_addr_t& addr)
 void Client::ms_handle_remote_reset(const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+  
 }

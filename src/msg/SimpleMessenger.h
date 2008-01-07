@@ -85,6 +85,7 @@ private:
       STATE_ACCEPTING,
       STATE_CONNECTING,
       STATE_OPEN,
+      STATE_STANDBY,
       STATE_CLOSED,
       STATE_CLOSING
       //STATE_GOTCLOSE,  // got (but haven't sent) a close
@@ -130,11 +131,6 @@ private:
     void fail();
 
     void report_failures();
-
-    void take_queue(list<Message*>& ls) {
-      ls.splice(ls.begin(), q);
-      ls.splice(ls.begin(), sent);
-    }
 
     // threads
     class Reader : public Thread {
@@ -197,7 +193,6 @@ private:
     }    
     void _send(Message *m) {
       q.push_back(m);
-      m->set_seq(++out_seq);
       cond.Signal();
     }
 
