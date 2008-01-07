@@ -4029,13 +4029,16 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
     int mds = last.num();
     dout(0) << "ms_handle_remote_reset on " << last << ", " << caps_by_mds[mds]
 	    << " caps, kicking requests" << dendl;
+
     mds_sessions.erase(mds); // "kill" session
+
     // reopen if caps
     if (caps_by_mds[mds] > 0) {
       waiting_for_session[mds].size();  // make sure entry exists
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 			      mdsmap->get_inst(mds));
     }
+
     // or requests
     kick_requests(mds);
   }
