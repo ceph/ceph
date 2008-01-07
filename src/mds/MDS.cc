@@ -1250,7 +1250,7 @@ void MDS::proc_message(Message *m)
 void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
 {
   mds_lock.Lock();
-  dout(10) << "handle_ms_failure to " << inst << " on " << *m << dendl;
+  dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
   
   if (m->get_type() == CEPH_MSG_MDS_MAP && m->get_dest().is_client()) 
     server->client_reconnect_failure(m->get_dest().num());
@@ -1259,3 +1259,13 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Unlock();
 }
 
+void MDS::ms_handle_reset(const entity_addr_t& addr) 
+{
+  dout(0) << "ms_handle_reset on " << addr << dendl;
+}
+
+
+void MDS::ms_handle_remote_reset(const entity_addr_t& addr) 
+{
+  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+}

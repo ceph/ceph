@@ -278,7 +278,7 @@ struct ceph_msg_header {
 #define CEPH_MSG_OSD_OPREPLY      43    // delete, etc.
 
 
-/* client_session message op values */
+/* client_session */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
 	CEPH_SESSION_OPEN,

@@ -40,6 +40,22 @@ using namespace __gnu_cxx;
  */
 class Rank {
 public:
+  struct Policy {
+    float retry_interval;               // (initial)
+    float fail_interval;                // before we call ms_handle_failure
+    bool drop_msg_callback;
+    bool fail_callback;
+    bool remote_reset_callback;
+    Policy() : 
+      retry_interval(g_conf.ms_retry_interval),
+      fail_interval(g_conf.ms_fail_interval),
+      drop_msg_callback(true),
+      fail_callback(true),
+      remote_reset_callback(true) {}
+  };
+
+
+public:
   void sigint();
 
 private:
@@ -61,7 +77,6 @@ private:
   } accepter;
 
   void sigint(int r);
-  
 
   // pipe
   class Pipe {
@@ -79,6 +94,7 @@ private:
     int sd;
     int new_sd;
     entity_addr_t peer_addr;
+    Policy policy;
 
     Mutex lock;
     int state;
@@ -112,6 +128,8 @@ private:
 
     void fault(bool silent=false);
     void fail();
+
+    void report_failures();
 
     void take_queue(list<Message*>& ls) {
       ls.splice(ls.begin(), q);
@@ -255,7 +273,7 @@ private:
 
     int shutdown();
     void suicide();
-    void prepare_dest(const entity_addr_t& addr);
+    void prepare_dest(const entity_inst_t& inst);
     int send_message(Message *m, entity_inst_t dest);
     
     void mark_down(entity_addr_t a);
@@ -280,10 +298,12 @@ private:
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
 
+  map<int, Policy> policy_map; // entity_name_t::type -> Policy
+
   set<Pipe*>      pipes;
   list<Pipe*>     pipe_reap_queue;
         
-  Pipe *connect_rank(const entity_addr_t& addr);
+  Pipe *connect_rank(const entity_addr_t& addr, const Policy& p);
 
   const entity_addr_t &get_rank_addr() { return rank_addr; }
 
@@ -306,11 +326,14 @@ public:
   void unregister_entity(EntityMessenger *ms);
 
   void submit_message(Message *m, const entity_addr_t& addr);  
-  void prepare_dest(const entity_addr_t& addr);
+  void prepare_dest(const entity_inst_t& inst);
 
   // create a new messenger
   EntityMessenger *new_entity(entity_name_t addr);
 
+  void set_policy(int type, Policy p) {
+    policy_map[type] = p;
+  }
 } ;
 
 

@@ -217,7 +217,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
-  } else if (session->is_closing()) {
+  } else if (session->is_closing() || session->is_stale_closing()) {
     // kill any lingering capabilities
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
@@ -226,7 +226,10 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       in->remove_client_cap(session->inst.name.num());
     }
 
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
+    if (session->is_closing())
+      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
+    else if (session->is_stale_closing())
+      mds->messenger->mark_down(session->inst.addr); // kill connection
     mds->sessionmap.remove_session(session);
   } else {
     // close must have been canceled (by an import?) ...
@@ -330,7 +333,7 @@ void Server::find_idle_sessions()
     }
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_CLOSING);
+    mds->sessionmap.set_state(session, Session::STATE_STALE_CLOSING);
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));

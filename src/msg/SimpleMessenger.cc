@@ -305,7 +305,7 @@ int Rank::start_rank()
 /* connect_rank
  * NOTE: assumes rank.lock held.
  */
-Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
+Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr, const Policy& p)
 {
   assert(rank.lock.is_locked());
   assert(addr != rank.rank_addr);
@@ -314,6 +314,7 @@ Rank::Pipe *Rank::connect_rank(const entity_addr_t& addr)
   
   // create pipe
   Pipe *pipe = new Pipe(Pipe::STATE_CONNECTING);
+  pipe->policy = p;
   pipe->peer_addr = addr;
   pipe->start_writer();
   pipe->register_pipe();
@@ -418,7 +419,7 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
       if (!pipe) {
         dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", new pipe." << dendl;
         // not connected.
-        pipe = connect_rank( dest_proc_addr );
+        pipe = connect_rank(dest_proc_addr, policy_map[m->get_dest().type()]);
 	pipe->send(m);
       }
     }
@@ -581,12 +582,12 @@ void Rank::EntityMessenger::suicide()
   // hmm, or exit(0)?
 }
 
-void Rank::EntityMessenger::prepare_dest(const entity_addr_t& addr)
+void Rank::EntityMessenger::prepare_dest(const entity_inst_t& inst)
 {
   rank.lock.Lock();
   {
-    if (rank.rank_pipe.count(addr) == 0)
-      rank.connect_rank(addr);
+    if (rank.rank_pipe.count(inst.addr) == 0)
+      rank.connect_rank(inst.addr, rank.policy_map[inst.name.type()]);
   }
   rank.lock.Unlock();
 }
@@ -701,9 +702,10 @@ int Rank::Pipe::accept()
   }
 
   dout(20) << "accept got connect_seq " << cseq << dendl;
+
+  __u32 myseq = connect_seq = 1;
     
   // register pipe.
-  __u32 myseq = connect_seq;
   rank.lock.Lock();
   {
     if (rank.rank_pipe.count(peer_addr) == 0) {
@@ -785,6 +787,7 @@ int Rank::Pipe::connect()
     sd = 0;
   }
   __u32 cseq = connect_seq;
+  __u32 rseq;
 
   lock.Unlock();
 
@@ -862,12 +865,12 @@ int Rank::Pipe::connect()
 
   // wait for tag
   if (tcp_read(newsd, &tag, 1) < 0 ||
-      tcp_read(newsd, (char*)&cseq, sizeof(cseq)) < 0) {
+      tcp_read(newsd, (char*)&rseq, sizeof(rseq)) < 0) {
     dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
     goto fail;
   }
 
-  dout(20) << "connect got initial tag " << (int)tag << " + seq " << cseq << dendl;
+  dout(20) << "connect got initial tag " << (int)tag << " + seq " << rseq << dendl;
 
   lock.Lock();
 
@@ -877,10 +880,10 @@ int Rank::Pipe::connect()
     goto fail_locked;  // hmm!
   }
   if (tag == CEPH_MSGR_TAG_REJECT) {
-    if (connect_seq != cseq) {
+    if (connect_seq != rseq) {
       dout(0) << "connect got REJECT, old connect_seq was " << connect_seq
-	      << ", taking new " << cseq << dendl;
-      connect_seq = cseq;
+	      << ", taking new " << rseq << dendl;
+      connect_seq = rseq;
     } else {
       dout(10) << "connect got REJECT, connection race (harmless), connect_seq=" << connect_seq << dendl;
     }
@@ -890,6 +893,20 @@ int Rank::Pipe::connect()
   state = STATE_OPEN;
   this->sd = newsd;
   connect_seq++;
+    dout(0) << "connect REMOTE RESET: my seq = " << connect_seq << ", remote seq = " << rseq << dendl;
+  if (rseq != connect_seq) {
+    dout(0) << "connect REMOTE RESET: my seq = " << connect_seq << ", remote seq = " << rseq << dendl;
+    if (rseq < connect_seq) {
+      connect_seq = rseq;
+      report_failures();
+      for (unsigned i=0; i<rank.local.size(); i++) 
+	if (rank.local[i] && rank.local[i]->get_dispatcher())
+	  rank.local[i]->get_dispatcher()->ms_handle_remote_reset(peer_addr);
+    } else {
+      dout(0) << "WTF" << dendl;
+      assert(0);
+    }
+  }
   first_fault = last_attempt = utime_t();
   dout(20) << "connect success " << connect_seq << dendl;
 
@@ -959,13 +976,13 @@ void Rank::Pipe::fault(bool silent)
     if (!silent) dout(10) << "fault failure was " << failinterval 
 			  << " ago, last attempt was at " << last_attempt
 			  << ", " << retryinterval << " ago" << dendl;
-    if (failinterval > g_conf.ms_fail_interval) {
+    if (policy.fail_interval > 0 && failinterval > policy.fail_interval) {
       // give up
       dout(0) << "fault giving up" << dendl;
       fail();
-    } else if (retryinterval < g_conf.ms_retry_interval) {
+    } else if (retryinterval < policy.retry_interval) {
       // wait
-      now += (g_conf.ms_retry_interval - retryinterval);
+      now += (policy.retry_interval - retryinterval);
       dout(10) << "fault waiting until " << now << dendl;
       cond.WaitUntil(lock, now);
       dout(10) << "fault done waiting or woke up" << dendl;
@@ -980,25 +997,33 @@ void Rank::Pipe::fail()
   assert(lock.is_locked());
 
   stop();
+  report_failures();
 
+  for (unsigned i=0; i<rank.local.size(); i++) 
+    if (rank.local[i] && rank.local[i]->get_dispatcher())
+      rank.local[i]->get_dispatcher()->ms_handle_reset(peer_addr);
+}
+
+void Rank::Pipe::report_failures()
+{
   // report failures
   q.splice(q.begin(), sent);
   while (!q.empty()) {
     Message *m = q.front();
     q.pop_front();
-    unsigned srcrank = m->get_source_inst().addr.v.erank;
-    if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
-      dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
-      delete m;
-      continue;
+
+    if (policy.drop_msg_callback) {
+      unsigned srcrank = m->get_source_inst().addr.v.erank;
+      if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
+	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
+      } else if (rank.local[srcrank]->is_stopped()) {
+	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
+      } else {
+	dout(10) << "fail on " << *m << dendl;
+	rank.local[srcrank]->get_dispatcher()->ms_handle_failure(m, m->get_dest_inst());
+      }
     }
-    if (rank.local[srcrank]->is_stopped()) {
-      dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
-      delete m;
-      continue;
-    } 
-    dout(10) << "fail on " << *m << dendl;
-    rank.local[srcrank]->get_dispatcher()->ms_handle_failure(m, m->get_dest_inst());
+    delete m;
   }
 }
 
@@ -1009,6 +1034,8 @@ void Rank::Pipe::stop()
 
   cond.Signal();
   state = STATE_CLOSED;
+  ::close(sd);
+  sd = 0;
 
   // deactivate myself
   lock.Unlock();

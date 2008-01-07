@@ -40,7 +40,8 @@ public:
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
-  static const int STATE_RECONNECTING = 5; // ?
+  static const int STATE_STALE_CLOSING = 5;
+  //static const int STATE_RECONNECTING = 5; // ?
 
 private:
   int state;
@@ -54,6 +55,7 @@ public:
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
   bool is_stale() { return state == STATE_STALE; }
+  bool is_stale_closing() { return state == STATE_STALE_CLOSING; }
 
   // -- caps --
 private:

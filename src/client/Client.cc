@@ -4015,3 +4015,13 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   }
 }
 
+void Client::ms_handle_reset(const entity_addr_t& addr) 
+{
+  dout(0) << "ms_handle_reset on " << addr << dendl;
+}
+
+
+void Client::ms_handle_remote_reset(const entity_addr_t& addr) 
+{
+  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+}
