@@ -432,6 +432,7 @@ public:
   // mds sessions
   map<int, version_t> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
+  map<int, int> caps_by_mds;
   list<Cond*> waiting_for_mdsmap;
 
   void handle_client_session(MClientSession *m);

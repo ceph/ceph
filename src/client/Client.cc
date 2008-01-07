@@ -1153,6 +1153,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
+	caps_by_mds[mds]++;
         if (in->caps.empty()) in->get();
         in->caps[mds].seq = m->get_seq();
         in->caps[mds].caps = m->get_caps();
@@ -1184,6 +1185,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
     assert(in->caps.count(mds));
     in->caps.erase(mds);
+    caps_by_mds[mds]--;
     if (in->caps.empty()) in->put();
 
     // delayed reap?
@@ -1207,6 +1209,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
+    caps_by_mds[mds]--;
     for (map<int,InodeCap>::iterator p = in->caps.begin();
          p != in->caps.end();
          p++)
@@ -2661,6 +2664,9 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
       in->get();
     }
 
+    if (in->caps.count(mds) == 0)
+      caps_by_mds[mds]++;
+
     int new_caps = reply->get_file_caps();
 
     assert(reply->get_file_caps_seq() >= in->caps[mds].seq);
@@ -2676,7 +2682,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
 
       in->caps[mds].caps = new_caps;
       in->caps[mds].seq = reply->get_file_caps_seq();
-
+      
       // we shouldn't ever lose caps at this point.
       // actually, we might...?
       assert((old_caps & ~in->caps[mds].caps) == 0);
@@ -4025,6 +4031,17 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
 {
   dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
   if (last.is_mds()) {
-    
+    int mds = last.num();
+    dout(0) << "ms_handle_remote_reset on " << last << ", " << caps_by_mds[mds]
+	    << " caps, kicking requests" << dendl;
+    mds_sessions.erase(mds); // "kill" session
+    // reopen if caps
+    if (caps_by_mds[mds] > 0) {
+      waiting_for_session[mds].size();  // make sure entry exists
+      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
+			      mdsmap->get_inst(mds));
+    }
+    // or requests
+    kick_requests(mds);
   }
 }
