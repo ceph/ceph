@@ -291,6 +291,12 @@ enum {
 	CEPH_SESSION_RESUME	
 };
 
+struct ceph_mds_session_head {
+	__u32 op;
+	__u64 seq;
+	struct ceph_timeval stamp;
+};
+
 /* client_request */
 enum {
 	CEPH_MDS_OP_STAT = 100,

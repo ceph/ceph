@@ -143,15 +143,15 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 {
 	struct ceph_msg *msg;
 	void *p;
+	struct ceph_mds_session_head *h;
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(__u32)+sizeof(__u64), 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(*h), 0, 0);
 	if (IS_ERR(msg))
 		return ERR_PTR(-ENOMEM);  /* fixme */
-	p = msg->front.iov_base;
-	*(__le32*)p = cpu_to_le32(op);
-	p += sizeof(__le32);
-	*(__le64*)p = cpu_to_le64(seq);
-	p += sizeof(__le64);
+	h = msg->front.iov_base;
+	h->op = cpu_to_le32(op);
+	h->seq = cpu_to_le64(seq);
+	/*h->stamp = ....*/
 
 	return msg;
 }
@@ -180,14 +180,12 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 	int err;
 	struct ceph_mds_session *session;
 	int from = msg->hdr.src.name.num;
-	void *p = msg->front.iov_base;
-	void *end = msg->front.iov_base + msg->front.iov_len;
+	struct ceph_mds_session_head *h = msg->front.iov_base;
+	BUG_ON(msg->front.iov_len != sizeof(*h));
 
 	/* decode */
-	if ((err = ceph_decode_32(&p, end, &op)) != 0)
-		goto bad;
-	if ((err = ceph_decode_64(&p, end, &seq)) != 0)
-		goto bad;
+	h->op = le32_to_cpu(h->op);
+	h->seq = le64_to_cpu(h->seq);
 	
 	/* handle */
 	dout(1, "handle_session op %d seq %llu\n", op, seq);
