@@ -525,20 +525,27 @@ void Rank::EntityMessenger::dispatch_entry()
 	  }
           Message *m = ls.front();
           ls.pop_front();
-	  if (m == 0) {
+	  if ((long)m == BAD_REMOTE_RESET) {
 	    lock.Lock();
 	    entity_addr_t a = remote_reset_q.front().first;
 	    entity_name_t n = remote_reset_q.front().second;
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
 	    get_dispatcher()->ms_handle_remote_reset(a, n);
- 	  } else if ((long)m == 1) {
+ 	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
 	    entity_addr_t a = reset_q.front().first;
 	    entity_name_t n = reset_q.front().second;
-	    remote_reset_q.pop_front();
+	    reset_q.pop_front();
 	    lock.Unlock();
 	    get_dispatcher()->ms_handle_reset(a, n);
+	  } else if ((long)m == BAD_FAILED) {
+	    lock.Lock();
+	    m = failed_q.front().first;
+	    entity_inst_t i = failed_q.front().second;
+	    failed_q.pop_front();
+	    lock.Unlock();
+	    get_dispatcher()->ms_handle_failure(m, i);
 	  } else {
 	    dout(1) << m->get_dest() 
 		    << " <== " << m->get_source_inst()
@@ -925,6 +932,7 @@ int Rank::Pipe::connect()
       out_seq = 0;
       for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
 	(*p)->set_seq(++out_seq);
+      in_seq = 0;
     } else {
       dout(0) << "WTF" << dendl;
       assert(0);
@@ -1050,7 +1058,7 @@ void Rank::Pipe::report_failures()
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
       } else {
 	dout(10) << "fail on " << *m << dendl;
-	rank.local[srcrank]->get_dispatcher()->ms_handle_failure(m, m->get_dest_inst());
+	rank.local[srcrank]->queue_failure(m, m->get_dest_inst());
       }
     }
     delete m;

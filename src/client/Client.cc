@@ -4010,12 +4010,7 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   else if (dest.is_osd()) {
     objecter->ms_handle_failure(m, dest, inst);
   } 
-  else if (dest.is_mds()) {
-    dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
-    //failed_mds.insert(dest.num());
-  }
   else {
-    // client?
     dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
     delete m;
   }
