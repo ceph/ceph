@@ -216,6 +216,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   if (open) {
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
   } else if (session->is_closing()) {
     // kill any lingering capabilities
     while (!session->caps.empty()) {
@@ -225,17 +226,13 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       in->remove_client_cap(session->inst.name.num());
     }
 
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
     mds->sessionmap.remove_session(session);
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
   }
   mds->sessionmap.version++;  // noop
-
-  if (open)
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
-  else
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
 }
 
 void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
