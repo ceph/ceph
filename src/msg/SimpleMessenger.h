@@ -95,8 +95,9 @@ private:
     int sd;
     int new_sd;
     entity_addr_t peer_addr;
+    entity_name_t last_dest_name;
     Policy policy;
-
+    
     Mutex lock;
     int state;
 
@@ -193,6 +194,7 @@ private:
     }    
     void _send(Message *m) {
       q.push_back(m);
+      last_dest_name = m->get_dest();
       cond.Signal();
     }
 
@@ -242,8 +244,26 @@ private:
       lock.Unlock();
     }
 
+    list<pair<entity_addr_t,entity_name_t> > remote_reset_q;
+    list<pair<entity_addr_t,entity_name_t> > reset_q;
+
+    void queue_remote_reset(entity_addr_t a, entity_name_t n) {
+      lock.Lock();
+      remote_reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
+      dispatch_queue.push_back((Message*)0);
+      cond.Signal();
+      lock.Unlock();
+    }
+    void queue_reset(entity_addr_t a, entity_name_t n) {
+      lock.Lock();
+      reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
+      dispatch_queue.push_back((Message*)1);
+      cond.Signal();
+      lock.Unlock();
+    }
+
   public:
-      EntityMessenger(entity_name_t name, int r) : 
+    EntityMessenger(entity_name_t name, int r) : 
       Messenger(name),
       stop(false),
       qlen(0), pqlen(0),

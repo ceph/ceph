@@ -4015,14 +4015,16 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   }
 }
 
-void Client::ms_handle_reset(const entity_addr_t& addr) 
+void Client::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
 }
 
 
-void Client::ms_handle_remote_reset(const entity_addr_t& addr) 
+void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
 {
-  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-  
+  dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
+  if (last.is_mds()) {
+    
+  }
 }

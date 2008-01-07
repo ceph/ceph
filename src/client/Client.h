@@ -846,8 +846,8 @@ public:
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);
-  void ms_handle_reset(const entity_addr_t& addr);
-  void ms_handle_remote_reset(const entity_addr_t& addr);
+  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
+  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
 };
 
 #endif

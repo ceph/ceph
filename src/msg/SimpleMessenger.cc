@@ -525,13 +525,29 @@ void Rank::EntityMessenger::dispatch_entry()
 	  }
           Message *m = ls.front();
           ls.pop_front();
-          dout(1) << m->get_dest() 
-		  << " <== " << m->get_source_inst()
-		  << " ==== " << *m
-                  << " ==== " << m 
-                  << dendl;
-          dispatch(m);
-	  dout(20) << "done calling dispatch on " << m << dendl;
+	  if (m == 0) {
+	    lock.Lock();
+	    entity_addr_t a = remote_reset_q.front().first;
+	    entity_name_t n = remote_reset_q.front().second;
+	    remote_reset_q.pop_front();
+	    lock.Unlock();
+	    get_dispatcher()->ms_handle_remote_reset(a, n);
+ 	  } else if ((long)m == 1) {
+	    lock.Lock();
+	    entity_addr_t a = reset_q.front().first;
+	    entity_name_t n = reset_q.front().second;
+	    remote_reset_q.pop_front();
+	    lock.Unlock();
+	    get_dispatcher()->ms_handle_reset(a, n);
+	  } else {
+	    dout(1) << m->get_dest() 
+		    << " <== " << m->get_source_inst()
+		    << " ==== " << *m
+		    << " ==== " << m 
+		    << dendl;
+	    dispatch(m);
+	    dout(20) << "done calling dispatch on " << m << dendl;
+	  }
         }
       }
       lock.Lock();
@@ -904,7 +920,7 @@ int Rank::Pipe::connect()
       report_failures();
       for (unsigned i=0; i<rank.local.size(); i++) 
 	if (rank.local[i] && rank.local[i]->get_dispatcher())
-	  rank.local[i]->get_dispatcher()->ms_handle_remote_reset(peer_addr);
+	  rank.local[i]->queue_remote_reset(peer_addr, last_dest_name);
       // renumber outgoing seqs
       out_seq = 0;
       for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
@@ -1015,7 +1031,7 @@ void Rank::Pipe::fail()
 
   for (unsigned i=0; i<rank.local.size(); i++) 
     if (rank.local[i] && rank.local[i]->get_dispatcher())
-      rank.local[i]->get_dispatcher()->ms_handle_reset(peer_addr);
+      rank.local[i]->queue_reset(peer_addr, last_dest_name);
 }
 
 void Rank::Pipe::report_failures()
