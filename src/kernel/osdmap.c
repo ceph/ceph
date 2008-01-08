@@ -534,7 +534,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 			struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
-	if (fl->fl_pg_preferred) {
+	if (fl->fl_pg_preferred >= 0) {
 		num = osdmap->localized_pg_num;
 		num_mask = osdmap->localized_pg_num_mask;
 	} else {

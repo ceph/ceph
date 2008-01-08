@@ -597,7 +597,7 @@ static int read_message_partial(struct ceph_connection *con)
 		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off);
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
-		ret = con->msgr->prepare_pages(con->msgr, m, want);
+		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
 		if (ret < 0) {
 			dout(10, "prepare_pages failed, skipping+discarding message\n");
 			con->in_base_pos = -m->hdr.data_len; /* ignore rest of message */
