@@ -388,56 +388,49 @@ static void prepare_write_ack(struct ceph_connection *con)
 
 	con->out_kvec[0].iov_base = &tag_ack;
 	con->out_kvec[0].iov_len = 1;
-	con->out_kvec[1].iov_base = &con->in_seq_acked;
-	con->out_kvec[1].iov_len = sizeof(con->in_seq_acked);
+	con->onwire32 = cpu_to_le32(con->in_seq_acked);
+	con->out_kvec[1].iov_base = &con->onwire32;
+	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = 1 + sizeof(con->in_seq_acked);
+	con->out_kvec_bytes = 1 + 4;
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
 static void prepare_write_connect(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	con->out_kvec[0].iov_base = &msgr->inst.addr;
-	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
-	con->out_kvec[1].iov_base = &con->connect_seq;
-	con->out_kvec[1].iov_len = sizeof(con->connect_seq);
+	ceph_encode_addr(&con->onwire_addr, &msgr->inst.addr);
+	con->out_kvec[0].iov_base = &con->onwire_addr;
+	con->out_kvec[0].iov_len = sizeof(con->onwire_addr);
+	con->onwire32 = cpu_to_le32(con->connect_seq);
+	con->out_kvec[1].iov_base = &con->onwire32;
+	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = sizeof(msgr->inst.addr) + sizeof(con->connect_seq);
+	con->out_kvec_bytes = sizeof(con->onwire_addr) + 4;
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
 static void prepare_write_accept_announce(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	con->out_kvec[0].iov_base = &msgr->inst.addr;
-	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
+	ceph_encode_addr(&con->onwire_addr, &msgr->inst.addr);
+	con->out_kvec[0].iov_base = &con->onwire_addr;
+	con->out_kvec[0].iov_len = sizeof(con->onwire_addr);
 	con->out_kvec_left = 1;
-	con->out_kvec_bytes = sizeof(msgr->inst.addr);
+	con->out_kvec_bytes = sizeof(con->onwire_addr);
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
-static void prepare_write_accept_ready(struct ceph_connection *con)
+static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 {
-	con->out_kvec[0].iov_base = &tag_ready;
+	con->out_kvec[0].iov_base = ptag;
 	con->out_kvec[0].iov_len = 1;
-	con->out_kvec[1].iov_base = &con->connect_seq;
-	con->out_kvec[1].iov_len = sizeof(con->connect_seq);
+	con->onwire32 = cpu_to_le32(con->connect_seq);
+	con->out_kvec[1].iov_base = &con->onwire32;
+	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = 1 + sizeof(con->connect_seq);
-	con->out_kvec_cur = con->out_kvec;
-	set_bit(WRITE_PENDING, &con->state);
-}
-
-static void prepare_write_accept_reject(struct ceph_connection *con)
-{
-	con->out_kvec[0].iov_base = &tag_reject;
-	con->out_kvec[0].iov_len = 1;
-	con->out_kvec[1].iov_base = &con->connect_seq;
-	con->out_kvec[1].iov_len = sizeof(con->connect_seq);
-	con->out_kvec_left = 2;
-	con->out_kvec_bytes = 1 + sizeof(con->connect_seq);
+	con->out_kvec_bytes = 1 + 4;
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
@@ -812,9 +805,9 @@ static void process_accept(struct ceph_connection *con)
 	/* the result? */
 	clear_bit(ACCEPTING, &con->state);
 	if (test_bit(REJECTING, &con->state))
-		prepare_write_accept_reject(con);
+		prepare_write_accept_reply(con, &tag_reject);
 	else
-		prepare_write_accept_ready(con);
+		prepare_write_accept_reply(con, &tag_ready);
 	/* queue write */
 	queue_work(send_wq, &con->swork.work);
 }

@@ -82,6 +82,9 @@ struct ceph_connection {
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
+	__le32 onwire32;
+	struct ceph_entity_addr onwire_addr;
+
 	/* connect state */
 	struct ceph_entity_addr actual_peer_addr;
 	__u32 peer_connect_seq;
@@ -169,6 +172,12 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 	ceph_decode_copy(p, end, &v->ipaddr, sizeof(v->ipaddr));
 	return 0;
 }
+static __inline__ void ceph_encode_addr(struct ceph_entity_addr *to, struct ceph_entity_addr *from)
+{
+	to->erank = cpu_to_le32(from->erank);
+	to->nonce = cpu_to_le32(from->nonce);
+	to->ipaddr = from->ipaddr;
+}
 
 static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
 	if (unlikely(*p + sizeof(*v) > end))
@@ -192,9 +201,7 @@ static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph
 {
 	to->name.type = cpu_to_le32(from->name.type);
 	to->name.num = cpu_to_le32(from->name.num);
-	to->addr.erank = cpu_to_le32(from->addr.erank);
-	to->addr.nonce = cpu_to_le32(from->addr.nonce);
-	to->addr.ipaddr = from->addr.ipaddr;
+	ceph_encode_addr(&to->addr, &from->addr);
 }
 
 static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct ceph_msg_header *from)
