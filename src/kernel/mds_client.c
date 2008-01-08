@@ -749,6 +749,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	spin_lock(&mdsc->lock);
 	if (mdsc->mdsmap) {
 		if (mdsc->mdsmap->m_epoch < newmap->m_epoch) {
+			dout(2, "got new mdsmap %u\n", newmap->m_epoch);
 			oldmap = mdsc->mdsmap;
 			mdsc->mdsmap = newmap;
 			if (oldmap) {
@@ -762,6 +763,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			return;
 		}
 	} else {
+		dout(2, "got first mdsmap %u\n", newmap->m_epoch);
 		mdsc->mdsmap = newmap;
 	}
 	spin_unlock(&mdsc->lock);
