@@ -728,7 +728,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if ((err = ceph_decode_32(&p, end, &maplen)) != 0)
 		goto bad;
 
-	dout(2, "ceph_mdsc_handle_map epoch %u len %d\n", epoch, (int)maplen);
+	dout(2, "handle_map epoch %u len %d\n", epoch, (int)maplen);
 
 	/* do we need it? */
 	spin_lock(&mdsc->lock);

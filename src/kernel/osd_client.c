@@ -267,7 +267,7 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	__u64 tid;
 	int ret = -1;
 
-	dout(10, "prepare_pages on %p\n", m);
+	dout(10, "prepare_pages on msg %p want %d\n", m, want);
 	if (unlikely(le32_to_cpu(m->hdr.type) != CEPH_MSG_OSD_OPREPLY))
 		return -1;  /* hmm! */
 
@@ -334,9 +334,9 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	spin_unlock(&osdc->lock);
 	
 	/* wait */
-	dout(10, "readpage waiting for reply on %p\n", req);
+	dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
 	wait_for_completion(&req->r_completion);
-	dout(10, "readpage got reply on %p\n", req);
+	dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
 
 	spin_lock(&osdc->lock);
 	unregister_request(osdc, req);

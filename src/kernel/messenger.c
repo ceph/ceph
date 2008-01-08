@@ -559,6 +559,8 @@ static int read_message_partial(struct ceph_connection *con)
 	void *p;
 	int ret;
 	int want, left;
+	
+	dout(20, "read_message_partial con %p msg %p\n", con, m);
 
 	/* header */
 	while (con->in_base_pos < sizeof(struct ceph_msg_header)) {
@@ -591,10 +593,10 @@ static int read_message_partial(struct ceph_connection *con)
 		goto done;
 	if (m->nr_pages == 0) {
 		con->in_msg_pos.page = 0;
-		con->in_msg_pos.page_pos = m->hdr.data_off;
+		con->in_msg_pos.page_pos = m->hdr.data_off & ~PAGE_MASK;
 		con->in_msg_pos.data_pos = 0;
 		/* find (or alloc) pages for data payload */
-		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off);
+		want = calc_pages_for(m->hdr.data_len, m->hdr.data_off & ~PAGE_MASK);
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
@@ -615,6 +617,8 @@ static int read_message_partial(struct ceph_connection *con)
 	while (con->in_msg_pos.data_pos < m->hdr.data_len) {
 		left = min((int)(m->hdr.data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
+		/*dout(10, "data_pos = %d, data_len = %d, page_pos=%d left = %d\n", 
+		  con->in_msg_pos.data_pos, m->hdr.data_len, con->in_msg_pos.page_pos, left);*/
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos, left);
 		if (ret <= 0) return ret;
@@ -627,6 +631,7 @@ static int read_message_partial(struct ceph_connection *con)
 	}
 
 done:
+	dout(20, "read_message_partial got msg %p\n", m);
 	return 1; /* done! */
 }
 
