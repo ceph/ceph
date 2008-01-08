@@ -23,7 +23,10 @@ kernel client
 - mds client
   - examine new mds maps to kick requests for failed nodes...
   - mechanism to close out old caps
+  - handle file caps, ack back to mds, etc. 
+    - actually flush dirty data, too
 - osd client
+  - readpages (readahead)
   - async (caching) mode
   - sync mode (write-through)
   - capability changes (flush)
@@ -295,6 +298,3 @@ why qsync could be wrong (for very strict POSIX) : varying mds -> client message
 
 
 
-
-
-::: Added by Dongsu :::
