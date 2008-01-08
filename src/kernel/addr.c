@@ -29,6 +29,7 @@ out_unlock:
 	return err;
 }
 
+#if 0
 static int ceph_readpages(struct file *file, struct address_space *mapping,
 			  struct list_head *pages, unsigned nr_pages)
 {
@@ -51,6 +52,7 @@ out_unlock:
 
 
 }
+#endif
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
