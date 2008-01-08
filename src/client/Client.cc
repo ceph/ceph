@@ -4038,6 +4038,12 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
       waiting_for_session[mds].size();  // make sure entry exists
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 			      mdsmap->get_inst(mds));
+      
+      /*
+       * FIXME: actually, we need to do a reconnect or similar to reestablish
+       * our caps (where possible)
+       */
+      dout(0) << "FIXME: client needs to reconnect to restablish existing caps ****" << dendl;
     }
 
     // or requests
