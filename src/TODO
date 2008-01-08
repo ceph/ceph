@@ -22,6 +22,7 @@ kernel client
 - msg layer (patience)
 - mds client
   - examine new mds maps to kick requests for failed nodes...
+  - mechanism to close out old caps
 - osd client
   - async (caching) mode
   - sync mode (write-through)
@@ -30,7 +31,12 @@ kernel client
   - handle map changes (resubmit ops)
 - mon client
   - work out message resend logic..?
-
+- mount
+  - do monitor hostname resolution in mount, instead of requiring monitor to be specified with ip
+  - determine suitable local ip automatically
+    - this should be determined by which interface/ip would be used to connect to the monitor ip
+- unmount
+  - close open file handles, mds sessions, flush data before unmount.
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably
