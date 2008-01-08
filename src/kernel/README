@@ -1,4 +1,3 @@
-1234
 Quick and dirty instructions on building this into the kernel
 
 1) Patch kernel (to add to fs/Kconfig, fs/Makefile):
