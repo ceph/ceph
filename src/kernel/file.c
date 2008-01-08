@@ -49,7 +49,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_inode_cap *cap;
 	struct ceph_file_info *fi;
 
-	dout(5, "dir_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
+	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
 	cap = ceph_find_cap(inode, 0);
 	if (!cap) {
 		cap = ceph_do_open(inode, file);
@@ -63,7 +63,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	file->private_data = fi;
 
 	atomic_inc(&ci->i_cap_count);
-	dout(5, "open_dir success\n");
+	dout(5, "ceph_open success\n");
 	return 0;
 }
 
@@ -72,7 +72,7 @@ int ceph_release(struct inode *inode, struct file *filp)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *fi = filp->private_data;
 
-	dout(5, "dir_release inode %p filp %p\n", inode, filp);
+	dout(5, "ceph_release inode %p filp %p\n", inode, filp);
 	atomic_dec(&ci->i_cap_count);
 
 	if (fi->rinfo.reply) 

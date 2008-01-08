@@ -62,6 +62,9 @@ extern int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			      struct ceph_file_layout *layout, 
 			      loff_t off, loff_t len,
 			      struct page *page);
+extern int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			       struct ceph_file_layout *layout, 
+			       struct list_head *pagels, int nr_pages);
 
 #endif
 

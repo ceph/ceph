@@ -353,31 +353,79 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 /*
  * read multiple pages (readahead)
  */
+#if 0
+
+int ceph_osdc_readpages_filler(struct ceph_osd_request *req, struct page *p)
+{
+	
+}
+
 int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			struct ceph_file_layout *layout, 
-			loff_t off, loff_t len,
-			struct page **pages)
+			struct list_head *pagels, int nr_pages)
 {
-	struct ceph_object oid;
+	struct ceph_msg *reqm, *reply;
+	struct ceph_osd_request_head *reqhead;
+	struct ceph_osd_request *req;
+	struct ceph_osd_reply_head *replyhead;
+	__u64 off, len;
+	struct page *page;
 
-	BUG_ON(layout->fl_stripe_unit & ~PAGE_MASK);
-	
-	/* this may do a scatter/gather type of thing... need to track
-	 * that mess somehow 
+	/*
+	 * for now, our strategy is simple: start with the 
+	 * initial page, and fetch as much of that object as
+	 * we can that falls within the range specified by 
+	 * nr_pages.
 	 */
 
-	/* map range onto objects */
-	oid.ino = ino;
-	oid.rev = 0;
-	while (len > 0) {
-		/*calc_file_object_mapping(layout, &off, &len, &oid, &oxoff, &oxlen);
-		npages = calc_pages_for(oxoff, oxlen);
-		dout(10, " object block %u %u~%u over %d pages\n", 
-		     oid.bno, oxoff, oxlen, npages);
-		*/
-		/* make request */		
-
+	/* request msg */
+	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
+	if (IS_ERR(reqm))
+		return PTR_ERR(reqm);
+	reqhead = reqm->front.iov_base;
+	reqhead->oid.ino = ino;
+	reqhead->oid.rev = 0;
+	off = list_to_page(pagels)->index << PAGE_SHIFT;
+	len = nr_pages << PAGE_SHIFT;
+	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
+				 &reqhead->offset, &reqhead->length);
+	BUG_ON(len != 0);
+	nr_pages = DIV_ROUND_UP(reqhead->length, PAGE_SIZE);
+	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
+	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
+	
+	/* register request */
+	spin_lock(&osdc->lock);
+	req = register_request(osdc, reqm, nr_pages);
+	if (IS_ERR(req)) {
+		ceph_msg_put(reqm);
+		spin_unlock(&osdc->lock);
+		return PTR_ERR(req);
 	}
 
+	/* prepage pages (add to page cache, request vector) */
+	read_cache_pages(mapping, pagels, ceph_readpages_filler, req);
+
+	/* send request */
+	reqhead->osdmap_epoch = osdc->osdmap->epoch;
+	send_request(osdc, req);
+	spin_unlock(&osdc->lock);
+	
+	/* wait */
+	dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
+	wait_for_completion(&req->r_completion);
+	dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
+
+	spin_lock(&osdc->lock);
+	unregister_request(osdc, req);
+	spin_unlock(&osdc->lock);
+
+	reply = req->r_reply;
+	replyhead = reply->front.iov_base;
+	dout(10, "readpage result %d\n", replyhead->result);
+	ceph_msg_put(reply);
+	put_request(req);
 	return 0;
 }
+
+#endif
