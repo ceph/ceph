@@ -422,8 +422,10 @@ static void prepare_write_accept_ready(struct ceph_connection *con)
 {
 	con->out_kvec[0].iov_base = &tag_ready;
 	con->out_kvec[0].iov_len = 1;
-	con->out_kvec_left = 1;
-	con->out_kvec_bytes = 1;
+	con->out_kvec[1].iov_base = &con->connect_seq;
+	con->out_kvec[1].iov_len = sizeof(con->connect_seq);
+	con->out_kvec_left = 2;
+	con->out_kvec_bytes = 1 + sizeof(con->connect_seq);
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
@@ -870,6 +872,7 @@ more:
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
 		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
 		if (ret <= 0) goto done;
+		dout(30, "try_read got tag %d\n", (int)con->in_tag);
 		if (con->in_tag == CEPH_MSGR_TAG_MSG) 
 			prepare_read_message(con);
 		else if (con->in_tag == CEPH_MSGR_TAG_ACK)
