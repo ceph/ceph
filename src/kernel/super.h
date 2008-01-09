@@ -75,7 +75,7 @@ struct ceph_inode_info {
 	int i_nr_caps, i_max_caps;
 	struct ceph_inode_cap *i_caps;
 	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
-	atomic_t i_cap_count;  /* ref count */
+	atomic_t i_cap_count;  /* ref count (e.g. from file*) */
 
 	loff_t i_wr_size;
 	struct ceph_timeval i_wr_mtime;

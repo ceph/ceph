@@ -82,9 +82,6 @@ struct ceph_connection {
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
-	__le32 onwire32;
-	struct ceph_entity_addr onwire_addr;
-
 	/* connect state */
 	struct ceph_entity_addr actual_peer_addr;
 	__u32 peer_connect_seq;
@@ -95,14 +92,14 @@ struct ceph_connection {
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	struct ceph_msg_header out_hdr;
+	struct ceph_entity_addr out_addr;
+	__le32 out32;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
-
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
-
 
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */

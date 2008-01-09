@@ -388,8 +388,8 @@ static void prepare_write_ack(struct ceph_connection *con)
 
 	con->out_kvec[0].iov_base = &tag_ack;
 	con->out_kvec[0].iov_len = 1;
-	con->onwire32 = cpu_to_le32(con->in_seq_acked);
-	con->out_kvec[1].iov_base = &con->onwire32;
+	con->out32 = cpu_to_le32(con->in_seq_acked);
+	con->out_kvec[1].iov_base = &con->out32;
 	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = 1 + 4;
@@ -399,25 +399,25 @@ static void prepare_write_ack(struct ceph_connection *con)
 
 static void prepare_write_connect(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	ceph_encode_addr(&con->onwire_addr, &msgr->inst.addr);
-	con->out_kvec[0].iov_base = &con->onwire_addr;
-	con->out_kvec[0].iov_len = sizeof(con->onwire_addr);
-	con->onwire32 = cpu_to_le32(con->connect_seq);
-	con->out_kvec[1].iov_base = &con->onwire32;
+	ceph_encode_addr(&con->out_addr, &msgr->inst.addr);
+	con->out_kvec[0].iov_base = &con->out_addr;
+	con->out_kvec[0].iov_len = sizeof(con->out_addr);
+	con->out32 = cpu_to_le32(con->connect_seq);
+	con->out_kvec[1].iov_base = &con->out32;
 	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = sizeof(con->onwire_addr) + 4;
+	con->out_kvec_bytes = sizeof(con->out_addr) + 4;
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
 static void prepare_write_accept_announce(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	ceph_encode_addr(&con->onwire_addr, &msgr->inst.addr);
-	con->out_kvec[0].iov_base = &con->onwire_addr;
-	con->out_kvec[0].iov_len = sizeof(con->onwire_addr);
+	ceph_encode_addr(&con->out_addr, &msgr->inst.addr);
+	con->out_kvec[0].iov_base = &con->out_addr;
+	con->out_kvec[0].iov_len = sizeof(con->out_addr);
 	con->out_kvec_left = 1;
-	con->out_kvec_bytes = sizeof(con->onwire_addr);
+	con->out_kvec_bytes = sizeof(con->out_addr);
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
@@ -426,8 +426,8 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 {
 	con->out_kvec[0].iov_base = ptag;
 	con->out_kvec[0].iov_len = 1;
-	con->onwire32 = cpu_to_le32(con->connect_seq);
-	con->out_kvec[1].iov_base = &con->onwire32;
+	con->out32 = cpu_to_le32(con->connect_seq);
+	con->out_kvec[1].iov_base = &con->out32;
 	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = 1 + 4;

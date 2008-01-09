@@ -675,6 +675,10 @@ void kick_requests(struct ceph_mds_client *mdsc, int m)
 	}
 }
 
+/*
+ * compare old and new mdsmaps, kicking requests
+ * and closing out old connections as necessary
+ */
 void check_new_map(struct ceph_mds_client *mdsc,
 		   struct ceph_mdsmap *newmap,
 		   struct ceph_mdsmap *oldmap)
