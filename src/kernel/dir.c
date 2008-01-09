@@ -77,7 +77,9 @@ nextfrag:
 		rhead->args.readdir.frag = cpu_to_le32(frag);
 		if ((err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, -1)) < 0)
 		    return err;
-		dout(10, "dir_readdir got and parsed readdir result on frag %u\n", frag);
+		err = le32_to_cpu(fi->rinfo.head->result);
+		dout(10, "dir_readdir got and parsed readdir result=%d on frag %u\n", err, frag);
+		if (err < 0) return err;
 		
 		/* pre-populate dentry cache */
 		parent = filp->f_dentry;
@@ -168,6 +170,10 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return ERR_PTR(err);
+	err = le32_to_cpu(rinfo.head->result);
+	dout(20, "dir_readdir result=%d\n", err);
+	if (err < 0) 
 		return ERR_PTR(err);
 
 	if (rinfo.trace_nr > 0) {
