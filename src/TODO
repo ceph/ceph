@@ -21,7 +21,7 @@ code cleanup
 kernel client
 - msg layer (patience)
 - mds client
-  - examine new mds maps to kick requests for failed nodes...
+/  - examine new mds maps to kick requests for failed nodes...
   - mechanism to close out old caps
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
