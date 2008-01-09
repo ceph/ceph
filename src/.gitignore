@@ -13,3 +13,4 @@ dev
 mondata
 log
 .ceph_monmap
+mnt
