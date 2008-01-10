@@ -294,7 +294,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	len = c - dev_name;
 	parse_ip(dev_name, len, &args->mon_addr[0]);
 	args->mon_addr[0].ipaddr.sin_family = AF_INET;
-	args->mon_addr[0].ipaddr.sin_port = CEPH_MON_PORT;
+	args->mon_addr[0].ipaddr.sin_port = htons(CEPH_MON_PORT);
 	args->mon_addr[0].erank = 0;
 	args->mon_addr[0].nonce = 0;
 	args->num_mon = 1;

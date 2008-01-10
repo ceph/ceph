@@ -15,7 +15,7 @@
 # include "byteorder.h"
 #endif
 
-#define CEPH_MON_PORT 2138
+#define CEPH_MON_PORT 12345
 
 
 typedef __u64 ceph_version_t;
