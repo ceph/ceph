@@ -87,26 +87,34 @@ nextfrag:
 			dname.name = fi->rinfo.dir_dname[i];
 			dname.len = fi->rinfo.dir_dname_len[i];
 			dname.hash = full_name_hash(dname.name, dname.len);
-			dn = d_alloc(parent, &dname);
-			if (dn == NULL) {
-				dout(30, "d_alloc badness\n");
-				break; 
+
+			dn = d_lookup(parent, &dname);
+			dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
+
+			if (!dn) {
+				dn = d_alloc(parent, &dname);
+				if (dn == NULL) {
+					dout(30, "d_alloc badness\n");
+					break; 
+				}
+				in = new_inode(parent->d_sb);
+				if (in == NULL) {
+					dout(30, "new_inode badness\n");
+					d_delete(dn);
+					break;
+				}
+				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
+					dout(30, "ceph_fill_inode badness\n");
+					iput(in);
+					d_delete(dn);
+					break;
+				}
+				d_add(dn, in);
+				dout(10, "dir_readdir added dentry %p inode %lu %d/%d\n",
+				     dn, in->i_ino, i, fi->rinfo.dir_nr);
 			}
-			in = new_inode(parent->d_sb);
-			if (in == NULL) {
-				dout(30, "new_inode badness\n");
-				d_delete(dn);
-				break;
-			}
-			if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
-				d_delete(dn);
-				break;
-			}
-			d_add(dn, in);
-			dout(10, "dir_readdir added dentry %p inode %lu %d/%d\n",
-			     dn, in->i_ino, i, fi->rinfo.dir_nr);
+
+			dput(dn);
 		}
 	}	
 	
@@ -146,6 +154,9 @@ const struct file_operations ceph_dir_fops = {
 	.release = ceph_release,
 };
 
+struct dentry_operations ceph_dentry_ops = {
+	.d_revalidate = NULL,
+};
 
 
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
@@ -173,6 +184,12 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(err);
 	err = le32_to_cpu(rinfo.head->result);
 	dout(20, "dir_readdir result=%d\n", err);
+
+	/* if there was a previous inode associated with this dentry, now there isn't one */
+	if (err == -ENOENT) {
+		d_add(dentry, NULL);
+	}
+
 	if (err < 0) 
 		return ERR_PTR(err);
 
