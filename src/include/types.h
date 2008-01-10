@@ -15,6 +15,8 @@
 #ifndef __MDS_TYPES_H
 #define __MDS_TYPES_H
 
+#include "ceph_fs.h"
+
 extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
@@ -36,7 +38,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-#include "ceph_fs.h"
 
 
 #include "object.h"

@@ -26,7 +26,7 @@
 # include <sys/mman.h>
 #endif
 
-#include <asm/page.h>
+#include "page.h"
 
 // <hack>
 //  these are in config.o

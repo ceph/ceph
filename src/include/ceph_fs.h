@@ -8,10 +8,12 @@
 
 #ifdef __KERNEL__
 # include <linux/in.h>
+# include <linux/types.h>
 #else
 # include <netinet/in.h>
+# include "inttypes.h"
+# include "byteorder.h"
 #endif
-#include <linux/types.h>
 
 #define CEPH_MON_PORT 2138
 
