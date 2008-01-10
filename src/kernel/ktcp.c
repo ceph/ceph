@@ -66,10 +66,12 @@ static void ceph_state_change(struct sock *sk)
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
 		case TCP_CLOSE:
-			set_bit(CLOSED, &con->state);
 			break;
 		case TCP_CLOSE_WAIT:
 			set_bit(CLOSING, &con->state);
+			clear_bit(OPEN, &con->state);
+        		dout(30, "ceph_state_change state = %lu \n", 
+	     		con->state);
 		case TCP_ESTABLISHED:
 			ceph_write_space(sk);
 			break;
