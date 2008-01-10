@@ -309,6 +309,9 @@ count:
 TAGS:
 	etags `find . -name "*.[h|c|cc]"|grep -v '\.\#'`
 
+tags:
+	ctags `find . -name "*.[h|c|cc]"|grep -v '\.\#'`
+
 .depend:
 	touch .depend
 
