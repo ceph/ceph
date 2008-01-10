@@ -23,6 +23,8 @@ enum {
 struct ceph_mds_session {
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	struct list_head  s_caps;
+	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct completion s_completion;
 };

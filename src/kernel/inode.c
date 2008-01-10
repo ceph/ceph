@@ -54,7 +54,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
-	ci->i_wr_mtime.tv_usec = 0;
+	ci->i_wr_mtime.tv_nsec = 0;
 
 	inode->i_mapping->a_ops = &ceph_aops;
 

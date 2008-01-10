@@ -25,6 +25,7 @@ kernel client
   - mechanism to close out old caps
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
+  - integrate mds reply trace into cache
 - osd client
   - readpages (readahead)
   - async (caching) mode
