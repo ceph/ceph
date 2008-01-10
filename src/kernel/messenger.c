@@ -30,7 +30,7 @@ static void try_accept(struct work_struct *);
  */
 static void ceph_send_fault(struct ceph_connection *con, int error)
 {
-	derr(1, "connection error %d to peer %x:%d\n", error,
+	derr(1, " ceph_send_fault connection error %d to peer %x:%d\n", error,
 	     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
 	     ntohs(con->peer_addr.ipaddr.sin_port));
 
@@ -40,19 +40,16 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 	}
 
 	switch (error) {
-		/* no space in socket buffer, ceph_write_space will handle 
-		 * requeueing */
-		case -EAGAIN:
-			break;
 		case -ETIMEDOUT:
-			derr(1, "timed out to peer %x:%d\n",
+			derr(10, "timed out to peer %x:%d\n",
 			     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
 			     ntohs(con->peer_addr.ipaddr.sin_port));
-		/* peer unreachable */
+		/* peer unreachable, TBD: need to research if should retry
+		 * a few times first, then close socket and try reconnecting */
 		case -EHOSTDOWN:
 		case -EHOSTUNREACH:
         	case -ENETUNREACH:
-			derr(1, "ENETUNREACH set\n");
+			derr(10, "ceph_send_fault peer unreachable via route\n");
 			spin_lock(&con->out_queue_lock);
 			/* TBD: reset buffer correctly */
 			list_splice_init(&con->out_sent, &con->out_queue);
@@ -60,12 +57,17 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 			/* retry with delay */
 			queue_delayed_work(send_wq, &con->swork, con->delay);
 			break;
+		case -EAGAIN:
+			/* no space in socket buffer, ceph_write_space will
+			 * handle requeueing */
+			if (test_bit(OPEN, &con->state))
+				return;
         	case -EPIPE:
+		/* TBD: may do something different here, may not be allowed */
         	case -ECONNREFUSED:
 		case -ECONNRESET:
 		/* never connected socket. SOCK_DONE flag not set */
 		case -ENOTCONN:
-			derr(1, "ENOTCONN set\n");
 			/* TBD: setup timeout here */
 			if (!test_and_clear_bit(CONNECTING, &con->state)){
 				derr(1, "CONNECTING bit not set\n");
@@ -78,25 +80,24 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 				clear_bit(OPEN, &con->state);
 			}
 			set_bit(NEW, &con->state);
+			sock_release(con->sock);
 			/* retry with delay */
 			queue_delayed_work(send_wq, &con->swork, con->delay);
 			break;
 		case -EIO:
-			derr(1, "EIO set\n");
+			derr(10, "ceph_send_fault EIO set\n");
 			/* shutdown or soft timeout */
 
 		default:
 			/* if we ever hit here ... */
-			derr(1, "unrecognized error %d\n", error);
+			derr(10, "ceph_send_fault unrecognized error %d\n", 
+			     error);
 	}
 	if (con->delay < MAX_DELAY_INTERVAL)
 		con->delay *= 2;
 	else
 		con->delay = MAX_DELAY_INTERVAL;
 }
-
-
-
 
 /*
  * connections
@@ -185,10 +186,12 @@ out:
  */
 static void put_connection(struct ceph_connection *con) 
 {
+	BUG_ON(con == NULL);
 	if (atomic_dec_and_test(&con->nref)) {
 		dout(20, "put_connection destroying %p\n", con);
 		sock_release(con->sock);
 		kfree(con);
+		con = NULL;
 	}
 }
 
@@ -459,8 +462,7 @@ static void try_write(struct work_struct *work)
 	if (test_and_clear_bit(CLOSING, &con->state)) {
 		dout(5, "try_write peer initiated close\n");
 		remove_connection(msgr, con);
-		set_bit(CLOSED, &con->state);
-		put_connection(con);
+		/* put_connection(con); */
 		goto done;
 	}
 more:
