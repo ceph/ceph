@@ -92,14 +92,14 @@ struct ceph_connection {
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	struct ceph_msg_header out_hdr;
+	struct ceph_entity_addr out_addr;
+	__le32 out32;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
-
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
-
 
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
@@ -169,6 +169,12 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 	ceph_decode_copy(p, end, &v->ipaddr, sizeof(v->ipaddr));
 	return 0;
 }
+static __inline__ void ceph_encode_addr(struct ceph_entity_addr *to, struct ceph_entity_addr *from)
+{
+	to->erank = cpu_to_le32(from->erank);
+	to->nonce = cpu_to_le32(from->nonce);
+	to->ipaddr = from->ipaddr;
+}
 
 static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
 	if (unlikely(*p + sizeof(*v) > end))
@@ -192,9 +198,7 @@ static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph
 {
 	to->name.type = cpu_to_le32(from->name.type);
 	to->name.num = cpu_to_le32(from->name.num);
-	to->addr.erank = cpu_to_le32(from->addr.erank);
-	to->addr.nonce = cpu_to_le32(from->addr.nonce);
-	to->addr.ipaddr = from->addr.ipaddr;
+	ceph_encode_addr(&to->addr, &from->addr);
 }
 
 static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct ceph_msg_header *from)
@@ -228,8 +232,22 @@ static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 
 static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
 	BUG_ON(*p + sizeof(v) > end);
-	*(__u32*)*p = cpu_to_le64(v);
+	*(__u32*)*p = cpu_to_le32(v);
 	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_16(void **p, void *end, __u16 v) {
+	BUG_ON(*p + sizeof(v) > end);
+	*(__u16*)*p = cpu_to_le16(v);
+	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_8(void **p, void *end, __u8 v) {
+	BUG_ON(*p < end);
+	*(__u8*)*p = v;
+	(*p)++;
 	return 0;
 }
 
@@ -244,13 +262,27 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 	return 0;
 }
 
-static void __inline__ ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
+static __inline__ int ceph_encode_string(void **p, void *end, const char *s, __u32 len)
+{
+	BUG_ON(*p + sizeof(len) > end);
+	ceph_encode_32(p, end, len);
+	if (len) memcpy(*p, s, len);
+	*p += len;
+	return 0;
+}
+
+static __inline__ void ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
 {
 	ts->tv_sec = le32_to_cpu(tv->tv_sec);
 	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
 }
 
-
-
+static __inline__ int ceph_encode_timespec(void **p, void *end, struct timespec *ts)
+{
+	BUG_ON(*p + sizeof(struct ceph_timeval) > end);
+	ceph_encode_32(p, end, ts->tv_sec);
+	ceph_encode_32(p, end, ts->tv_nsec/1000);
+	return 0;
+}
 
 #endif

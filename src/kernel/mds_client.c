@@ -110,6 +110,8 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
+	INIT_LIST_HEAD(&s->s_caps);
+	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
 	mdsc->sessions[mds] = s;
@@ -675,6 +677,85 @@ void kick_requests(struct ceph_mds_client *mdsc, int m)
 	}
 }
 
+/*
+ * send an MClientReconnect to a recovering mds
+ */
+void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
+{
+	struct ceph_mds_session *session;
+	struct ceph_msg *reply;
+	int len = 4 + 1;
+	void *p, *end;
+	struct list_head *cp;
+	struct ceph_inode_cap *cap;
+	char *path;
+	int pathlen, err;
+	struct dentry *dentry;
+
+	dout(10, "send_mds_reconnect mds%d\n", mds);
+
+	/* find session */
+	session = get_session(mdsc, mds);
+	if (!session) {
+		dout(20, "no session for mds%d, sending short reconnect\n", mds);
+		reply = ceph_msg_new(CEPH_MSG_CLIENT_RECONNECT, len, 0, 0, 0);
+		if (IS_ERR(reply))
+			return;
+		*(__u32*)reply->front.iov_base = 0;
+		*(__u8*)(reply->front.iov_base + 4) = 1; /* session was closed */
+		goto send;
+	}
+
+	/* estimate needed space */
+	len += session->s_nr_caps * sizeof(struct ceph_mds_cap_reconnect);
+	len += session->s_nr_caps * (100); /* ugly hack */
+
+	/* build reply */
+	reply = ceph_msg_new(CEPH_MSG_CLIENT_RECONNECT, len, 0, 0, 0);
+	if (IS_ERR(reply))
+		return;
+	p = reply->front.iov_base;
+	end = p + len;
+
+	/* traverse this session's caps */
+	ceph_encode_32(&p, end, session->s_nr_caps);
+	list_for_each(cp, &session->s_caps) {
+		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
+		ceph_encode_32(&p, end, cap->ci->i_cap_wanted);
+		ceph_encode_32(&p, end, cap->ci->i_cap_issued);
+		ceph_encode_64(&p, end, cap->ci->i_wr_size);
+		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_mtime); //i_wr_mtime
+		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_atime); /* atime.. fixme */
+		dentry = list_entry(&cap->ci->vfs_inode.i_dentry, struct dentry, d_alias);
+		err = ceph_build_dentry_path(dentry, &path, &pathlen);
+		BUG_ON(err);
+		if (p + pathlen + 4 + sizeof(struct ceph_mds_cap_reconnect) > end) {
+			/* der, realloc front */
+			int off = end-p;
+			void *t;
+			dout(30, "blech, reallocating larger buffer, from %d\n", off);
+			t = kmalloc(off*2, GFP_KERNEL);
+			memcpy(t, reply->front.iov_base, off);
+			kfree(reply->front.iov_base);
+			reply->front.iov_base = t;
+			reply->front.iov_len = off*2;
+			p = t + off;
+			end = p + off*2;
+		}
+		ceph_encode_string(&p, end, path, pathlen);		
+		kfree(path);
+	}
+	ceph_encode_8(&p, end, 0);
+	reply->front.iov_len = end-p;
+	
+send:
+	send_msg_mds(mdsc, reply, mds);
+}			
+
+/*
+ * compare old and new mdsmaps, kicking requests
+ * and closing out old connections as necessary
+ */
 void check_new_map(struct ceph_mds_client *mdsc,
 		   struct ceph_mdsmap *newmap,
 		   struct ceph_mdsmap *oldmap)
@@ -691,12 +772,12 @@ void check_new_map(struct ceph_mds_client *mdsc,
 			continue;
 		oldstate = ceph_mdsmap_get_state(oldmap, i);
 		newstate = ceph_mdsmap_get_state(newmap, i);
+
+		dout(20, "check_new_map mds%d state %d -> %d\n",
+		     i, oldstate, newstate);
 		if (newstate >= oldstate)
 			continue;  /* no problem */
 		
-		dout(20, "check_new_map mds%d state %d -> %d\n",
-		     i, oldstate, newstate);
-
 		/* notify messenger */
 		ceph_messenger_mark_down(mdsc->client->msgr,
 					 &oldmap->m_addr[i]);
@@ -722,6 +803,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
+	int from = msg->hdr.src.name.num;
+	int newstate;
 
 	if ((err = ceph_decode_32(&p, end, &epoch)) != 0)
 		goto bad;
@@ -755,6 +838,13 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			if (oldmap) {
 				check_new_map(mdsc, newmap, oldmap);
 				ceph_mdsmap_destroy(oldmap);
+
+				/* reconnect? */
+				if (from < newmap->m_max_mds) {
+					newstate = ceph_mdsmap_get_state(newmap, from);
+					if (newstate == CEPH_MDS_STATE_RECONNECT)
+						send_mds_reconnect(mdsc, from);
+				}
 			}
 		} else {
 			dout(2, "ceph_mdsc_handle_map lost decode race?\n");

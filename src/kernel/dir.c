@@ -29,6 +29,58 @@ int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 	return len;
 }
 
+int ceph_build_dentry_path(struct dentry *dentry, char **path, int *len)
+{
+	struct dentry *temp;
+
+	if (dentry == NULL)
+		return -EINVAL;  /* not much we can do if dentry is freed and
+		we need to reopen the file after it was closed implicitly
+		when the server crashed */
+
+retry:
+	*len = 0;
+	for (temp = dentry; !IS_ROOT(temp);) {
+		*len += (1 + temp->d_name.len);
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			derr(1, "corrupt dentry");
+			return -EINVAL;
+		}
+	}
+
+	*path = kmalloc(*len+1, GFP_KERNEL);
+	if (*path == NULL)
+		return -ENOMEM;
+	(*path)[*len] = 0;	/* trailing null */
+	for (temp = dentry; !IS_ROOT(temp);) {
+		*len -= 1 + temp->d_name.len;
+		if (*len < 0) {
+			break;
+		} else {
+			(*path)[*len] = '/';
+			strncpy(*path + *len + 1, temp->d_name.name,
+				temp->d_name.len);
+			dout(0, "name: %s", *path + *len);
+		}
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			dout(1, "corrupt dentry");
+			kfree(*path);
+			return -EINVAL;
+		}
+	}
+	if (*len != 0) {
+		derr(1, "did not end path lookup where expected namelen is %d", *len);
+		/* presumably this is only possible if racing with a rename
+		of one of the parent directories  (we can not lock the dentries
+		above us to prevent this, but retrying should be harmless) */
+		kfree(*path);
+		goto retry;
+	}
+	return 0;
+}
+
 
 /*
  * build fpos from fragment id and offset within that fragment.
@@ -77,7 +129,9 @@ nextfrag:
 		rhead->args.readdir.frag = cpu_to_le32(frag);
 		if ((err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, -1)) < 0)
 		    return err;
-		dout(10, "dir_readdir got and parsed readdir result on frag %u\n", frag);
+		err = le32_to_cpu(fi->rinfo.head->result);
+		dout(10, "dir_readdir got and parsed readdir result=%d on frag %u\n", err, frag);
+		if (err < 0) return err;
 		
 		/* pre-populate dentry cache */
 		parent = filp->f_dentry;
@@ -168,6 +222,10 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+		return ERR_PTR(err);
+	err = le32_to_cpu(rinfo.head->result);
+	dout(20, "dir_readdir result=%d\n", err);
+	if (err < 0) 
 		return ERR_PTR(err);
 
 	if (rinfo.trace_nr > 0) {
