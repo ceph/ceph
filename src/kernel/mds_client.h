@@ -15,10 +15,10 @@ struct ceph_client;
  * state associated with each MDS<->client session
  */
 enum {
-	CEPH_MDS_SESSION_NEW,
-	CEPH_MDS_SESSION_OPENING,
-	CEPH_MDS_SESSION_OPEN,
-	CEPH_MDS_SESSION_CLOSING
+	CEPH_MDS_SESSION_NEW = 1,
+	CEPH_MDS_SESSION_OPENING = 2,
+	CEPH_MDS_SESSION_OPEN = 3,
+	CEPH_MDS_SESSION_CLOSING = 4
 };
 struct ceph_mds_session {
 	int               s_state;

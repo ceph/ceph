@@ -3,23 +3,6 @@
 
 #include <linux/ceph_fs.h>
 
-/* see mds/MDSMap.h */
-#define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
-#define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees. empty log. */
-#define CEPH_MDS_STATE_FAILED      2  /* down, active subtrees needs to be recovered. */
-
-#define CEPH_MDS_STATE_BOOT       -3  /* up, boot announcement.  destiny unknown. */
-#define CEPH_MDS_STATE_STANDBY    -4  /* up, idle.  waiting for assignment by monitor. */
-#define CEPH_MDS_STATE_CREATING   -5  /* up, creating MDS instance (new journal, idalloc..). */
-#define CEPH_MDS_STATE_STARTING   -6  /* up, starting prior stopped MDS instance. */
-
-#define CEPH_MDS_STATE_REPLAY      7  /* up, starting prior failed instance. scanning journal. */
-#define CEPH_MDS_STATE_RESOLVE     8  /* up, disambiguating distributed operations (import, rename, etc.) */
-#define CEPH_MDS_STATE_RECONNECT   9  /* up, reconnect to clients */
-#define CEPH_MDS_STATE_REJOIN      10 /* up, replayed journal, rejoining distributed cache */
-#define CEPH_MDS_STATE_ACTIVE      11 /* up, active */
-#define CEPH_MDS_STATE_STOPPING    12 /* up, exporting metadata (-> standby or out) */
-
 /*
  * mds map
  *

@@ -65,5 +65,6 @@ void ceph_monc_init(struct ceph_mon_client *monc)
 
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
 {
-	dout(5, "ceph_monc_request_mdsmap\n");
+	dout(5, "ceph_monc_request_mdsmap -- IMPLEMENT ME\n");
+	
 }

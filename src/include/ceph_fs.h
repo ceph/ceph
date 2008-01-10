@@ -269,6 +269,25 @@ struct ceph_msg_header {
 #define CEPH_MSG_OSD_OPREPLY      43
 
 
+/* mds states */
+#define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
+#define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees. empty log. */
+#define CEPH_MDS_STATE_DESTROYING -2  /* down, once existed, but no subtrees. empty log. */
+#define CEPH_MDS_STATE_FAILED      3  /* down, active subtrees needs to be recovered. */
+
+#define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement.  destiny unknown. */
+#define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment by monitor. */
+#define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance (new journal, idalloc..). */
+#define CEPH_MDS_STATE_STARTING   -7  /* up, starting prior stopped MDS instance. */
+
+#define CEPH_MDS_STATE_REPLAY      8  /* up, starting prior failed instance. scanning journal. */
+#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed operations (import, rename, etc.) */
+#define CEPH_MDS_STATE_RECONNECT   10 /* up, reconnect to clients */
+#define CEPH_MDS_STATE_REJOIN      11 /* up, replayed journal, rejoining distributed cache */
+#define CEPH_MDS_STATE_ACTIVE      12 /* up, active */
+#define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata (-> standby or out) */
+
+
 /* client_session message op values */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
@@ -310,7 +329,6 @@ struct ceph_mds_request_head {
 	ceph_ino_t mds_wants_replica_in_dirino;
 	__u32 op;
 	__u32 caller_uid, caller_gid;
-	ceph_ino_t cwd_ino;
 
 	// fixed size arguments.  in a union.
 	union { 

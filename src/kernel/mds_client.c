@@ -158,22 +158,26 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	return msg;
 }
 
-static void open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *session, int mds)
+static int open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *session, int mds)
 {
 	struct ceph_msg *msg;
+	int mstate;
 
 	/* connect */
-	if (ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
+	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
+	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
+	if (mstate < CEPH_MDS_STATE_ACTIVE) {
 		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
-		return;
+		return -EINPROGRESS;
 	} 
 	
 	/* send connect message */
 	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_cap_seq);
 	if (IS_ERR(msg))
-		return;  /* fixme */
+		return PTR_ERR(msg);  /* fixme */
 	session->s_state = CEPH_MDS_SESSION_OPENING;
 	send_msg_mds(mdsc, msg, mds);
+	return 0;
 }
 
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
@@ -277,14 +281,20 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			   0, 0, 0);
 	if (IS_ERR(req))
 		return req;
-	memset(req->front.iov_base, 0, req->front.iov_len);
 	head = req->front.iov_base;
 	p = req->front.iov_base + sizeof(*head);
 	end = req->front.iov_base + req->front.iov_len;
 
 	/* encode head */
-	head->op = cpu_to_le32(op);
 	ceph_encode_inst(&head->client_inst, &mdsc->client->msgr->inst);
+	/* tid, oldest_client_tid set by do_request */
+	head->mdsmap_epoch = cpu_to_le64(mdsc->mdsmap->m_epoch);
+	head->num_fwd = 0;
+	/* head->retry_attempt = 0; set by do_request */
+	head->mds_wants_replica_in_dirino = 0;
+	head->op = cpu_to_le32(op);
+	head->caller_uid = cpu_to_le32(current->uid);
+	head->caller_gid = cpu_to_le32(current->gid);
 
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
@@ -341,12 +351,21 @@ retry:
 
 	/* get session */
 	session = get_session(mdsc, mds);
-	dout(30, "do_request session %p\n", session);
+	dout(30, "do_request session %p state %d\n", session, session->s_state);
 
 	/* open? */
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
-	    session->s_state == CEPH_MDS_SESSION_CLOSING)
-		open_session(mdsc, session, mds);
+	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
+		err = open_session(mdsc, session, mds);
+		if (err == -EINPROGRESS) {
+			/* waiting for new mdsmap.  bleh, this is a little messy. */
+			spin_unlock(&mdsc->lock);
+			wait_for_completion(&mdsc->map_waiters);
+			spin_lock(&mdsc->lock);
+			goto retry;
+		}
+		BUG_ON(err);  /* implement me */
+	}
 	if (session->s_state == CEPH_MDS_SESSION_OPENING) {
 		/* wait for session to open (or fail, or close) */
 		spin_unlock(&mdsc->lock);
@@ -385,7 +404,8 @@ retry:
 	if ((err = ceph_mdsc_parse_reply_info(reply, rinfo)) < 0)
 		return err;
 
-	dout(30, "do_request done on %p\n", msg);
+	dout(30, "do_request done on %p result %d tracelen %d\n", msg, 
+	     rinfo->head->result, rinfo->trace_nr);
 	return 0;
 }
 

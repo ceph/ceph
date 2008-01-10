@@ -401,6 +401,7 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	struct inode *inode;
 	struct dentry *root;
 	struct ceph_msg *req = 0;
+	struct ceph_mds_request_head *reqhead;
 	struct ceph_mds_reply_info rinfo;
 	int frommds;
 	int err;
@@ -411,6 +412,9 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
+	reqhead = req->front.iov_base;
+	reqhead->args.open.flags = 0;
+	reqhead->args.open.mode = 0;
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return err;
 	

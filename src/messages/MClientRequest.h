@@ -191,8 +191,6 @@ public:
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return head.mds_wants_replica_in_dirino; }
 
-  inodeno_t get_cwd_ino() { return head.cwd_ino ? head.cwd_ino:MDS_INO_ROOT; }
-
   void decode_payload() {
     int off = 0;
     ::_decode(head, payload, off);

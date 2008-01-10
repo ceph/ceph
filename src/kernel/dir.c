@@ -235,7 +235,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return ERR_PTR(err);
 	err = le32_to_cpu(rinfo.head->result);
-	dout(20, "dir_readdir result=%d\n", err);
+	dout(20, "dir_lookup result=%d\n", err);
 
 	/* if there was a previous inode associated with this dentry, now there isn't one */
 	if (err == -ENOENT) {
