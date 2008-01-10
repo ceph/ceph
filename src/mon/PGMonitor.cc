@@ -189,14 +189,15 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   // fill out stfs
   MStatfsReply *reply = new MStatfsReply(statfs->tid);
   memset(&reply->stfs, 0, sizeof(reply->stfs));
-  reply->stfs.f_bsize   = 1024;
-  reply->stfs.f_frsize  = 1024;
-  reply->stfs.f_blocks  = 1024 * 1024; //pg_map.total_num_blocks;
-  reply->stfs.f_bfree   = 1024 * 1024;
-  reply->stfs.f_bavail  = 1024 * 1024;
-  reply->stfs.f_files   = 1024 * 1024;
-  reply->stfs.f_ffree   = 1024 * 1024;
-  reply->stfs.f_favail  = 1024 * 1024;
+  // these are in KB:
+  reply->stfs.f_bsize   = 4096;  // fixme
+  reply->stfs.f_frsize  = 4096;  // what is this?
+  reply->stfs.f_blocks  = pg_map.total_osd_num_blocks;  // kb
+  reply->stfs.f_bfree   = pg_map.total_osd_num_blocks_avail;
+  reply->stfs.f_bavail  = pg_map.total_osd_num_blocks_avail;
+  reply->stfs.f_files   = pg_map.total_osd_num_objects;
+  reply->stfs.f_ffree   = -1;
+  reply->stfs.f_favail  = -1;
   reply->stfs.f_namemax = 1024;
 #ifdef __CYGWIN__
   reply->stfs.f_flag = 0;
@@ -212,7 +213,20 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 bool PGMonitor::handle_pg_stats(MPGStats *stats) 
 {
   dout(10) << "handle_pg_stats " << *stats << " from " << stats->get_source() << dendl;
-  
+  int from = stats->get_source().num();
+  if (!stats->get_source().is_osd() ||
+      !mon->osdmon->osdmap.is_up(from) ||
+      stats->get_source_inst() != mon->osdmon->osdmap.get_inst(from)) {
+    dout(1) << " ignoring stats from non-active osd" << dendl;
+  }
+      
+  // osd stat
+  if (pg_map.osd_stat.count(from))
+    pg_map.stat_osd_sub(pg_map.osd_stat[from]);
+  pg_map.osd_stat[from] = stats->osd_stat;
+  pg_map.stat_osd_add(stats->osd_stat);
+
+  // pg stats
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++) {
@@ -236,9 +250,9 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
 
     // we don't care about consistency; apply to live map.
     if (pg_map.pg_stat.count(pgid))
-      pg_map.stat_sub(pg_map.pg_stat[pgid]);
+      pg_map.stat_pg_sub(pg_map.pg_stat[pgid]);
     pg_map.pg_stat[pgid] = p->second;
-    pg_map.stat_add(pg_map.pg_stat[pgid]);
+    pg_map.stat_pg_add(pg_map.pg_stat[pgid]);
   }
   
   delete stats;

@@ -51,39 +51,78 @@ public:
 	 p != inc.pg_stat_updates.end();
 	 ++p) {
       if (pg_stat.count(p->first))
-	stat_sub(pg_stat[p->first]);
+	stat_pg_sub(pg_stat[p->first]);
       pg_stat[p->first] = p->second;
-      stat_add(p->second);
+      stat_pg_add(p->second);
+    }
+    for (map<int,osd_stat_t>::iterator p = inc.osd_stat_updates.begin();
+	 p != inc.osd_stat_updates.end();
+	 ++p) {
+      if (osd_stat.count(p->first))
+	stat_osd_sub(osd_stat[p->first]);
+      osd_stat[p->first] = p->second;
+      stat_osd_add(p->second);
     }
   }
 
   // aggregate stats (soft state)
   hash_map<int,int> num_pg_by_state;
   int64_t num_pg;
-  int64_t total_size;
-  int64_t total_num_blocks;
+  int64_t total_pg_num_bytes;
+  int64_t total_pg_num_blocks;
+  int64_t total_pg_num_objects;
+  int64_t num_osd;
+  int64_t total_osd_num_blocks;
+  int64_t total_osd_num_blocks_avail;
+  int64_t total_osd_num_objects;
   
   void stat_zero() {
     num_pg = 0;
     num_pg_by_state.clear();
-    total_size = 0;
-    total_num_blocks = 0;
+    total_pg_num_bytes = 0;
+    total_pg_num_blocks = 0;
+    total_pg_num_objects = 0;
+    num_osd = 0;
+    total_osd_num_blocks = 0;
+    total_osd_num_blocks_avail = 0;
+    total_osd_num_objects = 0;
   }
-  void stat_add(pg_stat_t &s) {
+  void stat_pg_add(pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
-    total_size += s.size;
-    total_num_blocks += s.num_blocks;
+    total_pg_num_bytes += s.num_bytes;
+    total_pg_num_blocks += s.num_blocks;
+    total_pg_num_objects += s.num_objects;
   }
-  void stat_sub(pg_stat_t &s) {
+  void stat_osd_add(osd_stat_t &s) {
+    num_osd++;
+    total_osd_num_blocks += s.num_blocks;
+    total_osd_num_blocks_avail += s.num_blocks_avail;
+    total_osd_num_objects += s.num_objects;
+  }
+  void stat_pg_sub(pg_stat_t &s) {
     num_pg--;
     num_pg_by_state[s.state]--;
-    total_size -= s.size;
-    total_num_blocks -= s.num_blocks;
+    total_pg_num_bytes -= s.num_bytes;
+    total_pg_num_blocks -= s.num_blocks;
+    total_pg_num_objects -= s.num_objects;
+  }
+  void stat_osd_sub(osd_stat_t &s) {
+    num_osd--;
+    total_osd_num_blocks -= s.num_blocks;
+    total_osd_num_blocks_avail -= s.num_blocks_avail;
+    total_osd_num_objects -= s.num_objects;
   }
 
   PGMap() : version(0), 
-	    num_pg(0), total_size(0), total_num_blocks(0) {}
+	    num_pg(0), 
+	    total_pg_num_bytes(0), 
+	    total_pg_num_blocks(0), 
+	    total_pg_num_objects(0), 
+	    num_osd(0),
+	    total_osd_num_blocks(0),
+	    total_osd_num_blocks_avail(0),
+	    total_osd_num_objects(0) {}
 
   void _encode(bufferlist &bl) {
     ::_encode(version, bl);
@@ -96,7 +135,11 @@ public:
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();
 	 ++p)
-      stat_add(p->second);
+      stat_pg_add(p->second);
+    for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+	 p != osd_stat.end();
+	 ++p)
+      stat_osd_add(p->second);
   }
 };
 

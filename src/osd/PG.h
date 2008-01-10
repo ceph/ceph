@@ -496,7 +496,7 @@ protected:
   
 
   // stats
-  off_t stat_size;
+  off_t stat_num_bytes;
   off_t stat_num_blocks;
 
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
@@ -573,7 +573,7 @@ public:
     state(0),
     last_epoch_started_any(0),
     have_master_log(true),
-    stat_size(0), stat_num_blocks(0)
+    stat_num_bytes(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }
   

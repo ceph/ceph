@@ -828,7 +828,8 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     break;
   }   
   
-
+  update_stats();
+  
 }
 
 void ReplicatedPG::put_rep_gather(RepGather *repop)

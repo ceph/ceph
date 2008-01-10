@@ -297,6 +297,7 @@ private:
   // -- pg stats --
   Mutex pg_stat_queue_lock;
   set<pg_t> pg_stat_queue;
+  bool osd_stat_updated;
 
   class C_Stats : public Context {
     OSD *osd;

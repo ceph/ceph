@@ -1018,19 +1018,22 @@ void PG::finish_recovery()
 void PG::update_stats()
 {
   dout(15) << "update_stats" << dendl;
-  assert(is_primary());
 
-  // update our stat summary
-  pg_stats_lock.Lock();
-  pg_stats.reported = info.last_update;
-  pg_stats.state = state;
-  pg_stats.size = stat_size;
-  pg_stats.num_blocks = stat_num_blocks;
-  pg_stats_lock.Unlock();
+  if (is_primary()) {
+    // update our stat summary
+    pg_stats_lock.Lock();
+    pg_stats.reported = info.last_update;
+    pg_stats.state = state;
+    pg_stats.num_bytes = stat_num_bytes;
+    pg_stats.num_blocks = stat_num_blocks;
+    pg_stats_lock.Unlock();
+  }
 
   // put in osd stat_queue
   osd->pg_stat_queue_lock.Lock();
-  osd->pg_stat_queue.insert(info.pgid);    
+  if (is_primary())
+    osd->pg_stat_queue.insert(info.pgid);    
+  osd->osd_stat_updated = true;
   osd->pg_stat_queue_lock.Unlock();
 }
 

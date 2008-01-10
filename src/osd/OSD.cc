@@ -823,14 +823,17 @@ void OSD::heartbeat()
 void OSD::send_pg_stats()
 {
   //dout(-10) << "send_pg_stats" << dendl;
-  
+  bool updated;
+
   // grab queue
   set<pg_t> q;
   pg_stat_queue_lock.Lock();
   q.swap(pg_stat_queue);
+  updated = osd_stat_updated;
+  osd_stat_updated = false;
   pg_stat_queue_lock.Unlock();
-
-  if (!q.empty()) {
+  
+  if (!q.empty() || osd_stat_updated) {
     dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
     
     MPGStats *m = new MPGStats;

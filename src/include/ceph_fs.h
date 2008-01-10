@@ -213,8 +213,6 @@ struct ceph_entity_addr {
 	 (a)->nonce == (b)->nonce &&		\
 	 memcmp((a), (b), sizeof(*(a)) == 0))
 
-
-
 struct ceph_entity_inst {
 	struct ceph_entity_name name;
 	struct ceph_entity_addr addr;
@@ -269,11 +267,15 @@ struct ceph_msg_header {
 #define CEPH_MSG_OSD_OPREPLY      43
 
 
-/* mds states */
-#define CEPH_MDS_STATE_DNE         0  /* down, never existed. */
+/*
+ * mds states 
+ *   > 0 -> in
+ *  <= 0 -> out
+ */
+#define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
 #define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees. empty log. */
-#define CEPH_MDS_STATE_DESTROYING -2  /* down, once existed, but no subtrees. empty log. */
-#define CEPH_MDS_STATE_FAILED      3  /* down, active subtrees needs to be recovered. */
+#define CEPH_MDS_STATE_DESTROYING -2  /* down, existing, semi-destroyed. */
+#define CEPH_MDS_STATE_FAILED      3  /* down, needs to be recovered. */
 
 #define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement.  destiny unknown. */
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment by monitor. */
@@ -283,9 +285,9 @@ struct ceph_msg_header {
 #define CEPH_MDS_STATE_REPLAY      8  /* up, starting prior failed instance. scanning journal. */
 #define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed operations (import, rename, etc.) */
 #define CEPH_MDS_STATE_RECONNECT   10 /* up, reconnect to clients */
-#define CEPH_MDS_STATE_REJOIN      11 /* up, replayed journal, rejoining distributed cache */
+#define CEPH_MDS_STATE_REJOIN      11 /* up, rejoining distributed cache */
 #define CEPH_MDS_STATE_ACTIVE      12 /* up, active */
-#define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata (-> standby or out) */
+#define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata */
 
 
 /* client_session message op values */
