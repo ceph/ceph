@@ -269,6 +269,14 @@ struct ceph_msg_header {
 #define CEPH_MSG_OSD_OPREPLY      43
 
 
+/* for statfs_reply.  units are KB, objects. */
+struct ceph_statfs {
+	__le64 f_total;
+	__le64 f_free;  // used = total - free
+	__le64 f_avail; // usable
+	__le64 f_objects;
+};
+
 /*
  * mds states 
  *   > 0 -> in

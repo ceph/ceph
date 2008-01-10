@@ -189,21 +189,12 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   // fill out stfs
   MStatfsReply *reply = new MStatfsReply(statfs->tid);
   memset(&reply->stfs, 0, sizeof(reply->stfs));
-  // these are in KB:
-  reply->stfs.f_bsize   = 4096;  // fixme
-  reply->stfs.f_frsize  = 4096;  // what is this?
-  reply->stfs.f_blocks  = pg_map.total_osd_num_blocks;  // kb
-  reply->stfs.f_bfree   = pg_map.total_osd_num_blocks_avail;
-  reply->stfs.f_bavail  = pg_map.total_osd_num_blocks_avail;
-  reply->stfs.f_files   = pg_map.total_osd_num_objects;
-  reply->stfs.f_ffree   = -1;
-  reply->stfs.f_favail  = -1;
-  reply->stfs.f_namemax = 1024;
-#ifdef __CYGWIN__
-  reply->stfs.f_flag = 0;
-#else
-  reply->stfs.f_flag = ST_NOATIME|ST_NODIRATIME;  // for now.
-#endif
+
+  // these are in KB.
+  reply->stfs.f_total = 4*pg_map.total_osd_num_blocks;
+  reply->stfs.f_free = 4*pg_map.total_osd_num_blocks_avail;
+  reply->stfs.f_avail = 4*pg_map.total_osd_num_blocks_avail;
+  reply->stfs.f_objects = pg_map.total_osd_num_objects;
 
   // reply
   mon->messenger->send_message(reply, statfs->get_source_inst());

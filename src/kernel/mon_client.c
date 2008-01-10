@@ -68,3 +68,17 @@ void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
 	dout(5, "ceph_monc_request_mdsmap -- IMPLEMENT ME\n");
 	
 }
+
+
+/*
+ * message handlers
+ */
+
+void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg *msg)
+{
+	__u64 tid;
+	struct ceph_statfs *st;
+
+	dout(10, "handle_statfs_reply %p\n", msg);
+	
+}

@@ -3245,7 +3245,19 @@ int Client::_statfs(struct statvfs *stbuf)
   while (req->reply == 0)
     cond.Wait(client_lock);
 
-  // yay
+  // fill it in
+  memset(stbuf, 0, sizeof(*stbuf));
+  stbuf->f_bsize = 4096;
+  stbuf->f_frsize = 4096;
+  stbuf->f_blocks = req->reply->stfs.f_total / 4;
+  stbuf->f_bfree = req->reply->stfs.f_free / 4;
+  stbuf->f_bavail = req->reply->stfs.f_avail / 4;
+  stbuf->f_files = req->reply->stfs.f_objects;
+  stbuf->f_ffree = -1;
+  stbuf->f_favail = -1;
+  stbuf->f_fsid = -1;       // ??
+  stbuf->f_flag = 0;        // ??
+  stbuf->f_namemax = 1024;  // ??
   memcpy(stbuf, &req->reply->stfs, sizeof(*stbuf));
 
   statfs_requests.erase(req->tid);
