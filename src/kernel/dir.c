@@ -29,6 +29,58 @@ int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base)
 	return len;
 }
 
+int ceph_build_dentry_path(struct dentry *dentry, char **path, int *len)
+{
+	struct dentry *temp;
+
+	if (dentry == NULL)
+		return -EINVAL;  /* not much we can do if dentry is freed and
+		we need to reopen the file after it was closed implicitly
+		when the server crashed */
+
+retry:
+	*len = 0;
+	for (temp = dentry; !IS_ROOT(temp);) {
+		*len += (1 + temp->d_name.len);
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			derr(1, "corrupt dentry");
+			return -EINVAL;
+		}
+	}
+
+	*path = kmalloc(*len+1, GFP_KERNEL);
+	if (*path == NULL)
+		return -ENOMEM;
+	(*path)[*len] = 0;	/* trailing null */
+	for (temp = dentry; !IS_ROOT(temp);) {
+		*len -= 1 + temp->d_name.len;
+		if (*len < 0) {
+			break;
+		} else {
+			(*path)[*len] = '/';
+			strncpy(*path + *len + 1, temp->d_name.name,
+				temp->d_name.len);
+			dout(0, "name: %s", *path + *len);
+		}
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			dout(1, "corrupt dentry");
+			kfree(*path);
+			return -EINVAL;
+		}
+	}
+	if (*len != 0) {
+		derr(1, "did not end path lookup where expected namelen is %d", *len);
+		/* presumably this is only possible if racing with a rename
+		of one of the parent directories  (we can not lock the dentries
+		above us to prevent this, but retrying should be harmless) */
+		kfree(*path);
+		goto retry;
+	}
+	return 0;
+}
+
 
 /*
  * build fpos from fragment id and offset within that fragment.

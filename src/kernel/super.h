@@ -57,6 +57,8 @@ struct ceph_inode_cap {
 	int caps;
 	u64 seq;
 	int flags;  /* stale, etc.? */
+	struct ceph_inode_info *ci;
+	struct list_head session_caps;  /* per-session caplist */
 };
 
 struct ceph_inode_frag_map_item {
@@ -77,8 +79,10 @@ struct ceph_inode_info {
 	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
 	atomic_t i_cap_count;  /* ref count (e.g. from file*) */
 
+	int i_cap_wanted;
+	int i_cap_issued;
 	loff_t i_wr_size;
-	struct ceph_timeval i_wr_mtime;
+	struct timespec i_wr_mtime;
 	
 	struct inode vfs_inode; /* at end */
 };
@@ -148,6 +152,7 @@ extern int ceph_release(struct inode *inode, struct file *filp);
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
 extern int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base);  /* move me */
+extern int ceph_build_dentry_path(struct dentry *dentry, char **path, int *len);
 
 
 #endif /* _FS_CEPH_CEPH_H */

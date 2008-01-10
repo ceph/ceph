@@ -232,8 +232,22 @@ static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 
 static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
 	BUG_ON(*p + sizeof(v) > end);
-	*(__u32*)*p = cpu_to_le64(v);
+	*(__u32*)*p = cpu_to_le32(v);
 	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_16(void **p, void *end, __u16 v) {
+	BUG_ON(*p + sizeof(v) > end);
+	*(__u16*)*p = cpu_to_le16(v);
+	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_8(void **p, void *end, __u8 v) {
+	BUG_ON(*p < end);
+	*(__u8*)*p = v;
+	(*p)++;
 	return 0;
 }
 
@@ -248,13 +262,27 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 	return 0;
 }
 
-static void __inline__ ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
+static __inline__ int ceph_encode_string(void **p, void *end, const char *s, __u32 len)
+{
+	BUG_ON(*p + sizeof(len) > end);
+	ceph_encode_32(p, end, len);
+	if (len) memcpy(*p, s, len);
+	*p += len;
+	return 0;
+}
+
+static __inline__ void ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
 {
 	ts->tv_sec = le32_to_cpu(tv->tv_sec);
 	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
 }
 
-
-
+static __inline__ int ceph_encode_timespec(void **p, void *end, struct timespec *ts)
+{
+	BUG_ON(*p + sizeof(struct ceph_timeval) > end);
+	ceph_encode_32(p, end, ts->tv_sec);
+	ceph_encode_32(p, end, ts->tv_nsec/1000);
+	return 0;
+}
 
 #endif
