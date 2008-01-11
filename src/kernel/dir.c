@@ -240,9 +240,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	/* if there was a previous inode associated with this dentry, now there isn't one */
 	if (err == -ENOENT) {
 		d_add(dentry, NULL);
-	}
-
-	if (err < 0) 
+	} else if (err < 0) 
 		return ERR_PTR(err);
 
 	if (rinfo.trace_nr > 0) {
@@ -266,11 +264,11 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
 	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = NULL;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
 	struct ceph_mds_reply_info rinfo;
-	char path[200];
+	char path[200]; /* FIXME dynamic */
 	int pathlen;
 	int err;
 
@@ -279,17 +277,29 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKDIR, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
-	if (IS_ERR(req)) 
+	if (IS_ERR(req)) {
+		d_drop(dentry);
 		return PTR_ERR(req);
+	}
 	rhead = req->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);	
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+		d_drop(dentry);
 		return err;
+	}
 	
 	err = le32_to_cpu(rinfo.head->result);
 	if (err == 0) {
-		inode_dec_link_count(inode);
+/*		inode_dec_link_count(inode); */
 		/* FIXME update dir mtime etc. from reply trace */
+		inode = new_inode(dir->i_sb);
+
+		if (inode == NULL) {
+			/* TODO handle this one */
+		}
+
+		inode->i_nlink = 2;
+		d_instantiate(dentry, inode);
 	}
 	return err;
 }
