@@ -273,13 +273,25 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 	}
 
 	dn = sb->s_root;
+	dget(dn);
 	in = dn->d_inode;
+
+	for (i=0; i<prinfo->trace_nr; i++) {
+		if (in->i_ino == prinfo->trace_in[i].in->ino) {
+			break;
+		}
+	}
+
+	if (i == prinfo->trace_nr) {
+		dout(10, "ceph_fill_trace did not locate mounted root!\n");
+		return -ENOENT;
+	}
 
 	if ((err = ceph_fill_inode(in, prinfo->trace_in[i].in)) < 0) {
 		return err;
 	}
 
-	for (i=1; i<prinfo->trace_nr; i++) {
+	for (++i; i<prinfo->trace_nr; i++) {
 		parent = dn;
 
 		dname.name = prinfo->trace_dname[i];
@@ -287,6 +299,9 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 		dname.hash = full_name_hash(dname.name, dname.len);
 
 		dn = d_lookup(parent, &dname);
+
+		dput(parent);
+
 		dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
 
 		if (!dn) {
@@ -297,17 +312,27 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 			}
 		}
 
-		if (!dn->d_inode) {
+		if (!prinfo->trace_in[i].in) {
+			err = -ENOENT;
+			d_delete(dn);
+			dn = NULL;
+			break;
+		}
+
+		if ((!dn->d_inode) ||
+			 (dn->d_inode->i_ino != prinfo->trace_in[i].in->ino)) {
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
+				dn = NULL;
 				break;
 			}
 			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				iput(in);
 				d_delete(dn);
+				dn = NULL;
 				break;
 			}
 			d_add(dn, in);
@@ -318,7 +343,12 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 		}
 	
 	}
-	*lastinode = in;
+
+	dput(dn);
+	
+	if (lastinode) {
+		*lastinode = in;
+	}
 
 	return err;
 }
