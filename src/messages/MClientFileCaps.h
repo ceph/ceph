@@ -43,72 +43,67 @@ class MClientFileCaps : public Message {
   }
 
  private:
-  int32_t op; 
-  inode_t inode;
-  capseq_t seq;
-  int32_t caps;
-  int32_t wanted;
-  
-  int32_t mds;
+  struct ceph_mds_file_caps h;
 
  public:
-  inodeno_t get_ino() { return inode.ino; }
-  inode_t&  get_inode() { return inode; }
-  int       get_caps() { return caps; }
-  int       get_wanted() { return wanted; }
-  capseq_t  get_seq() { return seq; }
+  int       get_caps() { return le32_to_cpu(h.caps); }
+  int       get_wanted() { return le32_to_cpu(h.wanted); }
+  capseq_t  get_seq() { return le64_to_cpu(h.seq); }
+
+  inodeno_t get_ino() { return le64_to_cpu(h.ino); }
+  __u64 get_size() { return le64_to_cpu(h.size);  }
+  utime_t get_mtime() { return utime_t(h.mtime); }
+  utime_t get_atime() { return utime_t(h.atime); }
 
   // for cap migration
-  int       get_mds() { return mds; }
-  int       get_op() { return op; }
+  int       get_mds() { return le32_to_cpu(h.mds); }
+  int       get_op() { return le32_to_cpu(h.op); }
 
-  void set_caps(int c) { caps = c; }
-  void set_wanted(int w) { wanted = w; }
+  void set_caps(int c) { h.caps = cpu_to_le32(c); }
+  void set_wanted(int w) { h.wanted = cpu_to_le32(w); }
 
-  void set_mds(int m) { mds = m; }
-  void set_op(int s) { op = s; }
+  void set_mds(int m) { h.mds = cpu_to_le32(m); }
+  void set_op(int o) { h.op = cpu_to_le32(o); }
+
+  void set_size(loff_t s) { h.size = cpu_to_le64(s); }
+  void set_mtime(utime_t t) { h.mtime = t.tv_ref(); }
+  void set_atime(utime_t t) { h.atime = t.tv_ref(); }
 
   MClientFileCaps() {}
-  MClientFileCaps(int op_,
-		  inode_t& inode_,
-                  long seq_,
-                  int caps_,
-                  int wanted_,
-                  int mds_=0) :
-    Message(CEPH_MSG_CLIENT_FILECAPS),
-    op(op_),
-    inode(inode_),
-    seq(seq_),
-    caps(caps_),
-    wanted(wanted_),
-    mds(mds_) { }
+  MClientFileCaps(int op,
+		  inode_t& inode,
+                  long seq,
+                  int caps,
+                  int wanted,
+                  int mds=0) :
+    Message(CEPH_MSG_CLIENT_FILECAPS) {
+    h.op = cpu_to_le32(op);
+    h.mds = cpu_to_le32(mds);
+    h.seq = cpu_to_le64(seq);
+    h.caps = cpu_to_le32(caps);
+    h.wanted = cpu_to_le32(wanted);
+    h.ino = cpu_to_le64(inode.ino);
+    h.size = cpu_to_le64(inode.size);
+    h.mtime = inode.mtime.tv_ref();
+    h.atime = inode.atime.tv_ref();
+  }
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_file_caps(" << get_opname(op)
-	<< " " << inode.ino
-	<< " seq " << seq
-	<< " caps " << cap_string(caps) 
-	<< " wanted" << cap_string(wanted) 
+    out << "client_file_caps(" << le32_to_cpu(h.op)
+	<< " " << le64_to_cpu(h.ino)
+	<< " seq " << le32_to_cpu(h.seq)
+	<< " caps " << cap_string(le32_to_cpu(h.caps)) 
+	<< " wanted" << cap_string(le32_to_cpu(h.wanted)) 
 	<< ")";
   }
   
   void decode_payload() {
-    int off = 0;
-    ::_decode(op, payload, off);
-    ::_decode(seq, payload, off);
-    ::_decode(inode, payload, off);
-    ::_decode(caps, payload, off);
-    ::_decode(wanted, payload, off);
-    ::_decode(mds, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(h, p);
   }
   void encode_payload() {
-    ::_encode(op, payload);
-    ::_encode(seq, payload);
-    ::_encode(inode, payload);
-    ::_encode(caps, payload);
-    ::_encode(wanted, payload);
-    ::_encode(mds, payload);
+    ::_encode_simple(h, payload);
   }
 };
 

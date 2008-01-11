@@ -1242,25 +1242,30 @@ void Client::handle_file_caps(MClientFileCaps *m)
   // did file size decrease?
   if ((old_caps & (CAP_FILE_RD|CAP_FILE_WR)) == 0 &&
       (new_caps & (CAP_FILE_RD|CAP_FILE_WR)) != 0 &&
-      in->inode.size > m->get_inode().size) {
-    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << dendl;
+      in->inode.size > (loff_t)m->get_size()) {
+    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_size() << dendl;
     
     // trim filecache?
     if (g_conf.client_oc)
-      in->fc.truncate(in->inode.size, m->get_inode().size);
+      in->fc.truncate(in->inode.size, m->get_size());
 
-    in->inode.size = in->file_wr_size = m->get_inode().size; 
+    in->inode.size = in->file_wr_size = m->get_size(); 
   }
 
   // update inode
-  in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
+  in->inode.size = m->get_size();      // might have updated size... FIXME this is overkill!
+  in->inode.mtime = m->get_mtime();
+  in->inode.atime = m->get_atime();
 
   // preserve our (possibly newer) file size, mtime
-  if (in->file_wr_size > in->inode.size)
-    m->get_inode().size = in->inode.size = in->file_wr_size;
-  if (in->file_wr_mtime > in->inode.mtime)
-    m->get_inode().mtime = in->inode.mtime = in->file_wr_mtime;
-
+  if (in->file_wr_size > in->inode.size) {
+    in->inode.size = in->file_wr_size;
+    m->set_size(in->file_wr_size);
+  }
+  if (in->file_wr_mtime > in->inode.mtime) {
+    in->inode.mtime = in->file_wr_mtime;
+    m->set_mtime(in->file_wr_mtime);
+  }
 
 
   if (g_conf.client_oc) {

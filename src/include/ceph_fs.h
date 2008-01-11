@@ -418,6 +418,18 @@ struct ceph_mds_reply_dirfrag {
 	__u32 dist[];
 } __attribute__ ((packed));
 
+/* client file caps */
+struct ceph_mds_file_caps {
+	__le32 op;
+	__le32 mds;
+	__le64 seq;
+	__le32 caps, wanted;
+	__le64 ino;
+	__le64 size;
+	struct ceph_timeval mtime, atime;
+} __attribute__ ((packed));
+
+/* client reconnect */
 struct ceph_mds_cap_reconnect {
 	__le32 wanted;
 	__le32 issued;

@@ -734,27 +734,27 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }
 
   // merge in atime?
-  if (m->get_inode().atime > in->inode.atime) {
-      dout(7) << "  taking atime " << m->get_inode().atime << " > " 
+  if (m->get_atime() > in->inode.atime) {
+      dout(7) << "  taking atime " << m->get_atime() << " > " 
               << in->inode.atime << " for " << *in << dendl;
-    in->inode.atime = m->get_inode().atime;
+    in->inode.atime = m->get_atime();
   }
   
   if ((has|had) & CAP_FILE_WR) {
     bool dirty = false;
 
     // mtime
-    if (m->get_inode().mtime > in->inode.mtime) {
-      dout(7) << "  taking mtime " << m->get_inode().mtime << " > " 
+    if (m->get_mtime() > in->inode.mtime) {
+      dout(7) << "  taking mtime " << m->get_mtime() << " > " 
               << in->inode.mtime << " for " << *in << dendl;
-      in->inode.mtime = m->get_inode().mtime;
+      in->inode.mtime = m->get_mtime();
       dirty = true;
     }
     // size
-    if (m->get_inode().size > in->inode.size) {
-      dout(7) << "  taking size " << m->get_inode().size << " > " 
+    if ((loff_t)m->get_size() > in->inode.size) {
+      dout(7) << "  taking size " << m->get_size() << " > " 
               << in->inode.size << " for " << *in << dendl;
-      in->inode.size = m->get_inode().size;
+      in->inode.size = m->get_size();
       dirty = true;
     }
 
