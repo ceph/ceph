@@ -499,7 +499,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 
 	/* client */
 	if (!sbinfo->sb_client) {
-		sbinfo->sb_client = ceph_get_client(&mount_args);
+		sbinfo->sb_client = ceph_create_client(&mount_args, sb);
 		if (IS_ERR(sbinfo->sb_client)) {
 			err = PTR_ERR(sbinfo->sb_client);
 			sbinfo->sb_client = 0;

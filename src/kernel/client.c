@@ -175,27 +175,18 @@ static struct ceph_client *get_client_monaddr(struct ceph_entity_addr *monaddr)
 }
 */
 
-struct ceph_client *ceph_get_client(struct ceph_mount_args *args)
+struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb)
 {
 	struct ceph_client *client = 0;
 	int ret;
-
-	/* existing, by fsid? */
-	/*
-	if (args->flags & CEPH_MOUNT_FSID) 
-		client = ceph_get_client_fsid(&args->fsid);
-	if (client)
-		return client;
-	*/
-	/* existing, by monitors? */
-	/* write me. */
 
 	/* create new client */
 	client = create_client(args);
 	if (IS_ERR(client))
 		return client;
 	atomic_inc(&client->nref);
-	
+	client->sb = sb;
+
 	/* request mount */
 	ret = mount(client, args);
 	if (ret < 0) {
@@ -277,6 +268,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
 		ceph_mdsc_handle_forward(&client->mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_FILECAPS:
+		ceph_handle_filecaps(&client->mdsc, msg);
 		break;
 
 		/* osd client */

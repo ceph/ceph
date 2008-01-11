@@ -74,7 +74,7 @@ void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
 
 
 /*
- * message handlers
+ * statfs
  */
 
 void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg *msg)
@@ -148,6 +148,5 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 
 	dout(20, "do_statfs waiting for reply\n");
 	wait_for_completion(&req.completion);
-
 	return 0;
 }

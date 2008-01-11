@@ -50,8 +50,8 @@ struct ceph_object {
 #define CEPH_INO_ROOT 1
 
 struct ceph_timeval {
-	__u32 tv_sec;
-	__u32 tv_usec;
+	__le32 tv_sec;
+	__le32 tv_usec;
 };
 
 /*
@@ -419,13 +419,26 @@ struct ceph_mds_reply_dirfrag {
 } __attribute__ ((packed));
 
 /* client file caps */
+enum {
+	CEPH_CAP_OP_GRANT,   /* mds->client grant */
+	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_RELEASE, /* mds->client release (*) */
+	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
+	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
+};
+  /* 
+   * (*) it's a bit counterintuitive, but the mds has to 
+   *  close the cap because the client isn't able to tell
+   *  if a concurrent open() would map to the same inode.
+   */
 struct ceph_mds_file_caps {
-	__le32 op;
-	__le32 mds;
 	__le64 seq;
 	__le32 caps, wanted;
 	__le64 ino;
 	__le64 size;
+	__le32 op;
+	__le32 migrate_mds;
+	__le32 migrate_seq;
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));
 

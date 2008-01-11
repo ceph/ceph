@@ -1117,8 +1117,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   mds_sessions[mds]++;
 
   // reap?
-  if (m->get_op() == MClientFileCaps::OP_IMPORT) {
-    int other = m->get_mds();
+  if (m->get_op() == CEPH_CAP_OP_IMPORT) {
+    int other = m->get_migrate_mds();
 
     /*
      * FIXME: there is a race here.. if the caps are exported twice in succession,
@@ -1157,7 +1157,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_op() == MClientFileCaps::OP_EXPORT) {
+  if (m->get_op() == CEPH_CAP_OP_EXPORT) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now exported/stale" << dendl;
     
     // move to stale list
@@ -1172,7 +1172,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // delayed reap?
     if (cap_reap_queue.count(in->ino()) &&
         cap_reap_queue[in->ino()].count(mds)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << dendl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds
+	      << " delayed reap on mds?FIXME?" << dendl;  /* FIXME */
       
       // process delayed reap
       handle_file_caps( cap_reap_queue[in->ino()][mds] );
@@ -1186,7 +1187,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // release?
-  if (m->get_op() == MClientFileCaps::OP_RELEASE) {
+  if (m->get_op() == CEPH_CAP_OP_RELEASE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
@@ -1220,7 +1221,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << dendl;
-    m->set_op(MClientFileCaps::OP_ACK);
+    m->set_op(CEPH_CAP_OP_ACK);
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst());
@@ -1359,7 +1360,7 @@ void Client::release_caps(Inode *in,
       // release (some of?) these caps
       it->second.caps = retain & it->second.caps;
       // note: tell mds _full_ wanted; it'll filter/behave based on what it is allowed to do
-      MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+      MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
 					       in->inode, 
                                                it->second.seq,
                                                it->second.caps,
@@ -1384,7 +1385,7 @@ void Client::update_caps_wanted(Inode *in)
   for (map<int,InodeCap>::iterator it = in->caps.begin();
        it != in->caps.end();
        it++) {
-    MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
 					     in->inode, 
                                              it->second.seq,
                                              it->second.caps,

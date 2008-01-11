@@ -151,6 +151,41 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 }
 
 
+/* caps */
+
+void ceph_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct ceph_client *client = ceph_sbinfo(sb)->sb_client;
+	struct inode *inode;
+	struct ceph_mds_file_caps *h;
+	int mds = msg->hdr.src.name.num;
+	int op;
+	__u64 ino;
+	
+	dout(10, "handle_filecaps from mds%d\n", mds);
+	
+	/* decode */
+	if (msg->front.iov_len != sizeof(*h))
+		goto bad;
+	h = msg->front.iov_base;
+	op = le32_to_cpu(h->op);
+	ino = le64_to_cpu(h->ino);
+
+	/* lookup ino */
+	inode = ilookup(sb, ino);
+	dout(20, "op is %d, inode is %llx %p\n", op, ino, inode);
+
+	switch (op) {
+		
+	}
+
+	return;
+bad:
+	dout(10, "corrupt filecaps message\n");
+}
+
+
 
 
 /*

@@ -139,6 +139,7 @@ extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			      struct kstat *stat);
+extern void ceph_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 
 
 /* addr.c */

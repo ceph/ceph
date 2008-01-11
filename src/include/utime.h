@@ -23,10 +23,8 @@
 // --------
 // utime_t
 
-typedef struct ceph_timeval _utime_t;
-
 class utime_t {
-  _utime_t tv;
+  struct ceph_timeval tv;
 
   friend class Clock;
  
@@ -42,7 +40,7 @@ class utime_t {
   utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
   //utime_t(time_t s) { tv.tv_sec = s; tv.tv_usec = 0; }
   utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
-  utime_t(const _utime_t &v) : tv(v) {}
+  utime_t(const struct ceph_timeval &v) : tv(v) {}
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }

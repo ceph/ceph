@@ -21,23 +21,13 @@
 
 class MClientFileCaps : public Message {
  public:
-  static const int OP_GRANT   = 0;  // mds->client grant.
-  static const int OP_ACK     = 1;  // client->mds ack (if prior grant was a recall)
-  static const int OP_RELEASE = 2;  // mds->client release cap (*)
-  static const int OP_EXPORT  = 3;  // mds has exported the cap
-  static const int OP_IMPORT  = 4;  // mds has imported the cap from get_mds()
-  /* 
-   * (*) it's a bit counterintuitive, but the mds has to 
-   *  close the cap because the client isn't able to tell
-   *  if a concurrent open() would map to the same inode.
-   */
   static const char* get_opname(int op) {
     switch (op) {
-    case OP_GRANT: return "grant";
-    case OP_ACK: return "ack";
-    case OP_RELEASE: return "release";
-    case OP_EXPORT: return "export";
-    case OP_IMPORT: return "import";
+    case CEPH_CAP_OP_GRANT: return "grant";
+    case CEPH_CAP_OP_ACK: return "ack";
+    case CEPH_CAP_OP_RELEASE: return "release";
+    case CEPH_CAP_OP_EXPORT: return "export";
+    case CEPH_CAP_OP_IMPORT: return "import";
     default: assert(0); return 0;
     }
   }
@@ -56,13 +46,15 @@ class MClientFileCaps : public Message {
   utime_t get_atime() { return utime_t(h.atime); }
 
   // for cap migration
-  int       get_mds() { return le32_to_cpu(h.mds); }
+  int       get_migrate_mds() { return le32_to_cpu(h.migrate_mds); }
+  int       get_migrate_seq() { return le32_to_cpu(h.migrate_seq); }
   int       get_op() { return le32_to_cpu(h.op); }
 
   void set_caps(int c) { h.caps = cpu_to_le32(c); }
   void set_wanted(int w) { h.wanted = cpu_to_le32(w); }
 
-  void set_mds(int m) { h.mds = cpu_to_le32(m); }
+  void set_migrate_mds(int m) { h.migrate_mds = cpu_to_le32(m); }
+  void set_migrate_seq(int m) { h.migrate_seq = cpu_to_le32(m); }
   void set_op(int o) { h.op = cpu_to_le32(o); }
 
   void set_size(loff_t s) { h.size = cpu_to_le64(s); }
@@ -75,15 +67,17 @@ class MClientFileCaps : public Message {
                   long seq,
                   int caps,
                   int wanted,
-                  int mds=0) :
+                  int mmds=0,
+		  int mseq=0) :
     Message(CEPH_MSG_CLIENT_FILECAPS) {
-    h.op = cpu_to_le32(op);
-    h.mds = cpu_to_le32(mds);
     h.seq = cpu_to_le64(seq);
     h.caps = cpu_to_le32(caps);
     h.wanted = cpu_to_le32(wanted);
     h.ino = cpu_to_le64(inode.ino);
     h.size = cpu_to_le64(inode.size);
+    h.op = cpu_to_le32(op);
+    h.migrate_mds = cpu_to_le32(mmds);
+    h.migrate_seq = cpu_to_le32(mseq);
     h.mtime = inode.mtime.tv_ref();
     h.atime = inode.atime.tv_ref();
   }

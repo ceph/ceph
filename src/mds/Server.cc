@@ -321,7 +321,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
+	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.

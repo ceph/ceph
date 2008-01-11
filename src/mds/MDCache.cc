@@ -2657,13 +2657,13 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   
   // send REAP
   // FIXME client session weirdness.
-  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
+  MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
 					      in->client_caps[client].get_last_seq(),
 					      in->client_caps[client].pending(),
 					      in->client_caps[client].wanted());
   
-  reap->set_mds( frommds ); // reap from whom?
+  reap->set_migrate_mds(frommds); // reap from whom?
   mds->messenger->send_message(reap, mds->clientmap.get_inst(client));
 }
 
