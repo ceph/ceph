@@ -29,13 +29,13 @@ static int ceph_write_inode(struct inode * inode, int unused)
 	dout(30, "ceph_write_inode\n");
 	return 0;
 }
-
+#if 0
 static void ceph_delete_inode(struct inode * inode)
 {
 	dout(30, "ceph_delete_inode\n");
 	return;
 }
-
+#endif
 static void ceph_clear_inode(struct inode * inode)
 {
 	dout(30, "ceph_clear_inode\n");
@@ -166,7 +166,7 @@ static const struct super_operations ceph_sops = {
 	.read_inode	= ceph_read_inode,
 	.write_inode	= ceph_write_inode,
 	.clear_inode    = ceph_clear_inode,
-	.delete_inode	= ceph_delete_inode,
+/* 	.delete_inode	= ceph_delete_inode, */
 	.put_super	= ceph_put_super,
 	.write_super	= ceph_write_super,
 	.show_options   = ceph_show_options,
