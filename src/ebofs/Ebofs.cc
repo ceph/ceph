@@ -201,7 +201,7 @@ int Ebofs::mkfs()
   limbo_blocks = 0;
 
   // create first noderegion
-  Extent nr;
+  extent_t nr;
   nr.start = 2;
   nr.length = 20+ (num_blocks / 1000);
   if (nr.length < 10) nr.length = 10;
@@ -236,7 +236,7 @@ int Ebofs::mkfs()
   co_tab = new Table<coll_pobject_t, bool>( nodepool, empty );
 
   // add free space
-  Extent left;
+  extent_t left;
   left.start = nodepool.usemap_odd.end();
   left.length = num_blocks - left.start;
   dout(10) << "mkfs: free data blocks at " << left << dendl;
@@ -591,11 +591,11 @@ void Ebofs::alloc_more_node_space()
   if (nodepool.num_regions() < EBOFS_MAX_NODE_REGIONS) {
     int want = nodepool.get_num_total();
 
-    Extent ex;
+    extent_t ex;
     allocator.allocate(ex, want, 2);
     dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << dendl;
 
-    Extent even, odd;
+    extent_t even, odd;
     unsigned ulen = nodepool.get_usemap_len(nodepool.get_num_total() + ex.length);
     allocator.allocate(even, ulen, 2);
     allocator.allocate(odd, ulen, 2);
@@ -731,8 +731,8 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off, csum_t csum)
   on->extent_map.clear();
   block_t n = 0;
   for (unsigned i=0; i<eo->num_extents; i++) {
-    Extent ex = *((Extent*)p);
-    p += sizeof(Extent);
+    extent_t ex = *((extent_t*)p);
+    p += sizeof(extent_t);
     on->extent_map[n].ex = ex;
     if (ex.start) {
       on->extent_map[n].csum.resize(ex.length);
@@ -746,7 +746,7 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off, csum_t csum)
   
   // parse bad byte extents
   for (unsigned i=0; i<eo->num_bad_byte_extents; i++) {
-    Extent ex = *((Extent*)p);
+    extent_t ex = *((extent_t*)p);
     p += sizeof(ex);
     on->bad_byte_extents.insert(ex.start, ex.length);
     dout(15) << "decode_onode " << *on << " bad byte ex " << ex << dendl;
@@ -880,8 +880,8 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
        i != on->extent_map.end();
        i++) {
     ExtentCsum &o = i->second;
-    bl.copy_in(off, sizeof(Extent), (char*)&(o.ex));
-    off += sizeof(Extent);
+    bl.copy_in(off, sizeof(extent_t), (char*)&(o.ex));
+    off += sizeof(extent_t);
     if (o.ex.start) {
       bl.copy_in(off, sizeof(csum_t)*o.ex.length, (char*)&o.csum[0]);
       off += sizeof(csum_t)*o.ex.length;
@@ -893,7 +893,7 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   for (map<off_t,off_t>::iterator p = on->bad_byte_extents.m.begin();
        p != on->bad_byte_extents.m.end();
        p++) {
-    Extent o(p->first, p->second);
+    extent_t o = {p->first, p->second};
     bl.copy_in(off, sizeof(o), (char*)&o);
     off += sizeof(o);
     dout(15) << "encode_onode " << *on  << " bad byte ex " << o << dendl;
@@ -1546,7 +1546,7 @@ void Ebofs::alloc_write(Onode *on,
        i != alloc.m.end();
        i++) {
     // get old region
-    vector<Extent> old;
+    vector<extent_t> old;
     on->map_extents(i->first, i->second, old, 0);
     for (unsigned o=0; o<old.size(); o++) 
       if (old[o].start)
@@ -1592,7 +1592,7 @@ void Ebofs::alloc_write(Onode *on,
         continue;
       }
 
-      vector<Extent> old;
+      vector<extent_t> old;
       on->map_extents(bh->start(), bh->length(), old, 0);
       assert(old.size() == 1);
 
@@ -1657,7 +1657,7 @@ void Ebofs::alloc_write(Onode *on,
     block_t left = i->second;
     block_t cur = i->first;
     while (left > 0) {
-      Extent ex;
+      extent_t ex;
       allocator.allocate(ex, left, Allocator::NEAR_LAST_FWD);
       dout(10) << "alloc_write got " << ex << " for object offset " << cur << dendl;
       on->set_extent(cur, ex);      // map object to new region
@@ -1795,7 +1795,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
     bh->epoch_modified = super_epoch;
 
     // break bh over disk extent boundaries
-    vector<Extent> exv;
+    vector<extent_t> exv;
     on->map_extents(bh->start(), bh->length(), exv, 0);
     dout(10) << "apply_write bh " << *bh << " maps to " << exv << dendl;
     if (exv.size() > 1) {
@@ -2135,12 +2135,12 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
   }
 
   // free old blocks
-  vector<Extent> old;
+  vector<extent_t> old;
   on->map_extents(bstart, blen, old, 0);
   for (unsigned i=0; i<old.size(); i++)
     if (old[i].start)
       allocator.release(old[i]);
-  Extent hole(0, blen);      
+  extent_t hole = {0, blen};
   on->set_extent(bstart, hole);
   
   // adjust uncom
@@ -3019,7 +3019,7 @@ int Ebofs::_truncate(pobject_t oid, off_t size)
     block_t nblocks = 0;
     if (size) nblocks = 1 + (size-1) / EBOFS_BLOCK_SIZE;
     if (on->last_block > nblocks) {
-      vector<Extent> extra;
+      vector<extent_t> extra;
       on->truncate_extents(nblocks, extra);
       for (unsigned i=0; i<extra.size(); i++)
 	if (extra[i].start)
@@ -3954,7 +3954,7 @@ void Ebofs::_export_freelist(bufferlist& bl)
       while (1) {
         assert(cursor.current().value > 0);
         
-        Extent ex(cursor.current().key, cursor.current().value);
+        extent_t ex = {cursor.current().key, cursor.current().value};
         dout(10) << "_export_freelist " << ex << dendl;
         bl.append((char*)&ex, sizeof(ex));
         if (cursor.move_right() <= 0) break;
@@ -3971,8 +3971,8 @@ void Ebofs::_import_freelist(bufferlist& bl)
   limbo_tab->clear();
 
   // import!
-  int num = bl.length() / sizeof(Extent);
-  Extent *p = (Extent*)bl.c_str();
+  int num = bl.length() / sizeof(extent_t);
+  extent_t *p = (extent_t*)bl.c_str();
   for (int i=0; i<num; i++) {
     dout(10) << "_import_freelist " << p[i] << dendl;
     allocator._release_loner(p[i]);

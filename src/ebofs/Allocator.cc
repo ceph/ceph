@@ -80,7 +80,7 @@ void Allocator::dump_freelist()
 }
 
 
-int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, int dir)
+int Allocator::find(extent_t& ex, int bucket, block_t num, block_t near, int dir)
 {
   Table<block_t,block_t>::Cursor cursor(fs->free_tab[bucket]);
   bool found = false;
@@ -113,7 +113,7 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, int dir)
   return -1;
 }
 
-int Allocator::allocate(Extent& ex, block_t num, block_t near)
+int Allocator::allocate(extent_t& ex, block_t num, block_t near)
 {
   //dump_freelist();
 
@@ -143,7 +143,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
             // to the left
             if (ex.start + ex.length - num <= near) {
               // by a lot.  take right-most portion.
-              Extent left;
+              extent_t left;
               left.start = ex.start;
               left.length = ex.length - num;
               ex.start += left.length;
@@ -152,7 +152,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
               _release_loner(left);
             } else {
               // take middle part.
-              Extent left,right;
+              extent_t left,right;
               left.start = ex.start;
               left.length = near - ex.start;
               ex.start = near;
@@ -165,7 +165,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
           }
           else {
             // to the right.  take left-most part.
-            Extent right;
+            extent_t right;
             right.start = ex.start + num;
             right.length = ex.length - num;
             ex.length = num;
@@ -210,7 +210,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
   return -1;
 }
 
-int Allocator::_release_into_limbo(Extent& ex)
+int Allocator::_release_into_limbo(extent_t& ex)
 {
   dout(10) << "_release_into_limbo " << ex << dendl;
   dout(10) << "limbo is " << limbo << dendl;
@@ -220,7 +220,7 @@ int Allocator::_release_into_limbo(Extent& ex)
   return 0;
 }
 
-int Allocator::release(Extent& ex)
+int Allocator::release(extent_t& ex)
 {
   if (g_conf.ebofs_cloneable)
     return alloc_dec(ex);
@@ -251,7 +251,7 @@ int Allocator::release_limbo()
     Table<block_t,block_t>::Cursor cursor(fs->limbo_tab);
     fs->limbo_tab->find(0, cursor);
     while (1) {
-      Extent ex(cursor.current().key, cursor.current().value);
+      extent_t ex = {cursor.current().key, cursor.current().value};
       dout(20) << "release_limbo  ex " << ex << dendl;
 
       fs->limbo_blocks -= ex.length;
@@ -268,7 +268,7 @@ int Allocator::release_limbo()
 
 
 /*
-int Allocator::_alloc_loner_inc(Extent& ex)
+int Allocator::_alloc_loner_inc(extent_t& ex)
 {
   Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
   
@@ -288,7 +288,7 @@ int Allocator::_alloc_loner_inc(Extent& ex)
   return 0;
 }
 
-int Allocator::_alloc_loner_dec(Extent& ex)
+int Allocator::_alloc_loner_dec(extent_t& ex)
 {
   Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
   
@@ -313,7 +313,7 @@ int Allocator::_alloc_loner_dec(Extent& ex)
 */
 
 
-int Allocator::alloc_inc(Extent ex)
+int Allocator::alloc_inc(extent_t ex)
 {
   dout(10) << "alloc_inc " << ex << dendl;
 
@@ -474,7 +474,7 @@ int Allocator::alloc_inc(Extent ex)
 }
 
 
-int Allocator::alloc_dec(Extent ex)
+int Allocator::alloc_dec(extent_t ex)
 {
   dout(10) << "alloc_dec " << ex << dendl;
 
@@ -530,7 +530,7 @@ int Allocator::alloc_dec(Extent ex)
 		   << " " << ref << " -> " << ref-1
 		   << dendl;
 	} else {
-	  Extent r(ex.start, l);
+	  extent_t r = {ex.start, l};
 	  _release_into_limbo(r);
 	}
 		
@@ -586,7 +586,7 @@ int Allocator::alloc_dec(Extent ex)
 	  if (ex.length == 0) break;
 	  cursor.move_right();
 	} else {
-	  Extent r(cursor.current().key, cursor.current().value.first);
+	  extent_t r = {cursor.current().key, cursor.current().value.first};
 	  _release_into_limbo(r);
 
 	  ex.start += cursor.current().value.first;
@@ -634,7 +634,7 @@ int Allocator::alloc_dec(Extent ex)
  * release extent into freelist
  * WARNING: *ONLY* use this if you _know_ there are no adjacent free extents
  */
-int Allocator::_release_loner(Extent& ex) 
+int Allocator::_release_loner(extent_t& ex) 
 {
   assert(ex.length > 0);
   int b = pick_bucket(ex.length);
@@ -647,12 +647,12 @@ int Allocator::_release_loner(Extent& ex)
  * release extent into freelist
  * look for any adjacent extents and merge with them!
  */
-int Allocator::_release_merge(Extent& orig) 
+int Allocator::_release_merge(extent_t& orig) 
 {
   dout(15) << "_release_merge " << orig << dendl;
   assert(orig.length > 0);
 
-  Extent newex = orig;
+  extent_t newex = orig;
   
   // one after us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {

@@ -74,7 +74,7 @@ inline __u64 calc_csum_realign(const char *start, int len, int off) {
   const char *end = start + len;
   __u64 csum = 0;
   
-  if (((unsigned long)start & 7) == (off & 7))
+  if (((unsigned long)start & 7) == ((unsigned long)off & 7))
     return calc_csum_unaligned(start, len);     // lucky us, start and off alignment matches.
 
   // do it the slow way.  yucky!

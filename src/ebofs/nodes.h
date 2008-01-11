@@ -134,9 +134,9 @@ class NodePool {
   hash_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
   
  public:
-  vector<Extent> region_loc;    // region locations
-  Extent         usemap_even;
-  Extent         usemap_odd;
+  vector<extent_t> region_loc;    // region locations
+  extent_t         usemap_even;
+  extent_t         usemap_odd;
 
   buffer::ptr usemap_data;
   bitmapper  usemap_bits;
@@ -201,7 +201,7 @@ class NodePool {
   unsigned num_regions() { return region_loc.size(); }
 
   // the caller had better adjust usemap locations...
-  void add_region(Extent ex) {
+  void add_region(extent_t ex) {
     assert(region_loc.size() < EBOFS_MAX_NODE_REGIONS);
     region_loc.push_back(ex);
     free.insert(ex.start, ex.length);
@@ -275,7 +275,7 @@ class NodePool {
 
   int read_usemap_and_clean_nodes(BlockDevice& dev, version_t epoch) {
     // read map
-    Extent loc;
+    extent_t loc;
     if (epoch & 1) 
       loc = usemap_odd;
     else 
@@ -343,7 +343,7 @@ class NodePool {
  public:
   int write_usemap(BlockDevice& dev, version_t version) {
     // alloc
-    Extent loc;
+    extent_t loc;
     if (version & 1) 
       loc = usemap_odd;
     else 

@@ -225,7 +225,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       dout(10) << "rx_finish  partial -> tx on " << *bh << dendl;      
 
       // see what block i am
-      vector<Extent> exv;
+      vector<extent_t> exv;
       on->map_extents(bh->start(), 1, exv, 0);
       assert(exv.size() == 1);
       assert(exv[0].start != 0);
@@ -400,7 +400,7 @@ int ObjectCache::try_map_read(block_t start, block_t len)
     // at end?
     if (p == data.end()) {
       // rest is a miss.
-      vector<Extent> exv;
+      vector<extent_t> exv;
       on->map_extents(cur, left,   // no prefetch here!
                       exv, 0);
       for (unsigned i=0; i<exv.size(); i++)
@@ -444,7 +444,7 @@ int ObjectCache::try_map_read(block_t start, block_t len)
     } else if (p->first > cur) {
       // gap.. miss
       block_t next = p->first;
-      vector<Extent> exv;
+      vector<extent_t> exv;
       on->map_extents(cur, 
                       MIN(next-cur, left),   // no prefetch
                       exv, 0);
@@ -489,7 +489,7 @@ int ObjectCache::map_read(block_t start, block_t len,
     // at end?
     if (p == data.end()) {
       // rest is a miss.
-      vector<Extent> exv;
+      vector<extent_t> exv;
       on->map_extents(cur, 
                       //MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //on->object_blocks-cur),  
@@ -547,7 +547,7 @@ int ObjectCache::map_read(block_t start, block_t len,
     } else if (p->first > cur) {
       // gap.. miss
       block_t next = p->first;
-      vector<Extent> exv;
+      vector<extent_t> exv;
       on->map_extents(cur, 
                       //MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
                       //                on->object_blocks-cur)),  
@@ -606,7 +606,7 @@ int ObjectCache::map_write(block_t start, block_t len,
     block_t max = left;
 
     // based on disk extent boundary ...
-    vector<Extent> exv;
+    vector<extent_t> exv;
     on->map_extents(cur, max, exv, 0);
     if (exv.size() > 1) 
       max = exv[0].length;
@@ -967,7 +967,7 @@ void ObjectCache::scrub_csums()
     if (bh->is_clean() && bh->data.length() == 0) continue;  // hole.
     if (bh->is_clean() || bh->is_tx()) {
       for (unsigned i=0; i<bh->length(); i++) {
-	vector<Extent> exv;
+	vector<extent_t> exv;
 	on->map_extents(bh->start()+i, 1, exv, 0);
 	assert(exv.size() == 1);
 	if (exv[0].start == 0) continue;  // hole.
@@ -1068,11 +1068,11 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   }
   
   // get extent.  there should be only one!
-  vector<Extent> exv;
+  vector<extent_t> exv;
   on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
   assert(exv[0].start != 0); // not a hole.
-  Extent ex = exv[0];
+  extent_t ex = exv[0];
 
   if (from) {  // force behavior, used for reading partials
     dout(10) << "bh_read  forcing read from block " << from << " (for a partial)" << dendl;
@@ -1121,11 +1121,11 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   mark_tx(bh);
   
   // get extents
-  vector<Extent> exv;
+  vector<extent_t> exv;
   on->map_extents(bh->start(), bh->length(), exv, 0);
   assert(exv.size() == 1);
   assert(exv[0].start != 0);
-  Extent ex = exv[0];
+  extent_t ex = exv[0];
 
   if (shouldbe)
     assert(ex.length == 1 && ex.start == shouldbe);
