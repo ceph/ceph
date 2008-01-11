@@ -11,8 +11,8 @@ int ceph_super_debug = 50;
 #include "super.h"
 #include "ktcp.h"
 
-
-
+#include <linux/statfs.h>
+#include "mon_client.h"
 
 /*
  * super ops
@@ -49,7 +49,26 @@ static void ceph_put_super(struct super_block *s)
 
 static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
+	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
+	struct ceph_statfs st;
+	int err;
+
 	dout(30, "ceph_statfs\n");
+	if ((err = ceph_monc_do_statfs(&client->monc, &st)) < 0)
+		return err;
+
+	/* fill in kstatfs */
+	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
+	buf->f_bsize = 4096;
+	buf->f_blocks = st.f_total / 4;
+	buf->f_bfree = st.f_free / 4;
+	buf->f_bavail = st.f_avail / 4;
+	buf->f_files = st.f_objects;
+	buf->f_ffree = -1;
+	/* fsid? */
+	buf->f_namelen = 1024;
+	buf->f_frsize = 4096;
+	
 	return 0;
 }
 

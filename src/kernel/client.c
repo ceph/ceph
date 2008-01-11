@@ -82,7 +82,7 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	cl->msgr->prepare_pages = ceph_osdc_prepare_pages;
 	
 	cl->whoami = -1;
-	ceph_monc_init(&cl->monc);
+	ceph_monc_init(&cl->monc, cl);
 	ceph_mdsc_init(&cl->mdsc, cl);
 	ceph_osdc_init(&cl->osdc, cl);
 
@@ -255,6 +255,11 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		handle_monmap(client, msg);
 		if (!had && client->monc.monmap.epoch)
 			got_first_map(client, 0);
+		break;
+
+		/* mon client */
+	case CEPH_MSG_STATFS_REPLY:
+		ceph_monc_handle_statfs_reply(&client->monc, msg);
 		break;
 
 		/* mds client */

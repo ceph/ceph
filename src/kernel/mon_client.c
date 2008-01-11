@@ -55,10 +55,13 @@ static int pick_mon(struct ceph_mon_client *monc, int notmon)
 }
 
 
-void ceph_monc_init(struct ceph_mon_client *monc)
+void ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 {
 	dout(5, "ceph_monc_init\n");
 	memset(monc, 0, sizeof(*monc));
+	monc->client = cl;
+	spin_lock_init(&monc->lock);
+	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_KERNEL);
 }
 
 
@@ -77,8 +80,74 @@ void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
 void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg *msg)
 {
 	__u64 tid;
-	struct ceph_statfs *st;
-
-	dout(10, "handle_statfs_reply %p\n", msg);
+	struct ceph_mon_statfs_request *req;
+	void *p = msg->front.iov_base;
+	void *end = p + msg->front.iov_len;
+	int err;
 	
+	if ((err = ceph_decode_64(&p, end, &tid)) < 0)
+		goto bad;
+	dout(10, "handle_statfs_reply %p tid %llu\n", msg, tid);
+
+	spin_lock(&monc->lock);
+	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
+	dout(30, "got req %p\n", req);
+	if (req) {
+		if ((err = ceph_decode_64(&p, end, &req->buf->f_total)) < 0)
+			goto bad;
+		if ((err = ceph_decode_64(&p, end, &req->buf->f_free)) < 0)
+			goto bad;
+		if ((err = ceph_decode_64(&p, end, &req->buf->f_avail)) < 0)
+			goto bad;
+		if ((err = ceph_decode_64(&p, end, &req->buf->f_objects)) < 0)
+			goto bad;
+		dout(30, "decoded ok\n");
+	}
+	radix_tree_delete(&monc->statfs_request_tree, tid);
+	spin_unlock(&monc->lock);
+	if (req)
+		complete(&req->completion);
+	return;
+bad:
+	dout(10, "corrupt statfs reply\n");
+}
+
+int send_statfs(struct ceph_mon_client *monc, u64 tid)
+{
+	struct ceph_msg *msg;
+	int mon = pick_mon(monc, -1);
+
+	dout(10, "send_statfs to mon%d tid %llu\n", mon, tid);
+	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(tid), 0, 0, 0);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	*(__le64*)msg->front.iov_base = cpu_to_le64(tid);
+	msg->hdr.dst = monc->monmap.mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, BASE_DELAY_INTERVAL);
+	return 0;
+}
+
+int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
+{
+	struct ceph_mon_statfs_request req;
+	int err;
+
+	req.buf = buf;
+	init_completion(&req.completion);
+
+	/* register request */
+	spin_lock(&monc->lock);
+	req.tid = ++monc->last_tid;
+	req.last_attempt = jiffies;
+	radix_tree_insert(&monc->statfs_request_tree, req.tid, &req);
+	spin_unlock(&monc->lock);
+	
+	/* send request */
+	if ((err = send_statfs(monc, req.tid)) < 0)
+		return err;
+
+	dout(20, "do_statfs waiting for reply\n");
+	wait_for_completion(&req.completion);
+
+	return 0;
 }
