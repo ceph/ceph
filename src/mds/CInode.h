@@ -448,7 +448,7 @@ public:
     linklock.replicate_relax();
     dirfragtreelock.replicate_relax();
 
-    if (get_caps_issued() & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0) 
+    if (get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER) == 0) 
       filelock.replicate_relax();
 
     dirlock.replicate_relax();

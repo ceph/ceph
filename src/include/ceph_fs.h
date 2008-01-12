@@ -419,9 +419,17 @@ struct ceph_mds_reply_dirfrag {
 } __attribute__ ((packed));
 
 /* client file caps */
+#define CEPH_CAP_PIN       1  /* no specific capabilities beyond the pin */
+#define CEPH_CAP_RDCACHE   2  /* client can cache reads */
+#define CEPH_CAP_RD        4  /* client can read */
+#define CEPH_CAP_WR        8  /* client can write */
+#define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
+#define CEPH_CAP_WREXTEND 32  /* client can extend eof */
+#define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
 	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
 	CEPH_CAP_OP_RELEASE, /* mds->client release (*) */
 	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
@@ -432,13 +440,12 @@ enum {
    *  if a concurrent open() would map to the same inode.
    */
 struct ceph_mds_file_caps {
-	__le64 seq;
+	__le32 op;
+	__le32 seq;
 	__le32 caps, wanted;
 	__le64 ino;
 	__le64 size;
-	__le32 op;
-	__le32 migrate_mds;
-	__le32 migrate_seq;
+	__le32 migrate_mds, migrate_seq;
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));
 

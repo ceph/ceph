@@ -21,6 +21,7 @@ enum {
 	CEPH_MDS_SESSION_CLOSING = 4
 };
 struct ceph_mds_session {
+	int               s_mds;
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
 	struct list_head  s_caps;
@@ -97,6 +98,10 @@ extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+
+extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+struct ceph_inode_info;
+extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
 extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 

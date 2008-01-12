@@ -47,7 +47,9 @@ int ceph_open(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_inode_cap *cap;
-	struct ceph_file_info *fi;
+	struct ceph_file_info *cf;
+	int mode;
+	int wanted;
 
 	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
 	cap = ceph_find_cap(inode, 0);
@@ -57,27 +59,41 @@ int ceph_open(struct inode *inode, struct file *file)
 			return PTR_ERR(cap);
 	}
 	
-	fi = kzalloc(sizeof(*fi), GFP_KERNEL);
-	if (fi == NULL)
+	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
+	if (cf == NULL)
 		return -ENOMEM;
-	file->private_data = fi;
+	file->private_data = cf;
 
 	atomic_inc(&ci->i_cap_count);
-	dout(5, "ceph_open success\n");
+
+	mode = ceph_file_mode(file->f_flags);
+	ci->i_nr_by_mode[mode]++;
+	wanted = ceph_caps_wanted(ci);
+	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
+
+	dout(5, "ceph_open success, %lx %p\n", inode->i_ino, ilookup(inode->i_sb, inode->i_ino));
 	return 0;
 }
 
-int ceph_release(struct inode *inode, struct file *filp)
+int ceph_release(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_file_info *fi = filp->private_data;
-
-	dout(5, "ceph_release inode %p filp %p\n", inode, filp);
+	struct ceph_file_info *cf = file->private_data;
+	int mode, wanted;
+	
+	dout(5, "ceph_release inode %p file %p\n", inode, file);
 	atomic_dec(&ci->i_cap_count);
+	
+	if (cf->rinfo.reply) 
+		ceph_mdsc_destroy_reply_info(&cf->rinfo);
+	kfree(cf);
 
-	if (fi->rinfo.reply) 
-		ceph_mdsc_destroy_reply_info(&fi->rinfo);
-	kfree(fi);
+	mode = ceph_file_mode(file->f_flags);
+	ci->i_nr_by_mode[mode]--;
+	wanted = ceph_caps_wanted(ci);
+	dout(10, "mode %d wanted %d was %d\n", mode, wanted, ci->i_cap_wanted);
+	if (wanted != ci->i_cap_wanted)
+		ceph_mdsc_update_cap_wanted(ci, wanted);
 
 	return 0;
 }

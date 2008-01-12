@@ -53,8 +53,8 @@ class FileCache {
   }
 
   // waiters/waiting
-  bool can_read() { return latest_caps & CAP_FILE_RD; }
-  bool can_write() { return latest_caps & CAP_FILE_WR; }
+  bool can_read() { return latest_caps & CEPH_CAP_RD; }
+  bool can_write() { return latest_caps & CEPH_CAP_WR; }
   bool all_safe();// { return num_unsafe == 0; }
 
   void add_safe_waiter(Context *c);

@@ -51,7 +51,10 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_frag_map[0].mds = 0; // FIXME
 	
 	ci->i_nr_caps = 0;
-
+	for (i=0; i<4; i++)
+		ci->i_nr_by_mode[i] = 0;
+	ci->i_cap_wanted = 0;
+	
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_nsec = 0;
@@ -103,6 +106,16 @@ struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want)
 	return 0;
 }
 
+static struct ceph_inode_cap *get_cap_for_mds(struct inode *inode, int mds)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int i;
+	for (i=0; i<ci->i_nr_caps; i++) 
+		if (ci->i_caps[i].mds == mds) 
+			return &ci->i_caps[i];
+	return 0;
+}
+
 
 struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
 {
@@ -151,40 +164,59 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 }
 
 
-/* caps */
-
-void ceph_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+/*
+ * 0 - ok
+ * 1 - send the msg back to mds
+ */
+int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session)
 {
-	struct super_block *sb = mdsc->client->sb;
-	struct ceph_client *client = ceph_sbinfo(sb)->sb_client;
-	struct inode *inode;
-	struct ceph_mds_file_caps *h;
-	int mds = msg->hdr.src.name.num;
-	int op;
-	__u64 ino;
-	
-	dout(10, "handle_filecaps from mds%d\n", mds);
-	
-	/* decode */
-	if (msg->front.iov_len != sizeof(*h))
-		goto bad;
-	h = msg->front.iov_base;
-	op = le32_to_cpu(h->op);
-	ino = le64_to_cpu(h->ino);
+	struct ceph_inode_cap *cap;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int mds = session->s_mds;
+	int seq = le32_to_cpu(grant->seq);
+	int newcaps;
 
-	/* lookup ino */
-	inode = ilookup(sb, ino);
-	dout(20, "op is %d, inode is %llx %p\n", op, ino, inode);
+	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 
-	switch (op) {
-		
+	/* unwanted? */
+	if (ceph_caps_wanted(ci) == 0) {
+		dout(10, "wanted=0, reminding mds\n");
+		grant->wanted = cpu_to_le32(0);
+		return 1; /* ack */
 	}
 
-	return;
-bad:
-	dout(10, "corrupt filecaps message\n");
-}
+	/* new cap? */
+	dout(10, "1\n");
+	cap = get_cap_for_mds(inode, mds);
+	dout(10, "2\n");
+	if (!cap) {
+		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
+		cap = ceph_add_cap(inode, mds, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
+		return 0;
+	} 
 
+	/* revocation? */
+	dout(10, "3\n");
+	newcaps = le32_to_cpu(grant->caps);
+	dout(10, "4\n");
+	if (cap->caps & ~newcaps) {
+		dout(10, "revocation: %d -> %d\n", cap->caps, newcaps);
+		/* FIXME FIXME FIXME DO STUFF HERE */
+		/* blindly ack for now: */
+		cap->caps = newcaps;
+		return 1; /* ack */
+	}
+	
+	/* grant or no-op */
+	dout(10, "5\n");
+	if (cap->caps == newcaps) {
+		dout(10, "no-op: %d -> %d\n", cap->caps, newcaps);
+	} else {
+		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
+		cap->caps = newcaps;
+	}
+	return 0;	
+}
 
 
 

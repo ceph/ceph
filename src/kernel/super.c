@@ -425,6 +425,7 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	int frommds;
 	int err;
 	struct ceph_inode_cap *cap;
+	struct ceph_inode_info *ci;
 	
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
@@ -432,7 +433,7 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	reqhead = req->front.iov_base;
-	reqhead->args.open.flags = 0;
+	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return err;
@@ -454,6 +455,8 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 		err = PTR_ERR(cap);
 		goto out;
 	}
+	ci = ceph_inode(inode);
+	ci->i_nr_by_mode[FILE_MODE_PIN]++;
 
 	root = d_alloc_root(inode);
 	if (root == NULL) {

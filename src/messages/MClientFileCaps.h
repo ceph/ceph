@@ -38,7 +38,7 @@ class MClientFileCaps : public Message {
  public:
   int       get_caps() { return le32_to_cpu(h.caps); }
   int       get_wanted() { return le32_to_cpu(h.wanted); }
-  capseq_t  get_seq() { return le64_to_cpu(h.seq); }
+  capseq_t  get_seq() { return le32_to_cpu(h.seq); }
 
   inodeno_t get_ino() { return le64_to_cpu(h.ino); }
   __u64 get_size() { return le64_to_cpu(h.size);  }
@@ -70,12 +70,12 @@ class MClientFileCaps : public Message {
                   int mmds=0,
 		  int mseq=0) :
     Message(CEPH_MSG_CLIENT_FILECAPS) {
-    h.seq = cpu_to_le64(seq);
+    h.op = cpu_to_le32(op);
+    h.seq = cpu_to_le32(seq);
     h.caps = cpu_to_le32(caps);
     h.wanted = cpu_to_le32(wanted);
     h.ino = cpu_to_le64(inode.ino);
     h.size = cpu_to_le64(inode.size);
-    h.op = cpu_to_le32(op);
     h.migrate_mds = cpu_to_le32(mmds);
     h.migrate_seq = cpu_to_le32(mseq);
     h.mtime = inode.mtime.tv_ref();
@@ -84,8 +84,8 @@ class MClientFileCaps : public Message {
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_file_caps(" << le32_to_cpu(h.op)
-	<< " " << le64_to_cpu(h.ino)
+    out << "client_file_caps(" << get_opname(le32_to_cpu(h.op))
+	<< " ino " << inodeno_t(le64_to_cpu(h.ino))
 	<< " seq " << le32_to_cpu(h.seq)
 	<< " caps " << cap_string(le32_to_cpu(h.caps)) 
 	<< " wanted" << cap_string(le32_to_cpu(h.wanted)) 

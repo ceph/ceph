@@ -362,8 +362,8 @@ void Server::process_reconnected_caps()
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
-      if (issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) {
-	if (issued & (CAP_FILE_RDCACHE|CAP_FILE_WRBUFFER)) {
+      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
 	  in->filelock.set_state(LOCK_LONER);
 	} else {
 	  in->filelock.set_state(LOCK_MIXED);
@@ -371,7 +371,7 @@ void Server::process_reconnected_caps()
       }
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
-      assert(issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0);   // ????
+      assert(issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER) == 0);   // ????
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else
@@ -3743,7 +3743,7 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != 0)) {
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != O_DIRECTORY)) {
     reply_request(mdr, -EINVAL);
     return;
   }

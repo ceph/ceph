@@ -270,7 +270,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		ceph_mdsc_handle_forward(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_FILECAPS:
-		ceph_handle_filecaps(&client->mdsc, msg);
+		ceph_mdsc_handle_filecaps(&client->mdsc, msg);
 		break;
 
 		/* osd client */

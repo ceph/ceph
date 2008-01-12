@@ -108,6 +108,7 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 		mdsc->max_sessions = mds+1;
 	}
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
+	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
 	INIT_LIST_HEAD(&s->s_caps);
@@ -741,8 +742,8 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	ceph_encode_32(&p, end, session->s_nr_caps);
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
-		ceph_encode_32(&p, end, cap->ci->i_cap_wanted);
-		ceph_encode_32(&p, end, cap->ci->i_cap_issued);
+		ceph_encode_32(&p, end, ceph_caps_wanted(cap->ci));
+		ceph_encode_32(&p, end, ceph_caps_issued(cap->ci));
 		ceph_encode_64(&p, end, cap->ci->i_wr_size);
 		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_mtime); //i_wr_mtime
 		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_atime); /* atime.. fixme */
@@ -887,6 +888,105 @@ bad2:
 	dout(1, "no memory to decode new mdsmap\n");
 	return;
 }
+
+/* caps */
+
+void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct ceph_client *client = ceph_sbinfo(sb)->sb_client;
+	struct ceph_mds_session *session;
+	struct inode *inode;
+	struct ceph_mds_file_caps *h;
+	int mds = msg->hdr.src.name.num;
+	int op;
+	__u64 ino;
+	
+	dout(10, "handle_filecaps from mds%d\n", mds);
+	
+	/* decode */
+	if (msg->front.iov_len != sizeof(*h))
+		goto bad;
+	h = msg->front.iov_base;
+	op = le32_to_cpu(h->op);
+	ino = le64_to_cpu(h->ino);
+
+	/* find session */
+	session = get_session(&client->mdsc, mds);
+	if (!session) {
+		dout(10, "WTF, got filecap msg but no session for mds%d\n", mds);
+		return;
+	}
+	session->s_cap_seq++;
+
+	/* lookup ino */
+	inode = ilookup(sb, ino);
+	dout(20, "op is %d, inode is %llx %p\n", op, ino, inode);
+	if (!inode) {
+		dout(10, "hrm, wtf, don't have inode?\n");
+		return;
+	}
+
+	switch (op) {
+	case CEPH_CAP_OP_GRANT:
+		if (ceph_handle_cap_grant(inode, h, session) == 1) {
+			dout(10, "sending reply back to mds%d\n", mds);
+			ceph_msg_get(msg);
+			send_msg_mds(mdsc, msg, mds);
+		}
+		break;
+		
+	case CEPH_CAP_OP_EXPORT:
+	case CEPH_CAP_OP_IMPORT:
+		dout(10, "cap export/import -- IMPLEMENT ME\n");
+		break;
+	}
+	
+	return;
+bad:
+	dout(10, "corrupt filecaps message\n");
+	return;
+}
+
+int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
+{
+	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_inode_cap *cap;
+	struct ceph_mds_session *session;
+	struct ceph_mds_file_caps *fc;
+	struct ceph_msg *msg;
+	int i;
+
+	dout(10, "update_cap_wanted %d -> %d\n", ci->i_cap_wanted, wanted);
+
+	for (i=0; i<ci->i_nr_caps; i++) {
+		cap = &ci->i_caps[i];
+
+		session = get_session(mdsc, cap->mds);
+		BUG_ON(!session);
+		
+		msg = ceph_msg_new(CEPH_MSG_CLIENT_FILECAPS, sizeof(*fc), 0, 0, 0);
+		if (IS_ERR(msg))
+			return PTR_ERR(msg);
+
+		cap->caps &= wanted;  /* drop caps we don't want */
+
+		fc = msg->front.iov_base;
+		fc->op = cpu_to_le32(CEPH_CAP_OP_ACK);  /* misnomer */
+		fc->seq = cap->seq;
+		fc->caps = cap->caps;
+		fc->wanted = wanted;
+		fc->ino = cpu_to_le64(ci->vfs_inode.i_ino);
+		fc->size = cpu_to_le64(ci->vfs_inode.i_size);
+
+		send_msg_mds(mdsc, msg, cap->mds);
+	}
+
+	ci->i_cap_wanted = wanted;
+	return 0;
+}
+
 
 
 
