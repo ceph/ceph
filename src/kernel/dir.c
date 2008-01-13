@@ -262,7 +262,7 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 {
 	int err = 0;
 	struct qstr dname;
-	struct dentry *dn, *parent;
+	struct dentry *dn, *parent = NULL;
 	struct inode *in;
 	int i = 0;
 
@@ -292,6 +292,7 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 	}
 
 	for (++i; i<prinfo->trace_nr; i++) {
+		dput(parent);
 		parent = dn;
 
 		dname.name = prinfo->trace_dname[i];
@@ -299,8 +300,6 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 		dname.hash = full_name_hash(dname.name, dname.len);
 
 		dn = d_lookup(parent, &dname);
-
-		dput(parent);
 
 		dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
 
@@ -344,6 +343,7 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 	
 	}
 
+	dput(parent);
 	dput(dn);
 	
 	if (lastinode) {
