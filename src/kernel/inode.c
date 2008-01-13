@@ -26,6 +26,9 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	inode->i_blocks = 1;
 	inode->i_rdev = 0;
+
+	insert_inode_hash(inode);
+
 	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o\n", inode->i_ino,
 	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode);
 	
