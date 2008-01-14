@@ -24,6 +24,8 @@ static void try_read(struct work_struct *);
 static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
+static void remove_connection(struct ceph_messenger *, struct ceph_connection *);
+
 /*
  * failure case
  * A retry mechanism is used with exponential backoff
@@ -36,6 +38,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 
 	if (!con->delay) {
 		derr(1, "ceph_send_fault timeout not set\n");
+		remove_connection(con->msgr, con);
 		return;
 	}
 
@@ -211,10 +214,14 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 	if (head) {
 		dout(20, "add_connection %p in existing bucket %lu\n", con, key);
 		list_add(&con->list_bucket, head);
+		/* PW try this */
+		list_add(&con->list_all, &msgr->con_all);
 	} else {
 		dout(20, "add_connection %p in new bucket %lu\n", con, key);
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
+		/* PW try this */
+		list_add(&con->list_all, &msgr->con_all);
 	}
 	spin_unlock(&msgr->con_lock);
 }
@@ -467,7 +474,7 @@ more:
 		set_bit(CONNECTING, &con->state);
 		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
-		dout(5, "try_write initiated connect\n");
+		dout(5, "try_write initiated connect ret = %d\n state = %lu", ret, con->state);
 		if (ret < 0) {
 			/* fault */
 			derr(1, "connect error\n");
@@ -990,6 +997,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
 	while (!list_empty(&msgr->con_all)) {
+	dout(1, "con_all isn't empty\n");
 		con = list_entry(msgr->con_all.next, struct ceph_connection, list_all);
 		__remove_connection(msgr, con);
 	}
