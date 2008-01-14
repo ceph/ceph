@@ -89,9 +89,11 @@ static unsigned fpos_off(loff_t p)
 static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(filp->f_dentry->d_inode)->mdsc;
+	struct inode *inode = filp->f_dentry->d_inode;
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned frag = fpos_frag(filp->f_pos);
 	unsigned off = fpos_off(filp->f_pos);
+	unsigned skew = -2;
 	int err;
 	int i;
 	struct qstr dname;
@@ -108,9 +110,9 @@ nextfrag:
 		if (fi->rinfo.reply) 
 			ceph_mdsc_destroy_reply_info(&fi->rinfo);
 		
-		dout(10, "dir_readdir querying mds for ino %lu frag %u\n", filp->f_dentry->d_inode->i_ino, frag);
+		dout(10, "dir_readdir querying mds for ino %lu frag %u\n", inode->i_ino, frag);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR, 
-					       filp->f_dentry->d_inode->i_ino, "", 0, 0);
+					       inode->i_ino, "", 0, 0);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
 		rhead = req->front.iov_base;
@@ -164,16 +166,40 @@ nextfrag:
 
 			dput(dn);
 		}
-	}	
+	}
 	
-	while (off < fi->rinfo.dir_nr) {
-		dout(10, "dir_readdir off %d / %d name '%s'\n", off, fi->rinfo.dir_nr, fi->rinfo.dir_dname[off]);
+	/* include . and .. with first fragment */
+	if (frag == 0) {
+		switch (off) {
+		case 0:
+			dout(10, "dir_readdir off 0 -> '.'\n");
+			if (filldir(dirent, ".", 1, make_fpos(0, 0), 
+				    inode->i_ino, inode->i_mode >> 12) < 0)
+				return 0;
+			off++;
+			filp->f_pos++;
+		case 1:
+			dout(10, "dir_readdir off 1 -> '..'\n");
+			if (filp->f_dentry->d_parent != NULL &&
+			    filldir(dirent, "..", 2, make_fpos(0, 1), 
+				    filp->f_dentry->d_parent->d_inode->i_ino,
+				    inode->i_mode >> 12) < 0)
+				return 0;
+			off++;
+			filp->f_pos++;
+		}
+	} else
+		skew = -2;  
+
+	while (off+skew < fi->rinfo.dir_nr) {
+		dout(10, "dir_readdir off %d -> %d / %d name '%s'\n", off, off+skew,
+		     fi->rinfo.dir_nr, fi->rinfo.dir_dname[off+skew]);
 		if (filldir(dirent, 
-			    fi->rinfo.dir_dname[off], 
-			    fi->rinfo.dir_dname_len[off], 
+			    fi->rinfo.dir_dname[off+skew], 
+			    fi->rinfo.dir_dname_len[off+skew], 
 			    make_fpos(frag, off),
-			    le64_to_cpu(fi->rinfo.dir_in[off].in->ino), 
-			    le32_to_cpu(fi->rinfo.dir_in[off].in->mode >> 12)) < 0) {
+			    le64_to_cpu(fi->rinfo.dir_in[off+skew].in->ino), 
+			    le32_to_cpu(fi->rinfo.dir_in[off+skew].in->mode >> 12)) < 0) {
 			dout(20, "filldir stopping us...\n");
 			return 0;
 		}
@@ -189,7 +215,7 @@ nextfrag:
 		dout(10, "dir_readdir next frag is %u\n", frag);
 		goto nextfrag;
 	}
-	
+
 	dout(20, "dir_readdir done.\n");
 	return 0;
 }
@@ -594,7 +620,6 @@ const struct inode_operations ceph_dir_iops = {
 	.rmdir = ceph_dir_unlink,
 	.rename = ceph_dir_rename,
 /*	.create = ceph_dir_create,
-	.mknod = ceph_vfs_mknod,
 	.getattr = ceph_vfs_getattr,
 	.setattr = ceph_vfs_setattr,
 */
