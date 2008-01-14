@@ -11,7 +11,7 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 	int flags = file->f_flags;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	ceph_ino_t pathbase;
-	char path[PATH_MAX];
+	char *path;
 	int pathlen;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
@@ -25,9 +25,11 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 
 	dout(5, "open inode %p dentry %p name '%s' flags %d\n", inode, dentry, dentry->d_name.name, flags);
 	pathbase = inode->i_sb->s_root->d_inode->i_ino;
-	pathlen = ceph_get_dentry_path(dentry, path, inode->i_sb->s_root);
-
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path)) 
+		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
+	kfree(path);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	rhead = req->front.iov_base;

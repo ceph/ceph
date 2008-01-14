@@ -748,8 +748,11 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_mtime); //i_wr_mtime
 		ceph_encode_timespec(&p, end, &cap->ci->vfs_inode.i_atime); /* atime.. fixme */
 		dentry = list_entry(&cap->ci->vfs_inode.i_dentry, struct dentry, d_alias);
-		err = ceph_build_dentry_path(dentry, &path, &pathlen);
-		BUG_ON(err);
+		path = ceph_build_dentry_path(dentry, &pathlen);
+		if (IS_ERR(path)) {
+			err = PTR_ERR(path);
+			BUG_ON(err);
+		}
 		if (p + pathlen + 4 + sizeof(struct ceph_mds_cap_reconnect) > end) {
 			/* der, realloc front */
 			int off = end-p;

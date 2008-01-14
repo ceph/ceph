@@ -189,8 +189,7 @@ extern int ceph_release(struct inode *inode, struct file *filp);
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
-extern int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base);  /* move me */
-extern int ceph_build_dentry_path(struct dentry *dentry, char **path, int *len);
+extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
 
 
 #endif /* _FS_CEPH_CEPH_H */
