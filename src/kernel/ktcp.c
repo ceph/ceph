@@ -61,11 +61,15 @@ static void ceph_write_space(struct sock *sk)
 static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+	if (con == NULL)
+		return;
 
         dout(30, "ceph_state_change %p state = %lu sk_state = %u\n", 
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
 		case TCP_CLOSE:
+			set_bit(CLOSED, &con->state);
+			clear_bit(OPEN, &con->state);
 			break;
 		case TCP_CLOSE_WAIT:
 			set_bit(CLOSING, &con->state);
