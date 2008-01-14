@@ -437,12 +437,13 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 	reqhead->args.open.mode = 0;
 	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
 		return err;
-	
-	inode = new_inode(sb);
+
+	BUG_ON(rinfo.trace_nr == 0);
+
+	inode = iget(sb, rinfo.trace_in[rinfo.trace_nr-1].in->ino) ;
 	if (inode == NULL) 
 		return -ENOMEM;
 
-	BUG_ON(rinfo.trace_nr == 0);
 	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
 		goto out;
 	

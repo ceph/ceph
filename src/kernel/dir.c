@@ -149,12 +149,20 @@ nextfrag:
 					dout(30, "d_alloc badness\n");
 					break; 
 				}
+			}
+
+			if (dn->d_inode == NULL) {
 				in = new_inode(parent->d_sb);
 				if (in == NULL) {
 					dout(30, "new_inode badness\n");
 					d_delete(dn);
 					break;
 				}
+			} else {
+				in=dn->d_inode;
+			}
+
+			if (in->i_ino !=  fi->rinfo.dir_in[i].in->ino) {
 				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
 					dout(30, "ceph_fill_inode badness\n");
 					iput(in);
@@ -249,9 +257,12 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		inode = iget(dir->i_sb, ino);
 		if (!inode)
 			return ERR_PTR(-EACCES);
-		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) {
+			iput(inode);
 			return ERR_PTR(err);
+		}
 		d_add(dentry, inode);
+		iput(inode);
 	} else {
 		dout(10, "no trace in reply? wtf.\n");
 	}

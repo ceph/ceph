@@ -71,7 +71,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	wanted = ceph_caps_wanted(ci);
 	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
 
-	dout(5, "ceph_open success, %lx %p\n", inode->i_ino, ilookup(inode->i_sb, inode->i_ino));
+	dout(5, "ceph_open success, %lx\n", inode->i_ino);
 	return 0;
 }
 

@@ -941,6 +941,8 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 		dout(10, "cap export/import -- IMPLEMENT ME\n");
 		break;
 	}
+
+	iput(inode);
 	
 	return;
 bad:
