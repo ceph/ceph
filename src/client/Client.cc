@@ -3264,7 +3264,6 @@ int Client::_statfs(struct statvfs *stbuf)
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = 1024;  // ??
-  memcpy(stbuf, &req->reply->stfs, sizeof(*stbuf));
 
   statfs_requests.erase(req->tid);
   delete req->reply;
