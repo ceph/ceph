@@ -114,6 +114,7 @@ const struct file_operations ceph_file_fops = {
 	.write = do_sync_write,
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
+	.mmap = generic_file_mmap,
 /*	.read = ceph_file_read,
 	.write = ceph_file_write,
 	.open = ceph_file_open,

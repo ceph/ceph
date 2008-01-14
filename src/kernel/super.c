@@ -18,29 +18,6 @@ int ceph_super_debug = 50;
  * super ops
  */
 
-static void ceph_read_inode(struct inode * inode)
-{
-	dout(30, "ceph_read_inode\n");
-	return;
-}
-
-static int ceph_write_inode(struct inode * inode, int unused)
-{
-	dout(30, "ceph_write_inode\n");
-	return 0;
-}
-#if 0
-static void ceph_delete_inode(struct inode * inode)
-{
-	dout(30, "ceph_delete_inode\n");
-	return;
-}
-#endif
-static void ceph_clear_inode(struct inode * inode)
-{
-	dout(30, "ceph_clear_inode\n");
-}
-
 static void ceph_put_super(struct super_block *s)
 {
 	dout(30, "ceph_put_super\n");
@@ -167,10 +144,6 @@ static void destroy_inodecache(void)
 static const struct super_operations ceph_sops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
-	.read_inode	= ceph_read_inode,
-	.write_inode	= ceph_write_inode,
-	.clear_inode    = ceph_clear_inode,
-/* 	.delete_inode	= ceph_delete_inode, */
 	.put_super	= ceph_put_super,
 	.write_super	= ceph_write_super,
 	.show_options   = ceph_show_options,
@@ -444,13 +417,15 @@ static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
 
 	BUG_ON(rinfo.trace_nr == 0);
 
-	inode = iget(sb, rinfo.trace_in[rinfo.trace_nr-1].in->ino) ;
+	inode = iget_locked(sb, rinfo.trace_in[rinfo.trace_nr-1].in->ino);
 	if (inode == NULL) 
 		return -ENOMEM;
+	if (inode->i_state & I_NEW)
+		unlock_new_inode(inode);
 
 	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
 		goto out;
-	
+
 	/* fill in cap */
 	frommds = rinfo.reply->hdr.src.name.num;
 	cap = ceph_add_cap(inode, frommds, 
@@ -521,7 +496,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if ((err = open_root_inode(sb, &mount_args)) < 0) 
 		goto out_splat;
 	
-	dout(30, "ceph_get_sb finishing\n");
+	dout(30, "ceph_get_sb %p finishing\n", sb);
         return simple_set_mnt(mnt, sb);
 	
 out_splat:
@@ -537,6 +512,7 @@ out:
 static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
+	dout(1, "kill_sb %p\n", s);
 	kill_anon_super(s);
 	if (sbinfo->sb_client)
 		ceph_put_client(sbinfo->sb_client);

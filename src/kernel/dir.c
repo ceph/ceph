@@ -228,10 +228,6 @@ const struct file_operations ceph_dir_fops = {
 	.release = ceph_release,
 };
 
-struct dentry_operations ceph_dentry_ops = {
-	.d_revalidate = NULL,
-};
-
 
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nameidata)
@@ -269,9 +265,11 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if (rinfo.trace_nr > 0) {
 		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
 		dout(10, "got and parsed stat result, ino %lu\n", ino);
-		inode = iget(dir->i_sb, ino);
+		inode = iget_locked(dir->i_sb, ino);
 		if (!inode) 
 			return ERR_PTR(-EACCES);
+		if (inode->i_state & I_NEW)
+			unlock_new_inode(inode);
 		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) {
 			iput(inode);
 			return ERR_PTR(err);
