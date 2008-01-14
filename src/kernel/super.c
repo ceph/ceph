@@ -113,6 +113,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	if (!ci)
 		return NULL;
 
+	ci->i_symlink = 0;
+
 	ci->i_fragtree = ci->i_fragtree_static;
 	ci->i_fragtree->nsplits = 0;
 
@@ -130,9 +132,11 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-
+	
 	if (ci->i_caps != ci->i_caps_static) 
 		kfree(ci->i_caps);
+	if (ci->i_symlink)
+		kfree(ci->i_symlink);
 
 	kmem_cache_free(ceph_inode_cachep, ci);
 }

@@ -1709,10 +1709,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
-  newi->inode.mode &= ~S_IFMT;
-  newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
+  dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
@@ -1802,7 +1802,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // it's a symlink
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFLNK;
+  newi->inode.mode |= 0777;     // ?
   newi->symlink = req->get_path2();
+  newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
 
   // prepare finisher

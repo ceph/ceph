@@ -185,7 +185,7 @@ public:
 
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
-  const string& get_path2() { return path.get_path(); }
+  const string& get_path2() { return path2.get_path(); }
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 

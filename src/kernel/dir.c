@@ -9,6 +9,7 @@ const struct file_operations ceph_dir_fops;
 /*
  * build a dentry's path, relative to sb root.  allocate on
  * heap; caller must kfree.
+ * (based on build_path_from_dentry in fs/cifs/dir.c)
  */
 char *ceph_build_dentry_path(struct dentry *dentry, int *plen)
 {
@@ -29,7 +30,7 @@ retry:
 			return ERR_PTR(-EINVAL);
 		}
 	}
-	if (len) len--;
+	if (len) len--;  /* no leading '/' */
 
 	path = kmalloc(len+1, GFP_KERNEL);
 	if (path == NULL)
@@ -55,7 +56,7 @@ retry:
 		}
 	}
 	if (pos != 0) {
-		derr(1, "did not end path lookup where expected namelen is %d\n", len);
+		derr(1, "did not end path lookup where expected, namelen is %d\n", len);
 		/* presumably this is only possible if racing with a rename
 		   of one of the parent directories  (we can not lock the dentries
 		   above us to prevent this, but retrying should be harmless) */
@@ -352,6 +353,102 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 	return err;
 }
 
+static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t rdev)
+{
+	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
+	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct inode *inode = NULL;
+	struct ceph_msg *req;
+	struct ceph_mds_request_head *rhead;
+	struct ceph_mds_reply_info rinfo;
+	char *path;
+	int pathlen;
+	int err;
+
+	dout(5, "dir_mknod dir %p dentry %p mode %d rdev %d\n", dir, dentry, mode, rdev);
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);	
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, 
+				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	kfree(path);
+	if (IS_ERR(req)) {
+		d_drop(dentry);
+		return PTR_ERR(req);
+	}
+	rhead = req->front.iov_base;
+	rhead->args.mknod.mode = cpu_to_le32(mode);
+	rhead->args.mknod.rdev = cpu_to_le32(rdev);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+		d_drop(dentry);
+		return err;
+	}
+	
+	err = le32_to_cpu(rinfo.head->result);
+	if (err == 0) {
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode);
+
+		if (err < 0) {
+			goto done;
+		}
+
+		if (inode == NULL) {
+			/* TODO handle this one */
+			err = -ENOMEM;
+			goto done;
+		}
+		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
+	}
+done:
+	return err;
+}
+
+static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char *dest)
+{
+	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
+	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct inode *inode = NULL;
+	struct ceph_msg *req;
+	struct ceph_mds_reply_info rinfo;
+	char *path;
+	int pathlen;
+	int err;
+
+	dout(5, "dir_symlink dir %p dentry %p to '%s'\n", dir, dentry, dest);
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);	
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SYMLINK, 
+				       dir->i_sb->s_root->d_inode->i_ino, path, 0, dest);
+	kfree(path);
+	if (IS_ERR(req)) {
+		d_drop(dentry);
+		return PTR_ERR(req);
+	}
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+		d_drop(dentry);
+		return err;
+	}
+	
+	err = le32_to_cpu(rinfo.head->result);
+	if (err == 0) {
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode);
+
+		if (err < 0) {
+			goto done;
+		}
+
+		if (inode == NULL) {
+			/* TODO handle this one */
+			err = -ENOMEM;
+			goto done;
+		}
+		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
+	}
+done:
+	return err;
+}
+
 static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
@@ -490,6 +587,8 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
 //	.getattr = ceph_inode_getattr,
+	.mknod = ceph_dir_mknod,
+	.symlink = ceph_dir_symlink,
 	.mkdir = ceph_dir_mkdir,
 	.unlink = ceph_dir_unlink,
 	.rmdir = ceph_dir_unlink,

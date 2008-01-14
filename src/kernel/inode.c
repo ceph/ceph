@@ -2,6 +2,8 @@
 #include <linux/fs.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/uaccess.h>
 
 #include <linux/ceph_fs.h>
 
@@ -16,6 +18,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
+	int symlen;
 
 	inode->i_ino = le64_to_cpu(info->ino);
 	inode->i_mode = le32_to_cpu(info->mode);
@@ -25,7 +28,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_size = le64_to_cpu(info->size);
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	inode->i_blocks = 1;
-	inode->i_rdev = 0;
 
 	insert_inode_hash(inode);
 
@@ -40,6 +42,10 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	dout(30, "inode %p, ci %p\n", inode, ci);
 	ci->i_layout = info->layout; 
 	dout(30, "inode layout %p su %d\n", &ci->i_layout, ci->i_layout.fl_stripe_unit);
+
+	if (ci->i_symlink)
+		kfree(ci->i_symlink);
+	ci->i_symlink = 0;
 
 	if (le32_to_cpu(info->fragtree.nsplits) > 0) {
 		//ci->i_fragtree = kmalloc(...);
@@ -80,6 +86,17 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	case S_IFLNK:
 		dout(20, "%p is a symlink\n", inode);
 		inode->i_op = &ceph_symlink_iops;
+		symlen = le32_to_cpu(*(__u32*)(info->fragtree.splits+ci->i_fragtree->nsplits));
+		dout(20, "symlink len is %d\n", symlen);
+		BUG_ON(symlen != ci->vfs_inode.i_size);
+		ci->i_symlink = kmalloc(symlen+1, GFP_KERNEL);
+		if (ci->i_symlink == NULL)
+			return -ENOMEM;
+		memcpy(ci->i_symlink, 
+		       (char*)(info->fragtree.splits+ci->i_fragtree->nsplits) + 4,
+		       symlen);
+		ci->i_symlink[symlen] = 0;
+		dout(20, "symlink is '%s'\n", ci->i_symlink);
 		break;
 	case S_IFDIR:
 		dout(20, "%p is a dir\n", inode);
@@ -236,46 +253,20 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 
 
 /*
+ * symlinks
+ */
 
-
-static int ceph_vfs_setattr(struct dentry *dentry, struct iattr *iattr)
+static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
+	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
+	nd_set_link(nd, ci->i_symlink);
+	return NULL;
 }
-
-static int ceph_vfs_readlink(struct dentry *dentry, char __user * buffer,
-			     int buflen)
-{
-}
-
-static void *ceph_vfs_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-}
-
-static void ceph_vfs_put_link(struct dentry *dentry, struct nameidata *nd, void *p)
-{
-}
-
-static int
-ceph_vfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
-{
-}
-
-static int
-ceph_vfs_link(struct dentry *old_dentry, struct inode *dir,
-	      struct dentry *dentry)
-{
-}
-
-static int
-ceph_vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t rdev)
-{
-}
-*/
 
 const struct inode_operations ceph_symlink_iops = {
-/*	.readlink = ceph_vfs_readlink,
-	.follow_link = ceph_vfs_follow_link,
-	.put_link = ceph_vfs_put_link,
+	.readlink = generic_readlink,
+	.follow_link = ceph_sym_follow_link,
+/*	.put_link = ceph_vfs_put_link,
 	.getattr = ceph_vfs_getattr,
 	.setattr = ceph_vfs_setattr,
 */

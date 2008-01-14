@@ -80,6 +80,8 @@ enum {
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
 
+	char *i_symlink;
+
 	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
 	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
