@@ -101,7 +101,7 @@ static int mount(struct ceph_client *client, struct ceph_mount_args *args)
 {
 	struct ceph_msg *mount_msg;
 	int err;
-	int attempts = 3;
+	int attempts = 10;
 	int which;
 	char r;
 	
