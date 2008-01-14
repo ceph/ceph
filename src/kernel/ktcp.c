@@ -73,7 +73,6 @@ static void ceph_state_change(struct sock *sk)
 			break;
 		case TCP_CLOSE_WAIT:
 			set_bit(CLOSING, &con->state);
-			clear_bit(OPEN, &con->state);
         		dout(30, "ceph_state_change state = %lu \n", 
 	     		con->state);
 		case TCP_ESTABLISHED:
