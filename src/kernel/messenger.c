@@ -190,6 +190,7 @@ out:
 static void put_connection(struct ceph_connection *con) 
 {
 	BUG_ON(con == NULL);
+	dout(20, "put_connection nref = %d\n", atomic_read(&con->nref));
 	if (atomic_dec_and_test(&con->nref)) {
 		dout(20, "put_connection destroying %p\n", con);
 		sock_release(con->sock);
@@ -210,18 +211,22 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 	atomic_inc(&con->nref);
 
 	spin_lock(&msgr->con_lock);
+	/* PW this is bogus... needs to be readdressed later */
+	if (test_bit(ACCEPTING, &con->state)) {
+		list_del(&con->list_bucket);
+		put_connection(con);
+	} else {
+		list_add(&con->list_all, &msgr->con_all);
+	}
+
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
 		dout(20, "add_connection %p in existing bucket %lu\n", con, key);
 		list_add(&con->list_bucket, head);
-		/* PW try this */
-		list_add(&con->list_all, &msgr->con_all);
 	} else {
 		dout(20, "add_connection %p in new bucket %lu\n", con, key);
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
-		/* PW try this */
-		list_add(&con->list_all, &msgr->con_all);
 	}
 	spin_unlock(&msgr->con_lock);
 }
@@ -258,7 +263,8 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 			list_del(&con->list_bucket);
 		}
 	}
-	put_connection(con);
+	/* PW just test this with no remounting */
+	/* put_connection(con); */
 }
 
 static void remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
@@ -462,7 +468,6 @@ static void try_write(struct work_struct *work)
 	if (test_and_clear_bit(CLOSING, &con->state)) {
 		dout(5, "try_write peer initiated close\n");
 		remove_connection(msgr, con);
-		/* put_connection(con); */
 		goto done;
 	}
 more:
@@ -492,8 +497,6 @@ more:
 			dout(30, "try_write done rejecting, state %lu, closing\n", con->state);
 			/* FIXME do something else here, pbly? */
 			remove_connection(msgr, con);
-			set_bit(CLOSED, &con->state);
-			put_connection(con);
 		}
 		if (ret < 0) {
 			ceph_send_fault(con, ret);
@@ -819,6 +822,7 @@ static void process_accept(struct ceph_connection *con)
 		prepare_write_accept_reply(con, &tag_ready);
 	/* queue write */
 	queue_work(send_wq, &con->swork.work);
+	put_connection(con);
 }
 
 
@@ -1062,7 +1066,6 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		queue_work(send_wq, &con->swork.work);
 		dout(30, "ceph_msg_send queued\n");
 	}
-
 	put_connection(con);
 	dout(30, "ceph_msg_send done\n");
 	return ret;
