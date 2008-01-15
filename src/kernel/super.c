@@ -5,6 +5,7 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 
+
 int ceph_super_debug = 50;
 #define DOUT_VAR ceph_super_debug
 #define DOUT_PREFIX "super: "
@@ -13,6 +14,8 @@ int ceph_super_debug = 50;
 
 #include <linux/statfs.h>
 #include "mon_client.h"
+
+
 
 /*
  * super ops
@@ -68,8 +71,8 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
  */
 static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 {
-	struct ceph_super_info *sbinfo = mnt->mnt_sb->s_fs_info;
-	struct ceph_mount_args *args = &sbinfo->mount_args;
+	struct ceph_client *client = mnt->mnt_sb->s_fs_info;
+	struct ceph_mount_args *args = &client->mount_args;
 
 	if (ceph_debug != 0)
 		seq_printf(m, ",debug=%d", ceph_debug);		
@@ -154,6 +157,10 @@ static const struct super_operations ceph_sops = {
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
 };
+
+
+
+
 
 
 /* 
@@ -313,135 +320,26 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	return 0;
 }
 
-int parse_open_reply(struct ceph_msg *reply, struct inode *inode)
-{
-	struct ceph_mds_reply_head *head;
-	struct ceph_mds_reply_info rinfo;
-	int frommds = reply->hdr.src.name.num;
-	int err;
-	struct ceph_inode_cap *cap;
-
-	/* parse reply */
-	head = reply->front.iov_base;
-	err = le32_to_cpu(head->result);
-	dout(30, "parse_open_reply mds%d reports %d\n", frommds, err);
-	if (err < 0) 
-		return err;
-	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0)
-		return err;
-	BUG_ON(rinfo.trace_nr == 0);
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		return err;
-
-	/* fill in cap */
-	cap = ceph_add_cap(inode, frommds, 
-			   le32_to_cpu(head->file_caps), 
-			   le32_to_cpu(head->file_caps_seq));
-	if (IS_ERR(cap))
-		return PTR_ERR(cap);
-
-	ceph_mdsc_destroy_reply_info(&rinfo);
-	return 0;
-}
-
-
-static int open_root_inode(struct super_block *sb, struct ceph_mount_args *args)
-{
-	struct ceph_super_info *sbinfo = ceph_sbinfo(sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
-	struct inode *inode;
-	struct dentry *root;
-	struct ceph_msg *req = 0;
-	struct ceph_mds_request_head *reqhead;
-	struct ceph_mds_reply_info rinfo;
-	int frommds;
-	int err;
-	struct ceph_inode_cap *cap;
-	struct ceph_inode_info *ci;
-	
-	/* open dir */
-	dout(30, "open_root_inode opening '%s'\n", args->path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
-	if (IS_ERR(req)) 
-		return PTR_ERR(req);
-	reqhead = req->front.iov_base;
-	reqhead->args.open.flags = O_DIRECTORY;
-	reqhead->args.open.mode = 0;
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
-		return err;
-	
-	err = le32_to_cpu(rinfo.head->result);
-	if (err != 0)
-		return err;
-	if (rinfo.trace_nr == 0) {
-		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
-		err = -EINVAL;
-	}
-
-	/* create root inode */
-	inode = iget_locked(sb, rinfo.trace_in[rinfo.trace_nr-1].in->ino);
-	if (inode == NULL) 
-		return -ENOMEM;
-	if (inode->i_state & I_NEW)
-		unlock_new_inode(inode);
-
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		goto out;
-
-	/* fill in cap */
-	frommds = rinfo.reply->hdr.src.name.num;
-	cap = ceph_add_cap(inode, frommds, 
-			   le32_to_cpu(rinfo.head->file_caps), 
-			   le32_to_cpu(rinfo.head->file_caps_seq));
-	if (IS_ERR(cap)) {
-		err = PTR_ERR(cap);
-		goto out;
-	}
-	ci = ceph_inode(inode);
-	ci->i_nr_by_mode[FILE_MODE_PIN]++;
-
-	root = d_alloc_root(inode);
-	if (root == NULL) {
-		err = -ENOMEM;
-		/* fixme: also close? */
-		goto out;
-	}
-	sb->s_root = root;
-	dout(30, "open_root_inode success.\n");
-	return 0;
-
-out:
-	dout(30, "open_root_inode failure %d\n", err);
-	iput(inode);
-	return err;
-}
 
 static int ceph_set_super(struct super_block *s, void *data)
 {
 	struct ceph_mount_args *args = data;
-	struct ceph_super_info *sbinfo;
+	struct ceph_client *client;
 	int ret;
 
 	dout(10, "set_super %p data %p\n", s, data);
 
 	s->s_flags = args->mntflags;
 
-	sbinfo = kzalloc(sizeof(struct ceph_super_info), GFP_KERNEL);
-	if (!sbinfo)
-		return -ENOMEM;
-	s->s_fs_info = sbinfo;
-
+	/* create client */
+	client = ceph_create_client(args, s);
+	if (IS_ERR(client))
+		return PTR_ERR(client);
+	s->s_fs_info = client;
+	
 	/* fill sbinfo */
 	s->s_op = &ceph_sops;
-	memcpy(&sbinfo->mount_args, args, sizeof(*args));
-
-	/* create client */
-	sbinfo->sb_client = ceph_create_client(args, s);
-	if (IS_ERR(sbinfo->sb_client)) {
-		ret = PTR_ERR(sbinfo->sb_client);
-		sbinfo->sb_client = 0;
-		goto bail2;
-	}
+	memcpy(&client->mount_args, args, sizeof(*args));
 
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)
@@ -449,10 +347,8 @@ static int ceph_set_super(struct super_block *s, void *data)
 
 	return ret;
 
-bail2:
-	ceph_put_client(sbinfo->sb_client);
 bail:
-	kfree(s->s_fs_info);
+	ceph_destroy_client(client);
 	s->s_fs_info = 0;
 	return ret;
 }
@@ -463,20 +359,20 @@ bail:
 static int ceph_compare_super(struct super_block *sb, void *data)
 {
 	struct ceph_mount_args *args = (struct ceph_mount_args*)data;
-	struct ceph_super_info *other = ceph_sbinfo(sb);
+	struct ceph_client *other = sb->s_fs_info;
 	int i;
 	dout(10, "ceph_compare_super %p\n", sb);
 
 	/* either compare fsid, or specified mon_hostname */
 	if (args->flags & CEPH_MOUNT_FSID) {
-		if (!ceph_fsid_equal(&args->fsid, &other->sb_client->fsid)) {
+		if (!ceph_fsid_equal(&args->fsid, &other->fsid)) {
 			dout(30, "fsid doesn't match\n");
 			return 0;
 		}
 	} else {
 		/* do we share (a) monitor? */
 		for (i=0; i<args->num_mon; i++)
-			if (ceph_monmap_contains(other->sb_client->monc.monmap, 
+			if (ceph_monmap_contains(other->monc.monmap, 
 						 &args->mon_addr[i]))
 				break;
 		if (i == args->num_mon) {
@@ -497,7 +393,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 {
 	struct super_block *sb;
 	struct ceph_mount_args mount_args;
-	struct ceph_super_info *sbinfo;
+	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 
@@ -516,17 +412,9 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		err = PTR_ERR(sb);
 		goto out;
 	}
-	sbinfo = ceph_sbinfo(sb);
+	client = sb->s_fs_info;
 
-	/* request mount */
-	if (sbinfo->sb_client->mounting < 7) {
-		if ((err = ceph_mount(sbinfo->sb_client, &mount_args)) < 0)
-			goto out_splat;
-	}
-
-	/* open root */
-	dout(30, "ceph_get_sb opening base mountpoint\n");
-	if ((err = open_root_inode(sb, &mount_args)) < 0) 
+	if ((err = ceph_mount(client, &mount_args)) < 0)
 		goto out_splat;
 	
 	dout(30, "ceph_get_sb %p finishing\n", sb);
@@ -542,13 +430,13 @@ out:
 
 static void ceph_kill_sb(struct super_block *s)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(s);
+	struct ceph_client *client = s->s_fs_info;
 	dout(1, "kill_sb %p\n", s);
 	kill_anon_super(s);
-	if (sbinfo->sb_client)
-		ceph_put_client(sbinfo->sb_client);
-	kfree(sbinfo);
+	ceph_destroy_client(client);
 }
+
+
 
 
 

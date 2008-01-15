@@ -897,7 +897,7 @@ bad2:
 void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
-	struct ceph_client *client = ceph_sbinfo(sb)->sb_client;
+	struct ceph_client *client = sb->s_fs_info;
 	struct ceph_mds_session *session;
 	struct inode *inode;
 	struct ceph_mds_file_caps *h;
