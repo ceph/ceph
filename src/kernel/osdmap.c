@@ -1,4 +1,6 @@
 
+#include <asm/div64.h>
+
 int ceph_osdmap_debug = 50;
 #define DOUT_VAR ceph_osdmap_debug
 #define DOUT_PREFIX "osdmap: "
@@ -497,22 +499,34 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 			      struct ceph_object *oid, __u64 *oxoff, __u64 *oxlen)
 {
 	unsigned su, stripeno, stripepos, objsetno;
-	unsigned su_per_object = layout->fl_object_size / layout->fl_stripe_unit;
+	unsigned su_per_object;
 	unsigned stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
 	unsigned first_oxlen;
 	loff_t t;
 
+	/*su_per_object = layout->fl_object_size / layout->fl_stripe_unit; */
+	su_per_object = layout->fl_object_size;
+	do_div(su_per_object, layout->fl_stripe_unit);
+
 	BUG_ON((layout->fl_stripe_unit & ~PAGE_MASK) != 0);
-	su = *off / layout->fl_stripe_unit;
-	stripeno = su / layout->fl_stripe_count;
-	stripepos = su % layout->fl_stripe_count;
-	objsetno = stripeno / su_per_object;
+	/* su = *off / layout->fl_stripe_unit; */
+	su = *off;
+	do_div(su, layout->fl_stripe_unit);
+	/* stripeno = su / layout->fl_stripe_count;
+	   stripepos = su % layout->fl_stripe_count; */
+	stripeno = su;
+	stripepos = do_div(stripeno, layout->fl_stripe_count);
+	/* objsetno = stripeno / su_per_object; */
+	objsetno = stripeno;
+	do_div(objsetno, su_per_object);
 
 	oid->bno = objsetno * layout->fl_stripe_count + stripepos;
-	*oxoff = *off % layout->fl_stripe_unit;
+	/* *oxoff = *off / layout->fl_stripe_unit; */
+	t = *off;
+	*oxoff = do_div(t, layout->fl_stripe_unit);
 	first_oxlen = min_t(loff_t, *len, layout->fl_stripe_unit);
 	*oxlen = first_oxlen;
-
+	
 	/* multiple stripe units across this object? */
 	t = *len;
 	while (t > stripe_len && *oxoff + *oxlen < layout->fl_object_size) {

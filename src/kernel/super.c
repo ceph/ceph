@@ -51,9 +51,9 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	/* fill in kstatfs */
 	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
 	buf->f_bsize = 4096;
-	buf->f_blocks = st.f_total / 4;
-	buf->f_bfree = st.f_free / 4;
-	buf->f_bavail = st.f_avail / 4;
+	buf->f_blocks = st.f_total >> 2;
+	buf->f_bfree = st.f_free >> 2;
+	buf->f_bavail = st.f_avail >> 2;
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
 	/* fsid? */
