@@ -263,8 +263,7 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 			list_del(&con->list_bucket);
 		}
 	}
-	/* PW just test this with no remounting */
-	/* put_connection(con); */
+	put_connection(con);
 }
 
 static void remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
