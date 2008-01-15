@@ -38,7 +38,8 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 
 	if (!con->delay) {
 		derr(1, "ceph_send_fault timeout not set\n");
-		remove_connection(con->msgr, con);
+		if (error != -EAGAIN || test_bit(CLOSED, &con->state))
+			remove_connection(con->msgr, con);
 		return;
 	}
 
@@ -478,10 +479,10 @@ more:
 		set_bit(CONNECTING, &con->state);
 		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
-		dout(5, "try_write initiated connect ret = %d\n state = %lu", ret, con->state);
+		dout(30, "try_write returned from connect ret = %d state = %lu", ret, con->state);
 		if (ret < 0) {
 			/* fault */
-			derr(1, "connect error\n");
+			derr(1, "try_write connect error\n");
 			ceph_send_fault(con, ret);
 			goto done;
 		}
