@@ -52,7 +52,7 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_DELAY_INTERVAL	(3U * HZ)
+#define BASE_DELAY_INTERVAL	1	
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
