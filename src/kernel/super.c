@@ -518,6 +518,12 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	}
 	sbinfo = ceph_sbinfo(sb);
 
+	/* request mount */
+	if (sbinfo->sb_client->mounting < 7) {
+		if ((err = ceph_mount(sbinfo->sb_client, &mount_args)) < 0)
+			goto out_splat;
+	}
+
 	/* open root */
 	dout(30, "ceph_get_sb opening base mountpoint\n");
 	if ((err = open_root_inode(sb, &mount_args)) < 0) 

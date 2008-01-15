@@ -98,15 +98,15 @@ fail:
 /*
  * mount: join the ceph cluster.
  */
-static int mount(struct ceph_client *client, struct ceph_mount_args *args)
+int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args)
 {
 	struct ceph_msg *mount_msg;
 	int err;
 	int attempts = 10;
 	int which;
 	char r;
-	
-	client->mounting = 0;  /* wait for mon+mds+osd */
+
+	dout(10, "mount start\n");
 
 	/* send mount request */
 trymount:
@@ -182,7 +182,6 @@ static struct ceph_client *get_client_monaddr(struct ceph_entity_addr *monaddr)
 struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb)
 {
 	struct ceph_client *client = 0;
-	int ret;
 
 	/* create new client */
 	client = create_client(args);
@@ -191,12 +190,8 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	atomic_inc(&client->nref);
 	client->sb = sb;
 
-	/* request mount */
-	ret = mount(client, args);
-	if (ret < 0) {
-		ceph_put_client(client);
-		return ERR_PTR(ret);
-	}
+	client->mounting = 0;  /* wait for mon+mds+osd */
+
 	return client;
 }
 

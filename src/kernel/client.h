@@ -57,5 +57,6 @@ struct ceph_client {
 
 extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb);
 extern void ceph_put_client(struct ceph_client *cl);
+extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args);
 
 #endif

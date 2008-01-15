@@ -478,7 +478,7 @@ more:
 		set_bit(CONNECTING, &con->state);
 		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
-		dout(5, "try_write initiated connect ret = %d\n state = %lu", ret, con->state);
+		dout(5, "try_write initiated connect ret = %d state = %lu\n", ret, con->state);
 		if (ret < 0) {
 			/* fault */
 			derr(1, "connect error\n");
