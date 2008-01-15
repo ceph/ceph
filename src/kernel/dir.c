@@ -265,17 +265,21 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	if (rinfo.trace_nr > 0) {
 		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
 		dout(10, "got and parsed stat result, ino %lu\n", ino);
-		inode = iget_locked(dir->i_sb, ino);
-		if (!inode) 
+
+		inode = ilookup(dir->i_sb, ino);
+
+		if (!inode) {
+			inode = new_inode(dir->i_sb);
+		}
+
+		if (!inode) {
 			return ERR_PTR(-EACCES);
+		}
+
 		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) {
-			iput(inode);
 			return ERR_PTR(err);
 		}
-		if (inode->i_state & I_NEW)
-			unlock_new_inode(inode);
 		d_add(dentry, inode);
-		iput(inode);
 	} else {
 		dout(10, "no trace in reply? wtf.\n");
 	}
