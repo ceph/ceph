@@ -78,7 +78,6 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 			   args->fsid.major, args->fsid.minor);
 	if (args->flags & CEPH_MOUNT_NOSHARE)
 		seq_puts(m, ",noshare");
-	seq_printf(m, ",monport=%d", args->mon_port);
 	return 0;
 }
 
@@ -236,7 +235,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	/* defaults */
 	args->mntflags = flags;
 	args->flags = 0;
-	args->mon_port = CEPH_MON_PORT;
 
 	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
@@ -285,7 +283,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			break;
 		case Opt_monport:
 			dout(25, "parse_mount_args monport=%d\n", intval);
-			args->mon_port = intval;
 			for (i=0; i<args->num_mon; i++)
 				args->mon_addr[i].ipaddr.sin_port = htons(intval);
 			break;
@@ -479,7 +476,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	} else {
 		/* do we share (a) monitor? */
 		for (i=0; i<args->num_mon; i++)
-			if (ceph_monmap_contains(&other->sb_client->monc.monmap, 
+			if (ceph_monmap_contains(other->sb_client->monc.monmap, 
 						 &args->mon_addr[i]))
 				break;
 		if (i == args->num_mon) {

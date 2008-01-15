@@ -30,7 +30,6 @@ struct ceph_mount_args {
 	struct ceph_entity_addr my_addr;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
-	int mon_port;
 	char path[100];
 };
 
