@@ -484,12 +484,13 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [replica] tell auth about any new caps wanted
     request_inode_file_caps(in);
   }
-    
+
   // issue caps (pot. incl new one)
   issue_caps(in);  // note: _eval above may have done this already...
 
   // re-issue whatever we can
   cap->issue(cap->pending());
+  cap->set_last_open();
   
   // ok, stop suppressing.
   cap->set_suppress(false);
@@ -742,9 +743,13 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
           << " on " << *in 
           << dendl;  
   
+  // confirm caps
+  int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
+  int has = cap->confirmed();
+
   // update wanted
   if (cap->wanted() != wanted) {
-    if (m->get_seq() < cap->get_last_seq()) {
+    if (m->get_seq() < cap->get_last_open()) {
       /* this is awkward.
 	 client may be trying to release caps (i.e. inode closed, etc.) by setting reducing wanted
 	 set.
@@ -753,28 +758,18 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	 sure the client has seen all the latest caps.
       */
       dout(10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
-		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << dendl;
+		<< " bc seq " << m->get_seq() << " < last open " << cap->get_last_open() << dendl;
+    } else if (wanted == 0) {
+      // outright release?
+      dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
+      in->remove_client_cap(client);
+      if (!in->is_any_caps()) 
+	in->xlist_open_file.remove_myself();  // unpin logsegment
+      if (!in->is_auth())
+	request_inode_file_caps(in);
     } else {
       cap->set_wanted(wanted);
     }
-  }
-
-  // confirm caps
-  int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-  int has = cap->confirmed();
-  if (cap->is_null()) {
-    dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
-    in->remove_client_cap(client);
-    if (!in->is_any_caps()) 
-      in->xlist_open_file.remove_myself();  // unpin logsegment
-    if (!in->is_auth())
-      request_inode_file_caps(in);
-
-    // tell client.
-    MClientFileCaps *r = new MClientFileCaps(CEPH_CAP_OP_RELEASE,
-					     in->inode, 
-                                             0, 0, 0);
-    mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?

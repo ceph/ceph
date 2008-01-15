@@ -434,19 +434,15 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
 #define CEPH_CAP_WREXTEND 32  /* client can extend eof */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
+
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
 	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
 	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
-	CEPH_CAP_OP_RELEASE, /* mds->client release (*) */
 	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
 };
-  /* 
-   * (*) it's a bit counterintuitive, but the mds has to 
-   *  close the cap because the client isn't able to tell
-   *  if a concurrent open() would map to the same inode.
-   */
+
 struct ceph_mds_file_caps {
 	__le32 op;
 	__le32 seq;

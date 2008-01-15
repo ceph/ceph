@@ -1205,36 +1205,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
-  // release?
-  if (m->get_op() == CEPH_CAP_OP_RELEASE) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
-    assert(in->caps.count(mds));
-    in->caps.erase(mds);
-    caps_by_mds[mds]--;
-    for (map<int,InodeCap>::iterator p = in->caps.begin();
-         p != in->caps.end();
-         p++)
-      dout(20) << " left cap " << p->first << " " 
-              << cap_string(p->second.caps) << " " 
-              << p->second.seq << dendl;
-    for (map<int,InodeCap>::iterator p = in->stale_caps.begin();
-         p != in->stale_caps.end();
-         p++)
-      dout(20) << " left stale cap " << p->first << " " 
-              << cap_string(p->second.caps) << " " 
-              << p->second.seq << dendl;
-
-    if (in->caps.empty()) {
-      //dout(0) << "did put_inode" << dendl;
-      put_inode(in);
-    } else {
-      //dout(0) << "didn't put_inode" << dendl;
-    }
-    delete m;
-    return;
-  }
-
-
   // don't want?
   if (in->file_caps_wanted() == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
@@ -1366,10 +1336,11 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
 void Client::release_caps(Inode *in,
                           int retain)
 {
+  int wanted = in->file_caps_wanted();
   dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
-	  << " want " << cap_string(in->file_caps_wanted())
+	  << " want " << cap_string(wanted)
           << dendl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -1384,11 +1355,17 @@ void Client::release_caps(Inode *in,
 					       in->inode, 
                                                it->second.seq,
                                                it->second.caps,
-                                               in->file_caps_wanted()); 
+                                               wanted);
       messenger->send_message(m, mdsmap->get_inst(it->first));
     }
+    if (wanted == 0)
+      caps_by_mds[it->first]--;
   }
-  
+  if (wanted == 0 && !in->caps.empty()) {
+    in->caps.clear();
+    put_inode(in);
+  }
+
   if (in->file_caps() == 0) {
     in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
@@ -1397,8 +1374,9 @@ void Client::release_caps(Inode *in,
 
 void Client::update_caps_wanted(Inode *in)
 {
+  int wanted = in->file_caps_wanted();
   dout(5) << "updating caps wanted on ino " << in->inode.ino 
-          << " to " << cap_string(in->file_caps_wanted())
+          << " to " << cap_string(wanted)
           << dendl;
   
   // FIXME: pick a single mds and let the others off the hook..
@@ -1409,11 +1387,17 @@ void Client::update_caps_wanted(Inode *in)
 					     in->inode, 
                                              it->second.seq,
                                              it->second.caps,
-                                             in->file_caps_wanted());
+                                             wanted);
     messenger->send_message(m, mdsmap->get_inst(it->first));
+    if (wanted == 0)
+      caps_by_mds[it->first]--;
+  }
+  if (wanted == 0 && !in->caps.empty()) {
+    in->caps.clear();
+    put_inode(in);
   }
 }
-
+  
 
 
 // -------------------

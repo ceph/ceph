@@ -63,6 +63,7 @@ private:
   
   map<capseq_t, int>  cap_history;  // seq -> cap
   capseq_t last_sent, last_recv;
+  capseq_t last_open;
   
   bool suppress;
   bool stale;
@@ -74,10 +75,14 @@ public:
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
+    last_open(0),
     suppress(false), stale(false),
     session_caps_item(this) { 
   }
   
+  capseq_t get_last_open() { return last_open; }
+  void set_last_open() { last_open = last_sent; }
+
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
 

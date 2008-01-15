@@ -3562,6 +3562,7 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
+  // empty stray dir
   if (!shutdown_export_strays()) {
     dout(7) << "waiting for strays to migrate" << dendl;
     return false;
@@ -3617,12 +3618,6 @@ bool MDCache::shutdown_pass()
   assert(subtrees.empty());
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
-
-
-
-  // empty out stray contents
-  // FIXME
-  dout(7) << "FIXME: i need to empty out stray dir contents..." << dendl;
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {

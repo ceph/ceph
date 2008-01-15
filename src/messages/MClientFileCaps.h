@@ -24,7 +24,6 @@ class MClientFileCaps : public Message {
     switch (op) {
     case CEPH_CAP_OP_GRANT: return "grant";
     case CEPH_CAP_OP_ACK: return "ack";
-    case CEPH_CAP_OP_RELEASE: return "release";
     case CEPH_CAP_OP_EXPORT: return "export";
     case CEPH_CAP_OP_IMPORT: return "import";
     default: assert(0); return 0;
@@ -85,7 +84,7 @@ class MClientFileCaps : public Message {
   void print(ostream& out) {
     out << "client_file_caps(" << get_opname(le32_to_cpu(h.op))
 	<< " ino " << inodeno_t(le64_to_cpu(h.ino))
-	<< " seq " << le32_to_cpu(h.seq)
+	<< " seq " << le32_to_cpu(h.seq) 
 	<< " caps " << cap_string(le32_to_cpu(h.caps)) 
 	<< " wanted" << cap_string(le32_to_cpu(h.wanted)) 
 	<< ")";
