@@ -25,7 +25,7 @@ kernel client
   - mechanism to close out old caps
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
-  - integrate mds reply trace into cache
+/  - integrate mds reply trace into cache
 ?  - reconnect to recoverying mds
 - osd client
   - readpages (readahead)
@@ -37,7 +37,6 @@ kernel client
 - mon client
   - work out message resend logic..?
 - mount
-  - do monitor hostname resolution in mount, instead of requiring monitor to be specified with ip
   - determine suitable local ip automatically
     - this should be determined by which interface/ip would be used to connect to the monitor ip
 - unmount

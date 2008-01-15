@@ -39,6 +39,8 @@ struct ceph_client {
 	struct ceph_fsid fsid;
 	atomic_t nref;
 
+	struct super_block *sb;
+
 	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
 	struct completion mount_completion;
 
@@ -53,7 +55,7 @@ struct ceph_client {
 	struct list_head sb_list;
 };
 
-extern struct ceph_client *ceph_get_client(struct ceph_mount_args *args);
+extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb);
 extern void ceph_put_client(struct ceph_client *cl);
 
 #endif

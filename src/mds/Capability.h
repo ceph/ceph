@@ -24,15 +24,6 @@ using namespace std;
 #include "config.h"
 
 
-// definite caps
-#define CAP_FILE_RDCACHE   1    // client can safely cache reads
-#define CAP_FILE_RD        2    // client can read
-#define CAP_FILE_WR        4    // client can write
-#define CAP_FILE_WREXTEND  8    // client can extend file
-#define CAP_FILE_WRBUFFER  16   // client can safely buffer writes
-#define CAP_FILE_LAZYIO    32   // client can perform lazy io
-
-
 // heuristics
 //#define CAP_FILE_DELAYFLUSH  32
 
@@ -40,12 +31,13 @@ inline string cap_string(int cap)
 {
   string s;
   s = "[";
-  if (cap & CAP_FILE_RDCACHE) s += " rdcache";
-  if (cap & CAP_FILE_RD) s += " rd";
-  if (cap & CAP_FILE_WR) s += " wr";
-  if (cap & CAP_FILE_WRBUFFER) s += " wrbuffer";
-  if (cap & CAP_FILE_WRBUFFER) s += " wrextend";
-  if (cap & CAP_FILE_LAZYIO) s += " lazyio";
+  if (cap & CEPH_CAP_PIN) s += " pin";
+  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
+  if (cap & CEPH_CAP_RD) s += " rd";
+  if (cap & CEPH_CAP_WR) s += " wr";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
+  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
   s += " ]";
   return s;
 }
@@ -126,17 +118,17 @@ public:
   // needed
   static int needed(int from) {
     // strip out wrbuffer, rdcache
-    return from & (CAP_FILE_WR|CAP_FILE_RD);
+    return from & (CEPH_CAP_WR|CEPH_CAP_RD);
   }
   int needed() { return needed(wanted_caps); }
 
   // conflicts
   static int conflicts(int from) {
     int c = 0;
-    if (from & CAP_FILE_WRBUFFER) c |= CAP_FILE_RDCACHE|CAP_FILE_RD;
-    if (from & CAP_FILE_WR) c |= CAP_FILE_RDCACHE;
-    if (from & CAP_FILE_RD) c |= CAP_FILE_WRBUFFER;
-    if (from & CAP_FILE_RDCACHE) c |= CAP_FILE_WRBUFFER|CAP_FILE_WR;
+    if (from & CEPH_CAP_WRBUFFER) c |= CEPH_CAP_RDCACHE|CEPH_CAP_RD;
+    if (from & CEPH_CAP_WR) c |= CEPH_CAP_RDCACHE;
+    if (from & CEPH_CAP_RD) c |= CEPH_CAP_WRBUFFER;
+    if (from & CEPH_CAP_RDCACHE) c |= CEPH_CAP_WRBUFFER|CEPH_CAP_WR;
     return c;
   }
   int wanted_conflicts() { return conflicts(wanted()); }

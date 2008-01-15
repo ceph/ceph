@@ -395,7 +395,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dn->inode->mask = st->mask;
   
   // or do we have newer size/mtime from writing?
-  if (dn->inode->file_caps() & CAP_FILE_WR) {
+  if (dn->inode->file_caps() & CEPH_CAP_WR) {
     if (dn->inode->file_wr_size > dn->inode->inode.size)
       dn->inode->inode.size = dn->inode->file_wr_size;
     if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
@@ -1117,8 +1117,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   mds_sessions[mds]++;
 
   // reap?
-  if (m->get_op() == MClientFileCaps::OP_IMPORT) {
-    int other = m->get_mds();
+  if (m->get_op() == CEPH_CAP_OP_IMPORT) {
+    int other = m->get_migrate_mds();
 
     /*
      * FIXME: there is a race here.. if the caps are exported twice in succession,
@@ -1157,7 +1157,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   assert(in);
   
   // stale?
-  if (m->get_op() == MClientFileCaps::OP_EXPORT) {
+  if (m->get_op() == CEPH_CAP_OP_EXPORT) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now exported/stale" << dendl;
     
     // move to stale list
@@ -1172,7 +1172,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // delayed reap?
     if (cap_reap_queue.count(in->ino()) &&
         cap_reap_queue[in->ino()].count(mds)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << dendl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds
+	      << " delayed reap on mds?FIXME?" << dendl;  /* FIXME */
       
       // process delayed reap
       handle_file_caps( cap_reap_queue[in->ino()][mds] );
@@ -1186,7 +1187,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // release?
-  if (m->get_op() == MClientFileCaps::OP_RELEASE) {
+  if (m->get_op() == CEPH_CAP_OP_RELEASE) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
@@ -1220,7 +1221,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << dendl;
-    m->set_op(MClientFileCaps::OP_ACK);
+    m->set_op(CEPH_CAP_OP_ACK);
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst());
@@ -1240,27 +1241,32 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " was " << cap_string(old_caps) << dendl;
   
   // did file size decrease?
-  if ((old_caps & (CAP_FILE_RD|CAP_FILE_WR)) == 0 &&
-      (new_caps & (CAP_FILE_RD|CAP_FILE_WR)) != 0 &&
-      in->inode.size > m->get_inode().size) {
-    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_inode().size << dendl;
+  if ((old_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) == 0 &&
+      (new_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) != 0 &&
+      in->inode.size > (loff_t)m->get_size()) {
+    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_size() << dendl;
     
     // trim filecache?
     if (g_conf.client_oc)
-      in->fc.truncate(in->inode.size, m->get_inode().size);
+      in->fc.truncate(in->inode.size, m->get_size());
 
-    in->inode.size = in->file_wr_size = m->get_inode().size; 
+    in->inode.size = in->file_wr_size = m->get_size(); 
   }
 
   // update inode
-  in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
+  in->inode.size = m->get_size();      // might have updated size... FIXME this is overkill!
+  in->inode.mtime = m->get_mtime();
+  in->inode.atime = m->get_atime();
 
   // preserve our (possibly newer) file size, mtime
-  if (in->file_wr_size > in->inode.size)
-    m->get_inode().size = in->inode.size = in->file_wr_size;
-  if (in->file_wr_mtime > in->inode.mtime)
-    m->get_inode().mtime = in->inode.mtime = in->file_wr_mtime;
-
+  if (in->file_wr_size > in->inode.size) {
+    in->inode.size = in->file_wr_size;
+    m->set_size(in->file_wr_size);
+  }
+  if (in->file_wr_mtime > in->inode.mtime) {
+    in->inode.mtime = in->file_wr_mtime;
+    m->set_mtime(in->file_wr_mtime);
+  }
 
 
   if (g_conf.client_oc) {
@@ -1278,7 +1284,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // caching off.
 
     // wake up waiters?
-    if (new_caps & CAP_FILE_RD) {
+    if (new_caps & CEPH_CAP_RD) {
       for (list<Cond*>::iterator it = in->waitfor_read.begin();
            it != in->waitfor_read.end();
            it++) {
@@ -1287,7 +1293,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       }
       in->waitfor_read.clear();
     }
-    if (new_caps & CAP_FILE_WR) {
+    if (new_caps & CEPH_CAP_WR) {
       for (list<Cond*>::iterator it = in->waitfor_write.begin();
            it != in->waitfor_write.end();
            it++) {
@@ -1296,7 +1302,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       }
       in->waitfor_write.clear();
     }
-    if (new_caps & CAP_FILE_LAZYIO) {
+    if (new_caps & CEPH_CAP_LAZYIO) {
       for (list<Cond*>::iterator it = in->waitfor_lazy.begin();
            it != in->waitfor_lazy.end();
            it++) {
@@ -1354,7 +1360,7 @@ void Client::release_caps(Inode *in,
       // release (some of?) these caps
       it->second.caps = retain & it->second.caps;
       // note: tell mds _full_ wanted; it'll filter/behave based on what it is allowed to do
-      MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+      MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
 					       in->inode, 
                                                it->second.seq,
                                                it->second.caps,
@@ -1379,7 +1385,7 @@ void Client::update_caps_wanted(Inode *in)
   for (map<int,InodeCap>::iterator it = in->caps.begin();
        it != in->caps.end();
        it++) {
-    MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_ACK,
+    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
 					     in->inode, 
                                              it->second.seq,
                                              it->second.caps,
@@ -2662,8 +2668,8 @@ void Client::close_release(Inode *in)
     in->fc.release_clean();
 
   int retain = 0;
-  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_WREXTEND;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
+  if (in->num_open_wr || in->fc.is_dirty()) retain |= CEPH_CAP_WR | CEPH_CAP_WRBUFFER | CEPH_CAP_WREXTEND;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CEPH_CAP_RD | CEPH_CAP_RDCACHE;
 
   release_caps(in, retain);              // release caps now.
 }
@@ -2853,7 +2859,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
-  if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
+  if (!lazy && (in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
     // we're doing buffered i/o.  make sure we're inside the file.
     // we can trust size info bc we get accurate info when buffering/caching caps are issued.
     dout(10) << "file size: " << in->inode.size << dendl;
@@ -2898,14 +2904,14 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     // object cache OFF -- legacy inconsistent way.
 
     // do we have read file cap?
-    while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
+    while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
       dout(7) << " don't have read cap, waiting" << dendl;
       Cond cond;
       in->waitfor_read.push_back(&cond);
       cond.Wait(client_lock);
     }  
     // lazy cap?
-    while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+    while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
@@ -3021,13 +3027,13 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
     dout(7) << "synchronous write" << dendl;
 
     // do we have write file cap?
-    while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
+    while (!lazy && (in->file_caps() & CEPH_CAP_WR) == 0) {
       dout(7) << " don't have write cap, waiting" << dendl;
       Cond cond;
       in->waitfor_write.push_back(&cond);
       cond.Wait(client_lock);
     }
-    while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+    while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
@@ -3258,7 +3264,6 @@ int Client::_statfs(struct statvfs *stbuf)
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = 1024;  // ??
-  memcpy(stbuf, &req->reply->stfs, sizeof(*stbuf));
 
   statfs_requests.erase(req->tid);
   delete req->reply;
@@ -3295,7 +3300,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
 
   if (f->mode & FILE_MODE_LAZY) {
     // wait for lazy cap
-    while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+    while ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);
@@ -3331,7 +3336,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   
   if (f->mode & FILE_MODE_LAZY) {
     // wait for lazy cap
-    while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+    while ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
       Cond cond;
       in->waitfor_lazy.push_back(&cond);

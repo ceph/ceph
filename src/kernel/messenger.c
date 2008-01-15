@@ -790,7 +790,7 @@ static void process_accept(struct ceph_connection *con)
 		//spin_lock(&existing->lock);
 		/* replace existing connection? */
 		if ((test_bit(CONNECTING, &existing->state) && 
-		     compare_addr(&con->msgr->inst.addr, &con->peer_addr)) ||
+		     ceph_entity_addr_equal(&con->msgr->inst.addr, &con->peer_addr)) ||
 		    (test_bit(OPEN, &existing->state) && 
 		     con->connect_seq == existing->connect_seq)) {
 			/* replace existing with new connection */

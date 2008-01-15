@@ -50,8 +50,8 @@ struct ceph_object {
 #define CEPH_INO_ROOT 1
 
 struct ceph_timeval {
-	__u32 tv_sec;
-	__u32 tv_usec;
+	__le32 tv_sec;
+	__le32 tv_usec;
 };
 
 /*
@@ -210,10 +210,8 @@ struct ceph_entity_addr {
 	((a).nonce == (b).nonce &&					\
 	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
 
-#define compare_addr(a, b)			\
-	((a)->erank == (b)->erank &&		\
-	 (a)->nonce == (b)->nonce &&		\
-	 memcmp((a), (b), sizeof(*(a)) == 0))
+#define ceph_entity_addr_equal(a, b)		\
+	(memcmp((a), (b), sizeof(*(a))) == 0)
 
 struct ceph_entity_inst {
 	struct ceph_entity_name name;
@@ -418,6 +416,38 @@ struct ceph_mds_reply_dirfrag {
 	__u32 dist[];
 } __attribute__ ((packed));
 
+/* client file caps */
+#define CEPH_CAP_PIN       1  /* no specific capabilities beyond the pin */
+#define CEPH_CAP_RDCACHE   2  /* client can cache reads */
+#define CEPH_CAP_RD        4  /* client can read */
+#define CEPH_CAP_WR        8  /* client can write */
+#define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
+#define CEPH_CAP_WREXTEND 32  /* client can extend eof */
+#define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
+enum {
+	CEPH_CAP_OP_GRANT,   /* mds->client grant */
+	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_RELEASE, /* mds->client release (*) */
+	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
+	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
+};
+  /* 
+   * (*) it's a bit counterintuitive, but the mds has to 
+   *  close the cap because the client isn't able to tell
+   *  if a concurrent open() would map to the same inode.
+   */
+struct ceph_mds_file_caps {
+	__le32 op;
+	__le32 seq;
+	__le32 caps, wanted;
+	__le64 ino;
+	__le64 size;
+	__le32 migrate_mds, migrate_seq;
+	struct ceph_timeval mtime, atime;
+} __attribute__ ((packed));
+
+/* client reconnect */
 struct ceph_mds_cap_reconnect {
 	__le32 wanted;
 	__le32 issued;

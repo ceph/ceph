@@ -12,7 +12,7 @@ struct ceph_monmap {
 	ceph_epoch_t epoch;
 	struct ceph_fsid fsid;
 	__u32 num_mon;
-	struct ceph_entity_inst *mon_inst;
+	struct ceph_entity_inst mon_inst[0];
 };
 
 struct ceph_mon_statfs_request {
@@ -25,16 +25,17 @@ struct ceph_mon_statfs_request {
 struct ceph_mon_client {
 	struct ceph_client *client;
 	int last_mon;  /* last monitor i contacted */
-	struct ceph_monmap monmap;
+	struct ceph_monmap *monmap;
 
 	spinlock_t lock;
 	struct radix_tree_root statfs_request_tree;  /* statfs requests */
 	u64 last_tid;
 };
 
-extern int ceph_monmap_decode(struct ceph_monmap *m, void *p, void *end);
+extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
+extern int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr);
 
-extern void ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
+extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 
 extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have);
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u64 have);

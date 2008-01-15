@@ -82,7 +82,8 @@ static struct ceph_client *create_client(struct ceph_mount_args *args)
 	cl->msgr->prepare_pages = ceph_osdc_prepare_pages;
 	
 	cl->whoami = -1;
-	ceph_monc_init(&cl->monc, cl);
+	if ((err = ceph_monc_init(&cl->monc, cl)) < 0)
+		goto fail;
 	ceph_mdsc_init(&cl->mdsc, cl);
 	ceph_osdc_init(&cl->osdc, cl);
 
@@ -143,16 +144,19 @@ trymount:
 static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 {
 	int err;
-	int first = (client->monc.monmap.epoch == 0);
+	int first = (client->monc.monmap->epoch == 0);
+	void *new;
 
-	dout(1, "handle_monmap had epoch %d\n", client->monc.monmap.epoch);
-
-	/* parse */
-	err = ceph_monmap_decode(&client->monc.monmap, 
-				 msg->front.iov_base, 
+	dout(1, "handle_monmap had epoch %d\n", client->monc.monmap->epoch);
+	new = ceph_monmap_decode(msg->front.iov_base, 
 				 msg->front.iov_base + msg->front.iov_len);
-	if (err != 0)
+	if (IS_ERR(new)) {
+		err = PTR_ERR(new);
+		derr(0, "problem decoding monmap, %d\n", err);
 		return;
+	}
+	kfree(client->monc.monmap);
+	client->monc.monmap = new;
 
 	if (first) {
 		client->whoami = msg->hdr.dst.name.num;
@@ -175,27 +179,18 @@ static struct ceph_client *get_client_monaddr(struct ceph_entity_addr *monaddr)
 }
 */
 
-struct ceph_client *ceph_get_client(struct ceph_mount_args *args)
+struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb)
 {
 	struct ceph_client *client = 0;
 	int ret;
-
-	/* existing, by fsid? */
-	/*
-	if (args->flags & CEPH_MOUNT_FSID) 
-		client = ceph_get_client_fsid(&args->fsid);
-	if (client)
-		return client;
-	*/
-	/* existing, by monitors? */
-	/* write me. */
 
 	/* create new client */
 	client = create_client(args);
 	if (IS_ERR(client))
 		return client;
 	atomic_inc(&client->nref);
-	
+	client->sb = sb;
+
 	/* request mount */
 	ret = mount(client, args);
 	if (ret < 0) {
@@ -251,9 +246,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	switch (msg->hdr.type) {
 		/* me */
 	case CEPH_MSG_MON_MAP:
-		had = client->monc.monmap.epoch ? 1:0;
+		had = client->monc.monmap->epoch ? 1:0;
 		handle_monmap(client, msg);
-		if (!had && client->monc.monmap.epoch)
+		if (!had && client->monc.monmap->epoch)
 			got_first_map(client, 0);
 		break;
 
@@ -277,6 +272,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
 		ceph_mdsc_handle_forward(&client->mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_FILECAPS:
+		ceph_mdsc_handle_filecaps(&client->mdsc, msg);
 		break;
 
 		/* osd client */

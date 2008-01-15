@@ -30,7 +30,6 @@ struct ceph_mount_args {
 	struct ceph_entity_addr my_addr;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
-	int mon_port;
 	char path[100];
 };
 
@@ -70,8 +69,17 @@ struct ceph_inode_frag_map_item {
 };
 
 #define STATIC_CAPS 2
+
+enum {
+	FILE_MODE_PIN,
+	FILE_MODE_RDONLY,
+	FILE_MODE_RDWR,
+	FILE_MODE_WRONLY
+};
 struct ceph_inode_info {
 	struct ceph_file_layout i_layout;
+
+	char *i_symlink;
 
 	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
@@ -82,13 +90,42 @@ struct ceph_inode_info {
 	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
 	atomic_t i_cap_count;  /* ref count (e.g. from file*) */
 
+	int i_nr_by_mode[4];
 	int i_cap_wanted;
-	int i_cap_issued;
 	loff_t i_wr_size;
 	struct timespec i_wr_mtime;
+	struct timespec i_old_atime;
 	
 	struct inode vfs_inode; /* at end */
 };
+
+static inline int ceph_caps_issued(struct ceph_inode_info *ci) {
+	int i, issued = 0;
+	for (i=0; i<ci->i_nr_caps; i++)
+		issued |= ci->i_caps[i].caps;
+	return issued;
+}
+
+static inline int ceph_caps_wanted(struct ceph_inode_info *ci) {
+	int want = 0;
+	if (ci->i_nr_by_mode[0]) want |= CEPH_CAP_PIN;
+	if (ci->i_nr_by_mode[1]) want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
+	if (ci->i_nr_by_mode[2]) want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE|CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+	if (ci->i_nr_by_mode[3]) want |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+	return want;
+}
+static inline int ceph_file_mode(int flags)
+{
+	if ((flags & O_DIRECTORY) == O_DIRECTORY)
+		return FILE_MODE_PIN;
+	if ((flags & O_RDWR) == O_RDWR)
+		return FILE_MODE_RDWR;
+	if ((flags & O_WRONLY) == O_WRONLY)
+		return FILE_MODE_WRONLY;
+	if ((flags & O_RDONLY) == O_RDONLY)
+		return FILE_MODE_RDONLY;
+	BUG_ON(1);	
+}
 
 static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 {
@@ -139,7 +176,7 @@ extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			      struct kstat *stat);
-
+extern int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;
@@ -154,8 +191,7 @@ extern int ceph_release(struct inode *inode, struct file *filp);
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
-extern int ceph_get_dentry_path(struct dentry *dn, char *buf, struct dentry *base);  /* move me */
-extern int ceph_build_dentry_path(struct dentry *dentry, char **path, int *len);
+extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
 
 
 #endif /* _FS_CEPH_CEPH_H */

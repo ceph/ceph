@@ -321,7 +321,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
+	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
@@ -362,8 +362,8 @@ void Server::process_reconnected_caps()
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
-      if (issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER)) {
-	if (issued & (CAP_FILE_RDCACHE|CAP_FILE_WRBUFFER)) {
+      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
 	  in->filelock.set_state(LOCK_LONER);
 	} else {
 	  in->filelock.set_state(LOCK_MIXED);
@@ -371,7 +371,7 @@ void Server::process_reconnected_caps()
       }
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
-      assert(issued & (CAP_FILE_WR|CAP_FILE_WRBUFFER) == 0);   // ????
+      assert(issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER) == 0);   // ????
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else
@@ -1709,10 +1709,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
-  newi->inode.mode &= ~S_IFMT;
-  newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
+  dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
@@ -1802,7 +1802,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // it's a symlink
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFLNK;
+  newi->inode.mode |= 0777;     // ?
   newi->symlink = req->get_path2();
+  newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
 
   // prepare finisher
@@ -3743,7 +3745,7 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != 0)) {
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != O_DIRECTORY)) {
     reply_request(mdr, -EINVAL);
     return;
   }

@@ -11,7 +11,7 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 	int flags = file->f_flags;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	ceph_ino_t pathbase;
-	char path[PATH_MAX];
+	char *path;
 	int pathlen;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
@@ -25,9 +25,11 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 
 	dout(5, "open inode %p dentry %p name '%s' flags %d\n", inode, dentry, dentry->d_name.name, flags);
 	pathbase = inode->i_sb->s_root->d_inode->i_ino;
-	pathlen = ceph_get_dentry_path(dentry, path, inode->i_sb->s_root);
-
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path)) 
+		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
+	kfree(path);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	rhead = req->front.iov_base;
@@ -47,7 +49,9 @@ int ceph_open(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_inode_cap *cap;
-	struct ceph_file_info *fi;
+	struct ceph_file_info *cf;
+	int mode;
+	int wanted;
 
 	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
 	cap = ceph_find_cap(inode, 0);
@@ -57,27 +61,41 @@ int ceph_open(struct inode *inode, struct file *file)
 			return PTR_ERR(cap);
 	}
 	
-	fi = kzalloc(sizeof(*fi), GFP_KERNEL);
-	if (fi == NULL)
+	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
+	if (cf == NULL)
 		return -ENOMEM;
-	file->private_data = fi;
+	file->private_data = cf;
 
 	atomic_inc(&ci->i_cap_count);
-	dout(5, "ceph_open success\n");
+
+	mode = ceph_file_mode(file->f_flags);
+	ci->i_nr_by_mode[mode]++;
+	wanted = ceph_caps_wanted(ci);
+	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
+
+	dout(5, "ceph_open success, %lx\n", inode->i_ino);
 	return 0;
 }
 
-int ceph_release(struct inode *inode, struct file *filp)
+int ceph_release(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_file_info *fi = filp->private_data;
-
-	dout(5, "ceph_release inode %p filp %p\n", inode, filp);
+	struct ceph_file_info *cf = file->private_data;
+	int mode, wanted;
+	
+	dout(5, "ceph_release inode %p file %p\n", inode, file);
 	atomic_dec(&ci->i_cap_count);
+	
+	if (cf->rinfo.reply) 
+		ceph_mdsc_destroy_reply_info(&cf->rinfo);
+	kfree(cf);
 
-	if (fi->rinfo.reply) 
-		ceph_mdsc_destroy_reply_info(&fi->rinfo);
-	kfree(fi);
+	mode = ceph_file_mode(file->f_flags);
+	ci->i_nr_by_mode[mode]--;
+	wanted = ceph_caps_wanted(ci);
+	dout(10, "mode %d wanted %d was %d\n", mode, wanted, ci->i_cap_wanted);
+	if (wanted != ci->i_cap_wanted)
+		ceph_mdsc_update_cap_wanted(ci, wanted);
 
 	return 0;
 }
@@ -96,6 +114,7 @@ const struct file_operations ceph_file_fops = {
 	.write = do_sync_write,
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
+	.mmap = generic_file_mmap,
 /*	.read = ceph_file_read,
 	.write = ceph_file_write,
 	.open = ceph_file_open,
