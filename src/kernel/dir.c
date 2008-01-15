@@ -152,7 +152,7 @@ nextfrag:
 				in=dn->d_inode;
 			}
 
-			if (in->i_ino !=  fi->rinfo.dir_in[i].in->ino) {
+			if (in->i_ino != fi->rinfo.dir_in[i].in->ino) {
 				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
 					dout(30, "ceph_fill_inode badness\n");
 					iput(in);
@@ -268,12 +268,12 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		inode = iget_locked(dir->i_sb, ino);
 		if (!inode) 
 			return ERR_PTR(-EACCES);
-		if (inode->i_state & I_NEW)
-			unlock_new_inode(inode);
 		if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) {
 			iput(inode);
 			return ERR_PTR(err);
 		}
+		if (inode->i_state & I_NEW)
+			unlock_new_inode(inode);
 		d_add(dentry, inode);
 		iput(inode);
 	} else {

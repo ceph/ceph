@@ -31,8 +31,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	insert_inode_hash(inode);
 
-	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o\n", inode->i_ino,
-	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode);
+	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode->i_ino,
+	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, inode->i_nlink);
 	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
@@ -68,6 +68,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_nsec = 0;
 
+	ci->i_old_atime = inode->i_atime;
+
 	inode->i_mapping->a_ops = &ceph_aops;
 
 	switch (inode->i_mode & S_IFMT) {
@@ -100,7 +102,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		break;
 	case S_IFDIR:
 		dout(20, "%p is a dir\n", inode);
-		inc_nlink(inode);
 		inode->i_op = &ceph_dir_iops;
 		inode->i_fop = &ceph_dir_fops;
 		break;

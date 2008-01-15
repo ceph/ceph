@@ -95,6 +95,7 @@ struct ceph_inode_info {
 	int i_cap_wanted;
 	loff_t i_wr_size;
 	struct timespec i_wr_mtime;
+	struct timespec i_old_atime;
 	
 	struct inode vfs_inode; /* at end */
 };

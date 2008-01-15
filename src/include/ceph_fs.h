@@ -210,10 +210,8 @@ struct ceph_entity_addr {
 	((a).nonce == (b).nonce &&					\
 	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
 
-#define compare_addr(a, b)			\
-	((a)->erank == (b)->erank &&		\
-	 (a)->nonce == (b)->nonce &&		\
-	 memcmp((a), (b), sizeof(*(a)) == 0))
+#define ceph_entity_addr_equal(a, b)		\
+	(memcmp((a), (b), sizeof(*(a))) == 0)
 
 struct ceph_entity_inst {
 	struct ceph_entity_name name;

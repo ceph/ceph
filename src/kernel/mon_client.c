@@ -44,6 +44,19 @@ bad:
 	return err;
 }
 
+/*
+ * return true if *addr is included in the monmap
+ */
+int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr)
+{
+	int i;
+	for (i=0; i<m->num_mon; i++) 
+		if (ceph_entity_addr_equal(addr, &m->mon_inst[i].addr)) 
+			return 1;
+	return 0;
+}
+
+
 static int pick_mon(struct ceph_mon_client *monc, int notmon)
 {
 	char r;
