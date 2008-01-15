@@ -38,6 +38,8 @@ using namespace __gnu_cxx;
 class OSD;
 class MOSDOp;
 class MOSDOpReply;
+class MOSDSubOp;
+class MOSDSubOpReply;
 class MOSDPGActivateSet;
 
 /** PG - Replica Placement Group
@@ -216,11 +218,11 @@ public:
       object_t   oid;
       eversion_t version;
       
-      osdreqid_t reqid;  // caller+tid to uniquely identify request
+      osd_reqid_t reqid;  // caller+tid to uniquely identify request
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v, 
-	    const osdreqid_t& rid) :
+	    const osd_reqid_t& rid) :
         op(_op), oid(_oid), version(v), reqid(rid) {}
       
       bool is_delete() const { return op == DELETE; }
@@ -273,7 +275,7 @@ public:
   class IndexedLog : public Log {
   public:
     hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osdreqid_t>      caller_ops;
+    hash_set<osd_reqid_t>      caller_ops;
 
     // recovery pointers
     list<Entry>::iterator requested_to; // not inclusive of referenced item
@@ -291,7 +293,7 @@ public:
     bool logged_object(object_t oid) {
       return objects.count(oid);
     }
-    bool logged_req(const osdreqid_t &r) {
+    bool logged_req(const osd_reqid_t &r) {
       return caller_ops.count(r);
     }
 
@@ -493,9 +495,8 @@ protected:
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 
-
   // stats
-  off_t stat_size;
+  off_t stat_num_bytes;
   off_t stat_num_blocks;
 
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
@@ -572,7 +573,7 @@ public:
     state(0),
     last_epoch_started_any(0),
     have_master_log(true),
-    stat_size(0), stat_num_blocks(0)
+    stat_num_bytes(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }
   
@@ -632,7 +633,7 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
 
-  bool is_dup(osdreqid_t rid) {
+  bool is_dup(osd_reqid_t rid) {
     return log.logged_req(rid);
   }
 
@@ -645,14 +646,15 @@ public:
   // abstract bits
   virtual bool preprocess_op(MOSDOp *op, utime_t now) { return false; } 
   virtual void do_op(MOSDOp *op) = 0;
-  virtual void do_op_reply(MOSDOpReply *op) = 0;
+  virtual void do_sub_op(MOSDSubOp *op) = 0;
+  virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual bool is_missing_object(object_t oid) = 0;
-  virtual void wait_for_missing_object(object_t oid, MOSDOp *op) = 0;
+  virtual void wait_for_missing_object(object_t oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_acker_change() = 0;

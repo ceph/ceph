@@ -2663,12 +2663,12 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   // send REAP
   Capability *cap = in->get_client_cap(client);
   assert(cap); // ?
-  MClientFileCaps *reap = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
+  MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
 					      cap->get_last_seq(),
 					      cap->pending(),
 					      cap->wanted());
-  reap->set_mds(frommds); // reap from whom?
+  reap->set_migrate_mds(frommds); // reap from whom?
   mds->messenger->send_message(reap, session->inst);
 }
 

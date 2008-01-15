@@ -52,14 +52,15 @@ public:
 
   bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
-  void do_op_reply(MOSDOpReply *r);
+  void do_sub_op(MOSDSubOp *op);
+  void do_sub_op_reply(MOSDSubOpReply *r);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(object_t oid);
-  void wait_for_missing_object(object_t oid, MOSDOp *op);
+  void wait_for_missing_object(object_t oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

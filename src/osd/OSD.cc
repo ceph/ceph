@@ -44,6 +44,8 @@
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDSubOp.h"
+#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
@@ -645,7 +647,7 @@ void OSD::_refresh_my_stat(utime_t now)
   if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval ||
       pending_ops > 2*my_stat.qlen) {
 
-    my_stat.stamp = now;
+    my_stat.stamp = now.tv_ref();
     my_stat.oprate = stat_oprate.get(now);
 
     //read_latency_calc.set_size( 20 );  // hrm.
@@ -821,14 +823,17 @@ void OSD::heartbeat()
 void OSD::send_pg_stats()
 {
   //dout(-10) << "send_pg_stats" << dendl;
-  
+  bool updated;
+
   // grab queue
   set<pg_t> q;
   pg_stat_queue_lock.Lock();
   q.swap(pg_stat_queue);
+  updated = osd_stat_updated;
+  osd_stat_updated = false;
   pg_stat_queue_lock.Unlock();
-
-  if (!q.empty()) {
+  
+  if (!q.empty() || osd_stat_updated) {
     dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
     
     MPGStats *m = new MPGStats;
@@ -965,7 +970,6 @@ void OSD::dispatch(Message *m)
       switch (m->get_type()) {
 
       case MSG_OSD_PING:
-        // take note.
         handle_osd_ping((MOSDPing*)m);
         break;
         
@@ -985,13 +989,17 @@ void OSD::dispatch(Message *m)
         handle_pg_activate_set((MOSDPGActivateSet*)m);
         break;
 
+	// client ops
       case CEPH_MSG_OSD_OP:
         handle_op((MOSDOp*)m);
         break;
         
         // for replication etc.
-      case CEPH_MSG_OSD_OPREPLY:
-        handle_op_reply((MOSDOpReply*)m);
+      case MSG_OSD_SUBOP:
+	handle_sub_op((MOSDSubOp*)m);
+	break;
+      case MSG_OSD_SUBOPREPLY:
+        handle_sub_op_reply((MOSDSubOpReply*)m);
         break;
         
         
@@ -1319,7 +1327,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     // is this okay?
     assert(superblock.current_epoch == 2);
-    ceph_fsid_t nullfsid;
+    ceph_fsid nullfsid;
     memset(&nullfsid, 0, sizeof(nullfsid));
     if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {
       derr(0) << "will not mkfs, my superblock fsid is not zeroed" << dendl;
@@ -2301,8 +2309,10 @@ void OSD::handle_op(MOSDOp *op)
     // do it now.
     if (op->get_type() == CEPH_MSG_OSD_OP)
       pg->do_op((MOSDOp*)op);
-    else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
-      pg->do_op_reply((MOSDOpReply*)op);
+    else if (op->get_type() == MSG_OSD_SUBOP)
+      pg->do_sub_op((MOSDSubOp*)op);
+    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
+      pg->do_sub_op_reply((MOSDSubOpReply*)op);
     else 
       assert(0);
   } else {
@@ -2314,7 +2324,42 @@ void OSD::handle_op(MOSDOp *op)
 }
 
 
-void OSD::handle_op_reply(MOSDOpReply *op)
+void OSD::handle_sub_op(MOSDSubOp *op)
+{
+  dout(10) << "handle_sub_op " << *op << " epoch " << op->get_map_epoch() << dendl;
+  if (op->get_map_epoch() < boot_epoch) {
+    dout(3) << "replica op from before boot" << dendl;
+    delete op;
+    return;
+  }
+
+  // must be a rep op.
+  assert(op->get_source().is_osd());
+  
+  // make sure we have the pg
+  const pg_t pgid = op->get_pg();
+
+  // require same or newer map
+  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+
+  // share our map with sender, if they're old
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+
+  if (!_have_pg(pgid)) {
+    // hmm.
+    delete op;
+    return;
+  } 
+
+  PG *pg = _lookup_lock_pg(pgid);
+  if (g_conf.osd_maxthreads < 1) {
+    pg->do_sub_op(op);    // do it now
+  } else {
+    enqueue_op(pg, op);     // queue for worker threads
+  }
+  pg->unlock();
+}
+void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
   if (op->get_map_epoch() < boot_epoch) {
     dout(3) << "replica op reply from before boot" << dendl;
@@ -2342,7 +2387,7 @@ void OSD::handle_op_reply(MOSDOpReply *op)
 
   PG *pg = _lookup_lock_pg(pgid);
   if (g_conf.osd_maxthreads < 1) {
-    pg->do_op_reply(op);    // do it now
+    pg->do_sub_op_reply(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
   }
@@ -2397,8 +2442,10 @@ void OSD::dequeue_op(PG *pg)
   // do it
   if (op->get_type() == CEPH_MSG_OSD_OP)
     pg->do_op((MOSDOp*)op); // do it now
-  else if (op->get_type() == CEPH_MSG_OSD_OPREPLY)
-    pg->do_op_reply((MOSDOpReply*)op);
+  else if (op->get_type() == MSG_OSD_SUBOP)
+    pg->do_sub_op((MOSDSubOp*)op);
+  else if (op->get_type() == MSG_OSD_SUBOPREPLY)
+    pg->do_sub_op_reply((MOSDSubOpReply*)op);
   else 
     assert(0);
 

@@ -1081,6 +1081,7 @@ void MDS::_dispatch(Message *m)
       // SERVER
     case CEPH_MSG_CLIENT_SESSION:
     case CEPH_MSG_CLIENT_REQUEST:
+    case CEPH_MSG_CLIENT_RECONNECT:
     case MSG_MDS_SLAVE_REQUEST:
       server->dispatch(m);
       break;

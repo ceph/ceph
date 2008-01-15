@@ -548,7 +548,7 @@ bool Locker::issue_caps(CInode *in)
         dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << cap->get_last_seq()
 		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
 		<< dendl;
-        mds->send_message_client(new MClientFileCaps(MClientFileCaps::OP_GRANT,
+        mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
 						     in->inode,
 						     cap->get_last_seq(),
 						     cap->pending(),
@@ -771,34 +771,34 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       request_inode_file_caps(in);
 
     // tell client.
-    MClientFileCaps *r = new MClientFileCaps(MClientFileCaps::OP_RELEASE,
+    MClientFileCaps *r = new MClientFileCaps(CEPH_CAP_OP_RELEASE,
 					     in->inode, 
                                              0, 0, 0);
     mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?
-  if (m->get_inode().atime > in->inode.atime) {
-      dout(7) << "  taking atime " << m->get_inode().atime << " > " 
+  if (m->get_atime() > in->inode.atime) {
+      dout(7) << "  taking atime " << m->get_atime() << " > " 
               << in->inode.atime << " for " << *in << dendl;
-    in->inode.atime = m->get_inode().atime;
+    in->inode.atime = m->get_atime();
   }
   
   if ((has|had) & CEPH_CAP_WR) {
     bool dirty = false;
 
     // mtime
-    if (m->get_inode().mtime > in->inode.mtime) {
-      dout(7) << "  taking mtime " << m->get_inode().mtime << " > " 
+    if (m->get_mtime() > in->inode.mtime) {
+      dout(7) << "  taking mtime " << m->get_mtime() << " > " 
               << in->inode.mtime << " for " << *in << dendl;
-      in->inode.mtime = m->get_inode().mtime;
+      in->inode.mtime = m->get_mtime();
       dirty = true;
     }
     // size
-    if (m->get_inode().size > in->inode.size) {
-      dout(7) << "  taking size " << m->get_inode().size << " > " 
+    if ((loff_t)m->get_size() > in->inode.size) {
+      dout(7) << "  taking size " << m->get_size() << " > " 
               << in->inode.size << " for " << *in << dendl;
-      in->inode.size = m->get_inode().size;
+      in->inode.size = m->get_size();
       dirty = true;
     }
 

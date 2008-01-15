@@ -51,7 +51,7 @@ class BufferHead : public LRUObject {
   bufferlist data;   // if empty, defined as zero (hole)
 
   ioh_t     rx_ioh;         // 
-  Extent    rx_from;
+  extent_t  rx_from;
   ioh_t     tx_ioh;         // 
   block_t   tx_block;
 
@@ -73,7 +73,7 @@ class BufferHead : public LRUObject {
   version_t  version;        // current version in cache
   version_t  last_flushed;   // last version flushed to disk
  
-  Extent     object_loc;     // block position _in_object_
+  extent_t   object_loc;     // block position _in_object_
 
   utime_t    dirty_stamp;
   //xlist<BufferHead*>::item xlist_dirty;
@@ -86,10 +86,12 @@ class BufferHead : public LRUObject {
     rx_ioh(0), tx_ioh(0), tx_block(0),
     shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
-    object_loc(start, len),
+    //object_loc(start, len),
     //xlist_dirty(this),
-    want_to_expire(false)
-    {}
+    want_to_expire(false) {
+    object_loc.start = start;
+    object_loc.length = len;
+  }
   ~BufferHead() {
     unpin_shadows();
   }

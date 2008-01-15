@@ -33,8 +33,10 @@ public:
 
   void add_inode(CInode *in) {
     inos.push_back(in->ino());
-    metablob.add_dir_context(in->get_parent_dn()->get_dir());
-    metablob.add_primary_dentry(in->get_parent_dn(), false);
+    if (!in->is_base()) {
+      metablob.add_dir_context(in->get_parent_dn()->get_dir());
+      metablob.add_primary_dentry(in->get_parent_dn(), false);
+    }
   }
 
   void encode_payload(bufferlist& bl) {

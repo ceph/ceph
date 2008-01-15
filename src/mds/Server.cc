@@ -395,7 +395,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// mark client caps stale.
 	inode_t fake_inode;
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
+	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
@@ -1785,10 +1785,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
-  newi->inode.mode &= ~S_IFMT;
-  newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
+  dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
@@ -1878,7 +1878,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // it's a symlink
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFLNK;
+  newi->inode.mode |= 0777;     // ?
   newi->symlink = req->get_path2();
+  newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
 
   // prepare finisher
@@ -3819,7 +3821,7 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != 0)) {
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != O_DIRECTORY)) {
     reply_request(mdr, -EINVAL);
     return;
   }

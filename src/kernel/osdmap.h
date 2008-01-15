@@ -22,13 +22,26 @@ struct ceph_osdmap {
 
 	__u32 num_pg_swap_primary;
 	struct {
-		ceph_pg_t pg;
+		union ceph_pg pg;
 		__u32 osd;
 	} *pg_swap_primary;
 };
 
+static inline bool ceph_osd_is_up(struct ceph_osdmap *map, int osd)
+{
+	return (osd < map->max_osd) && (map->osd_state[osd] & CEPH_OSD_UP);
+}
+
 extern struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *map);
 extern void osdmap_destroy(struct ceph_osdmap *map);
 extern struct ceph_osdmap *osdmap_decode(void **p, void *end);
+
+extern void calc_file_object_mapping(struct ceph_file_layout *layout, 
+				     loff_t *off, loff_t *len,
+				     struct ceph_object *oid, __u64 *oxoff, __u64 *oxlen);
+extern void calc_object_layout(struct ceph_object_layout *ol,
+			       struct ceph_object *oid,
+			       struct ceph_file_layout *fl,
+			       struct ceph_osdmap *osdmap);
 
 #endif

@@ -9,7 +9,8 @@
 
 struct ceph_msg;
 
-typedef void (*ceph_messenger_dispatch_t) (void *p, struct ceph_msg *m);
+typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
+typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
 	switch (t) {
@@ -25,7 +26,8 @@ static __inline__ const char *ceph_name_type_str(int t) {
 
 struct ceph_messenger {
 	void *parent;
-	ceph_messenger_dispatch_t dispatch;
+	ceph_msgr_dispatch_t dispatch;
+	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
 	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
@@ -38,7 +40,7 @@ struct ceph_messenger {
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
 	struct kvec front;              /* first bit of message */
-	struct page **pages;            /* data payload */
+	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
 	atomic_t nref;
@@ -50,8 +52,8 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_RETRY_INTERVAL	(3U * HZ)
-#define MAX_RETRY_INTERVAL	(5U * 60 * HZ)
+#define BASE_DELAY_INTERVAL	1	
+#define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
 #define NEW            0
@@ -62,12 +64,13 @@ struct ceph_msg_pos {
 #define READABLE       5  /* set when socket gets new data */
 #define READING        6  /* provides mutual exclusion, protecting in_* */
 #define REJECTING      7
-#define CLOSED         8
+#define CLOSING        8
+#define CLOSED         9
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
-	__u32 state;		/* connection state */
+	unsigned long state;	/* connection state */
 	
 	atomic_t nref;
 
@@ -89,19 +92,19 @@ struct ceph_connection {
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
 	struct ceph_msg_header out_hdr;
+	struct ceph_entity_addr out_addr;
+	__le32 out32;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
-
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
-
 
 	/* partially read message contents */
 	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
 	int in_base_pos;   /* for ack seq, or msg headers, or accept handshake */
-	__u32 in_partial_ack;  
+	__u32 in_partial_ack; 
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
@@ -114,8 +117,9 @@ struct ceph_connection {
 
 extern struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
+extern void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr);
 
-extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off);
+extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);
 }
@@ -165,6 +169,12 @@ static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_a
 	ceph_decode_copy(p, end, &v->ipaddr, sizeof(v->ipaddr));
 	return 0;
 }
+static __inline__ void ceph_encode_addr(struct ceph_entity_addr *to, struct ceph_entity_addr *from)
+{
+	to->erank = cpu_to_le32(from->erank);
+	to->nonce = cpu_to_le32(from->nonce);
+	to->ipaddr = from->ipaddr;
+}
 
 static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
 	if (unlikely(*p + sizeof(*v) > end))
@@ -188,9 +198,7 @@ static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph
 {
 	to->name.type = cpu_to_le32(from->name.type);
 	to->name.num = cpu_to_le32(from->name.num);
-	to->addr.erank = cpu_to_le32(from->addr.erank);
-	to->addr.nonce = cpu_to_le32(from->addr.nonce);
-	to->addr.ipaddr = from->addr.ipaddr;
+	ceph_encode_addr(&to->addr, &from->addr);
 }
 
 static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct ceph_msg_header *from)
@@ -224,8 +232,22 @@ static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 
 static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
 	BUG_ON(*p + sizeof(v) > end);
-	*(__u32*)*p = cpu_to_le64(v);
+	*(__u32*)*p = cpu_to_le32(v);
 	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_16(void **p, void *end, __u16 v) {
+	BUG_ON(*p + sizeof(v) > end);
+	*(__u16*)*p = cpu_to_le16(v);
+	*p += sizeof(v);
+	return 0;
+}
+
+static __inline__ int ceph_encode_8(void **p, void *end, __u8 v) {
+	BUG_ON(*p < end);
+	*(__u8*)*p = v;
+	(*p)++;
 	return 0;
 }
 
@@ -240,13 +262,27 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 	return 0;
 }
 
-static void __inline__ ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
+static __inline__ int ceph_encode_string(void **p, void *end, const char *s, __u32 len)
+{
+	BUG_ON(*p + sizeof(len) > end);
+	ceph_encode_32(p, end, len);
+	if (len) memcpy(*p, s, len);
+	*p += len;
+	return 0;
+}
+
+static __inline__ void ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
 {
 	ts->tv_sec = le32_to_cpu(tv->tv_sec);
 	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
 }
 
-
-
+static __inline__ int ceph_encode_timespec(void **p, void *end, struct timespec *ts)
+{
+	BUG_ON(*p + sizeof(struct ceph_timeval) > end);
+	ceph_encode_32(p, end, ts->tv_sec);
+	ceph_encode_32(p, end, ts->tv_nsec/1000);
+	return 0;
+}
 
 #endif

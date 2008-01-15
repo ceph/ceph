@@ -41,15 +41,6 @@ using namespace std;
  * some system constants
  */
 
-// from LSB to MSB,
-#define PG_PS_BITS         16  // max bits for placement seed/group portion of PG
-#define PG_REP_BITS        6   // up to 64 replicas   
-#define PG_TYPE_BITS       2
-#define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
-
-#define PG_TYPE_RAND     1   // default: distribution randomly
-#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD
-
 // pg roles
 #define PG_ROLE_STRAY   -1
 #define PG_ROLE_HEAD     0
@@ -57,13 +48,6 @@ using namespace std;
 #define PG_ROLE_MIDDLE   2  // der.. misnomer
 //#define PG_ROLE_TAIL     2
 
-
-inline int stable_mod(int x, int b, int bmask) {
-  if ((x & bmask) < b) 
-    return x & bmask;
-  else
-    return (x & (bmask>>1));
-}
 
 inline int calc_bits_of(int t) {
   int b = 0;
@@ -83,7 +67,7 @@ class OSDMap {
 public:
   class Incremental {
   public:
-    ceph_fsid_t fsid;
+    ceph_fsid fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
@@ -135,7 +119,7 @@ public:
   };
 
 private:
-  ceph_fsid_t fsid;
+  ceph_fsid fsid;
   epoch_t epoch;       // what epoch of the osd cluster descriptor is this
   epoch_t mon_epoch;  // monitor epoch (election iteration)
   utime_t ctime, mtime;       // epoch start time
@@ -165,8 +149,8 @@ private:
   }
 
   // map info
-  ceph_fsid_t& get_fsid() { return fsid; }
-  void set_fsid(ceph_fsid_t& f) { fsid = f; }
+  ceph_fsid& get_fsid() { return fsid; }
+  void set_fsid(ceph_fsid& f) { fsid = f; }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -387,11 +371,11 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
+  ceph_object_layout file_to_object_layout(object_t oid, FileLayout& layout) {
     return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
   }
 
-  ObjectLayout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
     int num = preferred >= 0 ? localized_pg_num:pg_num;
     int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
 
@@ -399,19 +383,19 @@ private:
     ps_t ps;
     switch (g_conf.osd_object_layout) {
     case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = stable_mod(oid.bno + oid.ino, num, num_mask);
+      ps = ceph_stable_mod(oid.bno + oid.ino, num, num_mask);
       break;
       
     case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
       break;
 
     default:
@@ -421,8 +405,11 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    return ObjectLayout(pg_t(pg_type, pg_size, ps, preferred), 
-			object_stripe_unit);
+    pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
+    ceph_object_layout layout;
+    layout.ol_pgid = pgid.u;
+    layout.ol_stripe_unit = object_stripe_unit;
+    return layout;
   }
 
 
@@ -437,16 +424,10 @@ private:
 	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size());
 	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size());
 	else assert(0);
-
-	// forcefeed?
-	int forcefeed = -1;
-	if (pg.preferred() >= 0 &&
-	    exists(pg.preferred())) 
-	  forcefeed = pg.preferred();
 	crush.do_rule(rule,
 		      pg.ps(),
 		      osds, pg.size(),
-		      forcefeed);
+		      pg.preferred());
       }
       break;
       

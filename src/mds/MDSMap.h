@@ -29,25 +29,6 @@ using namespace std;
 
 /*
 
-  beautiful state diagram:  
-
-   STOPPED                     DNE              FAILED                    
-  / |  \                      / |                  |
- /  |   \________     _______/  |                  |               
-|   v            v   v          v                  |
-| STARTING <--> STANDBY <--> CREATING              |
-|      \                      /                    |
-|       \____    ____________/                     |
- \           v  v                                  |
-  \         ACTIVE  <-- REJOIN <-- RECONNECT <-- REPLAY
-   \          |
-    \         |
-     \        v
-      \--  STOPPING 
-
-
- new states:
-
  boot  --> standby, creating, or starting.
 
 
@@ -73,23 +54,23 @@ using namespace std;
 class MDSMap {
  public:
   // mds states
-  static const int STATE_DNE =         0;  // down, never existed.
-  static const int STATE_DESTROYING = -1;  // down, existing, semi-destroyed.
-  static const int STATE_STOPPED =    -2;  // down, once existed, but no subtrees. empty log.
-  static const int STATE_FAILED =      3;  // down, active subtrees; needs to be recovered.
+  static const int STATE_DNE =        CEPH_MDS_STATE_DNE;  // down, never existed.
+  static const int STATE_DESTROYING = CEPH_MDS_STATE_DESTROYING;  // down, existing, semi-destroyed.
+  static const int STATE_STOPPED =    CEPH_MDS_STATE_STOPPED;  // down, once existed, but no subtrees. empty log.
+  static const int STATE_FAILED =     CEPH_MDS_STATE_FAILED;  // down, active subtrees; needs to be recovered.
 
-  static const int STATE_BOOT     =   -4;  // up, boot announcement.  destiny unknown.
-  static const int STATE_STANDBY  =   -5;  // up, idle.  waiting for assignment by monitor.
+  static const int STATE_BOOT     =   CEPH_MDS_STATE_BOOT;  // up, boot announcement.  destiny unknown.
+  static const int STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY;  // up, idle.  waiting for assignment by monitor.
 
-  static const int STATE_CREATING  =  -6;  // up, creating MDS instance (new journal, idalloc..).
-  static const int STATE_STARTING  =  -7;  // up, starting prior stopped MDS instance.
+  static const int STATE_CREATING  =  CEPH_MDS_STATE_CREATING;  // up, creating MDS instance (new journal, idalloc..).
+  static const int STATE_STARTING  =  CEPH_MDS_STATE_STARTING;  // up, starting prior stopped MDS instance.
 
-  static const int STATE_REPLAY    =   8;  // up, starting prior failed instance. scanning journal.
-  static const int STATE_RESOLVE   =   9;  // up, disambiguating distributed operations (import, rename, etc.)
-  static const int STATE_RECONNECT =  10;  // up, reconnect to clients
-  static const int STATE_REJOIN    =  11; // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =     12; // up, active
-  static const int STATE_STOPPING  =  13; // up, exporting metadata (-> standby or out)
+  static const int STATE_REPLAY    =  CEPH_MDS_STATE_REPLAY;  // up, starting prior failed instance. scanning journal.
+  static const int STATE_RESOLVE   =  CEPH_MDS_STATE_RESOLVE;  // up, disambiguating distributed operations (import, rename, etc.)
+  static const int STATE_RECONNECT =  CEPH_MDS_STATE_RECONNECT;  // up, reconnect to clients
+  static const int STATE_REJOIN    =  CEPH_MDS_STATE_REJOIN; // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
+  static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
   
   static const char *get_state_name(int s) {
     switch (s) {

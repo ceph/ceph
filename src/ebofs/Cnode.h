@@ -33,7 +33,7 @@ class Cnode : public LRUObject
 
  public:
   coll_t coll_id;
-  Extent cnode_loc;
+  extent_t cnode_loc;
   epoch_t last_alloc_epoch;
 
   map<string,bufferptr> attr;

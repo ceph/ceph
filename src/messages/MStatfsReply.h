@@ -16,12 +16,10 @@
 #ifndef __MSTATFSREPLY_H
 #define __MSTATFSREPLY_H
 
-#include <sys/statvfs.h>    /* or <sys/statfs.h> */
-
 class MStatfsReply : public Message {
 public:
   tid_t tid;
-  struct statvfs stfs;
+  struct ceph_statfs stfs;
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
   MStatfsReply(tid_t t) : Message(CEPH_MSG_STATFS_REPLY), tid(t) {}

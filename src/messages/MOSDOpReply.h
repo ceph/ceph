@@ -30,87 +30,45 @@
  */
 
 class MOSDOpReply : public Message {
-  struct st_t {
-    // req
-    osdreqid_t reqid;
-
-    tid_t rep_tid;
-    
-    object_t oid;
-    ObjectLayout layout;  // pgid, etc.
-    
-    int32_t op;
-    
-    // reply
-    int32_t    result;
-    bool   commit;
-    off_t length, offset;
-    off_t object_size;
-    eversion_t version;
-    
-    eversion_t pg_complete_thru;
-    
-    epoch_t map_epoch;
-
-    osd_peer_stat_t peer_stat;
-  } st;
-
-  map<string,bufferptr> attrset;
+  ceph_osd_reply_head head;
 
  public:
-  const osdreqid_t& get_reqid() { return st.reqid; }
-  long     get_tid() { return st.reqid.tid; }
-  long     get_rep_tid() { return st.rep_tid; }
-  object_t get_oid() { return st.oid; }
-  pg_t     get_pg() { return st.layout.pgid; }
-  int      get_op()  { return st.op; }
-  bool     get_commit() { return st.commit; }
+  long     get_tid() { return head.tid; }
+  object_t get_oid() { return head.oid; }
+  pg_t     get_pg() { return head.layout.ol_pgid; }
+  int      get_op()  { return head.op; }
+  bool     is_safe() { return head.flags & CEPH_OSD_OP_SAFE; }
   
-  int    get_result() { return st.result; }
-  off_t get_length() { return st.length; }
-  off_t get_offset() { return st.offset; }
-  off_t get_object_size() { return st.object_size; }
-  eversion_t get_version() { return st.version; }
-  map<string,bufferptr>& get_attrset() { return attrset; }
+  int    get_result() { return head.result; }
+  off_t get_length() { return head.length; }
+  off_t get_offset() { return head.offset; }
+  eversion_t get_version() { return head.reassert_version; }
 
-  eversion_t get_pg_complete_thru() { return st.pg_complete_thru; }
-  void set_pg_complete_thru(eversion_t v) { st.pg_complete_thru = v; }
+  void set_result(int r) { head.result = r; }
+  void set_length(off_t s) { head.length = s; }
+  void set_offset(off_t o) { head.offset = o; }
+  void set_version(eversion_t v) { head.reassert_version = v; }
 
-  void set_result(int r) { st.result = r; }
-  void set_length(off_t s) { st.length = s; }
-  void set_offset(off_t o) { st.offset = o; }
-  void set_object_size(off_t s) { st.object_size = s; }
-  void set_version(eversion_t v) { st.version = v; }
-  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
-
-  void set_op(int op) { st.op = op; }
-  void set_rep_tid(tid_t t) { st.rep_tid = t; }
-
-  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
-  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
+  void set_op(int op) { head.op = op; }
 
   // osdmap
-  epoch_t get_map_epoch() { return st.map_epoch; }
+  epoch_t get_map_epoch() { return head.osdmap_epoch; }
 
 
 public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
     Message(CEPH_MSG_OSD_OPREPLY) {
-    memset(&st, 0, sizeof(st));
-    this->st.reqid = req->st.reqid;
-    this->st.op = req->st.op;
-    this->st.rep_tid = req->st.rep_tid;
-
-    this->st.oid = req->st.oid;
-    this->st.layout = req->st.layout;
-    this->st.result = result;
-    this->st.commit = commit;
-
-    this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
-    this->st.offset = req->st.offset;
-    this->st.version = req->st.version;
-
-    this->st.map_epoch = e;
+    memset(&head, 0, sizeof(head));
+    head.tid = req->head.tid;
+    head.op = req->head.op;
+    head.flags = commit ? CEPH_OSD_OP_SAFE:0;
+    head.oid = req->head.oid;
+    head.layout = req->head.layout;
+    head.osdmap_epoch = e;
+    head.result = result;
+    head.offset = req->head.offset;
+    head.length = req->head.length;  // speculative... OSD should ensure these are correct
+    head.reassert_version = req->head.reassert_version;
   }
   MOSDOpReply() {}
 
@@ -118,29 +76,27 @@ public:
   // marshalling
   virtual void decode_payload() {
     int off = 0;
-    ::_decode(st, payload, off);
-    ::_decode(attrset, payload, off);
+    ::_decode(head, payload, off);
   }
   virtual void encode_payload() {
-    ::_encode(st, payload);
-    ::_encode(attrset, payload);
-    env.data_off = st.offset;
+    ::_encode(head, payload);
+    env.data_off = head.offset;
   }
 
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_op_reply(" << st.reqid
-	<< " " << MOSDOp::get_opname(st.op)
-	<< " " << st.oid;
-    if (st.length) out << " " << st.offset << "~" << st.length;
-    if (st.op >= 10) {
-      if (st.commit)
+    out << "osd_op_reply(" << get_tid()
+	<< " " << MOSDOp::get_opname(head.op)
+	<< " " << head.oid;
+    if (head.length) out << " " << head.offset << "~" << head.length;
+    if (head.op >= 10) {
+      if (is_safe())
 	out << " commit";
       else
 	out << " ack";
     }
-    out << " = " << st.result;
+    out << " = " << head.result;
     out << ")";
   }
 

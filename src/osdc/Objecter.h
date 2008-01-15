@@ -209,18 +209,17 @@ class Objecter {
   // med level
   tid_t readx(OSDRead *read, Context *onfinish);
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
-  //tid_t lockx(OSDLock *l, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl, 
+  tid_t read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, 
              Context *onfinish);
-  tid_t write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
+  tid_t write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
               Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, off_t off, size_t len, ObjectLayout ol,  
+  tid_t zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,  
              Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish);
+  tid_t stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish);
   
-  tid_t lock(int op, object_t oid, ObjectLayout ol, Context *onack, Context *oncommit);
+  tid_t lock(int op, object_t oid, ceph_object_layout ol, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

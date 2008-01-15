@@ -42,19 +42,19 @@ void RAID4PG::do_op(MOSDOp *op)
   // a write will do something like
   object_t oid = op->get_oid();   // logical object
   pg_t pg = op->get_pg();
-  ObjectLayout layout = op->get_layout();
+  ceph_object_layout layout = op->get_layout();
   bufferlist data = op->get_data();
   off_t off = op->get_offset();
   off_t left = op->get_length();
 
   // map data onto pobjects
   int n = pg.size() - 1;  // n+1 raid4
-  int rank = (off % layout.stripe_unit) % n;
+  int rank = (off % layout.ol_stripe_unit) % n;
   off_t off_in_bl = 0;
   while (left > 0) {
     pobject_t po(0, rank, oid);
-    off_t off_in_po = off % layout.stripe_unit;
-    off_t stripe_unit_end = off - off_in_po + layout.stripe_unit;
+    off_t off_in_po = off % layout.ol_stripe_unit;
+    off_t stripe_unit_end = off - off_in_po + layout.ol_stripe_unit;
     off_t len_in_po = MAX(left, stripe_unit_end-off);
     bufferlist data_in_po;
     data_in_po.substr_of(data, off_in_bl, len_in_po);
@@ -70,7 +70,12 @@ void RAID4PG::do_op(MOSDOp *op)
 
 }
 
-void RAID4PG::do_op_reply(MOSDOpReply *reply)
+void RAID4PG::do_sub_op(MOSDSubOp *op)
+{
+
+}
+
+void RAID4PG::do_sub_op_reply(MOSDSubOpReply *reply)
 {
 
 }
@@ -104,7 +109,7 @@ bool RAID4PG::is_missing_object(object_t oid)
   return false;
 }
 
-void RAID4PG::wait_for_missing_object(object_t oid, MOSDOp *op)
+void RAID4PG::wait_for_missing_object(object_t oid, Message *op)
 {
   //assert(0);
 }

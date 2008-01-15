@@ -4,7 +4,6 @@
 #include <linux/string.h>
 #include "messenger.h"
 #include "ktcp.h"
-#include "ktcp.h"
 
 int ceph_tcp_debug = 50;
 #define DOUT_VAR ceph_tcp_debug
@@ -35,7 +34,7 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
-		dout(30, "ceph_data_ready on %p state = %u, queuing rwork\n",
+		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
 		set_bit(READABLE, &con->state);
 		queue_work(recv_wq, &con->rwork);
@@ -47,9 +46,10 @@ static void ceph_write_space(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
 
-        dout(30, "ceph_write_space %p state = %u\n", con, con->state);
+        dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 	/* only queue to workqueue if a WRITE is pending */
-        if (con && test_bit(WRITE_PENDING, &con->state)) {
+	if (con && (test_bit(WRITE_PENDING, &con->state) || 
+	    test_bit(CLOSING, &con->state))) {
                 dout(30, "ceph_write_space %p queuing write work\n", con);
                 queue_work(send_wq, &con->swork.work);
         }
@@ -61,14 +61,20 @@ static void ceph_write_space(struct sock *sk)
 static void ceph_state_change(struct sock *sk)
 {
         struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+	if (con == NULL)
+		return;
 
-        dout(30, "ceph_state_change %p state = %u sk_state = %u\n", 
+        dout(30, "ceph_state_change %p state = %lu sk_state = %u\n", 
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
-		case TCP_CLOSE_WAIT:
 		case TCP_CLOSE:
-			set_bit(CLOSED,&con->state);
+			set_bit(CLOSED, &con->state);
+			clear_bit(OPEN, &con->state);
 			break;
+		case TCP_CLOSE_WAIT:
+			set_bit(CLOSING, &con->state);
+        		dout(30, "ceph_state_change state = %lu \n", 
+	     		con->state);
 		case TCP_ESTABLISHED:
 			ceph_write_space(sk);
 			break;
@@ -257,6 +263,7 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	//dout(30, "ceph_tcp_recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
+
 
 /*
  * Send a message this may return after partial send

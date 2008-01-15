@@ -277,7 +277,7 @@ int crush_do_rule(struct crush_map *map,
 	o = b;
 	
 	/* determine hierarchical context of forcefeed, if any */
-	if (forcefeed >= 0) {
+	if (forcefeed >= 0 && forcefeed < map->max_devices) {
 		if (map->device_parents[forcefeed] == 0) {
 			/*printf("CRUSH: forcefed device dne\n");*/
 			return -1;  /* force fed device dne */

@@ -44,6 +44,29 @@
 #include <fcntl.h>
 
 
+static inline const char* ceph_mds_op_name(int op) {
+  switch (op) {
+  case CEPH_MDS_OP_STAT:  return "stat";
+  case CEPH_MDS_OP_LSTAT: return "lstat";
+  case CEPH_MDS_OP_FSTAT: return "fstat";
+  case CEPH_MDS_OP_UTIME: return "utime";
+  case CEPH_MDS_OP_CHMOD: return "chmod";
+  case CEPH_MDS_OP_CHOWN: return "chown";
+  case CEPH_MDS_OP_READDIR: return "readdir";
+  case CEPH_MDS_OP_MKNOD: return "mknod";
+  case CEPH_MDS_OP_LINK: return "link";
+  case CEPH_MDS_OP_UNLINK: return "unlink";
+  case CEPH_MDS_OP_RENAME: return "rename";
+  case CEPH_MDS_OP_MKDIR: return "mkdir";
+  case CEPH_MDS_OP_RMDIR: return "rmdir";
+  case CEPH_MDS_OP_SYMLINK: return "symlink";
+  case CEPH_MDS_OP_OPEN: return "open";
+  case CEPH_MDS_OP_TRUNCATE: return "truncate";
+  case CEPH_MDS_OP_FSYNC: return "fsync";
+  default: return "unknown";
+  }
+}
+
 // metadata ops.
 //  >=1000 --> an update, non-idempotent (i.e. an update)
 
@@ -162,13 +185,11 @@ public:
 
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
-  const string& get_path2() { return path.get_path(); }
+  const string& get_path2() { return path2.get_path(); }
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return head.mds_wants_replica_in_dirino; }
-
-  inodeno_t get_cwd_ino() { return head.cwd_ino ? head.cwd_ino:MDS_INO_ROOT; }
 
   void decode_payload() {
     int off = 0;
@@ -187,51 +208,7 @@ public:
   void print(ostream& out) {
     out << "clientreq(" << get_client() 
 	<< "." << get_tid() 
-	<< " ";
-    switch(get_op()) {
-    case CEPH_MDS_OP_STAT: 
-      out << "stat"; break;
-    case CEPH_MDS_OP_LSTAT: 
-      out << "lstat"; break;
-    case CEPH_MDS_OP_FSTAT: 
-      out << "fstat"; break;
-    case CEPH_MDS_OP_UTIME: 
-      out << "utime"; break;
-    case CEPH_MDS_OP_CHMOD: 
-      out << "chmod"; break;
-    case CEPH_MDS_OP_CHOWN: 
-      out << "chown"; break;
-      
-    case CEPH_MDS_OP_READDIR: 
-      out << "readdir"; break;
-    case CEPH_MDS_OP_MKNOD: 
-      out << "mknod"; break;
-    case CEPH_MDS_OP_LINK: 
-      out << "link"; break;
-    case CEPH_MDS_OP_UNLINK:
-      out << "unlink"; break;
-    case CEPH_MDS_OP_RENAME:
-      out << "rename"; break;
-      
-    case CEPH_MDS_OP_MKDIR: 
-      out << "mkdir"; break;
-    case CEPH_MDS_OP_RMDIR: 
-      out << "rmdir"; break;
-    case CEPH_MDS_OP_SYMLINK: 
-      out << "symlink"; break;
-      
-    case CEPH_MDS_OP_OPEN: 
-      out << "open"; break;
-    case CEPH_MDS_OP_TRUNCATE: 
-      out << "truncate"; break;
-    case CEPH_MDS_OP_FSYNC: 
-      out << "fsync"; break;
-      //    case CEPH_MDS_OP_RELEASE: 
-      //out << "release"; break;
-    default: 
-      out << "unknown=" << get_op();
-      assert(0);
-    }
+	<< " " << ceph_mds_op_name(get_op());
     if (!get_filepath().empty()) 
       out << " " << get_filepath();
     if (!get_filepath2().empty())

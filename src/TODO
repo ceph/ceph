@@ -1,6 +1,4 @@
 
-- learn git
-
 some smallish projects:
 
 - userspace crush tools
@@ -24,18 +22,26 @@ code cleanup
 kernel client
 - msg layer (patience)
 - mds client
-  - handle map changes (check for mds failure)
-- mount
-  - get handle on root mount point
+/  - examine new mds maps to kick requests for failed nodes...
+  - mechanism to close out old caps
+  - handle file caps, ack back to mds, etc. 
+    - actually flush dirty data, too
+/  - integrate mds reply trace into cache
+?  - reconnect to recoverying mds
 - osd client
+  - readpages (readahead)
   - async (caching) mode
   - sync mode (write-through)
   - capability changes (flush)
   - osd ack vs commit handling.  hmm!
   - handle map changes (resubmit ops)
 - mon client
-  - work out message resend logic..
-
+  - work out message resend logic..?
+- mount
+  - determine suitable local ip automatically
+    - this should be determined by which interface/ip would be used to connect to the monitor ip
+- unmount
+  - close open file handles, mds sessions, flush data before unmount.
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably
@@ -44,6 +50,7 @@ osdmon
 - bootstrap crush map
 
 crush
+- properly mind osd_overload for forcefed values (caller no longer does any checking)
 - xml import/export?
  - named storage "pools"
  - generic rule definition
@@ -54,7 +61,7 @@ pgmon
 - watch osd utilization; adjust overload in cluster map
 
 mon
-- some sort of tester PaxosService...
+- some sort of tester for PaxosService...
 
 
 mds mustfix
@@ -298,9 +305,6 @@ why qsync could be wrong (for very strict POSIX) : varying mds -> client message
 
 
 - dump active config in run output somewhere
-
-
-
 
 
 

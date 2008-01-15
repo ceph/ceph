@@ -899,7 +899,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
     Capability *cap = it->second;
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
-    MClientFileCaps *m = new MClientFileCaps(MClientFileCaps::OP_EXPORT,
+    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 					     in->inode, 
                                              cap->get_last_seq(), 
                                              cap->pending(),
@@ -2048,12 +2048,12 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
       cap = in->add_client_cap(it->first, in, session->caps);
     cap->merge(it->second);
 
-    MClientFileCaps *caps = new MClientFileCaps(MClientFileCaps::OP_IMPORT,
+    MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 						in->inode,
 						cap->get_last_seq(),
 						cap->pending(),
-						cap->wanted());
-    caps->set_mds(from); // from whom?
+						cap->wanted(),
+						from);
     mds->send_message_client(caps, session->inst);
   }
 

@@ -49,31 +49,30 @@ protected:
     return b;
   }
 
-  int find(Extent& ex, int bucket, block_t num, block_t near, int dir = DIR_ANY);
+  int find(extent_t& ex, int bucket, block_t num, block_t near, int dir = DIR_ANY);
 
   void dump_freelist();
 
  public:
-  int _release_into_limbo(Extent& ex);
+  int _release_into_limbo(extent_t& ex);
 
-  int _release_loner(Extent& ex);  // release loner extent
-  int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
+  int _release_loner(extent_t& ex);  // release loner extent
+  int _release_merge(extent_t& ex);  // release any extent (searches for adjacent)
 
-  //int _alloc_loner_inc(Extent& ex);
-  //int _alloc_loner_dec(Extent& ex);
+  //int _alloc_loner_inc(extent_t& ex);
+  //int _alloc_loner_dec(extent_t& ex);
 
 
  public:
   Allocator(Ebofs *f) : fs(f), last_pos(0) {}
   
-  int allocate(Extent& ex, block_t num, block_t near=NEAR_LAST);
-  int release(Extent& ex);  // alias for alloc_dec
+  int allocate(extent_t& ex, block_t num, block_t near=NEAR_LAST);
+  int release(extent_t& ex);  // alias for alloc_dec
 
-  int alloc_inc(Extent ex);
-  int alloc_dec(Extent ex);
+  int alloc_inc(extent_t ex);
+  int alloc_dec(extent_t ex);
 
-
-  int unallocate(Extent& ex) {  // skip limbo
+  int unallocate(extent_t& ex) {  // skip limbo
     return _release_merge(ex);
   }
   

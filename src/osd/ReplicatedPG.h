@@ -18,7 +18,8 @@
 #include "PG.h"
 
 #include "messages/MOSDOp.h"
-
+class MOSDSubOp;
+class MOSDSubOpReply;
 
 class ReplicatedPG : public PG {
 public:  
@@ -80,8 +81,8 @@ protected:
   void get_rep_gather(RepGather*);
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
-  void issue_repop(MOSDOp *op, int osd, utime_t now);
-  RepGather *new_rep_gather(MOSDOp *op);
+  void issue_repop(RepGather *repop, int dest, utime_t now);
+  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -90,21 +91,22 @@ protected:
   int num_pulling;
   map<object_t, set<int> > pushing;
 
-  void push(object_t oid, int dest);
-  void pull(object_t oid);
+  void push(pobject_t oid, int dest);
+  void pull(pobject_t oid);
 
   // modify
   objectrev_t assign_version(MOSDOp *op);
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
-  void op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complete);
+  void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void prepare_log_transaction(ObjectStore::Transaction& t, 
-			       MOSDOp *op, eversion_t& version, 
+			       osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
 			       objectrev_t crev, objectrev_t rev,
 			       eversion_t trim_to);
-  void prepare_op_transaction(ObjectStore::Transaction& t, 
-			      MOSDOp *op, eversion_t& version, 
-			      objectrev_t crev, objectrev_t rev);
+  void prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
+			      pg_t pgid, int op, pobject_t poid, 
+			      off_t offset, off_t length, bufferlist& bl,
+			      eversion_t& version, objectrev_t crev, objectrev_t rev);
 
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
@@ -122,11 +124,12 @@ protected:
 
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
-  void op_rep_modify(MOSDOp *op);
-  void op_push(MOSDOp *op);
-  void op_pull(MOSDOp *op);
 
-  void op_push_reply(MOSDOpReply *reply);
+  void sub_op_modify(MOSDSubOp *op);
+  void sub_op_modify_reply(MOSDSubOpReply *reply);
+  void sub_op_push(MOSDSubOp *op);
+  void sub_op_push_reply(MOSDSubOpReply *reply);
+  void sub_op_pull(MOSDSubOp *op);
 
 
 public:
@@ -138,14 +141,15 @@ public:
 
   bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
-  void do_op_reply(MOSDOpReply *r);
+  void do_sub_op(MOSDSubOp *op);
+  void do_sub_op_reply(MOSDSubOpReply *op);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(object_t oid);
-  void wait_for_missing_object(object_t oid, MOSDOp *op);
+  void wait_for_missing_object(object_t oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

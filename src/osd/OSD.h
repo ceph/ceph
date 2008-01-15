@@ -297,6 +297,7 @@ private:
   // -- pg stats --
   Mutex pg_stat_queue_lock;
   set<pg_t> pg_stat_queue;
+  bool osd_stat_updated;
 
   class C_Stats : public Context {
     OSD *osd;
@@ -362,7 +363,8 @@ private:
 
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
-  void handle_op_reply(class MOSDOpReply *m);
+  void handle_sub_op(class MOSDSubOp *m);
+  void handle_sub_op_reply(class MOSDSubOpReply *m);
 
   void force_remount();
 };

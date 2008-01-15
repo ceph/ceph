@@ -15,14 +15,17 @@ struct ceph_client;
  * state associated with each MDS<->client session
  */
 enum {
-	CEPH_MDS_SESSION_IDLE,
-	CEPH_MDS_SESSION_OPENING,
-	CEPH_MDS_SESSION_OPEN,
-	CEPH_MDS_SESSION_CLOSING
+	CEPH_MDS_SESSION_NEW = 1,
+	CEPH_MDS_SESSION_OPENING = 2,
+	CEPH_MDS_SESSION_OPEN = 3,
+	CEPH_MDS_SESSION_CLOSING = 4
 };
 struct ceph_mds_session {
+	int               s_mds;
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	struct list_head  s_caps;
+	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct completion s_completion;
 };
@@ -37,7 +40,7 @@ struct ceph_mds_request {
 	
 	__u32             r_mds[2];   /* set of mds's with whom request may be outstanding */
         int               r_num_mds;  /* items in r_mds */
-	
+
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
         int               r_resend_mds; /* mds to resend to next, if any*/
@@ -96,6 +99,10 @@ extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_m
 extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 
+extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
+struct ceph_inode_info;
+extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
+
 extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
 				struct ceph_mds_reply_info *rinfo, int mds);
@@ -103,5 +110,6 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *m
 extern int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info);
 extern void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info);
 extern void ceph_mdsc_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *i);
+
 
 #endif

@@ -26,8 +26,7 @@
 # include <sys/mman.h>
 #endif
 
-#define BUFFER_PAGE_SIZE 4096  // FIXME
-#define BUFFER_PAGE_MASK (BUFFER_PAGE_SIZE-1)  // FIXME
+#include "page.h"
 
 // <hack>
 //  these are in config.o
@@ -73,10 +72,10 @@ private:
     }
 
     bool is_page_aligned() {
-      return ((long)data & BUFFER_PAGE_MASK) == 0;
+      return ((long)data & ~PAGE_MASK) == 0;
     }
     bool is_n_page_sized() {
-      return (len & BUFFER_PAGE_MASK) == 0;
+      return (len & ~PAGE_MASK) == 0;
     }
   };
 
@@ -131,7 +130,7 @@ private:
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
-      ::posix_memalign((void**)(void*)&data, BUFFER_PAGE_SIZE, len);
+      ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
 #endif /* DARWIN */
       inc_total_alloc(len);
     }
@@ -150,21 +149,21 @@ private:
     char *realdata;
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
-      realdata = new char[len+BUFFER_PAGE_SIZE-1];
-      unsigned off = ((unsigned)realdata) & BUFFER_PAGE_MASK;
+      realdata = new char[len+PAGE_SIZE-1];
+      unsigned off = ((unsigned)realdata) & ~PAGE_MASK;
       if (off) 
-	data = realdata + BUFFER_PAGE_SIZE - off;
+	data = realdata + PAGE_SIZE - off;
       else
 	data = realdata;
-      inc_total_alloc(len+BUFFER_PAGE_SIZE-1);
+      inc_total_alloc(len+PAGE_SIZE-1);
       //cout << "hack aligned " << (unsigned)data 
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      assert(((unsigned)data & (BUFFER_PAGE_SIZE-1)) == 0);
+      assert(((unsigned)data & (PAGE_SIZE-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-      dec_total_alloc(len+BUFFER_PAGE_SIZE-1);
+      dec_total_alloc(len+PAGE_SIZE-1);
     }
     raw* clone_empty() {
       return new raw_hack_aligned(len);
@@ -287,8 +286,8 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const { return _off + _len == _raw->len; }
 
-    bool is_page_aligned() const { return ((long)c_str() & BUFFER_PAGE_MASK) == 0; }
-    bool is_n_page_sized() const { return (length() & BUFFER_PAGE_MASK) == 0; }
+    bool is_page_aligned() const { return ((long)c_str() & ~PAGE_MASK) == 0; }
+    bool is_n_page_sized() const { return (length() & ~PAGE_MASK) == 0; }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -730,7 +729,7 @@ public:
 	if (len == 0) break;  // done!
 	
 	// make a new append_buffer!
-	unsigned alen = BUFFER_PAGE_SIZE * (((len-1) / BUFFER_PAGE_SIZE) + 1);
+	unsigned alen = PAGE_SIZE * (((len-1) / PAGE_SIZE) + 1);
 	append_buffer = create_page_aligned(alen);
 	append_buffer.set_length(0);   // unused, so far.
       }

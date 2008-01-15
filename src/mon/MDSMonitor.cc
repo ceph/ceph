@@ -581,6 +581,9 @@ void MDSMonitor::tick()
 	newstate = MDSMap::STATE_STOPPED;
 	break;
 
+      case MDSMap::STATE_STOPPED:
+	break;
+
       case MDSMap::STATE_REPLAY:
       case MDSMap::STATE_RESOLVE:
       case MDSMap::STATE_RECONNECT:
@@ -589,7 +592,7 @@ void MDSMonitor::tick()
       case MDSMap::STATE_STOPPING:
 	newstate = MDSMap::STATE_FAILED;
 	break;
-	
+
       default:
 	assert(0);
       }

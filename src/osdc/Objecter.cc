@@ -320,7 +320,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ObjectLayout ol, Context *onfinish)
+tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish)
 {
   OSDStat *st = new OSDStat(size);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
@@ -334,7 +334,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
 {
   // find OSD
   ObjectExtent &ex = st->extents.front();
-  PG &pg = get_pg( ex.layout.pgid );
+  PG &pg = get_pg( ex.layout.ol_pgid );
 
   // pick tid
   last_tid++;
@@ -378,7 +378,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 
   dout(7) << "handle_osd_stat_reply " << tid 
 		  << " r=" << m->get_result()
-		  << " size=" << m->get_object_size()
+		  << " size=" << m->get_length()
 		  << dendl;
   OSDStat *st = op_stat[ tid ];
   op_stat.erase( tid );
@@ -402,7 +402,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (m->get_result() < 0) {
 	*st->size = -1;
   } else {
-	*st->size = m->get_object_size();
+	*st->size = m->get_length();
   }
 
   // finish, clean up
@@ -422,7 +422,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist *bl,
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl,
                      Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
@@ -449,7 +449,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
-  PG &pg = get_pg( ex.layout.pgid );
+  PG &pg = get_pg( ex.layout.ol_pgid );
 
   // pick tid
   last_tid++;
@@ -660,7 +660,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
                       Context *onack, Context *oncommit)
 {
   OSDWrite *wr = new OSDWrite(bl);
@@ -674,7 +674,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ObjectLayout ol, buff
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
                      Context *onack, Context *oncommit)
 {
   OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO);
@@ -687,7 +687,7 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ObjectLayout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, ObjectLayout ol, 
+tid_t Objecter::lock(int op, object_t oid, ceph_object_layout ol, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *l = new OSDModify(op);
@@ -719,7 +719,7 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
-  PG &pg = get_pg( ex.layout.pgid );
+  PG &pg = get_pg( ex.layout.ol_pgid );
     
   // pick tid
   tid_t tid;
@@ -793,14 +793,14 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   if (op_modify.count(tid) == 0) {
     dout(7) << "handle_osd_modify_reply " << tid 
-            << (m->get_commit() ? " commit":" ack")
+            << (m->is_safe() ? " commit":" ack")
             << " ... stray" << dendl;
     delete m;
     return;
   }
 
   dout(7) << "handle_osd_modify_reply " << tid 
-          << (m->get_commit() ? " commit":" ack")
+          << (m->is_safe() ? " commit":" ack")
           << " v " << m->get_version() << " in " << m->get_pg()
           << dendl;
   OSDModify *wr = op_modify[ tid ];
@@ -819,9 +819,8 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   assert(m->get_result() >= 0);
 
-  // ack or commit?
-  if (m->get_commit()) {
-    //dout(15) << " handle_osd_write_reply commit on " << tid << dendl;
+  // ack or safe?
+  if (m->is_safe()) {
     assert(wr->tid_version.count(tid) == 0 ||
            m->get_version() == wr->tid_version[tid]);
 
@@ -845,7 +844,6 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     }
   } else {
     // ack.
-    //dout(15) << " handle_osd_write_reply ack on " << tid << dendl;
     assert(wr->waitfor_ack.count(tid));
     wr->waitfor_ack.erase(tid);
     

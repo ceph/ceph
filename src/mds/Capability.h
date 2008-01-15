@@ -32,6 +32,7 @@ inline string cap_string(int cap)
 {
   string s;
   s = "[";
+  if (cap & CEPH_CAP_PIN) s += " pin";
   if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
   if (cap & CEPH_CAP_RD) s += " rd";
   if (cap & CEPH_CAP_WR) s += " wr";

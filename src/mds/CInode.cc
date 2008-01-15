@@ -59,7 +59,7 @@ ostream& operator<<(ostream& out, CInode& in)
     assert(in.get_replica_nonce() >= 0);
   }
 
-  if (in.is_symlink()) out << " symlink";
+  if (in.is_symlink()) out << " symlink='" << in.symlink << "'";
   if (in.is_dir() && !in.dirfragtree.empty()) out << " " << in.dirfragtree;
   
   out << " v" << in.get_version();

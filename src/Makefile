@@ -136,8 +136,6 @@ endif
 
 all: depend ${TARGETS}
 
-test: depend ${TEST_TARGETS}
-
 
 # real bits
 mkmonmap: mkmonmap.cc common.o
@@ -300,7 +298,7 @@ osbdb.o: ${OSBDB_OBJS}
 
 # handy
 clean:
-	rm -f *.o */*.o crush/*.co ${TARGETS} ${TEST_TARGETS}
+	rm -f *.o */*.o crush/*.co ${TARGETS}
 
 count:
 	cat ${SRCS} | wc -l
@@ -308,6 +306,9 @@ count:
 
 TAGS:
 	etags `find . -name "*.[h|c|cc]"|grep -v '\.\#'`
+
+tags:
+	ctags `find . -name "*.[h|c|cc]"|grep -v '\.\#'`
 
 .depend:
 	touch .depend

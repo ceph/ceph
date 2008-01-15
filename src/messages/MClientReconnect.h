@@ -22,7 +22,7 @@ class MClientReconnect : public Message {
 public:
   map<inodeno_t, inode_caps_reconnect_t>  inode_caps;
   map<inodeno_t, string> inode_path;
-  bool closed;  // true if this session was closed by the client.
+  __u8 closed;  // true if this session was closed by the client.
 
   MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT),
 		       closed(false) { }
@@ -42,15 +42,28 @@ public:
   }
 
   void encode_payload() {
+    __u32 n = inode_caps.size();
+    ::_encode_simple(n, payload);
+    for (map<inodeno_t, inode_caps_reconnect_t>::iterator p = inode_caps.begin();
+	 p != inode_caps.end();
+	 p++) {
+      ::_encode_simple(p->first, payload);
+      ::_encode_simple(p->second, payload);
+      ::_encode_simple(inode_path[p->first], payload);
+    }
     ::_encode(closed, payload);
-    ::_encode(inode_caps, payload);
-    ::_encode(inode_path, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(closed, payload, off);
-    ::_decode(inode_caps, payload, off);
-    ::_decode(inode_path, payload, off);
+    bufferlist::iterator p = payload.begin();
+    __u32 n;
+    ::_decode_simple(n, p);
+    while (n--) {
+      inodeno_t ino;
+      ::_decode_simple(ino, p);
+      ::_decode_simple(inode_caps[ino], p);
+      ::_decode_simple(inode_path[ino], p);
+    }
+    ::_decode_simple(closed, p);
   }
 
 };

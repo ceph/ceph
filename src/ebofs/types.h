@@ -52,17 +52,17 @@ static const int EBOFS_BLOCK_SIZE = 4096;
 static const int EBOFS_BLOCK_MASK = 4095;
 static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
-struct Extent {
+struct extent_t {
   block_t start, length;
 
-  Extent() : start(0), length(0) {}
-  Extent(block_t s, block_t l) : start(s), length(l) {}
+  //extent_t() : start(0), length(0) {}
+  //extent_t(block_t s, block_t l) : start(s), length(l) {}
 
   block_t last() const { return start + length - 1; }
   block_t end() const { return start + length; }
 } __attribute__ ((packed));
 
-inline ostream& operator<<(ostream& out, const Extent& ex)
+inline ostream& operator<<(ostream& out, const extent_t& ex)
 {
   return out << ex.start << "~" << ex.length;
 }
@@ -76,7 +76,7 @@ struct ebofs_onode {
   csum_t onode_csum;  // from after onode_csum to base + onode_bytes
   __u32 onode_bytes;    
 
-  Extent onode_loc;       /* this is actually the block we live in */
+  extent_t onode_loc;       /* this is actually the block we live in */
   pobject_t object_id;    /* for kicks */
   __u64 readonly;  
 
@@ -95,16 +95,16 @@ struct ebofs_cnode {
   csum_t cnode_csum;
   __u32  cnode_bytes;
 
-  Extent     cnode_loc;       /* this is actually the block we live in */
+  extent_t     cnode_loc;       /* this is actually the block we live in */
   coll_t     coll_id;
   __u32      num_attr;        // num attr in cnode
 } __attribute__ ((packed));
 
 struct ebofs_inode_ptr {
-  Extent loc;
+  extent_t loc;
   csum_t csum;
   ebofs_inode_ptr() {}
-  ebofs_inode_ptr(const Extent& l, csum_t c) : loc(l), csum(c) {}
+  ebofs_inode_ptr(const extent_t& l, csum_t c) : loc(l), csum(c) {}
 } __attribute__ ((packed));
 
 static inline ostream& operator<<(ostream& out, const ebofs_inode_ptr& ptr) {
@@ -122,11 +122,11 @@ static const unsigned EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
 static const unsigned EBOFS_NODE_DUP = 3;
 
 struct ebofs_nodepool {
-  Extent node_usemap_even;   // for even sb versions
-  Extent node_usemap_odd;    // for odd sb versions
+  extent_t node_usemap_even;   // for even sb versions
+  extent_t node_usemap_odd;    // for odd sb versions
   
   __u32  num_regions;
-  Extent region_loc[EBOFS_MAX_NODE_REGIONS];
+  extent_t region_loc[EBOFS_MAX_NODE_REGIONS];
 } __attribute__ ((packed));
 
 // table

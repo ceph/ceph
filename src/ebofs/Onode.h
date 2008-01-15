@@ -35,7 +35,7 @@
  */
 
 struct ExtentCsum {
-  Extent ex;
+  extent_t ex;
   vector<csum_t> csum;
   
   void resize_tail() {
@@ -73,7 +73,7 @@ public:
   version_t version;      // incremented on each modify.
 
   // data
-  Extent onode_loc;
+  extent_t onode_loc;
   epoch_t last_alloc_epoch; // epoch i last allocated for
 
   __s64 object_size;
@@ -216,7 +216,7 @@ public:
    *  assume new extent will have csum of 0.
    *  factor clobbered extents out of csums.
    */
-  void set_extent(block_t offset, Extent ex) {
+  void set_extent(block_t offset, extent_t ex) {
     //cout << "set_extent " << offset << " -> " << ex << " ... " << last_block << std::endl;
 
     verify_extents();
@@ -348,7 +348,7 @@ public:
     verify_extents();
   }
   
-  int truncate_extents(block_t len, vector<Extent>& extra) {
+  int truncate_extents(block_t len, vector<extent_t>& extra) {
     //cout << " truncate to " << len << " .. last_block " << last_block << std::endl;
 
     verify_extents();
@@ -361,7 +361,7 @@ public:
       if (o.ex.length > len - p->first) {
 	int newlen = len - p->first;
 	if (o.ex.start) {
-	  Extent ex;
+	  extent_t ex;
 	  ex.start = o.ex.start + newlen;
 	  ex.length = o.ex.length - newlen;
 	  //cout << " truncating ex " << p->second.ex << " to " << newlen << ", releasing " << ex << std::endl;
@@ -402,7 +402,7 @@ public:
   /* map_extents(start, len, ls)
    *  map teh given page range into extents (and csums) on disk.
    */
-  int map_extents(block_t start, block_t len, vector<Extent>& ls, vector<csum_t> *csum) {
+  int map_extents(block_t start, block_t len, vector<extent_t>& ls, vector<csum_t> *csum) {
     //cout << "map_extents " << start << " " << len << std::endl;
     verify_extents();
 
@@ -425,7 +425,7 @@ public:
         (p == extent_map.end() || p->first > start && p->first)) {
       p--;
       if (p->second.ex.length > start - p->first) {
-        Extent ex;
+        extent_t ex;
 	int off = (start - p->first);
         ex.length = MIN(len, p->second.ex.length - off);
 	if (p->second.ex.start) {
@@ -515,10 +515,10 @@ public:
     return s;
   }
   int get_extent_bytes() {
-    return sizeof(Extent) * extent_map.size() + sizeof(csum_t)*alloc_blocks;
+    return sizeof(extent_t) * extent_map.size() + sizeof(csum_t)*alloc_blocks;
   }
   int get_bad_byte_bytes() {
-    return sizeof(Extent) * bad_byte_extents.m.size();
+    return sizeof(extent_t) * bad_byte_extents.m.size();
   }
 };
 

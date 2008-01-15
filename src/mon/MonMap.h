@@ -25,7 +25,7 @@
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
-  ceph_fsid_t fsid;
+  ceph_fsid fsid;
   vector<entity_inst_t> mon_inst;
 
   int       last_mon;    // last mon i talked to
