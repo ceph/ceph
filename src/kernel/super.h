@@ -3,8 +3,13 @@
 
 #include <linux/ceph_fs.h>
 #include <linux/fs.h>
+#include <linux/wait.h>
+#include <linux/completion.h>
 
-#include "client.h"
+#include "messenger.h"
+#include "mon_client.h"
+#include "mds_client.h"
+#include "osd_client.h"
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
@@ -34,18 +39,46 @@ struct ceph_mount_args {
 };
 
 
+enum {
+	MOUNTING,
+	MOUNTED,
+	UNMOUNTING,
+	UNMOUNTED
+};
+
+/* 
+ * per-filesystem client state
+ * 
+ * possibly shared by multiple mount points, if they are 
+ * mounting the same ceph filesystem/cluster.
+ */
+struct ceph_client {
+	__u32 whoami;                   /* my client number */
+
+	struct ceph_mount_args mount_args;
+	struct ceph_fsid fsid;
+
+	struct super_block *sb;
+
+	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
+	struct completion mount_completion;
+
+	struct ceph_messenger *msgr;   /* messenger instance */
+	struct ceph_mon_client monc;
+	struct ceph_mds_client mdsc;
+	struct ceph_osd_client osdc;
+
+	/* lets ignore all this until later */
+	spinlock_t sb_lock;
+	int num_sb;      /* reference count (for each sb_info that points to me) */
+	struct list_head sb_list;
+};
+
+
 /*
  * CEPH per-mount superblock info
  */
-struct ceph_super_info {
-	struct ceph_mount_args mount_args;
-	struct ceph_client *sb_client;
-	
-	/* FIXME: ptr to inode of my relative offset into the filesystem,
-	   so we can appropriately mangle/adjust path names in requests, etc...? */
-};
-
-static inline struct ceph_super_info *ceph_sbinfo(struct super_block *sb)
+static inline struct ceph_client *ceph_client(struct super_block *sb)
 {
 	return sb->s_fs_info;
 }
@@ -134,7 +167,7 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
-	return ((struct ceph_super_info*)inode->i_sb->s_fs_info)->sb_client;
+	return (struct ceph_client*)inode->i_sb->s_fs_info;
 }
 
 /*
@@ -168,6 +201,10 @@ static inline int calc_pages_for(int len, int off)
 }
 
 
+/* client.c */
+extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb);
+extern void ceph_destroy_client(struct ceph_client *cl);
+extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args);
 
 
 /* inode.c */

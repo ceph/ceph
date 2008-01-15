@@ -232,8 +232,8 @@ const struct file_operations ceph_dir_fops = {
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nameidata)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	char *path;
 	int pathlen;
 	struct ceph_msg *req;
@@ -383,8 +383,8 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 
 static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t rdev)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = NULL;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
@@ -433,8 +433,8 @@ done:
 
 static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char *dest)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = NULL;
 	struct ceph_msg *req;
 	struct ceph_mds_reply_info rinfo;
@@ -479,8 +479,8 @@ done:
 
 static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = NULL;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
@@ -530,8 +530,8 @@ done_mkdir:
 
 static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = dentry->d_inode;
 	struct ceph_msg *req;
 	struct ceph_mds_reply_info rinfo;
@@ -563,8 +563,8 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   struct inode *new_dir, struct dentry *new_dentry)
 {
-	struct ceph_super_info *sbinfo = ceph_sbinfo(old_dir->i_sb);
-	struct ceph_mds_client *mdsc = &sbinfo->sb_client->mdsc;
+	struct ceph_client *client = old_dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_msg *req;
 	struct ceph_mds_reply_info rinfo;
 	struct dentry *root = old_dir->i_sb->s_root;
