@@ -38,7 +38,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 
 	if (!con->delay) {
 		derr(1, "ceph_send_fault timeout not set\n");
-		if (error != -EAGAIN || test_bit(CLOSED, &con->state)) {
+		if (error != -EAGAIN || !test_bit(OPEN, &con->state)) {
 			remove_connection(con->msgr, con);
 			return;
 		}
@@ -465,15 +465,10 @@ static void try_write(struct work_struct *work)
 	msgr = con->msgr;
 	dout(30, "try_write start %p state %lu\n", con, con->state);
 
-	/* PW will remove this... */
-	if (test_bit(CLOSED, &con->state)) {
-		derr(1, "try_write socket closed\n");
-		ceph_send_fault(con, ret);
-		goto done;
-	}
 	/* Peer initiated close, other end is waiting for us to close */
 	if (test_and_clear_bit(CLOSING, &con->state)) {
 		dout(5, "try_write peer initiated close\n");
+		set_bit(CLOSED, &con->state);
 		remove_connection(msgr, con);
 		goto done;
 	}
