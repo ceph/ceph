@@ -12,6 +12,13 @@
  * 
  */
 
+/* 
+ * This is the top level monitor. It runs on each machine in the Monitor   
+ * Cluster. The election of a leader for the paxos algorithm only happens 
+ * once per machine via the elector. There is a separate paxos instance (state) 
+ * kept for each of the system components: Object Store Device (OSD) Monitor, 
+ * Placement Group (PG) Monitor, Metadata Server (MDS) Monitor, and Client Monitor.
+ */
 
 #ifndef __MONITOR_H
 #define __MONITOR_H
