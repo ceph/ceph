@@ -245,7 +245,7 @@ static __inline__ int ceph_encode_16(void **p, void *end, __u16 v) {
 }
 
 static __inline__ int ceph_encode_8(void **p, void *end, __u8 v) {
-	BUG_ON(*p < end);
+	BUG_ON(*p >= end);
 	*(__u8*)*p = v;
 	(*p)++;
 	return 0;

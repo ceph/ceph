@@ -722,14 +722,17 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		reply = ceph_msg_new(CEPH_MSG_CLIENT_RECONNECT, len, 0, 0, 0);
 		if (IS_ERR(reply))
 			return;
-		*(__u32*)reply->front.iov_base = 0;
-		*(__u8*)(reply->front.iov_base + 4) = 1; /* session was closed */
+		p = reply->front.iov_base;
+		end = p + len;
+		ceph_encode_8(&p, end, 1); /* session was closed */
+		ceph_encode_32(&p, end, 0);
 		goto send;
 	}
 
 	/* estimate needed space */
 	len += session->s_nr_caps * sizeof(struct ceph_mds_cap_reconnect);
 	len += session->s_nr_caps * (100); /* ugly hack */
+	dout(40, "estimating i need %d bytes for %d caps\n", len, session->s_nr_caps);
 
 	/* build reply */
 	reply = ceph_msg_new(CEPH_MSG_CLIENT_RECONNECT, len, 0, 0, 0);
@@ -739,9 +742,11 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	end = p + len;
 
 	/* traverse this session's caps */
+	ceph_encode_8(&p, end, 0);
 	ceph_encode_32(&p, end, session->s_nr_caps);
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
+		dout(10, " adding cap %p on ino %lx\n", cap, cap->ci->vfs_inode.i_ino);
 		ceph_encode_32(&p, end, ceph_caps_wanted(cap->ci));
 		ceph_encode_32(&p, end, ceph_caps_issued(cap->ci));
 		ceph_encode_64(&p, end, cap->ci->i_wr_size);
@@ -769,8 +774,10 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		ceph_encode_string(&p, end, path, pathlen);		
 		kfree(path);
 	}
-	ceph_encode_8(&p, end, 0);
-	reply->front.iov_len = end-p;
+
+	len = p - reply->front.iov_base;
+	reply->hdr.front_len = reply->front.iov_len = len;
+	dout(10, "final len is %d\n", len);
 	
 send:
 	send_msg_mds(mdsc, reply, mds);

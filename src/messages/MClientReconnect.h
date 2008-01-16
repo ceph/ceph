@@ -43,6 +43,7 @@ public:
 
   void encode_payload() {
     __u32 n = inode_caps.size();
+    ::_encode_simple(closed, payload);
     ::_encode_simple(n, payload);
     for (map<inodeno_t, inode_caps_reconnect_t>::iterator p = inode_caps.begin();
 	 p != inode_caps.end();
@@ -51,10 +52,10 @@ public:
       ::_encode_simple(p->second, payload);
       ::_encode_simple(inode_path[p->first], payload);
     }
-    ::_encode(closed, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::_decode_simple(closed, p);
     __u32 n;
     ::_decode_simple(n, p);
     while (n--) {
@@ -63,7 +64,6 @@ public:
       ::_decode_simple(inode_caps[ino], p);
       ::_decode_simple(inode_path[ino], p);
     }
-    ::_decode_simple(closed, p);
   }
 
 };

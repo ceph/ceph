@@ -305,12 +305,13 @@ static int write_partial_kvec(struct ceph_connection *con)
 {
 	int ret;
 
-	dout(30, "write_partial_kvec %p left %d vec %d bytes\n", con, 
+	dout(30, "write_partial_kvec %p : %d vec, %d bytes left\n", con, 
 	     con->out_kvec_left, con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
 		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, 
 				       con->out_kvec_left, con->out_kvec_bytes);
 		if (ret <= 0) goto out;
+		dout(30, "write_partial_kvec %p : wrote %d\n", con, ret);
 		con->out_kvec_bytes -= ret;
 		if (con->out_kvec_bytes == 0)
 			break;            /* done */
@@ -377,6 +378,7 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	dout(20, "prepare_write_message %p seq %d type %d len %d+%d\n", 
 	     m, m->hdr.seq, m->hdr.type, m->hdr.front_len, m->hdr.data_len);
+	BUG_ON(m->hdr.front_len != m->front.iov_len);
 
 	/* tag + hdr + front */
 	con->out_kvec[0].iov_base = &tag_msg;
