@@ -93,6 +93,7 @@ static struct kmem_cache *ceph_inode_cachep;
 static struct inode *ceph_alloc_inode(struct super_block *sb)
 {
 	struct ceph_inode_info *ci;
+
 	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_KERNEL);
 	if (!ci)
 		return NULL;
@@ -110,12 +111,15 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_caps = ci->i_caps_static;
 	atomic_set(&ci->i_cap_count, 0);
 
+	dout(30, "ceph_alloc_inode sb=%p inode=%lu\n", sb, (&ci->vfs_inode)->i_ino);
 	return &ci->vfs_inode;
 }
 
 static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	dout(30, "ceph_destroy_inode sb=%p inode=%lu\n", inode->i_sb, inode->i_ino);
 	
 	if (ci->i_caps != ci->i_caps_static) 
 		kfree(ci->i_caps);
@@ -396,6 +400,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
+	struct dentry *droot;
 
 	dout(25, "ceph_get_sb\n");
 	
@@ -414,11 +419,16 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	}
 	client = sb->s_fs_info;
 
-	if ((err = ceph_mount(client, &mount_args)) < 0)
+	if ((err = ceph_mount(client, &mount_args, &droot)) < 0)
 		goto out_splat;
 	
 	dout(30, "ceph_get_sb %p finishing\n", sb);
-        return simple_set_mnt(mnt, sb);
+	mnt->mnt_sb = sb;
+	mnt->mnt_root = droot;
+
+	dout(22, "droot inode = %ld\n", droot->d_inode->i_ino);
+
+	return 0;
 	
 out_splat:
 	up_write(&sb->s_umount);
@@ -431,6 +441,7 @@ out:
 static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = s->s_fs_info;
+
 	dout(1, "kill_sb %p\n", s);
 	kill_anon_super(s);
 	ceph_destroy_client(client);

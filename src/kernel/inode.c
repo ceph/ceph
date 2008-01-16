@@ -14,6 +14,22 @@ int ceph_inode_debug = 50;
 
 const struct inode_operations ceph_symlink_iops;
 
+int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode)
+{
+	BUG_ON(pinode == NULL);
+
+	*pinode = NULL;
+
+	*pinode = iget_locked(sb, ino);
+
+	if (*pinode == NULL) 
+		return -ENOMEM;
+	if ((*pinode)->i_state & I_NEW)
+		unlock_new_inode(*pinode);
+
+	return 0;
+}
+
 int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);

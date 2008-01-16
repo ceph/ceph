@@ -151,8 +151,8 @@ nextfrag:
 			} else {
 				in=dn->d_inode;
 			}
-
-			if (in->i_ino != fi->rinfo.dir_in[i].in->ino) {
+	
+			if (in->i_ino != le64_to_cpu(fi->rinfo.dir_in[i].in->ino)) {
 				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
 					dout(30, "ceph_fill_inode badness\n");
 					iput(in);
@@ -241,6 +241,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	struct inode *inode;
 	int err;
 	ino_t ino;
+	int found = 0;
 
 	dout(5, "dir_lookup inode %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 	path = ceph_build_dentry_path(dentry, &pathlen);
@@ -270,6 +271,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 
 		if (!inode) {
 			inode = new_inode(dir->i_sb);
+		} else {
+			found++;
 		}
 
 		if (!inode) {
@@ -280,13 +283,19 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 			return ERR_PTR(err);
 		}
 		d_add(dentry, inode);
+
+		if (found) {
+			iput(inode);
+		}
+
 	} else {
 		dout(10, "no trace in reply? wtf.\n");
 	}
 	return NULL;
 }
 
-static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, struct inode **lastinode)
+int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, 
+		struct inode **lastinode, struct dentry **lastdentry)
 {
 	int err = 0;
 	struct qstr dname;
@@ -298,6 +307,10 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 
 	if (lastinode) {
 		*lastinode = NULL;
+	}
+
+	if (lastdentry) {
+		*lastdentry = NULL;
 	}
 
 	dn = sb->s_root;
@@ -372,7 +385,12 @@ static int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *p
 	}
 
 	dput(parent);
-	dput(dn);
+
+	if (lastdentry) {
+		*lastdentry = dn;
+	} else {
+		dput(dn);
+	}
 	
 	if (lastinode) {
 		*lastinode = in;
@@ -414,7 +432,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 	
 	err = le32_to_cpu(rinfo.head->result);
 	if (err == 0) {
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode);
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
 
 		if (err < 0) {
 			goto done;
@@ -460,7 +478,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 	
 	err = le32_to_cpu(rinfo.head->result);
 	if (err == 0) {
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode);
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
 
 		if (err < 0) {
 			goto done;
@@ -510,7 +528,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	err = le32_to_cpu(rinfo.head->result);
 	if (err == 0) {
 /*		inode_dec_link_count(inode); */
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode);
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
 
 		if (err < 0) {
 			goto done_mkdir;

@@ -204,10 +204,12 @@ static inline int calc_pages_for(int len, int off)
 /* client.c */
 extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb);
 extern void ceph_destroy_client(struct ceph_client *cl);
-extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args);
+extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
+					struct dentry **pmnt_root);
 
 
 /* inode.c */
+extern int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
@@ -229,6 +231,8 @@ extern int ceph_release(struct inode *inode, struct file *filp);
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
+extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, 
+		struct inode **lastinode, struct dentry **lastdentry);
 
 
 #endif /* _FS_CEPH_CEPH_H */
