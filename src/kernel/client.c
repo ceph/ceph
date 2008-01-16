@@ -46,8 +46,6 @@ static void put_client_counter(void)
 }
 
 
-
-
 int parse_open_reply(struct ceph_msg *reply, struct inode *inode)
 {
 	struct ceph_mds_reply_head *head;
@@ -140,6 +138,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		goto out;
 	}
 	client->sb->s_root = root;
+
 	dout(30, "open_root_inode success.\n");
 	return 0;
 
@@ -161,7 +160,6 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args)
 	char r;
 
 	dout(10, "mount start\n");
-
 	while (client->mounting < 7) {
 		get_random_bytes(&r, 1);
 		which = r % args->num_mon;
@@ -176,7 +174,7 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args)
 		dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
 		
 		/* wait */
-		dout(10, "mount sent moutn request, waiting for maps\n");
+		dout(10, "mount sent mount request, waiting for maps\n");
 		err = wait_for_completion_timeout(&client->mount_completion, 6*HZ);
 		if (err == -EINTR)
 			return err; 
@@ -288,6 +286,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 	
+	
+
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);

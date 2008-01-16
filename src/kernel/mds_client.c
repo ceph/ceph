@@ -989,6 +989,10 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 	}
 
 	ci->i_cap_wanted = wanted;
+
+	if (wanted == 0) 
+		ceph_remove_caps(ci);
+
 	return 0;
 }
 

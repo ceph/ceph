@@ -12,8 +12,24 @@ int ceph_inode_debug = 50;
 #define DOUT_PREFIX "inode: "
 #include "super.h"
 
-const struct inode_operations ceph_symlink_iops;
+/*
+ * symlinks
+ */
+static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
+	nd_set_link(nd, ci->i_symlink);
+	return NULL;
+}
 
+const struct inode_operations ceph_symlink_iops = {
+	.readlink = generic_readlink,
+	.follow_link = ceph_sym_follow_link,
+};
+
+/*
+ * populate an inode based on info from mds
+ */
 int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -142,7 +158,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
-
+	
 	for (i=0; i<ci->i_nr_caps; i++) 
 		if (ci->i_caps[i].mds == mds) break;
 	if (i == ci->i_nr_caps) {
@@ -172,6 +188,8 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
+	if (ci->i_nr_caps == 0)
+		igrab(inode);
 	return &ci->i_caps[i];
 }
 
@@ -184,6 +202,18 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 	return have;
 }
 
+void ceph_remove_caps(struct ceph_inode_info *ci)
+{
+	if (ci->i_nr_caps) {
+		iput(&ci->vfs_inode);
+		ci->i_nr_caps = 0;
+		if (ci->i_caps != ci->i_caps_static) {
+			kfree(ci->i_caps);
+			ci->i_caps = ci->i_caps_static;
+			ci->i_max_caps = STATIC_CAPS;
+		}
+	}
+}
 
 /*
  * 0 - ok
@@ -196,6 +226,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps;
+	int used;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 
@@ -221,9 +252,12 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	newcaps = le32_to_cpu(grant->caps);
 	dout(10, "4\n");
 	if (cap->caps & ~newcaps) {
-		dout(10, "revocation: %d -> %d\n", cap->caps, newcaps);
-		/* FIXME FIXME FIXME DO STUFF HERE */
-		/* blindly ack for now: */
+		used = ceph_caps_used(ci);
+		dout(10, "revocation: %d -> %d, used %d\n", cap->caps, newcaps, used);
+		if (newcaps & used) {
+			/* FIXME FIXME FIXME DO STUFF HERE */
+			/* but blindly ack for now... */
+		}
 		cap->caps = newcaps;
 		return 1; /* ack */
 	}
@@ -239,36 +273,3 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	return 0;	
 }
 
-
-
-/*
- * vfs methods
- */
-int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		       struct kstat *stat)
-{
-	dout(5, "getattr on dentry %p\n", dentry);
-	return 0;
-}
-
-
-
-/*
- * symlinks
- */
-
-static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
-	nd_set_link(nd, ci->i_symlink);
-	return NULL;
-}
-
-const struct inode_operations ceph_symlink_iops = {
-	.readlink = generic_readlink,
-	.follow_link = ceph_sym_follow_link,
-/*	.put_link = ceph_vfs_put_link,
-	.getattr = ceph_vfs_getattr,
-	.setattr = ceph_vfs_setattr,
-*/
-};
