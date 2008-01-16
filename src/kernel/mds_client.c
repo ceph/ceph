@@ -97,7 +97,7 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 	if (mds >= mdsc->max_sessions) {
 		struct ceph_mds_session **sa;
 		/* realloc */
-		dout(50, "mdsc register_session realloc to %d\n", mds+1);
+		dout(50, "register_session realloc to %d\n", mds+1);
 		sa = kzalloc((mds+1) * sizeof(struct ceph_mds_session), GFP_KERNEL);
 		BUG_ON(sa == NULL);  /* i am lazy */
 		if (mdsc->sessions) {
@@ -375,12 +375,15 @@ retry:
 		spin_unlock(&mdsc->lock);
 		dout(30, "do_request waiting on session %p\n", session);
 		wait_for_completion(&session->s_completion);
-		dout(30, "do_request done waiting on session %p\n", session);
-		put_session(session);
+		dout(30, "do_request done waiting on session %p, state %d\n", 
+		     session, session->s_state);
 		spin_lock(&mdsc->lock);
+	}
+	if (session->s_state != CEPH_MDS_SESSION_OPEN) {
+		dout(30, "do_request session %p not open, %d\n", session, session->s_state);
+		put_session(session);
 		goto retry;
 	}
-	BUG_ON(session->s_state != CEPH_MDS_SESSION_OPEN);
 	put_session(session);
 
 	/* make request? */
@@ -679,21 +682,21 @@ bad:
 /*
  * kick outstanding requests
  */
-void kick_requests(struct ceph_mds_client *mdsc, int m)
+void kick_requests(struct ceph_mds_client *mdsc, int mds)
 {
 	struct ceph_mds_request *reqs[10];
 	u64 nexttid = 0;
 	int i, got;
 	
-	dout(20, "kick_requests mds%d\n", m);
+	dout(20, "kick_requests mds%d\n", mds);
 	while (nexttid < mdsc->last_tid) {
 		got = radix_tree_gang_lookup(&mdsc->request_tree, (void**)&reqs,
 					     nexttid, 10);
 		if (got == 0) break;
 		nexttid = reqs[got-1]->r_tid + 1;
 		for (i=0; i<got; i++) {
-			if ((reqs[i]->r_num_mds >= 1 && reqs[i]->r_mds[0] == m) ||
-			    (reqs[i]->r_num_mds >= 2 && reqs[i]->r_mds[1] == m)) {
+			if ((reqs[i]->r_num_mds >= 1 && reqs[i]->r_mds[0] == mds) ||
+			    (reqs[i]->r_num_mds >= 2 && reqs[i]->r_mds[1] == mds)) {
 				dout(10, " kicking req %llu\n", reqs[i]->r_tid);
 				complete(&reqs[i]->r_completion);
 			}
@@ -819,11 +822,15 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 		/* kill session */
 		session = mdsc->sessions[i];
-		if (session->s_state == CEPH_MDS_SESSION_OPENING) 
+		switch (session->s_state) {
+		case CEPH_MDS_SESSION_OPENING:
 			complete(&session->s_completion);
-		if (session->s_state == CEPH_MDS_SESSION_OPEN)
+			unregister_session(mdsc, i);
+			break;
+		case CEPH_MDS_SESSION_OPEN:
 			kick_requests(mdsc, i);
-		unregister_session(mdsc, i);
+			break;
+		}
 	}
 }
 
