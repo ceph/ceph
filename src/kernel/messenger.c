@@ -38,9 +38,10 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 
 	if (!con->delay) {
 		derr(1, "ceph_send_fault timeout not set\n");
-		if (error != -EAGAIN || test_bit(CLOSED, &con->state))
+		if (error != -EAGAIN || test_bit(CLOSED, &con->state)) {
 			remove_connection(con->msgr, con);
-		return;
+			return;
+		}
 	}
 
 	switch (error) {
@@ -53,11 +54,11 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 		case -EHOSTDOWN:
 		case -EHOSTUNREACH:
         	case -ENETUNREACH:
-			derr(10, "ceph_send_fault peer unreachable via route\n");
-			spin_lock(&con->out_queue_lock);
+			derr(10, "ceph_send_fault peer unreachable via route state = %lu\n", con->state);
 			/* TBD: reset buffer correctly */
+			/* spin_lock(&con->out_queue_lock);
 			list_splice_init(&con->out_sent, &con->out_queue);
-			spin_unlock(&con->out_queue_lock);
+			spin_unlock(&con->out_queue_lock); */
 			/* retry with delay */
 			queue_delayed_work(send_wq, &con->swork, con->delay);
 			break;
@@ -72,6 +73,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 		case -ECONNRESET:
 		/* never connected socket. SOCK_DONE flag not set */
 		case -ENOTCONN:
+			derr(10, "ceph_send_fault no connection state = %lu\n", con->state);
 			/* TBD: setup timeout here */
 			if (!test_and_clear_bit(CONNECTING, &con->state)){
 				derr(1, "CONNECTING bit not set\n");
@@ -84,6 +86,7 @@ static void ceph_send_fault(struct ceph_connection *con, int error)
 				clear_bit(OPEN, &con->state);
 			}
 			set_bit(NEW, &con->state);
+			clear_bit(CLOSED, &con->state);
 			sock_release(con->sock);
 			/* retry with delay */
 			queue_delayed_work(send_wq, &con->swork, con->delay);
@@ -464,6 +467,12 @@ static void try_write(struct work_struct *work)
 	msgr = con->msgr;
 	dout(30, "try_write start %p state %lu\n", con, con->state);
 
+	/* PW will remove this... */
+	if (test_bit(CLOSED, &con->state)) {
+		derr(1, "try_write socket closed\n");
+		ceph_send_fault(con, ret);
+		goto done;
+	}
 	/* Peer initiated close, other end is waiting for us to close */
 	if (test_and_clear_bit(CLOSING, &con->state)) {
 		dout(5, "try_write peer initiated close\n");
@@ -479,7 +488,7 @@ more:
 		set_bit(CONNECTING, &con->state);
 		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
-		dout(30, "try_write returned from connect ret = %d state = %lu", ret, con->state);
+		dout(30, "try_write returned from connect ret = %d state = %lu\n", ret, con->state);
 		if (ret < 0) {
 			/* fault */
 			derr(1, "try_write connect error\n");
