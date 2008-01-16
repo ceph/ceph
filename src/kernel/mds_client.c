@@ -93,6 +93,7 @@ static void register_session(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_mds_session *s;
 
 	/* register */
+	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
 		struct ceph_mds_session **sa;
 		/* realloc */
@@ -122,6 +123,7 @@ static struct ceph_mds_session *get_session(struct ceph_mds_client *mdsc, int md
 {
 	struct ceph_mds_session *session;
 	
+	dout(10, "get_session %d max %d\n", mds, mdsc->max_sessions);
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == 0) 
 		register_session(mdsc, mds);
 	session = mdsc->sessions[mds];
@@ -138,6 +140,7 @@ static void put_session(struct ceph_mds_session *s)
 
 static void unregister_session(struct ceph_mds_client *mdsc, int mds)
 {
+	dout(10, "unregister_session mds%d %p\n", mds, mdsc->sessions[mds]);
 	put_session(mdsc->sessions[mds]);
 	mdsc->sessions[mds] = 0;
 }
@@ -728,6 +731,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		ceph_encode_32(&p, end, 0);
 		goto send;
 	}
+	dout(10, "session %p state %d\n", session, session->s_state);
 
 	/* estimate needed space */
 	len += session->s_nr_caps * sizeof(struct ceph_mds_cap_reconnect);
