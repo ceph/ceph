@@ -3839,7 +3839,9 @@ int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
   tout << off << std::endl;
   tout << len << std::endl;
 
-  return _write(fh, off, len, data);
+  int r = _write(fh, off, len, data);
+  dout(3) << "ll_write " << fh << " " << off << "~" << len << " = " << r << dendl;
+  return r;
 }
 
 int Client::ll_flush(Fh *fh)
