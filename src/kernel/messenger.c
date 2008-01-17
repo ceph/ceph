@@ -22,6 +22,7 @@ static char tag_ack = CEPH_MSGR_TAG_ACK;
 
 static void try_read(struct work_struct *);
 static void try_write(struct work_struct *);
+static void try_write_later(struct work_struct *);
 static void try_accept(struct work_struct *);
 
 
@@ -53,7 +54,8 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 	INIT_LIST_HEAD(&con->out_sent);
 
 	INIT_WORK(&con->rwork, try_read);
-	INIT_DELAYED_WORK(&con->swork, try_write);
+	INIT_WORK(&con->swork, try_write);
+	INIT_DELAYED_WORK(&con->delaywork, try_write_later);
 
 	return con;
 }
@@ -223,33 +225,39 @@ static void __replace_connection(struct ceph_messenger *msgr, struct ceph_connec
  */
 void ceph_queue_write(struct ceph_connection *con)
 {
-	if (test_and_set_bit(WRITEABLE, &con->state) == 0) {
-		dout(40, "ceph_queue_write %p\n", con);
-		atomic_inc(&con->nref);
-		queue_work(send_wq, &con->swork.work);
-	} else
-		dout(40, "ceph_queue_write %p - already queued\n", con);
+	if (test_and_set_bit(WRITEABLE, &con->state) != 0) {
+		dout(40, "ceph_queue_write %p - already WRITEABLE\n", con);
+		return;
+	}
+	if (test_bit(WRITING, &con->state)) {
+		dout(40, "ceph_queue_write %p - still WRITING, queuing nothing\n", con);
+		return;
+	} 
+	dout(40, "ceph_queue_write %p\n", con);
+	atomic_inc(&con->nref);
+	queue_work(send_wq, &con->swork);
 }
 
 void ceph_queue_delayed_write(struct ceph_connection *con)
 {
 	dout(40, "ceph_queue_delayed_write %p delay %lu\n", con, con->delay);
 	atomic_inc(&con->nref);
-	if (!queue_delayed_work(send_wq, &con->swork, con->delay)) {
+	set_bit(WAITING, &con->state);
+	if (!queue_delayed_work(send_wq, &con->delaywork, con->delay)) {
 		dout(40, "ceph_queue_delayed_write %p - already queued\n", con);
 		put_connection(con);
 	}
 }
 
-
 void ceph_queue_read(struct ceph_connection *con)
 {
-	if (test_and_set_bit(READABLE, &con->state) == 0) {
-		dout(40, "ceph_queue_read %p\n", con);
-		atomic_inc(&con->nref);
-		queue_work(recv_wq, &con->rwork);
-	} else
-		dout(40, "ceph_queue_read %p - already queued\n", con);
+	if (test_and_set_bit(READABLE, &con->state) != 0) {
+		dout(40, "ceph_queue_read %p - already READABLE\n", con);
+		return;
+	}
+	dout(40, "ceph_queue_read %p\n", con);
+	atomic_inc(&con->nref);
+	queue_work(recv_wq, &con->rwork);
 }
 
 
@@ -511,17 +519,15 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 /*
  * worker function when socket is writeable
  */
-static void try_write(struct work_struct *work)
+static void _try_write(struct ceph_connection *con) 
 {
-	struct ceph_connection *con;
-	struct ceph_messenger *msgr;
+	struct ceph_messenger *msgr = con->msgr;
 	int ret = 1;
 
-	con = container_of(work, struct ceph_connection, swork.work);
-	msgr = con->msgr;
 	dout(30, "try_write start %p state %lu nref %d\n", con, con->state, atomic_read(&con->nref));
 
 retry:
+	clear_bit(WAITING, &con->state);
 	if (test_and_set_bit(WRITING, &con->state)) {
 		dout(20, "try_write already writing\n");
 		goto out;
@@ -603,7 +609,7 @@ more:
 
 done:
 	clear_bit(WRITING, &con->state);
-	if (test_bit(WRITEABLE, &con->state)) {
+	if (test_bit(WRITEABLE, &con->state) && !test_bit(WAITING, &con->state)) {
 		dout(30, "try_write writeable flag set again, looping\n");
 		goto retry;
 	}
@@ -612,6 +618,20 @@ out:
 	dout(30, "try_write done\n");
 	put_connection(con);
 	return;
+}
+
+static void try_write_later(struct work_struct *work)
+{
+	struct ceph_connection *con;
+	con = container_of(work, struct ceph_connection, delaywork.work);
+	_try_write(con);
+}
+
+static void try_write(struct work_struct *work)
+{
+	struct ceph_connection *con;
+	con = container_of(work, struct ceph_connection, swork);
+	_try_write(con);
 }
 
 
@@ -1097,8 +1117,11 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 
 void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
 {
-	dout(1, "mark_down\n");
-	/* write me */
+	dout(1, "mark_down peer %x:%d\n",
+	     ntohl(addr->ipaddr.sin_addr.s_addr), 
+	     ntohs(addr->ipaddr.sin_port));
+
+	dout(1, "mark_down --- IMPLEMENT ME\n");
 }
 
 

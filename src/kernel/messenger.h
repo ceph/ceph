@@ -68,6 +68,7 @@ struct ceph_msg_pos {
 #define REJECTING      9
 #define CLOSING       10
 #define CLOSED        11
+#define WAITING       12  /* avoid try_write looping after queuing delayed work */
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -110,8 +111,8 @@ struct ceph_connection {
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
-	struct work_struct rwork;		/* received work */
-	struct delayed_work swork;		/* send work */
+	struct work_struct rwork, swork;	/* receive/send work */
+	struct delayed_work delaywork;		/* delayed send work */
         unsigned long           delay;          /* delay interval */
         unsigned int            retries;        /* temp track of retries */
 };
