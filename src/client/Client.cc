@@ -1103,7 +1103,6 @@ void Client::kick_requests(int mds)
  * caps
  */
 
-
 class C_Client_ImplementedCaps : public Context {
   Client *client;
   MClientFileCaps *msg;
@@ -1182,6 +1181,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     assert(in->caps.count(mds));
     if (in->stale_caps.empty()) in->get();
     in->stale_caps[mds] = in->caps[mds];
+    in->stale_caps[mds].seq = m->get_seq();
 
     assert(in->caps.count(mds));
     in->caps.erase(mds);
