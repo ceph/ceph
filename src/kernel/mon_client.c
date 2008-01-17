@@ -86,11 +86,32 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 }
 
 
+static int request_mdsmap(struct ceph_mon_client *monc)
+{
+	struct ceph_msg *msg;
+	int mon = pick_mon(monc, -1);
+
+	dout(10, "request_mdsmap to mon%d have %u\n", mon, monc->want_mdsmap_epoch_gt);
+	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(ceph_epoch_t), 0, 0, 0);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	*(__le32*)msg->front.iov_base = cpu_to_le32(monc->want_mdsmap_epoch_gt);
+	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, 0);
+	return 0;
+}
+
 
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
 {
 	dout(5, "ceph_monc_request_mdsmap -- IMPLEMENT ME\n");
 	
+	if (have <= monc->want_mdsmap_epoch_gt) {
+		dout(5, " already waiting for > %u\n", monc->want_mdsmap_epoch_gt);
+		return;
+	}
+	monc->want_mdsmap_epoch_gt = have;
+	request_mdsmap(monc);
 }
 
 
@@ -144,7 +165,7 @@ int send_statfs(struct ceph_mon_client *monc, u64 tid)
 		return PTR_ERR(msg);
 	*(__le64*)msg->front.iov_base = cpu_to_le64(tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, BASE_DELAY_INTERVAL);
+	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;
 }
 

@@ -30,6 +30,8 @@ struct ceph_mon_client {
 	spinlock_t lock;
 	struct radix_tree_root statfs_request_tree;  /* statfs requests */
 	u64 last_tid;
+
+	u32 want_mdsmap_epoch_gt;
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);

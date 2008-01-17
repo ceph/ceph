@@ -167,12 +167,22 @@ static int open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *s
 	struct ceph_msg *msg;
 	int mstate;
 
-	/* connect */
+	/* mds active? */
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
 	if (mstate < CEPH_MDS_STATE_ACTIVE) {
 		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
-		return -EINPROGRESS;
+		spin_unlock(&mdsc->lock);
+		dout(30, "open_session waiting on map\n");
+		wait_for_completion(&mdsc->map_waiters);
+		dout(30, "open_session done waiting on map\n");
+		spin_lock(&mdsc->lock);
+
+		mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
+		if (mstate < CEPH_MDS_STATE_ACTIVE) {
+			dout(30, "open_session still not active...\n");
+			return -EAGAIN;  /* hrm, try again? */
+		}
 	} 
 	
 	/* send connect message */
@@ -181,6 +191,14 @@ static int open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *s
 		return PTR_ERR(msg);  /* fixme */
 	session->s_state = CEPH_MDS_SESSION_OPENING;
 	send_msg_mds(mdsc, msg, mds);
+
+	/* wait for session to open (or fail, or close) */
+	spin_unlock(&mdsc->lock);
+	dout(30, "open_session waiting on session %p\n", session);
+	wait_for_completion(&session->s_completion);
+	dout(30, "open_session done waiting on session %p, state %d\n", 
+	     session, session->s_state);
+	spin_lock(&mdsc->lock);
 	return 0;
 }
 
@@ -361,23 +379,7 @@ retry:
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
 		err = open_session(mdsc, session, mds);
-		if (err == -EINPROGRESS) {
-			/* waiting for new mdsmap.  bleh, this is a little messy. */
-			spin_unlock(&mdsc->lock);
-			wait_for_completion(&mdsc->map_waiters);
-			spin_lock(&mdsc->lock);
-			goto retry;
-		}
-		BUG_ON(err);  /* implement me */
-	}
-	if (session->s_state == CEPH_MDS_SESSION_OPENING) {
-		/* wait for session to open (or fail, or close) */
-		spin_unlock(&mdsc->lock);
-		dout(30, "do_request waiting on session %p\n", session);
-		wait_for_completion(&session->s_completion);
-		dout(30, "do_request done waiting on session %p, state %d\n", 
-		     session, session->s_state);
-		spin_lock(&mdsc->lock);
+		BUG_ON(err && err != -EAGAIN);
 	}
 	if (session->s_state != CEPH_MDS_SESSION_OPEN) {
 		dout(30, "do_request session %p not open, %d\n", session, session->s_state);
