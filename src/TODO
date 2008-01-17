@@ -20,7 +20,10 @@ code cleanup
 
 
 kernel client
-- msg layer (patience)
+- msgr layer
+  - clean up ceph_send_fault
+  - more testing
+  - callbacks for 'remote reset' (once 'caps' branch is merged in)
 - mds client
   - pin inodes with caps (igrab/iput?)
   - mechanism to close out old caps
