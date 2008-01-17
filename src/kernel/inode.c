@@ -47,18 +47,16 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	insert_inode_hash(inode);
 
-	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode->i_ino,
-	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, inode->i_nlink);
+	dout(30, "fill_inode %p ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode,
+	     inode->i_ino, inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, 
+	     inode->i_nlink);
 	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
 	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
 
 	/* ceph inode */
-	dout(30, "inode %p, ci %p\n", inode, ci);
 	ci->i_layout = info->layout; 
-	dout(30, "inode layout %p su %d\n", &ci->i_layout, ci->i_layout.fl_stripe_unit);
-
 	if (ci->i_symlink)
 		kfree(ci->i_symlink);
 	ci->i_symlink = 0;
@@ -188,7 +186,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
-	if (ci->i_nr_caps == 0)
+	if (ci->i_nr_caps == 1)
 		igrab(inode);
 	return &ci->i_caps[i];
 }
@@ -204,6 +202,8 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 
 void ceph_remove_caps(struct ceph_inode_info *ci)
 {
+	dout(10, "remove_caps on %p nr %d i_caps %p\n", &ci->vfs_inode,
+	     ci->i_nr_caps, ci->i_caps);
 	if (ci->i_nr_caps) {
 		iput(&ci->vfs_inode);
 		ci->i_nr_caps = 0;
