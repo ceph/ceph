@@ -687,8 +687,8 @@ Onode* Ebofs::decode_onode(bufferlist& bl, unsigned& off, csum_t csum)
     derr(0) << "obviously corrupt onode (bad onode_bytes)" << dendl;
     return 0;
   }
-  csum_t actual = calc_csum(bl.c_str() + off + sizeof(csum_t),
-			    eo->onode_bytes - sizeof(csum_t));
+  csum_t actual = calc_csum_unaligned(bl.c_str() + off + sizeof(csum_t),
+				      eo->onode_bytes - sizeof(csum_t));
   if (actual != eo->onode_csum) {
     derr(0) << "corrupt onode (bad csum actual " << actual << " != onode's " << eo->onode_csum << ")" << dendl;
     return 0;
@@ -1103,8 +1103,8 @@ Cnode* Ebofs::decode_cnode(bufferlist& bl, unsigned& off, csum_t csum)
     derr(0) << "obviously corrupt cnode (bad cnode_bytes)" << dendl;
     return 0;
   }
-  csum_t actual = calc_csum(bl.c_str() + off + sizeof(csum_t),
-			    ec->cnode_bytes - sizeof(csum_t));
+  csum_t actual = calc_csum_unaligned(bl.c_str() + off + sizeof(csum_t),
+				      ec->cnode_bytes - sizeof(csum_t));
   if (actual != ec->cnode_csum) {
     derr(0) << "corrupt cnode (bad csum actual " << actual << " != cnode's " << ec->cnode_csum << ")" << dendl;
     return 0;
