@@ -17,6 +17,11 @@
 #include <iostream>
 using namespace std;
 
+
+#define _FCNTL_H
+#include <bits/fcntl.h>
+
+
 // ceph stuff
 #include "config.h"
 #include "client/Client.h"
@@ -27,10 +32,6 @@ using namespace std;
 #include <unistd.h>
 #include <sys/types.h>
 //#include <sys/stat.h>
-
-#define _FCNTL_H
-#include <bits/fcntl.h>
-
 #define CEPH_FD_OFF  50000
 
 
@@ -68,7 +69,7 @@ public:
         if (o[b] == "..")
           p.pop_dentry();
         else
-          p.add_dentry(o[b]);
+          p.push_dentry(o[b]);
       }
 
       // FIXME rewrite
@@ -124,26 +125,27 @@ public:
     mount_point(0), mount_point_parent(0),
     mount_point_len(0),
     cwd_above_mp(false), cwd_in_mp(false) {
+    cerr << "ldceph init " << std::endl;
 
     // args
-    vector<char *> args;
+    vector<const char *> args;
     env_to_vec(args);
     parse_config_options(args);
   
-
-    tcpaddr_t nsa;
-    if (tcpmessenger_findns(nsa) < 0) 
-      return;
-    tcpmessenger_init();
-    tcpmessenger_start();
-    tcpmessenger_start_rankserver(nsa);
-
-    client = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));
+    // load monmap
+    MonMap monmap;
+    int r = monmap.read(".ceph_monmap");
+    assert(r >= 0);
+    
+    // start up network
+    rank.start_rank();
+    
+    client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &monmap);
     client->init();
-    int r = client->mount();
+    r = client->mount();
     if (r < 0) {
       // failure
-      cerr << "ldceph init: mount failed " << r << endl;
+      cerr << "ldceph init: mount failed " << r << std::endl;
       delete client;
       client = 0;
     } else {
@@ -155,20 +157,19 @@ public:
 
       fp_mount_point = mount_point;
 
-      cerr << "ldceph init: mounted on " << mount_point << " as " << client->get_myaddr() << endl;
+      cerr << "ldceph init: mounted on " << mount_point << " as client" << client->get_nodeid() << std::endl;
 
       refresh_cwd();
     }
   }
   ~LdCeph() {
-    cout << "ldceph fini" << endl;
+    cout << "ldceph fini" << std::endl;
     if (false && client) {  
       client->unmount();
       client->shutdown();
       delete client;
       client = 0;
-      tcpmessenger_wait();
-      tcpmessenger_shutdown(); 
+      rank.wait();
     }
   }    
 
