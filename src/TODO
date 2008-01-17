@@ -24,6 +24,11 @@ kernel client
   - clean up ceph_send_fault
   - more testing
   - callbacks for 'remote reset' (once 'caps' branch is merged in)
+
+ - TCP_CLOSE case in callback.. should it set CLOSED bit?
+ - ceph_queue_read .. check READING bit?
+ - 
+
 - mds client
   - pin inodes with caps (igrab/iput?)
   - mechanism to close out old caps

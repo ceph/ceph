@@ -162,6 +162,18 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	return msg;
 }
 
+static void wait_for_new_map(struct ceph_mds_client *mdsc)
+{
+	dout(30, "wait_for_new_map enter\n");
+	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch)
+		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
+
+	spin_unlock(&mdsc->lock);
+	wait_for_completion(&mdsc->map_waiters);
+	spin_lock(&mdsc->lock);
+	dout(30, "wait_for_new_map exit\n");
+}
+
 static int open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *session, int mds)
 {
 	struct ceph_msg *msg;
@@ -171,16 +183,11 @@ static int open_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *s
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
 	if (mstate < CEPH_MDS_STATE_ACTIVE) {
-		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
-		spin_unlock(&mdsc->lock);
-		dout(30, "open_session waiting on map\n");
-		wait_for_completion(&mdsc->map_waiters);
-		dout(30, "open_session done waiting on map\n");
-		spin_lock(&mdsc->lock);
-
+		wait_for_new_map(mdsc);
 		mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 		if (mstate < CEPH_MDS_STATE_ACTIVE) {
-			dout(30, "open_session still not active...\n");
+			dout(30, "open_session mds%d now %d, still not active...\n",
+			     mds, mstate);
 			return -EAGAIN;  /* hrm, try again? */
 		}
 	} 
@@ -258,15 +265,7 @@ bad:
 }
 
 
-static void wait_for_new_map(struct ceph_mds_client *mdsc)
-{
-	dout(30, "wait_for_new_map enter\n");
-	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch)
-		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
 
-	wait_for_completion(&mdsc->map_waiters);
-	dout(30, "wait_for_new_map exit\n");
-}
 
 /* exported functions */
 
@@ -362,11 +361,8 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 retry:
 	mds = choose_mds(mdsc, req);
 	if (mds < 0) {
-		/* wait for new mdsmap */
-		spin_unlock(&mdsc->lock);
 		dout(30, "do_request waiting for new mdsmap\n");
 		wait_for_new_map(mdsc);
-		spin_lock(&mdsc->lock);
 		goto retry;
 	}
 	dout(30, "do_request chose mds%d\n", mds);
@@ -900,6 +896,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(2, "got first mdsmap %u\n", newmap->m_epoch);
 		mdsc->mdsmap = newmap;
 	}
+	ceph_monc_got_mdsmap(&mdsc->client->monc, newmap->m_epoch);  /* stop asking */
 	spin_unlock(&mdsc->lock);
 	complete(&mdsc->map_waiters);
 	return;
