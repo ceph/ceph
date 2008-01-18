@@ -270,7 +270,7 @@ static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, 
 
 static __inline__ int ceph_encode_string(void **p, void *end, const char *s, __u32 len)
 {
-	BUG_ON(*p + sizeof(len) > end);
+	BUG_ON(*p + sizeof(len) + len > end);
 	ceph_encode_32(p, end, len);
 	if (len) memcpy(*p, s, len);
 	*p += len;

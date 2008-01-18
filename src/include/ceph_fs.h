@@ -454,6 +454,7 @@ struct ceph_mds_cap_reconnect {
 	__le64 size;
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));
+/* followed by encoded string */
 
 
 

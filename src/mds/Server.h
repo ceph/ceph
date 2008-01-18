@@ -62,7 +62,7 @@ public:
   void terminate_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
-  void process_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
+  void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void add_reconnected_cap_inode(CInode *in) {
     reconnected_caps.insert(in);
   }

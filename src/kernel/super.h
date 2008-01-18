@@ -93,6 +93,7 @@ struct ceph_inode_cap {
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
+	struct ceph_mds_session *session;
 	struct list_head session_caps;  /* per-session caplist */
 };
 
@@ -215,7 +216,7 @@ extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args);
 /* inode.c */
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
-extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
+extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq);
 extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session);
 

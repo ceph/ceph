@@ -117,7 +117,7 @@ nextfrag:
 			return PTR_ERR(req);
 		rhead = req->front.iov_base;
 		rhead->args.readdir.frag = cpu_to_le32(frag);
-		if ((err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, -1)) < 0)
+		if ((err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, 0)) < 0)
 		    return err;
 		err = le32_to_cpu(fi->rinfo.head->result);
 		dout(10, "dir_readdir got and parsed readdir result=%d on frag %u\n", err, frag);
@@ -251,7 +251,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	kfree(path);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) 
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
 		return ERR_PTR(err);
 	err = le32_to_cpu(rinfo.head->result);
 	dout(20, "dir_lookup result=%d\n", err);
@@ -407,7 +407,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 	rhead = req->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) {
 		d_drop(dentry);
 		return err;
 	}
@@ -453,7 +453,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) {
 		d_drop(dentry);
 		return err;
 	}
@@ -502,7 +502,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	}
 	rhead = req->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);	
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0) {
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) {
 		d_drop(dentry);
 		return err;
 	}
@@ -549,7 +549,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0)
 		return err;
 	
 	err = le32_to_cpu(rinfo.head->result);
@@ -589,7 +589,7 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0)
 		return err;
 	
 	err = le32_to_cpu(rinfo.head->result);

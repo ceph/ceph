@@ -152,8 +152,9 @@ static struct ceph_inode_cap *get_cap_for_mds(struct inode *inode, int mds)
 }
 
 
-struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
+struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq)
 {
+	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
 	
@@ -174,12 +175,18 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 				kfree(o);
 			ci->i_max_caps *= 2;
 		}
-
+		ci->i_caps[i].ci = ci;
 		ci->i_caps[i].caps = 0;
 		ci->i_caps[i].mds = mds;
 		ci->i_caps[i].seq = 0;
 		ci->i_caps[i].flags = 0;
 		ci->i_nr_caps++;
+
+		ci->i_caps[i].session = session;
+		spin_lock(&session->s_cap_lock);
+		list_add(&ci->i_caps[i].session_caps, &session->s_caps);
+		session->s_nr_caps++;
+		spin_unlock(&session->s_cap_lock);
 	}
 
 	dout(10, "add_cap inode %p (%lu) got cap %d %xh now %xh seq %d from %d\n",
@@ -200,11 +207,24 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 	return have;
 }
 
+void __remove_cap(struct ceph_inode_cap *cap)
+{
+	/* remove from session list */
+	struct ceph_mds_session *session = cap->session;
+	spin_lock(&session->s_cap_lock);
+	list_del(&cap->session_caps);
+	session->s_nr_caps--;
+	spin_unlock(&session->s_cap_lock);
+	cap->session = 0;
+}
+
 void ceph_remove_caps(struct ceph_inode_info *ci)
 {
-	dout(10, "remove_caps on %p nr %d i_caps %p\n", &ci->vfs_inode,
-	     ci->i_nr_caps, ci->i_caps);
+	int i;
+	dout(10, "remove_caps on %p nr %d\n", &ci->vfs_inode, ci->i_nr_caps);
 	if (ci->i_nr_caps) {
+		for (i=0; i<ci->i_nr_caps; i++) 
+			__remove_cap(&ci->i_caps[i]);
 		iput(&ci->vfs_inode);
 		ci->i_nr_caps = 0;
 		if (ci->i_caps != ci->i_caps_static) {
@@ -243,7 +263,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	dout(10, "2\n");
 	if (!cap) {
 		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
-		cap = ceph_add_cap(inode, mds, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
+		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
 		return 0;
 	} 
 
