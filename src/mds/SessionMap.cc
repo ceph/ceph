@@ -12,27 +12,18 @@
  * 
  */
 
-
-
-#define DBLEVEL  20
-
-#include "include/types.h"
-
 #include "MDS.h"
-#include "ClientMap.h"
-
+#include "SessionMap.h"
 #include "osdc/Filer.h"
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".clientmap "
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".sessionmap "
 
-
-
-void ClientMap::init_inode()
+void SessionMap::init_inode()
 {
   memset(&inode, 0, sizeof(inode));
-  inode.ino = MDS_INO_CLIENTMAP_OFFSET + mds->get_nodeid();
+  inode.ino = MDS_INO_SESSIONMAP_OFFSET + mds->get_nodeid();
   inode.layout = g_OSD_FileLayout;
 }
 
@@ -40,17 +31,17 @@ void ClientMap::init_inode()
 // ----------------
 // LOAD
 
-class C_CM_Load : public Context {
-  ClientMap *clientmap;
+class C_SM_Load : public Context {
+  SessionMap *sessionmap;
 public:
   bufferlist bl;
-  C_CM_Load(ClientMap *cm) : clientmap(cm) {}
+  C_SM_Load(SessionMap *cm) : sessionmap(cm) {}
   void finish(int r) {
-	clientmap->_load_finish(bl);
+	sessionmap->_load_finish(bl);
   }
 };
 
-void ClientMap::load(Context *onload)
+void SessionMap::load(Context *onload)
 {
   dout(10) << "load" << dendl;
 
@@ -59,7 +50,7 @@ void ClientMap::load(Context *onload)
   if (onload)
 	waiting_for_load.push_back(onload);
   
-  C_CM_Load *c = new C_CM_Load(this);
+  C_SM_Load *c = new C_SM_Load(this);
   mds->filer->read(inode,
                    0, inode.layout.fl_stripe_unit,
                    &c->bl,
@@ -67,14 +58,14 @@ void ClientMap::load(Context *onload)
 
 }
 
-void ClientMap::_load_finish(bufferlist &bl)
+void SessionMap::_load_finish(bufferlist &bl)
 { 
-  int off = 0;
-  decode(bl, off);
+  bufferlist::iterator blp = bl.begin();
+  decode(blp);
   dout(10) << "_load_finish v " << version 
-		   << ", " << client_inst.size() << " clients, "
-		   << bl.length() << " bytes"
-		   << dendl;
+	   << ", " << session_map.size() << " sessions, "
+	   << bl.length() << " bytes"
+	   << dendl;
   projected = committing = committed = version;
   finish_contexts(waiting_for_load);
 }
@@ -83,17 +74,17 @@ void ClientMap::_load_finish(bufferlist &bl)
 // ----------------
 // SAVE
 
-class C_CM_Save : public Context {
-  ClientMap *clientmap;
+class C_SM_Save : public Context {
+  SessionMap *sessionmap;
   version_t version;
 public:
-  C_CM_Save(ClientMap *cm, version_t v) : clientmap(cm), version(v) {}
+  C_SM_Save(SessionMap *cm, version_t v) : sessionmap(cm), version(v) {}
   void finish(int r) {
-	clientmap->_save_finish(version);
+	sessionmap->_save_finish(version);
   }
 };
 
-void ClientMap::save(Context *onsave, version_t needv)
+void SessionMap::save(Context *onsave, version_t needv)
 {
   dout(10) << "save needv " << needv << ", v " << version << dendl;
  
@@ -113,14 +104,40 @@ void ClientMap::save(Context *onsave, version_t needv)
   mds->filer->write(inode,
                     0, bl.length(), bl,
                     0,
-		    0, new C_CM_Save(this, version));
+		    0, new C_SM_Save(this, version));
 }
 
-void ClientMap::_save_finish(version_t v)
+void SessionMap::_save_finish(version_t v)
 {
   dout(10) << "_save_finish v" << v << dendl;
   committed = v;
 
   finish_contexts(commit_waiters[v]);
   commit_waiters.erase(v);
+}
+
+
+// -------------------
+
+void SessionMap::encode(bufferlist& bl)
+{
+  ::_encode_simple(version, bl);
+  __u32 n = session_map.size();
+  ::_encode_simple(n, bl);
+  for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
+       p != session_map.end(); 
+       ++p) 
+    p->second->_encode(bl);
+}
+
+void SessionMap::decode(bufferlist::iterator& p)
+{
+  ::_decode_simple(version, p);
+  __u32 n;
+  ::_decode_simple(n, p);
+  while (n--) {
+    Session *s = new Session;
+    s->_decode(p);
+    session_map[s->inst.name] = s;
+  }
 }

@@ -21,19 +21,27 @@
 
 class MPingAck : public Message {
  public:
-  int seq;
+  __u64 seq;
+  utime_t sender_stamp;
+  utime_t reply_stamp;
+
   MPingAck() {}
-  MPingAck(MPing *p) : Message(CEPH_MSG_PING_ACK) {
-    this->seq = p->seq;
+  MPingAck(MPing *p, utime_t w) : Message(CEPH_MSG_PING_ACK) {
+    seq = p->seq;
+    sender_stamp = p->stamp;
+    reply_stamp = w;
   }
 
   void decode_payload() {
-    int off = 0;
-    payload.copy(0, sizeof(seq), (char*)&seq);
-    off += sizeof(seq);
+    bufferlist::iterator p = payload.begin();
+    ::_decode_simple(seq, p);
+    ::_decode_simple(sender_stamp, p);
+    ::_decode_simple(reply_stamp, p);
   }
   void encode_payload() {
-    payload.append((char*)&seq, sizeof(seq));
+    ::_encode_simple(seq, payload);
+    ::_encode_simple(sender_stamp, payload);
+    ::_encode_simple(reply_stamp, payload);
   }
 
   const char *get_type_name() { return "pinga"; }

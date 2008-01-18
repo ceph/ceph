@@ -1082,7 +1082,7 @@ void MDCache::send_resolve_now(int who)
   }
   // [resolving]
   if (uncommitted_slave_updates.count(who)) {
-    for (map<metareqid_t, MDSlaveUpdate>::iterator p = uncommitted_slave_updates[who].begin();
+    for (map<metareqid_t, MDSlaveUpdate*>::iterator p = uncommitted_slave_updates[who].begin();
 	 p != uncommitted_slave_updates[who].end();
 	 ++p) {
       dout(10) << " including uncommitted " << p->first << dendl;
@@ -1252,7 +1252,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     for (list<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
-      if (mds->clientmap.have_completed_request(*p)) {
+      if (mds->sessionmap.have_completed_request(*p)) {
 	// COMMIT
 	dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
 	ack->add_commit(*p);
@@ -1388,7 +1388,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     if (mds->is_resolve()) {
       // replay
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p].commit.replay(mds);
+      uncommitted_slave_updates[from][*p]->commit.replay(mds);
+      delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
       // log commit
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_COMMIT));
@@ -1406,7 +1407,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
     if (mds->is_resolve()) {
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p].rollback.replay(mds);
+      uncommitted_slave_updates[from][*p]->rollback.replay(mds);
+      delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {
@@ -2651,20 +2653,23 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 {
   dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
 	   << " on " << *in << dendl;
-  
+
+  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
+  assert(session);
+
   // add cap
-  in->reconnect_cap(client, icr);
+  in->reconnect_cap(client, icr, session->caps);
   
   // send REAP
-  // FIXME client session weirdness.
+  Capability *cap = in->get_client_cap(client);
+  assert(cap); // ?
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
-					      in->client_caps[client].get_last_seq(),
-					      in->client_caps[client].pending(),
-					      in->client_caps[client].wanted());
-  
+					      cap->get_last_seq(),
+					      cap->pending(),
+					      cap->wanted());
   reap->set_migrate_mds(frommds); // reap from whom?
-  mds->messenger->send_message(reap, mds->clientmap.get_inst(client));
+  mds->messenger->send_message(reap, session->inst);
 }
 
 void MDCache::rejoin_send_acks()
@@ -3557,6 +3562,7 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
+  // empty stray dir
   if (!shutdown_export_strays()) {
     dout(7) << "waiting for strays to migrate" << dendl;
     return false;
@@ -3612,12 +3618,6 @@ bool MDCache::shutdown_pass()
   assert(subtrees.empty());
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
-
-
-
-  // empty out stray contents
-  // FIXME
-  dout(7) << "FIXME: i need to empty out stray dir contents..." << dendl;
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {

@@ -54,7 +54,7 @@ class LogSegment {
 
   // table version
   version_t allocv;
-  version_t clientmapv;
+  version_t sessionmapv;
   version_t anchortablev;
 
   // try to expire
@@ -62,7 +62,7 @@ class LogSegment {
 
   // cons
   LogSegment(off_t off) : offset(off), end(off), num_events(0),
-			  allocv(0), clientmapv(0), anchortablev(0) 
+			  allocv(0), sessionmapv(0), anchortablev(0) 
   { }
 };
 

@@ -65,7 +65,6 @@ static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
 static inline __u32 frag_mask(__u32 f) { return 0xffffffu >> (24-frag_bits(f)); }
 static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_value(f)+1); }
 
-
 /*
  * object layout - how objects are mapped into PGs
  */
@@ -298,13 +297,24 @@ struct ceph_statfs {
 #define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata */
 
 
-/* client_session message op values */
+/* client_session */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
 	CEPH_SESSION_OPEN,
 	CEPH_SESSION_REQUEST_CLOSE,
-	CEPH_SESSION_CLOSE
+	CEPH_SESSION_CLOSE,
+	CEPH_SESSION_REQUEST_RENEWCAPS,
+	CEPH_SESSION_RENEWCAPS,
+	CEPH_SESSION_STALE,           // caps not renewed.
+	CEPH_SESSION_REQUEST_RESUME,
+	CEPH_SESSION_RESUME	
 };
+
+struct ceph_mds_session_head {
+	__u32 op;
+	__u64 seq;
+	struct ceph_timeval stamp;
+} __attribute__ ((packed));
 
 /* client_request */
 enum {
@@ -424,19 +434,15 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
 #define CEPH_CAP_WREXTEND 32  /* client can extend eof */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
+
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
 	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
 	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
-	CEPH_CAP_OP_RELEASE, /* mds->client release (*) */
 	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
 };
-  /* 
-   * (*) it's a bit counterintuitive, but the mds has to 
-   *  close the cap because the client isn't able to tell
-   *  if a concurrent open() would map to the same inode.
-   */
+
 struct ceph_mds_file_caps {
 	__le32 op;
 	__le32 seq;

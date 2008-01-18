@@ -447,13 +447,14 @@ version_t Locker::issue_file_data_version(CInode *in)
 
 
 Capability* Locker::issue_new_caps(CInode *in,
-                                    int mode,
-                                    MClientRequest *req)
+				   int mode,
+				   Session *session)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
   // my needs
-  int my_client = req->get_client().num();
+  assert(session->inst.name.is_client());
+  int my_client = session->inst.name.num();
   int my_want = 0;
   if (mode & FILE_MODE_R) my_want |= CEPH_CAP_RDCACHE  | CEPH_CAP_RD;
   if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR;
@@ -462,17 +463,14 @@ Capability* Locker::issue_new_caps(CInode *in,
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    Capability c(my_want);
-    in->add_client_cap(my_client, c);
-    cap = in->get_client_cap(my_client);
-
-    // suppress file cap messages for new cap (we'll bundle with the open() reply)
-    cap->set_suppress(true);
+    cap = in->add_client_cap(my_client, in, session->caps);
+    cap->set_wanted(my_want);
+    cap->set_suppress(true); // suppress file cap messages for new cap (we'll bundle with the open() reply)
   } else {
     // make sure it has sufficient caps
     if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
-      cap->set_wanted( cap->wanted() | my_want );
+      cap->set_wanted(cap->wanted() | my_want);
     }
   }
 
@@ -486,12 +484,13 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [replica] tell auth about any new caps wanted
     request_inode_file_caps(in);
   }
-    
+
   // issue caps (pot. incl new one)
   issue_caps(in);  // note: _eval above may have done this already...
 
   // re-issue whatever we can
   cap->issue(cap->pending());
+  cap->set_last_open();
   
   // ok, stop suppressing.
   cap->set_suppress(false);
@@ -526,16 +525,17 @@ bool Locker::issue_caps(CInode *in)
   int nissued = 0;        
 
   // client caps
-  for (map<int, Capability>::iterator it = in->client_caps.begin();
+  for (map<int, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    if (it->second.pending() != (it->second.wanted() & allowed)) {
+    Capability *cap = it->second;
+    if (cap->pending() != (cap->wanted() & allowed)) {
       // issue
       nissued++;
 
-      int before = it->second.pending();
-      long seq = it->second.issue(it->second.wanted() & allowed);
-      int after = it->second.pending();
+      int before = cap->pending();
+      long seq = cap->issue(cap->wanted() & allowed);
+      int after = cap->pending();
 
       // twiddle file_data_version?
       if (!(before & CEPH_CAP_WRBUFFER) &&
@@ -545,13 +545,15 @@ bool Locker::issue_caps(CInode *in)
       }
 
       if (seq > 0 && 
-          !it->second.is_suppress()) {
-        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << it->second.get_last_seq() << " new pending " << cap_string(it->second.pending()) << " was " << cap_string(before) << dendl;
+          !cap->is_suppress()) {
+        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << cap->get_last_seq()
+		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
+		<< dendl;
         mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
 						     in->inode,
-						     it->second.get_last_seq(),
-						     it->second.pending(),
-						     it->second.wanted()),
+						     cap->get_last_seq(),
+						     cap->pending(),
+						     cap->wanted()),
 				 it->first);
       }
     }
@@ -560,6 +562,47 @@ bool Locker::issue_caps(CInode *in)
   return (nissued == 0);  // true if no re-issued, no callbacks
 }
 
+void Locker::revoke_stale_caps(Session *session)
+{
+  dout(10) << "revoke_stale_caps for " << session->inst.name << dendl;
+  
+  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+    CInode *in = cap->get_inode();
+    int issued = cap->issued();
+    if (issued) {
+      dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
+      cap->revoke();
+      file_eval_gather(&in->filelock);
+      if (in->is_auth()) {
+	if (in->filelock.is_stable())
+	  file_eval(&in->filelock);
+      } else {
+	request_inode_file_caps(in);
+      }
+    } else {
+      dout(10) << " nothing issued on " << *in << dendl;
+    }
+    cap->set_stale(true);
+  }
+}
+
+void Locker::resume_stale_caps(Session *session)
+{
+  dout(10) << "resume_stale_caps for " << session->inst.name << dendl;
+
+  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+    CInode *in = cap->get_inode();
+    if (cap->is_stale()) {
+      dout(10) << " clearing stale flag on " << *in << dendl;
+      cap->set_stale(false);
+      if (in->is_auth() && in->filelock.is_stable())
+	file_eval(&in->filelock);
+      issue_caps(in);
+    }
+  }
+}
 
 class C_MDL_RequestInodeFileCaps : public Context {
   Locker *locker;
@@ -575,6 +618,8 @@ public:
 
 void Locker::request_inode_file_caps(CInode *in)
 {
+  assert(!in->is_auth());
+
   int wanted = in->get_caps_wanted();
   if (wanted != in->replica_caps_wanted) {
 
@@ -698,9 +743,13 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
           << " on " << *in 
           << dendl;  
   
+  // confirm caps
+  int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
+  int has = cap->confirmed();
+
   // update wanted
   if (cap->wanted() != wanted) {
-    if (m->get_seq() < cap->get_last_seq()) {
+    if (m->get_seq() < cap->get_last_open()) {
       /* this is awkward.
 	 client may be trying to release caps (i.e. inode closed, etc.) by setting reducing wanted
 	 set.
@@ -709,28 +758,18 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	 sure the client has seen all the latest caps.
       */
       dout(10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
-		<< " bc seq " << m->get_seq() << " < " << cap->get_last_seq() << dendl;
+		<< " bc seq " << m->get_seq() << " < last open " << cap->get_last_open() << dendl;
+    } else if (wanted == 0) {
+      // outright release?
+      dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
+      in->remove_client_cap(client);
+      if (!in->is_any_caps()) 
+	in->xlist_open_file.remove_myself();  // unpin logsegment
+      if (!in->is_auth())
+	request_inode_file_caps(in);
     } else {
       cap->set_wanted(wanted);
     }
-  }
-
-  // confirm caps
-  int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-  int has = cap->confirmed();
-  if (cap->is_null()) {
-    dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
-    in->remove_client_cap(client);
-    if (!in->is_any_caps()) 
-      in->xlist_open_file.remove_myself();  // unpin logsegment
-    if (!in->is_auth())
-      request_inode_file_caps(in);
-
-    // tell client.
-    MClientFileCaps *r = new MClientFileCaps(CEPH_CAP_OP_RELEASE,
-					     in->inode, 
-                                             0, 0, 0);
-    mds->send_message_client(r, m->get_source_inst());
   }
 
   // merge in atime?
@@ -2408,7 +2447,7 @@ void Locker::file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   int wanted = in->get_caps_wanted();
-  bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+  bool loner = in->is_loner_cap();
   dout(7) << "file_eval wanted=" << cap_string(wanted)
 	  << "  filelock=" << *lock << " on " << *lock->get_parent()
 	  << "  loner=" << loner

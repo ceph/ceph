@@ -77,6 +77,14 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- client cap timeouts
+/  - stale -> resume
+  - tolerate connection break
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+  
+
+
 - extend/clean up filepath to allow paths relative to an ino
 /  - fix path_traverse
   - fix reconnect/rejoin open file weirdness

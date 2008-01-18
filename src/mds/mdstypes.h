@@ -36,8 +36,9 @@ using namespace std;
 #define MDS_INO_LOG_OFFSET        (1*MAX_MDS)
 #define MDS_INO_IDS_OFFSET        (2*MAX_MDS)
 #define MDS_INO_CLIENTMAP_OFFSET  (3*MAX_MDS)
-#define MDS_INO_STRAY_OFFSET      (4*MAX_MDS)
-#define MDS_INO_BASE              (5*MAX_MDS)
+#define MDS_INO_SESSIONMAP_OFFSET (4*MAX_MDS)
+#define MDS_INO_STRAY_OFFSET      (5*MAX_MDS)
+#define MDS_INO_BASE              (6*MAX_MDS)
 
 #define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
 #define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)

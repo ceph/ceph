@@ -70,7 +70,7 @@ MDS_OBJS= \
 	mds/AnchorClient.o\
 	mds/LogEvent.o\
 	mds/IdAllocator.o\
-	mds/ClientMap.o\
+	mds/SessionMap.o\
 	mds/MDLog.o
 
 OSD_OBJS= \

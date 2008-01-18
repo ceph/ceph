@@ -109,6 +109,8 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   whoami = m->get_myname().num();
   monmap = mm;
   
+  tick_event = 0;
+
   mounted = false;
   mounters = 0;
   mount_timeout_event = 0;
@@ -271,6 +273,7 @@ void Client::init()
   }
   client_logger_lock.Unlock();
 
+  tick();
 }
 
 void Client::shutdown() 
@@ -697,7 +700,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       
       if (waiting_for_session.count(mds) == 0) {
 	dout(10) << "opening session to mds" << mds << dendl;
-	messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_OPEN),
+	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 				mdsmap->get_inst(mds));
       }
       
@@ -770,14 +773,28 @@ void Client::handle_client_session(MClientSession *m)
   int from = m->get_source().num();
 
   switch (m->op) {
-  case MClientSession::OP_OPEN:
+  case CEPH_SESSION_OPEN:
     assert(mds_sessions.count(from) == 0);
     mds_sessions[from] = 0;
     break;
 
-  case MClientSession::OP_CLOSE:
+  case CEPH_SESSION_CLOSE:
     mds_sessions.erase(from);
     // FIXME: kick requests (hard) so that they are redirected.  or fail.
+    break;
+
+  case CEPH_SESSION_RENEWCAPS:
+    last_cap_renew = g_clock.now();
+    break;
+
+  case CEPH_SESSION_STALE:
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RESUME, g_clock.now()),
+			    m->get_source_inst());
+    // hmm, verify caps have been revoked?
+    break;
+
+  case CEPH_SESSION_RESUME:
+    // ??
     break;
 
   default:
@@ -1086,7 +1103,6 @@ void Client::kick_requests(int mds)
  * caps
  */
 
-
 class C_Client_ImplementedCaps : public Context {
   Client *client;
   MClientFileCaps *msg;
@@ -1136,6 +1152,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
+	caps_by_mds[mds]++;
         if (in->caps.empty()) in->get();
         in->caps[mds].seq = m->get_seq();
         in->caps[mds].caps = m->get_caps();
@@ -1164,9 +1181,11 @@ void Client::handle_file_caps(MClientFileCaps *m)
     assert(in->caps.count(mds));
     if (in->stale_caps.empty()) in->get();
     in->stale_caps[mds] = in->caps[mds];
+    in->stale_caps[mds].seq = m->get_seq();
 
     assert(in->caps.count(mds));
     in->caps.erase(mds);
+    caps_by_mds[mds]--;
     if (in->caps.empty()) in->put();
 
     // delayed reap?
@@ -1185,35 +1204,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
     delete m;
     return;
   }
-
-  // release?
-  if (m->get_op() == CEPH_CAP_OP_RELEASE) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << dendl;
-    assert(in->caps.count(mds));
-    in->caps.erase(mds);
-    for (map<int,InodeCap>::iterator p = in->caps.begin();
-         p != in->caps.end();
-         p++)
-      dout(20) << " left cap " << p->first << " " 
-              << cap_string(p->second.caps) << " " 
-              << p->second.seq << dendl;
-    for (map<int,InodeCap>::iterator p = in->stale_caps.begin();
-         p != in->stale_caps.end();
-         p++)
-      dout(20) << " left stale cap " << p->first << " " 
-              << cap_string(p->second.caps) << " " 
-              << p->second.seq << dendl;
-
-    if (in->caps.empty()) {
-      //dout(0) << "did put_inode" << dendl;
-      put_inode(in);
-    } else {
-      //dout(0) << "didn't put_inode" << dendl;
-    }
-    delete m;
-    return;
-  }
-
 
   // don't want?
   if (in->file_caps_wanted() == 0) {
@@ -1346,10 +1336,11 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
 void Client::release_caps(Inode *in,
                           int retain)
 {
+  int wanted = in->file_caps_wanted();
   dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
-	  << " want " << cap_string(in->file_caps_wanted())
+	  << " want " << cap_string(wanted)
           << dendl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -1364,11 +1355,17 @@ void Client::release_caps(Inode *in,
 					       in->inode, 
                                                it->second.seq,
                                                it->second.caps,
-                                               in->file_caps_wanted()); 
+                                               wanted);
       messenger->send_message(m, mdsmap->get_inst(it->first));
     }
+    if (wanted == 0)
+      caps_by_mds[it->first]--;
   }
-  
+  if (wanted == 0 && !in->caps.empty()) {
+    in->caps.clear();
+    put_inode(in);
+  }
+
   if (in->file_caps() == 0) {
     in->file_wr_mtime = utime_t();
     in->file_wr_size = 0;
@@ -1377,8 +1374,9 @@ void Client::release_caps(Inode *in,
 
 void Client::update_caps_wanted(Inode *in)
 {
+  int wanted = in->file_caps_wanted();
   dout(5) << "updating caps wanted on ino " << in->inode.ino 
-          << " to " << cap_string(in->file_caps_wanted())
+          << " to " << cap_string(wanted)
           << dendl;
   
   // FIXME: pick a single mds and let the others off the hook..
@@ -1389,11 +1387,17 @@ void Client::update_caps_wanted(Inode *in)
 					     in->inode, 
                                              it->second.seq,
                                              it->second.caps,
-                                             in->file_caps_wanted());
+                                             wanted);
     messenger->send_message(m, mdsmap->get_inst(it->first));
+    if (wanted == 0)
+      caps_by_mds[it->first]--;
+  }
+  if (wanted == 0 && !in->caps.empty()) {
+    in->caps.clear();
+    put_inode(in);
   }
 }
-
+  
 
 
 // -------------------
@@ -1585,8 +1589,7 @@ int Client::unmount()
        p != mds_sessions.end();
        ++p) {
     dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
-    messenger->send_message(new MClientSession(MClientSession::OP_REQUEST_CLOSE,
-					       p->second),
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second),
 			    mdsmap->get_inst(p->first));
   }
 
@@ -1617,6 +1620,44 @@ void Client::handle_unmount(Message* m)
   mount_cond.Signal();
 
   delete m;
+}
+
+
+class C_C_Tick : public Context {
+  Client *client;
+public:
+  C_C_Tick(Client *c) : client(c) {}
+  void finish(int r) {
+    client->tick();
+  }
+};
+
+void Client::tick()
+{
+  dout(10) << "tick" << dendl;
+  tick_event = new C_C_Tick(this);
+  timer.add_event_after(g_conf.client_tick_interval, tick_event);
+  
+  utime_t now = g_clock.now();
+  utime_t el = now - last_cap_renew_request;
+  if (el > g_conf.mds_cap_timeout / 3.0) {
+    renew_caps();
+  }
+  
+}
+
+void Client::renew_caps()
+{
+  dout(10) << "renew_caps" << dendl;
+  last_cap_renew_request = g_clock.now();
+  
+  for (map<int,version_t>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++) {
+    dout(15) << "renew_caps requesting from mds" << p->first << dendl;
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
+			    mdsmap->get_inst(p->first));
+  }
 }
 
 
@@ -2613,6 +2654,9 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
       in->get();
     }
 
+    if (in->caps.count(mds) == 0)
+      caps_by_mds[mds]++;
+
     int new_caps = reply->get_file_caps();
 
     assert(reply->get_file_caps_seq() >= in->caps[mds].seq);
@@ -2628,7 +2672,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
 
       in->caps[mds].caps = new_caps;
       in->caps[mds].seq = reply->get_file_caps_seq();
-
+      
       // we shouldn't ever lose caps at this point.
       // actually, we might...?
       assert((old_caps & ~in->caps[mds].caps) == 0);
@@ -3969,14 +4013,42 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
   else if (dest.is_osd()) {
     objecter->ms_handle_failure(m, dest, inst);
   } 
-  else if (dest.is_mds()) {
-    dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
-    //failed_mds.insert(dest.num());
-  }
   else {
-    // client?
     dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
     delete m;
   }
 }
 
+void Client::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+{
+  dout(0) << "ms_handle_reset on " << addr << dendl;
+}
+
+
+void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+{
+  dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
+  if (last.is_mds()) {
+    int mds = last.num();
+    dout(0) << "ms_handle_remote_reset on " << last << ", " << caps_by_mds[mds]
+	    << " caps, kicking requests" << dendl;
+
+    mds_sessions.erase(mds); // "kill" session
+
+    // reopen if caps
+    if (caps_by_mds[mds] > 0) {
+      waiting_for_session[mds].size();  // make sure entry exists
+      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
+			      mdsmap->get_inst(mds));
+      
+      /*
+       * FIXME: actually, we need to do a reconnect or similar to reestablish
+       * our caps (where possible)
+       */
+      dout(0) << "FIXME: client needs to reconnect to restablish existing caps ****" << dendl;
+    }
+
+    // or requests
+    kick_requests(mds);
+  }
+}
