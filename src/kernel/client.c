@@ -105,10 +105,11 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	
 	err = le32_to_cpu(rinfo.head->result);
 	if (err != 0) 
-		goto out;
+		return err;
 	if (rinfo.trace_nr == 0) {
 		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
-		return -EINVAL;
+		err = -EINVAL;
+		goto out;
 	}
 
 	fs_root = client->sb->s_root;
@@ -313,6 +314,7 @@ void ceph_destroy_client(struct ceph_client *cl)
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);
+	dout(10, "destroy_client %p done\n", cl);
 }
 
 

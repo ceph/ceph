@@ -230,6 +230,43 @@ static int resume_session(struct ceph_mds_client *mdsc, struct ceph_mds_session 
 	return 0;
 }
 
+static void close_session(struct ceph_mds_client *mdsc, struct ceph_mds_session *session)
+{
+	int mds = session->s_mds;
+	struct ceph_msg *msg;
+
+	dout(10, "close_session to mds%d\n", mds);
+	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE, session->s_cap_seq);
+	if (IS_ERR(msg))
+		return;// PTR_ERR(msg);  /* fixme */
+	session->s_state = CEPH_MDS_SESSION_CLOSING;
+	send_msg_mds(mdsc, msg, mds);
+}
+
+static void remove_session_caps(struct ceph_mds_session *session)
+{
+	struct ceph_inode_cap *cap;
+	struct ceph_inode_info *ci;
+
+	/*
+	 * fixme: when we start locking the inode, make sure
+	 * we don't deadlock with __remove_cap in inode.c.
+	 */
+	dout(10, "remove_session_caps on %p\n", session);
+	spin_lock(&session->s_cap_lock);
+	while (session->s_nr_caps > 0) {
+		cap = list_entry(session->s_caps.next, struct ceph_inode_cap, session_caps);
+		ci = cap->ci;
+		igrab(&ci->vfs_inode);
+		dout(10, "removing cap %p, ci is %p, inode is %p\n", cap, ci, &ci->vfs_inode);
+		spin_unlock(&session->s_cap_lock);
+		ceph_remove_cap(ci, session->s_mds);
+		spin_lock(&session->s_cap_lock);
+	}
+	BUG_ON(session->s_nr_caps > 0);
+	spin_unlock(&session->s_cap_lock);
+}
+
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	__u32 op;
@@ -266,7 +303,9 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 			dout(1, "ignoring session close from mds%d, seq %llu < my seq %llu\n", 
 			     msg->hdr.src.name.num, seq, session->s_cap_seq);
 		}
+		remove_session_caps(session);
 		ceph_mdsc_put_session(session);
+		complete(&mdsc->session_close_waiters);
 		break;
 
 	case CEPH_SESSION_RENEWCAPS:
@@ -300,38 +339,6 @@ bad:
 
 
 /* exported functions */
-
-void schedule_delayed(struct ceph_mds_client *mdsc)
-{
-	schedule_delayed_work(&mdsc->delayed_work, HZ*60);
-}
-
-void delayed_work(struct work_struct *work);
-
-void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
-{
-	spin_lock_init(&mdsc->lock);
-	mdsc->client = client;
-	mdsc->mdsmap = 0;            /* none yet */
-	mdsc->sessions = 0;
-	mdsc->max_sessions = 0;
-	mdsc->last_tid = 0;
-	INIT_RADIX_TREE(&mdsc->request_tree, GFP_KERNEL);
-	mdsc->last_requested_map = 0;
-	init_completion(&mdsc->map_waiters);
-	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
-
-	/* hack fixme */
-	schedule_delayed(mdsc);
-}
-
-void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
-{
-	/* close sessions, caps */
-	/* IMPLEMENT ME */
-	cancel_delayed_work_sync(&mdsc->delayed_work);
-}
-
 
 struct ceph_msg *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
@@ -1108,6 +1115,15 @@ int ceph_mdsc_renew_caps(struct ceph_mds_client *mdsc)
 	return 0;
 }
 
+
+/*
+ * delayed work -- renew caps with mds 
+ */
+void schedule_delayed(struct ceph_mds_client *mdsc)
+{
+	schedule_delayed_work(&mdsc->delayed_work, HZ*60);
+}
+
 void delayed_work(struct work_struct *work)
 {
 	int i;
@@ -1125,5 +1141,52 @@ void delayed_work(struct work_struct *work)
 	
 	schedule_delayed(mdsc);
 }
+
+
+void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
+{
+	spin_lock_init(&mdsc->lock);
+	mdsc->client = client;
+	mdsc->mdsmap = 0;            /* none yet */
+	mdsc->sessions = 0;
+	mdsc->max_sessions = 0;
+	mdsc->last_tid = 0;
+	INIT_RADIX_TREE(&mdsc->request_tree, GFP_KERNEL);
+	mdsc->last_requested_map = 0;
+	init_completion(&mdsc->map_waiters);
+	init_completion(&mdsc->session_close_waiters);
+	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
+
+	/* hack fixme */
+	schedule_delayed(mdsc);
+}
+
+void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
+{
+	int i;
+	int n;
+
+	dout(10, "stop\n");
+
+	/* close sessions, caps */
+	for (;;) {
+		dout(10, "closing sessions\n");
+		n = 0;
+		for (i=0; i<mdsc->max_sessions; i++) {
+			if (mdsc->sessions[i] == 0 ||
+			    mdsc->sessions[i]->s_state >= CEPH_MDS_SESSION_CLOSING)
+				continue;
+			close_session(mdsc, mdsc->sessions[i]);
+			n++;
+		}
+		if (n == 0) break;
+		dout(10, "waiting for sessions to close\n");
+		wait_for_completion(&mdsc->session_close_waiters);
+	} 
+
+	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
+}
+
+
 
 /* eof */

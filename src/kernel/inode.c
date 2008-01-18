@@ -168,6 +168,8 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session
 	for (i=0; i<ci->i_nr_caps; i++) 
 		if (ci->i_caps[i].mds == mds) break;
 	if (i == ci->i_nr_caps) {
+		for (i=0; i<ci->i_nr_caps; i++) 
+			if (ci->i_caps[i].mds < 0) break;
 		if (i == ci->i_max_caps) {
 			/* realloc */
 			void *o = ci->i_caps;
@@ -182,26 +184,31 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session
 				kfree(o);
 			ci->i_max_caps *= 2;
 		}
+		if (i == ci->i_nr_caps)
+			ci->i_nr_caps++;
+
 		ci->i_caps[i].ci = ci;
 		ci->i_caps[i].caps = 0;
 		ci->i_caps[i].mds = mds;
 		ci->i_caps[i].seq = 0;
 		ci->i_caps[i].flags = 0;
-		ci->i_nr_caps++;
 
 		ci->i_caps[i].session = session;
 		spin_lock(&session->s_cap_lock);
 		list_add(&ci->i_caps[i].session_caps, &session->s_caps);
 		session->s_nr_caps++;
 		spin_unlock(&session->s_cap_lock);
+
+		if (ci->i_nr_caps == 1) {
+			dout(10, "igrab on %p\n", inode);
+			igrab(inode);
+		}
 	}
 
 	dout(10, "add_cap inode %p (%lu) got cap %d %xh now %xh seq %d from %d\n",
 	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
-	if (ci->i_nr_caps == 1)
-		igrab(inode);
 	return &ci->i_caps[i];
 }
 
@@ -221,8 +228,35 @@ void __remove_cap(struct ceph_inode_cap *cap)
 	spin_lock(&session->s_cap_lock);
 	list_del(&cap->session_caps);
 	session->s_nr_caps--;
-	spin_unlock(&session->s_cap_lock);
 	cap->session = 0;
+	spin_unlock(&session->s_cap_lock);
+}
+
+void ceph_remove_cap(struct ceph_inode_info *ci, int mds)
+{
+	int i;
+	int was = ci->i_nr_caps;
+	dout(10, "remove_cap on %p for mds%d\n", &ci->vfs_inode, mds);
+	for (i=0; i<ci->i_nr_caps; i++) {
+		if (ci->i_caps[i].mds != mds) 
+			continue;
+		dout(10, "remove_cap removing %p\n", &ci->i_caps[i]);
+		__remove_cap(&ci->i_caps[i]);  /* remove from list */
+		if (i == ci->i_nr_caps-1) {
+			do {
+				ci->i_nr_caps--;
+			} while (ci->i_nr_caps &&
+				 ci->i_caps[ci->i_nr_caps-1].mds < 0);
+			break;
+		}
+		ci->i_caps[i].mds = -1;
+		ci->i_caps[i].caps = 0;
+		ci->i_caps[i].seq = 0;
+	}
+	if (was > 0 && ci->i_nr_caps == 0) {
+		dout(10, "iput on %p\n", &ci->vfs_inode);
+		iput(&ci->vfs_inode);
+	}
 }
 
 void ceph_remove_caps(struct ceph_inode_info *ci)
@@ -232,13 +266,14 @@ void ceph_remove_caps(struct ceph_inode_info *ci)
 	if (ci->i_nr_caps) {
 		for (i=0; i<ci->i_nr_caps; i++) 
 			__remove_cap(&ci->i_caps[i]);
-		iput(&ci->vfs_inode);
 		ci->i_nr_caps = 0;
 		if (ci->i_caps != ci->i_caps_static) {
 			kfree(ci->i_caps);
 			ci->i_caps = ci->i_caps_static;
 			ci->i_max_caps = STATIC_CAPS;
 		}
+		dout(10, "iput on %p\n", &ci->vfs_inode);
+		iput(&ci->vfs_inode);
 	}
 }
 

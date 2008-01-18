@@ -62,7 +62,7 @@ struct ceph_mds_client {
 	__u64                   last_tid;      /* id of most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	__u64                   last_requested_map;
-	struct completion       map_waiters;
+	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
 };
 

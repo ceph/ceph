@@ -32,6 +32,7 @@ kernel client
 - mds client
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
+  - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
   - readpages (readahead)
   - async (caching) mode

@@ -453,10 +453,9 @@ out:
 static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = s->s_fs_info;
-
 	dout(1, "kill_sb %p\n", s);
-	kill_anon_super(s);
 	ceph_destroy_client(client);
+	kill_anon_super(s);
 }
 
 
