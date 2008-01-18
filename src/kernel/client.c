@@ -81,7 +81,6 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *root_inode, *mnt_inode = NULL;
-	struct dentry *fs_root;
 	struct ceph_msg *req = 0;
 	struct ceph_mds_request_head *reqhead;
 	struct ceph_mds_reply_info rinfo;
@@ -112,33 +111,31 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		goto out;
 	}
 
-	fs_root = client->sb->s_root;
-	if (fs_root == NULL) {
+	if (client->sb->s_root == NULL) {
 		/* get the fs root inode. Note that this is not necessarily the root of
 		   the mount */
 		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo.trace_in[0].in->ino), &root_inode);
-		if (err < 0) {
+		if (err < 0) 
 			goto out;
-		}
 		alloc_fs = 1;
 
-		fs_root = d_alloc_root(root_inode);
-		if (fs_root == NULL) {
+		client->sb->s_root = d_alloc_root(root_inode);
+		if (client->sb->s_root == NULL) {
 			err = -ENOMEM;
 			/* fixme: also close? */
 			goto out2;
 		}
-		client->sb->s_root = fs_root;
 	} else {
 		root_inode = client->sb->s_root->d_inode;
-
 		BUG_ON (root_inode == NULL);
 	}
 
 	if ((err = ceph_fill_trace(client->sb, &rinfo, &mnt_inode, pmnt_root)) < 0)
 		goto out2;
-
-	BUG_ON(*pmnt_root == NULL);
+	if (*pmnt_root == NULL) {
+		err = -ENOMEM;
+		goto out2;
+	}
 
 	/* fill in cap */
 	frommds = rinfo.reply->hdr.src.name.num;
@@ -150,15 +147,10 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		goto out2;
 	}
 
-	if (*pmnt_root == NULL) {
-		err = -ENOMEM;
-		goto out2;
-	}
-
 	ci = ceph_inode(mnt_inode);
 	ci->i_nr_by_mode[FILE_MODE_PIN]++;
 
-	dout(30, "open_root_inode success, root d is %p.\n", fs_root);
+	dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
 	return 0;
 
 out2:

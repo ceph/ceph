@@ -31,10 +31,7 @@ int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pin
 {
 	BUG_ON(pinode == NULL);
 
-	*pinode = NULL;
-
 	*pinode = iget_locked(sb, ino);
-
 	if (*pinode == NULL) 
 		return -ENOMEM;
 	if ((*pinode)->i_state & I_NEW)

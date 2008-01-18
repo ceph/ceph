@@ -262,6 +262,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 		spin_unlock(&session->s_cap_lock);
 		ceph_remove_cap(ci, session->s_mds);
 		spin_lock(&session->s_cap_lock);
+		iput(&ci->vfs_inode);
 	}
 	BUG_ON(session->s_nr_caps > 0);
 	spin_unlock(&session->s_cap_lock);
