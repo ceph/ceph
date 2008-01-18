@@ -30,11 +30,8 @@ kernel client
  - 
 
 - mds client
-  - pin inodes with caps (igrab/iput?)
-  - mechanism to close out old caps
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
-?  - reconnect to recoverying mds
 - osd client
   - readpages (readahead)
   - async (caching) mode
