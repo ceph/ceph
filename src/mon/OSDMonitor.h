@@ -12,6 +12,8 @@
  * 
  */
 
+/* Object Store Device (OSD) Monitor
+ */
 
 #ifndef __OSDMONITOR_H
 #define __OSDMONITOR_H

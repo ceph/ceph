@@ -11,6 +11,12 @@
  * Foundation.  See file COPYING.
  * 
  */
+ 
+/*
+ * Placement Group Map. Placement Groups are logical sets of objects
+ * that are replicated by the same set of devices. pgid=(r,hash(o)&m)
+ * where & is a bit-wise AND and m=2^k-1
+ */
 
 #ifndef __PGMAP_H
 #define __PGMAP_H
