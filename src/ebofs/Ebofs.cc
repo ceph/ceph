@@ -362,62 +362,60 @@ int Ebofs::umount()
 
 void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
 {
-  struct ebofs_super sb;
+  bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
+  bp.zero();
+
+  struct ebofs_super *sb = (ebofs_super*)bp.c_str();  // this way it's aligned.
   
   dout(10) << "prepare_super v" << epoch << dendl;
 
   // fill in super
-  memset(&sb, 0, sizeof(sb));
-  sb.s_magic = EBOFS_MAGIC;
-  sb.fsid = super_fsid;
-  sb.epoch = epoch;
-  sb.num_blocks = dev.get_num_blocks();
+  sb->s_magic = EBOFS_MAGIC;
+  sb->fsid = super_fsid;
+  sb->epoch = epoch;
+  sb->num_blocks = dev.get_num_blocks();
 
-  sb.free_blocks = free_blocks;
-  sb.limbo_blocks = limbo_blocks;
+  sb->free_blocks = free_blocks;
+  sb->limbo_blocks = limbo_blocks;
 
   // tables
-  sb.object_tab.num_keys = object_tab->get_num_keys();
-  sb.object_tab.root = object_tab->get_root();
-  sb.object_tab.depth = object_tab->get_depth();
+  sb->object_tab.num_keys = object_tab->get_num_keys();
+  sb->object_tab.root = object_tab->get_root();
+  sb->object_tab.depth = object_tab->get_depth();
 
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++) {
-    sb.free_tab[i].num_keys = free_tab[i]->get_num_keys();
-    sb.free_tab[i].root = free_tab[i]->get_root();
-    sb.free_tab[i].depth = free_tab[i]->get_depth();
+    sb->free_tab[i].num_keys = free_tab[i]->get_num_keys();
+    sb->free_tab[i].root = free_tab[i]->get_root();
+    sb->free_tab[i].depth = free_tab[i]->get_depth();
   }
-  sb.limbo_tab.num_keys = limbo_tab->get_num_keys();
-  sb.limbo_tab.root = limbo_tab->get_root();
-  sb.limbo_tab.depth = limbo_tab->get_depth();
+  sb->limbo_tab.num_keys = limbo_tab->get_num_keys();
+  sb->limbo_tab.root = limbo_tab->get_root();
+  sb->limbo_tab.depth = limbo_tab->get_depth();
 
-  sb.alloc_tab.num_keys = alloc_tab->get_num_keys();
-  sb.alloc_tab.root = alloc_tab->get_root();
-  sb.alloc_tab.depth = alloc_tab->get_depth();
+  sb->alloc_tab.num_keys = alloc_tab->get_num_keys();
+  sb->alloc_tab.root = alloc_tab->get_root();
+  sb->alloc_tab.depth = alloc_tab->get_depth();
 
-  sb.collection_tab.num_keys = collection_tab->get_num_keys();
-  sb.collection_tab.root = collection_tab->get_root();
-  sb.collection_tab.depth = collection_tab->get_depth();
+  sb->collection_tab.num_keys = collection_tab->get_num_keys();
+  sb->collection_tab.root = collection_tab->get_root();
+  sb->collection_tab.depth = collection_tab->get_depth();
 
-  sb.co_tab.num_keys = co_tab->get_num_keys();
-  sb.co_tab.root = co_tab->get_root();
-  sb.co_tab.depth = co_tab->get_depth();
+  sb->co_tab.num_keys = co_tab->get_num_keys();
+  sb->co_tab.root = co_tab->get_root();
+  sb->co_tab.depth = co_tab->get_depth();
 
   // pools
-  sb.nodepool.num_regions = nodepool.region_loc.size();
+  sb->nodepool.num_regions = nodepool.region_loc.size();
   for (unsigned i=0; i<nodepool.region_loc.size(); i++) {
-    sb.nodepool.region_loc[i] = nodepool.region_loc[i];
+    sb->nodepool.region_loc[i] = nodepool.region_loc[i];
   }
-  sb.nodepool.node_usemap_even = nodepool.usemap_even;
-  sb.nodepool.node_usemap_odd = nodepool.usemap_odd;
+  sb->nodepool.node_usemap_even = nodepool.usemap_even;
+  sb->nodepool.node_usemap_odd = nodepool.usemap_odd;
 
   // csum
-  sb.super_csum = sb.calc_csum();
-  dout(20) << "super csum is " << sb.super_csum << " " << sb.calc_csum() << dendl;
-  
-  // put in a buffer
-  bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
-  bp.zero();
-  memcpy(bp.c_str(), (const char*)&sb, sizeof(sb));
+  sb->super_csum = sb->calc_csum();
+  dout(-20) << "super csum is " << sb->super_csum << " " << sb->calc_csum() << dendl;
+  assert(!sb->is_corrupt());
 }
 
 void Ebofs::write_super(version_t epoch, bufferptr& bp)
