@@ -63,6 +63,7 @@ struct ceph_mds_client {
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	__u64                   last_requested_map;
 	struct completion       map_waiters;
+	struct delayed_work     delayed_work;  /* delayed work */
 };
 
 /*
@@ -94,6 +95,7 @@ struct ceph_mds_reply_info {
 
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client);
+extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg);
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg);

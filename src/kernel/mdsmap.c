@@ -43,7 +43,6 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 	return i;
 }
 
-
 struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
 {
 	if (w >= m->m_max_mds)

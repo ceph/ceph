@@ -258,9 +258,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	}
 
 	/* new cap? */
-	dout(10, "1\n");
 	cap = get_cap_for_mds(inode, mds);
-	dout(10, "2\n");
 	if (!cap) {
 		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
 		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
@@ -268,9 +266,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	} 
 
 	/* revocation? */
-	dout(10, "3\n");
 	newcaps = le32_to_cpu(grant->caps);
-	dout(10, "4\n");
 	if (cap->caps & ~newcaps) {
 		used = ceph_caps_used(ci);
 		dout(10, "revocation: %d -> %d, used %d\n", cap->caps, newcaps, used);
@@ -283,7 +279,6 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	}
 	
 	/* grant or no-op */
-	dout(10, "5\n");
 	if (cap->caps == newcaps) {
 		dout(10, "no-op: %d -> %d\n", cap->caps, newcaps);
 	} else {
