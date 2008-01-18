@@ -414,7 +414,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
 
   // csum
   sb->super_csum = sb->calc_csum();
-  dout(-20) << "super csum is " << sb->super_csum << " " << sb->calc_csum() << dendl;
+  dout(20) << "super csum is " << sb->super_csum << " " << sb->calc_csum() << dendl;
   assert(!sb->is_corrupt());
 }
 
