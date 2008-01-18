@@ -73,15 +73,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_frag_map[0].frag = 0;
 	ci->i_frag_map[0].mds = 0; // FIXME
 	
-	ci->i_nr_caps = 0;
-	for (i=0; i<4; i++)
-		ci->i_nr_by_mode[i] = 0;
-	ci->i_cap_wanted = 0;
-	
-	ci->i_wr_size = 0;
-	ci->i_wr_mtime.tv_sec = 0;
-	ci->i_wr_mtime.tv_nsec = 0;
-
 	ci->i_old_atime = inode->i_atime;
 
 	inode->i_mapping->a_ops = &ceph_aops;

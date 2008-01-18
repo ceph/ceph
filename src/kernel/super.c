@@ -93,6 +93,8 @@ static struct kmem_cache *ceph_inode_cachep;
 static struct inode *ceph_alloc_inode(struct super_block *sb)
 {
 	struct ceph_inode_info *ci;
+	int i;
+
 	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_KERNEL);
 	if (!ci)
 		return NULL;
@@ -112,6 +114,14 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_caps = ci->i_caps_static;
 	atomic_set(&ci->i_cap_count, 0);
 
+	for (i=0; i<4; i++)
+		ci->i_nr_by_mode[i] = 0;
+	ci->i_cap_wanted = 0;
+	
+	ci->i_wr_size = 0;
+	ci->i_wr_mtime.tv_sec = 0;
+	ci->i_wr_mtime.tv_nsec = 0;
+	
 	return &ci->vfs_inode;
 }
 
