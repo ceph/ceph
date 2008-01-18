@@ -307,8 +307,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 
 	/* unmount */
 	/* ... */
-	
-	
+
+	ceph_mdsc_stop(&cl->mdsc);	
 
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();

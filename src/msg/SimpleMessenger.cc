@@ -1054,14 +1054,15 @@ void Rank::Pipe::report_failures()
       unsigned srcrank = m->get_source_inst().addr.v.erank;
       if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
 	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
+	delete m;
       } else if (rank.local[srcrank]->is_stopped()) {
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
+	delete m;
       } else {
 	dout(10) << "fail on " << *m << dendl;
 	rank.local[srcrank]->queue_failure(m, m->get_dest_inst());
       }
     }
-    delete m;
   }
 }
 

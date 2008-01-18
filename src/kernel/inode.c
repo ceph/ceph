@@ -89,15 +89,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_frag_map[0].frag = 0;
 	ci->i_frag_map[0].mds = 0; // FIXME
 	
-	ci->i_nr_caps = 0;
-	for (i=0; i<4; i++)
-		ci->i_nr_by_mode[i] = 0;
-	ci->i_cap_wanted = 0;
-	
-	ci->i_wr_size = 0;
-	ci->i_wr_mtime.tv_sec = 0;
-	ci->i_wr_mtime.tv_nsec = 0;
-
 	ci->i_old_atime = inode->i_atime;
 
 	inode->i_mapping->a_ops = &ceph_aops;
@@ -274,9 +265,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	}
 
 	/* new cap? */
-	dout(10, "1\n");
 	cap = get_cap_for_mds(inode, mds);
-	dout(10, "2\n");
 	if (!cap) {
 		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
 		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
@@ -284,9 +273,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	} 
 
 	/* revocation? */
-	dout(10, "3\n");
 	newcaps = le32_to_cpu(grant->caps);
-	dout(10, "4\n");
 	if (cap->caps & ~newcaps) {
 		used = ceph_caps_used(ci);
 		dout(10, "revocation: %d -> %d, used %d\n", cap->caps, newcaps, used);
@@ -299,7 +286,6 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	}
 	
 	/* grant or no-op */
-	dout(10, "5\n");
 	if (cap->caps == newcaps) {
 		dout(10, "no-op: %d -> %d\n", cap->caps, newcaps);
 	} else {
