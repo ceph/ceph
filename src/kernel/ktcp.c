@@ -36,8 +36,7 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
 		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
-		set_bit(READABLE, &con->state);
-		queue_work(recv_wq, &con->rwork);
+		ceph_queue_read(con);
 	}
 }
 
@@ -49,9 +48,9 @@ static void ceph_write_space(struct sock *sk)
         dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 	/* only queue to workqueue if a WRITE is pending */
 	if (con && (test_bit(WRITE_PENDING, &con->state) || 
-	    test_bit(CLOSING, &con->state))) {
+		    test_bit(CLOSING, &con->state))) {
                 dout(30, "ceph_write_space %p queuing write work\n", con);
-                queue_work(send_wq, &con->swork.work);
+		ceph_queue_write(con);
         }
 	/* Since we have our own write_space, Clear the SOCK_NOSPACE flag */
 	clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
@@ -68,13 +67,16 @@ static void ceph_state_change(struct sock *sk)
 	     con, con->state, sk->sk_state);
         switch (sk->sk_state) {
 		case TCP_CLOSE:
+			dout(30, "ceph_state_change TCP_CLOSE\n");
 			set_bit(CLOSED, &con->state);
 			clear_bit(OPEN, &con->state);
+			ceph_queue_write(con);
 			break;
 		case TCP_CLOSE_WAIT:
+			dout(30, "ceph_state_change TCP_CLOSE_WAIT\n");
 			set_bit(CLOSING, &con->state);
         		dout(30, "ceph_state_change state = %lu \n", 
-	     		con->state);
+			     con->state);
 		case TCP_ESTABLISHED:
 			ceph_write_space(sk);
 			break;

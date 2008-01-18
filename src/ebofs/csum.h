@@ -37,7 +37,7 @@ inline __u64 calc_csum(const char *start, int len) {
 
 /*
  * arbitrarily aligned buffer.  buffer alignment must match logical alignment.
- * i.e., buffer is aligned, but has non-aligned boundaries.
+ * i.e., buffer content is aligned, but has non-aligned boundaries.
  */
 inline __u64 calc_csum_unaligned(const char *start, int len) {
   const char *end = start + len;

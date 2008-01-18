@@ -12,6 +12,11 @@
  * 
  */
 
+/*
+ * Placement Group Monitor. Placement Groups are logical sets of objects
+ * that are replicated by the same set of devices.
+ */
+
 #ifndef __PGMONITOR_H
 #define __PGMONITOR_H
 

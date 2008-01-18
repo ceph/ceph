@@ -16,6 +16,7 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
 	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_session *session;
 	struct dentry *dentry;
 	int frommds;
 	struct ceph_inode_cap *cap;
@@ -34,14 +35,15 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 		return ERR_PTR(PTR_ERR(req));
 	rhead = req->front.iov_base;
 	rhead->args.open.flags = cpu_to_le32(flags);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
 		return ERR_PTR(err);
 	
 	dout(10, "open got and parsed result\n");
 	frommds = rinfo.reply->hdr.src.name.num;
-	cap = ceph_add_cap(inode, frommds, 
+	cap = ceph_add_cap(inode, session, 
 			   le32_to_cpu(rinfo.head->file_caps), 
 			   le32_to_cpu(rinfo.head->file_caps_seq));
+	ceph_mdsc_put_session(session);
 	return cap;
 }
 

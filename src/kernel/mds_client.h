@@ -24,6 +24,7 @@ struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	spinlock_t        s_cap_lock;
 	struct list_head  s_caps;
 	int               s_nr_caps;
 	atomic_t          s_ref;
@@ -105,7 +106,14 @@ extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
 extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
-				struct ceph_mds_reply_info *rinfo, int mds);
+				struct ceph_mds_reply_info *rinfo, struct ceph_mds_session **psession);
+
+static __inline__ void ceph_mdsc_put_session(struct ceph_mds_session *s)
+{
+	if (atomic_dec_and_test(&s->s_ref)) 
+		kfree(s);
+}
+
 
 extern int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info);
 extern void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info);

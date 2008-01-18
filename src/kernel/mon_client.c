@@ -82,15 +82,39 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 		return -ENOMEM;
 	spin_lock_init(&monc->lock);
 	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_KERNEL);
+	monc->last_tid = 0;
+	monc->want_mdsmap = 0;
 	return 0;
 }
 
-
-
-void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have)
+int ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have)
 {
-	dout(5, "ceph_monc_request_mdsmap -- IMPLEMENT ME\n");
-	
+	struct ceph_msg *msg;
+	int mon = pick_mon(monc, -1);
+
+	dout(5, "ceph_monc_request_mdsmap from mon%d have %u\n", mon, have);
+	monc->want_mdsmap = have;
+	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(__u32), 0, 0, 0);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	*(__le32*)msg->front.iov_base = cpu_to_le32(have);
+	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, 0);
+	return 0;
+}
+
+int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have)
+{
+	if (have > monc->want_mdsmap) {
+		monc->want_mdsmap = 0;
+		dout(5, "ceph_monc_got_mdsmap have %u > wanted %u\n", 
+		     have, monc->want_mdsmap);
+		return 0;
+	} else {
+		dout(5, "ceph_monc_got_mdsmap have %u <= wanted %u *****\n", 
+		     have, monc->want_mdsmap);
+		return -EAGAIN;
+	}
 }
 
 
@@ -144,7 +168,7 @@ int send_statfs(struct ceph_mon_client *monc, u64 tid)
 		return PTR_ERR(msg);
 	*(__le64*)msg->front.iov_base = cpu_to_le64(tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, BASE_DELAY_INTERVAL);
+	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;
 }
 

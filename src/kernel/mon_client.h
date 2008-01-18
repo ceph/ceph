@@ -30,6 +30,8 @@ struct ceph_mon_client {
 	spinlock_t lock;
 	struct radix_tree_root statfs_request_tree;  /* statfs requests */
 	u64 last_tid;
+
+	u32 want_mdsmap;  /* protected by caller's lock */
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
@@ -37,7 +39,10 @@ extern int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *
 
 extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 
-extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u64 have);
+extern int ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have);
+extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
+
+
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u64 have);
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 extern void ceph_monc_report_failure(struct ceph_mon_client *monc, struct ceph_entity_inst *who);

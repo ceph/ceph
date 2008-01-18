@@ -93,6 +93,7 @@ struct ceph_inode_cap {
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
+	struct ceph_mds_session *session;
 	struct list_head session_caps;  /* per-session caplist */
 };
 
@@ -147,6 +148,11 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci) {
 	if (ci->i_nr_by_mode[3]) want |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
 	return want;
 }
+
+static inline int ceph_caps_used(struct ceph_inode_info *ci) {
+	return 0;  /* FIXME */
+}
+
 static inline int ceph_file_mode(int flags)
 {
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
@@ -212,9 +218,8 @@ extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 extern int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
-extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq);
-extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
-			      struct kstat *stat);
+extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq);
+extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session);
 
 /* addr.c */

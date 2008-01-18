@@ -11,6 +11,10 @@
  * Foundation.  See file COPYING.
  * 
  */
+ 
+/*
+ * The Client Monitor is used for traking the filesystem's clients.
+ */
 
 #ifndef __CLIENTMONITOR_H
 #define __CLIENTMONITOR_H

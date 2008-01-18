@@ -56,13 +56,14 @@ public:
   set<CInode*> reconnected_caps;
 
   void handle_client_session(class MClientSession *m);
-  void _session_logged(entity_inst_t ci, bool open, version_t cmapv);
+  void _session_logged(Session *session, bool open, version_t pv);
   void prepare_force_open_sessions(map<int,entity_inst_t> &cm);
   void finish_force_open_sessions(map<int,entity_inst_t> &cm);
   void terminate_sessions();
+  void find_idle_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
-  void process_reconnect_cap(CInode *in, int from, inode_caps_reconnect_t& capinfo);
+  void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void add_reconnected_cap_inode(CInode *in) {
     reconnected_caps.insert(in);
   }

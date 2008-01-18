@@ -12,7 +12,20 @@ int ceph_inode_debug = 50;
 #define DOUT_PREFIX "inode: "
 #include "super.h"
 
-const struct inode_operations ceph_symlink_iops;
+/*
+ * symlinks
+ */
+static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
+	nd_set_link(nd, ci->i_symlink);
+	return NULL;
+}
+
+const struct inode_operations ceph_symlink_iops = {
+	.readlink = generic_readlink,
+	.follow_link = ceph_sym_follow_link,
+};
 
 int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode)
 {
@@ -30,6 +43,9 @@ int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pin
 	return 0;
 }
 
+/*
+ * populate an inode based on info from mds
+ */
 int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -47,18 +63,16 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	insert_inode_hash(inode);
 
-	dout(30, "new_inode ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode->i_ino,
-	     inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, inode->i_nlink);
+	dout(30, "fill_inode %p ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode,
+	     inode->i_ino, inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, 
+	     inode->i_nlink);
 	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
 	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
 
 	/* ceph inode */
-	dout(30, "inode %p, ci %p\n", inode, ci);
 	ci->i_layout = info->layout; 
-	dout(30, "inode layout %p su %d\n", &ci->i_layout, ci->i_layout.fl_stripe_unit);
-
 	if (ci->i_symlink)
 		kfree(ci->i_symlink);
 	ci->i_symlink = 0;
@@ -154,11 +168,12 @@ static struct ceph_inode_cap *get_cap_for_mds(struct inode *inode, int mds)
 }
 
 
-struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 seq)
+struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq)
 {
+	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
-
+	
 	for (i=0; i<ci->i_nr_caps; i++) 
 		if (ci->i_caps[i].mds == mds) break;
 	if (i == ci->i_nr_caps) {
@@ -176,18 +191,26 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, int mds, u32 cap, u32 s
 				kfree(o);
 			ci->i_max_caps *= 2;
 		}
-
+		ci->i_caps[i].ci = ci;
 		ci->i_caps[i].caps = 0;
 		ci->i_caps[i].mds = mds;
 		ci->i_caps[i].seq = 0;
 		ci->i_caps[i].flags = 0;
 		ci->i_nr_caps++;
+
+		ci->i_caps[i].session = session;
+		spin_lock(&session->s_cap_lock);
+		list_add(&ci->i_caps[i].session_caps, &session->s_caps);
+		session->s_nr_caps++;
+		spin_unlock(&session->s_cap_lock);
 	}
 
 	dout(10, "add_cap inode %p (%lu) got cap %d %xh now %xh seq %d from %d\n",
 	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
+	if (ci->i_nr_caps == 1)
+		igrab(inode);
 	return &ci->i_caps[i];
 }
 
@@ -200,6 +223,33 @@ int ceph_get_caps(struct ceph_inode_info *ci)
 	return have;
 }
 
+void __remove_cap(struct ceph_inode_cap *cap)
+{
+	/* remove from session list */
+	struct ceph_mds_session *session = cap->session;
+	spin_lock(&session->s_cap_lock);
+	list_del(&cap->session_caps);
+	session->s_nr_caps--;
+	spin_unlock(&session->s_cap_lock);
+	cap->session = 0;
+}
+
+void ceph_remove_caps(struct ceph_inode_info *ci)
+{
+	int i;
+	dout(10, "remove_caps on %p nr %d\n", &ci->vfs_inode, ci->i_nr_caps);
+	if (ci->i_nr_caps) {
+		for (i=0; i<ci->i_nr_caps; i++) 
+			__remove_cap(&ci->i_caps[i]);
+		iput(&ci->vfs_inode);
+		ci->i_nr_caps = 0;
+		if (ci->i_caps != ci->i_caps_static) {
+			kfree(ci->i_caps);
+			ci->i_caps = ci->i_caps_static;
+			ci->i_max_caps = STATIC_CAPS;
+		}
+	}
+}
 
 /*
  * 0 - ok
@@ -212,6 +262,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps;
+	int used;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 
@@ -228,7 +279,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	dout(10, "2\n");
 	if (!cap) {
 		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
-		cap = ceph_add_cap(inode, mds, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
+		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
 		return 0;
 	} 
 
@@ -237,9 +288,12 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	newcaps = le32_to_cpu(grant->caps);
 	dout(10, "4\n");
 	if (cap->caps & ~newcaps) {
-		dout(10, "revocation: %d -> %d\n", cap->caps, newcaps);
-		/* FIXME FIXME FIXME DO STUFF HERE */
-		/* blindly ack for now: */
+		used = ceph_caps_used(ci);
+		dout(10, "revocation: %d -> %d, used %d\n", cap->caps, newcaps, used);
+		if (newcaps & used) {
+			/* FIXME FIXME FIXME DO STUFF HERE */
+			/* but blindly ack for now... */
+		}
 		cap->caps = newcaps;
 		return 1; /* ack */
 	}
@@ -255,36 +309,3 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	return 0;	
 }
 
-
-
-/*
- * vfs methods
- */
-int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		       struct kstat *stat)
-{
-	dout(5, "getattr on dentry %p\n", dentry);
-	return 0;
-}
-
-
-
-/*
- * symlinks
- */
-
-static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
-	nd_set_link(nd, ci->i_symlink);
-	return NULL;
-}
-
-const struct inode_operations ceph_symlink_iops = {
-	.readlink = generic_readlink,
-	.follow_link = ceph_sym_follow_link,
-/*	.put_link = ceph_vfs_put_link,
-	.getattr = ceph_vfs_getattr,
-	.setattr = ceph_vfs_setattr,
-*/
-};

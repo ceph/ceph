@@ -21,18 +21,22 @@ public:
   struct item {
     T _item;
     item *_prev, *_next;
-    xlist *_head;
+    xlist *_list;
     
-    item(T i) : _item(i), _prev(0), _next(0), _head(0) {}
+    item(T i) : _item(i), _prev(0), _next(0), _list(0) {}
     ~item() { 
       remove_myself();
     }
+    // no copying!
+    item(const item& other);
+    const item& operator= (const item& right);
+
     
-    xlist* get_xlist() { return _head; }
+    xlist* get_xlist() { return _list; }
     void remove_myself() {
-      if (_head) 
-	_head->remove(this);
-      assert(_head == 0);
+      if (_list) 
+	_list->remove(this);
+      assert(_list == 0);
     }
   };
 
@@ -59,10 +63,10 @@ public:
   }
 
   void push_back(item *item) {
-    if (item->_head) 
-      item->_head->remove(item);
+    if (item->_list) 
+      item->_list->remove(item);
 
-    item->_head = this;
+    item->_list = this;
     item->_next = 0;
     item->_prev = _back;
     if (_back) 
@@ -73,7 +77,7 @@ public:
     _size++;
   }
   void remove(item *item) {
-    assert(item->_head == this);
+    assert(item->_list == this);
     
     if (item->_prev)
       item->_prev->_next = item->_next;
@@ -85,7 +89,7 @@ public:
       _back = item->_prev;
     _size--;
 
-    item->_head = 0;
+    item->_list = 0;
     item->_next = item->_prev = 0;
   }
 

@@ -41,7 +41,7 @@ using namespace __gnu_cxx;
 #include "mon/MonMap.h"
 #include "MDSMap.h"
 
-#include "ClientMap.h"
+#include "SessionMap.h"
 
 
 
@@ -199,7 +199,7 @@ class MDS : public Dispatcher {
   void     reset_tick();
 
   // -- client map --
-  ClientMap    clientmap;
+  SessionMap   sessionmap;
   epoch_t      last_client_mdsmap_bcast;
   //void log_clientmap(Context *c);
 
@@ -268,9 +268,11 @@ class MDS : public Dispatcher {
   // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
-  void my_dispatch(Message *m);
+  void _dispatch(Message *m);
 
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
+  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
+  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
 
   // special message types
   void handle_mds_map(class MMDSMap *m);
@@ -291,7 +293,7 @@ public:
     this->mds = mds;
   }
   virtual void finish(int r) {
-    mds->my_dispatch(m);
+    mds->_dispatch(m);
   }
 };
 

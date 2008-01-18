@@ -70,7 +70,7 @@ MDS_OBJS= \
 	mds/AnchorClient.o\
 	mds/LogEvent.o\
 	mds/IdAllocator.o\
-	mds/ClientMap.o\
+	mds/SessionMap.o\
 	mds/MDLog.o
 
 OSD_OBJS= \
@@ -103,6 +103,7 @@ COMMON_OBJS= \
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
+	mon/MonMap.o\
 	config.o
 
 CLIENT_OBJS= \
@@ -230,6 +231,10 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleM
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
 	${LDINC} $^ -o $@
+
+ldceph.so: libceph.o msg/SimpleMessenger.o
+	${CXX} -shared -fPIC ${CFLAGS} $< -o $@
+
 
 # some benchmarking tools
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c

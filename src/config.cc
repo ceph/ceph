@@ -200,13 +200,9 @@ md_config_t g_conf = {
   client_cache_stat_ttl: 0, // seconds until cached stat results become invalid
   client_cache_readdir_ttl: 1,  // 1 second only
   client_use_random_mds:  false,
-
-  client_sync_writes: 0,
-
   client_mount_timeout: 10.0,  // retry every N seconds
-
+  client_tick_interval: 1.0,
   client_hack_balance_reads: false,
-
   client_trace: 0,
   fuse_direct_io: 0,
   fuse_ll: true,
@@ -240,6 +236,11 @@ md_config_t g_conf = {
 
   mds_beacon_interval: 4, //30.0,
   mds_beacon_grace: 15, //60*60.0,
+
+  mds_cap_timeout: 10,        // cap bits time out if client idle
+  mds_session_autoclose: 30, // autoclose idle session 
+
+  mds_tick_interval: 5,
 
   mds_log: true,
   mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
@@ -359,40 +360,7 @@ md_config_t g_conf = {
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
   bdev_fake_mb: 0,
-  bdev_fake_max_mb:  0,
-
-  // --- fakeclient (mds regression testing) (ancient history) ---
-  num_fakeclient: 100,
-  fakeclient_requests: 100,
-  fakeclient_deterministic: false,
-
-  fakeclient_op_statfs:     false,
-
-  // loosely based on Roselli workload paper numbers
-  fakeclient_op_stat:     610,
-  fakeclient_op_lstat:      false,
-  fakeclient_op_utime:    0,
-  fakeclient_op_chmod:    1,
-  fakeclient_op_chown:    1,
-
-  fakeclient_op_readdir:  2,
-  fakeclient_op_mknod:    30,
-  fakeclient_op_link:     false,
-  fakeclient_op_unlink:   20,
-  fakeclient_op_rename:   0,//40,
-
-  fakeclient_op_mkdir:    10,
-  fakeclient_op_rmdir:    20,
-  fakeclient_op_symlink:  20,
-
-  fakeclient_op_openrd:   200,
-  fakeclient_op_openwr:   0,
-  fakeclient_op_openwrc:  0,
-  fakeclient_op_read:       false,  // osd!
-  fakeclient_op_write:      false,  // osd!
-  fakeclient_op_truncate:   false,
-  fakeclient_op_fsync:      false,
-  fakeclient_op_close:    200
+  bdev_fake_max_mb:  0
 
 #ifdef USE_OSBDB
   ,
@@ -804,8 +772,6 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0)
       g_conf.mon_stop_with_last_mds = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--client_sync_writes") == 0)
-      g_conf.client_sync_writes = atoi(args[++i]);
     else if (strcmp(args[i], "--client_oc") == 0)
       g_conf.client_oc = atoi(args[++i]);
     else if (strcmp(args[i], "--client_oc_size") == 0)

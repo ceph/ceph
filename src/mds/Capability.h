@@ -17,6 +17,7 @@
 #define __CAPABILITY_H
 
 #include "include/buffer.h"
+#include "include/xlist.h"
 
 #include <map>
 using namespace std;
@@ -25,7 +26,7 @@ using namespace std;
 
 
 // heuristics
-//#define CAP_FILE_DELAYFLUSH  32
+//#define CEPH_CAP_DELAYFLUSH  32
 
 inline string cap_string(int cap)
 {
@@ -44,6 +45,8 @@ inline string cap_string(int cap)
 
 typedef uint32_t capseq_t;
 
+class CInode;
+
 class Capability {
 public:
   struct Export {
@@ -55,31 +58,42 @@ public:
   };
 
 private:
+  CInode *inode;
   int wanted_caps;     // what the client wants (ideally)
   
   map<capseq_t, int>  cap_history;  // seq -> cap
   capseq_t last_sent, last_recv;
+  capseq_t last_open;
   
   bool suppress;
-
+  bool stale;
 public:
-  Capability(int want=0, capseq_t s=0) :
+  xlist<Capability*>::item session_caps_item;
+
+  Capability(CInode *i=0, int want=0, capseq_t s=0) :
+    inode(i),
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
-    suppress(false) { 
-  }
-  Capability(Export& other) : 
-    wanted_caps(other.wanted),
-    last_sent(0), last_recv(0) { 
-    // issued vs pending
-    if (other.issued & ~other.pending)
-      issue(other.issued);
-    issue(other.pending);
+    last_open(0),
+    suppress(false), stale(false),
+    session_caps_item(this) { 
   }
   
+  capseq_t get_last_open() { return last_open; }
+  void set_last_open() { last_open = last_sent; }
+
   bool is_suppress() { return suppress; }
   void set_suppress(bool b) { suppress = b; }
+
+  bool is_stale() { return stale; }
+  void set_stale(bool b) { stale = b; }
+
+  CInode *get_inode() { return inode; }
+  void set_inode(CInode *i) { inode = i; }
+  void add_to_cap_list(xlist<Capability*>& ls) {
+    ls.push_back(&session_caps_item);
+  }
 
   bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 
@@ -137,19 +151,8 @@ public:
 
   // issue caps; return seq number.
   capseq_t issue(int c) {
-    //int was = pending();
-    //no!  if (c == was && last_sent) return -1;  // repeat of previous?
-    
     ++last_sent;
     cap_history[last_sent] = c;
-
-    /* no!
-    // not recalling, just adding?
-    if (c & ~was &&
-        cap_history.count(last_sent-1)) { 
-      cap_history.erase(last_sent-1);
-    }
-    */
     return last_sent;
   }
   capseq_t get_last_seq() { return last_sent; }
@@ -209,6 +212,12 @@ public:
     }
 
     return r;
+  }
+
+  void revoke() {
+    if (pending())
+      issue(0);
+    confirm_receipt(last_sent, 0);
   }
 
   // serializers

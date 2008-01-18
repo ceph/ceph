@@ -226,7 +226,9 @@ static void ceph_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
 static void ceph_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 			  struct fuse_file_info *fi)
 {
-
+  Fh *fh = (Fh*)fi->fh;
+  int r = client->ll_fsync(fh, datasync);
+  fuse_reply_err(req, -r);
 }
 
 static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,

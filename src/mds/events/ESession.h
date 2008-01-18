@@ -55,8 +55,6 @@ class ESession : public LogEvent {
       out << "ESession " << client_inst << " close cmapv " << cmapv;
   }
   
-  bool has_expired(MDS *mds);
-  void expire(MDS *mds, Context *c);
   void update_segment();
   void replay(MDS *mds);  
 };

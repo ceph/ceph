@@ -39,8 +39,6 @@ public:
     ::_decode(subtrees, bl, off);
   }
 
-  //bool has_expired(MDS *mds);
-  //void expire(MDS *mds, Context *c);
   void replay(MDS *mds);
 };
 

@@ -18,15 +18,20 @@ code cleanup
   - specify word size in all encoded structures
 
 
+
 kernel client
-- msg layer (patience)
+- msgr layer
+  - clean up ceph_send_fault
+  - more testing
+  - callbacks for 'remote reset' (once 'caps' branch is merged in)
+
+ - TCP_CLOSE case in callback.. should it set CLOSED bit?
+ - ceph_queue_read .. check READING bit?
+ - 
+
 - mds client
-/  - examine new mds maps to kick requests for failed nodes...
-  - mechanism to close out old caps
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
-/  - integrate mds reply trace into cache
-?  - reconnect to recoverying mds
 - osd client
   - readpages (readahead)
   - async (caching) mode
@@ -72,6 +77,14 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- client cap timeouts
+/  - stale -> resume
+  - tolerate connection break
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+  
+
+
 - extend/clean up filepath to allow paths relative to an ino
 /  - fix path_traverse
   - fix reconnect/rejoin open file weirdness

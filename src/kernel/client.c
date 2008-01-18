@@ -46,13 +46,11 @@ static void put_client_counter(void)
 }
 
 
-
-
-int parse_open_reply(struct ceph_msg *reply, struct inode *inode)
+int parse_open_reply(struct ceph_msg *reply, struct inode *inode, struct ceph_mds_session *session)
 {
 	struct ceph_mds_reply_head *head;
 	struct ceph_mds_reply_info rinfo;
-	int frommds = reply->hdr.src.name.num;
+	int frommds = session->s_mds;
 	int err;
 	struct ceph_inode_cap *cap;
 
@@ -69,7 +67,7 @@ int parse_open_reply(struct ceph_msg *reply, struct inode *inode)
 		return err;
 
 	/* fill in cap */
-	cap = ceph_add_cap(inode, frommds, 
+	cap = ceph_add_cap(inode, session, 
 			   le32_to_cpu(head->file_caps), 
 			   le32_to_cpu(head->file_caps_seq));
 	if (IS_ERR(cap))
@@ -87,10 +85,12 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	struct ceph_msg *req = 0;
 	struct ceph_mds_request_head *reqhead;
 	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_session *session;
 	int frommds;
 	int err;
 	struct ceph_inode_cap *cap;
 	struct ceph_inode_info *ci;
+	int alloc_fs = 0;
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
@@ -100,15 +100,15 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	reqhead = req->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, -1)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
 		return err;
 	
 	err = le32_to_cpu(rinfo.head->result);
-	if (err != 0)
-		return err;
+	if (err != 0) 
+		goto out;
 	if (rinfo.trace_nr == 0) {
 		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
-		err = -EINVAL;
+		return -EINVAL;
 	}
 
 	fs_root = client->sb->s_root;
@@ -117,14 +117,15 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		   the mount */
 		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo.trace_in[0].in->ino), &root_inode);
 		if (err < 0) {
-			return err;
+			goto out;
 		}
+		alloc_fs = 1;
 
 		fs_root = d_alloc_root(root_inode);
 		if (fs_root == NULL) {
 			err = -ENOMEM;
 			/* fixme: also close? */
-			goto out;
+			goto out2;
 		}
 		client->sb->s_root = fs_root;
 	} else {
@@ -134,33 +135,38 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	}
 
 	if ((err = ceph_fill_trace(client->sb, &rinfo, &mnt_inode, pmnt_root)) < 0)
-		goto out;
+		goto out2;
 
 	BUG_ON(*pmnt_root == NULL);
 
 	/* fill in cap */
 	frommds = rinfo.reply->hdr.src.name.num;
-	cap = ceph_add_cap(mnt_inode, frommds, 
+	cap = ceph_add_cap(mnt_inode, session, 
 			   le32_to_cpu(rinfo.head->file_caps), 
 			   le32_to_cpu(rinfo.head->file_caps_seq));
 	if (IS_ERR(cap)) {
 		err = PTR_ERR(cap);
-		goto out;
+		goto out2;
 	}
 
 	if (*pmnt_root == NULL) {
-		goto out;
+		err = -ENOMEM;
+		goto out2;
 	}
+
 	ci = ceph_inode(mnt_inode);
 	ci->i_nr_by_mode[FILE_MODE_PIN]++;
 
-	dout(30, "open_root_inode success.\n");
+	dout(30, "open_root_inode success, root d is %p.\n", fs_root);
 	return 0;
 
-out:
+out2:
 	dout(30, "open_root_inode failure %d\n", err);
-	iput(root_inode);
+	if (alloc_fs)
+		iput(root_inode);
 	iput(mnt_inode);
+out:
+	ceph_mdsc_put_session(session);
 	return err;
 }
 
@@ -176,7 +182,6 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 	char r;
 
 	dout(10, "mount start\n");
-
 	while (client->mounting < 7) {
 		get_random_bytes(&r, 1);
 		which = r % args->num_mon;
@@ -191,7 +196,7 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
 		
 		/* wait */
-		dout(10, "mount sent moutn request, waiting for maps\n");
+		dout(10, "mount sent mount request, waiting for maps\n");
 		err = wait_for_completion_timeout(&client->mount_completion, 6*HZ);
 		if (err == -EINTR)
 			return err; 
@@ -303,6 +308,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 	
+	
+
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);

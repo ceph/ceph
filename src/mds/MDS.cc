@@ -33,7 +33,6 @@
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "Migrator.h"
-//#include "Renamer.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -48,8 +47,6 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 
-#include "messages/MPing.h"
-#include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
 #include "messages/MOSDMap.h"
@@ -72,7 +69,7 @@
 // cons/des
 MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
   timer(mds_lock), 
-  clientmap(this) {
+  sessionmap(this) {
 
   this->whoami = whoami;
 
@@ -280,15 +277,15 @@ void MDS::forward_message_mds(Message *req, int mds)
 
 void MDS::send_message_client(Message *m, int client)
 {
-  version_t seq = clientmap.inc_push_seq(client);
+  version_t seq = sessionmap.inc_push_seq(client);
   dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, clientmap.get_inst(client));
+  messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
 }
 
 void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 {
-  version_t seq = clientmap.inc_push_seq(clientinst.name.num());
-  dout(10) << "send_message_client client" << clientinst.name.num() << " seq " << seq << " " << *m << dendl;
+  version_t seq = sessionmap.inc_push_seq(clientinst.name.num());
+  dout(10) << "send_message_client " << clientinst.name << " seq " << seq << " " << *m << dendl;
   messenger->send_message(m, clientinst);
 }
 
@@ -321,7 +318,7 @@ void MDS::reset_tick()
 
   // schedule
   tick_event = new C_MDS_Tick(this);
-  timer.add_event_after(g_conf.mon_tick_interval, tick_event);
+  timer.add_event_after(g_conf.mds_tick_interval, tick_event);
 }
 
 void MDS::tick()
@@ -345,15 +342,14 @@ void MDS::tick()
     mdcache->log_stat(logger);
   }
 
-  if (is_active() || is_stopping())
+  // ...
+  if (is_active() || is_stopping()) {
     locker->scatter_unscatter_autoscattered();
+    server->find_idle_sessions();
+  }
 
-  // booted?
   if (is_active()) {
-    
-    // balancer
     balancer->tick();
-
   }
 }
 
@@ -654,12 +650,12 @@ void MDS::bcast_mds_map()
   dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
 
   // share the map with mounted clients
-  for (set<int>::const_iterator p = clientmap.get_session_set().begin();
-       p != clientmap.get_session_set().end();
-       ++p) {
-    messenger->send_message(new MMDSMap(mdsmap),
-			    clientmap.get_inst(*p));
-  }
+  set<Session*> clients;
+  sessionmap.get_client_session_set(clients);
+  for (set<Session*>::const_iterator p = clients.begin();
+       p != clients.end();
+       ++p) 
+    messenger->send_message(new MMDSMap(mdsmap), (*p)->inst);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -755,8 +751,8 @@ void MDS::boot_create()
   idalloc->reset();
   idalloc->save(fin->new_sub());
 
-  // write empty clientmap
-  clientmap.save(fin->new_sub());
+  // write empty sessionmap
+  sessionmap.save(fin->new_sub());
   
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
@@ -793,8 +789,8 @@ void MDS::boot_start(int step)
       dout(2) << "boot_start " << step << ": opening idalloc" << dendl;
       idalloc->load(gather->new_sub());
 
-      dout(2) << "boot_start " << step << ": opening clientmap" << dendl;
-      clientmap.load(gather->new_sub());
+      dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+      sessionmap.load(gather->new_sub());
 
       if (mdsmap->get_anchortable() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
@@ -1034,13 +1030,13 @@ void MDS::suicide()
 void MDS::dispatch(Message *m)
 {
   mds_lock.Lock();
-  my_dispatch(m);
+  _dispatch(m);
   mds_lock.Unlock();
 }
 
 
 
-void MDS::my_dispatch(Message *m)
+void MDS::_dispatch(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
@@ -1255,7 +1251,7 @@ void MDS::proc_message(Message *m)
 void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
 {
   mds_lock.Lock();
-  dout(10) << "handle_ms_failure to " << inst << " on " << *m << dendl;
+  dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
   
   if (m->get_type() == CEPH_MSG_MDS_MAP && m->get_dest().is_client()) 
     server->client_reconnect_failure(m->get_dest().num());
@@ -1264,3 +1260,13 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Unlock();
 }
 
+void MDS::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+{
+  dout(0) << "ms_handle_reset on " << addr << dendl;
+}
+
+
+void MDS::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+{
+  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+}

@@ -180,7 +180,7 @@ struct ebofs_super {
   csum_t super_csum;
 
   csum_t calc_csum() {
-    return ::calc_csum((char*)this, (unsigned long)&super_csum-(unsigned long)this);
+    return ::calc_csum_unaligned((char*)this, (unsigned long)&super_csum-(unsigned long)this);
   }
   bool is_corrupt() { 
     csum_t actual = calc_csum();

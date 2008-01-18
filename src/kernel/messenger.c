@@ -22,86 +22,10 @@ static char tag_ack = CEPH_MSGR_TAG_ACK;
 
 static void try_read(struct work_struct *);
 static void try_write(struct work_struct *);
+static void try_write_later(struct work_struct *);
 static void try_accept(struct work_struct *);
 
-static void remove_connection(struct ceph_messenger *, struct ceph_connection *);
 
-/*
- * failure case
- * A retry mechanism is used with exponential backoff
- */
-static void ceph_send_fault(struct ceph_connection *con, int error)
-{
-	derr(1, " ceph_send_fault connection error %d to peer %x:%d\n", error,
-	     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
-	     ntohs(con->peer_addr.ipaddr.sin_port));
-
-	if (!con->delay) {
-		derr(1, "ceph_send_fault timeout not set\n");
-		if (error != -EAGAIN || test_bit(CLOSED, &con->state))
-			remove_connection(con->msgr, con);
-		return;
-	}
-
-	switch (error) {
-		case -ETIMEDOUT:
-			derr(10, "timed out to peer %x:%d\n",
-			     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
-			     ntohs(con->peer_addr.ipaddr.sin_port));
-		/* peer unreachable, TBD: need to research if should retry
-		 * a few times first, then close socket and try reconnecting */
-		case -EHOSTDOWN:
-		case -EHOSTUNREACH:
-        	case -ENETUNREACH:
-			derr(10, "ceph_send_fault peer unreachable via route\n");
-			spin_lock(&con->out_queue_lock);
-			/* TBD: reset buffer correctly */
-			list_splice_init(&con->out_sent, &con->out_queue);
-			spin_unlock(&con->out_queue_lock);
-			/* retry with delay */
-			queue_delayed_work(send_wq, &con->swork, con->delay);
-			break;
-		case -EAGAIN:
-			/* no space in socket buffer, ceph_write_space will
-			 * handle requeueing */
-			if (test_bit(OPEN, &con->state))
-				return;
-        	case -EPIPE:
-		/* TBD: may do something different here, may not be allowed */
-        	case -ECONNREFUSED:
-		case -ECONNRESET:
-		/* never connected socket. SOCK_DONE flag not set */
-		case -ENOTCONN:
-			/* TBD: setup timeout here */
-			if (!test_and_clear_bit(CONNECTING, &con->state)){
-				derr(1, "CONNECTING bit not set\n");
-				/* TBD: reset buffer correctly */
-				/* reset buffer */
-				spin_lock(&con->out_queue_lock);
-				list_splice_init(&con->out_sent, 
-					         &con->out_queue);
-				spin_unlock(&con->out_queue_lock);
-				clear_bit(OPEN, &con->state);
-			}
-			set_bit(NEW, &con->state);
-			sock_release(con->sock);
-			/* retry with delay */
-			queue_delayed_work(send_wq, &con->swork, con->delay);
-			break;
-		case -EIO:
-			derr(10, "ceph_send_fault EIO set\n");
-			/* shutdown or soft timeout */
-
-		default:
-			/* if we ever hit here ... */
-			derr(10, "ceph_send_fault unrecognized error %d\n", 
-			     error);
-	}
-	if (con->delay < MAX_DELAY_INTERVAL)
-		con->delay *= 2;
-	else
-		con->delay = MAX_DELAY_INTERVAL;
-}
 
 /*
  * connections
@@ -130,7 +54,8 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 	INIT_LIST_HEAD(&con->out_sent);
 
 	INIT_WORK(&con->rwork, try_read);
-	INIT_DELAYED_WORK(&con->swork, try_write);
+	INIT_WORK(&con->swork, try_write);
+	INIT_DELAYED_WORK(&con->delaywork, try_write_later);
 
 	return con;
 }
@@ -153,14 +78,13 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
 /* 
  * get an existing connection, if any, for given addr
  */
-static struct ceph_connection *get_connection(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
+static struct ceph_connection *__get_connection(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
 {
 	struct ceph_connection *con = NULL;
 	struct list_head *head, *p;
 	unsigned long key = hash_addr(addr);
 
 	/* existing? */
-	spin_lock(&msgr->con_lock);
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head == NULL) 
 		goto out;
@@ -181,9 +105,10 @@ static struct ceph_connection *get_connection(struct ceph_messenger *msgr, struc
 	}
 	con = NULL;
 out:
-	spin_unlock(&msgr->con_lock);
 	return con;
 }
+
+
 
 /* 
  * drop a reference
@@ -203,7 +128,7 @@ static void put_connection(struct ceph_connection *con)
 /* 
  * add to connections tree
  */
-static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
+static void __add_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	struct list_head *head;
 	unsigned long key = hash_addr(&con->peer_addr);
@@ -211,7 +136,6 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 	/* inc ref count */
 	atomic_inc(&con->nref);
 
-	spin_lock(&msgr->con_lock);
 	/* PW this is bogus... needs to be readdressed later */
 	if (test_bit(ACCEPTING, &con->state)) {
 		list_del(&con->list_bucket);
@@ -229,7 +153,6 @@ static void add_connection(struct ceph_messenger *msgr, struct ceph_connection *
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
 	}
-	spin_unlock(&msgr->con_lock);
 }
 
 static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_connection *con)
@@ -250,17 +173,21 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 	unsigned long key;
 
 	dout(20, "__remove_connection %p from %p\n", con, msgr);
-	list_del(&con->list_all);
+	if (list_empty(&con->list_all)) {
+		dout(20, "__remove_connection %p not registered\n", con);
+		return;
+	}
+	list_del_init(&con->list_all);
 	if (test_bit(CONNECTING, &con->state) ||
 	    test_bit(OPEN, &con->state)) {
 		/* remove from con_open too */
 		key = hash_addr(&con->peer_addr);
 		if (list_empty(&con->list_bucket)) {
 			/* last one */
-			dout(20, "remove_connection %p and removing bucket %lu\n", con, key);
+			dout(20, "__remove_connection %p and removing bucket %lu\n", con, key);
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
-			dout(20, "remove_connection %p from bucket %lu\n", con, key);
+			dout(20, "__remove_connection %p from bucket %lu\n", con, key);
 			list_del(&con->list_bucket);
 		}
 	}
@@ -279,7 +206,7 @@ static void remove_connection(struct ceph_messenger *msgr, struct ceph_connectio
  * replace another connection
  *  (old and new should be for the _same_ peer, and thus in the same pos in the radix tree)
  */
-static void replace_connection(struct ceph_messenger *msgr, struct ceph_connection *old, struct ceph_connection *new)
+static void __replace_connection(struct ceph_messenger *msgr, struct ceph_connection *old, struct ceph_connection *new)
 {
 	spin_lock(&msgr->con_lock);
 	list_add(&new->list_bucket, &old->list_bucket);
@@ -287,6 +214,141 @@ static void replace_connection(struct ceph_messenger *msgr, struct ceph_connecti
 	spin_unlock(&msgr->con_lock);
 	put_connection(old); /* dec reference count */
 }
+
+
+
+
+/*
+ * atomically queue read or write work on a connection.
+ * bump reference to avoid races.
+ */
+void ceph_queue_write(struct ceph_connection *con)
+{
+	if (test_and_set_bit(WRITEABLE, &con->state) != 0) {
+		dout(40, "ceph_queue_write %p - already WRITEABLE\n", con);
+		return;
+	}
+	if (test_bit(WRITING, &con->state)) {
+		dout(40, "ceph_queue_write %p - still WRITING, queuing nothing\n", con);
+		return;
+	} 
+	dout(40, "ceph_queue_write %p\n", con);
+	atomic_inc(&con->nref);
+	queue_work(send_wq, &con->swork);
+}
+
+void ceph_queue_delayed_write(struct ceph_connection *con)
+{
+	dout(40, "ceph_queue_delayed_write %p delay %lu\n", con, con->delay);
+	atomic_inc(&con->nref);
+	set_bit(WAITING, &con->state);
+	if (!queue_delayed_work(send_wq, &con->delaywork, con->delay)) {
+		dout(40, "ceph_queue_delayed_write %p - already queued\n", con);
+		put_connection(con);
+	}
+}
+
+void ceph_queue_read(struct ceph_connection *con)
+{
+	if (test_and_set_bit(READABLE, &con->state) != 0) {
+		dout(40, "ceph_queue_read %p - already READABLE\n", con);
+		return;
+	}
+	dout(40, "ceph_queue_read %p\n", con);
+	atomic_inc(&con->nref);
+	queue_work(recv_wq, &con->rwork);
+}
+
+
+
+
+/*
+ * failure case
+ * A retry mechanism is used with exponential backoff
+ */
+static void ceph_send_fault(struct ceph_connection *con, int error)
+{
+	derr(1, "ceph_send_fault %p state %lu error %d to peer %x:%d\n", 
+	     con, con->state, error,
+	     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
+	     ntohs(con->peer_addr.ipaddr.sin_port));
+
+	if (!con->delay) {
+		/*
+		 * lossy channel.  don't bother with any retry.
+		 */
+		if (error == -EAGAIN) {
+			derr(1, "ceph_send_fault lossy channel, ignoring EAGAIN\n");
+			return;
+		}
+		dout(1, "ceph_send_fault lossy channel, giving up\n");
+		remove_connection(con->msgr, con);
+		return;
+	}
+
+	switch (error) {
+		case -ETIMEDOUT:
+			derr(10, "timed out to peer %x:%d\n",
+			     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
+			     ntohs(con->peer_addr.ipaddr.sin_port));
+		/* peer unreachable, TBD: need to research if should retry
+		 * a few times first, then close socket and try reconnecting */
+		case -EHOSTDOWN:
+		case -EHOSTUNREACH:
+        	case -ENETUNREACH:
+			derr(10, "ceph_send_fault peer unreachable via route state = %lu\n", con->state);
+			/* TBD: reset buffer correctly */
+			/* spin_lock(&con->out_queue_lock);
+			list_splice_init(&con->out_sent, &con->out_queue);
+			spin_unlock(&con->out_queue_lock); */
+			/* retry with delay */
+			ceph_queue_delayed_write(con);
+			break;
+		case -EAGAIN:
+			/* no space in socket buffer, ceph_write_space will
+			 * handle requeueing */
+			if (test_bit(OPEN, &con->state))
+				return;
+        	case -EPIPE:
+		/* TBD: may do something different here, may not be allowed */
+        	case -ECONNREFUSED:
+		case -ECONNRESET:
+		/* never connected socket. SOCK_DONE flag not set */
+		case -ENOTCONN:
+			derr(10, "ceph_send_fault no connection state = %lu\n", con->state);
+			/* TBD: setup timeout here */
+			if (!test_and_clear_bit(CONNECTING, &con->state)){
+				derr(1, "CONNECTING bit not set\n");
+				/* TBD: reset buffer correctly */
+				/* reset buffer */
+				spin_lock(&con->out_queue_lock);
+				list_splice_init(&con->out_sent, 
+					         &con->out_queue);
+				spin_unlock(&con->out_queue_lock);
+				clear_bit(OPEN, &con->state);
+			}
+			set_bit(NEW, &con->state);
+			clear_bit(CLOSED, &con->state);
+			sock_release(con->sock);
+			/* retry with delay */
+			ceph_queue_delayed_write(con);
+			break;
+		case -EIO:
+			derr(10, "ceph_send_fault EIO set\n");
+			/* shutdown or soft timeout */
+
+		default:
+			/* if we ever hit here ... */
+			derr(10, "ceph_send_fault unrecognized error %d\n", 
+			     error);
+	}
+	if (con->delay < MAX_DELAY_INTERVAL)
+		con->delay *= 2;
+	else
+		con->delay = MAX_DELAY_INTERVAL;
+}
+
+
 
 /*
  * non-blocking versions
@@ -304,12 +366,13 @@ static int write_partial_kvec(struct ceph_connection *con)
 {
 	int ret;
 
-	dout(30, "write_partial_kvec %p left %d vec %d bytes\n", con, 
+	dout(30, "write_partial_kvec %p : %d vec, %d bytes left\n", con, 
 	     con->out_kvec_left, con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
 		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, 
 				       con->out_kvec_left, con->out_kvec_bytes);
 		if (ret <= 0) goto out;
+		dout(30, "write_partial_kvec %p : wrote %d\n", con, ret);
 		con->out_kvec_bytes -= ret;
 		if (con->out_kvec_bytes == 0)
 			break;            /* done */
@@ -376,6 +439,7 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	dout(20, "prepare_write_message %p seq %d type %d len %d+%d\n", 
 	     m, m->hdr.seq, m->hdr.type, m->hdr.front_len, m->hdr.data_len);
+	BUG_ON(m->hdr.front_len != m->front.iov_len);
 
 	/* tag + hdr + front */
 	con->out_kvec[0].iov_base = &tag_msg;
@@ -454,19 +518,30 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 /*
  * worker function when socket is writeable
  */
-static void try_write(struct work_struct *work)
+static void _try_write(struct ceph_connection *con) 
 {
-	struct ceph_connection *con;
-	struct ceph_messenger *msgr;
+	struct ceph_messenger *msgr = con->msgr;
 	int ret = 1;
 
-	con = container_of(work, struct ceph_connection, swork.work);
-	msgr = con->msgr;
-	dout(30, "try_write start %p state %lu\n", con, con->state);
+	dout(30, "try_write start %p state %lu nref %d\n", con, con->state, atomic_read(&con->nref));
+
+retry:
+	clear_bit(WAITING, &con->state);
+	if (test_and_set_bit(WRITING, &con->state)) {
+		dout(20, "try_write already writing\n");
+		goto out;
+	}
+	clear_bit(WRITEABLE, &con->state);
 
 	/* Peer initiated close, other end is waiting for us to close */
 	if (test_and_clear_bit(CLOSING, &con->state)) {
 		dout(5, "try_write peer initiated close\n");
+		set_bit(CLOSED, &con->state);
+		remove_connection(msgr, con);
+		goto done;
+	}
+	if (test_bit(CLOSED, &con->state)) {
+		dout(5, "try_write closed\n");
 		remove_connection(msgr, con);
 		goto done;
 	}
@@ -479,7 +554,7 @@ more:
 		set_bit(CONNECTING, &con->state);
 		dout(5, "try_write initiating connect on %p new state %lu\n", con, con->state);
 		ret = ceph_tcp_connect(con);
-		dout(30, "try_write returned from connect ret = %d state = %lu", ret, con->state);
+		dout(30, "try_write returned from connect ret = %d state = %lu\n", ret, con->state);
 		if (ret < 0) {
 			/* fault */
 			derr(1, "try_write connect error\n");
@@ -532,8 +607,30 @@ more:
 	goto more;
 
 done:
-	dout(30, "try_write done\n");
+	clear_bit(WRITING, &con->state);
+	if (test_bit(WRITEABLE, &con->state) && !test_bit(WAITING, &con->state)) {
+		dout(30, "try_write writeable flag set again, looping\n");
+		goto retry;
+	}
+
+out:
+	dout(30, "try_write done on %p\n", con);
+	put_connection(con);
 	return;
+}
+
+static void try_write_later(struct work_struct *work)
+{
+	struct ceph_connection *con;
+	con = container_of(work, struct ceph_connection, delaywork.work);
+	_try_write(con);
+}
+
+static void try_write(struct work_struct *work)
+{
+	struct ceph_connection *con;
+	con = container_of(work, struct ceph_connection, swork);
+	_try_write(con);
 }
 
 
@@ -782,19 +879,20 @@ static int read_accept_partial(struct ceph_connection *con)
 static void process_accept(struct ceph_connection *con)
 {
 	struct ceph_connection *existing;
+	struct ceph_messenger *msgr = con->msgr;
 
 	/* do we already have a connection for this peer? */
-	spin_lock(&con->msgr->con_lock);
-	existing = get_connection(con->msgr, &con->peer_addr);
+	spin_lock(&msgr->con_lock);
+	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
 		//spin_lock(&existing->lock);
 		/* replace existing connection? */
 		if ((test_bit(CONNECTING, &existing->state) && 
-		     ceph_entity_addr_equal(&con->msgr->inst.addr, &con->peer_addr)) ||
+		     ceph_entity_addr_equal(&msgr->inst.addr, &con->peer_addr)) ||
 		    (test_bit(OPEN, &existing->state) && 
 		     con->connect_seq == existing->connect_seq)) {
 			/* replace existing with new connection */
-			replace_connection(con->msgr, existing, con);
+			__replace_connection(msgr, existing, con);
 			/* steal message queue */
 			list_splice_init(&con->out_queue, &existing->out_queue); /* fixme order */
 			con->out_seq = existing->out_seq;
@@ -809,10 +907,10 @@ static void process_accept(struct ceph_connection *con)
 		//spin_unlock(&existing->lock);
 		put_connection(existing);
 	} else {
-		add_connection(con->msgr, con);
+		__add_connection(msgr, con);
 		set_bit(OPEN, &con->state);
 	}
-	spin_unlock(&con->msgr->con_lock);
+	spin_unlock(&msgr->con_lock);
 
 	/* the result? */
 	clear_bit(ACCEPTING, &con->state);
@@ -821,7 +919,7 @@ static void process_accept(struct ceph_connection *con)
 	else
 		prepare_write_accept_reply(con, &tag_ready);
 	/* queue write */
-	queue_work(send_wq, &con->swork.work);
+	ceph_queue_write(con);
 	put_connection(con);
 }
 
@@ -835,14 +933,14 @@ void try_read(struct work_struct *work)
 	struct ceph_connection *con;
 	struct ceph_messenger *msgr;
 
-	dout(20, "Entering try_read\n");
 	con = container_of(work, struct ceph_connection, rwork);
+	dout(20, "try_read start on %p\n", con);
 	msgr = con->msgr;
 
 retry:
 	if (test_and_set_bit(READING, &con->state)) {
 		dout(20, "try_read already reading\n");
-		return;
+		goto out;
 	}
 	clear_bit(READABLE, &con->state);
 
@@ -915,7 +1013,10 @@ done:
 		dout(30, "try_read readable flag set again, looping\n");
 		goto retry;
 	}
-	dout(20, "Exited try_read\n");
+
+out:
+	dout(20, "try_read done on %p\n", con);
+	put_connection(con);
 	return;
 }
 
@@ -955,7 +1056,7 @@ static void try_accept(struct work_struct *work)
 	 * hand off to worker threads ,should be able to write, we want to 
 	 * try to write right away, we may have missed socket state change
 	 */
-	queue_work(send_wq, &new_con->swork.work);
+	ceph_queue_write(new_con);
 done:
         return;
 }
@@ -1001,7 +1102,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
 	while (!list_empty(&msgr->con_all)) {
-	dout(1, "con_all isn't empty\n");
+		dout(1, "con_all isn't empty\n");
 		con = list_entry(msgr->con_all.next, struct ceph_connection, list_all);
 		__remove_connection(msgr, con);
 	}
@@ -1013,10 +1114,25 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	kfree(msgr);
 }
 
+/*
+ * mark a peer down.  drop any open connection.
+ */
 void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr)
 {
-	dout(1, "mark_down\n");
-	/* write me */
+	struct ceph_connection *con;
+
+	dout(1, "mark_down peer %x:%d\n",
+	     ntohl(addr->ipaddr.sin_addr.s_addr), 
+	     ntohs(addr->ipaddr.sin_port));
+
+	spin_lock(&msgr->con_lock);
+	con = __get_connection(msgr, addr);
+	if (con) {
+		dout(10, "mark_down dropping %p\n", con);
+		set_bit(CLOSED, &con->state);  /* in case there is queued work */
+		__remove_connection(msgr, con);
+	}
+	spin_unlock(&msgr->con_lock);
 }
 
 
@@ -1025,8 +1141,7 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_ad
  *
  * will take+drop msgr, then connection locks.
  */
-int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, 
-		  unsigned long timeout)
+int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned long timeout)
 {
 	struct ceph_connection *con;
 	int ret = 0;
@@ -1035,7 +1150,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	msg->hdr.src = msgr->inst;
 
 	/* do we have the connection? */
-	con = get_connection(msgr, &msg->hdr.dst.addr);
+	spin_lock(&msgr->con_lock);
+	con = __get_connection(msgr, &msg->hdr.dst.addr);
 	if (!con) {
 		con = new_connection(msgr);
 		if (IS_ERR(con))
@@ -1044,14 +1160,16 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
 		con->peer_addr = msg->hdr.dst.addr;
-		add_connection(msgr, con);
+		__add_connection(msgr, con);
 	} else {
 		dout(10, "ceph_msg_send had connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
 		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
-	}		     
+	}
+	spin_unlock(&msgr->con_lock);
 	con->delay = timeout;
 	dout(10, "ceph_msg_send delay = %lu\n", con->delay); 
+
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = ++con->out_seq;
@@ -1060,19 +1178,19 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);
-		
-	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0) {
-		dout(30, "ceph_msg_send queuing new swork on %p\n", con);
-		queue_work(send_wq, &con->swork.work);
-		dout(30, "ceph_msg_send queued\n");
-	}
+	
+	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0) 
+		ceph_queue_write(con);
+
 	put_connection(con);
 	dout(30, "ceph_msg_send done\n");
 	return ret;
 }
 
 
-
+/* 
+ * construct a new message with given type, size
+ */
 struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages)
 {
 	struct ceph_msg *m;
@@ -1099,19 +1217,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 	/* pages */
 	m->nr_pages = calc_pages_for(page_len, page_off);
 	m->pages = pages;
-	/*
-	if (m->nr_pages) {
-		int i;
-		kzalloc(m->nr_pages*sizeof(*m->pages), GFP_KERNEL);
-		for (i=0; i<m->nr_pages; i++) {
-			m->pages[i] = alloc_page(GFP_KERNEL);
-			if (m->pages[i] == NULL)
-				goto out2;
-		}
-	} else {
-		m->pages = 0;
-	}
-	*/
 
 	INIT_LIST_HEAD(&m->list_head);
 	return m;
@@ -1127,9 +1232,8 @@ void ceph_msg_put(struct ceph_msg *m)
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(30, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));
-		if (m->front.iov_base) {
+		if (m->front.iov_base) 
 			kfree(m->front.iov_base);
-		}
 		kfree(m);
 	}
 }

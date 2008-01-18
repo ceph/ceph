@@ -417,6 +417,13 @@ class Client : public Dispatcher {
 
   SafeTimer timer;
 
+  Context *tick_event;
+  utime_t last_cap_renew_request;
+  utime_t last_cap_renew;
+  void renew_caps();
+public:
+  void tick();
+
  protected:
   Messenger *messenger;  
   int whoami;
@@ -425,6 +432,7 @@ class Client : public Dispatcher {
   // mds sessions
   map<int, version_t> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
+  map<int, int> caps_by_mds;
   list<Cond*> waiting_for_mdsmap;
 
   void handle_client_session(MClientSession *m);
@@ -839,6 +847,8 @@ public:
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);
+  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
+  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
 };
 
 #endif
