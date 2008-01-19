@@ -55,11 +55,13 @@ osdmon
 - bootstrap crush map
 
 crush
-- properly mind osd_overload for forcefed values (caller no longer does any checking)
 - xml import/export?
  - named storage "pools"
  - generic rule definition
 - crush tools
+- more efficient failure when all/too many osds are down
+- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
+- "knob" bucket
 
 pgmon
 - monitor pg states, notify on out?
@@ -283,9 +285,6 @@ remaining hard problems
 - how to cope with file size changes and read/write sharing
 
 
-crush
-- more efficient failure when all/too many osds are down
-- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 
 

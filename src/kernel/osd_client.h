@@ -12,16 +12,6 @@
 struct ceph_msg;
 
 /*
- * object extent
- */
-struct ceph_osd_read {
-	struct ceph_object oid;
-	__u64 start;
-	__u64 length;
-	struct page **pages;
-};
-
-/*
  * pending request 
  */
 enum {
