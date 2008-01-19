@@ -783,6 +783,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	int pathlen, err;
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
+	struct ceph_mds_cap_reconnect *rec;
 
 	dout(10, "send_mds_reconnect mds%d\n", mds);
 
@@ -827,11 +828,13 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		dout(10, "cap is %p, ci is %p, inode is %p\n", cap, ci, &ci->vfs_inode);
 		dout(10, " adding cap %p on ino %lx\n", cap, ci->vfs_inode.i_ino);
 		ceph_encode_64(&p, end, ci->vfs_inode.i_ino);
-		ceph_encode_32(&p, end, ceph_caps_wanted(ci));
-		ceph_encode_32(&p, end, ceph_caps_issued(ci));
-		ceph_encode_64(&p, end, ci->i_wr_size);
-		ceph_encode_timespec(&p, end, &ci->vfs_inode.i_mtime); //i_wr_mtime
-		ceph_encode_timespec(&p, end, &ci->vfs_inode.i_atime); /* atime.. fixme */
+		rec = p;
+		BUG_ON(p + sizeof(*rec) > end);
+		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
+		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
+		rec->size = cpu_to_le64(ci->i_wr_size);
+		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime); //i_wr_mtime
+		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime); /* atime.. fixme */
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {

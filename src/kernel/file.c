@@ -103,6 +103,7 @@ int ceph_release(struct inode *inode, struct file *file)
 }
 
 const struct inode_operations ceph_file_iops = {
+	.setattr = ceph_setattr,
 /*	.getattr = ceph_vfs_getattr,
 	.setattr = ceph_vfs_setattr,
 */

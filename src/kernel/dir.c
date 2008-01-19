@@ -162,7 +162,13 @@ nextfrag:
 				d_add(dn, in);
 				dout(10, "dir_readdir added dentry %p inode %lu %d/%d\n",
 				     dn, in->i_ino, i, fi->rinfo.dir_nr);
+			} else {
+				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
+					dout(30, "ceph_fill_inode badness\n");
+					break;
+				}
 			}
+
 
 			dput(dn);
 		}
@@ -243,7 +249,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	ino_t ino;
 	int found = 0;
 
-	dout(5, "dir_lookup inode %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
+	dout(5, "dir_lookup dirinode %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
@@ -292,111 +298,6 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		dout(10, "no trace in reply? wtf.\n");
 	}
 	return NULL;
-}
-
-int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, 
-		struct inode **lastinode, struct dentry **lastdentry)
-{
-	int err = 0;
-	struct qstr dname;
-	struct dentry *dn, *parent = NULL;
-	struct inode *in;
-	int i = 0;
-
-	BUG_ON(sb == NULL);
-
-	if (lastinode) {
-		*lastinode = NULL;
-	}
-
-	if (lastdentry) {
-		*lastdentry = NULL;
-	}
-
-	dn = sb->s_root;
-	dget(dn);
-	in = dn->d_inode;
-
-	for (i=0; i<prinfo->trace_nr; i++) {
-		if (in->i_ino == prinfo->trace_in[i].in->ino) {
-			break;
-		}
-	}
-
-	if (i == prinfo->trace_nr) {
-		dout(10, "ceph_fill_trace did not locate mounted root!\n");
-		return -ENOENT;
-	}
-
-	if ((err = ceph_fill_inode(in, prinfo->trace_in[i].in)) < 0) {
-		return err;
-	}
-
-	for (++i; i<prinfo->trace_nr; i++) {
-		dput(parent);
-		parent = dn;
-
-		dname.name = prinfo->trace_dname[i];
-		dname.len = prinfo->trace_dname_len[i];
-		dname.hash = full_name_hash(dname.name, dname.len);
-
-		dn = d_lookup(parent, &dname);
-
-		dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
-
-		if (!dn) {
-			dn = d_alloc(parent, &dname);
-			if (dn == NULL) {
-				dout(30, "d_alloc badness\n");
-				break; 
-			}
-		}
-
-		if (!prinfo->trace_in[i].in) {
-			err = -ENOENT;
-			d_delete(dn);
-			dn = NULL;
-			break;
-		}
-
-		if ((!dn->d_inode) ||
-			 (dn->d_inode->i_ino != prinfo->trace_in[i].in->ino)) {
-			in = new_inode(parent->d_sb);
-			if (in == NULL) {
-				dout(30, "new_inode badness\n");
-				d_delete(dn);
-				dn = NULL;
-				break;
-			}
-			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
-				d_delete(dn);
-				dn = NULL;
-				break;
-			}
-			d_add(dn, in);
-			dout(10, "ceph_fill_trace added dentry %p inode %lu %d/%d\n",
-			     dn, in->i_ino, i, prinfo->trace_nr);
-		} else {
-			in = dn->d_inode;
-		}
-	
-	}
-
-	dput(parent);
-
-	if (lastdentry) {
-		*lastdentry = dn;
-	} else {
-		dput(dn);
-	}
-	
-	if (lastinode) {
-		*lastinode = in;
-	}
-
-	return err;
 }
 
 static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t rdev)
@@ -633,6 +534,7 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
 //	.getattr = ceph_inode_getattr,
+	.setattr = ceph_setattr,
 	.mknod = ceph_dir_mknod,
 	.symlink = ceph_dir_symlink,
 	.mkdir = ceph_dir_mkdir,

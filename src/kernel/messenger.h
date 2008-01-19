@@ -282,12 +282,12 @@ static __inline__ void ceph_decode_timespec(struct timespec *ts, struct ceph_tim
 	ts->tv_sec = le32_to_cpu(tv->tv_sec);
 	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
 }
-
-static __inline__ int ceph_encode_timespec(void **p, void *end, struct timespec *ts)
+static __inline__ int ceph_encode_timespec(struct ceph_timeval *tv, struct timespec *ts)
 {
-	BUG_ON(*p + sizeof(struct ceph_timeval) > end);
-	ceph_encode_32(p, end, ts->tv_sec);
-	ceph_encode_32(p, end, ts->tv_nsec/1000);
+	int usec = ts->tv_nsec;
+	do_div(usec, 1000);
+	tv->tv_sec = cpu_to_le32(ts->tv_sec);
+	tv->tv_usec = cpu_to_le32(usec);
 	return 0;
 }
 

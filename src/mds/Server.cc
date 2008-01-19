@@ -1593,8 +1593,10 @@ void Server::handle_client_chown(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->uid = MAX(req->head.args.chown.uid, 0);
-  pi->gid = MAX(req->head.args.chown.gid, 0);
+  if (req->head.args.chown.uid != -1)
+    pi->uid = req->head.args.chown.uid;
+  if (req->head.args.chown.gid != -1)
+    pi->gid = req->head.args.chown.gid;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   

@@ -29,6 +29,13 @@ kernel client
  - ceph_queue_read .. check READING bit?
  - 
 
+- vfs
+ - getattr should do an lstat?
+ - setattr needs to be implemented.. 
+ - d_revalidate..
+ - create
+ - truncate
+ - fix up open.  it really shouldn't blindly use existing caps!
 - mds client
   - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too

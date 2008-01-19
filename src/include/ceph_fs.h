@@ -369,8 +369,8 @@ struct ceph_mds_request_head {
 			__u32 mode;
 		} chmod; 
 		struct {
-			uid_t uid;
-			gid_t gid;
+			__s32 uid;
+			__s32 gid;
 		} chown;
 		struct {
 			__u32 mode;

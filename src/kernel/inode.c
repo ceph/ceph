@@ -12,20 +12,7 @@ int ceph_inode_debug = 50;
 #define DOUT_PREFIX "inode: "
 #include "super.h"
 
-/*
- * symlinks
- */
-static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
-	nd_set_link(nd, ci->i_symlink);
-	return NULL;
-}
-
-const struct inode_operations ceph_symlink_iops = {
-	.readlink = generic_readlink,
-	.follow_link = ceph_sym_follow_link,
-};
+const struct inode_operations ceph_symlink_iops;
 
 int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode)
 {
@@ -41,7 +28,8 @@ int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pin
 }
 
 /*
- * populate an inode based on info from mds
+ * populate an inode based on info from mds.
+ * may be called on new or existing inodes.
  */
 int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info) 
 {
@@ -131,6 +119,114 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 	return 0;
 }
+
+int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, 
+		struct inode **lastinode, struct dentry **lastdentry)
+{
+	int err = 0;
+	struct qstr dname;
+	struct dentry *dn, *parent = NULL;
+	struct inode *in;
+	int i = 0;
+
+	BUG_ON(sb == NULL);
+
+	if (lastinode)
+		*lastinode = NULL;
+
+	if (lastdentry)
+		*lastdentry = NULL;
+
+	dn = sb->s_root;
+	dget(dn);
+	in = dn->d_inode;
+
+	for (i=0; i<prinfo->trace_nr; i++)
+		if (in->i_ino == prinfo->trace_in[i].in->ino)
+			break;
+
+	if (i == prinfo->trace_nr) {
+		dout(10, "ceph_fill_trace did not locate mounted root!\n");
+		return -ENOENT;
+	}
+
+	if ((err = ceph_fill_inode(in, prinfo->trace_in[i].in)) < 0)
+		return err;
+
+	for (++i; i<prinfo->trace_nr; i++) {
+		dput(parent);
+		parent = dn;
+
+		dname.name = prinfo->trace_dname[i];
+		dname.len = prinfo->trace_dname_len[i];
+		dname.hash = full_name_hash(dname.name, dname.len);
+
+		dn = d_lookup(parent, &dname);
+
+		dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
+
+		if (!dn) {
+			dn = d_alloc(parent, &dname);
+			if (dn == NULL) {
+				dout(30, "d_alloc badness\n");
+				break; 
+			}
+		}
+
+		if (!prinfo->trace_in[i].in) {
+			err = -ENOENT;
+			d_delete(dn);
+			dn = NULL;
+			break;
+		}
+
+		if ((!dn->d_inode) ||
+			 (dn->d_inode->i_ino != prinfo->trace_in[i].in->ino)) {
+			in = new_inode(parent->d_sb);
+			if (in == NULL) {
+				dout(30, "new_inode badness\n");
+				d_delete(dn);
+				dn = NULL;
+				break;
+			}
+			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
+				dout(30, "ceph_fill_inode badness\n");
+				iput(in);
+				d_delete(dn);
+				dn = NULL;
+				break;
+			}
+			d_add(dn, in);
+			dout(10, "ceph_fill_trace added dentry %p inode %lu %d/%d\n",
+			     dn, in->i_ino, i, prinfo->trace_nr);
+		} else {
+			in = dn->d_inode;
+			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
+				dout(30, "ceph_fill_inode badness\n");
+				break;
+			}
+
+		}
+	
+	}
+
+	dput(parent);
+
+	if (lastdentry)
+		*lastdentry = dn;
+	else
+		dput(dn);
+	
+	if (lastinode)
+		*lastinode = in;
+
+	return err;
+}
+
+
+/*
+ * capabilities
+ */
 
 struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want)
 {
@@ -325,5 +421,156 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		cap->caps = newcaps;
 	}
 	return 0;	
+}
+
+
+
+/*
+ * symlinks
+ */
+static void * ceph_sym_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
+	nd_set_link(nd, ci->i_symlink);
+	return NULL;
+}
+
+const struct inode_operations ceph_symlink_iops = {
+	.readlink = generic_readlink,
+	.follow_link = ceph_sym_follow_link,
+};
+
+
+/*
+ * generics
+ */
+struct ceph_msg * prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
+{
+	char *path;
+	int pathlen;
+	struct ceph_msg *req;
+
+	dout(5, "prepare_setattr dentry %p\n", dentry);
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return ERR_PTR(PTR_ERR(path));
+	req = ceph_mdsc_create_request(mdsc, op, dentry->d_inode->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	kfree(path);
+	return req;
+}
+
+int ceph_setattr(struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_client *client = inode->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
+        const unsigned int ia_valid = attr->ia_valid;
+	struct ceph_msg *req;
+	struct ceph_mds_request_head *reqh;
+	struct ceph_mds_reply_info rinfo;
+	int err;
+
+	/* gratuitous debug output */
+        if (ia_valid & ATTR_UID)
+		dout(10, "uid %d -> %d\n", inode->i_uid, attr->ia_uid);
+        if (ia_valid & ATTR_GID)
+		dout(10, "gid %d -> %d\n", inode->i_uid, attr->ia_uid);
+        if (ia_valid & ATTR_MODE)
+		dout(10, "mode %d -> %d\n", inode->i_mode, attr->ia_mode);
+        if (ia_valid & ATTR_SIZE)
+		dout(10, "size %lld -> %lld\n", inode->i_size, attr->ia_size);
+        if (ia_valid & ATTR_ATIME)
+		dout(10, "atime %ld.%ld -> %ld.%ld\n", 
+		     inode->i_atime.tv_sec, inode->i_atime.tv_nsec, 
+		     attr->ia_atime.tv_sec, attr->ia_atime.tv_nsec);
+        if (ia_valid & ATTR_MTIME)
+		dout(10, "mtime %ld.%ld -> %ld.%ld\n", 
+		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec, 
+		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
+        if (ia_valid & ATTR_FILE)
+		dout(10, "ATTR_FILE ... hrm!\n");
+
+	/* chown */
+        if (ia_valid & (ATTR_UID|ATTR_GID)) {
+		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHOWN);
+		if (IS_ERR(req)) 
+			return PTR_ERR(req);
+		reqh = req->front.iov_base;
+		if (ia_valid & ATTR_UID)
+			reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
+		else
+			reqh->args.chown.uid = cpu_to_le32(-1);
+		if (ia_valid & ATTR_GID)
+			reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
+		else
+			reqh->args.chown.gid = cpu_to_le32(-1);
+		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+			return err;
+		err = le32_to_cpu(rinfo.head->result);
+		dout(10, "chown result %d\n", err);
+		if (err)
+			return err;
+		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
+		//if (err) return err;
+	}
+	
+	/* chmod? */
+	if (ia_valid & ATTR_MODE) {
+		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHMOD);
+		if (IS_ERR(req)) 
+			return PTR_ERR(req);
+		reqh = req->front.iov_base;
+		reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
+		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+			return err;
+		err = le32_to_cpu(rinfo.head->result);
+		dout(10, "chmod result %d\n", err);
+		if (err)
+			return err;
+		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
+		//if (err) return err;
+	}
+
+	/* FIXME: does getattr get set to do regular mtime updates? */
+	/* utimes */
+	if (ia_valid & (ATTR_ATIME|ATTR_MTIME)) {
+		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
+		if (IS_ERR(req)) 
+			return PTR_ERR(req);
+		reqh = req->front.iov_base;
+		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
+		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
+		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+			return err;
+		err = le32_to_cpu(rinfo.head->result);
+		dout(10, "utime result %d\n", err);
+		if (err)
+			return err;
+		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
+		//if (err) return err;
+	}
+
+	/* truncate? */
+	if (ia_valid & ATTR_SIZE) {
+		if (ia_valid & ATTR_FILE) 
+			req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_TRUNCATE, 
+						       dentry->d_inode->i_ino, "", 0, 0);
+		else
+			req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_TRUNCATE);
+		if (IS_ERR(req)) 
+			return PTR_ERR(req);
+		reqh = req->front.iov_base;
+		reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
+		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+			return err;
+		err = le32_to_cpu(rinfo.head->result);
+		dout(10, "truncate result %d\n", err);
+		if (err)
+			return err;
+		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
+		//if (err) return err;
+	}
+
+	return 0;
 }
 

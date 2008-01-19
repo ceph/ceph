@@ -223,6 +223,8 @@ extern void ceph_remove_cap(struct ceph_inode_info *ci, int mds);
 extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session);
 
+extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
+
 /* addr.c */
 extern const struct address_space_operations ceph_aops;
 
