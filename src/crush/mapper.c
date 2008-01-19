@@ -131,6 +131,17 @@ crush_bucket_straw_choose(struct crush_bucket_straw *bucket, int x, int r)
 /** crush proper **/
 
 
+static int is_out(struct crush_map *map, int item, int x)
+{
+	if (map->device_offload[item]) {
+		if (map->device_offload[item] >= 0x10000) 
+			return 1;
+		else if ((crush_hash32_2(x, item) & 0xffff) < map->device_offload[item])
+			return 1;
+	}
+	return 0;
+}
+
 /*
  * choose numrep distinct items of given type
  */
@@ -147,7 +158,7 @@ static int crush_choose(struct crush_map *map,
 	int i;
 	int item;
 	int itemtype;
-	int collide, bad;
+	int collide, reject;
 	
 	for (rep = outpos; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
@@ -218,16 +229,13 @@ static int crush_choose(struct crush_map *map,
 					}
 				}
 				
-				/* bad (out)? */
-				bad = 0;
-				if (itemtype == 0 && map->device_offload[item]) {
-					if (map->device_offload[item] >= 0x10000) 
-						bad = 1;
-					else if ((crush_hash32_2(x, item) & 0xffff) < map->device_offload[item])
-						bad = 1;
-				}
+				/* out? */
+				if (itemtype == 0) 
+					reject = is_out(map, item, x);
+				else 
+					reject = 0;
 				
-				if (bad || collide) {
+				if (reject || collide) {
 					ftotal++;
 					flocal++;
 					
@@ -282,14 +290,16 @@ int crush_do_rule(struct crush_map *map,
 			/*printf("CRUSH: forcefed device dne\n");*/
 			return -1;  /* force fed device dne */
 		}
-		while (1) {
-			force_stack[++force_pos] = forcefeed;
-			/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
-			if (forcefeed >= 0)
-				forcefeed = map->device_parents[forcefeed];
-			else
-				forcefeed = map->bucket_parents[-1-forcefeed];
-			if (forcefeed == 0) break;
+		if (!is_out(map, forcefeed, x)) {
+			while (1) {
+				force_stack[++force_pos] = forcefeed;
+				/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
+				if (forcefeed >= 0)
+					forcefeed = map->device_parents[forcefeed];
+				else
+					forcefeed = map->bucket_parents[-1-forcefeed];
+				if (forcefeed == 0) break;
+			}
 		}
 	}
 	
@@ -318,8 +328,8 @@ int crush_do_rule(struct crush_map *map,
 				j = 0;
 				if (osize == 0 && force_pos >= 0) {
 					o[osize] = force_stack[force_pos];
-					force_pos--;
 					j++;
+					force_pos--;
 				}
 				osize += crush_choose(map,
 						      map->buckets[-1-w[i]],
