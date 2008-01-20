@@ -122,6 +122,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_nsec = 0;
+
+	ci->i_hashval = 0;
 	
 	return &ci->vfs_inode;
 }

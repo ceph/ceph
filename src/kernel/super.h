@@ -22,6 +22,8 @@ extern int ceph_debug_osdc;
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
+#define CEPH_BLKSIZE	4096
+
 /*
  * mount options
  */
@@ -129,6 +131,8 @@ struct ceph_inode_info {
 	loff_t i_wr_size;
 	struct timespec i_wr_mtime;
 	struct timespec i_old_atime;
+
+	unsigned long i_hashval;
 	
 	struct inode vfs_inode; /* at end */
 };
@@ -224,6 +228,7 @@ extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant, struct ceph_mds_session *session);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
+extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

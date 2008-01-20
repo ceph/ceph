@@ -533,7 +533,7 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
-//	.getattr = ceph_inode_getattr,
+	.getattr = ceph_inode_getattr,
 	.setattr = ceph_setattr,
 	.mknod = ceph_dir_mknod,
 	.symlink = ceph_dir_symlink,

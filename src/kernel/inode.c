@@ -16,6 +16,8 @@ const struct inode_operations ceph_symlink_iops;
 
 int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode)
 {
+	struct ceph_inode_info *ci;
+
 	BUG_ON(pinode == NULL);
 
 	*pinode = iget_locked(sb, ino);
@@ -23,6 +25,10 @@ int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pin
 		return -ENOMEM;
 	if ((*pinode)->i_state & I_NEW)
 		unlock_new_inode(*pinode);
+
+	ci = ceph_inode(*pinode);
+
+	ci->i_hashval = ino;
 
 	return 0;
 }
@@ -46,7 +52,10 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	inode->i_blocks = 1;
 
-	insert_inode_hash(inode);
+	if (ci->i_hashval != inode->i_ino) {
+		insert_inode_hash(inode);
+		ci->i_hashval = inode->i_ino;
+	}
 
 	dout(30, "fill_inode %p ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode,
 	     inode->i_ino, inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, 
@@ -571,6 +580,16 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		//if (err) return err;
 	}
 
+	return 0;
+}
+
+int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
+{
+	dout(30, "ceph_inode_getattr\n");
+
+	/* TODO: need to revalidate first */
+	generic_fillattr(dentry->d_inode, stat);
+	stat->blksize = CEPH_BLKSIZE;
 	return 0;
 }
 

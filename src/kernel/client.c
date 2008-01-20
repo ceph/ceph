@@ -110,13 +110,14 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		err = -EINVAL;
 		goto out;
 	}
-
+	
 	if (client->sb->s_root == NULL) {
 		/* get the fs root inode. Note that this is not necessarily the root of
 		   the mount */
 		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo.trace_in[0].in->ino), &root_inode);
 		if (err < 0) 
 			goto out;
+
 		alloc_fs = 1;
 
 		client->sb->s_root = d_alloc_root(root_inode);
