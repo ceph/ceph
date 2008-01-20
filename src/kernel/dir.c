@@ -253,7 +253,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_STAT, 
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT, 
 				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
 	kfree(path);
 	if (IS_ERR(req)) 
