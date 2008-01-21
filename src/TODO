@@ -21,22 +21,16 @@ code cleanup
 
 kernel client
 - msgr layer
-  - clean up ceph_send_fault
-  - more testing
-  - callbacks for 'remote reset' (once 'caps' branch is merged in)
-
- - TCP_CLOSE case in callback.. should it set CLOSED bit?
- - ceph_queue_read .. check READING bit?
- - 
-
+  - callbacks for 'remote reset'
+  - idle state, to keep connect_seq around after a disconnect
 - audit locking
 - audit use of kmalloc vs spinlocks
 - convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
+ - generate paths relative to the appropriate vfsmount root
  - getattr should do an lstat?
- - d_revalidate..
+ - d_revalidate?
  - test truncate
- - fix open: it really shouldn't blindly use existing caps (except for O_DIRECTORY on root?)
 - mds client
 /  - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
@@ -45,7 +39,7 @@ kernel client
   - readpages (readahead)
   - async (caching) mode
   - sync mode (write-through)
-  - capability changes (flush)
+  - capability changes (flush.. need way to initiate/block on writeback initiated by mds)
   - osd ack vs commit handling.  hmm!
   - handle map changes (resubmit ops)
 - mon client

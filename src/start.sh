@@ -6,4 +6,4 @@
 ./cosd --mkfs --osd 1 &
 ./cosd --mkfs --osd 2 &
 ./cosd --mkfs --osd 3 &
-./cmds --debug_ms 1 --debug_mds 10 &
+./cmds &

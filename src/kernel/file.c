@@ -50,13 +50,16 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 int ceph_open(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_cap *cap;
+	struct ceph_inode_cap *cap = 0;
 	struct ceph_file_info *cf;
 	int mode;
 	int wanted;
 
 	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
-	cap = ceph_find_cap(inode, 0);
+	/*
+	if (file->f_flags == O_DIRECTORY && ... ) 
+		cap = ceph_find_cap(inode, 0);
+	*/
 	if (!cap) {
 		cap = ceph_do_open(inode, file);
 		if (IS_ERR(cap))
