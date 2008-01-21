@@ -29,15 +29,16 @@ kernel client
  - ceph_queue_read .. check READING bit?
  - 
 
+- audit locking
+- audit use of kmalloc vs spinlocks
+- convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - getattr should do an lstat?
- - setattr needs to be implemented.. 
  - d_revalidate..
- - create
- - truncate
- - fix up open.  it really shouldn't blindly use existing caps!
+ - test truncate
+ - fix open: it really shouldn't blindly use existing caps (except for O_DIRECTORY on root?)
 - mds client
-  - handle file caps, ack back to mds, etc. 
+/  - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
@@ -53,7 +54,8 @@ kernel client
   - determine suitable local ip automatically
     - this should be determined by which interface/ip would be used to connect to the monitor ip
 - unmount
-  - close open file handles, mds sessions, flush data before unmount.
+/  - close open file handles, mds sessions
+    - flush data before unmount.
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably
