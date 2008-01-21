@@ -57,4 +57,5 @@ out_unlock:
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 //	.readpages = ceph_readpages
+	.writepage = ceph_writepage,
 };

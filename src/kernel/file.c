@@ -112,6 +112,33 @@ const struct inode_operations ceph_file_iops = {
 */
 };
 
+
+/*
+ * totally naive write.  just to get things sort of working.
+ */
+int ceph_silly_write(struct file *filp, const char __user * data,
+		     size_t count, loff_t * offset)
+{
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_file_info *cf = file->private_data;
+	int ret = 0;
+
+	dout(10, "silly_write on file %p %lld~%u\n", filp, offset, count);
+	
+	/* ignore caps, for now. */
+	
+	if (ret > 0)
+		*offset += ret;
+
+	if (*offset > inode->i_size) {
+		inode->i_size = *offset;
+		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+	}	
+	invalidate_inode_pages2(inode->i_mapping);
+	return ret;
+}
+
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,

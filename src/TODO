@@ -23,6 +23,7 @@ kernel client
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
+  - make sure the radix_tree to list_head thing works right with __remove_connection..
 - audit locking
 - audit use of kmalloc vs spinlocks
 - convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
@@ -31,6 +32,7 @@ kernel client
  - getattr should do an lstat?
  - d_revalidate?
  - test truncate
+- is ino_t really still 32 bits on i386??  hrm!
 - mds client
 /  - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too

@@ -107,9 +107,9 @@ struct InodeStat {
     ::_decode_simple(e, p);
     inode.ino = e.ino;
     inode.layout = e.layout;
-    inode.ctime.tv_ref() = e.ctime;
-    inode.mtime.tv_ref() = e.mtime;
-    inode.atime.tv_ref() = e.atime;
+    inode.ctime.decode_timeval(&e.ctime);
+    inode.mtime.decode_timeval(&e.mtime);
+    inode.atime.decode_timeval(&e.atime);
     inode.mode = e.mode;
     inode.uid = e.uid;
     inode.gid = e.gid;
@@ -144,9 +144,9 @@ struct InodeStat {
     memset(&e, 0, sizeof(e));
     e.ino = in->inode.ino;
     e.layout = in->inode.layout;
-    e.ctime = in->inode.ctime.tv_ref();
-    e.mtime = in->inode.mtime.tv_ref();
-    e.atime = in->inode.atime.tv_ref();
+    in->inode.ctime.encode_timeval(&e.ctime);
+    in->inode.mtime.encode_timeval(&e.mtime);
+    in->inode.atime.encode_timeval(&e.atime);
     e.mode = in->inode.mode;
     e.uid = in->inode.uid;
     e.gid = in->inode.gid;

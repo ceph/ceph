@@ -20,11 +20,16 @@
 #include <time.h>
 #include "ceph_fs.h"
 
+#include "buffer.h"
+#include "encodable.h"
+
 // --------
 // utime_t
 
 class utime_t {
-  struct ceph_timeval tv;
+  struct {
+    __u32 tv_sec, tv_usec;
+  } tv;
 
   friend class Clock;
  
@@ -40,7 +45,9 @@ class utime_t {
   utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
   //utime_t(time_t s) { tv.tv_sec = s; tv.tv_usec = 0; }
   utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
-  utime_t(const struct ceph_timeval &v) : tv(v) {}
+  utime_t(const struct ceph_timeval &v) {
+    decode_timeval(&v);
+  }
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -70,10 +77,23 @@ class utime_t {
     tv.tv_sec = v->tv_sec;
     tv.tv_usec = v->tv_usec;
   }
-  //struct timeval& timeval()  { return tv; }
-  //struct timeval& tv_ref() { return tv; }
 
-  struct ceph_timeval& tv_ref() { return tv; }
+  void encode_timeval(struct ceph_timeval *t) const {
+    t->tv_sec = cpu_to_le32(tv.tv_sec);
+    t->tv_usec = cpu_to_le32(tv.tv_usec);
+  }
+  void decode_timeval(const struct ceph_timeval *t) {
+    tv.tv_sec = le32_to_cpu(t->tv_sec);
+    tv.tv_usec = le32_to_cpu(t->tv_usec);
+  }
+  void _encode(bufferlist &bl) {
+    ::_encode_simple(tv.tv_sec, bl);
+    ::_encode_simple(tv.tv_usec, bl);
+  }
+  void _decode(bufferlist &bl, int& off) {
+    ::_decode(tv.tv_sec, bl, off);
+    ::_decode(tv.tv_usec, bl, off);
+  }
 
   // cast to double
   operator double() {

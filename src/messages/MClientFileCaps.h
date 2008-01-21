@@ -56,8 +56,8 @@ class MClientFileCaps : public Message {
   void set_op(int o) { h.op = cpu_to_le32(o); }
 
   void set_size(loff_t s) { h.size = cpu_to_le64(s); }
-  void set_mtime(utime_t t) { h.mtime = t.tv_ref(); }
-  void set_atime(utime_t t) { h.atime = t.tv_ref(); }
+  void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
+  void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
 
   MClientFileCaps() {}
   MClientFileCaps(int op,
@@ -76,8 +76,8 @@ class MClientFileCaps : public Message {
     h.size = cpu_to_le64(inode.size);
     h.migrate_mds = cpu_to_le32(mmds);
     h.migrate_seq = cpu_to_le32(mseq);
-    h.mtime = inode.mtime.tv_ref();
-    h.atime = inode.atime.tv_ref();
+    inode.mtime.encode_timeval(&h.mtime);
+    inode.atime.encode_timeval(&h.atime);
   }
 
   const char *get_type_name() { return "Cfcap";}

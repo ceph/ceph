@@ -110,9 +110,9 @@ struct ltstr
 // some basic types
 
 // NOTE: these must match ceph_fs.h typedefs
-typedef uint64_t tid_t;         // transaction id
-typedef uint64_t version_t;
-typedef uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
+typedef __u64 tid_t;         // transaction id
+typedef __u64 version_t;
+typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 
 #define O_LAZY 01000000
@@ -125,7 +125,7 @@ typedef ceph_file_layout FileLayout;
 // --------------------------------------
 // inode
 
-typedef __uint64_t _inodeno_t;
+typedef __u64 _inodeno_t;
 
 struct inodeno_t {
   _inodeno_t val;

@@ -2184,8 +2184,8 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
-  req->head.args.utime.mtime = mtime.tv_ref();
-  req->head.args.utime.atime = atime.tv_ref();
+  mtime.encode_timeval(&req->head.args.utime.mtime);
+  atime.encode_timeval(&req->head.args.utime.atime);
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());

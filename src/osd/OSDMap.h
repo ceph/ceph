@@ -88,7 +88,7 @@ public:
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
       ::_encode(mon_epoch, bl);
-      ::_encode(ctime, bl);
+      ctime._encode(bl);
       ::_encode(fullmap, bl);
       ::_encode(crush, bl);
       ::_encode(new_max_osd, bl);
@@ -102,7 +102,7 @@ public:
       ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
       ::_decode(mon_epoch, bl, off);
-      ::_decode(ctime, bl, off);
+      ctime._decode(bl, off);
       ::_decode(fullmap, bl, off);
       ::_decode(crush, bl, off);
       ::_decode(new_max_osd, bl, off);
