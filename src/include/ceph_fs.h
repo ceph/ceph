@@ -337,7 +337,8 @@ enum {
 
 	CEPH_MDS_OP_OPEN = 301,
 	CEPH_MDS_OP_TRUNCATE = 1303,
-	CEPH_MDS_OP_FSYNC = 303
+	CEPH_MDS_OP_FSYNC = 303,
+	CEPH_MDS_OP_CREATE = 304
 };
 
 struct ceph_mds_request_head {

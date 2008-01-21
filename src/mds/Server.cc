@@ -671,11 +671,14 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // funky.
   case CEPH_MDS_OP_OPEN:
     if (req->head.args.open.flags & O_CREAT)
-      handle_client_openc(mdr);
+      handle_client_openc(mdr, true);
     else 
       handle_client_open(mdr);
     break;
 
+  case CEPH_MDS_OP_CREATE:
+    handle_client_openc(mdr, false);
+    break;
     // namespace.
     // no prior locks.
   case CEPH_MDS_OP_MKNOD:
@@ -4030,10 +4033,11 @@ class C_MDS_openc_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
+  bool should_open;
   version_t pv;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
-    mds(m), mdr(r), dn(d), newi(ni),
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, bool open) :
+    mds(m), mdr(r), dn(d), newi(ni), should_open(open),
     pv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
@@ -4047,17 +4051,22 @@ public:
     // downgrade xlock to rdlock
     //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
 
-    // set/pin ref inode for open()
-    mdr->ref = newi;
-    mdr->pin(newi);
+    if (should_open) {
+      // set/pin ref inode for open()
+      mdr->ref = newi;
+      mdr->pin(newi);
     
-    // ok, do the open.
-    mds->server->handle_client_open(mdr);
+      // ok, do the open.
+      mds->server->handle_client_open(mdr);
+    } else {
+      MClientReply *reply = new MClientReply(mdr->client_request);
+      mds->server->reply_request(mdr, reply, newi);
+    }
   }
 };
 
 
-void Server::handle_client_openc(MDRequest *mdr)
+void Server::handle_client_openc(MDRequest *mdr, bool open)
 {
   MClientRequest *req = mdr->client_request;
 
@@ -4076,7 +4085,12 @@ void Server::handle_client_openc(MDRequest *mdr)
     } 
     
     // pass to regular open handler.
-    handle_client_open(mdr);
+    if (open) {
+      handle_client_open(mdr);
+    } else {
+	  MClientReply *reply = new MClientReply(req);
+	  reply_request(mdr, reply, dn->get_dir()->get_inode());
+    }
     return;
   }
 
@@ -4093,7 +4107,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.version = dn->pre_dirty() - 1;
   
   // prepare finisher
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, open);
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());

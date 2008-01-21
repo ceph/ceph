@@ -518,18 +518,55 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return err;
 }
 
-
-/*
-
-
 static int
 ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 		struct nameidata *nd)
 {
+    struct ceph_mds_client *mdsc = &ceph_inode_to_client(dir)->mdsc;
+    ceph_ino_t pathbase;
+    char *path;
+    int pathlen;
+    struct ceph_msg *req;
+    struct ceph_mds_request_head *rhead;
+    struct ceph_mds_reply_info rinfo;
+    struct ceph_mds_session *session;
+    int err;
+	struct inode *inode;
+
+    dout(5, "create dir %p dentry %p name '%s' flags %d\n", dir, dentry, dentry->d_name.name, mode);
+    pathbase = dir->i_sb->s_root->d_inode->i_ino;
+    path = ceph_build_dentry_path(dentry, &pathlen);
+    if (IS_ERR(path)) 
+        return PTR_ERR(path);
+    req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_CREATE, pathbase, path, 0, 0); 
+    kfree(path);
+    if (IS_ERR(req)) 
+        return PTR_ERR(req);
+    rhead = req->front.iov_base;
+    rhead->args.open.flags = O_CREAT;
+    rhead->args.open.mode = mode;
+    if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
+        return err;
+      
+    dout(10, "create got and parsed result\n");
+
+	err = le32_to_cpu(rinfo.head->result);
+	if (err == 0) {
+		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
+
+		if (err < 0) {
+			goto done_create;
+		}
+
+		if (inode == NULL) {
+			err = -ENOMEM;
+			goto done_create;
+		}
+		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
+	}
+done_create:
+	return err;
 }
-
-
-*/
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
@@ -541,9 +578,6 @@ const struct inode_operations ceph_dir_iops = {
 	.unlink = ceph_dir_unlink,
 	.rmdir = ceph_dir_unlink,
 	.rename = ceph_dir_rename,
-/*	.create = ceph_dir_create,
-	.getattr = ceph_vfs_getattr,
-	.setattr = ceph_vfs_setattr,
-*/
+	.create = ceph_dir_create,
 };
 
