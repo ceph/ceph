@@ -972,6 +972,7 @@ static void try_accept(struct work_struct *work)
 	dout(5, "accepted connection \n");
 
 	new_con->in_tag = CEPH_MSGR_TAG_READY;
+	new_con->connect_seq = 1;
 	set_bit(ACCEPTING, &new_con->state);
 	clear_bit(NEW,&new_con->state);
 	prepare_write_accept_announce(msgr, new_con);

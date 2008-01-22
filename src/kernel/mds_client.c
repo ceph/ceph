@@ -829,7 +829,8 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		dout(10, " adding cap %p on ino %lx\n", cap, ci->vfs_inode.i_ino);
 		ceph_encode_64(&p, end, ci->vfs_inode.i_ino);
 		rec = p;
-		BUG_ON(p + sizeof(*rec) > end);
+		p += sizeof(*rec);
+		BUG_ON(p > end);
 		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->i_wr_size);

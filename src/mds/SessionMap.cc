@@ -61,7 +61,7 @@ void SessionMap::load(Context *onload)
 void SessionMap::_load_finish(bufferlist &bl)
 { 
   bufferlist::iterator blp = bl.begin();
-  decode(blp);
+  decode(blp);  // note: this sets last_cap_renew = now()
   dout(10) << "_load_finish v " << version 
 	   << ", " << session_map.size() << " sessions, "
 	   << bl.length() << " bytes"
@@ -132,6 +132,8 @@ void SessionMap::encode(bufferlist& bl)
 
 void SessionMap::decode(bufferlist::iterator& p)
 {
+  utime_t now = g_clock.now();
+
   ::_decode_simple(version, p);
   __u32 n;
   ::_decode_simple(n, p);
@@ -139,5 +141,6 @@ void SessionMap::decode(bufferlist::iterator& p)
     Session *s = new Session;
     s->_decode(p);
     session_map[s->inst.name] = s;
+    s->last_cap_renew = now;
   }
 }
