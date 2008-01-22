@@ -23,7 +23,6 @@ kernel client
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
-  - make sure the radix_tree to list_head thing works right with __remove_connection..
 - audit locking
 - audit use of kmalloc vs spinlocks
 - convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately

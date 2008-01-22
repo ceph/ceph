@@ -857,6 +857,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		}
 		ceph_encode_string(&p, end, path, pathlen);		
 		kfree(path);
+		dput(dentry);
 	}
 	dout(10, "unlocking\n");
 	spin_unlock(&session->s_cap_lock);
