@@ -56,19 +56,16 @@ struct ceph_msg_pos {
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define NEW            0
-#define CONNECTING     1
-#define ACCEPTING      2
-#define OPEN           3
-#define WRITE_PENDING  4  /* we have data to send */
-#define WRITEABLE      5
-#define WRITING        6
-#define READABLE       7  /* set when socket gets new data */
-#define READING        8  /* provides mutual exclusion, protecting in_* */
-#define REJECTING      9
-#define CLOSING       10
-#define CLOSED        11
-#define WAITING       12  /* avoid try_write looping after queuing delayed work */
+#define NEW           	 0
+#define CONNECTING       1
+#define ACCEPTING        2
+#define OPEN             3
+#define WRITE_PENDING    4  /* we have data to send */
+#define READABLE         5  /* set when socket gets new data */
+#define READING          6  /* provides mutual exclusion, protecting in_* */
+#define REJECTING        7
+#define CLOSING          8
+#define CLOSED           9
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -111,8 +108,8 @@ struct ceph_connection {
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
-	struct work_struct rwork, swork;	/* receive/send work */
-	struct delayed_work delaywork;		/* delayed send work */
+	struct work_struct rwork;		/* receive work */
+	struct delayed_work swork;		/* send work */
         unsigned long           delay;          /* delay interval */
         unsigned int            retries;        /* temp track of retries */
 };
