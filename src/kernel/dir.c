@@ -249,7 +249,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	ino_t ino;
 	int found = 0;
 
-	dout(5, "dir_lookup dirinode %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
+	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
@@ -312,7 +312,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 	int pathlen;
 	int err;
 
-	dout(5, "dir_mknod dir %p dentry %p mode %d rdev %d\n", dir, dentry, mode, rdev);
+	dout(5, "dir_mknod in dir %p dentry %p mode %d rdev %d\n", dir, dentry, mode, rdev);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);	
@@ -361,7 +361,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 	int pathlen;
 	int err;
 
-	dout(5, "dir_symlink dir %p dentry %p to '%s'\n", dir, dentry, dest);
+	dout(5, "dir_symlink in dir %p dentry %p to '%s'\n", dir, dentry, dest);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);	
@@ -408,7 +408,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	int pathlen;
 	int err;
 
-	dout(5, "dir_mkdir dir %p dentry %p mode %d\n", dir, dentry, mode);
+	dout(5, "dir_mkdir in dir %p dentry %p mode %d\n", dir, dentry, mode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);	
@@ -459,7 +459,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	int err;
 	int op = ((dentry->d_inode->i_mode & S_IFMT) == S_IFDIR) ? CEPH_MDS_OP_RMDIR:CEPH_MDS_OP_UNLINK;
 	
-	dout(5, "dir_unlink/rmdir dir %p dentry %p inode %p\n", dir, dentry, inode);
+	dout(5, "dir_unlink/rmdir in dir %p dentry %p inode %p\n", dir, dentry, inode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
@@ -491,7 +491,7 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	int oldpathlen, newpathlen;
 	int err;
 	
-	dout(5, "dir_newname dir %p dentry %p to dir %p dentry %p\n", 
+	dout(5, "dir_rename in dir %p dentry %p to dir %p dentry %p\n", 
 	     old_dir, old_dentry, new_dir, new_dentry);
 	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen);
 	if (IS_ERR(oldpath)) 
@@ -533,18 +533,18 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
     int err;
 	struct inode *inode;
 
-    dout(5, "create dir %p dentry %p name '%s' flags %d\n", dir, dentry, dentry->d_name.name, mode);
+    dout(5, "create in dir %p dentry %p name '%s' flags %d\n", dir, dentry, dentry->d_name.name, mode);
     pathbase = dir->i_sb->s_root->d_inode->i_ino;
     path = ceph_build_dentry_path(dentry, &pathlen);
     if (IS_ERR(path)) 
         return PTR_ERR(path);
-    req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_CREATE, pathbase, path, 0, 0); 
+    req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, pathbase, path, 0, 0); 
     kfree(path);
     if (IS_ERR(req)) 
         return PTR_ERR(req);
     rhead = req->front.iov_base;
-    rhead->args.open.flags = O_CREAT;
-    rhead->args.open.mode = mode;
+    rhead->args.mknod.mode = cpu_to_le32(mode);
+    rhead->args.mknod.rdev = 0;
     if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
         return err;
       
