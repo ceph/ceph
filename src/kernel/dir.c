@@ -236,7 +236,7 @@ const struct file_operations ceph_dir_fops = {
 
 
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nameidata)
+				      struct nameidata *nd)
 {
 	struct ceph_client *client = dir->i_sb->s_fs_info;
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -250,6 +250,14 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	int found = 0;
 
 	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
+
+	/* open(|create) intent? */
+	/*
+	if (nd->flags & LOOKUP_OPEN) 
+		return ceph_lookup_open(dir, dentry, nd);
+	*/
+
+	/* regular lookup */
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));

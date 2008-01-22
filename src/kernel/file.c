@@ -6,20 +6,16 @@ int ceph_debug_file = 50;
 
 #include "mds_client.h"
 
-struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
+int do_open_request(struct inode *inode, int flags, int create_mode,
+		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
 {
-	int flags = file->f_flags;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	ceph_ino_t pathbase;
 	char *path;
 	int pathlen;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
-	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_session *session;
 	struct dentry *dentry;
-	int frommds;
-	struct ceph_inode_cap *cap;
 	int err;
 
 	dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
@@ -28,30 +24,47 @@ struct ceph_inode_cap *ceph_do_open(struct inode *inode, struct file *file)
 	pathbase = inode->i_sb->s_root->d_inode->i_ino;
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path)) 
-		return ERR_PTR(PTR_ERR(path));
+		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
 	kfree(path);
 	if (IS_ERR(req)) 
-		return ERR_PTR(PTR_ERR(req));
+		return PTR_ERR(req);
 	rhead = req->front.iov_base;
 	rhead->args.open.flags = cpu_to_le32(flags);
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
-		return ERR_PTR(err);
-	
-	dout(10, "open got and parsed result\n");
-	frommds = rinfo.reply->hdr.src.name.num;
+	rhead->args.open.mode = cpu_to_le32(create_mode);
+	if ((err = ceph_mdsc_do_request(mdsc, req, rinfo, psession)) < 0)
+		return err;
+	return 0;
+}
+
+int proc_open_reply(struct inode *inode, struct file *file, 
+		    struct ceph_mds_session *session, struct ceph_mds_reply_info *rinfo)
+{
+	struct ceph_inode_cap *cap;
+	struct ceph_file_info *cf;
+
 	cap = ceph_add_cap(inode, session, 
-			   le32_to_cpu(rinfo.head->file_caps), 
-			   le32_to_cpu(rinfo.head->file_caps_seq));
-	ceph_mdsc_put_session(session);
-	return cap;
+			   le32_to_cpu(rinfo->head->file_caps), 
+			   le32_to_cpu(rinfo->head->file_caps_seq));
+
+	if (file->f_flags & O_DIRECTORY) {
+		cf = kzalloc(sizeof(*cf), GFP_KERNEL);
+		if (cf == NULL)
+			return -ENOMEM;
+		file->private_data = cf;
+	}
+
+	return 0;
 }
 
 int ceph_open(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_session *session;
 	struct ceph_inode_cap *cap = 0;
 	struct ceph_file_info *cf;
+	int err;
 	int mode;
 	int wanted;
 
@@ -61,11 +74,99 @@ int ceph_open(struct inode *inode, struct file *file)
 		cap = ceph_find_cap(inode, 0);
 	*/
 	if (!cap) {
-		cap = ceph_do_open(inode, file);
-		if (IS_ERR(cap))
-			return PTR_ERR(cap);
+		err = do_open_request(inode, file->f_flags, 0, &session, &rinfo);
+		if (err < 0) 
+			return err;
+		err = proc_open_reply(inode, file, session, &rinfo);
+		ceph_mdsc_put_session(session);
+		if (err < 0)
+			return err;
 	}
 	
+	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
+	if (cf == NULL)
+		return -ENOMEM;
+	file->private_data = cf;
+
+	mode = ceph_file_mode(file->f_flags);
+	ci->i_nr_by_mode[mode]++;
+	wanted = ceph_caps_wanted(ci);
+	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
+
+	dout(5, "ceph_open success, %lx\n", inode->i_ino);
+	return 0;
+}
+
+#if 0
+int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+{
+	struct ceph_client *client = dir->i_sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	char *path;
+	int pathlen;
+	struct ceph_msg *req;
+	struct ceph_mds_request_head *rhead;
+	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_session *session;
+	struct file *file = nd->intent.open.file;
+	ino_t ino;
+	int found = 0;
+
+	dout(5, "ceph_lookup_open in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
+
+	/* do request */
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
+				       dir->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	kfree(path);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	rhead = req->front.iov_base;
+	rhead->args.open.flags = cpu_to_le32(nd->intent.open.flags);
+	rhead->args.open.mode = cpu_to_le32(nd->intent.open.create_mode);
+	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0) 
+		return err;
+	err = le32_to_cpu(rinfo.head->result);
+	dout(20, "ceph_lookup_open result=%d\n", err);
+
+	/* if there was a previous inode associated with this dentry, now there isn't one */
+	if (err == -ENOENT) 
+		d_add(dentry, NULL);
+	if (err < 0) 
+		goto out;
+	if (rinfo.trace_nr == 0) {
+		derr(0, "wtf, no trace from mds\n");
+		err = -EIO;
+		goto out;
+	}
+
+	/* create the inode */
+	ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
+	dout(10, "got and parsed stat result, ino %lu\n", ino);
+	inode = ilookup(dir->i_sb, ino);
+	if (!inode) 
+		inode = new_inode(dir->i_sb);
+	else
+		found++;
+	if (!inode) {
+		err = -EACCES;
+		goto out;
+	}
+	
+	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+		goto out;
+	d_add(dentry, inode);
+
+	if (found) 
+		iput(inode);
+
+	/* do the open */
+	cap = ceph_add_cap(inode, session, 
+			   le32_to_cpu(rinfo.head->file_caps), 
+			   le32_to_cpu(rinfo.head->file_caps_seq));
+
 	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
 	if (cf == NULL)
 		return -ENOMEM;
@@ -78,9 +179,11 @@ int ceph_open(struct inode *inode, struct file *file)
 	wanted = ceph_caps_wanted(ci);
 	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
 
-	dout(5, "ceph_open success, %lx\n", inode->i_ino);
-	return 0;
+out:
+	ceph_mdsc_put_session(session);
+	return err;
 }
+#endif
 
 int ceph_release(struct inode *inode, struct file *file)
 {
