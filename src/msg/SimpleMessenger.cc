@@ -153,6 +153,12 @@ int Rank::Accepter::start()
   } else {
     // my IP is... HELP!
     struct hostent *myhostname = gethostbyname(hostname); 
+    if (!myhostname) {
+      derr(0) << "unable to resolve hostname '" << hostname 
+	      << "', please specify your ip with --bind x.x.x.x" 
+	      << dendl;
+      exit(0);
+    }
     
     // look up my hostname.
     listen_addr.sin_family = myhostname->h_addrtype;
