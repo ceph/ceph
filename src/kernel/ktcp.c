@@ -68,8 +68,6 @@ static void ceph_state_change(struct sock *sk)
         switch (sk->sk_state) {
 		case TCP_CLOSE:
 			dout(30, "ceph_state_change TCP_CLOSE\n");
-			set_bit(CLOSED, &con->state);
-			clear_bit(OPEN, &con->state);
 			ceph_queue_write(con);
 			break;
 		case TCP_CLOSE_WAIT:
@@ -78,6 +76,7 @@ static void ceph_state_change(struct sock *sk)
         		dout(30, "ceph_state_change state = %lu \n", 
 			     con->state);
 		case TCP_ESTABLISHED:
+			dout(30, "ceph_state_change TCP_ESTABLISHED\n");
 			ceph_write_space(sk);
 			break;
         }
@@ -124,8 +123,10 @@ int ceph_tcp_connect(struct ceph_connection *con)
         
 	ret = con->sock->ops->connect(con->sock, paddr,
                                       sizeof(struct sockaddr_in), O_NONBLOCK);
-        if (ret == -EINPROGRESS) 
+        if (ret == -EINPROGRESS) {
+        	dout(20, "ceph_tcp_connect EINPROGRESS sk_state = = %u\n",con->sock->sk->sk_state);
 		return 0;
+	}
         if (ret < 0) {
                 /* TBD check for fatal errors, retry if not fatal.. */
                 derr(1, "ceph_tcp_connect kernel_connect error: %d\n", ret);
