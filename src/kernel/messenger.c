@@ -1013,7 +1013,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	spin_lock_init(&msgr->con_lock);
 	INIT_LIST_HEAD(&msgr->con_all);
 	INIT_LIST_HEAD(&msgr->con_accepting);
-	INIT_RADIX_TREE(&msgr->con_open, GFP_KERNEL);
+	INIT_RADIX_TREE(&msgr->con_open, GFP_ATOMIC);  /* we insert under spinlock */
 
 	/* create listening socket */
 	ret = ceph_tcp_listen(msgr, myaddr ? ntohs(myaddr->ipaddr.sin_port):0);
@@ -1081,7 +1081,7 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_ad
  */
 int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned long timeout)
 {
-	struct ceph_connection *con;
+	struct ceph_connection *con, *newcon;
 	int ret = 0;
 	
 	/* set source */
@@ -1091,14 +1091,26 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned lo
 	spin_lock(&msgr->con_lock);
 	con = __get_connection(msgr, &msg->hdr.dst.addr);
 	if (!con) {
-		con = new_connection(msgr);
-		if (IS_ERR(con))
+		/* drop lock while we allocate a new connection */
+		spin_unlock(&msgr->con_lock);
+		newcon = new_connection(msgr);
+		if (IS_ERR(newcon))
 			return PTR_ERR(con);
-		dout(5, "ceph_msg_send new connection %p to peer %x:%d\n", con,
-		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
-		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
-		con->peer_addr = msg->hdr.dst.addr;
-		__add_connection(msgr, con);
+		spin_lock(&msgr->con_lock);
+		con = __get_connection(msgr, &msg->hdr.dst.addr);
+		if (con) {
+			put_connection(newcon);
+			dout(10, "ceph_msg_send (lost race and) had connection %p to peer %x:%d\n", con,
+			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
+			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
+		} else {
+			con = newcon;
+			con->peer_addr = msg->hdr.dst.addr;
+			__add_connection(msgr, con);
+			dout(5, "ceph_msg_send new connection %p to peer %x:%d\n", con,
+			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
+			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
+		}
 	} else {
 		dout(10, "ceph_msg_send had connection %p to peer %x:%d\n", con,
 		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
