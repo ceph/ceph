@@ -167,7 +167,7 @@ static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_co
 static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	unsigned long key;
-	void *slot;
+	void **slot, *val;
 
 	dout(20, "__remove_connection %p\n", con);
 	if (list_empty(&con->list_all)) {
@@ -184,15 +184,14 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 			dout(20, "__remove_connection %p and removing bucket %lu\n", con, key);
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
-			/* radix_tree_lookup_slot is on crack!  don't use it for now. */
-			slot = radix_tree_lookup(&msgr->con_open, key);
-			dout(20, "__remove_connection %p from bucket %lu head %p\n", con, key, slot);
-			if (slot == &con->list_bucket) {
+			slot = radix_tree_lookup_slot(&msgr->con_open, key);
+			val = radix_tree_deref_slot(slot);
+			dout(20, "__remove_connection %p from bucket %lu head %p\n", con, key, val);
+			if (val == &con->list_bucket) {
 				dout(20, "__remove_connection adjusting bucket ptr"
 				     " for %lu to next item, %p\n", key, 
 				     con->list_bucket.next);
-				radix_tree_delete(&msgr->con_open, key);
-				radix_tree_insert(&msgr->con_open, key, con->list_bucket.next);
+				radix_tree_replace_slot(slot, con->list_bucket.next);
 			}
 			list_del(&con->list_bucket);
 		}
@@ -814,6 +813,7 @@ static void process_accept(struct ceph_connection *con)
 	struct ceph_messenger *msgr = con->msgr;
 
 	/* do we already have a connection for this peer? */
+	radix_tree_preload(GFP_KERNEL);
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
