@@ -6,6 +6,9 @@ int ceph_debug_file = 50;
 
 #include "mds_client.h"
 
+/*
+ * if err==0, caller is responsible for a put_session on *psession
+ */
 int do_open_request(struct dentry *dentry, int flags, int create_mode,
 		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
 {
@@ -34,6 +37,10 @@ int do_open_request(struct dentry *dentry, int flags, int create_mode,
 	return 0;
 }
 
+/*
+ * add cap.  also set up private_data for holding readdir results
+ * if O_DIRECTORY.
+ */
 int proc_open_reply(struct inode *inode, struct file *file, 
 		    struct ceph_mds_session *session, struct ceph_mds_reply_info *rinfo)
 {
