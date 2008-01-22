@@ -321,10 +321,6 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	struct ceph_client *client = p;
 	int had;
 
-	dout(5, "===== %p ===== from %s%d type %d len %d+%d\n", msg,
-	     ceph_name_type_str(msg->hdr.src.name.type), msg->hdr.src.name.num,
-	     msg->hdr.type, msg->hdr.front_len, msg->hdr.data_len);
-
 	/* deliver the message */
 	switch (msg->hdr.type) {
 		/* me */

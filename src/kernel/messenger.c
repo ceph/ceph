@@ -923,6 +923,10 @@ more:
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
 		ret = read_message_partial(con);
 		if (ret <= 0) goto done;
+
+		dout(5, "===== %p from %s%d type %d len %d+%d =====\n", con->in_msg,
+		     ceph_name_type_str(con->in_msg->hdr.src.name.type), con->in_msg->hdr.src.name.num,
+		     con->in_msg->hdr.type, con->in_msg->hdr.front_len, con->in_msg->hdr.data_len);
 		msgr->dispatch(con->msgr->parent, con->in_msg); /* fixme: use a workqueue */
 		con->in_msg = 0;
 		con->in_tag = CEPH_MSGR_TAG_READY;
@@ -1107,8 +1111,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned lo
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = ++con->out_seq;
-	dout(1, "----- %p ----- to %s%d type %d len %d+%d\n", msg,
-	     ceph_name_type_str(msg->hdr.src.name.type), msg->hdr.src.name.num,
+	dout(1, "----- %p to %s%d type %d len %d+%d -----\n", msg,
+	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num,
 	     msg->hdr.type, msg->hdr.front_len, msg->hdr.data_len);
 	dout(1, "ceph_msg_send queuing %p seq %u for %s%d on %p\n", msg, msg->hdr.seq,
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num, con);
