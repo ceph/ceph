@@ -37,36 +37,40 @@ static void put_request(struct ceph_mds_request *req)
 	} 
 }
 
-
-/*
- * register an in-flight request.
- * fill in tid in msg request header
- */
-static struct ceph_mds_request *
-register_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
+static struct ceph_mds_request *new_request(struct ceph_msg *msg, int mds)
 {
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *head = msg->front.iov_base;
 
 	req = kmalloc(sizeof(*req), GFP_KERNEL);
-	req->r_tid = head->tid = ++mdsc->last_tid;
 	req->r_request = msg;
 	req->r_reply = 0;
 	req->r_num_mds = 0;
 	req->r_attempts = 0;
 	req->r_num_fwd = 0;
 	req->r_resend_mds = mds;
-	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
+	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
-
-	dout(30, "register_request %p tid %lld\n", req, req->r_tid);
-	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void*)req);
 	ceph_msg_get(msg);  /* grab reference */
+
 	return req;
 }
 
-static void unregister_request(struct ceph_mds_client *mdsc, 
-			       struct ceph_mds_request *req)
+
+/*
+ * register an in-flight request.
+ * fill in tid in msg request header
+ */
+void __register_request(struct ceph_mds_client *mdsc, struct ceph_mds_request *req)
+{
+	struct ceph_mds_request_head *head = req->r_request->front.iov_base;
+	req->r_tid = head->tid = ++mdsc->last_tid;
+	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
+	get_request(req);
+	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void*)req);
+}
+
+static void __unregister_request(struct ceph_mds_client *mdsc, 
+				 struct ceph_mds_request *req)
 {
 	dout(30, "unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
@@ -158,11 +162,15 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 
 static void wait_for_new_map(struct ceph_mds_client *mdsc)
 {
+	__u32 have;
 	dout(30, "wait_for_new_map enter\n");
-	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch)
-		ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch);
-
-	spin_unlock(&mdsc->lock);
+	have = mdsc->mdsmap->m_epoch;
+	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch) {
+		mdsc->last_requested_map = have;
+		spin_unlock(&mdsc->lock);
+		ceph_monc_request_mdsmap(&mdsc->client->monc, have);
+	} else
+		spin_unlock(&mdsc->lock);
 	wait_for_completion(&mdsc->map_waiters);
 	spin_lock(&mdsc->lock);
 	dout(30, "wait_for_new_map exit\n");
@@ -414,8 +422,11 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 
 	dout(30, "do_request on %p type %d\n", msg, msg->hdr.type);
 
+	req = new_request(msg, mds);
+
+	radix_tree_preload(GFP_KERNEL);
 	spin_lock(&mdsc->lock);
-	req = register_request(mdsc, msg, mds);
+	__register_request(mdsc, req);
 
 retry:
 	mds = choose_mds(mdsc, req);
@@ -463,7 +474,7 @@ retry:
 		goto retry;
 	}
 	reply = req->r_reply;
-	unregister_request(mdsc, req);
+	__unregister_request(mdsc, req);
 	spin_unlock(&mdsc->lock);
 	put_request(req);
 	if ((err = ceph_mdsc_parse_reply_info(reply, rinfo)) < 0) {
@@ -844,6 +855,10 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		}
 		if (p + pathlen + 4 + sizeof(struct ceph_mds_cap_reconnect) > end) {
 			/* der, realloc front */
+			/*
+			 * this is broken (kmalloc under spinlock).  should probably drop
+			 * lock, and retry with higher initial estimate?
+			 */
 			int off = end-p;
 			void *t;
 			dout(30, "blech, reallocating larger buffer, from %d\n", off);
@@ -1169,7 +1184,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->sessions = 0;
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
-	INIT_RADIX_TREE(&mdsc->request_tree, GFP_KERNEL);
+	INIT_RADIX_TREE(&mdsc->request_tree, GFP_ATOMIC);
 	mdsc->last_requested_map = 0;
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
