@@ -1009,7 +1009,7 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps, int wanted,
 	fc->wanted = cpu_to_le32(wanted);
 	fc->ino = cpu_to_le64(ino);
 	fc->size = cpu_to_le64(size);
-	
+
 	send_msg_mds(mdsc, msg, mds);
 }
 

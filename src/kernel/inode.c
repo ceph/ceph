@@ -391,14 +391,21 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps;
 	int used;
+	int wanted = ceph_caps_wanted(ci);
+	int ret = 0;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
+	dout(10, " my wanted = %d\n", wanted);
 
 	/* unwanted? */
-	if (ceph_caps_wanted(ci) == 0) {
+	if (wanted == 0) {
 		dout(10, "wanted=0, reminding mds\n");
 		grant->wanted = cpu_to_le32(0);
 		return 1; /* ack */
+	}
+	if (wanted != le32_to_cpu(grant->wanted)) {
+		dout(10, "wanted %d -> %d\n", le32_to_cpu(grant->wanted), wanted);
+		grant->wanted = cpu_to_le32(wanted);
 	}
 
 	/* new cap? */
@@ -406,7 +413,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	if (!cap) {
 		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
 		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
-		return 0;
+		return ret;
 	} 
 
 	/* revocation? */
@@ -429,7 +436,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
 		cap->caps = newcaps;
 	}
-	return 0;	
+	return ret;	
 }
 
 

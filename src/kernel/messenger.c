@@ -305,13 +305,10 @@ static int write_partial_kvec(struct ceph_connection *con)
 {
 	int ret;
 
-	dout(30, "write_partial_kvec %p : %d vec, %d bytes left\n", con, 
-	     con->out_kvec_left, con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
 		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur, 
 				       con->out_kvec_left, con->out_kvec_bytes);
 		if (ret <= 0) goto out;
-		dout(30, "write_partial_kvec %p : wrote %d\n", con, ret);
 		con->out_kvec_bytes -= ret;
 		if (con->out_kvec_bytes == 0)
 			break;            /* done */
@@ -1102,6 +1099,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned lo
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = ++con->out_seq;
+	dout(1, "----- %p ----- to %s%d type %d len %d+%d\n", msg,
+	     ceph_name_type_str(msg->hdr.src.name.type), msg->hdr.src.name.num,
+	     msg->hdr.type, msg->hdr.front_len, msg->hdr.data_len);
 	dout(1, "ceph_msg_send queuing %p seq %u for %s%d on %p\n", msg, msg->hdr.seq,
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num, con);
 	ceph_msg_get(msg);

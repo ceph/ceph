@@ -115,25 +115,41 @@ const struct inode_operations ceph_file_iops = {
 
 /*
  * totally naive write.  just to get things sort of working.
+ * ugly hack!
  */
-int ceph_silly_write(struct file *filp, const char __user * data,
+ssize_t ceph_silly_write(struct file *file, const char __user * data,
 		     size_t count, loff_t * offset)
 {
-	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_file_info *cf = file->private_data;
+	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int ret = 0;
-
-	dout(10, "silly_write on file %p %lld~%u\n", filp, offset, count);
+	int did = 0;
+	
+	dout(10, "silly_write on file %p %lld~%lu\n", file, *offset, count);
 	
 	/* ignore caps, for now. */
-	
-	if (ret > 0)
-		*offset += ret;
+	/* this is an ugly hack */
+
+	while (count > 0) {
+		ret = ceph_osdc_silly_write(osdc, inode->i_ino, &ci->i_layout, count, *offset, data);
+		dout(10, "ret is %d\n", ret);
+		if (ret > 0) {
+			did += ret;
+			*offset += ret;
+			data += ret;
+			count -= ret;
+			dout(10, "did %d bytes, ret now %d, %lu left\n", did, ret, count);
+		} else if (did) 
+			break;
+		else 
+			return ret;
+	}
 
 	if (*offset > inode->i_size) {
-		inode->i_size = *offset;
+		ci->i_wr_size = inode->i_size = *offset;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}	
 	invalidate_inode_pages2(inode->i_mapping);
 	return ret;
@@ -144,7 +160,7 @@ const struct file_operations ceph_file_fops = {
 	.release = ceph_release,
 	.llseek = generic_file_llseek,
 	.read = do_sync_read,
-	.write = do_sync_write,
+	.write = ceph_silly_write,//do_sync_write,
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
 	.mmap = generic_file_mmap,

@@ -56,5 +56,9 @@ extern int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			       struct ceph_file_layout *layout, 
 			       struct list_head *pagels, int nr_pages);
 
+extern int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+				 struct ceph_file_layout *layout, 
+				 __u64 count, __u64 offset, const char __user *data);
+
 #endif
 
