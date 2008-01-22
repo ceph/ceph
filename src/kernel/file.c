@@ -9,24 +9,17 @@ int ceph_debug_file = 50;
 /*
  * if err==0, caller is responsible for a put_session on *psession
  */
-int do_open_request(struct dentry *dentry, int flags, int create_mode,
-		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
+int do_open_request(struct super_block *sb, struct dentry *dentry, char *path, ceph_ino_t pathbase, int flags,
+		    int create_mode, struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
 {
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(dentry->d_inode)->mdsc;
-	ceph_ino_t pathbase;
-	char *path;
-	int pathlen;
+	struct ceph_client *client = sb->s_fs_info;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_msg *req;
 	struct ceph_mds_request_head *rhead;
 	int err;
 
 	dout(5, "open dentry %p name '%s' flags %d\n", dentry, dentry->d_name.name, flags);
-	pathbase = dentry->d_inode->i_sb->s_root->d_inode->i_ino;
-	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path)) 
-		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
-	kfree(path);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	rhead = req->front.iov_base;
@@ -61,34 +54,13 @@ int proc_open_reply(struct inode *inode, struct file *file,
 	return 0;
 }
 
-int ceph_open(struct inode *inode, struct file *file)
+static int ceph_open_init_private_data(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct dentry *dentry;
-	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_session *session;
-	struct ceph_inode_cap *cap = 0;
 	struct ceph_file_info *cf;
-	int err;
 	int mode;
 	int wanted;
 
-	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
-	/*
-	if (file->f_flags == O_DIRECTORY && ... ) 
-		cap = ceph_find_cap(inode, 0);
-	*/
-	if (!cap) {
-		dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
-		err = do_open_request(dentry, file->f_flags, 0, &session, &rinfo);
-		if (err < 0) 
-			return err;
-		err = proc_open_reply(inode, file, session, &rinfo);
-		ceph_mdsc_put_session(session);
-		if (err < 0)
-			return err;
-	}
-	
 	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
 	if (cf == NULL)
 		return -ENOMEM;
@@ -99,24 +71,93 @@ int ceph_open(struct inode *inode, struct file *file)
 	wanted = ceph_caps_wanted(ci);
 	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
 
+	return 0;
+}
+
+int ceph_open(struct inode *inode, struct file *file)
+{
+	struct dentry *dentry;
+	char *path;
+	int pathlen;
+	ceph_ino_t pathbase;
+	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_session *session;
+	struct ceph_inode_cap *cap = 0;
+	struct ceph_file_info *cf = file->private_data;
+	int err;
+
+	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
+
+	if (cf) {
+		/* the file is already opened */
+		return 0;
+	}
+	
+	/*
+	if (file->f_flags == O_DIRECTORY && ... ) 
+		cap = ceph_find_cap(inode, 0);
+	*/
+	if (!cap) {
+		dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
+
+		pathbase = dentry->d_inode->i_sb->s_root->d_inode->i_ino;
+		path = ceph_build_dentry_path(dentry, &pathlen);
+		if (IS_ERR(path)) 
+			return PTR_ERR(path);
+
+		err = do_open_request(inode->i_sb, dentry, path, pathbase, file->f_flags, 0, &session, &rinfo);
+
+		kfree(path);
+
+		if (err < 0) 
+			return err;
+		err = proc_open_reply(inode, file, session, &rinfo);
+		ceph_mdsc_put_session(session);
+		if (err < 0)
+			return err;
+	}
+
+	err = ceph_open_init_private_data(inode, file);
+
+	if (err < 0) {
+		return err;
+	}
+	
 	dout(5, "ceph_open success, %lx\n", inode->i_ino);
 	return 0;
 }
 
-#if 0
 int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
-	struct ceph_client *client = dir->i_sb->s_fs_info;
-	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_reply_info rinfo;
 	struct ceph_mds_session *session;
 	struct file *file = nd->intent.open.file;
+	struct inode *inode;
+	struct dentry *dir_dentry;
+	char *path, *dirpath;
+	int pathlen;
+	ceph_ino_t pathbase;
 	ino_t ino;
 	int found = 0;
+	int err;
 
 	dout(5, "ceph_lookup_open in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 
-	err = do_open_request(dentry, nd->intent.open.flags, nd->intent.open.create_mode,
+	pathbase = dir->i_sb->s_root->d_inode->i_ino;
+
+	dir_dentry = list_entry(dir->i_dentry.next, struct dentry, d_alias);
+
+	pathbase = dir_dentry->d_inode->i_sb->s_root->d_inode->i_ino;
+	dirpath = ceph_build_dentry_path(dir_dentry, &pathlen);
+
+	path = kmalloc(pathlen+dentry->d_name.len+2, GFP_KERNEL);
+	strncpy(path, dirpath, pathlen);
+	kfree(dirpath);
+	path[pathlen]='/';
+	strncpy(&path[pathlen+1], dentry->d_name.name, dentry->d_name.len);
+	path[pathlen+dentry->d_name.len+1]=0;
+
+	err = do_open_request(dir->i_sb, dentry, path, pathbase, nd->intent.open.flags, nd->intent.open.create_mode,
 			      &session, &rinfo);
 	if (err < 0)
 		return err;
@@ -156,18 +197,14 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata 
 		iput(inode);
 
 	/* finish the open */
-	err = proc_open_reply(inode, file);
+	err = proc_open_reply(inode, file, session, &rinfo);
 	if (err == 0) {
-		mode = ceph_file_mode(file->f_flags);
-		ci->i_nr_by_mode[mode]++;
-		wanted = ceph_caps_wanted(ci);
-		ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
+		err = ceph_open_init_private_data(inode, file);
 	}
 out:
 	ceph_mdsc_put_session(session);
 	return err;
 }
-#endif
 
 int ceph_release(struct inode *inode, struct file *file)
 {
