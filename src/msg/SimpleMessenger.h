@@ -199,7 +199,7 @@ private:
     }
 
     void force_close() {
-      ::close(sd);
+      if (sd > 0) ::close(sd);
     }
   };
 
