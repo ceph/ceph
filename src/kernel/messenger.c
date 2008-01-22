@@ -86,19 +86,16 @@ static struct ceph_connection *__get_connection(struct ceph_messenger *msgr, str
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head == NULL) 
 		goto out;
-	if (list_empty(head)) {
-		con = list_entry(head, struct ceph_connection, list_bucket);
+	con = list_entry(head, struct ceph_connection, list_bucket);
+	if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
+		atomic_inc(&con->nref);
+		goto out;
+	}
+	list_for_each(p, head) {
+		con = list_entry(p, struct ceph_connection, list_bucket);
 		if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
 			atomic_inc(&con->nref);
 			goto out;
-		}
-	} else {
-		list_for_each(p, head) {
-			con = list_entry(p, struct ceph_connection, list_bucket);
-			if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0) {
-				atomic_inc(&con->nref);
-				goto out;
-			}
 		}
 	}
 	con = NULL;
@@ -145,10 +142,10 @@ static void __add_connection(struct ceph_messenger *msgr, struct ceph_connection
 
 	head = radix_tree_lookup(&msgr->con_open, key);
 	if (head) {
-		dout(20, "add_connection %p in existing bucket %lu\n", con, key);
+		dout(20, "add_connection %p in existing bucket %lu head %p\n", con, key, head);
 		list_add(&con->list_bucket, head);
 	} else {
-		dout(20, "add_connection %p in new bucket %lu\n", con, key);
+		dout(20, "add_connection %p in new bucket %lu head %p\n", con, key, &con->list_bucket);
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
 		radix_tree_insert(&msgr->con_open, key, &con->list_bucket);
 	}
@@ -170,8 +167,9 @@ static void add_connection_accepting(struct ceph_messenger *msgr, struct ceph_co
 static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	unsigned long key;
+	void *slot;
 
-	dout(20, "__remove_connection %p from %p\n", con, msgr);
+	dout(20, "__remove_connection %p\n", con);
 	if (list_empty(&con->list_all)) {
 		dout(20, "__remove_connection %p not registered\n", con);
 		return;
@@ -186,7 +184,16 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 			dout(20, "__remove_connection %p and removing bucket %lu\n", con, key);
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
-			dout(20, "__remove_connection %p from bucket %lu\n", con, key);
+			/* radix_tree_lookup_slot is on crack!  don't use it for now. */
+			slot = radix_tree_lookup(&msgr->con_open, key);
+			dout(20, "__remove_connection %p from bucket %lu head %p\n", con, key, slot);
+			if (slot == &con->list_bucket) {
+				dout(20, "__remove_connection adjusting bucket ptr"
+				     " for %lu to next item, %p\n", key, 
+				     con->list_bucket.next);
+				radix_tree_delete(&msgr->con_open, key);
+				radix_tree_insert(&msgr->con_open, key, con->list_bucket.next);
+			}
 			list_del(&con->list_bucket);
 		}
 	}
