@@ -9,10 +9,10 @@ int ceph_debug_file = 50;
 /*
  * if err==0, caller is responsible for a put_session on *psession
  */
-int do_open_request(struct dentry *dentry, int flags, int create_mode, 
+int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, int create_mode, 
 		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
 {
-	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
+	struct ceph_client *client = sb->s_fs_info;
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	ceph_ino_t pathbase;
 	char *path;
@@ -22,7 +22,7 @@ int do_open_request(struct dentry *dentry, int flags, int create_mode,
 	int err;
 
 	dout(5, "open dentry %p name '%s' flags %d\n", dentry, dentry->d_name.name, flags);
-	pathbase = dentry->d_inode->i_sb->s_root->d_inode->i_ino;
+	pathbase = sb->s_root->d_inode->i_ino;
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path)) 
 		return PTR_ERR(path);
@@ -104,7 +104,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	*/
 	if (!cap) {
 		dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
-		err = do_open_request(dentry, file->f_flags, 0, &session, &rinfo);
+		err = do_open_request(inode->i_sb, dentry, file->f_flags, 0, &session, &rinfo);
 		if (err < 0) 
 			return err;
 		err = proc_open_reply(inode, file, session, &rinfo);
@@ -134,7 +134,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata 
 	int err;
 
 	dout(5, "ceph_lookup_open in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
-	err = do_open_request(dentry, nd->intent.open.flags, nd->intent.open.create_mode,
+	err = do_open_request(dir->i_sb, dentry, nd->intent.open.flags, nd->intent.open.create_mode,
 			      &session, &rinfo);
 	if (err < 0)
 		return err;
