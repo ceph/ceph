@@ -1116,6 +1116,16 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   object_t oid = op->get_oid();
   const char *opname = MOSDOp::get_opname(op->get_op());
 
+  // make sure it looks ok
+  if (op->get_op() == CEPH_OSD_OP_WRITE &&
+      op->get_length() != op->get_data().length()) {
+    dout(0) << "op_modify got bad write, claimed length " << op->get_length() 
+	    << " != payload length " << op->get_data().length()
+	    << dendl;
+    delete op;
+    return;
+  }
+
   // --- locking ---
 
   // wrlock?
