@@ -12,7 +12,7 @@ int ceph_debug_file = 50;
 int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, int create_mode, 
 		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
 {
-	struct ceph_client *client = sb->s_fs_info;
+	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	ceph_ino_t pathbase;
 	char *path;

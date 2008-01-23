@@ -180,6 +180,10 @@ static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 	return (struct ceph_client*)inode->i_sb->s_fs_info;
 }
 
+static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
+{
+	return (struct ceph_client*)sb->s_fs_info;
+}
 /*
  * keep readdir buffers attached to file->private_data
  */

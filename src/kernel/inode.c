@@ -478,7 +478,7 @@ struct ceph_msg * prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *d
 int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
-	struct ceph_client *client = inode->i_sb->s_fs_info;
+	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
         const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_msg *req;

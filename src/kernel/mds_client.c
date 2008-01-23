@@ -1071,7 +1071,7 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps, int wanted,
 void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
-	struct ceph_client *client = sb->s_fs_info;
+	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_session *session;
 	struct inode *inode;
 	struct ceph_mds_file_caps *h;

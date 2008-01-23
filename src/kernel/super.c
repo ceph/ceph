@@ -71,7 +71,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
  */
 static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 {
-	struct ceph_client *client = mnt->mnt_sb->s_fs_info;
+	struct ceph_client *client = ceph_sb_to_client(mnt->mnt_sb);
 	struct ceph_mount_args *args = &client->mount_args;
 
 	if (ceph_debug != 0)
@@ -377,7 +377,7 @@ bail:
 static int ceph_compare_super(struct super_block *sb, void *data)
 {
 	struct ceph_mount_args *args = (struct ceph_mount_args*)data;
-	struct ceph_client *other = sb->s_fs_info;
+	struct ceph_client *other = ceph_sb_to_client(sb);
 	int i;
 	dout(10, "ceph_compare_super %p\n", sb);
 
@@ -431,7 +431,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		err = PTR_ERR(sb);
 		goto out;
 	}
-	client = sb->s_fs_info;
+	client = ceph_sb_to_client(sb);
 
 	if ((err = ceph_mount(client, &mount_args, &droot)) < 0)
 		goto out_splat;
@@ -454,7 +454,7 @@ out:
 
 static void ceph_kill_sb(struct super_block *s)
 {
-	struct ceph_client *client = s->s_fs_info;
+	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_destroy_client(client);
 	kill_anon_super(s);
