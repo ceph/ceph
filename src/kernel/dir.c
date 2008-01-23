@@ -252,8 +252,10 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 
 	/* open(|create) intent? */
-	if (nd->flags & LOOKUP_OPEN) 
-		return ceph_lookup_open(dir, dentry, nd);
+	if (nd->flags & LOOKUP_OPEN) {
+		err = ceph_lookup_open(dir, dentry, nd);
+		return ERR_PTR(err);
+	}
 
 	/* regular lookup */
 	path = ceph_build_dentry_path(dentry, &pathlen);
