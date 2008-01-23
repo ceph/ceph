@@ -146,7 +146,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool is_balanced = false;
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
-      if (osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
+      if (g_conf.osd_balance_reads &&
+	  osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
