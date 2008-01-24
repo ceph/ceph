@@ -1,14 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph - scalable distributed dio system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
- * Foundation.  See file COPYING.
+ * Foundation.  See dio COPYING.
  * 
  */
 
@@ -22,13 +22,13 @@
 #include "common/Mutex.h"
 #include "common/Thread.h"
 
-class DIOJournal : public Journal {
+class DioJournal : public Journal {
 public:
   /** log header
    * we allow 4 pointers:
    *  top/initial,
    *  one for an epoch boundary (if any),
-   *  one for a wrap in the ring buffer/journal file,
+   *  one for a wrap in the ring buffer/journal dio,
    *  one for a second epoch boundary (if any).
    * the epoch boundary one is useful only for speedier recovery in certain cases
    * (i.e. when ebofs committed, but the journal didn't rollover ... very small window!)
@@ -66,6 +66,9 @@ public:
       offset[num] = o;
       num++;
     }
+    epoch_t last_epoch() {
+      return epoch[num-1];
+    }
   } header;
 
   struct entry_header_t {
@@ -88,16 +91,18 @@ public:
 private:
   string fn;
 
-  bool full;
+  bool full, writing;
   off_t write_pos;      // byte where next entry written goes
-  off_t queue_pos;      // byte where next entry queued for write goes
-
   off_t read_pos;       // 
 
   int fd;
 
-  list<pair<epoch_t,bufferlist> > writeq;  // currently journaling
-  list<Context*> commitq; // currently journaling
+  // to be journaled
+  list<pair<epoch_t,bufferlist> > writeq;
+  list<Context*> commitq;
+
+  // being journaled
+  list<Context*> writingq;
   
   // write thread
   Mutex write_lock;
@@ -112,9 +117,9 @@ private:
   void write_thread_entry();
 
   class Writer : public Thread {
-    DIOJournal *journal;
+    DioJournal *journal;
   public:
-    Writer(DIOJournal *fj) : journal(fj) {}
+    Writer(DioJournal *fj) : journal(fj) {}
     void *entry() {
       journal->write_thread_entry();
       return 0;
@@ -122,13 +127,13 @@ private:
   } write_thread;
 
  public:
-  DIOJournal(Ebofs *e, char *f) : 
+  DioJournal(Ebofs *e, const char *f) : 
     Journal(e), fn(f),
-    full(false),
-    write_pos(0), queue_pos(0), read_pos(0),
+    full(false), writing(false),
+    write_pos(0), read_pos(0),
     fd(0),
     write_stop(false), write_thread(this) { }
-  ~DIOJournal() {}
+  ~DioJournal() {}
 
   int create();
   int open();
@@ -137,11 +142,13 @@ private:
   void make_writeable();
 
   // writes
-  bool submit_entry(bufferlist& e, Context *oncommit);  // submit an item
+  void submit_entry(bufferlist& e, Context *oncommit);  // submit an item
   void commit_epoch_start();   // mark epoch boundary
   void commit_epoch_finish();  // mark prior epoch as committed (we can expire)
 
   bool read_entry(bufferlist& bl, epoch_t& e);
+
+  bool is_full();
 
   // reads
 };

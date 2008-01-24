@@ -17,6 +17,7 @@
 #include "Ebofs.h"
 
 #include "FileJournal.h"
+#include "DIOJournal.h"
 
 #include <errno.h>
 
@@ -125,6 +126,7 @@ int Ebofs::mount()
   // open journal?
   if (journalfn) {
     journal = new FileJournal(this, journalfn);
+    //journal = new DioJournal(this, journalfn);
     if (journal->open() < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;

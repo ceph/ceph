@@ -276,7 +276,7 @@ void FileJournal::write_thread_entry()
     // write anything?
     if (bl.length() > 0) {
       writing = true;
-      write_lock.Unlock();
+      //write_lock.Unlock();
       dout(15) << "write_thread_entry writing " << write_pos << "~" << bl.length() << dendl;
       
       ::lseek(fd, write_pos, SEEK_SET);
@@ -287,7 +287,7 @@ void FileJournal::write_thread_entry()
 	::write(fd, (char*)(*it).c_str(), (*it).length() );
       }
       
-      write_lock.Lock();    
+      //write_lock.Lock();    
       writing = false;
       write_pos = queue_pos;
       ebofs->queue_finishers(writingq);

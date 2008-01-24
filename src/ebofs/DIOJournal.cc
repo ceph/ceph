@@ -27,7 +27,7 @@
 #define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
 
 
-int DIOJournal::create()
+int DioJournal::create()
 {
   dout(2) << "create " << fn << dendl;
 
@@ -56,14 +56,14 @@ int DIOJournal::create()
   
   // writeable.
   read_pos = 0;
-  write_pos = queue_pos = sizeof(header);
+  write_pos = sizeof(header);
 
   ::close(fd);
 
   return 0;
 }
 
-int DIOJournal::open()
+int DioJournal::open()
 {
   //dout(1) << "open " << fn << dendl;
 
@@ -78,7 +78,7 @@ int DIOJournal::open()
 
   // assume writeable, unless...
   read_pos = 0;
-  write_pos = queue_pos = sizeof(header);
+  write_pos = sizeof(header);
 
   // read header?
   read_header();
@@ -93,7 +93,7 @@ int DIOJournal::open()
 		<< header.epoch[i] << " at " << header.offset[i]
 		<< dendl;
 	read_pos = header.offset[i];
-	write_pos = queue_pos = 0;
+	write_pos = 0;
 	break;
       }      
       else if (header.epoch[i] < ebofs->get_super_epoch()) {
@@ -115,7 +115,7 @@ int DIOJournal::open()
   return 0;
 }
 
-void DIOJournal::close()
+void DioJournal::close()
 {
   dout(1) << "close " << fn << dendl;
 
@@ -130,13 +130,13 @@ void DIOJournal::close()
   fd = 0;
 }
 
-void DIOJournal::start_writer()
+void DioJournal::start_writer()
 {
   write_stop = false;
   write_thread.create();
 }
 
-void DIOJournal::stop_writer()
+void DioJournal::stop_writer()
 {
   write_lock.Lock();
   {
@@ -148,7 +148,7 @@ void DIOJournal::stop_writer()
 }
 
 
-void DIOJournal::print_header()
+void DioJournal::print_header()
 {
   for (int i=0; i<header.num; i++) {
     if (i && header.offset[i] < header.offset[i-1]) {
@@ -159,11 +159,11 @@ void DIOJournal::print_header()
   }
   //if (header.wrap) dout(10) << "header: wrap at " << header.wrap << dendl;
 }
-void DIOJournal::read_header()
+void DioJournal::read_header()
 {
   dout(10) << "read_header" << dendl;
-  memset(&header, 0, sizeof(header));  // zero out (read may fail)
   char buf[4096];
+  memset(buf, 0, 4096);  // zero out (read may fail)
   ::lseek(fd, 0, SEEK_SET);
   int r = ::read(fd, buf, 4096);
   memcpy(&header, buf, sizeof(header));
@@ -171,22 +171,21 @@ void DIOJournal::read_header()
     dout(0) << "read_header error " << errno << " " << strerror(errno) << dendl;
   print_header();
 }
-void DIOJournal::write_header()
+void DioJournal::write_header()
 {
   dout(10) << "write_header " << dendl;
   print_header();
 
+  ::lseek(fd, 0, SEEK_SET);
   char buf[4096];
   memcpy(buf, &header, sizeof(header));
-  
-  ::lseek(fd, 0, SEEK_SET);
-  int r = ::write(fd, &buf, 4096);
+  int r = ::write(fd, buf, 4096);
   if (r < 0) 
     dout(0) << "write_header error " << errno << " " << strerror(errno) << dendl;
 }
 
 
-void DIOJournal::write_thread_entry()
+void DioJournal::write_thread_entry()
 {
   dout(10) << "write_thread_entry start" << dendl;
   write_lock.Lock();
@@ -195,143 +194,123 @@ void DIOJournal::write_thread_entry()
     if (writeq.empty()) {
       // sleep
       dout(20) << "write_thread_entry going to sleep" << dendl;
-      assert(write_pos == queue_pos);
       write_cond.Wait(write_lock);
       dout(20) << "write_thread_entry woke up" << dendl;
       continue;
     }
     
-    // do queued writes
-    while (!writeq.empty()) {
-      // grab next item
-      epoch_t epoch = writeq.front().first;
+    // grab next item
+    epoch_t epoch = writeq.front().first;
+    bufferlist &ebl = writeq.front().second;
 
-      int len = writeq.front().second.length() + sizeof(entry_header_t);
-      int dolen = DIV_ROUND_UP(len,4096) * 4096;
-      bufferptr bp = buffer::create_page_aligned(dolen);
-      entry_header_t *h = (entry_header_t*)bp.c_str();
-      writeq.front().second.copy(0, writeq.front().second.length(), bp.c_str()+sizeof(entry_header_t));
+    // epoch boundary?
+    if (epoch > header.last_epoch()) {
+      dout(10) << "saw an epoch boundary " << header.last_epoch() << " -> " << epoch << dendl;
+      header.push(epoch, write_pos);
+    }
 
-      writeq.pop_front();
-      Context *oncommit = commitq.front();
-      commitq.pop_front();
-      
-      // wrap?
-      if (write_pos == header.wrap) {
-	dout(15) << "write_thread_entry wrapped write_pos at " << write_pos << " to " << sizeof(header_t) << dendl;
-	assert(header.wrap == write_pos);
-	write_header();
-	write_pos = 4096; //sizeof(header_t);
+    off_t size = 2*sizeof(entry_header_t) + ebl.length();
+    size = DIV_ROUND_UP(size, 4096) * 4096;
+
+    // does it fit?
+    if (header.wrap) {
+      // we're wrapped.  don't overwrite ourselves.
+      if (write_pos + size >= header.offset[0]) {
+	dout(10) << "JOURNAL FULL (and wrapped), " << write_pos << "+" << size
+		 << " >= " << header.offset[0]
+		 << dendl;
+	full = true;
+	writeq.clear();
+	print_header();
+	continue;
       }
-
-      // write!
-      dout(-15) << "write_thread_entry writing " << write_pos << " : " 
-		<< len << " (" << dolen << ")"
-		<< " epoch " << epoch
-	       << dendl;
-      
-      // write entry header
-      //entry_header_t h;
-      h->epoch = epoch;
-      h->len = len;//bl.length();
-      h->make_magic(write_pos, header.fsid);
-
-      ::lseek(fd, write_pos, SEEK_SET);
-      /*
-      ::write(fd, &h, sizeof(h));
-      for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-	   it != bl.buffers().end();
-	   it++) {
-	if ((*it).length() == 0) continue;  // blank buffer.
-	::write(fd, (char*)(*it).c_str(), (*it).length() );
-      }
-      ::write(fd, &h, sizeof(h));
-      ::fsync(fd);
-      */
-      int r = ::write(fd, bp.c_str(), dolen);
-      if (r != dolen) derr(0) << "write got " << r << " not " << dolen << dendl;
-      
-      // move position pointer
-      write_pos += dolen;
-      
-      if (oncommit) {
-	if (1) {
-	  // queue callback
-	  ebofs->queue_finisher(oncommit);
+    } else {
+      // we haven't wrapped.  
+      if (write_pos + size >= header.max_size) {
+	// is there room if we wrap?
+	if ((off_t)sizeof(header_t) + size < header.offset[0]) {
+	  // yes!
+	  dout(10) << "wrapped from " << write_pos << " to " << sizeof(header_t) << dendl;
+	  header.wrap = write_pos;
+	  write_pos = sizeof(header_t);
+	  header.push(ebofs->get_super_epoch(), write_pos);
+	  write_header();
 	} else {
-	  // callback now
-	  oncommit->finish(0);
-	  delete oncommit;
+	  // no room.
+	  dout(10) << "submit_entry JOURNAL FULL (and can't wrap), " << write_pos << "+" << size
+		   << " >= " << header.max_size
+		   << dendl;
+	  full = true;
+	  writeq.clear();
+	  continue;
 	}
       }
     }
+
+    // build it
+    bufferptr bp = buffer::create_page_aligned(size);
+    entry_header_t *h = (entry_header_t*)bp.c_str();
+    ebl.copy(0, ebl.length(), bp.c_str()+sizeof(entry_header_t));
+    
+    // add to write buffer
+    dout(15) << "write_thread_entry will write " << write_pos << " : " 
+	     << bp.length() 
+	     << " epoch " << epoch
+	     << dendl;
+      
+    // add it this entry
+    h->epoch = epoch;
+    h->len = ebl.length();
+    h->make_magic(write_pos, header.fsid);
+    memcpy(bp.c_str() + sizeof(*h) + ebl.length(), h, sizeof(*h));
+      
+    Context *oncommit = commitq.front();
+    if (oncommit)
+      writingq.push_back(oncommit);
+      
+    // pop from writeq
+    writeq.pop_front();
+    commitq.pop_front();
+    
+    writing = true;
+    write_lock.Unlock();
+    dout(15) << "write_thread_entry writing " << write_pos << "~" << bp.length() << dendl;
+    
+    ::lseek(fd, write_pos, SEEK_SET);
+    ::write(fd, bp.c_str(), size);
+    
+    write_lock.Lock();    
+    writing = false;
+    write_pos += bp.length();
+    ebofs->queue_finishers(writingq);
   }
-  
   write_lock.Unlock();
   dout(10) << "write_thread_entry finish" << dendl;
 }
 
-bool DIOJournal::submit_entry(bufferlist& e, Context *oncommit)
+bool DioJournal::is_full()
 {
-  assert(queue_pos != 0);  // bad create(), or journal didn't replay to completion.
-
-  // ** lock **
   Mutex::Locker locker(write_lock);
+  return full;
+}
 
-  // wrap? full?
-  off_t size = 2*sizeof(entry_header_t) + e.length();
+void DioJournal::submit_entry(bufferlist& e, Context *oncommit)
+{
+  Mutex::Locker locker(write_lock);  // ** lock **
 
-  if (full) return false;  // already marked full.
-
-  if (header.wrap) {
-    // we're wrapped.  don't overwrite ourselves.
-    if (queue_pos + size >= header.offset[0]) {
-      derr(0) << "submit_entry JOURNAL FULL (and wrapped), " << queue_pos << "+" << size
-	       << " >= " << header.offset[0]
-	       << dendl;
-      full = true;
-      print_header();
-      return false;
-    }
-  } else {
-    // we haven't wrapped.  
-    if (queue_pos + size >= header.max_size) {
-      // is there room if we wrap?
-      if ((off_t)sizeof(header_t) + size < header.offset[0]) {
-	// yes!
-	dout(10) << "submit_entry wrapped from " << queue_pos << " to " << sizeof(header_t) << dendl;
-	header.wrap = queue_pos;
-	queue_pos = sizeof(header_t);
-	header.push(ebofs->get_super_epoch(), queue_pos);
-      } else {
-	// no room.
-	derr(0) << "submit_entry JOURNAL FULL (and can't wrap), " << queue_pos << "+" << size
-		 << " >= " << header.max_size
-		 << dendl;
-	full = true;
-	return false;
-      }
-    }
-  }
-  
-  dout(10) << "submit_entry " << queue_pos << " : " << e.length()
+  // dump on queue
+  dout(10) << "submit_entry " << e.length()
 	   << " epoch " << ebofs->get_super_epoch()
 	   << " " << oncommit << dendl;
-  
-  // dump on queue
-  writeq.push_back(pair<epoch_t,bufferlist>(ebofs->get_super_epoch(), e));
   commitq.push_back(oncommit);
-  
-  queue_pos += size;
-  
-  // kick writer thread
-  write_cond.Signal();
-
-  return true;
+  if (!full) {
+    writeq.push_back(pair<epoch_t,bufferlist>(ebofs->get_super_epoch(), e));
+    write_cond.Signal(); // kick writer thread
+  }
 }
 
 
-void DIOJournal::commit_epoch_start()
+void DioJournal::commit_epoch_start()
 {
   dout(10) << "commit_epoch_start on " << ebofs->get_super_epoch()-1 
 	   << " -- new epoch " << ebofs->get_super_epoch()
@@ -346,71 +325,61 @@ void DIOJournal::commit_epoch_start()
       return;
     }
     
-    derr(0) << " clearing FULL flag, journal now usable" << dendl;
+    dout(1) << " clearing FULL flag, journal now usable" << dendl;
     full = false;
   } 
-
-  // note epoch boundary
-  header.push(ebofs->get_super_epoch(), queue_pos);  // note: these entries may not yet be written.
-  //write_header();  // no need to write it now, though...
 }
 
-void DIOJournal::commit_epoch_finish()
+void DioJournal::commit_epoch_finish()
 {
   dout(10) << "commit_epoch_finish committed " << ebofs->get_super_epoch()-1 << dendl;
 
-  write_lock.Lock();
-  {
-    if (full) {
-      // full journal damage control.
-      dout(15) << " journal was FULL, contents now committed, clearing header.  journal still not usable until next epoch." << dendl;
-      header.clear();
-      write_pos = queue_pos = sizeof(header_t);
-    } else {
-      // update header -- trim/discard old (committed) epochs
-      while (header.epoch[0] < ebofs->get_super_epoch())
-	header.pop();
-    }
-    write_header();
+   Mutex::Locker locker(write_lock);
 
-    // discard any unwritten items in previous epoch, and do callbacks
-    epoch_t epoch = ebofs->get_super_epoch();
-    list<Context*> callbacks;
-    while (!writeq.empty() && writeq.front().first < epoch) {
-      dout(15) << " dropping unwritten and committed " 
-	       << write_pos << " : " << writeq.front().second.length()
-	       << " epoch " << writeq.front().first 
-	       << dendl;
-      // finisher?
-      Context *oncommit = commitq.front();
-      if (oncommit) callbacks.push_back(oncommit);
-
-      write_pos += 2*sizeof(entry_header_t) + writeq.front().second.length();
-
-      // discard.
-      writeq.pop_front();  
-      commitq.pop_front();
-    }
-    
-    // queue the finishers
-    ebofs->queue_finishers(callbacks);
-  }
-  write_lock.Unlock();
-  
+   if (full) {
+     // full journal damage control.
+     dout(15) << " journal was FULL, contents now committed, clearing header.  journal still not usable until next epoch." << dendl;
+     header.clear();
+     write_pos = sizeof(header_t);
+   } else {
+     // update header -- trim/discard old (committed) epochs
+     while (header.num && header.epoch[0] < ebofs->get_super_epoch())
+       header.pop();
+   }
+   write_header();
+   
+   // discard any unwritten items in previous epoch
+   epoch_t epoch = ebofs->get_super_epoch();
+   while (!writeq.empty() && writeq.front().first < epoch) {
+     dout(15) << " dropping unwritten and committed " 
+	      << write_pos << " : " << writeq.front().second.length()
+	      << " epoch " << writeq.front().first 
+	      << dendl;
+     // finisher?
+     Context *oncommit = commitq.front();
+     if (oncommit) writingq.push_back(oncommit);
+     
+     // discard.
+     writeq.pop_front();  
+     commitq.pop_front();
+   }
+   
+   // queue the finishers
+   ebofs->queue_finishers(writingq);
 }
 
 
-void DIOJournal::make_writeable()
+void DioJournal::make_writeable()
 {
   if (read_pos)
-    write_pos = queue_pos = read_pos;
+    write_pos = read_pos;
   else
-    write_pos = queue_pos = sizeof(header_t);
+    write_pos = sizeof(header_t);
   read_pos = 0;
 }
 
 
-bool DIOJournal::read_entry(bufferlist& bl, epoch_t& epoch)
+bool DioJournal::read_entry(bufferlist& bl, epoch_t& epoch)
 {
   if (!read_pos) {
     dout(2) << "read_entry -- not readable" << dendl;
