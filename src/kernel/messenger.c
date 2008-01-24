@@ -284,13 +284,20 @@ static void ceph_send_fault(struct ceph_connection *con)
 	set_bit(NEW, &con->state);
 	clear_bit(CLOSED, &con->state);
 	sock_release(con->sock);
-	/* retry with delay */
-	ceph_queue_delayed_write(con);
 
-	if (con->delay < MAX_DELAY_INTERVAL)
-		con->delay *= 2;
-	else
-		con->delay = MAX_DELAY_INTERVAL;
+	/* If there are no messages in the queue, place the connection 
+	 * in a STANDBY state otherwise retry with delay */
+	if (list_empty(&con->out_queue)) {
+		set_bit(STANDBY, &con->state);
+	} else {
+		/* retry with delay */
+		ceph_queue_delayed_write(con);
+
+		if (con->delay < MAX_DELAY_INTERVAL)
+			con->delay *= 2;
+		else
+			con->delay = MAX_DELAY_INTERVAL;
+	}
 }
 
 
@@ -552,7 +559,6 @@ more:
 		/* hmm, nothing to do! No more writes pending? */
 		dout(30, "try_write nothing else to write.\n");
 		spin_unlock(&con->out_queue_lock);
-		/* TBD PW remove from wait queue if still there.. and put_connection */
 		if (con->delay > 1) con->delay = BASE_DELAY_INTERVAL;
 		goto done;
 	}
