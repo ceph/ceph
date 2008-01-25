@@ -1177,6 +1177,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 out2:
 	ceph_msg_put(m);
 out:
+	derr(0, "msg_new can't create msg type %d len %d\n", type, front_len);
 	return ERR_PTR(-ENOMEM);
 }
 

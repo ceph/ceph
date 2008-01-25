@@ -311,8 +311,8 @@ enum {
 };
 
 struct ceph_mds_session_head {
-	__u32 op;
-	__u64 seq;
+	__le32 op;
+	__le64 seq;
 	struct ceph_timeval stamp;
 } __attribute__ ((packed));
 
