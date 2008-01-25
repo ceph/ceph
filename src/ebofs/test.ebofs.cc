@@ -44,7 +44,7 @@ public:
       coll_t cid = rand() % 50;
       off_t off = rand() % 10000;//0;//rand() % 1000000;
       off_t len = 1+rand() % 100000;
-      char *a = "one";
+      const char *a = "one";
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;
 
@@ -150,15 +150,15 @@ public:
   }
 };
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
   // args
   if (args.size() != 3) return -1;
-  char *filename = args[0];
+  const char *filename = args[0];
   int seconds = atoi(args[1]);
   int threads = atoi(args[2]);
   if (!threads) threads = 1;

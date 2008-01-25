@@ -73,6 +73,10 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &m->m_root)) != 0)
 		goto bad;
+	if ((err = ceph_decode_32(p, end, &m->m_cap_bit_timeout)) != 0)
+		goto bad;
+	if ((err = ceph_decode_32(p, end, &m->m_session_autoclose)) != 0)
+		goto bad;
 	if ((err = ceph_decode_32(p, end, &m->m_max_mds)) != 0)
 		goto bad;
 

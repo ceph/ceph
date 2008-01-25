@@ -19,7 +19,7 @@ static int ceph_readpage(struct file *filp, struct page *page)
 
 	dout(10, "ceph_readpage inode %p file %p page %p index %lu\n", 
 	     inode, filp, page, page->index);
-	err = ceph_osdc_readpage(osdc, inode->i_ino, &ci->i_layout,
+	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (err) goto out_unlock;
 
@@ -41,7 +41,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	dout(10, "ceph_readpages inode %p file %p nr_pages %d\n", 
 	     inode, file, nr_pages);
 	
-	err = ceph_osdc_readpages(osdc, inode->i_ino, &ci->i_layout,
+	err = ceph_osdc_readpages(osdc, ceph_ino(inode), &ci->i_layout,
 				  pages, nr_pages);
 	if (err < 0) goto out_unlock;
 

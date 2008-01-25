@@ -113,6 +113,8 @@ enum {
 	FILE_MODE_WRONLY
 };
 struct ceph_inode_info {
+	u64 i_ceph_ino;
+
 	struct ceph_file_layout i_layout;
 
 	char *i_symlink;
@@ -137,6 +139,34 @@ struct ceph_inode_info {
 	struct inode vfs_inode; /* at end */
 };
 
+static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
+{
+	return list_entry(inode, struct ceph_inode_info, vfs_inode);
+}
+
+/*
+ * ino_t is <64 bits on many architectures... blech
+ */
+static inline ino_t ceph_ino_to_ino(u64 cephino)
+{
+	ino_t ino = (ino_t)cephino;
+	if (sizeof(ino_t) < sizeof(u64)) 
+		ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+	return ino;
+}
+static inline void ceph_set_ino(struct inode *inode, __u64 ino) {
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	ci->i_ceph_ino = ino;
+	inode->i_ino = ceph_ino_to_ino(ino);
+}
+static inline u64 ceph_ino(struct inode *inode) {
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	return ci->i_ceph_ino;
+}
+
+/*
+ * caps helpers
+ */
 static inline int ceph_caps_issued(struct ceph_inode_info *ci) {
 	int i, issued = 0;
 	for (i=0; i<ci->i_nr_caps; i++)
@@ -168,11 +198,6 @@ static inline int ceph_file_mode(int flags)
 	if ((flags & O_RDONLY) == O_RDONLY)
 		return FILE_MODE_RDONLY;
 	BUG_ON(1);	
-}
-
-static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
-{
-	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -223,7 +248,7 @@ extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 
 
 /* inode.c */
-extern int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode);
+extern int ceph_get_inode(struct super_block *sb, ino_t ino, struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq);

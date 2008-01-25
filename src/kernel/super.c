@@ -26,7 +26,7 @@ static int ceph_write_inode(struct inode * inode, int unused)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %lx .. atime updated\n", inode->i_ino);
+		dout(30, "ceph_write_inode %llx .. atime updated\n", ceph_ino(inode));
 		/* eventually push this async to mds ... */
 	}
 	return 0;
@@ -114,7 +114,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_caps = ci->i_caps_static;
 	atomic_set(&ci->i_cap_count, 0);
 
-	dout(30, "ceph_alloc_inode sb=%p inode=%lu\n", sb, (&ci->vfs_inode)->i_ino);
+	dout(30, "ceph_alloc_inode sb=%p\n", sb);
 	for (i=0; i<4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
@@ -132,9 +132,9 @@ static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
-	dout(30, "ceph_destroy_inode sb=%p inode=%lu\n", inode->i_sb, inode->i_ino);
-	
-	dout(10, "destroy_inode %p vfsi %p\n", ci, inode);
+	dout(30, "ceph_destroy_inode %p ino %lu=%llx\n", inode, 
+	     inode->i_ino, ceph_ino(inode));
+
 	if (ci->i_caps != ci->i_caps_static) 
 		kfree(ci->i_caps);
 	if (ci->i_symlink)
@@ -442,7 +442,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	mnt->mnt_sb = sb;
 	mnt->mnt_root = droot;
 
-	dout(22, "droot inode = %ld\n", droot->d_inode->i_ino);
+	dout(22, "droot ino %llx\n", ceph_ino(droot->d_inode));
 
 	return 0;
 	

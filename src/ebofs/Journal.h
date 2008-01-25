@@ -35,10 +35,11 @@ public:
 
   // writes
   virtual void make_writeable() = 0;
-  virtual bool submit_entry(bufferlist& e, Context *oncommit) = 0;// submit an item
+  virtual void submit_entry(bufferlist& e, Context *oncommit) = 0;
   virtual void commit_epoch_start() = 0;  // mark epoch boundary
-  virtual void commit_epoch_finish() = 0; // mark prior epoch as committed (we can expire)
+  virtual void commit_epoch_finish(epoch_t) = 0; // mark prior epoch as committed (we can expire)
   virtual bool read_entry(bufferlist& bl, epoch_t &e) = 0;
+  virtual bool is_full() = 0;
 
   // reads/recovery
   

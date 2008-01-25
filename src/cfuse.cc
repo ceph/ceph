@@ -64,16 +64,20 @@ int main(int argc, const char **argv, const char *envp[]) {
     
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting" << std::endl;
+  cout << "mounting ceph" << std::endl;
   client->mount();
-  
+
+  create_courtesy_output_symlink("client", client->get_nodeid());
+  cout << "starting fuse" << std::endl;
+
   //cerr << "starting fuse on pid " << getpid() << std::endl;
   if (g_conf.fuse_ll)
     ceph_fuse_ll_main(client, argc, argv);
   else
     ceph_fuse_main(client, argc, argv);
   //cerr << "fuse finished on pid " << getpid() << std::endl;
-  
+
+  cout << "fuse finished, unmounting ceph" << std::endl;
   client->unmount();
   cout << "unmounted" << std::endl;
   client->shutdown();

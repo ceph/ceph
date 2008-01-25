@@ -86,9 +86,6 @@ int main(int argc, const char **argv)
     sprintf(dev_default, "dev/osd%d", whoami);
     dev = dev_default;
   }
-  cout << "dev " << dev << std::endl;
-  
-
   if (whoami < 0) {
     // who am i?   peek at superblock!
     OSDSuperblock sb;
@@ -104,11 +101,10 @@ int main(int argc, const char **argv)
     store->umount();
     delete store;
     whoami = sb.whoami;
-    
-    cout << "osd fs says i am osd" << whoami << std::endl;
-  } else {
-    cout << "command line arg says i am osd" << whoami << std::endl;
   }
+  cout << "starting osd" << whoami << " dev " << dev << std::endl;
+
+  create_courtesy_output_symlink("osd", whoami);
 
   // load monmap
   MonMap monmap;

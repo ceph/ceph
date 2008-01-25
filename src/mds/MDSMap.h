@@ -26,6 +26,7 @@
 #include <string>
 using namespace std;
 
+#include "config.h"
 
 /*
 
@@ -106,6 +107,9 @@ class MDSMap {
   int32_t anchortable;   // which MDS has anchortable (fixme someday)
   int32_t root;          // which MDS has root directory
 
+  __u32 cap_bit_timeout;
+  __u32 session_autoclose;
+
   map<int32_t,int32_t>       mds_state;     // MDS state
   map<int32_t,version_t>     mds_state_seq;
   map<int32_t,entity_inst_t> mds_inst;      // up instances
@@ -118,7 +122,11 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), client_epoch(0), anchortable(0), root(0) {}
+  MDSMap() : epoch(0), client_epoch(0), anchortable(0), root(0) {
+    // hack.. this doesn't really belong here
+    cap_bit_timeout = (int)g_conf.mds_cap_timeout;
+    session_autoclose = (int)g_conf.mds_session_autoclose;
+  }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -325,6 +333,8 @@ class MDSMap {
     ::_encode(created, bl);
     ::_encode(anchortable, bl);
     ::_encode(root, bl);
+    ::_encode(cap_bit_timeout, bl);
+    ::_encode(session_autoclose, bl);
     ::_encode(max_mds, bl);
     ::_encode(mds_state, bl);
     ::_encode(mds_state_seq, bl);
@@ -342,6 +352,8 @@ class MDSMap {
     ::_decode(created, bl, off);
     ::_decode(anchortable, bl, off);
     ::_decode(root, bl, off);
+    ::_decode(cap_bit_timeout, bl, off);
+    ::_decode(session_autoclose, bl, off);
     ::_decode(max_mds, bl, off);
     ::_decode(mds_state, bl, off);
     ::_decode(mds_state_seq, bl, off);

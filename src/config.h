@@ -287,7 +287,10 @@ struct md_config_t {
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
-
+  bool ebofs_journal_dio;
+  bool ebofs_journal_max_write_bytes;
+  bool ebofs_journal_max_write_entries;
+  
   // block device
   bool  bdev_lock;
   int   bdev_iothreads;
@@ -328,6 +331,8 @@ void vec_to_argv(std::vector<const char*>& args,
 void parse_config_options(std::vector<const char*>& args);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
+
+int create_courtesy_output_symlink(const char *type, int n);
 
 
 /**

@@ -45,7 +45,7 @@
 */
 
 #undef debofs
-#define debofs(x) if (x < g_conf.debug_ebofs) cout << "ebofs.nodepool."
+#define debofs(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << "ebofs.nodepool."
 
 
 class Node {
@@ -237,7 +237,7 @@ class NodePool {
     assert(region_loc.empty());
     num_nodes = 0;
     for (unsigned i=0; i<np->num_regions; i++) {
-      debofs(3) << "init region " << i << " at " << np->region_loc[i] << std::endl;
+      debofs(3) << "init region " << i << " at " << np->region_loc[i] << dendl;
       region_loc.push_back( np->region_loc[i] );
       num_nodes += np->region_loc[i].length;
     }
@@ -245,8 +245,8 @@ class NodePool {
     // usemap
     usemap_even = np->node_usemap_even;
     usemap_odd = np->node_usemap_odd;
-    debofs(3) << "init even map at " << usemap_even << std::endl;
-    debofs(3) << "init  odd map at " << usemap_odd << std::endl;
+    debofs(3) << "init even map at " << usemap_even << dendl;
+    debofs(3) << "init  odd map at " << usemap_odd << dendl;
 
     init_usemap();
     return 0;
@@ -302,15 +302,15 @@ class NodePool {
         
         Node *n = new Node(nid, i, bp, Node::STATE_CLEAN);
         node_map[nid] = n;
-        debofs(10) << "ebofs.nodepool.read node " << nid << " at " << (void*)n << std::endl;
+        debofs(10) << "ebofs.nodepool.read node " << nid << " at " << (void*)n << dendl;
 
       } else {
-        //debofs(-10) << "ebofs.nodepool.read  node " << nid << " is free" << std::endl;
+        //debofs(-10) << "ebofs.nodepool.read  node " << nid << " is free" << dendl;
 	free.insert(nid);
 	num_free++;
       }
     }
-    debofs(10) << "ebofs.nodepool.read free is " << free.m << std::endl;
+    debofs(10) << "ebofs.nodepool.read free is " << free.m << dendl;
     assert(num_dirty == 0);
     assert(num_limbo == 0);
     assert(num_clean + num_free == num_nodes);
@@ -384,7 +384,7 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-    debofs(20) << "ebofs.nodepool.commit_start start dirty=" << dirty_ls.size() << std::endl;
+    debofs(20) << "ebofs.nodepool.commit_start start dirty=" << dirty_ls.size() << dendl;
 
     assert(flushing == 0);
     /*if (0)
@@ -409,14 +409,14 @@ class NodePool {
       num_dirty--;
       num_clean++;
 
-      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << std::endl;
+      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << dendl;
       
       bufferlist bl;
-      if (0) {
+      if (1) {
 	bufferptr bp = n->get_buffer().clone();  // dup it now
 	bl.append(bp);
       } else {
-	bl.append(n->get_buffer());
+	bl.append(n->get_buffer());  // this isn't working right .. fixme
       }
       dev.write(n->get_id(), EBOFS_NODE_BLOCKS, 
                 bl,
@@ -424,13 +424,13 @@ class NodePool {
       flushing++;
     }
 
-    debofs(20) << "ebofs.nodepool.commit_start finish" << std::endl;
+    debofs(20) << "ebofs.nodepool.commit_start finish" << dendl;
   }
 
   void commit_wait() {
     while (flushing > 0) 
       commit_cond.Wait(ebofs_lock);
-    debofs(20) << "ebofs.nodepool.commit_wait finish" << std::endl;
+    debofs(20) << "ebofs.nodepool.commit_wait finish" << dendl;
   }
 
   void commit_finish() {
@@ -456,7 +456,7 @@ class NodePool {
   // *** nodes ***
   // opened node
   Node* get_node(nodeid_t nid) {
-    //dbtout << "pool.get " << nid << std::endl;
+    //dbtout << "pool.get " << nid << dendl;
     assert(node_map.count(nid));
     return node_map[nid];
   }
@@ -474,7 +474,7 @@ class NodePool {
   // new node
   Node* new_node(int type) {
     nodeid_t nid = alloc_id();
-    debofs(15) << "ebofs.nodepool.new_node " << nid << std::endl;
+    debofs(15) << "ebofs.nodepool.new_node " << nid << dendl;
     
     // alloc node
     bufferptr bp = buffer::create_page_aligned(EBOFS_NODE_BYTES);
@@ -497,7 +497,7 @@ class NodePool {
 
   void release(Node *n) {
     const nodeid_t nid = n->get_id();
-    debofs(15) << "ebofs.nodepool.release on " << nid << std::endl;
+    debofs(15) << "ebofs.nodepool.release on " << nid << dendl;
     node_map.erase(nid);
 
     if (n->is_dirty()) {
@@ -520,7 +520,7 @@ class NodePool {
   void release_all() {
     while (!node_map.empty()) {
       hash_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
-      debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << std::endl;
+      debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << dendl;
       release( i->second );
     }
     assert(node_map.empty());
@@ -530,15 +530,15 @@ class NodePool {
     // get new node id?
     nodeid_t oldid = n->get_id();
     nodeid_t newid = alloc_id();
-    debofs(15) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << std::endl;
+    debofs(15) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << dendl;
 
     // dup data?
     //  this only does a memcpy if there are multiple references.. 
     //  i.e. if we are still writing the old data
     if (n->do_cow()) {
       //assert(0); //i'm duping on write
-      debofs(15) << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << std::endl;
-      //cerr << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << std::endl;
+      debofs(15) << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << dendl;
+      //cerr << "ebofs.nodepool.dirty_node did cow on " << oldid << " now " << newid << dendl;
     }
 
     // release old block
@@ -557,7 +557,7 @@ class NodePool {
     // new block
     n->set_state(Node::STATE_DIRTY);
     dirty_ls.push_back(&n->xlist);
-    debofs(15) << "ebofs.nodepool.dirty_node added to dirty list, len now " << dirty_ls.size() << std::endl;
+    debofs(15) << "ebofs.nodepool.dirty_node added to dirty list, len now " << dirty_ls.size() << dendl;
     num_dirty++;
     usemap_bits.set(n->get_pos_in_bitmap());
 

@@ -34,14 +34,16 @@ public:
    * (i.e. when ebofs committed, but the journal didn't rollover ... very small window!)
    */
   struct header_t {
-    uint64_t fsid;
-    int num;
-    off_t wrap;
-    off_t max_size;
-    epoch_t epoch[4];
-    off_t offset[4];
+    __u64 fsid;
+    __s64 num;
+    __u32 block_size;
+    __u32 alignment;
+    __s64 max_size;
+    __s64 wrap;
+    __u32 epoch[4];
+    __s64 offset[4];
 
-    header_t() : fsid(0), num(0), wrap(0), max_size(0) {}
+    header_t() : fsid(0), num(0), block_size(0), alignment(0), max_size(0), wrap(0) {}
 
     void clear() {
       num = 0;
@@ -56,7 +58,7 @@ public:
 	offset[i] = offset[i+1];
       }
     }
-    void push(epoch_t e, off_t o) {
+    void push(epoch_t e, off64_t o) {
       assert(num < 4);
       if (num > 2 && 
 	  epoch[num-1] == e &&
@@ -66,6 +68,12 @@ public:
       offset[num] = o;
       num++;
     }
+    epoch_t last_epoch() {
+      if (num)
+	return epoch[num-1];
+      else
+	return 0;
+    }
   } header;
 
   struct entry_header_t {
@@ -74,11 +82,11 @@ public:
     uint64_t magic1;
     uint64_t magic2;
     
-    void make_magic(off_t pos, uint64_t fsid) {
+    void make_magic(off64_t pos, uint64_t fsid) {
       magic1 = pos;
       magic2 = fsid ^ epoch ^ len;
     }
-    bool check_magic(off_t pos, uint64_t fsid) {
+    bool check_magic(off64_t pos, uint64_t fsid) {
       return
 	magic1 == (uint64_t)pos &&
 	magic2 == (fsid ^ epoch ^ len);
@@ -88,28 +96,39 @@ public:
 private:
   string fn;
 
-  bool full;
-  off_t write_pos;      // byte where next entry written goes
-  off_t queue_pos;      // byte where next entry queued for write goes
-
-  off_t read_pos;       // 
+  off64_t max_size;
+  size_t block_size;
+  bool directio;
+  bool full, writing, must_write_header;
+  off64_t write_pos;      // byte where next entry written goes
+  off64_t read_pos;       // 
 
   int fd;
 
-  list<pair<epoch_t,bufferlist> > writeq;  // currently journaling
-  list<Context*> commitq; // currently journaling
+  // to be journaled
+  list<pair<epoch_t,bufferlist> > writeq;
+  list<Context*> commitq;
+
+  // being journaled
+  list<Context*> writingq;
   
   // write thread
   Mutex write_lock;
   Cond write_cond;
   bool write_stop;
 
+  int _open(bool wr);
   void print_header();
   void read_header();
-  void write_header();
+  bufferptr prepare_header();
   void start_writer();
   void stop_writer();
   void write_thread_entry();
+
+  void check_for_wrap(epoch_t epoch, off64_t pos, off64_t size);
+  bool prepare_single_dio_write(bufferlist& bl);
+  void prepare_multi_write(bufferlist& bl);
+  void do_write(bufferlist& bl);
 
   class Writer : public Thread {
     FileJournal *journal;
@@ -121,12 +140,21 @@ private:
     }
   } write_thread;
 
+  off64_t get_top() {
+    if (directio)
+      return block_size;
+    else
+      return sizeof(header);
+  }
+
  public:
-  FileJournal(Ebofs *e, char *f) : 
+  FileJournal(Ebofs *e, const char *f, bool dio=false) : 
     Journal(e), fn(f),
-    full(false),
-    write_pos(0), queue_pos(0), read_pos(0),
-    fd(0),
+    max_size(0), block_size(0),
+    directio(dio),
+    full(false), writing(false), must_write_header(false),
+    write_pos(0), read_pos(0),
+    fd(-1),
     write_stop(false), write_thread(this) { }
   ~FileJournal() {}
 
@@ -137,11 +165,13 @@ private:
   void make_writeable();
 
   // writes
-  bool submit_entry(bufferlist& e, Context *oncommit);  // submit an item
+  void submit_entry(bufferlist& e, Context *oncommit);  // submit an item
   void commit_epoch_start();   // mark epoch boundary
-  void commit_epoch_finish();  // mark prior epoch as committed (we can expire)
+  void commit_epoch_finish(epoch_t);  // mark prior epoch as committed (we can expire)
 
   bool read_entry(bufferlist& bl, epoch_t& e);
+
+  bool is_full();
 
   // reads
 };

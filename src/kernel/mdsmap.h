@@ -13,6 +13,8 @@ struct ceph_mdsmap {
 	struct ceph_timeval m_created;
 	__u32 m_anchortable;
 	__u32 m_root;
+	__u32 m_cap_bit_timeout;
+	__u32 m_session_autoclose;
 	__u32 m_max_mds;  /* size of m_addr, m_state arrays */
 	struct ceph_entity_addr *m_addr;  /* array of addresses */
 	__s32 *m_state;                   /* array of states */

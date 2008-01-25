@@ -122,7 +122,7 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: 0,
+  dout_dir: 0, //"out",
 
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -349,6 +349,9 @@ md_config_t g_conf = {
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   ebofs_verify_csum_on_read: true,
+  ebofs_journal_dio: false,
+  ebofs_journal_max_write_bytes: 0,
+  ebofs_journal_max_write_entries: 10,
 
   // --- block device ---
   bdev_lock: true,
@@ -804,7 +807,12 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
       g_conf.ebofs_realloc = atoi(args[++i]);
-
+    else if (strcmp(args[i], "--ebofs_journal_dio") == 0)
+      g_conf.ebofs_journal_dio = atoi(args[++i]);      
+    else if (strcmp(args[i], "--ebofs_journal_max_write_entries") == 0)
+      g_conf.ebofs_journal_max_write_entries = atoi(args[++i]);      
+    else if (strcmp(args[i], "--ebofs_journal_max_write_bytes") == 0)
+      g_conf.ebofs_journal_max_write_bytes = atoi(args[++i]);      
 
     else if (strcmp(args[i], "--fakestore") == 0) {
       g_conf.ebofs = 0;
@@ -987,6 +995,14 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   // redirect dout?
+  /*
+  if (g_conf.dout_dir) {
+    struct stat st;
+    int r = ::stat(g_conf.dout_dir, &st);
+    if (r != 0)
+      g_conf.dout_dir = 0;
+  }
+  */
   if (g_conf.dout_dir) {
     char fn[80];
     char hostname[80];
@@ -1002,4 +1018,18 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   args = nargs;
+}
+
+int create_courtesy_output_symlink(const char *type, int n)
+{
+  if (g_conf.dout_dir) {
+    char from[200], to[200];
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(from, "%s/%s%d", g_conf.dout_dir, type, n);
+    sprintf(to, "%s.%d", hostname, getpid());
+    ::unlink(from);
+    ::symlink(to, from);
+  }
+  return 0;
 }

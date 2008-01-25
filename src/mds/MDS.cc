@@ -493,8 +493,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   //  note that fakesyn/newsyn starts knowing who they are
   if (whoami >= 0 &&
       mdsmap->is_up(whoami) &&
-      (oldwhoami != whoami || !logger))
+      (oldwhoami != whoami || !logger)) {
+    create_courtesy_output_symlink("mds", whoami);
     reopen_logger(mdsmap->get_create());   // adopt mds cluster timeline
+  }
   
   if (oldwhoami != whoami) {
     // update messenger.

@@ -14,7 +14,7 @@ int ceph_inode_debug = 50;
 
 const struct inode_operations ceph_symlink_iops;
 
-int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pinode)
+int ceph_get_inode(struct super_block *sb, ino_t ino, struct inode **pinode)
 {
 	struct ceph_inode_info *ci;
 
@@ -27,6 +27,7 @@ int ceph_get_inode(struct super_block *sb, unsigned long ino, struct inode **pin
 		unlock_new_inode(*pinode);
 
 	ci = ceph_inode(*pinode);
+	ceph_set_ino(*pinode, ino);
 
 	ci->i_hashval = ino;
 
@@ -43,7 +44,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	int i;
 	int symlen;
 
-	inode->i_ino = le64_to_cpu(info->ino);
+	ceph_set_ino(inode, le64_to_cpu(info->ino));
 	inode->i_mode = le32_to_cpu(info->mode);
 	inode->i_uid = le32_to_cpu(info->uid);
 	inode->i_gid = le32_to_cpu(info->gid);
@@ -59,9 +60,9 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		ci->i_hashval = inode->i_ino;
 	}
 
-	dout(30, "fill_inode %p ino=%lx by %d.%d sz=%llu mode %o nlink %d\n", inode,
-	     inode->i_ino, inode->i_uid, inode->i_gid, inode->i_size, inode->i_mode, 
-	     inode->i_nlink);
+	dout(30, "fill_inode %p ino %lu/%llx by %d.%d sz=%llu mode %o nlink %d\n", 
+	     inode, inode->i_ino, ceph_ino(inode), inode->i_uid, inode->i_gid, 
+	     inode->i_size, inode->i_mode, inode->i_nlink);
 	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
@@ -153,7 +154,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 	in = dn->d_inode;
 
 	for (i=0; i<prinfo->trace_nr; i++)
-		if (in->i_ino == prinfo->trace_in[i].in->ino)
+		if (ceph_ino(in) == prinfo->trace_in[i].in->ino)
 			break;
 
 	if (i == prinfo->trace_nr) {
@@ -192,7 +193,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 		}
 
 		if ((!dn->d_inode) ||
-			 (dn->d_inode->i_ino != prinfo->trace_in[i].in->ino)) {
+		    (ceph_ino(dn->d_inode) != prinfo->trace_in[i].in->ino)) {
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
@@ -208,8 +209,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 				break;
 			}
 			d_add(dn, in);
-			dout(10, "ceph_fill_trace added dentry %p inode %lu %d/%d\n",
-			     dn, in->i_ino, i, prinfo->trace_nr);
+			dout(10, "ceph_fill_trace added dentry %p inode %llx %d/%d\n",
+			     dn, ceph_ino(in), i, prinfo->trace_nr);
 		} else {
 			in = dn->d_inode;
 			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
@@ -309,8 +310,8 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session
 		}
 	}
 
-	dout(10, "add_cap inode %p (%lu) got cap %d %xh now %xh seq %d from %d\n",
-	     inode, inode->i_ino, i, cap, cap|ci->i_caps[i].caps, seq, mds);
+	dout(10, "add_cap inode %p (%llx) got cap %d %xh now %xh seq %d from %d\n",
+	     inode, ceph_ino(inode), i, cap, cap|ci->i_caps[i].caps, seq, mds);
 	ci->i_caps[i].caps |= cap;
 	ci->i_caps[i].seq = seq;
 	return &ci->i_caps[i];
@@ -472,7 +473,7 @@ struct ceph_msg * prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *d
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, op, dentry->d_inode->i_sb->s_root->d_inode->i_ino, path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, op, ceph_ino(dentry->d_inode->i_sb->s_root->d_inode), path, 0, 0);
 	kfree(path);
 	return req;
 }
@@ -572,7 +573,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	if (ia_valid & ATTR_SIZE) {
 		if (ia_valid & ATTR_FILE) 
 			req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_TRUNCATE, 
-						       dentry->d_inode->i_ino, "", 0, 0);
+						       ceph_ino(dentry->d_inode), "", 0, 0);
 		else
 			req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_TRUNCATE);
 		if (IS_ERR(req)) 
