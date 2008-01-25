@@ -91,6 +91,8 @@ public:
 private:
   string fn;
 
+  size_t block_size;
+  bool directio;
   bool full, writing;
   off_t write_pos;      // byte where next entry written goes
   off_t read_pos;       // 
@@ -115,20 +117,32 @@ private:
   void start_writer();
   void stop_writer();
   void write_thread_entry();
+  void write_thread_entry_dio();
 
   class Writer : public Thread {
     FileJournal *journal;
   public:
     Writer(FileJournal *fj) : journal(fj) {}
     void *entry() {
-      journal->write_thread_entry();
+      if (journal->directio)
+	journal->write_thread_entry_dio();
+      else
+	journal->write_thread_entry();
       return 0;
     }
   } write_thread;
 
+  off_t get_top() {
+    if (directio)
+      return block_size;
+    else
+      return sizeof(header);
+  }
+
  public:
-  FileJournal(Ebofs *e, const char *f) : 
+  FileJournal(Ebofs *e, const char *f, bool dio=false) : 
     Journal(e), fn(f),
+    directio(dio),
     full(false), writing(false),
     write_pos(0), read_pos(0),
     fd(0),

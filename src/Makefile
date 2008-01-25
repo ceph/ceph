@@ -53,8 +53,7 @@ EBOFS_OBJS= \
 	ebofs/BufferCache.o\
 	ebofs/Ebofs.o\
 	ebofs/Allocator.o\
-	ebofs/FileJournal.o\
-	ebofs/DIOJournal.o
+	ebofs/FileJournal.o
 
 MDS_OBJS= \
 	mds/MDS.o\

@@ -45,7 +45,8 @@ int FileJournal::create()
   // get size
   struct stat st;
   ::fstat(fd, &st);
-  dout(2) << "create " << fn << " " << st.st_size << " bytes" << dendl;
+  block_size = st.st_blksize;
+  dout(2) << "create " << fn << " " << st.st_size << " bytes, block size " << block_size << dendl;
 
   // write empty header
   memset(&header, 0, sizeof(header));
@@ -56,7 +57,7 @@ int FileJournal::create()
   
   // writeable.
   read_pos = 0;
-  write_pos = sizeof(header);
+  write_pos = get_top();
 
   ::close(fd);
 
@@ -78,7 +79,7 @@ int FileJournal::open()
 
   // assume writeable, unless...
   read_pos = 0;
-  write_pos = sizeof(header);
+  write_pos = get_top();
 
   // read header?
   read_header();
@@ -161,21 +162,36 @@ void FileJournal::print_header()
 }
 void FileJournal::read_header()
 {
+  int r;
   dout(10) << "read_header" << dendl;
-  memset(&header, 0, sizeof(header));  // zero out (read may fail)
   ::lseek(fd, 0, SEEK_SET);
-  int r = ::read(fd, &header, sizeof(header));
+  if (directio) {
+    buffer::ptr bp = buffer::create_page_aligned(block_size);
+    bp.zero();
+    r = ::read(fd, bp.c_str(), bp.length());
+    memcpy(&header, bp.c_str(), sizeof(header));
+  } else {
+    memset(&header, 0, sizeof(header));  // zero out (read may fail)
+    r = ::read(fd, &header, sizeof(header));
+  }
   if (r < 0) 
     dout(0) << "read_header error " << errno << " " << strerror(errno) << dendl;
   print_header();
 }
 void FileJournal::write_header()
 {
+  int r;
   dout(10) << "write_header " << dendl;
   print_header();
-
   ::lseek(fd, 0, SEEK_SET);
-  int r = ::write(fd, &header, sizeof(header));
+  if (directio) {
+    buffer::ptr bp = buffer::create_page_aligned(block_size);
+    bp.zero();
+    memcpy(bp.c_str(), &header, sizeof(header));
+    r = ::write(fd, bp.c_str(), bp.length());
+  } else {
+    r = ::write(fd, &header, sizeof(header));
+  }
   if (r < 0) 
     dout(0) << "write_header error " << errno << " " << strerror(errno) << dendl;
 }
@@ -231,9 +247,9 @@ void FileJournal::write_thread_entry()
 	  // is there room if we wrap?
 	  if ((off_t)sizeof(header_t) + size < header.offset[0]) {
 	    // yes!
-	    dout(10) << "wrapped from " << queue_pos << " to " << sizeof(header_t) << dendl;
+	    dout(10) << "wrapped from " << queue_pos << " to " << get_top() << dendl;
 	    header.wrap = queue_pos;
-	    queue_pos = sizeof(header_t);
+	    queue_pos = get_top();
 	    header.push(ebofs->get_super_epoch(), queue_pos);
 	    write_header();
 	  } else {
@@ -297,6 +313,109 @@ void FileJournal::write_thread_entry()
   dout(10) << "write_thread_entry finish" << dendl;
 }
 
+void FileJournal::write_thread_entry_dio()
+{
+  dout(10) << "write_thread_entry start" << dendl;
+  write_lock.Lock();
+  
+  while (!write_stop) {
+    if (writeq.empty()) {
+      // sleep
+      dout(20) << "write_thread_entry going to sleep" << dendl;
+      write_cond.Wait(write_lock);
+      dout(20) << "write_thread_entry woke up" << dendl;
+      continue;
+    }
+    
+    // grab next item
+    epoch_t epoch = writeq.front().first;
+    bufferlist &ebl = writeq.front().second;
+
+    // epoch boundary?
+    if (epoch > header.last_epoch()) {
+      dout(10) << "saw an epoch boundary " << header.last_epoch() << " -> " << epoch << dendl;
+      header.push(epoch, write_pos);
+    }
+
+    off_t size = 2*sizeof(entry_header_t) + ebl.length();
+    size = DIV_ROUND_UP(size, 4096) * 4096;
+
+    // does it fit?
+    if (header.wrap) {
+      // we're wrapped.  don't overwrite ourselves.
+      if (write_pos + size >= header.offset[0]) {
+	dout(10) << "JOURNAL FULL (and wrapped), " << write_pos << "+" << size
+		 << " >= " << header.offset[0]
+		 << dendl;
+	full = true;
+	writeq.clear();
+	print_header();
+	continue;
+      }
+    } else {
+      // we haven't wrapped.  
+      if (write_pos + size >= header.max_size) {
+	// is there room if we wrap?
+	if ((off_t)sizeof(header_t) + size < header.offset[0]) {
+	  // yes!
+	  dout(10) << "wrapped from " << write_pos << " to " << sizeof(header_t) << dendl;
+	  header.wrap = write_pos;
+	  write_pos = sizeof(header_t);
+	  header.push(ebofs->get_super_epoch(), write_pos);
+	  write_header();
+	} else {
+	  // no room.
+	  dout(10) << "submit_entry JOURNAL FULL (and can't wrap), " << write_pos << "+" << size
+		   << " >= " << header.max_size
+		   << dendl;
+	  full = true;
+	  writeq.clear();
+	  continue;
+	}
+      }
+    }
+
+    // build it
+    bufferptr bp = buffer::create_page_aligned(size);
+    entry_header_t *h = (entry_header_t*)bp.c_str();
+    ebl.copy(0, ebl.length(), bp.c_str()+sizeof(entry_header_t));
+    
+    // add to write buffer
+    dout(15) << "write_thread_entry will write " << write_pos << " : " 
+	     << bp.length() 
+	     << " epoch " << epoch
+	     << dendl;
+      
+    // add it this entry
+    h->epoch = epoch;
+    h->len = ebl.length();
+    h->make_magic(write_pos, header.fsid);
+    memcpy(bp.c_str() + sizeof(*h) + ebl.length(), h, sizeof(*h));
+      
+    Context *oncommit = commitq.front();
+    if (oncommit)
+      writingq.push_back(oncommit);
+      
+    // pop from writeq
+    writeq.pop_front();
+    commitq.pop_front();
+    
+    writing = true;
+    write_lock.Unlock();
+    dout(15) << "write_thread_entry writing " << write_pos << "~" << bp.length() << dendl;
+    
+    ::lseek(fd, write_pos, SEEK_SET);
+    ::write(fd, bp.c_str(), size);
+    
+    write_lock.Lock();    
+    writing = false;
+    write_pos += bp.length();
+    ebofs->queue_finishers(writingq);
+  }
+  write_lock.Unlock();
+  dout(10) << "write_thread_entry finish" << dendl;
+}
+
 bool FileJournal::is_full()
 {
   Mutex::Locker locker(write_lock);
@@ -349,7 +468,7 @@ void FileJournal::commit_epoch_finish()
      // full journal damage control.
      dout(15) << " journal was FULL, contents now committed, clearing header.  journal still not usable until next epoch." << dendl;
      header.clear();
-     write_pos = sizeof(header_t);
+     write_pos = get_top();
    } else {
      // update header -- trim/discard old (committed) epochs
      while (header.num && header.epoch[0] < ebofs->get_super_epoch())
@@ -383,7 +502,7 @@ void FileJournal::make_writeable()
   if (read_pos)
     write_pos = read_pos;
   else
-    write_pos = sizeof(header_t);
+    write_pos = get_top();
   read_pos = 0;
 }
 
