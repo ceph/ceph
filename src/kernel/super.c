@@ -4,7 +4,7 @@
 #include <linux/mount.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
-
+#include <linux/version.h>
 
 int ceph_super_debug = 50;
 #define DOUT_VAR ceph_super_debug
@@ -142,7 +142,11 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
+static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
+#else
 static void init_once(struct kmem_cache *cachep, void *foo)
+#endif
 {
 	struct ceph_inode_info *ci = foo;
 	dout(10, "init_once on %p\n", foo);
