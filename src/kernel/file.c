@@ -14,7 +14,7 @@ int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, in
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	ceph_ino_t pathbase;
+	u64 pathbase;
 	char *path;
 	int pathlen;
 	struct ceph_msg *req;
@@ -22,7 +22,7 @@ int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, in
 	int err;
 
 	dout(5, "open dentry %p name '%s' flags %d\n", dentry, dentry->d_name.name, flags);
-	pathbase = sb->s_root->d_inode->i_ino;
+	pathbase = ceph_ino(sb->s_root->d_inode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path)) 
 		return PTR_ERR(path);
@@ -91,7 +91,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	int err;
 
-	dout(5, "ceph_open inode %p (%lu) file %p\n", inode, inode->i_ino, file);
+	dout(5, "ceph_open inode %p ino %llx file %p\n", inode, 
+	     ceph_ino(inode), file);
 
 	if (cf) {
 		/* the file is already opened */
@@ -119,7 +120,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		return err;
 	}
 	
-	dout(5, "ceph_open success, %lx\n", inode->i_ino);
+	dout(5, "ceph_open success, %llx\n", ceph_ino(inode));
 	return 0;
 }
 
@@ -232,7 +233,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user * data,
 	/* this is an ugly hack */
 
 	while (count > 0) {
-		ret = ceph_osdc_silly_write(osdc, inode->i_ino, &ci->i_layout, count, *offset, data);
+		ret = ceph_osdc_silly_write(osdc, ceph_ino(inode), &ci->i_layout, count, *offset, data);
 		dout(10, "ret is %d\n", ret);
 		if (ret > 0) {
 			did += ret;

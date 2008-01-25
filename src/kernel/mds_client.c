@@ -875,8 +875,8 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
 		ci = cap->ci;
 		dout(10, "cap is %p, ci is %p, inode is %p\n", cap, ci, &ci->vfs_inode);
-		dout(10, " adding cap %p on ino %lx\n", cap, ci->vfs_inode.i_ino);
-		ceph_encode_64(&p, end, ci->vfs_inode.i_ino);
+		dout(10, " adding cap %p on ino %llx\n", cap, ceph_ino(&ci->vfs_inode));
+		ceph_encode_64(&p, end, ceph_ino(&ci->vfs_inode));
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);
@@ -1077,8 +1077,9 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	struct ceph_mds_file_caps *h;
 	int mds = msg->hdr.src.name.num;
 	int op;
-	__u32 seq;
-	__u64 ino, size;
+	u32 seq;
+	u64 ino, size;
+	ino_t inot;
 	
 	dout(10, "handle_filecaps from mds%d\n", mds);
 	
@@ -1100,10 +1101,18 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	session->s_cap_seq++;
 
 	/* lookup ino */
-	inode = ilookup(sb, ino);
-	dout(20, "op is %d, inode is %llx %p\n", op, ino, inode);
+	inot = ceph_ino_to_ino(ino);
+	inode = ilookup(sb, inot);
+	dout(20, "op is %d, ino %llx %p\n", op, ino, inode);
+
+	if (inode && ceph_ino(inode) != inot) {
+		BUG_ON(sizeof(ino_t) >= sizeof(u64));
+		dout(10, "UH OH, did our lame ceph ino %llx -> %lu ino_t hash collide?"
+		     "  inode is %llx\n", ino, inot, ceph_ino(inode));
+		inode = 0;
+	}
 	if (!inode) {
-		dout(10, "hrm, wtf, i don't have inode %llx?  closing out cap\n", ino);
+		dout(10, "hrm, wtf, i don't have ino %lu=%llx?  closing out cap\n", inot, ino);
 		send_cap_ack(mdsc, ino, 0, 0, seq, size, mds);
 		return;
 	}
@@ -1124,7 +1133,6 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	}
 
 	iput(inode);
-	
 	return;
 bad:
 	dout(10, "corrupt filecaps message\n");
@@ -1148,7 +1156,7 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 		BUG_ON(!session);
 
 		cap->caps &= wanted;  /* drop caps we don't want */
-		send_cap_ack(mdsc, ci->vfs_inode.i_ino, cap->caps, wanted, 
+		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted, 
 			     cap->seq, ci->vfs_inode.i_size, cap->mds);
 	}
 

@@ -248,7 +248,6 @@ ebofs
 
 - verify proper behavior of conflicting/overlapping reads of clones
 - combine inodes and/or cnodes into same blocks
-- nonblocking write on missing onodes?
 - fix bug in node rotation on insert (and reenable)
 - fix NEAR_LAST_FWD (?)
 
