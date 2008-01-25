@@ -248,7 +248,9 @@ ssize_t ceph_silly_write(struct file *file, const char __user * data,
 
 	if (*offset > inode->i_size) {
 		ci->i_wr_size = inode->i_size = *offset;
+		spin_lock(&inode->i_lock);
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+		spin_unlock(&inode->i_lock);
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}	
 	invalidate_inode_pages2(inode->i_mapping);
