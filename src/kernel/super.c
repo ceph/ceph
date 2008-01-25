@@ -410,30 +410,32 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		       int flags, const char *dev_name, void *data, struct vfsmount *mnt)
 {
 	struct super_block *sb;
-	struct ceph_mount_args mount_args;
+	struct ceph_mount_args *mount_args;
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
 	struct dentry *droot;
 
 	dout(25, "ceph_get_sb\n");
+
+	mount_args = kmalloc(sizeof(struct ceph_mount_args), GFP_KERNEL);
 	
-	err = parse_mount_args(flags, data, dev_name, &mount_args);
+	err = parse_mount_args(flags, data, dev_name, mount_args);
 	if (err < 0) 
 		goto out;
 
-	if (mount_args.flags & CEPH_MOUNT_NOSHARE)
+	if (mount_args->flags & CEPH_MOUNT_NOSHARE)
 		compare_super = 0;
 	
 	/* superblock */
-	sb = sget(fs_type, compare_super, ceph_set_super, &mount_args);
+	sb = sget(fs_type, compare_super, ceph_set_super, mount_args);
 	if (IS_ERR(sb)) {
 		err = PTR_ERR(sb);
 		goto out;
 	}
 	client = ceph_sb_to_client(sb);
 
-	if ((err = ceph_mount(client, &mount_args, &droot)) < 0)
+	if ((err = ceph_mount(client, mount_args, &droot)) < 0)
 		goto out_splat;
 	
 	dout(30, "ceph_get_sb %p finishing\n", sb);
@@ -448,6 +450,7 @@ out_splat:
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
 out:
+	kfree(mount_args);
 	dout(25, "ceph_get_sb fail %d\n", err);
 	return err;
 }

@@ -48,9 +48,9 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_uid = le32_to_cpu(info->uid);
 	inode->i_gid = le32_to_cpu(info->gid);
 	inode->i_nlink = le32_to_cpu(info->nlink);
-	inode->i_size = le64_to_cpu(info->size);
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	spin_lock(&inode->i_lock);
+	inode->i_size = le64_to_cpu(info->size);
 	inode->i_blocks = 1;
 	spin_unlock(&inode->i_lock);
 
