@@ -81,12 +81,11 @@ int main(int argc, const char **argv)
 
   if (whoami < 0) {
     // let's assume a standalone monitor
-    cout << "starting standalone mon0" << std::endl;
     whoami = 0;
 
     // start messenger
     rank.start_rank();
-    cout << "bound to " << rank.get_rank_addr() << std::endl;
+    cout << "starting standalone mon0, bound to " << rank.get_rank_addr() << std::endl;
 
     // add single mon0
     entity_inst_t inst;
@@ -102,12 +101,17 @@ int main(int argc, const char **argv)
     // i am specific monitor.
 
     // read monmap
-    cout << "reading monmap from .ceph_monmap" << std::endl;
+    //cout << "reading monmap from " << monmap_fn << std::endl;
     int r = monmap.read(monmap_fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "couldn't read monmap from " << monmap_fn << std::endl;
+      return -1;
+    }
 
     // bind to a specific port
-    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << std::endl;
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) 
+	 << " from " << monmap_fn
+	 << std::endl;
     g_my_addr = monmap.get_inst(whoami).addr;
     rank.start_rank();
   }
@@ -120,7 +124,6 @@ int main(int argc, const char **argv)
   mon->init();
 
   // wait
-  cout << "waiting for shutdown ..." << std::endl;
   rank.wait();
 
   // done
