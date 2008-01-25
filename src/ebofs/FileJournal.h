@@ -38,10 +38,11 @@ public:
     int num;
     off_t wrap;
     off_t max_size;
+    size_t block_size;
     epoch_t epoch[4];
     off_t offset[4];
 
-    header_t() : fsid(0), num(0), wrap(0), max_size(0) {}
+    header_t() : fsid(0), num(0), wrap(0), max_size(0), block_size(0) {}
 
     void clear() {
       num = 0;
@@ -67,7 +68,10 @@ public:
       num++;
     }
     epoch_t last_epoch() {
-      return epoch[num-1];
+      if (num)
+	return epoch[num-1];
+      else
+	return 0;
     }
   } header;
 
@@ -91,9 +95,10 @@ public:
 private:
   string fn;
 
+  off_t max_size;
   size_t block_size;
   bool directio;
-  bool full, writing;
+  bool full, writing, must_write_header;
   off_t write_pos;      // byte where next entry written goes
   off_t read_pos;       // 
 
@@ -111,23 +116,26 @@ private:
   Cond write_cond;
   bool write_stop;
 
+  int _open();
   void print_header();
   void read_header();
+  bufferptr prepare_header();
   void write_header();
   void start_writer();
   void stop_writer();
   void write_thread_entry();
-  void write_thread_entry_dio();
+
+  void check_for_wrap(epoch_t epoch, off_t pos, off_t size);
+  bool prepare_single_dio_write(bufferlist& bl);
+  void prepare_multi_write(bufferlist& bl);
+  void do_write(bufferlist& bl);
 
   class Writer : public Thread {
     FileJournal *journal;
   public:
     Writer(FileJournal *fj) : journal(fj) {}
     void *entry() {
-      if (journal->directio)
-	journal->write_thread_entry_dio();
-      else
-	journal->write_thread_entry();
+      journal->write_thread_entry();
       return 0;
     }
   } write_thread;
@@ -142,8 +150,9 @@ private:
  public:
   FileJournal(Ebofs *e, const char *f, bool dio=false) : 
     Journal(e), fn(f),
+    max_size(0), block_size(0),
     directio(dio),
-    full(false), writing(false),
+    full(false), writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
     fd(0),
     write_stop(false), write_thread(this) { }
@@ -158,7 +167,7 @@ private:
   // writes
   void submit_entry(bufferlist& e, Context *oncommit);  // submit an item
   void commit_epoch_start();   // mark epoch boundary
-  void commit_epoch_finish();  // mark prior epoch as committed (we can expire)
+  void commit_epoch_finish(epoch_t);  // mark prior epoch as committed (we can expire)
 
   bool read_entry(bufferlist& bl, epoch_t& e);
 

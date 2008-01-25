@@ -19,10 +19,13 @@
 
 map<off_t, pair<utime_t,utime_t> > writes;
 
+Mutex lock;
+
 struct C_Commit : public Context {
   off_t off;
   C_Commit(off_t o) : off(o) {}
   void finish(int r) {
+    Mutex::Locker l(lock);
     utime_t now = g_clock.now();
     dout(0) << off << "\t" 
 	 << (writes[off].second-writes[off].first) << "\t"
@@ -51,8 +54,9 @@ int main(int argc, const char **argv)
   bp.zero();
   bufferlist bl;
   bl.push_back(bp);
-  
 
+  float interval = 1.0 / 1000;
+  
   cout << "#dev " << filename
        << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
@@ -74,11 +78,28 @@ int main(int argc, const char **argv)
   cout << "# offset\tack\tcommit" << std::endl;
   while (now < end) {
     object_t oid(1,1);
-    writes[pos].first = now;
+    utime_t start;
+    {
+      Mutex::Locker l(lock);
+      start = writes[pos].first = now;
+    }
     fs.write(oid, pos, bytes, bl, new C_Commit(pos));
     now = g_clock.now();
-    writes[pos].second = now;
+    {
+      Mutex::Locker l(lock);
+      writes[pos].second = now;
+    }
     pos += bytes;
+
+    // wait?
+    utime_t next = start;
+    next += interval;
+    if (now < next) {
+      float s = next - now;
+      s *= 1000 * 1000;  // s -> us
+      //cout << "sleeping for " << s << std::endl;
+      usleep(s);
+    }
   }
 
   fs.umount();

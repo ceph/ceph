@@ -287,7 +287,10 @@ struct md_config_t {
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
-
+  bool ebofs_journal_dio;
+  bool ebofs_journal_max_write_bytes;
+  bool ebofs_journal_max_write_entries;
+  
   // block device
   bool  bdev_lock;
   int   bdev_iothreads;

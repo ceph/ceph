@@ -124,8 +124,7 @@ int Ebofs::mount()
   
   // open journal?
   if (journalfn) {
-    journal = new FileJournal(this, journalfn);
-    //journal = new DioJournal(this, journalfn);
+    journal = new FileJournal(this, journalfn, g_conf.ebofs_journal_dio);
     if (journal->open() < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;
@@ -270,7 +269,7 @@ int Ebofs::mkfs()
 
   // create journal?
   if (journalfn) {
-    Journal *journal = new FileJournal(this, journalfn);
+    Journal *journal = new FileJournal(this, journalfn, g_conf.ebofs_journal_dio);
     if (journal->create() < 0) {
       dout(3) << "mount journal " << journalfn << " created failed" << dendl;
     } else {
@@ -559,7 +558,7 @@ int Ebofs::commit_thread_entry()
       }
       
       // signal journal
-      if (journal) journal->commit_epoch_finish();
+      if (journal) journal->commit_epoch_finish(super_epoch);
 
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
