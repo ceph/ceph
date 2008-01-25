@@ -21,12 +21,13 @@ int ceph_super_debug = 50;
  * super ops
  */
 
-static int ceph_write_inode(struct inode * inode, int unused)
+static int ceph_write_inode(struct inode *inode, int unused)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %llx .. atime updated\n", ceph_ino(inode));
+		dout(30, "ceph_write_inode %llx .. atime updated\n",
+		     ceph_ino(inode));
 		/* eventually push this async to mds ... */
 	}
 	return 0;
@@ -45,7 +46,8 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	int err;
 
 	dout(30, "ceph_statfs\n");
-	if ((err = ceph_monc_do_statfs(&client->monc, &st)) < 0)
+	err = ceph_monc_do_statfs(&client->monc, &st);
+	if (err < 0)
 		return err;
 
 	/* fill in kstatfs */
@@ -59,7 +61,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	/* fsid? */
 	buf->f_namelen = 1024;
 	buf->f_frsize = 4096;
-	
+
 	return 0;
 }
 
@@ -75,9 +77,9 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 	struct ceph_mount_args *args = &client->mount_args;
 
 	if (ceph_debug != 0)
-		seq_printf(m, ",debug=%d", ceph_debug);		
-	if (args->flags & CEPH_MOUNT_FSID) 
-		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu", 
+		seq_printf(m, ",debug=%d", ceph_debug);
+	if (args->flags & CEPH_MOUNT_FSID)
+		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
 			   args->fsid.major, args->fsid.minor);
 	if (args->flags & CEPH_MOUNT_NOSHARE)
 		seq_puts(m, ",noshare");
@@ -114,16 +116,16 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_caps = ci->i_caps_static;
 	atomic_set(&ci->i_cap_count, 0);
 
-	for (i=0; i<4; i++)
+	for (i = 0; i < 4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
-	
+
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
 	ci->i_wr_mtime.tv_nsec = 0;
 
 	ci->i_hashval = 0;
-	
+
 	return &ci->vfs_inode;
 }
 
@@ -131,13 +133,12 @@ static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
-	dout(30, "destroy_inode %p ino %lu=%llx\n", inode, 
+	dout(30, "destroy_inode %p ino %lu=%llx\n", inode,
 	     inode->i_ino, ceph_ino(inode));
 
-	if (ci->i_caps != ci->i_caps_static) 
+	if (ci->i_caps != ci->i_caps_static)
 		kfree(ci->i_caps);
-	if (ci->i_symlink)
-		kfree(ci->i_symlink);
+	kfree(ci->i_symlink);
 
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
@@ -174,7 +175,7 @@ static const struct super_operations ceph_sops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
 	.write_inode    = ceph_write_inode,
-//	.sync_fs        = ceph_syncfs,
+/*	.sync_fs        = ceph_syncfs, */
 	.put_super	= ceph_put_super,
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
@@ -185,12 +186,12 @@ static const struct super_operations ceph_sops = {
 
 
 
-/* 
+/*
  * mount options
  */
 
 enum {
-	Opt_fsidmajor, 
+	Opt_fsidmajor,
 	Opt_fsidminor,
 	Opt_debug,
 	Opt_debug_msgr,
@@ -224,25 +225,23 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 	const char *p = c;
 
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
-	for (i=0; *p && i<4; i++) {
+	for (i = 0; *p && i < 4; i++) {
 		v = 0;
-		//dout(30, " i=%d at %s\n", i, p);
 		while (*p && *p != '.' && p < c+len) {
 			if (*p < '0' || *p > '9')
 				goto bad;
 			v = (v * 10) + (*p - '0');
 			p++;
 		}
-		//dout(30, " v = %d\n", v);
 		ip = (ip << 8) + v;
-		if (!*p) 
+		if (!*p)
 			break;
 		p++;
 	}
-	if (p < c+len) 
+	if (p < c+len)
 		goto bad;
 
-	*(__u32*)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
+	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
 	dout(15, "parse_ip got %u.%u.%u.%u\n", ip >> 24, (ip >> 16) & 0xff,
 	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
@@ -252,7 +251,8 @@ bad:
 	return -EINVAL;
 }
 
-static int parse_mount_args(int flags, char *options, const char *dev_name, struct ceph_mount_args *args)
+static int parse_mount_args(int flags, char *options, const char *dev_name,
+			    struct ceph_mount_args *args)
 {
 	char *c;
 	int len, err;
@@ -271,29 +271,30 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 		return -EINVAL;
 
 	/* get mon ip */
-	/* er, just one for now. later, comma-separate... */	
+	/* er, just one for now. later, comma-separate... */
 	len = c - dev_name;
-	if ((err = parse_ip(dev_name, len, &args->mon_addr[0])) < 0)
+	err = parse_ip(dev_name, len, &args->mon_addr[0]);
+	if (err < 0)
 		return err;
 	args->mon_addr[0].ipaddr.sin_family = AF_INET;
 	args->mon_addr[0].ipaddr.sin_port = htons(CEPH_MON_PORT);
 	args->mon_addr[0].erank = 0;
 	args->mon_addr[0].nonce = 0;
 	args->num_mon = 1;
-	
+
 	/* path on server */
 	c++;
 	while (*c == '/') c++;  /* remove leading '/'(s) */
 	if (strlen(c) >= sizeof(args->path))
 		return -ENAMETOOLONG;
 	strcpy(args->path, c);
-	
+
 	dout(15, "server path '%s'\n", args->path);
-	
+
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
 		int token, intval, ret, i;
-		if (!*c) 
+		if (!*c)
 			continue;
 		token = match_token(c, arg_tokens, argstr);
 		if (token < Opt_ip) {
@@ -313,8 +314,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			break;
 		case Opt_monport:
 			dout(25, "parse_mount_args monport=%d\n", intval);
-			for (i=0; i<args->num_mon; i++)
-				args->mon_addr[i].ipaddr.sin_port = htons(intval);
+			for (i = 0; i < args->num_mon; i++)
+				args->mon_addr[i].ipaddr.sin_port =
+					htons(intval);
 			break;
 		case Opt_debug:
 			ceph_debug = intval;
@@ -332,9 +334,10 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
 		case Opt_ip:
-			if ((err = parse_ip(argstr[0].from, 
-					    argstr[0].to-argstr[0].from, 
-					    &args->my_addr)) < 0)
+			err = parse_ip(argstr[0].from,
+				       argstr[0].to-argstr[0].from,
+				       &args->my_addr);
+			if (err < 0)
 				return err;
 			break;
 		default:
@@ -362,7 +365,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	if (IS_ERR(client))
 		return PTR_ERR(client);
 	s->s_fs_info = client;
-	
+
 	/* fill sbinfo */
 	s->s_op = &ceph_sops;
 	memcpy(&client->mount_args, args, sizeof(*args));
@@ -384,7 +387,7 @@ bail:
  */
 static int ceph_compare_super(struct super_block *sb, void *data)
 {
-	struct ceph_mount_args *args = (struct ceph_mount_args*)data;
+	struct ceph_mount_args *args = (struct ceph_mount_args *)data;
 	struct ceph_client *other = ceph_sb_to_client(sb);
 	int i;
 	dout(10, "ceph_compare_super %p\n", sb);
@@ -397,8 +400,8 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 		}
 	} else {
 		/* do we share (a) monitor? */
-		for (i=0; i<args->num_mon; i++)
-			if (ceph_monmap_contains(other->monc.monmap, 
+		for (i = 0; i < args->num_mon; i++)
+			if (ceph_monmap_contains(other->monc.monmap,
 						 &args->mon_addr[i]))
 				break;
 		if (i == args->num_mon) {
@@ -415,7 +418,8 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 }
 
 static int ceph_get_sb(struct file_system_type *fs_type,
-		       int flags, const char *dev_name, void *data, struct vfsmount *mnt)
+		       int flags, const char *dev_name, void *data,
+		       struct vfsmount *mnt)
 {
 	struct super_block *sb;
 	struct ceph_mount_args *mount_args;
@@ -427,14 +431,14 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	dout(25, "ceph_get_sb\n");
 
 	mount_args = kmalloc(sizeof(struct ceph_mount_args), GFP_KERNEL);
-	
+
 	err = parse_mount_args(flags, data, dev_name, mount_args);
-	if (err < 0) 
+	if (err < 0)
 		goto out;
 
 	if (mount_args->flags & CEPH_MOUNT_NOSHARE)
 		compare_super = 0;
-	
+
 	/* superblock */
 	sb = sget(fs_type, compare_super, ceph_set_super, mount_args);
 	if (IS_ERR(sb)) {
@@ -443,9 +447,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	}
 	client = ceph_sb_to_client(sb);
 
-	if ((err = ceph_mount(client, mount_args, &droot)) < 0)
+	err = ceph_mount(client, mount_args, &droot);
+	if (err < 0)
 		goto out_splat;
-	
+
 	dout(30, "ceph_get_sb %p finishing\n", sb);
 	mnt->mnt_sb = sb;
 	mnt->mnt_root = droot;
@@ -453,7 +458,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	dout(22, "droot ino %llx\n", ceph_ino(droot->d_inode));
 
 	return 0;
-	
+
 out_splat:
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
@@ -490,11 +495,13 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
-	if (!(ret = init_inodecache())) {
-		if ((ret = register_filesystem(&ceph_fs_type))) {
-			destroy_inodecache();
-        	}
-        }
+	ret = init_inodecache();
+	if (ret)
+		goto out;
+	ret = register_filesystem(&ceph_fs_type);
+	if (ret)
+		destroy_inodecache();
+out:
 	return ret;
 }
 

@@ -9,8 +9,10 @@ int ceph_debug_file = 50;
 /*
  * if err==0, caller is responsible for a put_session on *psession
  */
-int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, int create_mode, 
-		    struct ceph_mds_session **psession, struct ceph_mds_reply_info *rinfo)
+int do_open_request(struct super_block *sb, struct dentry *dentry,
+		    int flags, int create_mode,
+		    struct ceph_mds_session **psession,
+		    struct ceph_mds_reply_info *rinfo)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -21,19 +23,22 @@ int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, in
 	struct ceph_mds_request_head *rhead;
 	int err;
 
-	dout(5, "open dentry %p name '%s' flags %d\n", dentry, dentry->d_name.name, flags);
+	dout(5, "open dentry %p name '%s' flags %d\n", dentry,
+	     dentry->d_name.name, flags);
 	pathbase = ceph_ino(sb->s_root->d_inode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path)) 
+	if (IS_ERR(path))
 		return PTR_ERR(path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
+				       0, 0);
 	kfree(path);
-	if (IS_ERR(req)) 
+	if (IS_ERR(req))
 		return PTR_ERR(req);
 	rhead = req->front.iov_base;
 	rhead->args.open.flags = cpu_to_le32(flags);
 	rhead->args.open.mode = cpu_to_le32(create_mode);
-	if ((err = ceph_mdsc_do_request(mdsc, req, rinfo, psession)) < 0)
+	err = ceph_mdsc_do_request(mdsc, req, rinfo, psession);
+	if (err < 0)
 		return err;
 	return 0;
 }
@@ -42,14 +47,15 @@ int do_open_request(struct super_block *sb, struct dentry *dentry, int flags, in
  * add cap.  also set up private_data for holding readdir results
  * if O_DIRECTORY.
  */
-int proc_open_reply(struct inode *inode, struct file *file, 
-		    struct ceph_mds_session *session, struct ceph_mds_reply_info *rinfo)
+int proc_open_reply(struct inode *inode, struct file *file,
+		    struct ceph_mds_session *session,
+		    struct ceph_mds_reply_info *rinfo)
 {
 	struct ceph_inode_cap *cap;
 	struct ceph_file_info *cf;
 
-	cap = ceph_add_cap(inode, session, 
-			   le32_to_cpu(rinfo->head->file_caps), 
+	cap = ceph_add_cap(inode, session,
+			   le32_to_cpu(rinfo->head->file_caps),
 			   le32_to_cpu(rinfo->head->file_caps_seq));
 
 	if (file->f_flags & O_DIRECTORY) {
@@ -91,22 +97,24 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	int err;
 
-	dout(5, "ceph_open inode %p ino %llx file %p\n", inode, 
+	dout(5, "ceph_open inode %p ino %llx file %p\n", inode,
 	     ceph_ino(inode), file);
 
 	if (cf) {
 		/* the file is already opened */
 		return 0;
 	}
-	
+
 	/*
-	if (file->f_flags == O_DIRECTORY && ... ) 
+	if (file->f_flags == O_DIRECTORY && ... )
 		cap = ceph_find_cap(inode, 0);
 	*/
 	if (!cap) {
-		dentry = list_entry(inode->i_dentry.next, struct dentry, d_alias);
-		err = do_open_request(inode->i_sb, dentry, file->f_flags, 0, &session, &rinfo);
-		if (err < 0) 
+		dentry = list_entry(inode->i_dentry.next, struct dentry,
+				    d_alias);
+		err = do_open_request(inode->i_sb, dentry, file->f_flags, 0,
+				      &session, &rinfo);
+		if (err < 0)
 			return err;
 		err = proc_open_reply(inode, file, session, &rinfo);
 		ceph_mdsc_put_session(session);
@@ -116,15 +124,15 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	err = ceph_open_init_private_data(inode, file);
 
-	if (err < 0) {
+	if (err < 0)
 		return err;
-	}
-	
+
 	dout(5, "ceph_open success, %llx\n", ceph_ino(inode));
 	return 0;
 }
 
-int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
+		     struct nameidata *nd)
 {
 	struct ceph_mds_reply_info rinfo;
 	struct ceph_mds_session *session;
@@ -134,18 +142,21 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata 
 	int found = 0;
 	int err;
 
-	dout(5, "ceph_lookup_open in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
-	err = do_open_request(dir->i_sb, dentry, nd->intent.open.flags, nd->intent.open.create_mode,
+	dout(5, "ceph_lookup_open in dir %p dentry %p '%s'\n", dir, dentry,
+	     dentry->d_name.name);
+	err = do_open_request(dir->i_sb, dentry, nd->intent.open.flags,
+			      nd->intent.open.create_mode,
 			      &session, &rinfo);
 	if (err < 0)
 		return err;
 	err = le32_to_cpu(rinfo.head->result);
 	dout(20, "ceph_lookup_open result=%d\n", err);
 
-	/* if there was a previous inode associated with this dentry, now there isn't one */
-	if (err == -ENOENT) 
+	/* if there was a previous inode associated with this dentry,
+	 * now there isn't one */
+	if (err == -ENOENT)
 		d_add(dentry, NULL);
-	if (err < 0) 
+	if (err < 0)
 		goto out;
 	if (rinfo.trace_nr == 0) {
 		derr(0, "wtf, no trace from mds\n");
@@ -157,7 +168,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata 
 	ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
 	dout(10, "got and parsed stat result, ino %lu\n", ino);
 	inode = ilookup(dir->i_sb, ino);
-	if (!inode) 
+	if (!inode)
 		inode = new_inode(dir->i_sb);
 	else
 		found++;
@@ -165,19 +176,19 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry, struct nameidata 
 		err = -EACCES;
 		goto out;
 	}
-	
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
+
+	err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in);
+	if (err < 0)
 		goto out;
 	d_add(dentry, inode);
 
-	if (found) 
+	if (found)
 		iput(inode);
 
 	/* finish the open */
 	err = proc_open_reply(inode, file, session, &rinfo);
-	if (err == 0) {
+	if (err == 0)
 		err = ceph_open_init_private_data(inode, file);
-	}
 out:
 	ceph_mdsc_put_session(session);
 	return err;
@@ -188,11 +199,11 @@ int ceph_release(struct inode *inode, struct file *file)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf = file->private_data;
 	int mode, wanted;
-	
+
 	dout(5, "ceph_release inode %p file %p\n", inode, file);
 	atomic_dec(&ci->i_cap_count);
-	
-	if (cf->rinfo.reply) 
+
+	if (cf->rinfo.reply)
 		ceph_mdsc_destroy_reply_info(&cf->rinfo);
 	kfree(cf);
 
@@ -218,32 +229,36 @@ const struct inode_operations ceph_file_iops = {
  * totally naive write.  just to get things sort of working.
  * ugly hack!
  */
-ssize_t ceph_silly_write(struct file *file, const char __user * data,
-		     size_t count, loff_t * offset)
+ssize_t ceph_silly_write(struct file *file, const char __user *data,
+			 size_t count, loff_t *offset)
 {
 	struct inode *inode = file->f_path.dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int ret = 0;
 	int did = 0;
-	
-	dout(10, "silly_write on file %p %lld~%u\n", file, *offset, (unsigned)count);
-	
+
+	dout(10, "silly_write on file %p %lld~%u\n", file, *offset,
+	     (unsigned)count);
+
 	/* ignore caps, for now. */
 	/* this is an ugly hack */
 
 	while (count > 0) {
-		ret = ceph_osdc_silly_write(osdc, ceph_ino(inode), &ci->i_layout, count, *offset, data);
+		ret = ceph_osdc_silly_write(osdc, ceph_ino(inode),
+					    &ci->i_layout,
+					    count, *offset, data);
 		dout(10, "ret is %d\n", ret);
 		if (ret > 0) {
 			did += ret;
 			*offset += ret;
 			data += ret;
 			count -= ret;
-			dout(10, "did %d bytes, ret now %d, %u left\n", did, ret, (unsigned)count);
-		} else if (did) 
+			dout(10, "did %d bytes, ret now %d, %u left\n",
+			     did, ret, (unsigned)count);
+		} else if (did)
 			break;
-		else 
+		else
 			return ret;
 	}
 
@@ -252,7 +267,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user * data,
 		ci->i_wr_size = inode->i_size = *offset;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
-	}	
+	}
 	spin_unlock(&inode->i_lock);
 	invalidate_inode_pages2(inode->i_mapping);
 	return ret;
@@ -267,11 +282,4 @@ const struct file_operations ceph_file_fops = {
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
 	.mmap = generic_file_mmap,
-/*	.read = ceph_file_read,
-	.write = ceph_file_write,
-	.open = ceph_file_open,
-//	.release = ceph_dir_release,
-	.lock = ceph_file_lock,
-	.mmap = generic_file_mmap,
-*/
 };
