@@ -27,17 +27,24 @@
 #define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
 
 
-int FileJournal::_open()
+int FileJournal::_open(bool forwrite)
 {
-  int flags = O_RDWR;
-  if (directio) flags |= O_DIRECT;
+  int flags;
+
+  if (forwrite) {
+    flags = O_RDONLY;
+  } else {
+    flags = O_RDWR;
+    if (directio) flags |= O_DIRECT;
+  }
   
+  if (fd >= 0) 
+    ::close(fd);
   fd = ::open(fn.c_str(), flags);
   if (fd < 0) {
     dout(2) << "_open failed " << errno << " " << strerror(errno) << dendl;
     return -errno;
   }
-  assert(fd > 0);
 
   // get size
   struct stat st;
@@ -53,7 +60,7 @@ int FileJournal::create()
 {
   dout(2) << "create " << fn << dendl;
 
-  int err = _open();
+  int err = _open(true);
   if (err < 0) return err;
 
   // write empty header
@@ -69,6 +76,7 @@ int FileJournal::create()
   write_pos = get_top();
 
   ::close(fd);
+  fd = -1;
   dout(2) << "create done" << dendl;
   return 0;
 }
@@ -77,7 +85,7 @@ int FileJournal::open()
 {
   dout(2) << "open " << fn << dendl;
 
-  int err = _open();
+  int err = _open(false);
   if (err < 0) return err;
 
   // assume writeable, unless...
@@ -121,8 +129,6 @@ int FileJournal::open()
       }
     }
   }
-  write_header();
-  start_writer();
 
   return 0;
 }
@@ -139,7 +145,7 @@ void FileJournal::close()
   assert(commitq.empty());
   assert(fd > 0);
   ::close(fd);
-  fd = 0;
+  fd = -1;
 }
 
 void FileJournal::start_writer()
@@ -311,7 +317,6 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
   }
 }
 
-
 bool FileJournal::prepare_single_dio_write(bufferlist& bl)
 {
   // grab next item
@@ -359,6 +364,8 @@ void FileJournal::do_write(bufferlist& bl)
 
   writing = true;
 
+  header_t old_header = header;
+
   write_lock.Unlock();
 
   dout(15) << "do_write writing " << write_pos << "~" << bl.length() 
@@ -378,12 +385,18 @@ void FileJournal::do_write(bufferlist& bl)
     ::pwrite(fd, (char*)(*it).c_str(), (*it).length(), pos);
     pos += (*it).length();
   }
+  ::fdatasync(fd);
       
   write_lock.Lock();    
 
   writing = false;
-  write_pos += bl.length();
-  ebofs->queue_finishers(writingq);
+  if (memcmp(&old_header, &header, sizeof(header)) == 0) {
+    write_pos += bl.length();
+    ebofs->queue_finishers(writingq);
+  } else {
+    derr(0) << "do_write finished write but header changed?  not moving write_pos." << dendl;
+    assert(writingq.empty());
+  }
 }
 
 
@@ -451,7 +464,7 @@ void FileJournal::commit_epoch_start()
       dout(1) << " journal FULL, ignoring this epoch" << dendl;
       return;
     }
-    
+
     dout(1) << " clearing FULL flag, journal now usable" << dendl;
     full = false;
   } 
@@ -506,11 +519,16 @@ void FileJournal::commit_epoch_finish(epoch_t new_epoch)
 
 void FileJournal::make_writeable()
 {
+  _open(true);
+
   if (read_pos)
     write_pos = read_pos;
   else
     write_pos = get_top();
   read_pos = 0;
+
+  must_write_header = true;
+  start_writer();
 }
 
 
@@ -536,8 +554,7 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
 
   // header
   entry_header_t h;
-  ::lseek(fd, read_pos, SEEK_SET);
-  ::read(fd, &h, sizeof(h));
+  ::pread(fd, &h, sizeof(h), read_pos);
   if (!h.check_magic(read_pos, header.fsid)) {
     dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;
     return false;

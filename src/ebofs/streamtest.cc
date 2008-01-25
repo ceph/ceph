@@ -17,20 +17,55 @@
 #include <iostream>
 #include "ebofs/Ebofs.h"
 
-map<off_t, pair<utime_t,utime_t> > writes;
+struct io {
+  utime_t start, ack, commit;
+  bool done() {
+    return ack.sec() && commit.sec();
+  }
+};
+map<off_t,io> writes;
 
 Mutex lock;
+
+
+void pr(off_t off)
+{
+  io &i = writes[off];
+  dout(0) << off << "\t" 
+	  << (i.ack - i.start) << "\t"
+	  << (i.commit - i.start) << dendl;
+  writes.erase(off);
+}
+
+void set_start(off_t off, utime_t t)
+{
+  Mutex::Locker l(lock);
+  writes[off].start = t;
+}
+
+void set_ack(off_t off, utime_t t)
+{
+  Mutex::Locker l(lock);
+  writes[off].ack = t;
+  if (writes[off].done())
+    pr(off);
+}
+
+void set_commit(off_t off, utime_t t)
+{
+  Mutex::Locker l(lock);
+  writes[off].commit = t;
+  if (writes[off].done())
+    pr(off);
+}
+
 
 struct C_Commit : public Context {
   off_t off;
   C_Commit(off_t o) : off(o) {}
   void finish(int r) {
     Mutex::Locker l(lock);
-    utime_t now = g_clock.now();
-    dout(0) << off << "\t" 
-	 << (writes[off].second-writes[off].first) << "\t"
-	 << (now - writes[off].first) << dendl;
-    writes.erase(off);
+    set_commit(off, g_clock.now());
   }
 };
 
@@ -78,17 +113,11 @@ int main(int argc, const char **argv)
   cout << "# offset\tack\tcommit" << std::endl;
   while (now < end) {
     object_t oid(1,1);
-    utime_t start;
-    {
-      Mutex::Locker l(lock);
-      start = writes[pos].first = now;
-    }
+    utime_t start = now;
+    set_start(pos, now);
     fs.write(oid, pos, bytes, bl, new C_Commit(pos));
     now = g_clock.now();
-    {
-      Mutex::Locker l(lock);
-      writes[pos].second = now;
-    }
+    set_ack(pos, now);
     pos += bytes;
 
     // wait?

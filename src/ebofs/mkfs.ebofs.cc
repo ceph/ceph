@@ -18,10 +18,10 @@
 #include "ebofs/Ebofs.h"
 
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
   // args
-  vector<char*> args;
+  vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     cerr << "usage: mkfs.ebofs [options] <device file>" << std::endl;
     return -1;
   }
-  char *filename = args[0];
+  const char *filename = args[0];
 
   // mkfs
   Ebofs mfs(filename);

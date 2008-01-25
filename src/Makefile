@@ -226,6 +226,8 @@ streamtest.ebofs: ebofs/streamtest.cc config.cc common/Clock.o ebofs.o
 dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
 	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
+allebofs: mkfs.ebofs test.ebofs streamtest.ebofs dupstore
+
 
 # hadoop
 libhadoopcephfs.so: client/hadoop/CephFSInterface.cc client.o osdc.o msg/SimpleMessenger.o common.o

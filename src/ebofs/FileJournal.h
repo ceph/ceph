@@ -116,7 +116,7 @@ private:
   Cond write_cond;
   bool write_stop;
 
-  int _open();
+  int _open(bool wr);
   void print_header();
   void read_header();
   bufferptr prepare_header();
@@ -154,7 +154,7 @@ private:
     directio(dio),
     full(false), writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
-    fd(0),
+    fd(-1),
     write_stop(false), write_thread(this) { }
   ~FileJournal() {}
 
