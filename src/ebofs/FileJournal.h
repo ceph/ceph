@@ -34,15 +34,16 @@ public:
    * (i.e. when ebofs committed, but the journal didn't rollover ... very small window!)
    */
   struct header_t {
-    uint64_t fsid;
-    int num;
-    off_t wrap;
-    off_t max_size;
-    size_t block_size;
-    epoch_t epoch[4];
-    off_t offset[4];
+    __u64 fsid;
+    __s64 num;
+    __u32 block_size;
+    __u32 alignment;
+    __s64 max_size;
+    __s64 wrap;
+    __u32 epoch[4];
+    __s64 offset[4];
 
-    header_t() : fsid(0), num(0), wrap(0), max_size(0), block_size(0) {}
+    header_t() : fsid(0), num(0), block_size(0), alignment(0), max_size(0), wrap(0) {}
 
     void clear() {
       num = 0;
@@ -57,7 +58,7 @@ public:
 	offset[i] = offset[i+1];
       }
     }
-    void push(epoch_t e, off_t o) {
+    void push(epoch_t e, off64_t o) {
       assert(num < 4);
       if (num > 2 && 
 	  epoch[num-1] == e &&
@@ -81,11 +82,11 @@ public:
     uint64_t magic1;
     uint64_t magic2;
     
-    void make_magic(off_t pos, uint64_t fsid) {
+    void make_magic(off64_t pos, uint64_t fsid) {
       magic1 = pos;
       magic2 = fsid ^ epoch ^ len;
     }
-    bool check_magic(off_t pos, uint64_t fsid) {
+    bool check_magic(off64_t pos, uint64_t fsid) {
       return
 	magic1 == (uint64_t)pos &&
 	magic2 == (fsid ^ epoch ^ len);
@@ -95,12 +96,12 @@ public:
 private:
   string fn;
 
-  off_t max_size;
+  off64_t max_size;
   size_t block_size;
   bool directio;
   bool full, writing, must_write_header;
-  off_t write_pos;      // byte where next entry written goes
-  off_t read_pos;       // 
+  off64_t write_pos;      // byte where next entry written goes
+  off64_t read_pos;       // 
 
   int fd;
 
@@ -120,12 +121,11 @@ private:
   void print_header();
   void read_header();
   bufferptr prepare_header();
-  void write_header();
   void start_writer();
   void stop_writer();
   void write_thread_entry();
 
-  void check_for_wrap(epoch_t epoch, off_t pos, off_t size);
+  void check_for_wrap(epoch_t epoch, off64_t pos, off64_t size);
   bool prepare_single_dio_write(bufferlist& bl);
   void prepare_multi_write(bufferlist& bl);
   void do_write(bufferlist& bl);
@@ -140,7 +140,7 @@ private:
     }
   } write_thread;
 
-  off_t get_top() {
+  off64_t get_top() {
     if (directio)
       return block_size;
     else

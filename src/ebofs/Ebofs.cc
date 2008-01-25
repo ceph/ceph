@@ -48,15 +48,12 @@ char *nice_blocks(block_t b)
 
 int Ebofs::mount()
 {
-  ebofs_lock.Lock();
+  Mutex::Locker locker(ebofs_lock);
   assert(!mounted);
 
   // open dev
   int r = dev.open(&idle_kicker);
-  if (r < 0) {
-    ebofs_lock.Unlock();
-    return r;
-  }
+  if (r < 0) return r;
 
   dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << dendl;
 
@@ -121,15 +118,21 @@ int Ebofs::mount()
 
   allocator.release_limbo();
 
-  
-  // open journal?
+  // open journal
   if (journalfn) {
     journal = new FileJournal(this, journalfn, g_conf.ebofs_journal_dio);
-    if (journal->open() < 0) {
+    int err = journal->open();
+    if (err < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;
       journal = 0;
+      if (err == -EINVAL) {
+	dout(0) << "mount journal appears corrupt/invalid, stopping" << dendl;
+	dev.close();
+	return -1;
+      }
     } else {
+      // replay journal
       dout(3) << "mount journal " << journalfn << " opened, replaying" << dendl;
       
       while (1) {
@@ -139,7 +142,7 @@ int Ebofs::mount()
 	  dout(3) << "mount replay: end of journal, done." << dendl;
 	  break;
 	}
-
+	
 	if (e < super_epoch) {
 	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << dendl;
 	  continue;
@@ -156,7 +159,7 @@ int Ebofs::mount()
 	t._decode(bl, off);
 	_apply_transaction(t);
       }
-
+      
       // done reading, make writeable.
       journal->make_writeable();
     }
@@ -171,22 +174,18 @@ int Ebofs::mount()
 	  << dendl;
   mounted = true;
 
-
-  ebofs_lock.Unlock();
   return 0;
 }
 
 
 int Ebofs::mkfs()
 {
-  ebofs_lock.Lock();
+  Mutex::Locker locker(ebofs_lock);
   assert(!mounted);
 
   int r = dev.open();
-  if (r < 0) {
-    ebofs_lock.Unlock();
+  if (r < 0) 
     return r;
-  }
 
   block_t num_blocks = dev.get_num_blocks();
 
@@ -279,7 +278,6 @@ int Ebofs::mkfs()
   }
 
   dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << dendl;
-  ebofs_lock.Unlock();
   return 0;
 }
 

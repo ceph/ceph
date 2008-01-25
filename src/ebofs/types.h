@@ -44,6 +44,7 @@ using namespace __gnu_cxx;
 #ifndef DIV_ROUND_UP
 # define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
 #endif
+#define ROUND_UP_2(n, d) (((n)+(d)-1) & ~((d)-1))
 
 // disk
 typedef uint64_t block_t;        // disk location/sector/block
