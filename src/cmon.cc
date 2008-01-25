@@ -112,6 +112,8 @@ int main(int argc, const char **argv)
     rank.start_rank();
   }
 
+  create_courtesy_output_symlink("mon", whoami);
+
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);

@@ -110,6 +110,8 @@ int main(int argc, const char **argv)
     cout << "command line arg says i am osd" << whoami << std::endl;
   }
 
+  create_courtesy_output_symlink("osd", whoami);
+
   // load monmap
   MonMap monmap;
   int r = monmap.read(".ceph_monmap");

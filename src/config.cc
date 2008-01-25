@@ -122,7 +122,7 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: 0,
+  dout_dir: 0, //"out",
 
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -995,6 +995,14 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   // redirect dout?
+  /*
+  if (g_conf.dout_dir) {
+    struct stat st;
+    int r = ::stat(g_conf.dout_dir, &st);
+    if (r != 0)
+      g_conf.dout_dir = 0;
+  }
+  */
   if (g_conf.dout_dir) {
     char fn[80];
     char hostname[80];
@@ -1010,4 +1018,18 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   args = nargs;
+}
+
+int create_courtesy_output_symlink(const char *type, int n)
+{
+  if (g_conf.dout_dir) {
+    char from[200], to[200];
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(from, "%s/%s%d", g_conf.dout_dir, type, n);
+    sprintf(to, "%s.%d", hostname, getpid());
+    ::unlink(from);
+    ::symlink(to, from);
+  }
+  return 0;
 }
