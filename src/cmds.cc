@@ -83,16 +83,17 @@ int main(int argc, const char **argv)
   assert(r >= 0);
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+  cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
+
+  rank.start();
 
   // start mds
   Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
   assert(m);
-  
   MDS *mds = new MDS(whoami, m, &monmap);
   mds->init(standby);
   
-  // wait
   rank.wait();
 
   // yuck: grab the mds lock, so we can be sure that whoever in *mds 

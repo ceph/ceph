@@ -48,7 +48,6 @@ class C_Debug : public Context {
   }
 };
 
-
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -84,7 +83,7 @@ int main(int argc, const char **argv)
     whoami = 0;
 
     // start messenger
-    rank.start_rank();
+    rank.bind();
     cout << "starting standalone mon0, bound to " << rank.get_rank_addr() << std::endl;
 
     // add single mon0
@@ -109,21 +108,22 @@ int main(int argc, const char **argv)
     }
 
     // bind to a specific port
-    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) 
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami).addr
 	 << " from " << monmap_fn
 	 << std::endl;
     g_my_addr = monmap.get_inst(whoami).addr;
-    rank.start_rank();
+    rank.bind();
   }
 
   create_courtesy_output_symlink("mon", whoami);
+  
+  rank.start();
 
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);
   mon->init();
 
-  // wait
   rank.wait();
 
   // done

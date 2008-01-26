@@ -102,17 +102,27 @@ int main(int argc, const char **argv)
     delete store;
     whoami = sb.whoami;
   }
-  cout << "starting osd" << whoami << " dev " << dev << std::endl;
 
   create_courtesy_output_symlink("osd", whoami);
 
   // load monmap
+  const char *monmap_fn = ".ceph_monmap";
   MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
+  int r = monmap.read(monmap_fn);
+  if (r < 0) {
+    cerr << "unable to read monmap from " << monmap_fn << std::endl;
+    return -1;
+  }
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+
+  cout << "starting osd" << whoami
+       << " at " << rank.get_rank_addr() 
+       << " dev " << dev
+       << std::endl;
+
+  rank.start();
 
   // start osd
   Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
@@ -120,7 +130,6 @@ int main(int argc, const char **argv)
   OSD *osd = new OSD(whoami, m, &monmap, dev);
   osd->init();
 
-  // wait
   rank.wait();
 
   // done

@@ -45,6 +45,8 @@ struct md_config_t {
 
   bool mkfs;
 
+  bool daemonize;
+
   // profiling
   bool  log;
   int   log_interval;

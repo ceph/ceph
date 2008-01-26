@@ -88,7 +88,8 @@ pair<int,int> mpi_bootstrap_new(int& argc, const char**& argv, MonMap *monmap)
   // start up all monitors at known addresses.
   entity_inst_t moninst[mpi_world];  // only care about first g_conf.num_mon of these.
 
-  rank.start_rank();   // bind and listen
+  rank.bind();   // bind and listen
+  rank.start();
 
   if (mpi_rank < g_conf.num_mon) {
     moninst[mpi_rank].addr = rank.rank_addr;

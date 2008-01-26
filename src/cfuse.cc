@@ -56,7 +56,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   assert(r >= 0);
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+  cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
+  rank.start();
 
   // start client
   Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);
@@ -64,7 +66,6 @@ int main(int argc, const char **argv, const char *envp[]) {
     
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
-  cout << "mounting ceph" << std::endl;
   client->mount();
 
   create_courtesy_output_symlink("client", client->get_nodeid());

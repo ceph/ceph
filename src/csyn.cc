@@ -52,7 +52,8 @@ int main(int argc, const char **argv, char *envp[]) {
   assert(r >= 0);
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+  rank.start();
 
   Rank::Policy client_policy;
   client_policy.fail_interval = 0;

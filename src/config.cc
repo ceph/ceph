@@ -112,6 +112,8 @@ md_config_t g_conf = {
 
   mkfs: false,
 
+  daemonize: false,
+
   // profiling and debugging
   log: true,
   log_interval: 1,
@@ -485,6 +487,10 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.num_client = atoi(args[++i]);
     else if (strcmp(args[i], "--numosd") == 0) 
       g_conf.num_osd = atoi(args[++i]);
+    
+    else if (strcmp(args[i], "--daemonize") == 0 ||
+	     strcmp(args[i], "-d") == 0)
+      g_conf.daemonize = true;	     
 
     else if (strcmp(args[i], "--ms_hosts") == 0)
       g_conf.ms_hosts = args[++i];
