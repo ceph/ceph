@@ -140,7 +140,7 @@ done:
 /*
  * setup listening socket
  */
-int ceph_tcp_listen(struct ceph_messenger *msgr, int port)
+int ceph_tcp_listen(struct ceph_messenger *msgr)
 {
 	int ret;
 	struct socket *sock = NULL;
@@ -163,11 +163,6 @@ int ceph_tcp_listen(struct ceph_messenger *msgr, int port)
 	/* set user_data to be the messenger */
 	sock->sk->sk_user_data = msgr;
 
-	/* currently no user specified address given so create */
-	/* if (!*myaddr) */
-	myaddr->sin_family = AF_INET;
-	myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-	myaddr->sin_port = htons(port);  /* any port */
 	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr, sizeof(*myaddr));
 	if (ret < 0) {
 		derr(0, "Failed to bind: %d\n", ret);

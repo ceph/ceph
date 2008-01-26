@@ -339,6 +339,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				       &args->my_addr);
 			if (err < 0)
 				return err;
+			args->flags |= CEPH_MOUNT_MYIP;
 			break;
 		default:
 			derr(1, "parse_mount_args bad token %d\n", token);

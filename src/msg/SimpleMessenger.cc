@@ -721,6 +721,18 @@ int Rank::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
+  if (peer_addr.v.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    // peer apparently doesn't know what ip they have; figure it out for them.
+    entity_addr_t old_addr = peer_addr;
+    socklen_t len = sizeof(peer_addr.v.ipaddr);
+    int r = ::getpeername(sd, (sockaddr*)&peer_addr.v.ipaddr, &len);
+    if (r < 0) {
+      dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+      state = STATE_CLOSED;
+      return -1;
+    }
+    dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
+  }
 
   __u32 cseq;
   rc = tcp_read(sd, (char*)&cseq, sizeof(cseq));
@@ -1365,6 +1377,11 @@ Message *Rank::Pipe::read_message()
 	   << " data=" << env.data_len << " at " << env.data_off
            << dendl;
   
+  if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
+    env.src.addr.ipaddr = peer_addr.v.ipaddr;
+  }
+
   // read front
   bufferlist front;
   bufferptr bp;

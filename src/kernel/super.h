@@ -35,6 +35,7 @@ extern int ceph_debug_osdc;
  */
 #define CEPH_MOUNT_FSID     1
 #define CEPH_MOUNT_NOSHARE  2  /* don't share client with other mounts */
+#define CEPH_MOUNT_MYIP     4  /* specified my ip */
 
 struct ceph_mount_args {
 	int mntflags;
