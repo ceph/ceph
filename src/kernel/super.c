@@ -114,7 +114,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_caps = ci->i_caps_static;
 	atomic_set(&ci->i_cap_count, 0);
 
-	dout(30, "ceph_alloc_inode sb=%p\n", sb);
 	for (i=0; i<4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
@@ -132,7 +131,7 @@ static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
-	dout(30, "ceph_destroy_inode %p ino %lu=%llx\n", inode, 
+	dout(30, "destroy_inode %p ino %lu=%llx\n", inode, 
 	     inode->i_ino, ceph_ino(inode));
 
 	if (ci->i_caps != ci->i_caps_static) 
@@ -143,9 +142,10 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
-static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct ceph_inode_info *ci = foo;
+	dout(10, "init_once on %p\n", foo);
 	inode_init_once(&ci->vfs_inode);
 }
 
@@ -251,9 +251,9 @@ bad:
 static int parse_mount_args(int flags, char *options, const char *dev_name, struct ceph_mount_args *args)
 {
 	char *c;
-	int len;
+	int len, err;
 	substring_t argstr[MAX_OPT_ARGS];
-		
+
 	dout(15, "parse_mount_args dev_name '%s'\n", dev_name);
 	memset(args, 0, sizeof(*args));
 
@@ -269,7 +269,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 	/* get mon ip */
 	/* er, just one for now. later, comma-separate... */	
 	len = c - dev_name;
-	parse_ip(dev_name, len, &args->mon_addr[0]);
+	if ((err = parse_ip(dev_name, len, &args->mon_addr[0])) < 0)
+		return err;
 	args->mon_addr[0].ipaddr.sin_family = AF_INET;
 	args->mon_addr[0].ipaddr.sin_port = htons(CEPH_MON_PORT);
 	args->mon_addr[0].erank = 0;
@@ -327,7 +328,10 @@ static int parse_mount_args(int flags, char *options, const char *dev_name, stru
 			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
 		case Opt_ip:
-			parse_ip(argstr[0].from, argstr[0].to-argstr[0].from, &args->my_addr);
+			if ((err = parse_ip(argstr[0].from, 
+					    argstr[0].to-argstr[0].from, 
+					    &args->my_addr)) < 0)
+				return err;
 			break;
 		default:
 			derr(1, "parse_mount_args bad token %d\n", token);

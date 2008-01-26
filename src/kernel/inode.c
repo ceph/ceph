@@ -14,7 +14,7 @@ int ceph_inode_debug = 50;
 
 const struct inode_operations ceph_symlink_iops;
 
-int ceph_get_inode(struct super_block *sb, ino_t ino, struct inode **pinode)
+int ceph_get_inode(struct super_block *sb, __u64 ino, struct inode **pinode)
 {
 	struct ceph_inode_info *ci;
 
@@ -29,8 +29,9 @@ int ceph_get_inode(struct super_block *sb, ino_t ino, struct inode **pinode)
 	ci = ceph_inode(*pinode);
 	ceph_set_ino(*pinode, ino);
 
-	ci->i_hashval = ino;
+	ci->i_hashval = (*pinode)->i_ino;
 
+	dout(30, "get_inode on %lu=%llx got %p\n", (*pinode)->i_ino, ino, *pinode);
 	return 0;
 }
 

@@ -248,7 +248,7 @@ extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 
 
 /* inode.c */
-extern int ceph_get_inode(struct super_block *sb, ino_t ino, struct inode **pinode);
+extern int ceph_get_inode(struct super_block *sb, u64 ino, struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info);
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq);

@@ -227,7 +227,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user * data,
 	int ret = 0;
 	int did = 0;
 	
-	dout(10, "silly_write on file %p %lld~%lu\n", file, *offset, count);
+	dout(10, "silly_write on file %p %lld~%u\n", file, *offset, (unsigned)count);
 	
 	/* ignore caps, for now. */
 	/* this is an ugly hack */
@@ -240,7 +240,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user * data,
 			*offset += ret;
 			data += ret;
 			count -= ret;
-			dout(10, "did %d bytes, ret now %d, %lu left\n", did, ret, count);
+			dout(10, "did %d bytes, ret now %d, %u left\n", did, ret, (unsigned)count);
 		} else if (did) 
 			break;
 		else 
