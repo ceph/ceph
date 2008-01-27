@@ -31,35 +31,12 @@ using namespace std;
 #include "common/Timer.h"
 
 
-class C_Die : public Context {
-public:
-  void finish(int) {
-    cerr << "die" << std::endl;
-    exit(1);
-  }
-};
-
-class C_Debug : public Context {
-  public:
-  void finish(int) {
-    int size = &g_conf.debug_after - &g_conf.debug;
-    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    generic_dout(0) << "debug_after flipping debug settings" << dendl;
-  }
-};
-
-
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   parse_config_options(args);
-
-  if (g_conf.kill_after) 
-    g_timer.add_event_after(g_conf.kill_after, new C_Die);
-  if (g_conf.debug_after) 
-    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   // mds specific args
   int whoami = -1;

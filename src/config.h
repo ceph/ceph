@@ -335,6 +335,7 @@ void parse_config_options(std::vector<const char*>& args);
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
 
 int create_courtesy_output_symlink(const char *type, int n);
+int rename_output_file();
 
 
 /**

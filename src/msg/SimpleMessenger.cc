@@ -303,6 +303,24 @@ int Rank::bind()
   return accepter.bind();
 }
 
+
+class C_Die : public Context {
+public:
+  void finish(int) {
+    cerr << "die" << std::endl;
+    exit(1);
+  }
+};
+
+class C_Debug : public Context {
+  public:
+  void finish(int) {
+    int size = &g_conf.debug_after - &g_conf.debug;
+    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
+    dout(0) << "debug_after flipping debug settings" << dendl;
+  }
+};
+
 int Rank::start()
 {
   lock.Lock();
@@ -318,12 +336,24 @@ int Rank::start()
 
   // daemonize?
   if (g_conf.daemonize) {
+    if (Thread::get_num_threads() > 0) {
+      derr(0) << "rank.start BUG: there are " << Thread::get_num_threads()
+	      << " already started that will now die!  call rank.start() sooner." 
+	      << dendl;
+    }
     dout(1) << "rank.start daemonizing" << dendl;
     daemon(1, 0);  /* fixme.. we should chdir(/) too! */
+    rename_output_file();
   }
 
-  accepter.start();
+  // some debug hackery?
+  if (g_conf.kill_after) 
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+  if (g_conf.debug_after) 
+    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
+  // go!
+  accepter.start();
   return 0;
 }
 

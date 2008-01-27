@@ -20,10 +20,12 @@
 #include <signal.h>
 #include <errno.h>
 
+extern int _num_threads;  // hack: in config.cc
+
 class Thread {
  private:
   pthread_t thread_id;
-
+  
  public:
   Thread() : thread_id(0) {}
   virtual ~Thread() {}
@@ -33,7 +35,9 @@ class Thread {
 
  private:
   static void *_entry_func(void *arg) {
-    return ((Thread*)arg)->entry();
+    void *r = ((Thread*)arg)->entry();
+    _num_threads--;
+    return r;
   }
 
  public:
@@ -41,10 +45,13 @@ class Thread {
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
 
+  static int get_num_threads() { return _num_threads; }
+
   int kill(int signal) {
     return pthread_kill(thread_id, signal);
   }
   int create() {
+    _num_threads++;
     return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }
   int join(void **prval = 0) {

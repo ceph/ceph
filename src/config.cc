@@ -38,6 +38,9 @@ atomic_t buffer_total_alloc;
 Mutex _dout_lock;
 ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
+char _dout_file[100] = {0};
+char _dout_dir[1000] = {0};
+char _dout_symlink_path[1000] = {0};
 
 // page size crap, see page.h
 int _get_bits_of(int v) {
@@ -51,6 +54,8 @@ int _get_bits_of(int v) {
 unsigned _page_size = sysconf(_SC_PAGESIZE);
 unsigned long _page_mask = ~(_page_size - 1);
 unsigned _page_shift = _get_bits_of(_page_size);
+
+int _num_threads = 0;
 
 // file layouts
 struct ceph_file_layout g_OSD_FileLayout = {
@@ -1013,7 +1018,17 @@ void parse_config_options(std::vector<const char*>& args)
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);
-    sprintf(fn, "%s/%s.%d", g_conf.dout_dir, hostname, getpid());
+
+    if (g_conf.dout_dir[0] == '/') 
+      strcpy(_dout_dir, g_conf.dout_dir);
+    else {
+      getcwd(_dout_dir, 100);
+      strcat(_dout_dir, "/");
+      strcat(_dout_dir, g_conf.dout_dir);
+    }
+    sprintf(_dout_file, "%s.%d", hostname, getpid());
+
+    sprintf(fn, "%s/%s", _dout_dir, _dout_file);
     std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
     if (!out->is_open()) {
       std::cerr << "error opening output file " << fn << std::endl;
@@ -1026,16 +1041,34 @@ void parse_config_options(std::vector<const char*>& args)
   args = nargs;
 }
 
-int create_courtesy_output_symlink(const char *type, int n)
+int rename_output_file()  // after calling daemon()
 {
   if (g_conf.dout_dir) {
-    char from[200], to[200];
+    char oldfn[100];
+    char newfn[100];
     char hostname[80];
     gethostname(hostname, 79);
-    sprintf(from, "%s/%s%d", g_conf.dout_dir, type, n);
-    sprintf(to, "%s.%d", hostname, getpid());
-    ::unlink(from);
-    ::symlink(to, from);
+    
+    sprintf(oldfn, "%s/%s", _dout_dir, _dout_file);
+    sprintf(newfn, "%s/%s.%d", _dout_dir, hostname, getpid());
+    ::rename(oldfn, newfn);
+    sprintf(_dout_file, "%s.%d", hostname, getpid());
+
+    if (_dout_symlink_path[0]) {
+      ::unlink(_dout_symlink_path);
+      ::symlink(_dout_file, _dout_symlink_path);
+    }
   }
   return 0;
 }
+
+int create_courtesy_output_symlink(const char *type, int n)
+{
+  if (g_conf.dout_dir) {
+    sprintf(_dout_symlink_path, "%s/%s%d", _dout_dir, type, n);
+    ::unlink(_dout_symlink_path);
+    ::symlink(_dout_file, _dout_symlink_path);
+  }
+  return 0;
+}
+
