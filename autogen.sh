@@ -3,5 +3,5 @@ rm -f config.cache
 aclocal
 autoconf
 autoheader
-automake -a
+automake -a --add-missing
 exit
