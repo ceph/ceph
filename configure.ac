@@ -20,8 +20,7 @@ AC_CHECK_LIB([pthread], [pthread_create])
 
 # fuse?
 AC_ARG_WITH([fuse],
-            [AS_HELP_STRING([--with-fuse]),
-              [use FUSE library for client])],
+            [AS_HELP_STRING([--with-fuse], [use FUSE library for client])],
             [],
             [with_fuse=check])
 LIBFUSE=
@@ -41,7 +40,7 @@ AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # CommonC++?
 AC_ARG_WITH([ccgnu],
-            [AS_HELP_STRING([--with-ccgnu]),
+            [AS_HELP_STRING([--with-ccgnu],
               [use CommonC++ library for fast thread-safe reference counting])],
             [],
             [with_ccgnu=check])
@@ -61,11 +60,10 @@ AS_IF([test "x$with_ccgnu" != xno],
 AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
 
 # newsyn?  requires mpi.
-AC_ARG_WITH([newsyn],
-            [AS_HELP_STRING([--with-newsyn]),
-              [build newsyn target, requires mpi]],
-            [],
-            [with_newsyn=no])
+#AC_ARG_WITH([newsyn],
+#            [AS_HELP_STRING([--with-newsyn], [build newsyn target, requires mpi])],
+#            [],
+#            [with_newsyn=no])
 
 # Checks for header files.
 AC_HEADER_DIRENT

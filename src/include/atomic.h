@@ -15,7 +15,9 @@
 #ifndef __CEPH_ATOMIC_H
 #define __CEPH_ATOMIC_H
 
-#include "acconfig.h"
+#ifdef HAVE_CONFIG_H
+# include "acconfig.h"
+#endif
 
 #ifdef WITH_CCGNU
 /*

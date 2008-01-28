@@ -1,1 +1,15 @@
-/usr/share/automake-1.10/INSTALL
+Installation Instructions
+*************************
+
+If pulling from git, you first need to build the configure script with
+
+$ ./reconf
+
+Then,
+
+$ ./configure
+$ make
+
+Note that if the FUSE library is not found, the user-space fuse client
+will not be built.  
+

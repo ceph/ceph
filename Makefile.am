@@ -1,3 +1,3 @@
 AUTOMAKE_OPTIONS = gnu
-EXTRA_DIST = doc web reconf
+EXTRA_DIST = web reconf
 SUBDIRS = src
