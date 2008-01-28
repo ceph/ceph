@@ -7,25 +7,65 @@ AC_INIT([Ceph distributed file system], [.1],
 	      [ceph])
 AM_INIT_AUTOMAKE(ceph, 0.1)
 
-
 # Checks for programs.
 AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_RANLIB
+AC_PROG_MAKE_SET
+
 
 # Checks for libraries.
-# FIXME: Replace `main' with a function in `-lccgnu2':
-AC_CHECK_LIB([ccgnu2], [main])
-# FIXME: Replace `main' with a function in `-ldb_cxx':
-AC_CHECK_LIB([db_cxx], [main])
-# FIXME: Replace `main' with a function in `-ldl':
-AC_CHECK_LIB([dl], [main])
-# FIXME: Replace `main' with a function in `-lfuse':
-AC_CHECK_LIB([fuse], [main])
-# FIXME: Replace `main' with a function in `-lm':
-AC_CHECK_LIB([m], [main])
-# FIXME: Replace `main' with a function in `-lpthread':
-AC_CHECK_LIB([pthread], [main])
+AC_CHECK_LIB([m], [pow])
+AC_CHECK_LIB([pthread], [pthread_create])
+
+# fuse?
+AC_ARG_WITH([fuse],
+            [AS_HELP_STRING([--with-fuse]),
+              [use FUSE library for client])],
+            [],
+            [with_fuse=check])
+LIBFUSE=
+AS_IF([test "x$with_fuse" != xno],
+	    [AC_CHECK_LIB([fuse], [fuse_main],
+             [AC_SUBST([LIBFUSE], ["-lfuse"])
+               AC_DEFINE([HAVE_LIBFUSE], [1],
+                         [Define if you have fuse])
+               HAVE_LIBFUSE=1
+              ],
+             [if test "x$with_fuse" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-fuse was given, but test failed])
+               fi
+             ])])
+AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
+
+# CommonC++?
+AC_ARG_WITH([ccgnu],
+            [AS_HELP_STRING([--with-ccgnu]),
+              [use CommonC++ library for fast thread-safe reference counting])],
+            [],
+            [with_ccgnu=check])
+LIBCCGNU2=
+AS_IF([test "x$with_ccgnu" != xno],
+	    [AC_CHECK_LIB([ccgnu2], [main],
+             [AC_SUBST([LIBCCGNU2], ["-lccgnu2"])
+              AC_DEFINE([WITH_CCGNU], [1],
+                        [Define if you have ccgnu])
+	      LIBS="-lccgnu2 $LIBS"
+             ],
+             [if test "x$with_ccgnu" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-ccgnu was given, but test failed])
+               fi
+             ], [-ldl -lpthread])])
+AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
+
+# newsyn?  requires mpi.
+AC_ARG_WITH([newsyn],
+            [AS_HELP_STRING([--with-newsyn]),
+              [build newsyn target, requires mpi]],
+            [],
+            [with_newsyn=no])
 
 # Checks for header files.
 AC_HEADER_DIRENT
@@ -79,7 +119,5 @@ AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile])
 AC_OUTPUT
-
-AC_PROG_MAKE_SET
 
 AM_INIT_AUTOMAKE

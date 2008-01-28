@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <list>
 #include <stdint.h>
+#include <assert.h>
 
 #include "atomic.h"
 

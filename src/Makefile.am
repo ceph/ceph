@@ -1,33 +1,65 @@
+#
+# note: the old Makefile is at Makefile.old
+#
+
 AUTOMAKE_OPTIONS = gnu
-
-INCLUDES = 
-LDADD = -lpthread libcommon.a
-
-bin_PROGRAMS = cmon mkmonmap cmonctl cmds cosd
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
-cmon_LDADD = libmon.a libcommon.a libcrush.a
-
+cmon_LDADD = libmon.a libcrush.a libcommon.a
 mkmonmap_SOURCES = mkmonmap.cc
 mkmonmap_LDADD = libcommon.a
-
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
 cmonctl_LDADD = libcommon.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcommon.a libcrush.a
+cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
-cosd_LDADD = libosd.a libebofs.a libcommon.a libcrush.a
+cosd_LDADD = libosd.a libebofs.a libcrush.a libcommon.a
 
+# synthetic client
+csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
+csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
 
+# fuse client
+if WITH_FUSE
+FUSEBIN = cfuse fakefuse
+else
+FUSEBIN = 
+endif
+
+cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
+cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
+fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
+fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libebofs.a \
+	libclient.a libosdc.a libcrush.a libcommon.a
+
+# debug targets
+fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
+fakesyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
+	libclient.a libosdc.a libcrush.a libcommon.a
+
+#newsyn_SOURCES = newsyn.cc msg/SimpleMessenger.cc
+#newsyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
+#	libclient.a libosdc.a libcrush.a libcommon.a
+
+##
+INCLUDES = 
+LDADD = -lpthread 
+
+AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
+AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
+AM_LDFLAGS =
+
+bin_PROGRAMS = cmon mkmonmap cmonctl cmds cosd csyn fakesyn $(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libebofs.a libclient.a
 
+# libs
 libcommon_a_SOURCES = \
 	msg/Message.cc \
 	common/Logger.cc \

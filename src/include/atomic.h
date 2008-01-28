@@ -15,7 +15,9 @@
 #ifndef __CEPH_ATOMIC_H
 #define __CEPH_ATOMIC_H
 
-#ifdef BUFFER_USE_CCPP
+#include "acconfig.h"
+
+#ifdef WITH_CCGNU
 /*
  * use commonc++ library AtomicCounter.
  */
