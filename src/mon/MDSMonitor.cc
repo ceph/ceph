@@ -569,8 +569,8 @@ void MDSMonitor::tick()
     int mds = pending_mdsmap.get_addr_rank(addr);
     if (mds >= 0) {
       // failure!
-      int newstate;
       int curstate = pending_mdsmap.get_state(mds);
+      int newstate = curstate;
       switch (curstate) {
       case MDSMap::STATE_CREATING:
 	newstate = MDSMap::STATE_DNE;	// didn't finish creating
