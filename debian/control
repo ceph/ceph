@@ -1,0 +1,14 @@
+Source: ceph
+Section: admin
+Priority: optional
+Maintainer: Sage Weil <sage@newdream.net>
+Build-Depends: debhelper (>= 5), autotools-dev, autoconf, automake, g++, gcc
+Standards-Version: 3.7.2
+
+Package: ceph
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libc6, libstdc++6, libfuse2, libcommoncpp2-1.6-0
+Recommends: fuse-utils
+Description: Ceph distributed file system
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  
