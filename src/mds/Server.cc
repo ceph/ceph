@@ -579,11 +579,13 @@ void Server::handle_client_request(MClientRequest *req)
 
   // active session?
   Session *session = 0;
-  if (req->get_client_inst().name.is_client() && 
-      !(session = mds->sessionmap.get_session(req->get_client_inst().name))) {
-    dout(5) << "no session for " << req->get_client_inst().name << ", dropping" << dendl;
-    delete req;
-    return;
+  if (req->get_client_inst().name.is_client()) {
+    session = mds->sessionmap.get_session(req->get_client_inst().name);
+    if (!session) {
+      dout(5) << "no session for " << req->get_client_inst().name << ", dropping" << dendl;
+      delete req;
+      return;
+    }
   }
 
   // old mdsmap?
@@ -3861,12 +3863,15 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   MClientRequest *req = mdr->client_request;
   int cmode = req->get_open_file_mode();
 
-  // can we issue the caps they want?
-  //version_t fdv = mds->locker->issue_file_data_version(cur);
+  // register new cap
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
-  if (!cap) return; // can't issue (yet), so wait!
-  
-  dout(12) << "_do_open issuing caps " << cap_string(cap->pending())
+
+  // drop our locks (they may interfere with us issuing new caps)
+  mds->locker->drop_locks(mdr);
+
+  cap->set_suppress(false);  // stop suppressing messages on this cap
+
+  dout(12) << "_do_open issued caps " << cap_string(cap->pending())
 	   << " for " << req->get_source()
 	   << " on " << *cur << dendl;
   

@@ -28,6 +28,17 @@ void SessionMap::init_inode()
 }
 
 
+void SessionMap::dump()
+{
+  hash<entity_name_t> H;
+  dout(0) << "dump" << dendl;
+  for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
+       p != session_map.end();
+       ++p) 
+    dout(0) << p->first << " " << p->second << " hash " << H(p->first) << " addr " << (void*)&p->first << dendl;
+}
+
+
 // ----------------
 // LOAD
 
