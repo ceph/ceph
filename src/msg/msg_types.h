@@ -89,8 +89,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const entity_name_t m ) const
     {
-      static blobhash H;
-      return H((const char*)&m, sizeof(m));
+      return rjhash32(m.v.type) ^ rjhash32(m.v.num);
     }
   };
 }
