@@ -94,7 +94,7 @@ struct ceph_mds_reply_info {
 	__u32                         *dir_dname_len;
 };
 
-
+extern const char* ceph_mds_op_name(int op);
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);

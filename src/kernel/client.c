@@ -376,3 +376,30 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 	ceph_msg_put(msg);
 }
+
+const char *ceph_msg_type_name(int type) 
+{
+	switch (type) {
+	case CEPH_MSG_SHUTDOWN: return "shutdown";
+	case CEPH_MSG_PING: return "ping";
+	case CEPH_MSG_PING_ACK: return "ping_ack";
+	case CEPH_MSG_MON_MAP: return "mon_map";
+	case CEPH_MSG_CLIENT_MOUNT: return "client_mount";
+	case CEPH_MSG_CLIENT_UNMOUNT: return "client_unmount";
+	case CEPH_MSG_STATFS: return "statfs";
+	case CEPH_MSG_STATFS_REPLY: return "statfs_reply";
+	case CEPH_MSG_MDS_GETMAP: return "mds_getmap";
+	case CEPH_MSG_MDS_MAP: return "mds_map";
+	case CEPH_MSG_CLIENT_SESSION: return "client_session";
+	case CEPH_MSG_CLIENT_RECONNECT: return "client_reconnect";
+	case CEPH_MSG_CLIENT_REQUEST: return "client_request";
+	case CEPH_MSG_CLIENT_REQUEST_FORWARD: return "client_request_forward";
+	case CEPH_MSG_CLIENT_REPLY: return "client_reply";
+	case CEPH_MSG_CLIENT_FILECAPS: return "client_filecaps";
+	case CEPH_MSG_OSD_GETMAP: return "osd_getmap";
+	case CEPH_MSG_OSD_MAP: return "osd_map";
+	case CEPH_MSG_OSD_OP: return "osd_op";
+	case CEPH_MSG_OSD_OPREPLY: return "osd_opreply";
+	}
+	return "unknown";
+}

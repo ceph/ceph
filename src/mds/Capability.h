@@ -61,7 +61,7 @@ private:
   CInode *inode;
   int wanted_caps;     // what the client wants (ideally)
   
-  map<capseq_t, int>  cap_history;  // seq -> cap
+  map<capseq_t, int>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
   
@@ -99,26 +99,34 @@ public:
 
   // most recently issued caps.
   int pending() { 
+    if (!last_sent) 
+      return 0;
     if (cap_history.count(last_sent))
-      return cap_history[ last_sent ];
-    return 0;
+      return cap_history[last_sent];
+    else 
+      return 0;
   }
   
   // caps client has confirmed receipt of
   int confirmed() { 
+    if (!last_recv)
+      return 0;
     if (cap_history.count(last_recv))
-      return cap_history[ last_recv ];
-    return 0;
+      return cap_history[last_recv];
+    else
+      return 0;
   }
 
-  // caps potentially issued
+  // caps issued, potentially still in hands of client
   int issued() { 
     int c = 0;
-    for (capseq_t seq = last_recv; seq <= last_sent; seq++) {
-      if (cap_history.count(seq)) {
-        c |= cap_history[seq];
-        generic_dout(10) << " cap issued: seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(c) << dendl;
-      }
+    for (map<capseq_t,int>::iterator p = cap_history.begin();
+	 p != cap_history.end();
+	 p++) {
+      c |= p->second;
+      generic_dout(10) << " cap issued: seq " << p->first << " " 
+		       << cap_string(p->second) << " -> " << cap_string(c)
+		       << dendl;
     }
     return c;
   }
@@ -185,32 +193,43 @@ public:
   int confirm_receipt(capseq_t seq, int caps) {
     int r = 0;
 
-    // old seqs
-    while (last_recv < seq) {
-      generic_dout(10) << " cap.confirm_receipt forgetting seq " << last_recv << " " << cap_string(cap_history[last_recv]) << dendl;
-      r |= cap_history[last_recv];
-      cap_history.erase(last_recv);
-      ++last_recv;
-    }
-    
-    // release current?
-    if (cap_history.count(seq) &&
-        cap_history[seq] != caps) {
-      generic_dout(10) << " cap.confirm_receipt revising seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) << dendl;
-      // note what we're releasing..
-      assert(cap_history[seq] & ~caps);
-      r |= cap_history[seq] & ~caps; 
+    generic_dout(10) << " confirm_receipt seq " << seq << " last_recv " << last_recv << " last_sent " << last_sent
+		    << " cap_history " << cap_history << dendl;
 
-      cap_history[seq] = caps; // confirmed() now less than before..
-    }
+    assert(last_recv <= last_sent);
+    assert(seq <= last_sent);
+    while (!cap_history.empty()) {
+      map<capseq_t,int>::iterator p = cap_history.begin();
 
-    // null?
-    if (caps == 0 && 
-        cap_history.size() == 1 &&
-        cap_history.count(seq)) {
-      cap_history.clear();  // viola, null!
-    }
+      if (p->first > seq)
+	break;
 
+      if (p->first == seq) {
+	// note what we're releasing..
+	if (p->second & ~caps) {
+	  generic_dout(10) << " cap.confirm_receipt revising seq " << seq 
+			  << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) 
+			  << dendl;
+	  r |= cap_history[seq] & ~caps; 
+	  cap_history[seq] = caps; // confirmed() now less than before..
+	}
+
+	// null?
+	if (caps == 0 && seq == last_sent) {
+	  generic_dout(10) << " cap.confirm_receipt making null seq " << last_recv
+			  << " " << cap_string(cap_history[last_recv]) << dendl;
+	  cap_history.clear();  // viola, null!
+	}
+	break;
+      }
+
+      generic_dout(10) << " cap.confirm_receipt forgetting seq " << p->first
+		      << " " << cap_string(p->second) << dendl;
+      r |= p->second;
+      cap_history.erase(p);
+    }
+    last_recv = seq;
+      
     return r;
   }
 

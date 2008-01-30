@@ -209,7 +209,7 @@ public:
     out << "clientreq(" << get_client() 
 	<< "." << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
-    if (!get_filepath().empty()) 
+    //if (!get_filepath().empty()) 
       out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();

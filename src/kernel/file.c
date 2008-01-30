@@ -68,7 +68,7 @@ int proc_open_reply(struct inode *inode, struct file *file,
 	return 0;
 }
 
-static int ceph_open_init_private_data(struct inode *inode, struct file *file)
+static int ceph_open_init_private_data(struct inode *inode, struct file *file, int flags)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf;
@@ -80,9 +80,14 @@ static int ceph_open_init_private_data(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	file->private_data = cf;
 
-	mode = ceph_file_mode(file->f_flags);
+	mode = ceph_file_mode(flags);
+	cf->mode = mode;
 	ci->i_nr_by_mode[mode]++;
 	wanted = ceph_caps_wanted(ci);
+	dout(10, "opened %p flags 0%o mode %d nr now %d.  wanted %d -> %d\n",
+	     file, flags,
+	     mode, ci->i_nr_by_mode[mode], 
+	     ci->i_cap_wanted, ci->i_cap_wanted|wanted);
 	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
 
 	return 0;
@@ -122,7 +127,7 @@ int ceph_open(struct inode *inode, struct file *file)
 			return err;
 	}
 
-	err = ceph_open_init_private_data(inode, file);
+	err = ceph_open_init_private_data(inode, file, file->f_flags);
 
 	if (err < 0)
 		return err;
@@ -188,7 +193,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	/* finish the open */
 	err = proc_open_reply(inode, file, session, &rinfo);
 	if (err == 0)
-		err = ceph_open_init_private_data(inode, file);
+		err = ceph_open_init_private_data(inode, file, nd->intent.open.flags);
 out:
 	ceph_mdsc_put_session(session);
 	return err;
@@ -198,21 +203,33 @@ int ceph_release(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf = file->private_data;
-	int mode, wanted;
+	int mode = cf->mode;
+	int wanted;
 
-	dout(5, "ceph_release inode %p file %p\n", inode, file);
+	dout(5, "release inode %p file %p\n", inode, file);
 	atomic_dec(&ci->i_cap_count);
+
+	/*
+	 * FIXME mystery: why is file->f_flags now different than
+	 * file->f_flags (actually, nd->intent.open.flags) on
+	 * open?  e.g., on ceph_lookup_open,
+	 *   ceph_file: opened 000000006fa3ebd0 flags 0101102 mode 2 nr now 1.  wanted 0 -> 30
+	 * and on release,
+	 *   ceph_file: released 000000006fa3ebd0 flags 0100001 mode 3 nr now -1.  wanted 30 was 30
+	 * for now, store the open mode in ceph_file_info.
+	 */
+	mode = cf->mode;
+	ci->i_nr_by_mode[mode]--;
+	wanted = ceph_caps_wanted(ci);
+	dout(10, "released %p flags 0%o mode %d nr now %d.  wanted %d was %d\n", 
+	     file, file->f_flags, mode, 
+	     ci->i_nr_by_mode[mode], wanted, ci->i_cap_wanted);
+	if (wanted != ci->i_cap_wanted)
+		ceph_mdsc_update_cap_wanted(ci, wanted);
 
 	if (cf->rinfo.reply)
 		ceph_mdsc_destroy_reply_info(&cf->rinfo);
 	kfree(cf);
-
-	mode = ceph_file_mode(file->f_flags);
-	ci->i_nr_by_mode[mode]--;
-	wanted = ceph_caps_wanted(ci);
-	dout(10, "mode %d wanted %d was %d\n", mode, wanted, ci->i_cap_wanted);
-	if (wanted != ci->i_cap_wanted)
-		ceph_mdsc_update_cap_wanted(ci, wanted);
 
 	return 0;
 }

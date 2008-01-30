@@ -11,6 +11,33 @@ int ceph_debug_mdsc = 50;
 #include "super.h"
 #include "messenger.h"
 
+/*
+ * note: this also appears in messages/MClientRequest.h,
+ * but i don't want it inline in the kernel.
+ */
+const char* ceph_mds_op_name(int op) 
+{
+  switch (op) {
+  case CEPH_MDS_OP_STAT:  return "stat";
+  case CEPH_MDS_OP_LSTAT: return "lstat";
+  case CEPH_MDS_OP_FSTAT: return "fstat";
+  case CEPH_MDS_OP_UTIME: return "utime";
+  case CEPH_MDS_OP_CHMOD: return "chmod";
+  case CEPH_MDS_OP_CHOWN: return "chown";
+  case CEPH_MDS_OP_READDIR: return "readdir";
+  case CEPH_MDS_OP_MKNOD: return "mknod";
+  case CEPH_MDS_OP_LINK: return "link";
+  case CEPH_MDS_OP_UNLINK: return "unlink";
+  case CEPH_MDS_OP_RENAME: return "rename";
+  case CEPH_MDS_OP_MKDIR: return "mkdir";
+  case CEPH_MDS_OP_RMDIR: return "rmdir";
+  case CEPH_MDS_OP_SYMLINK: return "symlink";
+  case CEPH_MDS_OP_OPEN: return "open";
+  case CEPH_MDS_OP_TRUNCATE: return "truncate";
+  case CEPH_MDS_OP_FSYNC: return "fsync";
+  default: return "unknown";
+  }
+}
 
 static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 {
@@ -436,7 +463,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
 	ceph_encode_filepath(&p, end, ino2, path2);
-	dout(10, "create_request op %d -> %p\n", op, req);
+	dout(10, "create_request op %d=%s -> %p\n", op, ceph_mds_op_name(op), req);
 	if (path1) 
 		dout(10, "create_request  path1 %llx/%s\n", ino1, path1);
 	if (path2)
@@ -1007,6 +1034,9 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps, int wanted,
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
+
+	dout(10, "send_cap_ack ino %llx caps %d wanted %d seq %u size %llu\n", 
+	     ino, caps, wanted, (unsigned)seq, size);
 	
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_FILECAPS, sizeof(*fc), 0, 0, 0);
 	if (IS_ERR(msg))

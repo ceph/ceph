@@ -401,24 +401,31 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 	dout(10, " my wanted = %d\n", wanted);
 
-	/* unwanted? */
-	if (wanted == 0) {
-		dout(10, "wanted=0, reminding mds\n");
-		grant->wanted = cpu_to_le32(0);
-		return 1; /* ack */
-	}
+	cap = get_cap_for_mds(inode, mds);
+
+	/* new cap? */
+	if (!cap) {
+		/* unwanted? */
+		if (wanted == 0) {
+			dout(10, "wanted=0, reminding mds\n");
+			grant->wanted = cpu_to_le32(0);
+			return 1; /* ack */
+		}
+		/* hrm */
+		BUG_ON(1);
+		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
+		cap = ceph_add_cap(inode, session, 
+				   le32_to_cpu(grant->caps), 
+				   le32_to_cpu(grant->seq));
+		return ret;
+	} 
+
+	cap->seq = seq;
+
 	if (wanted != le32_to_cpu(grant->wanted)) {
 		dout(10, "wanted %d -> %d\n", le32_to_cpu(grant->wanted), wanted);
 		grant->wanted = cpu_to_le32(wanted);
 	}
-
-	/* new cap? */
-	cap = get_cap_for_mds(inode, mds);
-	if (!cap) {
-		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
-		cap = ceph_add_cap(inode, session, le32_to_cpu(grant->caps), le32_to_cpu(grant->seq));
-		return ret;
-	} 
 
 	/* revocation? */
 	newcaps = le32_to_cpu(grant->caps);
@@ -482,6 +489,7 @@ struct ceph_msg * prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *d
 int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
         const unsigned int ia_valid = attr->ia_valid;
@@ -492,23 +500,23 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 
 	/* gratuitous debug output */
         if (ia_valid & ATTR_UID)
-		dout(10, "uid %d -> %d\n", inode->i_uid, attr->ia_uid);
+		dout(10, "setattr: uid %d -> %d\n", inode->i_uid, attr->ia_uid);
         if (ia_valid & ATTR_GID)
-		dout(10, "gid %d -> %d\n", inode->i_uid, attr->ia_uid);
+		dout(10, "setattr: gid %d -> %d\n", inode->i_uid, attr->ia_uid);
         if (ia_valid & ATTR_MODE)
-		dout(10, "mode %d -> %d\n", inode->i_mode, attr->ia_mode);
+		dout(10, "setattr: mode %d -> %d\n", inode->i_mode, attr->ia_mode);
         if (ia_valid & ATTR_SIZE)
-		dout(10, "size %lld -> %lld\n", inode->i_size, attr->ia_size);
+		dout(10, "setattr: size %lld -> %lld\n", inode->i_size, attr->ia_size);
         if (ia_valid & ATTR_ATIME)
-		dout(10, "atime %ld.%ld -> %ld.%ld\n", 
+		dout(10, "setattr: atime %ld.%ld -> %ld.%ld\n", 
 		     inode->i_atime.tv_sec, inode->i_atime.tv_nsec, 
 		     attr->ia_atime.tv_sec, attr->ia_atime.tv_nsec);
         if (ia_valid & ATTR_MTIME)
-		dout(10, "mtime %ld.%ld -> %ld.%ld\n", 
+		dout(10, "setattr: mtime %ld.%ld -> %ld.%ld\n", 
 		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec, 
 		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
         if (ia_valid & ATTR_FILE)
-		dout(10, "ATTR_FILE ... hrm!\n");
+		dout(10, "setattr: ATTR_FILE ... hrm!\n");
 
 	/* chown */
         if (ia_valid & (ATTR_UID|ATTR_GID)) {
@@ -571,7 +579,10 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* truncate? */
-	if (ia_valid & ATTR_SIZE) {
+	if (ia_valid & ATTR_SIZE &&
+	    attr->ia_size < inode->i_size) {  /* fixme? */
+		dout(10, "truncate: ia_size %d i_size %d ci->i_wr_size %d\n",
+		     (int)attr->ia_size, (int)inode->i_size, (int)ci->i_wr_size);
 		if (ia_valid & ATTR_FILE) 
 			req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_TRUNCATE, 
 						       ceph_ino(dentry->d_inode), "", 0, 0);

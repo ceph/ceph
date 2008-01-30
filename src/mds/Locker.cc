@@ -741,8 +741,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
           << dendl;  
   
   // confirm caps
+  int had2 = cap->issued();
   int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
   int has = cap->confirmed();
+  dout(10) << "had " << cap_string(had) << " " << cap_string(had2) << " has " << cap_string(has) << dendl;
+  had |= had2;
 
   // update wanted
   if (cap->wanted() != wanted) {

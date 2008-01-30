@@ -16,11 +16,11 @@ extern int ceph_debug_msgr;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 
-# define dout(x, args...) do {						\
+#define dout(x, args...) do {						\
 		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))		\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
-# define derr(x, args...) do {					   \
+#define derr(x, args...) do {					   \
 		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))	   \
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 	} while (0)
@@ -29,6 +29,8 @@ extern int ceph_debug_osdc;
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
 #define CEPH_BLKSIZE	4096
+
+
 
 /*
  * mount options
@@ -208,11 +210,11 @@ static inline int ceph_file_mode(int flags)
 {
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
 		return FILE_MODE_PIN;
-	if ((flags & O_RDWR) == O_RDWR)
+	if ((flags & O_ACCMODE) == O_RDWR)
 		return FILE_MODE_RDWR;
-	if ((flags & O_WRONLY) == O_WRONLY)
+	if ((flags & O_ACCMODE) == O_WRONLY)
 		return FILE_MODE_WRONLY;
-	if ((flags & O_RDONLY) == O_RDONLY)
+	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
 	BUG_ON(1);
 }
@@ -231,6 +233,7 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
  */
 struct ceph_file_info {
 	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
+	int mode;      /* initialized on open */
 	struct ceph_mds_reply_info rinfo;
 };
 
@@ -263,6 +266,7 @@ extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 extern void ceph_destroy_client(struct ceph_client *cl);
 extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 		      struct dentry **pmnt_root);
+extern const char *ceph_msg_type_name(int type);
 
 
 /* inode.c */

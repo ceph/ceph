@@ -32,6 +32,8 @@ kernel client
  - d_revalidate?
  - test truncate
 - is ino_t really still 32 bits on i386??  hrm!
+- fix file open vs file_cap race
+  - preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
 /  - handle file caps, ack back to mds, etc. 
     - actually flush dirty data, too
@@ -45,9 +47,6 @@ kernel client
   - handle map changes (resubmit ops)
 - mon client
   - work out message resend logic..?
-- mount
-  - determine suitable local ip automatically
-    - this should be determined by which interface/ip would be used to connect to the monitor ip
 - unmount
 /  - close open file handles, mds sessions
     - flush data before unmount.
