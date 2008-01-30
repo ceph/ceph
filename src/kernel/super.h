@@ -16,6 +16,8 @@ extern int ceph_debug_msgr;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 
+extern int ceph_lookup_cache;
+
 # define dout(x, args...) do {						\
 		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))		\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
@@ -29,6 +31,8 @@ extern int ceph_debug_osdc;
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
 #define CEPH_BLKSIZE	4096
+
+#define CACHE_HZ		(1*HZ)
 
 /*
  * mount options
@@ -142,6 +146,8 @@ struct ceph_inode_info {
 	struct timespec i_old_atime;
 
 	unsigned long i_hashval;
+
+	unsigned long time;
 
 	struct inode vfs_inode; /* at end */
 };
@@ -304,6 +310,8 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_reply_info *prinfo,
 			   struct inode **lastinode,
 			   struct dentry **lastdentry);
+extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
+				      struct ceph_mds_reply_info *prinfo);
 
 
 #endif /* _FS_CEPH_CEPH_H */

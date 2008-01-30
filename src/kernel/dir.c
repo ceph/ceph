@@ -245,8 +245,36 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nd)
+int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
+				      struct ceph_mds_reply_info *prinfo)
+{
+	struct ceph_client *client = ceph_sb_to_client(sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	char *path;
+	int pathlen;
+	struct ceph_msg *req;
+	int err;
+
+	/* regular lookup */
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
+				       ceph_ino(sb->s_root->d_inode), path, 0, 0);
+	kfree(path);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	err = ceph_mdsc_do_request(mdsc, req, prinfo, 0);
+	if (err < 0)
+		return err;
+	err = le32_to_cpu(prinfo->head->result);
+	dout(20, "dir_lookup result=%d\n", err);
+
+	return err;
+}
+
+struct dentry *ceph_inode_lookup(struct inode *dir, struct dentry *dentry,
+				      struct nameidata *nd, struct inode *inode)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -254,7 +282,6 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	int pathlen;
 	struct ceph_msg *req;
 	struct ceph_mds_reply_info rinfo;
-	struct inode *inode;
 	int err;
 	ino_t ino;
 	int found = 0;
@@ -262,7 +289,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 
 	/* open(|create) intent? */
-	if (nd->flags & LOOKUP_OPEN) {
+	if (nd && nd->flags & LOOKUP_OPEN) {
 		err = ceph_lookup_open(dir, dentry, nd);
 		return ERR_PTR(err);
 	}
@@ -283,6 +310,61 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	dout(20, "dir_lookup result=%d\n", err);
 
 	/* if there was a previous inode associated with this dentry, now there isn't one */
+	if (err == -ENOENT)
+		d_add(dentry, NULL);
+	else if (err < 0)
+		return ERR_PTR(err);
+
+	if (rinfo.trace_nr > 0) {
+		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
+		dout(10, "got and parsed stat result, ino %lu\n", ino);
+
+		if (!inode) {	
+			inode = ilookup(dir->i_sb, ino);
+
+			if (!inode)
+				inode = new_inode(dir->i_sb);
+			else
+				found++;
+
+			if (!inode)
+				return ERR_PTR(-EACCES);
+		}
+
+		err = ceph_fill_inode(inode,
+				      rinfo.trace_in[rinfo.trace_nr-1].in);
+		if (err < 0)
+			return ERR_PTR(err);
+		d_add(dentry, inode);
+
+		if (found)
+			iput(inode);
+
+	} else {
+		dout(10, "no trace in reply? wtf.\n");
+	}
+	return NULL;
+}
+
+static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
+				      struct nameidata *nd)
+{
+	struct ceph_mds_reply_info rinfo;
+	struct inode *inode;
+	int err;
+	ino_t ino;
+	int found = 0;
+
+	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
+
+	/* open(|create) intent? */
+	if (nd && nd->flags & LOOKUP_OPEN) {
+		err = ceph_lookup_open(dir, dentry, nd);
+		return ERR_PTR(err);
+	}
+
+	err = ceph_request_lookup(dir->i_sb, dentry, &rinfo);
+
 	if (err == -ENOENT)
 		d_add(dentry, NULL);
 	else if (err < 0)
@@ -314,6 +396,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	} else {
 		dout(10, "no trace in reply? wtf.\n");
 	}
+
 	return NULL;
 }
 

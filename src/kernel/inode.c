@@ -130,6 +130,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		return -EINVAL;
 	}
 
+	ci->time = jiffies;
+
 	return 0;
 }
 
@@ -594,13 +596,56 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
+int ceph_inode_revalidate(struct dentry *dentry)
+{
+	struct ceph_inode_info *ci;
+	struct ceph_mds_reply_info rinfo;
+	ino_t ino;
+	int err;
+
+	if (dentry->d_inode == NULL)
+		return -ENOENT;
+
+	ci = ceph_inode(dentry->d_inode);
+
+	if (!ci)
+		return -ENOENT;
+
+	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ)) {
+		return 0;
+	}
+
+	err = ceph_request_lookup(dentry->d_inode->i_sb, dentry, &rinfo);
+
+	if (err < 0)
+		return err;
+
+	if (rinfo.trace_nr > 0) {
+		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
+		dout(10, "revalidate: got and parsed stat result, ino %lu\n", ino);
+
+		err = ceph_fill_inode(dentry->d_inode,
+				      rinfo.trace_in[rinfo.trace_nr-1].in);
+		if (err < 0)
+			return err;
+	} else {
+		dout(10, "no trace in reply? wtf.\n");
+	}
+
+	return err;
+}
+
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
 {
+	int err;
 	dout(30, "ceph_inode_getattr\n");
 
-	/* TODO: need to revalidate first */
-	generic_fillattr(dentry->d_inode, stat);
-	stat->blksize = CEPH_BLKSIZE;
-	return 0;
+	err = ceph_inode_revalidate(dentry);
+
+	if (!err) {
+		generic_fillattr(dentry->d_inode, stat);
+		stat->blksize = CEPH_BLKSIZE;
+	}
+	return err;
 }
 
