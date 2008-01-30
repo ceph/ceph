@@ -7,6 +7,9 @@
 #include <linux/version.h>
 
 int ceph_super_debug = 50;
+
+int ceph_lookup_cache = 1;
+
 #define DOUT_VAR ceph_super_debug
 #define DOUT_PREFIX "super: "
 #include "super.h"

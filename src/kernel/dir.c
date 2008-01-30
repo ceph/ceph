@@ -245,14 +245,37 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nd)
+int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
+				      struct ceph_mds_reply_info *prinfo)
 {
-	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
+	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	char *path;
 	int pathlen;
 	struct ceph_msg *req;
+	int err;
+
+	/* regular lookup */
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
+				       ceph_ino(sb->s_root->d_inode), path, 0, 0);
+	kfree(path);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	err = ceph_mdsc_do_request(mdsc, req, prinfo, 0);
+	if (err < 0)
+		return err;
+	err = le32_to_cpu(prinfo->head->result);
+	dout(20, "dir_lookup result=%d\n", err);
+
+	return err;
+}
+
+static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
+				      struct nameidata *nd)
+{
 	struct ceph_mds_reply_info rinfo;
 	struct inode *inode;
 	int err;
@@ -267,22 +290,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(err);
 	}
 
-	/* regular lookup */
-	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path))
-		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-				       ceph_ino(dir->i_sb->s_root->d_inode), path, 0, 0);
-	kfree(path);
-	if (IS_ERR(req))
-		return ERR_PTR(PTR_ERR(req));
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
-	if (err < 0)
-		return ERR_PTR(err);
-	err = le32_to_cpu(rinfo.head->result);
-	dout(20, "dir_lookup result=%d\n", err);
+	err = ceph_request_lookup(dir->i_sb, dentry, &rinfo);
 
-	/* if there was a previous inode associated with this dentry, now there isn't one */
 	if (err == -ENOENT)
 		d_add(dentry, NULL);
 	else if (err < 0)
@@ -314,6 +323,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	} else {
 		dout(10, "no trace in reply? wtf.\n");
 	}
+
 	return NULL;
 }
 
