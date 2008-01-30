@@ -75,12 +75,15 @@ mon
 
 
 mds mustfix
+- journal cap mtime/size updates
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
 
 - rerun destro trace against latest, with various journal lengths
+
+- EOpen vs other journal events... update ordering problem?
 
 mds
 - client cap timeouts

@@ -12,41 +12,36 @@
  * 
  */
 
-#ifndef __MDS_EOPEN_H
-#define __MDS_EOPEN_H
+#ifndef __MDS_EFILEACCESS_H
+#define __MDS_EFILEACCESS_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
-class EOpen : public LogEvent {
+class EFileAccess : public LogEvent {
 public:
-  EMetaBlob metablob;
-  list<inodeno_t> inos;
-  //list<inodeno_t> wr_inos;
+  inodeno_t ino;
+  utime_t atime;
 
-  EOpen() : LogEvent(EVENT_OPEN) { }
-  EOpen(MDLog *mdlog) : 
-    LogEvent(EVENT_OPEN), metablob(mdlog) { }
-
-  void print(ostream& out) {
-    out << "EOpen " << metablob;
+  EFileAccess() : LogEvent(EVENT_FILEACCESS) { }
+  EFileAccess(MDLog *mdlog, CInode *in) : 
+    LogEvent(EVENT_FILEACCESS) { 
+    ino = in->inode.ino;
+    atime = in->inode.atime;
   }
 
-  void add_inode(CInode *in) {
-    inos.push_back(in->ino());
-    if (!in->is_base()) {
-      metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      metablob.add_primary_dentry(in->get_parent_dn(), false);
-    }
+  void print(ostream& out) {
+    out << "EFileAccess " << ino
+	<< " atime " << atime;
   }
 
   void encode_payload(bufferlist& bl) {
-    ::_encode(inos, bl);
-    metablob._encode(bl);
+    ::_encode(ino, bl);
+    ::_encode(atime, bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(inos, bl, off);
-    metablob._decode(bl, off);
+    ::_decode(ino, bl, off);
+    ::_decode(atime, bl, off);
   }
 
   void update_segment();

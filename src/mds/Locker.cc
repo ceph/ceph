@@ -27,6 +27,8 @@
 
 #include "events/EString.h"
 #include "events/EUpdate.h"
+#include "events/EFileWrite.h"
+#include "events/EFileAccess.h"
 
 #include "msg/Messenger.h"
 
@@ -731,6 +733,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   assert(cap);
 
   // filter wanted based on what we could ever give out (given auth/replica status)
+  int old_wanted = in->get_caps_wanted();
   int wanted = m->get_wanted() & in->filelock.caps_allowed_ever();
   
   dout(7) << "handle_client_file_caps seq " << m->get_seq() 
@@ -748,6 +751,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   had |= had2;
 
   // update wanted
+  bool last_wr = false;  // last write cap
   if (cap->wanted() != wanted) {
     if (m->get_seq() < cap->get_last_open()) {
       /* this is awkward.
@@ -763,7 +767,19 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       // outright release?
       dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
       in->remove_client_cap(client);
-      if (!in->is_any_caps()) 
+
+      // last wr cap?
+      int new_wanted = in->get_caps_wanted();
+      dout(10) << "old_wanted " << cap_string(old_wanted)
+	       << " new_wanted " << cap_string(new_wanted) << dendl;
+      if ((old_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+	  !(new_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND))) {
+	dout(7) << " last wr-wanted cap, adjusting max_size" << dendl;
+	in->inode.max_size = 0;
+	last_wr = true;
+      }
+
+      if (!in->is_any_caps())
 	in->xlist_open_file.remove_myself();  // unpin logsegment
       if (!in->is_auth())
 	request_inode_file_caps(in);
@@ -777,11 +793,12 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << "  taking atime " << m->get_atime() << " > " 
               << in->inode.atime << " for " << *in << dendl;
     in->inode.atime = m->get_atime();
+    mds->mdlog->submit_entry(new EFileAccess(mds->mdlog, in));      
   }
   
+  // mtime|size?
+  bool dirty = false;
   if ((has|had) & CEPH_CAP_WR) {
-    bool dirty = false;
-
     // mtime
     if (m->get_mtime() > in->inode.mtime) {
       dout(7) << "  taking mtime " << m->get_mtime() << " > " 
@@ -796,10 +813,9 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       in->inode.size = m->get_size();
       dirty = true;
     }
-
-    if (dirty) 
-      mds->mdlog->submit_entry(new EString("cap inode update dirty fixme"));
-  }  
+  }
+  if (dirty || last_wr) 
+    mds->mdlog->submit_entry(new EFileWrite(mds->mdlog, in));      
 
   // reevaluate, waiters
   if (!in->filelock.is_stable())

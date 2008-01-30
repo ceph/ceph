@@ -15,18 +15,20 @@ if [ `echo $IP | grep '^127\\.'` ]
 then
 	echo
 	echo "WARNING: hostname resolves to loopback; remote hosts will not be able to"
-	echo "  connect.  either adjust /etc/hsots, or edit this script to use your"
+	echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
 	echo "  machine's real IP."
 	echo
 fi
 
-ARGS="--bind $IP --doutdir out -d"
 ./mkmonmap $IP:12345  # your IP here
-./cmon --mkfs --mon 0 $ARGS
-./cosd --mkfs --osd 0 $ARGS
-./cosd --mkfs --osd 1 $ARGS
-./cosd --mkfs --osd 2 $ARGS
-./cosd --mkfs --osd 3 $ARGS
-./cmds $ARGS
+
+ARGS="-d --bind $IP --doutdir out --debug_ms 1"
+./cmon $ARGS --mkfs --mon 0
+./cosd $ARGS --mkfs --osd 0
+./cosd $ARGS --mkfs --osd 1
+./cosd $ARGS --mkfs --osd 2
+./cosd $ARGS --mkfs --osd 3
+./cmds $ARGS --debug_mds 10
+
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

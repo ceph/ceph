@@ -32,6 +32,9 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
 
+#include "events/EFileWrite.h"
+#include "events/EFileAccess.h"
+
 #include "events/EPurgeFinish.h"
 
 #include "events/EAnchor.h"
@@ -69,6 +72,9 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_UPDATE: le = new EUpdate; break;
   case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
   case EVENT_OPEN: le = new EOpen; break;
+
+  case EVENT_FILEWRITE: le = new EFileWrite; break;
+  case EVENT_FILEACCESS: le = new EFileAccess; break;
 
   case EVENT_PURGEFINISH: le = new EPurgeFinish; break;
 

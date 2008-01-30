@@ -29,6 +29,8 @@
 #define EVENT_UPDATE       20
 #define EVENT_SLAVEUPDATE  21
 #define EVENT_OPEN         22
+#define EVENT_FILEWRITE    23
+#define EVENT_FILEACCESS   24
 
 #define EVENT_PURGEFINISH  30
 

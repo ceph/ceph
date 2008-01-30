@@ -198,10 +198,11 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
-  int64_t    size, max_size, allocated_size;
+  int64_t    size;
+  int64_t    max_size; // client(s) are auth to write this much...
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  utime_t    rmtime;  // recursive mtime
+  utime_t    rmtime;  // recursive mtime?
  
   // special stuff
   version_t version;           // auth only
