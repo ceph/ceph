@@ -17,29 +17,39 @@
 
 #define CEPH_MON_PORT 12345
 
+/*
+ * types in this file are defined as little-endian, and are
+ * primarily intended to describe data structures that pass
+ * over the wire or are stored on disk.
+ */
 
-typedef __u64 ceph_version_t;
-typedef __u64 ceph_tid_t;
-typedef __u32 ceph_epoch_t;
+
+/*
+ * some basics
+ */
+typedef __le64 ceph_version_t;
+typedef __le64 ceph_tid_t;
+typedef __le32 ceph_epoch_t;
 
 
 /*
  * fs id
  */
 struct ceph_fsid {
-	__u64 major;
-	__u64 minor;
+	__le64 major;
+	__le64 minor;
 };
 
 static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
-	return a->major == b->major && a->minor == b->minor;
+	return le64_to_cpu(a->major) == le64_to_cpu(b->major) && 
+		le64_to_cpu(a->minor) == le64_to_cpu(b->minor);
 }
 
 
 /*
  * ino, object, etc.
  */
-typedef __u64 ceph_ino_t;
+typedef __le64 ceph_ino_t;
 
 struct ceph_object {
 	__le64 ino;  /* inode "file" identifier */
@@ -57,7 +67,7 @@ struct ceph_timeval {
 /*
  * dir fragments
  */ 
-typedef __u32 ceph_frag_t;
+typedef __le32 ceph_frag_t;
 
 static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
@@ -153,7 +163,7 @@ struct ceph_object_layout {
  */
 struct ceph_eversion {
 	ceph_epoch_t epoch;
-	__u64        version;
+	__le64       version;
 } __attribute__ ((packed));
 
 /*

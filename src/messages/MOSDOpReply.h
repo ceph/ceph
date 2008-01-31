@@ -33,7 +33,7 @@ class MOSDOpReply : public Message {
   ceph_osd_reply_head head;
 
  public:
-  long     get_tid() { return head.tid; }
+  long     get_tid() { return le64_to_cpu(head.tid); }
   object_t get_oid() { return head.oid; }
   pg_t     get_pg() { return head.layout.ol_pgid; }
   int      get_op()  { return head.op; }
@@ -52,7 +52,7 @@ class MOSDOpReply : public Message {
   void set_op(int op) { head.op = op; }
 
   // osdmap
-  epoch_t get_map_epoch() { return head.osdmap_epoch; }
+  epoch_t get_map_epoch() { return le32_to_cpu(head.osdmap_epoch); }
 
 
 public:
@@ -64,7 +64,7 @@ public:
     head.flags = commit ? CEPH_OSD_OP_SAFE:0;
     head.oid = req->head.oid;
     head.layout = req->head.layout;
-    head.osdmap_epoch = e;
+    head.osdmap_epoch = cpu_to_le32(e);
     head.result = result;
     head.offset = req->head.offset;
     head.length = req->head.length;  // speculative... OSD should ensure these are correct

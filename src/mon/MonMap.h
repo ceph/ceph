@@ -68,8 +68,8 @@ class MonMap {
 
 
   void generate_fsid() {
-    fsid.major = ((uint64_t)rand() << 32) + rand();
-    fsid.minor = ((uint64_t)rand() << 32) + rand();
+    fsid.major = cpu_to_le64(((uint64_t)rand() << 32) + rand());
+    fsid.minor = cpu_to_le64(((uint64_t)rand() << 32) + rand());
   }
 
   // read from/write to a file
