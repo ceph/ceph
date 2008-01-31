@@ -734,8 +734,9 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
 
 
-
-
+/*
+ * helper: journal size, max_size, mtime, atime updates, as needed.
+ */
 void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr, 
 					int64_t size, utime_t mtime, utime_t atime)
 {

@@ -25,6 +25,7 @@ kernel client
  - echo blah >> mnt/blah "appends" from offset zero, regardless of file size
  - cap handler probably needs i_mutex or something when updating file sizes
    - which means it probably needs to be done in a different worker thread (NOT the messenger's)
+ - prevent client_reply from racing against a subsequent file_caps.
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
@@ -36,7 +37,6 @@ kernel client
  - getattr should do an lstat?
  - d_revalidate?
  - test truncate
-- is ino_t really still 32 bits on i386??  hrm!
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
@@ -80,7 +80,6 @@ mon
 
 
 mds mustfix
-- journal cap mtime/size updates
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
@@ -91,6 +90,8 @@ mds mustfix
 - EOpen vs other journal events... update ordering problem?
 
 mds
+- fix file_data_version
+
 - client cap timeouts
 /  - stale -> resume
   - tolerate connection break
@@ -113,9 +114,6 @@ mds
 - inode.rmtime (recursive mtime)
 - make inode.size reflect directory size (number of entries)
 
-- inode.max_size
-- inode.allocated_size
- 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
 - could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...

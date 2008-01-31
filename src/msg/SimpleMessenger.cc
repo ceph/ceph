@@ -815,7 +815,7 @@ int Rank::Pipe::accept()
       // if open race, low addr's pipe "wins".
       // otherwise, look at connect_seq
       if ((other->state == STATE_CONNECTING && peer_addr < rank.rank_addr) ||
-	  (other->state == STATE_OPEN && cseq == other->connect_seq)) {
+	  (other->state == STATE_OPEN && cseq >= other->connect_seq)) {
 	dout(10) << "accept already had pipe " << other
 		 << ", but switching to this new one" << dendl;
 	// switch to this new Pipe

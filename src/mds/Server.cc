@@ -2515,7 +2515,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // log + wait
-  journal_opens();  // journal pending opens, just in case
   mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
 							dirpv));
 }
@@ -2631,8 +2630,6 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
 
   // finisher
   C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn, dirpv);
-  
-  journal_opens();  // journal pending opens, just in case
   
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -3033,8 +3030,6 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
-
-  journal_opens();  // journal pending opens, just in case
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -3891,68 +3886,15 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply, cur);
 
-  // journal?
-  if (cur->last_open_journaled == 0) {
-    queue_journal_open(cur);
-    maybe_journal_opens();
-  }
-
-}
-
-void Server::queue_journal_open(CInode *in)
-{
-  dout(10) << "queue_journal_open on " << *in << dendl;
-
-  if (journal_open_queue.count(in) == 0) {
-    // pin so our pointer stays valid
-    in->get(CInode::PIN_BATCHOPENJOURNAL);
-    
-    // queue it up for a bit
-    journal_open_queue.insert(in);
+  // make sure this inode gets into the journal
+  if (cur->xlist_open_file.get_xlist() == 0) {
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    EOpen *le = new EOpen(mds->mdlog);
+    le->add_inode(cur);
+    ls->open_files.push_back(&cur->xlist_open_file);
+    mds->mdlog->submit_entry(le);
   }
 }
-
-
-void Server::journal_opens()
-{
-  dout(10) << "journal_opens " << journal_open_queue.size() << " inodes" << dendl;
-  if (journal_open_queue.empty()) return;
-
-  EOpen *le = 0;
-
-  // check queued inodes
-  LogSegment *ls = mdlog->get_current_segment();
-  for (set<CInode*>::iterator p = journal_open_queue.begin();
-       p != journal_open_queue.end();
-       ++p) {
-    CInode *in = *p;
-    in->put(CInode::PIN_BATCHOPENJOURNAL);
-    if (in->is_any_caps()) {
-      if (!le) le = new EOpen(mdlog);
-      le->add_inode(in);
-      in->last_open_journaled = mds->mdlog->get_write_pos();
-      ls->open_files.push_back(&in->xlist_open_file);
-    }
-  }
-  journal_open_queue.clear();
-  
-  if (le) {
-    // journal
-    mdlog->submit_entry(le);
-  
-    // add waiters to journal entry
-    for (list<Context*>::iterator p = journal_open_waiters.begin();
-	 p != journal_open_waiters.end();
-	 ++p) 
-      mds->mdlog->wait_for_sync(*p);
-    journal_open_waiters.clear();
-  } else {
-    // nothing worth journaling here, just kick the waiters.
-    mds->queue_waiters(journal_open_waiters);
-  }
-}
-
-
 
 
 class C_MDS_open_truncate_purged : public Context {
