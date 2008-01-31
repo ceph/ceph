@@ -281,23 +281,14 @@ static void ceph_send_fault(struct ceph_connection *con)
 		spin_unlock(&con->out_queue_lock);
 		clear_bit(OPEN, &con->state);
 	}
-	set_bit(NEW, &con->state);
-	clear_bit(CLOSED, &con->state);
-	sock_release(con->sock);
 
-	/* If there are no messages in the queue, place the connection 
-	 * in a STANDBY state otherwise retry with delay */
-	if (list_empty(&con->out_queue)) {
-		set_bit(STANDBY, &con->state);
-	} else {
-		/* retry with delay */
-		ceph_queue_delayed_write(con);
+	/* retry with delay */
+	ceph_queue_delayed_write(con);
 
-		if (con->delay < MAX_DELAY_INTERVAL)
-			con->delay *= 2;
-		else
-			con->delay = MAX_DELAY_INTERVAL;
-	}
+	if (con->delay < MAX_DELAY_INTERVAL)
+		con->delay *= 2;
+	else
+		con->delay = MAX_DELAY_INTERVAL;
 }
 
 
@@ -469,19 +460,13 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
  */
 static void try_write(struct work_struct *work)
 {
-	struct ceph_connection *con = container_of(work, struct ceph_connection, swork.work);
+	struct ceph_connection *con = 
+			container_of(work, struct ceph_connection, swork.work);
 	struct ceph_messenger *msgr = con->msgr;
 	int ret = 1;
 
-	dout(30, "try_write start %p state %lu nref %d\n", con, con->state, atomic_read(&con->nref));
-
-	/* Peer initiated close, other end is waiting for us to close */
-	if (test_and_clear_bit(CLOSING, &con->state)) {
-		dout(5, "try_write peer initiated close\n");
-		set_bit(CLOSED, &con->state);
-		remove_connection(msgr, con);
-		goto done;
-	}
+	dout(30, "try_write start %p state %lu nref %d\n", con, con->state, 
+  	     atomic_read(&con->nref));
 
 	if (test_bit(CLOSED, &con->state)) {
 		dout(5, "try_write closed\n");
@@ -489,19 +474,30 @@ static void try_write(struct work_struct *work)
 		goto done;
 	}
 
-	if (con->sock && con->sock->sk->sk_state == TCP_CLOSE) {
+	if (test_and_clear_bit(SOCK_CLOSE, &con->state)) {
 		dout(5, "try_write TCP_CLOSE received\n");
 		if (!con->delay) {
-			dout(5, "try_write tcp_close delay = 0\n");
+			dout(30, "try_write tcp_close delay = 0\n");
 			remove_connection(msgr, con);
 			goto done;
-		} else {
-			dout(5, "try_write tcp_close delay != 0\n");
-			ceph_send_fault(con);
-		/* PW hmm, keep getting tcp_close so need to drop through.. 
-                 * I want to play around with it a little more.. */
-		/* 	goto done; */
 		}
+		dout(30, "try_write tcp_close delay != 0\n");
+		sock_release(con->sock);
+		con->sock = NULL;
+		set_bit(NEW, &con->state);
+
+		/* If there are no messages in the queue, place the connection 
+	 	* in a STANDBY state otherwise retry with delay */
+		if (list_empty(&con->out_queue)) {
+			dout(10, "setting STANDBY bit\n");
+			set_bit(STANDBY, &con->state);
+			goto done;
+		}
+
+		ceph_send_fault(con);
+		/* PW may be able to goto done now that we cleared SOCK_CLOSE */
+		/* We have something to send so drop through and try again... */
+		goto done;
 	}
 more:
 	dout(30, "try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
@@ -514,7 +510,8 @@ more:
 		ret = ceph_tcp_connect(con);
 		dout(30, "try_write returned from connect ret = %d state = %lu\n", ret, con->state);
 		if (ret < 0) {
-			derr(1, "try_write connect error, maybe we need to cleanup?\n");
+			derr(1, "try_write tcp connect error %d\n", ret);
+			remove_connection(msgr, con);
 			goto done;
 		}
 	}
@@ -530,9 +527,8 @@ more:
 			remove_connection(msgr, con);
 		}
 		if (ret < 0) {
-			/* TBD: seems to always close on error,  so remove this once we're sure */
-			/* ceph_send_fault(con, ret); */
-			goto done; /* error */
+			dout(30, "try_write write_partial_kvec returned error %d\n", ret);
+			goto done;
 		}
 	}
 
@@ -542,8 +538,7 @@ more:
 		if (ret == 0) 
 			goto done;
 		if (ret < 0) {
-			/* TBD: seems to always close on error,  so remove this once we're sure */
-			/* ceph_send_fault(con, ret); */
+			dout(30, "try_write write_partial_msg_pages returned error %d\n", ret);
 			goto done;
 		}
 	}
@@ -823,6 +818,7 @@ static void process_accept(struct ceph_connection *con)
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
+		dout(20, "process_accept we have existing connection\n"); 
 		//spin_lock(&existing->lock);
 		/* replace existing connection? */
 		if ((test_bit(CONNECTING, &existing->state) && 
@@ -837,6 +833,11 @@ static void process_accept(struct ceph_connection *con)
 			set_bit(OPEN, &con->state);
 			set_bit(CLOSED, &existing->state);
 			clear_bit(OPEN, &existing->state);
+		} else if (test_bit(STANDBY, &existing->state) && 
+			   existing->connect_seq !=  con->connect_seq) {
+			dout(20, "process_accept connect_seq mismatchi con = %d, existing = %d\n", 
+			     con->connect_seq,  existing->connect_seq);
+			/* callback to mds */
 		} else {
 			/* reject new connection */
 			set_bit(REJECTING, &con->state);
@@ -845,6 +846,7 @@ static void process_accept(struct ceph_connection *con)
 		//spin_unlock(&existing->lock);
 		put_connection(existing);
 	} else {
+		dout(20, "process_accept no existing connection\n");
 		__add_connection(msgr, con);
 		set_bit(OPEN, &con->state);
 	}
