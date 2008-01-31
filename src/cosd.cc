@@ -87,7 +87,8 @@ int main(int argc, const char **argv)
   MonMap monmap;
   int r = monmap.read(monmap_fn);
   if (r < 0) {
-    cerr << "unable to read monmap from " << monmap_fn << std::endl;
+    cerr << "unable to read monmap from " << monmap_fn 
+	 << ": " << strerror(errno) << std::endl;
     return -1;
   }
 
