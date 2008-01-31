@@ -146,7 +146,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool is_balanced = false;
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
-      if (osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
+      if (g_conf.osd_balance_reads &&
+	  osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
@@ -1115,6 +1116,16 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   int whoami = osd->get_nodeid();
   object_t oid = op->get_oid();
   const char *opname = MOSDOp::get_opname(op->get_op());
+
+  // make sure it looks ok
+  if (op->get_op() == CEPH_OSD_OP_WRITE &&
+      op->get_length() != op->get_data().length()) {
+    dout(0) << "op_modify got bad write, claimed length " << op->get_length() 
+	    << " != payload length " << op->get_data().length()
+	    << dendl;
+    delete op;
+    return;
+  }
 
   // --- locking ---
 

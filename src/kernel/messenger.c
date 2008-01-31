@@ -666,6 +666,20 @@ static int read_message_partial(struct ceph_connection *con)
 
 done:
 	dout(20, "read_message_partial got msg %p\n", m);
+
+	/* did i learn my ip? */
+	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+		/*
+		 * in practice, we learn our ip from the first incoming mon
+		 * message, before anyone else knows we exist, so this is 
+		 * safe.
+		 */
+		con->msgr->inst.addr.ipaddr = con->in_msg->hdr.dst.addr.ipaddr;
+		dout(10, "read_message_partial learned my addr is %x:%d\n",
+		     ntohl(con->msgr->inst.addr.ipaddr.sin_addr.s_addr), 
+		     ntohs(con->msgr->inst.addr.ipaddr.sin_port));
+	}
+
 	return 1; /* done! */
 }
 
@@ -1021,8 +1035,18 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	INIT_LIST_HEAD(&msgr->con_accepting);
 	INIT_RADIX_TREE(&msgr->con_open, GFP_ATOMIC);  /* we insert under spinlock */
 
+	/* pick listening address */
+	if (myaddr) {
+		msgr->inst.addr = *myaddr;
+	} else {
+		dout(10, "create my ip not specified, binding to INADDR_ANY\n");
+		msgr->inst.addr.ipaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		msgr->inst.addr.ipaddr.sin_port = htons(0);  /* any port */
+	}
+	msgr->inst.addr.ipaddr.sin_family = AF_INET;
+	
 	/* create listening socket */
-	ret = ceph_tcp_listen(msgr, myaddr ? ntohs(myaddr->ipaddr.sin_port):0);
+	ret = ceph_tcp_listen(msgr);
 	if (ret < 0) {
 		kfree(msgr);
 		return ERR_PTR(ret);
@@ -1183,6 +1207,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_of
 out2:
 	ceph_msg_put(m);
 out:
+	derr(0, "msg_new can't create msg type %d len %d\n", type, front_len);
 	return ERR_PTR(-ENOMEM);
 }
 

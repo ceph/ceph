@@ -33,35 +33,12 @@ using namespace std;
 #include "common/Timer.h"
 
 
-class C_Die : public Context {
-public:
-  void finish(int) {
-    cerr << "die" << std::endl;
-    exit(1);
-  }
-};
-
-class C_Debug : public Context {
-  public:
-  void finish(int) {
-    int size = &g_conf.debug_after - &g_conf.debug;
-    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    cout << "debug_after flipping debug settings" << std::endl;
-  }
-};
-
-
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   parse_config_options(args);
-
-  if (g_conf.kill_after) 
-    g_timer.add_event_after(g_conf.kill_after, new C_Die);
-  if (g_conf.debug_after) 
-    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -86,9 +63,6 @@ int main(int argc, const char **argv)
     sprintf(dev_default, "dev/osd%d", whoami);
     dev = dev_default;
   }
-  cout << "dev " << dev << std::endl;
-  
-
   if (whoami < 0) {
     // who am i?   peek at superblock!
     OSDSuperblock sb;
@@ -104,19 +78,28 @@ int main(int argc, const char **argv)
     store->umount();
     delete store;
     whoami = sb.whoami;
-    
-    cout << "osd fs says i am osd" << whoami << std::endl;
-  } else {
-    cout << "command line arg says i am osd" << whoami << std::endl;
   }
 
+  create_courtesy_output_symlink("osd", whoami);
+
   // load monmap
+  const char *monmap_fn = ".ceph_monmap";
   MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
+  int r = monmap.read(monmap_fn);
+  if (r < 0) {
+    cerr << "unable to read monmap from " << monmap_fn << std::endl;
+    return -1;
+  }
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+
+  cout << "starting osd" << whoami
+       << " at " << rank.get_rank_addr() 
+       << " dev " << dev
+       << std::endl;
+
+  rank.start();
 
   // start osd
   Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
@@ -124,7 +107,6 @@ int main(int argc, const char **argv)
   OSD *osd = new OSD(whoami, m, &monmap, dev);
   osd->init();
 
-  // wait
   rank.wait();
 
   // done

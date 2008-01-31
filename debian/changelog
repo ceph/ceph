@@ -1,0 +1,6 @@
+ceph (0.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- sage <sage@newdream.net>  Mon, 28 Jan 2008 15:09:44 -0800
+

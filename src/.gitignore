@@ -16,4 +16,6 @@ log
 mnt
 TAGS
 tags
-
+out
+acconfig.h.in
+acconfig.h

@@ -258,6 +258,7 @@ void got_first_map(struct ceph_client *client, int num)
 struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb)
 {
 	struct ceph_client *cl;
+	struct ceph_entity_addr *myaddr = 0;
 	int err;
 
 	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
@@ -269,7 +270,9 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	get_client_counter();
 
 	/* messenger */
-	cl->msgr = ceph_messenger_create(&args->my_addr);
+	if (args->flags & CEPH_MOUNT_MYIP)
+		myaddr = &args->my_addr;
+	cl->msgr = ceph_messenger_create(myaddr);
 	if (IS_ERR(cl->msgr)) {
 		err = PTR_ERR(cl->msgr);
 		goto fail;

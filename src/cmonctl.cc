@@ -65,7 +65,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   assert(r >= 0);
   
   // start up network
-  rank.start_rank();
+  rank.bind();
+  g_conf.daemonize = false; // not us!
+  rank.start();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
   

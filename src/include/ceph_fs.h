@@ -42,9 +42,9 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
 typedef __u64 ceph_ino_t;
 
 struct ceph_object {
-	ceph_ino_t ino;  /* inode "file" identifier */
-	__u32 bno;  /* "block" (object) in that "file" */
-	__u32 rev;  /* revision.  normally ctime (as epoch). */
+	__le64 ino;  /* inode "file" identifier */
+	__le32 bno;  /* "block" (object) in that "file" */
+	__le32 rev;  /* revision.  normally ctime (as epoch). */
 };
 
 #define CEPH_INO_ROOT 1
@@ -311,8 +311,8 @@ enum {
 };
 
 struct ceph_mds_session_head {
-	__u32 op;
-	__u64 seq;
+	__le32 op;
+	__le64 seq;
 	struct ceph_timeval stamp;
 } __attribute__ ((packed));
 

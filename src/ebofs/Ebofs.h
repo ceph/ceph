@@ -80,6 +80,13 @@ protected:
 public:
   uint64_t get_fsid() { return super_fsid; }
   epoch_t get_super_epoch() { return super_epoch; }
+
+  void queue_commit_waiter(Context *oncommit) {
+    if (oncommit) 
+      commit_waiters[super_epoch].push_back(oncommit);
+  }
+
+
 protected:
 
 
@@ -239,13 +246,13 @@ protected:
 
 
  public:
-  Ebofs(const char *devfn, char *jfn=0) : 
+  Ebofs(const char *devfn, const char *jfn=0) : 
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 
     super_epoch(0), commit_starting(false), commit_thread_started(false),
     commit_thread(this),
-    journalfn(jfn), journal(0),
+    journal(0),
     free_blocks(0), limbo_blocks(0),
     allocator(this),
     nodepool(ebofs_lock),
@@ -258,7 +265,10 @@ protected:
     finisher_stop(false), finisher_thread(this) {
     for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
       free_tab[i] = 0;
-    if (!journalfn) {
+    if (jfn) {
+      journalfn = new char[strlen(jfn) + 1];
+      strcpy(journalfn, jfn);
+    } else {
       journalfn = new char[strlen(devfn) + 100];
       strcpy(journalfn, devfn);
       strcat(journalfn, ".journal");

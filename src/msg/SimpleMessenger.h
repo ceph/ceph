@@ -73,6 +73,7 @@ private:
     
     void *entry();
     void stop();
+    int bind();
     int start();
   } accepter;
 
@@ -342,7 +343,8 @@ public:
 
   //void set_listen_addr(tcpaddr_t& a);
 
-  int start_rank();
+  int bind();
+  int start();
   void wait();
 
   EntityMessenger *register_entity(entity_name_t addr);

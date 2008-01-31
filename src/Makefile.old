@@ -220,8 +220,13 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
 
+streamtest.ebofs: ebofs/streamtest.cc config.cc common/Clock.o ebofs.o
+	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
+
 dupstore: dupstore.cc config.cc ebofs.o common/Clock.o common/Timer.o osd/FakeStore.o
 	${CXX} ${CFLAGS} ${LIBS} $^ -o $@
+
+allebofs: mkfs.ebofs test.ebofs streamtest.ebofs dupstore
 
 
 # hadoop

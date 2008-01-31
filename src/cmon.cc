@@ -31,35 +31,11 @@ using namespace std;
 #include "common/Timer.h"
 
 
-class C_Die : public Context {
-public:
-  void finish(int) {
-    cerr << "die" << std::endl;
-    exit(1);
-  }
-};
-
-class C_Debug : public Context {
-  public:
-  void finish(int) {
-    int size = &g_conf.debug_after - &g_conf.debug;
-    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-    generic_dout(0) << "debug_after flipping debug settings" << dendl;
-  }
-};
-
-
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-
   parse_config_options(args);
-
-  if (g_conf.kill_after) 
-    g_timer.add_event_after(g_conf.kill_after, new C_Die);
-  if (g_conf.debug_after) 
-    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   // args
   int whoami = -1;
@@ -81,12 +57,11 @@ int main(int argc, const char **argv)
 
   if (whoami < 0) {
     // let's assume a standalone monitor
-    cout << "starting standalone mon0" << std::endl;
     whoami = 0;
 
     // start messenger
-    rank.start_rank();
-    cout << "bound to " << rank.get_rank_addr() << std::endl;
+    rank.bind();
+    cout << "starting standalone mon0, bound to " << rank.get_rank_addr() << std::endl;
 
     // add single mon0
     entity_inst_t inst;
@@ -102,23 +77,30 @@ int main(int argc, const char **argv)
     // i am specific monitor.
 
     // read monmap
-    cout << "reading monmap from .ceph_monmap" << std::endl;
+    //cout << "reading monmap from " << monmap_fn << std::endl;
     int r = monmap.read(monmap_fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "couldn't read monmap from " << monmap_fn << std::endl;
+      return -1;
+    }
 
     // bind to a specific port
-    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << std::endl;
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami).addr
+	 << " from " << monmap_fn
+	 << std::endl;
     g_my_addr = monmap.get_inst(whoami).addr;
-    rank.start_rank();
+    rank.bind();
   }
+
+  create_courtesy_output_symlink("mon", whoami);
+  
+  rank.start();
 
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);
   mon->init();
 
-  // wait
-  cout << "waiting for shutdown ..." << std::endl;
   rank.wait();
 
   // done

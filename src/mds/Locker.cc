@@ -492,9 +492,6 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->issue(cap->pending());
   cap->set_last_open();
   
-  // ok, stop suppressing.
-  cap->set_suppress(false);
-
   int now = cap->pending();
   if (before != now &&
       (before & CEPH_CAP_WR) == 0 &&

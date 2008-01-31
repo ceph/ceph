@@ -31,8 +31,6 @@ typedef uint32_t objectrev_t;
 struct object_t {
   static const uint32_t MAXREV = 0xffffffffU;
 
-  // IMPORTANT: make this match struct ceph_object ****
-
   uint64_t ino;    // "file" identifier
   uint32_t bno;    // "block" in that "file"
   objectrev_t rev; // revision.  normally ctime (as epoch).
@@ -41,17 +39,17 @@ struct object_t {
   object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
   object_t(uint64_t i, uint32_t b, uint32_t r) : ino(i), bno(b), rev(r) {}
 
-  // yuck.
+  // IMPORTANT: make this match struct ceph_object ****
   object_t(const ceph_object& co) {
-    ino = co.ino;
-    bno = co.bno;
-    rev = co.rev;
+    ino = le64_to_cpu(co.ino);
+    bno = le32_to_cpu(co.bno);
+    rev = le32_to_cpu(co.rev);
   }  
   operator ceph_object() {
     ceph_object oid;
-    oid.ino = ino;
-    oid.bno = bno;
-    oid.rev = rev;
+    oid.ino = cpu_to_le64(ino);
+    oid.bno = cpu_to_le32(bno);
+    oid.rev = cpu_to_le32(rev);
     return oid;
   }
 } __attribute__ ((packed));

@@ -169,7 +169,7 @@ public:
 
   // allocation
   void verify_extents() {
-    if (1) {  // do crazy stupid sanity checking
+    if (0) {  // do crazy stupid sanity checking
       block_t count = 0, pos = 0;
       interval_set<block_t> is;    
       csum_t csum = 0;

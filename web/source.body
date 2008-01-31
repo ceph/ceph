@@ -94,24 +94,11 @@ make fakesyn && ./fakesyn --mkfs --debug_ms 1 --debug_client 3 --syn rw 1 100000
 
 		<h4>Starting up a full "cluster" on a single host</h4>
 		<div>
-			You can start up a the full cluster of daemons on a single host.  Assuming you've created a set of individual files for each OSD's block device (the second option of #3 above), you can create a <tt>stop.sh</tt> script like
-<pre>
-#!/bin/sh
-killall cosd cmds cmon
-</pre>
-and a <tt>start.sh</tt> script like
-<pre>
-#!/bin/sh
-./stop.sh
-./mkmonmap 1.2.3.4:12345  # your IP here; any unused port will do
-./cmon --mkfs --mon 0 &
-./cosd --mkfs --osd 0 &
-./cosd --mkfs --osd 1 &
-./cosd --mkfs --osd 2 &
-./cosd --mkfs --osd 3 &
-./cmds &
-</pre>
-			Note that the IP you specify is for the monitor.  This is the only fixed and static ip:port in the system.  The rest of the cluster daemons bind to a random port and register themselves with the monitor.
+			You can start up a the full cluster of daemons on a single host.  Assuming you've created a set of individual files for each OSD's block device (the second option of #3 above), there is a <tt>start.sh</tt> and <tt>stop.sh</tt> script that will start up on port 12345.  
+<p>
+One caveat here is that the ceph daemons need to know what IP they are reachable at; they determine that by doing a lookup on the machine's hostname.  Since many/most systems map the hostname to 127.0.0.1 in <tt>/etc/hosts</tt>, you either need to change that (the easiest approach, usually) or add a <tt>--bind 1.2.3.4</tt> argument to cmon/cosd/cmds to help them out.
+<p>
+Note that the monitor has the only fixed and static ip:port in the system.  The rest of the cluster daemons bind to a random port and register themselves with the monitor.
 		</div>
 
 		<h4>Mounting with FUSE</h4>
@@ -145,7 +132,7 @@ $ ln -s ~/ceph/src/kernel fs/ceph
 $ ln -s ~/ceph/src/include/ceph_fs.h include/linux
 $ make ARCH=um
 </pre>
-			I am using <a href="http://uml.nagafix.co.uk/Debian-3.1/Debian-3.1-AMD64-root_fs.bz2">this x86_64 Debian UML root fs image</a>, but any image will do (see <a href="http://user-mode-linux.sf.net">http://user-mode-linux.sf.net</a>) as long as the architecture (e.g. x86_64 vs i386) matches your host.  Start up the UML instance with something like
+			I am using <a href="http://uml.nagafix.co.uk/Debian-3.1/Debian-3.1-AMD64-root_fs.bz2">this x86_64 Debian UML root fs image</a>, but any image will do (see <a href="http://user-mode-linux.sf.net">http://user-mode-linux.sf.net</a>) as long as the architecture (e.g. x86_64 vs i386) matches your host.  Start up the UML guest instance with something like
 <pre>
 ./linux ubda=Debian-3.1-AMD64-root_fs mem=256M eth0=tuntap,,,1.2.3.4  # 1.2.3.4 is the _host_ ip
 </pre>
@@ -156,7 +143,7 @@ reset ; killall -9 linux ; ./linux ubda=Debian-3.1-AMD64-root_fs mem=256M eth0=t
 			You'll need to configure the network in UML with an unused IP.  For my debian-based root fs image, this <tt>/etc/network/interfaces</tt> file does the trick:
 <pre>
 iface eth0 inet static
-        address 1.2.3.5     # unused ip in your host's netowrk
+        address 1.2.3.5     # unused ip in your host's netowrk for the uml guest
         netmask 255.0.0.0
         gateway 1.2.3.4     # host ip
 auto eth0
@@ -170,7 +157,7 @@ none            /host           hostfs  defaults        0       0
 			You can then load the kernel client module and mount from the UML instance with
 <pre>
 insmod /host/path/to/ceph/src/kernel/ceph.ko
-mount -t ceph 1.2.3.4:/ -o monport=12345,ip=1.2.3.5 mnt # 1.2.3.4 is host, 1.2.3.5 is uml ip
+mount -t ceph 1.2.3.4:/ mnt  # 1.2.3.4 is host
 </pre>
 
 		</div>

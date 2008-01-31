@@ -85,15 +85,15 @@ void noop_signal_handler(int s)
   //dout(0) << "blah_handler got " << s << dendl;
 }
 
-int Rank::Accepter::start()
+int Rank::Accepter::bind()
 {
   // bind to a socket
-  dout(10) << "accepter.start" << dendl;
+  dout(10) << "accepter.bind" << dendl;
   
   char hostname[100];
   memset(hostname, 0, 100);
   gethostname(hostname, 100);
-  dout(2) << "accepter.start my hostname is " << hostname << dendl;
+  dout(2) << "accepter.bind my hostname is " << hostname << dendl;
 
   // is there a .ceph_hosts file?
   if (g_conf.ms_hosts) {
@@ -133,14 +133,14 @@ int Rank::Accepter::start()
   /* bind to port */
   int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
   if (rc < 0) 
-    derr(0) << "accepter.start unable to bind to " << g_my_addr.v.ipaddr << dendl;
+    derr(0) << "accepter.bind unable to bind to " << g_my_addr.v.ipaddr << dendl;
   assert(rc >= 0);
 
   // what port did we get?
   socklen_t llen = sizeof(listen_addr);
   getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
   
-  dout(10) << "accepter.start bound to " << listen_addr << dendl;
+  dout(10) << "accepter.bind bound to " << listen_addr << dendl;
 
   // listen!
   rc = ::listen(listen_sd, 128);
@@ -176,8 +176,13 @@ int Rank::Accepter::start()
   }
   rank.rank_addr.v.erank = 0;
 
-  dout(1) << "accepter.start rank_addr is " << rank.rank_addr << dendl;
+  dout(1) << "accepter.bind rank_addr is " << rank.rank_addr << dendl;
+  return 0;
+}
 
+int Rank::Accepter::start()
+{
+  dout(1) << "accepter.start" << dendl;
   // set up signal handler
   //old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
 
@@ -283,29 +288,74 @@ void Rank::reaper()
 }
 
 
-int Rank::start_rank()
+int Rank::bind()
 {
   lock.Lock();
   if (started) {
-    dout(10) << "start_rank already started" << dendl;
+    dout(10) << "rank.bind already started" << dendl;
     lock.Unlock();
     return 0;
   }
-  dout(10) << "start_rank" << dendl;
+  dout(10) << "rank.bind" << dendl;
   lock.Unlock();
 
   // bind to a socket
-  if (accepter.start() < 0) 
-    return -1;
-
-  lock.Lock();
-
-  dout(1) << "start_rank at " << rank_addr << dendl;
-  started = true;
-  lock.Unlock();
-  return 0;
+  return accepter.bind();
 }
 
+
+class C_Die : public Context {
+public:
+  void finish(int) {
+    cerr << "die" << std::endl;
+    exit(1);
+  }
+};
+
+class C_Debug : public Context {
+  public:
+  void finish(int) {
+    int size = &g_conf.debug_after - &g_conf.debug;
+    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
+    dout(0) << "debug_after flipping debug settings" << dendl;
+  }
+};
+
+int Rank::start()
+{
+  lock.Lock();
+  if (started) {
+    dout(10) << "rank.start already started" << dendl;
+    lock.Unlock();
+    return 0;
+  }
+
+  dout(1) << "rank.start at " << rank_addr << dendl;
+  started = true;
+  lock.Unlock();
+
+  // daemonize?
+  if (g_conf.daemonize) {
+    if (Thread::get_num_threads() > 0) {
+      derr(0) << "rank.start BUG: there are " << Thread::get_num_threads()
+	      << " already started that will now die!  call rank.start() sooner." 
+	      << dendl;
+    }
+    dout(1) << "rank.start daemonizing" << dendl;
+    daemon(1, 0);  /* fixme.. we should chdir(/) too! */
+    rename_output_file();
+  }
+
+  // some debug hackery?
+  if (g_conf.kill_after) 
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+  if (g_conf.debug_after) 
+    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
+
+  // go!
+  accepter.start();
+  return 0;
+}
 
 
 /* connect_rank
@@ -720,6 +770,18 @@ int Rank::Pipe::accept()
     dout(10) << "accept couldn't read peer addr" << dendl;
     state = STATE_CLOSED;
     return -1;
+  }
+  if (peer_addr.v.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    // peer apparently doesn't know what ip they have; figure it out for them.
+    entity_addr_t old_addr = peer_addr;
+    socklen_t len = sizeof(peer_addr.v.ipaddr);
+    int r = ::getpeername(sd, (sockaddr*)&peer_addr.v.ipaddr, &len);
+    if (r < 0) {
+      dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+      state = STATE_CLOSED;
+      return -1;
+    }
+    dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
 
   __u32 cseq;
@@ -1365,6 +1427,11 @@ Message *Rank::Pipe::read_message()
 	   << " data=" << env.data_len << " at " << env.data_off
            << dendl;
   
+  if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
+    env.src.addr.ipaddr = peer_addr.v.ipaddr;
+  }
+
   // read front
   bufferlist front;
   bufferptr bp;

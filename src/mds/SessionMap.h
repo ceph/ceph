@@ -172,6 +172,7 @@ public:
       by_state[s].push_back(&session->session_list_item);
     }
   }
+  void dump();
 
   void get_client_set(set<int>& s) {
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
