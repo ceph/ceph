@@ -3890,7 +3890,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   if (cur->xlist_open_file.get_xlist() == 0) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
-    le->add_inode(cur);
+    le->add_clean_inode(cur);
     ls->open_files.push_back(&cur->xlist_open_file);
     mds->mdlog->submit_entry(le);
   }

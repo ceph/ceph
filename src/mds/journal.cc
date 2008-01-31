@@ -135,7 +135,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
       CInode *in = *p;
       dout(20) << "try_to_expire requeueing open file " << *in << dendl;
       if (!le) le = new EOpen(mds->mdlog);
-      le->add_inode(in);
+      le->add_clean_inode(in);
       ls->open_files.push_back(&in->xlist_open_file);
     }
     if (le) {
