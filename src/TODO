@@ -12,10 +12,8 @@ some smallish projects:
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
-  - endian macros
   - use le32 etc annotation
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
-  - specify word size in all encoded structures
 
 kernel client
 - some bugs
