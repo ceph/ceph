@@ -121,7 +121,7 @@ int Rank::Accepter::bind()
   }
 
   // use whatever user specified (if anything)
-  sockaddr_in listen_addr = g_my_addr.v.ipaddr;
+  sockaddr_in listen_addr = g_my_addr.ipaddr;
 
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -133,7 +133,7 @@ int Rank::Accepter::bind()
   /* bind to port */
   int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
   if (rc < 0) 
-    derr(0) << "accepter.bind unable to bind to " << g_my_addr.v.ipaddr << dendl;
+    derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr << dendl;
   assert(rc >= 0);
 
   // what port did we get?
@@ -165,16 +165,16 @@ int Rank::Accepter::bind()
     memcpy((char*)&listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.rank_addr.v.ipaddr = listen_addr;
+    rank.rank_addr.ipaddr = listen_addr;
     rank.rank_addr.set_port(0);
   }
   if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
-    tmp.v.ipaddr = listen_addr;
+    tmp.ipaddr = listen_addr;
     rank.rank_addr.set_port(tmp.get_port());
-    rank.rank_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
+    rank.rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
-  rank.rank_addr.v.erank = 0;
+  rank.rank_addr.erank = 0;
 
   dout(1) << "accepter.bind rank_addr is " << rank.rank_addr << dendl;
   return 0;
@@ -405,7 +405,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   local[erank] = msgr;
   stopped[erank] = false;
   msgr->_myinst.addr = rank_addr;
-  msgr->_myinst.addr.v.erank = erank;
+  msgr->_myinst.addr.erank = erank;
 
   dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr << dendl;
 
@@ -438,16 +438,16 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
 
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
-  dest_proc_addr.v.erank = 0;
+  dest_proc_addr.erank = 0;
 
   lock.Lock();
   {
     // local?
-    if (ceph_entity_addr_is_local(dest_addr.v, rank_addr.v)) {
-      if (dest_addr.v.erank < max_local && local[dest_addr.v.erank]) {
+    if (rank_addr.is_local_to(dest_addr)) {
+      if (dest_addr.erank < max_local && local[dest_addr.erank]) {
         // local
         dout(20) << "submit_message " << *m << " dest " << dest << " local" << dendl;
-	local[dest_addr.v.erank]->queue_message(m);
+	local[dest_addr.erank]->queue_message(m);
       } else {
         derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?  dropping." << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
@@ -771,11 +771,11 @@ int Rank::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
-  if (peer_addr.v.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+  if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     entity_addr_t old_addr = peer_addr;
-    socklen_t len = sizeof(peer_addr.v.ipaddr);
-    int r = ::getpeername(sd, (sockaddr*)&peer_addr.v.ipaddr, &len);
+    socklen_t len = sizeof(peer_addr.ipaddr);
+    int r = ::getpeername(sd, (sockaddr*)&peer_addr.ipaddr, &len);
     if (r < 0) {
       dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
       state = STATE_CLOSED;
@@ -912,10 +912,10 @@ int Rank::Pipe::connect()
   assert(rc>=0);
 
   // connect!
-  dout(10) << "connecting to " << peer_addr.v.ipaddr << dendl;
-  rc = ::connect(newsd, (sockaddr*)&peer_addr.v.ipaddr, sizeof(peer_addr.v.ipaddr));
+  dout(10) << "connecting to " << peer_addr.ipaddr << dendl;
+  rc = ::connect(newsd, (sockaddr*)&peer_addr.ipaddr, sizeof(peer_addr.ipaddr));
   if (rc < 0) {
-    dout(2) << "connect error " << peer_addr.v.ipaddr
+    dout(2) << "connect error " << peer_addr.ipaddr
 	     << ", " << errno << ": " << strerror(errno) << dendl;
     goto fail;
   }
@@ -935,7 +935,7 @@ int Rank::Pipe::connect()
     goto fail;
   }
   dout(20) << "connect read peer addr " << paddr << dendl;
-  if (!ceph_entity_addr_is_local(peer_addr.v, paddr.v)) {
+  if (!peer_addr.is_local_to(paddr)) {
     dout(0) << "connect peer identifies itself as " 
 	    << paddr << "... wrong node!" << dendl;
     goto fail;
@@ -1119,7 +1119,7 @@ void Rank::Pipe::report_failures()
     q.pop_front();
 
     if (policy.drop_msg_callback) {
-      unsigned srcrank = m->get_source_inst().addr.v.erank;
+      unsigned srcrank = m->get_source_inst().addr.erank;
       if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
 	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
 	delete m;
@@ -1256,7 +1256,7 @@ void Rank::Pipe::reader()
       
       rank.lock.Lock();
       {
-	unsigned erank = m->get_dest_inst().addr.v.erank;
+	unsigned erank = m->get_dest_inst().addr.erank;
 	if (erank < rank.max_local && rank.local[erank]) {
 	  // find entity
 	  entity = rank.local[erank];
@@ -1421,23 +1421,25 @@ Message *Rank::Pipe::read_message()
   if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
-  dout(20) << "reader got envelope type=" << env.type 
+  dout(20) << "reader got envelope type=" << le32_to_cpu(env.type)
            << " src " << env.src << " dst " << env.dst
-           << " front=" << env.front_len 
-	   << " data=" << env.data_len << " at " << env.data_off
+           << " front=" << le32_to_cpu(env.front_len)
+	   << " data=" << le32_to_cpu(env.data_len)
+	   << " off " << le32_to_cpu(env.data_off)
            << dendl;
   
   if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
-    env.src.addr.ipaddr = peer_addr.v.ipaddr;
+    env.src.addr.ipaddr = peer_addr.ipaddr;
   }
 
   // read front
   bufferlist front;
   bufferptr bp;
-  if (env.front_len) {
-    bp = buffer::create(env.front_len);
-    if (tcp_read( sd, bp.c_str(), env.front_len ) < 0) 
+  int front_len = le32_to_cpu(env.front_len);
+  if (front_len) {
+    bp = buffer::create(front_len);
+    if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
       return 0;
     front.push_back(bp);
     dout(20) << "reader got front " << front.length() << dendl;
@@ -1445,11 +1447,13 @@ Message *Rank::Pipe::read_message()
 
   // read data
   bufferlist data;
-  if (env.data_len) {
-    int left = env.data_len;
-    if (env.data_off & ~PAGE_MASK) {
+  int data_len = le32_to_cpu(env.data_len);
+  int data_off = le32_to_cpu(env.data_off);
+  if (data_len) {
+    int left = data_len;
+    if (data_off & ~PAGE_MASK) {
       // head
-      int head = MIN(PAGE_SIZE - (env.data_off & ~PAGE_MASK),
+      int head = MIN(PAGE_SIZE - (data_off & ~PAGE_MASK),
 		     (unsigned)left);
       bp = buffer::create(head);
       if (tcp_read( sd, bp.c_str(), head ) < 0) 
@@ -1563,8 +1567,8 @@ int Rank::Pipe::write_message(Message *m)
 {
   // get envelope, buffers
   ceph_msg_header *env = &m->get_env();
-  env->front_len = m->get_payload().length();
-  env->data_len = m->get_data().length();
+  env->front_len = cpu_to_le32(m->get_payload().length());
+  env->data_len = cpu_to_le32(m->get_data().length());
 
   bufferlist blist;
   blist.claim( m->get_payload() );

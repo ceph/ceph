@@ -377,7 +377,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	/* encode header */
 	ceph_encode_header(&con->out_hdr, &m->hdr);
 
-	dout(20, "prepare_write_message %p seq %d type %d len %d+%d\n", 
+	dout(20, "prepare_write_message %p seq %lld type %d len %d+%d\n", 
 	     m, m->hdr.seq, m->hdr.type, m->hdr.front_len, m->hdr.data_len);
 	BUG_ON(m->hdr.front_len != m->front.iov_len);
 
@@ -713,7 +713,7 @@ static void process_ack(struct ceph_connection *con, __u32 ack)
 	while (!list_empty(&con->out_sent)) {
 		m = list_entry(con->out_sent.next, struct ceph_msg, list_head);
 		if (m->hdr.seq > ack) break;
-		dout(5, "got ack for %d type %d at %p\n", m->hdr.seq, m->hdr.type, m);
+		dout(5, "got ack for seq %llu type %d at %p\n", m->hdr.seq, m->hdr.type, m);
 		list_del(&m->list_head);
 		ceph_msg_put(m);
 	}
@@ -1158,7 +1158,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned lo
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num,
 	     msg->hdr.type, ceph_msg_type_name(msg->hdr.type),
 	     msg->hdr.front_len, msg->hdr.data_len);
-	dout(2, "ceph_msg_send queuing %p seq %u for %s%d on %p\n", msg, msg->hdr.seq,
+	dout(2, "ceph_msg_send queuing %p seq %llu for %s%d on %p\n", msg, msg->hdr.seq,
 	     ceph_name_type_str(msg->hdr.dst.name.type), msg->hdr.dst.name.num, con);
 	ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);

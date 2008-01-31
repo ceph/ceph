@@ -88,9 +88,9 @@ int main(int argc, const char **argv) {
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
-  a.v.nonce = getpid();
+  a.nonce = getpid();
   for (int i=0; i<g_conf.num_mon; i++) {
-    a.v.erank = i;
+    a.erank = i;
     monmap->mon_inst[i] = entity_inst_t(entity_name_t::MON(i), a);  // hack ; see FakeMessenger.cc
   }
 

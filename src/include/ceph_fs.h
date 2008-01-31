@@ -189,8 +189,8 @@ struct ceph_eversion {
  * entity_name
  */
 struct ceph_entity_name {
-	__u32 type;
-	__u32 num;
+	__le32 type;
+	__le32 num;
 };
 
 #define CEPH_ENTITY_TYPE_MON    1
@@ -210,13 +210,13 @@ struct ceph_entity_name {
  * entity_addr
  */
 struct ceph_entity_addr {
-	__u32 erank;  /* entity's rank in process */
-	__u32 nonce;  /* unique id for process (e.g. pid) */
+	__le32 erank;  /* entity's rank in process */
+	__le32 nonce;  /* unique id for process (e.g. pid) */
 	struct sockaddr_in ipaddr;
 };
 
 #define ceph_entity_addr_is_local(a,b)					\
-	((a).nonce == (b).nonce &&					\
+	(le32_to_cpu((a).nonce) == le32_to_cpu((b).nonce) &&		\
 	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
 
 #define ceph_entity_addr_equal(a, b)		\
@@ -232,12 +232,12 @@ struct ceph_entity_inst {
  * message header
  */
 struct ceph_msg_header {
-	__u32 seq;    /* message seq# for this session */
-	__u32 type;   /* message type */
+	__le64 seq;    /* message seq# for this session */
+	__le32 type;   /* message type */
+	__le32 front_len;
+	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
+	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, dst;
-	__u32 front_len;
-	__u32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
-	__u32 data_len;  /* bytes of data payload */
 } __attribute__ ((packed));
 
 

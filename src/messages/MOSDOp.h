@@ -73,7 +73,7 @@ public:
   
   entity_name_t get_client() { return head.client_inst.name; }
   entity_inst_t get_client_inst() { return head.client_inst; }
-  void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a.v; }
+  void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a; }
 
   object_t get_oid() { return object_t(head.oid); }
   pg_t     get_pg() { return head.layout.ol_pgid; }
@@ -103,8 +103,8 @@ public:
          object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
-    head.client_inst.name = asker.name.v;
-    head.client_inst.addr = asker.addr.v;
+    head.client_inst.name = asker.name;
+    head.client_inst.addr = asker.addr;
     head.tid = cpu_to_le64(tid);
     head.client_inc = inc;
     head.oid = oid;
@@ -138,7 +138,7 @@ public:
 
   virtual void encode_payload() {
     ::_encode(head, payload);
-    env.data_off = head.offset;
+    env.data_off = cpu_to_le32(head.offset);
   }
 
   const char *get_type_name() { return "osd_op"; }

@@ -83,8 +83,8 @@ public:
   MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&head, 0, sizeof(head));
     this->head.op = op;
-    this->head.client_inst.name = ci.name.v;
-    this->head.client_inst.addr = ci.addr.v;
+    this->head.client_inst.name = ci.name;
+    this->head.client_inst.addr = ci.addr;
   }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -168,8 +168,8 @@ public:
     head.mds_wants_replica_in_dirino = cpu_to_le64(dirino); }
   
   void set_client_inst(const entity_inst_t& i) { 
-    head.client_inst.name = i.name.v; 
-    head.client_inst.addr = i.addr.v; 
+    head.client_inst.name = i.name; 
+    head.client_inst.addr = i.addr; 
   }
   entity_inst_t get_client_inst() { 
     return entity_inst_t(head.client_inst);

@@ -80,7 +80,7 @@ public:
   }
   virtual void encode_payload() {
     ::_encode(head, payload);
-    env.data_off = head.offset;
+    env.data_off = cpu_to_le32(head.offset);
   }
 
   const char *get_type_name() { return "osd_op_reply"; }
