@@ -2381,7 +2381,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_READDIR, messenger->get_myinst());
   req->set_filepath(dirp->path); 
-  req->head.args.readdir.frag = fg;
+  req->head.args.readdir.frag = cpu_to_le32(fg);
   
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -3332,10 +3332,10 @@ int Client::_statfs(struct statvfs *stbuf)
   memset(stbuf, 0, sizeof(*stbuf));
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;
-  stbuf->f_blocks = req->reply->stfs.f_total / 4;
-  stbuf->f_bfree = req->reply->stfs.f_free / 4;
-  stbuf->f_bavail = req->reply->stfs.f_avail / 4;
-  stbuf->f_files = req->reply->stfs.f_objects;
+  stbuf->f_blocks = le64_to_cpu(req->reply->stfs.f_total) / 4;
+  stbuf->f_bfree = le64_to_cpu(req->reply->stfs.f_free) / 4;
+  stbuf->f_bavail = le64_to_cpu(req->reply->stfs.f_avail) / 4;
+  stbuf->f_files = le64_to_cpu(req->reply->stfs.f_objects);
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??

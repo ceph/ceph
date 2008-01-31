@@ -176,11 +176,13 @@ public:
   eversion_t() : epoch(0), version(0) {}
   eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
 
-  eversion_t(const ceph_eversion& ce) : epoch(ce.epoch), version(ce.version) {}    
+  eversion_t(const ceph_eversion& ce) : 
+    epoch(le32_to_cpu(ce.epoch)), 
+    version(le64_to_cpu(ce.version)) {}    
   operator ceph_eversion() {
     ceph_eversion c;
-    c.epoch = epoch;
-    c.version = version;
+    c.epoch = cpu_to_le32(epoch);
+    c.version = cpu_to_le64(version);
     return c;
   }
 };

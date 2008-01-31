@@ -1639,7 +1639,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // which frag?
-  frag_t fg = req->head.args.readdir.frag;
+  frag_t fg = le32_to_cpu(req->head.args.readdir.frag);
 
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {

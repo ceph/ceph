@@ -83,8 +83,8 @@ public:
   MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&head, 0, sizeof(head));
     this->head.op = op;
-    this->head.client_inst.name = ci.name.v;
-    this->head.client_inst.addr = ci.addr.v;
+    this->head.client_inst.name = ci.name;
+    this->head.client_inst.addr = ci.addr;
   }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -92,7 +92,7 @@ public:
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(head.client_inst.name, head.tid); 
+    return metareqid_t(head.client_inst.name, le64_to_cpu(head.tid)); 
   }
 
   int get_open_file_mode() {
@@ -152,8 +152,8 @@ public:
 
 
   // normal fields
-  void set_tid(tid_t t) { head.tid = t; }
-  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void set_tid(tid_t t) { head.tid = cpu_to_le64(t); }
+  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = cpu_to_le64(t); }
   void inc_num_fwd() { head.num_fwd++; }
   void set_retry_attempt(int a) { head.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
@@ -165,18 +165,18 @@ public:
   void set_caller_uid(int u) { head.caller_uid = u; }
   void set_caller_gid(int g) { head.caller_gid = g; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
-    head.mds_wants_replica_in_dirino = dirino; }
+    head.mds_wants_replica_in_dirino = cpu_to_le64(dirino); }
   
   void set_client_inst(const entity_inst_t& i) { 
-    head.client_inst.name = i.name.v; 
-    head.client_inst.addr = i.addr.v; 
+    head.client_inst.name = i.name; 
+    head.client_inst.addr = i.addr; 
   }
   entity_inst_t get_client_inst() { 
     return entity_inst_t(head.client_inst);
   }
   entity_name_t get_client() { return head.client_inst.name; }
-  tid_t get_tid() { return head.tid; }
-  tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
+  tid_t get_tid() { return le64_to_cpu(head.tid); }
+  tid_t get_oldest_client_tid() { return le64_to_cpu(head.oldest_client_tid); }
   int get_num_fwd() { return head.num_fwd; }
   int get_retry_attempt() { return head.retry_attempt; }
   int get_op() { return head.op; }
@@ -189,7 +189,7 @@ public:
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 
-    return head.mds_wants_replica_in_dirino; }
+    return le64_to_cpu(head.mds_wants_replica_in_dirino); }
 
   void decode_payload() {
     int off = 0;

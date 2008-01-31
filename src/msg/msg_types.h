@@ -21,7 +21,7 @@
 
 class entity_name_t {
 public:
-  struct ceph_entity_name v;
+  __u32 _type, _num;
 
 public:
   static const int TYPE_MON = CEPH_ENTITY_TYPE_MON;
@@ -33,9 +33,10 @@ public:
   static const int NEW = -1;
 
   // cons
-  entity_name_t() { v.type = v.num = 0; }
-  entity_name_t(int t, int n) { v.type = t; v.num = n; }
-  entity_name_t(const ceph_entity_name &n) : v(n) { }
+  entity_name_t() : _type(0), _num(0) { }
+  entity_name_t(int t, int n) : _type(t), _num(n) { }
+  entity_name_t(const ceph_entity_name &n) : 
+    _type(le32_to_cpu(n.type)), _num(le32_to_cpu(n.num)) { }
 
   // static cons
   static entity_name_t MON(int i=NEW) { return entity_name_t(TYPE_MON, i); }
@@ -44,8 +45,8 @@ public:
   static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
   static entity_name_t ADMIN(int i=NEW) { return entity_name_t(TYPE_ADMIN, i); }
   
-  int num() const { return v.num; }
-  int type() const { return v.type; }
+  int num() const { return _num; }
+  int type() const { return _type; }
   const char *type_str() const {
     switch (type()) {
     case TYPE_MDS: return "mds"; 
@@ -64,6 +65,12 @@ public:
   bool is_osd() const { return type() == TYPE_OSD; }
   bool is_mon() const { return type() == TYPE_MON; }
   bool is_admin() const { return type() == TYPE_ADMIN; }
+
+  operator ceph_entity_name() const {
+    ceph_entity_name n = { cpu_to_le32(_type), cpu_to_le32(_num) };
+    return n;
+  }
+
 };
 
 inline bool operator== (const entity_name_t& l, const entity_name_t& r) { 
@@ -89,7 +96,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const entity_name_t m ) const
     {
-      return rjhash32(m.v.type) ^ rjhash32(m.v.num);
+      return rjhash32(m.type()) ^ rjhash32(m.num());
     }
   };
 }
@@ -103,28 +110,50 @@ namespace __gnu_cxx {
  * ipv4 for now.
  */
 struct entity_addr_t {
-  struct ceph_entity_addr v;
+  __u32 erank;
+  __u32 nonce;
+  struct sockaddr_in ipaddr;
 
-  entity_addr_t() { 
-    memset(&v, 0, sizeof(v));
-    v.ipaddr.sin_family = AF_INET;
+  entity_addr_t() : erank(0), nonce(0) { 
+    memset(&ipaddr, 0, sizeof(ipaddr));
+    ipaddr.sin_family = AF_INET;
+  }
+  entity_addr_t(const ceph_entity_addr &v) {
+    erank = le32_to_cpu(v.erank);
+    nonce = le32_to_cpu(v.nonce);
+    ipaddr = v.ipaddr;
   }
 
   void set_ipquad(int pos, int val) {
-    unsigned char *ipq = (unsigned char*)&v.ipaddr.sin_addr.s_addr;
+    unsigned char *ipq = (unsigned char*)&ipaddr.sin_addr.s_addr;
     ipq[pos] = val;
   }
   void set_port(int port) {
-    v.ipaddr.sin_port = htons(port);
+    ipaddr.sin_port = htons(port);
   }
   int get_port() {
-    return ntohs(v.ipaddr.sin_port);
+    return ntohs(ipaddr.sin_port);
+  }
+
+  operator ceph_entity_addr() const { 
+    ceph_entity_addr a = { 
+      cpu_to_le32(erank), 
+      cpu_to_le32(nonce),
+      ipaddr
+    };
+    return a;
+  }
+
+  bool is_local_to(const entity_addr_t &other) {
+    return 
+      nonce == other.nonce &&
+      memcpy(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
   }
 };
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << addr.v.ipaddr << '/' << addr.v.nonce << '/' << addr.v.erank;
+  return out << addr.ipaddr << '/' << addr.nonce << '/' << addr.erank;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
@@ -154,14 +183,8 @@ struct entity_inst_t {
   entity_addr_t addr;
   entity_inst_t() {}
   entity_inst_t(entity_name_t n, const entity_addr_t& a) : name(n), addr(a) {}
-  entity_inst_t(const ceph_entity_inst& i) {
-    name.v = i.name;
-    addr.v = i.addr;
-  }
-  entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) {
-    name.v = n;
-    addr.v = a;
-  }
+  entity_inst_t(const ceph_entity_inst& i) : name(i.name), addr(i.addr) { }
+  entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) : name(n), addr(a) {}
 };
 
 

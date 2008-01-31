@@ -105,7 +105,7 @@ struct InodeStat {
   void _decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::_decode_simple(e, p);
-    inode.ino = e.ino;
+    inode.ino = le64_to_cpu(e.ino);
     inode.layout = e.layout;
     inode.ctime.decode_timeval(&e.ctime);
     inode.mtime.decode_timeval(&e.mtime);
@@ -143,7 +143,7 @@ struct InodeStat {
      */
     struct ceph_mds_reply_inode e;
     memset(&e, 0, sizeof(e));
-    e.ino = in->inode.ino;
+    e.ino = cpu_to_le64(in->inode.ino);
     e.layout = in->inode.layout;
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
@@ -185,7 +185,7 @@ class MClientReply : public Message {
   bufferlist dir_bl;
 
  public:
-  long get_tid() { return st.tid; }
+  long get_tid() { return le64_to_cpu(st.tid); }
   int get_op() { return st.op; }
 
   void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
@@ -209,7 +209,7 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY), dir_dir(0) {
     memset(&st, 0, sizeof(st));
-    this->st.tid = req->get_tid();
+    this->st.tid = cpu_to_le64(req->get_tid());
     this->st.op = req->get_op();
     this->st.result = result;
   }
@@ -223,7 +223,7 @@ class MClientReply : public Message {
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "creply(" << env.dst.name << "." << st.tid;
+    o << "creply(" << env.dst.name << "." << le64_to_cpu(st.tid);
     o << " = " << st.result;
     if (st.result <= 0)
       o << " " << strerror(-st.result);

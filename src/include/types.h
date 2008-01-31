@@ -219,7 +219,7 @@ struct inode_t {
 // --
 
 inline ostream& operator<<(ostream& out, ceph_fsid& f) {
-  return out << hex << f.major << '.' << f.minor << dec;
+  return out << hex << le64_to_cpu(f.major) << '.' << le64_to_cpu(f.minor) << dec;
 }
 
 

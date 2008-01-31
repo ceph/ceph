@@ -51,9 +51,8 @@ using namespace std;
 
 struct metareqid_t {
   entity_name_t name;
-  uint64_t tid;
+  __u64 tid;
   metareqid_t() : tid(0) {}
-  //metareqid_t(int c, tid_t t) : tid(t) { name = entity_name_t::CLIENT(c); }
   metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
 };
 
