@@ -147,7 +147,7 @@ struct entity_addr_t {
   bool is_local_to(const entity_addr_t &other) {
     return 
       nonce == other.nonce &&
-      memcpy(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
+      memcmp(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
   }
 };
 
