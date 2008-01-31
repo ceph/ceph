@@ -87,17 +87,10 @@ mds mustfix
 
 - rerun destro trace against latest, with various journal lengths
 
-- EOpen vs other journal events... update ordering problem?
-
 mds
 - fix file_data_version
+- on recovery, validate file sizes when max_size > size
 
-- client cap timeouts
-/  - stale -> resume
-  - tolerate connection break
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
-  
 
 
 - extend/clean up filepath to allow paths relative to an ino
@@ -138,11 +131,13 @@ mds
 
 
 client
+- obey file_max
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
-- fstat
 
 
 

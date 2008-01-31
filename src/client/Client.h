@@ -710,7 +710,7 @@ private:
   };
 
   // some helpers
-  int _do_lstat(const char *path, int mask, Inode **in);
+  int _do_lstat(filepath &fpath, int mask, Inode **in);
   int _opendir(const char *name, DirResult **dirpp);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
@@ -745,6 +745,7 @@ private:
   int _truncate(const char *file, off_t length);
   int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
+  int _fstat(Fh *fh, struct stat *stbuf);
   int _statfs(struct statvfs *stbuf);
 
 
@@ -806,6 +807,7 @@ public:
   int truncate(const char *file, off_t size);
   int ftruncate(int fd, off_t size);
   int fsync(int fd, bool syncdataonly);
+  int fstat(int fd, struct stat *stbuf);
 
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
