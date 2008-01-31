@@ -1030,7 +1030,7 @@ void check_new_map(struct ceph_mds_client *mdsc,
 /* caps */
 
 void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps, int wanted, 
-		  __u32 seq, __u64 size, int mds)
+		  __u32 seq, __u64 size, __u64 max_size, int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1049,6 +1049,7 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps, int wanted,
 	fc->wanted = cpu_to_le32(wanted);
 	fc->ino = cpu_to_le64(ino);
 	fc->size = cpu_to_le64(size);
+	fc->max_size = cpu_to_le64(max_size);
 
 	send_msg_mds(mdsc, msg, mds);
 }
@@ -1063,7 +1064,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	int mds = msg->hdr.src.name.num;
 	int op;
 	u32 seq;
-	u64 ino, size;
+	u64 ino, size, max_size;
 	ino_t inot;
 	
 	dout(10, "handle_filecaps from mds%d\n", mds);
@@ -1075,7 +1076,8 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	op = le32_to_cpu(h->op);
 	ino = le64_to_cpu(h->ino);
 	seq = le32_to_cpu(h->seq);
-	size = le64_to_cpu(h->seq);
+	size = le64_to_cpu(h->size);
+	max_size = le64_to_cpu(h->max_size);
 
 	/* find session */
 	session = __get_session(&client->mdsc, mds);
@@ -1098,7 +1100,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	}
 	if (!inode) {
 		dout(10, "hrm, wtf, i don't have ino %lu=%llx?  closing out cap\n", inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, mds);
+		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, mds);
 		return;
 	}
 
@@ -1142,7 +1144,8 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 
 		cap->caps &= wanted;  /* drop caps we don't want */
 		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted, 
-			     cap->seq, ci->vfs_inode.i_size, cap->mds);
+			     cap->seq, ci->vfs_inode.i_size, ci->i_max_size, 
+			     cap->mds);
 	}
 
 	ci->i_cap_wanted = wanted;

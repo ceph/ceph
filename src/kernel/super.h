@@ -141,7 +141,8 @@ struct ceph_inode_info {
 
 	int i_nr_by_mode[4];
 	int i_cap_wanted;
-	loff_t i_wr_size;
+	loff_t i_max_size;     /* size authorized by mds */
+	loff_t i_wr_size;      /* largest offset we've written (+1) */
 	struct timespec i_wr_mtime;
 	struct timespec i_old_atime;
 

@@ -412,7 +412,7 @@ struct ceph_mds_reply_inode {
 	struct ceph_timeval ctime, mtime, atime;
 	__u32 mode, uid, gid;
 	__u32 nlink;
-	__u64 size;
+	__u64 size, max_size;
 	__u32 rdev;
 	__u32 mask;
 	struct ceph_frag_tree_head fragtree;
@@ -449,7 +449,7 @@ struct ceph_mds_file_caps {
 	__le32 seq;
 	__le32 caps, wanted;
 	__le64 ino;
-	__le64 size;
+	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));

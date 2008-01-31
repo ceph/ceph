@@ -4099,6 +4099,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
+  in->inode.max_size = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
   
   // prepare finisher
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);

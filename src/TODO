@@ -27,10 +27,11 @@ kernel client
 - audit use of kmalloc vs spinlocks
 - convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
- - generate paths relative to the appropriate vfsmount root
+ - generate paths relative to the appropriate vfsmount root?
  - getattr should do an lstat?
  - d_revalidate?
  - test truncate
+ - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
 - is ino_t really still 32 bits on i386??  hrm!
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?

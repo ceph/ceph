@@ -39,7 +39,8 @@ class MClientFileCaps : public Message {
   capseq_t  get_seq() { return le32_to_cpu(h.seq); }
 
   inodeno_t get_ino() { return le64_to_cpu(h.ino); }
-  __u64 get_size() { return le64_to_cpu(h.size);  }
+  __s64 get_size() { return le64_to_cpu(h.size);  }
+  __s64 get_max_size() { return le64_to_cpu(h.max_size);  }
   utime_t get_mtime() { return utime_t(h.mtime); }
   utime_t get_atime() { return utime_t(h.atime); }
 
@@ -74,6 +75,7 @@ class MClientFileCaps : public Message {
     h.wanted = cpu_to_le32(wanted);
     h.ino = cpu_to_le64(inode.ino);
     h.size = cpu_to_le64(inode.size);
+    h.max_size = cpu_to_le64(inode.max_size);
     h.migrate_mds = cpu_to_le32(mmds);
     h.migrate_seq = cpu_to_le32(mseq);
     inode.mtime.encode_timeval(&h.mtime);
@@ -87,6 +89,7 @@ class MClientFileCaps : public Message {
 	<< " seq " << le32_to_cpu(h.seq) 
 	<< " caps " << cap_string(le32_to_cpu(h.caps)) 
 	<< " wanted" << cap_string(le32_to_cpu(h.wanted)) 
+	<< " size " << le64_to_cpu(h.size) << "/" << le64_to_cpu(h.max_size)
 	<< ")";
   }
   

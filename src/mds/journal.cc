@@ -23,9 +23,6 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
 
-#include "events/EFileWrite.h"
-#include "events/EFileAccess.h"
-
 #include "events/EPurgeFinish.h"
 
 #include "events/EExport.h"
@@ -602,48 +599,6 @@ void EOpen::replay(MDS *mds)
   metablob.replay(mds, _segment);
 }
 
-
-// ------------------------
-// EFileWrite
-
-void EFileWrite::update_segment()
-{
-  // ??
-}
-
-void EFileWrite::replay(MDS *mds)
-{
-  dout(10) << "EFileWrite.replay " << dendl;
-  CInode *in = mds->mdcache->get_inode(ino);
-  if (in) {
-    in->inode.size = size;
-    in->inode.max_size = max_size;
-    in->inode.mtime = mtime;
-  } else {
-    dout(10) << " missing inode " << ino << dendl;
-    //assert(in);
-  }
-}
-
-// ------------------------
-// EFileAccess
-
-void EFileAccess::update_segment()
-{
-  // ??
-}
-
-void EFileAccess::replay(MDS *mds)
-{
-  dout(10) << "EFileAccess.replay " << dendl;
-  CInode *in = mds->mdcache->get_inode(ino);
-  if (in)
-    in->inode.atime = atime;
-  else {
-    dout(10) << " missing inode " << ino << dendl;
-    //assert(in);
-  }
-}
 
 
 // -----------------------

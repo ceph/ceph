@@ -89,6 +89,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	
 	ci->i_old_atime = inode->i_atime;
 
+	ci->i_max_size = le64_to_cpu(info->max_size);
+
 	inode->i_mapping->a_ops = &ceph_aops;
 
 	switch (inode->i_mode & S_IFMT) {
@@ -399,9 +401,28 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int used;
 	int wanted = ceph_caps_wanted(ci);
 	int ret = 0;
+	u64 size = le64_to_cpu(grant->size);
+	u64 max_size = le64_to_cpu(grant->max_size);
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 	dout(10, " my wanted = %d\n", wanted);
+	dout(10, " size %llu max_size %llu\n", size, max_size);
+
+	/* size change? */
+	if (size != inode->i_size) {
+		/* FIXME: lock something here? */
+		dout(10, "size %lld -> %llu\n", inode->i_size, size);
+		if (size < inode->i_size) {
+			/* FIXME: truncate page cache? */
+		}
+		inode->i_size = size;
+	}
+
+	/* max size increase? */
+	if (max_size != ci->i_max_size) {
+		dout(10, "max_size %lld -> %llu\n", ci->i_max_size, max_size);
+		ci->i_max_size = max_size;
+	}
 
 	cap = get_cap_for_mds(inode, mds);
 
@@ -473,7 +494,7 @@ const struct inode_operations ceph_symlink_iops = {
 /*
  * generics
  */
-struct ceph_msg * prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
+struct ceph_msg *prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
 {
 	char *path;
 	int pathlen;
@@ -561,9 +582,10 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		//if (err) return err;
 	}
 
-	/* FIXME: does getattr get set to do regular mtime updates? */
 	/* utimes */
-	if (ia_valid & (ATTR_ATIME|ATTR_MTIME)) {
+	/* FIXME: second resolution here is a hack to avoid setattr on open... :/ */
+	if (((ia_valid & ATTR_ATIME) && inode->i_atime.tv_sec != attr->ia_atime.tv_sec) ||
+	    ((ia_valid & ATTR_MTIME) && inode->i_mtime.tv_sec != attr->ia_mtime.tv_sec)) {
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);

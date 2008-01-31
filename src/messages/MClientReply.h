@@ -115,6 +115,7 @@ struct InodeStat {
     inode.gid = e.gid;
     inode.nlink = e.nlink;
     inode.size = e.size;
+    inode.max_size = e.max_size;
     inode.rdev = e.rdev;
 
     int n = e.fragtree.nsplits;
@@ -152,6 +153,7 @@ struct InodeStat {
     e.gid = in->inode.gid;
     e.nlink = in->inode.nlink;
     e.size = in->inode.size;
+    e.max_size = in->inode.max_size;
     e.rdev = in->inode.rdev;
     e.mask = mask;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
@@ -209,7 +211,6 @@ class MClientReply : public Message {
     memset(&st, 0, sizeof(st));
     this->st.tid = req->get_tid();
     this->st.op = req->get_op();
-
     this->st.result = result;
   }
   virtual ~MClientReply() {
