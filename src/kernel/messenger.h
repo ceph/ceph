@@ -93,7 +93,6 @@ struct ceph_connection {
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
-	struct ceph_entity_addr out_addr;
 	__le32 out32;
 	struct kvec out_kvec[4],
 		*out_kvec_cur;
@@ -160,49 +159,6 @@ static __inline__ int ceph_decode_copy(void **p, void *end, void *v, int len) {
 	memcpy(v, *p, len);
 	*p += len;
 	return 0;
-}
-
-static __inline__ int ceph_decode_addr(void **p, void *end, struct ceph_entity_addr *v) {
-	int err;
-	if (*p + sizeof(*v) > end) 
-		return -EINVAL;
-	if ((err = ceph_decode_32(p, end, &v->erank)) != 0)
-		return -EINVAL;
-	if ((err = ceph_decode_32(p, end, &v->nonce)) != 0)
-		return -EINVAL;
-	ceph_decode_copy(p, end, &v->ipaddr, sizeof(v->ipaddr));
-	return 0;
-}
-static __inline__ void ceph_encode_addr(struct ceph_entity_addr *to, struct ceph_entity_addr *from)
-{
-	to->erank = cpu_to_le32(from->erank);
-	to->nonce = cpu_to_le32(from->nonce);
-	to->ipaddr = from->ipaddr;
-}
-
-static __inline__ int ceph_decode_name(void **p, void *end, struct ceph_entity_name *v) {
-	if (unlikely(*p + sizeof(*v) > end))
-		return -EINVAL;
-	v->type = le32_to_cpu(*(__u32*)*p);
-	*p += sizeof(__u32);
-	v->num = le32_to_cpu(*(__u32*)*p);
-	*p += sizeof(__u32);
-	return 0;
-}
-
-/* hmm, these are actually identical, yeah? */
-static __inline__ void ceph_decode_inst(struct ceph_entity_inst *to)
-{
-	le32_to_cpus(&to->name.type);
-	le32_to_cpus(&to->name.num);
-	le32_to_cpus(&to->addr.erank);
-	le32_to_cpus(&to->addr.nonce);
-}
-static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph_entity_inst *from)
-{
-	to->name.type = cpu_to_le32(from->name.type);
-	to->name.num = cpu_to_le32(from->name.num);
-	ceph_encode_addr(&to->addr, &from->addr);
 }
 
 static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {

@@ -34,7 +34,6 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	}
 	memcpy(m->mon_inst, p, end-p);
 	for (i=0; i<m->num_mon; i++) {
-		ceph_decode_inst(&m->mon_inst[i]);
 		dout(30, "monmap_decode mon%d is %x:%d\n", i,
 		     ntohl(m->mon_inst[i].addr.ipaddr.sin_addr.s_addr), 
 		     ntohs(m->mon_inst[i].addr.ipaddr.sin_port));

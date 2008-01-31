@@ -18,7 +18,6 @@ code cleanup
 kernel client
 - some bugs
  - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
- - echo blah >> mnt/blah "appends" from offset zero, regardless of file size
  - cap handler probably needs i_mutex or something when updating file sizes
    - which means it probably needs to be done in a different worker thread (NOT the messenger's)
  - prevent client_reply from racing against a subsequent file_caps.
@@ -29,10 +28,7 @@ kernel client
 - audit use of kmalloc vs spinlocks
 - convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
- - generate paths relative to the appropriate vfsmount root?
- - getattr should do an lstat?
- - d_revalidate?
- - test truncate
+ - can we use dentry_path(), if it gets merged into mainline?
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client

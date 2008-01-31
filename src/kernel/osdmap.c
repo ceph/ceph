@@ -447,7 +447,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 		struct ceph_entity_addr addr;
 		if ((err = ceph_decode_32(p, end, &osd)) < 0)
 			goto bad;
-		if ((err = ceph_decode_addr(p, end, &addr)) < 0)
+		if ((err = ceph_decode_copy(p, end, &addr, 
+					    sizeof(addr))) < 0)
 			goto bad;
 		dout(1, "osd%d up\n", osd);
 		BUG_ON(osd >= map->max_osd);

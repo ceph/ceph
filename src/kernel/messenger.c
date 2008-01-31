@@ -419,25 +419,23 @@ static void prepare_write_ack(struct ceph_connection *con)
 
 static void prepare_write_connect(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	ceph_encode_addr(&con->out_addr, &msgr->inst.addr);
-	con->out_kvec[0].iov_base = &con->out_addr;
-	con->out_kvec[0].iov_len = sizeof(con->out_addr);
+	con->out_kvec[0].iov_base = &msgr->inst.addr;
+	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
 	con->out32 = cpu_to_le32(con->connect_seq);
 	con->out_kvec[1].iov_base = &con->out32;
 	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = sizeof(con->out_addr) + 4;
+	con->out_kvec_bytes = sizeof(msgr->inst.addr) + 4;
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
 static void prepare_write_accept_announce(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	ceph_encode_addr(&con->out_addr, &msgr->inst.addr);
-	con->out_kvec[0].iov_base = &con->out_addr;
-	con->out_kvec[0].iov_len = sizeof(con->out_addr);
+	con->out_kvec[0].iov_base = &msgr->inst.addr;
+	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
 	con->out_kvec_left = 1;
-	con->out_kvec_bytes = sizeof(con->out_addr);
+	con->out_kvec_bytes = sizeof(msgr->inst.addr);
 	con->out_kvec_cur = con->out_kvec;
 	set_bit(WRITE_PENDING, &con->state);
 }
