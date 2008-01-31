@@ -201,8 +201,8 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	}
 	if (i < nr_osds) {
 		dout(10, "send_request %p tid %llu to osd%d flags %d\n", req, req->r_tid, osds[i], req->r_flags);
-		req->r_request->hdr.dst.name.type = CEPH_ENTITY_TYPE_OSD;
-		req->r_request->hdr.dst.name.num = osds[i];
+		req->r_request->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
+		req->r_request->hdr.dst.name.num = cpu_to_le32(osds[i]);
 		req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
 		ceph_msg_get(req->r_request); /* send consumes a ref */
 		ceph_msg_send(osdc->client->msgr, req->r_request, 0);
@@ -268,9 +268,10 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	struct ceph_osd_request *req;
 	__u64 tid;
 	int ret = -1;
+	int type = le32_to_cpu(m->hdr.type);
 
 	dout(10, "prepare_pages on msg %p want %d\n", m, want);
-	if (unlikely(le32_to_cpu(m->hdr.type) != CEPH_MSG_OSD_OPREPLY))
+	if (unlikely(type != CEPH_MSG_OSD_OPREPLY))
 		return -1;  /* hmm! */
 
 	tid = le64_to_cpu(rhead->tid);
@@ -504,8 +505,8 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 	req->r_request->pages = req->r_pages;
 	req->r_request->nr_pages = req->r_nr_pages;
-	req->r_request->hdr.data_len = len;
-	req->r_request->hdr.data_off = off;
+	req->r_request->hdr.data_len = cpu_to_le32(len);
+	req->r_request->hdr.data_off = cpu_to_le32(off);
 
 	reqhead->osdmap_epoch = osdc->osdmap->epoch;
 	send_request(osdc, req);

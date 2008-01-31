@@ -93,7 +93,6 @@ struct ceph_connection {
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
 
-	struct ceph_msg_header out_hdr;
 	struct ceph_entity_addr out_addr;
 	__le32 out32;
 	struct kvec out_kvec[4],
@@ -205,28 +204,6 @@ static __inline__ void ceph_encode_inst(struct ceph_entity_inst *to, struct ceph
 	to->name.num = cpu_to_le32(from->name.num);
 	ceph_encode_addr(&to->addr, &from->addr);
 }
-
-static __inline__ void ceph_encode_header(struct ceph_msg_header *to, struct ceph_msg_header *from)
-{
-	to->seq = cpu_to_le32(from->seq);
-	to->type = cpu_to_le32(from->type);
-	ceph_encode_inst(&to->src, &from->src);
-	ceph_encode_inst(&to->dst, &from->dst);
-	to->front_len = cpu_to_le32(from->front_len);
-	to->data_off = cpu_to_le32(from->data_off);
-	to->data_len = cpu_to_le32(from->data_len);
-}
-static __inline__ void ceph_decode_header(struct ceph_msg_header *to)
-{
-	to->seq = cpu_to_le32(to->seq);
-	to->type = cpu_to_le32(to->type);
-	ceph_decode_inst(&to->src);
-	ceph_decode_inst(&to->dst);
-	to->front_len = cpu_to_le32(to->front_len);
-	to->data_off = cpu_to_le32(to->data_off);
-	to->data_len = cpu_to_le32(to->data_len);
-}
-
 
 static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
 	BUG_ON(*p + sizeof(v) > end);

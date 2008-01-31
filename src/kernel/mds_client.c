@@ -42,8 +42,8 @@ const char* ceph_mds_op_name(int op)
 static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg, int mds)
 {
 	msg->hdr.dst.addr = *ceph_mdsmap_get_addr(mdsc->mdsmap, mds);
-	msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MDS;
-	msg->hdr.dst.name.num = mds;
+	msg->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
+	msg->hdr.dst.name.num = cpu_to_le32(mds);
 	ceph_msg_send(mdsc->client->msgr, msg, BASE_DELAY_INTERVAL);
 }
 
@@ -359,7 +359,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 	__u32 op;
 	__u64 seq;
 	struct ceph_mds_session *session;
-	int mds = msg->hdr.src.name.num;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	struct ceph_mds_session_head *h = msg->front.iov_base;
 
 	if (msg->front.iov_len != sizeof(*h))
@@ -387,7 +387,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 			unregister_session(mdsc, mds);
 		} else {
 			dout(1, "ignoring session close from mds%d, seq %llu < my seq %llu\n", 
-			     msg->hdr.src.name.num, seq, session->s_cap_seq);
+			     le32_to_cpu(msg->hdr.src.name.num), seq, session->s_cap_seq);
 		}
 		remove_session_caps(session);
 		complete(&mdsc->session_close_waiters);
@@ -497,7 +497,8 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 	int err;
 	int mds = -1;
 
-	dout(30, "do_request on %p type %d\n", msg, msg->hdr.type);
+	dout(30, "do_request on %p\n", msg);
+	BUG_ON(le32_to_cpu(msg->hdr.type) != CEPH_MSG_CLIENT_REQUEST);
 
 	req = new_request(msg, mds);
 
@@ -808,7 +809,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg
 			req->r_num_fwd = fwd_seq;
 			req->r_resend_mds = next_mds;
 			req->r_num_mds = 1;
-			req->r_mds[0] = msg->hdr.src.name.num;
+			req->r_mds[0] = le32_to_cpu(msg->hdr.src.name.num);
 		}
 		spin_unlock(&mdsc->lock);
 	} else {
@@ -957,7 +958,8 @@ retry:
 	spin_unlock(&session->s_cap_lock);
 
 send:
-	reply->hdr.front_len = reply->front.iov_len = p - reply->front.iov_base;
+	reply->front.iov_len = p - reply->front.iov_base;
+	reply->hdr.front_len = cpu_to_le32(reply->front.iov_len);
 	dout(10, "final len was %lu (guessed %d)\n", reply->front.iov_len, len);
 	send_msg_mds(mdsc, reply, mds);
 
@@ -1065,7 +1067,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 	struct ceph_mds_session *session;
 	struct inode *inode;
 	struct ceph_mds_file_caps *h;
-	int mds = msg->hdr.src.name.num;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	int op;
 	u32 seq;
 	u64 ino, size, max_size;
@@ -1279,7 +1281,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
-	int from = msg->hdr.src.name.num;
+	int from = le32_to_cpu(msg->hdr.src.name.num);
 	int newstate;
 
 	if ((err = ceph_decode_32(&p, end, &epoch)) != 0)
