@@ -183,6 +183,7 @@ static struct ceph_mds_session *__register_session(struct ceph_mds_client *mdsc,
 		return mdsc->sessions[mds];
 	} else {
 		mdsc->sessions[mds] = s;
+		atomic_inc(&s->s_ref);
 		return s;
 	}
 }
