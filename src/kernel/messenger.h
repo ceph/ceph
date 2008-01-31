@@ -66,7 +66,8 @@ struct ceph_msg_pos {
 #define REJECTING        7
 #define CLOSING          8
 #define CLOSED           9
-#define STANDBY          10 /* standby, when socket gets TCP_CLOSE and no message queued */
+#define SOCK_CLOSE       10 /* socket state changed to close */
+#define STANDBY          11 /* standby, when socket state close, no message queued */
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
