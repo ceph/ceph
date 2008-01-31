@@ -516,14 +516,18 @@ retry:
 
 	/* get session */
 	session = __get_session(mdsc, mds);
+	dout(30, "do_request __get_session returned %p state %d\n", session, (session ? session->s_state:0));
 	if (!session)
 		session = __register_session(mdsc, mds);
 	dout(30, "do_request session %p state %d\n", session, session->s_state);
+
+	BUG_ON(session->s_state == 0x6b6b6b6b);
 
 	/* open? */
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
 		err = open_session(mdsc, session);
+		dout(30, "do_request session err=%d\n", err);
 		BUG_ON(err && err != -EAGAIN);
 	}
 	if (session->s_state != CEPH_MDS_SESSION_OPEN) {

@@ -254,6 +254,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user *data,
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int ret = 0;
 	int did = 0;
+	off_t pos = *offset;
 
 	dout(10, "silly_write on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
@@ -261,14 +262,17 @@ ssize_t ceph_silly_write(struct file *file, const char __user *data,
 	/* ignore caps, for now. */
 	/* this is an ugly hack */
 
+	if (file->f_flags & O_APPEND)
+		pos = inode->i_size;
+
 	while (count > 0) {
 		ret = ceph_osdc_silly_write(osdc, ceph_ino(inode),
 					    &ci->i_layout,
-					    count, *offset, data);
+					    count, pos, data);
 		dout(10, "ret is %d\n", ret);
 		if (ret > 0) {
 			did += ret;
-			*offset += ret;
+			pos += ret;
 			data += ret;
 			count -= ret;
 			dout(10, "did %d bytes, ret now %d, %u left\n",
@@ -280,13 +284,16 @@ ssize_t ceph_silly_write(struct file *file, const char __user *data,
 	}
 
 	spin_lock(&inode->i_lock);
-	if (*offset > inode->i_size) {
-		ci->i_wr_size = inode->i_size = *offset;
+	if (pos > inode->i_size) {
+		ci->i_wr_size = inode->i_size = pos;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}
 	spin_unlock(&inode->i_lock);
 	invalidate_inode_pages2(inode->i_mapping);
+
+	*offset = pos;
+
 	return ret;
 }
 
