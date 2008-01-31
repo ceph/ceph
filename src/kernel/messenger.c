@@ -495,8 +495,6 @@ static void try_write(struct work_struct *work)
 		}
 
 		ceph_send_fault(con);
-		/* PW may be able to goto done now that we cleared SOCK_CLOSE */
-		/* We have something to send so drop through and try again... */
 		goto done;
 	}
 more:
