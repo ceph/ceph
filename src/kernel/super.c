@@ -198,6 +198,7 @@ enum {
 	Opt_fsidminor,
 	Opt_debug,
 	Opt_debug_msgr,
+	Opt_debug_tcp,
 	Opt_debug_mdsc,
 	Opt_debug_osdc,
 	Opt_monport,
@@ -210,6 +211,7 @@ static match_table_t arg_tokens = {
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
 	{Opt_debug_msgr, "debug_msgr=%d"},
+	{Opt_debug_tcp, "debug_tcp=%d"},
 	{Opt_debug_mdsc, "debug_mdsc=%d"},
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_monport, "monport=%d"},
@@ -321,18 +323,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				args->mon_addr[i].ipaddr.sin_port =
 					htons(intval);
 			break;
-		case Opt_debug:
-			ceph_debug = intval;
-			break;
-		case Opt_debug_msgr:
-			ceph_debug_msgr = intval;
-			break;
-		case Opt_debug_mdsc:
-			ceph_debug_mdsc = intval;
-			break;
-		case Opt_debug_osdc:
-			ceph_debug_osdc = intval;
-			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
@@ -344,6 +334,24 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				return err;
 			args->flags |= CEPH_MOUNT_MYIP;
 			break;
+			
+			/* debug levels */
+		case Opt_debug:
+			ceph_debug = intval;
+			break;
+		case Opt_debug_msgr:
+			ceph_debug_msgr = intval;
+			break;
+		case Opt_debug_tcp:
+			ceph_debug_tcp = intval;
+			break;
+		case Opt_debug_mdsc:
+			ceph_debug_mdsc = intval;
+			break;
+		case Opt_debug_osdc:
+			ceph_debug_osdc = intval;
+			break;
+
 		default:
 			derr(1, "parse_mount_args bad token %d\n", token);
 			continue;

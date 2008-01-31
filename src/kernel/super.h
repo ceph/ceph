@@ -13,6 +13,7 @@
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
+extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 

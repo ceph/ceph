@@ -20,6 +20,11 @@ code cleanup
 
 
 kernel client
+- some bugs
+ - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
+ - echo blah >> mnt/blah "appends" from offset zero, regardless of file size
+ - cap handler probably needs i_mutex or something when updating file sizes
+   - which means it probably needs to be done in a different worker thread (NOT the messenger's)
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
@@ -31,7 +36,6 @@ kernel client
  - getattr should do an lstat?
  - d_revalidate?
  - test truncate
- - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
 - is ino_t really still 32 bits on i386??  hrm!
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?
