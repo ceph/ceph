@@ -4,7 +4,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
-
+#include <linux/kernel.h>
 #include <linux/ceph_fs.h>
 
 int ceph_inode_debug = 50;
@@ -44,6 +44,18 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
 	int symlen;
+	u32 su = le32_to_cpu(info->layout.fl_stripe_unit);
+	int blkbits = fls(su)-1;
+	unsigned blksize = 1 << blkbits;
+	u64 size = le64_to_cpu(info->size);
+	u64 blocks = size + blksize - 1;
+	do_div(blocks, blksize);
+
+	dout(30, "fill_inode %p ino %lu/%llx by %d.%d sz=%llu mode %o nlink %d\n", 
+	     inode, inode->i_ino, ceph_ino(inode), inode->i_uid, inode->i_gid, 
+	     inode->i_size, inode->i_mode, inode->i_nlink);
+	dout(30, " su %d, blkbits %d, blksize %u, blocks %llu\n",
+	     su, blkbits, blksize, blocks);	
 
 	ceph_set_ino(inode, le64_to_cpu(info->ino));
 	inode->i_mode = le32_to_cpu(info->mode);
@@ -52,8 +64,9 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_nlink = le32_to_cpu(info->nlink);
 	inode->i_rdev = le32_to_cpu(info->rdev);
 	spin_lock(&inode->i_lock);
-	inode->i_size = le64_to_cpu(info->size);
-	inode->i_blocks = 1;
+	inode->i_size = size;
+	inode->i_blkbits = blkbits;
+	inode->i_blocks = blocks;
 	spin_unlock(&inode->i_lock);
 
 	if (ci->i_hashval != inode->i_ino) {
@@ -61,10 +74,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		ci->i_hashval = inode->i_ino;
 	}
 
-	dout(30, "fill_inode %p ino %lu/%llx by %d.%d sz=%llu mode %o nlink %d\n", 
-	     inode, inode->i_ino, ceph_ino(inode), inode->i_uid, inode->i_gid, 
-	     inode->i_size, inode->i_mode, inode->i_nlink);
-	
 	ceph_decode_timespec(&inode->i_atime, &info->atime);
 	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
 	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
@@ -675,10 +684,8 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat
 
 	err = ceph_inode_revalidate(dentry);
 
-	if (!err) {
+	if (!err) 
 		generic_fillattr(dentry->d_inode, stat);
-		stat->blksize = CEPH_BLKSIZE;
-	}
 	return err;
 }
 

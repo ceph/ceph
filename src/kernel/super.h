@@ -31,8 +31,6 @@ extern int ceph_lookup_cache;
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
-#define CEPH_BLKSIZE	4096
-
 #define CACHE_HZ		(1*HZ)
 
 /*
