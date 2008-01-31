@@ -75,6 +75,9 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.filelock;
   out << " " << in.dirlock;
   
+  if (in.inode.max_size)
+    out << " size=" << in.inode.size << "/" << in.inode.max_size;
+
   // hack: spit out crap on which clients have caps
   if (!in.get_client_caps().empty()) {
     out << " caps={";

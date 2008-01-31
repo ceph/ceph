@@ -465,7 +465,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	
 	/* grant or no-op */
 	if (cap->caps == newcaps) {
-		dout(10, "no-op: %d -> %d\n", cap->caps, newcaps);
+		dout(10, "caps unchanged: %d -> %d\n", cap->caps, newcaps);
 	} else {
 		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
 		cap->caps = newcaps;

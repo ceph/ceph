@@ -42,15 +42,7 @@ using namespace __gnu_cxx;
 
 #include "object.h"
 #include "utime.h"
-
-
-#ifndef MIN
-# define MIN(a,b) ((a) < (b) ? (a):(b))
-#endif
-#ifndef MAX
-# define MAX(a,b) ((a) > (b) ? (a):(b))
-#endif
-
+#include "intarith.h"
 
 // -- stl crap --
 

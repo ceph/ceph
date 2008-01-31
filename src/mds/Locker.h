@@ -190,7 +190,12 @@ protected:
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
+  void maybe_journal_inode_update(CInode *in, bool had_or_has_wr, 
+				  int64_t size, utime_t mtime, utime_t atime);
+  void share_new_file_max(CInode *in);
+
   friend class C_MDL_RequestInodeFileCaps;
+  friend class C_Locker_FileUpdate_finish;
 
 };
 

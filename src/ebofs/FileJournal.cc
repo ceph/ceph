@@ -345,7 +345,7 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
   bufferlist &ebl = writeq.front().second;
     
   off64_t size = 2*sizeof(entry_header_t) + ebl.length();
-  size = ROUND_UP_2(size, header.alignment);
+  size = ROUND_UP_TO(size, header.alignment);
   
   check_for_wrap(epoch, write_pos, size);
   if (full) return false;
@@ -419,7 +419,7 @@ void FileJournal::do_write(bufferlist& bl)
   writing = false;
   if (memcmp(&old_header, &header, sizeof(header)) == 0) {
     write_pos += bl.length();
-    write_pos = ROUND_UP_2(write_pos, header.alignment);
+    write_pos = ROUND_UP_TO(write_pos, header.alignment);
     ebofs->queue_finishers(writingq);
   } else {
     dout(10) << "do_write finished write but header changed?  not moving write_pos." << dendl;
@@ -615,7 +615,7 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
   epoch = h.epoch;
 
   read_pos += 2*sizeof(entry_header_t) + h.len;
-  read_pos = ROUND_UP_2(read_pos, header.alignment);
+  read_pos = ROUND_UP_TO(read_pos, header.alignment);
 
   return true;
 }

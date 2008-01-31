@@ -69,7 +69,6 @@ class CInode : public MDSCacheObject {
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
   static const int PIN_IMPORTINGCAPS =    15;
-  static const int PIN_FILEUPDATE =      -16;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -87,7 +86,6 @@ class CInode : public MDSCacheObject {
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
     case PIN_IMPORTINGCAPS: return "importingcaps";
-    case PIN_FILEUPDATE: return "fileupdate";
     default: return generic_pin_name(p);
     }
   }
@@ -151,6 +149,12 @@ class CInode : public MDSCacheObject {
       return projected_inode.back()->version;
   }
 
+  inode_t *get_projected_inode() { 
+    if (projected_inode.empty())
+      return &inode;
+    else
+      return projected_inode.back();
+  }
   inode_t *project_inode();
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
@@ -280,6 +284,10 @@ public:
   
   bool is_lt(const MDSCacheObject *r) const {
     return ino() < ((CInode*)r)->ino();
+  }
+
+  int64_t get_layout_size_increment() {
+    return inode.layout.fl_object_size * inode.layout.fl_stripe_count;
   }
 
   // -- misc -- 
