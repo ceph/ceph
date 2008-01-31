@@ -114,8 +114,11 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *m
 
 static __inline__ void ceph_mdsc_put_session(struct ceph_mds_session *s)
 {
-	if (atomic_dec_and_test(&s->s_ref)) 
+	BUG_ON(s == NULL);
+	if (atomic_dec_and_test(&s->s_ref)) {
 		kfree(s);
+		s = NULL;
+	}
 }
 
 
