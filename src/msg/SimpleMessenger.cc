@@ -1447,8 +1447,8 @@ Message *Rank::Pipe::read_message()
 
   // read data
   bufferlist data;
-  int data_len = le32_to_cpu(env.data_len);
-  int data_off = le32_to_cpu(env.data_off);
+  unsigned data_len = le32_to_cpu(env.data_len);
+  unsigned data_off = le32_to_cpu(env.data_off);
   if (data_len) {
     int left = data_len;
     if (data_off & ~PAGE_MASK) {

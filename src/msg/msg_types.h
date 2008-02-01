@@ -185,6 +185,10 @@ struct entity_inst_t {
   entity_inst_t(entity_name_t n, const entity_addr_t& a) : name(n), addr(a) {}
   entity_inst_t(const ceph_entity_inst& i) : name(i.name), addr(i.addr) { }
   entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) : name(n), addr(a) {}
+  operator ceph_entity_inst() {
+    ceph_entity_inst i = {name, addr};
+    return i;
+  }
 };
 
 
