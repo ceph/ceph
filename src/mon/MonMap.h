@@ -39,6 +39,30 @@ class MonMap {
     mon_inst.push_back(inst);
   }
 
+  void add(entity_addr_t a) {
+    entity_inst_t i;
+    i.addr = a;
+    i.name = entity_name_t::MON(mon_inst.size());
+    mon_inst.push_back(i);
+  }
+  bool remove(entity_addr_t a) {
+    for (unsigned i=0; i<mon_inst.size(); i++) {
+      if (mon_inst[i].addr == a) {
+	for (; i < mon_inst.size()-1; i++) 
+	  mon_inst[i].addr = mon_inst[i+1].addr;
+	mon_inst.pop_back();
+	return true;
+      }
+    }
+    return false;
+  }
+  bool contains(entity_addr_t a) {
+    for (unsigned i=0; i<mon_inst.size(); i++)
+      if (mon_inst[i].addr == a) 
+	return true;
+    return false;
+  }
+
   // pick a mon.  
   // choice should be stable, unless we explicitly ask for a new one.
   int pick_mon(bool newmon=false) { 

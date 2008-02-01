@@ -20,7 +20,7 @@ then
 	echo
 fi
 
-./mkmonmap $IP:12345  # your IP here
+./monmaptool --create --clobber --add $IP:12345 --print  # your IP here
 
 ARGS="-d --bind $IP --doutdir out --debug_ms 1"
 ./cmon $ARGS --mkfs --mon 0

@@ -9,8 +9,12 @@ cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a
 mkmonmap_SOURCES = mkmonmap.cc
 mkmonmap_LDADD = libcommon.a
+monmaptool_SOURCES = monmaptool.cc
+monmaptool_LDADD = libcommon.a
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
 cmonctl_LDADD = libcommon.a
+crushtool_SOURCES = crushtool.cc
+crushtool_LDADD = libcommon.a libcrush.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
@@ -54,7 +58,11 @@ AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
 AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
 AM_LDFLAGS =
 
-bin_PROGRAMS = cmon mkmonmap cmonctl cmds cosd csyn fakesyn $(FUSEBIN) $(NEWSYN)
+bin_PROGRAMS = \
+	cmon cmds cosd csyn \
+	mkmonmap monmaptool crushtool cmonctl \
+	fakesyn \
+	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libebofs.a libclient.a
@@ -281,9 +289,6 @@ noinst_HEADERS = \
         messages/MOSDMap.h\
         messages/MOSDOp.h\
         messages/MOSDOut.h\
-        messages/MMonElectionCollect.h\
-        messages/MMonElectionRefresh.h\
-        messages/MMonElectionStatus.h\
         messages/MOSDPGActivateSet.h\
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\

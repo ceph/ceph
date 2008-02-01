@@ -27,7 +27,7 @@
 
 void Elector::init()
 {
-  epoch = mon->store->get_int("mon_epoch");
+  epoch = mon->store->get_int("election_epoch");
   if (!epoch)
     epoch = 1;
   dout(1) << "init, last seen epoch " << epoch << dendl;
@@ -44,7 +44,7 @@ void Elector::bump_epoch(epoch_t e)
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
   assert(epoch < e);
   epoch = e;
-  mon->store->put_int(epoch, "mon_epoch");
+  mon->store->put_int(epoch, "election_epoch");
 
   // clear up some state
   electing_me = false;
@@ -67,7 +67,7 @@ void Elector::start()
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == whoami) continue;
-    mon->messenger->send_message(new MMonElection(MMonElection::OP_PROPOSE, epoch),
+    mon->messenger->send_message(new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap),
 				 mon->monmap->get_inst(i));
   }
   
@@ -87,7 +87,7 @@ void Elector::defer(int who)
   // ack them
   leader_acked = who;
   ack_stamp = g_clock.now();
-  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch),
+  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
 			       mon->monmap->get_inst(who));
   
   // set a timer
@@ -145,7 +145,7 @@ void Elector::victory()
        p != quorum.end();
        ++p) {
     if (*p == whoami) continue;
-    mon->messenger->send_message(new MMonElection(MMonElection::OP_VICTORY, epoch),
+    mon->messenger->send_message(new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap),
 				 mon->monmap->get_inst(*p));
   }
     
@@ -253,10 +253,30 @@ void Elector::handle_victory(MMonElection *m)
 void Elector::dispatch(Message *m)
 {
   switch (m->get_type()) {
-
+    
   case MSG_MON_ELECTION:
     {
       MMonElection *em = (MMonElection*)m;
+
+      MonMap *peermap = new MonMap;
+      peermap->decode(em->monmap_bl);
+      if (peermap->epoch > mon->monmap->epoch) {
+	dout(0) << m->get_source_inst() << " has newer monmap epoch " << peermap->epoch
+		<< " > my epoch " << mon->monmap->epoch 
+		<< ", taking it"
+		<< dendl;
+	delete mon->monmap;
+	mon->monmap = peermap;
+	mon->store->put_bl_sn(em->monmap_bl, "monmap", peermap->epoch);
+	mon->store->put_bl_ss(em->monmap_bl, "monmap", "latest");
+      } else {
+	if (peermap->epoch < mon->monmap->epoch) {
+	  dout(0) << m->get_source_inst() << " has older monmap epoch " << peermap->epoch
+		  << " < my epoch " << mon->monmap->epoch 
+		  << dendl;
+	}
+	delete peermap;
+      } 
 
       switch (em->op) {
       case MMonElection::OP_PROPOSE:

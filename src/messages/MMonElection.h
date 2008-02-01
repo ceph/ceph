@@ -17,7 +17,7 @@
 #define __MMONELECTION_H
 
 #include "msg/Message.h"
-
+#include "mon/MonMap.h"
 
 class MMonElection : public Message {
 public:
@@ -37,27 +37,32 @@ public:
   
   int32_t op;
   epoch_t epoch;
-
+  bufferlist monmap_bl;
+  
   MMonElection() : Message(MSG_MON_ELECTION) {}
-  MMonElection(int o, epoch_t e) : 
-	Message(MSG_MON_ELECTION), 
-	op(o), epoch(e) {}
+  MMonElection(int o, epoch_t e, MonMap *m) : 
+    Message(MSG_MON_ELECTION), 
+    op(o), epoch(e) {
+    m->encode(monmap_bl);
+  }
   
   const char *get_type_name() { return "election"; }
   void print(ostream& out) {
-	out << "election(" << get_opname(op) << " " << epoch << ")";
+    out << "election(" << get_opname(op) << " " << epoch << ")";
   }
   
   void encode_payload() {
-	::_encode(op, payload);
-	::_encode(epoch, payload);
+    ::_encode(op, payload);
+    ::_encode(epoch, payload);
+    ::_encode(monmap_bl, payload);
   }
   void decode_payload() {
-	int off = 0;
-	::_decode(op, payload, off);
-	::_decode(epoch, payload, off);
+    int off = 0;
+    ::_decode(op, payload, off);
+    ::_decode(epoch, payload, off);
+    ::_decode(monmap_bl, payload, off);
   }
-
+  
 };
 
 #endif
