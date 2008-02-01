@@ -758,6 +758,7 @@ static int read_connect_partial(struct ceph_connection *con)
 	ret = 1;
 out:
 	dout(20, "read_connect_partial %p end at %d ret %d\n", con, con->in_base_pos, ret);
+	dout(20, "read_connect_partial peer_connect_seq = %d\n", con->peer_connect_seq);
 	return ret; /* done */
 }
 
@@ -782,6 +783,10 @@ static void process_connect(struct ceph_connection *con)
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
 		dout(10, "process_connect got READY, now open\n");
 		set_bit(OPEN, &con->state);
+		if (test_bit(STANDBY, &con->state)) {
+			dout(10, "process_connect peer_connect_seq = %d\n", con->peer_connect_seq);
+			/* callback */
+		}
 	}
 }
 
