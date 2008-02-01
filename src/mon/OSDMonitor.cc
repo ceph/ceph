@@ -204,13 +204,13 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       }
 
       crush_bucket_uniform *domain = crush_make_uniform_bucket(1, j, items, 0x10000);
-      ritems[i] = crush_add_bucket(crush.map, (crush_bucket*)domain);
+      ritems[i] = crush_add_bucket(crush.crush, (crush_bucket*)domain);
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
     }
     
     // root
     crush_bucket_list *root = crush_make_list_bucket(2, ndom, ritems, rweights);
-    int rootid = crush_add_bucket(crush.map, (crush_bucket*)root);
+    int rootid = crush_add_bucket(crush.crush, (crush_bucket*)root);
     
     // rules
     // replication
@@ -220,7 +220,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
       crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
       crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
+      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
     }
 
     // raid
@@ -231,13 +231,13 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
 	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
 	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
 	crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
+	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
       } else {
 	crush_rule *rule = crush_make_rule(3);
 	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
 	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
 	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
+	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
       }
     }
     
@@ -249,7 +249,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       items[i] = i;
     
     crush_bucket_uniform *b = crush_make_uniform_bucket(1, g_conf.num_osd, items, 0x10000);
-    int root = crush_add_bucket(crush.map, (crush_bucket*)b);
+    int root = crush_add_bucket(crush.crush, (crush_bucket*)b);
     
     // rules
     // replication
@@ -258,7 +258,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.map, CRUSH_REP_RULE(i), rule);
+      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
     }
     // raid4
     for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
@@ -266,7 +266,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.map, CRUSH_RAID_RULE(i), rule);
+      crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
     }
   }
   
@@ -276,7 +276,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
   for (int i=0; i<g_conf.num_osd; i++)
     crush.set_offload(i, CEPH_OSD_IN);
 
-  dout(20) << "crush max_devices " << crush.map->max_devices << dendl;
+  dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
 }
 
 

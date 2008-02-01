@@ -15,8 +15,10 @@
 #ifndef __MONMAP_H
 #define __MONMAP_H
 
+#include <asm/errno.h>
 #include "msg/Message.h"
 #include "include/types.h"
+//#include "config.h"
 
 class MonMap {
  public:
@@ -39,6 +41,16 @@ class MonMap {
     mon_inst.push_back(inst);
   }
 
+  /*
+  int add(const char *a) {
+    entity_addr_t addr;
+    if (!parse_ip_port(a, addr))
+      return -EINVAL;
+    if (contains(addr))
+      return -EEXIST;
+    add(addr);
+  }
+  */
   void add(entity_addr_t a) {
     entity_inst_t i;
     i.addr = a;
