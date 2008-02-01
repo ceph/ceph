@@ -16,6 +16,7 @@
 #include "config.h"
 #include "include/types.h"
 #include <fstream>
+#include <stdlib.h>
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb

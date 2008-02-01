@@ -3,7 +3,7 @@ Installation Instructions
 
 If pulling from git, you first need to build the configure script with
 
-$ ./reconf
+$ ./autogen.sh
 
 Then,
 
@@ -13,3 +13,9 @@ $ make
 Note that if the FUSE library is not found, the user-space fuse client
 will not be built.  
 
+If you are doing development, you may want to do
+
+$ CXXFLAGS="-g -pg" ./configure
+
+or similar to avoid the default (-g -O2), which includes optimizations
+(-O2).

@@ -11,6 +11,7 @@
 
 #include "include/encodable.h"
 
+#include <stdlib.h>
 #include <map>
 #include <set>
 
