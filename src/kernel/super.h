@@ -251,12 +251,7 @@ static inline int calc_pages_for(int len, int off)
 	int nr = 0;
 	if (len == 0)
 		return 0;
-	if (off + len < PAGE_SIZE)
-		return 1;
-	if (off) {
-		nr++;
-		len -= off;
-	}
+	len += off & ~PAGE_MASK;
 	nr += len >> PAGE_SHIFT;
 	if (len & ~PAGE_MASK)
 		nr++;

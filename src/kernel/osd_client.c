@@ -437,16 +437,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 /*
  * silly hack.
  */
-static int calc_bits_of(unsigned t) 
-{
-	int b = 0;
-	while (t) {
-		t = t >> 1;
-		b++;
-	}
-	return b;
-}
-
 int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			  struct ceph_file_layout *layout, 
 			  __u64 len, __u64 off, const char __user *data)
@@ -491,9 +481,8 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 
 	/* data into a set of pages */
-	req->r_pages[0] = alloc_pages(GFP_KERNEL, calc_bits_of(nrp));
-	for (i=1; i<nrp; i++)
-		req->r_pages[i] = req->r_pages[i-1]+1;
+	for (i=0; i<nrp; i++)
+		req->r_pages[i] = alloc_page(GFP_KERNEL);
 	left = len;
 	po = off & ~PAGE_MASK;
 	for (i=0; i<nrp; i++) {
