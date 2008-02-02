@@ -55,7 +55,7 @@ enum {
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
 	__u16 type;
-	__u16 bucket_type;
+	__u16 alg;
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;

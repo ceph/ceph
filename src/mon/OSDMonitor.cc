@@ -204,13 +204,13 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       }
 
       crush_bucket_uniform *domain = crush_make_uniform_bucket(1, j, items, 0x10000);
-      ritems[i] = crush_add_bucket(crush.crush, (crush_bucket*)domain);
+      ritems[i] = crush_add_bucket(crush.crush, 0, (crush_bucket*)domain);
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
     }
     
     // root
     crush_bucket_list *root = crush_make_list_bucket(2, ndom, ritems, rweights);
-    int rootid = crush_add_bucket(crush.crush, (crush_bucket*)root);
+    int rootid = crush_add_bucket(crush.crush, 0, (crush_bucket*)root);
     
     // rules
     // replication
@@ -249,7 +249,7 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
       items[i] = i;
     
     crush_bucket_uniform *b = crush_make_uniform_bucket(1, g_conf.num_osd, items, 0x10000);
-    int root = crush_add_bucket(crush.crush, (crush_bucket*)b);
+    int root = crush_add_bucket(crush.crush, 0, (crush_bucket*)b);
     
     // rules
     // replication

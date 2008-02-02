@@ -22,14 +22,19 @@ public:
   struct crush_map *crush;
   map<int, string> type_map; /* bucket type names */
   map<int, string> name_map; /* bucket/device names */
+  map<int, string> rule_name_map;
 
   /* reverse maps */
-  map<string, int> type_rmap, name_rmap;
+  bool have_rmaps;
+  map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
+    if (have_rmaps) return;
     build_rmap(type_map, type_rmap);
     build_rmap(name_map, name_rmap);
+    build_rmap(rule_name_map, rule_name_rmap);
+    have_rmaps = true;
   }
   void build_rmap(map<int, string> &f, std::map<string, int> &r) {
     r.clear();
@@ -49,9 +54,10 @@ public:
     crush = crush_create();
   }
 
-  /*** types and names ***/
+  // bucket types
   int get_type_id(const char *s) {
     string name(s);
+    build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
     return 0;
@@ -59,14 +65,56 @@ public:
   const char *get_type_name(int t) {
     if (type_map.count(t))
       return type_map[t].c_str();
-  }
-  int get_name_id(const char *s) {
-    string name(s);
-    if (type_rmap.count(name))
-      return type_rmap[name];
     return 0;
   }
+  void set_type_name(int i, const char *n) {
+    string name(n);
+    type_map[i] = name;
+    if (have_rmaps)
+      type_rmap[name] = i;
+  }
 
+  // item/bucket names
+  int get_item_id(const char *s) {
+    string name(s);
+    build_rmaps();
+    if (name_rmap.count(name))
+      return name_rmap[name];
+    return 0;  /* hrm */
+  }  
+  const char *get_item_name(int t) {
+    if (name_map.count(t))
+      return name_map[t].c_str();
+    return 0;
+  }
+  void set_item_name(int i, const char *n) {
+    string name(n);
+    name_map[i] = name;
+    if (have_rmaps)
+      name_rmap[name] = i;
+  }
+
+  // rule names
+  int get_rule_id(const char *n) {
+    string name(n);
+    build_rmaps();
+    if (rule_name_rmap.count(name))
+      return rule_name_rmap[name];
+    return 0;  /* hrm */
+  }  
+  const char *get_rule_name(int t) {
+    if (rule_name_map.count(t))
+      return rule_name_map[t].c_str();
+    return 0;
+  }
+  void set_rule_name(int i, const char *n) {
+    string name(n);
+    rule_name_map[i] = name;
+    if (have_rmaps)
+      rule_name_rmap[name] = i;
+  }
+
+  
   /*** rules ***/
 private:
   crush_rule *get_rule(unsigned ruleno) {
@@ -87,6 +135,11 @@ public:
   int get_max_rules() {
     if (!crush) return 0;
     return crush->max_rules;
+  }
+  int get_rule_len(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return PTR_ERR(r);
+    return r->len;
   }
   int get_rule_op(unsigned ruleno, unsigned step) {
     crush_rule_step *s = get_rule_step(ruleno, step);
@@ -132,13 +185,58 @@ public:
   }
   
   
-  
 
+  /** buckets **/
+private:
+  crush_bucket *get_bucket(int id) {
+    if (!crush) return (crush_bucket *)(-ENOENT);
+    int pos = -1 - id;
+    if ((unsigned)pos >= crush->max_buckets) return 0;
+    return crush->buckets[pos];
+  }
 
+public:
+  int get_next_bucket_id() {
+    if (!crush) return -EINVAL;
+    return crush_get_next_bucket_id(crush);
+  }
+  bool bucket_exists(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (b == 0 || IS_ERR(b)) return false;
+    return true;
+  }
+  int get_bucket_weight(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->weight;
+  }
+  int get_bucket_type(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->type;
+  }
+  int get_bucket_alg(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->alg;
+  }
+  int get_bucket_size(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->size;
+  }
+  int get_bucket_item(int id, int pos) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->items[pos];
+  }
 
-
-
-
+  /* modifiers */
+  int add_bucket(int bucketno, int alg, int type, int size,
+		 int *items, int *weights) {
+    crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
+    return crush_add_bucket(crush, bucketno, b);
+  }
 
 
 
@@ -170,7 +268,7 @@ public:
       out[i] = rawout[i];
   }
 
-  void _encode(bufferlist &bl) {
+  void _encode(bufferlist &bl, bool lean=false) {
     ::_encode_simple(crush->max_buckets, bl);
     ::_encode_simple(crush->max_rules, bl);
     ::_encode_simple(crush->max_devices, bl);
@@ -181,13 +279,13 @@ public:
     // buckets
     for (unsigned i=0; i<crush->max_buckets; i++) {
       __u32 type = 0;
-      if (crush->buckets[i]) type = crush->buckets[i]->bucket_type;
+      if (crush->buckets[i]) type = crush->buckets[i]->alg;
       ::_encode_simple(type, bl);
       if (!type) continue;
 
       ::_encode_simple(crush->buckets[i]->id, bl);
       ::_encode_simple(crush->buckets[i]->type, bl);
-      ::_encode_simple(crush->buckets[i]->bucket_type, bl);
+      ::_encode_simple(crush->buckets[i]->alg, bl);
       ::_encode_simple(crush->buckets[i]->weight, bl);
       ::_encode_simple(crush->buckets[i]->size, bl);
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
@@ -229,6 +327,11 @@ public:
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_encode_simple(crush->rules[i]->steps[j], bl);
     }
+
+    // name info
+    ::_encode_simple(type_map, bl);
+    ::_encode_simple(name_map, bl);
+    ::_encode_simple(rule_name_map, bl);
   }
 
   void _decode(bufferlist::iterator &blp) {
@@ -272,7 +375,7 @@ public:
       
       ::_decode_simple(crush->buckets[i]->id, blp);
       ::_decode_simple(crush->buckets[i]->type, blp);
-      ::_decode_simple(crush->buckets[i]->bucket_type, blp);
+      ::_decode_simple(crush->buckets[i]->alg, blp);
       ::_decode_simple(crush->buckets[i]->weight, blp);
       ::_decode_simple(crush->buckets[i]->size, blp);
 
@@ -334,6 +437,12 @@ public:
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_decode_simple(crush->rules[i]->steps[j], blp);
     }
+
+    // name info
+    ::_decode_simple(type_map, blp);
+    ::_decode_simple(name_map, blp);
+    ::_decode_simple(rule_name_map, blp);
+    build_rmaps();
 
     finalize();
   }
