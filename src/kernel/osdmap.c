@@ -167,7 +167,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 			goto bad;
 		if ((err = ceph_decode_16(p, end, &b->type)) < 0)
 			goto bad;
-		if ((err = ceph_decode_16(p, end, &b->bucket_type)) < 0)
+		if ((err = ceph_decode_16(p, end, &b->alg)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(p, end, &b->weight)) < 0)
 			goto bad;
