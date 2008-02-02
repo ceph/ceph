@@ -298,6 +298,8 @@ extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 			    struct nameidata *nd);
 extern int ceph_release(struct inode *inode, struct file *filp);
+extern int ceph_inode_revalidate(struct dentry *dentry);
+
 
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
@@ -309,6 +311,6 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct dentry **lastdentry);
 extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
 				      struct ceph_mds_reply_info *prinfo);
-
+extern void ceph_touch_dentry(struct dentry *dentry);
 
 #endif /* _FS_CEPH_CEPH_H */

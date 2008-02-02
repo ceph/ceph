@@ -222,6 +222,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 				dn = NULL;
 				break;
 			}
+			ceph_touch_dentry(dn);
 			d_add(dn, in);
 			dout(10, "ceph_fill_trace added dentry %p inode %llx %d/%d\n",
 			     dn, ceph_ino(in), i, prinfo->trace_nr);
@@ -684,6 +685,7 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat
 
 	err = ceph_inode_revalidate(dentry);
 
+	dout(30, "ceph_inode_getattr returned %d\n", err);
 	if (!err) 
 		generic_fillattr(dentry->d_inode, stat);
 	return err;

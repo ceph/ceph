@@ -5,6 +5,7 @@ int ceph_dir_debug = 50;
 
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
+struct dentry_operations ceph_dentry_ops;
 
 /*
  * build a dentry's path, relative to sb root.  allocate on
@@ -161,6 +162,7 @@ nextfrag:
 				in = dn->d_inode;
 			}
 
+			ceph_touch_dentry(dn);
 			if (ceph_ino(in) !=
 			    le64_to_cpu(fi->rinfo.dir_in[i].in->ino)) {
 				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
@@ -273,6 +275,12 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
 	return err;
 }
 
+void ceph_touch_dentry(struct dentry *dentry)
+{
+	dentry->d_time = jiffies;
+	dentry->d_op = &ceph_dentry_ops;
+}
+
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nd)
 {
@@ -292,12 +300,13 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 
 	err = ceph_request_lookup(dir->i_sb, dentry, &rinfo);
 
-	if (err == -ENOENT)
+	if (err == -ENOENT) {
+		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
-	else if (err < 0)
+	} else if (err < 0)
 		return ERR_PTR(err);
 
-	if (rinfo.trace_nr > 0) {
+	if ((!err) && (rinfo.trace_nr > 0)) {
 		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
 		dout(10, "got and parsed stat result, ino %lu\n", ino);
 
@@ -315,6 +324,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      rinfo.trace_in[rinfo.trace_nr-1].in);
 		if (err < 0)
 			return ERR_PTR(err);
+
+		ceph_touch_dentry(dentry);
 		d_add(dentry, inode);
 
 		if (found)
@@ -598,6 +609,24 @@ done_create:
 	return err;
 }
 
+static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
+{
+	dout(20, "ceph_d_revalidate\n");
+	if (dentry->d_inode) {
+		if (ceph_inode_revalidate(dentry)) {
+			dout(20, "ceph_d_revalidate (invalid entry)\n");
+			return 0;
+		}
+	} else {
+		if (!ceph_lookup_cache || time_after(jiffies, dentry->d_time+CACHE_HZ)) {
+			d_drop(dentry);
+			return 0;
+		}
+	}
+	return 1;
+}
+
+
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
 	.getattr = ceph_inode_getattr,
@@ -609,5 +638,9 @@ const struct inode_operations ceph_dir_iops = {
 	.rmdir = ceph_dir_unlink,
 	.rename = ceph_dir_rename,
 	.create = ceph_dir_create,
+};
+
+struct dentry_operations ceph_dentry_ops = { 
+    .d_revalidate = ceph_d_revalidate,
 };
 

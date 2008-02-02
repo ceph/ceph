@@ -159,9 +159,10 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 
 	/* if there was a previous inode associated with this dentry,
 	 * now there isn't one */
-	if (err == -ENOENT)
+	if (err == -ENOENT) {
+		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
-	if (err < 0)
+	} if (err < 0)
 		goto out;
 	if (rinfo.trace_nr == 0) {
 		derr(0, "wtf, no trace from mds\n");
@@ -185,6 +186,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in);
 	if (err < 0)
 		goto out;
+	ceph_touch_dentry(dentry);
 	d_add(dentry, inode);
 
 	if (found)
