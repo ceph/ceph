@@ -162,7 +162,8 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	if (err == -ENOENT) {
 		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
-	} if (err < 0)
+	} 
+	if (err < 0)
 		goto out;
 	if (rinfo.trace_nr == 0) {
 		derr(0, "wtf, no trace from mds\n");
