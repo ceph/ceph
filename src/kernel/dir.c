@@ -640,7 +640,7 @@ const struct inode_operations ceph_dir_iops = {
 	.create = ceph_dir_create,
 };
 
-struct dentry_operations ceph_dentry_ops = { 
+struct dentry_operations ceph_dentry_ops = {
     .d_revalidate = ceph_d_revalidate,
 };
 
