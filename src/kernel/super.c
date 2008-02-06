@@ -507,6 +507,9 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
+
+	ceph_fs_proc_init();
+
 	ret = init_inodecache();
 	if (ret)
 		goto out;

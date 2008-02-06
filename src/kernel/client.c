@@ -4,7 +4,7 @@
 #include <linux/sched.h>
 #include <linux/random.h>
 
-/* debug level; defined in include/ceph_fs.h */
+/* debug level; defined in super.h */
 int ceph_debug = 0;
 
 int ceph_client_debug = 50;

@@ -20,11 +20,11 @@ extern int ceph_debug_osdc;
 extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
-		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))		\
+		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))		\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 #define derr(x, args...) do {					   \
-		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))	   \
+		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))	   \
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 	} while (0)
 
@@ -312,5 +312,8 @@ extern int ceph_fill_trace(struct super_block *sb,
 extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
 				      struct ceph_mds_reply_info *prinfo);
 extern void ceph_touch_dentry(struct dentry *dentry);
+
+/* proc.c */
+extern void ceph_fs_proc_init(void);
 
 #endif /* _FS_CEPH_CEPH_H */
