@@ -368,7 +368,11 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	}
 
 	dout(30, "osdmap_decode done %p %p\n", *p, end);
+#if 0
 	BUG_ON(*p < end);
+#else
+#warning osdmap_decode missing name info decode
+#endif
 
 	return map;
 
