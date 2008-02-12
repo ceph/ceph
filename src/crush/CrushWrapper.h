@@ -17,16 +17,19 @@
 #include <set>
 #include <string>
 
+#include <iostream> //for testing, remove
+
+using namespace std;
 class CrushWrapper {
 public:
   struct crush_map *crush;
-  map<int, string> type_map; /* bucket type names */
-  map<int, string> name_map; /* bucket/device names */
-  map<int, string> rule_name_map;
+  std::map<int, string> type_map; /* bucket type names */
+  std::map<int, string> name_map; /* bucket/device names */
+  std::map<int, string> rule_name_map;
 
   /* reverse maps */
   bool have_rmaps;
-  map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
@@ -233,9 +236,35 @@ public:
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int type, int size,
-		 int *items, int *weights) {
-    crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
-    return crush_add_bucket(crush, bucketno, b);
+		 int *items, int *weights, double *min, double *max, double *avg) {
+    std::cout << "here" <<std::endl;
+    //crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
+
+
+    int num = 0;
+    std::cout << "bucket size: "<<size<<std::endl;
+
+
+    *min = *max = *items;
+    *avg = 0.0;
+    for (int i=0; i < size; i++) {
+      std::cout << "stats: " << num << " : " << *items << " : "  << *weights <<std::endl;
+      *avg += *items;
+      if (*items < *min)
+        *min = *items;
+      else if (*items > *max)       
+	*max = *items;      
+      items++;
+      weights++;
+      num++;
+    }    
+
+    printf("here\n");
+
+    *avg /= num;
+
+    return 10;
+    //return crush_add_bucket(crush, bucketno, b);
   }
 
 
@@ -244,7 +273,6 @@ public:
     assert(crush);
     crush_finalize(crush);
   }
-
 
 
 
