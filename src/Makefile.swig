@@ -4,7 +4,7 @@ EXTRA_CFLAGS += -pg
 #EXTRA_CFLAGS += -O3
 
 # base
-CFLAGS = -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
+CFLAGS = -fPIC -Wall -I. -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE ${EXTRA_CFLAGS}
 LDINC = ld -i -o
 CXX = g++
 CC = gcc
@@ -32,8 +32,8 @@ COMMON_OBJS= \
 #
 perl: common.o crush.o
 	swig -perl5 -c++ -shadow crush/CrushWrapper.i
-	${CXX} ${CFLAGS} -c crush/CrushWrapper_wrap.cxx -fno-strict-aliasing -pipe
-	${CXX} -shared crush/CrushWrapper_wrap.o common.o crush.o -o CrushWrapper.so
+	${CXX} ${CFLAGS} -c -fPIC crush/CrushWrapper_wrap.cxx -I/usr/lib/perl/5.8/CORE -fno-strict-aliasing -pipe -o crush/CrushWrapper_wrap.o
+	${CXX} -shared -fPIC crush/CrushWrapper_wrap.o common.o crush.o -o crush/CrushWrapper.so
 
 
 
