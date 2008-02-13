@@ -72,6 +72,10 @@ mon
 
 
 mds mustfix
+- fix cap release size/mtime vs new open race
+  - mtime/size update should hold FileLock in writing state until
+    things are flushed to the log...?
+    - take "wr" reference ala ScatterLock et al?
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing

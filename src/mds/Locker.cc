@@ -779,6 +779,11 @@ void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr,
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
     inode_t *pi = in->project_inode();
+    /*
+     * FIXME HACK: set current inode too, until we get
+     *  FileLock to grab a reference here or some such
+     *  thing...
+     */
     pi->version = in->pre_dirty();
     if (no_wr) {
       dout(7) << " last wr-wanted cap, max_size=0" << dendl;
@@ -787,22 +792,22 @@ void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr,
       int64_t inc = in->get_layout_size_increment();
       int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
-      pi->max_size = new_max;
+      in->inode.max_size = pi->max_size = new_max;
     }    
     if (mtime > latest->mtime) {
       dout(7) << "  taking mtime " << mtime << " > " 
 	      << in->inode.mtime << " for " << *in << dendl;
-      pi->mtime = mtime;
+      in->inode.mtime = pi->mtime = mtime;
     }
     if (size > latest->size) {
       dout(7) << "  taking size " << size << " > " 
 	      << in->inode.size << " for " << *in << dendl;
-      pi->size = size;
+      in->inode.size = pi->size = size;
     }
     if (atime > latest->atime) {
       dout(7) << "  taking atime " << atime << " > " 
 	      << in->inode.atime << " for " << *in << dendl;
-      pi->atime = atime;
+      in->inode.atime = pi->atime = atime;
     }
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
