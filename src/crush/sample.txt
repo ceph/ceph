@@ -14,12 +14,24 @@
 </type>
 
 # hierarchy
-<osd osd001>weight 500</osd>
-<osd osd002>weight 500</osd>
-<osd osd003>weight 500</osd>
-<osd osd004>weight 500</osd>
-<osd osd005>weight 500</osd>
-<osd osd006>weight 500</osd>
+<osd osd001>
+	weight 500
+		</osd>
+<osd osd002>
+	weight 500
+		</osd>
+<osd osd003>
+	weight 500
+		</osd>
+<osd osd004>
+	weight 500
+		</osd>
+<osd osd005>
+	weight 500
+		</osd>
+<osd osd006>
+	weight 500
+		</osd>
 
 <cab cab-d2>
   type strawbucket
@@ -32,8 +44,12 @@
 
 
 <pool newlayout>
-  <item satapool>weight 1.0</item>
-  <item fcpool>weight 3.0</item>
+  <item satapool>
+  	weight 1.0
+</item>
+  <item fcpool>
+  	weight 3.0
+</item>
 </pool>
 
 # rules
