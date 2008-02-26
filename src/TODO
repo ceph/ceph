@@ -24,9 +24,11 @@ kernel client
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
+- fix 32bit inode handling
+  - see nfs_fhget, nfs_find_actor as reference for allowing multiple inodes with the same i_ino
 - audit locking
 - audit use of kmalloc vs spinlocks
-- convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
+- convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - fix file open vs file_cap race
