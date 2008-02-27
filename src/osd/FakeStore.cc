@@ -41,7 +41,7 @@
 
 #include "config.h"
 
-#define  dout(l)    if (true || l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 #define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 
 #include "include/buffer.h"
@@ -218,6 +218,7 @@ int FakeStore::mount()
 #endif
 
   journal_start();
+  sync_thread.create();
 
   // all okay.
   return 0;
@@ -229,6 +230,12 @@ int FakeStore::umount()
   
   sync();
   journal_stop();
+
+  lock.Lock();
+  stop = true;
+  sync_cond.Signal();
+  lock.Unlock();
+  sync_thread.join();
 
   if (g_conf.fakestore_dev) {
     char cmd[100];
@@ -436,12 +443,14 @@ int FakeStore::setattr(pobject_t oid, const char *name,
 		       const void *value, size_t size,
 		       Context *onsafe) 
 {
-  if (fake_attrs) return attrs.setattr(oid, name, value, size, onsafe);
-
-  int r = 0;
-  char fn[100];
-  get_oname(oid, fn);
-  r = ::setxattr(fn, name, value, size, 0);
+  int r;
+  if (fake_attrs) 
+    r = attrs.setattr(oid, name, value, size, onsafe);
+  else {
+    char fn[100];
+    get_oname(oid, fn);
+    r = ::setxattr(fn, name, value, size, 0);
+  }
   if (r >= 0)
     journal_setattr(oid, name, value, size, onsafe);
   else
@@ -451,69 +460,77 @@ int FakeStore::setattr(pobject_t oid, const char *name,
 
 int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.setattrs(oid, aset);
-
-  char fn[100];
-  get_oname(oid, fn);
-  int r = 0;
-  for (map<string,bufferptr>::iterator p = aset.begin();
-       p != aset.end();
-       ++p) {
-    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-    if (r < 0) {
-      cerr << "error setxattr " << strerror(errno) << std::endl;
-      break;
+  int r;
+  if (fake_attrs) 
+    r = attrs.setattrs(oid, aset);
+  else {
+    char fn[100];
+    get_oname(oid, fn);
+    r = 0;
+    for (map<string,bufferptr>::iterator p = aset.begin();
+	 p != aset.end();
+	 ++p) {
+      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+      if (r < 0) {
+	cerr << "error setxattr " << strerror(errno) << std::endl;
+	break;
+      }
     }
   }
+  if (r >= 0)
+    journal_setattrs(oid, aset, 0);
   return r;
 }
 
 int FakeStore::getattr(pobject_t oid, const char *name,
 		       void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.getattr(oid, name, value, size);
-  int r = 0;
-#ifndef __CYGWIN__
-  char fn[100];
-  get_oname(oid, fn);
-  r = ::getxattr(fn, name, value, size);
-#endif
+  int r;
+  if (fake_attrs) 
+    r = attrs.getattr(oid, name, value, size);
+  else {
+    char fn[100];
+    get_oname(oid, fn);
+    r = ::getxattr(fn, name, value, size);
+  }
   return r;
 }
 
 int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.getattrs(oid, aset);
-
-#ifndef __CYGWIN__
-  char fn[100];
-  get_oname(oid, fn);
-
-  char val[1000];
-  char names[1000];
-  int num = ::listxattr(fn, names, 1000);
-  
-  char *name = names;
-  for (int i=0; i<num; i++) {
-    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-    int l = ::getxattr(fn, name, val, 1000);
-    dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-    aset[names].append(val, l);
-    name += strlen(name) + 1;
+  int r;
+  if (fake_attrs) 
+    r = attrs.getattrs(oid, aset);
+  else {
+    char fn[100];
+    get_oname(oid, fn);
+    
+    char val[1000];
+    char names[1000];
+    int num = ::listxattr(fn, names, 1000);
+    
+    char *name = names;
+    for (int i=0; i<num; i++) {
+      dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+      int l = ::getxattr(fn, name, val, 1000);
+      dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
+      aset[names].append(val, l);
+      name += strlen(name) + 1;
+    }
   }
-#endif
-  return 0;
+  return r;
 }
 
 int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
 {
-  if (fake_attrs) return attrs.rmattr(oid, name, onsafe);
-  int r = 0;
-#ifndef __CYGWIN__
-  char fn[100];
-  get_oname(oid, fn);
-  r = ::removexattr(fn, name);
-#endif
+  int r;
+  if (fake_attrs) 
+    r = attrs.rmattr(oid, name, onsafe);
+  else {
+    char fn[100];
+    get_oname(oid, fn);
+    r = ::removexattr(fn, name);
+  }
   if (r >= 0)
     journal_rmattr(oid, name, onsafe);
   else
@@ -529,24 +546,50 @@ int FakeStore::collection_setattr(coll_t c, const char *name,
 				  void *value, size_t size,
 				  Context *onsafe) 
 {
-  if (fake_attrs) return attrs.collection_setattr(c, name, value, size, onsafe);
-  return 0;
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_setattr(c, name, value, size, onsafe);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = ::setxattr(fn, name, value, size, 0);
+  }
+  if (r >= 0)
+    journal_collection_setattr(c, name, value, size, onsafe);
+  else 
+    delete onsafe;
+  return r;
 }
 
 int FakeStore::collection_rmattr(coll_t c, const char *name,
 				 Context *onsafe) 
 {
-  if (fake_attrs) return attrs.collection_rmattr(c, name, onsafe);
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_rmattr(c, name, onsafe);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = ::removexattr(fn, name);
+  }
   return 0;
 }
 
 int FakeStore::collection_getattr(coll_t c, const char *name,
 				  void *value, size_t size) 
 {
-  if (fake_attrs) return attrs.collection_getattr(c, name, value, size);
-  return 0;
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_getattr(c, name, value, size);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = ::getxattr(fn, name, value, size);   
+  }
+  return r;
 }
 
+/*
 int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.collection_setattrs(cid, aset);
@@ -562,31 +605,36 @@ int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
     if (r < 0) break;
   }
 #endif
+  if (r >= 0)
+    journal_collection_setattrs(cid, aset, 0);
   return r;
 }
+*/
 
 int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.collection_getattrs(cid, aset);
-
-#ifndef __CYGWIN__
-  char fn[100];
-  get_cdir(cid, fn);
-
-  char val[1000];
-  char names[1000];
-  int num = ::listxattr(fn, names, 1000);
-  
-  char *name = names;
-  for (int i=0; i<num; i++) {
-    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-    int l = ::getxattr(fn, name, val, 1000);
-    dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-    aset[names].append(val, l);
-    name += strlen(name) + 1;
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_getattrs(cid, aset);
+  else {
+    char fn[100];
+    get_cdir(cid, fn);
+    
+    char val[1000];
+    char names[1000];
+    int num = ::listxattr(fn, names, 1000);
+    
+    char *name = names;
+    for (int i=0; i<num; i++) {
+      dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+      int l = ::getxattr(fn, name, val, 1000);
+      dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
+      aset[names].append(val, l);
+      name += strlen(name) + 1;
+    }
+    r = 0;
   }
-#endif
-  return 0;
+  return r;
 }
 
 
@@ -656,7 +704,10 @@ int FakeStore::create_collection(coll_t c,
 
   int r = ::mkdir(fn, 0755);
 
-  if (onsafe) sync(onsafe);
+  if (r >= 0)
+    journal_create_collection(c, onsafe);
+  else 
+    delete onsafe;
   return r;
 }
 
@@ -670,8 +721,12 @@ int FakeStore::destroy_collection(coll_t c,
   char cmd[200];
   sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
   system(cmd);
+  int r = 0; // fixme
 
-  if (onsafe) sync(onsafe);
+  if (r >= 0)
+    journal_destroy_collection(c, onsafe);
+  else 
+    delete onsafe;
   return 0;
 }
 
@@ -704,7 +759,10 @@ int FakeStore::collection_add(coll_t c, pobject_t o,
   get_oname(o, of);
   
   int r = ::link(of, cof);
-  if (onsafe) sync(onsafe);
+  if (r >= 0)
+    journal_collection_add(c, o, onsafe);
+  else 
+    delete onsafe;
   return r;
 }
 
@@ -717,7 +775,10 @@ int FakeStore::collection_remove(coll_t c, pobject_t o,
   get_coname(c, o, cof);
 
   int r = ::unlink(cof);
-  if (onsafe) sync(onsafe);
+  if (r >= 0)
+    journal_collection_remove(c, o, onsafe);
+  else
+    delete onsafe;
   return r;
 }
 

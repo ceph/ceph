@@ -157,6 +157,17 @@ protected:
     } else
       queue_commit_waiter(onsafe);
   }
+  
+  void journal_collection_add(coll_t cid, pobject_t oid, Context *onsafe) {
+    if (journal) {
+      Transaction t;
+      t.collection_add(cid, oid);
+      bufferlist bl;
+      t._encode(bl);
+      journal->submit_entry(super_epoch, bl, onsafe);
+    } else
+      queue_commit_waiter(onsafe);
+  }
 
   void journal_collection_remove(coll_t cid, pobject_t oid, Context *onsafe) {
     if (journal) {
@@ -173,17 +184,6 @@ protected:
     if (journal) {
       Transaction t;
       t.collection_setattr(cid, name, value, size);
-      bufferlist bl;
-      t._encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
-    } else
-      queue_commit_waiter(onsafe);
-  }
-
-  void journal_collection_setattrs(coll_t cid, const char *name, Context *onsafe) {
-    if (journal) {
-      Transaction t;
-      t.collection_rmattr(cid, name);
       bufferlist bl;
       t._encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
