@@ -337,7 +337,7 @@ md_config_t g_conf = {
 
   
   // --- fakestore ---
-  fakestore_fake_sync: .2,    // seconds
+  fakestore_fake_sync: 2,    // seconds
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,

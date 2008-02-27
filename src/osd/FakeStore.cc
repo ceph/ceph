@@ -41,20 +41,12 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  dout(l)    if (true || l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 #define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
 #include <map>
-
-
-// crap-a-crap hash
-//#define HASH_DIRS       0x80
-//#define HASH_MASK       0x7f
-// end crap hash
-
-
 
 
 int FakeStore::statfs(struct statfs *buf)
@@ -225,6 +217,8 @@ int FakeStore::mount()
   }
 #endif
 
+  journal_start();
+
   // all okay.
   return 0;
 }
@@ -234,6 +228,7 @@ int FakeStore::umount()
   dout(5) << "umount " << basedir << dendl;
   
   sync();
+  journal_stop();
 
   if (g_conf.fakestore_dev) {
     char cmd[100];
@@ -279,7 +274,10 @@ int FakeStore::remove(pobject_t oid, Context *onsafe)
   char fn[200];
   get_oname(oid,fn);
   int r = ::unlink(fn);
-  if (onsafe) sync(onsafe);
+  if (r == 0) 
+    journal_remove(oid, onsafe);
+  else
+    delete onsafe;
   return r;
 }
 
@@ -290,7 +288,7 @@ int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
   char fn[200];
   get_oname(oid,fn);
   int r = ::truncate(fn, size);
-  if (onsafe) sync(onsafe);
+  if (r >= 0) journal_truncate(oid, size, onsafe);
   return r;
 }
 
@@ -376,7 +374,10 @@ int FakeStore::write(pobject_t oid,
   ::flock(fd, LOCK_UN);
 
   // schedule sync
-  if (onsafe) sync(onsafe);
+  if (did >= 0)
+    journal_write(oid, offset, len, bl, onsafe);
+  else
+    delete onsafe;
 
   ::close(fd);
   
@@ -384,49 +385,45 @@ int FakeStore::write(pobject_t oid,
 }
 
 
-class C_FakeSync : public Context {
-  Context *c;
-  int *n;
-  Mutex *lock;
-  Cond *cond;
+void FakeStore::sync_fs()
+{
+  // induce an fs sync.  
+  // we assume data=ordered or similar semantics
+  char fn[100];
+  sprintf(fn, "%s/commit.%d", basedir.c_str(), (int)super_epoch);
+  int fd = ::open(fn, O_CREAT);
+  ::write(fd, &super_epoch, sizeof(super_epoch));
+  ::fsync(fd);  // this should cause the fs's journal to commit.
+  ::close(fd);
+  ::unlink(fn); // clean up.
+}
 
-public:
-  C_FakeSync(Context *c_, int *n_, Mutex *lo, Cond *co) : 
-    c(c_), n(n_),
-    lock(lo), cond(co) {
-    lock->Lock();
-    ++*n;
-    lock->Unlock();
+void FakeStore::sync_entry()
+{
+  lock.Lock();
+  utime_t interval(g_conf.fakestore_fake_sync, 0); // rename me
+  while (!stop) {
+    dout(10) << "sync_entry waiting for " << interval << dendl;
+    sync_cond.WaitInterval(lock, interval);
+    dout(10) << "sync_entry committing " << super_epoch << dendl;
+    commit_start();
+    sync_fs();
+    commit_finish();
+    dout(10) << "sync_entry committed " << super_epoch << dendl;
   }
-  void finish(int r) {
-    c->finish(r);
-    
-    lock->Lock();
-    --(*n);
-    if (*n == 0) cond->Signal();
-    lock->Unlock();
-  }
-};
+  lock.Unlock();
+}
 
 void FakeStore::sync()
 {
-  synclock.Lock();
-  while (unsync > 0) {
-    dout(0) << "sync waiting for " << unsync << " items to (fake) sync" << dendl;
-    synccond.Wait(synclock);
-  }
-  synclock.Unlock();
+  Mutex::Locker l(lock);
+  sync_cond.Signal();
 }
 
 void FakeStore::sync(Context *onsafe)
 {
-  if (g_conf.fakestore_fake_sync > 0.0) {
-    g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
-                            new C_FakeSync(onsafe, &unsync, &synclock, &synccond));
-    
-  } else {
-    assert(0); // der..no implemented anymore
-  }
+  journal_sync(onsafe);
+  sync();
 }
 
 
@@ -442,11 +439,13 @@ int FakeStore::setattr(pobject_t oid, const char *name,
   if (fake_attrs) return attrs.setattr(oid, name, value, size, onsafe);
 
   int r = 0;
-#ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
   r = ::setxattr(fn, name, value, size, 0);
-#endif
+  if (r >= 0)
+    journal_setattr(oid, name, value, size, onsafe);
+  else
+    delete onsafe;
   return r;
 }
 
@@ -457,7 +456,6 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
   char fn[100];
   get_oname(oid, fn);
   int r = 0;
-#ifndef __CYGWIN__
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
@@ -467,7 +465,6 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
       break;
     }
   }
-#endif
   return r;
 }
 
@@ -517,18 +514,13 @@ int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
   get_oname(oid, fn);
   r = ::removexattr(fn, name);
 #endif
+  if (r >= 0)
+    journal_rmattr(oid, name, onsafe);
+  else
+    delete onsafe;
   return r;
 }
 
-/*
-int FakeStore::listattr(pobject_t oid, char *attrls, size_t size) 
-{
-  if (fake_attrs) return attrs.listattr(oid, attrls, size);
-  char fn[100];
-  get_oname(oid, fn);
-  return ::listxattr(fn, attrls, size);
-}
-*/
 
 
 // collections

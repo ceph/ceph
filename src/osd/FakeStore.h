@@ -17,6 +17,7 @@
 #define __FAKESTORE_H
 
 #include "ObjectStore.h"
+#include "JournalingObjectStore.h"
 #include "common/ThreadPool.h"
 #include "common/Mutex.h"
 
@@ -33,12 +34,8 @@ using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
-class FakeStore : public ObjectStore {
+class FakeStore : public JournalingObjectStore {
   string basedir;
-
-  Mutex synclock;
-  Cond synccond;
-  int unsync;
 
   // fake attrs?
   FakeStoreAttrs attrs;
@@ -55,12 +52,28 @@ class FakeStore : public ObjectStore {
   pobject_t parse_object(char *s);
   coll_t parse_coll(char *s);
 
+  // sync thread
+  Mutex lock;
+  Cond sync_cond;
+  bool stop;
+  void sync_entry();
+  struct SyncThread : public Thread {
+    FakeStore *fs;
+    SyncThread(FakeStore *f) : fs(f) {}
+    void *entry() {
+      fs->sync_entry();
+      return 0;
+    }
+  } sync_thread;
+
+  void sync_fs(); // actuall sync underlying fs
+
  public:
   FakeStore(const char *base) : 
     basedir(base),
-    unsync(0),
     attrs(this), fake_attrs(false), 
-    collections(this), fake_collections(false) { }
+    collections(this), fake_collections(false),
+    stop(false), sync_thread(this) { }
 
   int mount();
   int umount();
