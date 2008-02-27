@@ -601,27 +601,26 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   return r;
 }
 
-/*
 int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  if (fake_attrs) return attrs.collection_setattrs(cid, aset);
-
-  char fn[100];
-  get_cdir(cid, fn);
-  int r = 0;
-#ifndef __CYGWIN__
-  for (map<string,bufferptr>::iterator p = aset.begin();
-       p != aset.end();
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_setattrs(cid, aset);
+  else {
+    char fn[100];
+    get_cdir(cid, fn);
+    int r = 0;
+    for (map<string,bufferptr>::iterator p = aset.begin();
+	 p != aset.end();
        ++p) {
-    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-    if (r < 0) break;
+      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+      if (r < 0) break;
+    }
   }
-#endif
   if (r >= 0)
     journal_collection_setattrs(cid, aset, 0);
   return r;
 }
-*/
 
 int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
 {

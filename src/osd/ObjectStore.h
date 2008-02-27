@@ -96,6 +96,7 @@ public:
     static const int OP_COLL_REMOVE =  23;  // cid, oid
     static const int OP_COLL_SETATTR = 24;  // cid, attrname, attrval
     static const int OP_COLL_RMATTR =  25;  // cid, attrname
+    static const int OP_COLL_SETATTRS = 26;  // cid, attrset
 
   private:
     list<int8_t> ops;
@@ -285,6 +286,12 @@ public:
       ops.push_back(op);
       cids.push_back(cid);
       attrnames.push_back(name);
+    }
+    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
+      int op = OP_COLL_SETATTRS;
+      ops.push_back(op);
+      cids.push_back(cid);
+      pattrsets.push_back(&aset);
     }
 
     // etc.

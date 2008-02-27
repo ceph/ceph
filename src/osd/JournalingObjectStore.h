@@ -192,6 +192,17 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
+  void journal_collection_setattrs(coll_t cid, map<string,bufferptr>& aset, Context *onsafe) {
+    if (journal) {
+      Transaction t;
+      t.collection_setattrs(cid, aset);
+      bufferlist bl;
+      t._encode(bl);
+      journal->submit_entry(super_epoch, bl, onsafe);
+    } else
+      queue_commit_waiter(onsafe);
+  }
+
   void journal_sync(Context *onsafe) {
     if (journal) {  
       // journal empty transaction
