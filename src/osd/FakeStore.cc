@@ -410,7 +410,8 @@ int FakeStore::write(pobject_t oid,
 void FakeStore::sync_entry()
 {
   lock.Lock();
-  utime_t interval(g_conf.fakestore_fake_sync, 0); // rename me
+  utime_t interval;
+  interval.set_from_double(g_conf.fakestore_fake_sync); // rename me
   while (!stop) {
     dout(10) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
