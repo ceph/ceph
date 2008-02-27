@@ -3719,12 +3719,6 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // apply to cache
-    in->inode.size = size;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
-    in->mark_dirty(pv, mdr->ls);
-
     // reply
     mds->server->reply_request(mdr, 0);
   }
@@ -3744,6 +3738,12 @@ public:
     size(sz), ctime(ct) { }
   void finish(int r) {
     assert(r == 0);
+
+    // apply to cache
+    in->inode.size = size;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->pop_and_dirty_projected_inode(mdr->ls);
 
     // purge
     mds->mdcache->purge_inode(in, size, in->inode.size, mdr->ls);
@@ -3911,12 +3911,6 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // apply to cache
-    in->inode.size = 0;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
-    in->mark_dirty(pv, mdr->ls);
-    
     // do the open
     mds->server->_do_open(mdr, in);
   }
@@ -3936,6 +3930,12 @@ public:
   void finish(int r) {
     assert(r == 0);
 
+    // apply to cache
+    in->inode.size = 0;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->pop_and_dirty_projected_inode(mdr->ls);
+    
     // hit pop
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
