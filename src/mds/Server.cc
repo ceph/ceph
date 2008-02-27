@@ -3786,13 +3786,13 @@ void Server::handle_client_truncate(MDRequest *mdr)
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
-  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = req->head.args.truncate.length;
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-
   mdlog->submit_entry(le, fin);
 }
 
@@ -3964,11 +3964,12 @@ void Server::handle_client_opent(MDRequest *mdr)
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), 0, cur->inode.size);
-  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
 }
