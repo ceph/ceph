@@ -959,7 +959,7 @@ retry:
 send:
 	reply->front.iov_len = p - reply->front.iov_base;
 	reply->hdr.front_len = cpu_to_le32(reply->front.iov_len);
-	dout(10, "final len was %lu (guessed %d)\n", reply->front.iov_len, len);
+	dout(10, "final len was %u (guessed %d)\n", (unsigned)reply->front.iov_len, len);
 	send_msg_mds(mdsc, reply, mds);
 
 	spin_lock(&mdsc->lock);
