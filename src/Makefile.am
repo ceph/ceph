@@ -127,6 +127,7 @@ libosd_a_SOURCES = \
 	osd/RAID4PG.cc \
 	osd/Ager.cc \
 	osd/FakeStore.cc \
+	osd/JournalingObjectStore.cc \
 	osd/OSD.cc
 
 libosdc_a_SOURCES = \
@@ -174,6 +175,7 @@ noinst_HEADERS = \
         ebofs/BlockDevice.h\
         ebofs/Ebofs.h\
         osd/FileJournal.h\
+        osd/JournalingObjectStore.h\
         ebofs/types.h\
         ebofs/Allocator.h\
         ebofs/BufferCache.h\

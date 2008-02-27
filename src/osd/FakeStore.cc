@@ -217,6 +217,21 @@ int FakeStore::mount()
   }
 #endif
 
+  // get epoch
+  char fn[100];
+  sprintf(fn, "%s/commit_epoch", basedir.c_str());
+  int fd = ::open(fn, O_RDONLY);
+  ::read(fd, &super_epoch, sizeof(super_epoch));
+  ::fsync(fd);  // this should cause the fs's journal to commit.
+  ::close(fd);
+  dout(5) << "mount epoch is " << super_epoch << dendl;
+  
+  r = journal_replay();
+  if (r == -EINVAL) {
+    dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
+    return r;
+  }
+
   journal_start();
   sync_thread.create();
 
@@ -392,19 +407,6 @@ int FakeStore::write(pobject_t oid,
 }
 
 
-void FakeStore::sync_fs()
-{
-  // induce an fs sync.  
-  // we assume data=ordered or similar semantics
-  char fn[100];
-  sprintf(fn, "%s/commit.%d", basedir.c_str(), (int)super_epoch);
-  int fd = ::open(fn, O_CREAT);
-  ::write(fd, &super_epoch, sizeof(super_epoch));
-  ::fsync(fd);  // this should cause the fs's journal to commit.
-  ::close(fd);
-  ::unlink(fn); // clean up.
-}
-
 void FakeStore::sync_entry()
 {
   lock.Lock();
@@ -414,7 +416,16 @@ void FakeStore::sync_entry()
     sync_cond.WaitInterval(lock, interval);
     dout(10) << "sync_entry committing " << super_epoch << dendl;
     commit_start();
-    sync_fs();
+
+    // induce an fs sync.
+    // we assume data=ordered or similar semantics
+    char fn[100];
+    sprintf(fn, "%s/commit_epoch", basedir.c_str());
+    int fd = ::open(fn, O_CREAT|O_WRONLY);
+    ::write(fd, &super_epoch, sizeof(super_epoch));
+    ::fsync(fd);  // this should cause the fs's journal to commit.
+    ::close(fd);
+
     commit_finish();
     dout(10) << "sync_entry committed " << super_epoch << dendl;
   }
@@ -751,14 +762,16 @@ bool FakeStore::collection_exists(coll_t c)
 int FakeStore::collection_add(coll_t c, pobject_t o,
 			      Context *onsafe) 
 {
-  if (fake_collections) return collections.collection_add(c, o, onsafe);
-
-  char cof[200];
-  get_coname(c, o, cof);
-  char of[200];
-  get_oname(o, of);
-  
-  int r = ::link(of, cof);
+  int r;
+  if (fake_collections) 
+    r = collections.collection_add(c, o, onsafe);
+  else {
+    char cof[200];
+    get_coname(c, o, cof);
+    char of[200];
+    get_oname(o, of);
+    r = ::link(of, cof);
+  }
   if (r >= 0)
     journal_collection_add(c, o, onsafe);
   else 
@@ -769,12 +782,14 @@ int FakeStore::collection_add(coll_t c, pobject_t o,
 int FakeStore::collection_remove(coll_t c, pobject_t o,
 				 Context *onsafe) 
 {
-  if (fake_collections) return collections.collection_remove(c, o, onsafe);
-
-  char cof[200];
-  get_coname(c, o, cof);
-
-  int r = ::unlink(cof);
+  int r;
+  if (fake_collections) 
+    r = collections.collection_remove(c, o, onsafe);
+  else {
+    char cof[200];
+    get_coname(c, o, cof);
+    r = ::unlink(cof);
+  }
   if (r >= 0)
     journal_collection_remove(c, o, onsafe);
   else

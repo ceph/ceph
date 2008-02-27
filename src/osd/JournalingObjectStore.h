@@ -31,6 +31,7 @@ protected:
   void journal_stop() {
     finisher.stop();
   }
+  int journal_replay();
 
   void commit_start() {
     super_epoch++;
