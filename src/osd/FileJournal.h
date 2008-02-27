@@ -148,8 +148,8 @@ private:
   }
 
  public:
-  FileJournal(Ebofs *e, const char *f, bool dio=false) : 
-    Journal(e), fn(f),
+  FileJournal(__u64 fsid, Finisher *fin, const char *f, bool dio=false) : 
+    Journal(fsid, fin), fn(f),
     max_size(0), block_size(0),
     directio(dio),
     full(false), writing(false), must_write_header(false),
@@ -159,14 +159,14 @@ private:
   ~FileJournal() {}
 
   int create();
-  int open();
+  int open(epoch_t epoch);
   void close();
 
   void make_writeable();
 
   // writes
-  void submit_entry(bufferlist& e, Context *oncommit);  // submit an item
-  void commit_epoch_start();   // mark epoch boundary
+  void submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit);  // submit an item
+  void commit_epoch_start(epoch_t);   // mark epoch boundary
   void commit_epoch_finish(epoch_t);  // mark prior epoch as committed (we can expire)
 
   bool read_entry(bufferlist& bl, epoch_t& e);

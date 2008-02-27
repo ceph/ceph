@@ -14,6 +14,9 @@ code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
+- ip quad printfs?
+- addr=?
+- fix ceph_lookup_open
 
 kernel client
 - some bugs

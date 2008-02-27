@@ -76,6 +76,7 @@ libcommon_a_SOURCES = \
 	common/Logger.cc \
 	common/Clock.cc \
 	common/Timer.cc \
+	common/Finisher.cc \
 	mon/MonMap.cc \
 	config.cc
 
@@ -100,7 +101,7 @@ libebofs_a_SOURCES = \
 	ebofs/BufferCache.cc \
 	ebofs/Ebofs.cc \
 	ebofs/Allocator.cc \
-	ebofs/FileJournal.cc
+	osd/FileJournal.cc
 
 libmds_a_SOURCES = \
 	mds/MDS.cc \
@@ -161,6 +162,7 @@ noinst_HEADERS = \
         common/ThreadPool.h\
         common/Timer.h\
         common/Thread.h\
+        common/Finisher.h\
         crush/builder.h\
         crush/hash.h\
         crush/mapper.h\
@@ -171,11 +173,11 @@ noinst_HEADERS = \
         ebofs/csum.h\
         ebofs/BlockDevice.h\
         ebofs/Ebofs.h\
-        ebofs/FileJournal.h\
+        osd/FileJournal.h\
         ebofs/types.h\
         ebofs/Allocator.h\
         ebofs/BufferCache.h\
-        ebofs/Journal.h\
+        osd/Journal.h\
         ebofs/nodes.h\
         ebofs/Cnode.h\
         ebofs/Onode.h\
