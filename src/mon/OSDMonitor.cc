@@ -880,6 +880,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "got crush map from osdmap epoch " << osdmap.get_epoch();
       r = 0;
     }
+    else if (m->cmd[1] == "getmaxosd") {
+      ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+      r = 0;
+    }
   }
   if (r != -1) {
     string rs;
@@ -900,6 +904,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       dout(10) << "prepare_command setting new crush map" << dendl;
       pending_inc.crush = m->get_data();
       string rs = "set crush map";
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+    if (m->cmd[1] == "setmaxosd" &&
+	m->cmd.size() > 2) {
+      pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
+      string rs = "set new max_osd";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
     }

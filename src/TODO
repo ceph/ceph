@@ -1,15 +1,4 @@
 
-some smallish projects:
-
-- userspace crush tools
- - xml import/export?  
-
-- generalize monitor client?
- - throttle message resend attempts
-
-- ENOSPC on client, OSD
-
-
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
@@ -59,7 +48,7 @@ osdmon
 
 crush
 - xml import/export?
- - named storage "pools"
+ - named storage "pools"?
  - generic rule definition
 - crush tools
 - more efficient failure when all/too many osds are down
