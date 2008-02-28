@@ -31,6 +31,7 @@ using namespace std;
 
 class Monitor;
 class MOSDBoot;
+class MMonCommand;
 
 class OSDMonitor : public PaxosService {
 public:
@@ -121,8 +122,9 @@ private:
 
   void tick();  // check state, take actions
 
-  int do_command(vector<string>& cmd, bufferlist& data, 
-		 bufferlist& rdata, string &rs);
+  bool preprocess_command(MMonCommand *m);
+  bool prepare_command(MMonCommand *m);
+  void finish_command(MMonCommand *m, int rc, const string &rs);
 
   void mark_all_down();
 

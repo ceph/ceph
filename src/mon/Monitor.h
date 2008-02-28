@@ -119,8 +119,19 @@ public:
   void handle_ping_ack(class MPingAck *m);
   void handle_command(class MMonCommand *m);
 
-  int do_command(vector<string>& cmd, bufferlist& data, 
-		 bufferlist& rdata, string &rs);
+  void finish_command(MMonCommand *m, int rc, const string &rs);
+public:
+  struct C_Command : public Context {
+    Monitor *mon;
+    MMonCommand *m;
+    int rc;
+    string rs;
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s) :
+      mon(_mm), m(_m), rc(r), rs(s) {}
+    void finish(int r) {
+      mon->finish_command(m, rc, rs);
+    }
+  };
 
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 

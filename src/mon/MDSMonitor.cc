@@ -21,6 +21,8 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -154,6 +156,9 @@ bool MDSMonitor::preprocess_query(Message *m)
   case CEPH_MSG_MDS_GETMAP:
     handle_mds_getmap((MMDSGetMap*)m);
     return true;
+
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
 
   default:
     assert(0);
@@ -465,16 +470,41 @@ void MDSMonitor::take_over(entity_addr_t addr, int mds)
 }
 
 
+bool MDSMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
 
-int MDSMonitor::do_command(vector<string>& cmd, bufferlist& data, 
-			   bufferlist& rdata, string &rs)
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "getmap") {
+      mdsmap.encode(rdata);
+      ss << "got mdsmap epoch " << mdsmap.get_epoch();
+      r = 0;
+    }
+  }
+
+  if (r != -1) {
+    string rs;
+    ss >> rs;
+    MMonCommandAck *reply = new MMonCommandAck(r, rs);
+    reply->set_data(rdata);
+    mon->messenger->send_message(reply, m->inst);
+    delete m;
+    return true;
+  } else
+    return false;
+}
+
+bool MDSMonitor::prepare_command(MMonCommand *m)
 {
   int r = -EINVAL;
   stringstream ss;
+  bufferlist rdata;
 
-  if (cmd.size() > 1) {
-    if (cmd[1] == "stop" && cmd.size() > 2) {
-      int who = atoi(cmd[2].c_str());
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
+      int who = atoi(m->cmd[2].c_str());
       if (mdsmap.is_active(who)) {
 	r = 0;
 	ss << "telling mds" << who << " to stop";
@@ -484,19 +514,29 @@ int MDSMonitor::do_command(vector<string>& cmd, bufferlist& data,
 	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
       }
     }
-    else if (cmd[1] == "set_max_mds" && cmd.size() > 2) {
-      pending_mdsmap.max_mds = atoi(cmd[2].c_str());
+    else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {
+      pending_mdsmap.max_mds = atoi(m->cmd[2].c_str());
       r = 0;
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
   }
-  if (r == -EINVAL) {
+  if (r == -EINVAL) 
     ss << "unrecognized command";
-  } 
-  
-  // reply
+  string rs;
   getline(ss, rs);
-  return r;
+
+  if (r >= 0) {
+    // success.. delay reply
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs));
+    return true;
+  } else {
+    // reply immediately
+    MMonCommandAck *reply = new MMonCommandAck(r, rs);
+    reply->set_data(rdata);
+    mon->messenger->send_message(reply, m->inst);
+    delete m;
+    return false;
+  }
 }
 
 

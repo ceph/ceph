@@ -31,6 +31,7 @@ using namespace std;
 
 class MMDSBeacon;
 class MMDSGetMap;
+class MMonCommand;
 
 class MDSMonitor : public PaxosService {
  public:
@@ -79,8 +80,8 @@ class MDSMonitor : public PaxosService {
 
   void take_over(entity_addr_t addr, int mds);
 
-  int do_command(vector<string>& cmd, bufferlist& data, 
-		 bufferlist& rdata, string &rs);
+  bool preprocess_command(MMonCommand *m);
+  bool prepare_command(MMonCommand *m);
 
   // beacons
   map<entity_addr_t, utime_t> last_beacon;

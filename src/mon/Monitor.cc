@@ -196,50 +196,37 @@ void Monitor::lose_election(epoch_t epoch, int l)
   pgmon->election_finished();
 }
 
-
-int Monitor::do_command(vector<string>& cmd, bufferlist& data, 
-			bufferlist& rdata, string &rs)
-{
-  if (cmd.empty()) {
-    rs = "no command";
-    return -EINVAL;
-  }
-
-  if (cmd[0] == "stop") {
-    rs = "stopping";
-    do_stop();
-    return 0;
-  }
-  if (cmd[0] == "mds") 
-    return mdsmon->do_command(cmd, data, rdata, rs);
-
-  if (cmd[0] == "osd") 
-    return osdmon->do_command(cmd, data, rdata, rs);
-
-  // huh.
-  rs = "unrecognized subsystem '" + cmd[0] + "'";
-  return -EINVAL;
-}
-
 void Monitor::handle_command(MMonCommand *m)
 {
   dout(0) << "handle_command " << *m << dendl;
-  
-  string rs;         // return string
-  bufferlist rdata;  // return data
-  int rc = do_command(m->cmd, m->get_data(), rdata, rs);
-  if (rc == -EROFS && !is_leader()) {
-    dout(10) << "forwarding command to leader" << dendl;
-    messenger->send_message(m, monmap->get_inst(get_leader()));
-    return;
-  }
-
-  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
-  reply->set_data(rdata);
+  string rs;
+  if (!m->cmd.empty()) {
+    if (m->cmd[0] == "mds") {
+      mdsmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "osd") {
+      osdmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "stop") {
+      do_stop();
+      return;
+    }
+    rs = "unrecognized subsystem";
+  } else 
+    rs = "no command";
+  MMonCommandAck *reply = new MMonCommandAck(-EINVAL, rs);
   messenger->send_message(reply, m->inst);
   delete m;
 }
 
+void Monitor::finish_command(MMonCommand *m, int rc, const string &rs)
+{
+  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
+  messenger->send_message(reply, m->inst);
+  delete m;
+}
 
 void Monitor::do_stop()
 {

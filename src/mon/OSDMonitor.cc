@@ -26,11 +26,14 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 
 #include "common/Timer.h"
 
 #include "config.h"
 
+#include <sstream>
 
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd e" << osdmap.get_epoch() << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd e" << osdmap.get_epoch() << " "
@@ -409,6 +412,9 @@ bool OSDMonitor::preprocess_query(Message *m)
     handle_osd_getmap((MOSDGetMap*)m);
     return true;
     
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
+
     // damp updates
   case MSG_OSD_FAILURE:
     return preprocess_failure((MOSDFailure*)m);
@@ -439,6 +445,9 @@ bool OSDMonitor::prepare_update(Message *m)
   case MSG_OSD_BOOT:
     return prepare_boot((MOSDBoot*)m);
 
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+    
     /*
   case MSG_OSD_IN:
     return prepare_in((MOSDIn*)m);
@@ -456,6 +465,7 @@ bool OSDMonitor::prepare_update(Message *m)
 
 bool OSDMonitor::should_propose(double& delay)
 {
+  dout(10) << "should_propose" << dendl;
   if (osdmap.epoch == 1) {
     if (pending_inc.new_up.size() == (unsigned)g_conf.num_osd) {
       delay = 0.0;
@@ -852,6 +862,51 @@ void OSDMonitor::mark_all_down()
 }
 
 
+
+bool OSDMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "getmap") {
+      osdmap.encode(rdata);
+      ss << "got osdmap epoch " << osdmap.get_epoch();
+      r = 0;
+    }
+    else if (m->cmd[1] == "getcrushmap") {
+      osdmap.crush._encode(rdata);
+      ss << "got crush map from osdmap epoch " << osdmap.get_epoch();
+      r = 0;
+    }
+  }
+  if (r != -1) {
+    string rs;
+    ss >> rs;
+    MMonCommandAck *reply = new MMonCommandAck(r, rs);
+    reply->set_data(rdata);
+    mon->messenger->send_message(reply, m->inst);
+    delete m;
+    return true;
+  } else
+    return false;
+}
+
+bool OSDMonitor::prepare_command(MMonCommand *m)
+{
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "setcrushmap") {
+      dout(10) << "prepare_command setting new crush map" << dendl;
+      pending_inc.crush = m->get_data();
+      string rs = "set crush map";
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+  }
+  return false;
+}
+/*
 int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data, 
 			   bufferlist& rdata, string &rs)
 {
@@ -866,11 +921,9 @@ int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data,
     return 0;
   }
   if (cmd[1] == "setcrushmap") {
-    if (!mon->is_leader()) return -EROFS;
-    // HACK
-    pending_inc.crush = data;
-    propose_pending();
+    return -EAGAIN;
   }
   rs = "unknown command";
   return -EINVAL;
 }
+*/
