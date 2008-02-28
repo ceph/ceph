@@ -22,8 +22,8 @@
 
 #include "config.h"
 
-#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs(" << fn << ").journal "
-#define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << fn << ").journal "
+#define dout(x) if (x <= g_conf.debug_journal) *_dout << dbeginl << g_clock.now() << " journal "
+#define derr(x) if (x <= g_conf.debug_journal) *_derr << dbeginl << g_clock.now() << " journal "
 
 
 int FileJournal::_open(bool forwrite)
@@ -293,8 +293,8 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
   // gather queued writes
   off64_t queue_pos = write_pos;
 
-  int eleft = g_conf.ebofs_journal_max_write_entries;
-  int bleft = g_conf.ebofs_journal_max_write_bytes;
+  int eleft = g_conf.journal_max_write_entries;
+  int bleft = g_conf.journal_max_write_bytes;
 
   while (!writeq.empty()) {
     // grab next item

@@ -120,7 +120,7 @@ int Ebofs::mount()
 
   // open journal
   if (journalfn) {
-    journal = new FileJournal(sb->fsid, &finisher, journalfn, g_conf.ebofs_journal_dio);
+    journal = new FileJournal(sb->fsid, &finisher, journalfn, g_conf.journal_dio);
     int err = journal->open(super_epoch);
     if (err < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
@@ -268,13 +268,14 @@ int Ebofs::mkfs()
 
   // create journal?
   if (journalfn) {
-    Journal *journal = new FileJournal(super_fsid, &finisher, journalfn, g_conf.ebofs_journal_dio);
+    Journal *journal = new FileJournal(super_fsid, &finisher, journalfn, g_conf.journal_dio);
     if (journal->create() < 0) {
       dout(3) << "mount journal " << journalfn << " created failed" << dendl;
     } else {
       dout(3) << "mount journal " << journalfn << " created" << dendl;
     }
     delete journal;
+    journal = 0;
   }
 
   dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << dendl;

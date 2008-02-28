@@ -36,7 +36,8 @@ using namespace __gnu_cxx;
 
 class FakeStore : public JournalingObjectStore {
   string basedir;
-
+  __u64 fsid;
+  
   // fake attrs?
   FakeStoreAttrs attrs;
   bool fake_attrs;

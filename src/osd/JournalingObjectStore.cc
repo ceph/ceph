@@ -8,6 +8,9 @@
 
 int JournalingObjectStore::journal_replay()
 {
+  if (!journal)
+    return 0;
+
   int err = journal->open(super_epoch);
   if (err < 0) {
     dout(3) << "journal_replay open failed with" << err

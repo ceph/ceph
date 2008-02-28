@@ -88,6 +88,8 @@ struct md_config_t {
   int debug_client;
   int debug_osd;
   int debug_ebofs;
+  int debug_fakestore;
+  int debug_journal;
   int debug_bdev;
   int debug_ns;
   int debug_ms;
@@ -269,10 +271,8 @@ struct md_config_t {
 
   bool osd_hack_fast_startup;
 
-  double   fakestore_fake_sync;
-  bool  fakestore_fsync;
-  bool  fakestore_writesync;
-  int   fakestore_syncthreads;   // such crap
+  // fakestore
+  double   fakestore_sync_interval;
   bool  fakestore_fake_attrs;
   bool  fakestore_fake_collections;
   const char  *fakestore_dev;
@@ -289,10 +289,12 @@ struct md_config_t {
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
-  bool ebofs_journal_dio;
-  bool ebofs_journal_max_write_bytes;
-  bool ebofs_journal_max_write_entries;
   
+  // journal
+  bool journal_dio;
+  bool journal_max_write_bytes;
+  bool journal_max_write_entries;
+
   // block device
   bool  bdev_lock;
   int   bdev_iothreads;

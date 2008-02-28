@@ -161,6 +161,8 @@ md_config_t g_conf = {
   debug_client: 0,
   debug_osd: 0,
   debug_ebofs: 1,
+  debug_fakestore: 1,
+  debug_journal: 1,
   debug_bdev: 1,         // block device
   debug_ns: 0,
   debug_ms: 0,
@@ -337,10 +339,7 @@ md_config_t g_conf = {
 
   
   // --- fakestore ---
-  fakestore_fake_sync: 2,    // seconds
-  fakestore_fsync: false,//true,
-  fakestore_writesync: false,
-  fakestore_syncthreads: 4,
+  fakestore_sync_interval: 2,    // seconds
   fakestore_fake_attrs: false,
   fakestore_fake_collections: false,   
   fakestore_dev: 0,
@@ -357,9 +356,11 @@ md_config_t g_conf = {
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   ebofs_verify_csum_on_read: true,
-  ebofs_journal_dio: false,
-  ebofs_journal_max_write_bytes: 0,
-  ebofs_journal_max_write_entries: 10,
+
+  // journal
+  journal_dio: false,
+  journal_max_write_bytes: 0,
+  journal_max_write_entries: 10,
 
   // --- block device ---
   bdev_lock: true,
@@ -640,6 +641,16 @@ void parse_config_options(std::vector<const char*>& args)
         g_conf.debug_ebofs = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_ebofs = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_fakestore") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_fakestore = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_fakestore = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_journal") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_journal = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_journal = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_bdev") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_bdev = atoi(args[++i]);
@@ -819,22 +830,21 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
       g_conf.ebofs_realloc = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_journal_dio") == 0)
-      g_conf.ebofs_journal_dio = atoi(args[++i]);      
-    else if (strcmp(args[i], "--ebofs_journal_max_write_entries") == 0)
-      g_conf.ebofs_journal_max_write_entries = atoi(args[++i]);      
-    else if (strcmp(args[i], "--ebofs_journal_max_write_bytes") == 0)
-      g_conf.ebofs_journal_max_write_bytes = atoi(args[++i]);      
+\
+    else if (strcmp(args[i], "--journal_dio") == 0)
+      g_conf.journal_dio = atoi(args[++i]);      
+    else if (strcmp(args[i], "--journal_max_write_entries") == 0)
+      g_conf.journal_max_write_entries = atoi(args[++i]);      
+    else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
+      g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
     else if (strcmp(args[i], "--fakestore") == 0) {
       g_conf.ebofs = 0;
       //g_conf.osd_pg_bits = 5;
       //g_conf.osd_maxthreads = 1;   // fucking hell
     }
-    else if (strcmp(args[i], "--fakestore_fsync") == 0) 
-      g_conf.fakestore_fsync = atoi(args[++i]);
-    else if (strcmp(args[i], "--fakestore_writesync") == 0) 
-      g_conf.fakestore_writesync = atoi(args[++i]);
+    else if (strcmp(args[i], "--fakestore_sync_interval") == 0)
+      g_conf.fakestore_sync_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
       g_conf.fakestore_dev = args[++i];
     else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 

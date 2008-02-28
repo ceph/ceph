@@ -917,24 +917,3 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   }
   return false;
 }
-/*
-int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data, 
-			   bufferlist& rdata, string &rs)
-{
-  if (cmd[1] == "getmap") {
-    osdmap.encode(rdata);
-    rs = "ok";
-    return 0;
-  }
-  if (cmd[1] == "getcrushmap") {
-    osdmap.crush._encode(rdata);
-    rs = "ok";
-    return 0;
-  }
-  if (cmd[1] == "setcrushmap") {
-    return -EAGAIN;
-  }
-  rs = "unknown command";
-  return -EINVAL;
-}
-*/

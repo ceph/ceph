@@ -17,6 +17,8 @@
 #include "FakeStore.h"
 #include "include/types.h"
 
+#include "FileJournal.h"
+
 #include "common/Timer.h"
 
 #include <unistd.h>
@@ -41,13 +43,12 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
-#define  derr(l)    if (l<=g_conf.debug) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  dout(l)    if (l<=g_conf.debug_fakestore) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  derr(l)    if (l<=g_conf.debug_fakestore) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
 #include <map>
-
 
 int FakeStore::statfs(struct statfs *buf)
 {
@@ -60,20 +61,17 @@ int FakeStore::statfs(struct statfs *buf)
  */ 
 void FakeStore::get_oname(pobject_t oid, char *s) 
 {
-  //static hash<pobject_t> H;
   assert(sizeof(oid) == 24);
 #ifdef __LP64__
-  //sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
   sprintf(s, "%s/objects/%04x.%04x.%016lx.%016lx", basedir.c_str(), 
 	  oid.volume, oid.rank,
 	  *((uint64_t*)&oid.oid),
 	  *(((uint64_t*)&oid.oid) + 1));
 #else
-  //sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
   sprintf(s, "%s/objects/%04x.%04x.%016llx.%016llx", basedir.c_str(), 
 	  oid.volume, oid.rank,
-	  *((uint64_t*)&oid),
-	  *(((uint64_t*)&oid) + 1));
+	  *((uint64_t*)&oid.oid),
+	  *(((uint64_t*)&oid.oid) + 1));
 #endif
 }
 
@@ -147,21 +145,28 @@ int FakeStore::mkfs()
   dout(5) << "wipe: " << cmd << dendl;
   system(cmd);
 
-  // hashed bits too
-  /*
-  for (int i=0; i<HASH_DIRS; i++) {
-    char s[4];
-    sprintf(s, "%02x", i);
-    string subdir = basedir + "/objects/" + s;
+  // fsid
+  fsid = rand();
+  char fn[100];
+  sprintf(fn, "%s/fsid", basedir.c_str());
+  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY);
+  ::write(fd, &fsid, sizeof(fsid));
+  ::fchmod(fd, 666);
+  ::close(fd);
 
-    dout(15) << " creating " << subdir << dendl;
-    int r = ::mkdir(subdir.c_str(), 0755);
-    if (r != 0) {
-      derr(0) << "couldnt create subdir, r = " << r << dendl;
-      return r;
+  // journal?
+  struct stat st;
+  sprintf(fn, "%s/journal", basedir.c_str());
+  if (::stat(fn, &st) == 0) {
+    journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
+    if (journal->create() < 0) {
+      dout(0) << "mkfs error creating journal on " << fn << dendl;
+    } else {
+      dout(0) << "mkfs created journal on " << fn << dendl;
     }
+    delete journal;
+    journal = 0;
   }
-  */
 
   if (g_conf.fakestore_dev) {
     char cmd[100];
@@ -201,12 +206,9 @@ int FakeStore::mount()
 
   // fake attrs? 
   // let's test to see if they work.
-#ifndef __CYGWIN__
   if (g_conf.fakestore_fake_attrs) {
-#endif
     dout(0) << "faking attrs (in memory)" << dendl;
     fake_attrs = true;
-#ifndef __CYGWIN__
   } else {
     char names[1000];
     r = ::listxattr(basedir.c_str(), names, 1000);
@@ -215,23 +217,32 @@ int FakeStore::mount()
       assert(0);
     }
   }
-#endif
 
-  // get epoch
   char fn[100];
+  int fd;
+
+  // get fsid
+  sprintf(fn, "%s/fsid", basedir.c_str());
+  fd = ::open(fn, O_RDONLY);
+  ::read(fd, &fsid, sizeof(fsid));
+  ::close(fd);
+  
+  // get epoch
   sprintf(fn, "%s/commit_epoch", basedir.c_str());
-  int fd = ::open(fn, O_RDONLY);
+  fd = ::open(fn, O_RDONLY);
   ::read(fd, &super_epoch, sizeof(super_epoch));
-  ::fsync(fd);  // this should cause the fs's journal to commit.
   ::close(fd);
   dout(5) << "mount epoch is " << super_epoch << dendl;
-  
+
+  // journal
+  sprintf(fn, "%s/journal", basedir.c_str());
+  if (::stat(fn, &st) == 0)
+    journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
   r = journal_replay();
   if (r == -EINVAL) {
     dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
     return r;
   }
-
   journal_start();
   sync_thread.create();
 
@@ -278,18 +289,17 @@ bool FakeStore::exists(pobject_t oid)
 }
 
   
-int FakeStore::stat(pobject_t oid,
-                    struct stat *st)
+int FakeStore::stat(pobject_t oid, struct stat *st)
 {
   dout(20) << "stat " << oid << dendl;
   char fn[200];
   get_oname(oid,fn);
   int r = ::stat(fn, st);
+  dout(20) << "stat " << oid << " at " << fn << " = " << r << dendl;
   return r;
 }
  
  
-
 int FakeStore::remove(pobject_t oid, Context *onsafe) 
 {
   dout(20) << "remove " << oid << dendl;
@@ -411,7 +421,7 @@ void FakeStore::sync_entry()
 {
   lock.Lock();
   utime_t interval;
-  interval.set_from_double(g_conf.fakestore_fake_sync); // rename me
+  interval.set_from_double(g_conf.fakestore_sync_interval);
   while (!stop) {
     dout(10) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
@@ -424,6 +434,7 @@ void FakeStore::sync_entry()
     sprintf(fn, "%s/commit_epoch", basedir.c_str());
     int fd = ::open(fn, O_CREAT|O_WRONLY);
     ::write(fd, &super_epoch, sizeof(super_epoch));
+    ::fchmod(fd, 0664);
     ::fsync(fd);  // this should cause the fs's journal to commit.
     ::close(fd);
 
