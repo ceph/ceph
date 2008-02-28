@@ -3130,6 +3130,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdn->is_auth())
       ipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
     ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
+    destdn->inode->projected_parent = destdn;
     
     // do src dentry
     metablob->add_dir_context(srcdn->dir);
@@ -3148,6 +3149,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (straydn->is_auth())
 	ipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
       ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
+      destdn->inode->projected_parent = straydn;
     } 
     else if (destdn->is_remote()) {
       // remote.
@@ -3197,6 +3199,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
+      srcdn->inode->projected_parent = destdn;
 
     } else {
       assert(srcdn->is_remote());
