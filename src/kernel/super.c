@@ -247,7 +247,8 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 		goto bad;
 
 	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n", ip >> 24, (ip >> 16) & 0xff,
+	dout(15, "parse_ip got %u.%u.%u.%u\n", 
+	     ip >> 24, (ip >> 16) & 0xff,
 	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
 
