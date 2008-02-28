@@ -865,6 +865,12 @@ int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data,
     rs = "ok";
     return 0;
   }
+  if (cmd[1] == "setcrushmap") {
+    if (!mon->is_leader()) return -EROFS;
+    // HACK
+    pending_inc.crush = data;
+    propose_pending();
+  }
   rs = "unknown command";
   return -EINVAL;
 }

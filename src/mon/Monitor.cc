@@ -228,10 +228,15 @@ void Monitor::handle_command(MMonCommand *m)
   string rs;         // return string
   bufferlist rdata;  // return data
   int rc = do_command(m->cmd, m->get_data(), rdata, rs);
+  if (rc == -EROFS && !is_leader()) {
+    dout(10) << "forwarding command to leader" << dendl;
+    messenger->send_message(m, monmap->get_inst(get_leader()));
+    return;
+  }
 
   MMonCommandAck *reply = new MMonCommandAck(rc, rs);
   reply->set_data(rdata);
-  messenger->send_message(reply, m->get_source_inst());
+  messenger->send_message(reply, m->inst);
   delete m;
 }
 
