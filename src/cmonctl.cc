@@ -79,11 +79,22 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vec_to_argv(args, argc, argv);
 
+  bufferlist indata;
   vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"-o") == 0) 
       outfile = args[++i];
-    else 
+    else if (strcmp(args[i], "-i") == 0) {
+      int fd = ::open(args[++i], O_RDONLY);
+      struct stat st;
+      if (::fstat(fd, &st) == 0) {
+	indata.push_back(buffer::create(st.st_size));
+	indata.zero();
+	::read(fd, indata.c_str(), st.st_size);
+	::close(fd);
+	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
+      }
+    } else
       nargs.push_back(args[i]);
   }
 
@@ -101,6 +112,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // build command
   MMonCommand *m = new MMonCommand(messenger->get_myinst());
+  m->set_data(indata);
   string cmd;
   for (unsigned i=0; i<nargs.size(); i++) {
     if (i) cmd += " ";
