@@ -887,7 +887,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   }
   if (r != -1) {
     string rs;
-    ss >> rs;
+    getline(ss, rs);
     MMonCommandAck *reply = new MMonCommandAck(r, rs);
     reply->set_data(rdata);
     mon->messenger->send_message(reply, m->inst);
