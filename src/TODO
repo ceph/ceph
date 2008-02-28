@@ -13,8 +13,7 @@ some smallish projects:
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
-  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
-- ip quad printfs?
+  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 - fix ceph_lookup_open
 
@@ -37,8 +36,6 @@ kernel client
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
-/  - handle file caps, ack back to mds, etc. 
-    - actually flush dirty data, too
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
   - readpages (readahead)
@@ -52,6 +49,7 @@ kernel client
 - unmount
 /  - close open file handles, mds sessions
     - flush data before unmount.
+  - send (+deliver!) unmount message
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably
