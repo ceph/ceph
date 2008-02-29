@@ -18,17 +18,6 @@
 #include <fstream>
 #include <stdlib.h>
 
-//#define MDS_CACHE_SIZE        4*10000   -> <20mb
-//#define MDS_CACHE_SIZE        80000         62mb
-
-#define AVG_PER_INODE_SIZE    450
-#define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
-
-//#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
-//#define MDS_CACHE_SIZE 1500000
-#define MDS_CACHE_SIZE 150000
-
-
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
 atomic_t buffer_total_alloc;
@@ -239,7 +228,7 @@ md_config_t g_conf = {
   journaler_batch_max: 16384,        // max bytes we'll delay flushing
 
   // --- mds ---
-  mds_cache_size: 300000,  //MDS_CACHE_SIZE,
+  mds_cache_size: 300000,
   mds_cache_mid: .7,
 
   mds_decay_halflife: 5,
@@ -253,8 +242,8 @@ md_config_t g_conf = {
   mds_tick_interval: 5,
 
   mds_log: true,
-  mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
-  mds_log_max_segments: 100,
+  mds_log_max_events: -1,
+  mds_log_max_segments: 100,  // segment size defined by FileLayout, above
   mds_log_max_expiring: 20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_eopen_size: 100,   // # open inodes per log entry

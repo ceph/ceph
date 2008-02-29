@@ -1,3 +1,7 @@
+gsoc?
+- cas
+- libbtrfs objectstore
+- osdmap/crush gui
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
