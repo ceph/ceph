@@ -79,21 +79,14 @@ mds
 - fix file_data_version
 - on recovery, validate file sizes when max_size > size
 
-
-
-- extend/clean up filepath to allow paths relative to an ino
-/  - fix path_traverse
-  - fix reconnect/rejoin open file weirdness
-- real chdir (directory "open")
-  - relative metadata ops
+- fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-- detect and deal with client failure
-  - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
+- failure during reconnect vs clientmap.  
 
-- inode.rmtime (recursive mtime)
-- make inode.size reflect directory size (number of entries)
+- inode.rmtime (recursive mtime)?
+- make inode.size reflect directory size (number of entries)?
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
@@ -139,12 +132,12 @@ journaler
 fsck
 - fsck.ebofs
 - online mds fsck?
-
+- object backpointer attrs to hint catastrophic reconstruction?
 
 
 
 rados snapshots
-- integrate revisions into ObjectCacher
+- integrate revisions into ObjectCacher?
 - clean up oid.rev vs op.rev in osd+osdc
 
 - attr.crev is rev we were created in.
@@ -159,12 +152,6 @@ rados snapshots
 - read is tagged with op.rev
   - if 0, we read from 0 (if it exists).
   - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
-
-- how to get usage feedback to monitor?
-
-- clean up mds caps release in exporter
-- figure out client failure modes
-- add connection retry.
 
 
 objecter
