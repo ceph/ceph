@@ -2488,7 +2488,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    ipv = straydn->pre_dirty(dn->inode->inode.version);
+    dn->inode->projected_parent = straydn;    
+    ipv = dn->inode->pre_dirty();
     le->metablob.add_dir_context(straydn->dir);
     ji = le->metablob.add_primary_dentry(straydn, true, dn->inode);
   } else {
@@ -2504,7 +2505,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->ctime = mdr->now;
   pi->version = ipv;
   *ji = *pi;  // copy into journal
-  
+
   // the unlinked dentry
   dn->pre_dirty();
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);

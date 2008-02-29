@@ -407,10 +407,13 @@ void CInode::name_stray_dentry(string& dname)
 version_t CInode::pre_dirty()
 {    
   assert(parent);
+  version_t pv;
   if (projected_parent)
-    return projected_parent->pre_dirty();
+    pv = projected_parent->pre_dirty(get_projected_version());
   else
-    return parent->pre_dirty();
+    pv = parent->pre_dirty();
+  dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
+  return pv;
 }
 
 void CInode::_mark_dirty(LogSegment *ls)

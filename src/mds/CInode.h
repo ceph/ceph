@@ -139,7 +139,7 @@ class CInode : public MDSCacheObject {
   //utime_t hack_load_stamp;
 
   // projected values (only defined while dirty)
-  list<inode_t*>    projected_inode;
+  list<inode_t*>   projected_inode;
   list<fragtree_t> projected_dirfragtree;
 
   version_t get_projected_version() {
