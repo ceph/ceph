@@ -372,10 +372,13 @@ private:
 
   // oid -> pg
   ceph_object_layout file_to_object_layout(object_t oid, FileLayout& layout) {
-    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
+    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, 
+			      layout.fl_pg_pool,
+			      layout.fl_pg_preferred, 
+			      layout.fl_object_stripe_unit);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     int num = preferred >= 0 ? localized_pg_num:pg_num;
     int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
 
@@ -405,7 +408,7 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
+    pg_t pgid = pg_t(pg_type, pg_size, ps, pg_pool, preferred);
     ceph_object_layout layout;
     layout.ol_pgid = pgid.u;
     layout.ol_stripe_unit = object_stripe_unit;
@@ -421,8 +424,8 @@ private:
       {
 	// what crush rule?
 	int rule;
-	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size());
-	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size());
+	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size(), pg.pool());
+	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size(), pg.pool());
 	else assert(0);
 	crush.do_rule(rule,
 		      pg.ps(),

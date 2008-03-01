@@ -217,32 +217,34 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     
     // rules
     // replication
-    for (int i=1; i<=ndom; i++) {
-      crush_rule *rule = crush_make_rule(4);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-      crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
-    }
-
-    // raid
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      if (ndom >= i) {
+    for (int pool=0; pool<1; pool++)
+      for (int i=1; i<=ndom; i++) {
 	crush_rule *rule = crush_make_rule(4);
 	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
+	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
+	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
 	crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
-      } else {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
+	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
       }
-    }
+
+    // raid
+    for (int pool=0; pool<1; pool++) 
+      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+	if (ndom >= i) {
+	  crush_rule *rule = crush_make_rule(4);
+	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
+	  crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
+	  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
+	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
+	} else {
+	  crush_rule *rule = crush_make_rule(3);
+	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
+	  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
+	}
+      }
     
   } else {
     // one bucket
@@ -256,21 +258,24 @@ void OSDMonitor::build_crush_map(CrushWrapper& crush,
     
     // rules
     // replication
-    for (int i=1; i<=g_conf.osd_max_rep; i++) {
-      crush_rule *rule = crush_make_rule(3);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
-    }
+    for (int pool=0; pool<1; pool++)
+      for (int i=1; i<=g_conf.osd_max_rep; i++) {
+	crush_rule *rule = crush_make_rule(3);
+	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
+	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
+      }
+
     // raid4
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      crush_rule *rule = crush_make_rule(3);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
-    }
+    for (int pool=0; pool<1; pool++)
+      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+	crush_rule *rule = crush_make_rule(3);
+	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
+	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
+      }
   }
   
   crush.finalize();
@@ -826,18 +831,19 @@ void OSDMonitor::tick()
   ps_t numps = osdmap.get_pg_num();
   int minrep = 1; 
   int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
-  for (int nrep = minrep; nrep <= maxrep; nrep++) { 
-    for (ps_t ps = 0; ps < numps; ++ps) {
-      pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
-      vector<int> osds;
-      osdmap.pg_to_osds(pgid, osds); 
-      if (osds[0] == 0) {
-	pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		<< osds[1] << dendl;
+  for (int pool=0; pool<1; pool++)
+    for (int nrep = minrep; nrep <= maxrep; nrep++) { 
+      for (ps_t ps = 0; ps < numps; ++ps) {
+	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1);
+	vector<int> osds;
+	osdmap.pg_to_osds(pgid, osds); 
+	if (osds[0] == 0) {
+	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
+	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
+		  << osds[1] << dendl;
+	}
       }
     }
-  }
   propose_pending();
 }
 

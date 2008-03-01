@@ -33,14 +33,14 @@ int myrand()
 }
 
 
-object_t Ager::age_get_oid() {
+pobject_t Ager::age_get_oid() {
   if (!age_free_oids.empty()) {
-    object_t o = age_free_oids.front();
+    pobject_t o = age_free_oids.front();
     age_free_oids.pop_front();
     return o;
   }
-  object_t last = age_cur_oid;
-  ++age_cur_oid.bno;
+  pobject_t last = age_cur_oid;
+  ++age_cur_oid.oid.bno;
   return last;
 }
 
@@ -77,10 +77,10 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
         avail - free > .02) 
       store->sync();
 
-    object_t oid = age_get_oid();
+    pobject_t poid = age_get_oid();
     
     int b = myrand() % 10;
-    age_objects[b].push_back(oid);
+    age_objects[b].push_back(poid);
     
     ssize_t s = age_pick_size();
     wrote += (s + 4095) / 4096;
@@ -88,7 +88,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
 
 
 
-    generic_dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << oid << dec << " sz " << s << dendl;
+    generic_dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << poid << dec << " sz " << s << dendl;
     
 
     if (false && !g_conf.ebofs_verify && start_debug && wrote > 1000000ULL) { 
@@ -116,11 +116,11 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
       ssize_t t = MIN(s, max);
       bufferlist sbl;
       sbl.substr_of(bl, 0, t);
-      store->write(oid, off, t, sbl, false);
+      store->write(poid, off, t, sbl, false);
       off += t;
       s -= t;
     }
-    oid.bno++;
+    poid.oid.bno++;
   }
 
   return wrote*4; // KB
@@ -152,13 +152,13 @@ void Ager::age_empty(float pc) {
       n = nper;
       continue;
     }
-    object_t oid = age_objects[b].front();
+    pobject_t poid = age_objects[b].front();
     age_objects[b].pop_front();
     
-    generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << oid << dec << dendl;
+    generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << poid << dec << dendl;
     
-    store->remove(oid);
-    age_free_oids.push_back(oid);
+    store->remove(poid);
+    age_free_oids.push_back(poid);
   }
 
   g_conf.ebofs_verify = false;
@@ -209,7 +209,7 @@ void Ager::age(int time,
   utime_t nextfl = start;
   nextfl.sec_ref() += freelist_inc;
 
-  while (age_objects.size() < 10) age_objects.push_back( list<object_t>() );
+  while (age_objects.size() < 10) age_objects.push_back( list<pobject_t>() );
   
   if (fake_size_mb) {
     int fake_bl = fake_size_mb * 256;
@@ -225,7 +225,7 @@ void Ager::age(int time,
   // init size distn (once)
   if (!did_distn) {
     did_distn = true;
-    age_cur_oid = object_t(0,1);
+    age_cur_oid = pobject_t(0, 0, object_t(0,1));
     file_size_distn.add(1, 19.0758125+0.65434375);
     file_size_distn.add(512, 35.6566);
     file_size_distn.add(1024, 27.7271875);

@@ -69,7 +69,7 @@ int main(int argc, const char **argv)
     ObjectStore *store = new Ebofs(dev);
     bufferlist bl;
     store->mount();
-    int r = store->read(object_t(0,0), 0, sizeof(sb), bl);
+    int r = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
     if (r < 0) {
       cerr << "couldn't read superblock object on " << dev << std::endl;
       exit(0);

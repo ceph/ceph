@@ -79,8 +79,6 @@
 const char *osd_base_path = "./osddata";
 const char *ebofs_base_path = "./dev";
 
-static const object_t SUPERBLOCK_OBJECT(0,0);
-
 // <hack> force remount hack for performance testing FakeStore
 class C_Remount : public Context {
   OSD *osd;
@@ -231,13 +229,13 @@ int OSD::init()
       bl.push_back(bp);
       utime_t start = g_clock.now();
       for (int i=0; i<1000; i++) 
-	store->write(object_t(999,i), 0, bl.length(), bl, 0);
+	store->write(pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
       store->sync();
       utime_t end = g_clock.now();
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       for (int i=0; i<1000; i++) 
-	store->remove(object_t(999,i), 0);
+	store->remove(pobject_t(0, 0, object_t(999,i)), 0);
       
       // set osd weight
       superblock.weight = (1000.0 / (double)end);
@@ -369,13 +367,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   bl.append((char*)&superblock, sizeof(superblock));
-  t.write(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl);
+  t.write(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl);
+  int r = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
   if (bl.length() != sizeof(superblock)) {
     dout(10) << "read_superblock failed, r = " << r << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;
     return -1;
@@ -471,7 +469,7 @@ void OSD::_remove_unlock_pg(PG *pg)
 	 p++)
       t.remove(*p);
     t.remove_collection(pgid);
-    t.remove(pgid.to_object());  // log too
+    t.remove(pgid.to_pobject());  // log too
   }
   store->apply_transaction(t);
 
@@ -1146,8 +1144,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
        p != m->maps.end();
        p++) {
-    object_t oid = get_osdmap_object_name(p->first);
-    if (store->exists(oid)) {
+    pobject_t poid = get_osdmap_pobject_name(p->first);
+    if (store->exists(poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
       logger->inc("mapfdup");
       bufferlist bl;
@@ -1157,7 +1155,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    store->write(oid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    store->write(poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1170,8 +1168,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (map<epoch_t,bufferlist>::iterator p = m->incremental_maps.begin();
        p != m->incremental_maps.end();
        p++) {
-    object_t oid = get_inc_osdmap_object_name(p->first);
-    if (store->exists(oid)) {
+    pobject_t poid = get_inc_osdmap_pobject_name(p->first);
+    if (store->exists(poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
       logger->inc("mapidup");
       bufferlist bl;
@@ -1181,7 +1179,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    store->write(oid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    store->write(poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1200,7 +1198,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
 
     if (m->incremental_maps.count(cur+1) ||
-        store->exists(get_inc_osdmap_object_name(cur+1))) {
+        store->exists(get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
@@ -1221,7 +1219,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       // archive the full map
       bl.clear();
       osdmap->encode(bl);
-      t.write( get_osdmap_object_name(cur+1), 0, bl.length(), bl);
+      t.write( get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
@@ -1240,7 +1238,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
     else if (m->maps.count(cur+1) ||
-             store->exists(get_osdmap_object_name(cur+1))) {
+             store->exists(get_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding full map epoch " << cur+1 << dendl;
       bufferlist bl;
       if (m->maps.count(cur+1))
@@ -1346,6 +1344,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
     int minraid = g_conf.osd_min_raid_width;
     int maxraid = g_conf.osd_max_raid_width;
+    int numpool = 1; // FIXME
     dout(1) << "mkfs    " << minrep << ".." << maxrep << " replicas, " 
 	    << minraid << ".." << maxraid << " osd raid groups" << dendl;
 
@@ -1354,20 +1353,22 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     // create PGs
     //  replicated
-    for (int nrep = 1; nrep <= maxrep; nrep++) {
-      for (ps_t ps = 0; ps < numps; ++ps)
-	try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, -1), t);
-      for (ps_t ps = 0; ps < numlps; ++ps) 
-	try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, whoami), t);
-    }
+    for (int pool = 0; pool < numpool; pool++) 
+      for (int nrep = 1; nrep <= maxrep; nrep++) {
+	for (ps_t ps = 0; ps < numps; ++ps)
+	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1), t);
+	for (ps_t ps = 0; ps < numlps; ++ps) 
+	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, whoami), t);
+      }
 
     // raided
-    for (int size = minraid; size <= maxraid; size++) {
-      for (ps_t ps = 0; ps < numps; ++ps) 
-	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, -1), t);
-      for (ps_t ps = 0; ps < numlps; ++ps) 
-	try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, whoami), t);
-    }
+    for (int pool = 0; pool < numpool; pool++) 
+      for (int size = minraid; size <= maxraid; size++) {
+	for (ps_t ps = 0; ps < numps; ++ps) 
+	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, -1), t);
+	for (ps_t ps = 0; ps < numlps; ++ps) 
+	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, whoami), t);
+      }
 
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << dendl;
 
@@ -1582,12 +1583,12 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(get_osdmap_object_name(e), 0, 0, bl) >= 0;
+  return store->read(get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(get_inc_osdmap_object_name(e), 0, 0, bl) >= 0;
+  return store->read(get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 void OSD::get_map(epoch_t epoch, OSDMap &m)

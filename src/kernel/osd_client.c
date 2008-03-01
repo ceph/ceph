@@ -187,7 +187,7 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	/* choose dest */
 	switch (req->r_pgid.pg.type) {
 	case CEPH_PG_TYPE_REP:
-		rule = CRUSH_REP_RULE(req->r_pgid.pg.size);
+		rule = CRUSH_REP_RULE(req->r_pgid.pg.size, req->r_pgid.pg.pool);
 		break;
 	default:
 		BUG_ON(1);

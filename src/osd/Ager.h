@@ -16,16 +16,16 @@ class Ager {
   ObjectStore *store;
 
  private:
-  list<object_t>           age_free_oids;
-  object_t                 age_cur_oid;
-  vector< list<object_t> > age_objects;
+  list<pobject_t>           age_free_oids;
+  pobject_t                 age_cur_oid;
+  vector< list<pobject_t> > age_objects;
   Distribution file_size_distn; //kb
   bool         did_distn;
 
   void age_empty(float pc);
   uint64_t age_fill(float pc, utime_t until);
   ssize_t age_pick_size();
-  object_t age_get_oid();
+  pobject_t age_get_oid();
 
  public:
   Ager(ObjectStore *s) : store(s), did_distn(false) {} 

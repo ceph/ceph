@@ -98,6 +98,7 @@ struct ceph_file_layout {
 	__u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
 	__u32 fl_stripe_count;    /* over this many objects */
 	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
+	__u32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
 	
 	/* pg -> disk layout */
 	__u32 fl_object_stripe_unit;  /* for per-object parity, if any */
@@ -106,6 +107,7 @@ struct ceph_file_layout {
 	__s32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
 	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
 	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
+	__u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
 };
 
 #define ceph_file_layout_stripe_width(l) (l.fl_stripe_unit * l.fl_stripe_count)
@@ -122,10 +124,12 @@ struct ceph_file_layout {
 union ceph_pg {
 	__u64 pg64;
 	struct {
-		__s32 preferred; /* preferred primary osd */
+		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
+		__u8 pool;       /* implies crush ruleset */
 		__u8 type;
 		__u8 size;
+		__u8 __pad;
 	} pg;
 };
 
@@ -133,10 +137,13 @@ union ceph_pg {
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
- * crush rule ids.  fixme.
+ * crush rule ids.  fixme, this static mapping to rule ids is lame.
  */
-#define CRUSH_REP_RULE(nrep) (nrep) 
-#define CRUSH_RAID_RULE(num) (10+num)
+#define CRUSH_MAX_REP              8
+#define CRUSH_PG_TYPES             2
+#define CRUSH_RULE_OFFSET(p, t)    (((p)*CRUSH_PG_TYPES + (t))*CRUSH_MAX_REP)
+#define CRUSH_REP_RULE(nrep, pool) (CRUSH_RULE_OFFSET(pool, 0) + (nrep)) 
+#define CRUSH_RAID_RULE(num, pool) (CRUSH_RULE_OFFSET(pool, 1) + (num))
 
 /*
  * stable_mod func is used to control number of placement groups
