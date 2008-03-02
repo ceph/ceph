@@ -119,7 +119,8 @@ public:
   void handle_ping_ack(class MPingAck *m);
   void handle_command(class MMonCommand *m);
 
-  void finish_command(MMonCommand *m, int rc, const string &rs);
+  void reply_command(MMonCommand *m, int rc, const string &rs);
+  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
 public:
   struct C_Command : public Context {
     Monitor *mon;
@@ -129,7 +130,7 @@ public:
     C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s) :
       mon(_mm), m(_m), rc(r), rs(s) {}
     void finish(int r) {
-      mon->finish_command(m, rc, rs);
+      mon->reply_command(m, rc, rs);
     }
   };
 

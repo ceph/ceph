@@ -216,14 +216,20 @@ void Monitor::handle_command(MMonCommand *m)
     rs = "unrecognized subsystem";
   } else 
     rs = "no command";
-  MMonCommandAck *reply = new MMonCommandAck(-EINVAL, rs);
-  messenger->send_message(reply, m->inst);
-  delete m;
+
+  reply_command(m, -EINVAL, rs);
 }
 
-void Monitor::finish_command(MMonCommand *m, int rc, const string &rs)
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
+{
+  bufferlist rdata;
+  reply_command(m, rc, rs, rdata);
+}
+
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata)
 {
   MMonCommandAck *reply = new MMonCommandAck(rc, rs);
+  reply->set_data(rdata);
   messenger->send_message(reply, m->inst);
   delete m;
 }

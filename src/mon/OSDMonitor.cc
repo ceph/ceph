@@ -905,6 +905,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
+  stringstream ss;
+  string rs;
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
@@ -913,12 +915,57 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
     }
-    if (m->cmd[1] == "setmaxosd" &&
-	m->cmd.size() > 2) {
+    else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
-      string rs = "set new max_osd";
+      ss << "set new max_osd = " << pending_inc.new_max_osd;
+      getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
+    }
+    else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
+      errno = 0;
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_up(osd)) {
+	pending_inc.new_down[osd] = false;
+	ss << "marked down osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } else {
+	ss << "osd" << osd << " is already down";
+	getline(ss, rs);
+	mon->reply_command(m, -EINVAL, rs);
+      }
+    }
+    else if (m->cmd[1] == "out" && m->cmd.size() > 2) {
+      errno = 0;
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_in(osd)) {
+	pending_inc.new_offload[osd] = CEPH_OSD_OUT;
+	ss << "marked out osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } else {
+	ss << "osd" << osd << " is already out";
+	getline(ss, rs);
+	mon->reply_command(m, -EINVAL, rs);
+      }
+    }
+    else if (m->cmd[1] == "in" && m->cmd.size() > 2) {
+      errno = 0;
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_out(osd)) {
+	pending_inc.new_offload[osd] = CEPH_OSD_IN;
+	ss << "marked in osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } else {
+	ss << "osd" << osd << " is already in";
+	getline(ss, rs);
+	mon->reply_command(m, -EINVAL, rs);
+      }
     }
   }
   return false;

@@ -487,9 +487,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    MMonCommandAck *reply = new MMonCommandAck(r, rs);
-    reply->set_data(rdata);
-    mon->messenger->send_message(reply, m->inst);
+    mon->reply_command(m, r, rs, rdata);
     delete m;
     return true;
   } else
@@ -531,10 +529,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     return true;
   } else {
     // reply immediately
-    MMonCommandAck *reply = new MMonCommandAck(r, rs);
-    reply->set_data(rdata);
-    mon->messenger->send_message(reply, m->inst);
-    delete m;
+    mon->reply_command(m, r, rs, rdata);
     return false;
   }
 }
