@@ -457,6 +457,7 @@ enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
 	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
 	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_TRUNC,   /* mds->client trunc notify (invalidate size+mtime) */
 	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
 };
