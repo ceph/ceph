@@ -175,7 +175,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "failed to getsockname: %d\n", ret);
 		goto err;
 	}
-	dout(0, "ceph_tcp_listen on port %d\n", ntohs(myaddr->sin_port));
+	dout(10, "listen on port %d\n", ntohs(myaddr->sin_port));
 
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
 				(char *)&optval, sizeof(optval)); 

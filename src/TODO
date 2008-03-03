@@ -16,6 +16,9 @@ kernel client
  - cap handler probably needs i_mutex or something when updating file sizes
    - which means it probably needs to be done in a different worker thread (NOT the messenger's)
  - prevent client_reply from racing against a subsequent file_caps.
+- proc.c
+  - adjust granular debug levels too
+    - should we be using debugfs?
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
