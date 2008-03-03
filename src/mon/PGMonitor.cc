@@ -191,10 +191,10 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   memset(&reply->stfs, 0, sizeof(reply->stfs));
 
   // these are in KB.
-  reply->stfs.f_total = 4*pg_map.total_osd_num_blocks;
-  reply->stfs.f_free = 4*pg_map.total_osd_num_blocks_avail;
-  reply->stfs.f_avail = 4*pg_map.total_osd_num_blocks_avail;
-  reply->stfs.f_objects = pg_map.total_osd_num_objects;
+  reply->stfs.f_total = cpu_to_le64(4*pg_map.total_osd_num_blocks);
+  reply->stfs.f_free = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
+  reply->stfs.f_avail = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
+  reply->stfs.f_objects = cpu_to_le64(pg_map.total_osd_num_objects);
 
   // reply
   mon->messenger->send_message(reply, statfs->get_source_inst());

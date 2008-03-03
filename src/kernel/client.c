@@ -4,7 +4,7 @@
 #include <linux/sched.h>
 #include <linux/random.h>
 
-/* debug level; defined in include/ceph_fs.h */
+/* debug level; defined in super.h */
 int ceph_debug = 0;
 
 int ceph_client_debug = 50;
@@ -139,7 +139,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	}
 
 	/* fill in cap */
-	frommds = rinfo.reply->hdr.src.name.num;
+	frommds = le32_to_cpu(rinfo.reply->hdr.src.name.num);
 	cap = ceph_add_cap(mnt_inode, session, 
 			   le32_to_cpu(rinfo.head->file_caps), 
 			   le32_to_cpu(rinfo.head->file_caps_seq));
@@ -182,8 +182,8 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
 		if (IS_ERR(mount_msg))
 			return PTR_ERR(mount_msg);
-		mount_msg->hdr.dst.name.type = CEPH_ENTITY_TYPE_MON;
-		mount_msg->hdr.dst.name.num = which;
+		mount_msg->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
 		mount_msg->hdr.dst.addr = args->mon_addr[which];
 		
 		ceph_msg_send(client->msgr, mount_msg, 0);
@@ -232,7 +232,7 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	client->monc.monmap = new;
 
 	if (first) {
-		client->whoami = msg->hdr.dst.name.num;
+		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
 		client->msgr->inst.name = msg->hdr.dst.name;
 		dout(1, "i am client%d\n", client->whoami);
 	}
@@ -323,9 +323,10 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 {
 	struct ceph_client *client = p;
 	int had;
+	int type = le32_to_cpu(msg->hdr.type);
 
 	/* deliver the message */
-	switch (msg->hdr.type) {
+	switch (type) {
 		/* me */
 	case CEPH_MSG_MON_MAP:
 		had = client->monc.monmap->epoch ? 1:0;
@@ -371,7 +372,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 
 	default:
-		derr(1, "dispatch unknown message type %d\n", msg->hdr.type);
+		derr(1, "dispatch unknown message type %d\n", type);
 	}
 
 	ceph_msg_put(msg);

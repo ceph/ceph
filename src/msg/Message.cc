@@ -114,7 +114,8 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
 {
   // make message
   Message *m = 0;
-  switch(env.type) {
+  int type = le32_to_cpu(env.type);
+  switch (type) {
 
     // -- with payload --
 
@@ -361,11 +362,11 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
-    m = new MGenericMessage(env.type);
+    m = new MGenericMessage(type);
     break;
 
   default:
-    dout(0) << "can't decode unknown message type " << env.type << dendl;
+    dout(0) << "can't decode unknown message type " << type << dendl;
     assert(0);
   }
   

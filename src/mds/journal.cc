@@ -129,14 +129,20 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   // open files
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
+    EOpen *le = 0;
+    LogSegment *ls = mds->mdlog->get_current_segment();
     for (xlist<CInode*>::iterator p = open_files.begin(); !p.end(); ++p) {
-      dout(20) << "try_to_expire requeueing open file " << **p << dendl;
-      mds->server->queue_journal_open(*p);
+      CInode *in = *p;
+      dout(20) << "try_to_expire requeueing open file " << *in << dendl;
+      if (!le) le = new EOpen(mds->mdlog);
+      le->add_clean_inode(in);
+      ls->open_files.push_back(&in->xlist_open_file);
     }
-    if (!gather) gather = new C_Gather;
-    mds->server->add_journal_open_waiter(gather->new_sub());
-    mds->server->maybe_journal_opens();
-    dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
+    if (le) {
+      if (!gather) gather = new C_Gather;
+      mds->mdlog->submit_entry(le, gather->new_sub());
+      dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
+    }
   }
 
   // slave updates
@@ -597,6 +603,15 @@ void EOpen::replay(MDS *mds)
 {
   dout(10) << "EOpen.replay " << dendl;
   metablob.replay(mds, _segment);
+
+  // note which segments inodes belong to, so we don't have to start rejournaling them
+  for (list<inodeno_t>::iterator p = inos.begin();
+       p != inos.end();
+       p++) {
+    CInode *in = mds->mdcache->get_inode(*p);
+    assert(in); 
+    _segment->open_files.push_back(&in->xlist_open_file);
+  }
 }
 
 

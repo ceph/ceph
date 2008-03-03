@@ -167,7 +167,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 			goto bad;
 		if ((err = ceph_decode_16(p, end, &b->type)) < 0)
 			goto bad;
-		if ((err = ceph_decode_16(p, end, &b->bucket_type)) < 0)
+		if ((err = ceph_decode_16(p, end, &b->alg)) < 0)
 			goto bad;
 		if ((err = ceph_decode_32(p, end, &b->weight)) < 0)
 			goto bad;
@@ -240,7 +240,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 		}
 	}
 
-	
+	/* ignore trailing name maps */
+		
 	dout(30, "crush_decode success\n");
 	return c;
 	
@@ -368,7 +369,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	}
 
 	dout(30, "osdmap_decode done %p %p\n", *p, end);
-	BUG_ON(*p < end);
+	/* ignore trailing bits of crush map */
+	/* BUG_ON(*p < end); */
 
 	return map;
 
@@ -447,7 +449,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 		struct ceph_entity_addr addr;
 		if ((err = ceph_decode_32(p, end, &osd)) < 0)
 			goto bad;
-		if ((err = ceph_decode_addr(p, end, &addr)) < 0)
+		if ((err = ceph_decode_copy(p, end, &addr, 
+					    sizeof(addr))) < 0)
 			goto bad;
 		dout(1, "osd%d up\n", osd);
 		BUG_ON(osd >= map->max_osd);

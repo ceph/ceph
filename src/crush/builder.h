@@ -18,8 +18,11 @@ extern int crush_add_rule(struct crush_map *map,
 			  struct crush_rule *rule);
 
 /* buckets */
+extern int crush_get_next_bucket_id(struct crush_map *map);
 extern int crush_add_bucket(struct crush_map *map,
+			    int bucketno,
 			    struct crush_bucket *bucket);
+struct crush_bucket *crush_make_bucket(int alg, int type, int size, int *items, int *weights);
 
 struct crush_bucket_uniform *
 crush_make_uniform_bucket(int type, int size,

@@ -13,26 +13,32 @@
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
+extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 
 extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
-		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))		\
+		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))		\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 #define derr(x, args...) do {					   \
-		if (x <= (ceph_debug ? ceph_debug : DOUT_VAR))	   \
+		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))	   \
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 	} while (0)
 
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
-#define CEPH_BLKSIZE	4096
-
 #define CACHE_HZ		(1*HZ)
+
+#define IPQUADPORT(n)							\
+	(unsigned int)((n.sin_addr.s_addr)>>24)&0xFF,			\
+		(unsigned int)((n.sin_addr.s_addr)>>16)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>8)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)&0xFF),		\
+		(unsigned int)(ntohs(n.sin_port))
 
 /*
  * mount options
@@ -252,12 +258,7 @@ static inline int calc_pages_for(int len, int off)
 	int nr = 0;
 	if (len == 0)
 		return 0;
-	if (off + len < PAGE_SIZE)
-		return 1;
-	if (off) {
-		nr++;
-		len -= off;
-	}
+	len += off & ~PAGE_MASK;
 	nr += len >> PAGE_SHIFT;
 	if (len & ~PAGE_MASK)
 		nr++;
@@ -304,6 +305,8 @@ extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 			    struct nameidata *nd);
 extern int ceph_release(struct inode *inode, struct file *filp);
+extern int ceph_inode_revalidate(struct dentry *dentry);
+
 
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
@@ -315,6 +318,9 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct dentry **lastdentry);
 extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
 				      struct ceph_mds_reply_info *prinfo);
+extern void ceph_touch_dentry(struct dentry *dentry);
 
+/* proc.c */
+extern void ceph_fs_proc_init(void);
 
 #endif /* _FS_CEPH_CEPH_H */

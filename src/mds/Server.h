@@ -114,18 +114,6 @@ public:
   void handle_client_opent(MDRequest *mdr);  // O_TRUNC variant.
   void _do_open(MDRequest *mdr, CInode *ref);
 
-  set<CInode*> journal_open_queue; // to be journal
-  list<Context*> journal_open_waiters;
-  void queue_journal_open(CInode *in);
-  void add_journal_open_waiter(Context *c) {
-    journal_open_waiters.push_back(c);
-  }
-  void maybe_journal_opens() {
-    if (journal_open_queue.size() >= (unsigned)g_conf.mds_log_eopen_size)
-      journal_opens();
-  }
-  void journal_opens();
-
   // namespace changes
   void handle_client_mknod(MDRequest *mdr);
   void handle_client_mkdir(MDRequest *mdr);

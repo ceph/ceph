@@ -7,9 +7,8 @@
 #ifndef _CEPH_BYTEORDER_H
 #define _CEPH_BYTEORDER_H
 
-typedef __u64 __le64;
-typedef __u32 __le32;
-typedef __u16 __le16;
+// type-safe?
+#define CEPH_TYPE_SAFE_BYTEORDER
 
 static __inline__ __u16 swab16(__u16 val) 
 {
@@ -34,7 +33,35 @@ static __inline__ __u64 swab64(__u64 val)
 	  ((val << 56)));
 }
 
-#ifdef WORDS_BIGENDIAN
+#ifdef CEPH_TYPE_SAFE_BYTEORDER
+
+struct __le64 { __u64 v; } __attribute__ ((packed));
+struct __le32 { __u32 v; } __attribute__ ((packed));
+struct __le16 { __u16 v; } __attribute__ ((packed));
+
+#if __BYTEORDER == __BIG_ENDIAN
+static inline __le64 cpu_to_le64(__u64 v) {  __le64 r = { swab64(v) };  return r; }
+static inline __le32 cpu_to_le32(__u32 v) {  __le32 r = { swab32(v) };  return r; }
+static inline __le16 cpu_to_le16(__u16 v) {  __le16 r = { swab16(v) };  return r; }
+static inline __u64 le64_to_cpu(__le64 v) { return swab64(v.v); }
+static inline __u32 le32_to_cpu(__le32 v) { return swab32(v.v); }
+static inline __u16 le16_to_cpu(__le16 v) { return swab16(v.v); }
+#else
+static inline __le64 cpu_to_le64(__u64 v) {  __le64 r = { v };  return r; }
+static inline __le32 cpu_to_le32(__u32 v) {  __le32 r = { v };  return r; }
+static inline __le16 cpu_to_le16(__u16 v) {  __le16 r = { v };  return r; }
+static inline __u64 le64_to_cpu(__le64 v) { return v.v; }
+static inline __u32 le32_to_cpu(__le32 v) { return v.v; }
+static inline __u16 le16_to_cpu(__le16 v) { return v.v; }
+#endif
+
+#else
+
+typedef __u64 __le64;
+typedef __u32 __le32;
+typedef __u16 __le16;
+
+#if __BYTEORDER == __BIG_ENDIAN
 # define cpu_to_le64(x) swab64((x))
 # define le64_to_cpu(x) swab64((x))
 # define cpu_to_le32(x) swab32((x))
@@ -48,6 +75,8 @@ static __inline__ __u64 swab64(__u64 val)
 # define le32_to_cpu(x) ((__u32)(x))
 # define cpu_to_le16(x) ((__u16)(x))
 # define le16_to_cpu(x) ((__u16)(x))
+#endif
+
 #endif
 
 #endif

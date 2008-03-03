@@ -30,10 +30,11 @@ using namespace __gnu_cxx;
 #include "nodes.h"
 #include "Allocator.h"
 #include "Table.h"
-#include "Journal.h"
+#include "osd/Journal.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/Finisher.h"
 
 #include "osd/ObjectStore.h"
 
@@ -208,36 +209,7 @@ protected:
   int attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
 		   Cond *will_wait_on, bool *will_wait_on_bool);
 
-  // ** finisher **
-  // async write notification to users
-  Mutex          finisher_lock;
-  Cond           finisher_cond;
-  bool           finisher_stop;
-  list<Context*> finisher_queue;
-
-public:
-  void queue_finisher(Context *c) {
-    finisher_lock.Lock();
-    finisher_queue.push_back(c);
-    finisher_cond.Signal();
-    finisher_lock.Unlock();
-  }
-  void queue_finishers(list<Context*>& ls) {
-    finisher_lock.Lock();
-    finisher_queue.splice(finisher_queue.end(), ls);
-    finisher_cond.Signal();
-    finisher_lock.Unlock();
-  }
-protected:
-
-  void *finisher_thread_entry();
-  class FinisherThread : public Thread {
-    Ebofs *ebofs;
-  public:
-    FinisherThread(Ebofs *e) : ebofs(e) {}
-    void* entry() { return (void*)ebofs->finisher_thread_entry(); }
-  } finisher_thread;
-
+  Finisher finisher;
 
   void alloc_more_node_space();
 
@@ -261,8 +233,7 @@ protected:
     cnode_lru(g_conf.ebofs_cc_size),
     inodes_flushing(0),
     bc(dev, ebofs_lock),
-    idle_kicker(this),
-    finisher_stop(false), finisher_thread(this) {
+    idle_kicker(this) {
     for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
       free_tab[i] = 0;
     if (jfn) {

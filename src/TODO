@@ -1,43 +1,37 @@
-
-some smallish projects:
-
-- userspace crush tools
- - xml import/export?  
-
-- generalize monitor client?
- - throttle message resend attempts
-
-- ENOSPC on client, OSD
-
+gsoc?
+- cas
+- libbtrfs objectstore
+- osdmap/crush gui
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
-  - endian macros
   - use le32 etc annotation
-  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
-  - specify word size in all encoded structures
-
-
+  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
+- addr=?
+- fix ceph_lookup_open
 
 kernel client
+- some bugs
+ - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
+ - cap handler probably needs i_mutex or something when updating file sizes
+   - which means it probably needs to be done in a different worker thread (NOT the messenger's)
+ - prevent client_reply from racing against a subsequent file_caps.
+- proc.c
+  - adjust granular debug levels too
+    - should we be using debugfs?
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
+- fix 32bit inode handling
+  - see nfs_fhget, nfs_find_actor as reference for allowing multiple inodes with the same i_ino
 - audit locking
 - audit use of kmalloc vs spinlocks
-- convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
+- convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
- - generate paths relative to the appropriate vfsmount root?
- - getattr should do an lstat?
- - d_revalidate?
- - test truncate
- - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
-- is ino_t really still 32 bits on i386??  hrm!
+ - can we use dentry_path(), if it gets merged into mainline?
 - fix file open vs file_cap race
   - preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
-/  - handle file caps, ack back to mds, etc. 
-    - actually flush dirty data, too
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
   - readpages (readahead)
@@ -51,6 +45,7 @@ kernel client
 - unmount
 /  - close open file handles, mds sessions
     - flush data before unmount.
+  - send (+deliver!) unmount message
 
 osdmon
 - allow fresh replacement osds.  add osd_created in osdmap, probably
@@ -60,7 +55,7 @@ osdmon
 
 crush
 - xml import/export?
- - named storage "pools"
+ - named storage "pools"?
  - generic rule definition
 - crush tools
 - more efficient failure when all/too many osds are down
@@ -76,7 +71,10 @@ mon
 
 
 mds mustfix
-- journal cap mtime/size updates
+- fix cap release size/mtime vs new open race
+  - mtime/size update should hold FileLock in writing state until
+    things are flushed to the log...?
+    - take "wr" reference ala ScatterLock et al?
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
@@ -84,34 +82,19 @@ mds mustfix
 
 - rerun destro trace against latest, with various journal lengths
 
-- EOpen vs other journal events... update ordering problem?
-
 mds
-- client cap timeouts
-/  - stale -> resume
-  - tolerate connection break
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
-  
+- fix file_data_version
+- on recovery, validate file sizes when max_size > size
 
-
-- extend/clean up filepath to allow paths relative to an ino
-/  - fix path_traverse
-  - fix reconnect/rejoin open file weirdness
-- real chdir (directory "open")
-  - relative metadata ops
+- fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-- detect and deal with client failure
-  - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
+- failure during reconnect vs clientmap.  
 
-- inode.rmtime (recursive mtime)
-- make inode.size reflect directory size (number of entries)
+- inode.rmtime (recursive mtime)?
+- make inode.size reflect directory size (number of entries)?
 
-- inode.max_size
-- inode.allocated_size
- 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
 - could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
@@ -130,17 +113,17 @@ mds
   - and dir sizes, if i add that... also on rejoin?
 
 - efficient stat for single writers
-- lstat vs stat?
 - add FILE_CAP_EXTEND capability bit
-- delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 
 
 client
+- obey file_max
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
-- fstat
 
 
 
@@ -153,10 +136,15 @@ journaler
 - need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
+fsck
+- fsck.ebofs
+- online mds fsck?
+- object backpointer attrs to hint catastrophic reconstruction?
+
 
 
 rados snapshots
-- integrate revisions into ObjectCacher
+- integrate revisions into ObjectCacher?
 - clean up oid.rev vs op.rev in osd+osdc
 
 - attr.crev is rev we were created in.
@@ -171,12 +159,6 @@ rados snapshots
 - read is tagged with op.rev
   - if 0, we read from 0 (if it exists).
   - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
-
-- how to get usage feedback to monitor?
-
-- clean up mds caps release in exporter
-- figure out client failure modes
-- add connection retry.
 
 
 objecter
@@ -225,6 +207,7 @@ messenger
 - fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
+- fix/audit accept() logic to detect reset, do callback
 - close idle connections
 - take a look at RDS?  http://oss.oracle.com/projects/rds/
 
@@ -289,32 +272,4 @@ ebofs
 
 remaining hard problems
 - how to cope with file size changes and read/write sharing
-
-
-
-
-
-
-
-
-
-
-
-
-
-why qsync could be wrong (for very strict POSIX) : varying mds -> client message transit or processing times.
-- mds -> 1,2 : qsync
-- client1 writes at byte 100
-- client1 -> mds : qsync reply (size=100)
-- client1 writes at byte 300
-- client1 -> client2 (outside channel)
-- client2 writes at byte 200
-- client2 -> mds : qsync reply (size=200)
--> stat results in size 200, even though at no single point in time was the max size 500.
--> for correct result, need to _stop_ client writers while gathering metadata.
-
-
-- dump active config in run output somewhere
-
-
 

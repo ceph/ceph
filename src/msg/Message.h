@@ -122,8 +122,8 @@ protected:
 public:
   Message() { };
   Message(int t) {
-    env.type = t;
-    env.data_off = 0;
+    env.type = cpu_to_le32(t);
+    env.data_off = cpu_to_le32(0);
   }
   virtual ~Message() { }
 
@@ -147,27 +147,27 @@ public:
   // ENVELOPE ----
 
   // type
-  int get_type() { return env.type; }
-  void set_type(int t) { env.type = t; }
+  int get_type() { return le32_to_cpu(env.type); }
+  void set_type(int t) { env.type = cpu_to_le32(t); }
 
-  unsigned get_seq() { return env.seq; }
-  void set_seq(unsigned s) { env.seq = s; }
+  unsigned get_seq() { return le64_to_cpu(env.seq); }
+  void set_seq(unsigned s) { env.seq = cpu_to_le64(s); }
 
   // source/dest
-  entity_inst_t& get_dest_inst() { return *(entity_inst_t*)&env.dst; }
-  void set_dest_inst(entity_inst_t& inst) { env.dst = *(ceph_entity_inst*)&inst; }
+  entity_inst_t get_dest_inst() { return entity_inst_t(env.dst); }
+  void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
 
-  entity_inst_t& get_source_inst() { return *(entity_inst_t*)&env.src; }
-  void set_source_inst(entity_inst_t& inst) { env.src = *(ceph_entity_inst*)&inst; }
+  entity_inst_t get_source_inst() { return entity_inst_t(env.src); }
+  void set_source_inst(entity_inst_t& inst) { env.src = inst; }
 
-  entity_name_t& get_dest() { return *(entity_name_t*)&env.dst.name; }
-  void set_dest(entity_name_t a) { env.dst.name = *(ceph_entity_name*)&a; }
+  entity_name_t get_dest() { return entity_name_t(env.dst.name); }
+  void set_dest(entity_name_t a) { env.dst.name = a; }
   
-  entity_name_t& get_source() { return *(entity_name_t*)&env.src.name; }
-  void set_source(entity_name_t a) { env.src.name = *(ceph_entity_name*)&a; }
+  entity_name_t get_source() { return entity_name_t(env.src.name); }
+  void set_source(entity_name_t a) { env.src.name = a; }
 
-  entity_addr_t& get_source_addr() { return *(entity_addr_t*)&env.src.addr; }
-  void set_source_addr(const entity_addr_t &i) { env.src.addr = *(ceph_entity_addr*)&i; }
+  entity_addr_t get_source_addr() { return entity_addr_t(env.src.addr); }
+  void set_source_addr(const entity_addr_t &i) { env.src.addr = i; }
 
   // virtual bits
   virtual void decode_payload() = 0;

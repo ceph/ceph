@@ -2,6 +2,8 @@
 # Makefile for CEPH filesystem.
 #
 
+ifneq ($(KERNELRELEASE),)
+
 obj-$(CONFIG_CEPH_FS) += ceph.o
 
 ceph-objs := super.o inode.o dir.o file.o addr.o \
@@ -9,4 +11,17 @@ ceph-objs := super.o inode.o dir.o file.o addr.o \
 	client.o \
 	mds_client.o mdsmap.o \
 	mon_client.o \
-	osd_client.o osdmap.o crush/crush.o crush/mapper.o
+	osd_client.o osdmap.o crush/crush.o crush/mapper.o \
+	proc.o
+
+else
+#Otherwise we were called directly from the command
+# line; invoke the kernel build system.
+
+	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+	PWD := $(shell pwd)
+
+default:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
+endif

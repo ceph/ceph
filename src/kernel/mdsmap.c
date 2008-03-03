@@ -109,7 +109,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		if (mds >= m->m_max_mds)
 			goto bad;
 		*p += sizeof(struct ceph_entity_name);
-		if ((err = ceph_decode_addr(p, end, &m->m_addr[mds])) != 0)
+		if ((err = ceph_decode_copy(p, end, &m->m_addr[mds],
+					    sizeof(*m->m_addr))) != 0)
 			goto bad;
 	}
 

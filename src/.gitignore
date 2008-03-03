@@ -8,6 +8,8 @@ dupstore
 fakefuse
 fakesyn
 mkmonmap
+monmaptool
+crushtool
 newsyn
 dev
 mondata

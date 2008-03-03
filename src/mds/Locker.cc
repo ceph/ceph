@@ -27,6 +27,7 @@
 
 #include "events/EString.h"
 #include "events/EUpdate.h"
+#include "events/EOpen.h"
 
 #include "msg/Messenger.h"
 
@@ -451,7 +452,9 @@ struct C_Locker_FileUpdate_finish : public Context {
   LogSegment *ls;
   bool share;
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, LogSegment *s, bool e=false) : 
-    locker(l), in(i), ls(s), share(e) {}
+    locker(l), in(i), ls(s), share(e) {
+    in->get(CInode::PIN_PTRWAITER);
+  }
   void finish(int r) {
     in->pop_and_dirty_projected_inode(ls);
     in->put(CInode::PIN_PTRWAITER);
@@ -517,11 +520,12 @@ Capability* Locker::issue_new_caps(CInode *in,
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
     pi->max_size = new_max;
-    EUpdate *le = new EUpdate(mds->mdlog, "max_size increase on open");
+    EOpen *le = new EOpen(mds->mdlog);
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
-    in->get(CInode::PIN_PTRWAITER);
+    le->add_ino(in->ino());
+    ls->open_files.push_back(&in->xlist_open_file);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
   }
   
@@ -632,7 +636,9 @@ class C_MDL_RequestInodeFileCaps : public Context {
   Locker *locker;
   CInode *in;
 public:
-  C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {}
+  C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {
+    in->get(CInode::PIN_PTRWAITER);
+  }
   void finish(int r) {
     in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
@@ -678,7 +684,6 @@ void Locker::request_inode_file_caps(CInode *in)
 
     // wait for single auth
     if (in->is_ambiguous_auth()) {
-      in->get(CInode::PIN_PTRWAITER);
       in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
 		     new C_MDL_RequestInodeFileCaps(this, in));
       return;
@@ -734,8 +739,9 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
 
 
-
-
+/*
+ * helper: journal size, max_size, mtime, atime updates, as needed.
+ */
 void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr, 
 					int64_t size, utime_t mtime, utime_t atime)
 {
@@ -773,6 +779,11 @@ void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr,
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
     inode_t *pi = in->project_inode();
+    /*
+     * FIXME HACK: set current inode too, until we get
+     *  FileLock to grab a reference here or some such
+     *  thing...
+     */
     pi->version = in->pre_dirty();
     if (no_wr) {
       dout(7) << " last wr-wanted cap, max_size=0" << dendl;
@@ -781,27 +792,26 @@ void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr,
       int64_t inc = in->get_layout_size_increment();
       int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
-      pi->max_size = new_max;
+      in->inode.max_size = pi->max_size = new_max;
     }    
     if (mtime > latest->mtime) {
       dout(7) << "  taking mtime " << mtime << " > " 
 	      << in->inode.mtime << " for " << *in << dendl;
-      pi->mtime = mtime;
+      in->inode.mtime = pi->mtime = mtime;
     }
     if (size > latest->size) {
       dout(7) << "  taking size " << size << " > " 
 	      << in->inode.size << " for " << *in << dendl;
-      pi->size = size;
+      in->inode.size = pi->size = size;
     }
     if (atime > latest->atime) {
       dout(7) << "  taking atime " << atime << " > " 
 	      << in->inode.atime << " for " << *in << dendl;
-      pi->atime = atime;
+      in->inode.atime = pi->atime = atime;
     }
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
-    in->get(CInode::PIN_PTRWAITER);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls));
   }
 }
@@ -1555,7 +1565,9 @@ class C_Locker_ScatterEval : public Context {
   Locker *locker;
   ScatterLock *lock;
 public:
-  C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {}
+  C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);
+  }
   void finish(int r) {
     lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_scatter_eval(lock);
@@ -1570,7 +1582,6 @@ void Locker::try_scatter_eval(ScatterLock *lock)
       lock->get_parent()->is_ambiguous_auth()) {
     dout(7) << "try_scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->get(CInode::PIN_PTRWAITER);
     lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
     return;
   }
@@ -1583,7 +1594,6 @@ void Locker::try_scatter_eval(ScatterLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->get(CInode::PIN_PTRWAITER);
     lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_ScatterEval(this, lock));
     return;
   }
@@ -2372,7 +2382,9 @@ class C_Locker_FileEval : public Context {
   Locker *locker;
   FileLock *lock;
 public:
-  C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {}
+  C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {
+    lock->get_parent()->get(CInode::PIN_PTRWAITER);    
+  }
   void finish(int r) {
     lock->get_parent()->put(CInode::PIN_PTRWAITER);
     locker->try_file_eval(lock);
@@ -2388,7 +2400,6 @@ void Locker::try_file_eval(FileLock *lock)
       in->is_ambiguous_auth()) {
     dout(7) << "try_file_eval not stable and ambiguous auth, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->get(CInode::PIN_PTRWAITER);
     in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
     return;
   }
@@ -2401,7 +2412,6 @@ void Locker::try_file_eval(FileLock *lock)
   if (!lock->get_parent()->can_auth_pin()) {
     dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << dendl;
     //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->get(CInode::PIN_PTRWAITER);
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_FileEval(this, lock));
     return;
   }

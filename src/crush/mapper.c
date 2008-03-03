@@ -173,7 +173,7 @@ static int crush_choose(struct crush_map *map,
 			do {
 				retry_bucket = 0;
 				r = rep;
-				if (in->bucket_type == CRUSH_BUCKET_UNIFORM) {
+				if (in->alg == CRUSH_BUCKET_UNIFORM) {
 					/* be careful */
 					if (firstn || numrep >= in->size) 
 						r += ftotal;           /* r' = r + f_total */
@@ -189,7 +189,7 @@ static int crush_choose(struct crush_map *map,
 				}
 
 				/* bucket choose */
-				switch (in->bucket_type) {
+				switch (in->alg) {
 				case CRUSH_BUCKET_UNIFORM:
 					item = crush_bucket_uniform_choose((struct crush_bucket_uniform*)in, x, r);
 					break;

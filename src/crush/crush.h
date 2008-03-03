@@ -17,10 +17,12 @@ extern "C" {
 
 /*** RULES ***/
 enum {
-	CRUSH_RULE_TAKE,
-	CRUSH_RULE_CHOOSE_FIRSTN,
-	CRUSH_RULE_CHOOSE_INDEP,
-	CRUSH_RULE_EMIT
+	CRUSH_RULE_NOOP = 0,
+	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */
+	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */
+	                              /* arg2 = type */
+	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */ 
+	CRUSH_RULE_EMIT = 4           /* no args */
 };
 
 #define CRUSH_MAX_DEPTH 10
@@ -53,7 +55,7 @@ enum {
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
 	__u16 type;
-	__u16 bucket_type;
+	__u16 alg;
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;

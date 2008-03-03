@@ -2,6 +2,7 @@
 #include <linux/err.h>
 #include <asm/uaccess.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>     /* kmap, kunmap */
 
 int ceph_debug_osdc = 50;
 #define DOUT_VAR ceph_debug_osdc
@@ -12,6 +13,14 @@ int ceph_debug_osdc = 50;
 #include "messenger.h"
 #include "crush/mapper.h"
 
+static int do_ceph_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                         struct ceph_file_layout *layout, 
+                         loff_t off, loff_t len,
+                         struct page *page);
+static int do_ceph_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                         struct ceph_file_layout *layout, 
+                         loff_t off, loff_t len,
+                         char *write_data);
 
 void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 {
@@ -144,9 +153,9 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op)
 
 	/* encode head */
 	head->op = cpu_to_le32(op);
-	ceph_encode_inst(&head->client_inst, &osdc->client->msgr->inst);
+	head->client_inst = osdc->client->msgr->inst;
 	head->client_inc = 1; /* always, for now. */
-	
+
 	return req;
 }
 
@@ -187,7 +196,7 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	/* choose dest */
 	switch (req->r_pgid.pg.type) {
 	case CEPH_PG_TYPE_REP:
-		rule = CRUSH_REP_RULE(req->r_pgid.pg.size);
+		rule = CRUSH_REP_RULE(req->r_pgid.pg.size, req->r_pgid.pg.pool);
 		break;
 	default:
 		BUG_ON(1);
@@ -201,8 +210,8 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	}
 	if (i < nr_osds) {
 		dout(10, "send_request %p tid %llu to osd%d flags %d\n", req, req->r_tid, osds[i], req->r_flags);
-		req->r_request->hdr.dst.name.type = CEPH_ENTITY_TYPE_OSD;
-		req->r_request->hdr.dst.name.num = osds[i];
+		req->r_request->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
+		req->r_request->hdr.dst.name.num = cpu_to_le32(osds[i]);
 		req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
 		ceph_msg_get(req->r_request); /* send consumes a ref */
 		ceph_msg_send(osdc->client->msgr, req->r_request, 0);
@@ -268,9 +277,10 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	struct ceph_osd_request *req;
 	__u64 tid;
 	int ret = -1;
+	int type = le32_to_cpu(m->hdr.type);
 
 	dout(10, "prepare_pages on msg %p want %d\n", m, want);
-	if (unlikely(le32_to_cpu(m->hdr.type) != CEPH_MSG_OSD_OPREPLY))
+	if (unlikely(type != CEPH_MSG_OSD_OPREPLY))
 		return -1;  /* hmm! */
 
 	tid = le64_to_cpu(rhead->tid);
@@ -302,53 +312,9 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 		       loff_t off, loff_t len,
 		       struct page *page)
 {
-	struct ceph_msg *reqm, *reply;
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_osd_request *req;
-	struct ceph_osd_reply_head *replyhead;
-
-	dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
-
-	/* request msg */
-	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
-	if (IS_ERR(reqm))
-		return PTR_ERR(reqm);
-	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	BUG_ON(len != 0);
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	/* register+send request */
-	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1);
-	if (IS_ERR(req)) {
-		ceph_msg_put(reqm);
-		spin_unlock(&osdc->lock);
-		return PTR_ERR(req);
-	}
-	req->r_pages[0] = page;
-	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	send_request(osdc, req);
-	spin_unlock(&osdc->lock);
-	
-	/* wait */
-	dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
-
-	spin_lock(&osdc->lock);
-	unregister_request(osdc, req);
-	spin_unlock(&osdc->lock);
-
-	reply = req->r_reply;
-	replyhead = reply->front.iov_base;
-	dout(10, "readpage result %d\n", replyhead->result);
-	ceph_msg_put(reply);
-	put_request(req);
+	int ret = do_ceph_read(osdc, ino, layout, off, len, page);
+	if (ret < 0)
+		return ret;
 	return 0;
 }
 
@@ -436,16 +402,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 /*
  * silly hack.
  */
-static int calc_bits_of(unsigned t) 
-{
-	int b = 0;
-	while (t) {
-		t = t >> 1;
-		b++;
-	}
-	return b;
-}
-
 int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			  struct ceph_file_layout *layout, 
 			  __u64 len, __u64 off, const char __user *data)
@@ -490,9 +446,8 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 
 	/* data into a set of pages */
-	req->r_pages[0] = alloc_pages(GFP_KERNEL, calc_bits_of(nrp));
-	for (i=1; i<nrp; i++)
-		req->r_pages[i] = req->r_pages[i-1]+1;
+	for (i=0; i<nrp; i++)
+		req->r_pages[i] = alloc_page(GFP_KERNEL);
 	left = len;
 	po = off & ~PAGE_MASK;
 	for (i=0; i<nrp; i++) {
@@ -504,8 +459,8 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 	req->r_request->pages = req->r_pages;
 	req->r_request->nr_pages = req->r_nr_pages;
-	req->r_request->hdr.data_len = len;
-	req->r_request->hdr.data_off = off;
+	req->r_request->hdr.data_len = cpu_to_le32(len);
+	req->r_request->hdr.data_off = cpu_to_le32(off);
 
 	reqhead->osdmap_epoch = osdc->osdmap->epoch;
 	send_request(osdc, req);
@@ -526,4 +481,252 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	ceph_msg_put(reply);
 	put_request(req);
 	return (int)len;
+}
+
+
+
+/*
+ * Make a page up to date to be written later to remote OSDs
+ */
+int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                      struct ceph_file_layout *layout, 
+                      loff_t off, loff_t len,
+                      struct page *page)
+{
+       int rc;
+       char *read_data;
+
+       dout(10, "osdc_prepare_write on ino %llx at %lld~%lld\n", ino, off, len);
+
+       get_page(page);
+       read_data = kmap(page);
+
+       /*
+        *  1. Read a page by calling ceph_osdc_readpage()
+        *  2. Fill the rest bytes by 0, to align by PAGE_SIZE
+        */
+
+       rc = do_ceph_read(osdc, ino, layout, off, len, page);
+       if (rc < 0)
+               goto io_error;
+
+       if (rc < PAGE_SIZE)
+               memset(read_data + rc, 0, PAGE_SIZE - rc);
+
+       SetPageUptodate(page);
+
+       rc = 0;
+
+io_error:
+       kunmap(page);
+       put_page(page);
+       return rc;
+}
+
+/*
+ * Mark a page as dirty to be written into remote OSDs
+ */
+int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                      struct ceph_file_layout *layout, 
+                      loff_t off, loff_t len,
+                      struct page *page)
+{
+       char *write_data;
+       int ret = 0;
+
+       dout(10, "osdc_commit_write on ino %llx at %lld~%lld\n", ino, off, len);
+
+       /*
+        * if it is not up-to-date, then force it to be so.
+        */
+
+       write_data = kmap(page);
+       write_data += off;
+
+       if (len > PAGE_SIZE) {
+               kunmap(page);
+               return -EIO;
+       }
+
+       ret = do_ceph_write(osdc, ino, layout, off, len, write_data);
+       if (ret) {
+               kunmap(page);
+               return ret;
+       }
+
+       kunmap(page);
+       return ret;
+}
+
+/*
+ * Do write a single page, sending data to remote OSDs.
+ */
+int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                         struct ceph_file_layout *layout, 
+                         loff_t off, loff_t len,
+                         struct page *page)
+{
+       int ret = 0;
+       char *write_data;
+
+       dout(10, "ceph_osdc_writepage on ino %llx at %lld~%lld\n", ino, off, len);
+
+       write_data = kmap(page);
+       write_data += off;
+
+       if (len > PAGE_SIZE) {
+               kunmap(page);
+               return -EIO;
+       }
+
+       ret = do_ceph_write(osdc, ino, layout, off, len, write_data);
+       if (ret) {
+               kunmap(page);
+               return ret;
+       }
+
+       kunmap(page);
+       return ret;
+}
+
+
+/*
+ * do a read job for one page
+ */
+static int do_ceph_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                         struct ceph_file_layout *layout, 
+                         loff_t off, loff_t len,
+                         struct page *page)
+{
+       struct ceph_msg *reqm, *reply;
+       struct ceph_osd_request_head *reqhead;
+       struct ceph_osd_request *req;
+       struct ceph_osd_reply_head *replyhead;
+
+       dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
+
+       /* request msg */
+       reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
+       if (IS_ERR(reqm))
+               return PTR_ERR(reqm);
+       reqhead = reqm->front.iov_base;
+       reqhead->oid.ino = ino;
+       reqhead->oid.rev = 0;
+       calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
+                                &reqhead->offset, &reqhead->length);
+       BUG_ON(len != 0);
+       calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
+       dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
+       
+       /* register+send request */
+       spin_lock(&osdc->lock);
+       req = register_request(osdc, reqm, 1);
+       if (IS_ERR(req)) {
+               ceph_msg_put(reqm);
+               spin_unlock(&osdc->lock);
+               return PTR_ERR(req);
+       }
+       req->r_pages[0] = page;
+       reqhead->osdmap_epoch = osdc->osdmap->epoch;
+       send_request(osdc, req);
+       spin_unlock(&osdc->lock);
+       
+       /* wait */
+       dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
+       wait_for_completion(&req->r_completion);
+       dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
+
+       spin_lock(&osdc->lock);
+       unregister_request(osdc, req);
+       spin_unlock(&osdc->lock);
+
+       reply = req->r_reply;
+       replyhead = reply->front.iov_base;
+       dout(10, "readpage result %d\n", replyhead->result);
+       ceph_msg_put(reply);
+       put_request(req);
+
+       return 0;
+}
+
+/*
+ * do a write job for one page
+ */
+static int do_ceph_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                         struct ceph_file_layout *layout, 
+                         loff_t off, loff_t len,
+                         char *write_data)
+{
+       struct ceph_msg *reqm, *reply;
+       struct ceph_osd_request_head *reqhead;
+       struct ceph_osd_request *req;
+       struct ceph_osd_reply_head *replyhead;
+       __u64 toff = off, tlen = len;
+       int po, l;
+       int ret = 0;
+
+       /* request msg */
+       reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
+       if (IS_ERR(reqm))
+               return PTR_ERR(reqm);
+       reqhead = reqm->front.iov_base;
+       reqhead->oid.ino = ino;
+       reqhead->oid.rev = 0;
+       reqhead->flags = CEPH_OSD_OP_ACK|CEPH_OSD_OP_SAFE;  /* want them both */
+       calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
+                                &reqhead->offset, &reqhead->length);
+       if (tlen != 0) {
+               dout(10, "not writing complete bit.. skipping last %llu, doing %llu~%llu\n", tlen, off, len);
+               len -= tlen;
+       }
+       calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
+       dout(10, "osdc_writepage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
+       
+       /* register+send request */
+       spin_lock(&osdc->lock);
+       req = register_request(osdc, reqm, 1);
+       if (IS_ERR(req)) {
+               ceph_msg_put(reqm);
+               spin_unlock(&osdc->lock);
+               return PTR_ERR(req);
+       }
+
+       /* copy data into a page in a request message */
+       req->r_pages[0] = alloc_pages(GFP_KERNEL, 1);
+       po = off & ~PAGE_MASK;
+
+       l = min_t(int, PAGE_SIZE-po, len);
+       if (copy_from_user(page_address(req->r_pages[0]) + po, write_data, l)) {
+               ret = -EFAULT;
+               goto out;
+       }
+
+       req->r_request->pages = req->r_pages;
+       req->r_request->nr_pages = req->r_nr_pages;
+       req->r_request->hdr.data_len = len;
+       req->r_request->hdr.data_off = off;
+
+       reqhead->osdmap_epoch = osdc->osdmap->epoch;
+       send_request(osdc, req);
+       spin_unlock(&osdc->lock);
+       
+       /* wait */
+       dout(10, "writepage tid %llu waiting for reply on %p\n", req->r_tid, req);
+       wait_for_completion(&req->r_completion);
+       dout(10, "writepage tid %llu got reply on %p\n", req->r_tid, req);
+
+       spin_lock(&osdc->lock);
+       unregister_request(osdc, req);
+       spin_unlock(&osdc->lock);
+
+       reply = req->r_reply;
+       replyhead = reply->front.iov_base;
+       dout(10, "writepage result %d, returning %d\n", replyhead->result, (int)len);
+       ceph_msg_put(reply);
+       put_request(req);
+
+       ret = len;
+
+out:
+       return ret;
 }

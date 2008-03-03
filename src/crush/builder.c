@@ -96,17 +96,29 @@ void crush_rule_set_step(struct crush_rule *rule, int n, int op, int arg1, int a
 
 
 /** buckets **/
+int crush_get_next_bucket_id(struct crush_map *map)
+{
+	int pos;
+	for (pos=0; pos < map->max_buckets; pos++)
+		if (map->buckets[pos] == 0) 
+			break;
+	return -1 - pos;
+}
+
 
 int crush_add_bucket(struct crush_map *map,
+		     int id,
 		     struct crush_bucket *bucket)
 {
-	int id;
 	int oldsize;
-	
+	int pos;
+
 	/* find a bucket id */
-	for (id=0; id < map->max_buckets; id++)
-		if (map->buckets[id] == 0) break;
-	if (id == map->max_buckets) {
+	if (id == 0) 
+		id = crush_get_next_bucket_id(map);
+	pos = -1 - id;
+
+	if (pos == map->max_buckets) {
 		/* expand array */
 		oldsize = map->max_buckets;
 		if (map->max_buckets)
@@ -116,11 +128,12 @@ int crush_add_bucket(struct crush_map *map,
 		map->buckets = realloc(map->buckets, map->max_buckets * sizeof(map->buckets[0]));
 		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));
 	}
-	
+	assert(map->buckets[pos] == 0);
+
 	/* add it */
-	bucket->id = -1 - id;
-	map->buckets[id] = bucket;
-	return -1 - id;
+	bucket->id = id;
+	map->buckets[pos] = bucket;
+	return id;
 }
 
 
@@ -136,7 +149,7 @@ crush_make_uniform_bucket(int type, int size,
 	
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
-	bucket->h.bucket_type = CRUSH_BUCKET_UNIFORM;
+	bucket->h.alg = CRUSH_BUCKET_UNIFORM;
 	bucket->h.type = type;
 	bucket->h.size = size;
 	bucket->h.weight = size * item_weight;
@@ -180,7 +193,7 @@ crush_make_list_bucket(int type, int size,
 
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
-	bucket->h.bucket_type = CRUSH_BUCKET_LIST;
+	bucket->h.alg = CRUSH_BUCKET_LIST;
 	bucket->h.type = type;
 	bucket->h.size = size;
 	
@@ -237,7 +250,7 @@ crush_make_tree_bucket(int type, int size,
 	
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
-	bucket->h.bucket_type = CRUSH_BUCKET_TREE;
+	bucket->h.alg = CRUSH_BUCKET_TREE;
 	bucket->h.type = type;
 	bucket->h.size = size;
 
@@ -289,7 +302,7 @@ crush_make_straw_bucket(int type,
 	
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
-	bucket->h.bucket_type = CRUSH_BUCKET_STRAW;
+	bucket->h.alg = CRUSH_BUCKET_STRAW;
 	bucket->h.type = type;
 	bucket->h.size = size;
 	
@@ -361,3 +374,31 @@ crush_make_straw_bucket(int type,
 	return bucket;
 }
 
+
+
+struct crush_bucket*
+crush_make_bucket(int alg, int type, int size,
+		  int *items,
+		  int *weights)
+{
+	int item_weight;
+
+	switch (alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		if (weights)
+			item_weight = weights[0];
+		else
+			item_weight = 0;
+		return (struct crush_bucket *)crush_make_uniform_bucket(type, size, items, item_weight);
+	
+	case CRUSH_BUCKET_LIST:
+		return (struct crush_bucket *)crush_make_list_bucket(type, size, items, weights);
+
+	case CRUSH_BUCKET_TREE:
+		return (struct crush_bucket *)crush_make_tree_bucket(type, size, items, weights);
+		
+	case CRUSH_BUCKET_STRAW:
+		return (struct crush_bucket *)crush_make_straw_bucket(type, size, items, weights);
+	}		
+	return 0;
+}

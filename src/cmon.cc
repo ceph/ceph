@@ -72,7 +72,11 @@ int main(int argc, const char **argv)
     // write monmap
     cout << "writing monmap to " << monmap_fn << std::endl;;
     int r = monmap.write(monmap_fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "couldn't write monmap to " << monmap_fn
+	   << ": " << strerror(errno) << std::endl;
+      return -1;
+    }
   } else {
     // i am specific monitor.
 
@@ -80,7 +84,8 @@ int main(int argc, const char **argv)
     //cout << "reading monmap from " << monmap_fn << std::endl;
     int r = monmap.read(monmap_fn);
     if (r < 0) {
-      cerr << "couldn't read monmap from " << monmap_fn << std::endl;
+      cerr << "couldn't read monmap from " << monmap_fn 
+	   << ": " << strerror(errno) << std::endl;
       return -1;
     }
 

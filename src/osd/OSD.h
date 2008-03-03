@@ -68,8 +68,12 @@ protected:
 public:
   int get_nodeid() { return whoami; }
   
-  static object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
-  static object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
+  static pobject_t get_osdmap_pobject_name(epoch_t epoch) { 
+    return pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0, epoch << 1)); 
+  }
+  static pobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
+    return pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0, (epoch << 1) + 1)); 
+  }
   
 
 private:

@@ -15,8 +15,10 @@
 #ifndef __MONMAP_H
 #define __MONMAP_H
 
+#include <asm/errno.h>
 #include "msg/Message.h"
 #include "include/types.h"
+//#include "config.h"
 
 class MonMap {
  public:
@@ -37,6 +39,40 @@ class MonMap {
   void add_mon(entity_inst_t inst) {
     if (!epoch) epoch = 1;
     mon_inst.push_back(inst);
+  }
+
+  /*
+  int add(const char *a) {
+    entity_addr_t addr;
+    if (!parse_ip_port(a, addr))
+      return -EINVAL;
+    if (contains(addr))
+      return -EEXIST;
+    add(addr);
+  }
+  */
+  void add(entity_addr_t a) {
+    entity_inst_t i;
+    i.addr = a;
+    i.name = entity_name_t::MON(mon_inst.size());
+    mon_inst.push_back(i);
+  }
+  bool remove(entity_addr_t a) {
+    for (unsigned i=0; i<mon_inst.size(); i++) {
+      if (mon_inst[i].addr == a) {
+	for (; i < mon_inst.size()-1; i++) 
+	  mon_inst[i].addr = mon_inst[i+1].addr;
+	mon_inst.pop_back();
+	return true;
+      }
+    }
+    return false;
+  }
+  bool contains(entity_addr_t a) {
+    for (unsigned i=0; i<mon_inst.size(); i++)
+      if (mon_inst[i].addr == a) 
+	return true;
+    return false;
   }
 
   // pick a mon.  
@@ -68,8 +104,8 @@ class MonMap {
 
 
   void generate_fsid() {
-    fsid.major = ((uint64_t)rand() << 32) + rand();
-    fsid.minor = ((uint64_t)rand() << 32) + rand();
+    fsid.major = cpu_to_le64(((uint64_t)rand() << 32) + rand());
+    fsid.minor = cpu_to_le64(((uint64_t)rand() << 32) + rand());
   }
 
   // read from/write to a file

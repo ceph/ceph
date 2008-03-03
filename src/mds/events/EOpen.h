@@ -22,7 +22,6 @@ class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
   list<inodeno_t> inos;
-  //list<inodeno_t> wr_inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   EOpen(MDLog *mdlog) : 
@@ -32,21 +31,25 @@ public:
     out << "EOpen " << metablob;
   }
 
-  void add_inode(CInode *in) {
-    inos.push_back(in->ino());
+  void add_clean_inode(CInode *in) {
     if (!in->is_base()) {
+      inode_t *pi = in->get_projected_inode();
       metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      metablob.add_primary_dentry(in->get_parent_dn(), false);
+      metablob.add_primary_dentry(in->get_parent_dn(), false, 0, pi);
+      inos.push_back(in->ino());
     }
+  }
+  void add_ino(inodeno_t ino) {
+    inos.push_back(ino);
   }
 
   void encode_payload(bufferlist& bl) {
-    ::_encode(inos, bl);
     metablob._encode(bl);
+    ::_encode(inos, bl);
   } 
   void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(inos, bl, off);
     metablob._decode(bl, off);
+    ::_decode(inos, bl, off);
   }
 
   void update_segment();

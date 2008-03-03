@@ -3550,9 +3550,6 @@ bool MDCache::shutdown_pass()
     return true;
   }
 
-  // flush batching eopens, so that we can properly expire them.
-  mds->server->journal_opens();    // hrm, this is sort of a hack.
-
   // flush what we can from the log
   mds->mdlog->set_max_events(0);
   mds->mdlog->trim();

@@ -1258,7 +1258,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       off_t size;
       client->objecter->stat(oid, &size, layout, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
@@ -1271,7 +1271,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       bufferlist bl;
       client->objecter->read(oid, off, len, layout, &bl, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
@@ -1284,7 +1284,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
@@ -1301,7 +1301,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       client->objecter->zero(oid, off, len, layout, 
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg->new_sub());
@@ -1943,7 +1943,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid(0x1000, i);
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.fl_pg_size);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.fl_pg_size, 0);
     
     if (i % inflight == 0) {
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
@@ -2045,7 +2045,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
     object_t oid(0x1000, o);
 
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.fl_pg_size);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, g_OSD_FileLayout.fl_pg_size, 0);
     
     client->client_lock.Lock();
     utime_t start = g_clock.now();

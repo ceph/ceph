@@ -95,8 +95,12 @@ any + statlite(mtime)
 class MDRequest;
 
 class FileLock : public SimpleLock {
+  int num_wrlock;
+
  public:
-  FileLock(MDSCacheObject *o, int t, int wo) : SimpleLock(o, t, wo) { }
+  FileLock(MDSCacheObject *o, int t, int wo) : 
+    SimpleLock(o, t, wo),
+    num_wrlock(0) { }
   
   int get_replica_state() {
     switch (state) {
@@ -154,6 +158,27 @@ class FileLock : public SimpleLock {
     else
       return false;
   }
+
+  // wrlock
+  bool can_wrlock() {
+    return 
+      state == LOCK_LOCK || state == LOCK_GLOCKM || state == LOCK_GLOCKL ||
+      state == LOCK_MIXED || state == LOCK_GMIXEDL ||
+      state == LOCK_LONER || state == LOCK_GLONERM ||
+      state == LOCK_GSYNCM || state == LOCK_GSYNCL;
+  }
+  void get_wrlock() {
+    assert(can_wrlock());
+    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
+    ++num_wrlock;
+  }
+  void put_wrlock() {
+    --num_wrlock;
+    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+  }
+  bool is_wrlocked() { return num_wrlock > 0; }
+  int get_num_wrlocks() { return num_wrlock; }
+
 
   // client caps allowed
   int caps_allowed_ever() {

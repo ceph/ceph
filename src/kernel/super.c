@@ -198,6 +198,7 @@ enum {
 	Opt_fsidminor,
 	Opt_debug,
 	Opt_debug_msgr,
+	Opt_debug_tcp,
 	Opt_debug_mdsc,
 	Opt_debug_osdc,
 	Opt_monport,
@@ -210,6 +211,7 @@ static match_table_t arg_tokens = {
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
 	{Opt_debug_msgr, "debug_msgr=%d"},
+	{Opt_debug_tcp, "debug_tcp=%d"},
 	{Opt_debug_mdsc, "debug_mdsc=%d"},
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_monport, "monport=%d"},
@@ -245,7 +247,8 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 		goto bad;
 
 	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n", ip >> 24, (ip >> 16) & 0xff,
+	dout(15, "parse_ip got %u.%u.%u.%u\n", 
+	     ip >> 24, (ip >> 16) & 0xff,
 	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
 
@@ -321,18 +324,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				args->mon_addr[i].ipaddr.sin_port =
 					htons(intval);
 			break;
-		case Opt_debug:
-			ceph_debug = intval;
-			break;
-		case Opt_debug_msgr:
-			ceph_debug_msgr = intval;
-			break;
-		case Opt_debug_mdsc:
-			ceph_debug_mdsc = intval;
-			break;
-		case Opt_debug_osdc:
-			ceph_debug_osdc = intval;
-			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
@@ -344,6 +335,24 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				return err;
 			args->flags |= CEPH_MOUNT_MYIP;
 			break;
+			
+			/* debug levels */
+		case Opt_debug:
+			ceph_debug = intval;
+			break;
+		case Opt_debug_msgr:
+			ceph_debug_msgr = intval;
+			break;
+		case Opt_debug_tcp:
+			ceph_debug_tcp = intval;
+			break;
+		case Opt_debug_mdsc:
+			ceph_debug_mdsc = intval;
+			break;
+		case Opt_debug_osdc:
+			ceph_debug_osdc = intval;
+			break;
+
 		default:
 			derr(1, "parse_mount_args bad token %d\n", token);
 			continue;
@@ -499,6 +508,9 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
+
+	ceph_fs_proc_init();
+
 	ret = init_inodecache();
 	if (ret)
 		goto out;

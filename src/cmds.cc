@@ -56,8 +56,13 @@ int main(int argc, const char **argv)
 
   // load monmap
   MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
+  const char *monmap_fn = ".ceph_monmap";
+  int r = monmap.read(monmap_fn);
+  if (r < 0) {
+    cerr << "couldn't read monmap from " << monmap_fn
+	 << ": " << strerror(errno) << std::endl;
+    return -1;
+  }
 
   // start up network
   rank.bind();

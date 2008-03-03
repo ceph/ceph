@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.61)
+AC_PREREQ(2.59)
 AC_INIT([Ceph distributed file system], [.1], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
@@ -50,7 +50,7 @@ AS_IF([test "x$with_ccgnu" != xno],
              [AC_SUBST([LIBCCGNU2], ["-lccgnu2"])
               AC_DEFINE([WITH_CCGNU], [1],
                         [Define if you have ccgnu])
-	      LIBS="-lccgnu2 $LIBS"
+	      LIBS="-lccgnu2 -ldl $LIBS"
              ],
              [if test "x$with_ccgnu" != xcheck; then
                  AC_MSG_FAILURE(
@@ -103,7 +103,7 @@ AC_FUNC_FORK
 AC_PROG_GCC_TRADITIONAL
 AC_FUNC_LSTAT
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_FUNC_MALLOC
+#AC_FUNC_MALLOC   # this causes annoying rpl_malloc error on some machines; skip it
 AC_FUNC_MEMCMP
 AC_FUNC_MMAP
 AC_FUNC_REALLOC

@@ -170,7 +170,7 @@ int fakemessenger_do_loop_2()
       FakeMessenger *mgr = 0;
       Dispatcher *dis = 0;
 
-      unsigned drank = m->get_source_addr().v.erank;
+      unsigned drank = m->get_source_addr().erank;
       if (drank < directory.size() && directory[drank]) {
 	mgr = directory[drank];
 	if (mgr) 
@@ -245,7 +245,7 @@ int fakemessenger_do_loop_2()
            it != shutdown_set.end();
            it++) {
         dout(7) << "fakemessenger: removing " << *it << " from directory" << dendl;
-	int r = it->v.erank;
+	int r = it->erank;
         assert(directory[r]);
         directory[r] = 0;
 	num_entity--;
@@ -278,8 +278,8 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
     unsigned r = directory.size();
     _myinst.name = me;
     _myinst.addr.set_port(0);
-    _myinst.addr.v.erank = r;
-    _myinst.addr.v.nonce = getpid();
+    _myinst.addr.erank = r;
+    _myinst.addr.nonce = getpid();
 
     // add to directory
     directory.push_back(this);
@@ -331,7 +331,7 @@ int FakeMessenger::shutdown()
 {
   dout(2) << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << dendl;
   lock.Lock();
-  assert(directory[_myinst.addr.v.erank] == this);
+  assert(directory[_myinst.addr.erank] == this);
   shutdown_set.insert(_myinst.addr);
   
   /*
@@ -386,7 +386,7 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst)
 #endif
 
   // queue
-  unsigned drank = inst.addr.v.erank;
+  unsigned drank = inst.addr.erank;
   if (drank < directory.size() && directory[drank] &&
       shutdown_set.count(inst.addr) == 0) {
     dout(1) << "--> " << get_myname() << " -> " << inst.name << " --- " << *m << " -- " << m

@@ -1470,7 +1470,8 @@ int Client::mount()
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
   Inode *root;
-  _do_lstat("/", STAT_MASK_ALL, &root);
+  filepath fpath("", 1);
+  _do_lstat(fpath, STAT_MASK_ALL, &root);
   _ll_get(root);
 
   // trace?
@@ -1922,7 +1923,8 @@ int Client::readlink(const char *path, char *buf, off_t size)
 int Client::_readlink(const char *path, char *buf, off_t size) 
 { 
   Inode *in;
-  int r = _do_lstat(path, STAT_MASK_BASE, &in);
+  filepath fpath(path);
+  int r = _do_lstat(fpath, STAT_MASK_BASE, &in);
   if (r == 0 && !in->inode.is_symlink()) r = -EINVAL;
   if (r == 0) {
     // copy into buf (at most size bytes)
@@ -1942,10 +1944,9 @@ int Client::_readlink(const char *path, char *buf, off_t size)
 
 // inode stuff
 
-int Client::_do_lstat(const char *path, int mask, Inode **in)
+int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
 {  
   MClientRequest *req = 0;
-  filepath fpath(path);
   
   // check whether cache content is fresh enough
   int res = 0;
@@ -1956,7 +1957,7 @@ int Client::_do_lstat(const char *path, int mask, Inode **in)
 
   if (dn && 
       now <= dn->inode->valid_until)
-    dout(10) << "_lstat has inode " << path << " with mask " << dn->inode->mask << ", want " << mask << dendl;
+    dout(10) << "_lstat has inode " << fpath << " with mask " << dn->inode->mask << ", want " << mask << dendl;
   
   if (dn && dn->inode &&
       now <= dn->inode->valid_until &&
@@ -2046,7 +2047,8 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 int Client::_lstat(const char *path, struct stat *stbuf)
 {
   Inode *in = 0;
-  int res = _do_lstat(path, STAT_MASK_ALL, &in);
+  filepath fpath(path);
+  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
@@ -2379,7 +2381,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_READDIR, messenger->get_myinst());
   req->set_filepath(dirp->path); 
-  req->head.args.readdir.frag = fg;
+  req->head.args.readdir.frag = cpu_to_le32(fg);
   
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -3250,6 +3252,37 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 }
 
 
+
+int Client::fstat(int fd, struct stat *stbuf) 
+{
+  Mutex::Locker lock(client_lock);
+  tout << "fstat" << std::endl;
+  tout << fd << std::endl;
+
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  int r = _fstat(f, stbuf);
+  dout(3) << "fstat(" << fd << ", " << stbuf << ") = " << r << dendl;
+  return r;
+}
+
+int Client::_fstat(Fh *f, struct stat *stbuf)
+{
+  Inode *in = 0;
+  filepath fpath("", f->inode->ino());
+  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  if (res == 0) {
+    assert(in);
+    fill_stat(in, stbuf);
+    dout(10) << "stat sez size = " << in->inode.size << " mode = 0" << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << dendl;
+  }
+
+  trim_cache();
+  dout(3) << "fstat(\"" << f << "\", " << stbuf << ") = " << res << dendl;
+  return res;
+}
+
+
 // not written yet, but i want to link!
 
 int Client::chdir(const char *path)
@@ -3299,10 +3332,10 @@ int Client::_statfs(struct statvfs *stbuf)
   memset(stbuf, 0, sizeof(*stbuf));
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;
-  stbuf->f_blocks = req->reply->stfs.f_total / 4;
-  stbuf->f_bfree = req->reply->stfs.f_free / 4;
-  stbuf->f_bavail = req->reply->stfs.f_avail / 4;
-  stbuf->f_files = req->reply->stfs.f_objects;
+  stbuf->f_blocks = le64_to_cpu(req->reply->stfs.f_total) / 4;
+  stbuf->f_bfree = le64_to_cpu(req->reply->stfs.f_free) / 4;
+  stbuf->f_bavail = le64_to_cpu(req->reply->stfs.f_avail) / 4;
+  stbuf->f_files = le64_to_cpu(req->reply->stfs.f_objects);
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
@@ -3451,7 +3484,8 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
     diri->make_path(path);
     path += "/";
     path += name;
-    _do_lstat(path.c_str(), 0, &in);
+    filepath fpath(path);
+    _do_lstat(fpath, 0, &in);
   }
   if (in) {
     fill_stat(in, attr);
@@ -3537,7 +3571,8 @@ Inode *Client::_ll_get_inode(inodeno_t ino)
   if (inode_map.count(ino) == 0) {
     assert(ino == 1);  // must be the root inode.
     Inode *in;
-    int r = _do_lstat("/", 0, &in);
+    filepath fpath("");
+    int r = _do_lstat(fpath, 0, &in);
     assert(r >= 0);
     return in;
   } else {

@@ -17,29 +17,39 @@
 
 #define CEPH_MON_PORT 12345
 
+/*
+ * types in this file are defined as little-endian, and are
+ * primarily intended to describe data structures that pass
+ * over the wire or are stored on disk.
+ */
 
-typedef __u64 ceph_version_t;
-typedef __u64 ceph_tid_t;
-typedef __u32 ceph_epoch_t;
+
+/*
+ * some basics
+ */
+typedef __le64 ceph_version_t;
+typedef __le64 ceph_tid_t;
+typedef __le32 ceph_epoch_t;
 
 
 /*
  * fs id
  */
 struct ceph_fsid {
-	__u64 major;
-	__u64 minor;
+	__le64 major;
+	__le64 minor;
 };
 
 static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
-	return a->major == b->major && a->minor == b->minor;
+	return le64_to_cpu(a->major) == le64_to_cpu(b->major) && 
+		le64_to_cpu(a->minor) == le64_to_cpu(b->minor);
 }
 
 
 /*
  * ino, object, etc.
  */
-typedef __u64 ceph_ino_t;
+typedef __le64 ceph_ino_t;
 
 struct ceph_object {
 	__le64 ino;  /* inode "file" identifier */
@@ -57,7 +67,7 @@ struct ceph_timeval {
 /*
  * dir fragments
  */ 
-typedef __u32 ceph_frag_t;
+typedef __le32 ceph_frag_t;
 
 static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
@@ -88,6 +98,7 @@ struct ceph_file_layout {
 	__u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
 	__u32 fl_stripe_count;    /* over this many objects */
 	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
+	__u32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
 	
 	/* pg -> disk layout */
 	__u32 fl_object_stripe_unit;  /* for per-object parity, if any */
@@ -96,6 +107,7 @@ struct ceph_file_layout {
 	__s32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
 	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
 	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
+	__u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
 };
 
 #define ceph_file_layout_stripe_width(l) (l.fl_stripe_unit * l.fl_stripe_count)
@@ -112,10 +124,12 @@ struct ceph_file_layout {
 union ceph_pg {
 	__u64 pg64;
 	struct {
-		__s32 preferred; /* preferred primary osd */
+		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
+		__u8 pool;       /* implies crush ruleset */
 		__u8 type;
 		__u8 size;
+		__u8 __pad;
 	} pg;
 };
 
@@ -123,10 +137,13 @@ union ceph_pg {
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
- * crush rule ids.  fixme.
+ * crush rule ids.  fixme, this static mapping to rule ids is lame.
  */
-#define CRUSH_REP_RULE(nrep) (nrep) 
-#define CRUSH_RAID_RULE(num) (10+num)
+#define CRUSH_MAX_REP              8
+#define CRUSH_PG_TYPES             2
+#define CRUSH_RULE_OFFSET(p, t)    (((p)*CRUSH_PG_TYPES + (t))*CRUSH_MAX_REP)
+#define CRUSH_REP_RULE(nrep, pool) (CRUSH_RULE_OFFSET(pool, 0) + (nrep)) 
+#define CRUSH_RAID_RULE(num, pool) (CRUSH_RULE_OFFSET(pool, 1) + (num))
 
 /*
  * stable_mod func is used to control number of placement groups
@@ -153,7 +170,7 @@ struct ceph_object_layout {
  */
 struct ceph_eversion {
 	ceph_epoch_t epoch;
-	__u64        version;
+	__le64       version;
 } __attribute__ ((packed));
 
 /*
@@ -179,8 +196,8 @@ struct ceph_eversion {
  * entity_name
  */
 struct ceph_entity_name {
-	__u32 type;
-	__u32 num;
+	__le32 type;
+	__le32 num;
 };
 
 #define CEPH_ENTITY_TYPE_MON    1
@@ -200,13 +217,13 @@ struct ceph_entity_name {
  * entity_addr
  */
 struct ceph_entity_addr {
-	__u32 erank;  /* entity's rank in process */
-	__u32 nonce;  /* unique id for process (e.g. pid) */
+	__le32 erank;  /* entity's rank in process */
+	__le32 nonce;  /* unique id for process (e.g. pid) */
 	struct sockaddr_in ipaddr;
 };
 
 #define ceph_entity_addr_is_local(a,b)					\
-	((a).nonce == (b).nonce &&					\
+	(le32_to_cpu((a).nonce) == le32_to_cpu((b).nonce) &&		\
 	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
 
 #define ceph_entity_addr_equal(a, b)		\
@@ -222,12 +239,12 @@ struct ceph_entity_inst {
  * message header
  */
 struct ceph_msg_header {
-	__u32 seq;    /* message seq# for this session */
-	__u32 type;   /* message type */
+	__le64 seq;    /* message seq# for this session */
+	__le32 type;   /* message type */
+	__le32 front_len;
+	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
+	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, dst;
-	__u32 front_len;
-	__u32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
-	__u32 data_len;  /* bytes of data payload */
 } __attribute__ ((packed));
 
 

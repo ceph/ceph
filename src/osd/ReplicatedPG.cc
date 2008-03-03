@@ -73,21 +73,23 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, Message *m)
 {
   assert(is_missing_object(oid));
 
+  pobject_t poid(info.pgid.pool(), 0, oid);
+
   // we don't have it (yet).
   eversion_t v = missing.missing[oid];
   if (objects_pulling.count(oid)) {
     dout(7) << "missing "
-	    << oid 
+	    << poid 
 	    << " v " << v
 	    << ", already pulling"
 	    << dendl;
   } else {
     dout(7) << "missing " 
-	    << oid 
+	    << poid 
 	    << " v " << v
 	    << ", pulling"
 	    << dendl;
-    pull(oid);
+    pull(poid);
   }
   waiting_for_missing_object[oid].push_back(m);
 }
@@ -105,6 +107,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
     return false;
 
   object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, oid);
 
   // -- load balance reads --
   if (is_primary() &&
@@ -147,7 +150,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
       if (g_conf.osd_balance_reads &&
-	  osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &b, 1) >= 0)
+	  osd->store->getattr(poid, "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
@@ -324,13 +327,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   // -- fastpath read?
   // if this is a read and the data is in the cache, do an immediate read.. 
   if ( g_conf.osd_immediate_read_from_cache ) {
-    if (osd->store->is_cached( pobject_t(0,0,oid) , 
+    if (osd->store->is_cached( poid,
 			       op->get_offset(), 
 			       op->get_length() ) == 0) {
       if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
-	if (osd->store->getattr(pobject_t(0,0,oid), "balance-reads", &v, 1) < 0) {
+	if (osd->store->getattr(poid, "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
@@ -447,6 +450,7 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 void ReplicatedPG::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, oid);
 
   dout(10) << "op_read " << MOSDOp::get_opname(op->get_op())
 	   << " " << oid 
@@ -489,9 +493,9 @@ void ReplicatedPG::op_read(MOSDOp *op)
     } else {
       // make sure i exist and am balanced, otherwise fw back to acker.
       bool b;
-      if (!osd->store->exists(oid) || 
-	  osd->store->getattr(oid, "balance-reads", &b, 1) < 0) {
-	dout(-10) << "read on replica, object " << oid 
+      if (!osd->store->exists(poid) || 
+	  osd->store->getattr(poid, "balance-reads", &b, 1) < 0) {
+	dout(-10) << "read on replica, object " << poid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
 	osd->messenger->send_message(op, osd->osdmap->get_inst(get_acker()));
 	return;
@@ -514,7 +518,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
       {
 	// read into a buffer
 	bufferlist bl;
-	r = osd->store->read(oid, 
+	r = osd->store->read(poid, 
 			     op->get_offset(), op->get_length(),
 			     bl);
 	reply->set_data(bl);
@@ -532,7 +536,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
       {
 	struct stat st;
 	memset(&st, sizeof(st), 0);
-	r = osd->store->stat(oid, &st);
+	r = osd->store->stat(poid, &st);
 	if (r >= 0)
 	  reply->set_length(st.st_size);
       }
@@ -897,7 +901,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
 
 void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 {
-  pobject_t poid = repop->op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, repop->op->get_oid());
   dout(7) << " issue_repop rep_tid " << repop->rep_tid
           << " o " << poid
           << " to osd" << dest
@@ -1021,11 +1025,11 @@ void ReplicatedPG::op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru)
 
 objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
 {
-  object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   // check crev
   objectrev_t crev = 0;
-  osd->store->getattr(oid, "crev", (char*)&crev, sizeof(crev));
+  osd->store->getattr(poid, "crev", (char*)&crev, sizeof(crev));
 
   // assign version
   eversion_t clone_version;
@@ -1037,7 +1041,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
     assert(nv > log.top);
 
     // will clone?
-    if (crev && op->get_oid().rev && op->get_oid().rev > crev) {
+    if (crev && poid.oid.rev && poid.oid.rev > crev) {
       clone_version = nv;
       nv.version++;
     }
@@ -1114,7 +1118,8 @@ public:
 void ReplicatedPG::op_modify(MOSDOp *op)
 {
   int whoami = osd->get_nodeid();
-  object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
+
   const char *opname = MOSDOp::get_opname(op->get_op());
 
   // make sure it looks ok
@@ -1137,19 +1142,19 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
-      (osd->store->getattr(op->get_oid(), "balance-reads", &v, 1) >= 0 ||
-       balancing_reads.count(op->get_oid()))) {
+      (osd->store->getattr(poid, "balance-reads", &v, 1) >= 0 ||
+       balancing_reads.count(poid.oid))) {
     
-    if (!unbalancing_reads.count(op->get_oid())) {
+    if (!unbalancing_reads.count(poid.oid)) {
       // unbalance
-      dout(-10) << "preprocess_op unbalancing-reads on " << op->get_oid() << dendl;
-      unbalancing_reads.insert(op->get_oid());
+      dout(-10) << "preprocess_op unbalancing-reads on " << poid.oid << dendl;
+      unbalancing_reads.insert(poid.oid);
       
       ceph_object_layout layout;
       layout.ol_pgid = info.pgid.u;
       layout.ol_stripe_unit = 0;
       MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
-			       op->get_oid(),
+			       poid.oid,
 			       layout,
 			       osd->osdmap->get_epoch(),
 			       CEPH_OSD_OP_UNBALANCEREADS);
@@ -1157,8 +1162,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     }
 
     // add to wait queue
-    dout(-10) << "preprocess_op waiting for unbalance-reads on " << op->get_oid() << dendl;
-    waiting_for_unbalanced_reads[op->get_oid()].push_back(op);
+    dout(-10) << "preprocess_op waiting for unbalance-reads on " << poid.oid << dendl;
+    waiting_for_unbalanced_reads[poid.oid].push_back(op);
     return;
   }
 
@@ -1179,18 +1184,18 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     if (peer_missing.count(peer) &&
-        peer_missing[peer].is_missing(oid)) {
+        peer_missing[peer].is_missing(poid.oid)) {
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
-      push(oid, peer);
+      push(poid, peer);
     }
   }
 
   dout(10) << "op_modify " << opname 
-           << " " << oid 
+           << " " << poid.oid 
            << " v " << nv 
     //<< " crev " << crev
-	   << " rev " << op->get_oid().rev
+	   << " rev " << poid.oid.rev
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
 
@@ -1211,13 +1216,12 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // we are acker.
   if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
     // log and update later.
-    pobject_t poid = oid;
     prepare_log_transaction(repop->t, op->get_reqid(), poid, op->get_op(), nv,
-			    crev, op->get_oid().rev, peers_complete_thru);
+			    crev, poid.oid.rev, peers_complete_thru);
     prepare_op_transaction(repop->t, op->get_reqid(),
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, crev, op->get_oid().rev);
+			   nv, crev, poid.oid.rev);
   }
   
   // (logical) local ack.
@@ -1685,7 +1689,8 @@ bool ReplicatedPG::do_recovery()
     if (latest->is_update() &&
         !objects_pulling.count(latest->oid) &&
         missing.is_missing(latest->oid)) {
-      pull(latest->oid);
+      pobject_t poid(info.pgid.pool(), 0, latest->oid);
+      pull(poid);
       return true;
     }
     
@@ -1734,16 +1739,17 @@ void ReplicatedPG::do_peer_recovery()
     
     // oldest first!
     object_t oid = peer_missing[peer].rmissing.begin()->second;
+    pobject_t poid(info.pgid.pool(), 0, oid);
     eversion_t v = peer_missing[peer].rmissing.begin()->first;
 
-    push(oid, peer);
+    push(poid, peer);
 
     // do other peers need it too?
     for (i++; i<acting.size(); i++) {
       int peer = acting[i];
       if (peer_missing.count(peer) &&
           peer_missing[peer].is_missing(oid)) 
-	push(oid, peer);
+	push(poid, peer);
     }
 
     return;
@@ -1808,9 +1814,10 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       
       if (p->is_delete()) {
         if (s.count(p->oid)) {
-          dout(10) << " deleting " << p->oid
+	  pobject_t poid(info.pgid.pool(), 0, p->oid);
+          dout(10) << " deleting " << poid
                    << " when " << p->version << dendl;
-          t.remove(p->oid);
+          t.remove(poid);
         }
         s.erase(p->oid);
       } else {
@@ -1822,8 +1829,9 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     for (set<object_t>::iterator i = s.begin(); 
          i != s.end();
          i++) {
-      dout(10) << " deleting stray " << *i << dendl;
-      t.remove(*i);
+      pobject_t poid(info.pgid.pool(), 0, *i);
+      dout(10) << " deleting stray " << poid << dendl;
+      t.remove(poid);
     }
 
   } else {
@@ -1836,9 +1844,10 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       did.insert(p->oid);
 
       if (p->is_delete()) {
-        dout(10) << " deleting " << p->oid
+	pobject_t poid(info.pgid.pool(), 0, p->oid);
+        dout(10) << " deleting " << poid
                  << " when " << p->version << dendl;
-        t.remove(p->oid);
+        t.remove(poid);
       } else {
         // keep old(+missing) objects, just for kicks.
       }
