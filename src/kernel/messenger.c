@@ -110,14 +110,12 @@ out:
  */
 static void put_connection(struct ceph_connection *con) 
 {
-	BUG_ON(con == NULL);
 	dout(20, "put_connection nref = %d\n", atomic_read(&con->nref));
 	if (atomic_dec_and_test(&con->nref)) {
 		dout(20, "put_connection destroying %p\n", con);
 		if (con->sock)
 			sock_release(con->sock);
 		kfree(con);
-		con = NULL;
 	}
 }
 
@@ -132,7 +130,6 @@ static void __add_connection(struct ceph_messenger *msgr, struct ceph_connection
 	/* inc ref count */
 	atomic_inc(&con->nref);
 
-	/* PW this is bogus... needs to be readdressed later */
 	if (test_bit(ACCEPTING, &con->state)) {
 		list_del(&con->list_bucket);
 		put_connection(con);
@@ -482,7 +479,8 @@ static void try_write(struct work_struct *work)
 			goto done;
 		}
 		dout(30, "try_write tcp_close delay != 0\n");
-		sock_release(con->sock);
+		if (con->sock)
+			sock_release(con->sock);
 		con->sock = NULL;
 		set_bit(NEW, &con->state);
 
@@ -764,6 +762,8 @@ out:
 
 static void process_connect(struct ceph_connection *con)
 {
+	struct ceph_messenger *msgr = con->msgr;
+
 	dout(20, "process_connect on %p tag %d\n", con, (int)con->in_tag);
 	clear_bit(CONNECTING, &con->state);
 	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr)) {
@@ -784,8 +784,15 @@ static void process_connect(struct ceph_connection *con)
 		dout(10, "process_connect got READY, now open\n");
 		set_bit(OPEN, &con->state);
 		if (test_bit(STANDBY, &con->state)) {
-			dout(10, "process_connect peer_connect_seq = %d\n", con->peer_connect_seq);
-			/* callback */
+			dout(30, "process_connect peer_connect_seq = %d\n", 
+			     con->peer_connect_seq);
+			dout(30, "process_connect connect_seq = %d\n", 
+			     con->connect_seq);
+/*
+			if (con->peer_connect_seq > con->connect_seq)
+				/* callback */
+				msgr->peer_reset(con);
+*/
 		}
 	}
 }
@@ -854,6 +861,7 @@ static void process_accept(struct ceph_connection *con)
 			   existing->connect_seq !=  con->connect_seq) {
 			dout(20, "process_accept connect_seq mismatchi con = %d, existing = %d\n", 
 			     con->connect_seq,  existing->connect_seq);
+				msgr->peer_reset(con);
 			/* callback to mds */
 		} else {
 			/* reject new connection */
@@ -863,6 +871,8 @@ static void process_accept(struct ceph_connection *con)
 		//spin_unlock(&existing->lock);
 		put_connection(existing);
 	} else {
+		if (con->peer_connect_seq > con->connect_seq)
+			msgr->peer_reset(con);
 		dout(20, "process_accept no existing connection\n");
 		__add_connection(msgr, con);
 		set_bit(OPEN, &con->state);
