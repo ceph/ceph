@@ -398,12 +398,10 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dn->inode->mask = st->mask;
   
   // or do we have newer size/mtime from writing?
-  if (dn->inode->file_caps() & CEPH_CAP_WR) {
-    if (dn->inode->file_wr_size > dn->inode->inode.size)
-      dn->inode->inode.size = dn->inode->file_wr_size;
-    if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
-      dn->inode->inode.mtime = dn->inode->file_wr_mtime;
-  }
+  if (dn->inode->file_wr_size > dn->inode->inode.size)
+    dn->inode->inode.size = dn->inode->file_wr_size;
+  if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
+    dn->inode->inode.mtime = dn->inode->file_wr_mtime;
 
   // symlink?
   if (dn->inode->inode.is_symlink()) {
@@ -1205,6 +1203,20 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
+  // truncate?
+  if (m->get_op() == CEPH_CAP_OP_TRUNC) {
+    dout(10) << "handle_file_caps TRUNC on ino " << in->ino()
+	     << " size " << in->inode.size << " -> " << m->get_size()
+	     << dendl;
+    // trim filecache?
+    if (g_conf.client_oc)
+      in->fc.truncate(in->inode.size, m->get_size());
+
+    in->inode.size = in->file_wr_size = m->get_size(); 
+    delete m;
+    return;
+  }
+
   // don't want?
   if (in->file_caps_wanted() == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
@@ -1230,19 +1242,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " caps now " << cap_string(new_caps) 
           << " was " << cap_string(old_caps) << dendl;
   
-  // did file size decrease?
-  if ((old_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) == 0 &&
-      (new_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) != 0 &&
-      in->inode.size > (loff_t)m->get_size()) {
-    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_size() << dendl;
-    
-    // trim filecache?
-    if (g_conf.client_oc)
-      in->fc.truncate(in->inode.size, m->get_size());
-
-    in->inode.size = in->file_wr_size = m->get_size(); 
-  }
-
   // update inode
   in->inode.size = m->get_size();      // might have updated size... FIXME this is overkill!
   in->inode.mtime = m->get_mtime();
@@ -3589,8 +3588,11 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr)
   tout << ino.val << std::endl;
 
   Inode *in = _ll_get_inode(ino);
-  fill_stat(in, attr);
-  return 0;
+  filepath fpath("", in->ino());
+  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  if (res == 0)
+    fill_stat(in, attr);
+  return res;
 }
 
 int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)

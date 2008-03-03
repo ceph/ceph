@@ -456,13 +456,19 @@ struct C_Locker_FileUpdate_finish : public Context {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    in->pop_and_dirty_projected_inode(ls);
-    in->put(CInode::PIN_PTRWAITER);
-    locker->file_wrlock_finish(&in->filelock);
-    if (share && in->is_auth() && in->filelock.is_stable())
-      locker->share_new_file_max(in);
+    locker->file_update_finish(in, ls, share);
   }
 };
+
+void Locker::file_update_finish(CInode *in, LogSegment *ls, bool share)
+{
+  dout(10) << "file_update_finish on " << *in << dendl;
+  in->pop_and_dirty_projected_inode(ls);
+  in->put(CInode::PIN_PTRWAITER);
+  file_wrlock_finish(&in->filelock);
+  if (share && in->is_auth() && in->filelock.is_stable())
+    share_new_file_max(in);
+}
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
@@ -543,7 +549,6 @@ Capability* Locker::issue_new_caps(CInode *in,
 }
 
 
-
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
@@ -590,6 +595,23 @@ bool Locker::issue_caps(CInode *in)
   }
 
   return (nissued == 0);  // true if no re-issued, no callbacks
+}
+
+void Locker::issue_truncate(CInode *in)
+{
+  dout(7) << "issue_truncate on " << *in << dendl;
+  
+  for (map<int, Capability*>::iterator it = in->client_caps.begin();
+       it != in->client_caps.end();
+       it++) {
+    Capability *cap = it->second;
+    mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_TRUNC,
+						 in->inode,
+						 cap->get_last_seq(),
+						 cap->pending(),
+						 cap->wanted()),
+			     it->first);
+  }
 }
 
 void Locker::revoke_stale_caps(Session *session)
@@ -836,12 +858,16 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   inode_t *latest = in->get_projected_inode();
 
   // no more writers?
-  int wanted = in->get_caps_wanted();
   bool no_wr = false;
   if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
     no_wr = true;
 
+  utime_t atime = m->get_atime();
+  utime_t mtime = m->get_mtime();
+  off_t size = m->get_size();
+
   // atime|mtime|size?
+  bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
   bool dirty = false;
   if (atime > latest->atime) 
     dirty = true;
@@ -866,11 +892,6 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
     inode_t *pi = in->project_inode();
-    /*
-     * FIXME HACK: set current inode too, until we get
-     *  FileLock to grab a reference here or some such
-     *  thing...
-     */
     pi->version = in->pre_dirty();
     if (no_wr) {
       dout(7) << " last wr-wanted cap, max_size=0" << dendl;
@@ -879,22 +900,22 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       int64_t inc = in->get_layout_size_increment();
       int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
-      in->inode.max_size = pi->max_size = new_max;
+      pi->max_size = new_max;
     }    
     if (mtime > latest->mtime) {
       dout(7) << "  taking mtime " << mtime << " > " 
 	      << in->inode.mtime << " for " << *in << dendl;
-      in->inode.mtime = pi->mtime = mtime;
+      pi->mtime = mtime;
     }
     if (size > latest->size) {
       dout(7) << "  taking size " << size << " > " 
 	      << in->inode.size << " for " << *in << dendl;
-      in->inode.size = pi->size = size;
+      pi->size = size;
     }
     if (atime > latest->atime) {
       dout(7) << "  taking atime " << atime << " > " 
 	      << in->inode.atime << " for " << *in << dendl;
-      in->inode.atime = pi->atime = atime;
+      pi->atime = atime;
     }
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
@@ -909,8 +930,6 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   else if (in->is_auth())
     file_eval(&in->filelock);
   
-  //in->finish_waiting(CInode::WAIT_CAPS, 0);  // note: any users for this? 
-
   delete m;
 }
 
@@ -2654,7 +2673,8 @@ bool Locker::file_sync(FileLock *lock)
 
   else if (lock->get_state() == LOCK_MIXED) {
     // writers?
-    if (issued & CEPH_CAP_WR) {
+    if ((issued & CEPH_CAP_WR) ||
+	lock->is_wrlocked()) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCM);
       lock->get_parent()->auth_pin();
@@ -2675,7 +2695,8 @@ bool Locker::file_sync(FileLock *lock)
 
   else if (lock->get_state() == LOCK_LONER) {
     // writers?
-    if (issued & CEPH_CAP_WR) {
+    if ((issued & CEPH_CAP_WR) ||
+	lock->is_wrlocked()) {
       // gather client write caps
       lock->set_state(LOCK_GSYNCL);
       lock->get_parent()->auth_pin();

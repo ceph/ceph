@@ -183,6 +183,7 @@ protected:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session);
   bool issue_caps(CInode *in);
+  void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);
 
@@ -192,6 +193,7 @@ protected:
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
+  void file_update_finish(CInode *in, LogSegment *ls, bool share);
   void share_new_file_max(CInode *in);
 
   friend class C_MDL_RequestInodeFileCaps;

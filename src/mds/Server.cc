@@ -3749,6 +3749,9 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
 
+    // notify any clients
+    mds->locker->issue_truncate(in);
+
     // purge
     mds->mdcache->purge_inode(in, size, in->inode.size, mdr->ls);
     mds->mdcache->wait_for_purge(in, size, 
