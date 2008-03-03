@@ -458,6 +458,7 @@ struct C_Locker_FileUpdate_finish : public Context {
   void finish(int r) {
     in->pop_and_dirty_projected_inode(ls);
     in->put(CInode::PIN_PTRWAITER);
+    locker->file_wrlock_finish(&in->filelock);
     if (share && in->is_auth() && in->filelock.is_stable())
       locker->share_new_file_max(in);
   }
@@ -527,6 +528,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     le->add_ino(in->ino());
     ls->open_files.push_back(&in->xlist_open_file);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
+    file_wrlock_start(&in->filelock);  // wrlock for duration of journal
   }
   
   // twiddle file_data_version?
@@ -739,83 +741,6 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
 
 
-/*
- * helper: journal size, max_size, mtime, atime updates, as needed.
- */
-void Locker::maybe_journal_inode_update(CInode *in, bool had_or_has_wr, 
-					int64_t size, utime_t mtime, utime_t atime)
-{
-  inode_t *latest = in->get_projected_inode();
-
-  // no more writers?
-  int wanted = in->get_caps_wanted();
-  bool no_wr = false;
-  if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
-    no_wr = true;
-
-  // atime|mtime|size?
-  bool dirty = false;
-  if (atime > latest->atime) 
-    dirty = true;
-  if (had_or_has_wr) {
-    if (mtime > latest->mtime) 
-      dirty = true;
-    if (size > latest->size) 
-      dirty = true;
-  }
-
-  
-  // increase max_size?
-  bool increase_max = false;
-  int64_t inc = in->get_layout_size_increment();
-  if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size > latest->max_size + inc) {
-    dout(10) << "hey, wr caps wanted, and size " << size
-	     << " > max " << latest->max_size << " *2, increasing" << dendl;
-    increase_max = true;
-  }
-
-  if ((dirty || no_wr || increase_max) &&
-      !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
-    EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
-    inode_t *pi = in->project_inode();
-    /*
-     * FIXME HACK: set current inode too, until we get
-     *  FileLock to grab a reference here or some such
-     *  thing...
-     */
-    pi->version = in->pre_dirty();
-    if (no_wr) {
-      dout(7) << " last wr-wanted cap, max_size=0" << dendl;
-      pi->max_size = 0;
-    } else if (increase_max) {
-      int64_t inc = in->get_layout_size_increment();
-      int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
-      dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
-      in->inode.max_size = pi->max_size = new_max;
-    }    
-    if (mtime > latest->mtime) {
-      dout(7) << "  taking mtime " << mtime << " > " 
-	      << in->inode.mtime << " for " << *in << dendl;
-      in->inode.mtime = pi->mtime = mtime;
-    }
-    if (size > latest->size) {
-      dout(7) << "  taking size " << size << " > " 
-	      << in->inode.size << " for " << *in << dendl;
-      in->inode.size = pi->size = size;
-    }
-    if (atime > latest->atime) {
-      dout(7) << "  taking atime " << atime << " > " 
-	      << in->inode.atime << " for " << *in << dendl;
-      in->inode.atime = pi->atime = atime;
-    }
-    le->metablob.add_dir_context(in->get_parent_dir());
-    le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls));
-  }
-}
-
 void Locker::share_new_file_max(CInode *in)
 {
   /*
@@ -908,8 +833,75 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     }
   }
 
-  maybe_journal_inode_update(in, (had|has) & CEPH_CAP_WR,
-			     m->get_size(), m->get_mtime(), m->get_atime());
+  inode_t *latest = in->get_projected_inode();
+
+  // no more writers?
+  int wanted = in->get_caps_wanted();
+  bool no_wr = false;
+  if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
+    no_wr = true;
+
+  // atime|mtime|size?
+  bool dirty = false;
+  if (atime > latest->atime) 
+    dirty = true;
+  if (had_or_has_wr) {
+    if (mtime > latest->mtime) 
+      dirty = true;
+    if (size > latest->size) 
+      dirty = true;
+  }
+  
+  // increase max_size?
+  bool increase_max = false;
+  int64_t inc = in->get_layout_size_increment();
+  if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+      size > latest->max_size + inc) {
+    dout(10) << "hey, wr caps wanted, and size " << size
+	     << " > max " << latest->max_size << " *2, increasing" << dendl;
+    increase_max = true;
+  }
+
+  if ((dirty || no_wr || increase_max) &&
+      !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
+    EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
+    inode_t *pi = in->project_inode();
+    /*
+     * FIXME HACK: set current inode too, until we get
+     *  FileLock to grab a reference here or some such
+     *  thing...
+     */
+    pi->version = in->pre_dirty();
+    if (no_wr) {
+      dout(7) << " last wr-wanted cap, max_size=0" << dendl;
+      pi->max_size = 0;
+    } else if (increase_max) {
+      int64_t inc = in->get_layout_size_increment();
+      int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
+      dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
+      in->inode.max_size = pi->max_size = new_max;
+    }    
+    if (mtime > latest->mtime) {
+      dout(7) << "  taking mtime " << mtime << " > " 
+	      << in->inode.mtime << " for " << *in << dendl;
+      in->inode.mtime = pi->mtime = mtime;
+    }
+    if (size > latest->size) {
+      dout(7) << "  taking size " << size << " > " 
+	      << in->inode.size << " for " << *in << dendl;
+      in->inode.size = pi->size = size;
+    }
+    if (atime > latest->atime) {
+      dout(7) << "  taking atime " << atime << " > " 
+	      << in->inode.atime << " for " << *in << dendl;
+      in->inode.atime = pi->atime = atime;
+    }
+    le->metablob.add_dir_context(in->get_parent_dir());
+    le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls));
+    file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+  }
 
   // reevaluate, waiters
   if (!in->filelock.is_stable())
@@ -2307,6 +2299,27 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
     file_eval_gather(lock);
 }
 
+bool Locker::file_wrlock_start(FileLock *lock)
+{
+  if (!lock->can_wrlock()) {
+    dout(7) << "wrlock_start can't on " << *lock << " on " << *lock->get_parent() << dendl;
+    assert(0); // !
+    return false;
+  }
+  dout(7) << "wrlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->get_wrlock();
+  return true;
+}
+
+void Locker::file_wrlock_finish(FileLock *lock)
+{
+  dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->put_wrlock();
+  
+  if (!lock->is_wrlocked())
+    file_eval_gather(lock);  
+}
+
 
 bool Locker::file_xlock_start(FileLock *lock, MDRequest *mdr)
 {
@@ -2438,6 +2451,7 @@ void Locker::file_eval_gather(FileLock *lock)
   // [auth] finished gather?
   if (in->is_auth() &&
       !lock->is_gathering() &&
+      !lock->is_wrlocked() &&
       ((issued & ~lock->caps_allowed()) == 0)) {
     dout(7) << "file_eval_gather finished gather" << dendl;
     
