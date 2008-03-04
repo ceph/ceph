@@ -1062,8 +1062,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove( info.pgid.to_object() );
-  t.write( info.pgid.to_object() , 0, bl.length(), bl);
+  t.remove( info.pgid.to_pobject() );
+  t.write( info.pgid.to_pobject() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1101,7 +1101,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid.to_object(), 0, ondisklog.bottom);
+  t.zero(info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1117,7 +1117,7 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
     bufferptr bp(4096 - sizeof(logentry));
     bl.push_back(bp);
   }
-  t.write( info.pgid.to_object(), ondisklog.top, bl.length(), bl );
+  t.write( info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1155,7 +1155,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid.to_object(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);
@@ -1197,7 +1197,8 @@ void PG::read_log(ObjectStore *store)
     if (i->is_delete()) continue;
 
     eversion_t v;
-    int r = osd->store->getattr(i->oid, "version", &v, sizeof(v));
+    pobject_t poid(info.pgid.pool(), 0, i->oid);
+    int r = osd->store->getattr(poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
       missing.add(i->oid, i->version);
   }
@@ -1215,16 +1216,16 @@ void PG::read_log(ObjectStore *store)
 // 
 bool PG::block_if_wrlocked(MOSDOp* op)
 {
-  object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   entity_name_t source;
-  int len = osd->store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
+  int len = osd->store->getattr(poid, "wrlock", &source, sizeof(entity_name_t));
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
       source != op->get_client()) {
     //the object is locked for writing by someone else -- add the op to the waiting queue      
-    waiting_for_wr_unlock[oid].push_back(op);
+    waiting_for_wr_unlock[poid.oid].push_back(op);
     return true;
   }
   
@@ -1271,7 +1272,7 @@ bool PG::pick_missing_object_rev(object_t& oid)
 
 bool PG::pick_object_rev(object_t& oid)
 {
-  pobject_t t = oid;
+  pobject_t t(info.pgid.pool(), 0, oid);
 
   if (!osd->store->pick_object_revision_lt(t))
     return false; // we have no revisions of this object!

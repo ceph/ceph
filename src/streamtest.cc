@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include "ebofs/Ebofs.h"
+#include "osd/FakeStore.h"
 
 struct io {
   utime_t start, ack, commit;
@@ -95,12 +96,15 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename
        << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
-  Ebofs fs(filename, journal);
-  if (fs.mkfs() < 0) {
+  //ObjectStore *fs = new Ebofs(filename, journal);
+  ObjectStore *fs = new FakeStore(filename);
+
+  if (g_conf.mkfs && 
+      fs->mkfs() < 0) {
     cout << "mkfs failed" << std::endl;
     return -1;
   }
-  if (fs.mount() < 0) {
+  if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;
   }
@@ -112,10 +116,10 @@ int main(int argc, const char **argv)
   //cout << "stop at " << end << std::endl;
   cout << "# offset\tack\tcommit" << std::endl;
   while (now < end) {
-    object_t oid(1,1);
+    pobject_t poid(0, 0, object_t(1, 1));
     utime_t start = now;
     set_start(pos, now);
-    fs.write(oid, pos, bytes, bl, new C_Commit(pos));
+    fs->write(poid, pos, bytes, bl, new C_Commit(pos));
     now = g_clock.now();
     set_ack(pos, now);
     pos += bytes;
@@ -126,12 +130,12 @@ int main(int argc, const char **argv)
     if (now < next) {
       float s = next - now;
       s *= 1000 * 1000;  // s -> us
-      //cout << "sleeping for " << s << std::endl;
-      usleep(s);
+      //cout << "sleeping for " << s << " us" << std::endl;
+      usleep((int)s);
     }
   }
 
-  fs.umount();
+  fs->umount();
 
 }
 

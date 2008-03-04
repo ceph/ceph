@@ -37,18 +37,39 @@ using namespace std;
 
 Messenger *messenger = 0;
 
+const char *outfile = 0;
+
+void handle_ack(MMonCommandAck *ack)
+{
+  generic_dout(0) << ack->get_source() << " -> '"
+		  << ack->rs << "' (" << ack->r << ")"
+		  << dendl;
+  int len = ack->get_data().length();
+  if (len) {
+    if (outfile) {
+      int fd = ::open(outfile, O_WRONLY|O_TRUNC|O_CREAT);
+      ::write(fd, ack->get_data().c_str(), len);
+      ::fchmod(fd, 0777);
+      ::close(fd);
+      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
+    } else {
+      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
+    }
+  }
+  messenger->shutdown();
+}
+
+
 class Admin : public Dispatcher {
   void dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
-      generic_dout(0) << m->get_source() << " -> '"
-		      << ((MMonCommandAck*)m)->rs << "' (" << ((MMonCommandAck*)m)->r << ")"
-		      << dendl;
-      messenger->shutdown();
+      handle_ack((MMonCommandAck*)m);
       break;      
     }
   }
 } dispatcher;
+
 
 int main(int argc, const char **argv, const char *envp[]) {
 
@@ -56,8 +77,26 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
-  // args for fuse
   vec_to_argv(args, argc, argv);
+
+  bufferlist indata;
+  vector<const char*> nargs;
+  for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i],"-o") == 0) 
+      outfile = args[++i];
+    else if (strcmp(args[i], "-i") == 0) {
+      int fd = ::open(args[++i], O_RDONLY);
+      struct stat st;
+      if (::fstat(fd, &st) == 0) {
+	indata.push_back(buffer::create(st.st_size));
+	indata.zero();
+	::read(fd, indata.c_str(), st.st_size);
+	::close(fd);
+	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
+      }
+    } else
+      nargs.push_back(args[i]);
+  }
 
   // load monmap
   MonMap monmap;
@@ -73,11 +112,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // build command
   MMonCommand *m = new MMonCommand(messenger->get_myinst());
+  m->set_data(indata);
   string cmd;
-  for (unsigned i=0; i<args.size(); i++) {
+  for (unsigned i=0; i<nargs.size(); i++) {
     if (i) cmd += " ";
-    cmd += args[i];
-    m->cmd.push_back(string(args[i]));
+    cmd += nargs[i];
+    m->cmd.push_back(string(nargs[i]));
   }
   int mon = monmap.pick_mon();
 

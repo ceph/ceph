@@ -111,8 +111,6 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 
 
-typedef ceph_file_layout FileLayout;
-
 
 // --------------------------------------
 // inode
@@ -174,7 +172,7 @@ inline unsigned char MODE_TO_DT(int mode) {
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
-  FileLayout layout;  // ?immutable?
+  ceph_file_layout layout;  // ?immutable?
   uint32_t   rdev;    // if special file
 
   // affected by any inode change...
