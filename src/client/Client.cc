@@ -3971,7 +3971,7 @@ int Client::ll_release(Fh *fh)
 // layout
 
 
-int Client::describe_layout(int fd, FileLayout *lp)
+int Client::describe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -3987,21 +3987,21 @@ int Client::describe_layout(int fd, FileLayout *lp)
 
 int Client::get_stripe_unit(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return layout.fl_stripe_unit;
 }
 
 int Client::get_stripe_width(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_stripe_width(layout);
 }
 
 int Client::get_stripe_period(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_period(layout);
 }

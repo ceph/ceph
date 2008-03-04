@@ -1829,7 +1829,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
-  newi->inode.layout = g_OSD_MDDirLayout;
+  newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
 
   // ...and that new dir is empty.

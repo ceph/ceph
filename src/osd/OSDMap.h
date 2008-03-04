@@ -371,7 +371,7 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, FileLayout& layout) {
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
     return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, 
 			      layout.fl_pg_pool,
 			      layout.fl_pg_preferred, 
