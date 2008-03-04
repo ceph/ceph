@@ -29,9 +29,6 @@
 <osd osd005>
 	weight 500
 		</osd>
-<osd osd006>
-	weight 500
-		</osd>
 
 <cab cab-d2>
   type strawbucket
@@ -51,6 +48,14 @@
   	weight 3.0
 </item>
 </pool>
+
+<osd osd006>
+	weight 500
+		</osd>
+<osd osd006>
+	weight 600
+		</osd>
+
 
 # rules
 <rule 1x>
