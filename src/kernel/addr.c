@@ -111,6 +111,9 @@ static int ceph_prepare_write(struct file *filp, struct page *page,
 	int err = 0;
 	loff_t offset, i_size;
 	
+	dout(10, "prepare_write file %p inode %p page %p %d~%d\n", filp, 
+	     inode, page, from, (to-from));
+
 	/*
 	 * TODO:
 	 *  1. check if page is up to date
@@ -163,6 +166,9 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 	loff_t position = ((loff_t)page->index << PAGE_SHIFT) + to;
 	int err = 0;
 	char *page_data;
+	
+	dout(10, "commit_write file %p inode %p page %p %d~%d\n", filp, 
+	     inode, page, from, (to-from));
 	
 	spin_lock(&inode->i_lock);
 	if (position > inode->i_size) {

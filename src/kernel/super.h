@@ -293,6 +293,9 @@ extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
+extern int ceph_handle_cap_trunc(struct inode *inode,
+				 struct ceph_mds_file_caps *grant,
+				 struct ceph_mds_session *session);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,

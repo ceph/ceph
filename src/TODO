@@ -13,8 +13,6 @@ code cleanup
 kernel client
 - some bugs
  - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
- - cap handler probably needs i_mutex or something when updating file sizes
-   - which means it probably needs to be done in a different worker thread (NOT the messenger's)
  - prevent client_reply from racing against a subsequent file_caps.
 - proc.c
   - adjust granular debug levels too
@@ -30,7 +28,7 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - fix file open vs file_cap race
-  - preemptively release caps as part of request if doing utimes/etc. on an open file?
+  - optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client

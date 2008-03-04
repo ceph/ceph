@@ -1117,6 +1117,10 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_msg *ms
 			send_msg_mds(mdsc, msg, mds);
 		}
 		break;
+
+	case CEPH_CAP_OP_TRUNC:
+		ceph_handle_cap_trunc(inode, h, session);
+		break;
 		
 	case CEPH_CAP_OP_EXPORT:
 	case CEPH_CAP_OP_IMPORT:
