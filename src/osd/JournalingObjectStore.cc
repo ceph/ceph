@@ -19,7 +19,7 @@ int JournalingObjectStore::journal_replay()
     journal = 0;
     return err;
   }
-  
+
   int count = 0;
   while (1) {
     bufferlist bl;

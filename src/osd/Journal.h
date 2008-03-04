@@ -34,6 +34,7 @@ public:
   virtual void close() = 0;
 
   // writes
+  virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
   virtual void submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit) = 0;
   virtual void commit_epoch_start(epoch_t) = 0;  // mark epoch boundary

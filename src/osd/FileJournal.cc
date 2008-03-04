@@ -102,6 +102,9 @@ int FileJournal::open(epoch_t epoch)
 
   // read header?
   read_header();
+  dout(10) << "open journal header.fsid = " << header.fsid 
+    //<< " vs expected fsid = " << fsid 
+	   << dendl;
   if (header.fsid != fsid) {
     dout(2) << "open journal fsid doesn't match, invalid (someone else's?) journal" << dendl;
     err = -EINVAL;
@@ -152,12 +155,12 @@ int FileJournal::open(epoch_t epoch)
 
     if (read_pos == 0) {
       dout(0) << "no valid journal segments" << dendl;
-      return -EINVAL;
+      return 0; //hrm return -EINVAL; 
     }
 
   } else {
     dout(0) << "journal was empty" << dendl;
-    read_pos = get_top();
+    read_pos = -1;
   }
 
   return 0;
@@ -549,7 +552,7 @@ void FileJournal::make_writeable()
 {
   _open(true);
 
-  if (read_pos)
+  if (read_pos > 0)
     write_pos = read_pos;
   else
     write_pos = get_top();

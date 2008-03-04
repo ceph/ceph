@@ -50,6 +50,10 @@ fakesyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
 #newsyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
 #	libclient.a libosdc.a libcrush.a libcommon.a
 
+# tester tools
+streamtest_SOURCES = streamtest.cc
+streamtest_LDADD = libosd.a libebofs.a libcommon.a
+
 ##
 INCLUDES = 
 LDADD = -lpthread 
@@ -62,6 +66,7 @@ bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	mkmonmap monmaptool crushtool cmonctl \
 	fakesyn \
+	streamtest \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \

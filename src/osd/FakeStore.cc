@@ -151,12 +151,13 @@ int FakeStore::mkfs()
   sprintf(fn, "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY);
   ::write(fd, &fsid, sizeof(fsid));
-  ::fchmod(fd, 666);
+  ::fchmod(fd, 0644);
   ::close(fd);
+  dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // journal?
   struct stat st;
-  sprintf(fn, "%s/journal", basedir.c_str());
+  sprintf(fn, "%s.journal", basedir.c_str());
   if (::stat(fn, &st) == 0) {
     journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
     if (journal->create() < 0) {
@@ -166,6 +167,8 @@ int FakeStore::mkfs()
     }
     delete journal;
     journal = 0;
+  } else {
+    dout(10) << "mkfs no journal at " << fn << dendl;
   }
 
   if (g_conf.fakestore_dev) {
@@ -226,6 +229,7 @@ int FakeStore::mount()
   fd = ::open(fn, O_RDONLY);
   ::read(fd, &fsid, sizeof(fsid));
   ::close(fd);
+  dout(10) << "mount fsid is " << fsid << dendl;
   
   // get epoch
   sprintf(fn, "%s/commit_epoch", basedir.c_str());
@@ -235,9 +239,13 @@ int FakeStore::mount()
   dout(5) << "mount epoch is " << super_epoch << dendl;
 
   // journal
-  sprintf(fn, "%s/journal", basedir.c_str());
-  if (::stat(fn, &st) == 0)
+  sprintf(fn, "%s.journal", basedir.c_str());
+  if (::stat(fn, &st) == 0) {
+    dout(10) << "mount opening journal at " << fn << dendl;
     journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
+  } else {
+    dout(10) << "mount no journal at " << fn << dendl;
+  }
   r = journal_replay();
   if (r == -EINVAL) {
     dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
@@ -379,7 +387,7 @@ int FakeStore::write(pobject_t oid,
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return fd;
   }
-  ::fchmod(fd, 0664);
+  ::fchmod(fd, 0644);
   ::flock(fd, LOCK_EX);    // lock for safety
   
   // seek
@@ -434,7 +442,7 @@ void FakeStore::sync_entry()
     sprintf(fn, "%s/commit_epoch", basedir.c_str());
     int fd = ::open(fn, O_CREAT|O_WRONLY);
     ::write(fd, &super_epoch, sizeof(super_epoch));
-    ::fchmod(fd, 0664);
+    ::fchmod(fd, 0644);
     ::fsync(fd);  // this should cause the fs's journal to commit.
     ::close(fd);
 
