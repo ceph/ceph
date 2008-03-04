@@ -13,19 +13,23 @@
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
+extern int ceph_debug_super;
 extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
+extern int ceph_debug_addr;
 
 extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))		\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug == 0 && x <= DOUT_VAR))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
-#define derr(x, args...) do {					   \
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))	   \
-			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
+#define derr(x, args...) do {						\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug == 0 && x <= DOUT_VAR))			\
+			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
 
