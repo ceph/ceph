@@ -236,46 +236,16 @@ public:
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int type, int size,
-		 int *items, int *weights, double *min, double *max, double *avg) {
-    std::cout << "here" <<std::endl;
-    //crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
+		 int *items, int *weights) {
+    crush_bucket *b = crush_make_bucket(alg, type, size, items, weights);
 
-
-    int num = 0;
-    std::cout << "bucket size: "<<size<<std::endl;
-
-
-    *min = *max = *items;
-    *avg = 0.0;
-    for (int i=0; i < size; i++) {
-      std::cout << "stats: " << num << " : " << *items << " : "  << *weights <<std::endl;
-      *avg += *items;
-      if (*items < *min)
-        *min = *items;
-      else if (*items > *max)       
-	*max = *items;      
-      items++;
-      weights++;
-      num++;
-    }    
-
-    printf("here\n");
-
-    *avg /= num;
-
-    return 10;
-    //return crush_add_bucket(crush, bucketno, b);
+    return crush_add_bucket(crush, bucketno, b);
   }
-
-
 
   void finalize() {
     assert(crush);
     crush_finalize(crush);
   }
-
-
-
 
   void set_offload(int i, unsigned o) {
     assert(i < crush->max_devices);
