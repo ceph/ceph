@@ -48,12 +48,14 @@ kernel client
   - send (+deliver!) unmount message
 
 osdmon
-- allow fresh replacement osds.  add osd_created in osdmap, probably
 - actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
 - bootstrap crush map
 
 crush
+- rule naming
+ - would about a tuple of (type, minsize, maxsize, pool) for each rule?  then we'd do a 
+   quick 'search' to find the best rule given (pg_type, pg_size, pg_pool)...
 - xml import/export?
  - named storage "pools"?
  - generic rule definition

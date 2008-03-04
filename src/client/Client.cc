@@ -2901,7 +2901,15 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   }
 
   bool lazy = f->mode == FILE_MODE_LAZY;
-  
+
+  // wait for RD cap before checking size
+  while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
+    dout(7) << " don't have read cap, waiting" << dendl;
+    Cond cond;
+    in->waitfor_read.push_back(&cond);
+    cond.Wait(client_lock);
+  }
+
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
   if (!lazy && (in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
@@ -2932,29 +2940,9 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   if (g_conf.client_oc) {
     // object cache ON
     rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
-
-    /*
-    if (in->inode.ino == 0x10000000075 && hackbuf) {
-      int s = MIN(size, bl->length());
-      char *v = bl->c_str();
-      for (int a=0; a<s; a++) 
-	if (v[a] != hackbuf[offset+a]) 
-	  dout(1) << "** hackbuf differs from read value at offset " << a 
-		  << " hackbuf[a] = " << (int)hackbuf[a] << ", read got " << (int)v[a]
-		  << dendl;
-    }
-    */
-
   } else {
     // object cache OFF -- legacy inconsistent way.
 
-    // do we have read file cap?
-    while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
-      dout(7) << " don't have read cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_read.push_back(&cond);
-      cond.Wait(client_lock);
-    }  
     // lazy cap?
     while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;

@@ -130,8 +130,8 @@ int main(int argc, const char **argv)
     if (now < next) {
       float s = next - now;
       s *= 1000 * 1000;  // s -> us
-      //cout << "sleeping for " << s << std::endl;
-      usleep(s);
+      //cout << "sleeping for " << s << " us" << std::endl;
+      usleep((int)s);
     }
   }
 
