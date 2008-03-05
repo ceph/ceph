@@ -241,7 +241,7 @@ public:
 
     return crush_add_bucket(crush, bucketno, b);
   }
-
+  
   void finalize() {
     assert(crush);
     crush_finalize(crush);
