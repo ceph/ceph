@@ -70,6 +70,11 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#ifdef DARWIN
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif // DARWIN
+
 
 #include "config.h"
 

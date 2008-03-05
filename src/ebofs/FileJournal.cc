@@ -398,8 +398,13 @@ void FileJournal::do_write(bufferlist& bl)
     ::pwrite(fd, hbp.c_str(), hbp.length(), 0);
   
   // entry
+#ifdef DARWIN
+  off_t pos = write_pos;
+  ::lseek(fd, write_pos, SEEK_SET);
+#else
   off64_t pos = write_pos;
   ::lseek64(fd, write_pos, SEEK_SET);
+#endif
   for (list<bufferptr>::const_iterator it = bl.buffers().begin();
        it != bl.buffers().end();
        it++) {
@@ -411,9 +416,15 @@ void FileJournal::do_write(bufferlist& bl)
 	      << dendl;
     pos += (*it).length();
   }
+#ifdef DARWIN
+  if (!directio)
+    ::fsync(fd);
+#else
   if (!directio)
     ::fdatasync(fd);
-      
+#endif
+
+
   write_lock.Lock();    
 
   writing = false;
@@ -583,7 +594,11 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
 
   // header
   entry_header_t h;
+#ifdef DARWIN
+  ::lseek(fd, read_pos, SEEK_SET);
+#else
   ::lseek64(fd, read_pos, SEEK_SET);
+#endif
   ::read(fd, &h, sizeof(h));
   if (!h.check_magic(read_pos, header.fsid)) {
     dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;

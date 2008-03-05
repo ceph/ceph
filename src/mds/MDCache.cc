@@ -1198,7 +1198,7 @@ void MDCache::handle_mds_recovery(int who)
     while (!q.empty()) {
       CDir *d = q.front();
       q.pop_front();
-      d->take_waiting(CDir::WAIT_ANY, waiters);
+      d->take_waiting(CDir::WAIT_ANY_MASK, waiters);
 
       // inode waiters too
       for (CDir::map_t::iterator p = d->items.begin();
@@ -1206,7 +1206,7 @@ void MDCache::handle_mds_recovery(int who)
 	   ++p) {
 	CDentry *dn = p->second;
 	if (dn->is_primary()) {
-	  dn->get_inode()->take_waiting(CInode::WAIT_ANY, waiters);
+	  dn->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, waiters);
 	  
 	  // recurse?
 	  list<CDir*> ls;

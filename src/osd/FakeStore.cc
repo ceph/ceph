@@ -217,7 +217,11 @@ int FakeStore::mount()
 #ifndef __CYGWIN__
   } else {
     char names[1000];
+#ifdef DARWIN
+    r = ::listxattr(basedir.c_str(), names, 1000, 0);
+#else
     r = ::listxattr(basedir.c_str(), names, 1000);
+#endif
     if (r < 0) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --fakestore_fake_attrs to fake them (in memory)." << dendl;
       assert(0);
@@ -445,7 +449,11 @@ int FakeStore::setattr(pobject_t oid, const char *name,
 #ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
+#ifdef DARWIN
+  r = ::setxattr(fn, name, value, size, 0, 0);
+#else
   r = ::setxattr(fn, name, value, size, 0);
+#endif
 #endif
   return r;
 }
@@ -461,7 +469,11 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
+#ifdef DARWIN
+    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0, 0);
+#else
     r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+#endif
     if (r < 0) {
       cerr << "error setxattr " << strerror(errno) << std::endl;
       break;
@@ -479,7 +491,11 @@ int FakeStore::getattr(pobject_t oid, const char *name,
 #ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
+#ifdef DARWIN
+  r = ::getxattr(fn, name, value, size, 0, 0);
+#else
   r = ::getxattr(fn, name, value, size);
+#endif
 #endif
   return r;
 }
@@ -494,12 +510,19 @@ int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset)
 
   char val[1000];
   char names[1000];
+#ifdef DARWIN
+  int num = ::listxattr(fn, names, 1000, 0);
+#else
   int num = ::listxattr(fn, names, 1000);
-  
+#endif
   char *name = names;
   for (int i=0; i<num; i++) {
     dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+#ifdef DARWIN
+    int l = ::getxattr(fn, name, val, 1000, 0, 0);
+#else
     int l = ::getxattr(fn, name, val, 1000);
+#endif
     dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
     aset[names].append(val, l);
     name += strlen(name) + 1;
@@ -515,7 +538,11 @@ int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
 #ifndef __CYGWIN__
   char fn[100];
   get_oname(oid, fn);
+#ifdef DARWIN
+  r = ::removexattr(fn, name, 0);
+#else
   r = ::removexattr(fn, name);
+#endif
 #endif
   return r;
 }
@@ -526,7 +553,11 @@ int FakeStore::listattr(pobject_t oid, char *attrls, size_t size)
   if (fake_attrs) return attrs.listattr(oid, attrls, size);
   char fn[100];
   get_oname(oid, fn);
+#ifdef DARWIN
+  return ::listxattr(fn, attrls, size, 0);
+#else
   return ::listxattr(fn, attrls, size);
+#endif
 }
 */
 
@@ -566,7 +597,11 @@ int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
+#ifdef DARWIN
+    r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0, 0);
+#else
     r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
+#endif
     if (r < 0) break;
   }
 #endif
@@ -583,12 +618,20 @@ int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
 
   char val[1000];
   char names[1000];
+#ifdef DARWIN
+  int num = ::listxattr(fn, names, 1000, 0);
+#else
   int num = ::listxattr(fn, names, 1000);
-  
+#endif
+
   char *name = names;
   for (int i=0; i<num; i++) {
     dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
+#ifdef DARWIN
+    int l = ::getxattr(fn, name, val, 1000, 0, 0);
+#else
     int l = ::getxattr(fn, name, val, 1000);
+#endif
     dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
     aset[names].append(val, l);
     name += strlen(name) + 1;

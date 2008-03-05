@@ -15,6 +15,12 @@
 # include "byteorder.h"
 #endif
 
+#ifdef DARWIN
+typedef long long loff_t;
+typedef long long off64_t;
+#define O_DIRECT 00040000
+#endif
+
 #define CEPH_MON_PORT 12345
 
 /*
