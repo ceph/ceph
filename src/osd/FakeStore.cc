@@ -50,6 +50,43 @@
 
 #include <map>
 
+
+/*
+ * xattr portability stupidity
+ */ 
+
+#ifdef DARWIN
+int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
+  return ::getxattr(fn, name, val, size, 0, 0);
+}
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
+  return ::setxattr(fn, name, val, size, 0, 0);
+}
+int do_removexattr(const char *fn, const char *name) {
+  return ::removexattr(fn, name, 0);
+}
+int do_listxattr(const char *fn, char *names, size_t len) {
+  return ::listxattr(fn, names, len, 0);
+}
+#else
+int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
+  return ::getxattr(fn, name, val, size);
+}
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
+  return ::setxattr(fn, name, val, size, 0);
+}
+int do_removexattr(const char *fn, const char *name) {
+  return ::removexattr(fn, name);
+}
+int do_listxattr(const char *fn, char *names, size_t len) {
+  return ::listxattr(fn, names, len);
+}
+
+#endif
+
+
+
+
 int FakeStore::statfs(struct statfs *buf)
 {
   return ::statfs(basedir.c_str(), buf);
@@ -214,11 +251,7 @@ int FakeStore::mount()
     fake_attrs = true;
   } else {
     char names[1000];
-#ifdef DARWIN
-    r = ::listxattr(basedir.c_str(), names, 1000, 0);
-#else
-    r = ::listxattr(basedir.c_str(), names, 1000);
-#endif
+    r = do_listxattr(basedir.c_str(), names, 1000);
     if (r < 0) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --fakestore_fake_attrs to fake them (in memory)." << dendl;
       assert(0);
@@ -484,11 +517,7 @@ int FakeStore::setattr(pobject_t oid, const char *name,
   else {
     char fn[100];
     get_oname(oid, fn);
-#ifdef DARWIN
-    r = ::setxattr(fn, name, value, size, 0, 0);
-#else
-    r = ::setxattr(fn, name, value, size, 0);
-#endif
+    r = do_setxattr(fn, name, value, size);
   }
   if (r >= 0)
     journal_setattr(oid, name, value, size, onsafe);
@@ -499,7 +528,6 @@ int FakeStore::setattr(pobject_t oid, const char *name,
 
 int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
-<<<<<<< HEAD:src/osd/FakeStore.cc
   int r;
   if (fake_attrs) 
     r = attrs.setattrs(oid, aset);
@@ -510,11 +538,7 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
     for (map<string,bufferptr>::iterator p = aset.begin();
 	 p != aset.end();
 	 ++p) {
-#ifdef DARWIN
-      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0, 0);
-#else
-      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-#endif
+      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
       if (r < 0) {
 	cerr << "error setxattr " << strerror(errno) << std::endl;
 	break;
@@ -535,11 +559,7 @@ int FakeStore::getattr(pobject_t oid, const char *name,
   else {
     char fn[100];
     get_oname(oid, fn);
-#ifdef DARWIN
-    r = ::getxattr(fn, name, value, size, 0, 0);
-#else
-    r = ::getxattr(fn, name, value, size);
-#endif
+    r = do_getxattr(fn, name, value, size);
   }
   return r;
 }
@@ -555,20 +575,12 @@ int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset)
     
     char val[1000];
     char names[1000];
-#ifdef DARWIN
-    int num = ::listxattr(fn, names, 1000, 0);
-#else
-    int num = ::listxattr(fn, names, 1000);
-#endif
+    int num = do_listxattr(fn, names, 1000);
     
     char *name = names;
     for (int i=0; i<num; i++) {
       dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-#ifdef DARWIN
-      int l = ::getxattr(fn, name, val, 1000, 0, 0);
-#else
-      int l = ::getxattr(fn, name, val, 1000);
-#endif
+      int l = do_getxattr(fn, name, val, 1000);
       dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
       aset[names].append(val, l);
       name += strlen(name) + 1;
@@ -585,16 +597,13 @@ int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
   else {
     char fn[100];
     get_oname(oid, fn);
-#ifdef DARWIN
-    r = ::removexattr(fn, name, 0);
-#else
-    r = ::removexattr(fn, name);
-#endif
+    r = do_removexattr(fn, name);
   }
   if (r >= 0)
     journal_rmattr(oid, name, onsafe);
   else
     delete onsafe;
+  return r;
 }
 
 
@@ -611,11 +620,7 @@ int FakeStore::collection_setattr(coll_t c, const char *name,
   else {
     char fn[200];
     get_cdir(c, fn);
-#ifdef DARWIN
-    r = ::setxattr(fn, name, value, size, 0, 0);
-#else
-    r = ::setxattr(fn, name, value, size, 0);
-#endif
+    r = do_setxattr(fn, name, value, size);
   }
   if (r >= 0)
     journal_collection_setattr(c, name, value, size, onsafe);
@@ -633,11 +638,7 @@ int FakeStore::collection_rmattr(coll_t c, const char *name,
   else {
     char fn[200];
     get_cdir(c, fn);
-#ifdef DARWIN
-    r = ::removexattr(fn, name, 0);
-#else
-    r = ::removexattr(fn, name);
-#endif
+    r = do_removexattr(fn, name);
   }
   return 0;
 }
@@ -651,11 +652,7 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   else {
     char fn[200];
     get_cdir(c, fn);
-#ifdef DARWIN
-    r = ::getxattr(fn, name, value, size, 0, 0);   
-#else
-    r = ::getxattr(fn, name, value, size);   
-#endif
+    r = do_getxattr(fn, name, value, size);   
   }
   return r;
 }
@@ -672,11 +669,7 @@ int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
     for (map<string,bufferptr>::iterator p = aset.begin();
 	 p != aset.end();
        ++p) {
-#ifdef DARWIN
-      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0, 0);
-#else
-      r = ::setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length(), 0);
-#endif
+      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
       if (r < 0) break;
     }
   }
@@ -696,20 +689,12 @@ int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     
     char val[1000];
     char names[1000];
-#ifdef DARWIN
-    int num = ::listxattr(fn, names, 1000, 0);
-#else
-    int num = ::listxattr(fn, names, 1000);
-#endif
+    int num = do_listxattr(fn, names, 1000);
     
     char *name = names;
     for (int i=0; i<num; i++) {
       dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-#ifdef DARWIN
-      int l = ::getxattr(fn, name, val, 1000, 0, 0);
-#else
-      int l = ::getxattr(fn, name, val, 1000);
-#endif
+      int l = do_getxattr(fn, name, val, 1000);
       dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
       aset[names].append(val, l);
       name += strlen(name) + 1;
