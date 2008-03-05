@@ -249,7 +249,7 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
 struct ceph_file_info {
 	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	int mode;      /* initialized on open */
-	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_request *req;
 };
 
 
@@ -323,8 +323,7 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_reply_info *prinfo,
 			   struct inode **lastinode,
 			   struct dentry **lastdentry);
-extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
-				      struct ceph_mds_reply_info *prinfo);
+extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry);
 extern void ceph_touch_dentry(struct dentry *dentry);
 
 /* proc.c */

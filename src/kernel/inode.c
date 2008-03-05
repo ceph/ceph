@@ -519,11 +519,11 @@ const struct inode_operations ceph_symlink_iops = {
 /*
  * generics
  */
-struct ceph_msg *prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
+struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
 {
 	char *path;
 	int pathlen;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 
 	dout(5, "prepare_setattr dentry %p\n", dentry);
 	path = ceph_build_dentry_path(dentry, &pathlen);
@@ -541,9 +541,8 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
         const unsigned int ia_valid = attr->ia_valid;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
-	struct ceph_mds_reply_info rinfo;
 	int err;
 
 	/* gratuitous debug output */
@@ -571,7 +570,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHOWN);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
-		reqh = req->front.iov_base;
+		reqh = req->r_request->front.iov_base;
 		if (ia_valid & ATTR_UID)
 			reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
 		else
@@ -580,13 +579,13 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
 		else
 			reqh->args.chown.gid = cpu_to_le32(-1);
-		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
 			return err;
-		err = le32_to_cpu(rinfo.head->result);
+		err = le32_to_cpu(req->r_reply_info.head->result);
+		ceph_mdsc_put_request(req);
 		dout(10, "chown result %d\n", err);
 		if (err)
 			return err;
-		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
 		//if (err) return err;
 	}
 	
@@ -595,16 +594,15 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHMOD);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
-		reqh = req->front.iov_base;
+		reqh = req->r_request->front.iov_base;
 		reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
-		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
 			return err;
-		err = le32_to_cpu(rinfo.head->result);
+		err = le32_to_cpu(req->r_reply_info.head->result);
+		ceph_mdsc_put_request(req);
 		dout(10, "chmod result %d\n", err);
 		if (err)
 			return err;
-		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
-		//if (err) return err;
 	}
 
 	/* utimes */
@@ -614,17 +612,16 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
-		reqh = req->front.iov_base;
+		reqh = req->r_request->front.iov_base;
 		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
 		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
-		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
 			return err;
-		err = le32_to_cpu(rinfo.head->result);
+		err = le32_to_cpu(req->r_reply_info.head->result);
+		ceph_mdsc_put_request(req);
 		dout(10, "utime result %d\n", err);
 		if (err)
 			return err;
-		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
-		//if (err) return err;
 	}
 
 	/* truncate? */
@@ -639,16 +636,15 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_TRUNCATE);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
-		reqh = req->front.iov_base;
+		reqh = req->r_request->front.iov_base;
 		reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-		if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0)) < 0) 
+		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
 			return err;
-		err = le32_to_cpu(rinfo.head->result);
+		err = le32_to_cpu(req->r_reply_info.head->result);
+		ceph_mdsc_put_request(req);
 		dout(10, "truncate result %d\n", err);
 		if (err)
 			return err;
-		err = ceph_fill_trace(inode->i_sb, &rinfo, &inode, NULL);
-		//if (err) return err;
 	}
 
 	return 0;
@@ -657,40 +653,18 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 int ceph_inode_revalidate(struct dentry *dentry)
 {
 	struct ceph_inode_info *ci;
-	struct ceph_mds_reply_info rinfo;
-	ino_t ino;
-	int err;
 
 	if (dentry->d_inode == NULL)
 		return -ENOENT;
 
 	ci = ceph_inode(dentry->d_inode);
-
 	if (!ci)
 		return -ENOENT;
 
-	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ)) {
+	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ))
 		return 0;
-	}
 
-	err = ceph_request_lookup(dentry->d_inode->i_sb, dentry, &rinfo);
-
-	if (err < 0)
-		return err;
-
-	if (rinfo.trace_nr > 0) {
-		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
-		dout(10, "revalidate: got and parsed stat result, ino %lu\n", ino);
-
-		err = ceph_fill_inode(dentry->d_inode,
-				      rinfo.trace_in[rinfo.trace_nr-1].in);
-		if (err < 0)
-			return err;
-	} else {
-		dout(10, "no trace in reply? wtf.\n");
-	}
-
-	return err;
+	return ceph_request_lookup(dentry->d_inode->i_sb, dentry);
 }
 
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)

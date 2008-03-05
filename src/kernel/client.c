@@ -45,46 +45,13 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-
-int parse_open_reply(struct ceph_msg *reply, struct inode *inode, struct ceph_mds_session *session)
-{
-	struct ceph_mds_reply_head *head;
-	struct ceph_mds_reply_info rinfo;
-	int frommds = session->s_mds;
-	int err;
-	struct ceph_inode_cap *cap;
-
-	/* parse reply */
-	head = reply->front.iov_base;
-	err = le32_to_cpu(head->result);
-	dout(30, "parse_open_reply mds%d reports %d\n", frommds, err);
-	if (err < 0) 
-		return err;
-	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0)
-		return err;
-	BUG_ON(rinfo.trace_nr == 0);
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		return err;
-
-	/* fill in cap */
-	cap = ceph_add_cap(inode, session, 
-			   le32_to_cpu(head->file_caps), 
-			   le32_to_cpu(head->file_caps_seq));
-	if (IS_ERR(cap))
-		return PTR_ERR(cap);
-
-	ceph_mdsc_destroy_reply_info(&rinfo);
-	return 0;
-}
-
 static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *args, struct dentry **pmnt_root)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *root_inode, *mnt_inode = NULL;
-	struct ceph_msg *req = 0;
+	struct ceph_mds_request *req = 0;
 	struct ceph_mds_request_head *reqhead;
 	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_session *session;
 	int frommds;
 	int err;
 	struct ceph_inode_cap *cap;
@@ -96,15 +63,16 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	reqhead = req->front.iov_base;
+	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
+	if ((err = ceph_mdsc_do_request(mdsc, req)) < 0)
 		return err;
 	
+	rinfo = req->r_reply_info;
 	err = le32_to_cpu(rinfo.head->result);
 	if (err != 0) 
-		return err;
+		goto out;
 	if (rinfo.trace_nr == 0) {
 		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
 		err = -EINVAL;
@@ -139,8 +107,8 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	}
 
 	/* fill in cap */
-	frommds = le32_to_cpu(rinfo.reply->hdr.src.name.num);
-	cap = ceph_add_cap(mnt_inode, session, 
+	frommds = le32_to_cpu(req->r_reply->hdr.src.name.num);
+	cap = ceph_add_cap(mnt_inode, req->r_session, 
 			   le32_to_cpu(rinfo.head->file_caps), 
 			   le32_to_cpu(rinfo.head->file_caps_seq));
 	if (IS_ERR(cap)) {
@@ -152,6 +120,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	ci->i_nr_by_mode[FILE_MODE_PIN]++;
 
 	dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
+	ceph_mdsc_put_request(req);
 	return 0;
 
 out2:
@@ -160,7 +129,7 @@ out2:
 		iput(root_inode);
 	iput(mnt_inode);
 out:
-	ceph_mdsc_put_session(session);
+	ceph_mdsc_put_request(req);
 	return err;
 }
 

@@ -104,16 +104,18 @@ static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct qstr dname;
 	struct dentry *parent, *dn;
 	struct inode *in;
+	struct ceph_mds_reply_info *rinfo;
 
 nextfrag:
 	dout(5, "dir_readdir filp %p at frag %u off %u\n", filp, frag, off);
-	if (fi->frag != frag || fi->rinfo.reply == NULL) {
-		struct ceph_msg *req;
+	if (fi->frag != frag || fi->req == NULL) {
+		struct ceph_mds_request *req;
 		struct ceph_mds_request_head *rhead;
+		struct ceph_mds_reply_info *rinfo;
 
 		/* query mds */
-		if (fi->rinfo.reply)
-			ceph_mdsc_destroy_reply_info(&fi->rinfo);
+		if (fi->req)
+			ceph_mdsc_put_request(fi->req);
 
 		dout(10, "dir_readdir querying mds for ino %llx frag %u\n",
 		     ceph_ino(inode), frag);
@@ -121,22 +123,27 @@ nextfrag:
 					       ceph_ino(inode), "", 0, 0);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
-		rhead = req->front.iov_base;
+		fi->req = req;
+		rhead = req->r_request->front.iov_base;
 		rhead->args.readdir.frag = cpu_to_le32(frag);
-		err = ceph_mdsc_do_request(mdsc, req, &fi->rinfo, 0);
+		err = ceph_mdsc_do_request(mdsc, req);
 		if (err < 0)
 		    return err;
-		err = le32_to_cpu(fi->rinfo.head->result);
+		rinfo = &fi->req->r_reply_info;
+		err = le32_to_cpu(rinfo->head->result);
 		dout(10, "dir_readdir got and parsed readdir result=%d"
 		     " on frag %u\n", err, frag);
-		if (err < 0)
+		if (err < 0) {
+			ceph_mdsc_put_request(req);
+			fi->req = 0;
 			return err;
+		}
 
 		/* pre-populate dentry cache */
 		parent = filp->f_dentry;
-		for (i = 0; i < fi->rinfo.dir_nr; i++) {
-			dname.name = fi->rinfo.dir_dname[i];
-			dname.len = fi->rinfo.dir_dname_len[i];
+		for (i = 0; i < rinfo->dir_nr; i++) {
+			dname.name = rinfo->dir_dname[i];
+			dname.len = rinfo->dir_dname_len[i];
 			dname.hash = full_name_hash(dname.name, dname.len);
 
 			dn = d_lookup(parent, &dname);
@@ -164,8 +171,8 @@ nextfrag:
 
 			ceph_touch_dentry(dn);
 			if (ceph_ino(in) !=
-			    le64_to_cpu(fi->rinfo.dir_in[i].in->ino)) {
-				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
+			    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
+				if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
 					dout(30, "ceph_fill_inode badness\n");
 					iput(in);
 					d_delete(dn);
@@ -173,9 +180,9 @@ nextfrag:
 				}
 				d_add(dn, in);
 				dout(10, "dir_readdir added dentry %p inode %llx %d/%d\n",
-				     dn, ceph_ino(in), i, fi->rinfo.dir_nr);
+				     dn, ceph_ino(in), i, rinfo->dir_nr);
 			} else {
-				if (ceph_fill_inode(in, fi->rinfo.dir_in[i].in) < 0) {
+				if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
 					dout(30, "ceph_fill_inode badness\n");
 					break;
 				}
@@ -209,15 +216,16 @@ nextfrag:
 	} else
 		skew = -2;
 
-	while (off+skew < fi->rinfo.dir_nr) {
+	rinfo = &fi->req->r_reply_info;
+	while (off+skew < rinfo->dir_nr) {
 		dout(10, "dir_readdir off %d -> %d / %d name '%s'\n", off, off+skew,
-		     fi->rinfo.dir_nr, fi->rinfo.dir_dname[off+skew]);
+		     rinfo->dir_nr, rinfo->dir_dname[off+skew]);
 		if (filldir(dirent,
-			    fi->rinfo.dir_dname[off+skew],
-			    fi->rinfo.dir_dname_len[off+skew],
+			    rinfo->dir_dname[off+skew],
+			    rinfo->dir_dname_len[off+skew],
 			    make_fpos(frag, off),
-			    le64_to_cpu(fi->rinfo.dir_in[off+skew].in->ino),
-			    le32_to_cpu(fi->rinfo.dir_in[off+skew].in->mode >> 12)) < 0) {
+			    le64_to_cpu(rinfo->dir_in[off+skew].in->ino),
+			    le32_to_cpu(rinfo->dir_in[off+skew].in->mode >> 12)) < 0) {
 			dout(20, "filldir stopping us...\n");
 			return 0;
 		}
@@ -247,14 +255,13 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
-				      struct ceph_mds_reply_info *prinfo)
+int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	char *path;
 	int pathlen;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 	int err;
 
 	/* regular lookup */
@@ -266,12 +273,12 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	err = ceph_mdsc_do_request(mdsc, req, prinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0)
 		return err;
-	err = le32_to_cpu(prinfo->head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
+	ceph_mdsc_put_request(req);
 	dout(20, "dir_lookup result=%d\n", err);
-
 	return err;
 }
 
@@ -284,56 +291,25 @@ void ceph_touch_dentry(struct dentry *dentry)
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nd)
 {
-	struct ceph_mds_reply_info rinfo;
-	struct inode *inode;
 	int err;
-	ino_t ino;
-	int found = 0;
 
 	dout(5, "dir_lookup in dir %p dentry %p '%s'\n", dir, dentry, dentry->d_name.name);
 
 	/* open(|create) intent? */
+	/*
 	if (nd->flags & LOOKUP_OPEN) {
 		err = ceph_lookup_open(dir, dentry, nd);
 		return ERR_PTR(err);
 	}
+	*/
 
-	err = ceph_request_lookup(dir->i_sb, dentry, &rinfo);
-
+	err = ceph_request_lookup(dir->i_sb, dentry);
 	if (err == -ENOENT) {
+		dout(10, "ENOENT, adding a null dentry\n");
 		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 	} else if (err < 0)
 		return ERR_PTR(err);
-
-	if ((!err) && (rinfo.trace_nr > 0)) {
-		ino = le64_to_cpu(rinfo.trace_in[rinfo.trace_nr-1].in->ino);
-		dout(10, "got and parsed stat result, ino %lu\n", ino);
-
-		inode = ilookup(dir->i_sb, ino);
-
-		if (!inode)
-			inode = new_inode(dir->i_sb);
-		else
-			found++;
-
-		if (!inode)
-			return ERR_PTR(-EACCES);
-
-		err = ceph_fill_inode(inode,
-				      rinfo.trace_in[rinfo.trace_nr-1].in);
-		if (err < 0)
-			return ERR_PTR(err);
-
-		ceph_touch_dentry(dentry);
-		d_add(dentry, inode);
-
-		if (found)
-			iput(inode);
-
-	} else {
-		dout(10, "no trace in reply? wtf.\n");
-	}
 
 	return NULL;
 }
@@ -342,10 +318,8 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct inode *inode = NULL;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
-	struct ceph_mds_reply_info rinfo;
 	char *path;
 	int pathlen;
 	int err;
@@ -361,30 +335,26 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	rhead = req->front.iov_base;
+	rhead = req->r_request->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0) {
 		d_drop(dentry);
 		return err;
 	}
 
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
-
-		if (err < 0)
-			goto done;
-
-		if (inode == NULL) {
+		if (req->r_last_inode == NULL) {
 			/* TODO handle this one */
 			err = -ENOMEM;
 			goto done;
 		}
-		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
+		//dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
 	}
 done:
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -392,9 +362,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct inode *inode = NULL;
-	struct ceph_msg *req;
-	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
 	int err;
@@ -410,27 +378,22 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0) {
 		d_drop(dentry);
 		return err;
 	}
 
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
-
-		if (err < 0)
-			goto done;
-
-		if (inode == NULL) {
+		if (req->r_last_inode == NULL) {
 			/* TODO handle this one */
 			err = -ENOMEM;
 			goto done;
 		}
-		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
 	}
 done:
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -438,10 +401,8 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct inode *inode = NULL;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
-	struct ceph_mds_reply_info rinfo;
 	char *path;
 	int pathlen;
 	int err;
@@ -457,30 +418,24 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	rhead = req->front.iov_base;
+	rhead = req->r_request->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0) {
 		d_drop(dentry);
 		return err;
 	}
 
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
-/*		inode_dec_link_count(inode); */
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
-
-		if (err < 0)
-			goto done_mkdir;
-
-		if (inode == NULL) {
+		if (req->r_last_inode == NULL) {
 			/* TODO handle this one */
 			err = -ENOMEM;
 			goto done_mkdir;
 		}
-		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
 	}
 done_mkdir:
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -490,8 +445,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = dentry->d_inode;
-	struct ceph_msg *req;
-	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
 	int err;
@@ -507,15 +461,16 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0)
 		return err;
 
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
-		inode_dec_link_count(inode);
+		inode_dec_link_count(req->r_last_inode);
 		/* FIXME update dir mtime etc. from reply trace */
 	}
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -524,8 +479,7 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	struct ceph_client *client = ceph_sb_to_client(old_dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_msg *req;
-	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_request *req;
 	struct dentry *root = old_dir->i_sb->s_root;
 	char *oldpath, *newpath;
 	int oldpathlen, newpathlen;
@@ -548,14 +502,15 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, 0);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0)
 		return err;
 
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
 		/* FIXME update dir mtime etc. from reply trace */
 	}
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -567,12 +522,9 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	ceph_ino_t pathbase;
 	char *path;
 	int pathlen;
-	struct ceph_msg *req;
+	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
-	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_session *session;
 	int err;
-	struct inode *inode;
 	
 	dout(5, "create in dir %p dentry %p name '%s' flags %d\n", dir, dentry, dentry->d_name.name, mode);
 	pathbase = ceph_ino(dir->i_sb->s_root->d_inode);
@@ -583,29 +535,24 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	rhead = req->front.iov_base;
+	rhead = req->r_request->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = 0;
-	err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session);
+	err = ceph_mdsc_do_request(mdsc, req);
 	if (err < 0)
 		return err;
 	
 	dout(10, "create got and parsed result\n");
 	
-	err = le32_to_cpu(rinfo.head->result);
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
-		err = ceph_fill_trace(dir->i_sb, &rinfo, &inode, NULL);
-		
-		if (err < 0)
-			goto done_create;
-		
-		if (inode == NULL) {
+		if (req->r_last_inode == NULL) {
 			err = -ENOMEM;
 			goto done_create;
 		}
-		dout(10, "rinfo.dir_in=%p rinfo.trace_nr=%d\n", rinfo.trace_in, rinfo.trace_nr);
 	}
 done_create:
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
@@ -641,6 +588,6 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 struct dentry_operations ceph_dentry_ops = {
-    .d_revalidate = ceph_d_revalidate,
+	.d_revalidate = ceph_d_revalidate,
 };
 
