@@ -9,6 +9,15 @@
 
 #include "osdmap.h"
 
+/* flags for page cache handling in CEPH.
+ * TODO: Where should they used? in which data structure?
+ */
+#define CEPH_PGCACHE_RD        0x00000001
+#define CEPH_PGCACHE_WR        0x00000002
+#define CEPH_PGCACHE_RDCACHE   0x00000004
+#define CEPH_PGCACHE_WRBUFFER  0x00000008
+
+
 struct ceph_msg;
 
 /*
@@ -59,6 +68,19 @@ extern int ceph_osdc_readpages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 extern int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 				 struct ceph_file_layout *layout, 
 				 __u64 count, __u64 offset, const char __user *data);
+
+extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                             struct ceph_file_layout *layout, 
+                             loff_t off, loff_t len,
+                             struct page *page);
+extern int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                             struct ceph_file_layout *layout, 
+                             loff_t off, loff_t len,
+                             struct page *page);
+extern int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+                                struct ceph_file_layout *layout, 
+                                loff_t off, loff_t len,
+                                struct page *page);
 
 #endif
 

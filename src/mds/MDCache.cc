@@ -154,7 +154,7 @@ CInode *MDCache::create_inode()
 
   in->inode.nlink = 1;   // FIXME
 
-  in->inode.layout = g_OSD_FileLayout;
+  in->inode.layout = g_default_file_layout;
 
   add_inode(in);  // add
   return in;
@@ -217,7 +217,7 @@ CInode *MDCache::create_root_inode()
     root->inode.mtime = g_clock.now();
   
   root->inode.nlink = 1;
-  root->inode.layout = g_OSD_MDDirLayout;
+  root->inode.layout = g_default_mds_dir_layout;
   
   root->inode_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
@@ -268,7 +268,7 @@ CInode *MDCache::create_stray_inode(int whose)
     in->inode.mtime = g_clock.now();
   
   in->inode.nlink = 1;
-  in->inode.layout = g_OSD_MDDirLayout;
+  in->inode.layout = g_default_mds_dir_layout;
   
   add_inode( in );
 

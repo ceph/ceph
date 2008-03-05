@@ -153,9 +153,9 @@ class Filer {
   /* map (ino, offset, len) to a (list of) OSDExtents 
      (byte ranges in objects on (primary) osds) */
   void file_to_extents(inode_t inode,
-                       off_t offset,
-                       size_t len,
-                       list<ObjectExtent>& extents,
+		       off_t offset,
+		       size_t len,
+		       list<ObjectExtent>& extents,
 		       objectrev_t rev=0);
   
 };

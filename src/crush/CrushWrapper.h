@@ -17,16 +17,19 @@
 #include <set>
 #include <string>
 
+#include <iostream> //for testing, remove
+
+using namespace std;
 class CrushWrapper {
 public:
   struct crush_map *crush;
-  map<int, string> type_map; /* bucket type names */
-  map<int, string> name_map; /* bucket/device names */
-  map<int, string> rule_name_map;
+  std::map<int, string> type_map; /* bucket type names */
+  std::map<int, string> name_map; /* bucket/device names */
+  std::map<int, string> rule_name_map;
 
   /* reverse maps */
   bool have_rmaps;
-  map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
@@ -234,20 +237,15 @@ public:
   /* modifiers */
   int add_bucket(int bucketno, int alg, int type, int size,
 		 int *items, int *weights) {
-    crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
+    crush_bucket *b = crush_make_bucket(alg, type, size, items, weights);
+
     return crush_add_bucket(crush, bucketno, b);
   }
-
-
-
+  
   void finalize() {
     assert(crush);
     crush_finalize(crush);
   }
-
-
-
-
 
   void set_offload(int i, unsigned o) {
     assert(i < crush->max_devices);

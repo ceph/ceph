@@ -814,7 +814,7 @@ public:
   int lazyio_synchronize(int fd, off_t offset, size_t count);
 
   // expose file layout
-  int describe_layout(int fd, FileLayout* layout);
+  int describe_layout(int fd, ceph_file_layout* layout);
   int get_stripe_unit(int fd);
   int get_stripe_width(int fd);
   int get_stripe_period(int fd);

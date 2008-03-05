@@ -39,7 +39,7 @@ struct __le64 { __u64 v; } __attribute__ ((packed));
 struct __le32 { __u32 v; } __attribute__ ((packed));
 struct __le16 { __u16 v; } __attribute__ ((packed));
 
-#ifdef WORDS_BIGENDIAN
+#if __BYTEORDER == __BIG_ENDIAN
 static inline __le64 cpu_to_le64(__u64 v) {  __le64 r = { swab64(v) };  return r; }
 static inline __le32 cpu_to_le32(__u32 v) {  __le32 r = { swab32(v) };  return r; }
 static inline __le16 cpu_to_le16(__u16 v) {  __le16 r = { swab16(v) };  return r; }
@@ -61,7 +61,7 @@ typedef __u64 __le64;
 typedef __u32 __le32;
 typedef __u16 __le16;
 
-#ifdef WORDS_BIGENDIAN
+#if __BYTEORDER == __BIG_ENDIAN
 # define cpu_to_le64(x) swab64((x))
 # define le64_to_cpu(x) swab64((x))
 # define cpu_to_le32(x) swab32((x))

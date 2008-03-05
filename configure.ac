@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.61)
+AC_PREREQ(2.59)
 AC_INIT([Ceph distributed file system], [.1], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])

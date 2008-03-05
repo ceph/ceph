@@ -68,9 +68,9 @@ typedef uint64_t coll_t;        // collection id
 // pg stuff
 
 typedef uint16_t ps_t;
-typedef uint8_t pruleset_t;
 
-
+#define OSD_METADATA_PG_POOL 0xff
+#define OSD_SUPERBLOCK_POBJECT pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0,0))
 
 // placement group id
 struct pg_t {
@@ -84,12 +84,12 @@ public:
 public:
   pg_t() { u.pg64 = 0; }
   pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
-  pg_t(int type, int size, ps_t seed, int pref) {//, pruleset_t r=0) {
+  pg_t(int type, int size, ps_t seed, int pool, int pref) {
     u.pg.type = type;
     u.pg.size = size;
     u.pg.ps = seed;
+    u.pg.pool = pool;
     u.pg.preferred = pref;   // hack: avoid negative.
-    //u.pg.ruleset = r;
     assert(sizeof(u.pg) == sizeof(u.pg64));
   }
   pg_t(uint64_t v) { u.pg64 = v; }
@@ -103,7 +103,7 @@ public:
 
   int size() { return u.pg.size; }
   ps_t ps() { return u.pg.ps; }
-  //pruleset_t ruleset() { return u.pg.ruleset; }
+  int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
   
   /*
@@ -115,8 +115,8 @@ public:
   */
   operator uint64_t() const { return u.pg64; }
 
-  pobject_t to_object() const { 
-    return pobject_t(1,  // volume 1 == osd metadata, for now
+  pobject_t to_pobject() const { 
+    return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
 		     0,
 		     object_t(u.pg64, 0));
   }
@@ -131,11 +131,10 @@ inline ostream& operator<<(ostream& out, pg_t pg)
   else 
     out << pg.size() << '?';
   
-  //if (pg.ruleset())
-  //out << (int)pg.ruleset() << 's';
-  
   out << hex << pg.ps() << dec;
 
+  if (pg.pool() > 0)
+    out << 'v' << pg.pool();
   if (pg.preferred() >= 0)
     out << 'p' << pg.preferred();
 
