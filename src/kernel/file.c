@@ -29,6 +29,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0);
+	req->r_expects_cap = true;
 	kfree(path);
 	if (!IS_ERR(req)) {
 		rhead = req->r_request->front.iov_base;
@@ -38,30 +39,6 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	return req;
 }
 
-/*
- * add cap.  also set up private_data for holding readdir results
- * if O_DIRECTORY.
- */
-int proc_open_reply(struct inode *inode, struct file *file,
-		    struct ceph_mds_session *session,
-		    struct ceph_mds_reply_info *rinfo)
-{
-	struct ceph_inode_cap *cap;
-	struct ceph_file_info *cf;
-
-	cap = ceph_add_cap(inode, session,
-			   le32_to_cpu(rinfo->head->file_caps),
-			   le32_to_cpu(rinfo->head->file_caps_seq));
-
-	if (file->f_flags & O_DIRECTORY) {
-		cf = kzalloc(sizeof(*cf), GFP_KERNEL);
-		if (cf == NULL)
-			return -ENOMEM;
-		file->private_data = cf;
-	}
-
-	return 0;
-}
 
 static int ceph_open_init_private_data(struct inode *inode, struct file *file, int flags)
 {
@@ -75,6 +52,7 @@ static int ceph_open_init_private_data(struct inode *inode, struct file *file, i
 		return -ENOMEM;
 	file->private_data = cf;
 
+	spin_lock(&inode->i_lock);
 	mode = ceph_file_mode(flags);
 	cf->mode = mode;
 	ci->i_nr_by_mode[mode]++;
@@ -84,6 +62,7 @@ static int ceph_open_init_private_data(struct inode *inode, struct file *file, i
 	     mode, ci->i_nr_by_mode[mode], 
 	     ci->i_cap_wanted, ci->i_cap_wanted|wanted);
 	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
+	spin_unlock(&inode->i_lock);
 
 	return 0;
 }
@@ -109,26 +88,22 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (file->f_flags == O_DIRECTORY && ... )
 		cap = ceph_find_cap(inode, 0);
 	*/
-	//if (!cap) {
-		dentry = list_entry(inode->i_dentry.next, struct dentry,
-				    d_alias);
-		req = prepare_open_request(inode->i_sb, dentry, file->f_flags, 0);
-		if (IS_ERR(req))
-			return PTR_ERR(req);
-		err = ceph_mdsc_do_request(mdsc, req);
-		if (err < 0)
-			return err;
-		err = le32_to_cpu(req->r_reply_info.head->result);
-		ceph_mdsc_put_request(req);
-		if (err < 0)
-			return err;
-//}
 
-	err = ceph_open_init_private_data(inode, file, file->f_flags);
+	dentry = list_entry(inode->i_dentry.next, struct dentry,
+			    d_alias);
+	req = prepare_open_request(inode->i_sb, dentry, file->f_flags, 0);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	err = ceph_mdsc_do_request(mdsc, req);
+	if (err < 0)
+		return err;
+	err = le32_to_cpu(req->r_reply_info.head->result);
+	if (err == 0) 
+		err = ceph_open_init_private_data(inode, file, file->f_flags);
+	ceph_mdsc_put_request(req);
 
 	if (err < 0)
 		return err;
-
 	dout(5, "ceph_open success, %llx\n", ceph_ino(inode));
 	return 0;
 }
@@ -243,8 +218,9 @@ int ceph_release(struct inode *inode, struct file *file)
 	     ci->i_nr_by_mode[mode], wanted, ci->i_cap_wanted);
 	if (wanted != ci->i_cap_wanted)
 		ceph_mdsc_update_cap_wanted(ci, wanted);
-
-	ceph_mdsc_put_request(cf->req);
+	
+	if (cf->last_readdir)
+		ceph_mdsc_put_request(cf->last_readdir);
 	kfree(cf);
 
 	return 0;

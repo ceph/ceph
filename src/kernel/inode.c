@@ -284,6 +284,8 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
+
+	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode, session->s_mds, cap, seq);
 	
 	for (i=0; i<ci->i_nr_caps; i++) 
 		if (ci->i_caps[i].mds == mds) break;

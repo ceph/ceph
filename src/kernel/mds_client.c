@@ -758,12 +758,20 @@ retry:
 	send_msg_mds(mdsc, req->r_request, mds);
 	wait_for_completion(&req->r_completion);
 	spin_lock(&mdsc->lock);
-	if (!req->r_reply) 
+	if (req->r_reply == NULL)
 		goto retry;
 
 	/* clean up request, parse reply */
 	__unregister_request(mdsc, req);
 	spin_unlock(&mdsc->lock);
+
+	if (IS_ERR(req->r_reply)) {
+		err = PTR_ERR(req->r_reply);
+		req->r_reply = 0;
+		dout(10, "do_request returning err %d from reply handler\n", err);
+		ceph_mdsc_put_request(req);
+		return err;
+	}
 
 	ceph_msg_put(req->r_request);
 	req->r_request = 0;
@@ -781,7 +789,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mds_reply_head *head = msg->front.iov_base;
 	struct ceph_mds_reply_info *rinfo;
 	__u64 tid;
-	int err;
+	int err, result;
 	int mds;
 
 	/* extract tid */
@@ -791,46 +799,56 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	tid = le64_to_cpu(head->tid);
 
-	/* pass to blocked caller */
+	/* get request, session */
 	req = find_request_and_lock(mdsc, tid);
 	if (!req) {
 		dout(1, "handle_reply on unknown tid %llu\n", tid);
 		return;
 	} 
-
-	/* session */
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 	req->r_session = __get_session(mdsc, mds);
 	BUG_ON(req->r_session == 0);
-
 	BUG_ON(req->r_reply);
-	req->r_reply = msg;
-	ceph_msg_get(msg);
+	spin_unlock(&mdsc->lock);
 
-	spin_unlock(&mdsc->lock);  /* unlock */
-	
 	/* parse */
 	rinfo = &req->r_reply_info;
 	if ((err = parse_reply_info(msg, rinfo)) < 0) {
-		derr(0, "handle_reply got corrupt reply, resend?\n");
-		BUG_ON(1);
-		/* hrm! retry? pass error up? FIXME */
+		derr(0, "handle_reply got corrupt reply\n");
+		goto done;
 	}
 	
-	err = le32_to_cpu(rinfo->head->result);
-	dout(10, "handle_reply tid %lld result %d\n", tid, err);
-	if (err == 0 && 
+	result = le32_to_cpu(rinfo->head->result);
+	dout(10, "handle_reply tid %lld result %d\n", tid, result);
+	if (result == 0 && 
 	    mdsc->client->sb->s_root) { /* mounted? */
 		err = ceph_fill_trace(mdsc->client->sb, rinfo, 
 				      &req->r_last_inode, 
 				      &req->r_last_dentry);
+		if (err) 
+			goto done;
 		
 		if (req->r_expects_cap) {
 			req->r_cap = ceph_add_cap(req->r_last_inode, req->r_session,
 						  le32_to_cpu(rinfo->head->file_caps),
 						  le32_to_cpu(rinfo->head->file_caps_seq));
+			if (IS_ERR(req->r_cap)) {
+				err = PTR_ERR(req->r_cap);
+				req->r_cap = 0;
+				goto done;
+			}
 		}
 	}
+
+done:
+	spin_lock(&mdsc->lock);
+	if (err) {
+		req->r_reply = ERR_PTR(err);
+	} else {
+		req->r_reply = msg;
+		ceph_msg_get(msg);
+	}
+	spin_unlock(&mdsc->lock);
 	
 	/* kick calling process */
 	complete(&req->r_completion);

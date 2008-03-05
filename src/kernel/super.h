@@ -247,9 +247,9 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
  * keep readdir buffers attached to file->private_data
  */
 struct ceph_file_info {
-	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	int mode;      /* initialized on open */
-	struct ceph_mds_request *req;
+	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
+	struct ceph_mds_request *last_readdir;
 };
 
 
