@@ -98,11 +98,11 @@ void crush_rule_set_step(struct crush_rule *rule, int n, int op, int arg1, int a
 /** buckets **/
 int crush_get_next_bucket_id(struct crush_map *map)
 {
-	int id;
-	for (id=0; id < map->max_buckets; id++)
-		if (map->buckets[id] == 0) 
-			return id;
-	return -1 - id;
+	int pos;
+	for (pos=0; pos < map->max_buckets; pos++)
+		if (map->buckets[pos] == 0) 
+			break;
+	return -1 - pos;
 }
 
 

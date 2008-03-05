@@ -398,12 +398,10 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dn->inode->mask = st->mask;
   
   // or do we have newer size/mtime from writing?
-  if (dn->inode->file_caps() & CEPH_CAP_WR) {
-    if (dn->inode->file_wr_size > dn->inode->inode.size)
-      dn->inode->inode.size = dn->inode->file_wr_size;
-    if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
-      dn->inode->inode.mtime = dn->inode->file_wr_mtime;
-  }
+  if (dn->inode->file_wr_size > dn->inode->inode.size)
+    dn->inode->inode.size = dn->inode->file_wr_size;
+  if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
+    dn->inode->inode.mtime = dn->inode->file_wr_mtime;
 
   // symlink?
   if (dn->inode->inode.is_symlink()) {
@@ -1205,6 +1203,20 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
+  // truncate?
+  if (m->get_op() == CEPH_CAP_OP_TRUNC) {
+    dout(10) << "handle_file_caps TRUNC on ino " << in->ino()
+	     << " size " << in->inode.size << " -> " << m->get_size()
+	     << dendl;
+    // trim filecache?
+    if (g_conf.client_oc)
+      in->fc.truncate(in->inode.size, m->get_size());
+
+    in->inode.size = in->file_wr_size = m->get_size(); 
+    delete m;
+    return;
+  }
+
   // don't want?
   if (in->file_caps_wanted() == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
@@ -1230,19 +1242,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " caps now " << cap_string(new_caps) 
           << " was " << cap_string(old_caps) << dendl;
   
-  // did file size decrease?
-  if ((old_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) == 0 &&
-      (new_caps & (CEPH_CAP_RD|CEPH_CAP_WR)) != 0 &&
-      in->inode.size > (loff_t)m->get_size()) {
-    dout(10) << "*** file size decreased from " << in->inode.size << " to " << m->get_size() << dendl;
-    
-    // trim filecache?
-    if (g_conf.client_oc)
-      in->fc.truncate(in->inode.size, m->get_size());
-
-    in->inode.size = in->file_wr_size = m->get_size(); 
-  }
-
   // update inode
   in->inode.size = m->get_size();      // might have updated size... FIXME this is overkill!
   in->inode.mtime = m->get_mtime();
@@ -2904,7 +2903,15 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   }
 
   bool lazy = f->mode == FILE_MODE_LAZY;
-  
+
+  // wait for RD cap before checking size
+  while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
+    dout(7) << " don't have read cap, waiting" << dendl;
+    Cond cond;
+    in->waitfor_read.push_back(&cond);
+    cond.Wait(client_lock);
+  }
+
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
   if (!lazy && (in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
@@ -2935,29 +2942,9 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
   if (g_conf.client_oc) {
     // object cache ON
     rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
-
-    /*
-    if (in->inode.ino == 0x10000000075 && hackbuf) {
-      int s = MIN(size, bl->length());
-      char *v = bl->c_str();
-      for (int a=0; a<s; a++) 
-	if (v[a] != hackbuf[offset+a]) 
-	  dout(1) << "** hackbuf differs from read value at offset " << a 
-		  << " hackbuf[a] = " << (int)hackbuf[a] << ", read got " << (int)v[a]
-		  << dendl;
-    }
-    */
-
   } else {
     // object cache OFF -- legacy inconsistent way.
 
-    // do we have read file cap?
-    while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
-      dout(7) << " don't have read cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_read.push_back(&cond);
-      cond.Wait(client_lock);
-    }  
     // lazy cap?
     while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
@@ -3591,8 +3578,11 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr)
   tout << ino.val << std::endl;
 
   Inode *in = _ll_get_inode(ino);
-  fill_stat(in, attr);
-  return 0;
+  filepath fpath("", in->ino());
+  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  if (res == 0)
+    fill_stat(in, attr);
+  return res;
 }
 
 int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask)
@@ -3983,7 +3973,7 @@ int Client::ll_release(Fh *fh)
 // layout
 
 
-int Client::describe_layout(int fd, FileLayout *lp)
+int Client::describe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -3999,21 +3989,21 @@ int Client::describe_layout(int fd, FileLayout *lp)
 
 int Client::get_stripe_unit(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return layout.fl_stripe_unit;
 }
 
 int Client::get_stripe_width(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_stripe_width(layout);
 }
 
 int Client::get_stripe_period(int fd)
 {
-  FileLayout layout;
+  ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_period(layout);
 }

@@ -13,25 +13,36 @@
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
+extern int ceph_debug_super;
 extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
+extern int ceph_debug_addr;
 
 extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))		\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug == 0 && x <= DOUT_VAR))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
-#define derr(x, args...) do {					   \
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))	   \
-			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
+#define derr(x, args...) do {						\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug == 0 && x <= DOUT_VAR))			\
+			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
 #define CACHE_HZ		(1*HZ)
+
+#define IPQUADPORT(n)							\
+	(unsigned int)((n.sin_addr.s_addr)>>24)&0xFF,			\
+		(unsigned int)((n.sin_addr.s_addr)>>16)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>8)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)&0xFF),		\
+		(unsigned int)(ntohs(n.sin_port))
 
 /*
  * mount options
@@ -280,6 +291,9 @@ extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 extern void ceph_remove_cap(struct ceph_inode_info *ci, int mds);
 extern void ceph_remove_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode,
+				 struct ceph_mds_file_caps *grant,
+				 struct ceph_mds_session *session);
+extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
 

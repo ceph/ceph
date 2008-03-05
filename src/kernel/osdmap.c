@@ -240,7 +240,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 		}
 	}
 
-	
+	/* ignore trailing name maps */
+		
 	dout(30, "crush_decode success\n");
 	return c;
 	
@@ -368,11 +369,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	}
 
 	dout(30, "osdmap_decode done %p %p\n", *p, end);
-#if 0
-	BUG_ON(*p < end);
-#else
-#warning osdmap_decode missing name info decode
-#endif
+	/* ignore trailing bits of crush map */
+	/* BUG_ON(*p < end); */
 
 	return map;
 

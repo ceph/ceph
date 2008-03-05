@@ -853,7 +853,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   cache->mds->objecter->read( get_ondisk_object(), 
 			      0, 0,   // whole object
 			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-										   g_OSD_MDDirLayout ),
+										   g_default_mds_dir_layout ),
 			      &fin->bl,
 			      fin );
 }
@@ -1189,7 +1189,7 @@ void CDir::_commit(version_t want)
   cache->mds->objecter->write( get_ondisk_object(),
 			       0, bl.length(),
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-										    g_OSD_MDDirLayout ),
+										    g_default_mds_dir_layout ),
 			       bl,
 			       NULL, new C_Dir_Committed(this, version) );
 }

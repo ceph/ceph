@@ -25,6 +25,13 @@ static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
 
+#define IPQUADPORT(n)							\
+	(unsigned int)((n.sin_addr.s_addr)>>24)&0xFF,			\
+		(unsigned int)((n.sin_addr.s_addr)>>16)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>8)&0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)&0xFF),		\
+		(unsigned int)(ntohs(n.sin_port))
+
 
 /*
  * connections
@@ -267,10 +274,9 @@ void ceph_queue_read(struct ceph_connection *con)
  */
 static void ceph_send_fault(struct ceph_connection *con)
 {
-	derr(1, "ceph_send_fault %p state %lu to peer %x:%d\n", 
+	derr(1, "ceph_send_fault %p state %lu to peer %u.%u.%u.%u:%u\n", 
 	     con, con->state,
-	     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr),
-	     ntohs(con->peer_addr.ipaddr.sin_port));
+	     IPQUADPORT(con->peer_addr.ipaddr));
 
 	if (!test_and_clear_bit(CONNECTING, &con->state)){
 		derr(1, "CONNECTING bit not set\n");
@@ -674,9 +680,8 @@ done:
 		 * safe.
 		 */
 		con->msgr->inst.addr.ipaddr = con->in_msg->hdr.dst.addr.ipaddr;
-		dout(10, "read_message_partial learned my addr is %x:%d\n",
-		     ntohl(con->msgr->inst.addr.ipaddr.sin_addr.s_addr), 
-		     ntohs(con->msgr->inst.addr.ipaddr.sin_port));
+		dout(10, "read_message_partial learned my addr is %u.%u.%u.%u:%u\n",
+		     IPQUADPORT(con->msgr->inst.addr.ipaddr));
 	}
 
 	return 1; /* done! */
@@ -769,12 +774,10 @@ static void process_connect(struct ceph_connection *con)
 	dout(20, "process_connect on %p tag %d\n", con, (int)con->in_tag);
 	clear_bit(CONNECTING, &con->state);
 	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr)) {
-		derr(1, "process_connect wrong peer, want %x:%d/%d, got %x:%d/%d, wtf\n",
-		     ntohl(con->peer_addr.ipaddr.sin_addr.s_addr), 
-		     ntohs(con->peer_addr.ipaddr.sin_port),
+		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, got %u.%u.%u.%u:%u/%d, wtf\n",
+		     IPQUADPORT(con->peer_addr.ipaddr),
 		     con->peer_addr.nonce,
-		     ntohl(con->actual_peer_addr.ipaddr.sin_addr.s_addr), 
-		     ntohs(con->actual_peer_addr.ipaddr.sin_port),
+		     IPQUADPORT(con->actual_peer_addr.ipaddr),
 		     con->actual_peer_addr.nonce);
 		con->in_tag = CEPH_MSGR_TAG_REJECT;
 	}
@@ -1095,9 +1098,8 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_ad
 {
 	struct ceph_connection *con;
 
-	dout(1, "mark_down peer %x:%d\n",
-	     ntohl(addr->ipaddr.sin_addr.s_addr), 
-	     ntohs(addr->ipaddr.sin_port));
+	dout(1, "mark_down peer %u.%u.%u.%u:%u\n",
+	     IPQUADPORT(addr->ipaddr));
 
 	spin_lock(&msgr->con_lock);
 	con = __get_connection(msgr, addr);
@@ -1137,21 +1139,18 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, unsigned lo
 		con = __get_connection(msgr, &msg->hdr.dst.addr);
 		if (con) {
 			put_connection(newcon);
-			dout(10, "ceph_msg_send (lost race and) had connection %p to peer %x:%d\n", con,
-			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
-			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
+			dout(10, "ceph_msg_send (lost race and) had connection %p to peer %u.%u.%u.%u:%u\n", con,
+			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
 		} else {
 			con = newcon;
 			con->peer_addr = msg->hdr.dst.addr;
 			__add_connection(msgr, con);
-			dout(5, "ceph_msg_send new connection %p to peer %x:%d\n", con,
-			     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr), 
-			     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
+			dout(5, "ceph_msg_send new connection %p to peer %u.%u.%u.%u:%u\n", con,
+			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
 		}
 	} else {
-		dout(10, "ceph_msg_send had connection %p to peer %x:%d\n", con,
-		     ntohl(msg->hdr.dst.addr.ipaddr.sin_addr.s_addr),
-		     ntohs(msg->hdr.dst.addr.ipaddr.sin_port));
+		dout(10, "ceph_msg_send had connection %p to peer %u.%u.%u.%u:%u\n", con,
+		     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
 	}
 	spin_unlock(&msgr->con_lock);
 	con->delay = timeout;

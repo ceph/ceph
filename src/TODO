@@ -1,39 +1,35 @@
-
-some smallish projects:
-
-- userspace crush tools
- - xml import/export?  
-
-- generalize monitor client?
- - throttle message resend attempts
-
-- ENOSPC on client, OSD
-
+gsoc?
+- cas
+- libbtrfs objectstore
+- osdmap/crush gui
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
-  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing
+  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
+- addr=?
+- fix ceph_lookup_open
 
 kernel client
 - some bugs
  - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
- - cap handler probably needs i_mutex or something when updating file sizes
-   - which means it probably needs to be done in a different worker thread (NOT the messenger's)
  - prevent client_reply from racing against a subsequent file_caps.
+- proc.c
+  - adjust granular debug levels too
+    - should we be using debugfs?
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
+- fix 32bit inode handling
+  - see nfs_fhget, nfs_find_actor as reference for allowing multiple inodes with the same i_ino
 - audit locking
 - audit use of kmalloc vs spinlocks
-- convert most everything in ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
+- convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - fix file open vs file_cap race
-  - preemptively release caps as part of request if doing utimes/etc. on an open file?
+  - optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
-/  - handle file caps, ack back to mds, etc. 
-    - actually flush dirty data, too
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
   - readpages (readahead)
@@ -47,16 +43,19 @@ kernel client
 - unmount
 /  - close open file handles, mds sessions
     - flush data before unmount.
+  - send (+deliver!) unmount message
 
 osdmon
-- allow fresh replacement osds.  add osd_created in osdmap, probably
 - actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
 - bootstrap crush map
 
 crush
+- rule naming
+ - would about a tuple of (type, minsize, maxsize, pool) for each rule?  then we'd do a 
+   quick 'search' to find the best rule given (pg_type, pg_size, pg_pool)...
 - xml import/export?
- - named storage "pools"
+ - named storage "pools"?
  - generic rule definition
 - crush tools
 - more efficient failure when all/too many osds are down
@@ -87,21 +86,14 @@ mds
 - fix file_data_version
 - on recovery, validate file sizes when max_size > size
 
-
-
-- extend/clean up filepath to allow paths relative to an ino
-/  - fix path_traverse
-  - fix reconnect/rejoin open file weirdness
-- real chdir (directory "open")
-  - relative metadata ops
+- fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 - consistency points/snapshots
   - dentry versions vs dirfrags...
-- detect and deal with client failure
-  - failure during reconnect vs clientmap.  although probalby the whole thing needs a larger overhaul...
+- failure during reconnect vs clientmap.  
 
-- inode.rmtime (recursive mtime)
-- make inode.size reflect directory size (number of entries)
+- inode.rmtime (recursive mtime)?
+- make inode.size reflect directory size (number of entries)?
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
@@ -147,12 +139,12 @@ journaler
 fsck
 - fsck.ebofs
 - online mds fsck?
-
+- object backpointer attrs to hint catastrophic reconstruction?
 
 
 
 rados snapshots
-- integrate revisions into ObjectCacher
+- integrate revisions into ObjectCacher?
 - clean up oid.rev vs op.rev in osd+osdc
 
 - attr.crev is rev we were created in.
@@ -167,12 +159,6 @@ rados snapshots
 - read is tagged with op.rev
   - if 0, we read from 0 (if it exists).
   - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
-
-- how to get usage feedback to monitor?
-
-- clean up mds caps release in exporter
-- figure out client failure modes
-- add connection retry.
 
 
 objecter

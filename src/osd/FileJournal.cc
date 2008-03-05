@@ -13,7 +13,6 @@
  */
 
 #include "FileJournal.h"
-#include "Ebofs.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -23,8 +22,8 @@
 
 #include "config.h"
 
-#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
-#define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << ebofs->dev.get_device_name() << ").journal "
+#define dout(x) if (x <= g_conf.debug_journal) *_dout << dbeginl << g_clock.now() << " journal "
+#define derr(x) if (x <= g_conf.debug_journal) *_derr << dbeginl << g_clock.now() << " journal "
 
 
 int FileJournal::_open(bool forwrite)
@@ -68,7 +67,7 @@ int FileJournal::create()
   // write empty header
   memset(&header, 0, sizeof(header));
   header.clear();
-  header.fsid = ebofs->get_fsid();
+  header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;
   if (directio)
@@ -90,7 +89,7 @@ int FileJournal::create()
   return 0;
 }
 
-int FileJournal::open()
+int FileJournal::open(epoch_t epoch)
 {
   dout(2) << "open " << fn << dendl;
 
@@ -103,7 +102,10 @@ int FileJournal::open()
 
   // read header?
   read_header();
-  if (header.fsid != ebofs->get_fsid()) {
+  dout(10) << "open journal header.fsid = " << header.fsid 
+    //<< " vs expected fsid = " << fsid 
+	   << dendl;
+  if (header.fsid != fsid) {
     dout(2) << "open journal fsid doesn't match, invalid (someone else's?) journal" << dendl;
     err = -EINVAL;
   } 
@@ -130,7 +132,7 @@ int FileJournal::open()
   if (header.num > 0) {
     // pick an offset
     for (int i=0; i<header.num; i++) {
-      if (header.epoch[i] == ebofs->get_super_epoch()) {
+      if (header.epoch[i] == epoch) {
 	dout(2) << "using read_pos header pointer "
 		<< header.epoch[i] << " at " << header.offset[i]
 		<< dendl;
@@ -138,13 +140,13 @@ int FileJournal::open()
 	write_pos = 0;
 	break;
       }      
-      else if (header.epoch[i] < ebofs->get_super_epoch()) {
-	dout(2) << "super_epoch is " << ebofs->get_super_epoch() 
+      else if (header.epoch[i] < epoch) {
+	dout(2) << "super_epoch is " << epoch 
 		<< ", skipping old " << header.epoch[i] << " at " << header.offset[i]
 		<< dendl;
       }
-      else if (header.epoch[i] > ebofs->get_super_epoch()) {
-	dout(2) << "super_epoch is " << ebofs->get_super_epoch() 
+      else if (header.epoch[i] > epoch) {
+	dout(2) << "super_epoch is " << epoch 
 		<< ", but wtf, journal is later " << header.epoch[i] << " at " << header.offset[i]
 		<< dendl;
 	break;
@@ -153,12 +155,12 @@ int FileJournal::open()
 
     if (read_pos == 0) {
       dout(0) << "no valid journal segments" << dendl;
-      return -EINVAL;
+      return 0; //hrm return -EINVAL; 
     }
 
   } else {
     dout(0) << "journal was empty" << dendl;
-    read_pos = get_top();
+    read_pos = -1;
   }
 
   return 0;
@@ -274,7 +276,7 @@ void FileJournal::check_for_wrap(epoch_t epoch, off64_t pos, off64_t size)
 	dout(10) << "wrapped from " << pos << " to " << get_top() << dendl;
 	header.wrap = pos;
 	pos = get_top();
-	header.push(ebofs->get_super_epoch(), pos);
+	header.push(epoch, pos);
 	must_write_header = true;
       } else {
 	// no room.
@@ -294,8 +296,8 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
   // gather queued writes
   off64_t queue_pos = write_pos;
 
-  int eleft = g_conf.ebofs_journal_max_write_entries;
-  int bleft = g_conf.ebofs_journal_max_write_bytes;
+  int eleft = g_conf.journal_max_write_entries;
+  int bleft = g_conf.journal_max_write_bytes;
 
   while (!writeq.empty()) {
     // grab next item
@@ -431,7 +433,7 @@ void FileJournal::do_write(bufferlist& bl)
   if (memcmp(&old_header, &header, sizeof(header)) == 0) {
     write_pos += bl.length();
     write_pos = ROUND_UP_TO(write_pos, header.alignment);
-    ebofs->queue_finishers(writingq);
+    finisher->queue(writingq);
   } else {
     dout(10) << "do_write finished write but header changed?  not moving write_pos." << dendl;
     derr(0) << "do_write finished write but header changed?  not moving write_pos." << dendl;
@@ -474,26 +476,26 @@ bool FileJournal::is_full()
   return full;
 }
 
-void FileJournal::submit_entry(bufferlist& e, Context *oncommit)
+void FileJournal::submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
   // dump on queue
   dout(10) << "submit_entry " << e.length()
-	   << " epoch " << ebofs->get_super_epoch()
+	   << " epoch " << epoch
 	   << " " << oncommit << dendl;
   commitq.push_back(oncommit);
   if (!full) {
-    writeq.push_back(pair<epoch_t,bufferlist>(ebofs->get_super_epoch(), e));
+    writeq.push_back(pair<epoch_t,bufferlist>(epoch, e));
     write_cond.Signal(); // kick writer thread
   }
 }
 
 
-void FileJournal::commit_epoch_start()
+void FileJournal::commit_epoch_start(epoch_t new_epoch)
 {
-  dout(10) << "commit_epoch_start on " << ebofs->get_super_epoch()-1 
-	   << " -- new epoch " << ebofs->get_super_epoch()
+  dout(10) << "commit_epoch_start on " << new_epoch-1 
+	   << " -- new epoch " << new_epoch
 	   << dendl;
 
   Mutex::Locker locker(write_lock);
@@ -552,7 +554,7 @@ void FileJournal::commit_epoch_finish(epoch_t new_epoch)
   }
   
   // queue the finishers
-  ebofs->queue_finishers(writingq);
+  finisher->queue(writingq);
   dout(10) << "commit_epoch_finish done" << dendl;
 }
 
@@ -561,7 +563,7 @@ void FileJournal::make_writeable()
 {
   _open(true);
 
-  if (read_pos)
+  if (read_pos > 0)
     write_pos = read_pos;
   else
     write_pos = get_top();

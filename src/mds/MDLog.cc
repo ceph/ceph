@@ -79,7 +79,7 @@ void MDLog::init_journaler()
   // inode
   memset(&log_inode, 0, sizeof(log_inode));
   log_inode.ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
-  log_inode.layout = g_OSD_MDLogLayout;
+  log_inode.layout = g_default_mds_log_layout;
   
   if (g_conf.mds_local_osd) 
     log_inode.layout.fl_pg_preferred = mds->get_nodeid() + g_conf.num_osd;  // hack

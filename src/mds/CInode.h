@@ -139,7 +139,7 @@ class CInode : public MDSCacheObject {
   //utime_t hack_load_stamp;
 
   // projected values (only defined while dirty)
-  list<inode_t*>    projected_inode;
+  list<inode_t*>   projected_inode;
   list<fragtree_t> projected_dirfragtree;
 
   version_t get_projected_version() {
@@ -191,6 +191,7 @@ public:
   // parent dentries in cache
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
+  CDentry         *projected_parent;   // for in-progress rename
 
   pair<int,int> inode_auth;
 
@@ -236,7 +237,8 @@ public:
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
-    parent(0), inode_auth(CDIR_AUTH_DEFAULT),
+    parent(0), projected_parent(0),
+    inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
@@ -505,6 +507,10 @@ public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
+    if (projected_parent) {
+      assert(projected_parent == p);
+      projected_parent = 0;
+    }
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
