@@ -16,15 +16,18 @@ $wrap->create();
 my $arr = \%conf;
 my @ritems;
 
-#print Dumper $arr;
-@nums = (1, -4, 11, 17, 1, -92, -15, 48);
-print "length: " . scalar(@nums) ."\n";
+#@nums = (1, -4, 11, 17, 1, -92, -15, 48);
+#print "length: " . scalar(@nums) ."\n";
 
-#print Dumper $arr;
+foreach my $type (keys %{$arr->{'type'}}) {
+	$wrap->set_type_name($arr->{'type'}->{$type}->{'id'},$type);
+	print $wrap->get_type_name($arr->{'type'}->{$type}->{'id'}) ."\n";
+}
 
 #first argument must be zero for auto bucket_id
 my $i=0;
 foreach my $osd (keys %{$arr->{'osd'}}) {
+	# bucket_id, alg, type, size, items, weights
 	$ritems[$i] = $wrap->add_bucket(0,4,0,0,[],[]);
 	$wrap->set_item_name($ritems[$i], $osd);
 	print "bucket_id: $ritems[$i]\n";
@@ -32,8 +35,26 @@ foreach my $osd (keys %{$arr->{'osd'}}) {
 	$i++;
 }
 
-print Dumper @ritems;
+foreach my $type (keys %{$arr->{'type'}}) {
+	next if ($type eq 'osd');
+	foreach my $bucket (keys %{$arr->{$type}}) {
+		print "bucket: $bucket\n";
+		#check for algorithm type
+		my @item_ids;
+		foreach my $item (keys %{$arr->{$type}->{'item'}}) {
+			push @item_ids, $wrap->get_item_id($item);
+		}
+		$ritems[$i] = $wrap->add_bucket(0,4,0,scalar(@item_ids),\@item_ids,[]);
+		$wrap->set_item_name($ritems[$i],$bucket);
+		print $wrap->get_item_name($ritems[$i]) ."\n";
+		$i++;
+	}   
+}
 
+
+
+print Dumper @ritems;
+print Dumper $arr;
 
 
 
