@@ -31,7 +31,7 @@
 		</osd>
 
 <cab cab-d2>
-  type strawbucket
+  alg strawbucket
   id   -12
   <item osd001/>
   <item osd002/>
