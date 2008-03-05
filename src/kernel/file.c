@@ -133,6 +133,20 @@ int ceph_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+
+/*
+ * FIXME 
+ *
+ * this whole thing needs some fixing.  we need to be sure that
+ * a successful lookup (that does an open) will be followed by
+ * a VFS open (that sets up teh file*?).  i think there are
+ * lots of things that can ahppen in between, mainly security 
+ * checks that may not match the server's checks. 
+ * otherwise, it's not safe to just go ahead and do the open
+ * here or you won't get an eventual release...
+ */
+#if 0
+
 int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 		     struct nameidata *nd)
 {
@@ -200,6 +214,7 @@ out:
 	//ceph_mdsc_put_session(session);
 	return err;
 }
+#endif
 
 int ceph_release(struct inode *inode, struct file *file)
 {
