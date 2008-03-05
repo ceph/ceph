@@ -3830,7 +3830,8 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != O_DIRECTORY)) {
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || (flags | O_DIRECTORY) == 0)) {
+    dout(10) << "bad open flags " << flags << " cmode " << cmode << " on dir " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
