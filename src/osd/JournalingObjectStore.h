@@ -50,7 +50,7 @@ protected:
   }
 
   void journal_write(pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.write(oid, off, len, bl);
       bufferlist tbl;
@@ -61,7 +61,7 @@ protected:
   }
   
   void journal_zero(pobject_t oid, off_t off, size_t len, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.zero(oid, off, len);
       bufferlist tbl;
@@ -72,7 +72,7 @@ protected:
   }
   
   void journal_remove(pobject_t oid, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.remove(oid);
       bufferlist bl;
@@ -83,7 +83,7 @@ protected:
   }
 
   void journal_truncate(pobject_t oid, off_t size, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.truncate(oid, size);
       bufferlist bl;
@@ -94,7 +94,7 @@ protected:
   }
 
   void journal_clone(pobject_t from, pobject_t to, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.clone(from, to);
       bufferlist bl;
@@ -105,7 +105,7 @@ protected:
   }
 
   void journal_setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.setattr(oid, name, value, size);
       bufferlist bl;
@@ -116,7 +116,7 @@ protected:
   }
 
   void journal_setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.setattrs(oid, attrset);
       bufferlist bl;
@@ -127,7 +127,7 @@ protected:
   }
 
   void journal_rmattr(pobject_t oid, const char *name, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.rmattr(oid, name);
       bufferlist bl;
@@ -138,7 +138,7 @@ protected:
   }
 
   void journal_create_collection(coll_t cid, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.create_collection(cid);
       bufferlist bl;
@@ -149,7 +149,7 @@ protected:
   }
 
   void journal_destroy_collection(coll_t cid, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.remove_collection(cid);
       bufferlist bl;
@@ -160,7 +160,7 @@ protected:
   }
   
   void journal_collection_add(coll_t cid, pobject_t oid, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.collection_add(cid, oid);
       bufferlist bl;
@@ -171,7 +171,7 @@ protected:
   }
 
   void journal_collection_remove(coll_t cid, pobject_t oid, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.collection_remove(cid, oid);
       bufferlist bl;
@@ -182,7 +182,7 @@ protected:
   }
 
   void journal_collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.collection_setattr(cid, name, value, size);
       bufferlist bl;
@@ -193,7 +193,7 @@ protected:
   }
 
   void journal_collection_setattrs(coll_t cid, map<string,bufferptr>& aset, Context *onsafe) {
-    if (journal) {
+    if (journal && journal->is_writeable()) {
       Transaction t;
       t.collection_setattrs(cid, aset);
       bufferlist bl;

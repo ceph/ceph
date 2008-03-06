@@ -15,10 +15,10 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-extern struct ceph_file_layout g_OSD_FileLayout;
-extern struct ceph_file_layout g_OSD_MDDirLayout;
-extern struct ceph_file_layout g_OSD_MDLogLayout;
-extern struct ceph_file_layout g_OSD_MDAnchorTableLayout;
+extern struct ceph_file_layout g_default_file_layout;
+extern struct ceph_file_layout g_default_mds_dir_layout;
+extern struct ceph_file_layout g_default_mds_log_layout;
+extern struct ceph_file_layout g_default_mds_anchortable_layout;
 
 #include <vector>
 #include <map>

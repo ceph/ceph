@@ -419,14 +419,12 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	dout(10, " size %llu max_size %llu\n", size, max_size);
 
 	/* size change? */
-	if (size != inode->i_size) {
-		/* FIXME: lock something here? */
+	spin_lock(&inode->i_lock);
+	if (size > inode->i_size) {
 		dout(10, "size %lld -> %llu\n", inode->i_size, size);
-		if (size < inode->i_size) {
-			/* FIXME: truncate page cache? */
-		}
 		inode->i_size = size;
 	}
+	spin_unlock(&inode->i_lock);
 
 	/* max size increase? */
 	if (max_size != ci->i_max_size) {
@@ -483,7 +481,24 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	return ret;	
 }
 
+int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc, struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int mds = session->s_mds;
+	int seq = le32_to_cpu(trunc->seq);
+	u64 size = le64_to_cpu(trunc->size);
+	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 
+	spin_lock(&inode->i_lock);
+	dout(10, "size %lld -> %llu\n", inode->i_size, size);
+	inode->i_size = size;
+	spin_unlock(&inode->i_lock);
+
+	/*
+	 * FIXME: how to truncate the page cache here?
+	 */
+	return 0;
+}
 
 /*
  * symlinks

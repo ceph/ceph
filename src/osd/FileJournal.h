@@ -162,6 +162,9 @@ private:
   int open(epoch_t epoch);
   void close();
 
+  bool is_writeable() {
+    return read_pos == 0;
+  }
   void make_writeable();
 
   // writes

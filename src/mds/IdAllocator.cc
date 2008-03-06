@@ -33,7 +33,7 @@ void IdAllocator::init_inode()
 {
   memset(&inode, 0, sizeof(inode));
   inode.ino = MDS_INO_IDS_OFFSET + mds->get_nodeid();
-  inode.layout = g_OSD_FileLayout;
+  inode.layout = g_default_file_layout;
 }
 
 

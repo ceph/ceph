@@ -6,11 +6,11 @@
 #include <linux/string.h>
 #include <linux/version.h>
 
-int ceph_super_debug = 50;
+int ceph_debug_super = 50;
 
 int ceph_lookup_cache = 1;
 
-#define DOUT_VAR ceph_super_debug
+#define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
 #include "super.h"
 #include "ktcp.h"
