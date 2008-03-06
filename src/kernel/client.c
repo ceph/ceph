@@ -15,6 +15,7 @@ int ceph_client_debug = 50;
 
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
+void ceph_peer_reset(void *c);
 
 
 /*
@@ -280,6 +281,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	cl->msgr->parent = cl;
 	cl->msgr->dispatch = ceph_dispatch;
 	cl->msgr->prepare_pages = ceph_osdc_prepare_pages;
+	cl->msgr->peer_reset = ceph_peer_reset;
 	
 	cl->whoami = -1;
 	if ((err = ceph_monc_init(&cl->monc, cl)) < 0)
@@ -403,4 +405,8 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_OSD_OPREPLY: return "osd_opreply";
 	}
 	return "unknown";
+}
+void ceph_peer_reset(void *c)
+{
+	return;
 }
