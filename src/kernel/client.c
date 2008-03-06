@@ -46,67 +46,32 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-
-int parse_open_reply(struct ceph_msg *reply, struct inode *inode, struct ceph_mds_session *session)
-{
-	struct ceph_mds_reply_head *head;
-	struct ceph_mds_reply_info rinfo;
-	int frommds = session->s_mds;
-	int err;
-	struct ceph_inode_cap *cap;
-
-	/* parse reply */
-	head = reply->front.iov_base;
-	err = le32_to_cpu(head->result);
-	dout(30, "parse_open_reply mds%d reports %d\n", frommds, err);
-	if (err < 0) 
-		return err;
-	if ((err = ceph_mdsc_parse_reply_info(reply, &rinfo)) < 0)
-		return err;
-	BUG_ON(rinfo.trace_nr == 0);
-	if ((err = ceph_fill_inode(inode, rinfo.trace_in[rinfo.trace_nr-1].in)) < 0) 
-		return err;
-
-	/* fill in cap */
-	cap = ceph_add_cap(inode, session, 
-			   le32_to_cpu(head->file_caps), 
-			   le32_to_cpu(head->file_caps_seq));
-	if (IS_ERR(cap))
-		return PTR_ERR(cap);
-
-	ceph_mdsc_destroy_reply_info(&rinfo);
-	return 0;
-}
-
 static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *args, struct dentry **pmnt_root)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *root_inode, *mnt_inode = NULL;
-	struct ceph_msg *req = 0;
+	struct ceph_mds_request *req = 0;
 	struct ceph_mds_request_head *reqhead;
-	struct ceph_mds_reply_info rinfo;
-	struct ceph_mds_session *session;
+	struct ceph_mds_reply_info *rinfo;
 	int frommds;
 	int err;
 	struct ceph_inode_cap *cap;
 	struct ceph_inode_info *ci;
-	int alloc_fs = 0;
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
-	reqhead = req->front.iov_base;
+	req->r_expects_cap = true;
+	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
-	if ((err = ceph_mdsc_do_request(mdsc, req, &rinfo, &session)) < 0)
-		return err;
-	
-	err = le32_to_cpu(rinfo.head->result);
+	err = ceph_mdsc_do_request(mdsc, req);
+	rinfo = &req->r_reply_info;
 	if (err != 0) 
-		return err;
-	if (rinfo.trace_nr == 0) {
+		goto out;
+	if (rinfo->trace_nr == 0) {
 		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
 		err = -EINVAL;
 		goto out;
@@ -115,11 +80,9 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	if (client->sb->s_root == NULL) {
 		/* get the fs root inode. Note that this is not necessarily the root of
 		   the mount */
-		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo.trace_in[0].in->ino), &root_inode);
+		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo->trace_in[0].in->ino), &root_inode);
 		if (err < 0) 
 			goto out;
-
-		alloc_fs = 1;
 
 		client->sb->s_root = d_alloc_root(root_inode);
 		if (client->sb->s_root == NULL) {
@@ -129,10 +92,11 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		}
 	} else {
 		root_inode = client->sb->s_root->d_inode;
+		igrab(root_inode);
 		BUG_ON (root_inode == NULL);
 	}
 
-	if ((err = ceph_fill_trace(client->sb, &rinfo, &mnt_inode, pmnt_root)) < 0)
+	if ((err = ceph_fill_trace(client->sb, rinfo, &mnt_inode, pmnt_root)) < 0)
 		goto out2;
 	if (*pmnt_root == NULL) {
 		err = -ENOMEM;
@@ -140,10 +104,10 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	}
 
 	/* fill in cap */
-	frommds = le32_to_cpu(rinfo.reply->hdr.src.name.num);
-	cap = ceph_add_cap(mnt_inode, session, 
-			   le32_to_cpu(rinfo.head->file_caps), 
-			   le32_to_cpu(rinfo.head->file_caps_seq));
+	frommds = le32_to_cpu(req->r_reply->hdr.src.name.num);
+	cap = ceph_add_cap(mnt_inode, req->r_session, 
+			   le32_to_cpu(rinfo->head->file_caps), 
+			   le32_to_cpu(rinfo->head->file_caps_seq));
 	if (IS_ERR(cap)) {
 		err = PTR_ERR(cap);
 		goto out2;
@@ -153,15 +117,16 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	ci->i_nr_by_mode[FILE_MODE_PIN]++;
 
 	dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
+	ceph_mdsc_put_request(req);
+	iput(mnt_inode);
 	return 0;
 
 out2:
 	dout(30, "open_root_inode failure %d\n", err);
-	if (alloc_fs)
-		iput(root_inode);
+	iput(root_inode);
 	iput(mnt_inode);
 out:
-	ceph_mdsc_put_session(session);
+	ceph_mdsc_put_request(req);
 	return err;
 }
 

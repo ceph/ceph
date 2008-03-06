@@ -114,11 +114,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_frag_map_nr = 0;
 	ci->i_frag_map = ci->i_frag_map_static;
 
-	ci->i_nr_caps = 0;
-	ci->i_max_caps = STATIC_CAPS;
-	ci->i_caps = ci->i_caps_static;
-	atomic_set(&ci->i_cap_count, 0);
-
+	INIT_LIST_HEAD(&ci->i_caps);
+	for (i = 0; i < STATIC_CAPS; i++)
+		ci->i_static_caps[i].mds = -1;
 	for (i = 0; i < 4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
@@ -139,8 +137,6 @@ static void ceph_destroy_inode(struct inode *inode)
 	dout(30, "destroy_inode %p ino %lu=%llx\n", inode,
 	     inode->i_ino, ceph_ino(inode));
 
-	if (ci->i_caps != ci->i_caps_static)
-		kfree(ci->i_caps);
 	kfree(ci->i_symlink);
 
 	kmem_cache_free(ceph_inode_cachep, ci);

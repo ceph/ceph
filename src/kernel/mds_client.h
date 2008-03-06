@@ -12,6 +12,31 @@
 struct ceph_client;
 
 /*
+ * for mds reply parsing
+ */
+struct ceph_mds_reply_info_in {
+	struct ceph_mds_reply_inode *in;
+	__u32                       symlink_len;
+	char                        *symlink;
+};
+
+struct ceph_mds_reply_info {
+	struct ceph_mds_reply_head    *head;
+
+	int                           trace_nr; 
+	struct ceph_mds_reply_info_in *trace_in;
+	struct ceph_mds_reply_dirfrag **trace_dir;
+	char                          **trace_dname;
+	__u32                         *trace_dname_len;
+
+	struct ceph_mds_reply_dirfrag *dir_dir;
+	int                           dir_nr;
+	struct ceph_mds_reply_info_in *dir_in;
+	char                          **dir_dname;
+	__u32                         *dir_dname_len;
+};
+
+/*
  * state associated with each MDS<->client session
  */
 enum {
@@ -40,8 +65,15 @@ struct ceph_mds_request {
 	__u64             r_tid;
 	struct ceph_msg * r_request;  /* original request */
 	struct ceph_msg * r_reply;   
-	
-	__u32             r_mds[2];   /* set of mds's with whom request may be outstanding */
+	struct ceph_mds_reply_info r_reply_info;
+	struct inode    * r_last_inode;
+	struct dentry   * r_last_dentry;
+	bool              r_expects_cap;
+	struct ceph_inode_cap * r_cap;
+	struct ceph_mds_session * r_session;
+	struct ceph_mds_session * r_mds[2];
+
+	//__u32             r_mds[2];   /* set of mds's with whom request may be outstanding */
         int               r_num_mds;  /* items in r_mds */
 
 	int               r_attempts;   /* resend attempts */
@@ -68,32 +100,6 @@ struct ceph_mds_client {
 	struct delayed_work     delayed_work;  /* delayed work */
 };
 
-/*
- * for mds reply parsing
- */
-struct ceph_mds_reply_info_in {
-	struct ceph_mds_reply_inode *in;
-	__u32                       symlink_len;
-	char                        *symlink;
-};
-
-struct ceph_mds_reply_info {
-	struct ceph_msg               *reply;
-	struct ceph_mds_reply_head    *head;
-
-	int                           trace_nr; 
-	struct ceph_mds_reply_info_in *trace_in;
-	struct ceph_mds_reply_dirfrag **trace_dir;
-	char                          **trace_dname;
-	__u32                         *trace_dname_len;
-
-	struct ceph_mds_reply_dirfrag *dir_dir;
-	int                           dir_nr;
-	struct ceph_mds_reply_info_in *dir_in;
-	char                          **dir_dname;
-	__u32                         *dir_dname_len;
-};
-
 extern const char* ceph_mds_op_name(int op);
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client);
@@ -108,23 +114,8 @@ extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, struct ceph_
 struct ceph_inode_info;
 extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
-extern struct ceph_msg *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
-extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_msg *msg, 
-				struct ceph_mds_reply_info *rinfo, struct ceph_mds_session **psession);
-
-static __inline__ void ceph_mdsc_put_session(struct ceph_mds_session *s)
-{
-	BUG_ON(s == NULL);
-	if (atomic_dec_and_test(&s->s_ref)) {
-		kfree(s);
-		s = NULL;
-	}
-}
-
-
-extern int ceph_mdsc_parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info);
-extern void ceph_mdsc_destroy_reply_info(struct ceph_mds_reply_info *info);
-extern void ceph_mdsc_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *i);
-
+extern struct ceph_mds_request *ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, ceph_ino_t ino1, const char *path1, ceph_ino_t ino2, const char *path2);
+extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc, struct ceph_mds_request *req);
+extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
 #endif
