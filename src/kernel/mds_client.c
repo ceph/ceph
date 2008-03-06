@@ -1232,12 +1232,14 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_inode_cap *cap;
 	struct ceph_mds_session *session;
+	struct list_head *p;
+
 	int i;
 
 	dout(10, "update_cap_wanted %d -> %d\n", ci->i_cap_wanted, wanted);
 
-	for (i=0; i<ci->i_nr_caps; i++) {
-		cap = &ci->i_caps[i];
+	list_for_each(p, &ci->i_caps) {
+		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 
 		session = __get_session(mdsc, cap->mds);
 		BUG_ON(!session);

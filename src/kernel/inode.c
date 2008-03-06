@@ -260,144 +260,133 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_cap *cap;
+	struct list_head *p;
 
-	int i;
-	for (i=0; i<ci->i_nr_caps; i++) 
-		if ((ci->i_caps[i].caps & want) == want) {
-			dout(40, "find_cap found i=%d cap %d want %d\n", i, ci->i_caps[i].caps, want);
-			return &ci->i_caps[i];
+	list_for_each(p, &ci->i_caps) {
+		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
+		if ((cap->caps & want) == want) {
+			dout(40, "find_cap found %p caps %d want %d\n", cap, 
+			     cap->caps, want);
+			return cap;
 		}
+	}
 	return 0;
 }
 
 static struct ceph_inode_cap *get_cap_for_mds(struct inode *inode, int mds)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int i;
-	for (i=0; i<ci->i_nr_caps; i++) 
-		if (ci->i_caps[i].mds == mds) 
-			return &ci->i_caps[i];
+	struct ceph_inode_cap *cap;
+	struct list_head *p;
+
+	list_for_each(p, &ci->i_caps) {
+		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
+		if (cap->mds == mds) 
+			return cap;
+	}
 	return 0;
 }
 
 
-struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 cap, u32 seq)
+struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session *session, u32 caps, u32 seq)
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_cap *cap;
 	int i;
 
-	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode, session->s_mds, cap, seq);
-	
-	for (i=0; i<ci->i_nr_caps; i++) 
-		if (ci->i_caps[i].mds == mds) break;
-	if (i == ci->i_nr_caps) {
-		for (i=0; i<ci->i_nr_caps; i++) 
-			if (ci->i_caps[i].mds < 0) break;
-		if (i == ci->i_max_caps) {
-			/* realloc */
-			void *o = ci->i_caps;
-			ci->i_caps = kmalloc(ci->i_max_caps*2*sizeof(*ci->i_caps), GFP_KERNEL);
-			if (ci->i_caps == NULL) {
-				ci->i_caps = o;
-				derr(0, "add_cap enomem\n");
-				return ERR_PTR(-ENOMEM);
+	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode, session->s_mds, caps, seq);
+	cap = get_cap_for_mds(inode, mds);
+	if (!cap) {
+		for (i=0; i<STATIC_CAPS; i++)
+			if (ci->i_static_caps[i].mds == -1) {
+				cap = &ci->i_static_caps[i];
+				break;
 			}
-			memcpy(ci->i_caps, o, ci->i_nr_caps*sizeof(*ci->i_caps));
-			if (o != ci->i_caps_static)
-				kfree(o);
-			ci->i_max_caps *= 2;
-		}
-		if (i == ci->i_nr_caps)
-			ci->i_nr_caps++;
+		if (!cap)
+			cap = kmalloc(sizeof(*cap), GFP_KERNEL);
+		if (cap == 0)
+			return ERR_PTR(-ENOMEM);
+		
+		cap->caps = 0;
+		cap->mds = mds;
+		cap->seq = 0;
+		cap->flags = 0;
+		
+		if (list_empty(&ci->i_caps))
+			igrab(inode);
+		cap->ci = ci;
+		list_add(&cap->ci_caps, &ci->i_caps);
 
-		ci->i_caps[i].ci = ci;
-		ci->i_caps[i].caps = 0;
-		ci->i_caps[i].mds = mds;
-		ci->i_caps[i].seq = 0;
-		ci->i_caps[i].flags = 0;
-
-		ci->i_caps[i].session = session;
+		cap->session = session;
 		spin_lock(&session->s_cap_lock);
-		list_add(&ci->i_caps[i].session_caps, &session->s_caps);
+		list_add(&cap->session_caps, &session->s_caps);
 		session->s_nr_caps++;
 		spin_unlock(&session->s_cap_lock);
-
-		if (ci->i_nr_caps == 1) {
-			dout(10, "igrab on %p\n", inode);
-			igrab(inode);
-		}
 	}
 
 	dout(10, "add_cap inode %p (%llx) got cap %d %xh now %xh seq %d from %d\n",
-	     inode, ceph_ino(inode), i, cap, cap|ci->i_caps[i].caps, seq, mds);
-	ci->i_caps[i].caps |= cap;
-	ci->i_caps[i].seq = seq;
-	return &ci->i_caps[i];
+	     inode, ceph_ino(inode), i, caps, caps|cap->caps, seq, mds);
+	cap->caps |= caps;
+	cap->seq = seq;
+	return cap;
 }
 
-int ceph_get_caps(struct ceph_inode_info *ci)
+int ceph_caps_issued(struct ceph_inode_info *ci)
 {
-	int i;
 	int have = 0;
-	for (i=0; i<ci->i_nr_caps; i++)
-		have |= ci->i_caps[i].caps;
+	struct ceph_inode_cap *cap;
+	struct list_head *p;
+
+	list_for_each(p, &ci->i_caps) {
+		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
+		have |= cap->caps;
+	}
 	return have;
 }
 
-void __remove_cap(struct ceph_inode_cap *cap)
+void __ceph_remove_cap(struct ceph_inode_cap *cap)
 {
-	/* remove from session list */
 	struct ceph_mds_session *session = cap->session;
+	struct ceph_inode_info *ci = cap->ci;
+
+	dout(10, "__ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
+
+	/* remove from session list */
 	spin_lock(&session->s_cap_lock);
 	list_del(&cap->session_caps);
 	session->s_nr_caps--;
 	cap->session = 0;
 	spin_unlock(&session->s_cap_lock);
+
+	/* remove from inode list */
+	list_del(&cap->ci_caps);
+	if (list_empty(&ci->i_caps))
+		iput(&ci->vfs_inode);
+	cap->ci = 0;
+
+	if (cap >= ci->i_static_caps &&
+	    cap < ci->i_static_caps + STATIC_CAPS) 
+		cap->mds = -1;
+	else
+		kfree(cap);
 }
 
-void ceph_remove_cap(struct ceph_inode_info *ci, int mds)
+/*void ceph_remove_cap(struct ceph_inode_info *ci, int mds)
 {
-	int i;
-	int was = ci->i_nr_caps;
-	dout(10, "remove_cap on %p for mds%d\n", &ci->vfs_inode, mds);
-	for (i=0; i<ci->i_nr_caps; i++) {
-		if (ci->i_caps[i].mds != mds) 
-			continue;
-		dout(10, "remove_cap removing %p\n", &ci->i_caps[i]);
-		__remove_cap(&ci->i_caps[i]);  /* remove from list */
-		if (i == ci->i_nr_caps-1) {
-			do {
-				ci->i_nr_caps--;
-			} while (ci->i_nr_caps &&
-				 ci->i_caps[ci->i_nr_caps-1].mds < 0);
-			break;
-		}
-		ci->i_caps[i].mds = -1;
-		ci->i_caps[i].caps = 0;
-		ci->i_caps[i].seq = 0;
-	}
-	if (was > 0 && ci->i_nr_caps == 0) {
-		dout(10, "iput on %p\n", &ci->vfs_inode);
-		iput(&ci->vfs_inode);
-	}
-}
+	struct ceph_inode_cap *cap = get_cap_for_mds(ci, mds);
+	if (cap)
+		__ceph_remove_cap(cap);
+		}*/
 
 void ceph_remove_caps(struct ceph_inode_info *ci)
 {
-	int i;
-	dout(10, "remove_caps on %p nr %d\n", &ci->vfs_inode, ci->i_nr_caps);
-	if (ci->i_nr_caps) {
-		for (i=0; i<ci->i_nr_caps; i++) 
-			__remove_cap(&ci->i_caps[i]);
-		ci->i_nr_caps = 0;
-		if (ci->i_caps != ci->i_caps_static) {
-			kfree(ci->i_caps);
-			ci->i_caps = ci->i_caps_static;
-			ci->i_max_caps = STATIC_CAPS;
-		}
-		dout(10, "iput on %p\n", &ci->vfs_inode);
-		iput(&ci->vfs_inode);
+	struct ceph_inode_cap *cap;
+	dout(10, "remove_caps on %p\n", &ci->vfs_inode);
+	while (!list_empty(&ci->i_caps)) {
+		cap = list_entry(ci->i_caps.next, struct ceph_inode_cap, ci_caps);
+		__ceph_remove_cap(cap);
 	}
 }
 

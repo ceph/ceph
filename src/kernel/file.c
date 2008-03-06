@@ -193,7 +193,6 @@ int ceph_release(struct inode *inode, struct file *file)
 	int wanted;
 
 	dout(5, "release inode %p file %p\n", inode, file);
-	atomic_dec(&ci->i_cap_count);
 
 	/*
 	 * FIXME mystery: why is file->f_flags now different than
