@@ -3,6 +3,8 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/random.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
 
 /* debug level; defined in super.h */
 int ceph_debug = 0;
@@ -46,96 +48,40 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *args, struct dentry **pmnt_root)
+static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_mount_args *args)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct inode *root_inode, *mnt_inode = NULL;
 	struct ceph_mds_request *req = 0;
 	struct ceph_mds_request_head *reqhead;
-	struct ceph_mds_reply_info *rinfo;
-	int frommds;
 	int err;
-	struct ceph_inode_cap *cap;
-	struct ceph_inode_info *ci;
+	struct dentry *root;
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
-		return PTR_ERR(req);
+		return ERR_PTR(PTR_ERR(req));
 	req->r_expects_cap = true;
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
 	err = ceph_mdsc_do_request(mdsc, req);
-	rinfo = &req->r_reply_info;
-	if (err != 0) 
-		goto out;
-	if (rinfo->trace_nr == 0) {
-		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
-		err = -EINVAL;
-		goto out;
-	}
-	
-	if (client->sb->s_root == NULL) {
-		/* get the fs root inode. Note that this is not necessarily the root of
-		   the mount */
-		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo->trace_in[0].in->ino), &root_inode);
-		if (err < 0) 
-			goto out;
-
-		client->sb->s_root = d_alloc_root(root_inode);
-		if (client->sb->s_root == NULL) {
-			err = -ENOMEM;
-			/* fixme: also close? */
-			goto out2;
-		}
-	} else {
-		root_inode = client->sb->s_root->d_inode;
-		igrab(root_inode);
-		BUG_ON (root_inode == NULL);
-	}
-
-	if ((err = ceph_fill_trace(client->sb, rinfo, &mnt_inode, pmnt_root)) < 0)
-		goto out2;
-	if (*pmnt_root == NULL) {
-		err = -ENOMEM;
-		goto out2;
-	}
-
-	/* fill in cap */
-	frommds = le32_to_cpu(req->r_reply->hdr.src.name.num);
-	cap = ceph_add_cap(mnt_inode, req->r_session, 
-			   le32_to_cpu(rinfo->head->file_caps), 
-			   le32_to_cpu(rinfo->head->file_caps_seq));
-	if (IS_ERR(cap)) {
-		err = PTR_ERR(cap);
-		goto out2;
-	}
-
-	ci = ceph_inode(mnt_inode);
-	ci->i_nr_by_mode[FILE_MODE_PIN]++;
-
-	dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
+	if (err == 0) {
+		root = req->r_last_dentry;
+		dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
+	} else
+		root = ERR_PTR(err);
 	ceph_mdsc_put_request(req);
-	iput(mnt_inode);
-	return 0;
-
-out2:
-	dout(30, "open_root_inode failure %d\n", err);
-	iput(root_inode);
-	iput(mnt_inode);
-out:
-	ceph_mdsc_put_request(req);
-	return err;
+	return root;
 }
 
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct dentry **pdroot)
+int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct vfsmount *mnt)
 {
 	struct ceph_msg *mount_msg;
+	struct dentry *root;
 	int err;
 	int attempts = 10;
 	int which;
@@ -168,9 +114,11 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 	}
 
 	dout(30, "mount opening base mountpoint\n");
-	if ((err = open_root_inode(client, args, pdroot)) < 0) 
-		return err;
-
+	root = open_root_dentry(client, args);
+	if (IS_ERR(root))
+		return PTR_ERR(root);
+	mnt->mnt_root = root;
+	mnt->mnt_sb = client->sb;
 	dout(10, "mount success\n");
 	return 0;
 }

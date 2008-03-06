@@ -331,7 +331,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			put_session(req->r_session);
 		if (req->r_last_inode) 
 			iput(req->r_last_inode);
-		if (req->r_last_dentry)
+		if (req->r_last_dentry) 
 			dput(req->r_last_dentry);
 		drop_request_session_attempt_refs(req);
 		kfree(req);
@@ -823,14 +823,10 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	
 	result = le32_to_cpu(rinfo->head->result);
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
-	if (result == 0 && 
-	    mdsc->client->sb->s_root) { /* mounted? */
-		err = ceph_fill_trace(mdsc->client->sb, rinfo, 
-				      &req->r_last_inode, 
-				      &req->r_last_dentry);
+	if (result == 0) {
+		err = ceph_fill_trace(mdsc->client->sb, req);
 		if (err) 
 			goto done;
-		
 		if (req->r_expects_cap) {
 			req->r_cap = ceph_add_cap(req->r_last_inode, req->r_session,
 						  le32_to_cpu(rinfo->head->file_caps),

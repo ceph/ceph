@@ -435,12 +435,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
-	struct dentry *droot;
 
 	dout(25, "ceph_get_sb\n");
 
 	mount_args = kmalloc(sizeof(struct ceph_mount_args), GFP_KERNEL);
-
 	err = parse_mount_args(flags, data, dev_name, mount_args);
 	if (err < 0)
 		goto out;
@@ -456,16 +454,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	}
 	client = ceph_sb_to_client(sb);
 
-	err = ceph_mount(client, mount_args, &droot);
+	err = ceph_mount(client, mount_args, mnt);
 	if (err < 0)
 		goto out_splat;
-
-	dout(30, "ceph_get_sb %p finishing\n", sb);
-	mnt->mnt_sb = sb;
-	mnt->mnt_root = droot;
-
-	dout(22, "droot ino %llx\n", ceph_ino(droot->d_inode));
-
+	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:

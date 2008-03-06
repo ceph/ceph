@@ -146,60 +146,61 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	return 0;
 }
 
-int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo, 
-		struct inode **lastinode, struct dentry **lastdentry)
+int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 {
+	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
 	int err = 0;
 	struct qstr dname;
-	struct dentry *dn, *parent = NULL;
+	struct dentry *dn = sb->s_root;
+	struct dentry *parent = NULL;
 	struct inode *in;
 	int i = 0;
 
-	BUG_ON(sb == NULL);
-
-	if (lastinode)
-		*lastinode = NULL;
-
-	if (lastdentry)
-		*lastdentry = NULL;
-
-	dn = sb->s_root;
-	dget(dn);
-	in = dn->d_inode;
-
-	for (i=0; i<prinfo->trace_nr; i++)
-		if (ceph_ino(in) == prinfo->trace_in[i].in->ino)
-			break;
-
-	if (i == prinfo->trace_nr) {
-		dout(10, "ceph_fill_trace did not locate mounted root!\n");
-		return -ENOENT;
+	if (dn) {
+		in = dn->d_inode;
+	} else {
+		/* first reply (i.e. mount) */
+		BUG_ON(i);
+		err = ceph_get_inode(sb, le64_to_cpu(rinfo->trace_in[0].in->ino), &in);
+		if (err < 0) 
+			return err;
+		dn = d_alloc_root(in);
+		if (dn == NULL) {
+			derr(0, "d_alloc_root enomem badness on root dentry\n");
+			return -ENOMEM;
+		}
 	}
 
-	if ((err = ceph_fill_inode(in, prinfo->trace_in[i].in)) < 0)
+	err = ceph_fill_inode(in, rinfo->trace_in[0].in);
+	if (err < 0)
 		return err;
 
-	for (++i; i<prinfo->trace_nr; i++) {
-		dput(parent);
+	if (sb->s_root == NULL) {
+		sb->s_root = dn;
+		dget(dn);
+	}
+
+	dget(dn);
+	for (i = 1; i < rinfo->trace_nr; i++) {
+		dout(10, "fill_trace i=%d/%d dn %p in %p dname '%s'\n", i, rinfo->trace_nr,
+		     dn, dn->d_inode, rinfo->trace_dname[i]);
 		parent = dn;
-
-		dname.name = prinfo->trace_dname[i];
-		dname.len = prinfo->trace_dname_len[i];
+		dname.name = rinfo->trace_dname[i];
+		dname.len = rinfo->trace_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
-
+		dout(10, "fill_trace calling d_lookup on '%s'\n", dname.name);
 		dn = d_lookup(parent, &dname);
 
-		dout(30, "calling d_lookup on parent=%p name=%s returned %p\n", parent, dname.name, dn);
-
 		if (!dn) {
+			dout(10, "fill_trace calling d_alloc\n");
 			dn = d_alloc(parent, &dname);
-			if (dn == NULL) {
-				dout(30, "d_alloc badness\n");
-				break; 
+			if (!dn) {
+				derr(0, "d_alloc enomem\n");
+				return -ENOMEM;
 			}
 		}
-
-		if (!prinfo->trace_in[i].in) {
+		if (!rinfo->trace_in[i].in) {
+			dout(10, "fill_trace enoent\n");
 			err = -ENOENT;
 			d_delete(dn);
 			dn = NULL;
@@ -207,7 +208,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 		}
 
 		if ((!dn->d_inode) ||
-		    (ceph_ino(dn->d_inode) != prinfo->trace_in[i].in->ino)) {
+		    (ceph_ino(dn->d_inode) != rinfo->trace_in[i].in->ino)) {
+			dout(10, "fill_trace new_inode\n");
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
@@ -215,7 +217,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 				dn = NULL;
 				break;
 			}
-			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
+			if (ceph_fill_inode(in, rinfo->trace_in[i].in) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				iput(in);
 				d_delete(dn);
@@ -223,32 +225,24 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 				break;
 			}
 			ceph_touch_dentry(dn);
+			dout(10, "fill_trace d_add\n");
 			d_add(dn, in);
 			dout(10, "ceph_fill_trace added dentry %p inode %llx %d/%d\n",
-			     dn, ceph_ino(in), i, prinfo->trace_nr);
+			     dn, ceph_ino(in), i, rinfo->trace_nr);
 		} else {
 			in = dn->d_inode;
-			if (ceph_fill_inode(in, prinfo->trace_in[i].in) < 0) {
+			if (ceph_fill_inode(in, rinfo->trace_in[i].in) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				break;
 			}
-
 		}
-	
 	}
-
 	dput(parent);
 
-	if (lastdentry)
-		*lastdentry = dn;
-	else
-		dput(dn);
-	
-	if (lastinode) {
-		*lastinode = in;
-		igrab(in);
-	}
-
+	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
+	req->r_last_dentry = dn;
+	req->r_last_inode = in;
+	igrab(in);
 	return err;
 }
 

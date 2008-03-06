@@ -12,7 +12,7 @@ code cleanup
 
 kernel client
 - some bugs
- - caps embedded list_head's don't play nice with realloc() on cap array in ceph_add_cap()
+ - crash on umount with multiple mount points...
 - cleanup
  - roll open_root_inode into fill_trace?
 - proc.c
