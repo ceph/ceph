@@ -13,7 +13,9 @@ code cleanup
 kernel client
 - some bugs
  - open path needs to call fill_trace/fill_inode such that ci->i_max_size gets filled in
- - prevent client_reply from racing against a subsequent file_caps.
+ - caps embedded list_head's don't play nice with realloc() on cap array in ceph_add_cap()
+- cleanup
+ - roll open_root_inode into fill_trace?
 - proc.c
   - adjust granular debug levels too
     - should we be using debugfs?
