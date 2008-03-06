@@ -56,13 +56,13 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	int err;
 	struct ceph_inode_cap *cap;
 	struct ceph_inode_info *ci;
-	int alloc_fs = 0;
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
+	req->r_expects_cap = true;
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
@@ -86,8 +86,6 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		if (err < 0) 
 			goto out;
 
-		alloc_fs = 1;
-
 		client->sb->s_root = d_alloc_root(root_inode);
 		if (client->sb->s_root == NULL) {
 			err = -ENOMEM;
@@ -96,6 +94,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		}
 	} else {
 		root_inode = client->sb->s_root->d_inode;
+		igrab(root_inode);
 		BUG_ON (root_inode == NULL);
 	}
 
@@ -126,8 +125,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 
 out2:
 	dout(30, "open_root_inode failure %d\n", err);
-	if (alloc_fs)
-		iput(root_inode);
+	iput(root_inode);
 	iput(mnt_inode);
 out:
 	ceph_mdsc_put_request(req);
