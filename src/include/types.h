@@ -44,6 +44,15 @@ using namespace __gnu_cxx;
 #include "utime.h"
 #include "intarith.h"
 
+#include "../acconfig.h"
+
+// DARWIN compatibility
+#ifdef DARWIN
+typedef long long loff_t;
+typedef long long off64_t;
+#define O_DIRECT 00040000
+#endif
+
 // -- stl crap --
 
 namespace __gnu_cxx {

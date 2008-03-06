@@ -1,6 +1,8 @@
 #ifndef __CEPHHASH_H
 #define __CEPHHASH_H
 
+#include "../acconfig.h"
+
 // Robert Jenkins' function for mixing 32-bit values
 // http://burtleburtle.net/bob/hash/evahash.html
 // a, b = random bits, c = input and output
