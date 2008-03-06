@@ -116,7 +116,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
 
-  static const int WAIT_ANY           = 0xffffffff;
+  static const int WAIT_ANY_MASK	= (0xffffffff);
 
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export

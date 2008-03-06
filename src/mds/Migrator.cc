@@ -940,7 +940,7 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->replica_nonce = CInode::EXPORT_NONCE;
   
   // waiters
-  in->take_waiting(CInode::WAIT_ANY, finished);
+  in->take_waiting(CInode::WAIT_ANY_MASK, finished);
   
   // *** other state too?
 
@@ -1051,7 +1051,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
 
   // suck up all waiters
-  dir->take_waiting(CDir::WAIT_ANY, finished);    // all dir waiters
+  dir->take_waiting(CDir::WAIT_ANY_MASK, finished);    // all dir waiters
   
   // pop
   dir->finish_export(now);
@@ -2105,7 +2105,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
   // a replica's presense in my cache implies/forces it's presense in authority's.
   list<Context*> waiters;
   
-  dir->take_waiting(CDir::WAIT_ANY, waiters);
+  dir->take_waiting(CDir::WAIT_ANY_MASK, waiters);
   for (list<Context*>::iterator it = waiters.begin();
        it != waiters.end();
        it++) 

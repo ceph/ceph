@@ -15,7 +15,8 @@
 #ifndef __MONMAP_H
 #define __MONMAP_H
 
-#include <asm/errno.h>
+#include "include/err.h"
+
 #include "msg/Message.h"
 #include "include/types.h"
 //#include "config.h"

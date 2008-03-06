@@ -6,13 +6,12 @@ test -d out || mkdir out
 rm out/*
 
 # figure machine's ip
-HOSTNAME=`hostname -f`
+HOSTNAME=`hostname`
 IP=`host $HOSTNAME | cut -d ' ' -f 4`
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 
 echo hostname $HOSTNAME
 echo "ip $IP"
-
 if [ `echo $IP | grep '^127\\.'` ]
 then
 	echo
