@@ -371,6 +371,7 @@ const char *ceph_msg_type_name(int type)
 	}
 	return "unknown";
 }
+
 void ceph_peer_reset(void *c)
 {
 	return;
