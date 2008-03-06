@@ -10,6 +10,7 @@
 struct ceph_msg;
 
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
+typedef void (*ceph_msgr_peer_reset_t) (void *c);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
@@ -27,6 +28,7 @@ static __inline__ const char *ceph_name_type_str(int t) {
 struct ceph_messenger {
 	void *parent;
 	ceph_msgr_dispatch_t dispatch;
+	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
 	struct socket *listen_sock; 	 /* listening socket */
