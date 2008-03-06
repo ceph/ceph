@@ -121,6 +121,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 
 	dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
 	ceph_mdsc_put_request(req);
+	iput(mnt_inode);
 	return 0;
 
 out2:

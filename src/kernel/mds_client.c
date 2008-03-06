@@ -329,6 +329,10 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 		}
 		if (req->r_session)
 			put_session(req->r_session);
+		if (req->r_last_inode) 
+			iput(req->r_last_inode);
+		if (req->r_last_dentry)
+			dput(req->r_last_dentry);
 		drop_request_session_attempt_refs(req);
 		kfree(req);
 	} 

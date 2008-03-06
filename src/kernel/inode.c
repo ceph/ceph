@@ -244,8 +244,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_reply_info *prinfo,
 	else
 		dput(dn);
 	
-	if (lastinode)
+	if (lastinode) {
 		*lastinode = in;
+		igrab(in);
+	}
 
 	return err;
 }
