@@ -127,16 +127,13 @@ nextfrag:
 		rhead = req->r_request->front.iov_base;
 		rhead->args.readdir.frag = cpu_to_le32(frag);
 		err = ceph_mdsc_do_request(mdsc, req);
-		if (err < 0)
-		    return err;
 		rinfo = &req->r_reply_info;
-		err = le32_to_cpu(rinfo->head->result);
-		dout(10, "dir_readdir got and parsed readdir result=%d"
-		     " on frag %u\n", err, frag);
 		if (err < 0) {
 			ceph_mdsc_put_request(req);
 			return err;
 		}
+		dout(10, "dir_readdir got and parsed readdir result=%d"
+		     " on frag %u\n", err, frag);
 		fi->last_readdir = req;
 
 		/* pre-populate dentry cache */
@@ -274,9 +271,6 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0)
-		return err;
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
 	dout(20, "dir_lookup result=%d\n", err);
 	return err;
@@ -339,12 +333,9 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry, int mode, de
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0) {
-		d_drop(dentry);
-		return err;
-	}
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
+	if (err < 0) 
+		d_drop(dentry);
 	return err;
 }
 
@@ -369,12 +360,9 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry, const char
 		return PTR_ERR(req);
 	}
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0) {
-		d_drop(dentry);
-		return err;
-	}
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
+	if (err < 0)
+		d_drop(dentry);
 	return err;
 }
 
@@ -402,12 +390,9 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0) {
-		d_drop(dentry);
-		return err;
-	}
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
+	if (err < 0)
+		d_drop(dentry);
 	return err;
 }
 
@@ -434,10 +419,6 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0)
-		return err;
-
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) {
 		inode_dec_link_count(req->r_last_inode);
 		/* FIXME update dir mtime etc. from reply trace */
@@ -475,10 +456,6 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0)
-		return err;
-
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
 	return err;
 }
@@ -508,10 +485,6 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = 0;
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0)
-		return err;
-	
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	ceph_mdsc_put_request(req);
 	return err;
 }

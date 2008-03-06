@@ -583,14 +583,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
 		else
 			reqh->args.chown.gid = cpu_to_le32(-1);
-		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
-			return err;
-		err = le32_to_cpu(req->r_reply_info.head->result);
+		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
 		dout(10, "chown result %d\n", err);
 		if (err)
 			return err;
-		//if (err) return err;
 	}
 	
 	/* chmod? */
@@ -600,9 +597,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			return PTR_ERR(req);
 		reqh = req->r_request->front.iov_base;
 		reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
-		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
-			return err;
-		err = le32_to_cpu(req->r_reply_info.head->result);
+		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
 		dout(10, "chmod result %d\n", err);
 		if (err)
@@ -619,9 +614,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		reqh = req->r_request->front.iov_base;
 		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
 		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
-		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
-			return err;
-		err = le32_to_cpu(req->r_reply_info.head->result);
+		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
 		dout(10, "utime result %d\n", err);
 		if (err)
@@ -642,9 +635,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			return PTR_ERR(req);
 		reqh = req->r_request->front.iov_base;
 		reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-		if ((err = ceph_mdsc_do_request(mdsc, req)) < 0) 
-			return err;
-		err = le32_to_cpu(req->r_reply_info.head->result);
+		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
 		dout(10, "truncate result %d\n", err);
 		if (err)

@@ -95,17 +95,11 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err < 0)
-		return err;
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	if (err == 0) 
 		err = ceph_open_init_private_data(inode, file, file->f_flags);
 	ceph_mdsc_put_request(req);
-
-	if (err < 0)
-		return err;
-	dout(5, "ceph_open success, %llx\n", ceph_ino(inode));
-	return 0;
+	dout(5, "ceph_open result=%d on %llx\n", err, ceph_ino(inode));
+	return err;
 }
 
 

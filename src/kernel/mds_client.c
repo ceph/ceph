@@ -773,7 +773,6 @@ retry:
 		err = PTR_ERR(req->r_reply);
 		req->r_reply = 0;
 		dout(10, "do_request returning err %d from reply handler\n", err);
-		ceph_mdsc_put_request(req);
 		return err;
 	}
 
@@ -781,10 +780,10 @@ retry:
 	req->r_request = 0;
 	drop_request_session_attempt_refs(req);
 
+	err = le32_to_cpu(req->r_reply_info.head->result);
 	dout(30, "do_request done on %p result %d tracelen %d\n", req, 
-	     req->r_reply_info.head->result, 
-	     req->r_reply_info.trace_nr);
-	return 0;
+	     err, req->r_reply_info.trace_nr);
+	return err;
 }
 
 void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)

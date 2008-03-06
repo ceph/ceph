@@ -51,7 +51,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	struct inode *root_inode, *mnt_inode = NULL;
 	struct ceph_mds_request *req = 0;
 	struct ceph_mds_request_head *reqhead;
-	struct ceph_mds_reply_info rinfo;
+	struct ceph_mds_reply_info *rinfo;
 	int frommds;
 	int err;
 	struct ceph_inode_cap *cap;
@@ -66,14 +66,11 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
-	if ((err = ceph_mdsc_do_request(mdsc, req)) < 0)
-		return err;
-	
-	rinfo = req->r_reply_info;
-	err = le32_to_cpu(rinfo.head->result);
+	err = ceph_mdsc_do_request(mdsc, req);
+	rinfo = &req->r_reply_info;
 	if (err != 0) 
 		goto out;
-	if (rinfo.trace_nr == 0) {
+	if (rinfo->trace_nr == 0) {
 		dout(10, "open_root_inode wtf, mds returns 0 but no trace\n");
 		err = -EINVAL;
 		goto out;
@@ -82,7 +79,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	if (client->sb->s_root == NULL) {
 		/* get the fs root inode. Note that this is not necessarily the root of
 		   the mount */
-		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo.trace_in[0].in->ino), &root_inode);
+		err = ceph_get_inode(client->sb, le64_to_cpu(rinfo->trace_in[0].in->ino), &root_inode);
 		if (err < 0) 
 			goto out;
 
@@ -98,7 +95,7 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 		BUG_ON (root_inode == NULL);
 	}
 
-	if ((err = ceph_fill_trace(client->sb, &rinfo, &mnt_inode, pmnt_root)) < 0)
+	if ((err = ceph_fill_trace(client->sb, rinfo, &mnt_inode, pmnt_root)) < 0)
 		goto out2;
 	if (*pmnt_root == NULL) {
 		err = -ENOMEM;
@@ -108,8 +105,8 @@ static int open_root_inode(struct ceph_client *client, struct ceph_mount_args *a
 	/* fill in cap */
 	frommds = le32_to_cpu(req->r_reply->hdr.src.name.num);
 	cap = ceph_add_cap(mnt_inode, req->r_session, 
-			   le32_to_cpu(rinfo.head->file_caps), 
-			   le32_to_cpu(rinfo.head->file_caps_seq));
+			   le32_to_cpu(rinfo->head->file_caps), 
+			   le32_to_cpu(rinfo->head->file_caps_seq));
 	if (IS_ERR(cap)) {
 		err = PTR_ERR(cap);
 		goto out2;
