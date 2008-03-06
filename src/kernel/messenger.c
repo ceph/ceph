@@ -770,8 +770,6 @@ out:
 
 static void process_connect(struct ceph_connection *con)
 {
-	struct ceph_messenger *msgr = con->msgr;
-
 	dout(20, "process_connect on %p tag %d\n", con, (int)con->in_tag);
 	clear_bit(CONNECTING, &con->state);
 	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr)) {
@@ -796,8 +794,7 @@ static void process_connect(struct ceph_connection *con)
 			     con->connect_seq);
 /*
 			if (con->peer_connect_seq > con->connect_seq)
-				/* callback */
-				msgr->peer_reset(con);
+				con->msgr->peer_reset(con);
 */
 		}
 	}
