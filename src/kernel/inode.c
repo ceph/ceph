@@ -326,8 +326,8 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode, struct ceph_mds_session
 		spin_unlock(&session->s_cap_lock);
 	}
 
-	dout(10, "add_cap inode %p (%llx) got cap %d %xh now %xh seq %d from %d\n",
-	     inode, ceph_ino(inode), i, caps, caps|cap->caps, seq, mds);
+	dout(10, "add_cap inode %p (%llx) got cap %xh now %xh seq %d from %d\n",
+	     inode, ceph_ino(inode), caps, caps|cap->caps, seq, mds);
 	cap->caps |= caps;
 	cap->seq = seq;
 	return cap;
@@ -346,12 +346,12 @@ int ceph_caps_issued(struct ceph_inode_info *ci)
 	return have;
 }
 
-void __ceph_remove_cap(struct ceph_inode_cap *cap)
+void ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_inode_info *ci = cap->ci;
 
-	dout(10, "__ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
+	dout(10, "ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
 
 	/* remove from session list */
 	spin_lock(&session->s_cap_lock);
@@ -361,32 +361,25 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 	spin_unlock(&session->s_cap_lock);
 
 	/* remove from inode list */
+	spin_lock(&ci->vfs_inode.i_lock);
 	list_del(&cap->ci_caps);
 	if (list_empty(&ci->i_caps))
 		iput(&ci->vfs_inode);
 	cap->ci = 0;
-
-	if (cap >= ci->i_static_caps &&
-	    cap < ci->i_static_caps + STATIC_CAPS) 
-		cap->mds = -1;
-	else
+	cap->mds = -1;  /* mark unused */
+	spin_unlock(&ci->vfs_inode.i_lock);
+		
+	if (cap < ci->i_static_caps || cap >= ci->i_static_caps + STATIC_CAPS) 
 		kfree(cap);
 }
 
-/*void ceph_remove_cap(struct ceph_inode_info *ci, int mds)
-{
-	struct ceph_inode_cap *cap = get_cap_for_mds(ci, mds);
-	if (cap)
-		__ceph_remove_cap(cap);
-		}*/
-
-void ceph_remove_caps(struct ceph_inode_info *ci)
+void ceph_remove_all_caps(struct ceph_inode_info *ci)
 {
 	struct ceph_inode_cap *cap;
 	dout(10, "remove_caps on %p\n", &ci->vfs_inode);
 	while (!list_empty(&ci->i_caps)) {
 		cap = list_entry(ci->i_caps.next, struct ceph_inode_cap, ci_caps);
-		__ceph_remove_cap(cap);
+		ceph_remove_cap(cap);
 	}
 }
 

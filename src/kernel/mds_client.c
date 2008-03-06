@@ -557,7 +557,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 		igrab(&ci->vfs_inode);
 		dout(10, "removing cap %p, ci is %p, inode is %p\n", cap, ci, &ci->vfs_inode);
 		spin_unlock(&session->s_cap_lock);
-		ceph_remove_cap(ci, session->s_mds);
+		ceph_remove_cap(cap);
 		spin_lock(&session->s_cap_lock);
 		iput(&ci->vfs_inode);
 	}
@@ -1234,8 +1234,6 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 	struct ceph_mds_session *session;
 	struct list_head *p;
 
-	int i;
-
 	dout(10, "update_cap_wanted %d -> %d\n", ci->i_cap_wanted, wanted);
 
 	list_for_each(p, &ci->i_caps) {
@@ -1251,9 +1249,8 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 	}
 
 	ci->i_cap_wanted = wanted;
-
 	if (wanted == 0) 
-		ceph_remove_caps(ci);
+		ceph_remove_all_caps(ci);
 
 	return 0;
 }

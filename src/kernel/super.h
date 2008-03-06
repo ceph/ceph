@@ -281,8 +281,8 @@ extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
 					   u32 cap, u32 seq);
-extern void ceph_remove_cap(struct ceph_inode_info *ci, int mds);
-extern void ceph_remove_caps(struct ceph_inode_info *ci);
+extern void ceph_remove_cap(struct ceph_inode_cap *cap);
+extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
