@@ -120,7 +120,7 @@ int crush_add_bucket(struct crush_map *map,
 		id = crush_get_next_bucket_id(map);
 	pos = -1 - id;
 
-	if (pos == map->max_buckets) {
+	while (pos > map->max_buckets) {
 		/* expand array */
 		oldsize = map->max_buckets;
 		if (map->max_buckets)
@@ -130,11 +130,13 @@ int crush_add_bucket(struct crush_map *map,
 		map->buckets = realloc(map->buckets, map->max_buckets * sizeof(map->buckets[0]));
 		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));
 	}
+
 	assert(map->buckets[pos] == 0);
 
-	/* add it */
+   	/* add it */
 	bucket->id = id;
 	map->buckets[pos] = bucket;
+
 	return id;
 }
 
