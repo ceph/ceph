@@ -39,12 +39,14 @@ struct crush_rule {
 	struct crush_rule_step steps[0];
 };
 
-#define crush_rule_size(len) (sizeof(struct crush_rule) + (len)*sizeof(struct crush_rule_step))
+#define crush_rule_size(len) (sizeof(struct crush_rule) + \
+			      (len)*sizeof(struct crush_rule_step))
 
 
 
 /*** BUCKETS ***/
 
+/* bucket algorithms */
 enum {
 	CRUSH_BUCKET_UNIFORM = 1,
 	CRUSH_BUCKET_LIST = 2,
@@ -54,8 +56,8 @@ enum {
 
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
-	__u16 type;
-	__u16 alg;
+	__u16 type;      /* non-zero; 0 is reserved for devices */
+	__u16 alg;       /* one of CRUSH_BUCKET_* */
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;
