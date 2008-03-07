@@ -25,8 +25,9 @@ static int ceph_readpage(struct file *filp, struct page *page)
 		goto out_unlock;
 
 	SetPageUptodate(page);
+
+	/* TODO: update info in ci? */
 out_unlock:
-	unlock_page(page);
 	return err;
 }
 
@@ -42,7 +43,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	dout(10, "ceph_readpages inode %p file %p nr_pages %d\n",
 	     inode, file, nr_pages);
 
-	err = ceph_osdc_readpages(osdc, ceph_ino(inode), &ci->i_layout,
+	err = ceph_osdc_readpages(osdc, mapping, ceph_ino(inode), &ci->i_layout,
 				  pages, nr_pages);
 	if (err < 0)
 		goto out_unlock;
@@ -82,17 +83,24 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
        dout(10, "ceph_writepage inode %p page %p index %lu\n",
                inode, page, page->index);
 
-       err = ceph_osdc_silly_write(osdc, inode->i_ino, &ci->i_layout,
-                               PAGE_SIZE, 0, (const char *)page->first_page);
-/*    err = ceph_osdc_writepage(osdc, inode->i_ino, &ci->i_layout,*/
-/*                page->index << PAGE_SHIFT, PAGE_SIZE, page);*/
-       if (err)
-               goto out_unlock;
+	/* write a page at the index of page->index, by size of PAGE_SIZE */
+	err = ceph_osdc_writepage(osdc, inode->i_ino, &ci->i_layout,
+				page->index << PAGE_SHIFT, PAGE_SIZE, page);
+	if (err)
+		goto out_unlock;
+
+	/* update written data size in ceph_inode_info */
+	spin_lock(&inode->i_lock);
+	if (inode->i_size <= PAGE_SIZE) {
+		ci->i_wr_size = inode->i_size = PAGE_SIZE;
+		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+		dout(10, "extending file size to %d\n", (int)inode->i_size);
+	}
+	spin_unlock(&inode->i_lock);
 
 out_unlock:
-       unlock_page(page);
-       end_page_writeback(page);
-       put_page(page);
+	end_page_writeback(page);
+	put_page(page);
 
        return err;
 }
@@ -115,7 +123,6 @@ static int ceph_prepare_write(struct file *filp, struct page *page,
 	     inode, page, from, (to-from));
 
 	/*
-	 * TODO:
 	 *  1. check if page is up to date
 	 *  2. If not, read a page to be up to date
 	 */
@@ -146,9 +153,10 @@ static int ceph_prepare_write(struct file *filp, struct page *page,
 				      page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (err)
 		goto out_unlock;
-	
+
+	/* TODO: update info in ci? */
+
 out_unlock:
-	unlock_page(page);
 	return err;
 }
 
@@ -191,6 +199,8 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 		if (err)
 			err = 0;        /* FIXME: more sophisticated error handling */
 		kunmap(page);
+
+		/* TODO: update info in ci? */
 	}
 	else {
 		/* set the page as up-to-date and mark it as dirty */
@@ -199,7 +209,6 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 	}
 	
 /*out_unlock:*/
-	unlock_page(page);
 	return err;
 }
 

@@ -1,6 +1,8 @@
 #ifndef __CEPHHASH_H
 #define __CEPHHASH_H
 
+#include "../acconfig.h"
+
 // Robert Jenkins' function for mixing 32-bit values
 // http://burtleburtle.net/bob/hash/evahash.html
 // a, b = random bits, c = input and output
@@ -63,7 +65,7 @@ template<> struct rjhash<uint64_t> {
   }
 };
   
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__) || defined(DARWIN)
 template<> struct rjhash<size_t> {
   inline size_t operator()(const size_t x) const {
 #ifdef __LP64__

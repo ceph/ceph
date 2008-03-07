@@ -1,11 +1,24 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
+# Autoconf
 AC_PREREQ(2.59)
 AC_INIT([Ceph distributed file system], [.1], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
+
+# Environment
+AC_CANONICAL_HOST
+AC_CANONICAL_TARGET
+
+# Automake
 AM_INIT_AUTOMAKE(ceph, 0.1)
+
+# Platform
+case "${target_os}" in
+darwin*)
+	AC_DEFINE([DARWIN], [1], [Define if darwin/osx])
+esac
 
 # Checks for programs.
 AC_PROG_CXX

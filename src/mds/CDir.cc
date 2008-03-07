@@ -485,7 +485,7 @@ void CDir::steal_dentry(CDentry *dn)
 void CDir::purge_stolen(list<Context*>& waiters)
 {
   // take waiters _before_ unfreeze...
-  take_waiting(WAIT_ANY, waiters);
+  take_waiting(WAIT_ANY_MASK, waiters);
   
   if (is_auth()) {
     assert(is_frozen_dir());

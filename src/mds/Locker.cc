@@ -869,8 +869,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   // atime|mtime|size?
   bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
   bool dirty = false;
-  if (atime > latest->atime) 
-    dirty = true;
+  //if (atime > latest->atime) 
+  //dirty = true;
   if (had_or_has_wr) {
     if (mtime > latest->mtime) 
       dirty = true;

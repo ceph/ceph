@@ -135,7 +135,7 @@ class CDir : public MDSCacheObject {
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const int WAIT_ANY  = (0xffffffff);
+  static const int WAIT_ANY_MASK  = (0xffffffff);
   static const int WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 

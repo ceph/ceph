@@ -111,11 +111,12 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
  */
 
 struct ceph_inode_cap {
-	int mds;
+	int mds;    /* -1 if not used */
 	int caps;
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
+	struct list_head ci_caps;       /* per-ci caplist */
 	struct ceph_mds_session *session;
 	struct list_head session_caps;  /* per-session caplist */
 };
@@ -144,10 +145,8 @@ struct ceph_inode_info {
 	int i_frag_map_nr;
 	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
 
-	int i_nr_caps, i_max_caps;
-	struct ceph_inode_cap *i_caps;
-	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
-	atomic_t i_cap_count;  /* ref count (e.g. from file*) */
+	struct list_head i_caps;
+	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 
 	int i_nr_by_mode[4];
 	int i_cap_wanted;
@@ -193,13 +192,7 @@ static inline u64 ceph_ino(struct inode *inode)
 /*
  * caps helpers
  */
-static inline int ceph_caps_issued(struct ceph_inode_info *ci)
-{
-	int i, issued = 0;
-	for (i = 0; i < ci->i_nr_caps; i++)
-		issued |= ci->i_caps[i].caps;
-	return issued;
-}
+extern int ceph_caps_issued(struct ceph_inode_info *ci);
 
 static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 {
@@ -247,9 +240,9 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
  * keep readdir buffers attached to file->private_data
  */
 struct ceph_file_info {
-	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	int mode;      /* initialized on open */
-	struct ceph_mds_reply_info rinfo;
+	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
+	struct ceph_mds_request *last_readdir;
 };
 
 
@@ -274,8 +267,9 @@ static inline int calc_pages_for(int len, int off)
 extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 					      struct super_block *sb);
 extern void ceph_destroy_client(struct ceph_client *cl);
-extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
-		      struct dentry **pmnt_root);
+extern int ceph_mount(struct ceph_client *client, 
+		      struct ceph_mount_args *args, 
+		      struct vfsmount *mnt);
 extern const char *ceph_msg_type_name(int type);
 
 
@@ -288,8 +282,8 @@ extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
 					   u32 cap, u32 seq);
-extern void ceph_remove_cap(struct ceph_inode_info *ci, int mds);
-extern void ceph_remove_caps(struct ceph_inode_info *ci);
+extern void ceph_remove_cap(struct ceph_inode_cap *cap);
+extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
@@ -319,12 +313,8 @@ extern int ceph_inode_revalidate(struct dentry *dentry);
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_fill_trace(struct super_block *sb,
-			   struct ceph_mds_reply_info *prinfo,
-			   struct inode **lastinode,
-			   struct dentry **lastdentry);
-extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
-				      struct ceph_mds_reply_info *prinfo);
+extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
+extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry);
 extern void ceph_touch_dentry(struct dentry *dentry);
 
 /* proc.c */

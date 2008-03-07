@@ -45,9 +45,11 @@
 
 Rank rank;
 
-
+#ifdef DARWIN
+sig_t old_sigint_handler = 0;
+#else
 sighandler_t old_sigint_handler = 0;
-
+#endif
 
 /********************************************
  * Accepter
