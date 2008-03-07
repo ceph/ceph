@@ -269,6 +269,7 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(dentry);
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
@@ -298,11 +299,9 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	*/
 
 	err = ceph_request_lookup(dir->i_sb, dentry);
-	if (err == -ENOENT) {
-		dout(10, "ENOENT, adding a null dentry\n");
-		ceph_touch_dentry(dentry);
+	if (err == -ENOENT)
 		d_add(dentry, NULL);
-	} else if (err < 0)
+	else if (err < 0) 
 		return ERR_PTR(err);
 
 	return NULL;
