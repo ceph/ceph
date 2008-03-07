@@ -1789,9 +1789,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
-  // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
+  if ((newi->inode.mode & S_IFMT) == 0)
+    newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
