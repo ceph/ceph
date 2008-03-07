@@ -23,10 +23,11 @@ $wrap->create();
 				      -MergeDuplicateBlocks => 1 );
 
 my $arr = \%conf;
-print Dumper $arr;
+#print Dumper $arr;
+
+my $p;
 
 my @ritems;
-
 
 # find lowest id number used
 sub get_lowest {
@@ -56,12 +57,10 @@ sub get_lowest {
 my $lowest = get_lowest($arr);
 #print "lowest is $lowest\n";
 
-
 # add type names/ids 
 foreach my $type (keys %{$arr->{'type'}}) {
 	#print $wrap->get_type_name($arr->{'type'}->{$type}->{'id'}) ."\n";
 }
-
 
 # build item name -> id 
 foreach my $section (qw(devices buckets)) { 
@@ -73,7 +72,7 @@ foreach my $section (qw(devices buckets)) {
 					die "invalid device id for $item_type $name: id is required and must be non-negative";
 				}
 			} else {
-				if ($id > -1) { 
+				if (defined $id && $id > -1) { 
 					die "invalid bucket id for $item_type $name: id must be negative";
 				} elsif (!defined $id) { 
 					# get the next lower ID number and inject it into the config hash
@@ -86,9 +85,10 @@ foreach my $section (qw(devices buckets)) {
 	}
 }
 
+
 foreach my $item_type (keys %{$arr->{'types'}->{'type'}}) {
-	my $type_id = $arr->{'types'}->{'type'}->{$type}->{'type_id'};
-	$wrap->set_type_name($type_id, $type);
+	my $type_id = $arr->{'types'}->{'type'}->{$item_type}->{'type_id'};
+	$wrap->set_type_name($type_id, $item_type);
 }
 
 foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
@@ -107,15 +107,17 @@ foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
 		$alg = $alg_types->{'straw'} if !$alg;
 
 		print "alg is: $alg\n";
+		print "b_id is: $bucket_id\n";
 
 		# bucket_id, alg, type, size, items, weights
 		#TODO: pass the correct value for type to add_bucket
-		my $result = $wrap->add_bucket($bucket_id, $alg, 0, scalar(@item_ids), \@item_ids, []);
+		my $result = $wrap->add_bucket($bucket_id, $alg_types->{$alg}, 0, scalar(@item_ids), \@item_ids, []);
 		print "... $result\n\n";
 	}   
 }
 
 
+print "Line: " . __LINE__ ."\n";
 
 
 =item
