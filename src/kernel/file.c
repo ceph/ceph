@@ -227,6 +227,24 @@ const struct inode_operations ceph_file_iops = {
 };
 
 
+/* 
+ * read wrapper 
+ */
+
+ssize_t ceph_do_sync_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	ssize_t ret;
+
+	ret = ceph_wait_for_cap(inode, CEPH_CAP_RD);
+	if (ret == 0)
+		ret = do_sync_read(filp, buf, len, ppos);
+	return ret;
+}
+
+
+
+
 /*
  * totally naive write.  just to get things sort of working.
  * ugly hack!
@@ -286,7 +304,7 @@ const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
 	.llseek = generic_file_llseek,
-	.read = do_sync_read,
+	.read = ceph_do_sync_read,
 	//.write = ceph_silly_write,
 	.write = do_sync_write,
 	.aio_read = generic_file_aio_read,

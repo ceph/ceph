@@ -147,6 +147,7 @@ struct ceph_inode_info {
 
 	struct list_head i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
+	wait_queue_head_t i_cap_wq;
 
 	int i_nr_by_mode[4];
 	int i_cap_wanted;
@@ -154,6 +155,8 @@ struct ceph_inode_info {
 	loff_t i_wr_size;      /* largest offset we've written (+1) */
 	struct timespec i_wr_mtime;
 	struct timespec i_old_atime;
+
+	int i_rd_ref, i_wr_ref;
 
 	unsigned long i_hashval;
 
@@ -290,6 +293,7 @@ extern int ceph_handle_cap_grant(struct inode *inode,
 extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
+extern int ceph_wait_for_cap(struct inode *inode, int mask);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,

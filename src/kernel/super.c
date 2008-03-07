@@ -120,6 +120,10 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	for (i = 0; i < 4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
+	init_waitqueue_head(&ci->i_cap_wq);
+
+	ci->i_rd_ref = 0;
+	ci->i_wr_ref = 0;
 
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
