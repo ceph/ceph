@@ -66,10 +66,9 @@ private:
   class Accepter : public Thread {
   public:
     bool done;
-
-    int       listen_sd;
+    int listen_sd;
     
-    Accepter() : done(false) {}
+    Accepter() : done(false), listen_sd(-1) {}
     
     void *entry();
     void stop();
@@ -153,7 +152,7 @@ private:
     
   public:
     Pipe(int st) : 
-      sd(0),
+      sd(-1),
       state(st), 
       reader_running(false), kick_reader_on_join(false), writer_running(false),
       connect_seq(0),
@@ -200,7 +199,7 @@ private:
     }
 
     void force_close() {
-      if (sd > 0) ::close(sd);
+      if (sd >= 0) ::close(sd);
     }
   };
 

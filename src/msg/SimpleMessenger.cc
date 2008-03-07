@@ -68,7 +68,7 @@ void Rank::sigint()
   derr(0) << "got control-c, exiting" << dendl;
   
   // force close listener socket
-  if (accepter.listen_sd > 0) 
+  if (accepter.listen_sd >= 0) 
     ::close(accepter.listen_sd);
 
   // force close all pipe sockets, too
@@ -127,7 +127,7 @@ int Rank::Accepter::bind()
 
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
-  assert(listen_sd > 0);
+  assert(listen_sd >= 0);
 
   int on = 1;
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -221,7 +221,7 @@ void *Rank::Accepter::entry()
     struct sockaddr_in addr;
     socklen_t slen = sizeof(addr);
     int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
-    if (sd > 0) {
+    if (sd >= 0) {
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
       // disable Nagle algorithm?
@@ -241,12 +241,12 @@ void *Rank::Accepter::entry()
       }
       rank.lock.Unlock();
     } else {
-      dout(10) << "no incoming connection?" << dendl;
+      dout(10) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
     }
   }
 
   dout(20) << "accepter closing" << dendl;
-  if (listen_sd > 0) ::close(listen_sd);
+  if (listen_sd >= 0) ::close(listen_sd);
   dout(10) << "accepter stopping" << dendl;
   return 0;
 }
@@ -879,9 +879,9 @@ int Rank::Pipe::connect()
   dout(10) << "connect " << connect_seq << dendl;
   assert(lock.is_locked());
 
-  if (sd > 0) {
+  if (sd >= 0) {
     ::close(sd);
-    sd = 0;
+    sd = -1;
   }
   __u32 cseq = connect_seq;
   __u32 rseq;
@@ -1020,7 +1020,7 @@ int Rank::Pipe::connect()
  fail:
   lock.Lock();
  fail_locked:
-  if (newsd > 0) ::close(newsd);
+  if (newsd >= 0) ::close(newsd);
   fault(tag == CEPH_MSGR_TAG_REJECT); // quiet if reject (not socket error)
   return -1;
 }
@@ -1065,7 +1065,7 @@ void Rank::Pipe::fault(bool onconnect)
       state = STATE_STANDBY;
     }
     ::close(sd);
-    sd = 0;
+    sd = -1;
     return;
   } 
 
@@ -1144,7 +1144,7 @@ void Rank::Pipe::stop()
   cond.Signal();
   state = STATE_CLOSED;
   ::close(sd);
-  sd = 0;
+  sd = -1;
 
   // deactivate myself
   lock.Unlock();
@@ -1297,7 +1297,7 @@ void Rank::Pipe::reader()
 
   if (reap) {
     dout(10) << "reader queueing for reap" << dendl;
-    if (sd > 0) ::close(sd);
+    if (sd >= 0) ::close(sd);
     rank.lock.Lock();
     {
       rank.pipe_reap_queue.push_back(this);
@@ -1403,7 +1403,7 @@ void Rank::Pipe::writer()
   
   if (reap) {
     dout(10) << "writer queueing for reap" << dendl;
-    if (sd > 0) ::close(sd);
+    if (sd >= 0) ::close(sd);
     rank.lock.Lock();
     {
       rank.pipe_reap_queue.push_back(this);
