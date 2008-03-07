@@ -163,6 +163,10 @@ crush_make_uniform_bucket(int type, int size,
 	/* generate some primes */
 	bucket->primes = malloc(sizeof(__u32)*size);
 
+	if (size < 1) {
+		return bucket;
+	}
+
 	x = size + 1;
 	x += crush_hash32(size) % (3*size);  /* make it big */
 	x |= 1;                              /* and odd */
@@ -385,7 +389,7 @@ crush_make_bucket(int alg, int type, int size,
 
 	switch (alg) {
 	case CRUSH_BUCKET_UNIFORM:
-		if (weights)
+		if (size && weights)
 			item_weight = weights[0];
 		else
 			item_weight = 0;
