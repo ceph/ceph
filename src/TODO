@@ -12,7 +12,6 @@ code cleanup
 
 kernel client
 - some bugs
- - crash on umount with multiple mount points...
 - cleanup
  - roll open_root_inode into fill_trace?
 - proc.c

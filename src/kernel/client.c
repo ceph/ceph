@@ -68,7 +68,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err == 0) {
 		root = req->r_last_dentry;
-		dout(30, "open_root_inode success, root dentry is %p.\n", client->sb->s_root);
+		dget(root);
+		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else
 		root = ERR_PTR(err);
 	ceph_mdsc_put_request(req);

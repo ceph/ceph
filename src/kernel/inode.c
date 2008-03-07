@@ -51,8 +51,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	u64 blocks = size + blksize - 1;
 	do_div(blocks, blksize);
 
-	dout(30, "fill_inode %p ino %lu/%llx by %d.%d sz=%llu mode %o nlink %d\n", 
-	     inode, inode->i_ino, ceph_ino(inode), inode->i_uid, inode->i_gid, 
+	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n", 
+	     inode, info->ino, inode->i_uid, inode->i_gid, 
 	     inode->i_size, inode->i_mode, inode->i_nlink);
 	dout(30, " su %d, blkbits %d, blksize %u, blocks %llu\n",
 	     su, blkbits, blksize, blocks);	
@@ -175,10 +175,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	if (err < 0)
 		return err;
 
-	if (sb->s_root == NULL) {
+	if (sb->s_root == NULL)
 		sb->s_root = dn;
-		dget(dn);
-	}
 
 	dget(dn);
 	for (i = 1; i < rinfo->trace_nr; i++) {
