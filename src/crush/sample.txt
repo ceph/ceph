@@ -41,7 +41,7 @@
 
 <buckets>
 	<cab cab-d2>
-		alg strawbucket
+		alg straw
 		id   -12
 		<item osd001/>
 		<item osd002/>
@@ -61,6 +61,7 @@
 
 <devices>
 	<osd osd006>
+		id 5
 		weight 500
 	</osd>
 </devices>
