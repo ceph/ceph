@@ -1,79 +1,88 @@
 
 # first define our types
-<type osd>
-   id = 0
-</type>
-<type cab>
-   id = 2
-</type>
-<type row>
-   id = 3
-</type>
-<type pool>
-   id = 10
-</type>
+<types>
+	<type osd>
+	   type_id = 0
+	</type>
+	<type cab>
+	   type_id = 2
+	</type>
+	<type row>
+	   type_id = 3
+	</type>
+	<type pool>
+	   type_id = 10
+	</type>
+</types>
 
 # hierarchy
-<osd osd001>
-	weight 500
-		</osd>
-<osd osd002>
-	weight 500
-		</osd>
-<osd osd003>
-	weight 500
-		</osd>
-<osd osd004>
-	weight 500
-		</osd>
-<osd osd005>
-	weight 500
-		</osd>
+<devices>
+	<osd osd001>
+		id 1
+		weight 500
+	</osd>
+	<osd osd002>
+		id 2
+		weight 500
+	</osd>
+	<osd osd003>
+		id 3
+		weight 500
+	</osd>
+	<osd osd004>
+		id 4
+		weight 500
+	</osd>
+	<osd osd005>
+		id 5
+		weight 500
+	</osd>
+</devices>
 
-<cab cab-d2>
-  alg strawbucket
-  id   -12
-  <item osd001/>
-  <item osd002/>
-  <item osd003/>
-  <item osd004/>
-</cab>
+<buckets>
+	<cab cab-d2>
+		alg strawbucket
+		id   -12
+		<item osd001/>
+		<item osd002/>
+		<item osd003/>
+		<item osd004/>
+	</cab>
+	
+	<pool newlayout>
+		<item satapool>
+			weight 1.0
+		</item>
+		<item fcpool>
+			weight 3.0
+		</item>
+	</pool>
+</buckets>
 
-
-<pool newlayout>
-  <item satapool>
-  	weight 1.0
-</item>
-  <item fcpool>
-  	weight 3.0
-</item>
-</pool>
-
-<osd osd006>
-	weight 500
-		</osd>
-<osd osd006>
-	weight 600
-		</osd>
-
+<devices>
+	<osd osd006>
+		weight 500
+	</osd>
+</devices>
 
 # rules
-<rule 1x>
-  id 1
-  step take root
-  step choose_indep 1 osd
-  step emit
-</rule>
-<rule 2x>
-  id 2
-  step take root
-  step choose_indep 2 osd
-  step emit
-</rule>
-<rule 3x>
-  id 3
-  step take root-d2
-  step choose_indep 3 osd
-  step emit
-</rule>
-
+<rules>
+	<rule 1x>
+	  id 1
+	  step take root
+	  step choose_indep 1 osd
+	  step emit
+	</rule>
+	<rule 2x>
+	  id 2
+	  step take root
+	  step choose_indep 2 osd
+	  step emit
+	</rule>
+	<rule 3x>
+	  id 3
+	  step take root-d2
+	  step choose_indep 3 osd
+	  step emit
+	</rule>
+</rules>
