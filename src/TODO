@@ -12,11 +12,11 @@ code cleanup
 
 kernel client
 - some bugs
-- cleanup
- - roll open_root_inode into fill_trace?
-- proc.c
+- procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
+  - a dir for each client instance (client###)?
+  - hooks to get mds, osd, monmap epoch #s
 - msgr layer
   - callbacks for 'remote reset'
   - idle state, to keep connect_seq around after a disconnect
@@ -27,8 +27,7 @@ kernel client
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- fix file open vs file_cap race
-  - optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
+- optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
