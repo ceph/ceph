@@ -38,10 +38,10 @@ extern int ceph_lookup_cache;
 #define CACHE_HZ		(1*HZ)
 
 #define IPQUADPORT(n)							\
-	(unsigned int)((n.sin_addr.s_addr)>>24)&0xFF,			\
-		(unsigned int)((n.sin_addr.s_addr)>>16)&0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)>>8)&0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)&0xFF),		\
+	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
+		(unsigned int)((n.sin_addr.s_addr)>>8) & 0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>16) & 0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>24) & 0xFF,		\
 		(unsigned int)(ntohs(n.sin_port))
 
 /*

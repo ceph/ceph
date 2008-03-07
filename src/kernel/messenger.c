@@ -25,13 +25,6 @@ static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
 
-#define IPQUADPORT(n)							\
-	(unsigned int)((n.sin_addr.s_addr)>>24)&0xFF,			\
-		(unsigned int)((n.sin_addr.s_addr)>>16)&0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)>>8)&0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)&0xFF),		\
-		(unsigned int)(ntohs(n.sin_port))
-
 
 /*
  * connections

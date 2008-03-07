@@ -142,7 +142,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	}
 
 	ci->time = jiffies;
-
 	return 0;
 }
 
