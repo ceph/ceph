@@ -2,10 +2,10 @@
 
 use CrushWrapper;
 use Config::General;
-use Tie::DxHash;
+use Tie::IxHash;
 use Data::Dumper;
 
-tie my %conf, "Tie::DxHash";
+tie my %conf, "Tie::IxHash";
 
 my $wrap = new CrushWrapper::CrushWrapper;
 
@@ -18,13 +18,13 @@ my $alg_types = {
 
 $wrap->create();
 
-%conf = Config::General::ParseConfig( -ConfigFile => "sample.txt", -Tie => "Tie::DxHash" );
+%conf = Config::General::ParseConfig( -ConfigFile => "sample.txt", -Tie => "Tie::IxHash", -MergeDuplicateBlocks => 1 );
 
 my $arr = \%conf;
+print Dumper $arr;
+
 my @ritems;
 
-#@nums = (1, -4, 11, 17, 1, -92, -15, 48);
-#print "length: " . scalar(@nums) ."\n";
 
 # find lowest id number used
 sub get_lowest {
@@ -54,57 +54,65 @@ sub get_lowest {
 my $lowest = get_lowest($arr);
 #print "lowest is $lowest\n";
 
+
+# add type names/ids 
 foreach my $type (keys %{$arr->{'type'}}) {
-	$wrap->set_type_name($arr->{'type'}->{$type}->{'id'},$type);
 	#print $wrap->get_type_name($arr->{'type'}->{$type}->{'id'}) ."\n";
 }
 
-# first argument must be zero for auto bucket_id
-my $i=0;
-foreach my $osd (keys %{$arr->{'osd'}}) {
-	# bucket_id, alg, type, size, items, weights
-	my $bucket_id = $osd->{'id'};
-	$bucket_id = --$lowest if !$bucket_id;
 
-	$ritems[$i] = $wrap->add_bucket($bucket_id, $alg_types->{'straw'}, 0, 0, [], []);
-	$wrap->set_item_name($ritems[$i], $osd);
-	#print "bucket_id: $ritems[$i]\n";
-	#print $wrap->get_item_name($ritems[$i]) ."\n";
-	$i++;
+# build item name -> id 
+foreach my $section (qw(devices buckets)) { 
+	foreach my $item_type (keys %{$arr->{$section}}) {
+		foreach my $name (keys %{$arr->{$section}->{$item_type}}) {
+			my $id = $arr->{$section}->{$item_type}->{$name}->{'id'};
+			if ($section eq 'devices') { 
+				if (!defined $id || $id < 0) { 
+					die "invalid device id for $item_type $name: id is required and must be non-negative";
+				}
+			} else {
+				if ($id > -1) { 
+					die "invalid bucket id for $item_type $name: id must be negative";
+				} elsif (!defined $id) { 
+					# get the next lower ID number and inject it into the config hash
+					$id = --$lowest;
+					$arr->{$section}->{$item_type}->{$name}->{'id'} = $id;
+				}
+			}
+			$wrap->set_item_name($id, $name);
+		}
+	}
 }
 
-foreach my $type (keys %{$arr->{'type'}}) {
-	next if ($type eq 'osd');
-	print "doing type $type\n";
-	foreach my $bucket (keys %{$arr->{$type}}) {
-		#print "bucket: $bucket\n";
-		# check for algorithm type
+foreach my $item_type (keys %{$arr->{'types'}->{'type'}}) {
+	my $type_id = $arr->{'types'}->{'type'}->{$type}->{'type_id'};
+	$wrap->set_type_name($type_id, $type);
+}
+
+foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
+
+	print "doing bucket type $type\n";
+	foreach my $bucket_name (keys %{$arr->{'buckets'}->{$bucket_type}}) {
+		print "... bucket: $bucket_name\n";
+
 		my @item_ids;
-		foreach my $item (keys %{$arr->{$type}->{'item'}}) {
-			push @item_ids, $wrap->get_item_id($item);
+		foreach my $item_name (keys %{$arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'item'}}) {
+			push @item_ids, $wrap->get_item_id($item_name);
 		}
-		my $bucket_id = $arr->{$type}->{$bucket}->{'id'};
-		$bucket_id = --$lowest if !$bucket_id;
 
-		
-
-
-		my $alg = $alg_types->{$arr->{$type}->{$bucket}->{'alg'}};
+		my $bucket_id = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'id'};
+		my $alg = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'alg'};
 		$alg = $alg_types->{'straw'} if !$alg;
 
 		print "alg is: $alg\n";
 
-		$ritems[$i] = $wrap->add_bucket($bucket_id, $alg, 0, scalar(@item_ids), \@item_ids, []);
-		$wrap->set_item_name($ritems[$i],$bucket);
-		#print $wrap->get_item_name($ritems[$i]) ."\n";
-		$i++;
+		# bucket_id, alg, type, size, items, weights
+		#TODO: pass the correct value for type to add_bucket
+		my $result = $wrap->add_bucket($bucket_id, $alg, 0, scalar(@item_ids), \@item_ids, []);
+		print "... $result\n\n";
 	}   
 }
 
-
-
-#print Dumper @ritems;
-#print Dumper $arr;
 
 
 
