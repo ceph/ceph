@@ -155,6 +155,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	struct inode *in;
 	int i = 0;
 
+	if (rinfo->trace_nr == 0) {
+		dout(10, "fill_trace reply has empty trace!\n");
+		return 0;
+	}
+
 	if (dn) {
 		in = dn->d_inode;
 	} else {
@@ -189,11 +194,17 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		dn = d_lookup(parent, &dname);
 
 		if (!dn) {
-			dout(10, "fill_trace calling d_alloc\n");
-			dn = d_alloc(parent, &dname);
-			if (!dn) {
-				derr(0, "d_alloc enomem\n");
-				return -ENOMEM;
+			if (req->r_last_dentry && 
+			    req->r_last_dentry->d_parent == parent) {
+				dout(10, "fill_trace using dentry provided in req\n");
+				dn = req->r_last_dentry;
+			} else {
+				dout(10, "fill_trace calling d_alloc\n");
+				dn = d_alloc(parent, &dname);
+				if (!dn) {
+					derr(0, "d_alloc enomem\n");
+					return -ENOMEM;
+				}
 			}
 		}
 		if (!rinfo->trace_in[i].in) {
@@ -454,6 +465,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	} else {
 		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
 		cap->caps = newcaps;
+		wake_up(&ci->i_cap_wq);
 	}
 	return ret;	
 }
@@ -476,6 +488,22 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	 */
 	return 0;
 }
+
+int ceph_wait_for_cap(struct inode *inode, int mask)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int err;
+
+	/*
+	 * FIXME: this isn't atomic, not safe...
+	 */
+	dout(10, "wait_for_cap on %p mask %d\n", inode, mask);
+	err = wait_event_interruptible(ci->i_cap_wq,
+				       (ceph_caps_issued(ci) & mask) == mask);
+	dout(20, "wait_for_cap on %p mask %d ret %d\n", inode, mask, err);
+	return err;
+}
+
 
 /*
  * symlinks
