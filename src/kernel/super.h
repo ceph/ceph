@@ -156,7 +156,7 @@ struct ceph_inode_info {
 	struct timespec i_wr_mtime;
 	struct timespec i_old_atime;
 
-	int i_rd_ref, i_wr_ref;
+	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
 	unsigned long i_hashval;
 
@@ -293,7 +293,8 @@ extern int ceph_handle_cap_grant(struct inode *inode,
 extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
-extern int ceph_wait_for_cap(struct inode *inode, int mask);
+extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
+extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,

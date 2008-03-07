@@ -122,8 +122,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_cap_wanted = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 
-	ci->i_rd_ref = 0;
-	ci->i_wr_ref = 0;
+	ci->i_rd_ref = ci->i_rdcache_ref = 0;
+	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
 
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;

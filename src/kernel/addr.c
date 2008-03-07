@@ -122,9 +122,11 @@ static int ceph_prepare_write(struct file *filp, struct page *page,
 	dout(10, "prepare_write file %p inode %p page %p %d~%d\n", filp, 
 	     inode, page, from, (to-from));
 
+	/*
 	err = ceph_wait_for_cap(inode, CEPH_CAP_WR);
 	if (err)
 		return err;
+	*/
 
 	/*
 	 *  1. check if page is up to date

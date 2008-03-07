@@ -1,10 +1,13 @@
 
+#include <linux/sched.h>
+
 int ceph_debug_file = 50;
 #define DOUT_VAR ceph_debug_file
 #define DOUT_PREFIX "file: "
 #include "super.h"
 
 #include "mds_client.h"
+
 
 /*
  * if err==0, caller is responsible for a put_session on *psession
@@ -231,14 +234,25 @@ const struct inode_operations ceph_file_iops = {
  * read wrapper 
  */
 
-ssize_t ceph_do_sync_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
+ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	ssize_t ret;
+	int got = 0;
 
-	ret = ceph_wait_for_cap(inode, CEPH_CAP_RD);
-	if (ret == 0)
-		ret = do_sync_read(filp, buf, len, ppos);
+	ret = wait_event_interruptible(ci->i_cap_wq,
+				       ceph_get_cap_refs(ci, CEPH_CAP_RD, CEPH_CAP_RDCACHE, &got));
+	if (ret < 0) 
+		goto out;
+	dout(10, "read got cap refs on %d\n", got);
+
+	//if (got & CEPH_CAP_RDCACHE) {
+	ret = do_sync_read(filp, buf, len, ppos);
+
+	dout(10, "read dropping cap refs on %d\n", got);
+out:
+	ceph_put_cap_refs(ci, got);
 	return ret;
 }
 
@@ -304,7 +318,7 @@ const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
 	.llseek = generic_file_llseek,
-	.read = ceph_do_sync_read,
+	.read = ceph_read,
 	//.write = ceph_silly_write,
 	.write = do_sync_write,
 	.aio_read = generic_file_aio_read,

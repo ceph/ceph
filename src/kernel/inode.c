@@ -401,6 +401,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int ret = 0;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
+	int wake = 0;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 	dout(10, " my wanted = %d\n", wanted);
@@ -412,7 +413,6 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		dout(10, "size %lld -> %llu\n", inode->i_size, size);
 		inode->i_size = size;
 	}
-	spin_unlock(&inode->i_lock);
 
 	/* max size increase? */
 	if (max_size != ci->i_max_size) {
@@ -436,7 +436,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		cap = ceph_add_cap(inode, session, 
 				   le32_to_cpu(grant->caps), 
 				   le32_to_cpu(grant->seq));
-		return ret;
+		goto out;
 	} 
 
 	cap->seq = seq;
@@ -456,7 +456,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			/* but blindly ack for now... */
 		}
 		cap->caps = newcaps;
-		return 1; /* ack */
+		ret = 1; /* ack */
+		goto out;
 	}
 	
 	/* grant or no-op */
@@ -465,8 +466,13 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	} else {
 		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
 		cap->caps = newcaps;
-		wake_up(&ci->i_cap_wq);
+		wake = 1;
 	}
+
+out:
+	spin_unlock(&inode->i_lock);
+	if (wake)
+		wake_up(&ci->i_cap_wq);
 	return ret;	
 }
 
@@ -489,20 +495,47 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	return 0;
 }
 
-int ceph_wait_for_cap(struct inode *inode, int mask)
+static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int err;
-
-	/*
-	 * FIXME: this isn't atomic, not safe...
-	 */
-	dout(10, "wait_for_cap on %p mask %d\n", inode, mask);
-	err = wait_event_interruptible(ci->i_cap_wq,
-				       (ceph_caps_issued(ci) & mask) == mask);
-	dout(20, "wait_for_cap on %p mask %d ret %d\n", inode, mask, err);
-	return err;
+	if (got & CEPH_CAP_RD)
+		ci->i_rd_ref++;
+	if (got & CEPH_CAP_RDCACHE)
+		ci->i_rdcache_ref++;
+	if (got & CEPH_CAP_WR)
+		ci->i_wr_ref++;
+	if (got & CEPH_CAP_WRBUFFER)
+		ci->i_wrbuffer_ref++;
 }
+
+int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
+{
+	int ret = 0;
+	int have;
+	spin_lock(&ci->vfs_inode.i_lock);
+	have = ceph_caps_issued(ci);
+	if ((have & need) == need) {
+		*got = need | (have & want);
+		__take_cap_refs(ci, *got);
+		ret = 1;
+	}
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return ret;
+}
+
+void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
+{
+	spin_lock(&ci->vfs_inode.i_lock);
+	if (had & CEPH_CAP_RD)
+		ci->i_rd_ref--;
+	if (had & CEPH_CAP_RDCACHE)
+		ci->i_rdcache_ref--;
+	if (had & CEPH_CAP_WR)
+		ci->i_wr_ref--;
+	if (had & CEPH_CAP_WRBUFFER)
+		ci->i_wrbuffer_ref--;
+	spin_unlock(&ci->vfs_inode.i_lock);
+}
+
 
 
 /*
