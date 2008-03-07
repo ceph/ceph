@@ -109,17 +109,17 @@ foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
 		my $alg = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'alg'};
 		$alg = 'straw' if !$alg;
 
-		print "... alg is: $alg\n";
-		print "... b_id is: $bucket_id\n";
+		print "alg is: $alg\n";
+		print "b_id is: $bucket_id\n";
 
 		# bucket_id, alg, type, size, items, weights
 		#TODO: pass the correct value for type to add_bucket
 		my $result = $wrap->add_bucket($bucket_id, $alg_types->{$alg}, 0, scalar(@item_ids), \@item_ids, []);
-		print "... result: $result\n\n";
+		print "... $result\n\n";
 	}   
 }
 
-print "Done!\n";
+print "Line: " . __LINE__ ."\n";
 
 
 =item
