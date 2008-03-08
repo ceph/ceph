@@ -241,6 +241,7 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ssize_t ret;
 	int got = 0;
 
+	dout(10, "read trying to get caps\n");
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD, CEPH_CAP_RDCACHE, &got));
 	if (ret < 0) 
@@ -250,8 +251,31 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	//if (got & CEPH_CAP_RDCACHE) {
 	ret = do_sync_read(filp, buf, len, ppos);
 
-	dout(10, "read dropping cap refs on %d\n", got);
 out:
+	dout(10, "read dropping cap refs on %d\n", got);
+	ceph_put_cap_refs(ci, got);
+	return ret;
+}
+
+ssize_t ceph_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	ssize_t ret;
+	int got = 0;
+
+	dout(10, "write trying to get caps\n");
+	ret = wait_event_interruptible(ci->i_cap_wq,
+				       ceph_get_cap_refs(ci, CEPH_CAP_WR, CEPH_CAP_WRBUFFER, &got));
+	if (ret < 0) 
+		goto out;
+	dout(10, "write got cap refs on %d\n", got);
+
+	//if (got & CEPH_CAP_RDCACHE) {
+	ret = do_sync_write(filp, buf, len, ppos);
+
+out:
+	dout(10, "write dropping cap refs on %d\n", got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
@@ -319,8 +343,7 @@ const struct file_operations ceph_file_fops = {
 	.release = ceph_release,
 	.llseek = generic_file_llseek,
 	.read = ceph_read,
-	//.write = ceph_silly_write,
-	.write = do_sync_write,
+	.write = ceph_write,
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
 	.mmap = generic_file_mmap,

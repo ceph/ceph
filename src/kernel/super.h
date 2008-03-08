@@ -214,7 +214,16 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 
 static inline int ceph_caps_used(struct ceph_inode_info *ci)
 {
-	return 0;  /* FIXME */
+	int used = 0;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_RD;
+	if (ci->i_rdcache_ref)
+		used |= CEPH_CAP_RDCACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_WRBUFFER;
+	return used;
 }
 
 static inline int ceph_file_mode(int flags)
