@@ -83,6 +83,7 @@ libcommon_a_SOURCES = \
 	common/Timer.cc \
 	common/Finisher.cc \
 	mon/MonMap.cc \
+	mon/MonClient.cc \
 	config.cc
 
 libcrush_a_SOURCES = \
@@ -347,6 +348,7 @@ noinst_HEADERS = \
 	mon/ClientMonitor.h\
 	mon/OSDMonitor.h\
 	mon/MonMap.h\
+	mon/MonClient.h\
 	mon/PGMap.h\
 	msg/FakeMessenger.h\
 	msg/tcp.h\

@@ -44,6 +44,7 @@ using namespace std;
 #include "messages/MOSDPGActivateSet.h"
 
 #include "messages/MMonMap.h"
+#include "messages/MMonGetMap.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
@@ -153,6 +154,9 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     
   case CEPH_MSG_MON_MAP:
     m = new MMonMap;
+    break;
+  case CEPH_MSG_MON_GET_MAP:
+    m = new MMonGetMap;
     break;
 
   case MSG_OSD_BOOT:

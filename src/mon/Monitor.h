@@ -39,6 +39,8 @@ class MDSMonitor;
 class ClientMonitor;
 class PGMonitor;
 
+class MMonGetMap;
+
 class Monitor : public Dispatcher {
 public:
   // me
@@ -115,6 +117,7 @@ public:
 
 
   // messages
+  void handle_mon_get_map(MMonGetMap *m);
   void handle_shutdown(Message *m);
   void handle_ping_ack(class MPingAck *m);
   void handle_command(class MMonCommand *m);

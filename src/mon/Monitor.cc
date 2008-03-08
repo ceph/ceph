@@ -25,6 +25,8 @@
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
+#include "messages/MMonMap.h"
+#include "messages/MMonGetMap.h"
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
@@ -249,6 +251,10 @@ void Monitor::dispatch(Message *m)
     switch (m->get_type()) {
       
       // misc
+    case CEPH_MSG_MON_GET_MAP:
+      handle_mon_get_map((MMonGetMap*)m);
+      break;
+
     case CEPH_MSG_PING_ACK:
       handle_ping_ack((MPingAck*)m);
       break;
@@ -336,6 +342,15 @@ void Monitor::dispatch(Message *m)
     }
   }
   lock.Unlock();
+}
+
+void Monitor::handle_mon_get_map(MMonGetMap *m)
+{
+  dout(10) << "handle_mon_get_map" << dendl;
+  bufferlist bl;
+  monmap->encode(bl);
+  messenger->send_message(new MMonMap(bl), m->get_source_inst());
+  delete m;
 }
 
 

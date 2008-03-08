@@ -259,6 +259,7 @@ struct ceph_msg_header {
 
 /* client <-> monitor */
 #define CEPH_MSG_MON_MAP                4
+#define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_CLIENT_MOUNT           10
 #define CEPH_MSG_CLIENT_UNMOUNT         11
 #define CEPH_MSG_STATFS                 12

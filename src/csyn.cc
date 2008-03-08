@@ -24,6 +24,8 @@ using namespace std;
 
 #include "msg/SimpleMessenger.h"
 
+#include "mon/MonClient.h"
+
 #include "common/Timer.h"
 
 #ifndef DARWIN
@@ -46,14 +48,25 @@ int main(int argc, const char **argv, char *envp[]) {
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  // load monmap
-  MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
-
   // start up network
   rank.bind();
   rank.start();
+
+  MonMap monmap;
+
+  if (args.size() > 0) {
+    MonClient mc;
+    entity_addr_t monaddr;
+    parse_ip_port(args[0], monaddr);
+    mc.get_monmap(&monmap, monaddr);
+  } else {
+    // load monmap
+    int r = monmap.read(".ceph_monmap");
+    if (r < 0) {
+      cerr << "no monitor specified on command line and .ceph_monmap not found" << std::endl;
+      exit(1);
+    }
+  }
 
   Rank::Policy client_policy;
   client_policy.fail_interval = 0;
@@ -68,7 +81,7 @@ int main(int argc, const char **argv, char *envp[]) {
 
   cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
-    Client *client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-2-i)), &monmap);
+    Client *client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &monmap);
     SyntheticClient *syn = new SyntheticClient(client);
     syn->start_thread();
     clients.push_back(client);
