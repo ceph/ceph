@@ -159,11 +159,20 @@ static void init_once(struct kmem_cache *cachep, void *foo)
 
 static int init_inodecache(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 23)
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
 					      init_once);
+#else
+	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
+					      sizeof(struct ceph_inode_info),
+					      0, (SLAB_RECLAIM_ACCOUNT|
+						  SLAB_MEM_SPREAD),
+					      init_once,
+						  NULL);
+#endif
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;

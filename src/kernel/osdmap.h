@@ -27,7 +27,7 @@ struct ceph_osdmap {
 	} *pg_swap_primary;
 };
 
-static inline bool ceph_osd_is_up(struct ceph_osdmap *map, int osd)
+static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 {
 	return (osd < map->max_osd) && (map->osd_state[osd] & CEPH_OSD_UP);
 }

@@ -6,6 +6,7 @@
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
+#include <linux/version.h>
 
 struct ceph_msg;
 
@@ -111,7 +112,11 @@ struct ceph_connection {
 	struct ceph_msg_pos in_msg_pos;
 
 	struct work_struct rwork;		/* receive work */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work swork;		/* send work */
+#else
+	struct work_struct	swork;		/* send work */
+#endif
         unsigned long           delay;          /* delay interval */
         unsigned int            retries;        /* temp track of retries */
 };

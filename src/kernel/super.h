@@ -237,6 +237,8 @@ static inline int ceph_file_mode(int flags)
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
 	BUG_ON(1);
+
+	return 0; /* remove compilation warning */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)

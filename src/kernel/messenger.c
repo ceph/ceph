@@ -20,7 +20,11 @@ static char tag_msg = CEPH_MSGR_TAG_MSG;
 static char tag_ack = CEPH_MSGR_TAG_ACK;
 //static char tag_close = CEPH_MSGR_TAG_CLOSE;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 static void try_read(struct work_struct *);
+#else
+static void try_read(void *);
+#endif
 static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
 
@@ -52,7 +56,11 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	INIT_WORK(&con->rwork, try_read);
+#else
+	INIT_WORK(&con->rwork, try_read, con);
+#endif
         INIT_DELAYED_WORK(&con->swork, try_write);
 
 	return con;
@@ -890,13 +898,21 @@ static void process_accept(struct ceph_connection *con)
 /*
  * worker function when data is available on the socket
  */
-void try_read(struct work_struct *work)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
+static void try_read(struct work_struct *work)
+#else
+static void try_read(void *arg)
+#endif
 {
 	int ret = -1;
 	struct ceph_connection *con;
 	struct ceph_messenger *msgr;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	con = container_of(work, struct ceph_connection, rwork);
+#else
+	con = arg;
+#endif
 	dout(20, "try_read start on %p\n", con);
 	msgr = con->msgr;
 

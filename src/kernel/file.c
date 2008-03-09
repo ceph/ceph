@@ -32,7 +32,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0);
-	req->r_expects_cap = true;
+	req->r_expects_cap = 1;
 	kfree(path);
 	if (!IS_ERR(req)) {
 		rhead = req->r_request->front.iov_base;
@@ -290,7 +290,7 @@ out:
 ssize_t ceph_silly_write(struct file *file, const char __user *data,
 			 size_t count, loff_t *offset)
 {
-	struct inode *inode = file->f_path.dentry->d_inode;
+	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int ret = 0;
