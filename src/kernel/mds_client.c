@@ -101,7 +101,7 @@ int parse_reply_info_trace(void **p, void *end,
 		if (--numi == 0)
 			break;
 		/* dentry */
-		err == ceph_decode_32(p, end, &info->trace_dname_len[numi]);
+		err = ceph_decode_32(p, end, &info->trace_dname_len[numi]);
 		if (err < 0)
 			goto bad;
 		info->trace_dname[numi] = *p;
@@ -157,7 +157,7 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 
 	while (num) {
 		/* dentry, inode */
-		err == ceph_decode_32(p, end, &info->dir_dname_len[i]);
+		err = ceph_decode_32(p, end, &info->dir_dname_len[i]);
 		if (err < 0)
 			goto bad;
 		info->dir_dname[i] = *p;
@@ -872,7 +872,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			goto done;
 		if (req->r_expects_cap) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
-			capseq = le32_to_cpu(rinfo->head->file_caps_seq));
+			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			req->r_cap = ceph_add_cap(req->r_last_inode,
 						  req->r_session,
 						  cap, capseq);
