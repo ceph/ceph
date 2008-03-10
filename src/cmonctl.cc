@@ -20,6 +20,7 @@ using namespace std;
 #include "config.h"
 
 #include "mon/MonMap.h"
+#include "mon/MonClient.h"
 #include "msg/SimpleMessenger.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
@@ -98,10 +99,11 @@ int main(int argc, const char **argv, const char *envp[]) {
       nargs.push_back(args[i]);
   }
 
-  // load monmap
+  // get monmap
   MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
+  MonClient mc;
+  if (mc.get_monmap(&monmap) < 0)
+    return -1;
   
   // start up network
   rank.bind();

@@ -25,6 +25,8 @@ using namespace std;
 
 #include "msg/SimpleMessenger.h"
 
+#include "mon/MonClient.h"
+
 #include "common/Timer.h"
        
 #ifndef DARWIN
@@ -50,10 +52,11 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  // load monmap
+  // get monmap
   MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
+  MonClient mc;
+  if (mc.get_monmap(&monmap) < 0)
+    return -1;
 
   // start up network
   rank.bind();
