@@ -75,7 +75,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
-  pending_mdsmap.max_mds = g_conf.num_mds;
+  pending_mdsmap.max_mds = 1;
   pending_mdsmap.created = g_clock.now();
   print_map(pending_mdsmap);
 }

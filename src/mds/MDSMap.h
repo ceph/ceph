@@ -131,7 +131,11 @@ class MDSMap {
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  const utime_t& get_create() const { return created; }
+  const utime_t& get_created() const { return created; }
+  void set_created(utime_t ct) { created = ct; }
+
+  int get_max_mds() const { return max_mds; }
+  void set_max_mds(int m) { max_mds = m; }
 
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }

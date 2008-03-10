@@ -85,7 +85,6 @@ bool ClientMonitor::update_from_paxos()
 
 void ClientMonitor::create_pending()
 {
-  assert(mon->is_leader());
   pending_inc = Incremental();
   pending_inc.version = client_map.version + 1;
   pending_inc.next_client = client_map.next_client;
@@ -96,7 +95,7 @@ void ClientMonitor::create_pending()
 
 void ClientMonitor::create_initial()
 {
-  dout(1) << "create_initial -- creating initial map" << dendl;
+  dout(10) << "create_initial -- creating initial map" << dendl;
 }
 
 void ClientMonitor::committed()
@@ -107,7 +106,6 @@ void ClientMonitor::committed()
 
 void ClientMonitor::encode_pending(bufferlist &bl)
 {
-  assert(mon->is_leader());
   dout(10) << "encode_pending v " << pending_inc.version 
 	   << ", next is " << pending_inc.next_client
 	   << dendl;

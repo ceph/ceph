@@ -493,6 +493,7 @@ void OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
   vector<int> acting;
   int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+  dout(20) << "pgid " << pgid << " -> " << acting << dendl;
   int role = osdmap->calc_pg_role(whoami, acting, nrep);
   if (role < 0) return;
   
@@ -1324,12 +1325,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 {
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
+	  << " mkfs_peoch " << osdmap->get_mkfs_epoch()
           << dendl;
   
   if (osdmap->is_mkfs()) {
 
     // is this okay?
-    assert(superblock.current_epoch == 2);
     ceph_fsid nullfsid;
     memset(&nullfsid, 0, sizeof(nullfsid));
     if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {

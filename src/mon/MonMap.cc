@@ -27,7 +27,7 @@ int MonMap::read(const char *fn)
   // read
   bufferlist bl;
   int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) return fd;
+  if (fd < 0) return -errno;
   struct stat st;
   ::fstat(fd, &st);
   bufferptr bp(st.st_size);

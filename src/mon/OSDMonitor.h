@@ -46,11 +46,10 @@ private:
 
   map<int,double> osd_weight;
 
-  void build_crush_map(CrushWrapper& crush,
-		       map<int,double>& weights);
-
   // svc
+public:  
   void create_initial();
+private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);

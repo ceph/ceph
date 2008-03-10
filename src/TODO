@@ -3,6 +3,11 @@ gsoc?
 - libbtrfs objectstore
 - osdmap/crush gui
 
+
+- online changes to pg_num
+- initialization of pg_num during non-simple mkfs...
+- review/remove post_mkfs hacks in PG.cc??
+
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation

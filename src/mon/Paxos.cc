@@ -711,7 +711,7 @@ void Paxos::dispatch(Message *m)
 
 bool Paxos::is_readable()
 {
-  //dout(15) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << dendl;
+  dout(1) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << dendl;
   return 
     (mon->is_peon() || mon->is_leader()) &&
     is_active() &&

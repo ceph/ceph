@@ -69,7 +69,6 @@ public:
   public:
     ceph_fsid fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
-    epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
 
     // full (rare)
@@ -78,6 +77,7 @@ public:
 
     // incremental
     int32_t new_max_osd;
+    __u8 mkfs;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
@@ -87,7 +87,7 @@ public:
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
-      ::_encode(mon_epoch, bl);
+      ::_encode(mkfs, bl);
       ctime._encode(bl);
       ::_encode(fullmap, bl);
       ::_encode(crush, bl);
@@ -101,7 +101,7 @@ public:
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
-      ::_decode(mon_epoch, bl, off);
+      ::_decode(mkfs, bl, off);
       ctime._decode(bl, off);
       ::_decode(fullmap, bl, off);
       ::_decode(crush, bl, off);
@@ -113,15 +113,14 @@ public:
       ::_decode(old_pg_swap_primary, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {
+    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), mkfs(0) {
       fsid.major = fsid.minor = cpu_to_le64(0);
     }
   };
 
 private:
   ceph_fsid fsid;
-  epoch_t epoch;       // what epoch of the osd cluster descriptor is this
-  epoch_t mon_epoch;  // monitor epoch (election iteration)
+  epoch_t epoch, mkfs_epoch;       // what epoch of the osd cluster descriptor is this
   utime_t ctime, mtime;       // epoch start time
   int32_t pg_num;       // placement group count
   int32_t pg_num_mask;  // bitmask for above
@@ -140,7 +139,7 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mon_epoch(0), 
+  OSDMap() : epoch(0), mkfs_epoch((epoch_t)-1),
 	     pg_num(1<<5),
 	     localized_pg_num(1<<3),
 	     max_osd(0) { 
@@ -154,6 +153,7 @@ private:
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
+  void set_epoch(epoch_t e) { epoch = e; }
 
   /* pg num / masks */
   void calc_pg_masks() {
@@ -169,8 +169,9 @@ private:
   const utime_t& get_ctime() const { return ctime; }
   const utime_t& get_mtime() const { return mtime; }
 
-  bool is_mkfs() const { return epoch == 2; }
-  bool post_mkfs() const { return epoch > 2; }
+  bool is_mkfs() const { return epoch == mkfs_epoch; }
+  bool post_mkfs() const { return epoch > mkfs_epoch; }
+  epoch_t get_mkfs_epoch() const { return mkfs_epoch; }
 
   /***** cluster state *****/
   /* osds */
@@ -273,7 +274,6 @@ private:
     assert(ceph_fsid_equal(&inc.fsid, &fsid) || inc.epoch == 1);
     assert(inc.epoch == epoch+1);
     epoch++;
-    mon_epoch = inc.mon_epoch;
     ctime = inc.ctime;
 
     // full map?
@@ -287,6 +287,9 @@ private:
     }
 
     // nope, incremental.
+    if (inc.mkfs)
+      mkfs_epoch = epoch;
+
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
 
@@ -325,7 +328,7 @@ private:
   void encode(bufferlist& blist) {
     ::_encode(fsid, blist);
     ::_encode(epoch, blist);
-    ::_encode(mon_epoch, blist);
+    ::_encode(mkfs_epoch, blist);
     ::_encode(ctime, blist);
     ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
@@ -345,7 +348,7 @@ private:
     int off = 0;
     ::_decode(fsid, blist, off);
     ::_decode(epoch, blist, off);
-    ::_decode(mon_epoch, blist, off);
+    ::_decode(mkfs_epoch, blist, off);
     ::_decode(ctime, blist, off);
     ::_decode(mtime, blist, off);
     ::_decode(pg_num, blist, off);
@@ -585,7 +588,12 @@ private:
   }
 
 
-
+  /*
+   * handy helpers to build simple maps...
+   */
+  void build_simple(epoch_t e, ceph_fsid &fsid,
+		    int num_osd, int pg_bits, int mds_local_osd);
+  static void build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,double>& weights);
 
 };
 

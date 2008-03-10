@@ -63,7 +63,7 @@ void PGMonitor::tick() {
 */
 void PGMonitor::create_initial()
 {
-  dout(1) << "create_initial -- creating initial map" << dendl;
+  dout(10) << "create_initial -- creating initial map" << dendl;
 }
 
 bool PGMonitor::update_from_paxos()
@@ -127,7 +127,6 @@ void PGMonitor::create_pending()
 
 void PGMonitor::encode_pending(bufferlist &bl)
 {
-  assert(mon->is_leader());
   dout(10) << "encode_pending v " << pending_inc.version << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
   pending_inc._encode(bl);

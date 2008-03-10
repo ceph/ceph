@@ -47,6 +47,13 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
+void Monitor::preinit()
+{
+  osdmon = new OSDMonitor(this, &paxos_osdmap);
+  mdsmon = new MDSMonitor(this, &paxos_mdsmap);
+  clientmon = new ClientMonitor(this, &paxos_clientmap);
+  pgmon = new PGMonitor(this, &paxos_pgmap);
+}
 
 void Monitor::init()
 {
@@ -54,21 +61,7 @@ void Monitor::init()
   
   dout(1) << "init" << dendl;
   
-  // store
-  char s[80];
-  sprintf(s, "mondata/mon%d", whoami);
-  store = new MonitorStore(s);
-  
-  if (g_conf.mkfs) 
-    store->mkfs();
-  
-  store->mount();
-  
-  // create 
-  osdmon = new OSDMonitor(this, &paxos_osdmap);
-  mdsmon = new MDSMonitor(this, &paxos_mdsmap);
-  clientmon = new ClientMonitor(this, &paxos_clientmap);
-  pgmon = new PGMonitor(this, &paxos_pgmap);
+  preinit();
   
   // init paxos
   paxos_osdmap.init();
@@ -418,5 +411,49 @@ void Monitor::tick()
 
 
 
+/*
+ * this is the closest thing to a traditional 'mkfs' for ceph.
+ * initialize the monitor state machines to their initial values.
+ */
+int Monitor::mkfs()
+{
+  preinit();
+
+  // create it
+  int err = store->mkfs();
+  if (err < 0) {
+    cerr << "error " << err << " " << strerror(err) << std::endl;
+    exit(1);
+  }
+  
+  store->put_int(whoami, "whoami", 0);
+
+  bufferlist monmapbl;
+  monmap->encode(monmapbl);
+  store->put_bl_ss(monmapbl, "monmap", 0);
+
+  list<PaxosService*> services;
+  services.push_back(osdmon);
+  services.push_back(mdsmon);
+  services.push_back(clientmon);
+  services.push_back(pgmon);
+  for (list<PaxosService*>::iterator p = services.begin(); 
+       p != services.end();
+       p++) {
+    PaxosService *svc = *p;
+    dout(10) << "initializing " << svc->get_machine_name() << dendl;
+    svc->paxos->init();
+    svc->create_pending();
+    svc->create_initial();
+
+    // commit to paxos
+    bufferlist bl;
+    svc->encode_pending(bl);
+    store->put_bl_sn(bl, svc->get_machine_name(), 1);
+    store->put_int(1, svc->get_machine_name(), "last_committed");
+  }
+
+  return 0;
+}
 
 

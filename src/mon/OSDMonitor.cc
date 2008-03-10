@@ -99,193 +99,23 @@ void OSDMonitor::fake_reorg()
 
 /************ MAPS ****************/
 
+
 void OSDMonitor::create_initial()
 {
-  assert(mon->is_leader());
-  assert(paxos->get_version() == 0);
+  dout(10) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
 
-  dout(1) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
-
-  // <HACK set up OSDMap from g_conf>
   OSDMap newmap;
+  newmap.epoch = 1;
   newmap.set_fsid(mon->monmap->fsid);
-  newmap.mon_epoch = mon->mon_epoch;
   newmap.ctime = g_clock.now();
-
-  newmap.set_pg_num(g_conf.num_osd << g_conf.osd_pg_bits);
-  
-  // start at epoch 1 until all osds boot
-  newmap.inc_epoch();  // = 1
-  assert(newmap.get_epoch() == 1);
-
-  map<int,double> weights;
-  build_crush_map(newmap.crush, weights);
-
-  // -- test --
-#if 0
-  {
-    //vector<int> t;
-    //crush.do_rule(2, 132, t, 4, -1);
-
-    // 3x5p2
-    int n = 4;
-    int x = 0;
-    int p = 2;
-    vector<int> r(n);
-    newmap.mark_down(0, false);
-    newmap.mark_out(0);
-    newmap.crush.do_rule(CRUSH_REP_RULE(n), x, r, n, p);
-    dout(0) << "test out " << r << dendl;
-  }
-#endif
-
-  newmap.set_max_osd(g_conf.num_osd);
-  for (int i=0; i<g_conf.num_osd; i++) {
-    newmap.set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
-    newmap.set_offload(i, CEPH_OSD_IN);
-  }
-  
-  if (g_conf.mds_local_osd) {
-    newmap.set_max_osd(g_conf.num_mds+g_conf.num_osd);
-
-    // add mds local osds, but don't put them in the crush mapping func
-    for (int i=0; i<g_conf.num_mds; i++) {
-      newmap.set_max_osd(i+g_conf.num_osd);
-      newmap.set_state(i, CEPH_OSD_EXISTS);
-      newmap.set_offload(i, CEPH_OSD_IN);
-    }
-  }
-  
-  // </HACK>
-  
-  // fake osd failures
-  for (map<int,float>::iterator i = g_fake_osd_down.begin();
-	   i != g_fake_osd_down.end();
-	   i++) {
-	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << dendl;
-	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
-  }
-  for (map<int,float>::iterator i = g_fake_osd_out.begin();
-	   i != g_fake_osd_out.end();
-	   i++) {
-	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << dendl;
-	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
-  }
+  newmap.crush.create(); // empty crush map
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap);
 }
 
 
-void OSDMonitor::build_crush_map(CrushWrapper& crush,
-				 map<int,double>& weights)
-{
-  // new
-  crush.create();
 
-  if (g_conf.num_osd >= 12) {
-    int ndom = g_conf.osd_max_rep;
-    int ritems[ndom];
-    int rweights[ndom];
-
-    int nper = ((g_conf.num_osd - 1) / ndom) + 1;
-    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
-
-    int o = 0;
-    for (int i=0; i<ndom; i++) {
-      int items[nper];
-      //int w[nper];
-      int j;
-      rweights[i] = 0;
-      for (j=0; j<nper; j++, o++) {
-	if (o == g_conf.num_osd) break;
-	dout(20) << "added osd" << o << dendl;
-	items[j] = o;
-	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
-	//rweights[i] += w[j];
-	rweights[i] += 0x10000;
-      }
-
-      crush_bucket_uniform *domain = crush_make_uniform_bucket(1, j, items, 0x10000);
-      ritems[i] = crush_add_bucket(crush.crush, 0, (crush_bucket*)domain);
-      dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
-    }
-    
-    // root
-    crush_bucket_list *root = crush_make_list_bucket(2, ndom, ritems, rweights);
-    int rootid = crush_add_bucket(crush.crush, 0, (crush_bucket*)root);
-    
-    // rules
-    // replication
-    for (int pool=0; pool<1; pool++)
-      for (int i=1; i<=ndom; i++) {
-	crush_rule *rule = crush_make_rule(4);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-	crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
-      }
-
-    // raid
-    for (int pool=0; pool<1; pool++) 
-      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-	if (ndom >= i) {
-	  crush_rule *rule = crush_make_rule(4);
-	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
-	  crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
-	  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-	} else {
-	  crush_rule *rule = crush_make_rule(3);
-	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-	}
-      }
-    
-  } else {
-    // one bucket
-
-    int items[g_conf.num_osd];
-    for (int i=0; i<g_conf.num_osd; i++) 
-      items[i] = i;
-    
-    crush_bucket_uniform *b = crush_make_uniform_bucket(1, g_conf.num_osd, items, 0x10000);
-    int root = crush_add_bucket(crush.crush, 0, (crush_bucket*)b);
-    
-    // rules
-    // replication
-    for (int pool=0; pool<1; pool++)
-      for (int i=1; i<=g_conf.osd_max_rep; i++) {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
-      }
-
-    // raid4
-    for (int pool=0; pool<1; pool++)
-      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-      }
-  }
-  
-  crush.finalize();
-
-  // mark all in
-  for (int i=0; i<g_conf.num_osd; i++)
-    crush.set_offload(i, CEPH_OSD_IN);
-
-  dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
-}
 
 
 bool OSDMonitor::update_from_paxos()
@@ -321,7 +151,7 @@ bool OSDMonitor::update_from_paxos()
     int off = 0;
     inc.decode(bl, off);
     osdmap.apply_incremental(inc);
-    
+
     // write out the full map, too.
     bl.clear();
     osdmap.encode(bl);
@@ -358,7 +188,6 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   
   // finish up pending_inc
   pending_inc.ctime = g_clock.now();
-  pending_inc.mon_epoch = mon->mon_epoch;
   
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();
@@ -472,11 +301,11 @@ bool OSDMonitor::should_propose(double& delay)
 {
   dout(10) << "should_propose" << dendl;
   if (osdmap.epoch == 1) {
-    if (pending_inc.new_up.size() == (unsigned)g_conf.num_osd) {
+    if (pending_inc.new_up.size() == (unsigned)osdmap.get_max_osd()) {
       delay = 0.0;
       if (g_conf.osd_auto_weight) {
 	CrushWrapper crush;
-	build_crush_map(crush, osd_weight);
+	OSDMap::build_simple_crush_map(crush, osdmap.get_max_osd(), osd_weight);
 	crush._encode(pending_inc.crush);
       }
       return true;
@@ -644,6 +473,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_offload[from] = CEPH_OSD_IN;
     
     osd_weight[from] = m->sb.weight;
+
+    if (!osdmap.post_mkfs() && !osdmap.is_mkfs())
+      pending_inc.mkfs = 1;  // first set of up osds, do the mkfs!
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
@@ -912,6 +744,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       dout(10) << "prepare_command setting new crush map" << dendl;
       pending_inc.crush = m->get_data();
       string rs = "set crush map";
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+    else if (m->cmd[1] == "setmap") {
+      OSDMap map;
+      map.decode(m->get_data());
+      map.epoch = pending_inc.epoch;  // make sure epoch is correct
+      map.encode(pending_inc.fullmap);
+      string rs = "set osd map";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
     }

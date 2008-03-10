@@ -305,7 +305,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->epoch)) < 0)
 		goto bad;
-	if ((err = ceph_decode_32(p, end, &map->mon_epoch)) < 0)
+	if ((err = ceph_decode_32(p, end, &map->mkfs_epoch)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->ctime.tv_sec)) < 0)
 		goto bad;
@@ -385,7 +385,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
 	struct ceph_fsid fsid;
-	__u32 epoch, mon_epoch;
+	__u32 epoch;
 	struct ceph_timeval ctime;
 	__u32 len;
 	__u32 max;
@@ -397,9 +397,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &epoch)) < 0)
 		goto bad;
+	(*p)++;  /* skip mkfs u8 */
 	BUG_ON(epoch != map->epoch+1);
-	if ((err = ceph_decode_32(p, end, &mon_epoch)) < 0)
-		goto bad;
 	if ((err = ceph_decode_32(p, end, &ctime.tv_sec)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &ctime.tv_usec)) < 0)
@@ -433,7 +432,6 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 	}
 
 	map->epoch++;
-	map->mon_epoch = mon_epoch;
 	map->ctime = map->ctime;
 	if (newcrush) {
 		if (map->crush) 

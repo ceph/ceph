@@ -25,92 +25,93 @@ using namespace std;
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
+#include "mon/MonitorStore.h"
 
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
 
+void usage()
+{
+  cerr << "usage: ./cmon [flags] <monfsdir>" << std::endl;
+  cerr << "  -d             daemonize" << std::endl;
+  cerr << "  -o <dir>       log output to dir/mon#" << std::endl;
+  cerr << "  --debug_mon n  debug monitor level (e.g. 10)" << std::endl;
+  cerr << "  --debug_ms n   debug messaging level (e.g. 1)" << std::endl;
+  exit(1);
+}
 
 int main(int argc, const char **argv) 
 {
+  int err;
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
   // args
-  int whoami = -1;
-  const char *monmap_fn = ".ceph_monmap";
+  const char *fsdir = 0;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--mon") == 0) 
-      whoami = atoi(args[++i]);
-    else if (strcmp(args[i], "--monmap") == 0) 
-      monmap_fn = args[++i];
-    else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
-      return -1;
-    }
+    if (!fsdir)
+      fsdir = args[i];
+    else 
+      usage();
   }
+  if (!fsdir)
+    usage();
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  MonMap monmap;
-
-  if (whoami < 0) {
-    // let's assume a standalone monitor
-    whoami = 0;
-
-    // start messenger
-    rank.bind(0);
-    cout << "starting standalone mon0, bound to " << rank.get_rank_addr() << std::endl;
-
-    // add single mon0
-    entity_inst_t inst;
-    inst.name = entity_name_t::MON(0);
-    inst.addr = rank.rank_addr;
-    monmap.add_mon(inst);
-    
-    // write monmap
-    cout << "writing monmap to " << monmap_fn << std::endl;;
-    int r = monmap.write(monmap_fn);
-    if (r < 0) {
-      cerr << "couldn't write monmap to " << monmap_fn
-	   << ": " << strerror(errno) << std::endl;
-      return -1;
-    }
-  } else {
-    // i am specific monitor.
-
-    // read monmap
-    //cout << "reading monmap from " << monmap_fn << std::endl;
-    int r = monmap.read(monmap_fn);
-    if (r < 0) {
-      cerr << "couldn't read monmap from " << monmap_fn 
-	   << ": " << strerror(errno) << std::endl;
-      return -1;
-    }
-
-    // bind to a specific port
-    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami).addr
-	 << " from " << monmap_fn
-	 << std::endl;
-    g_my_addr = monmap.get_inst(whoami).addr;
-    rank.bind();
+  MonitorStore store(fsdir);
+  err = store.mount();
+  if (err < 0) {
+    cerr << "problem opening monitor store in " << fsdir << ": " << strerror(err) << std::endl;
+    exit(1);
   }
+
+  // whoami?
+  if (!store.exists_bl_ss("whoami")) {
+    cerr << "mon fs missing 'whoami'" << std::endl;
+    exit(1);
+  }
+  int whoami = store.get_int("whoami");
+
+  // monmap?
+  bufferlist mapbl;
+  store.get_bl_ss(mapbl, "monmap", 0);
+  if (mapbl.length() == 0) {
+    cerr << "mon fs missing 'monmap'" << std::endl;
+    exit(1);
+  }
+  MonMap monmap;
+  monmap.decode(mapbl);
+
+  if ((unsigned)whoami >= monmap.size() || whoami < 0) {
+    cerr << "mon" << whoami << " does not exist in monmap" << std::endl;
+    exit(1);
+  }
+
+  // bind
+  cout << "starting mon" << whoami 
+       << " at " << monmap.get_inst(whoami).addr
+       << " from " << fsdir << std::endl;
+  g_my_addr = monmap.get_inst(whoami).addr;
+  err = rank.bind();
+  if (err < 0)
+    return 1;
 
   create_courtesy_output_symlink("mon", whoami);
   
-  rank.start();
-
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
-  Monitor *mon = new Monitor(whoami, m, &monmap);
-  mon->init();
+  Monitor *mon = new Monitor(whoami, &store, m, &monmap);
 
+  rank.start();  // may daemonize
+  mon->init();
   rank.wait();
 
-  // done
+  store.umount();
   delete mon;
-
   return 0;
 }
 

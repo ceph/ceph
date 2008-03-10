@@ -7,14 +7,18 @@ AUTOMAKE_OPTIONS = gnu
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a
-mkmonmap_SOURCES = mkmonmap.cc
-mkmonmap_LDADD = libcommon.a
-monmaptool_SOURCES = monmaptool.cc
-monmaptool_LDADD = libcommon.a
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
 cmonctl_LDADD = libcommon.a
+
+# tools
+mkmonfs_SOURCES = mkmonfs.cc
+mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
+monmaptool_SOURCES = monmaptool.cc
+monmaptool_LDADD = libcommon.a
 crushtool_SOURCES = crushtool.cc
 crushtool_LDADD = libcommon.a libcrush.a
+osdmaptool_SOURCES = osdmaptool.cc
+osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
@@ -64,7 +68,8 @@ AM_LDFLAGS =
 
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
-	mkmonmap monmaptool crushtool cmonctl \
+	cmonctl \
+	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
 	streamtest \
 	$(FUSEBIN) $(NEWSYN)
@@ -84,6 +89,7 @@ libcommon_a_SOURCES = \
 	common/Finisher.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
+	osd/OSDMap.cc \
 	config.cc
 
 libcrush_a_SOURCES = \

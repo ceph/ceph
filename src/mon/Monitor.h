@@ -138,12 +138,12 @@ public:
   };
 
  public:
-  Monitor(int w, Messenger *m, MonMap *mm) : 
+  Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) : 
     whoami(w), 
     messenger(m),
-    monmap(mm),
+    monmap(map),
     timer(lock), tick_timer(0),
-    store(0),
+    store(s),
 
     state(STATE_STARTING), stopping(false),
 
@@ -163,12 +163,15 @@ public:
     delete messenger;
   }
 
+  void preinit();
   void init();
   void shutdown();
   void dispatch(Message *m);
   void tick();
 
   void do_stop();
+
+  int mkfs();
 
 };
 

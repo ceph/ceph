@@ -27,14 +27,14 @@
 #include <errno.h>
 #include <unistd.h>
 
-void MonitorStore::mount()
+int MonitorStore::mount()
 {
   dout(1) << "mount" << dendl;
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
   if (!d) {
     derr(1) << "basedir " << dir << " dne" << dendl;
-    assert(0);
+    return -ENOENT;
   }
   ::closedir(d);
 
@@ -47,17 +47,19 @@ void MonitorStore::mount()
     dir += "/";
     dir += old;
   }
+  return 0;
 }
 
 
-void MonitorStore::mkfs()
+int MonitorStore::mkfs()
 {
   dout(1) << "mkfs" << dendl;
 
   char cmd[200];
   sprintf(cmd, "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
   dout(1) << cmd << dendl;
-  system(cmd);
+  int r = system(cmd);
+  return r;
 }
 
 

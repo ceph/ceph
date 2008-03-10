@@ -21,14 +21,27 @@ then
 	echo
 fi
 
-$CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print  # your IP here
+# build a fresh fs monmap, mon fs
+$CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
+$CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 
-ARGS="-d --bind $IP --doutdir out --debug_ms 1"
-$CEPH_BIN/cmon $ARGS --mkfs --mon 0
+# shared args
+ARGS="-d --bind $IP -o out --debug_ms 1"
+
+# start monitor
+$CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 10 --debug_ms 1
+
+# build and inject an initial osd map
+$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap
+$CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
+
+# osds
 $CEPH_BIN/cosd $ARGS --mkfs --osd 0
 $CEPH_BIN/cosd $ARGS --mkfs --osd 1
 $CEPH_BIN/cosd $ARGS --mkfs --osd 2
 $CEPH_BIN/cosd $ARGS --mkfs --osd 3
+
+# mds
 $CEPH_BIN/cmds $ARGS --debug_mds 10
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
