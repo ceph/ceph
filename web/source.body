@@ -6,7 +6,7 @@
 
 		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
 
-		<h4>Checking out</h4>
+		<h4>Checking out the source</h4>
 		<div>
 			You can check out a working copy (actually, clone the repository) with
 <pre>
@@ -27,16 +27,16 @@ git pull
 		<div>
 			There are a range of binary targets, mostly for ease of development and testing:
 			<ul>
+			<li><b>cmon</b> -- monitor</li>
+			<li><b>cosd</b> -- OSD storage daemon</li>
+			<li><b>cmds</b> -- MDS metadata server</li>
+			<li><b>cfuse</b> -- client, mountable via FUSE</li>
+			<li><b>csyn</b> -- client sythetic workload generator</li>
+			<li><b>cmonctl</b> -- control tool</li>
+			<p>
 			<li><b>fakesyn</b> -- places all logical elements (MDS, client, etc.) in a single binary, with synchronous message delivery (for easy debugging!).  Includes synthetic workload generation.</li>
 			<li><b>fakefuse</b> -- same as fakesyn, but mounts a single client via FUSE.</li>
-			<li><b>newsyn</b> -- starts up all logical elements using MPI.  As with fakesyn, it includes synthetic workload generation.</li>
-			<li><b>cosd</b> -- standalone OSD</li>
-			<li><b>cmon</b> -- standalone monitor</li>
-			<li><b>cmds</b> -- standalone MDS</li>
-			<li><b>cfuse</b> -- standalone client, mountable via FUSE</li>
 			</ul>
-
-			For most development, fakesyn, fakefuse, and newsyn are sufficient.
 		</div>
 
 		<h4>Runtime Environment</h4>
@@ -47,11 +47,12 @@ git pull
 			<li>Checkout, change into the <tt>ceph/src</tt> directory, and build.  E.g.,
 <pre>
 git clone git://ceph.newdream.net/ceph.git
-cd ceph/src
-make mpi=no fuse=no
+cd ceph
+./autogen.sh
+./configure   # of CXXFLAGS="-g" ./configure to disable optimizations (for debugging)
+cd src
+make
 </pre>
-(You can omit the mpi=no or fuse=no if you happen to have those installed.)
-
 
 			<li>Create a <tt>log/</tt> dir for various runtime stats.
 <pre>
@@ -75,22 +76,6 @@ done
 				Note that if your home/working directory is mounted via NFS or similar, you'll want to symlink <tt>dev/</tt> to a directory on a local disk.
 		</div>
 		
-
-		<h4>Running fakesyn -- everything one process</h4>
-		<div>
-			A quick example, assuming you've set up "fake" EBOFS devices as above:
-<pre>
-make fakesyn && ./fakesyn --mkfs --debug_ms 1 --debug_client 3 --syn rw 1 100000
-# where those options mean:
-#	--mkfs               # start with a fresh file system
-#	--debug_ms 1         # show message delivery
-#	--debug_client 3     # show limited client stuff
-#	--syn rw 1 100000    # write 1MB to a file in 100,000 byte chunks, then read it back
-</pre>
-			One the synthetic workload finishes, the synthetic client unmounts, and the whole system shuts down.
-
-			The full set of command line arguments can be found in <tt>config.cc</tt>.
-		</div>
 
 		<h4>Starting up a full "cluster" on a single host</h4>
 		<div>
@@ -162,52 +147,22 @@ mount -t ceph 1.2.3.4:/ mnt  # 1.2.3.4 is host
 
 		</div>
 
-		<h4>Running on multiple nodes</h4>
+		<h4>Running fakesyn -- everything one process</h4>
 		<div>
-			If you're ready to start things up on multiple nodes (or even just multiple processes on the same node), <tt>newsyn</tt> is the easiest way to get things launched.  It uses MPI to start up all the processes.  Assuming you have MPICH2 (or similar) installed,
+			A quick example, assuming you've set up "fake" EBOFS devices as above:
 <pre>
-mpd &           # for a single host
-mpiboot -n 10   # for multiple hosts (see MPICH docs)
-make newsyn && mpiexec -l -n 10 ./newsyn --mkfs --nummds 1 --numosd 6 --numclient 20 --syn writefile 100 16384
+make fakesyn && ./fakesyn --mkfs --debug_ms 1 --debug_client 3 --syn rw 1 100000
+# where those options mean:
+#	--mkfs               # start with a fresh file system
+#	--debug_ms 1         # show message delivery
+#	--debug_client 3     # show limited client stuff
+#	--syn rw 1 100000    # write 1MB to a file in 100,000 byte chunks, then read it back
 </pre>
-			You will probably want to make <tt>dev/osd.all</tt> a symlink to some block device that exists on every node you're starting an OSD on.  Otherwise, you'll need a symlink (for "block device" file) for each osd.
+			One the synthetic workload finishes, the synthetic client unmounts, and the whole system shuts down.
 
-			If you want to mount a distributed FS (instead of generating a synthetic workload), try
-<pre>
-make newsyn && mpiexec -l -n 10 ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0     # 0 clients, just mds and osds
-# in another terminal,
-mkdir mnt
-make cfuse && ./cfuse mnt
-# and in yet another terminal,
-ls mnt 
-touch mnt/asdf   # etc
-</pre>
-			Currently, when the last client (<tt>cfuse</tt> instance, in this case) shuts down, the whole thing will shut down.  Assuming things shut down cleanly, you should be able to start things up again without the <tt>--mkfs</tt> flag and recover the prior file system state.
+			The full set of command line arguments can be found in <tt>config.cc</tt>.
 		</div>
 
-		<h4>Structure</h4>
-		<div>
-			Here's a crude table diagram that shows how the major (user space) pieces fit together.  Ingore the MDS bits; that's mostly wrong.
-
-			FIXME: this links to the <b>old</b> Subversion repository.
-<table border=0>
-<tr> <td></td> <td>Application</td> </tr>
-<tr> <td></td> <td class=kernel>kernel</td> </tr>
-<tr> <td>Application</td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/client/fuse.cc?view=markup">FUSE glue</a></td> </tr>
-<tr> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/client/Client.h?view=markup">Client</a></td> <td class=net width=50></td><td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDS.h?view=markup">MDS</a></td> </tr>
-<tr>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/Filer.h?view=markup">Filer</a></td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/ObjectCacher.h?view=markup">ObjectCacher</a></td> <td></td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDLog.h?view=markup">MDLog</td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDStore.h?view=markup">MDStore</a></td> </tr>
-<tr> <td></td> <td class=lib colspan=4><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/Objecter.h?view=markup">Objecter</a></td> </tr>
-<tr> <td colspan=2></td> <td class=net colspan=2>(message layer)</td> </tr>
-<tr> <td colspan=2></td> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/OSD.h?view=markup">OSD</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=abstract colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/ObjectStore.h?view=markup">ObjectStore</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/ebofs/Ebofs.h?view=markup">EBOFS</a></td> <td rowspan=2 class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/FakeStore.h?view=markup">FakeStore</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/ebofs/BlockDevice.h?view=markup">BlockDevice</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=kernel colspan=2>Kernel POSIX interface</td> </tr>
-<tr> <td height=30></td> </tr>
-<tr> <td>Key:</td> <td class=net>Network</td> <td class=entity>Entity</td> <td class=lib>Lib/module</td> <td class=abstract>Abstract interface</td> <td class=kernel>Kernel</td>  </tr>
-</table>
-
-		</div>
 	</div>
 </div>
 

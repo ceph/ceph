@@ -486,7 +486,7 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
 
 	spin_lock(&inode->i_lock);
-	dout(10, "size %lld -> %llu\n", inode->i_size, size);
+	dout(10, "trunc size %lld -> %llu\n", inode->i_size, size);
 	inode->i_size = size;
 	spin_unlock(&inode->i_lock);
 
