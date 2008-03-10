@@ -329,6 +329,7 @@ noinst_HEADERS = \
 	messages/MMonElection.h\
 	messages/MOSDOpReply.h\
 	messages/MMonMap.h\
+	messages/MMonGetMap.h\
 	messages/MStatfs.h\
 	messages/MOSDSubOpReply.h\
 	messages/MPingAck.h\
