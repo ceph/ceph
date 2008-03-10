@@ -22,11 +22,13 @@ static char tag_ack = CEPH_MSGR_TAG_ACK;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 static void try_read(struct work_struct *);
-#else
-static void try_read(void *);
-#endif
 static void try_write(struct work_struct *);
 static void try_accept(struct work_struct *);
+#else
+static void try_read(void *);
+static void try_write(void *);
+static void try_accept(void *);
+#endif
 
 
 
@@ -58,10 +60,11 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	INIT_WORK(&con->rwork, try_read);
+	INIT_DELAYED_WORK(&con->swork, try_write);
 #else
 	INIT_WORK(&con->rwork, try_read, con);
+	INIT_WORK(&con->swork, try_write, con);
 #endif
-        INIT_DELAYED_WORK(&con->swork, try_write);
 
 	return con;
 }
@@ -190,13 +193,21 @@ static void __remove_connection(struct ceph_messenger *msgr, struct ceph_connect
 			radix_tree_delete(&msgr->con_open, key);
 		} else {
 			slot = radix_tree_lookup_slot(&msgr->con_open, key);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 			val = radix_tree_deref_slot(slot);
+#else
+			val = *slot;
+#endif
 			dout(20, "__remove_connection %p from bucket %lu head %p\n", con, key, val);
 			if (val == &con->list_bucket) {
 				dout(20, "__remove_connection adjusting bucket ptr"
 				     " for %lu to next item, %p\n", key, 
 				     con->list_bucket.next);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 				radix_tree_replace_slot(slot, con->list_bucket.next);
+#else
+				*slot = con->list_bucket.next;
+#endif
 			}
 			list_del(&con->list_bucket);
 		}
@@ -236,7 +247,11 @@ void ceph_queue_write(struct ceph_connection *con)
 {
 	dout(40, "ceph_queue_write %p\n", con);
 	atomic_inc(&con->nref);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	if (!queue_work(send_wq, &con->swork.work)) {
+#else
+	if (!queue_work(send_wq, &con->swork)) {
+#endif
 		dout(40, "ceph_queue_write %p - already queued\n", con);
 		put_connection(con);
 	}
@@ -460,10 +475,18 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 /*
  * worker function when socket is writeable
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 static void try_write(struct work_struct *work)
+#else
+static void try_write(void *arg)
+#endif
 {
 	struct ceph_connection *con = 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 			container_of(work, struct ceph_connection, swork.work);
+#else
+			arg;
+#endif
 	struct ceph_messenger *msgr = con->msgr;
 	int ret = 1;
 
@@ -1011,12 +1034,20 @@ out:
 /*
  *  worker function when listener receives a connect
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 static void try_accept(struct work_struct *work)
+#else
+static void try_accept(void *arg)
+#endif
 {
-        struct ceph_connection *new_con = NULL;
+	struct ceph_connection *new_con = NULL;
 	struct ceph_messenger *msgr;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	msgr = container_of(work, struct ceph_messenger, awork);
+#else
+	msgr = arg;
+#endif
 
         dout(5, "Entered try_accept\n");
 
@@ -1060,7 +1091,11 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
         msgr = kzalloc(sizeof(*msgr), GFP_KERNEL);
         if (msgr == NULL) 
 		return ERR_PTR(-ENOMEM);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	INIT_WORK(&msgr->awork, try_accept);
+#else
+	INIT_WORK(&msgr->awork, try_accept, msgr);
+#endif
 	spin_lock_init(&msgr->con_lock);
 	INIT_LIST_HEAD(&msgr->con_all);
 	INIT_LIST_HEAD(&msgr->con_accepting);

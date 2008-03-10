@@ -360,7 +360,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_reply = 0;
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
-	req->r_expects_cap = false;
+	req->r_expects_cap = 0;
 	req->r_cap = 0;
 	req->r_session = 0;
 	req->r_num_mds = 0;
@@ -1289,10 +1289,18 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	schedule_delayed_work(&mdsc->delayed_work, hz);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 void delayed_work(struct work_struct *work)
+#else
+void delayed_work(void *arg)
+#endif
 {
 	int i;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct ceph_mds_client *mdsc = container_of(work, struct ceph_mds_client, delayed_work.work);
+#else
+	struct ceph_mds_client *mdsc = arg;
+#endif
 
 	dout(10, "delayed_work on %p\n", mdsc);
 	
@@ -1324,7 +1332,11 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->last_requested_map = 0;
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
+#else
+	INIT_WORK(&mdsc->delayed_work, delayed_work, mdsc);
+#endif
 }
 
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
@@ -1354,7 +1366,12 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 		spin_lock(&mdsc->lock);
 	} 
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
+#else
+	cancel_delayed_work(&mdsc->delayed_work); /* cancel timer */
+	flush_scheduled_work();
+#endif
 	spin_unlock(&mdsc->lock);
 }
 

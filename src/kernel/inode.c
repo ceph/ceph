@@ -6,6 +6,7 @@
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/ceph_fs.h>
+#include <linux/namei.h>
 
 int ceph_inode_debug = 50;
 #define DOUT_VAR ceph_inode_debug

@@ -207,6 +207,8 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 		break;
 	default:
 		BUG_ON(1);
+
+		return; /* remove compilation warning */
 	}
 	nr_osds = crush_do_rule(osdc->osdmap->crush, rule, 
 				req->r_pgid.pg.ps, osds, 10, 
@@ -424,7 +426,11 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
 				 &reqhead->offset, &reqhead->length);
 	BUG_ON(len != 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	nr_pages = DIV_ROUND_UP(reqhead->length, PAGE_SIZE);
+#else
+	nr_pages = (reqhead->length + PAGE_SIZE - 1) / PAGE_SIZE;
+#endif
 	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
 	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
 	

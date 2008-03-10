@@ -61,7 +61,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
-	req->r_expects_cap = true;
+	req->r_expects_cap = 1;
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
