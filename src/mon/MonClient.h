@@ -22,10 +22,11 @@ class MonMap;
 class MMonMap;
 
 class MonClient : public Dispatcher {
+  int probe_mon(MonMap *pmonmap);
+  void handle_monmap(MMonMap *m);
  public:
   void dispatch(Message *m);
-  int get_monmap(MonMap *pmonmap, entity_addr_t monaddr);
-  void handle_monmap(MMonMap *m);
+  int get_monmap(MonMap *pmonmap);
 };
 
 #endif

@@ -60,7 +60,7 @@ int main(int argc, const char **argv)
     whoami = 0;
 
     // start messenger
-    rank.bind();
+    rank.bind(0);
     cout << "starting standalone mon0, bound to " << rank.get_rank_addr() << std::endl;
 
     // add single mon0

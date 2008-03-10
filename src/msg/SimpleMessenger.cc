@@ -87,7 +87,7 @@ void noop_signal_handler(int s)
   //dout(0) << "blah_handler got " << s << dendl;
 }
 
-int Rank::Accepter::bind()
+int Rank::Accepter::bind(int64_t force_nonce)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
@@ -174,7 +174,10 @@ int Rank::Accepter::bind()
     entity_addr_t tmp;
     tmp.ipaddr = listen_addr;
     rank.rank_addr.set_port(tmp.get_port());
-    rank.rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+    if (force_nonce >= 0)
+      rank.rank_addr.nonce = force_nonce;
+    else
+      rank.rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
   rank.rank_addr.erank = 0;
 
@@ -246,7 +249,11 @@ void *Rank::Accepter::entry()
   }
 
   dout(20) << "accepter closing" << dendl;
-  if (listen_sd >= 0) ::close(listen_sd);
+  // don't close socket, in case we start up again?  blech.
+  if (listen_sd >= 0) {
+    ::close(listen_sd);
+    listen_sd = -1;
+  }
   dout(10) << "accepter stopping" << dendl;
   return 0;
 }
@@ -257,6 +264,7 @@ void Rank::Accepter::stop()
   dout(10) << "stop sending SIGUSR1" << dendl;
   this->kill(SIGUSR1);
   join();
+  done = false;
 }
 
 
@@ -290,7 +298,7 @@ void Rank::reaper()
 }
 
 
-int Rank::bind()
+int Rank::bind(int64_t force_nonce)
 {
   lock.Lock();
   if (started) {
@@ -302,7 +310,7 @@ int Rank::bind()
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind();
+  return accepter.bind(force_nonce);
 }
 
 
@@ -323,7 +331,7 @@ class C_Debug : public Context {
   }
 };
 
-int Rank::start()
+int Rank::start(bool nodaemon)
 {
   lock.Lock();
   if (started) {
@@ -337,7 +345,7 @@ int Rank::start()
   lock.Unlock();
 
   // daemonize?
-  if (g_conf.daemonize) {
+  if (g_conf.daemonize && !nodaemon) {
     if (Thread::get_num_threads() > 0) {
       derr(0) << "rank.start BUG: there are " << Thread::get_num_threads()
 	      << " already started that will now die!  call rank.start() sooner." 
@@ -540,6 +548,7 @@ void Rank::wait()
 
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
+  started = false;
 }
 
 

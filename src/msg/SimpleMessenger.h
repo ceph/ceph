@@ -72,7 +72,7 @@ private:
     
     void *entry();
     void stop();
-    int bind();
+    int bind(int64_t force_nonce);
     int start();
   } accepter;
 
@@ -342,8 +342,8 @@ public:
 
   //void set_listen_addr(tcpaddr_t& a);
 
-  int bind();
-  int start();
+  int bind(int64_t force_nonce = -1);
+  int start(bool nodaemon = false);
   void wait();
 
   EntityMessenger *register_entity(entity_name_t addr);

@@ -24,6 +24,7 @@ using namespace std;
 #include "config.h"
 
 #include "mon/MonMap.h"
+#include "mon/MonClient.h"
 
 #include "osd/OSD.h"
 #include "ebofs/Ebofs.h"
@@ -46,11 +47,14 @@ int main(int argc, const char **argv)
   const char *dev = 0;
   char dev_default[20];
   int whoami = -1;
+  const char *monhost = 0;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--dev") == 0) 
       dev = args[++i];
     else if (strcmp(args[i],"--osd") == 0)
       whoami = atoi(args[++i]);
+    else if (!monhost)
+      monhost = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       return -1;
@@ -82,15 +86,11 @@ int main(int argc, const char **argv)
 
   create_courtesy_output_symlink("osd", whoami);
 
-  // load monmap
-  const char *monmap_fn = ".ceph_monmap";
+  // get monmap
   MonMap monmap;
-  int r = monmap.read(monmap_fn);
-  if (r < 0) {
-    cerr << "unable to read monmap from " << monmap_fn 
-	 << ": " << strerror(errno) << std::endl;
+  MonClient mc;
+  if (mc.get_monmap(&monmap) < 0)
     return -1;
-  }
 
   // start up network
   rank.bind();

@@ -44,7 +44,8 @@ struct md_config_t {
   int  num_client;
 
   bool mkfs;
-
+  
+  const char *mon_host;
   bool daemonize;
 
   // profiling
