@@ -563,9 +563,9 @@ void parse_config_options(std::vector<const char*>& args)
 
     
     
-    else if (strcmp(args[i], "--doutdir") == 0) {
+    else if (strcmp(args[i], "-o") == 0 ||
+	     strcmp(args[i], "--doutdir") == 0) 
       g_conf.dout_dir = args[++i];
-    }
 
     else if (strcmp(args[i], "--debug") == 0) 
       if (!g_conf.debug_after) 
