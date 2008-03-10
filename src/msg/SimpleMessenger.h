@@ -124,7 +124,8 @@ private:
     void writer();
 
     Message *read_message();
-    int write_message(Message *m);
+    int write_message(Message *m, ceph_msg_header *env, 
+		      bufferlist &payload, bufferlist &data);
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
 
