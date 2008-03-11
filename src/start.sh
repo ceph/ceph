@@ -38,7 +38,7 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 for osd in 0 1 2 3 
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- $CEPH_BIN/cosd $ARGS dev/osd$osd
+ $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 10
 done
 
 # mds

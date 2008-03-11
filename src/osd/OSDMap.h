@@ -286,7 +286,7 @@ private:
     ctime = inc.ctime;
 
     prior_pg_num = pg_num;
-    prior_localized_pg_num = prior_localized_pg_num;
+    prior_localized_pg_num = localized_pg_num;
       
     // full map?
     if (inc.fullmap.length()) {

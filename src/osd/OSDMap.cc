@@ -37,7 +37,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 
   for (int i=0; i<num_osd; i++) {
     set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
-    set_offload(i, CEPH_OSD_IN);
+    set_offload(i, CEPH_OSD_OUT);
   }
   
   if (mds_local_osd) {
@@ -47,7 +47,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
     for (int i=0; i<mds_local_osd; i++) {
       set_max_osd(i+num_osd);
       set_state(i, CEPH_OSD_EXISTS);
-      set_offload(i, CEPH_OSD_IN);
+      set_offload(i, CEPH_OSD_OUT);
     }
   }
 }

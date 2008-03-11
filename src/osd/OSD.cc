@@ -1409,7 +1409,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     ps_t numps = osdmap->get_pg_num();
     ps_t fromps = osdmap->get_prior_pg_num();
     ps_t numlps = osdmap->get_localized_pg_num();
-    ps_t fromlps = osdmap->get_prior_pg_num();
+    ps_t fromlps = osdmap->get_prior_localized_pg_num();
     dout(1) << "mkpg " << osdmap->get_fsid() << " on " 
 	    << fromps << "-" << numps << " normal, " 
 	    << fromlps << "-" << numlps << " localized pg sets" << dendl;
