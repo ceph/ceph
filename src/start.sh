@@ -35,11 +35,11 @@ $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 10 --debug_ms 1
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap
 $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 
-# osds
-$CEPH_BIN/cosd $ARGS --mkfs --osd 0
-$CEPH_BIN/cosd $ARGS --mkfs --osd 1
-$CEPH_BIN/cosd $ARGS --mkfs --osd 2
-$CEPH_BIN/cosd $ARGS --mkfs --osd 3
+for osd in 0 1 2 3 
+do
+ $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
+ $CEPH_BIN/cosd $ARGS dev/osd$osd
+done
 
 # mds
 $CEPH_BIN/cmds $ARGS --debug_mds 10

@@ -33,6 +33,17 @@ using namespace std;
 
 #include "common/Timer.h"
 
+void usage() 
+{
+  cerr << "usage: cosd <device> [-m monitor] [--mkfs_for_osd <nodeid>]" << std::endl;
+  cerr << "   -d              daemonize" << std::endl;
+  cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
+  cerr << "   --debug_ms N    set message debug level (e.g. 1)" << std::endl;
+  cerr << "   --ebofs         use EBOFS for object storage (default)" << std::endl;
+  cerr << "   --fakestore     store objects as files in directory <device>" << std::endl;
+  exit(1);
+}
+
 
 int main(int argc, const char **argv) 
 {
@@ -45,52 +56,56 @@ int main(int argc, const char **argv)
 
   // osd specific args
   const char *dev = 0;
-  char dev_default[20];
   int whoami = -1;
-  const char *monhost = 0;
+  bool mkfs;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--dev") == 0) 
-      dev = args[++i];
-    else if (strcmp(args[i],"--osd") == 0)
+    if (strcmp(args[i],"--mkfs_for_osd") == 0) {
+      mkfs = 1; 
       whoami = atoi(args[++i]);
-    else if (!monhost)
-      monhost = args[i];
+    } else if (strcmp(args[i],"--dev") == 0) 
+      dev = args[++i];
+    else if (!dev)
+      dev = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
-      return -1;
+      usage();
     }
-  }
-  if (whoami < 0) {
-    cerr << "must specify '--osd #' where # is the osd number" << std::endl;
   }
   if (!dev) {
-    sprintf(dev_default, "dev/osd%d", whoami);
-    dev = dev_default;
-  }
-  if (whoami < 0) {
-    // who am i?   peek at superblock!
-    OSDSuperblock sb;
-    ObjectStore *store = new Ebofs(dev);
-    bufferlist bl;
-    store->mount();
-    int r = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
-    if (r < 0) {
-      cerr << "couldn't read superblock object on " << dev << std::endl;
-      exit(0);
-    }
-    bl.copy(0, sizeof(sb), (char*)&sb);
-    store->umount();
-    delete store;
-    whoami = sb.whoami;
+    cerr << "must specify device file" << std::endl;
+    usage();
   }
 
-  create_courtesy_output_symlink("osd", whoami);
+  if (mkfs && whoami < 0) {
+    cerr << "must specify '--osd #' where # is the osd number" << std::endl;
+    usage();
+  }
 
   // get monmap
   MonMap monmap;
   MonClient mc;
   if (mc.get_monmap(&monmap) < 0)
     return -1;
+
+  if (mkfs) {
+    int err = OSD::mkfs(dev, monmap.fsid, whoami);
+    if (err < 0) {
+      cerr << "error creating empty object store in " << dev << ": " << strerror(-err) << std::endl;
+      exit(1);
+    }
+    cout << "created object store for osd" << whoami << " fsid " << monmap.fsid << " on " << dev << std::endl;
+    exit(0);
+  }
+
+  if (whoami < 0) {
+    whoami = OSD::peek_whoami(dev);
+    if (whoami < 0) {
+      cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-whoami) << std::endl;
+      exit(1);
+    }
+  }
+
+  create_courtesy_output_symlink("osd", whoami);
 
   // start up network
   rank.bind();

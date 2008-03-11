@@ -63,7 +63,7 @@ protected:
   MonMap      *monmap;
 
   int whoami;
-  char dev_path[100];
+  const char *dev_name;
 
 public:
   int get_nodeid() { return whoami; }
@@ -356,6 +356,12 @@ private:
  public:
   OSD(int id, Messenger *m, MonMap *mm, const char *dev = 0);
   ~OSD();
+
+  // static bits
+  static int find_osd_dev(char *result, int whoami);
+  static ObjectStore *create_object_store(const char *dev);
+  static int mkfs(const char *dev, ceph_fsid fsid, int whoami);
+  static int peek_whoami(const char *dev);
 
   // startup/shutdown
   int init();

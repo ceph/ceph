@@ -81,8 +81,98 @@
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
+
+
+
 const char *osd_base_path = "./osddata";
 const char *ebofs_base_path = "./dev";
+
+int OSD::find_osd_dev(char *result, int whoami)
+{
+  if (!g_conf.ebofs) {// || !g_conf.osbdb) {
+    sprintf(result, "%s/osddata/osd%d", osd_base_path, whoami);
+    return 0;
+  }
+
+  char hostname[100];
+  hostname[0] = 0;
+  gethostname(hostname,100);
+
+  // try in this order:
+  // dev/osd$num
+  // dev/osd.$hostname
+  // dev/osd.all
+  struct stat sta;
+
+  sprintf(result, "%s/osd%d", ebofs_base_path, whoami);
+  if (::lstat(result, &sta) == 0) return 0;
+
+  sprintf(result, "%s/osd.%s", ebofs_base_path, hostname);    
+  if (::lstat(result, &sta) == 0) return 0;
+    
+  sprintf(result, "%s/osd.all", ebofs_base_path);
+  if (::lstat(result, &sta) == 0) return 0;
+
+  return -ENOENT;
+}
+
+
+ObjectStore *OSD::create_object_store(const char *dev)
+{
+  ObjectStore *store = 0;
+  
+  if (g_conf.ebofs) 
+    store = new Ebofs(dev);
+#ifdef USE_OSBDB
+  else if (g_conf.bdbstore)
+    store = new OSBDB(dev);
+#endif // USE_OSBDB
+  else
+    store = new FakeStore(dev);
+
+  return store;
+}
+
+
+int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
+{
+  ObjectStore *store = create_object_store(dev);
+  int err = store->mkfs();    
+  if (err < 0) return err;
+  err = store->mount();
+  if (err < 0) return err;
+    
+  OSDSuperblock sb;
+  sb.fsid = fsid;
+  sb.whoami = whoami;
+  bufferlist bl;
+  bl.append((const char *)&sb, sizeof(sb));
+  store->write(OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
+  store->umount();
+  delete store;
+  return 0;
+}
+
+int OSD::peek_whoami(const char *dev)
+{
+  ObjectStore *store = create_object_store(dev);
+  int err = store->mount();
+  if (err < 0) 
+    return err;
+
+  OSDSuperblock sb;
+  bufferlist bl;
+  err = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
+  if (err < 0) 
+    return -ENOENT;
+  bl.copy(0, sizeof(sb), (char*)&sb);
+  store->umount();
+  delete store;
+
+  return sb.whoami;
+}
+
+
 
 // <hack> force remount hack for performance testing FakeStore
 class C_Remount : public Context {
@@ -114,12 +204,12 @@ LogType osd_logtype;
 
 OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) : 
   timer(osd_lock),
+  whoami(id), dev_name(dev),
   stat_oprate(5.0),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha)
 {
-  whoami = id;
   messenger = m;
   monmap = mm;
 
@@ -141,45 +231,6 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
   if (g_conf.osd_remount_at) 
     timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
-
-
-  // init object store
-  // try in this order:
-  // dev/osd$num
-  // dev/osd.$hostname
-  // dev/osd.all
-
-  if (dev) {
-    strcpy(dev_path,dev);
-  } else {
-    char hostname[100];
-    hostname[0] = 0;
-    gethostname(hostname,100);
-    
-    sprintf(dev_path, "%s/osd%d", ebofs_base_path, whoami);
-
-    struct stat sta;
-    if (::lstat(dev_path, &sta) != 0)
-      sprintf(dev_path, "%s/osd.%s", ebofs_base_path, hostname);    
-    
-    if (::lstat(dev_path, &sta) != 0)
-      sprintf(dev_path, "%s/osd.all", ebofs_base_path);
-  }
-
-  if (g_conf.ebofs) {
-    store = new Ebofs(dev_path);
-    //store->_fake_writes(true);
-  }
-#ifdef USE_OSBDB
-  else if (g_conf.bdbstore) {
-    store = new OSBDB(dev_path);
-  }
-#endif // USE_OSBDB
-  else {
-    sprintf(dev_path, "osddata/osd%d", whoami);
-    store = new FakeStore(dev_path);
-  }
-
 }
 
 OSD::~OSD()
@@ -196,18 +247,30 @@ int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
 
-  // mkfs?
-  if (g_conf.osd_mkfs) {
-    dout(2) << "mkfs on local store" << dendl;
-    if (store->mkfs() < 0)
-      return -1;
-    
-    // make up a superblock
-    superblock.whoami = whoami;
+  char dev_path[100];
+  if (dev_name) 
+    strcpy(dev_path, dev_name);
+  else {
+    // search for a suitable dev path, based on our identity
+    int r = find_osd_dev(dev_path, whoami);
+    if (r < 0) {
+      dout(0) << "*** unable to find a dev for osd" << whoami << dendl;
+      return r;
+    }
+
+    // mkfs?
+    if (g_conf.osd_mkfs) {
+      dout(2) << "mkfs on local store" << dendl;
+      r = mkfs(dev_path, monmap->fsid, whoami);
+      if (r < 0) 
+	return r;
+    }
   }
   
   // mount.
   dout(2) << "mounting " << dev_path << dendl;
+  store = create_object_store(dev_path);
+  assert(store);
   int r = store->mount();
   if (r < 0) return -1;
   
@@ -385,17 +448,19 @@ int OSD::read_superblock()
   }
 
   bl.copy(0, sizeof(superblock), (char*)&superblock);
-  
-  dout(10) << "read_superblock " << superblock << dendl;
 
+  dout(10) << "read_superblock " << superblock << dendl;
+  assert(whoami == superblock.whoami);  // fixme!
+  
   // load up "current" osdmap
   assert(!osdmap);
   osdmap = new OSDMap;
-  bl.clear();
-  get_map_bl(superblock.current_epoch, bl);
-  osdmap->decode(bl);
+  if (superblock.current_epoch) {
+    bl.clear();
+    get_map_bl(superblock.current_epoch, bl);
+    osdmap->decode(bl);
+  }
 
-  assert(whoami == superblock.whoami);  // fixme!
   return 0;
 }
 
