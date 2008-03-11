@@ -305,8 +305,6 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->epoch)) < 0)
 		goto bad;
-	if ((err = ceph_decode_32(p, end, &map->mkfs_epoch)) < 0)
-		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->ctime.tv_sec)) < 0)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->ctime.tv_usec)) < 0)
@@ -320,6 +318,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->localized_pg_num)) < 0)
 		goto bad;
+	*p += 2*sizeof(__u32);  /* skip prior_*pg_num fields */
 
 	calc_pg_masks(map);
 
@@ -397,7 +396,6 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &epoch)) < 0)
 		goto bad;
-	(*p)++;  /* skip mkfs u8 */
 	BUG_ON(epoch != map->epoch+1);
 	if ((err = ceph_decode_32(p, end, &ctime.tv_sec)) < 0)
 		goto bad;
@@ -426,6 +424,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *m
 	/* new max? */
 	if ((err = ceph_decode_32(p, end, &max)) < 0)
 		goto bad;
+	*p += 2*sizeof(__u32);  /* skip new_pg_num, for now.  FIXME. */
 	if (max > 0) {
 		if ((err = osdmap_set_max_osd(map, max)) < 0)
 			goto bad;

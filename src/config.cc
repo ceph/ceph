@@ -333,8 +333,6 @@ md_config_t g_conf = {
 
   osd_auto_weight: false,
 
-  osd_hack_fast_startup: false,  // this breaks localized pgs.
-
   
   // --- fakestore ---
   fakestore_sync_interval: 2,    // seconds
@@ -909,9 +907,6 @@ void parse_config_options(std::vector<const char*>& args)
 
     else if (strcmp(args[i], "--osd_auto_weight") == 0) 
       g_conf.osd_auto_weight = atoi(args[++i]);
-
-    else if (strcmp(args[i], "--osd_hack_fast_startup") == 0) 
-      g_conf.osd_hack_fast_startup = atoi(args[++i]);
 
     else if (strcmp(args[i], "--bdev_lock") == 0) 
       g_conf.bdev_lock = atoi(args[++i]);

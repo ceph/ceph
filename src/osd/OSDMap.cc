@@ -29,7 +29,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   ctime = g_clock.now();
 
   set_max_osd(num_osd);
-  set_pg_num(num_osd << pg_bits);
+  //pg_num = num_osd << pg_bits;  // not here.. must be >0 'up' osds!
 
   // crush map
   map<int,double> weights;

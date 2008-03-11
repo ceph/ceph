@@ -473,9 +473,13 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_offload[from] = CEPH_OSD_IN;
     
     osd_weight[from] = m->sb.weight;
-
-    if (!osdmap.post_mkfs() && !osdmap.is_mkfs())
-      pending_inc.mkfs = 1;  // first set of up osds, do the mkfs!
+    
+    if (osdmap.pg_num == 0) {
+      // set a conservative initial pg_num
+      pending_inc.new_pg_num = osdmap.get_max_osd() << g_conf.osd_pg_bits;
+      pending_inc.new_localized_pg_num = 4;  // per osd
+      dout(1) << "prepare_boot setting initial pg_num to " << pending_inc.new_pg_num << dendl;
+    }
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
@@ -762,6 +766,20 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
+    }
+    else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
+      int n = atoi(m->cmd[2].c_str());
+      if (n > osdmap.get_pg_num()) {
+	ss << "set new pg_num = " << n;
+	pending_inc.new_pg_num = n;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } else {
+	ss << "specified pg_num " << n << " < current " << osdmap.get_pg_num();
+	getline(ss, rs);
+	mon->reply_command(m, -EINVAL, rs);
+      }
     }
     else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
       errno = 0;

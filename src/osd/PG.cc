@@ -661,7 +661,7 @@ void PG::peer(ObjectStore::Transaction& t,
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
-  } else if (osd->osdmap->post_mkfs()) {
+  } else if (info.pgid.u.pg.ps < osd->osdmap->get_prior_pg_num()) {
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
     state_set(STATE_CRASHED);
   }    
@@ -888,8 +888,7 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // if primary..
-  if (role == 0 &&
-      (!g_conf.osd_hack_fast_startup || osd->osdmap->post_mkfs())) {
+  if (role == 0) {
     // who is clean?
     uptodate_set.clear();
     if (info.is_uptodate()) 

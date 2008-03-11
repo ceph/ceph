@@ -506,8 +506,6 @@ void OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
     pg->info.history.same_primary_since = 
     pg->info.history.same_acker_since = osdmap->get_epoch();
   pg->write_log(t);
-  if (g_conf.osd_hack_fast_startup)
-    pg->activate(t);
   
   dout(7) << "created " << *pg << dendl;
   pg->unlock();
@@ -1325,33 +1323,37 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 {
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
-	  << " mkfs_peoch " << osdmap->get_mkfs_epoch()
           << dendl;
   
-  if (osdmap->is_mkfs()) {
+  if (osdmap->is_mkpg()) {
 
+    // FIXME: move this bit elsewhere....
     // is this okay?
+    /*
     ceph_fsid nullfsid;
     memset(&nullfsid, 0, sizeof(nullfsid));
     if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {
-      derr(0) << "will not mkfs, my superblock fsid is not zeroed" << dendl;
+      derr(0) << "will not mkps, my superblock fsid is not zeroed" << dendl;
       assert(0);
     }
-    superblock.fsid = osdmap->get_fsid();
-    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
+    */
+    superblock.fsid = osdmap->get_fsid();  // FIXME
+    //assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // ok!
     ps_t numps = osdmap->get_pg_num();
+    ps_t fromps = osdmap->get_prior_pg_num();
     ps_t numlps = osdmap->get_localized_pg_num();
-    dout(1) << "mkfs " << osdmap->get_fsid() << " on " 
-	    << numps << " normal, " 
-	    << numlps << " localized pg sets" << dendl;
+    ps_t fromlps = osdmap->get_prior_pg_num();
+    dout(1) << "mkpg " << osdmap->get_fsid() << " on " 
+	    << fromps << "-" << numps << " normal, " 
+	    << fromlps << "-" << numlps << " localized pg sets" << dendl;
     int minrep = 1;
     int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
     int minraid = g_conf.osd_min_raid_width;
     int maxraid = g_conf.osd_max_raid_width;
     int numpool = 1; // FIXME
-    dout(1) << "mkfs    " << minrep << ".." << maxrep << " replicas, " 
+    dout(1) << "mkpg    " << minrep << ".." << maxrep << " replicas, " 
 	    << minraid << ".." << maxraid << " osd raid groups" << dendl;
 
     //derr(0) << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
@@ -1361,22 +1363,22 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     //  replicated
     for (int pool = 0; pool < numpool; pool++) 
       for (int nrep = 1; nrep <= maxrep; nrep++) {
-	for (ps_t ps = 0; ps < numps; ++ps)
+	for (ps_t ps = fromps; ps < numps; ++ps)
 	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1), t);
-	for (ps_t ps = 0; ps < numlps; ++ps) 
+	for (ps_t ps = fromlps; ps < numlps; ++ps) 
 	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, whoami), t);
       }
 
     // raided
     for (int pool = 0; pool < numpool; pool++) 
       for (int size = minraid; size <= maxraid; size++) {
-	for (ps_t ps = 0; ps < numps; ++ps) 
+	for (ps_t ps = fromps; ps < numps; ++ps) 
 	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, -1), t);
-	for (ps_t ps = 0; ps < numlps; ++ps) 
+	for (ps_t ps = fromlps; ps < numlps; ++ps) 
 	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, whoami), t);
       }
 
-    dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << dendl;
+    dout(1) << "mkpg done, now i have " << pg_map.size() << " pgs" << dendl;
 
   } else {
     // scan existing pg's
@@ -1547,10 +1549,6 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       pg->update_stats();
     pg->unlock();
   }  
-
-  if (g_conf.osd_hack_fast_startup &&
-      osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
-    return;
 
   do_notifies(notify_list);  // notify? (residual|replica)
   do_queries(query_map);

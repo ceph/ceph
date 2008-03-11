@@ -51,7 +51,7 @@ using namespace std;
 
 inline int calc_bits_of(int t) {
   int b = 0;
-  while (t) {
+  while (t > 0) {
     t = t >> 1;
     b++;
   }
@@ -77,7 +77,8 @@ public:
 
     // incremental
     int32_t new_max_osd;
-    __u8 mkfs;
+    int32_t new_pg_num;
+    int32_t new_localized_pg_num;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
@@ -87,11 +88,12 @@ public:
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
-      ::_encode(mkfs, bl);
       ctime._encode(bl);
       ::_encode(fullmap, bl);
       ::_encode(crush, bl);
       ::_encode(new_max_osd, bl);
+      ::_encode(new_pg_num, bl);
+      ::_encode(new_localized_pg_num, bl);
       ::_encode(new_up, bl);
       ::_encode(new_down, bl);
       ::_encode(new_offload, bl);
@@ -101,11 +103,12 @@ public:
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
-      ::_decode(mkfs, bl, off);
       ctime._decode(bl, off);
       ::_decode(fullmap, bl, off);
       ::_decode(crush, bl, off);
       ::_decode(new_max_osd, bl, off);
+      ::_decode(new_pg_num, bl, off);
+      ::_decode(new_localized_pg_num, bl, off);
       ::_decode(new_up, bl, off);
       ::_decode(new_down, bl, off);
       ::_decode(new_offload, bl, off);
@@ -113,19 +116,23 @@ public:
       ::_decode(old_pg_swap_primary, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), mkfs(0) {
+    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), new_pg_num(0), new_localized_pg_num(0) {
       fsid.major = fsid.minor = cpu_to_le64(0);
     }
   };
 
 private:
   ceph_fsid fsid;
-  epoch_t epoch, mkfs_epoch;       // what epoch of the osd cluster descriptor is this
-  utime_t ctime, mtime;       // epoch start time
+  epoch_t epoch;        // what epoch of the osd cluster descriptor is this
+  utime_t ctime, mtime; // epoch start time
   int32_t pg_num;       // placement group count
   int32_t pg_num_mask;  // bitmask for above
   int32_t localized_pg_num;      // localized place group count
   int32_t localized_pg_num_mask; // ditto
+
+  // values from prior epoch, so we can create them
+  int32_t prior_pg_num;
+  int32_t prior_localized_pg_num;
 
   int32_t max_osd;
   vector<uint8_t>  osd_state;
@@ -139,9 +146,9 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mkfs_epoch((epoch_t)-1),
-	     pg_num(1<<5),
-	     localized_pg_num(1<<3),
+  OSDMap() : epoch(0), 
+	     pg_num(0), localized_pg_num(0),
+	     prior_pg_num(0), prior_localized_pg_num(0),
 	     max_osd(0) { 
     fsid.major = fsid.minor = cpu_to_le64(0);
     calc_pg_masks();
@@ -162,16 +169,18 @@ private:
   }
 
   int get_pg_num() const { return pg_num; }
-  void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
+  int get_prior_pg_num() const { return prior_pg_num; }
+  //void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
   int get_localized_pg_num() const { return localized_pg_num; }
+  int get_prior_localized_pg_num() const { return prior_localized_pg_num; }
 
   /* stamps etc */
   const utime_t& get_ctime() const { return ctime; }
   const utime_t& get_mtime() const { return mtime; }
 
-  bool is_mkfs() const { return epoch == mkfs_epoch; }
-  bool post_mkfs() const { return epoch > mkfs_epoch; }
-  epoch_t get_mkfs_epoch() const { return mkfs_epoch; }
+  bool is_mkpg() const { 
+    return (pg_num > prior_pg_num) || (localized_pg_num > prior_localized_pg_num);
+  }
 
   /***** cluster state *****/
   /* osds */
@@ -276,6 +285,9 @@ private:
     epoch++;
     ctime = inc.ctime;
 
+    prior_pg_num = pg_num;
+    prior_localized_pg_num = prior_localized_pg_num;
+      
     // full map?
     if (inc.fullmap.length()) {
       decode(inc.fullmap);
@@ -287,8 +299,14 @@ private:
     }
 
     // nope, incremental.
-    if (inc.mkfs)
-      mkfs_epoch = epoch;
+    if (inc.new_pg_num) {
+      pg_num = inc.new_pg_num;
+      assert(pg_num >= prior_pg_num);
+    }
+    if (inc.new_localized_pg_num) {
+      localized_pg_num = inc.new_localized_pg_num;
+      assert(localized_pg_num >= prior_localized_pg_num);
+    }
 
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
@@ -328,11 +346,12 @@ private:
   void encode(bufferlist& blist) {
     ::_encode(fsid, blist);
     ::_encode(epoch, blist);
-    ::_encode(mkfs_epoch, blist);
     ::_encode(ctime, blist);
     ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
     ::_encode(localized_pg_num, blist);
+    ::_encode(prior_pg_num, blist);
+    ::_encode(prior_localized_pg_num, blist);
     
     ::_encode(max_osd, blist);
     ::_encode(osd_state, blist);
@@ -348,11 +367,12 @@ private:
     int off = 0;
     ::_decode(fsid, blist, off);
     ::_decode(epoch, blist, off);
-    ::_decode(mkfs_epoch, blist, off);
     ::_decode(ctime, blist, off);
     ::_decode(mtime, blist, off);
     ::_decode(pg_num, blist, off);
     ::_decode(localized_pg_num, blist, off);
+    ::_decode(prior_pg_num, blist, off);
+    ::_decode(prior_localized_pg_num, blist, off);
     calc_pg_masks();
 
     ::_decode(max_osd, blist, off);

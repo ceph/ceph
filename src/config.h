@@ -270,8 +270,6 @@ struct md_config_t {
 
   bool osd_auto_weight;
 
-  bool osd_hack_fast_startup;
-
   // fakestore
   double   fakestore_sync_interval;
   bool  fakestore_fake_attrs;
