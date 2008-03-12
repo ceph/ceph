@@ -82,7 +82,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	    inode, page, page->index);
 
 	/* write a page at the index of page->index, by size of PAGE_SIZE */
-	err = ceph_osdc_writepage(osdc, inode->i_ino, &ci->i_layout,
+	err = ceph_osdc_writepage(osdc, ceph_ino(inode), &ci->i_layout,
 				page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (err)
 		goto out_unlock;
@@ -153,7 +153,7 @@ static int ceph_prepare_write(struct file *filp, struct page *page,
 
 	/* Now it's clear that the page is not up to date */
 
-	err = ceph_osdc_prepare_write(osdc, inode->i_ino, &ci->i_layout,
+	err = ceph_osdc_prepare_write(osdc, ceph_ino(inode), &ci->i_layout,
 				      page->index << PAGE_SHIFT, PAGE_SIZE,
 				      page);
 	if (err)
@@ -198,7 +198,7 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 		position = ((loff_t)page->index << PAGE_SHIFT) + from;
 
 		page_data = kmap(page);
-		err = ceph_osdc_commit_write(osdc, inode->i_ino, &ci->i_layout,
+		err = ceph_osdc_commit_write(osdc, ceph_ino(inode), &ci->i_layout,
 					     page->index << PAGE_SHIFT,
 					     PAGE_SIZE,
 					     page);

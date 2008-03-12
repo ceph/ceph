@@ -176,20 +176,38 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 static inline ino_t ceph_ino_to_ino(u64 cephino)
 {
 	ino_t ino = (ino_t)cephino;
-	if (sizeof(ino_t) < sizeof(u64))
-		ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+#if BITS_PER_LONG == 32
+	ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+#endif
+
 	return ino;
 }
+
 static inline void ceph_set_ino(struct inode *inode, __u64 ino)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	ci->i_ceph_ino = ino;
 	inode->i_ino = ceph_ino_to_ino(ino);
 }
+
+static inline int ceph_set_ino_cb(struct inode *inode, void *data)
+{
+	ceph_set_ino(inode, *(__u64 *)data);
+
+	return 0;
+}
+
 static inline u64 ceph_ino(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	return ci->i_ceph_ino;
+}
+
+static inline int ceph_ino_compare(struct inode *inode, void *data)
+{
+	__u64 ino = *(__u64 *)data;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	return (ci->i_ceph_ino == ino);
 }
 
 /*

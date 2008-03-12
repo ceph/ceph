@@ -18,18 +18,25 @@ const struct inode_operations ceph_symlink_iops;
 int ceph_get_inode(struct super_block *sb, __u64 ino, struct inode **pinode)
 {
 	struct ceph_inode_info *ci;
+	ino_t inot;
 
 	BUG_ON(pinode == NULL);
 
+	inot = ceph_ino_to_ino(ino);
+#if BITS_PER_LONG == 64
 	*pinode = iget_locked(sb, ino);
+#else
+	*pinode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb, &ino);
+#endif
 	if (*pinode == NULL) 
 		return -ENOMEM;
 	if ((*pinode)->i_state & I_NEW)
 		unlock_new_inode(*pinode);
 
 	ci = ceph_inode(*pinode);
+#if BITS_PER_LONG == 64
 	ceph_set_ino(*pinode, ino);
-
+#endif
 	ci->i_hashval = (*pinode)->i_ino;
 
 	dout(30, "get_inode on %lu=%llx got %p\n", (*pinode)->i_ino, ino, *pinode);
@@ -429,6 +436,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		if (wanted == 0) {
 			dout(10, "wanted=0, reminding mds\n");
 			grant->wanted = cpu_to_le32(0);
+			spin_unlock(&inode->i_lock);
 			return 1; /* ack */
 		}
 		/* hrm */

@@ -1241,15 +1241,20 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 
 	/* lookup ino */
 	inot = ceph_ino_to_ino(ino);
-	inode = ilookup(sb, inot);
+#if BITS_PER_LONG == 64
+	inode = ilookup(sb, ino);
+#else
+	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
+#endif
 	dout(20, "op is %d, ino %llx %p\n", op, ino, inode);
 
-	if (inode && ceph_ino(inode) != inot) {
+	if (inode && ceph_ino(inode) != ino) {
 		BUG_ON(sizeof(ino_t) >= sizeof(u64));
 		dout(10, "UH OH, lame ceph ino %llx -> %lu ino_t hash collided?"
 		     "  inode is %llx\n", ino, inot, ceph_ino(inode));
 		inode = 0;
 	}
+
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
