@@ -57,7 +57,7 @@ int main(int argc, const char **argv)
   // osd specific args
   const char *dev = 0;
   int whoami = -1;
-  bool mkfs;
+  bool mkfs = 0;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--mkfs_for_osd") == 0) {
       mkfs = 1; 
