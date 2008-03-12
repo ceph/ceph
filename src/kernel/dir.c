@@ -280,12 +280,15 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	dget(dentry);
+	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	ceph_mdsc_put_request(req);
-	if (err != -ENOENT)
-		dput(dentry);
+	ceph_mdsc_put_request(req);  /* will dput(dentry) */
+	if (err == -ENOENT) {
+		ceph_touch_dentry(dentry);
+		d_add(dentry, NULL);
+		err = 0;
+	}
 	dout(20, "request_lookup result=%d\n", err);
 	return err;
 }

@@ -216,10 +216,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			}
 		}
 		if (!rinfo->trace_in[i].in) {
-			dout(10, "fill_trace enoent\n");
+			dout(10, "fill_trace has dentry but no inode\n");
 			err = -ENOENT;
-			d_delete(dn);
-			dn = NULL;
+			d_add(dn, NULL);
+			ceph_touch_dentry(dn);
 			break;
 		}
 
