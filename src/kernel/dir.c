@@ -284,7 +284,8 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	dput(dentry);
+	if (err != -ENOENT)
+		dput(dentry);
 	dout(20, "request_lookup result=%d\n", err);
 	return err;
 }
