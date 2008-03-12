@@ -377,6 +377,7 @@ private:
   void handle_sub_op_reply(class MOSDSubOpReply *m);
 
   void force_remount();
+
 };
 
 #endif

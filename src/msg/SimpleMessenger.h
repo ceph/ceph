@@ -130,6 +130,8 @@ private:
     void fault(bool silent=false);
     void fail();
 
+    void was_session_reset();
+
     void report_failures();
 
     // threads
