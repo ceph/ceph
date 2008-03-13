@@ -82,8 +82,8 @@ int main(int argc, const char **argv)
   const char *fn = 0;
   bool print = false;
   bool createsimple = false;
-  const char *monmapfn;
-  int num_osd;
+  const char *monmapfn = 0;
+  int num_osd = 0;
   int pg_bits = g_conf.osd_pg_bits;
   bool clobber = false;
   bool modified = false;
