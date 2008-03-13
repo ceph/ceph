@@ -15,8 +15,8 @@ mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a
-crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcommon.a libcrush.a
+#crushtool_SOURCES = crushtool.cc
+#crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
@@ -26,7 +26,11 @@ cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
-cosd_LDADD = libosd.a libebofs.a libcrush.a libcommon.a
+cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
+dupstore_SOURCES = dupstore.cc config.cc
+dupstore_LDADD = libos.a libebofs.a libcommon.a
+streamtest_SOURCES = streamtest.cc
+streamtest_LDADD = libos.a libebofs.a libcommon.a
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
@@ -42,21 +46,37 @@ endif
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
 fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
-fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libebofs.a \
+fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a libebofs.a \
 	libclient.a libosdc.a libcrush.a libcommon.a
 
 # debug targets
 fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
-fakesyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
+fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a libebofs.a \
 	libclient.a libosdc.a libcrush.a libcommon.a
 
 #newsyn_SOURCES = newsyn.cc msg/SimpleMessenger.cc
 #newsyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
 #	libclient.a libosdc.a libcrush.a libcommon.a
 
-# tester tools
-streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libosd.a libebofs.a libcommon.a
+# crushwrapper
+SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
+crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
+	${SWIG} -perl5 -c++ -shadow -outdir . $<
+
+crush/mapper.fpicco: crush/mapper.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
+
+crush/builder.fpicco: crush/builder.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
+
+crush/crush.fpicco: crush/crush.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
+
+CRUSH_FILES = crush/mapper.fpicco crush/builder.fpicco crush/crush.fpicco
+libCrushWrapper.so: crush/CrushWrapper_wrap.cxx ${CRUSH_FILES}
+	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC crush/CrushWrapper_wrap.cxx config.cc ${CRUSH_FILES} -o $@
+
+BUILT_SOURCES = libCrushWrapper.so
 
 ##
 INCLUDES = 
@@ -69,16 +89,24 @@ AM_LDFLAGS =
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	cmonctl \
-	mkmonfs monmaptool osdmaptool crushtool \
+	mkmonfs monmaptool osdmaptool \
 	fakesyn \
-	streamtest \
+	streamtest dupstore \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
-	libmon.a libmds.a libosdc.a libosd.a libebofs.a libclient.a
+	libmon.a libmds.a libosdc.a libosd.a libclient.a \
+	libos.a libebofs.a
 
 # extra bits
-EXTRA_DIST = start.sh stop.sh
+EXTRA_DIST = start.sh stop.sh crushtool
+
+# cleaning
+clean-local:
+	-rm crush/*.fpicco
+	-rm crush/*.cxx
+	-rm libCrushWrapper.so
+	-rm CrushWrapper.pm
 
 # libs
 libcommon_a_SOURCES = \
@@ -108,13 +136,6 @@ libmon_a_SOURCES = \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
 
-libebofs_a_SOURCES = \
-	ebofs/BlockDevice.cc \
-	ebofs/BufferCache.cc \
-	ebofs/Ebofs.cc \
-	ebofs/Allocator.cc \
-	osd/FileJournal.cc
-
 libmds_a_SOURCES = \
 	mds/MDS.cc \
 	mds/journal.cc \
@@ -133,13 +154,21 @@ libmds_a_SOURCES = \
 	mds/SessionMap.cc \
 	mds/MDLog.cc
 
+libebofs_a_SOURCES = \
+	ebofs/BlockDevice.cc \
+	ebofs/BufferCache.cc \
+	ebofs/Ebofs.cc \
+	ebofs/Allocator.cc
+libos_a_SOURCES = \
+	osd/FileJournal.cc \
+	osd/FakeStore.cc \
+	osd/JournalingObjectStore.cc
+
 libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/RAID4PG.cc \
 	osd/Ager.cc \
-	osd/FakeStore.cc \
-	osd/JournalingObjectStore.cc \
 	osd/OSD.cc
 
 libosdc_a_SOURCES = \
@@ -181,6 +210,7 @@ noinst_HEADERS = \
 	crush/mapper.h\
 	crush/types.h\
 	crush/CrushWrapper.h\
+	crush/CrushWrapper.i\
 	crush/crush.h\
 	ebofs/Table.h\
 	ebofs/csum.h\
