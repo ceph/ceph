@@ -1,9 +1,4 @@
-gsoc?
-- cas
-- libbtrfs objectstore
-- osdmap/crush gui
-
-
+mkfs
 - online changes to pg_num
 - initialization of pg_num during non-simple mkfs...
 
@@ -22,8 +17,7 @@ kernel client
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
 - msgr layer
-  - callbacks for 'remote reset'
-  - idle state, to keep connect_seq around after a disconnect
+  - standby state, to keep connect_seq around after a disconnect
 - fix 32bit inode handling
   - see nfs_fhget, nfs_find_actor as reference for allowing multiple inodes with the same i_ino
 - audit locking
