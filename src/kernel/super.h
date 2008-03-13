@@ -346,10 +346,19 @@ extern int ceph_inode_revalidate(struct dentry *dentry);
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
+extern struct dentry_operations ceph_dentry_ops;
+
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
 extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
-extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry);
-extern void ceph_touch_dentry(struct dentry *dentry);
+extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry);
+
+static inline void ceph_init_dentry(struct dentry *dentry) {
+	dentry->d_op = &ceph_dentry_ops;
+}
+static inline void ceph_touch_dentry(struct dentry *dentry) {
+	dentry->d_time = jiffies;
+	BUG_ON(dentry->d_op != &ceph_dentry_ops);
+}
 
 /* proc.c */
 extern void ceph_fs_proc_init(void);

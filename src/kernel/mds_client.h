@@ -23,7 +23,7 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info {
 	struct ceph_mds_reply_head    *head;
 
-	int                           trace_nr; 
+	int                           trace_nr;
 	struct ceph_mds_reply_info_in *trace_in;
 	struct ceph_mds_reply_dirfrag **trace_dir;
 	char                          **trace_dname;
@@ -64,7 +64,7 @@ struct ceph_mds_session {
 struct ceph_mds_request {
 	__u64             r_tid;
 	struct ceph_msg * r_request;  /* original request */
-	struct ceph_msg * r_reply;   
+	struct ceph_msg * r_reply;
 	struct ceph_mds_reply_info r_reply_info;
 	struct inode    * r_last_inode;
 	struct dentry   * r_last_dentry;
@@ -72,17 +72,17 @@ struct ceph_mds_request {
 	struct ceph_inode_cap * r_cap;
 	struct ceph_mds_session * r_session;
 	struct ceph_mds_session * r_mds[2];
-        int               r_num_mds;    /* items in r_mds */
+	int               r_num_mds;    /* items in r_mds */
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
-        int               r_resend_mds; /* mds to resend to next, if any*/
+	int               r_resend_mds; /* mds to resend to next, if any*/
 
 	atomic_t          r_ref;
 	struct completion r_completion;
 };
 
-/* 
+/*
  * mds client state
  */
 struct ceph_mds_client {
@@ -104,27 +104,27 @@ struct ceph_mds_client {
 
 extern const char* ceph_mds_op_name(int op);
 
-extern void ceph_mdsc_init(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
-extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
 				 struct ceph_msg *msg);
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
-extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
-extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
 
-extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 				      struct ceph_msg *msg);
 struct ceph_inode_info;
 extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
 extern struct ceph_mds_request *
-ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, 
-			 ceph_ino_t ino1, const char *path1, 
+ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
+			 ceph_ino_t ino1, const char *path1,
 			 ceph_ino_t ino2, const char *path2);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);

@@ -116,6 +116,7 @@ static int prepopulate_dir(struct dentry *parent,
 				dout(30, "d_alloc badness\n");
 				return -1;
 			}
+			ceph_init_dentry(dn);
 		}
 
 		if (dn->d_inode == NULL) {
@@ -261,7 +262,7 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
+int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -270,7 +271,7 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	struct ceph_mds_request *req;
 	int err;
 
-	dout(10, "request_lookup %p\n", dentry);
+	dout(10, "do_lookup %p\n", dentry);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
@@ -285,18 +286,13 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	if (err == -ENOENT) {
+		ceph_init_dentry(dentry);
 		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 		err = 0;
 	}
-	dout(20, "request_lookup result=%d\n", err);
+	dout(20, "do_lookup result=%d\n", err);
 	return err;
-}
-
-void ceph_touch_dentry(struct dentry *dentry)
-{
-	dentry->d_time = jiffies;
-	dentry->d_op = &ceph_dentry_ops;
 }
 
 static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
@@ -315,7 +311,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	}
 	*/
 
-	err = ceph_request_lookup(dir->i_sb, dentry);
+	err = ceph_do_lookup(dir->i_sb, dentry);
 	if (err == -ENOENT)
 		d_add(dentry, NULL);
 	else if (err < 0)

@@ -220,6 +220,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 					break;
 				}
 			}
+			ceph_init_dentry(dn);
 		}
 		ininfo = rinfo->trace_in[i].in;
 		if (!ininfo) {
@@ -719,7 +720,7 @@ int ceph_inode_revalidate(struct dentry *dentry)
 		return 0;
 	}
 	dout(10, "revalidate %p is old\n", dentry);
-	return ceph_request_lookup(dentry->d_inode->i_sb, dentry);
+	return ceph_do_lookup(dentry->d_inode->i_sb, dentry);
 }
 
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
