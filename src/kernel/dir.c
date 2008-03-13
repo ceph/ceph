@@ -270,7 +270,7 @@ int ceph_request_lookup(struct super_block *sb, struct dentry *dentry)
 	struct ceph_mds_request *req;
 	int err;
 
-	/* regular lookup */
+	dout(10, "request_lookup %p\n", dentry);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);

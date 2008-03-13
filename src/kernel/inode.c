@@ -206,6 +206,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			    req->r_last_dentry->d_parent == parent) {
 				dout(10, "fill_trace using dentry provided in req\n");
 				dn = req->r_last_dentry;
+				req->r_last_dentry = NULL;
 			} else {
 				dout(10, "fill_trace calling d_alloc\n");
 				dn = d_alloc(parent, &dname);
@@ -257,16 +258,14 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		dput(parent);
 		parent = NULL;
 	}
-
 	if (parent)
 		dput(parent);
 
+	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
 	if (req->r_last_dentry)
 		dput(req->r_last_dentry);
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
-
-	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
 	req->r_last_dentry = dn;
 	req->r_last_inode = in;
 	igrab(in);
@@ -703,16 +702,17 @@ int ceph_inode_revalidate(struct dentry *dentry)
 {
 	struct ceph_inode_info *ci;
 
-	if (dentry->d_inode == NULL)
+	if (dentry->d_inode == NULL) {
+		dout(10, "revalidate %p has no inode, -ENOENT\n", dentry);
 		return -ENOENT;
-
+	}
 	ci = ceph_inode(dentry->d_inode);
-	if (!ci)
-		return -ENOENT;
 
-	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ))
+	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ)) {
+		dout(10, "revalidate %p still valid\n", dentry);
 		return 0;
-
+	}
+	dout(10, "revalidate %p is old\n", dentry);
 	return ceph_request_lookup(dentry->d_inode->i_sb, dentry);
 }
 
