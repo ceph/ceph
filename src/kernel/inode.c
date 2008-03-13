@@ -211,7 +211,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				dn = d_alloc(parent, &dname);
 				if (!dn) {
 					derr(0, "d_alloc enomem\n");
-					return -ENOMEM;
+					err = -ENOMEM;
+					break;
 				}
 			}
 		}
@@ -229,11 +230,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
+				err = -ENOMEM;
 				d_delete(dn);
 				dn = NULL;
 				break;
 			}
-			if (ceph_fill_inode(in, rinfo->trace_in[i].in) < 0) {
+			if ((err = ceph_fill_inode(in, rinfo->trace_in[i].in)) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				iput(in);
 				d_delete(dn);
@@ -247,13 +249,17 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			     dn, ceph_ino(in), i, rinfo->trace_nr);
 		} else {
 			in = dn->d_inode;
-			if (ceph_fill_inode(in, rinfo->trace_in[i].in) < 0) {
+			if ((err = ceph_fill_inode(in, rinfo->trace_in[i].in)) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				break;
 			}
 		}
 		dput(parent);
+		parent = NULL;
 	}
+
+	if (parent)
+		dput(parent);
 
 	if (req->r_last_dentry)
 		dput(req->r_last_dentry);
