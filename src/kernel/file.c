@@ -78,6 +78,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	int err;
+	int flags;
 
 	dout(5, "ceph_open inode %p ino %llx file %p\n", inode,
 	     ceph_ino(inode), file);
@@ -92,14 +93,17 @@ int ceph_open(struct inode *inode, struct file *file)
 		cap = ceph_find_cap(inode, 0);
 	*/
 
+	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
+	flags = file->f_flags & ~(O_CREAT|O_EXCL);
+
 	dentry = list_entry(inode->i_dentry.next, struct dentry,
 			    d_alias);
-	req = prepare_open_request(inode->i_sb, dentry, file->f_flags, 0);
+	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err == 0) 
-		err = ceph_open_init_private_data(inode, file, file->f_flags);
+		err = ceph_open_init_private_data(inode, file, flags);
 	ceph_mdsc_put_request(req);
 	dout(5, "ceph_open result=%d on %llx\n", err, ceph_ino(inode));
 	return err;
