@@ -61,7 +61,7 @@ streamtest_LDADD = libosd.a libebofs.a libcommon.a
 # crushwrapper
 SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
 crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
-	${SWIG} -perl5 -c++ -shadow $<
+	${SWIG} -perl5 -c++ -shadow -outdir . $<
 
 crush/mapper.fpicco: crush/mapper.c
 	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
@@ -73,10 +73,10 @@ crush/crush.fpicco: crush/crush.c
 	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
 
 CRUSH_FILES = crush/mapper.fpicco crush/builder.fpicco crush/crush.fpicco
-libcrushwrapper.so: crush/CrushWrapper_wrap.cxx ${CRUSH_FILES}
-	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC crush/CrushWrapper_wrap.cxx config.cc ${CRUSH_FILES} -o libcrushwrapper.so
+libCrushWrapper.so: crush/CrushWrapper_wrap.cxx ${CRUSH_FILES}
+	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC crush/CrushWrapper_wrap.cxx config.cc ${CRUSH_FILES} -o $@
 
-BUILT_SOURCES = libcrushwrapper.so
+BUILT_SOURCES = libCrushWrapper.so
 
 ##
 INCLUDES = 
@@ -89,7 +89,7 @@ AM_LDFLAGS =
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	cmonctl \
-	mkmonfs monmaptool osdmaptool crushtool \
+	mkmonfs monmaptool osdmaptool \
 	fakesyn \
 	streamtest \
 	$(FUSEBIN) $(NEWSYN)

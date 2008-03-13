@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 
-use lib 'crush';
 use CrushWrapper;
 use Config::General;
 use Tie::IxHash;
