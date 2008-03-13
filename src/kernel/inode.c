@@ -537,6 +537,8 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 {
 	int ret = 0;
 	int have;
+	dout(10, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
+	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
 	have = ceph_caps_issued(ci);
 	if ((have & need) == need) {
@@ -545,6 +547,8 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 		ret = 1;
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
+	dout(10, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
+	     ret, *got);
 	return ret;
 }
 

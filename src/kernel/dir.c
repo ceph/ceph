@@ -304,12 +304,10 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
 	/* open(|create) intent? */
-	/*
 	if (nd->flags & LOOKUP_OPEN) {
 		err = ceph_lookup_open(dir, dentry, nd);
 		return ERR_PTR(err);
 	}
-	*/
 
 	err = ceph_do_lookup(dir->i_sb, dentry);
 	if (err == -ENOENT)
