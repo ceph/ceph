@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 
+use lib 'crush';
 use CrushWrapper;
 use Config::General;
 use Tie::IxHash;
@@ -18,7 +19,9 @@ my $alg_types = {
 
 $wrap->create();
 
-%conf = Config::General::ParseConfig( -ConfigFile => "sample.txt", -Tie => "Tie::IxHash", -MergeDuplicateBlocks => 1 );
+%conf = Config::General::ParseConfig( -ConfigFile => "crush/sample.txt", 
+				      -Tie => "Tie::IxHash",
+				      -MergeDuplicateBlocks => 1 );
 
 my $arr = \%conf;
 print Dumper $arr;

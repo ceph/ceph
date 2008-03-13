@@ -15,8 +15,8 @@ mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a
-crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcommon.a libcrush.a
+#crushtool_SOURCES = crushtool.cc
+#crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
@@ -98,7 +98,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libebofs.a libclient.a
 
 # extra bits
-EXTRA_DIST = start.sh stop.sh
+EXTRA_DIST = start.sh stop.sh crushtool
 
 # libs
 libcommon_a_SOURCES = \
