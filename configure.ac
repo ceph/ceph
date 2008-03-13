@@ -27,11 +27,8 @@ AC_PROG_RANLIB
 AC_PROG_MAKE_SET
 
 # swig
-#AM_PROG_CC_C_O
-#AC_DISABLE_STATIC
-AC_PROG_LIBTOOL
 AX_WITH_PERL
-AC_PROG_SWIG
+CEPH_CHECK_SWIG
 SWIG_ENABLE_CXX
 
 
@@ -117,22 +114,22 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_CHOWN
-AC_FUNC_CLOSEDIR_VOID
-AC_FUNC_ERROR_AT_LINE
-AC_FUNC_FORK
-AC_PROG_GCC_TRADITIONAL
-AC_FUNC_LSTAT
-AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+#AC_FUNC_CHOWN
+#AC_FUNC_CLOSEDIR_VOID
+#AC_FUNC_ERROR_AT_LINE
+#AC_FUNC_FORK
+#AC_PROG_GCC_TRADITIONAL
+#AC_FUNC_LSTAT
+#AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 #AC_FUNC_MALLOC   # this causes annoying rpl_malloc error on some machines; skip it
-AC_FUNC_MEMCMP
-AC_FUNC_MMAP
-AC_FUNC_REALLOC
-AC_FUNC_SELECT_ARGTYPES
-AC_TYPE_SIGNAL
-AC_FUNC_STAT
-AC_FUNC_UTIME_NULL
-AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
+#AC_FUNC_MEMCMP
+#AC_FUNC_MMAP
+#AC_FUNC_REALLOC
+#AC_FUNC_SELECT_ARGTYPES
+#AC_TYPE_SIGNAL
+#AC_FUNC_STAT
+#AC_FUNC_UTIME_NULL
+#AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
 
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile

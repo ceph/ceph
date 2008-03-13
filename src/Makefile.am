@@ -59,23 +59,24 @@ streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libosd.a libebofs.a libcommon.a
 
 # crushwrapper
-lib_LTLIBRARIES = libcrushwrapper.la
-libcrushwrapper_la_SOURCES = crush/CrushWrapper.h config.cc crush/mapper.c crush/builder.c crush/crush.c
-libcrushwrapper_la_CFLAGS = ${AM_CFLAGS}
-libcrushwrapper_la_CXXFLAGS = ${AM_CXXFLAGS}
-
-BUILT_SOURCES = crush/CrushWrapper_wrap.cxx
-
 SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
 crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
 	${SWIG} -perl5 -c++ -shadow $<
 
-#crushtool_PERL = crushtool.pl
-_crushwrapper_la_SOURCES = crush/CrushWrapper_wrap.cxx ${SWIG_FILES}
-_crushwrapper_la_CPPFLAGS = ${SWIG_PERL_CPPFLAGS} -I/usr/lib/perl/5.8/CORE -dno-strict-aliasing -pipe
-_crushwrapper_la_LDFLAGS = -module
-#_crushwrapper_la_LIBADD = lib
+crush/mapper.fpicco: crush/mapper.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
 
+crush/builder.fpicco: crush/builder.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
+
+crush/crush.fpicco: crush/crush.c
+	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
+
+CRUSH_FILES = crush/mapper.fpicco crush/builder.fpicco crush/crush.fpicco
+libcrushwrapper.so: crush/CrushWrapper_wrap.cxx ${CRUSH_FILES}
+	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC crush/CrushWrapper_wrap.cxx config.cc ${CRUSH_FILES} -o libcrushwrapper.so
+
+BUILT_SOURCES = libcrushwrapper.so
 
 ##
 INCLUDES = 
@@ -95,8 +96,6 @@ bin_PROGRAMS = \
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libebofs.a libclient.a
-
-noinst_LTLIBRARIES = _crushwrapper.la
 
 # extra bits
 EXTRA_DIST = start.sh stop.sh
