@@ -252,8 +252,13 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				break;
 			}
 		}
+		dput(parent);
 	}
-	dput(parent);
+
+	if (req->r_last_dentry)
+		dput(req->r_last_dentry);
+	if (req->r_last_inode)
+		iput(req->r_last_inode);
 
 	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
 	req->r_last_dentry = dn;
