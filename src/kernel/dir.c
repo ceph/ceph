@@ -46,8 +46,8 @@ retry:
 		} else {
 			strncpy(path + pos, temp->d_name.name,
 				temp->d_name.len);
-			dout(30, "build_path_dentry path+%d: '%s'\n",
-			     pos, path + pos);
+			dout(30, "build_path_dentry path+%d: '%.*s'\n",
+			     pos, temp->d_name.len, path + pos);
 			if (pos)
 				path[--pos] = '/';
 		}
@@ -69,8 +69,8 @@ retry:
 		goto retry;
 	}
 
-	dout(10, "build_path_dentry on %p build '%s' len %d\n",
-	     dentry, path, len);
+	dout(10, "build_path_dentry on %p build '%.*s'\n",
+	     dentry, len, path);
 	*plen = len;
 	return path;
 }
@@ -107,8 +107,8 @@ static int prepopulate_dir(struct dentry *parent,
 		dname.hash = full_name_hash(dname.name, dname.len);
 
 		dn = d_lookup(parent, &dname);
-		dout(30, "calling d_lookup on parent=%p name=%s"
-		     " returned %p\n", parent, dname.name, dn);
+		dout(30, "calling d_lookup on parent=%p name=%.*s"
+		     " returned %p\n", parent, dname.len, dname.name, dn);
 
 		if (!dn) {
 			dn = d_alloc(parent, &dname);
@@ -304,8 +304,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 {
 	int err;
 
-	dout(5, "dir_lookup in dir %p dentry %p '%s'\n",
-	     dir, dentry, dentry->d_name.name);
+	dout(5, "dir_lookup in dir %p dentry %p '%.*s'\n",
+	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
 	/* open(|create) intent? */
 	/*
@@ -496,8 +496,8 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	struct ceph_mds_request_head *rhead;
 	int err;
 
-	dout(5, "create in dir %p dentry %p name '%s' flags %d\n",
-	     dir, dentry, dentry->d_name.name, mode);
+	dout(5, "create in dir %p dentry %p name '%.*s' flags %d\n",
+	     dir, dentry, dentry->d_name.len, dentry->d_name.name, mode);
 	pathbase = ceph_ino(dir->i_sb->s_root->d_inode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))

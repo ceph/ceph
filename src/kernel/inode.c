@@ -161,6 +161,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	struct dentry *dn = sb->s_root;
 	struct dentry *parent = NULL;
 	struct inode *in;
+	struct ceph_mds_reply_inode *ininfo;
 	int i = 0;
 
 	if (rinfo->trace_nr == 0) {
@@ -172,8 +173,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		in = dn->d_inode;
 	} else {
 		/* first reply (i.e. mount) */
-		BUG_ON(i);
-		err = ceph_get_inode(sb, le64_to_cpu(rinfo->trace_in[0].in->ino), &in);
+		err = ceph_get_inode(sb, 
+				     le64_to_cpu(rinfo->trace_in[0].in->ino),
+				     &in);
 		if (err < 0) 
 			return err;
 		dn = d_alloc_root(in);
@@ -192,19 +194,21 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 
 	dget(dn);
 	for (i = 1; i < rinfo->trace_nr; i++) {
-		dout(10, "fill_trace i=%d/%d dn %p in %p dname '%s'\n", i, rinfo->trace_nr,
+		dout(10, "fill_trace i=%d/%d dn %p in %p dname '%s'\n", 
+		     i, rinfo->trace_nr,
 		     dn, dn->d_inode, rinfo->trace_dname[i]);
 		parent = dn;
 		dname.name = rinfo->trace_dname[i];
 		dname.len = rinfo->trace_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
-		dout(10, "fill_trace calling d_lookup on '%s'\n", dname.name);
+		dout(10, "fill_trace calling d_lookup on '%.*s'\n", 
+		     (int)dname.len, dname.name);
 		dn = d_lookup(parent, &dname);
 
 		if (!dn) {
 			if (req->r_last_dentry && 
 			    req->r_last_dentry->d_parent == parent) {
-				dout(10, "fill_trace using dentry provided in req\n");
+				dout(10, "fill_trace using provided dentry\n");
 				dn = req->r_last_dentry;
 				req->r_last_dentry = NULL;
 			} else {
@@ -217,7 +221,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				}
 			}
 		}
-		if (!rinfo->trace_in[i].in) {
+		ininfo = rinfo->trace_in[i].in;
+		if (!ininfo) {
 			dout(10, "fill_trace has dentry but no inode\n");
 			err = -ENOENT;
 			d_add(dn, NULL);
@@ -226,7 +231,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		}
 
 		if ((!dn->d_inode) ||
-		    (ceph_ino(dn->d_inode) != rinfo->trace_in[i].in->ino)) {
+		    (ceph_ino(dn->d_inode) != ininfo->ino)) {
 			dout(10, "fill_trace new_inode\n");
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
@@ -236,7 +241,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				dn = NULL;
 				break;
 			}
-			if ((err = ceph_fill_inode(in, rinfo->trace_in[i].in)) < 0) {
+			if ((err = ceph_fill_inode(in, ininfo)) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				iput(in);
 				d_delete(dn);
@@ -246,11 +251,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			ceph_touch_dentry(dn);
 			dout(10, "fill_trace d_add\n");
 			d_add(dn, in);
-			dout(10, "ceph_fill_trace added dentry %p inode %llx %d/%d\n",
+			dout(10, "ceph_fill_trace added dentry %p"
+			     " inode %llx %d/%d\n",
 			     dn, ceph_ino(in), i, rinfo->trace_nr);
 		} else {
 			in = dn->d_inode;
-			if ((err = ceph_fill_inode(in, rinfo->trace_in[i].in)) < 0) {
+			if ((err = ceph_fill_inode(in, ininfo)) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
 				break;
 			}
