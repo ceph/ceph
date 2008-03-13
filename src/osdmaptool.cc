@@ -30,6 +30,8 @@ using namespace std;
 void usage(const char *me)
 {
   cout << me << " usage: [--print] [--createsimple <monmapfile> <numosd> [--clobber] [--pgbits <bitsperosd>]] <mapfilename>" << std::endl;
+  cout << me << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
+  cout << me << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   exit(1);
 }
 
@@ -87,6 +89,8 @@ int main(int argc, const char **argv)
   int pg_bits = g_conf.osd_pg_bits;
   bool clobber = false;
   bool modified = false;
+  const char *export_crush = 0;
+  const char *import_crush = 0;
   list<entity_addr_t> add, rm;
 
   for (unsigned i=0; i<args.size(); i++) {
@@ -100,13 +104,19 @@ int main(int argc, const char **argv)
       clobber = true;
     else if (strcmp(args[i], "--pgbits") == 0)
       pg_bits = atoi(args[++i]);
+    else if (strcmp(args[i], "--export-crush") == 0)
+      export_crush = args[++i];
+    else if (strcmp(args[i], "--import-crush") == 0)
+      import_crush = args[++i];
     else if (!fn)
       fn = args[i];
     else 
       usage(me);
   }
-  if (!fn)
+  if (!fn) {
+    cerr << me << ": must specify osdmap filename" << std::endl;
     usage(me);
+  }
   
   OSDMap osdmap;
   bufferlist bl;
@@ -125,9 +135,6 @@ int main(int argc, const char **argv)
     return -1;
   }
 
-  if (!print && !modified)
-    usage(me);
-
   if (createsimple) {
     MonMap monmap;
     int r = monmap.read(monmapfn);
@@ -139,9 +146,40 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
+  if (import_crush) {
+    bufferlist cbl;
+    r = read_file(import_crush, cbl);
+    if (r < 0) {
+      cerr << me << ": error reading crush map from " << import_crush << std::endl;
+      exit(1);
+    }
+    // validate
+    CrushWrapper cw;
+    //cw._decode(cbl,    FIXME
+    bufferlist::iterator p = cbl.begin();
+    osdmap.crush._decode(p);
+    cout << me << ": imported crush map from " << import_crush << std::endl;
+    modified = true;
+  }
+
+  if (export_crush) {
+    bufferlist cbl;
+    osdmap.crush._encode(cbl);
+    r = write_file(export_crush, cbl);
+    if (r < 0) {
+      cerr << me << ": error writing crush map to " << import_crush << std::endl;
+      exit(1);
+    }
+    cout << me << ": exported crush map to " << export_crush << std::endl;
+  }  
+
+  if (!print && !modified) {
+    cerr << me << ": no action specified?" << std::endl;
+    usage(me);
+  }
   if (modified)
     osdmap.inc_epoch();
-  
+
   if (print) 
     printmap(me, &osdmap);
 
