@@ -194,16 +194,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 
 	dget(dn);
 	for (i = 1; i < rinfo->trace_nr; i++) {
-		dout(10, "fill_trace i=%d/%d dn %p in %p dname '%s'\n", 
+		dout(10, "fill_trace i=%d/%d dn %p in %p\n", 
 		     i, rinfo->trace_nr,
-		     dn, dn->d_inode, rinfo->trace_dname[i]);
+		     dn, dn->d_inode);
 		parent = dn;
 		dname.name = rinfo->trace_dname[i];
 		dname.len = rinfo->trace_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
-		dout(10, "fill_trace calling d_lookup on '%.*s'\n", 
-		     (int)dname.len, dname.name);
 		dn = d_lookup(parent, &dname);
+		dout(10, "fill_trace d_lookup of '%.*s' got %p\n", 
+		     (int)dname.len, dname.name, dn);
 
 		if (!dn) {
 			if (req->r_last_dentry && 
