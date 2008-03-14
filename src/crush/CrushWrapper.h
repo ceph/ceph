@@ -144,6 +144,26 @@ public:
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
   }
+  int get_rule_mask_pool(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.pool;
+  }
+  int get_rule_mask_type(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.type;
+  }
+  int get_rule_mask_min_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.min_size;
+  }
+  int get_rule_mask_max_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.max_size;
+  }
   int get_rule_op(unsigned ruleno, unsigned step) {
     crush_rule_step *s = get_rule_step(ruleno, step);
     if (IS_ERR(s)) return PTR_ERR(s);

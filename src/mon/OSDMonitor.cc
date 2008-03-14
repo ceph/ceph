@@ -473,13 +473,6 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_offload[from] = CEPH_OSD_IN;
     
     osd_weight[from] = m->sb.weight;
-    
-    if (osdmap.pg_num == 0) {
-      // set a conservative initial pg_num
-      pending_inc.new_pg_num = osdmap.get_max_osd() << g_conf.osd_pg_bits;
-      pending_inc.new_localized_pg_num = 4;  // per osd
-      dout(1) << "prepare_boot setting initial pg_num to " << pending_inc.new_pg_num << dendl;
-    }
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));

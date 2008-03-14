@@ -227,14 +227,14 @@ struct osd_stat_t {
  */
 struct pg_stat_t {
   eversion_t reported;
-  
+  epoch_t created;
   int32_t state;
   int64_t num_bytes;    // in bytes
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
   pg_stat_t() : state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
-};
+} __attribute__ ((packed));
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 

@@ -297,6 +297,17 @@ private:
     }
   };
 
+  // -- pg creation --
+  struct pg_create_info {
+    epoch_t  first_epoch;
+    set<int> prior_set;
+    set<int> dne_set;    
+  };
+  map<pg_t,pg_create_info> creating_pg;
+
+  void handle_pg_create(class MOSDPGCreate *m);
+
+
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
@@ -326,6 +337,7 @@ private:
     tid_lock.Unlock();
     return t;
   }
+
 
 
   // -- generic pg recovery --

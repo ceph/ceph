@@ -661,7 +661,7 @@ void PG::peer(ObjectStore::Transaction& t,
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
-  } else if (info.pgid.u.pg.ps < osd->osdmap->get_prior_pg_num()) {
+  } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
     state_set(STATE_CRASHED);
   }    

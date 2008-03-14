@@ -248,3 +248,67 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
   delete stats;
   return true;
 }
+
+
+
+
+// ------------------------
+
+struct RetryRegisterNewPgs : public Context {
+  PGMonitor *pgmon;
+  RetryRegisterNewPgs(PGMonitor *p) : pgmon(p) {}
+  void finish(int r) {
+    pgmon->register_new_pgs();
+  }
+};
+
+void PGMonitor::register_new_pgs()
+{
+  if (!paxos->is_readable()) {
+    dout(10) << "register_new_pgs -- pgmap not readable, waiting" << dendl;
+    paxos->wait_for_readable(new RetryRegisterNewPgs(this));
+    return;
+  }
+  if (!mon->osdmon->paxos->is_readable()) {
+    dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
+    mon->osdmon->paxos->wait_for_readable(new RetryRegisterNewPgs(this));
+    return;
+  }
+
+  // iterate over crush mapspace
+  dout(10) << "register_new_pgs scanning pgid space defined by crush rule masks" << dendl;
+
+  CrushWrapper *crush = &mon->osdmon->osdmap->crush;
+  int pg_num = mon->osdmon->osdmap->get_pg_num();
+  epoch_t epoch = mon->osdmap->osdmap->get_epoch();
+
+  for (int ruleno=0; ruleno<crush->get_max_rules(); ruleno++) {
+    if (crush->get_rule_len(ruleno) < 0) continue;
+    int pool = crush->get_rule_mask_pool(ruleno);
+    int type = crush->get_rule_mask_type(ruleno);
+    int minsize = crush->get_rule_mask_min_size(ruleno);
+    int maxsize = crush->get_rule_mask_max_size(ruleno);
+    for (int size = min_size; size <= max_size; size++) {
+      for (ps_t ps = 0; ps < pg_num; ps++) {
+	pg_t pgid(type, size, ps, pool, -1);
+	if (pg_stat.count(pgid)) {
+	  dout(20) << "register_new_pgs have " << pgid << dendl;
+	  continue;
+	}
+	dout(10) << "register_new_pgs will create " << pgid << dendl;
+	pg_stat[pgid].state = STATE_CREATING;
+	pg_stat[pgid].created = epoch;
+	stat_pg_add(pg_stat[pgid]);
+      }
+    }
+  } 
+  dout(10) << "register_new_pgs done" << dendl;
+}
+
+void PGMonitor::send_pg_creates()
+{
+  dout(10) << "send_pg_creates to " << creating_pgids.size() << " pgs" << dendl;
+
+
+
+}

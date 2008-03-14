@@ -30,6 +30,8 @@
 
 #include "crush/CrushWrapper.h"
 
+#include "include/interval_set.h"
+
 #include <vector>
 #include <list>
 #include <set>
@@ -85,6 +87,10 @@ public:
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
     
+    static const __u8 MKPG_START;
+    static const __u8 MKPG_FINISH;
+    __u8 mkpg;
+    
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
@@ -99,6 +105,7 @@ public:
       ::_encode(new_offload, bl);
       ::_encode(new_pg_swap_primary, bl);
       ::_encode(old_pg_swap_primary, bl);
+      ::_encode(mkpg, bl);
     }
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
@@ -114,9 +121,10 @@ public:
       ::_decode(new_offload, bl, off);
       ::_decode(new_pg_swap_primary, bl, off);
       ::_decode(old_pg_swap_primary, bl, off);
+      ::_decode(mkpg, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), new_pg_num(0), new_localized_pg_num(0) {
+    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), new_pg_num(0), new_localized_pg_num(0), mkpg(false) {
       fsid.major = fsid.minor = cpu_to_le64(0);
     }
   };
@@ -130,9 +138,8 @@ private:
   int32_t localized_pg_num;      // localized place group count
   int32_t localized_pg_num_mask; // ditto
 
-  // values from prior epoch, so we can create them
-  int32_t prior_pg_num;
-  int32_t prior_localized_pg_num;
+  // new pgs
+  bool creating_pgs;
 
   int32_t max_osd;
   vector<uint8_t>  osd_state;
@@ -148,7 +155,6 @@ private:
  public:
   OSDMap() : epoch(0), 
 	     pg_num(0), localized_pg_num(0),
-	     prior_pg_num(0), prior_localized_pg_num(0),
 	     max_osd(0) { 
     fsid.major = fsid.minor = cpu_to_le64(0);
     calc_pg_masks();
@@ -169,17 +175,15 @@ private:
   }
 
   int get_pg_num() const { return pg_num; }
-  int get_prior_pg_num() const { return prior_pg_num; }
   //void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
   int get_localized_pg_num() const { return localized_pg_num; }
-  int get_prior_localized_pg_num() const { return prior_localized_pg_num; }
 
   /* stamps etc */
   const utime_t& get_ctime() const { return ctime; }
   const utime_t& get_mtime() const { return mtime; }
 
-  bool is_mkpg() const { 
-    return (pg_num > prior_pg_num) || (localized_pg_num > prior_localized_pg_num);
+  bool is_creating_pgs() const { 
+    return creating_pgs
   }
 
   /***** cluster state *****/
@@ -285,9 +289,11 @@ private:
     epoch++;
     ctime = inc.ctime;
 
-    prior_pg_num = pg_num;
-    prior_localized_pg_num = localized_pg_num;
-      
+    if (inc.mkpg & Incremental::MKPG_START)
+      creating_pgs = true;
+    if (inc.mkpg & Incremental::MKPG_FINISH)
+      creating_pgs = false;
+
     // full map?
     if (inc.fullmap.length()) {
       decode(inc.fullmap);
@@ -300,12 +306,12 @@ private:
 
     // nope, incremental.
     if (inc.new_pg_num) {
+      assert(inc.new_pg_num >= pg_num);
       pg_num = inc.new_pg_num;
-      assert(pg_num >= prior_pg_num);
     }
     if (inc.new_localized_pg_num) {
+      assert(inc.new_localized_pg_num >= localized_pg_num);
       localized_pg_num = inc.new_localized_pg_num;
-      assert(localized_pg_num >= prior_localized_pg_num);
     }
 
     if (inc.new_max_osd >= 0) 
@@ -350,8 +356,7 @@ private:
     ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
     ::_encode(localized_pg_num, blist);
-    ::_encode(prior_pg_num, blist);
-    ::_encode(prior_localized_pg_num, blist);
+    ::_encode(creating_pgs, blist);
     
     ::_encode(max_osd, blist);
     ::_encode(osd_state, blist);
@@ -371,9 +376,9 @@ private:
     ::_decode(mtime, blist, off);
     ::_decode(pg_num, blist, off);
     ::_decode(localized_pg_num, blist, off);
-    ::_decode(prior_pg_num, blist, off);
-    ::_decode(prior_localized_pg_num, blist, off);
     calc_pg_masks();
+
+    ::_decode(creating_pgs, blist, off);
 
     ::_decode(max_osd, blist, off);
     ::_decode(osd_state, blist, off);

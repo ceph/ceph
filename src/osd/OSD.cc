@@ -57,6 +57,7 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGCreate.h"
 
 #include "messages/MPGStats.h"
 
@@ -1039,6 +1040,10 @@ void OSD::dispatch(Message *m)
       case MSG_OSD_PING:
         handle_osd_ping((MOSDPing*)m);
         break;
+
+      case MSG_OSD_PG_CREATE:
+	handle_pg_create((MOSDPGCreate*)m);
+	break;
         
       case MSG_OSD_PG_NOTIFY:
         handle_pg_notify((MOSDPGNotify*)m);
@@ -1390,194 +1395,137 @@ void OSD::advance_map(ObjectStore::Transaction& t)
           << "  " << pg_map.size() << " pgs"
           << dendl;
   
-  if (osdmap->is_mkpg()) {
-
-    // FIXME: move this bit elsewhere....
-    // is this okay?
-    /*
-    ceph_fsid nullfsid;
-    memset(&nullfsid, 0, sizeof(nullfsid));
-    if (memcmp(&nullfsid, &superblock.fsid, sizeof(nullfsid)) != 0) {
-      derr(0) << "will not mkps, my superblock fsid is not zeroed" << dendl;
-      assert(0);
+  // scan existing pg's
+  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+       it != pg_map.end();
+       it++) {
+    pg_t pgid = it->first;
+    PG *pg = it->second;
+    
+    // did i finish this epoch?
+    if (pg->is_active()) {
+      pg->info.last_epoch_finished = osdmap->get_epoch()-1;
+    }      
+    
+    // get new acting set
+    vector<int> tacting;
+    int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
+    int role = osdmap->calc_pg_role(whoami, tacting, nrep);
+    
+    // no change?
+    if (tacting == pg->acting) 
+      continue;
+    
+    // -- there was a change! --
+    pg->lock();
+    
+    int oldrole = pg->get_role();
+    int oldprimary = pg->get_primary();
+    int oldacker = pg->get_acker();
+    vector<int> oldacting = pg->acting;
+    
+    // update PG
+    pg->acting.swap(tacting);
+    pg->set_role(role);
+    
+    // did primary|acker change?
+    pg->info.history.same_since = osdmap->get_epoch();
+    if (oldprimary != pg->get_primary()) {
+      pg->info.history.same_primary_since = osdmap->get_epoch();
+      pg->cancel_recovery();
     }
-    */
-    superblock.fsid = osdmap->get_fsid();  // FIXME
-    //assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
+    if (oldacker != pg->get_acker()) {
+      pg->info.history.same_acker_since = osdmap->get_epoch();
+    }
+    
+    // deactivate.
+    pg->state_clear(PG::STATE_ACTIVE);
+    
+    // reset primary state?
+    if (oldrole == 0 || pg->get_role() == 0)
+      pg->clear_primary_state();
 
-    // ok!
-    ps_t numps = osdmap->get_pg_num();
-    ps_t fromps = osdmap->get_prior_pg_num();
-    ps_t numlps = osdmap->get_localized_pg_num();
-    ps_t fromlps = osdmap->get_prior_localized_pg_num();
-    dout(1) << "mkpg " << osdmap->get_fsid() << " on " 
-	    << fromps << "-" << numps << " normal, " 
-	    << fromlps << "-" << numlps << " localized pg sets" << dendl;
-    int minrep = 1;
-    int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
-    int minraid = g_conf.osd_min_raid_width;
-    int maxraid = g_conf.osd_max_raid_width;
-    int numpool = 1; // FIXME
-    dout(1) << "mkpg    " << minrep << ".." << maxrep << " replicas, " 
-	    << minraid << ".." << maxraid << " osd raid groups" << dendl;
-
-    //derr(0) << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << dendl;
-    logger->set_start( osdmap->get_ctime() );
-
-    // create PGs
-    //  replicated
-    for (int pool = 0; pool < numpool; pool++) 
-      for (int nrep = 1; nrep <= maxrep; nrep++) {
-	for (ps_t ps = fromps; ps < numps; ++ps)
-	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1), t);
-	for (ps_t ps = fromlps; ps < numlps; ++ps) 
-	  try_create_pg(pg_t(pg_t::TYPE_REP, nrep, ps, pool, whoami), t);
+    // pg->on_*
+    for (unsigned i=0; i<oldacting.size(); i++)
+      if (osdmap->is_down(oldacting[i]))
+	pg->on_osd_failure(oldacting[i]);
+    pg->on_change();
+    if (oldacker != pg->get_acker() && oldacker == whoami)
+      pg->on_acker_change();
+    
+    if (role != oldrole) {
+      // old primary?
+      if (oldrole == 0) {
+	pg->state_clear(PG::STATE_CLEAN);
+	
+	// take replay queue waiters
+	list<Message*> ls;
+	for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
+	     it != pg->replay_queue.end();
+	     it++)
+	  ls.push_back(it->second);
+	pg->replay_queue.clear();
+	take_waiters(ls);
+	
+	// take active waiters
+	take_waiters(pg->waiting_for_active);
+	
+	pg->on_role_change();
       }
-
-    // raided
-    for (int pool = 0; pool < numpool; pool++) 
-      for (int size = minraid; size <= maxraid; size++) {
-	for (ps_t ps = fromps; ps < numps; ++ps) 
-	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, -1), t);
-	for (ps_t ps = fromlps; ps < numlps; ++ps) 
-	  try_create_pg(pg_t(pg_t::TYPE_RAID4, size, ps, pool, whoami), t);
-      }
-
-    dout(1) << "mkpg done, now i have " << pg_map.size() << " pgs" << dendl;
-
-  } else {
-    // scan existing pg's
-    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-         it != pg_map.end();
-         it++) {
-      pg_t pgid = it->first;
-      PG *pg = it->second;
       
-      // did i finish this epoch?
-      if (pg->is_active()) {
-        pg->info.last_epoch_finished = osdmap->get_epoch()-1;
-      }      
-
-      // get new acting set
-      vector<int> tacting;
-      int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
-      int role = osdmap->calc_pg_role(whoami, tacting, nrep);
-
-      // no change?
-      if (tacting == pg->acting) 
-        continue;
-
-      // -- there was a change! --
-      pg->lock();
-
-      int oldrole = pg->get_role();
-      int oldprimary = pg->get_primary();
-      int oldacker = pg->get_acker();
-      vector<int> oldacting = pg->acting;
-      
-      // update PG
-      pg->acting.swap(tacting);
-      pg->set_role(role);
-      
-      // did primary|acker change?
-      pg->info.history.same_since = osdmap->get_epoch();
-      if (oldprimary != pg->get_primary()) {
-        pg->info.history.same_primary_since = osdmap->get_epoch();
-        pg->cancel_recovery();
-      }
-      if (oldacker != pg->get_acker()) {
-        pg->info.history.same_acker_since = osdmap->get_epoch();
-      }
-
-      // deactivate.
-      pg->state_clear(PG::STATE_ACTIVE);
-      
-      // reset primary state?
-      if (oldrole == 0 || pg->get_role() == 0)
-        pg->clear_primary_state();
-
-      // pg->on_*
-      for (unsigned i=0; i<oldacting.size(); i++)
-	if (osdmap->is_down(oldacting[i]))
-	  pg->on_osd_failure(oldacting[i]);
-      pg->on_change();
-      if (oldacker != pg->get_acker() && oldacker == whoami)
-	pg->on_acker_change();
-
-      if (role != oldrole) {
-        // old primary?
-        if (oldrole == 0) {
-          pg->state_clear(PG::STATE_CLEAN);
-
-	  // take replay queue waiters
-	  list<Message*> ls;
-	  for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
-	       it != pg->replay_queue.end();
-	       it++)
-	    ls.push_back(it->second);
-	  pg->replay_queue.clear();
-	  take_waiters(ls);
-
-	  // take active waiters
-	  take_waiters(pg->waiting_for_active);
-  
-	  pg->on_role_change();
-        }
-        
-        // new primary?
-        if (role == 0) {
+      // new primary?
+      if (role == 0) {
           // i am new primary
-          pg->state_clear(PG::STATE_STRAY);
-        } else {
-          // i am now replica|stray.  we need to send a notify.
-          pg->state_set(PG::STATE_STRAY);
-
-          if (nrep == 0) {
-	    // did they all shut down cleanly?
-	    bool clean = true;
-	    vector<int> inset;
-	    osdmap->pg_to_osds(pg->info.pgid, inset);
-	    for (unsigned i=0; i<inset.size(); i++)
-	      if (!osdmap->is_down_clean(inset[i])) clean = false;
-	    if (clean) {
-	      dout(1) << *pg << " is cleanly inactive" << dendl;
-	    } else {
-	      pg->state_set(PG::STATE_CRASHED);
-	      dout(1) << *pg << " is crashed" << dendl;
-	    }
-          }
-        }
-        
-        // my role changed.
-        dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
-                 << ", role " << oldrole << " -> " << role << dendl; 
-        
+	pg->state_clear(PG::STATE_STRAY);
       } else {
-        // no role change.
-        // did primary change?
-        if (pg->get_primary() != oldprimary) {    
-          // we need to announce
-          pg->state_set(PG::STATE_STRAY);
-          
-          dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
-                   << ", acting primary " 
-                   << oldprimary << " -> " << pg->get_primary() 
-                   << dendl;
-        } else {
-          // primary is the same.
-          if (role == 0) {
-            // i am (still) primary. but my replica set changed.
-            pg->state_clear(PG::STATE_CLEAN);
-            pg->state_clear(PG::STATE_REPLAY);
-
-            dout(10) << *pg << " " << oldacting << " -> " << pg->acting
-                     << ", replicas changed" << dendl;
-          }
-        }
+	// i am now replica|stray.  we need to send a notify.
+	pg->state_set(PG::STATE_STRAY);
+	
+	if (nrep == 0) {
+	  // did they all shut down cleanly?
+	  bool clean = true;
+	  vector<int> inset;
+	  osdmap->pg_to_osds(pg->info.pgid, inset);
+	  for (unsigned i=0; i<inset.size(); i++)
+	    if (!osdmap->is_down_clean(inset[i])) clean = false;
+	  if (clean) {
+	    dout(1) << *pg << " is cleanly inactive" << dendl;
+	  } else {
+	    pg->state_set(PG::STATE_CRASHED);
+	    dout(1) << *pg << " is crashed" << dendl;
+	  }
+	}
       }
-
-      pg->unlock();
+      
+      // my role changed.
+      dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
+	       << ", role " << oldrole << " -> " << role << dendl; 
+      
+    } else {
+      // no role change.
+      // did primary change?
+      if (pg->get_primary() != oldprimary) {    
+	// we need to announce
+	pg->state_set(PG::STATE_STRAY);
+        
+	dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
+		 << ", acting primary " 
+		 << oldprimary << " -> " << pg->get_primary() 
+		 << dendl;
+      } else {
+	// primary is the same.
+	if (role == 0) {
+	  // i am (still) primary. but my replica set changed.
+	  pg->state_clear(PG::STATE_CLEAN);
+	  pg->state_clear(PG::STATE_REPLAY);
+	  
+	  dout(10) << *pg << " " << oldacting << " -> " << pg->acting
+		   << ", replicas changed" << dendl;
+	}
+      }
     }
+    
+    pg->unlock();
   }
 }
 
@@ -1767,6 +1715,66 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 
 
 
+// ----------------------------------------
+// pg creation
+
+
+/*
+ * holding osd_lock
+ */
+void OSD::handle_pg_create(MOSDPGCreate *m)
+{
+  dout(10) << "handle_pg_create " << *m << dendl;
+
+  if (!require_same_or_newer_map(m, m->epoch)) return;
+
+  ObjectStore::Transaction t;
+
+  for (map<pg_t,epoch_t>::iterator p = m->mkpg.begin();
+       p != m->mkpg.end();
+       p++) {
+    pg_t pgid = p->first;
+    epoch_t created = p->second;
+    dout(20) << "mkpg " << pgid << " (logically created " << created << ")" << dendl;
+   
+    // is it still ours?
+    vector<int> acting;
+    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, nrep);
+
+    if (role != 0) {
+      dout(10) << "mkpg " << pgid << "  no longer primary (role=" << role << "), skipping" << dendl;
+      continue;
+    }
+
+    // does it exist?
+    if (_have_pg(pgid)) {
+      dout(10) << "mkpg " << pgid << "  already exists, skipping" << dendl;
+      continue;
+    }
+
+    // figure history
+    PG::Info::History history;
+    project_pg_history(pgid, history, created, acting);
+    
+    if (history.same_primary_since <= created) {
+      dout(10) << "mkpg " << pgid << " creating now" << dendl;
+      try_create_pg(pgid, t);
+    } else {
+      dout(10) << "mkpg " << pgid << " querying priors" << dendl;
+      assert(0);
+    }
+  }
+
+  store->apply_transaction(t);
+  delete m;
+}
+
+
+
+// ----------------------------------------
+// peering and recovery
+
 /** do_notifies
  * Send an MOSDPGNotify to a primary, with a list of PGs that I have
  * content for, and they are primary for.
@@ -1815,10 +1823,6 @@ void OSD::do_activators(map<int,MOSDPGActivateSet*>& activator_map)
     messenger->send_message(p->second, osdmap->get_inst(p->first));
   activator_map.clear();
 }
-
-
-
-
 
 /** PGNotify
  * from non-primary to primary

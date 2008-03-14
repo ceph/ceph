@@ -66,6 +66,7 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
+    epoch_t epoch_created;       // epoch in which it was created
     epoch_t last_epoch_started;  // last epoch started.
     epoch_t last_epoch_finished; // last epoch finished.
 
@@ -78,6 +79,7 @@ public:
     
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
+		     epoch_created(0),
                      last_epoch_started(0), last_epoch_finished(0) {}
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
@@ -383,6 +385,8 @@ public:
  
   // non-primary
   static const int STATE_STRAY =  16; // i must notify the primary i exist.
+
+  static const int STATE_CREATING = 256; // pg is being created (used by pgmonitor only)
 
   static std::string get_state_string(int state) {
     std::string st;
