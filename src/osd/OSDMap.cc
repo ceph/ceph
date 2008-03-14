@@ -57,8 +57,8 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
   // new
   crush.create();
 
-  if (num_osd >= 12) {
-    int ndom = g_conf.osd_max_rep;
+  int ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
+  if (num_osd >= ndom*2) {
     int ritems[ndom];
     int rweights[ndom];
 
@@ -91,34 +91,25 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
     
     // rules
     // replication
-    for (int pool=0; pool<1; pool++)
-      for (int i=1; i<=ndom; i++) {
-	crush_rule *rule = crush_make_rule(4);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-	crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
-      }
+    for (int pool=0; pool<1; pool++) {
+      // size 1..ndom
+      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_REP, 1, ndom);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
+      crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);  // and 1 device in each
+      crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
+      crush_add_rule(crush.crush, rule, -1);
+    }
 
     // raid
-    for (int pool=0; pool<1; pool++) 
-      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-	if (ndom >= i) {
-	  crush_rule *rule = crush_make_rule(4);
-	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
-	  crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
-	  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-	} else {
-	  crush_rule *rule = crush_make_rule(3);
-	  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	  crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-	}
-      }
+    for (int pool=0; pool<1; pool++) {
+      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, CRUSH_CHOOSE_N, 1);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
+      crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
+      crush_add_rule(crush.crush, rule, -1);
+    }
     
   } else {
     // one bucket
@@ -130,26 +121,23 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
     crush_bucket_uniform *b = crush_make_uniform_bucket(1, num_osd, items, 0x10000);
     int root = crush_add_bucket(crush.crush, 0, (crush_bucket*)b);
     
-    // rules
     // replication
-    for (int pool=0; pool<1; pool++)
-      for (int i=1; i<=g_conf.osd_max_rep; i++) {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_REP_RULE(i, pool), rule);
-      }
+    for (int pool=0; pool<1; pool++) {
+      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, 1, g_conf.osd_max_rep);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+      crush_add_rule(crush.crush, rule, -1);
+    }
 
     // raid4
-    for (int pool=0; pool<1; pool++)
-      for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i, pool), rule);
-      }
+    for (int pool=0; pool<1; pool++) {
+      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, CRUSH_CHOOSE_N, 0);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+      crush_add_rule(crush.crush, rule, -1);
+    }
   }
   
   crush.finalize();

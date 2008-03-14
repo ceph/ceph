@@ -446,14 +446,9 @@ private:
     case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
-	int rule;
-	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size(), pg.pool());
-	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size(), pg.pool());
-	else assert(0);
-	crush.do_rule(rule,
-		      pg.ps(),
-		      osds, pg.size(),
-		      pg.preferred());
+	int ruleno = crush.find_rule(pg.pool(), pg.type(), pg.size());
+	if (ruleno >= 0)
+	  crush.do_rule(ruleno, pg.ps(), osds, pg.size(), pg.preferred());
       }
       break;
       

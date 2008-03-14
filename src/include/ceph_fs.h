@@ -137,15 +137,6 @@ union ceph_pg {
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
- * crush rule ids.  fixme, this static mapping to rule ids is lame.
- */
-#define CRUSH_MAX_REP              8
-#define CRUSH_PG_TYPES             2
-#define CRUSH_RULE_OFFSET(p, t)    (((p)*CRUSH_PG_TYPES + (t))*CRUSH_MAX_REP)
-#define CRUSH_REP_RULE(nrep, pool) (CRUSH_RULE_OFFSET(pool, 0) + (nrep)) 
-#define CRUSH_RAID_RULE(num, pool) (CRUSH_RULE_OFFSET(pool, 1) + (num))
-
-/*
  * stable_mod func is used to control number of placement groups
  *  b <= bmask and bmask=(2**n)-1
  *  e.g., b=12 -> bmask=15, b=123 -> bmask=127

@@ -222,6 +222,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 			continue;
 		}
 
+		// len
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
 
@@ -230,6 +231,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 		if (r == NULL)
 			goto badmem;
 		r->len = yes;
+		if ((err = ceph_decode_copy(p, end, &r->mask, 4)) < 0) /* 4 u8's */
+			goto bad;
 		for (j=0; j<r->len; j++) {
 			if ((err = ceph_decode_32(p, end, &r->steps[j].op)) < 0)
 				goto bad;

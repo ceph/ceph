@@ -193,24 +193,17 @@ struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
 
 static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 {
-	int rule;
+	int ruleno;
 	int osds[10];
 	int nr_osds;
 	int i;
 	
 	dout(30, "send_request %p\n", req);
 	
-	/* choose dest */
-	switch (req->r_pgid.pg.type) {
-	case CEPH_PG_TYPE_REP:
-		rule = CRUSH_REP_RULE(req->r_pgid.pg.size, req->r_pgid.pg.pool);
-		break;
-	default:
-		BUG_ON(1);
-
-		return; /* remove compilation warning */
-	}
-	nr_osds = crush_do_rule(osdc->osdmap->crush, rule, 
+	ruleno = crush_find_rule(osdc->osdmap->crush, req->r_pgid.pg.pool, 
+				 req->r_pgid.pg.type, req->r_pgid.pg.size);
+	BUG_ON(ruleno < 0);  /* fixme, need some proper error handling here */
+	nr_osds = crush_do_rule(osdc->osdmap->crush, ruleno, 
 				req->r_pgid.pg.ps, osds, 10, 
 				req->r_pgid.pg.preferred);
 	for (i=0; i<nr_osds; i++) {
