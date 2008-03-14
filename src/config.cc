@@ -199,6 +199,7 @@ md_config_t g_conf = {
   mon_stop_on_last_unmount: false,
   mon_stop_with_last_mds: false,
   mon_allow_mds_bully: false,   // allow a booting mds to (forcibly) claim an mds # .. FIXME
+  mon_pg_create_interval: 30.0, // no more than every 30s
 
   paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
 

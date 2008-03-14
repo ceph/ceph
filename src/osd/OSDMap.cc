@@ -30,7 +30,6 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 
   set_max_osd(num_osd);
   pg_num = num_osd << pg_bits;
-  mkpg.insert(0, pg_num);
 
   // crush map
   map<int,double> weights;

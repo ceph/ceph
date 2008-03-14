@@ -53,10 +53,16 @@ private:
   void handle_statfs(MStatfs *statfs);
   bool handle_pg_stats(MPGStats *stats);
 
+  map<int,utime_t> last_pg_create;  // per osd throttle
+
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
   //void tick();  // check state, take actions
+
+
+  void register_new_pgs();
+  void send_pg_creates(int onlyosd=-1);
 
 };
 

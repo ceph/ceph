@@ -87,8 +87,8 @@ public:
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
     
-    static const __u8 MKPG_START;
-    static const __u8 MKPG_FINISH;
+    static const __u8 MKPG_START = 1;
+    static const __u8 MKPG_FINISH = 2;
     __u8 mkpg;
     
     void encode(bufferlist& bl) {
@@ -139,7 +139,7 @@ private:
   int32_t localized_pg_num_mask; // ditto
 
   // new pgs
-  bool creating_pgs;
+  epoch_t creating_pgs_from;  // most recent epoch initiating possible pg creation
 
   int32_t max_osd;
   vector<uint8_t>  osd_state;
@@ -155,6 +155,7 @@ private:
  public:
   OSDMap() : epoch(0), 
 	     pg_num(0), localized_pg_num(0),
+	     creating_pgs_from(0),
 	     max_osd(0) { 
     fsid.major = fsid.minor = cpu_to_le64(0);
     calc_pg_masks();
@@ -183,7 +184,10 @@ private:
   const utime_t& get_mtime() const { return mtime; }
 
   bool is_creating_pgs() const { 
-    return creating_pgs
+    return creating_pgs_from;
+  }
+  epoch_t get_creating_pgs_from() const {
+    return creating_pgs_from;
   }
 
   /***** cluster state *****/
@@ -289,16 +293,19 @@ private:
     epoch++;
     ctime = inc.ctime;
 
-    if (inc.mkpg & Incremental::MKPG_START)
-      creating_pgs = true;
-    if (inc.mkpg & Incremental::MKPG_FINISH)
-      creating_pgs = false;
-
     // full map?
-    if (inc.fullmap.length()) {
+    if (inc.fullmap.length())
       decode(inc.fullmap);
+
+    // mkpg flags?
+    if (inc.mkpg & Incremental::MKPG_FINISH) 
+      creating_pgs_from = 0;
+    if (inc.mkpg & Incremental::MKPG_START) 
+      creating_pgs_from = epoch;
+    
+    if (inc.fullmap.length())
       return;
-    }
+
     if (inc.crush.length()) {
       bufferlist::iterator blp = inc.crush.begin();
       crush._decode(blp);
@@ -356,7 +363,7 @@ private:
     ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
     ::_encode(localized_pg_num, blist);
-    ::_encode(creating_pgs, blist);
+    ::_encode(creating_pgs_from, blist);
     
     ::_encode(max_osd, blist);
     ::_encode(osd_state, blist);
@@ -378,7 +385,7 @@ private:
     ::_decode(localized_pg_num, blist, off);
     calc_pg_masks();
 
-    ::_decode(creating_pgs, blist, off);
+    ::_decode(creating_pgs_from, blist, off);
 
     ::_decode(max_osd, blist, off);
     ::_decode(osd_state, blist, off);

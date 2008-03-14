@@ -122,7 +122,7 @@ public:
 private:
   crush_rule *get_rule(unsigned ruleno) {
     if (!crush) return (crush_rule *)(-ENOENT);
-    if (crush->max_rules >= ruleno) 
+    if (ruleno >= crush->max_rules) 
       return 0;
     return crush->rules[ruleno];
   }
@@ -138,6 +138,13 @@ public:
   int get_max_rules() {
     if (!crush) return 0;
     return crush->max_rules;
+  }
+  bool is_rule(unsigned ruleno) {
+    if (!crush) return false;
+    if (ruleno < crush->max_rules &&
+	crush->rules[ruleno] != NULL)
+      return true;
+    return false;
   }
   int get_rule_len(unsigned ruleno) {
     crush_rule *r = get_rule(ruleno);

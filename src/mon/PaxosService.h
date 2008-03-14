@@ -22,11 +22,11 @@ class Monitor;
 class Paxos;
 
 class PaxosService : public Dispatcher {
-protected:
+public:
   Monitor *mon;
   Paxos *paxos;
-  friend class Monitor;
   
+protected:
   class C_RetryMessage : public Context {
     PaxosService *svc;
     Message *m;

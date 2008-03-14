@@ -170,21 +170,21 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 // compound rados version type
 class eversion_t {
 public:
-  epoch_t epoch;
   version_t version;
-  eversion_t() : epoch(0), version(0) {}
-  eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
+  epoch_t epoch;
+  eversion_t() : version(0), epoch(0) {}
+  eversion_t(epoch_t e, version_t v) : version(v), epoch(e) {}
 
   eversion_t(const ceph_eversion& ce) : 
-    epoch(le32_to_cpu(ce.epoch)), 
-    version(le64_to_cpu(ce.version)) {}    
+    version(le64_to_cpu(ce.version)),
+    epoch(le32_to_cpu(ce.epoch)) {}
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = cpu_to_le32(epoch);
     c.version = cpu_to_le64(version);
     return c;
   }
-};
+} __attribute__ ((packed));
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
