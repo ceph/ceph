@@ -48,9 +48,6 @@ osdmon
 - bootstrap crush map
 
 crush
-- rule naming
- - would about a tuple of (type, minsize, maxsize, pool) for each rule?  then we'd do a 
-   quick 'search' to find the best rule given (pg_type, pg_size, pg_pool)...
 - xml import/export?
  - named storage "pools"?
  - generic rule definition
