@@ -374,34 +374,6 @@ public:
 
 
   /*** PG ****/
-public:
-  // any
-  static const int STATE_ACTIVE = 1; // i am active.  (primary: replicas too)
-  
-  // primary
-  static const int STATE_CLEAN =  2;  // peers are complete, clean of stray replicas.
-  static const int STATE_CRASHED = 4; // all replicas went down.
-  static const int STATE_REPLAY = 8;  // crashed, waiting for replay
- 
-  // non-primary
-  static const int STATE_STRAY =  16; // i must notify the primary i exist.
-
-  static const int STATE_CREATING = 256; // pg is being created (used by pgmonitor only)
-
-  static std::string get_state_string(int state) {
-    std::string st;
-    if (state & STATE_ACTIVE) st += "active+";
-    if (state & STATE_CLEAN) st += "clean+";
-    if (state & STATE_CRASHED) st += "crashed+";
-    if (state & STATE_REPLAY) st += "replay+";
-    if (state & STATE_STRAY) st += "stray+";
-    if (!st.length()) 
-      st = "inactive";
-    else 
-      st.resize(st.length()-1);
-    return st;
-  }
-
 protected:
   OSD *osd;
 
@@ -615,12 +587,12 @@ public:
 
   bool is_complete() const { return info.last_complete == info.last_update; }
 
-  bool       is_active() const { return state_test(STATE_ACTIVE); }
-  bool       is_crashed() const { return state_test(STATE_CRASHED); }
-  bool       is_replay() const { return state_test(STATE_REPLAY); }
-  //bool       is_complete()    { return state_test(STATE_COMPLETE); }
-  bool       is_clean() const { return state_test(STATE_CLEAN); }
-  bool       is_stray() const { return state_test(STATE_STRAY); }
+  bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
+  bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
+  //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
+  bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool       is_stray() const { return state_test(PG_STATE_STRAY); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 

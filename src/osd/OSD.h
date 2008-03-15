@@ -282,6 +282,7 @@ private:
   void try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
 
   void load_pgs();
+  void calc_primaries_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
@@ -298,12 +299,11 @@ private:
   };
 
   // -- pg creation --
-  struct pg_create_info {
-    epoch_t  first_epoch;
-    set<int> prior_set;
-    set<int> dne_set;    
+  struct create_pg_info {
+    epoch_t created;
+    set<int> prior;
   };
-  map<pg_t,pg_create_info> creating_pg;
+  hash_map<pg_t, create_pg_info> creating_pgs;
 
   void handle_pg_create(class MOSDPGCreate *m);
 

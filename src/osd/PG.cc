@@ -656,14 +656,14 @@ void PG::peer(ObjectStore::Transaction& t,
 	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
       } else {
 	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-	state_set(STATE_CRASHED);
+	state_set(PG_STATE_CRASHED);
       }
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
   } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-    state_set(STATE_CRASHED);
+    state_set(PG_STATE_CRASHED);
   }    
 
   dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
@@ -820,7 +820,7 @@ void PG::peer(ObjectStore::Transaction& t,
   // -- crash recovery?
   if (is_crashed()) {
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << dendl;
-    state_set(STATE_REPLAY);
+    state_set(PG_STATE_REPLAY);
     osd->timer.add_event_after(g_conf.osd_replay_window,
 			       new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
   } 
@@ -837,12 +837,12 @@ void PG::activate(ObjectStore::Transaction& t,
   assert(!is_active());
 
   // twiddle pg state
-  state_set(STATE_ACTIVE);
-  state_clear(STATE_STRAY);
+  state_set(PG_STATE_ACTIVE);
+  state_clear(PG_STATE_STRAY);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
-    state_clear(STATE_CRASHED);
-    state_clear(STATE_REPLAY);
+    state_clear(PG_STATE_CRASHED);
+    state_clear(PG_STATE_REPLAY);
   }
   last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
   
@@ -1007,7 +1007,7 @@ void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
 
-  state_set(PG::STATE_CLEAN);
+  state_set(PG_STATE_CLEAN);
   purge_strays();
   update_stats();
 }

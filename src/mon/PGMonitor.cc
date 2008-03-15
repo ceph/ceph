@@ -100,7 +100,7 @@ bool PGMonitor::update_from_paxos()
 	   ++p) {
 	if (p != pg_map.num_pg_by_state.begin())
 	  ss << ", ";
-	ss << p->second << " " << PG::get_state_string(p->first) << "(" << p->first << ")";
+	ss << p->second << " " << pg_state_string(p->first) << "(" << p->first << ")";
       }
       string states = ss.str();
       dout(0) << "v" << pg_map.version << " " << states << dendl;
@@ -236,14 +236,23 @@ bool PGMonitor::handle_pg_stats(MPGStats *stats)
       continue;
     }
 
-    dout(15) << " got " << pgid << " reported at " << p->second.reported 
-	     << " state " << PG::get_state_string(p->second.state)
+    if (pg_map.pg_stat.count(pgid) == 0) {
+      dout(15) << " got " << pgid << " reported at " << p->second.reported 
+	       << " state " << pg_state_string(p->second.state)
+	       << " but DNE in pg_map!!"
+	       << dendl;
+      assert(0);
+    }
+      
+    dout(15) << " got " << pgid
+	     << " reported at " << p->second.reported 
+	     << " state " << pg_state_string(pg_map.pg_stat[pgid].state)
+	     << " -> " << pg_state_string(p->second.state)
 	     << dendl;
     pending_inc.pg_stat_updates[pgid] = p->second;
 
-    // we don't care about consistency; apply to live map.
-    if (pg_map.pg_stat.count(pgid))
-      pg_map.stat_pg_sub(pgid, pg_map.pg_stat[pgid]);
+    // we don't care much about consistency, here; apply to live map.
+    pg_map.stat_pg_sub(pgid, pg_map.pg_stat[pgid]);
     pg_map.pg_stat[pgid] = p->second;
     pg_map.stat_pg_add(pgid, pg_map.pg_stat[pgid]);
   }

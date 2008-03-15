@@ -23,8 +23,6 @@
 
 #include "osd/osd_types.h"
 
-#define PG_STATE_CREATING 0x100  // this had better not collide with PG::STATE_* in osd/PG.h
-
 class PGMap {
 public:
   // the map
@@ -109,7 +107,7 @@ public:
     total_pg_num_bytes += s.num_bytes;
     total_pg_num_blocks += s.num_blocks;
     total_pg_num_objects += s.num_objects;
-    if (s.state == PG_STATE_CREATING)
+    if (s.state & PG_STATE_CREATING)
       creating_pgs.insert(pgid);
   }
   void stat_pg_sub(pg_t pgid, pg_stat_t &s) {
@@ -118,7 +116,7 @@ public:
     total_pg_num_bytes -= s.num_bytes;
     total_pg_num_blocks -= s.num_blocks;
     total_pg_num_objects -= s.num_objects;
-    if (s.state == PG_STATE_CREATING)
+    if (s.state & PG_STATE_CREATING)
       creating_pgs.erase(pgid);
   }
   void stat_osd_add(osd_stat_t &s) {

@@ -222,6 +222,32 @@ struct osd_stat_t {
 };
 
 
+
+/*
+ * pg states
+ */
+#define PG_STATE_CREATING   1  // this had better not collide with PG::STATE_* in osd/PG.h
+#define PG_STATE_ACTIVE     2  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN      4  // peers are complete, clean of stray replicas.
+#define PG_STATE_CRASHED    8  // all replicas went down. 
+#define PG_STATE_REPLAY    16  // crashed, waiting for replay
+#define PG_STATE_STRAY     32  // i must notify the primary i exist.
+
+static inline std::string pg_state_string(int state) {
+  std::string st;
+  if (state & PG_STATE_ACTIVE) st += "active+";
+  if (state & PG_STATE_CLEAN) st += "clean+";
+  if (state & PG_STATE_CRASHED) st += "crashed+";
+  if (state & PG_STATE_REPLAY) st += "replay+";
+  if (state & PG_STATE_STRAY) st += "stray+";
+  if (state & PG_STATE_CREATING) st += "creating+";
+  if (!st.length()) 
+    st = "inactive";
+  else 
+    st.resize(st.length()-1);
+  return st;
+}
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
