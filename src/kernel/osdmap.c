@@ -24,10 +24,12 @@ static int calc_bits_of(unsigned t)
 static void calc_pg_masks(struct ceph_osdmap *map)
 {
 	map->pg_num_mask = (1 << calc_bits_of(map->pg_num-1)) - 1;
-	map->localized_pg_num_mask = (1 << calc_bits_of(map->localized_pg_num-1)) - 1;
+	map->localized_pg_num_mask =
+		(1 << calc_bits_of(map->localized_pg_num-1)) - 1;
 }
 
-static int crush_decode_uniform_bucket(void **p, void *end, struct crush_bucket_uniform *b)
+static int crush_decode_uniform_bucket(void **p, void *end, 
+				       struct crush_bucket_uniform *b)
 {
 	int j, err;
 	dout(30, "crush_decode_uniform_bucket %p to %p\n", *p, end);
@@ -42,7 +44,8 @@ static int crush_decode_uniform_bucket(void **p, void *end, struct crush_bucket_
 	return 0;
 }
 
-static int crush_decode_list_bucket(void **p, void *end, struct crush_bucket_list *b)
+static int crush_decode_list_bucket(void **p, void *end,
+				    struct crush_bucket_list *b)
 {
 	int j, err;
 	dout(30, "crush_decode_list_bucket %p to %p\n", *p, end);
@@ -61,7 +64,8 @@ static int crush_decode_list_bucket(void **p, void *end, struct crush_bucket_lis
 	return 0;
 }
 
-static int crush_decode_tree_bucket(void **p, void *end, struct crush_bucket_tree *b)
+static int crush_decode_tree_bucket(void **p, void *end, 
+				    struct crush_bucket_tree *b)
 {
 	int j, err;
 	dout(30, "crush_decode_tree_bucket %p to %p\n", *p, end);
@@ -74,7 +78,8 @@ static int crush_decode_tree_bucket(void **p, void *end, struct crush_bucket_tre
 	return 0;
 }
 
-static int crush_decode_straw_bucket(void **p, void *end, struct crush_bucket_straw *b)
+static int crush_decode_straw_bucket(void **p, void *end, 
+				     struct crush_bucket_straw *b)
 {
 	int j, err;
 	dout(30, "crush_decode_straw_bucket %p to %p\n", *p, end);
@@ -134,11 +139,11 @@ static struct crush_map *crush_decode(void **p, void *end)
 		__u32 type;
 		struct crush_bucket *b;
 
-		//dout(30, "crush_decode bucket %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
+		dout(30, "crush_decode bucket %d off %x %p to %p\n",
+		     i, (int)(*p-start), *p, end); 
 
 		if ((err = ceph_decode_32(p, end, &type)) < 0)
 			goto bad;
-		//dout(30, "crush_decode type %d\n", type);
 		if (type == 0) {
 			c->buckets[i] = 0;
 			continue;
@@ -174,7 +179,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 		if ((err = ceph_decode_32(p, end, &b->size)) < 0)
 			goto bad;
 
-		//dout(30, "crush_decode bucket size %d off %x %p to %p\n", b->size, (int)(*p-start), *p, end);
+		dout(30, "crush_decode bucket size %d off %x %p to %p\n", 
+		     b->size, (int)(*p-start), *p, end);
 
 		b->items = kmalloc(b->size * sizeof(__s32), GFP_KERNEL);
 		if (b->items == NULL)
@@ -212,11 +218,11 @@ static struct crush_map *crush_decode(void **p, void *end)
 		__u32 yes;
 		struct crush_rule *r;
 
-		dout(30, "crush_decode rule %d off %x %p to %p\n", i, (int)(*p-start), *p, end);
+		dout(30, "crush_decode rule %d off %x %p to %p\n", 
+		     i, (int)(*p-start), *p, end);
 
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
-		//dout(30, "crush_decode yes = %d off %x %p to %p\n", yes, (int)(*p-start), *p, end);
 		if (!yes) {
 			c->rules[i] = 0;
 			continue;
@@ -226,19 +232,24 @@ static struct crush_map *crush_decode(void **p, void *end)
 		if ((err = ceph_decode_32(p, end, &yes)) < 0)
 			goto bad;
 
-		r = c->rules[i] = kmalloc(sizeof(**c->rules) + yes*sizeof(struct crush_rule_step),
+		r = c->rules[i] = kmalloc(sizeof(**c->rules) +
+					  yes*sizeof(struct crush_rule_step),
 					  GFP_KERNEL);
 		if (r == NULL)
 			goto badmem;
 		r->len = yes;
-		if ((err = ceph_decode_copy(p, end, &r->mask, 4)) < 0) /* 4 u8's */
+		err = ceph_decode_copy(p, end, &r->mask, 4); /* 4 u8's */
+		if (err < 0)
 			goto bad;
 		for (j=0; j<r->len; j++) {
-			if ((err = ceph_decode_32(p, end, &r->steps[j].op)) < 0)
+			err = ceph_decode_32(p, end, &r->steps[j].op);
+			if (err < 0)
 				goto bad;
-			if ((err = ceph_decode_32(p, end, &r->steps[j].arg1)) < 0)
+			err = ceph_decode_32(p, end, &r->steps[j].arg1);
+			if (err < 0)
 				goto bad;
-			if ((err = ceph_decode_32(p, end, &r->steps[j].arg2)) < 0)
+			err = ceph_decode_32(p, end, &r->steps[j].arg2);
+			if (err < 0)
 				goto bad;
 		}
 	}
@@ -321,7 +332,9 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	if ((err = ceph_decode_32(p, end, &map->localized_pg_num)) < 0)
 		goto bad;
-	*p += 2*sizeof(__u32);  /* skip prior_*pg_num fields */
+	err = ceph_decode_32(p, end, &map->last_pg_change);
+	if (err < 0)
+		goto bad;
 
 	calc_pg_masks(map);
 
@@ -338,23 +351,30 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if ((err = ceph_decode_copy(p, end, map->osd_state, map->max_osd)) < 0)
 		goto bad;
 	*p += 4; /* skip length field (should match max) */
-	if ((err = ceph_decode_copy(p, end, map->osd_addr, map->max_osd*sizeof(*map->osd_addr))) < 0)
+	if ((err = ceph_decode_copy(p, end, map->osd_addr, 
+				    map->max_osd*sizeof(*map->osd_addr))) < 0)
 		goto bad;
 
 	/* pg primary swapping */
 	if ((err = ceph_decode_32(p, end, &len)) < 0)
 		goto bad;
 	if (len) {
-		map->pg_swap_primary = kmalloc(len * sizeof(*map->pg_swap_primary), GFP_KERNEL);
+		map->pg_swap_primary = kmalloc(len * 
+					       sizeof(*map->pg_swap_primary), 
+					       GFP_KERNEL);
 		if (map->pg_swap_primary == NULL) {
 			err = -ENOMEM;
 			goto bad;
 		}
 		map->num_pg_swap_primary = len;
 		for (i=0; i<len; i++) {
-			if ((err = ceph_decode_64(p, end, &map->pg_swap_primary[i].pg.pg64)) < 0)
+			err = ceph_decode_64(p, end,
+					     &map->pg_swap_primary[i].pg.pg64);
+			if (err < 0)
 				goto bad;
-			if ((err = ceph_decode_32(p, end, &map->pg_swap_primary[i].osd)) < 0)
+			err = ceph_decode_32(p, end, 
+					     &map->pg_swap_primary[i].osd);
+			if (err < 0)
 				goto bad;
 		}
 	}
@@ -362,7 +382,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	/* crush */
 	if ((err = ceph_decode_32(p, end, &len)) < 0)
 		goto bad;
-	dout(30, "osdmap_decode crush len %d from off %x\n", len, (int)(*p - start));
+	dout(30, "osdmap_decode crush len %d from off %x\n", 
+	     len, (int)(*p - start));
 	map->crush = crush_decode(p, end);
 	if (IS_ERR(map->crush)) {
 		err = PTR_ERR(map->crush);
@@ -382,7 +403,8 @@ bad:
 	return ERR_PTR(err);
 }
 
-struct ceph_osdmap *apply_incremental(void **p, void *end, struct ceph_osdmap *map)
+struct ceph_osdmap *apply_incremental(void **p, void *end,
+				      struct ceph_osdmap *map)
 {
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
