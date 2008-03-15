@@ -1006,7 +1006,6 @@ void PG::activate(ObjectStore::Transaction& t,
 void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
-
   state_set(PG_STATE_CLEAN);
   purge_strays();
   update_stats();

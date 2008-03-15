@@ -115,6 +115,8 @@ private:
   bool preprocess_out(class MOSDOut *m);
   bool prepare_out(class MOSDOut *m);
 
+  void print_summary_stats(int dbl=10);
+
  public:
   OSDMonitor(Monitor *mn, Paxos *p) : 
     PaxosService(mn, p) { }

@@ -402,6 +402,7 @@ void Monitor::tick()
   
   osdmon->tick();
   mdsmon->tick();
+  pgmon->tick();
   
   // next tick!
   reset_tick();

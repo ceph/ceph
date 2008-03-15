@@ -42,9 +42,11 @@
  Tick function to update the map based on performance every N seconds
 */
 
-/*
-void PGMonitor::tick() {
+void PGMonitor::tick() 
+{
+  print_summary_stats(10);
 
+  /*
   // magic incantation that Sage told me
   if (!mon->is_leader()) return; 
   if (!paxos->is_active()) return;
@@ -58,10 +60,9 @@ void PGMonitor::tick() {
   if (mon->osdmon->paxos->is_readable()) {
     // safely use mon->osdmon->osdmap
   }
-
+  */
 }
 
-*/
 void PGMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
@@ -94,17 +95,7 @@ bool PGMonitor::update_from_paxos()
       inc._decode(bl, off);
       pg_map.apply_incremental(inc);
       
-      std::stringstream ss;
-      for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
-	   p != pg_map.num_pg_by_state.end();
-	   ++p) {
-	if (p != pg_map.num_pg_by_state.begin())
-	  ss << ", ";
-	ss << p->second << " " << pg_state_string(p->first) << "(" << p->first << ")";
-      }
-      string states = ss.str();
-      dout(0) << "v" << pg_map.version << " " << states << dendl;
-
+      print_summary_stats(0);
     } else {
       dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << dendl;
       return false;
@@ -119,6 +110,24 @@ bool PGMonitor::update_from_paxos()
   send_pg_creates();
 
   return true;
+}
+
+void PGMonitor::print_summary_stats(int dbl)
+{
+  std::stringstream ss;
+  for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
+       p != pg_map.num_pg_by_state.end();
+       ++p) {
+    if (p != pg_map.num_pg_by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << pg_state_string(p->first);// << "(" << p->first << ")";
+  }
+  string states = ss.str();
+  dout(dbl) << "v" << pg_map.version << " "
+	    << pg_map.pg_stat.size() << " pgs: "
+	    << states << dendl;
+  if (!pg_map.creating_pgs.empty())
+    dout(20) << " creating_pgs = " << pg_map.creating_pgs << dendl;
 }
 
 void PGMonitor::create_pending()
@@ -138,7 +147,6 @@ void PGMonitor::encode_pending(bufferlist &bl)
 bool PGMonitor::preprocess_query(Message *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
-
   switch (m->get_type()) {
   case CEPH_MSG_STATFS:
     handle_statfs((MStatfs*)m);
@@ -147,14 +155,18 @@ bool PGMonitor::preprocess_query(Message *m)
   case MSG_PGSTATS:
     {
       MPGStats *stats = (MPGStats*)m;
+      int from = m->get_source().num();
+      if (pg_map.osd_stat.count(from) ||
+	  memcmp(&pg_map.osd_stat[from], &stats->osd_stat, sizeof(stats->osd_stat)) != 0)
+	return false;  // new osd stat
       for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
 	   p != stats->pg_stat.end();
 	   p++) {
 	if (pg_map.pg_stat.count(p->first) == 0 ||
-	    pg_map.pg_stat[p->first].reported < p->second.reported)
-	  return false;
+	    memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
+	  return false; // new pg stat(s)
       }
-      dout(10) << " message contains no new pg stats" << dendl;
+      dout(10) << " message contains no new osd|pg stats" << dendl;
       return true;
     }
 
@@ -170,7 +182,7 @@ bool PGMonitor::prepare_update(Message *m)
   dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
-    return handle_pg_stats((MPGStats*)m);
+    return prepare_pg_stats((MPGStats*)m);
 
   default:
     assert(0);
@@ -203,9 +215,9 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   delete statfs;
 }
 
-bool PGMonitor::handle_pg_stats(MPGStats *stats) 
+bool PGMonitor::prepare_pg_stats(MPGStats *stats) 
 {
-  dout(10) << "handle_pg_stats " << *stats << " from " << stats->get_source() << dendl;
+  dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_source() << dendl;
   int from = stats->get_source().num();
   if (!stats->get_source().is_osd() ||
       !mon->osdmon->osdmap.is_up(from) ||

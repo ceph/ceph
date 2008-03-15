@@ -83,6 +83,7 @@ public:
                      last_epoch_started(0), last_epoch_finished(0) {}
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
+    bool dne() const { return epoch_created == 0; }
   };
   
   
@@ -648,6 +649,8 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
   out << pgi.pgid << "(";
+  if (pgi.dne())
+    out << " DNE";
   if (pgi.is_empty())
     out << " empty";
   else

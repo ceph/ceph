@@ -472,7 +472,7 @@ int OSD::read_superblock()
 // ======================================================
 // PG's
 
-PG *OSD::_new_lock_pg(pg_t pgid)
+PG *OSD::_open_lock_pg(pg_t pgid)
 {
   // create
   PG *pg;
@@ -500,7 +500,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
     dout(0) << "_create_lock_pg on " << pgid << ", already have " << *pg_map[pgid] << dendl;
 
   // open
-  PG *pg = _new_lock_pg(pgid);
+  PG *pg = _open_lock_pg(pgid);
 
   // create collection
   assert(!store->collection_exists(pgid));
@@ -508,6 +508,27 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 
   return pg;
 }
+
+PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
+{
+  dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
+  assert(whoami == acting[0]);
+  
+  PG *pg = _create_lock_pg(pgid, t);
+  pg->set_role(0);
+  pg->acting.swap(acting);
+  pg->info.epoch_created = 
+    pg->last_epoch_started_any = 
+    pg->info.last_epoch_started = 
+    pg->info.history.same_since = 
+    pg->info.history.same_primary_since = 
+    pg->info.history.same_acker_since = osdmap->get_epoch();
+  pg->write_log(t);
+  
+  dout(7) << "_create_lock_new_pg " << *pg << dendl;
+  return pg;
+}
+
 
 bool OSD::_have_pg(pg_t pgid)
 {
@@ -554,29 +575,6 @@ void OSD::_remove_unlock_pg(PG *pg)
   pg->put_unlock();     // will delete, if last reference
 }
 
-
-void OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
-{
-  vector<int> acting;
-  int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-  dout(20) << "pgid " << pgid << " -> " << acting << dendl;
-  int role = osdmap->calc_pg_role(whoami, acting, nrep);
-  if (role < 0) return;
-  
-  PG *pg = _create_lock_pg(pgid, t);
-  pg->set_role(role);
-  pg->acting.swap(acting);
-  pg->last_epoch_started_any = 
-    pg->info.last_epoch_started = 
-    pg->info.history.same_since = 
-    pg->info.history.same_primary_since = 
-    pg->info.history.same_acker_since = osdmap->get_epoch();
-  pg->write_log(t);
-  
-  dout(7) << "created " << *pg << dendl;
-  pg->unlock();
-}
-
 void OSD::load_pgs()
 {
   dout(10) << "load_pgs" << dendl;
@@ -589,7 +587,7 @@ void OSD::load_pgs()
        it != ls.end();
        it++) {
     pg_t pgid = *it;
-    PG *pg = _new_lock_pg(pgid);
+    PG *pg = _open_lock_pg(pgid);
 
     // read pg info
     store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
@@ -610,11 +608,13 @@ void OSD::load_pgs()
 
 
 /*
- * calculate pg primaries during an epoch interval
+ * calculate prior pg members during an epoch interval [start,end)
+ *  - from each epoch, include all osds up then AND now
+ *  - if no osds from then are up now, include them all, even tho they're not reachable now
  */
-void OSD::calc_primaries_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset)
+void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset)
 {
-  dout(15) << "calc_primaries_during " << pgid << " [" << start << "," << end << ")" << dendl;
+  dout(15) << "calc_priors_during " << pgid << " [" << start << "," << end << ")" << dendl;
   
   for (epoch_t e = start; e < end; e++) {
     OSDMap oldmap;
@@ -622,9 +622,21 @@ void OSD::calc_primaries_during(pg_t pgid, epoch_t start, epoch_t end, set<int>&
     vector<int> acting;
     oldmap.pg_to_acting_osds(pgid, acting);
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
-    if (acting.size())
-      pset.insert(acting[0]);
+    int added = 0;
+    for (unsigned i=0; i<acting.size(); i++)
+      if ((int)i != whoami && osdmap->is_up(acting[i])) {
+	pset.insert(acting[i]);
+	added++;
+      }
+    if (!added && acting.size()) {
+      // sucky.  add down osds, even tho we can't reach them right now.
+      for (unsigned i=0; i<acting.size(); i++)
+	pset.insert(acting[i]);
+    }
   }
+  dout(10) << "calc_priors_during " << pgid
+	   << " [" << start << "," << end 
+	   << ") = " << pset << dendl;
 }
 
 
@@ -798,7 +810,7 @@ void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
   peer_stat[peer] = stat;
 }
 
-void OSD::update_heartbeat_sets()
+void OSD::update_heartbeat_peers()
 {
   // build heartbeat to/from set
   heartbeat_to.clear();
@@ -1595,7 +1607,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   logger->set("numpg", pg_map.size());
 
-  update_heartbeat_sets();
+  update_heartbeat_peers();
 }
 
 
@@ -1788,7 +1800,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     if (history.same_primary_since > created) {
       // calc prior primary set.  may be empty, keep in mind.
       set<int> pset;
-      calc_primaries_during(pgid, created, history.same_primary_since, pset);
+      calc_priors_during(pgid, created, history.same_primary_since, pset);
       pset.erase(whoami);
       if (pset.size()) {
 	dout(10) << "mkpg " << pgid << " e " << created << " : querying priors " 
@@ -1802,7 +1814,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       }
     }
     dout(10) << "mkpg " << pgid << " creating now" << dendl;
-    try_create_pg(pgid, t);
+    PG *pg = _create_lock_new_pg(pgid, acting, t);
+    pg->unlock();
     created++;
   }
 
@@ -1811,7 +1824,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   delete m;
 
   if (created)
-    update_heartbeat_sets();
+    update_heartbeat_peers();
 }
 
 
@@ -1891,7 +1904,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
        it != m->get_pg_list().end();
        it++) {
     pg_t pgid = it->pgid;
-    PG *pg;
+    PG *pg = 0;
 
     if (!_have_pg(pgid)) {
       // same primary?
@@ -1912,40 +1925,46 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       
       epoch_t last_epoch_started = it->last_epoch_started;
 
-      // is this an empty info?
-      if (it->last_update == eversion_t()) {
-	// is there a creation probe on this pg?
+      // DNE on source?
+      if (it->dne()) {  
+	// is there a creation pending on this pg?
 	if (creating_pgs.count(pgid)) {
 	  creating_pgs[pgid].prior.erase(from);
 	  if (!creating_pgs[pgid].prior.empty()) {
 	    dout(10) << "handle_pg_notify pg " << pgid
 		     << " doing creation probe, still waiting for " 
 		     << creating_pgs[pgid].prior << dendl;
+	    /*
+	     * hrm, what happens if one of the prior osds fails permanently?
+	     * admin needs to recreate the pg basically?
+	     */
 	    continue;
 	  }
 	  dout(10) << "handle_pg_notify pg " << pgid
 		   << " finished creation probe and DNE, creating"
 		   << dendl;
-	  last_epoch_started = 
-	    history.same_since = 
-	    history.same_primary_since = 
-	    history.same_acker_since = osdmap->get_epoch();
+	  pg = _create_lock_new_pg(pgid, acting, t);
+	  // fall through
 	} else {
 	  dout(10) << "handle_pg_notify pg " << pgid
-		   << " was doing creation probe, but found pg info on osd" << from << dendl;
+		   << " DNE on source, but creation probe, ignoring" << dendl;
+	  continue;
 	}
       }
       creating_pgs.erase(pgid);
 
-      // ok, create PG!
-      pg = _create_lock_pg(pgid, t);
-      pg->acting.swap(acting);
-      pg->set_role(role);
-      pg->info.history = history;
-      pg->clear_primary_state();  // yep, notably, set hml=false
-      pg->last_epoch_started_any = last_epoch_started;  // _after_ clear_primary_state()
-      pg->build_prior();      
-      pg->write_log(t);
+      // ok, create PG locally using provided Info and History
+      if (!pg) {
+	pg = _create_lock_pg(pgid, t);
+	pg->acting.swap(acting);
+	pg->set_role(role);
+	pg->info.history = history;
+	pg->info.epoch_created = it->epoch_created;
+	pg->last_epoch_started_any = last_epoch_started;  // _after_ clear_primary_state()
+	pg->clear_primary_state();  // yep, notably, set hml=false
+	pg->build_prior();      
+	pg->write_log(t);
+      }
       
       created++;
       dout(10) << *pg << " is new" << dendl;
@@ -1983,22 +2002,20 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     if (had) {
       if (pg->is_active() && 
-          (*it).is_uptodate() && acting) {
+          (*it).is_uptodate() && 
+	  acting) {
         pg->uptodate_set.insert(from);
         dout(10) << *pg << " osd" << from << " now uptodate (" << pg->uptodate_set  
                  << "): " << *it << dendl;
-        if (pg->is_all_uptodate()) 
-	  pg->finish_recovery();
       } else {
         // hmm, maybe keep an eye out for cases where we see this, but peer should happen.
         dout(10) << *pg << " already had notify info from osd" << from << ": " << *it << dendl;
       }
+      if (pg->is_all_uptodate()) 
+	pg->finish_recovery();
     } else {
-      // adjust prior?
       if (it->last_epoch_started > pg->last_epoch_started_any) 
         pg->adjust_prior();
-      
-      // peer
       pg->peer(t, query_map, &activator_map);
     }
 
@@ -2012,7 +2029,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   do_activators(activator_map);
   
   if (created)
-    update_heartbeat_sets();
+    update_heartbeat_peers();
 
   delete m;
 }
@@ -2131,6 +2148,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
+  int created = 0;
   map< int, list<PG::Info> > notify_list;
   
   for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
@@ -2170,6 +2188,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->info.history = history;
       pg->write_log(t);
       store->apply_transaction(t);
+      created++;
 
       dout(10) << *pg << " dne (before), but i am role " << role << dendl;
     } else {
@@ -2235,6 +2254,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   do_notifies(notify_list);   
 
   delete m;
+
+  if (created)
+    update_heartbeat_peers();
 }
 
 

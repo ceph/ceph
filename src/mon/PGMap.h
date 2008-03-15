@@ -112,7 +112,8 @@ public:
   }
   void stat_pg_sub(pg_t pgid, pg_stat_t &s) {
     num_pg--;
-    num_pg_by_state[s.state]--;
+    if (--num_pg_by_state[s.state] == 0)
+      num_pg_by_state.erase(s.state);
     total_pg_num_bytes -= s.num_bytes;
     total_pg_num_blocks -= s.num_blocks;
     total_pg_num_objects -= s.num_objects;

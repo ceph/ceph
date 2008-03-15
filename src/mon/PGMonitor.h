@@ -50,15 +50,18 @@ private:
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 
+  bool prepare_pg_stats(MPGStats *stats);
+
   void handle_statfs(MStatfs *statfs);
-  bool handle_pg_stats(MPGStats *stats);
+
+  void print_summary_stats(int dbl=5);
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
-  //void tick();  // check state, take actions
+  void tick();  // check state, take actions
 
 
   void register_new_pgs();

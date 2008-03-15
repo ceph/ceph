@@ -159,10 +159,7 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(1) << osdmap.get_num_osds() << " osds, "
-	    << osdmap.get_num_up_osds() << " up, " 
-	    << osdmap.get_num_in_osds() << " in" 
-	    << dendl;
+    print_summary_stats(1);
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
@@ -177,6 +174,13 @@ bool OSDMonitor::update_from_paxos()
   return true;
 }
 
+void OSDMonitor::print_summary_stats(int dbl)
+{
+  dout(dbl) << osdmap.get_num_osds() << " osds: "
+	    << osdmap.get_num_up_osds() << " up, " 
+	    << osdmap.get_num_in_osds() << " in" 
+	    << dendl;
+}
 
 void OSDMonitor::create_pending()
 {
@@ -637,6 +641,8 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
+  print_summary_stats(10);
+
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
@@ -663,6 +669,7 @@ void OSDMonitor::tick()
   if (!mark_out.empty()) {
     propose_pending();
   }
+
 
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1

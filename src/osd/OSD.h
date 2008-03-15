@@ -100,7 +100,7 @@ private:
   set<int> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
 
-  void update_heartbeat_sets();
+  void update_heartbeat_peers();
   void heartbeat();
 
   class C_Heartbeat : public Context {
@@ -275,14 +275,13 @@ private:
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
-  PG   *_new_lock_pg(pg_t pg);  // create new PG (in memory)
+  PG   *_open_lock_pg(pg_t pg);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
+  PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
-  void try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
-
   void load_pgs();
-  void calc_primaries_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
+  void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);

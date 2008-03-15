@@ -171,11 +171,9 @@ osd/rados
   2:   B C
   3: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
 
-  1: A B C
-  2:   B C
-  3: A   C  -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
-
  -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
+ 
+ -> so, use calc_priors_during in build_prior, then make recovery code check for is_up
 
 - paxos replication (i.e. majority voting)?
 
