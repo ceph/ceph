@@ -1427,10 +1427,23 @@ void OSD::advance_map(ObjectStore::Transaction& t)
           << dendl;
   
   // scan pg creations
-  for (hash_map<pg_t, create_pg_info>::iterator p = creating_pgs.begin();
-       p != creating_pgs.end();
-       p++) {
-    dout(0) << "IMPLEMENT ME *********" << dendl;
+  hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
+  while (n != creating_pgs.end()) {
+    hash_map<pg_t, create_pg_info>::iterator p = n++;
+    pg_t pgid = p->first;
+
+    // am i still primary?
+    vector<int> acting;
+    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, nrep);
+    if (role != 0) {
+      dout(10) << " no longer primary for " << pgid << ", stopping creation" << dendl;
+      creating_pgs.erase(p);
+    }
+    /*
+     * adding new ppl to our pg has no effect, since we're still primary,
+     * and obviously haven't given the new nodes any data.
+     */
   }
 
   // scan existing pg's

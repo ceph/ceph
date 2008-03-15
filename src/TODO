@@ -1,6 +1,5 @@
 mkfs
-- online changes to pg_num
-- initialization of pg_num during non-simple mkfs...
+- pg splitting!
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
