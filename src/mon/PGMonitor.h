@@ -53,7 +53,7 @@ private:
   void handle_statfs(MStatfs *statfs);
   bool handle_pg_stats(MPGStats *stats);
 
-  map<int,utime_t> last_pg_create;  // per osd throttle
+  map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
@@ -62,7 +62,7 @@ private:
 
 
   void register_new_pgs();
-  void send_pg_creates(int onlyosd=-1);
+  void send_pg_creates();
 
 };
 

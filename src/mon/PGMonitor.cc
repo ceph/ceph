@@ -116,14 +116,7 @@ bool PGMonitor::update_from_paxos()
   pg_map._encode(bl);
   mon->store->put_bl_ss(bl, "pgmap", "latest");
 
-  // not creating pgs?
-  if (mon->osdmon->osdmap.is_creating_pgs() &&
-      pg_map.creating_pgs.empty()) {
-    // this may not work if osdmap not currently writeable.. but we'll get it eventually!
-    mon->osdmon->try_clear_mkpg_flag();  
-  } else {
-    send_pg_creates();
-  }
+  send_pg_creates();
 
   return true;
 }
@@ -274,23 +267,25 @@ struct RetryRegisterNewPgs : public Context {
 
 void PGMonitor::register_new_pgs()
 {
-  if (mon->is_peon()) return; // whatever.
+  if (mon->is_peon()) 
+    return; // whatever.
+
   if (!mon->osdmon->paxos->is_readable()) {
     dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
     mon->osdmon->paxos->wait_for_readable(new RetryRegisterNewPgs(this));
     return;
   }
+
   if (!paxos->is_writeable()) {
     dout(10) << "register_new_pgs -- pgmap not writeable, waiting" << dendl;
     paxos->wait_for_writeable(new RetryRegisterNewPgs(this));
     return;
   }
 
-  dout(10) << "map pg_creating_from = " << mon->osdmon->osdmap.get_creating_pgs_from() 
-	   << " vs last_mkpg_scan " << pg_map.last_mkpg_scan
-	   << dendl;
-  if (mon->osdmon->osdmap.get_creating_pgs_from() <=
-      pg_map.last_mkpg_scan) {
+  dout(10) << "osdmap last_pg_change " << mon->osdmon->osdmap.get_last_pg_change()
+	   << ", pgmap last_pg_scan " << pg_map.last_pg_scan << dendl;
+  if (mon->osdmon->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
+      mon->osdmon->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
     dout(10) << "register_new_pgs -- i've already scanned pg space since last significant osdmap update" << dendl;
     return;
   }
@@ -326,16 +321,18 @@ void PGMonitor::register_new_pgs()
   } 
   dout(10) << "register_new_pgs registered " << created << " new pgs" << dendl;
   if (created) {
-    last_pg_create.clear();  // reset pg_create throttle timer
-    pending_inc.mkpg_scan = epoch;
+    last_sent_pg_create.clear();  // reset pg_create throttle timer
+    pending_inc.pg_scan = epoch;
     propose_pending();
   }
 }
 
-void PGMonitor::send_pg_creates(int onlyosd)
+void PGMonitor::send_pg_creates()
 {
   dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
+
   map<int, MOSDPGCreate*> msg;
+  utime_t now = g_clock.now();
 
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
@@ -343,29 +340,27 @@ void PGMonitor::send_pg_creates(int onlyosd)
     pg_t pgid = *p;
     vector<int> acting;
     int nrep = mon->osdmon->osdmap.pg_to_acting_osds(pgid, acting);
-    if (!nrep) {
-      dout(20) << "send_pg_creates  " << pgid << " -> no up devices, skipping" << dendl;
+    if (!nrep) 
       continue;  // blarney!
-    }
     int osd = acting[0];
-    if (onlyosd >= 0 && osd != onlyosd) continue;
-    dout(20) << "send_pg_creates  " << pgid << " -> osd" << osd << dendl;
+
+    // throttle?
+    if (last_sent_pg_create.count(osd) &&
+	now - g_conf.mon_pg_create_interval < last_sent_pg_create[osd]) 
+      continue;
+      
+    dout(20) << "send_pg_creates  " << pgid << " -> osd" << osd 
+	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon->osdmap.get_epoch());
     msg[osd]->mkpg[pgid] = pg_map.pg_stat[pgid].created;
   }
 
-  utime_t now = g_clock.now();
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
        p != msg.end();
        p++) {
-    if (now - g_conf.mon_pg_create_interval < last_pg_create[p->first]) {
-      dout(10) << "NOT sending pg_create to osd" << p->first << dendl;
-      continue;  // throttle
-    } else {
-      dout(10) << "sending pg_create to osd" << p->first << dendl;
-      mon->messenger->send_message(p->second, mon->osdmon->osdmap.get_inst(p->first));
-      last_pg_create[p->first] = g_clock.now();
-    }
+    dout(10) << "sending pg_create to osd" << p->first << dendl;
+    mon->messenger->send_message(p->second, mon->osdmon->osdmap.get_inst(p->first));
+    last_sent_pg_create[p->first] = g_clock.now();
   }
 }

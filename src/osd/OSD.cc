@@ -1761,7 +1761,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       dout(10) << "mkpg " << pgid << " creating now" << dendl;
       try_create_pg(pgid, t);
     } else {
-      dout(10) << "mkpg " << pgid << " querying priors" << dendl;
+      dout(10) << "mkpg " << pgid << " e " << created << " : querying priors" << dendl;
       assert(0);
     }
   }

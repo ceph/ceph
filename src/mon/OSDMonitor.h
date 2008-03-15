@@ -127,8 +127,6 @@ private:
 
   void mark_all_down();
 
-  void try_clear_mkpg_flag();
-
   void send_latest(entity_inst_t i, epoch_t start=0);
 
   void fake_osd_failure(int osd, bool down);

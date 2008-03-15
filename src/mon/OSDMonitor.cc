@@ -166,11 +166,9 @@ bool OSDMonitor::update_from_paxos()
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
-  // mkpg flag set?
-  if (osdmap.is_creating_pgs()) {
-    mon->pgmon->register_new_pgs();
-    mon->pgmon->send_pg_creates();
-  }
+  // kick pgmon, in case there are pg creations going on 
+  mon->pgmon->register_new_pgs();
+  mon->pgmon->send_pg_creates();
 
   // new map!
   bcast_latest_mds();
@@ -199,17 +197,6 @@ struct RetryClearMkpg : public Context {
 };
 */
 
-void OSDMonitor::try_clear_mkpg_flag()
-{
-  if (paxos->is_writeable()) {
-    dout(10) << "clear_mkpg_flag" << dendl;
-    pending_inc.mkpg |= OSDMap::Incremental::MKPG_FINISH;
-    //} else if (!mon->is_peon()) {
-    //dout(10) << "clear_mkpg_flag -- waiting for writeable" << dendl;
-    //paxos->wait_for_writeable(new RetryClearMkpg(this));
-  }
-}
-
 void OSDMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
@@ -217,15 +204,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
   
   // finalize up pending_inc
   pending_inc.ctime = g_clock.now();
-  if ((pending_inc.mkpg & OSDMap::Incremental::MKPG_START) == 0 && 
-      (pending_inc.crush.length() ||
-       pending_inc.fullmap.length() ||
-       pending_inc.new_pg_num ||
-       pending_inc.new_localized_pg_num)) {
-    dout(2) << " setting mkpg flag" << dendl;
-    pending_inc.mkpg |= OSDMap::Incremental::MKPG_START;
-  }
-  
+
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
