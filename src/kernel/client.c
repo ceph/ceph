@@ -323,5 +323,13 @@ const char *ceph_msg_type_name(int type)
 
 void ceph_peer_reset(void *c)
 {
+	struct ceph_connection *con = c;
+
+	dout(30, "ceph_peer_reset peer_name = %s%d\n", 
+	     ceph_name_type_str(le32_to_cpu(con->peer_name.type)), 
+	     le32_to_cpu(con->peer_name.num));
+
+	con->connect_seq = con->peer_connect_seq;
+	
 	return;
 }
