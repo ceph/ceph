@@ -785,15 +785,18 @@ static int read_connect_partial(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
-	/* peer_connect_seq */
-	to += sizeof(con->peer_connect_seq);
-	if (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = sizeof(con->peer_connect_seq) - left;
-		ret = ceph_tcp_recvmsg(con->sock, (char*)&con->peer_connect_seq + have, left);
-		if (ret <= 0) goto out;
-		con->in_base_pos += ret;
-	}	
+	if (con->in_tag == CEPH_MSGR_TAG_RETRY) {
+		/* peer_connect_seq */
+		to += sizeof(con->peer_connect_seq);
+		if (con->in_base_pos < to) {
+			int left = to - con->in_base_pos;
+			int have = sizeof(con->peer_connect_seq) - left;
+			ret = ceph_tcp_recvmsg(con->sock, 
+					       (char*)&con->peer_connect_seq + have, left);
+			if (ret <= 0) goto out;
+			con->in_base_pos += ret;
+		}	
+	}
 	ret = 1;
 out:
 	dout(20, "read_connect_partial %p end at %d ret %d\n", con, con->in_base_pos, ret);
@@ -826,8 +829,8 @@ static void process_connect(struct ceph_connection *con)
 		ceph_queue_write(con);
 		break;
 	case CEPH_MSGR_TAG_RETRY:
-		dout(10, "process_connect got session RETRY connect_seq = %u, 
-		     peer_connect_seq = %u\n", con->connect_seq, con->peer_connect_seq);
+		dout(10, "process_connect got session RETRY connect_seq = %u, peer_connect_seq = %u\n", 
+		    con->connect_seq, con->peer_connect_seq);
 		con->connect_seq = con->peer_connect_seq;
 		prepare_write_connect(con->msgr, con);
 		ceph_queue_write(con);
