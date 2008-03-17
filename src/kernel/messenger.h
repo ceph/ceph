@@ -59,18 +59,17 @@ struct ceph_msg_pos {
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define NEW           	 0
-#define CONNECTING       1
-#define ACCEPTING        2
-#define OPEN             3
-#define WRITE_PENDING    4  /* we have data to send */
-#define READABLE         5  /* set when socket gets new data */
-#define READING          6  /* provides mutual exclusion, protecting in_* */
-#define REJECTING        7
-#define CLOSING          8
-#define CLOSED           9
-#define SOCK_CLOSE       10 /* socket state changed to close */
-#define STANDBY          11 /* standby, when socket state close, no message queued */
+#define NEW		0
+#define CONNECTING	1
+#define ACCEPTING	2
+#define OPEN		3
+#define WRITE_PENDING	4  /* we have data to send */
+#define READABLE	5  /* set when socket gets new data */
+#define READING		6  /* provides mutual exclusion, protecting in_* */
+#define WAIT		7  /* wait for peer to connect */
+#define CLOSED		8
+#define SOCK_CLOSE	9  /* socket state changed to close */
+#define STANDBY		10 /* standby, when socket state close, no message queued */
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -83,6 +82,7 @@ struct ceph_connection {
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
+	struct ceph_entity_name peer_name; /* peer name */
 	__u32 connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
