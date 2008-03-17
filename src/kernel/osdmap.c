@@ -485,7 +485,8 @@ bad:
  */
 void calc_file_object_mapping(struct ceph_file_layout *layout, 
 			      loff_t *off, loff_t *len,
-			      struct ceph_object *oid, __u64 *oxoff, __u64 *oxlen)
+			      struct ceph_object *oid,
+			      __u64 *oxoff, __u64 *oxlen)
 {
 	unsigned su, stripeno, stripepos, objsetno;
 	unsigned su_per_object;
@@ -544,7 +545,10 @@ void calc_object_layout(struct ceph_object_layout *ol,
 		num = osdmap->pg_num;
 		num_mask = osdmap->pg_num_mask;
 	}
-	ol->ol_pgid.pg.ps = ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, oid->ino>>32), num, num_mask);
+	ol->ol_pgid.pg.ps = 
+		ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, 
+							  oid->ino>>32), 
+				num, num_mask);
 	ol->ol_pgid.pg.preferred = fl->fl_pg_preferred;
 	ol->ol_pgid.pg.type = fl->fl_pg_type;
 	ol->ol_pgid.pg.size = fl->fl_pg_size;

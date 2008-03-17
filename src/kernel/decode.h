@@ -1,6 +1,15 @@
 #ifndef __CEPH_DECODE_H
 #define __CEPH_DECODE_H
 
+/*
+ * in all cases, 
+ *   void **p     pointer to position pointer
+ *   void *end    pointer to end of buffer (last byte + 1)
+ */
+
+/*
+ * bounds check input.
+ */
 #define ceph_decode_need(p, end, n, bad)		\
 	do {						\
 		if (unlikely(*(p) + (n) > (end))) 	\
