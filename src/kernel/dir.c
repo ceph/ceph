@@ -412,6 +412,43 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	return err;
 }
 
+static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
+			 struct dentry *dentry)
+{
+	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	char *oldpath, *path;
+	int oldpathlen, pathlen;
+	int err;
+
+	dout(5, "dir_link in dir %p old_dentry %p dentry %p\n", dir, 
+	     old_dentry, dentry);
+	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen);
+	if (IS_ERR(oldpath))
+		return PTR_ERR(oldpath);
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path)) {
+		kfree(oldpath);
+		return PTR_ERR(path);
+	}
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LINK,
+				       ceph_ino(dir->i_sb->s_root->d_inode),
+				       path,
+				       ceph_ino(dir->i_sb->s_root->d_inode),
+				       oldpath);
+	kfree(oldpath);
+	kfree(path);
+	if (IS_ERR(req)) {
+		d_drop(dentry);
+		return PTR_ERR(req);
+	}
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+	if (err < 0)
+		d_drop(dentry);
+	return err;
+}
 
 static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 {
@@ -535,6 +572,7 @@ const struct inode_operations ceph_dir_iops = {
 	.mknod = ceph_dir_mknod,
 	.symlink = ceph_dir_symlink,
 	.mkdir = ceph_dir_mkdir,
+	.link = ceph_dir_link,
 	.unlink = ceph_dir_unlink,
 	.rmdir = ceph_dir_unlink,
 	.rename = ceph_dir_rename,

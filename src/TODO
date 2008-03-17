@@ -10,7 +10,7 @@ code cleanup
 - fix ceph_lookup_open
 
 kernel client
-- some bugs
+- make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
