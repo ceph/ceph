@@ -379,7 +379,6 @@ private:
     ::_decode(pg_num, blist, off);
     ::_decode(localized_pg_num, blist, off);
     calc_pg_masks();
-
     ::_decode(last_pg_change, blist, off);
 
     ::_decode(max_osd, blist, off);
@@ -391,8 +390,6 @@ private:
     ::_decode(cbl, blist, off);
     bufferlist::iterator cblp = cbl.begin();
     crush._decode(cblp);
-
-    //crush.update_offload_map(out_osds, overload_osds);
   }
  
 
