@@ -120,7 +120,7 @@ public:
 		     0,
 		     object_t(u.pg64, 0));
   }
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
@@ -254,6 +254,7 @@ static inline std::string pg_state_string(int state) {
 struct pg_stat_t {
   eversion_t reported;
   epoch_t created;
+  pg_t    parent;
   int32_t state;
   int64_t num_bytes;    // in bytes
   int64_t num_blocks;   // in 4k blocks

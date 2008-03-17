@@ -1,5 +1,6 @@
 mkfs
 - pg splitting!
+- ratchet up pgp_num as pg creation succeeds
 
 code cleanup
 - userspace encoding/decoding needs major cleanup

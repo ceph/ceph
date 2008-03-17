@@ -131,7 +131,7 @@ union ceph_pg {
 		__u8 size;
 		__u8 __pad;
 	} pg;
-};
+} __attribute__ ((packed));
 
 #define ceph_pg_is_rep(pg)   (pg.pg.type == CEPH_PG_TYPE_REP)
 #define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)

@@ -624,14 +624,15 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
     int added = 0;
     for (unsigned i=0; i<acting.size(); i++)
-      if ((int)i != whoami && osdmap->is_up(acting[i])) {
+      if (acting[i] != whoami && osdmap->is_up(acting[i])) {
 	pset.insert(acting[i]);
 	added++;
       }
     if (!added && acting.size()) {
       // sucky.  add down osds, even tho we can't reach them right now.
       for (unsigned i=0; i<acting.size(); i++)
-	pset.insert(acting[i]);
+	if (acting[i] != whoami)
+	  pset.insert(acting[i]);
     }
   }
   dout(10) << "calc_priors_during " << pgid
@@ -1770,6 +1771,33 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 // pg creation
 
 
+bool OSD::ready_to_create_pg(pg_t pgid)
+{
+  assert(creating_pgs.count(pgid));
+
+  // priors empty?
+  if (!creating_pgs[pgid].prior.empty()) {
+    dout(10) << "ready_to_create_pg " << pgid
+	     << " - waiting for priors " << creating_pgs[pgid].prior << dendl;
+    return false;
+  }
+
+  if (creating_pgs[pgid].parent != pg_t()) {
+    PG *parent = _lookup_lock_pg(creating_pgs[pgid].parent);
+    assert(parent);
+    if (!parent->is_clean()) {
+      dout(10) << "ready_to_create_pg " << pgid
+	       << " - parent " << parent->info.pgid << " not clean" << dendl;
+      parent->unlock();
+      return false;
+    }
+    parent->unlock();
+  }
+
+  dout(10) << "ready_to_create_pg " << pgid << " - ready!" << dendl;      
+  return true;
+}
+
 /*
  * holding osd_lock
  */
@@ -1783,16 +1811,21 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   ObjectStore::Transaction t;
   int created = 0;
 
-  for (map<pg_t,epoch_t>::iterator p = m->mkpg.begin();
+  for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
        p++) {
     pg_t pgid = p->first;
-    epoch_t created = p->second;
-    dout(20) << "mkpg " << pgid << " (logically created " << created << ")" << dendl;
+    epoch_t created = p->second.created;
+    pg_t parent = p->second.parent;
+    pg_t on = pgid;
+    if (parent != pg_t()) 
+      on = parent;
+
+    dout(20) << "mkpg " << pgid << " from parent " << parent << " logically created " << created << dendl;;
    
     // is it still ours?
     vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+    int nrep = osdmap->pg_to_acting_osds(on, acting);
     int role = osdmap->calc_pg_role(whoami, acting, nrep);
 
     if (role != 0) {
@@ -1806,30 +1839,35 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       continue;
     }
 
+    // does parent exist?
+    if (parent != pg_t() && !_have_pg(parent)) {
+      dout(10) << "mkpg " << pgid << "  missing parent " << parent << ", skipping" << dendl;
+      continue;
+    }
+
     // figure history
     PG::Info::History history;
     project_pg_history(pgid, history, created, acting);
     
-    if (history.same_primary_since > created) {
-      // calc prior primary set.  may be empty, keep in mind.
-      set<int> pset;
-      calc_priors_during(pgid, created, history.same_primary_since, pset);
-      pset.erase(whoami);
-      if (pset.size()) {
-	dout(10) << "mkpg " << pgid << " e " << created << " : querying priors " 
-		 << pset << dendl;
-	for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
-	  if (osdmap->is_up(*p))
-	    query_map[*p][pgid].type = PG::Query::INFO;
-	creating_pgs[pgid].created = created;
-	creating_pgs[pgid].prior.swap(pset);
-	continue;
-      }
+    // register.
+    creating_pgs[pgid].created = created;
+    creating_pgs[pgid].parent = parent;
+    calc_priors_during(pgid, created, history.same_primary_since, 
+		       creating_pgs[pgid].prior);
+
+    if (ready_to_create_pg(pgid)) {
+      dout(10) << "mkpg " << pgid << " creating now" << dendl;
+      PG *pg = _create_lock_new_pg(pgid, acting, t);
+      pg->unlock();
+      created++;
+    } else {
+      set<int>& pset = creating_pgs[pgid].prior;
+      dout(10) << "mkpg " << pgid << " e " << created
+	       << " : waiting for parent and/or querying priors " << pset << dendl;
+      for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
+	if (osdmap->is_up(*p))
+	  query_map[*p][pgid].type = PG::Query::INFO;
     }
-    dout(10) << "mkpg " << pgid << " creating now" << dendl;
-    PG *pg = _create_lock_new_pg(pgid, acting, t);
-    pg->unlock();
-    created++;
   }
 
   store->apply_transaction(t);
@@ -1943,16 +1981,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	// is there a creation pending on this pg?
 	if (creating_pgs.count(pgid)) {
 	  creating_pgs[pgid].prior.erase(from);
-	  if (!creating_pgs[pgid].prior.empty()) {
-	    dout(10) << "handle_pg_notify pg " << pgid
-		     << " doing creation probe, still waiting for " 
-		     << creating_pgs[pgid].prior << dendl;
-	    /*
-	     * hrm, what happens if one of the prior osds fails permanently?
-	     * admin needs to recreate the pg basically?
-	     */
+	  if (!ready_to_create_pg(pgid))
 	    continue;
-	  }
+
 	  dout(10) << "handle_pg_notify pg " << pgid
 		   << " finished creation probe and DNE, creating"
 		   << dendl;

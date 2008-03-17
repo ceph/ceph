@@ -318,6 +318,7 @@ void PGMonitor::register_new_pgs()
   int pg_num = mon->osdmon->osdmap.get_pg_num();
   epoch_t epoch = mon->osdmon->osdmap.get_epoch();
 
+  bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
   for (int ruleno=0; ruleno<crush->get_max_rules(); ruleno++) {
     if (!crush->is_rule(ruleno)) 
@@ -333,10 +334,35 @@ void PGMonitor::register_new_pgs()
 	  dout(20) << "register_new_pgs have " << pgid << dendl;
 	  continue;
 	}
-	dout(10) << "register_new_pgs will create " << pgid << dendl;
+
+	pg_t parent;
+	if (!first) {
+	  parent = pgid;
+	  while (1) {
+	    // remove most significant bit
+	    int msb = calc_bits_of(parent.u.pg.ps);
+	    if (!msb) break;
+	    parent.u.pg.ps &= ~(1<<(msb-1));
+	    //dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
+	    if (pg_map.pg_stat.count(parent) &&
+		pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
+	      //dout(10) << "  parent is " << parent << dendl;
+	      break;
+	    }
+	  }
+	}
+	
 	pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
 	pending_inc.pg_stat_updates[pgid].created = epoch;
-	created++;
+	pending_inc.pg_stat_updates[pgid].parent = parent;
+	created++;	
+
+	if (parent == pg_t()) {
+	  dout(10) << "register_new_pgs will create " << pgid << dendl;
+	} else {
+	  dout(10) << "register_new_pgs will create " << pgid << " parent " << parent << dendl;
+	}
+
       }
     }
   } 
@@ -359,8 +385,11 @@ void PGMonitor::send_pg_creates()
        p != pg_map.creating_pgs.end();
        p++) {
     pg_t pgid = *p;
+    pg_t on = pgid;
+    if (pg_map.pg_stat[pgid].parent != pg_t())
+      on = pg_map.pg_stat[pgid].parent;
     vector<int> acting;
-    int nrep = mon->osdmon->osdmap.pg_to_acting_osds(pgid, acting);
+    int nrep = mon->osdmon->osdmap.pg_to_acting_osds(on, acting);
     if (!nrep) 
       continue;  // blarney!
     int osd = acting[0];
@@ -374,7 +403,8 @@ void PGMonitor::send_pg_creates()
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon->osdmap.get_epoch());
-    msg[osd]->mkpg[pgid] = pg_map.pg_stat[pgid].created;
+    msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
+    msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
   }
 
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();

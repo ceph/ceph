@@ -301,11 +301,14 @@ private:
   struct create_pg_info {
     epoch_t created;
     set<int> prior;
+    pg_t parent;
+    bool has_parent() { return parent != pg_t(); }
+
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
 
+  bool ready_to_create_pg(pg_t pgid);
   void handle_pg_create(class MOSDPGCreate *m);
-
 
 
   // -- pg stats --

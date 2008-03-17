@@ -24,13 +24,16 @@
 
 struct MOSDPGCreate : public Message {
   version_t          epoch;
-  map<pg_t,epoch_t>  mkpg;  // pg -> first epoch pg could/might exist
+  struct create_rec {
+    epoch_t created;   // epoch pg created
+    pg_t parent;       // split from parent (if != pg_t())
+  };
+  map<pg_t,create_rec> mkpg;
 
   MOSDPGCreate() {}
   MOSDPGCreate(epoch_t e) :
     Message(MSG_OSD_PG_CREATE),
-    epoch(e) {
-  }
+    epoch(e) { }
   
   const char *get_type_name() { return "pg_create"; }
 
