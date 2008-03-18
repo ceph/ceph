@@ -125,7 +125,6 @@ private:
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
-  void finish_command(MMonCommand *m, int rc, const string &rs);
 
   void mark_all_down();
 

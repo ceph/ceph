@@ -27,6 +27,7 @@ struct MOSDPGCreate : public Message {
   struct create_rec {
     epoch_t created;   // epoch pg created
     pg_t parent;       // split from parent (if != pg_t())
+    int split_bits;
   };
   map<pg_t,create_rec> mkpg;
 

@@ -165,10 +165,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   paxos_pgmap.leader_init();
   
   // init
+  pgmon->election_finished();  // hack: before osdmon, for osd->pg kick works ok
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
-  pgmon->election_finished();
 } 
 
 void Monitor::lose_election(epoch_t epoch, int l) 
@@ -202,6 +202,10 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "osd") {
       osdmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "pg") {
+      pgmon->dispatch(m);
       return;
     }
     if (m->cmd[0] == "stop") {

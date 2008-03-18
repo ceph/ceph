@@ -303,7 +303,7 @@ private:
     vector<int> acting;
     set<int> prior;
     pg_t parent;
-    bool has_parent() { return parent != pg_t(); }
+    int split_bits;
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
   map<pg_t, set<pg_t> > pg_split_ready;  // children ready to be split to, by parent
@@ -311,7 +311,6 @@ private:
   PG *try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
   void handle_pg_create(class MOSDPGCreate *m);
 
-  int num_expected_children_of(pg_t pgid);
   void kick_pg_split_queue();
   void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
 

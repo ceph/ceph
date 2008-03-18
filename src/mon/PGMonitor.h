@@ -32,6 +32,7 @@ using namespace std;
 
 class MPGStats;
 class MStatfs;
+class MMonCommand;
 
 class PGMonitor : public PaxosService {
 public:
@@ -56,6 +57,9 @@ private:
 
   void print_summary_stats(int dbl=5);
 
+  bool preprocess_command(MMonCommand *m);
+  bool prepare_command(MMonCommand *m);
+
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
  public:
@@ -66,6 +70,8 @@ private:
 
   void register_new_pgs();
   void send_pg_creates();
+
+
 
 };
 

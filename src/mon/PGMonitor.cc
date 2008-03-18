@@ -24,6 +24,7 @@
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
 
@@ -34,8 +35,8 @@
 #include <sstream>
 
 
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 
 
 /*
@@ -112,20 +113,25 @@ bool PGMonitor::update_from_paxos()
   return true;
 }
 
-void PGMonitor::print_summary_stats(int dbl)
+ostream& operator<<(ostream& out, PGMonitor& pm)
 {
   std::stringstream ss;
-  for (hash_map<int,int>::iterator p = pg_map.num_pg_by_state.begin();
-       p != pg_map.num_pg_by_state.end();
+  for (hash_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
+       p != pm.pg_map.num_pg_by_state.end();
        ++p) {
-    if (p != pg_map.num_pg_by_state.begin())
+    if (p != pm.pg_map.num_pg_by_state.begin())
       ss << ", ";
     ss << p->second << " " << pg_state_string(p->first);// << "(" << p->first << ")";
   }
   string states = ss.str();
-  dout(dbl) << "v" << pg_map.version << " "
-	    << pg_map.pg_stat.size() << " pgs: "
-	    << states << dendl;
+  return out << "v" << pm.pg_map.version << ": "
+	     << pm.pg_map.pg_stat.size() << " pgs: "
+	     << states;
+}
+
+void PGMonitor::print_summary_stats(int dbl)
+{
+  dout(dbl) << *this << dendl;
   if (!pg_map.creating_pgs.empty())
     dout(20) << " creating_pgs = " << pg_map.creating_pgs << dendl;
 }
@@ -169,6 +175,9 @@ bool PGMonitor::preprocess_query(Message *m)
       dout(10) << " message contains no new osd|pg stats" << dendl;
       return true;
     }
+
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
 
   default:
     assert(0);
@@ -336,6 +345,7 @@ void PGMonitor::register_new_pgs()
 	}
 
 	pg_t parent;
+	int split_bits = 0;
 	if (!first) {
 	  parent = pgid;
 	  while (1) {
@@ -343,10 +353,11 @@ void PGMonitor::register_new_pgs()
 	    int msb = calc_bits_of(parent.u.pg.ps);
 	    if (!msb) break;
 	    parent.u.pg.ps &= ~(1<<(msb-1));
+	    split_bits++;
 	    dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
-	    if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
-	      //if (pg_map.pg_stat.count(parent) &&
-	      //pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
+	    //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
+	    if (pg_map.pg_stat.count(parent) &&
+		pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
 	      dout(10) << "  parent is " << parent << dendl;
 	      break;
 	    }
@@ -356,12 +367,16 @@ void PGMonitor::register_new_pgs()
 	pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
 	pending_inc.pg_stat_updates[pgid].created = epoch;
 	pending_inc.pg_stat_updates[pgid].parent = parent;
+	pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
 	created++;	
 
-	if (parent == pg_t()) {
+	if (split_bits == 0) {
 	  dout(10) << "register_new_pgs will create " << pgid << dendl;
 	} else {
-	  dout(10) << "register_new_pgs will create " << pgid << " parent " << parent << dendl;
+	  dout(10) << "register_new_pgs will create " << pgid
+		   << " parent " << parent
+		   << " by " << split_bits << " bits"
+		   << dendl;
 	}
 
       }
@@ -387,7 +402,7 @@ void PGMonitor::send_pg_creates()
        p++) {
     pg_t pgid = *p;
     pg_t on = pgid;
-    if (pg_map.pg_stat[pgid].parent != pg_t())
+    if (pg_map.pg_stat[pgid].parent_split_bits)
       on = pg_map.pg_stat[pgid].parent;
     vector<int> acting;
     int nrep = mon->osdmon->osdmap.pg_to_acting_osds(on, acting);
@@ -406,6 +421,7 @@ void PGMonitor::send_pg_creates()
       msg[osd] = new MOSDPGCreate(mon->osdmon->osdmap.get_epoch());
     msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
     msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
+    msg[osd]->mkpg[pgid].split_bits = pg_map.pg_stat[pgid].parent_split_bits;
   }
 
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
@@ -415,4 +431,47 @@ void PGMonitor::send_pg_creates()
     mon->messenger->send_message(p->second, mon->osdmon->osdmap.get_inst(p->first));
     last_sent_pg_create[p->first] = g_clock.now();
   }
+}
+
+
+bool PGMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
+      pg_map._encode(rdata);
+      ss << "got pgmap version " << pg_map.version;
+      r = 0;
+    }
+  }
+
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata);
+    return true;
+  } else
+    return false;
+}
+
+
+bool PGMonitor::prepare_command(MMonCommand *m)
+{
+  stringstream ss;
+  string rs;
+  int err = -EINVAL;
+
+  // nothing here yet
+  ss << "unrecognized command";
+
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
+  return false;
 }

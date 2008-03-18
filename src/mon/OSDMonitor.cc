@@ -28,7 +28,6 @@
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 #include "messages/MMonCommand.h"
-#include "messages/MMonCommandAck.h"
 
 #include "common/Timer.h"
 
@@ -174,12 +173,17 @@ bool OSDMonitor::update_from_paxos()
   return true;
 }
 
+ostream& operator<<(ostream& out, OSDMonitor& om)
+{
+  return out << "e" << om.osdmap.get_epoch() << ": "
+	     << om.osdmap.get_num_osds() << " osds: "
+	     << om.osdmap.get_num_up_osds() << " up, " 
+	     << om.osdmap.get_num_in_osds() << " in";
+}
+
 void OSDMonitor::print_summary_stats(int dbl)
 {
-  dout(dbl) << osdmap.get_num_osds() << " osds: "
-	    << osdmap.get_num_up_osds() << " up, " 
-	    << osdmap.get_num_in_osds() << " in" 
-	    << dendl;
+  dout(dbl) << *this << dendl;
 }
 
 void OSDMonitor::create_pending()
@@ -728,7 +732,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   stringstream ss;
 
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "getmap") {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
       osdmap.encode(rdata);
       ss << "got osdmap epoch " << osdmap.get_epoch();
       r = 0;
@@ -746,10 +754,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    MMonCommandAck *reply = new MMonCommandAck(r, rs);
-    reply->set_data(rdata);
-    mon->messenger->send_message(reply, m->inst);
-    delete m;
+    mon->reply_command(m, r, rs, rdata);
     return true;
   } else
     return false;
@@ -759,6 +764,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
   string rs;
+  int err = -EINVAL;
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
@@ -785,13 +791,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
       int n = atoi(m->cmd[2].c_str());
-      if (n < osdmap.get_pg_num()) {
-	ss << "specified pg_num " << n << " < current " << osdmap.get_pg_num();
-      } else if (osdmap.get_pg_num() != osdmap.get_pgp_num()) {
-	ss << "current pg_num " << osdmap.get_pg_num() << " > " << osdmap.get_pgp_num()
-	   << ", increase pgp_num first";
+      if (n <= osdmap.get_pg_num()) {
+	ss << "specified pg_num " << n << " <= current " << osdmap.get_pg_num();
       } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
 	ss << "currently creating pgs, wait";
+	err = -EAGAIN;
       } else {
 	ss << "set new pg_num = " << n;
 	pending_inc.new_pg_num = n;
@@ -799,8 +803,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
-      getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs);
     }
     else if (m->cmd[1] == "setpgpnum" && m->cmd.size() > 2) {
       int n = atoi(m->cmd[2].c_str());
@@ -810,6 +812,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "specified pgp_num " << n << " > pg_num " << osdmap.get_pg_num();
       } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
 	ss << "still creating pgs, wait";
+	err = -EAGAIN;
       } else {
 	ss << "set new pgp_num = " << n;
 	pending_inc.new_pgp_num = n;
@@ -817,11 +820,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       }
-      getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs);
     }
     else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_down(osd)) {
 	ss << "osd" << osd << " is already down";
@@ -832,11 +832,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       }
-      getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs);
     }
     else if (m->cmd[1] == "out" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_out(osd)) {
 	ss << "osd" << osd << " is already out";
@@ -847,11 +844,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
-      getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs);
     }
     else if (m->cmd[1] == "in" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_in(osd)) {
 	ss << "osd" << osd << " is already in";
@@ -862,9 +856,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
-      getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs);
+    } else {
+      ss << "unknown command " << m->cmd[1];
     }
+  } else {
+    ss << "no command?";
   }
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
   return false;
 }

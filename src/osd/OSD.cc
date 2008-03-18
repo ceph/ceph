@@ -1784,8 +1784,8 @@ PG *OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
     return 0;
   }
 
-  if (creating_pgs[pgid].parent != pg_t()) {
-    dout(10) << "try_create_pg " << pgid << " - queuing for split" << dendl;
+  if (creating_pgs[pgid].split_bits) {
+    dout(10) << "try_create_pg " << pgid << " - queueing for split" << dendl;
     pg_split_ready[creating_pgs[pgid].parent].insert(pgid); 
     return 0;
   }
@@ -1795,63 +1795,6 @@ PG *OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
   return pg;
 }
 
-
-int OSD::num_expected_children_of(pg_t pgid)
-{
-  int n = osdmap->get_pg_num();
-  int o = osdmap->get_pgp_num();
-  assert(n > o);
-
-  /*
-                bits
-o pgp_num = 7      2
-o pgp_num = 8      3
-
-n pg_num  = 8      3
-n pg_num  = 9      4
-
-0   000
-1   001
-2   010
-3   011
-4   100
- 5  101
- 6  110
- 7  111
- 8 1000
- 9 1001
-
-max = 2
-
-   */
-
-  assert(pgid.u.pg.ps < o);
-  int obits = calc_bits_of(o)-1;  // lower bound
-  int nbits = calc_bits_of(n-1);  // upper bound
-  assert(nbits > obits);
-    
-  int max = 0xffffffff >> (32 - (nbits-obits)); // == -> 1
-  int num = 0;
-  dout(10) << "num_expected_children_of " << pgid
-	   << " o/n " << o << "/" << n
-	   << " bits " << obits << "/" << nbits
-	   << " max " << max
-	   << dendl;
-
-  for (int i=1; i<=max; i++) {
-    int ps = (i << obits) | pgid.u.pg.ps;
-    dout(10) << "num_expected_children_of " << pgid.u.pg.ps << " -> " << ps << dendl;
-    if (ps < o || ps >= n) 
-      continue;
-    num++;
-  }
-
-  dout(10) << "num_expected_children_of " << pgid
-	   << " num " << num
-	   << dendl;
-
-  return num;
-}
 
 void OSD::kick_pg_split_queue()
 {
@@ -1865,10 +1808,10 @@ void OSD::kick_pg_split_queue()
   while (n != pg_split_ready.end()) {
     map<pg_t, set<pg_t> >::iterator p = n++;
     // how many children should this parent have?
-    unsigned nchildren = num_expected_children_of(p->first);
+    unsigned nchildren = (1 << (creating_pgs[*p->second.begin()].split_bits - 1)) - 1;
     if (p->second.size() < nchildren) {
       dout(15) << " parent " << p->first << " children " << p->second 
-	       << " ... waiting for more children" << dendl;
+	       << " ... waiting for " << nchildren << " children" << dendl;
       continue;
     }
 
@@ -1985,12 +1928,13 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     pg_t pgid = p->first;
     epoch_t created = p->second.created;
     pg_t parent = p->second.parent;
+    int split_bits = p->second.split_bits;
     pg_t on = pgid;
-    if (parent != pg_t()) 
-      on = parent;
 
-    if (parent != pg_t()) {
-      dout(20) << "mkpg " << pgid << " e" << created << " from parent " << parent << dendl;
+    if (split_bits) {
+      on = parent;
+      dout(20) << "mkpg " << pgid << " e" << created << " from parent " << parent
+	       << " split by " << split_bits << " bits" << dendl;
     } else {
       dout(20) << "mkpg " << pgid << " e" << created << dendl;
     }
@@ -2005,14 +1949,14 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       continue;
     }
 
-    // does it exist?
+    // does it already exist?
     if (_have_pg(pgid)) {
       dout(10) << "mkpg " << pgid << "  already exists, skipping" << dendl;
       continue;
     }
 
     // does parent exist?
-    if (parent != pg_t() && !_have_pg(parent)) {
+    if (split_bits && !_have_pg(parent)) {
       dout(10) << "mkpg " << pgid << "  missing parent " << parent << ", skipping" << dendl;
       continue;
     }
@@ -2024,6 +1968,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     // register.
     creating_pgs[pgid].created = created;
     creating_pgs[pgid].parent = parent;
+    creating_pgs[pgid].split_bits = split_bits;
     creating_pgs[pgid].acting.swap(acting);
     calc_priors_during(pgid, created, history.same_primary_since, 
 		       creating_pgs[pgid].prior);
