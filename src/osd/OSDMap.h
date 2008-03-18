@@ -486,14 +486,14 @@ private:
 
 
   // pg -> (osd list)
-  int pg_to_osds(pg_t actual_pg, vector<int>& osds) {
+  int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
 
-    pg_t pg = actual_pg;  // effective pgid for placement calc
+    ps_t pps;  // placement ps
     if (pg.preferred() >= 0)
-      pg.u.pg.ps = ceph_stable_mod(pg.u.pg.ps, pgp_num, pgp_num_mask);
+      pps = ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
     else
-      pg.u.pg.ps = ceph_stable_mod(pg.u.pg.ps, lpgp_num, lpgp_num_mask);
+      pps = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
 
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
@@ -501,18 +501,18 @@ private:
 	// what crush rule?
 	int ruleno = crush.find_rule(pg.pool(), pg.type(), pg.size());
 	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pg.ps(), osds, pg.size(), pg.preferred());
+	  crush.do_rule(ruleno, pps, osds, pg.size(), pg.preferred());
       }
       break;
       
     case CEPH_PG_LAYOUT_LINEAR:
       for (int i=0; i<pg.size(); i++) 
-	osds.push_back( (i + pg.ps()*pg.size()) % g_conf.num_osd );
+	osds.push_back( (i + pps*pg.size()) % g_conf.num_osd );
       break;
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
-	int h = crush_hash32(pg.ps());
+	int h = crush_hash32(pps);
 	for (int i=0; i<pg.size(); i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
@@ -524,7 +524,7 @@ private:
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = crush_hash32_3(i, pg.ps(), t) % g_conf.num_osd;
+	    osd = crush_hash32_3(i, pps, t) % g_conf.num_osd;
 	    int j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;

@@ -197,16 +197,24 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 	int osds[10];
 	int nr_osds;
 	int i;
-	
+	int pps; /* placement ps */
+
 	dout(30, "send_request %p\n", req);
 	
 	ruleno = crush_find_rule(osdc->osdmap->crush, req->r_pgid.pg.pool, 
 				 req->r_pgid.pg.type, req->r_pgid.pg.size);
 	BUG_ON(ruleno < 0);  /* fixme, need some proper error handling here */
 	dout(30, "using crush rule %d\n", ruleno);
-	nr_osds = crush_do_rule(osdc->osdmap->crush, ruleno, 
-				req->r_pgid.pg.ps, osds, req->r_pgid.pg.size, 
-				req->r_pgid.pg.preferred);
+	if (req->r_pgid.pg.preferred >= 0)
+		pps = ceph_stable_mod(req->r_pgid.pg.ps, 
+				     osdc->osdmap->lpgp_num, 
+				     osdc->osdmap->lpgp_num_mask);
+	else 
+		pps = ceph_stable_mod(req->r_pgid.pg.ps, 
+				     osdc->osdmap->pgp_num, 
+				     osdc->osdmap->pgp_num_mask);
+	nr_osds = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
+				req->r_pgid.pg.size, req->r_pgid.pg.preferred);
 	for (i=0; i<nr_osds; i++) {
 		if (ceph_osd_is_up(osdc->osdmap, osds[i]))
 			break;

@@ -1440,12 +1440,13 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     if (role != 0) {
       dout(10) << " no longer primary for " << pgid << ", stopping creation" << dendl;
       creating_pgs.erase(p);
+    } else {
+      /*
+       * adding new ppl to our pg has no effect, since we're still primary,
+       * and obviously haven't given the new nodes any data.
+       */
+      p->second.acting.swap(acting);  // keep the latest
     }
-    p->second.acting.swap(acting);  // keep the latest
-    /*
-     * adding new ppl to our pg has no effect, since we're still primary,
-     * and obviously haven't given the new nodes any data.
-     */
   }
 
   // scan existing pg's
@@ -1916,6 +1917,9 @@ void OSD::kick_pg_split_queue()
       created++;
     }
     store->apply_transaction(t);
+
+    // remove from queue
+    pg_split_ready.erase(p);
   }
 
   do_queries(query_map);

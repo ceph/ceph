@@ -35,9 +35,9 @@ class MStatfs;
 
 class PGMonitor : public PaxosService {
 public:
+  PGMap pg_map;
 
 private:
-  PGMap pg_map;
   PGMap::Incremental pending_inc;
 
   void create_initial();

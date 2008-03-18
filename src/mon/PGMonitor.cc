@@ -345,6 +345,8 @@ void PGMonitor::register_new_pgs()
 	    parent.u.pg.ps &= ~(1<<(msb-1));
 	    dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
 	    if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
+	      //if (pg_map.pg_stat.count(parent) &&
+	      //pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
 	      dout(10) << "  parent is " << parent << dendl;
 	      break;
 	    }

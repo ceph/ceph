@@ -1,6 +1,5 @@
 mkfs
-- pg splitting!
-- ratchet up pgp_num as pg creation succeeds
+- increase pg_num when pg_num > pgp_num
 
 code cleanup
 - userspace encoding/decoding needs major cleanup
