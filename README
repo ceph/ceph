@@ -4,3 +4,28 @@ Ceph - a scalable distributed file system
 Please see http://ceph.sourceforge.net/ for current info.
 
 INSTALL for basic build instructions.
+
+
+A quick summary of binaries that will be built in src/
+
+daemons:
+ cmon -- monitor daemon.  handles cluster state and configuration
+         information.
+ cosd -- storage daemon.  stores objects on a given block device.
+ cmds -- metadata daemon.  handles file system namespace.
+ cmonctl -- send commands to the monitor cluster.
+
+userland clients:
+ cfuse -- fuse client.
+ csyn -- synthetic workload generator client.
+
+tools:
+ mkmonfs -- create a fresh monfs (for a new filesystem)
+ monmaptool -- create/edit mon map
+ osdmaptool -- create/edit osd map 
+ crushtool -- create/edit crush map
+ dupstore -- duplicate an osd object store (offline)
+
+development/debugging:
+ fakesyn -- simulator with synthetic workload
+ fakefuse -- simulator that mounts with fuse
