@@ -1,6 +1,3 @@
-mkfs
-- increase pg_num when pg_num > pgp_num
-
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
@@ -160,10 +157,6 @@ objecter
 - read+floor_lockout
 
 osd/rados
-- pg splits.
-  - during mkps, iterate over affected old pgs and move objects
-  - set prior set on new pg to include primaries+replicas of any possible old pgs from whom objects may have been inherited.
-
 - fix build_prior_set behavior.  needs to not always exclude currently down nodes.  e.g.,
 
   1: A B
