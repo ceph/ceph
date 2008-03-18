@@ -139,7 +139,9 @@ static int prepopulate_dir(struct dentry *parent,
 				d_delete(dn);
 				return -1;
 			}
-			d_add(dn, in);
+			d_instantiate(dn, in);
+			if (d_unhashed(dn))
+				d_rehash(dn);
 			dout(10, "dir_readdir added dentry %p ino %llx %d/%d\n",
 			     dn, ceph_ino(in), i, rinfo->dir_nr);
 		} else {

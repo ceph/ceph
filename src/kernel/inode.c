@@ -226,7 +226,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		if (!ininfo) {
 			dout(10, "fill_trace has dentry but no inode\n");
 			err = -ENOENT;
-			d_add(dn, NULL);
+			d_instantiate(dn, NULL);
+			if (d_unhashed(dn))
+				d_rehash(dn);
 			ceph_touch_dentry(dn);
 			break;
 		}
@@ -250,8 +252,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				break;
 			}
 			ceph_touch_dentry(dn);
-			dout(10, "fill_trace d_add\n");
-			d_add(dn, in);
+			dout(10, "fill_trace d_instantiate\n");
+			d_instantiate(dn, in);
+			if (d_unhashed(dn))
+				d_rehash(dn);
 			dout(10, "ceph_fill_trace added dentry %p"
 			     " inode %llx %d/%d\n",
 			     dn, ceph_ino(in), i, rinfo->trace_nr);
