@@ -303,7 +303,6 @@ private:
     set<int> prior;
     pg_t parent;
     bool has_parent() { return parent != pg_t(); }
-
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
 

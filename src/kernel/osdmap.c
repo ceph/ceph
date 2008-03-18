@@ -26,8 +26,9 @@ static int calc_bits_of(unsigned t)
 static void calc_pg_masks(struct ceph_osdmap *map)
 {
 	map->pg_num_mask = (1 << calc_bits_of(map->pg_num-1)) - 1;
-	map->localized_pg_num_mask =
-		(1 << calc_bits_of(map->localized_pg_num-1)) - 1;
+	map->pgp_num_mask = (1 << calc_bits_of(map->pgp_num-1)) - 1;
+	map->lpg_num_mask = (1 << calc_bits_of(map->lpg_num-1)) - 1;
+	map->lpgp_num_mask = (1 << calc_bits_of(map->lpgp_num-1)) - 1;
 }
 
 static int crush_decode_uniform_bucket(void **p, void *end, 
@@ -315,7 +316,9 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32(p, map->mtime.tv_sec);
 	ceph_decode_32(p, map->mtime.tv_usec);
 	ceph_decode_32(p, map->pg_num);
-	ceph_decode_32(p, map->localized_pg_num);
+	ceph_decode_32(p, map->pgp_num);
+	ceph_decode_32(p, map->lpg_num);
+	ceph_decode_32(p, map->lpgp_num);
 	ceph_decode_32(p, map->last_pg_change);
 
 	calc_pg_masks(map);
@@ -420,7 +423,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* new max? */
 	ceph_decode_need(p, end, 3*sizeof(__u32), bad);
 	ceph_decode_32(p, max);
-	*p += 2*sizeof(__u32);  /* skip new_pg_num, for now.  FIXME. */
+	*p += 4*sizeof(__u32);  /* skip new_pg_num et al for now.  FIXME. */
 	if (max > 0) {
 		if ((err = osdmap_set_max_osd(map, max)) < 0)
 			goto bad;
@@ -539,8 +542,8 @@ void calc_object_layout(struct ceph_object_layout *ol,
 {
 	unsigned num, num_mask;
 	if (fl->fl_pg_preferred >= 0) {
-		num = osdmap->localized_pg_num;
-		num_mask = osdmap->localized_pg_num_mask;
+		num = osdmap->lpg_num;
+		num_mask = osdmap->lpg_num_mask;
 	} else {
 		num = osdmap->pg_num;
 		num_mask = osdmap->pg_num_mask;
