@@ -7,11 +7,6 @@ code cleanup
 
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
-- finish switching over to new decode macros in decode.h
-  - mds_client.c
-  - osd_client.c
-  - inode.c
-  - remove old messenger.h ones
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?

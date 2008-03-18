@@ -60,4 +60,73 @@
 		ceph_decode_copy(p, pv, n);			\
 	} while (0)
 
+/*
+ * struct ceph_timeval <-> struct timespec
+ */ 
+#define ceph_decode_timespec(ts, tv)					\
+	do {								\
+		(ts)->tv_sec = le32_to_cpu((tv)->tv_sec);		\
+		(ts)->tv_nsec = 1000*le32_to_cpu((tv)->tv_usec);	\
+	} while (0)
+#define ceph_encode_timespec(tv, ts, usec)				\
+	do {							\
+		usec = (ts)->tv_nsec;			\
+		do_div(usec, 1000);				\
+		(tv)->tv_sec = cpu_to_le32((ts)->tv_sec);	\
+		(tv)->tv_usec = cpu_to_le32(usec);		\
+	} while (0)
+
+
+/*
+ * encoders
+ */ 
+
+#define ceph_encode_64(p, v)			  \
+	do {					  \
+		*(__u64*)*(p) = cpu_to_le64((v)); \
+		*(p) += sizeof(__u64);		  \
+	} while (0)
+#define ceph_encode_32(p, v)			  \
+	do {					  \
+		*(__u32*)*(p) = cpu_to_le32((v)); \
+		*(p) += sizeof(__u32);		  \
+	} while (0)
+#define ceph_encode_16(p, v)			  \
+	do {					  \
+		*(__u16*)*(p) = cpu_to_le16((v)); \
+		*(p) += sizeof(__u16);		  \
+	} while (0)
+#define ceph_encode_8(p, v)			  \
+	do {					  \
+		*(__u8*)*(p) = v;		  \
+		(*(p))++;			  \
+	} while (0)
+
+/* 
+ * filepath, string encoders 
+ */
+
+static __inline__ void ceph_encode_filepath(void **p, void *end, 
+					    ceph_ino_t ino, const char *path)
+{
+	__u32 len = path ? strlen(path):0;
+	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
+	ceph_encode_64(p, ino);
+	ceph_encode_32(p, len);
+	if (len) 
+		memcpy(*p, path, len);
+	*p += len;
+}
+
+static __inline__ void ceph_encode_string(void **p, void *end, 
+					  const char *s, __u32 len)
+{
+	BUG_ON(*p + sizeof(len) + len > end);
+	ceph_encode_32(p, len);
+	if (len)
+		memcpy(*p, s, len);
+	*p += len;
+}
+
+
 #endif

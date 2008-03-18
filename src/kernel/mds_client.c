@@ -10,6 +10,7 @@ int ceph_debug_mdsc = 50;
 #define DOUT_PREFIX "mds: "
 #include "super.h"
 #include "messenger.h"
+#include "decode.h"
 
 /*
  * note: this also appears in messages/MClientRequest.h,
@@ -55,17 +56,17 @@ static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 int parse_reply_info_in(void **p, void *end,
 			struct ceph_mds_reply_info_in *info)
 {
-	int err;
+	int err = -EINVAL;
 	info->in = *p;
 	*p += sizeof(struct ceph_mds_reply_inode) +
 		sizeof(__u32)*le32_to_cpu(info->in->fragtree.nsplits);
-	if ((err == ceph_decode_32(p, end, &info->symlink_len)) < 0)
-		return err;
+	ceph_decode_32_safe(p, end, info->symlink_len, bad);
+	ceph_decode_need(p, end, info->symlink_len, bad);
 	info->symlink = *p;
 	*p += info->symlink_len;
-	if (unlikely(*p > end))
-		return -EINVAL;
 	return 0;
+bad:
+	return err;
 }
 
 int parse_reply_info_trace(void **p, void *end,
@@ -74,9 +75,7 @@ int parse_reply_info_trace(void **p, void *end,
 	__u32 numi;
 	int err = -EINVAL;
 
-	err = ceph_decode_32(p, end, &numi);
-	if (err < 0)
-		goto bad;
+	ceph_decode_32_safe(p, end, numi, bad);
 	if (numi == 0)
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
 
@@ -87,8 +86,9 @@ int parse_reply_info_trace(void **p, void *end,
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
 				 GFP_KERNEL);
-	if (info->trace_in == NULL)
-		return -ENOMEM;
+	if (info->trace_in == NULL) 
+		goto badmem;
+
 	info->trace_dir = (void *)(info->trace_in + numi);
 	info->trace_dname = (void *)(info->trace_dir + numi);
 	info->trace_dname_len = (void *)(info->trace_dname + numi);
@@ -101,13 +101,10 @@ int parse_reply_info_trace(void **p, void *end,
 		if (--numi == 0)
 			break;
 		/* dentry */
-		err = ceph_decode_32(p, end, &info->trace_dname_len[numi]);
-		if (err < 0)
-			goto bad;
+		ceph_decode_32_safe(p, end, info->trace_dname_len[numi], bad);
+		ceph_decode_need(p, end, info->trace_dname_len[numi], bad);
 		info->trace_dname[numi] = *p;
 		*p += info->trace_dname_len[numi];
-		if (*p > end)
-			goto bad;
 		/* dir */
 		info->trace_dir[numi] = *p;
 		*p += sizeof(struct ceph_mds_reply_dirfrag) +
@@ -117,10 +114,12 @@ int parse_reply_info_trace(void **p, void *end,
 	}
 
 done:
-	if (*p != end)
+	if (unlikely(*p != end))
 		return -EINVAL;
 	return 0;
 
+badmem:
+	err = -ENOMEM;
 bad:
 	derr(1, "problem parsing trace %d\n", err);
 	return err;
@@ -138,9 +137,7 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 	if (*p > end)
 		goto bad;
 
-	err = ceph_decode_32(p, end, &num);
-	if (err < 0)
-		goto bad;
+	ceph_decode_32_safe(p, end, num, bad);
 	if (num == 0)
 		goto done;
 
@@ -151,19 +148,16 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 				      sizeof(*info->dir_dname_len)),
 			       GFP_KERNEL);
 	if (info->dir_in == NULL)
-		return -ENOMEM;
+		goto badmem;
 	info->dir_dname = (void *)(info->dir_in + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
 
 	while (num) {
 		/* dentry, inode */
-		err = ceph_decode_32(p, end, &info->dir_dname_len[i]);
-		if (err < 0)
-			goto bad;
+		ceph_decode_32_safe(p, end, info->dir_dname_len[i], bad);
+		ceph_decode_need(p, end, info->dir_dname_len[i], bad);
 		info->dir_dname[i] = *p;
 		*p += info->dir_dname_len[i];
-		if (*p > end)
-			goto bad;
 		err = parse_reply_info_in(p, end, &info->dir_in[i]);
 		if (err < 0)
 			goto bad;
@@ -174,6 +168,8 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 done:
 	return 0;
 
+badmem:
+	err = -ENOMEM;
 bad:
 	derr(1, "problem parsing dir contents %d\n", err);
 	return err;
@@ -191,24 +187,16 @@ int parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info)
 	/* trace */
 	p = msg->front.iov_base + sizeof(struct ceph_mds_reply_head);
 	end = p + msg->front.iov_len;
-	err = ceph_decode_32(&p, end, &len);
-	if (err < 0)
-		goto bad;
+	ceph_decode_32_safe(&p, end, len, bad);
 	if (len > 0) {
-		if (p + len > end)
-			goto bad;
 		err = parse_reply_info_trace(&p, p+len, info);
 		if (err < 0)
 			goto bad;
 	}
 
 	/* dir content */
-	err = ceph_decode_32(&p, end, &len);
-	if (err < 0)
-		goto bad;
+	ceph_decode_32_safe(&p, end, len, bad);
 	if (len > 0) {
-		if (p + len > end)
-			goto bad;
 		err = parse_reply_info_dir(&p, p+len, info);
 		if (err < 0)
 			goto bad;
@@ -914,21 +902,16 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	__u64 tid;
 	__u32 next_mds;
 	__u32 fwd_seq;
-	int err;
+	int err = -EINVAL;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	int frommds = le32_to_cpu(msg->hdr.src.name.num);
 
 	/* decode */
-	err = ceph_decode_64(&p, end, &tid);
-	if (err != 0)
-		goto bad;
-	err = ceph_decode_32(&p, end, &next_mds);
-	if (err != 0)
-		goto bad;
-	err = ceph_decode_32(&p, end, &fwd_seq);
-	if (err != 0)
-		goto bad;
+	ceph_decode_need(&p, end, sizeof(__u64)+2*sizeof(__u32), bad);
+	ceph_decode_64(&p, tid);
+	ceph_decode_32(&p, next_mds);
+	ceph_decode_32(&p, fwd_seq);
 
 	/* handle */
 	req = find_request_and_lock(mdsc, tid);
@@ -1010,6 +993,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_inode_cap *cap;
 	char *path;
 	int pathlen, err;
+	int usectmp;
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
@@ -1048,57 +1032,45 @@ retry:
 	end = p + len;
 
 	if (!session) {
-		ceph_encode_8(&p, end, 1); /* session was closed */
-		ceph_encode_32(&p, end, 0);
+		ceph_encode_8(&p, 1); /* session was closed */
+		ceph_encode_32(&p, 0);
 		goto send;
 	}
 	dout(10, "session %p state %d\n", session, session->s_state);
 
 	/* traverse this session's caps */
 	spin_lock(&session->s_cap_lock);
-	ceph_encode_8(&p, end, 0);
-	ceph_encode_32(&p, end, session->s_nr_caps);
+	ceph_encode_8(&p, 0);
+	ceph_encode_32(&p, session->s_nr_caps);
 	count = 0;
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
 		ci = cap->ci;
-		if (p + sizeof(u64) +
-		    sizeof(struct ceph_mds_cap_reconnect) > end)
-			goto needmore;
+		ceph_decode_need(&p, end, sizeof(u64) +
+				 sizeof(struct ceph_mds_cap_reconnect),
+				 needmore);
 		dout(10, " adding cap %p on ino %llx inode %p\n", cap,
 		     ceph_ino(&ci->vfs_inode), &ci->vfs_inode);
-		ceph_encode_64(&p, end, ceph_ino(&ci->vfs_inode));
+		ceph_encode_64(&p, ceph_ino(&ci->vfs_inode));
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);
 		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->i_wr_size);
-		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
-		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
+		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime, usectmp);
+		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime, usectmp);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
 			err = PTR_ERR(path);
 			BUG_ON(err);
 		}
-		if (p + pathlen + 4 > end)
-			goto needmore;
+		ceph_decode_need(&p, end, pathlen+4, needmore);
 		ceph_encode_string(&p, end, path, pathlen);
 		kfree(path);
 		dput(dentry);
 		count++;
-		continue;
-
-needmore:
-		newlen = len * (session->s_nr_caps+1);
-		do_div(newlen, (count+1));
-		dout(30, "i guessed %d, and did %d of %d, retrying with %d\n",
-		     len, count, session->s_nr_caps, newlen);
-		len = newlen;
-		spin_unlock(&session->s_cap_lock);
-		ceph_msg_put(reply);
-		goto retry;
 	}
 	spin_unlock(&session->s_cap_lock);
 
@@ -1121,6 +1093,16 @@ send:
 		put_session(session);
 	}
 	return;
+
+needmore:
+	newlen = len * (session->s_nr_caps+1);
+	do_div(newlen, (count+1));
+	dout(30, "i guessed %d, and did %d of %d, retrying with %d\n",
+	     len, count, session->s_nr_caps, newlen);
+	len = newlen;
+	spin_unlock(&session->s_cap_lock);
+	ceph_msg_put(reply);
+	goto retry;
 
 bad:
 	spin_lock(&mdsc->lock);
@@ -1454,20 +1436,15 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	ceph_epoch_t epoch;
 	__u32 maplen;
-	int err;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
 	int from = le32_to_cpu(msg->hdr.src.name.num);
 	int newstate;
 
-	err = ceph_decode_32(&p, end, &epoch);
-	if (err != 0)
-		goto bad;
-	err = ceph_decode_32(&p, end, &maplen);
-	if (err != 0)
-		goto bad;
-
+	ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
+	ceph_decode_32(&p, epoch);
+	ceph_decode_32(&p, maplen);
 	dout(2, "handle_map epoch %u len %d\n", epoch, (int)maplen);
 
 	/* do we need it? */
