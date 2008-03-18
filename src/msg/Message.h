@@ -41,7 +41,7 @@
 #define MSG_OSD_PG_SUMMARY     82
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
-#define MSG_OSD_PG_ACTIVATE_SET 85
+#define MSG_OSD_PG_INFO        85
 
 // CEPH_MSG_PGSTATS            87
 #define MSG_OSD_PG_CREATE      88

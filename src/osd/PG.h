@@ -40,7 +40,7 @@ class MOSDOp;
 class MOSDOpReply;
 class MOSDSubOp;
 class MOSDSubOpReply;
-class MOSDPGActivateSet;
+class MOSDPGInfo;
 
 /** PG - Replica Placement Group
  *
@@ -523,9 +523,9 @@ public:
 
   void peer(ObjectStore::Transaction& t, 
 	    map< int, map<pg_t,Query> >& query_map,
-	    map<int, MOSDPGActivateSet*> *activator_map=0);
+	    map<int, MOSDPGInfo*> *activator_map=0);
   void activate(ObjectStore::Transaction& t, 
-		map<int, MOSDPGActivateSet*> *activator_map=0);
+		map<int, MOSDPGInfo*> *activator_map=0);
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 

@@ -24,7 +24,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
-#include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGInfo.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
@@ -579,7 +579,7 @@ void PG::clear_primary_state()
 
 void PG::peer(ObjectStore::Transaction& t, 
               map< int, map<pg_t,Query> >& query_map,
-	      map<int, MOSDPGActivateSet*> *activator_map)
+	      map<int, MOSDPGInfo*> *activator_map)
 {
   dout(10) << "peer.  acting is " << acting 
            << ", prior_set is " << prior_set << dendl;
@@ -832,7 +832,7 @@ void PG::peer(ObjectStore::Transaction& t,
 
 
 void PG::activate(ObjectStore::Transaction& t,
-		  map<int, MOSDPGActivateSet*> *activator_map)
+		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
 
@@ -906,7 +906,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	if (activator_map) {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
-	    (*activator_map)[peer] = new MOSDPGActivateSet(osd->osdmap->get_epoch());
+	    (*activator_map)[peer] = new MOSDPGInfo(osd->osdmap->get_epoch());
 	  (*activator_map)[peer]->pg_info.push_back(info);
 	} else {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;

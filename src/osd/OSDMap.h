@@ -205,6 +205,11 @@ private:
   int get_lpg_num() const { return lpg_num; }
   int get_lpgp_num() const { return lpgp_num; }
 
+  int get_pg_num_mask() const { return pg_num_mask; }
+  int get_pgp_num_mask() const { return pgp_num_mask; }
+  int get_lpg_num_mask() const { return lpg_num_mask; }
+  int get_lpgp_num_mask() const { return lpgp_num_mask; }
+
   /* stamps etc */
   const utime_t& get_ctime() const { return ctime; }
   const utime_t& get_mtime() const { return mtime; }

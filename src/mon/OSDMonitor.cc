@@ -785,7 +785,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
       int n = atoi(m->cmd[2].c_str());
-      if (n > osdmap.get_pg_num()) {
+      if (n > osdmap.get_pg_num() &&
+	  osdmap.get_pg_num() == osdmap.get_pgp_num()) {
 	ss << "set new pg_num = " << n;
 	pending_inc.new_pg_num = n;
 	getline(ss, rs);
@@ -793,6 +794,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       } else {
 	ss << "specified pg_num " << n << " < current " << osdmap.get_pg_num();
+	ss << " or pg_num " << osdmap.get_pg_num() << " > pgp_num " << osdmap.get_pgp_num();
 	getline(ss, rs);
 	mon->reply_command(m, -EINVAL, rs);
       }

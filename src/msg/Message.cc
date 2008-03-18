@@ -41,7 +41,7 @@ using namespace std;
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
-#include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 
 #include "messages/MMonMap.h"
@@ -207,8 +207,8 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   case MSG_OSD_PG_REMOVE:
     m = new MOSDPGRemove;
     break;
-  case MSG_OSD_PG_ACTIVATE_SET:
-    m = new MOSDPGActivateSet;
+  case MSG_OSD_PG_INFO:
+    m = new MOSDPGInfo;
     break;
   case MSG_OSD_PG_CREATE:
     m = new MOSDPGCreate;
