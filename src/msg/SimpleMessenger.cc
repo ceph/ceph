@@ -789,7 +789,6 @@ int Rank::Pipe::accept()
   }
   
   __u32 peer_cseq;
-  connect_seq = 0;
   
   while (1) {
     rc = tcp_read(sd, (char*)&peer_cseq, sizeof(peer_cseq));
@@ -815,6 +814,7 @@ int Rank::Pipe::accept()
 	  // old attempt, or we sent READY but they didn't get it.
 	  dout(10) << "accept existing " << existing << ".cseq " << existing->connect_seq
 		   << " > " << peer_cseq << ", RETRY" << dendl;
+	  connect_seq = existing->connect_seq;
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
 	  char tag = CEPH_MSGR_TAG_RETRY;
