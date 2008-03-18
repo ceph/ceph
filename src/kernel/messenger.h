@@ -139,6 +139,7 @@ extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 
 /* encoding/decoding helpers */
+
 static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
 	if (unlikely(*p + sizeof(*v) > end))
 		return -EINVAL;

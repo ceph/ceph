@@ -28,14 +28,29 @@ enum {
 #define CRUSH_MAX_DEPTH 10
 #define CRUSH_MAX_SET   10
 
+/*
+ * for specifying choose numrep relative to the max
+ * parameter passed to do_rule
+ */
+#define CRUSH_CHOOSE_N            0
+#define CRUSH_CHOOSE_N_MINUS(x)   (-(x))
+
 struct crush_rule_step {
 	__u32 op;
 	__s32 arg1;
 	__s32 arg2;
 };
 
+struct crush_rule_mask {
+	__u8 pool;
+	__u8 type;
+	__u8 min_size;
+	__u8 max_size;
+};
+
 struct crush_rule {
 	__u32 len;
+	struct crush_rule_mask mask;
 	struct crush_rule_step steps[0];
 };
 

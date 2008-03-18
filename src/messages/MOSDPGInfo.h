@@ -13,12 +13,12 @@
  */
 
 
-#ifndef __MOSDPGACTIVATESET_H
-#define __MOSDPGACTIVATESET_H
+#ifndef __MOSDPGINFO_H
+#define __MOSDPGINFO_H
 
 #include "msg/Message.h"
 
-class MOSDPGActivateSet : public Message {
+class MOSDPGInfo : public Message {
   epoch_t epoch;
 
 public:
@@ -26,14 +26,14 @@ public:
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGActivateSet() {}
-  MOSDPGActivateSet(version_t mv) :
-    Message(MSG_OSD_PG_ACTIVATE_SET),
+  MOSDPGInfo() {}
+  MOSDPGInfo(version_t mv) :
+    Message(MSG_OSD_PG_INFO),
     epoch(mv) { }
 
-  const char *get_type_name() { return "pg_activate_set"; }
+  const char *get_type_name() { return "pg_info"; }
   void print(ostream& out) {
-    out << "pg_activate_set(" << pg_info.size() << " pgs e" << epoch << ")";
+    out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
   }
 
   void encode_payload() {

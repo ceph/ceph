@@ -1,7 +1,3 @@
-mkfs
-- online changes to pg_num
-- initialization of pg_num during non-simple mkfs...
-
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
@@ -11,6 +7,11 @@ code cleanup
 
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
+- finish switching over to new decode macros in decode.h
+  - mds_client.c
+  - osd_client.c
+  - inode.c
+  - remove old messenger.h ones
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
@@ -48,9 +49,6 @@ osdmon
 - bootstrap crush map
 
 crush
-- rule naming
- - would about a tuple of (type, minsize, maxsize, pool) for each rule?  then we'd do a 
-   quick 'search' to find the best rule given (pg_type, pg_size, pg_pool)...
 - xml import/export?
  - named storage "pools"?
  - generic rule definition
@@ -160,10 +158,6 @@ objecter
 - read+floor_lockout
 
 osd/rados
-- pg splits.
-  - during mkps, iterate over affected old pgs and move objects
-  - set prior set on new pg to include primaries+replicas of any possible old pgs from whom objects may have been inherited.
-
 - fix build_prior_set behavior.  needs to not always exclude currently down nodes.  e.g.,
 
   1: A B
@@ -174,11 +168,9 @@ osd/rados
   2:   B C
   3: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
 
-  1: A B C
-  2:   B C
-  3: A   C  -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
-
  -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
+ 
+ -> so, use calc_priors_during in build_prior, then make recovery code check for is_up
 
 - paxos replication (i.e. majority voting)?
 

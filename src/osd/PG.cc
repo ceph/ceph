@@ -24,7 +24,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
-#include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGInfo.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
@@ -579,7 +579,7 @@ void PG::clear_primary_state()
 
 void PG::peer(ObjectStore::Transaction& t, 
               map< int, map<pg_t,Query> >& query_map,
-	      map<int, MOSDPGActivateSet*> *activator_map)
+	      map<int, MOSDPGInfo*> *activator_map)
 {
   dout(10) << "peer.  acting is " << acting 
            << ", prior_set is " << prior_set << dendl;
@@ -656,14 +656,14 @@ void PG::peer(ObjectStore::Transaction& t,
 	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
       } else {
 	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-	state_set(STATE_CRASHED);
+	state_set(PG_STATE_CRASHED);
       }
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
-  } else if (info.pgid.u.pg.ps < osd->osdmap->get_prior_pg_num()) {
+  } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-    state_set(STATE_CRASHED);
+    state_set(PG_STATE_CRASHED);
   }    
 
   dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
@@ -820,7 +820,7 @@ void PG::peer(ObjectStore::Transaction& t,
   // -- crash recovery?
   if (is_crashed()) {
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << dendl;
-    state_set(STATE_REPLAY);
+    state_set(PG_STATE_REPLAY);
     osd->timer.add_event_after(g_conf.osd_replay_window,
 			       new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
   } 
@@ -832,17 +832,17 @@ void PG::peer(ObjectStore::Transaction& t,
 
 
 void PG::activate(ObjectStore::Transaction& t,
-		  map<int, MOSDPGActivateSet*> *activator_map)
+		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
 
   // twiddle pg state
-  state_set(STATE_ACTIVE);
-  state_clear(STATE_STRAY);
+  state_set(PG_STATE_ACTIVE);
+  state_clear(PG_STATE_STRAY);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
-    state_clear(STATE_CRASHED);
-    state_clear(STATE_REPLAY);
+    state_clear(PG_STATE_CRASHED);
+    state_clear(PG_STATE_REPLAY);
   }
   last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
   
@@ -906,7 +906,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	if (activator_map) {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
-	    (*activator_map)[peer] = new MOSDPGActivateSet(osd->osdmap->get_epoch());
+	    (*activator_map)[peer] = new MOSDPGInfo(osd->osdmap->get_epoch());
 	  (*activator_map)[peer]->pg_info.push_back(info);
 	} else {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;
@@ -1006,8 +1006,7 @@ void PG::activate(ObjectStore::Transaction& t,
 void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
-
-  state_set(PG::STATE_CLEAN);
+  state_set(PG_STATE_CLEAN);
   purge_strays();
   update_stats();
 }

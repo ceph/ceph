@@ -52,16 +52,14 @@ void crush_finalize(struct crush_map *map)
 
 /** rules **/
 
-int crush_add_rule(struct crush_map *map,
-		   int ruleno, 
-		   struct crush_rule *rule)
+int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 {
 	int oldsize;
 
-	if (ruleno < 0) {
+	if (ruleno < 0)
 		for (ruleno=0; ruleno < map->max_rules; ruleno++)
 			if (map->rules[ruleno] == 0) break;
-	}
+
 	if (ruleno >= map->max_rules) {
 		/* expand array */
 		oldsize = map->max_rules;
@@ -75,11 +73,15 @@ int crush_add_rule(struct crush_map *map,
 	return ruleno;
 }
 
-struct crush_rule *crush_make_rule(int len)
+struct crush_rule *crush_make_rule(int len, int pool, int type, int minsize, int maxsize)
 {
 	struct crush_rule *rule;
 	rule = malloc(crush_rule_size(len));
 	rule->len = len;
+	rule->mask.pool = pool;
+	rule->mask.type = type;
+	rule->mask.min_size = minsize;
+	rule->mask.max_size = maxsize;
 	return rule;
 }
 

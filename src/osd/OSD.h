@@ -100,7 +100,7 @@ private:
   set<int> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
 
-  void update_heartbeat_sets();
+  void update_heartbeat_peers();
   void heartbeat();
 
   class C_Heartbeat : public Context {
@@ -275,13 +275,13 @@ private:
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
-  PG   *_new_lock_pg(pg_t pg);  // create new PG (in memory)
+  PG   *_open_lock_pg(pg_t pg);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
+  PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
   void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
-  void try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
-
   void load_pgs();
+  void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
@@ -296,6 +296,23 @@ private:
       osd->activate_pg(pgid, epoch);
     }
   };
+
+  // -- pg creation --
+  struct create_pg_info {
+    epoch_t created;
+    vector<int> acting;
+    set<int> prior;
+    pg_t parent;
+    int split_bits;
+  };
+  hash_map<pg_t, create_pg_info> creating_pgs;
+  map<pg_t, set<pg_t> > pg_split_ready;  // children ready to be split to, by parent
+
+  PG *try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
+  void handle_pg_create(class MOSDPGCreate *m);
+
+  void kick_pg_split_queue();
+  void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
 
 
   // -- pg stats --
@@ -328,12 +345,13 @@ private:
   }
 
 
+
   // -- generic pg recovery --
   int num_pulling;
 
   void do_notifies(map< int, list<PG::Info> >& notify_list);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
-  void do_activators(map<int, MOSDPGActivateSet*>& activator_map);
+  void do_infos(map<int, MOSDPGInfo*>& info_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
 
   bool require_current_map(Message *m, epoch_t v);
@@ -342,15 +360,16 @@ private:
   void handle_pg_query(class MOSDPGQuery *m);
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_log(class MOSDPGLog *m);
-  void handle_pg_activate_set(class MOSDPGActivateSet *m);
+  void handle_pg_info(class MOSDPGInfo *m);
   void handle_pg_remove(class MOSDPGRemove *m);
 
-  // helper for handle_pg_log and handle_pg_activate_set
+  // helper for handle_pg_log and handle_pg_info
   void _process_pg_info(epoch_t epoch, int from,
 			PG::Info &info, 
 			PG::Log &log, 
 			PG::Missing &missing,
-			map<int, MOSDPGActivateSet*>* activator_map);
+			map<int, MOSDPGInfo*>* info_map,
+			int& created);
 
 
  public:

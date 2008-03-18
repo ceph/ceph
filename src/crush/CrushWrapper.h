@@ -122,7 +122,7 @@ public:
 private:
   crush_rule *get_rule(unsigned ruleno) {
     if (!crush) return (crush_rule *)(-ENOENT);
-    if (crush->max_rules >= ruleno) 
+    if (ruleno >= crush->max_rules) 
       return 0;
     return crush->rules[ruleno];
   }
@@ -139,10 +139,37 @@ public:
     if (!crush) return 0;
     return crush->max_rules;
   }
+  bool is_rule(unsigned ruleno) {
+    if (!crush) return false;
+    if (ruleno < crush->max_rules &&
+	crush->rules[ruleno] != NULL)
+      return true;
+    return false;
+  }
   int get_rule_len(unsigned ruleno) {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
+  }
+  int get_rule_mask_pool(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.pool;
+  }
+  int get_rule_mask_type(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.type;
+  }
+  int get_rule_mask_min_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.min_size;
+  }
+  int get_rule_mask_max_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.max_size;
   }
   int get_rule_op(unsigned ruleno, unsigned step) {
     crush_rule_step *s = get_rule_step(ruleno, step);
@@ -161,11 +188,11 @@ public:
   }
 
   /* modifiers */
-  int add_rule(unsigned ruleno, int len) {
+  int add_rule(int len, int pool, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len);
-    crush_add_rule(crush, ruleno, n);
-    return 0;
+    crush_rule *n = crush_make_rule(len, pool, type, minsize, maxsize);
+    ruleno = crush_add_rule(crush, n, ruleno);
+    return ruleno;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
@@ -256,6 +283,9 @@ public:
     return crush->device_offload[i];
   }
 
+  int find_rule(int pool, int type, int size) {
+    return crush_find_rule(crush, pool, type, size);
+  }
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed) {
     int rawout[maxout];
     
@@ -322,6 +352,7 @@ public:
       if (!yes) continue;
 
       ::_encode_simple(crush->rules[i]->len, bl);
+      ::_encode_simple(crush->rules[i]->mask, bl);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_encode_simple(crush->rules[i]->steps[j], bl);
     }
@@ -432,6 +463,7 @@ public:
       ::_decode_simple(len, blp);
       crush->rules[i] = (crush_rule*)malloc(crush_rule_size(len));
       crush->rules[i]->len = len;
+      ::_decode_simple(crush->rules[i]->mask, blp);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_decode_simple(crush->rules[i]->steps[j], blp);
     }

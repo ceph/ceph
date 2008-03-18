@@ -729,12 +729,12 @@ void Rank::mark_down(entity_addr_t addr)
   lock.Lock();
   if (rank_pipe.count(addr)) {
     Pipe *p = rank_pipe[addr];
-    dout(0) << "mark_down " << addr << " -- " << p << dendl;
+    dout(2) << "mark_down " << addr << " -- " << p << dendl;
     p->lock.Lock();
     p->stop();
     p->lock.Unlock();
   } else {
-    dout(0) << "mark_down " << addr << " -- pipe dne" << dendl;
+    dout(2) << "mark_down " << addr << " -- pipe dne" << dendl;
   }
   lock.Unlock();
 }

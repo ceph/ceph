@@ -1,6 +1,7 @@
 #!/bin/sh
 
 ./stop.sh
+rm core*
 
 test -d out || mkdir out
 rm out/*
@@ -29,7 +30,7 @@ $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 ARGS="-d --bind $IP -o out --debug_ms 1"
 
 # start monitor
-$CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 10 --debug_ms 1
+$CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap
@@ -38,7 +39,7 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 for osd in 0 1 2 3 
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 10
+ $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
 done
 
 # mds

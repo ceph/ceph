@@ -8,37 +8,34 @@ int ceph_mon_debug = 50;
 #define DOUT_PREFIX "mon: "
 #include "super.h"
 
+#include "decode.h"
 
 struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
 	struct ceph_monmap *m;
-	int i, err;
+	int i, err = -EINVAL;
 
 	dout(30, "monmap_decode %p %p\n", p, end);
 	m = kmalloc(end-p, GFP_KERNEL);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	if ((err = ceph_decode_32(&p, end, &m->epoch)) < 0)
-		goto bad;
-	if ((err = ceph_decode_64(&p, end, &m->fsid.major)) < 0)
-		goto bad;
-	if ((err = ceph_decode_64(&p, end, &m->fsid.minor)) < 0)
-		goto bad;
-	if ((err = ceph_decode_32(&p, end, &m->num_mon)) < 0)
+	ceph_decode_need(&p, end, 2*sizeof(__u32) + 2*sizeof(__u64), bad);
+	ceph_decode_32(&p, m->epoch);
+	ceph_decode_64(&p, m->fsid.major);
+	ceph_decode_64(&p, m->fsid.minor);
+	ceph_decode_32(&p, m->num_mon);
+	ceph_decode_need(&p, end, m->num_mon*sizeof(m->mon_inst[0]), bad);
+	ceph_decode_copy(&p, m->mon_inst, m->num_mon*sizeof(m->mon_inst[0]));
+	if (p != end)
 		goto bad;
 
-	if (p + m->num_mon*sizeof(m->mon_inst[0]) != end) { 
-		err = -EINVAL;
-		goto bad;
-	}
-	memcpy(m->mon_inst, p, end-p);
 	for (i=0; i<m->num_mon; i++) {
 		dout(30, "monmap_decode mon%d is %u.%u.%u.%u:%u\n", i,
 		     IPQUADPORT(m->mon_inst[i].addr.ipaddr));
 	}
-
-	dout(30, "monmap_decode got epoch %d, num_mon %d\n", m->epoch, m->num_mon);
+	dout(30, "monmap_decode got epoch %d, num_mon %d\n", m->epoch, 
+	     m->num_mon);
 	return m;
 
 bad:
@@ -126,24 +123,19 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg
 	struct ceph_mon_statfs_request *req;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
-	int err;
 	
-	if ((err = ceph_decode_64(&p, end, &tid)) < 0)
-		goto bad;
+	ceph_decode_64_safe(&p, end, tid, bad);
 	dout(10, "handle_statfs_reply %p tid %llu\n", msg, tid);
 
 	spin_lock(&monc->lock);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	dout(30, "got req %p\n", req);
 	if (req) {
-		if ((err = ceph_decode_64(&p, end, &req->buf->f_total)) < 0)
-			goto bad;
-		if ((err = ceph_decode_64(&p, end, &req->buf->f_free)) < 0)
-			goto bad;
-		if ((err = ceph_decode_64(&p, end, &req->buf->f_avail)) < 0)
-			goto bad;
-		if ((err = ceph_decode_64(&p, end, &req->buf->f_objects)) < 0)
-			goto bad;
+		ceph_decode_need(&p, end, 4*sizeof(__u64), bad_locked);
+		ceph_decode_64(&p, req->buf->f_total);
+		ceph_decode_64(&p, req->buf->f_free);
+		ceph_decode_64(&p, req->buf->f_avail);
+		ceph_decode_64(&p, req->buf->f_objects);
 		dout(30, "decoded ok\n");
 	}
 	radix_tree_delete(&monc->statfs_request_tree, tid);
@@ -151,6 +143,9 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg
 	if (req)
 		complete(&req->completion);
 	return;
+
+bad_locked:
+	spin_unlock(&monc->lock);
 bad:
 	dout(10, "corrupt statfs reply\n");
 }

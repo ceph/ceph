@@ -27,6 +27,7 @@ class PGMap {
 public:
   // the map
   version_t version;
+  epoch_t last_pg_scan;  // osdmap epoch
   hash_map<pg_t,pg_stat_t> pg_stat;
   hash_map<int,osd_stat_t> osd_stat;
 
@@ -35,19 +36,22 @@ public:
     version_t version;
     map<pg_t,pg_stat_t> pg_stat_updates;
     map<int,osd_stat_t> osd_stat_updates;
+    epoch_t pg_scan;  // osdmap epoch
 
     void _encode(bufferlist &bl) {
       ::_encode(version, bl);
       ::_encode(pg_stat_updates, bl);
       ::_encode(osd_stat_updates, bl);
+      ::_encode(pg_scan, bl);
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(version, bl, off);
       ::_decode(pg_stat_updates, bl, off);
       ::_decode(osd_stat_updates, bl, off);
+      ::_decode(pg_scan, bl, off);
     }
 
-    Incremental() : version(0) {}
+    Incremental() : version(0), pg_scan(0) {}
   };
 
   void apply_incremental(Incremental& inc) {
@@ -57,9 +61,9 @@ public:
 	 p != inc.pg_stat_updates.end();
 	 ++p) {
       if (pg_stat.count(p->first))
-	stat_pg_sub(pg_stat[p->first]);
+	stat_pg_sub(p->first, pg_stat[p->first]);
       pg_stat[p->first] = p->second;
-      stat_pg_add(p->second);
+      stat_pg_add(p->first, p->second);
     }
     for (map<int,osd_stat_t>::iterator p = inc.osd_stat_updates.begin();
 	 p != inc.osd_stat_updates.end();
@@ -69,6 +73,8 @@ public:
       osd_stat[p->first] = p->second;
       stat_osd_add(p->second);
     }
+    if (inc.pg_scan)
+      last_pg_scan = inc.pg_scan;
   }
 
   // aggregate stats (soft state)
@@ -81,6 +87,8 @@ public:
   int64_t total_osd_num_blocks;
   int64_t total_osd_num_blocks_avail;
   int64_t total_osd_num_objects;
+
+  set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   
   void stat_zero() {
     num_pg = 0;
@@ -93,25 +101,30 @@ public:
     total_osd_num_blocks_avail = 0;
     total_osd_num_objects = 0;
   }
-  void stat_pg_add(pg_stat_t &s) {
+  void stat_pg_add(pg_t pgid, pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
     total_pg_num_bytes += s.num_bytes;
     total_pg_num_blocks += s.num_blocks;
     total_pg_num_objects += s.num_objects;
+    if (s.state & PG_STATE_CREATING)
+      creating_pgs.insert(pgid);
+  }
+  void stat_pg_sub(pg_t pgid, pg_stat_t &s) {
+    num_pg--;
+    if (--num_pg_by_state[s.state] == 0)
+      num_pg_by_state.erase(s.state);
+    total_pg_num_bytes -= s.num_bytes;
+    total_pg_num_blocks -= s.num_blocks;
+    total_pg_num_objects -= s.num_objects;
+    if (s.state & PG_STATE_CREATING)
+      creating_pgs.erase(pgid);
   }
   void stat_osd_add(osd_stat_t &s) {
     num_osd++;
     total_osd_num_blocks += s.num_blocks;
     total_osd_num_blocks_avail += s.num_blocks_avail;
     total_osd_num_objects += s.num_objects;
-  }
-  void stat_pg_sub(pg_stat_t &s) {
-    num_pg--;
-    num_pg_by_state[s.state]--;
-    total_pg_num_bytes -= s.num_bytes;
-    total_pg_num_blocks -= s.num_blocks;
-    total_pg_num_objects -= s.num_objects;
   }
   void stat_osd_sub(osd_stat_t &s) {
     num_osd--;
@@ -120,7 +133,8 @@ public:
     total_osd_num_objects -= s.num_objects;
   }
 
-  PGMap() : version(0), 
+  PGMap() : version(0),
+	    last_pg_scan(0),
 	    num_pg(0), 
 	    total_pg_num_bytes(0), 
 	    total_pg_num_blocks(0), 
@@ -141,7 +155,7 @@ public:
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();
 	 ++p)
-      stat_pg_add(p->second);
+      stat_pg_add(p->first, p->second);
     for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
 	 p != osd_stat.end();
 	 ++p)

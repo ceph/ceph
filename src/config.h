@@ -138,6 +138,7 @@ struct md_config_t {
   bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
   bool mon_allow_mds_bully;
+  float mon_pg_create_interval;
 
   double paxos_propose_interval;
 

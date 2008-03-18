@@ -1558,6 +1558,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   if (is_primary()) {
     // continue recovery
+    if (info.is_uptodate())
+      uptodate_set.insert(osd->get_nodeid());
     do_recovery();
   } else {
     // ack if i'm a replica and being pushed to.
@@ -1646,21 +1648,6 @@ void ReplicatedPG::cancel_recovery()
 bool ReplicatedPG::do_recovery()
 {
   assert(is_primary());
-  /*if (!is_primary()) {
-    dout(10) << "do_recovery not primary, doing nothing" << dendl;
-    return true;
-  }
-  */
-
-  if (info.is_uptodate()) {  // am i up to date?
-    if (!is_all_uptodate()) {
-      dout(-10) << "do_recovery i'm clean but replicas aren't, starting peer recovery" << dendl;
-      do_peer_recovery();
-    } else {
-      dout(-10) << "do_recovery all clean, nothing to do" << dendl;
-    }
-    return true;
-  }
 
   dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
@@ -1708,10 +1695,14 @@ bool ReplicatedPG::do_recovery()
   
   if (is_primary()) {
     // i am primary
-    dout(-7) << "do_recovery complete, cleaning strays" << dendl;
     uptodate_set.insert(osd->whoami);
-    if (is_all_uptodate())
+    if (is_all_uptodate()) {
+      dout(-7) << "do_recovery complete" << dendl;
       finish_recovery();
+    } else {
+      dout(-10) << "do_recovery primary now complete, starting peer recovery" << dendl;
+      do_peer_recovery();
+    }
   } else {
     // tell primary
     dout(7) << "do_recovery complete, telling primary" << dendl;
@@ -1760,6 +1751,9 @@ void ReplicatedPG::do_peer_recovery()
 
   if (is_all_uptodate()) 
     finish_recovery();
+  else {
+    dout(10) << "do_peer_recovery not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
+  }
 }
 
 void ReplicatedPG::purge_strays()

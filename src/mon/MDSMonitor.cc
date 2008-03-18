@@ -22,7 +22,6 @@
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMonCommand.h"
-#include "messages/MMonCommandAck.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -256,7 +255,10 @@ bool MDSMonitor::prepare_update(Message *m)
     
   case MSG_MDS_BEACON:
     return handle_beacon((MMDSBeacon*)m);
-    
+
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+  
   default:
     assert(0);
     delete m;
@@ -509,7 +511,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	pending_mdsmap.mds_state[who] = MDSMap::STATE_STOPPING;
       } else {
 	r = -EEXIST;
-	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
+	ss << "mds" << who << " not active (" 
+	   << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
       }
     }
     else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {

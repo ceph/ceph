@@ -335,7 +335,7 @@ noinst_HEADERS = \
 	messages/MOSDMap.h\
 	messages/MOSDOp.h\
 	messages/MOSDOut.h\
-	messages/MOSDPGActivateSet.h\
+	messages/MOSDPGInfo.h\
 	messages/MOSDPGNotify.h\
 	messages/MOSDPGQuery.h\
 	messages/MOSDPGRemove.h\

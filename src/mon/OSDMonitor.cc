@@ -15,6 +15,7 @@
 #include "OSDMonitor.h"
 #include "Monitor.h"
 #include "MDSMonitor.h"
+#include "PGMonitor.h"
 
 #include "MonitorStore.h"
 
@@ -27,7 +28,6 @@
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 #include "messages/MMonCommand.h"
-#include "messages/MMonCommandAck.h"
 
 #include "common/Timer.h"
 
@@ -158,12 +158,13 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(1) << osdmap.get_num_osds() << " osds, "
-	    << osdmap.get_num_up_osds() << " up, " 
-	    << osdmap.get_num_in_osds() << " in" 
-	    << dendl;
+    print_summary_stats(1);
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
+
+  // kick pgmon, in case there are pg creations going on 
+  mon->pgmon->register_new_pgs();
+  mon->pgmon->send_pg_creates();
 
   // new map!
   bcast_latest_mds();
@@ -172,6 +173,18 @@ bool OSDMonitor::update_from_paxos()
   return true;
 }
 
+ostream& operator<<(ostream& out, OSDMonitor& om)
+{
+  return out << "e" << om.osdmap.get_epoch() << ": "
+	     << om.osdmap.get_num_osds() << " osds: "
+	     << om.osdmap.get_num_up_osds() << " up, " 
+	     << om.osdmap.get_num_in_osds() << " in";
+}
+
+void OSDMonitor::print_summary_stats(int dbl)
+{
+  dout(dbl) << *this << dendl;
+}
 
 void OSDMonitor::create_pending()
 {
@@ -181,14 +194,25 @@ void OSDMonitor::create_pending()
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 }
 
+
+/*
+struct RetryClearMkpg : public Context {
+  OSDMonitor *osdmon;
+  RetryClearMkpg(OSDMonitor *o) : osdmon(o) {}
+  void finish(int r) {
+    osdmon->clear_mkpg_flag();
+  }
+};
+*/
+
 void OSDMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
   
-  // finish up pending_inc
+  // finalize up pending_inc
   pending_inc.ctime = g_clock.now();
-  
+
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
@@ -473,13 +497,6 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_offload[from] = CEPH_OSD_IN;
     
     osd_weight[from] = m->sb.weight;
-    
-    if (osdmap.pg_num == 0) {
-      // set a conservative initial pg_num
-      pending_inc.new_pg_num = osdmap.get_max_osd() << g_conf.osd_pg_bits;
-      pending_inc.new_localized_pg_num = 4;  // per osd
-      dout(1) << "prepare_boot setting initial pg_num to " << pending_inc.new_pg_num << dendl;
-    }
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
@@ -628,6 +645,8 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
+  print_summary_stats(10);
+
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
@@ -654,6 +673,7 @@ void OSDMonitor::tick()
   if (!mark_out.empty()) {
     propose_pending();
   }
+
 
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1
@@ -712,7 +732,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   stringstream ss;
 
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "getmap") {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
       osdmap.encode(rdata);
       ss << "got osdmap epoch " << osdmap.get_epoch();
       r = 0;
@@ -730,10 +754,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    MMonCommandAck *reply = new MMonCommandAck(r, rs);
-    reply->set_data(rdata);
-    mon->messenger->send_message(reply, m->inst);
-    delete m;
+    mon->reply_command(m, r, rs, rdata);
     return true;
   } else
     return false;
@@ -743,6 +764,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
   string rs;
+  int err = -EINVAL;
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
@@ -769,63 +791,78 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
       int n = atoi(m->cmd[2].c_str());
-      if (n > osdmap.get_pg_num()) {
+      if (n <= osdmap.get_pg_num()) {
+	ss << "specified pg_num " << n << " <= current " << osdmap.get_pg_num();
+      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+	ss << "currently creating pgs, wait";
+	err = -EAGAIN;
+      } else {
 	ss << "set new pg_num = " << n;
 	pending_inc.new_pg_num = n;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
+      } 
+    }
+    else if (m->cmd[1] == "setpgpnum" && m->cmd.size() > 2) {
+      int n = atoi(m->cmd[2].c_str());
+      if (n <= osdmap.get_pgp_num()) {
+	ss << "specified pgp_num " << n << " <= current " << osdmap.get_pgp_num();
+      } else if (n > osdmap.get_pg_num()) {
+	ss << "specified pgp_num " << n << " > pg_num " << osdmap.get_pg_num();
+      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+	ss << "still creating pgs, wait";
+	err = -EAGAIN;
       } else {
-	ss << "specified pg_num " << n << " < current " << osdmap.get_pg_num();
+	ss << "set new pgp_num = " << n;
+	pending_inc.new_pgp_num = n;
 	getline(ss, rs);
-	mon->reply_command(m, -EINVAL, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
       }
     }
     else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_up(osd)) {
+      if (osdmap.is_down(osd)) {
+	ss << "osd" << osd << " is already down";
+      } else {
 	pending_inc.new_down[osd] = false;
 	ss << "marked down osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
-      } else {
-	ss << "osd" << osd << " is already down";
-	getline(ss, rs);
-	mon->reply_command(m, -EINVAL, rs);
       }
     }
     else if (m->cmd[1] == "out" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_in(osd)) {
+      if (osdmap.is_out(osd)) {
+	ss << "osd" << osd << " is already out";
+      } else {
 	pending_inc.new_offload[osd] = CEPH_OSD_OUT;
 	ss << "marked out osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
-      } else {
-	ss << "osd" << osd << " is already out";
-	getline(ss, rs);
-	mon->reply_command(m, -EINVAL, rs);
-      }
+      } 
     }
     else if (m->cmd[1] == "in" && m->cmd.size() > 2) {
-      errno = 0;
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_out(osd)) {
+      if (osdmap.is_in(osd)) {
+	ss << "osd" << osd << " is already in";
+      } else {
 	pending_inc.new_offload[osd] = CEPH_OSD_IN;
 	ss << "marked in osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
-      } else {
-	ss << "osd" << osd << " is already in";
-	getline(ss, rs);
-	mon->reply_command(m, -EINVAL, rs);
-      }
+      } 
+    } else {
+      ss << "unknown command " << m->cmd[1];
     }
+  } else {
+    ss << "no command?";
   }
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
   return false;
 }

@@ -120,7 +120,7 @@ public:
 		     0,
 		     object_t(u.pg64, 0));
   }
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
@@ -170,21 +170,21 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 // compound rados version type
 class eversion_t {
 public:
-  epoch_t epoch;
   version_t version;
-  eversion_t() : epoch(0), version(0) {}
-  eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
+  epoch_t epoch;
+  eversion_t() : version(0), epoch(0) {}
+  eversion_t(epoch_t e, version_t v) : version(v), epoch(e) {}
 
   eversion_t(const ceph_eversion& ce) : 
-    epoch(le32_to_cpu(ce.epoch)), 
-    version(le64_to_cpu(ce.version)) {}    
+    version(le64_to_cpu(ce.version)),
+    epoch(le32_to_cpu(ce.epoch)) {}
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = cpu_to_le32(epoch);
     c.version = cpu_to_le64(version);
     return c;
   }
-};
+} __attribute__ ((packed));
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
@@ -222,19 +222,49 @@ struct osd_stat_t {
 };
 
 
+
+/*
+ * pg states
+ */
+#define PG_STATE_CREATING   1  // creating
+#define PG_STATE_ACTIVE     2  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN      4  // peers are complete, clean of stray replicas.
+#define PG_STATE_CRASHED    8  // all replicas went down. 
+#define PG_STATE_REPLAY    16  // crashed, waiting for replay
+#define PG_STATE_STRAY     32  // i must notify the primary i exist.
+#define PG_STATE_SPLITTING 64  // i am splitting
+
+static inline std::string pg_state_string(int state) {
+  std::string st;
+  if (state & PG_STATE_CREATING) st += "creating+";
+  if (state & PG_STATE_ACTIVE) st += "active+";
+  if (state & PG_STATE_CLEAN) st += "clean+";
+  if (state & PG_STATE_CRASHED) st += "crashed+";
+  if (state & PG_STATE_REPLAY) st += "replay+";
+  if (state & PG_STATE_STRAY) st += "stray+";
+  if (state & PG_STATE_SPLITTING) st += "splitting+";
+  if (!st.length()) 
+    st = "inactive";
+  else 
+    st.resize(st.length()-1);
+  return st;
+}
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
   eversion_t reported;
-  
+  epoch_t created;
+  pg_t    parent;
+  int32_t parent_split_bits;
   int32_t state;
   int64_t num_bytes;    // in bytes
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
-  pg_stat_t() : state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
-};
+  pg_stat_t() : parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
+} __attribute__ ((packed));
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 

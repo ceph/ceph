@@ -12,7 +12,10 @@ struct ceph_osdmap {
 	struct ceph_timeval ctime, mtime;
 	
 	__u32 pg_num, pg_num_mask;
-	__u32 localized_pg_num, localized_pg_num_mask;
+	__u32 pgp_num, pgp_num_mask;
+	__u32 lpg_num, lpg_num_mask;
+	__u32 lpgp_num, lpgp_num_mask;
+	ceph_epoch_t last_pg_change;
 	
 	__u32 max_osd;
 	__u8 *osd_state;

@@ -476,10 +476,6 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err == 0) {
-		inode_dec_link_count(req->r_last_inode);
-		/* FIXME update dir mtime etc. from reply trace */
-	}
 	ceph_mdsc_put_request(req);
 	return err;
 }
