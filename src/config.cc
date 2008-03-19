@@ -15,9 +15,13 @@
 
 #include "config.h"
 #include "include/types.h"
+
 #include <fstream>
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
