@@ -1178,6 +1178,9 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 		return;
 
 	fc = msg->front.iov_base;
+
+	memset(fc, 0, sizeof(*fc));
+
 	fc->op = cpu_to_le32(CEPH_CAP_OP_ACK);  /* misnomer */
 	fc->seq = cpu_to_le64(seq);
 	fc->caps = cpu_to_le32(caps);
