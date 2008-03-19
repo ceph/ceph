@@ -320,10 +320,10 @@ public:
 
     // buckets
     for (unsigned i=0; i<crush->max_buckets; i++) {
-      __u32 type = 0;
-      if (crush->buckets[i]) type = crush->buckets[i]->alg;
-      ::_encode_simple(type, bl);
-      if (!type) continue;
+      __u32 alg = 0;
+      if (crush->buckets[i]) alg = crush->buckets[i]->alg;
+      ::_encode_simple(alg, bl);
+      if (!alg) continue;
 
       ::_encode_simple(crush->buckets[i]->id, bl);
       ::_encode_simple(crush->buckets[i]->type, bl);
@@ -333,7 +333,7 @@ public:
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::_encode_simple(crush->buckets[i]->items[j], bl);
       
-      switch (crush->buckets[i]->type) {
+      switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	  ::_encode_simple(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
@@ -389,15 +389,15 @@ public:
     // buckets
     crush->buckets = (crush_bucket**)malloc(sizeof(crush_bucket*)*crush->max_buckets);
     for (unsigned i=0; i<crush->max_buckets; i++) {
-      __u32 type;
-      ::_decode_simple(type, blp);
-      if (!type) {
+      __u32 alg;
+      ::_decode_simple(alg, blp);
+      if (!alg) {
 	crush->buckets[i] = 0;
 	continue;
       }
 
       int size = 0;
-      switch (type) {
+      switch (alg) {
       case CRUSH_BUCKET_UNIFORM:
 	size = sizeof(crush_bucket_uniform);
 	break;
@@ -426,7 +426,7 @@ public:
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::_decode_simple(crush->buckets[i]->items[j], blp);
 
-      switch (crush->buckets[i]->type) {
+      switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	((crush_bucket_uniform*)crush->buckets[i])->primes = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
