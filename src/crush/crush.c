@@ -64,7 +64,7 @@ void crush_destroy(struct crush_map *map)
 	if (map->buckets) {
 		for (b=0; b<map->max_buckets; b++) {
 			if (map->buckets[b] == 0) continue;
-			switch (map->buckets[b]->type) {
+			switch (map->buckets[b]->alg) {
 			case CRUSH_BUCKET_UNIFORM:
 				crush_destroy_bucket_uniform((struct crush_bucket_uniform*)map->buckets[b]);
 				break;

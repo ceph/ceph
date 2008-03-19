@@ -46,7 +46,7 @@ private:
   }
   
 public:
-  CrushWrapper() : crush(0) {}
+  CrushWrapper() : crush(0), have_rmaps(false) {}
   ~CrushWrapper() {
     if (crush) crush_destroy(crush);
   }  
@@ -265,7 +265,6 @@ public:
   int add_bucket(int bucketno, int alg, int type, int size,
 		 int *items, int *weights) {
     crush_bucket *b = crush_make_bucket(alg, type, size, items, weights);
-
     return crush_add_bucket(crush, bucketno, b);
   }
   

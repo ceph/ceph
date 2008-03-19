@@ -46,17 +46,19 @@
 		<item osd001/>
 		<item osd002/>
 		<item osd003/>
-		<item osd004/>
+		<item osd004>
+		      weight 600
+		</item>
 	</cab>
 	
-	<pool newlayout>
-		<item satapool>
-			weight 1.0
-		</item>
-		<item fcpool>
-			weight 3.0
-		</item>
-	</pool>
+#	<pool newlayout>
+#		<item satapool>
+#			weight 1.0
+#		</item>
+#		<item fcpool>
+#			weight 3.0
+#		</item>
+#	</pool>
 </buckets>
 
 <devices>
