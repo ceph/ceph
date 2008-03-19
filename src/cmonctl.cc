@@ -72,6 +72,20 @@ class Admin : public Dispatcher {
 } dispatcher;
 
 
+void usage() 
+{
+  cerr << "usage: cmonctl [options] monhost] command" << std::endl;
+  cerr << "Options:" << std::endl;
+  cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
+  cerr << "   -i infile         -- specify input file" << std::endl;
+  cerr << "   -o outfile        -- specify output file" << std::endl;
+  cerr << "Commands:" << std::endl;
+  cerr << "   stop              -- cleanly shut down file system" << std::endl
+       << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
+       << "   ..." << std::endl;
+  exit(1);
+}
+
 int main(int argc, const char **argv, const char *envp[]) {
 
   vector<const char*> args;
@@ -99,6 +113,19 @@ int main(int argc, const char **argv, const char *envp[]) {
       nargs.push_back(args[i]);
   }
 
+  // build command
+  vector<string> vcmd;
+  string cmd;
+  for (unsigned i=0; i<nargs.size(); i++) {
+    if (i) cmd += " ";
+    cmd += nargs[i];
+    vcmd.push_back(string(nargs[i]));
+  }
+  if (vcmd.empty()) {
+    cerr << "no mon command specified" << std::endl;
+    usage();
+  }
+
   // get monmap
   MonMap monmap;
   MonClient mc;
@@ -115,12 +142,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // build command
   MMonCommand *m = new MMonCommand(messenger->get_myinst());
   m->set_data(indata);
-  string cmd;
-  for (unsigned i=0; i<nargs.size(); i++) {
-    if (i) cmd += " ";
-    cmd += nargs[i];
-    m->cmd.push_back(string(nargs[i]));
-  }
+  m->cmd.swap(vcmd);
   int mon = monmap.pick_mon();
 
   generic_dout(0) << "mon" << mon << " <- '" << cmd << "'" << dendl;
