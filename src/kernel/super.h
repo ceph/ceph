@@ -23,12 +23,12 @@ extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
 		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug == 0 && x <= DOUT_VAR))			\
+		    (ceph_debug < 0 && x <= DOUT_VAR))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 #define derr(x, args...) do {						\
 		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug == 0 && x <= DOUT_VAR))			\
+		    (ceph_debug < 0 && x <= DOUT_VAR))			\
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
