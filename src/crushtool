@@ -8,9 +8,8 @@ use strict;
 
 use CrushWrapper;
 
-tie my %conf, "Tie::IxHash";
-
-my $wrap = new CrushWrapper::CrushWrapper;
+my $usage = "crushtool infile\n";
+my $fn = shift @ARGV || die $usage;
 
 my $alg_types = {
 	uniform => 1,
@@ -19,105 +18,159 @@ my $alg_types = {
 	straw => 4
 };
 
-$wrap->create();
+my $wrap = new CrushWrapper::CrushWrapper;
 
-%conf = Config::General::ParseConfig( -ConfigFile => "crush/sample.txt", 
-				      -Tie => "Tie::IxHash",
-				      -MergeDuplicateBlocks => 1 );
-
-my $arr = \%conf;
-#print Dumper $arr;
-
-my $p;
-
-my @ritems;
+&compile_crush($fn, "$fn.out");
+&decompile_crush("$fn.out", "$fn.out.out");
 
 # find lowest id number used
 sub get_lowest {
-	my $item = shift;
-	return unless ref $item;
-
-	my $lowest = 0;
-
-	if (ref $item eq 'HASH') { 
-		$lowest = $item->{'id'} if $lowest > $item->{'id'};
-		foreach my $key (keys %{$item}) { 
-			#next if grep { $key eq $_ } qw(type rule);
-
-			my $sublowest = get_lowest($item->{$key});
-			$lowest = $sublowest if $lowest > $sublowest;
-		}
-	} elsif (ref $item eq 'ARRAY') { 
-		foreach my $element (@{$item}) { 
-			my $sublowest = get_lowest($element);
-			$lowest = $sublowest if $lowest > $sublowest;
-		}
-	} 
-
-	return $lowest;
-}
-
-my $lowest = get_lowest($arr);
-#print "lowest is $lowest\n";
-
-# add type names/ids 
-foreach my $type (keys %{$arr->{'type'}}) {
-	#print $wrap->get_type_name($arr->{'type'}->{$type}->{'id'}) ."\n";
-}
-
-# build item name -> id 
-foreach my $section (qw(devices buckets)) { 
-	foreach my $item_type (keys %{$arr->{$section}}) {
-		foreach my $name (keys %{$arr->{$section}->{$item_type}}) {
-			my $id = $arr->{$section}->{$item_type}->{$name}->{'id'};
-			if ($section eq 'devices') { 
-				if (!defined $id || $id < 0) { 
-					die "invalid device id for $item_type $name: id is required and must be non-negative";
-				}
-			} else {
-				if (defined $id && $id > -1) { 
-					die "invalid bucket id for $item_type $name: id must be negative";
-				} elsif (!defined $id) { 
-					# get the next lower ID number and inject it into the config hash
-					$id = --$lowest;
-					$arr->{$section}->{$item_type}->{$name}->{'id'} = $id;
-				}
-			}
-			$wrap->set_item_name($id, $name);
-		}
+    my $item = shift;
+    return unless ref $item;
+    
+    my $lowest = 0;
+    
+    if (ref $item eq 'HASH') { 
+	$lowest = $item->{'id'} if $lowest > $item->{'id'};
+	foreach my $key (keys %{$item}) { 
+	    #next if grep { $key eq $_ } qw(type rule);
+	    my $sublowest = get_lowest($item->{$key});
+	    $lowest = $sublowest if $lowest > $sublowest;
 	}
+    } elsif (ref $item eq 'ARRAY') { 
+	foreach my $element (@{$item}) { 
+	    my $sublowest = get_lowest($element);
+	    $lowest = $sublowest if $lowest > $sublowest;
+	}
+    } 
+    
+    return $lowest;
 }
 
 
-foreach my $item_type (keys %{$arr->{'types'}->{'type'}}) {
+sub decompile_crush {
+    my $infn = shift @_;
+    my $outfn = shift @_;
+
+    $wrap->create();
+
+    print "reading...\n";
+    my $r = $wrap->read_from_file($infn);
+    print "read.\n";
+    die "can't read file $infn ($r)\n" if ($r != 0);
+
+    
+
+}
+
+sub compile_crush {
+    my $infn = shift @_;
+    my $outfn = shift @_;
+
+    $wrap->create();
+
+    tie my %conf, "Tie::IxHash";
+    %conf = Config::General::ParseConfig( -ConfigFile => $fn,
+					  -Tie => "Tie::IxHash",
+					  -MergeDuplicateBlocks => 1 );
+    
+    my $arr = \%conf;
+    print Dumper $arr;
+
+    my $lowest = get_lowest($arr);
+    #print "lowest is $lowest\n";
+    
+    my %weights;  # item id -> weight
+    
+    # types
+    my %type_ids;
+    foreach my $item_type (keys %{$arr->{'types'}->{'type'}}) {
 	my $type_id = $arr->{'types'}->{'type'}->{$item_type}->{'type_id'};
+	print "type $type_id '$item_type'\n";
+	$type_ids{$item_type} = $type_id;
 	$wrap->set_type_name($type_id, $item_type);
+    }
+    
+    # build device table
+    my %device_ids;  # name -> id
+    foreach my $item_type (keys %{$arr->{'devices'}}) {
+	foreach my $name (keys %{$arr->{'devices'}->{$item_type}}) {
+	    my $id = $arr->{'devices'}->{$item_type}->{$name}->{'id'};
+	    if (!defined $id || $id < 0) { 
+		die "invalid device id for $item_type $name: id is required and must be non-negative";
+	    }
+	    $wrap->set_item_name($id, $name);
+	    
+	    my $w = $arr->{'devices'}->{$item_type}->{$name}->{'weight'};
+	    $weights{$id} = $w;
+	    $device_ids{$name} = $id;
+	    print "device $id '$name' weight $w\n";
+	}
+    }
+    
+    # build bucket table
+    my %bucket_ids;
+    foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
+	foreach my $name (keys %{$arr->{'buckets'}->{$bucket_type}}) {
+	    # verify type
+	    unless (defined $type_ids{$bucket_type}) {
+		die "invalid bucket type $bucket_type\n";
+	    }
+	    
+	    # id
+	    my $id = $arr->{'buckets'}->{$bucket_type}->{$name}->{'id'};
+	    if (defined $id && $id > -1) { 
+		die "invalid bucket id for $bucket_type $name: id must be negative";
+	    } elsif (!defined $id) { 
+		# get the next lower ID number and inject it into the config hash
+		$id = --$lowest;
+		$arr->{'buckets'}->{$bucket_type}->{$name}->{'id'} = $id;
+	    }
+	    
+	    $wrap->set_item_name($id, $name);
+	    $bucket_ids{$name} = $id;
+	    
+	    my @item_ids;
+	    my @weights;
+	    my $myweight;
+	    foreach my $item_name (keys %{$arr->{'buckets'}->{$bucket_type}->{$name}->{'item'}}) {
+		my $id = $wrap->get_item_id($item_name);
+		push @item_ids, $id;
+		my $weight = $arr->{'buckets'}->{$bucket_type}->{$name}->{'item'}->{$item_name}->{'weight'};
+		$weight ||= $weights{$id};
+		push(@weights, $weight * 65536);  # 16.16 fixed point
+		$myweight += $weight;
+	    }
+	    
+	    my $alg = $arr->{'buckets'}->{$bucket_type}->{$name}->{'alg'};
+	    $alg = 'straw' if !$alg;
+	    die "invalid bucket alg $alg\n"
+		unless $alg_types->{$alg};
+	    
+	    my $typeid = $type_ids{$bucket_type};
+	    my $algid = $alg_types->{$alg};
+	    print "\tid $id\n";
+	    print "\talg $alg ($algid)\n";
+	    print "\ttype $bucket_type ($typeid)\n";
+	    print "\titems @item_ids\n";
+	    print "\tweights @weights\n";
+	    
+	    # id, alg, type, size, items, weights
+	    #TODO: pass the correct value for type to add_bucket
+	    my $result = $wrap->add_bucket($id, $algid, $typeid,
+				       scalar(@item_ids), \@item_ids, \@weights);
+	    #print "\t.. $result\n\n";
+	    print "\tweight $myweight\n";
+	    $weights{$id} = $myweight;
+	}
+    }
+
+    #$wrap->write_to_file($outfn);
+    $wrap->read_from_file($outfn);
+    1;
 }
 
-foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
 
-	print "doing bucket type $bucket_type\n";
-	foreach my $bucket_name (keys %{$arr->{'buckets'}->{$bucket_type}}) {
-		print "... bucket: $bucket_name\n";
-
-		my @item_ids;
-		foreach my $item_name (keys %{$arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'item'}}) {
-			push @item_ids, $wrap->get_item_id($item_name);
-		}
-
-		my $bucket_id = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'id'};
-		my $alg = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'alg'};
-		$alg = 'straw' if !$alg;
-
-		print "alg is: $alg\n";
-		print "b_id is: $bucket_id\n";
-
-		# bucket_id, alg, type, size, items, weights
-		#TODO: pass the correct value for type to add_bucket
-		my $result = $wrap->add_bucket($bucket_id, $alg_types->{$alg}, 0, scalar(@item_ids), \@item_ids, []);
-		print "... $result\n\n";
-	}   
-}
 
 print "Line: " . __LINE__ ."\n";
 
