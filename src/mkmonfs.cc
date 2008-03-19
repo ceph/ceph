@@ -24,7 +24,6 @@
 void usage() 
 {
   cerr << "usage: ./mkmonfs [--clobber] <monfs dir> --mon <monid> --monmap <file> --osdmap <file>" << std::endl;
-  cerr << "  --maxmds N   set max mds (default is 1)" << std::endl;
   exit(1);
 }
 
