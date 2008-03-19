@@ -85,6 +85,7 @@ public:
   pg_t() { u.pg64 = 0; }
   pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
   pg_t(int type, int size, ps_t seed, int pool, int pref) {
+    u.pg64 = 0;
     u.pg.type = type;
     u.pg.size = size;
     u.pg.ps = seed;
