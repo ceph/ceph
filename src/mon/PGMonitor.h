@@ -55,8 +55,6 @@ private:
 
   void handle_statfs(MStatfs *statfs);
 
-  void print_summary_stats(int dbl=5);
-
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 

@@ -67,6 +67,37 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
   }
 }
 
+ostream& operator<<(ostream& out, MDSMonitor& mm)
+{
+  std::stringstream ss;
+  set<int> all;
+  MDSMap &m = mm.mdsmap;
+  m.get_mds_set(all);
+  int standby_spec = 0;
+  map<int,int> by_state;
+  for (set<int>::iterator p = all.begin();
+       p != all.end();
+       ++p) {
+    by_state[m.get_state(*p)]++;
+    standby_spec += m.get_num_standby_for(*p);
+  }
+
+  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
+    if (p != by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << MDSMap::get_state_name(p->first);
+  }
+  if (m.get_num_standby_any())
+    ss << ", " << m.get_num_standby_any() << " standby (any)";
+  if (standby_spec)
+    ss << ", " << standby_spec << " standby (specific)";
+
+  string states = ss.str();  
+  return out << "e" << m.get_epoch() << ": "
+	     << all.size() << " nodes: " 
+	     << states;
+}
+
 
 
 // service methods
@@ -479,7 +510,11 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   stringstream ss;
 
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "getmap") {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    } 
+    else if (m->cmd[1] == "getmap") {
       mdsmap.encode(rdata);
       ss << "got mdsmap epoch " << mdsmap.get_epoch();
       r = 0;
@@ -490,7 +525,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     string rs;
     getline(ss, rs);
     mon->reply_command(m, r, rs, rdata);
-    delete m;
     return true;
   } else
     return false;
@@ -593,6 +627,8 @@ void MDSMonitor::tick()
   // ...if i am an active leader
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
+
+  dout(10) << *this << dendl;
 
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.mds_beacon_grace;

@@ -215,6 +215,15 @@ class MDSMap {
       return v[rand() % v.size()];
   }
 
+  int get_num_standby_any() {
+    return standby_any.size();
+  }
+  int get_num_standby_for(int m) {
+    if (standby_for.count(m))
+      return standby_for[m].size();
+    return 0;
+  }
+
 
   // mds states
   bool is_down(int m) { return is_dne(m) || is_stopped(m) || is_failed(m); }

@@ -38,6 +38,21 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 
+ostream& operator<<(ostream& out, PGMonitor& pm)
+{
+  std::stringstream ss;
+  for (hash_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
+       p != pm.pg_map.num_pg_by_state.end();
+       ++p) {
+    if (p != pm.pg_map.num_pg_by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << pg_state_string(p->first);// << "(" << p->first << ")";
+  }
+  string states = ss.str();
+  return out << "v" << pm.pg_map.version << ": "
+	     << pm.pg_map.pg_stat.size() << " pgs: "
+	     << states;
+}
 
 /*
  Tick function to update the map based on performance every N seconds
@@ -45,7 +60,7 @@
 
 void PGMonitor::tick() 
 {
-  print_summary_stats(10);
+  dout(10) << *this << dendl;
 
   /*
   // magic incantation that Sage told me
@@ -96,7 +111,7 @@ bool PGMonitor::update_from_paxos()
       inc._decode(bl, off);
       pg_map.apply_incremental(inc);
       
-      print_summary_stats(0);
+      dout(0) << *this << dendl;
     } else {
       dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << dendl;
       return false;
@@ -111,29 +126,6 @@ bool PGMonitor::update_from_paxos()
   send_pg_creates();
 
   return true;
-}
-
-ostream& operator<<(ostream& out, PGMonitor& pm)
-{
-  std::stringstream ss;
-  for (hash_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
-       p != pm.pg_map.num_pg_by_state.end();
-       ++p) {
-    if (p != pm.pg_map.num_pg_by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << pg_state_string(p->first);// << "(" << p->first << ")";
-  }
-  string states = ss.str();
-  return out << "v" << pm.pg_map.version << ": "
-	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states;
-}
-
-void PGMonitor::print_summary_stats(int dbl)
-{
-  dout(dbl) << *this << dendl;
-  if (!pg_map.creating_pgs.empty())
-    dout(20) << " creating_pgs = " << pg_map.creating_pgs << dendl;
 }
 
 void PGMonitor::create_pending()

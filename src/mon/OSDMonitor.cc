@@ -96,6 +96,14 @@ void OSDMonitor::fake_reorg()
 }
 
 
+ostream& operator<<(ostream& out, OSDMonitor& om)
+{
+  return out << "e" << om.osdmap.get_epoch() << ": "
+	     << om.osdmap.get_num_osds() << " osds: "
+	     << om.osdmap.get_num_up_osds() << " up, " 
+	     << om.osdmap.get_num_in_osds() << " in";
+}
+
 
 /************ MAPS ****************/
 
@@ -158,7 +166,7 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    print_summary_stats(1);
+    dout(1) << *this << dendl;
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
@@ -173,18 +181,6 @@ bool OSDMonitor::update_from_paxos()
   return true;
 }
 
-ostream& operator<<(ostream& out, OSDMonitor& om)
-{
-  return out << "e" << om.osdmap.get_epoch() << ": "
-	     << om.osdmap.get_num_osds() << " osds: "
-	     << om.osdmap.get_num_up_osds() << " up, " 
-	     << om.osdmap.get_num_in_osds() << " in";
-}
-
-void OSDMonitor::print_summary_stats(int dbl)
-{
-  dout(dbl) << *this << dendl;
-}
 
 void OSDMonitor::create_pending()
 {
@@ -645,7 +641,7 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
-  print_summary_stats(10);
+  dout(10) << *this << dendl;
 
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
