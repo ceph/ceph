@@ -260,7 +260,6 @@ crush_make_tree_bucket(int type, int size,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
 	bucket->h.type = type;
-	bucket->h.size = size;
 
 	/* calc tree depth */
 	depth = 1;
@@ -293,6 +292,7 @@ crush_make_tree_bucket(int type, int size,
 }
 
 
+
 /* straw bucket */
 
 struct crush_bucket_straw *
@@ -315,12 +315,14 @@ crush_make_straw_bucket(int type,
 	bucket->h.size = size;
 	
 	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->straws = malloc(sizeof(__u32)*size);
 	
 	bucket->h.weight = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
+		bucket->item_weights[i] = weights[i];
 	}
 	
 	/* reverse sort by weight (simple insertion sort) */

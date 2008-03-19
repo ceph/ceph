@@ -8,6 +8,26 @@
 
 #include "crush.h"
 
+int crush_get_bucket_item_weight(struct crush_bucket *b, int pos)
+{
+	if (pos >= b->size) 
+		return 0;
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return ((struct crush_bucket_uniform*)b)->item_weight;
+	case CRUSH_BUCKET_LIST:
+		return ((struct crush_bucket_list*)b)->item_weights[pos];
+	case CRUSH_BUCKET_TREE: 
+		if (pos & 1)
+			return ((struct crush_bucket_tree*)b)->node_weights[pos];
+		return 0;
+	case CRUSH_BUCKET_STRAW:
+		return ((struct crush_bucket_straw*)b)->item_weights[pos];
+	}
+	return 0;
+}
+
+
 void crush_calc_parents(struct crush_map *map)
 {
 	int i, b, c;
@@ -48,6 +68,7 @@ void crush_destroy_bucket_tree(struct crush_bucket_tree *b)
 void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 {
 	free(b->straws);
+	free(b->item_weights);
 	free(b->h.items);
 	free(b);
 }

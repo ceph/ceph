@@ -93,9 +93,11 @@ static int crush_decode_straw_bucket(void **p, void *end,
 	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
 	if (b->straws == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, b->h.size * sizeof(__u32), bad);
-	for (j=0; j<b->h.size; j++) 
+	ceph_decode_need(p, end, 2 * b->h.size * sizeof(__u32), bad);
+	for (j=0; j<b->h.size; j++) {
+		ceph_decode_32(p, b->item_weights[j]);
 		ceph_decode_32(p, b->straws[j]);
+	}
 	return 0;
 bad:
 	return -EINVAL;

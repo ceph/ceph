@@ -97,6 +97,7 @@ struct crush_bucket_tree {
 
 struct crush_bucket_straw {
 	struct crush_bucket h;
+	__u32 *item_weights;
 	__u32 *straws;  /* 16-bit fixed point */
 };
 
@@ -125,7 +126,8 @@ struct crush_map {
 };
 
 
-/* common destructors */
+/* common */
+extern int crush_get_bucket_item_weight(struct crush_bucket *b, int pos);
 extern void crush_calc_parents(struct crush_map *m);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *);

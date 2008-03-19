@@ -58,6 +58,9 @@ public:
   }
 
   // bucket types
+  int get_num_type_names() {
+    return type_map.size();
+  }
   int get_type_id(const char *s) {
     string name(s);
     build_rmaps();
@@ -117,6 +120,17 @@ public:
       rule_name_rmap[name] = i;
   }
 
+  /*** devices ***/
+  int get_max_devices() {
+    if (!crush) return 0;
+    return crush->max_devices;
+  }
+  int get_device_offload(int d) {
+    if (!crush) return -1;
+    if (d >= crush->max_devices) return -1;
+    return crush->device_offload[d];
+  }
+  
   
   /*** rules ***/
 private:
@@ -226,6 +240,10 @@ private:
   }
 
 public:
+  int get_max_buckets() {
+    if (!crush) return -EINVAL;
+    return crush->max_buckets;
+  }
   int get_next_bucket_id() {
     if (!crush) return -EINVAL;
     return crush_get_next_bucket_id(crush);
@@ -259,6 +277,11 @@ public:
     crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->items[pos];
+  }
+  int get_bucket_item_weight(int id, int pos) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return crush_get_bucket_item_weight(b, pos);
   }
 
   /* modifiers */
@@ -353,8 +376,10 @@ public:
 	break;
 
       case CRUSH_BUCKET_STRAW:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], bl);
 	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
+	}
 	break;
       }
     }
@@ -457,8 +482,12 @@ public:
       case CRUSH_BUCKET_STRAW:
 	((crush_bucket_straw*)crush->buckets[i])->straws = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	((crush_bucket_straw*)crush->buckets[i])->item_weights = 
+	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], blp);
 	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], blp);
+	}
 	break;
       }
     }

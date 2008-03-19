@@ -17,6 +17,11 @@ my $alg_types = {
 	tree => 3, 
 	straw => 4
 };
+my $alg_names = {
+    1 => 'uniform',
+    2 => 'list',
+    3 => 'tree',
+    4 => 'straw' };
 
 my $wrap = new CrushWrapper::CrushWrapper;
 
@@ -56,10 +61,71 @@ sub decompile_crush {
 
     print "reading...\n";
     my $r = $wrap->read_from_file($infn);
-    print "read.\n";
+
     die "can't read file $infn ($r)\n" if ($r != 0);
 
+    my $arr;
+
+    # types
+    my $types = $wrap->get_num_type_names();
+    my %type_map;
+    for (my $id=0; $types > 0; $id++) {
+	my $name = $wrap->get_type_name($id);
+	next if $name eq '';
+	$types--;
+	$type_map{$id} = $name;
+	print "type $id is '$name'\n";
+	$arr->{'types'}->{'type'}->{$name}->{'type_id'} = $id;
+    }
     
+    # devices
+    my $max_devices = $wrap->get_max_devices();
+    my %device_weight;
+    my %name_map;
+    for (my $id=0; $id < $max_devices; $id++) {
+	my $name = $wrap->get_item_name($id);
+	next if $name eq '';
+	$name_map{$id} = $name;
+	print "device $id '$name'\n";
+	$arr->{'devices'}->{$type_map{0}}->{$name}->{'id'} = $id;
+	my $off = $wrap->get_device_offload($id);
+	if ($off) {
+	    my $off = (0x10000 - $off) / 0x10000; 
+	    $arr->{'devices'}->{$type_map{0}}->{$name}->{'offload'} = $off;
+	}
+    }
+
+    # get bucket names
+    my $max_buckets = $wrap->get_max_buckets();
+    for (my $id=-1; $id > -1-$max_buckets; $id--) {
+	my $name = $wrap->get_item_name($id);
+	next if $name eq '';
+	$name_map{$id} = $name;
+    }
+
+    # do buckets
+    my $max_buckets = $wrap->get_max_buckets();
+    for (my $id=-1; $id > -1-$max_buckets; $id--) {
+	my $name = $wrap->get_item_name($id);
+	next if $name eq '';
+	print "bucket $id '$name'\n";
+	my $alg = $wrap->get_bucket_alg($id);
+	my $type = $wrap->get_bucket_type($id);
+	$arr->{'buckets'}->{$type_map{$type}}->{$name}->{'id'} = $id;
+	$arr->{'buckets'}->{$type_map{$type}}->{$name}->{'alg'} = $alg_names->{$alg};
+	my $n = $wrap->get_bucket_size($id);
+	for (my $i=0; $i<$n; $i++) {
+	    my $item = $wrap->get_bucket_item($id, $i);
+	    my $weight = $wrap->get_bucket_item_weight($id, $i);
+	    next unless $weight;
+	    $weight /= 0x10000;
+	    $arr->{'buckets'}->{$type_map{$type}}->{$name}->{'item'}->{$name_map{$item}}->{'weight'} = $weight;
+	}
+    }
+
+    
+
+    print Dumper $arr;
 
 }
 
@@ -165,6 +231,7 @@ sub compile_crush {
 	}
     }
 
+    $wrap->finalize;
     $wrap->write_to_file($outfn);
     1;
 }
