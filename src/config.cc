@@ -17,12 +17,43 @@
 #include "include/types.h"
 #include <fstream>
 #include <stdlib.h>
+#include <errno.h>
 
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
 atomic_t buffer_total_alloc;
 
 #include "osd/osd_types.h"
+
+int buffer::list::read_file(const char *fn)
+{
+  struct stat st;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
+    return -errno;
+  }
+  ::fstat(fd, &st);
+  bufferptr bp(st.st_size);
+  append(bp);
+  ::read(fd, (void*)c_str(), length());
+  ::close(fd);
+  return 0;
+}
+
+int buffer::list::write_file(const char *fn)
+{
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0) {
+    cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
+    return -errno;
+  }
+  ::write(fd, (void*)c_str(), length());
+  ::close(fd);
+  return 0;
+}
+
+
 
 // debug output
 Mutex _dout_lock;

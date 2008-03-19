@@ -3,7 +3,6 @@ code cleanup
   - use le32 etc annotation
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
-- fix ceph_lookup_open
 
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)

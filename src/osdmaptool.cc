@@ -45,33 +45,6 @@ void printmap(const char *me, OSDMap *m)
   */
 }
 
-int read_file(const char *fn, bufferlist &bl)
-{
-  struct stat st;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
-    return -errno;
-  }
-  ::fstat(fd, &st);
-  bufferptr bp(st.st_size);
-  bl.append(bp);
-  ::read(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
-  return 0;
-}
-
-int write_file(const char *fn, bufferlist &bl)
-{
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0) {
-    cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
-    return -errno;
-  }
-  ::write(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
-  return 0;
-}
 
 int main(int argc, const char **argv)
 {
@@ -125,7 +98,7 @@ int main(int argc, const char **argv)
   
   int r = 0;
   if (!(createsimple && clobber))
-    r = read_file(fn, bl);
+    r = bl.read_file(fn);
   if (!createsimple && r < 0) {
     cerr << me << ": couldn't open " << fn << ": " << strerror(errno) << std::endl;
     return -1;
@@ -148,7 +121,7 @@ int main(int argc, const char **argv)
 
   if (import_crush) {
     bufferlist cbl;
-    r = read_file(import_crush, cbl);
+    r = cbl.read_file(import_crush);
     if (r < 0) {
       cerr << me << ": error reading crush map from " << import_crush << std::endl;
       exit(1);
@@ -165,7 +138,7 @@ int main(int argc, const char **argv)
   if (export_crush) {
     bufferlist cbl;
     osdmap.crush._encode(cbl);
-    r = write_file(export_crush, cbl);
+    r = cbl.write_file(export_crush);
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;
       exit(1);
@@ -190,7 +163,7 @@ int main(int argc, const char **argv)
     cout << me << ": writing epoch " << osdmap.get_epoch()
 	 << " to " << fn
 	 << std::endl;
-    int r = write_file(fn, bl);
+    int r = bl.write_file(fn);
     assert(r >= 0);
   }
   

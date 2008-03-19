@@ -296,6 +296,20 @@ public:
       out[i] = rawout[i];
   }
 
+  int read_from_file(const char *fn) {
+    bufferlist bl;
+    int r = bl.read_file(fn);
+    if (r < 0) return r;
+    bufferlist::iterator blp = bl.begin();
+    _decode(blp);
+    return 0;
+  }
+  int write_to_file(const char *fn) {
+    bufferlist bl;
+    _encode(bl);
+    return bl.write_file(fn);
+  }
+
   void _encode(bufferlist &bl, bool lean=false) {
     ::_encode_simple(crush->max_buckets, bl);
     ::_encode_simple(crush->max_rules, bl);

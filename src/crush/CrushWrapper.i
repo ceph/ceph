@@ -12,7 +12,7 @@
   I32 len;
   int i;
   SV **tv;
-  int view;
+//  int view;
 
 
   //printf("typemap\n");

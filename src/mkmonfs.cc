@@ -27,22 +27,6 @@ void usage()
   exit(1);
 }
 
-int read_file(const char *fn, bufferlist &bl)
-{
-  struct stat st;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
-    return -errno;
-  }
-  ::fstat(fd, &st);
-  bufferptr bp(st.st_size);
-  bl.append(bp);
-  ::read(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
-  return 0;
-}
-
 
 int main(int argc, const char **argv)
 {
@@ -80,7 +64,7 @@ int main(int argc, const char **argv)
 
   // load monmap
   bufferlist monmapbl;
-  int err = read_file(monmapfn, monmapbl);
+  int err = monmapbl.read_file(monmapfn);
   if (err < 0)
     exit(1);
   MonMap monmap;
