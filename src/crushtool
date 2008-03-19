@@ -1,9 +1,12 @@
 #!/usr/bin/perl
 
-use CrushWrapper;
 use Config::General;
 use Tie::IxHash;
 use Data::Dumper;
+
+use strict;
+
+use CrushWrapper;
 
 tie my %conf, "Tie::IxHash";
 
@@ -93,7 +96,7 @@ foreach my $item_type (keys %{$arr->{'types'}->{'type'}}) {
 
 foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
 
-	print "doing bucket type $type\n";
+	print "doing bucket type $bucket_type\n";
 	foreach my $bucket_name (keys %{$arr->{'buckets'}->{$bucket_type}}) {
 		print "... bucket: $bucket_name\n";
 
@@ -104,20 +107,19 @@ foreach my $bucket_type (keys %{$arr->{'buckets'}}) {
 
 		my $bucket_id = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'id'};
 		my $alg = $arr->{'buckets'}->{$bucket_type}->{$bucket_name}->{'alg'};
-		$alg = $alg_types->{'straw'} if !$alg;
+		$alg = 'straw' if !$alg;
 
-		print "alg is: $alg\n";
-		print "b_id is: $bucket_id\n";
+		print "... alg is: $alg\n";
+		print "... b_id is: $bucket_id\n";
 
 		# bucket_id, alg, type, size, items, weights
 		#TODO: pass the correct value for type to add_bucket
 		my $result = $wrap->add_bucket($bucket_id, $alg_types->{$alg}, 0, scalar(@item_ids), \@item_ids, []);
-		print "... $result\n\n";
+		print "... result: $result\n\n";
 	}   
 }
 
-
-print "Line: " . __LINE__ ."\n";
+print "Done!\n";
 
 
 =item
