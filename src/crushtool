@@ -165,8 +165,7 @@ sub compile_crush {
 	}
     }
 
-    #$wrap->write_to_file($outfn);
-    $wrap->read_from_file($outfn);
+    $wrap->write_to_file($outfn);
     1;
 }
 

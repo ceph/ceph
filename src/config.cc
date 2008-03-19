@@ -38,7 +38,8 @@ int buffer::list::read_file(const char *fn)
     return -errno;
   }
   ::fstat(fd, &st);
-  bufferptr bp(st.st_size);
+  int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
+  bufferptr bp = buffer::create_page_aligned(s);
   append(bp);
   ::read(fd, (void*)c_str(), length());
   ::close(fd);
