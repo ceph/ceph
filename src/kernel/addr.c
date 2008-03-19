@@ -2,6 +2,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
+#include <linux/writeback.h>	/* generic_writepages */
 
 int ceph_debug_addr = 50;
 #define DOUT_VAR ceph_debug_addr
@@ -31,7 +32,6 @@ out_unlock:
 	return err;
 }
 
-#if 0
 static int ceph_readpages(struct file *file, struct address_space *mapping,
 			  struct list_head *pages, unsigned nr_pages)
 {
@@ -53,7 +53,6 @@ out_unlock:
 
 
 }
-#endif
 
 
 /*
@@ -101,6 +100,29 @@ out_unlock:
 	put_page(page);
 
        return err;
+}
+
+/*
+ * ceph_writepages:
+ *  do write jobs for several pages
+ */
+static int ceph_writepages(struct address_space *mapping, struct writeback_control *wbc)
+{
+#if 0
+	struct inode *inode = mapping->host;
+	struct ceph_pageio_descriptor pgio;
+	int err;
+
+	ceph_pageio_init_write(&pgio, inode, wb_priority(wbc));
+	wbc->fs_private = &pgio;
+	err = generic_writepages(mapping, wbc);
+	if (err)
+		return err;
+
+	return 0;
+#endif
+
+	return generic_writepages(mapping, wbc);
 }
 
 /*
@@ -220,8 +242,7 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
-//	.readpages = ceph_readpages
-//	.writepage = ceph_writepage,
+	.readpages = ceph_readpages,
 	.prepare_write = ceph_prepare_write,
 	.commit_write = ceph_commit_write,
 	.writepage = ceph_writepage,
