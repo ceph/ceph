@@ -13,8 +13,6 @@ kernel client
   - hooks to get mds, osd, monmap epoch #s
 - msgr layer
   - standby state, to keep connect_seq around after a disconnect
-- fix 32bit inode handling
-  - see nfs_fhget, nfs_find_actor as reference for allowing multiple inodes with the same i_ino
 - audit locking
 - audit use of kmalloc vs spinlocks
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
