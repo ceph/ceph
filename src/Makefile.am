@@ -15,8 +15,8 @@ mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a
-#crushtool_SOURCES = crushtool.cc
-#crushtool_LDADD = libcommon.a libcrush.a
+crushtool_SOURCES = crushtool.cc
+crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
@@ -89,7 +89,7 @@ AM_LDFLAGS =
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	cmonctl \
-	mkmonfs monmaptool osdmaptool \
+	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
 	streamtest dupstore \
 	$(FUSEBIN) $(NEWSYN)
@@ -99,7 +99,7 @@ noinst_LIBRARIES = \
 	libos.a libebofs.a
 
 # extra bits
-EXTRA_DIST = start.sh stop.sh crushtool
+EXTRA_DIST = start.sh stop.sh crushtool.pl
 
 # cleaning
 clean-local:
