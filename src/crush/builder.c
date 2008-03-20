@@ -120,7 +120,7 @@ int crush_add_bucket(struct crush_map *map,
 		id = crush_get_next_bucket_id(map);
 	pos = -1 - id;
 
-	while (pos > map->max_buckets) {
+	while (pos >= map->max_buckets) {
 		/* expand array */
 		oldsize = map->max_buckets;
 		if (map->max_buckets)
