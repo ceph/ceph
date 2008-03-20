@@ -113,6 +113,10 @@ long eval_expression(iter_t const& i)
 */
 
 
+
+const char *infn = "stdin";
+
+
 ////////////////////////////////////////////////////////////////////////////
 
 int compile_crush_file(const char *infn, CrushWrapper &crush)
@@ -122,27 +126,49 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
   string big;
   string str;
   int line = 1;
-  while (getline(in, str)) {
-    // fixme: strip out comments
+  map<int,int> line_pos;  // pos -> line
+  map<int,string> line_val;
+  while (getline(cin, str)) {
+    // remove newline
     int l = str.length();
     if (l && str[l] == '\n')
       str.erase(l-1, 1);
+
+    line_val[line] = str;
+
+    // strip comment
     int n = str.find("#");
     if (n >= 0)
       str.erase(n, str.length()-n);
-    cout << line++ << ": " << str << std::endl;
+    cout << line << ": " << str << std::endl;
+
     if (big.length()) big += " ";
+    line_pos[big.length()] = line;
+    line++;
     big += str;
   }
 
   cout << "whole file is: \"" << big << "\"" << std::endl;
-
+  
   crush_grammar crushg;
-  //bool parsed = parse(big.c_str(), crushg, space_p).full;
-  tree_parse_info<> info = ast_parse(big.c_str(), crushg, space_p);
-  bool parsed = info.full;
+  const char *start = big.c_str();
+  tree_parse_info<> info = ast_parse(start, crushg, space_p);
 
-  if (parsed) {
+  // parse error?
+  if (!info.full) {
+    int cpos = info.stop - start;
+    //cout << "cpos " << cpos << std::endl;
+    //cout << " linemap " << line_pos << std::endl;
+    assert(!line_pos.empty());
+    map<int,int>::iterator p = line_pos.upper_bound(cpos);
+    if (p != line_pos.begin()) p--;
+    int line = p->second;
+    int pos = cpos - p->first;
+    cerr << infn << ":" << line //<< ":" << (pos+1)
+	 << " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
+    return 1;
+  }
+  {
     // dump parse tree as XML
     std::map<parser_id, std::string> rule_names;
     rule_names[crush_grammar::_int] = "int";
@@ -165,8 +191,6 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     // print the result
     cout << "parsing succeeded\n";
     //cout << "result = " << evaluate(info) << "\n\n";
-  } else {
-    cout << "did not parse" << std::endl;
   }
 
   return 0;
