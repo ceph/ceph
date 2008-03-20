@@ -12,10 +12,6 @@
  * 
  */
 
-#include <boost/spirit/core.hpp>
-#include <boost/spirit/tree/ast.hpp>
-#include <boost/spirit/tree/tree_to_xml.hpp>
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -36,15 +32,13 @@
 #include <map>
 using namespace std;
 
-
-using namespace boost::spirit;
-
-typedef char const*         iterator_t;
+/*typedef char const*         iterator_t;
 typedef tree_match<iterator_t> parse_tree_match_t;
 typedef parse_tree_match_t::tree_iterator iter_t;
-
+*/
 
 //
+/*
 long evaluate(parse_tree_match_t hit);
 long eval_expression(iter_t const& i);
 
@@ -115,49 +109,64 @@ long eval_expression(iter_t const& i)
   
   return 0;
 }
+*/
+
 
 ////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
-  // look in tree_calc_grammar for the definition of crush_grammar
-  crush_grammar calc;
   
-  cout << "/////////////////////////////////////////////////////////\n\n";
-  cout << "\t\tThe simplest working crush_grammar...\n\n";
-  cout << "/////////////////////////////////////////////////////////\n\n";
-  cout << "Type an expression...or [q or Q] to quit\n\n";
-  
+  cout << "go" << std::endl;
+  string big;
   string str;
-  while (getline(cin, str))
-    {
-      if (str.empty() || str[0] == 'q' || str[0] == 'Q')
-	break;
-      
-      tree_parse_info<> info = ast_parse(str.c_str(), calc);
-      
-      if (info.full)
-        {
-#if defined(BOOST_SPIRIT_DUMP_PARSETREE_AS_XML)
-	  // dump parse tree as XML
-	  std::map<parser_id, std::string> rule_names;
-	  rule_names[crush_grammar::integerID] = "integer";
-	  rule_names[crush_grammar::factorID] = "factor";
-	  rule_names[crush_grammar::termID] = "term";
-	  rule_names[crush_grammar::expressionID] = "expression";
-	  tree_to_xml(cout, info.trees, str.c_str(), rule_names);
-#endif
-	  
-	  // print the result
-	  cout << "parsing succeeded\n";
-	  cout << "result = " << evaluate(info) << "\n\n";
-        }
-      else
-        {
-	  cout << "parsing failed\n";
-        }
-    }
-  
-  cout << "Bye... :-) \n\n";
+  int line = 1;
+  while (getline(cin, str)) {
+    // fixme: strip out comments
+    int l = str.length();
+    if (l && str[l] == '\n')
+      str.erase(l-1, 1);
+    int n = str.find("#");
+    if (n >= 0)
+      str.erase(n, str.length()-n);
+    cout << line++ << ": " << str << std::endl;
+    if (big.length()) big += " ";
+    big += str;
+  }
+
+  cout << "whole file is: \"" << big << "\"" << std::endl;
+
+  crush_grammar crushg;
+  //bool parsed = parse(big.c_str(), crushg, space_p).full;
+  tree_parse_info<> info = ast_parse(big.c_str(), crushg, space_p);
+  bool parsed = info.full;
+
+  if (parsed) {
+    // dump parse tree as XML
+    std::map<parser_id, std::string> rule_names;
+    rule_names[crush_grammar::_int] = "int";
+    rule_names[crush_grammar::_posint] = "posint";
+    rule_names[crush_grammar::_name] = "name";
+    rule_names[crush_grammar::_device] = "device";
+    rule_names[crush_grammar::_bucket_type] = "bucket_type";
+    rule_names[crush_grammar::_bucket_id] = "bucket_id";
+    rule_names[crush_grammar::_bucket_alg] = "bucket_alg";
+    rule_names[crush_grammar::_bucket_item] = "bucket_item";
+    rule_names[crush_grammar::_bucket] = "bucket";
+    rule_names[crush_grammar::_step_take] = "step_take";
+    rule_names[crush_grammar::_step_choose_indep] = "step_choose_indep";
+    rule_names[crush_grammar::_step_choose_firstn] = "step_choose_firstn";
+    rule_names[crush_grammar::_step_emit] = "step_emit";
+    rule_names[crush_grammar::_crushrule] = "rule";
+    rule_names[crush_grammar::_crushmap] = "map";
+    tree_to_xml(cout, info.trees, big.c_str(), rule_names);
+
+    // print the result
+    cout << "parsing succeeded\n";
+    //cout << "result = " << evaluate(info) << "\n\n";
+  } else {
+    cout << "did not parse" << std::endl;
+  }
+
   return 0;
 }
 

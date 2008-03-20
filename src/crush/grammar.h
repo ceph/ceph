@@ -15,17 +15,20 @@
 #ifndef __CRUSH_GRAMMAR
 #define __CRUSH_GRAMMAR
 
+#define BOOST_SPIRIT_DEBUG
+
+#include <boost/spirit/core.hpp>
+#include <boost/spirit/tree/ast.hpp>
+#include <boost/spirit/tree/tree_to_xml.hpp>
 using namespace boost::spirit;
 
 struct crush_grammar : public grammar<crush_grammar>
 {
-  static const int integerID = 1;
-  static const int factorID = 2;
-  static const int termID = 3;
-  static const int expressionID = 4;
-  
-  static const int _posint = 10;
-  static const int _name = 11;
+  static const int _int = 1;
+  static const int _posint = 2;
+  static const int _negint = 3;
+  static const int _name = 4;
+
   static const int _device = 12;
   static const int _bucket_type = 13;
   static const int _bucket_id = 14;
@@ -45,12 +48,9 @@ struct crush_grammar : public grammar<crush_grammar>
   template <typename ScannerT>
   struct definition
   {
-    rule<ScannerT, parser_context<>, parser_tag<expressionID> >   expression;
-    rule<ScannerT, parser_context<>, parser_tag<termID> >         term;
-    rule<ScannerT, parser_context<>, parser_tag<factorID> >       factor;
-    rule<ScannerT, parser_context<>, parser_tag<integerID> >      integer;
-
+    rule<ScannerT, parser_context<>, parser_tag<_int> >      integer;
     rule<ScannerT, parser_context<>, parser_tag<_posint> >      posint;
+    rule<ScannerT, parser_context<>, parser_tag<_negint> >      negint;
     rule<ScannerT, parser_context<>, parser_tag<_name> >      name;
 
     rule<ScannerT, parser_context<>, parser_tag<_device> >      device;
@@ -78,16 +78,17 @@ struct crush_grammar : public grammar<crush_grammar>
 					    (!ch_p('-') >> +digit_p)
 					    ] ];
       posint     =   leaf_node_d[ lexeme_d[ +digit_p ] ];
-      name = +alnum_p;
+      negint     =   leaf_node_d[ lexeme_d[ ch_p('-') >> +digit_p ] ];
+      name = leaf_node_d[ lexeme_d[ +alnum_p ] ];
 
       // devices
-      device = str_p("device") >> posint >> name >> *(str_p("overload") >> real_p);
+      device = str_p("device") >> posint >> name >> !( str_p("overload") >> real_p );
       
       // bucket types
       bucket_type = str_p("buckettype") >> posint >> name;
 
       // buckets
-      bucket_id = str_p("id") >> ch_p('-') >> posint;
+      bucket_id = str_p("id") >> negint;
       bucket_alg = str_p("alg") >> ( str_p("uniform") | str_p("list") | str_p("tree") | str_p("straw") );
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
@@ -110,34 +111,10 @@ struct crush_grammar : public grammar<crush_grammar>
 
       // the whole crush map
       crushmap = *(device | bucket_type) >> *bucket >> *crushrule;
-      	
-
-
-      //  Start grammar definition
-      factor      =   integer
-	|   inner_node_d[ch_p('(') >> expression >> ch_p(')')]
-	|   (root_node_d[ch_p('-')] >> factor);
-      
-      term        =   factor >>
-	*(  (root_node_d[ch_p('*')] >> factor)
-	    | (root_node_d[ch_p('/')] >> factor)
-	    );
-      
-      expression  =   term >>
-	*(  (root_node_d[ch_p('+')] >> term)
-	    | (root_node_d[ch_p('-')] >> term)
-	    );
-      //  End grammar definition
-      
-      // turn on the debugging info.
-      BOOST_SPIRIT_DEBUG_RULE(integer);
-      BOOST_SPIRIT_DEBUG_RULE(factor);
-      BOOST_SPIRIT_DEBUG_RULE(term);
-      BOOST_SPIRIT_DEBUG_RULE(expression);
     }
     
-    rule<ScannerT, parser_context<>, parser_tag<expressionID> > const& 
-    start() const { return expression; }
+    rule<ScannerT, parser_context<>, parser_tag<_crushmap> > const& 
+    start() const { return crushmap; }
   };
 };
 
