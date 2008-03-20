@@ -1,82 +1,35 @@
 
-# first define our types
-<types>
-	<type osd>
-	   type_id = 0
-	</type>
-	<type cab>
-	   type_id = 2
-	</type>
-	<type row>
-	   type_id = 3
-	</type>
-	<type pool>
-	   type_id = 10
-	</type>
-</types>
+# devices
+device 1 osd001
+device 2 osd002
+device 3 osd003
+device 4 osd004 overload 0      # 0.0 -> normal, 1.0 -> failed
+device 5 osd005 overload .1
 
 # hierarchy
-<devices>
-	<osd osd001>
-		id 1
-		weight 500
-	</osd>
-	<osd osd002>
-		id 2
-		weight 500
-	</osd>
-	<osd osd003>
-		id 3
-		weight 500
-	</osd>
-	<osd osd004>
-		id 4
-		weight 500
-	</osd>
-	<osd osd005>
-		id 5
-		weight 500
-	</osd>
-</devices>
+buckettype 2 cab
+buckettype 3 row
+buckettype 10 pool
 
-<buckets>
-	<cab cab-d2>
-		alg straw
-		id   -12
-		<item osd001/>
-		<item osd002/>
-		<item osd003/>
-		<item osd004>
-		      weight 600
-		</item>
-	</cab>
-	
-#	<pool newlayout>
-#		<item satapool>
-#			weight 1.0
-#		</item>
-#		<item fcpool>
-#			weight 3.0
-#		</item>
-#	</pool>
-</buckets>
-
-<devices>
-	<osd osd006>
-		id 5
-		weight 500
-	</osd>
-</devices>
+cab cab-d2 {
+       id -1         # optional
+       alg straw     # required
+       item osd001
+       item osd002 weight 600 pos 1
+       item osd003 weight 600 pos 2
+       item osd004 weight 600 pos 3
+       item osd005 pos 4 weight 600
+}
 
 # rules
-<rules>
-	<rule normal>
-		pool 0
-		type replicated
-		min_size 1
-		mix_size 4
-		step take root
-		step choose_indep 0 osd
-		step emit
-	</rule>
-</rules>
+rule normal {
+     # these are required.
+     pool 0
+     type replicated 
+     min_size 1
+     max_size 4
+     # need 1 or more of these.
+     step take root
+     step choose_indep 0 osd
+     step emit
+}
