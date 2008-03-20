@@ -83,8 +83,9 @@ class Filer {
   Objecter::OSDRead *prepare_read(inode_t& inode,
 				  off_t offset, 
 				  size_t len, 
-				  bufferlist *bl) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+				  bufferlist *bl,
+				  int flags) {
+    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, flags);
     file_to_extents(inode, offset, len, rd->extents);
     return rd;
   }
@@ -92,8 +93,9 @@ class Filer {
            off_t offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
+	   int flags,
            Context *onfinish) {
-    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl);
+    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl, flags);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
@@ -105,7 +107,7 @@ class Filer {
             Context *onack,
             Context *oncommit,
 	    objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, flags);
     file_to_extents(inode, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
@@ -113,9 +115,10 @@ class Filer {
   int zero(inode_t& inode,
            off_t offset,
            size_t len,
+	   int flags,
            Context *onack,
            Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO);
+    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO, flags);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
@@ -123,9 +126,10 @@ class Filer {
   int remove(inode_t& inode,
 	     off_t offset,
 	     size_t len,
+	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE);
+    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE, flags);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }

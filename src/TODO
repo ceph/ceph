@@ -35,6 +35,16 @@ kernel client
     - flush data before unmount.
   - send (+deliver!) unmount message
 
+client
+- obey file_max
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
+
+
 osdmon
 - actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
@@ -97,17 +107,6 @@ mds
 
 - efficient stat for single writers
 - add FILE_CAP_EXTEND capability bit
-
-
-client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
-- clean up client mds session vs mdsmap behavior?
-- client caps migration races
-  - caps need a seq number; reap logic needs to be a bit smarter
-  - also needs cope with mds failures
-
 
 
 journaler

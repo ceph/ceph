@@ -81,7 +81,7 @@ void Journaler::recover(Context *onread)
   dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
-  filer.read(inode, 0, sizeof(Header), &fin->bl, fin);
+  filer.read(inode, 0, sizeof(Header), &fin->bl, 0, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -459,7 +459,7 @@ void Journaler::_issue_read(off_t len)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
 	   << dendl;
   
-  filer.read(inode, requested_pos, len, &reading_buf, 
+  filer.read(inode, requested_pos, len, &reading_buf, 0,
 	     new C_Read(this));
   requested_pos += len;
 }
@@ -638,7 +638,7 @@ void Journaler::trim()
 	   << dendl;
   
   filer.remove(inode, trimming_pos, trim_to-trimming_pos, 
-	       0, new C_Trim(this, trim_to));
+	       0, NULL, new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }
 

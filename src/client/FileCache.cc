@@ -194,7 +194,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
     int rvalue = 0;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
     
-    r = oc->file_read(inode, offset, size, &blist, onfinish);
+    r = oc->file_read(inode, offset, size, &blist, 0, onfinish);
     
     if (r == 0) {
       // block
@@ -206,7 +206,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
       delete onfinish;
     }
   } else {
-    r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
+    r = oc->file_atomic_sync_read(inode, offset, size, &blist, 0, client_lock);
   }
 
   // dec reading counter
@@ -238,10 +238,10 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
       oc->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      oc->file_write(inode, offset, size, blist);
+      oc->file_write(inode, offset, size, blist, 0);
     } else {
       // atomic, synchronous, blocking.
-      oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
+      oc->file_atomic_sync_write(inode, offset, size, blist, 0, client_lock);
     }    
   }
     

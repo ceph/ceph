@@ -2846,7 +2846,7 @@ void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
 
   // remove
   if (in->inode.size > 0) {
-    mds->filer->remove(in->inode, newsize, oldsize,
+    mds->filer->remove(in->inode, newsize, oldsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it

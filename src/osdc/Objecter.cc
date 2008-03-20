@@ -320,9 +320,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish)
+tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish)
 {
-  OSDStat *st = new OSDStat(size);
+  OSDStat *st = new OSDStat(size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
   st->extents.front().layout = ol;
   st->onfinish = onfinish;
@@ -422,10 +422,10 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl,
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
-  OSDRead *rd = new OSDRead(bl);
+  OSDRead *rd = new OSDRead(bl, flags);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().layout = ol;
   readx(rd, onfinish);
@@ -479,7 +479,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     m->set_retry_attempt(retry);
     
     int who = pg.acker();
-    if (rd->balance_reads) {
+    if (rd->flags & CEPH_OSD_OP_BALANCE_READS) {
       int replica = messenger->get_myname().num() % pg.acting.size();
       who = pg.acting[replica];
       dout(-10) << "readx_submit reading from random replica " << replica
@@ -660,10 +660,10 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
-  OSDWrite *wr = new OSDWrite(bl);
+  OSDWrite *wr = new OSDWrite(bl, flags);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
@@ -674,10 +674,10 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO);
+  OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO, flags);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -687,10 +687,10 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, ceph_object_layout ol, 
+tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *l = new OSDModify(op);
+  OSDModify *l = new OSDModify(op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
