@@ -202,6 +202,7 @@ class Objecter {
   bool is_active() {
     return !(op_read.empty() && op_modify.empty());
   }
+  void dump_active();
 
   int get_client_incarnation() { return client_inc; }
   void set_client_incarnation(int inc) {

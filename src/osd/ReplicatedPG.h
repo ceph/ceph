@@ -55,12 +55,10 @@ public:
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
-      return !sent_ack && !sent_commit &&
-        waitfor_ack.empty(); 
+      return !sent_ack && !sent_commit && waitfor_ack.empty(); 
     }
     bool can_send_commit() { 
-      return !sent_commit &&
-        waitfor_ack.empty() && waitfor_commit.empty(); 
+      return !sent_commit && waitfor_ack.empty() && waitfor_commit.empty(); 
     }
     bool can_delete() { 
       return waitfor_ack.empty() && waitfor_commit.empty(); 

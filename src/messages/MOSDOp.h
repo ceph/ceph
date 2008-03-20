@@ -100,7 +100,8 @@ public:
 
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
-         object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op) :
+         object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op,
+	 int flags) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
     head.client_inst.name = asker.name;
@@ -111,8 +112,7 @@ public:
     head.layout = ol;
     head.osdmap_epoch = cpu_to_le32(mapepoch);
     head.op = op;
-    
-    head.flags = CEPH_OSD_OP_ACK | CEPH_OSD_OP_SAFE;
+    head.flags = flags;
   }
   MOSDOp() {}
 

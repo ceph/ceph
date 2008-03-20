@@ -164,7 +164,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_BALANCEREADS);
+				 CEPH_OSD_OP_BALANCEREADS, 0);
 	do_op(pop);
       }
       if (is_balanced && !should_balance &&
@@ -178,7 +178,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_UNBALANCEREADS);
+				 CEPH_OSD_OP_UNBALANCEREADS, 0);
 	do_op(pop);
       }
     }
@@ -842,27 +842,29 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
   dout(10) << "put_repop " << *repop << dendl;
   
   // commit?
-  if (repop->can_send_commit() &&
-      repop->op->wants_commit()) {
-    // send commit.
-    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
-    dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, repop->op->get_client_inst());
-    repop->sent_commit = true;
+  if (repop->can_send_commit()) {
+    if (repop->op->wants_commit()) {
+      // send commit.
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
+      dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      repop->sent_commit = true;
+    }
   }
 
   // ack?
-  else if (repop->can_send_ack() &&
-           repop->op->wants_ack()) {
+  else if (repop->can_send_ack()) {
     // apply
     if (!repop->applied)
       apply_repop(repop);
 
-    // send ack
-    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
-    dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, repop->op->get_client_inst());
-    repop->sent_ack = true;
+    if (repop->op->wants_ack()) {
+      // send ack
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
+      dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      repop->sent_ack = true;
+    }
 
     utime_t now = g_clock.now();
     now -= repop->start;
@@ -1157,7 +1159,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 			       poid.oid,
 			       layout,
 			       osd->osdmap->get_epoch(),
-			       CEPH_OSD_OP_UNBALANCEREADS);
+			       CEPH_OSD_OP_UNBALANCEREADS, 0);
       do_op(pop);
     }
 

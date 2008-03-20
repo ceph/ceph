@@ -169,7 +169,7 @@ void Journaler::write_head(Context *oncommit)
   bufferlist bl;
   bl.append((char*)&last_written, sizeof(last_written));
   filer.write(inode, 0, bl.length(), bl, 0, 
-	      0, 
+	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
 }
 
