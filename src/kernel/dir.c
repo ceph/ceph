@@ -439,6 +439,12 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 				       path,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
 				       oldpath);
+	kfree(oldpath);
+	kfree(path);
+	if (IS_ERR(req)) {
+		d_drop(dentry);
+		return PTR_ERR(req);
+	}
 	
 	err = ceph_mdsc_do_request(mdsc, req);
 
