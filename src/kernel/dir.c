@@ -479,6 +479,12 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
+
+	if (!err) {
+		if (dentry->d_inode)
+			drop_nlink(dentry->d_inode);
+	}
+
 	return err;
 }
 
