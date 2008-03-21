@@ -322,7 +322,7 @@ void PGMonitor::register_new_pgs()
   bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
   for (int ruleno=0; ruleno<crush->get_max_rules(); ruleno++) {
-    if (!crush->is_rule(ruleno)) 
+    if (!crush->rule_exists(ruleno)) 
       continue;
     int pool = crush->get_rule_mask_pool(ruleno);
     int type = crush->get_rule_mask_type(ruleno);

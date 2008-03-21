@@ -153,7 +153,7 @@ public:
     if (!crush) return 0;
     return crush->max_rules;
   }
-  bool is_rule(unsigned ruleno) {
+  bool rule_exists(unsigned ruleno) {
     if (!crush) return false;
     if (ruleno < crush->max_rules &&
 	crush->rules[ruleno] != NULL)

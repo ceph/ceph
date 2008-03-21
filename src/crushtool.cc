@@ -25,6 +25,7 @@
 #include "crush/grammar.h"
 
 #include <iostream>
+#include <fstream>
 #include <stack>
 #include <functional>
 #include <string>
@@ -113,14 +114,15 @@ long eval_expression(iter_t const& i)
 
 
 ////////////////////////////////////////////////////////////////////////////
-int main(int argc, char **argv)
-{
-  
-  cout << "go" << std::endl;
+
+int compile_crush_file(const char *infn, CrushWrapper &crush)
+{ 
+  // read the file
+  ifstream in(infn);
   string big;
   string str;
   int line = 1;
-  while (getline(cin, str)) {
+  while (getline(in, str)) {
     // fixme: strip out comments
     int l = str.length();
     if (l && str[l] == '\n')
@@ -170,3 +172,224 @@ int main(int argc, char **argv)
   return 0;
 }
 
+void print_type_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_type_name(t);
+  if (name)
+    out << name;
+  else if (t == 0)
+    out << "device";
+  else
+    out << "type" << t;
+}
+
+void print_item_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_item_name(t);
+  if (name)
+    out << name;
+  else if (t >= 0)
+    out << "device" << t;
+  else
+    out << "bucket" << (-1-t);
+}
+
+void print_rule_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_rule_name(t);
+  if (name)
+    out << name;
+  else
+    out << "rule" << t;
+}
+
+void print_fixedpoint(ostream& out, int i)
+{
+  out << (i / 0x10000);
+}
+
+int decompile_crush(CrushWrapper &crush, ostream &out)
+{
+  out << "# begin crush map\n\n";
+
+  out << "# devices\n";
+  for (int i=0; i<crush.get_max_devices(); i++) {
+    out << "device " << i << " ";
+    print_item_name(out, i, crush);
+    if (crush.get_device_offload(i)) {
+      out << " offload ";
+      print_fixedpoint(out, crush.get_device_offload(i));
+    }
+    out << "\n";
+  }
+  
+  out << "\n# types\n";
+  int n = crush.get_num_type_names();
+  for (int i=0; n; i++) {
+    const char *name = crush.get_type_name(i);
+    if (!name) {
+      if (i == 0) out << "type 0 device\n";
+      continue;
+    }
+    n--;
+    out << "type " << i << " " << name << "\n";
+  }
+
+  out << "\n# buckets\n";
+  for (int i=-1; i > -1-crush.get_max_buckets(); i--) {
+    if (!crush.bucket_exists(i)) continue;
+    int type = crush.get_bucket_type(i);
+    print_type_name(out, type, crush);
+    out << " ";
+    print_item_name(out, i, crush);
+    out << " {\n";
+    out << "\tid " << i << "\n";
+    out << "\talg " << crush.get_bucket_alg(i) << "\n";
+    int n = crush.get_bucket_size(i);
+    bool dopos = false;
+    for (int j=0; j<n; j++) {
+      int item = crush.get_bucket_item(i, j);
+      int w = crush.get_bucket_item_weight(i, j);
+      if (!w) {
+	dopos = true;
+	continue;
+      }
+      out << "\titem ";
+      print_item_name(out, item, crush);
+      out << " weight ";
+      print_fixedpoint(out, w);
+      if (dopos)
+	out << " pos " << j;
+      out << "\n";
+    }
+    out << "}\n";
+  }
+
+  out << "\n# rules\n";
+  for (int i=0; i<crush.get_max_rules(); i++) {
+    if (!crush.rule_exists(i)) continue;
+    out << "rule ";
+    print_rule_name(out, i, crush);
+    out << " {\n";
+    out << "\tpool " << crush.get_rule_mask_pool(i) << "\n";
+    switch (crush.get_rule_mask_type(i)) {
+    case CEPH_PG_TYPE_REP: out << "\ttype replicated\n"; break;
+    case CEPH_PG_TYPE_RAID4: out << "\ttype raid4\n"; break;
+    default: out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
+    }
+    out << "\tmin_size " << crush.get_rule_mask_min_size(i) << "\n";
+    out << "\tmax_size " << crush.get_rule_mask_max_size(i) << "\n";
+    for (int j=0; j<crush.get_rule_len(i); j++) {
+      switch (crush.get_rule_op(i, j)) {
+      case CRUSH_RULE_NOOP:
+	out << "\tstep noop\n";
+	break;
+      case CRUSH_RULE_TAKE:
+	out << "\tstep take ";
+	print_item_name(out, crush.get_rule_arg1(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_EMIT:
+	out << "\tstep emit\n";
+	break;
+      case CRUSH_RULE_CHOOSE_FIRSTN:
+	out << "\tstep choose firstn "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_CHOOSE_INDEP:
+	out << "\tstep choose indep "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      }
+    }
+    out << "}\n";
+  }
+  out << "\n# end crush map" << std::endl;
+  return 0;
+}
+
+
+int usage(const char *me)
+{
+  cout << me << ": usage: crushtool [-i infile] [-c infile.txt] [-o outfile] [-x outfile.txt]" << std::endl;
+  exit(1);
+}
+
+int main(int argc, const char **argv)
+{
+
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  parse_config_options(args);
+
+  const char *me = argv[0];
+
+  const char *infn = 0;
+  const char *outfn = 0;
+  const char *cinfn = 0;
+  const char *doutfn = 0;
+  bool print = false;
+  bool createsimple = false;
+  int size = 0;
+  bool clobber = false;
+  list<entity_addr_t> add, rm;
+
+  for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i], "--print") == 0)
+      print = true;
+    else if (strcmp(args[i], "--createsimple") == 0) {
+      createsimple = true;
+      size = atoi(args[++i]);
+    } else if (strcmp(args[i], "--clobber") == 0) 
+      clobber = true;
+    else if (strcmp(args[i], "-i") == 0)
+      infn = args[++i];
+    else if (strcmp(args[i], "-o") == 0)
+      outfn = args[++i];
+    else if (strcmp(args[i], "-c") == 0)
+      cinfn = args[++i];
+    else if (strcmp(args[i], "-x") == 0)
+      doutfn = args[++i];
+    else 
+      usage(me);
+  }
+
+  CrushWrapper crush;
+  
+  if (infn) {
+    bufferlist bl;
+    int r = bl.read_file(infn);
+    if (r < 0) {
+      cerr << me << ": error reading '" << infn << "': " << strerror(-r) << std::endl;
+      exit(1);
+    }
+    bufferlist::iterator p = bl.begin();
+    crush._decode(p);
+  }
+
+  if (cinfn) {
+    compile_crush_file(cinfn, crush);
+
+    if (outfn) {
+      bufferlist bl;
+      crush._encode(bl);
+      int r = bl.write_file(outfn);
+      if (r < 0) {
+	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;
+	exit(1);
+      }
+    }
+  }
+
+  if (doutfn) {
+    decompile_crush(crush, cout);
+  }
+
+  return 0;
+}

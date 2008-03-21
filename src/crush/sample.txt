@@ -3,8 +3,8 @@
 device 1 osd001
 device 2 osd002
 device 3 osd003
-device 4 osd004 overload 0       # 0.0 -> normal, 1.0 -> failed
-device 5 osd005 overload 0.1
+device 4 osd004 offload 0       # 0.0 -> normal, 1.0 -> failed
+device 5 osd005 offload 0.1
 
 # hierarchy
 buckettype 2 cab

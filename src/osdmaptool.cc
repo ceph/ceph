@@ -97,8 +97,10 @@ int main(int argc, const char **argv)
   cout << me << ": osdmap file '" << fn << "'" << std::endl;
   
   int r = 0;
-  if (!(createsimple && clobber))
+  if (!(createsimple && clobber)) {
     r = bl.read_file(fn);
+    osdmap.decode(bl);
+  }
   if (!createsimple && r < 0) {
     cerr << me << ": couldn't open " << fn << ": " << strerror(errno) << std::endl;
     return -1;

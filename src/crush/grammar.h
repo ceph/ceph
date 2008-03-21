@@ -15,7 +15,7 @@
 #ifndef __CRUSH_GRAMMAR
 #define __CRUSH_GRAMMAR
 
-#define BOOST_SPIRIT_DEBUG
+//#define BOOST_SPIRIT_DEBUG
 
 #include <boost/spirit/core.hpp>
 #include <boost/spirit/tree/ast.hpp>
@@ -82,7 +82,7 @@ struct crush_grammar : public grammar<crush_grammar>
       name = leaf_node_d[ lexeme_d[ +alnum_p ] ];
 
       // devices
-      device = str_p("device") >> posint >> name >> !( str_p("overload") >> real_p );
+      device = str_p("device") >> posint >> name >> !( str_p("offload") >> real_p );
       
       // bucket types
       bucket_type = str_p("buckettype") >> posint >> name;
