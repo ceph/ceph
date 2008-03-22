@@ -13,6 +13,7 @@ AC_CANONICAL_TARGET
 
 # Automake
 AM_INIT_AUTOMAKE(ceph, 0.1)
+AM_PROG_CC_C_O
 
 # Platform
 case "${target_os}" in
@@ -22,7 +23,7 @@ esac
 
 # Checks for programs.
 AC_PROG_CXX
-AC_PROG_CC
+#AC_PROG_CC
 AC_PROG_RANLIB
 AC_PROG_MAKE_SET
 

@@ -1,6 +1,10 @@
+#include "config.h"
 #include "CephFSInterface.h"
 
 using namespace std;
+
+#define dout generic_dout
+
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
@@ -12,10 +16,10 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   (JNIEnv *, jobject)
 {
 
-  dout(3) << "CephFSInterface: Initializing Ceph client:" << endl;
+  dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
 
   // parse args from CEPH_ARGS 
-  vector<char*> args; 
+  vector<const char*> args; 
   env_to_vec(args);
   parse_config_options(args);
 
@@ -29,18 +33,19 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   //  int r = monmap.read(".ceph_monmap");
   int r = monmap.read("/cse/grads/eestolan/ceph/trunk/ceph/.ceph_monmap");
   if (r < 0) {
-    dout(0) << "CephFSInterface: could not find .ceph_monmap" << endl; 
+    dout(0) << "CephFSInterface: could not find .ceph_monmap" << dendl; 
     assert(0 && "could not find .ceph_monmap");
     //    return 0;
   }
   assert(r >= 0);
 
   // start up network
-  rank.start_rank();
+  rank.bind();
+  rank.start();
 
   // start client
   Client *client;
-  client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
+  client = new Client(rank.register_entity(entity_name_t::CLIENT(-1)), &monmap);
   client->init();
     
   // mount
@@ -60,7 +65,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1copyFromLocalFile
 (JNIEnv * env, jobject obj, jlong clientp, jstring j_local_path, jstring j_ceph_path) {
 
-  dout(10) << "CephFSInterface: In copyFromLocalFile" << endl;
+  dout(10) << "CephFSInterface: In copyFromLocalFile" << dendl;
   Client* client;
   //client = (Client*) clientp;
    client = *(Client**)&clientp;
@@ -68,7 +73,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   const char* c_local_path = env->GetStringUTFChars(j_local_path, 0);
   const char* c_ceph_path = env->GetStringUTFChars(j_ceph_path, 0);
 
-  dout(10) << "CephFSInterface: Local source file is "<< c_local_path << " and Ceph destination file is " << c_ceph_path << endl;
+  dout(10) << "CephFSInterface: Local source file is "<< c_local_path << " and Ceph destination file is " << c_ceph_path << dendl;
   struct stat st;
   int r = ::stat(c_local_path, &st);
   assert (r == 0);
@@ -78,7 +83,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   int fh_ceph = client->open(c_ceph_path, O_WRONLY|O_CREAT|O_TRUNC);  
   assert (fh_local > -1);
   assert (fh_ceph > -1);
-  dout(10) << "CephFSInterface: local fd is " << fh_local << " and Ceph fd is " << fh_ceph << endl;
+  dout(10) << "CephFSInterface: local fd is " << fh_local << " and Ceph fd is " << fh_ceph << dendl;
 
   // get the source file size
   off_t remaining = st.st_size;
@@ -117,23 +122,23 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   const char* c_local_path = env->GetStringUTFChars(j_local_path, 0);
 
   dout(3) << "CephFSInterface: dout(3): In copyToLocalFile, copying from Ceph file " << c_ceph_path << 
-    " to local file " << c_local_path << endl;
+    " to local file " << c_local_path << dendl;
 
   cout << "CephFSInterface: cout: In copyToLocalFile, copying from Ceph file " << c_ceph_path << 
-    " to local file " << c_local_path << endl;
+    " to local file " << c_local_path << dendl;
 
 
   // get source file size
   struct stat st;
-  //dout(10) << "Attempting lstat with file " << c_ceph_path << ":" << endl;
+  //dout(10) << "Attempting lstat with file " << c_ceph_path << ":" << dendl;
   int r = client->lstat(c_ceph_path, &st);
   assert (r == 0);
 
-  dout(10) << "CephFSInterface: Opening Ceph source file for read: " << endl;
+  dout(10) << "CephFSInterface: Opening Ceph source file for read: " << dendl;
   int fh_ceph = client->open(c_ceph_path, O_RDONLY);  
   assert (fh_ceph > -1);
 
-  dout(10) << "CephFSInterface: Opened Ceph file! Opening local destination file: " << endl;
+  dout(10) << "CephFSInterface: Opened Ceph file! Opening local destination file: " << dendl;
   int fh_local = ::open(c_local_path, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   assert (fh_local > -1);
 
@@ -167,7 +172,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
 JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getcwd
   (JNIEnv *env, jobject obj, jlong clientp)
 {
-  dout(10) << "CephFSInterface: In getcwd" << endl;
+  dout(10) << "CephFSInterface: In getcwd" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -185,7 +190,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setcwd
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  dout(10) << "CephFSInterface: In setcwd" << endl;
+  dout(10) << "CephFSInterface: In setcwd" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -204,7 +209,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1rmdir
   (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
-  dout(10) << "CephFSInterface: In rmdir" << endl;
+  dout(10) << "CephFSInterface: In rmdir" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -224,7 +229,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
   (JNIEnv * env, jobject, jlong clientp, jstring j_path)
 {
-  dout(10) << "CephFSInterface: In mkdir" << endl;
+  dout(10) << "CephFSInterface: In mkdir" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -247,32 +252,32 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
   client = *(Client**)&clientp;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  dout(10) << "CephFSInterface: In unlink for path " << c_path <<  ":" << endl;
+  dout(10) << "CephFSInterface: In unlink for path " << c_path <<  ":" << dendl;
 
   // is it a file or a directory?
   struct stat stbuf;
   int stat_result = client->lstat(c_path, &stbuf);
   if (stat_result < 0) {// then the path doesn't even exist
-    dout(0) << "ceph_unlink: path " << c_path << " does not exist" << endl;
+    dout(0) << "ceph_unlink: path " << c_path << " does not exist" << dendl;
     return false;
   }  
   int result;
   if (0 != S_ISDIR(stbuf.st_mode)) { // it's a directory
-    dout(10) << "ceph_unlink: path " << c_path << " is a directory. Calling client->rmdir()" << endl;
+    dout(10) << "ceph_unlink: path " << c_path << " is a directory. Calling client->rmdir()" << dendl;
     result = client->rmdir(c_path);
   }
   else if (0 != S_ISREG(stbuf.st_mode)) { // it's a file
-    dout(10) << "ceph_unlink: path " << c_path << " is a file. Calling client->unlink()" << endl;
+    dout(10) << "ceph_unlink: path " << c_path << " is a file. Calling client->unlink()" << dendl;
     result = client->unlink(c_path);
   }
   else {
-    dout(0) << "ceph_unlink: path " << c_path << " is not a file or a directory. Failing:" << endl;
+    dout(0) << "ceph_unlink: path " << c_path << " is not a file or a directory. Failing:" << dendl;
     result = -1;
   }
     
   dout(10) << "In ceph_unlink for path " << c_path << 
     ": got result " 
-       << result << ". Returning..."<< endl;
+       << result << ". Returning..."<< dendl;
 
   env->ReleaseStringUTFChars(j_path, c_path);
   return (0 == result) ? JNI_TRUE : JNI_FALSE; 
@@ -287,7 +292,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1rename
   (JNIEnv *env, jobject, jlong clientp, jstring j_from, jstring j_to)
 {
-  dout(10) << "CephFSInterface: In rename" << endl;
+  dout(10) << "CephFSInterface: In rename" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -310,7 +315,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
 (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
 
-  dout(10) << "CephFSInterface: In exists" << endl;
+  dout(10) << "CephFSInterface: In exists" << dendl;
 
   Client* client;
   struct stat stbuf;
@@ -319,14 +324,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   dout(10) << "Attempting lstat with file " << c_path << ":" ;
   int result = client->lstat(c_path, &stbuf);
-  dout(10) << "result is " << result << endl;
+  dout(10) << "result is " << result << dendl;
   env->ReleaseStringUTFChars(j_path, c_path);
   if (result < 0) {
-    dout(10) << "Returning false (file does not exist)" << endl;
+    dout(10) << "Returning false (file does not exist)" << dendl;
     return JNI_FALSE;
   }
   else {
-    dout(10) << "Returning true (file exists)" << endl;
+    dout(10) << "Returning true (file exists)" << dendl;
     return JNI_TRUE;
   }
 }
@@ -342,7 +347,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getblocksize
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  dout(10) << "In getblocksize" << endl;
+  dout(10) << "In getblocksize" << dendl;
 
   Client* client;
   //struct stat stbuf;
@@ -360,7 +365,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
   */
 
   // we need to open the file to retrieve the stripe size
-  dout(10) << "CephFSInterface: getblocksize: opening file" << endl;
+  dout(10) << "CephFSInterface: getblocksize: opening file" << dendl;
   int fh = client->open(c_path, O_RDONLY);  
   if (fh < 0)
     return -1;
@@ -384,7 +389,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getfilesize
   (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
-  dout(10) << "In getfilesize" << endl;
+  dout(10) << "In getfilesize" << dendl;
 
   Client* client;
   struct stat stbuf;
@@ -408,7 +413,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getf
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isfile
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  dout(10) << "In isfile" << endl;
+  dout(10) << "In isfile" << dendl;
 
   Client* client;
   struct stat stbuf;
@@ -437,7 +442,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isdirectory
   (JNIEnv *env, jobject, jlong clientp, jstring j_path)
 {
-  dout(10) << "In isdirectory" << endl;
+  dout(10) << "In isdirectory" << dendl;
 
   Client* client;
   struct stat stbuf;
@@ -463,35 +468,35 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getdir
 (JNIEnv *env, jobject obj, jlong clientp, jstring j_path) {
 
-  dout(10) << "In getdir" << endl;
+  dout(10) << "In getdir" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
 
   // get the directory listing
-  map<string, inode_t> contents;
+  list<string> contents;
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   int result = client->getdir(c_path, contents);
   env->ReleaseStringUTFChars(j_path, c_path);
   
   if (result < 0) return NULL;
 
-  dout(10) << "checking for empty dir" << endl;
-  jint dir_size = contents.size();
-
   // Hadoop freaks out if the listing contains "." or "..".  Shrink
   // the listing size by two, or by one if the directory is the root.
-  if(('/' == c_path[0]) && (0 == c_path[1]))
-    dir_size -= 1;
-  else
-    dir_size -= 2;
+  if (!contents.empty() && contents.front() == ".")
+    contents.pop_front();
+  if (!contents.empty() && contents.front() == "..")
+    contents.pop_front();
+
+  dout(10) << "checking for empty dir" << dendl;
+  jint dir_size = contents.size();
   assert (dir_size >= 0);
 		
   // Create a Java String array of the size of the directory listing
   // jstring blankString = env->NewStringUTF("");
   jclass stringClass = env->FindClass("java/lang/String");
   if (NULL == stringClass) {
-    dout(0) << "ERROR: java String class not found; dying a horrible, painful death" << endl;
+    dout(0) << "ERROR: java String class not found; dying a horrible, painful death" << dendl;
     assert(0);
   }
   jobjectArray dirListingStringArray = (jobjectArray) env->NewObjectArray(dir_size, stringClass, NULL);
@@ -499,20 +504,14 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   // populate the array with the elements of the directory list,
   // omitting . and ..
   int i = 0;
-  string dot(".");
-  string dotdot ("..");
-  for (map<string, inode_t>::iterator it = contents.begin();
+  for (list<string>::iterator it = contents.begin();
        it != contents.end();
        it++) {
-    // is it "."?
-    if (it->first == dot) continue;
-    if (it->first == dotdot) continue;
-
     if (0 == dir_size)
-      dout(0) << "CephFSInterface: WARNING: adding stuff to an empty array." << endl;
+      dout(0) << "CephFSInterface: WARNING: adding stuff to an empty array." << dendl;
     assert (i < dir_size);
     env->SetObjectArrayElement(dirListingStringArray, i, 
-			       env->NewStringUTF(it->first.c_str()));
+			       env->NewStringUTF(it->c_str()));
     ++i;
   }
 			     
@@ -530,7 +529,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 
 {
-  dout(10) << "In open_for_read" << endl;
+  dout(10) << "In open_for_read" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -557,7 +556,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1overwrite
   (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
 {
-  dout(10) << "In open_for_overwrite" << endl;
+  dout(10) << "In open_for_overwrite" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -607,7 +606,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
 {
-  dout(10) << "In read" << endl;
+  dout(10) << "In read" << dendl;
 
 
   // IMPORTANT NOTE: Hadoop read arguments are a bit different from POSIX so we
@@ -645,7 +644,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1seek_1from_1start
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jlong pos)
 {
-  dout(10) << "In CephInputStream::seek_from_start" << endl;
+  dout(10) << "In CephInputStream::seek_from_start" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -659,7 +658,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1see
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1getpos
   (JNIEnv *env, jobject obj, jlong clientp, jint fh)
 {
-  dout(10) << "In CephInputStream::ceph_getpos" << endl;
+  dout(10) << "In CephInputStream::ceph_getpos" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -681,7 +680,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1get
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1close
   (JNIEnv *env, jobject obj, jlong clientp, jint fh)
 {
-  dout(10) << "In CephInputStream::ceph_close" << endl;
+  dout(10) << "In CephInputStream::ceph_close" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -700,7 +699,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1clos
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1seek_1from_1start
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jlong pos)
 {
-  dout(10) << "In CephOutputStream::ceph_seek_from_start" << endl;
+  dout(10) << "In CephOutputStream::ceph_seek_from_start" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -720,7 +719,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1se
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1getpos
   (JNIEnv *env, jobject obj, jlong clientp, jint fh)
 {
-  dout(10) << "In CephOutputStream::ceph_getpos" << endl;
+  dout(10) << "In CephOutputStream::ceph_getpos" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -740,7 +739,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1ge
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1close
   (JNIEnv *env, jobject obj, jlong clientp, jint fh)
 {
-  dout(10) << "In CephOutputStream::ceph_close" << endl;
+  dout(10) << "In CephOutputStream::ceph_close" << dendl;
 
   Client* client;
   client = *(Client**)&clientp;
@@ -761,7 +760,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1clo
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
   (JNIEnv *env, jobject obj, jlong clientp, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
 {
-  dout(10) << "In write" << endl;
+  dout(10) << "In write" << dendl;
 
   // IMPORTANT NOTE: Hadoop write arguments are a bit different from POSIX so we
   // have to convert.  The write is *always* from the current position in the file,

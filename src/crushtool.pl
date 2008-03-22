@@ -235,7 +235,7 @@ sub compile_crush {
     for my $rule_name (keys %{$arr->{'rules'}->{'rule'}}) {
 	my $r = $arr->{'rules'}->{'rule'}->{$rule_name};
 	my $pool = $r->{'pool'};
-	my $typeid = $rule_types{$r->{'type'}};
+	#my $typeid = $rule_types{$r->{'type'}};
 	my $min_size = $r->{'min_size'};
 	my $max_size = $r->{'max_size'};
 		

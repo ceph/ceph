@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CONFIG_H
-#define __CONFIG_H
+#ifndef __CEPH_CONFIG_H
+#define __CEPH_CONFIG_H
 
 extern struct ceph_file_layout g_default_file_layout;
 extern struct ceph_file_layout g_default_mds_dir_layout;

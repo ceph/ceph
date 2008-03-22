@@ -58,25 +58,61 @@ fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a libebofs.a \
 #newsyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
 #	libclient.a libosdc.a libcrush.a libcommon.a
 
+## libcrush.so
+libcrush_so_a_SOURCES = \
+	crush/builder.c \
+	crush/mapper.c \
+	crush/crush.c
+libcrush_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
+
+#libcrush.so: libcrush_so.a
+#	${CC} -I. -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} ${LIBS} ${libcrush_so_a_SOURCES} -o $@
+#BUILT_SOURCES = libcrush.so
+
 # crushwrapper
 SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
 crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
 	${SWIG} -perl5 -c++ -shadow -outdir . $<
 
-crush/mapper.fpicco: crush/mapper.c
-	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
-
-crush/builder.fpicco: crush/builder.c
-	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
-
-crush/crush.fpicco: crush/crush.c
-	${CC} -fPIC ${CFLAGS} -I. -c $< -o $@
-
-CRUSH_FILES = crush/mapper.fpicco crush/builder.fpicco crush/crush.fpicco
-libCrushWrapper.so: crush/CrushWrapper_wrap.cxx ${CRUSH_FILES}
-	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC crush/CrushWrapper_wrap.cxx config.cc ${CRUSH_FILES} -o $@
+libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
+	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
 
 BUILT_SOURCES = libCrushWrapper.so
+
+
+## libcephclient.so
+libcephclient_so_a_SOURCES = \
+	client/FileCache.cc \
+	client/Client.cc \
+	client/SyntheticClient.cc \
+	client/Trace.cc \
+	msg/Message.cc \
+	common/Logger.cc \
+	common/Clock.cc \
+	common/Timer.cc \
+	common/Finisher.cc \
+	mon/MonMap.cc \
+	mon/MonClient.cc \
+	osd/OSDMap.cc \
+	config.cc \
+	osdc/Objecter.cc \
+	osdc/ObjectCacher.cc \
+	osdc/Filer.cc \
+	osdc/Journaler.cc
+libcephclient_so_a_CXXFLAGS = ${AM_CXXFLAGS} -fPIC
+libcephclient_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
+
+#libcephclient.so: libcephclient_so.a libcrush_so.a
+#	${CXX} -I. -fPIC -shared -Wl,-soname,$@.1 ${AM_CXXFLAGS} ${LIBS} $^ -o $@
+#BUILT_SOURCES += libcephclient.so
+
+## hadoop client
+JAVA_BASE = /usr/lib/jvm/java-6-sun
+libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
+	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} -I${JAVA_BASE}/include -I${JAVA_BASE}/include/linux ${LIBS} $^ -o $@
+
+BUILT_SOURCES += libhadoopcephfs.so
+
 
 ##
 INCLUDES = 
@@ -96,16 +132,16 @@ bin_PROGRAMS = \
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a libebofs.a
+	libos.a libebofs.a \
+	libcrush_so.a libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = start.sh stop.sh crushtool.pl
 
 # cleaning
 clean-local:
-	-rm crush/*.fpicco
 	-rm crush/*.cxx
-	-rm libCrushWrapper.so
+	-rm *.so
 	-rm CrushWrapper.pm
 
 # libs
