@@ -154,7 +154,7 @@ CInode *MDCache::create_inode()
 
   in->inode.nlink = 1;   // FIXME
 
-  in->inode.layout = g_OSD_FileLayout;
+  in->inode.layout = g_default_file_layout;
 
   add_inode(in);  // add
   return in;
@@ -217,7 +217,7 @@ CInode *MDCache::create_root_inode()
     root->inode.mtime = g_clock.now();
   
   root->inode.nlink = 1;
-  root->inode.layout = g_OSD_MDDirLayout;
+  root->inode.layout = g_default_mds_dir_layout;
   
   root->inode_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
@@ -268,7 +268,7 @@ CInode *MDCache::create_stray_inode(int whose)
     in->inode.mtime = g_clock.now();
   
   in->inode.nlink = 1;
-  in->inode.layout = g_OSD_MDDirLayout;
+  in->inode.layout = g_default_mds_dir_layout;
   
   add_inode( in );
 
@@ -1198,7 +1198,7 @@ void MDCache::handle_mds_recovery(int who)
     while (!q.empty()) {
       CDir *d = q.front();
       q.pop_front();
-      d->take_waiting(CDir::WAIT_ANY, waiters);
+      d->take_waiting(CDir::WAIT_ANY_MASK, waiters);
 
       // inode waiters too
       for (CDir::map_t::iterator p = d->items.begin();
@@ -1206,7 +1206,7 @@ void MDCache::handle_mds_recovery(int who)
 	   ++p) {
 	CDentry *dn = p->second;
 	if (dn->is_primary()) {
-	  dn->get_inode()->take_waiting(CInode::WAIT_ANY, waiters);
+	  dn->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, waiters);
 	  
 	  // recurse?
 	  list<CDir*> ls;

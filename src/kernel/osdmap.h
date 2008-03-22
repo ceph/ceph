@@ -8,11 +8,14 @@
 struct ceph_osdmap {
 	struct ceph_fsid fsid;
 	ceph_epoch_t epoch;
-	ceph_epoch_t mon_epoch;
+	ceph_epoch_t mkfs_epoch;
 	struct ceph_timeval ctime, mtime;
 	
 	__u32 pg_num, pg_num_mask;
-	__u32 localized_pg_num, localized_pg_num_mask;
+	__u32 pgp_num, pgp_num_mask;
+	__u32 lpg_num, lpg_num_mask;
+	__u32 lpgp_num, lpgp_num_mask;
+	ceph_epoch_t last_pg_change;
 	
 	__u32 max_osd;
 	__u8 *osd_state;
@@ -27,7 +30,7 @@ struct ceph_osdmap {
 	} *pg_swap_primary;
 };
 
-static inline bool ceph_osd_is_up(struct ceph_osdmap *map, int osd)
+static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 {
 	return (osd < map->max_osd) && (map->osd_state[osd] & CEPH_OSD_UP);
 }

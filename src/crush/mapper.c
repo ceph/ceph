@@ -11,6 +11,22 @@
 # include <stdio.h>
 #endif
 
+
+int crush_find_rule(struct crush_map *map, int pool, int type, int size)
+{
+	int i;
+	for (i = 0; i < map->max_rules; i++) {
+		if (map->rules[i] &&
+		    map->rules[i]->mask.pool == pool &&
+		    map->rules[i]->mask.type == type &&
+		    map->rules[i]->mask.min_size <= size &&
+		    map->rules[i]->mask.max_size >= size)
+			return i;
+	}
+	return -1;
+}
+
+
 /** bucket choose methods **/
 
 /* uniform */
@@ -260,8 +276,7 @@ static int crush_choose(struct crush_map *map,
 
 
 int crush_do_rule(struct crush_map *map,
-		  int ruleno,
-		  int x, int *result, int result_max,
+		  int ruleno, int x, int *result, int result_max,
 		  int forcefeed)    /* -1 for none */
 {
 	int result_len;
@@ -324,7 +339,17 @@ int crush_do_rule(struct crush_map *map,
 			osize = 0;
 			
 			for (i = 0; i < wsize; i++) {
+				/*
+				 * see CRUSH_N, CRUSH_N_MINUS macros.
+				 * basically, numrep <= 0 means relative to
+				 * the provided result_max 
+				 */
 				numrep = rule->steps[step].arg1;
+				if (numrep <= 0) {
+					numrep += result_max;
+					if (numrep <= 0)
+						continue;
+				}
 				j = 0;
 				if (osize == 0 && force_pos >= 0) {
 					o[osize] = force_stack[force_pos];
@@ -346,10 +371,9 @@ int crush_do_rule(struct crush_map *map,
 			
 			
 		case CRUSH_RULE_EMIT:
-			for (i=0; i<wsize && result_max; i++) {
+			for (i=0; i<wsize && result_len < result_max; i++) {
 				result[result_len] = w[i];
 				result_len++;
-				result_max--;
 			}
 			wsize = 0;
 			break;

@@ -28,7 +28,7 @@ struct pobject_t {
   uint32_t rank;       // rank/stripe id (e.g. for parity encoding)
   object_t oid;        // logical object
   pobject_t() : volume(0), rank(0) {}
-  pobject_t(object_t o) : volume(0), rank(0), oid(o) {}  // this should go away eventually
+  //pobject_t(object_t o) : volume(0), rank(0), oid(o) {}  // this should go away eventually
   pobject_t(uint16_t v, uint16_t r, object_t o) : volume(v), rank(r), oid(o) {}
 } __attribute__ ((packed));
 

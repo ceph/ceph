@@ -33,12 +33,11 @@ using namespace std;
 ./monmaptool -f .ceph_monmap --add 1.2.3.4:12345
 ./monmaptool -f .ceph_monmap --rm 1.2.3.4:12345
 
-
  */
 
 void usage(const char *me)
 {
-  cout << me << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567]" << std::endl;
+  cout << me << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567] <mapfilename>" << std::endl;
   exit(1);
 }
 
@@ -58,7 +57,7 @@ int main(int argc, const char **argv)
 
   const char *me = argv[0];
 
-  const char *fn = ".ceph_monmap";
+  const char *fn = 0;
   bool print = false;
   bool create = false;
   bool clobber = false;
@@ -66,9 +65,7 @@ int main(int argc, const char **argv)
   list<entity_addr_t> add, rm;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--fn") == 0) 
-      fn = args[++i];
-    else if (strcmp(args[i], "--print") == 0)
+    if (strcmp(args[i], "--print") == 0)
       print = true;
     else if (strcmp(args[i], "--create") == 0) 
       create = true;
@@ -88,9 +85,13 @@ int main(int argc, const char **argv)
       else 
 	rm.push_back(addr);
       modified = true;
-    } else
+    } else if (!fn)
+      fn = args[i];
+    else 
       usage(me);
   }
+  if (!fn)
+    usage(me);
   
   MonMap monmap;
 
@@ -122,12 +123,13 @@ int main(int argc, const char **argv)
   if (!print && !modified)
     usage(me);
 
+  if (modified)
+    monmap.epoch++;
+
   if (print) 
     printmap(me, &monmap);
 
   if (modified) {
-    monmap.epoch++;
-
     // write it out
     cout << me << ": writing epoch " << monmap.epoch
 	 << " to " << fn

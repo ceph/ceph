@@ -13,25 +13,36 @@
 
 extern int ceph_debug;
 extern int ceph_debug_msgr;
+extern int ceph_debug_super;
 extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
+extern int ceph_debug_addr;
 
 extern int ceph_lookup_cache;
 
 #define dout(x, args...) do {						\
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))		\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug < 0 && x <= DOUT_VAR))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
-#define derr(x, args...) do {					   \
-		if (x <= ((ceph_debug >= 0) ? ceph_debug : DOUT_VAR))	   \
-			printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
+#define derr(x, args...) do {						\
+		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
+		    (ceph_debug < 0 && x <= DOUT_VAR))			\
+			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
 #define CACHE_HZ		(1*HZ)
+
+#define IPQUADPORT(n)							\
+	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
+		(unsigned int)((n.sin_addr.s_addr)>>8) & 0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>16) & 0xFF,		\
+		(unsigned int)((n.sin_addr.s_addr)>>24) & 0xFF,		\
+		(unsigned int)(ntohs(n.sin_port))
 
 /*
  * mount options
@@ -100,11 +111,12 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
  */
 
 struct ceph_inode_cap {
-	int mds;
+	int mds;    /* -1 if not used */
 	int caps;
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
+	struct list_head ci_caps;       /* per-ci caplist */
 	struct ceph_mds_session *session;
 	struct list_head session_caps;  /* per-session caplist */
 };
@@ -133,10 +145,9 @@ struct ceph_inode_info {
 	int i_frag_map_nr;
 	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
 
-	int i_nr_caps, i_max_caps;
-	struct ceph_inode_cap *i_caps;
-	struct ceph_inode_cap i_caps_static[STATIC_CAPS];
-	atomic_t i_cap_count;  /* ref count (e.g. from file*) */
+	struct list_head i_caps;
+	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
+	wait_queue_head_t i_cap_wq;
 
 	int i_nr_by_mode[4];
 	int i_cap_wanted;
@@ -144,6 +155,8 @@ struct ceph_inode_info {
 	loff_t i_wr_size;      /* largest offset we've written (+1) */
 	struct timespec i_wr_mtime;
 	struct timespec i_old_atime;
+
+	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
 	unsigned long i_hashval;
 
@@ -163,32 +176,44 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 static inline ino_t ceph_ino_to_ino(u64 cephino)
 {
 	ino_t ino = (ino_t)cephino;
-	if (sizeof(ino_t) < sizeof(u64))
-		ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+#if BITS_PER_LONG == 32
+	ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+#endif
+
 	return ino;
 }
+
 static inline void ceph_set_ino(struct inode *inode, __u64 ino)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	ci->i_ceph_ino = ino;
 	inode->i_ino = ceph_ino_to_ino(ino);
 }
+
+static inline int ceph_set_ino_cb(struct inode *inode, void *data)
+{
+	ceph_set_ino(inode, *(__u64 *)data);
+
+	return 0;
+}
+
 static inline u64 ceph_ino(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	return ci->i_ceph_ino;
 }
 
+static inline int ceph_ino_compare(struct inode *inode, void *data)
+{
+	__u64 ino = *(__u64 *)data;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	return (ci->i_ceph_ino == ino);
+}
+
 /*
  * caps helpers
  */
-static inline int ceph_caps_issued(struct ceph_inode_info *ci)
-{
-	int i, issued = 0;
-	for (i = 0; i < ci->i_nr_caps; i++)
-		issued |= ci->i_caps[i].caps;
-	return issued;
-}
+extern int ceph_caps_issued(struct ceph_inode_info *ci);
 
 static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 {
@@ -207,7 +232,16 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 
 static inline int ceph_caps_used(struct ceph_inode_info *ci)
 {
-	return 0;  /* FIXME */
+	int used = 0;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_RD;
+	if (ci->i_rdcache_ref)
+		used |= CEPH_CAP_RDCACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_WRBUFFER;
+	return used;
 }
 
 static inline int ceph_file_mode(int flags)
@@ -221,6 +255,8 @@ static inline int ceph_file_mode(int flags)
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
 	BUG_ON(1);
+
+	return 0; /* remove compilation warning */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -236,9 +272,9 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
  * keep readdir buffers attached to file->private_data
  */
 struct ceph_file_info {
-	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	int mode;      /* initialized on open */
-	struct ceph_mds_reply_info rinfo;
+	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
+	struct ceph_mds_request *last_readdir;
 };
 
 
@@ -263,8 +299,9 @@ static inline int calc_pages_for(int len, int off)
 extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 					      struct super_block *sb);
 extern void ceph_destroy_client(struct ceph_client *cl);
-extern int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
-		      struct dentry **pmnt_root);
+extern int ceph_mount(struct ceph_client *client, 
+		      struct ceph_mount_args *args, 
+		      struct vfsmount *mnt);
 extern const char *ceph_msg_type_name(int type);
 
 
@@ -277,11 +314,16 @@ extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
 					   u32 cap, u32 seq);
-extern void ceph_remove_cap(struct ceph_inode_info *ci, int mds);
-extern void ceph_remove_caps(struct ceph_inode_info *ci);
+extern void ceph_remove_cap(struct ceph_inode_cap *cap);
+extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
+extern int ceph_handle_cap_trunc(struct inode *inode,
+				 struct ceph_mds_file_caps *grant,
+				 struct ceph_mds_session *session);
+extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
+extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
@@ -304,14 +346,19 @@ extern int ceph_inode_revalidate(struct dentry *dentry);
 /* dir.c */
 extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
+extern struct dentry_operations ceph_dentry_ops;
+
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_fill_trace(struct super_block *sb,
-			   struct ceph_mds_reply_info *prinfo,
-			   struct inode **lastinode,
-			   struct dentry **lastdentry);
-extern int ceph_request_lookup(struct super_block *sb, struct dentry *dentry,
-				      struct ceph_mds_reply_info *prinfo);
-extern void ceph_touch_dentry(struct dentry *dentry);
+extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
+extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry);
+
+static inline void ceph_init_dentry(struct dentry *dentry) {
+	dentry->d_op = &ceph_dentry_ops;
+}
+static inline void ceph_touch_dentry(struct dentry *dentry) {
+	dentry->d_time = jiffies;
+	BUG_ON(dentry->d_op != &ceph_dentry_ops);
+}
 
 /* proc.c */
 extern void ceph_fs_proc_init(void);

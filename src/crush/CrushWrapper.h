@@ -17,16 +17,19 @@
 #include <set>
 #include <string>
 
+#include <iostream> //for testing, remove
+
+using namespace std;
 class CrushWrapper {
 public:
   struct crush_map *crush;
-  map<int, string> type_map; /* bucket type names */
-  map<int, string> name_map; /* bucket/device names */
-  map<int, string> rule_name_map;
+  std::map<int, string> type_map; /* bucket type names */
+  std::map<int, string> name_map; /* bucket/device names */
+  std::map<int, string> rule_name_map;
 
   /* reverse maps */
   bool have_rmaps;
-  map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
@@ -43,7 +46,7 @@ private:
   }
   
 public:
-  CrushWrapper() : crush(0) {}
+  CrushWrapper() : crush(0), have_rmaps(false) {}
   ~CrushWrapper() {
     if (crush) crush_destroy(crush);
   }  
@@ -55,6 +58,9 @@ public:
   }
 
   // bucket types
+  int get_num_type_names() {
+    return type_map.size();
+  }
   int get_type_id(const char *s) {
     string name(s);
     build_rmaps();
@@ -114,12 +120,23 @@ public:
       rule_name_rmap[name] = i;
   }
 
+  /*** devices ***/
+  int get_max_devices() {
+    if (!crush) return 0;
+    return crush->max_devices;
+  }
+  int get_device_offload(int d) {
+    if (!crush) return -1;
+    if (d >= crush->max_devices) return -1;
+    return crush->device_offload[d];
+  }
+  
   
   /*** rules ***/
 private:
   crush_rule *get_rule(unsigned ruleno) {
     if (!crush) return (crush_rule *)(-ENOENT);
-    if (crush->max_rules >= ruleno) 
+    if (ruleno >= crush->max_rules) 
       return 0;
     return crush->rules[ruleno];
   }
@@ -136,10 +153,37 @@ public:
     if (!crush) return 0;
     return crush->max_rules;
   }
+  bool rule_exists(unsigned ruleno) {
+    if (!crush) return false;
+    if (ruleno < crush->max_rules &&
+	crush->rules[ruleno] != NULL)
+      return true;
+    return false;
+  }
   int get_rule_len(unsigned ruleno) {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
+  }
+  int get_rule_mask_pool(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.pool;
+  }
+  int get_rule_mask_type(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.type;
+  }
+  int get_rule_mask_min_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.min_size;
+  }
+  int get_rule_mask_max_size(unsigned ruleno) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.max_size;
   }
   int get_rule_op(unsigned ruleno, unsigned step) {
     crush_rule_step *s = get_rule_step(ruleno, step);
@@ -158,11 +202,11 @@ public:
   }
 
   /* modifiers */
-  int add_rule(unsigned ruleno, int len) {
+  int add_rule(int len, int pool, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len);
-    crush_add_rule(crush, ruleno, n);
-    return 0;
+    crush_rule *n = crush_make_rule(len, pool, type, minsize, maxsize);
+    ruleno = crush_add_rule(crush, n, ruleno);
+    return ruleno;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
@@ -196,6 +240,10 @@ private:
   }
 
 public:
+  int get_max_buckets() {
+    if (!crush) return -EINVAL;
+    return crush->max_buckets;
+  }
   int get_next_bucket_id() {
     if (!crush) return -EINVAL;
     return crush_get_next_bucket_id(crush);
@@ -230,24 +278,23 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->items[pos];
   }
+  int get_bucket_item_weight(int id, int pos) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return crush_get_bucket_item_weight(b, pos);
+  }
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int type, int size,
 		 int *items, int *weights) {
-    crush_bucket *b = crush_make_bucket(alg, type, size, 0, 0);
+    crush_bucket *b = crush_make_bucket(alg, type, size, items, weights);
     return crush_add_bucket(crush, bucketno, b);
   }
-
-
-
+  
   void finalize() {
     assert(crush);
     crush_finalize(crush);
   }
-
-
-
-
 
   void set_offload(int i, unsigned o) {
     assert(i < crush->max_devices);
@@ -258,6 +305,10 @@ public:
     return crush->device_offload[i];
   }
 
+  int find_rule(int pool, int type, int size) {
+    if (!crush) return -1;
+    return crush_find_rule(crush, pool, type, size);
+  }
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed) {
     int rawout[maxout];
     
@@ -266,6 +317,20 @@ public:
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
+  }
+
+  int read_from_file(const char *fn) {
+    bufferlist bl;
+    int r = bl.read_file(fn);
+    if (r < 0) return r;
+    bufferlist::iterator blp = bl.begin();
+    _decode(blp);
+    return 0;
+  }
+  int write_to_file(const char *fn) {
+    bufferlist bl;
+    _encode(bl);
+    return bl.write_file(fn);
   }
 
   void _encode(bufferlist &bl, bool lean=false) {
@@ -278,10 +343,10 @@ public:
 
     // buckets
     for (unsigned i=0; i<crush->max_buckets; i++) {
-      __u32 type = 0;
-      if (crush->buckets[i]) type = crush->buckets[i]->alg;
-      ::_encode_simple(type, bl);
-      if (!type) continue;
+      __u32 alg = 0;
+      if (crush->buckets[i]) alg = crush->buckets[i]->alg;
+      ::_encode_simple(alg, bl);
+      if (!alg) continue;
 
       ::_encode_simple(crush->buckets[i]->id, bl);
       ::_encode_simple(crush->buckets[i]->type, bl);
@@ -291,7 +356,7 @@ public:
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::_encode_simple(crush->buckets[i]->items[j], bl);
       
-      switch (crush->buckets[i]->type) {
+      switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	  ::_encode_simple(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
@@ -311,8 +376,10 @@ public:
 	break;
 
       case CRUSH_BUCKET_STRAW:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], bl);
 	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
+	}
 	break;
       }
     }
@@ -324,6 +391,7 @@ public:
       if (!yes) continue;
 
       ::_encode_simple(crush->rules[i]->len, bl);
+      ::_encode_simple(crush->rules[i]->mask, bl);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_encode_simple(crush->rules[i]->steps[j], bl);
     }
@@ -346,15 +414,15 @@ public:
     // buckets
     crush->buckets = (crush_bucket**)malloc(sizeof(crush_bucket*)*crush->max_buckets);
     for (unsigned i=0; i<crush->max_buckets; i++) {
-      __u32 type;
-      ::_decode_simple(type, blp);
-      if (!type) {
+      __u32 alg;
+      ::_decode_simple(alg, blp);
+      if (!alg) {
 	crush->buckets[i] = 0;
 	continue;
       }
 
       int size = 0;
-      switch (type) {
+      switch (alg) {
       case CRUSH_BUCKET_UNIFORM:
 	size = sizeof(crush_bucket_uniform);
 	break;
@@ -383,7 +451,7 @@ public:
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::_decode_simple(crush->buckets[i]->items[j], blp);
 
-      switch (crush->buckets[i]->type) {
+      switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	((crush_bucket_uniform*)crush->buckets[i])->primes = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
@@ -414,8 +482,12 @@ public:
       case CRUSH_BUCKET_STRAW:
 	((crush_bucket_straw*)crush->buckets[i])->straws = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	((crush_bucket_straw*)crush->buckets[i])->item_weights = 
+	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], blp);
 	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], blp);
+	}
 	break;
       }
     }
@@ -434,6 +506,7 @@ public:
       ::_decode_simple(len, blp);
       crush->rules[i] = (crush_rule*)malloc(crush_rule_size(len));
       crush->rules[i]->len = len;
+      ::_decode_simple(crush->rules[i]->mask, blp);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	::_decode_simple(crush->rules[i]->steps[j], blp);
     }

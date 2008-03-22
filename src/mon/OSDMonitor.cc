@@ -15,6 +15,7 @@
 #include "OSDMonitor.h"
 #include "Monitor.h"
 #include "MDSMonitor.h"
+#include "PGMonitor.h"
 
 #include "MonitorStore.h"
 
@@ -26,11 +27,13 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
+#include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
 
 #include "config.h"
 
+#include <sstream>
 
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd e" << osdmap.get_epoch() << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd e" << osdmap.get_epoch() << " "
@@ -93,191 +96,34 @@ void OSDMonitor::fake_reorg()
 }
 
 
+ostream& operator<<(ostream& out, OSDMonitor& om)
+{
+  return out << "e" << om.osdmap.get_epoch() << ": "
+	     << om.osdmap.get_num_osds() << " osds: "
+	     << om.osdmap.get_num_up_osds() << " up, " 
+	     << om.osdmap.get_num_in_osds() << " in";
+}
+
 
 /************ MAPS ****************/
 
+
 void OSDMonitor::create_initial()
 {
-  assert(mon->is_leader());
-  assert(paxos->get_version() == 0);
+  dout(10) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
 
-  dout(1) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
-
-  // <HACK set up OSDMap from g_conf>
   OSDMap newmap;
+  newmap.epoch = 1;
   newmap.set_fsid(mon->monmap->fsid);
-  newmap.mon_epoch = mon->mon_epoch;
   newmap.ctime = g_clock.now();
-
-  newmap.set_pg_num(g_conf.num_osd << g_conf.osd_pg_bits);
-  
-  // start at epoch 1 until all osds boot
-  newmap.inc_epoch();  // = 1
-  assert(newmap.get_epoch() == 1);
-
-  map<int,double> weights;
-  build_crush_map(newmap.crush, weights);
-
-  // -- test --
-#if 0
-  {
-    //vector<int> t;
-    //crush.do_rule(2, 132, t, 4, -1);
-
-    // 3x5p2
-    int n = 4;
-    int x = 0;
-    int p = 2;
-    vector<int> r(n);
-    newmap.mark_down(0, false);
-    newmap.mark_out(0);
-    newmap.crush.do_rule(CRUSH_REP_RULE(n), x, r, n, p);
-    dout(0) << "test out " << r << dendl;
-  }
-#endif
-
-  newmap.set_max_osd(g_conf.num_osd);
-  for (int i=0; i<g_conf.num_osd; i++) {
-    newmap.set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
-    newmap.set_offload(i, CEPH_OSD_IN);
-  }
-  
-  if (g_conf.mds_local_osd) {
-    newmap.set_max_osd(g_conf.num_mds+g_conf.num_osd);
-
-    // add mds local osds, but don't put them in the crush mapping func
-    for (int i=0; i<g_conf.num_mds; i++) {
-      newmap.set_max_osd(i+g_conf.num_osd);
-      newmap.set_state(i, CEPH_OSD_EXISTS);
-      newmap.set_offload(i, CEPH_OSD_IN);
-    }
-  }
-  
-  // </HACK>
-  
-  // fake osd failures
-  for (map<int,float>::iterator i = g_fake_osd_down.begin();
-	   i != g_fake_osd_down.end();
-	   i++) {
-	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << dendl;
-	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
-  }
-  for (map<int,float>::iterator i = g_fake_osd_out.begin();
-	   i != g_fake_osd_out.end();
-	   i++) {
-	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << dendl;
-	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
-  }
+  newmap.crush.create(); // empty crush map
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap);
 }
 
 
-void OSDMonitor::build_crush_map(CrushWrapper& crush,
-				 map<int,double>& weights)
-{
-  // new
-  crush.create();
 
-  if (g_conf.num_osd >= 12) {
-    int ndom = g_conf.osd_max_rep;
-    int ritems[ndom];
-    int rweights[ndom];
-
-    int nper = ((g_conf.num_osd - 1) / ndom) + 1;
-    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
-
-    int o = 0;
-    for (int i=0; i<ndom; i++) {
-      int items[nper];
-      //int w[nper];
-      int j;
-      rweights[i] = 0;
-      for (j=0; j<nper; j++, o++) {
-	if (o == g_conf.num_osd) break;
-	dout(20) << "added osd" << o << dendl;
-	items[j] = o;
-	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
-	//rweights[i] += w[j];
-	rweights[i] += 0x10000;
-      }
-
-      crush_bucket_uniform *domain = crush_make_uniform_bucket(1, j, items, 0x10000);
-      ritems[i] = crush_add_bucket(crush.crush, 0, (crush_bucket*)domain);
-      dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
-    }
-    
-    // root
-    crush_bucket_list *root = crush_make_list_bucket(2, ndom, ritems, rweights);
-    int rootid = crush_add_bucket(crush.crush, 0, (crush_bucket*)root);
-    
-    // rules
-    // replication
-    for (int i=1; i<=ndom; i++) {
-      crush_rule *rule = crush_make_rule(4);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 1);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);
-      crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
-    }
-
-    // raid
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      if (ndom >= i) {
-	crush_rule *rule = crush_make_rule(4);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 1);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_INDEP, 1, 0);
-	crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
-      } else {
-	crush_rule *rule = crush_make_rule(3);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
-      }
-    }
-    
-  } else {
-    // one bucket
-
-    int items[g_conf.num_osd];
-    for (int i=0; i<g_conf.num_osd; i++) 
-      items[i] = i;
-    
-    crush_bucket_uniform *b = crush_make_uniform_bucket(1, g_conf.num_osd, items, 0x10000);
-    int root = crush_add_bucket(crush.crush, 0, (crush_bucket*)b);
-    
-    // rules
-    // replication
-    for (int i=1; i<=g_conf.osd_max_rep; i++) {
-      crush_rule *rule = crush_make_rule(3);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, i, 0);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_REP_RULE(i), rule);
-    }
-    // raid4
-    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
-      crush_rule *rule = crush_make_rule(3);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, i, 0);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      crush_add_rule(crush.crush, CRUSH_RAID_RULE(i), rule);
-    }
-  }
-  
-  crush.finalize();
-
-  // mark all in
-  for (int i=0; i<g_conf.num_osd; i++)
-    crush.set_offload(i, CEPH_OSD_IN);
-
-  dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
-}
 
 
 bool OSDMonitor::update_from_paxos()
@@ -313,19 +159,20 @@ bool OSDMonitor::update_from_paxos()
     int off = 0;
     inc.decode(bl, off);
     osdmap.apply_incremental(inc);
-    
+
     // write out the full map, too.
     bl.clear();
     osdmap.encode(bl);
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(1) << osdmap.get_num_osds() << " osds, "
-	    << osdmap.get_num_up_osds() << " up, " 
-	    << osdmap.get_num_in_osds() << " in" 
-	    << dendl;
+    dout(1) << *this << dendl;
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
+
+  // kick pgmon, in case there are pg creations going on 
+  mon->pgmon->register_new_pgs();
+  mon->pgmon->send_pg_creates();
 
   // new map!
   bcast_latest_mds();
@@ -343,15 +190,25 @@ void OSDMonitor::create_pending()
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 }
 
+
+/*
+struct RetryClearMkpg : public Context {
+  OSDMonitor *osdmon;
+  RetryClearMkpg(OSDMonitor *o) : osdmon(o) {}
+  void finish(int r) {
+    osdmon->clear_mkpg_flag();
+  }
+};
+*/
+
 void OSDMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
   
-  // finish up pending_inc
+  // finalize up pending_inc
   pending_inc.ctime = g_clock.now();
-  pending_inc.mon_epoch = mon->mon_epoch;
-  
+
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();
        i != pending_inc.new_down.end();
@@ -409,6 +266,9 @@ bool OSDMonitor::preprocess_query(Message *m)
     handle_osd_getmap((MOSDGetMap*)m);
     return true;
     
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
+
     // damp updates
   case MSG_OSD_FAILURE:
     return preprocess_failure((MOSDFailure*)m);
@@ -439,6 +299,9 @@ bool OSDMonitor::prepare_update(Message *m)
   case MSG_OSD_BOOT:
     return prepare_boot((MOSDBoot*)m);
 
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+    
     /*
   case MSG_OSD_IN:
     return prepare_in((MOSDIn*)m);
@@ -456,12 +319,13 @@ bool OSDMonitor::prepare_update(Message *m)
 
 bool OSDMonitor::should_propose(double& delay)
 {
+  dout(10) << "should_propose" << dendl;
   if (osdmap.epoch == 1) {
-    if (pending_inc.new_up.size() == (unsigned)g_conf.num_osd) {
+    if (pending_inc.new_up.size() == (unsigned)osdmap.get_max_osd()) {
       delay = 0.0;
       if (g_conf.osd_auto_weight) {
 	CrushWrapper crush;
-	build_crush_map(crush, osd_weight);
+	OSDMap::build_simple_crush_map(crush, osdmap.get_max_osd(), osd_weight);
 	crush._encode(pending_inc.crush);
       }
       return true;
@@ -777,6 +641,8 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
+  dout(10) << *this << dendl;
+
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
@@ -804,6 +670,7 @@ void OSDMonitor::tick()
     propose_pending();
   }
 
+
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1
 
@@ -816,18 +683,19 @@ void OSDMonitor::tick()
   ps_t numps = osdmap.get_pg_num();
   int minrep = 1; 
   int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
-  for (int nrep = minrep; nrep <= maxrep; nrep++) { 
-    for (ps_t ps = 0; ps < numps; ++ps) {
-      pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, -1);
-      vector<int> osds;
-      osdmap.pg_to_osds(pgid, osds); 
-      if (osds[0] == 0) {
-	pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		<< osds[1] << dendl;
+  for (int pool=0; pool<1; pool++)
+    for (int nrep = minrep; nrep <= maxrep; nrep++) { 
+      for (ps_t ps = 0; ps < numps; ++ps) {
+	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1);
+	vector<int> osds;
+	osdmap.pg_to_osds(pgid, osds); 
+	if (osds[0] == 0) {
+	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
+	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
+		  << osds[1] << dendl;
+	}
       }
     }
-  }
   propose_pending();
 }
 
@@ -852,9 +720,145 @@ void OSDMonitor::mark_all_down()
 }
 
 
-int OSDMonitor::do_command(vector<string>& cmd, bufferlist& data, 
-			   bufferlist& rdata, string &rs)
+
+bool OSDMonitor::preprocess_command(MMonCommand *m)
 {
-  rs = "unknown command";
-  return -EINVAL;
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
+      osdmap.encode(rdata);
+      ss << "got osdmap epoch " << osdmap.get_epoch();
+      r = 0;
+    }
+    else if (m->cmd[1] == "getcrushmap") {
+      osdmap.crush._encode(rdata);
+      ss << "got crush map from osdmap epoch " << osdmap.get_epoch();
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmaxosd") {
+      ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+      r = 0;
+    }
+  }
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata);
+    return true;
+  } else
+    return false;
+}
+
+bool OSDMonitor::prepare_command(MMonCommand *m)
+{
+  stringstream ss;
+  string rs;
+  int err = -EINVAL;
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "setcrushmap") {
+      dout(10) << "prepare_command setting new crush map" << dendl;
+      pending_inc.crush = m->get_data();
+      string rs = "set crush map";
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+    else if (m->cmd[1] == "setmap") {
+      OSDMap map;
+      map.decode(m->get_data());
+      map.epoch = pending_inc.epoch;  // make sure epoch is correct
+      map.encode(pending_inc.fullmap);
+      string rs = "set osd map";
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+    else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
+      pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
+      ss << "set new max_osd = " << pending_inc.new_max_osd;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
+    }
+    else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
+      int n = atoi(m->cmd[2].c_str());
+      if (n <= osdmap.get_pg_num()) {
+	ss << "specified pg_num " << n << " <= current " << osdmap.get_pg_num();
+      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+	ss << "currently creating pgs, wait";
+	err = -EAGAIN;
+      } else {
+	ss << "set new pg_num = " << n;
+	pending_inc.new_pg_num = n;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } 
+    }
+    else if (m->cmd[1] == "setpgpnum" && m->cmd.size() > 2) {
+      int n = atoi(m->cmd[2].c_str());
+      if (n <= osdmap.get_pgp_num()) {
+	ss << "specified pgp_num " << n << " <= current " << osdmap.get_pgp_num();
+      } else if (n > osdmap.get_pg_num()) {
+	ss << "specified pgp_num " << n << " > pg_num " << osdmap.get_pg_num();
+      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+	ss << "still creating pgs, wait";
+	err = -EAGAIN;
+      } else {
+	ss << "set new pgp_num = " << n;
+	pending_inc.new_pgp_num = n;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      }
+    }
+    else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_down(osd)) {
+	ss << "osd" << osd << " is already down";
+      } else {
+	pending_inc.new_down[osd] = false;
+	ss << "marked down osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      }
+    }
+    else if (m->cmd[1] == "out" && m->cmd.size() > 2) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_out(osd)) {
+	ss << "osd" << osd << " is already out";
+      } else {
+	pending_inc.new_offload[osd] = CEPH_OSD_OUT;
+	ss << "marked out osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } 
+    }
+    else if (m->cmd[1] == "in" && m->cmd.size() > 2) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_in(osd)) {
+	ss << "osd" << osd << " is already in";
+      } else {
+	pending_inc.new_offload[osd] = CEPH_OSD_IN;
+	ss << "marked in osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } 
+    } else {
+      ss << "unknown command " << m->cmd[1];
+    }
+  } else {
+    ss << "no command?";
+  }
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
+  return false;
 }

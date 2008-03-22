@@ -203,6 +203,10 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0) { }
 
+  const char *get_machine_name() const {
+    return machine_name;
+  }
+
   void dispatch(Message *m);
 
   void init();

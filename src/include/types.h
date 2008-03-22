@@ -44,6 +44,15 @@ using namespace __gnu_cxx;
 #include "utime.h"
 #include "intarith.h"
 
+#include "../acconfig.h"
+
+// DARWIN compatibility
+#ifdef DARWIN
+typedef long long loff_t;
+typedef long long off64_t;
+#define O_DIRECT 00040000
+#endif
+
 // -- stl crap --
 
 namespace __gnu_cxx {
@@ -111,8 +120,6 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 
 
-typedef ceph_file_layout FileLayout;
-
 
 // --------------------------------------
 // inode
@@ -174,7 +181,7 @@ inline unsigned char MODE_TO_DT(int mode) {
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
-  FileLayout layout;  // ?immutable?
+  ceph_file_layout layout;  // ?immutable?
   uint32_t   rdev;    // if special file
 
   // affected by any inode change...

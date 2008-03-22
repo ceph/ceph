@@ -24,13 +24,12 @@ class MonitorStore {
   string dir;
 
 public:
-  MonitorStore(char *d) : dir(d) {
-  }
-  ~MonitorStore() {
-  }
+  MonitorStore(const char *d) : dir(d) { }
+  ~MonitorStore() { }
 
-  void mkfs();  // wipe
-  void mount();
+  int mkfs();  // wipe
+  int mount();
+  int umount() { return 0; }
 
   // ints (stored as ascii)
   version_t get_int(const char *a, const char *b=0);

@@ -30,6 +30,8 @@
 
 #include "crush/CrushWrapper.h"
 
+#include "include/interval_set.h"
+
 #include <vector>
 #include <list>
 #include <set>
@@ -51,7 +53,7 @@ using namespace std;
 
 inline int calc_bits_of(int t) {
   int b = 0;
-  while (t) {
+  while (t > 0) {
     t = t >> 1;
     b++;
   }
@@ -69,8 +71,14 @@ public:
   public:
     ceph_fsid fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
-    epoch_t mon_epoch;  // monitor epoch (election iteration)
     utime_t ctime;
+
+    bool is_pg_change() {
+      return (fullmap.length() ||
+	      crush.length() ||
+	      new_pg_num ||
+	      new_lpg_num);
+    }
 
     // full (rare)
     bufferlist fullmap;  // in leiu of below.
@@ -78,6 +86,7 @@ public:
 
     // incremental
     int32_t new_max_osd;
+    int32_t new_pg_num, new_pgp_num, new_lpg_num, new_lpgp_num;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
@@ -87,11 +96,14 @@ public:
     void encode(bufferlist& bl) {
       ::_encode(fsid, bl);
       ::_encode(epoch, bl); 
-      ::_encode(mon_epoch, bl);
       ctime._encode(bl);
       ::_encode(fullmap, bl);
       ::_encode(crush, bl);
       ::_encode(new_max_osd, bl);
+      ::_encode(new_pg_num, bl);
+      ::_encode(new_pgp_num, bl);
+      ::_encode(new_lpg_num, bl);
+      ::_encode(new_lpgp_num, bl);
       ::_encode(new_up, bl);
       ::_encode(new_down, bl);
       ::_encode(new_offload, bl);
@@ -101,11 +113,14 @@ public:
     void decode(bufferlist& bl, int& off) {
       ::_decode(fsid, bl, off);
       ::_decode(epoch, bl, off);
-      ::_decode(mon_epoch, bl, off);
       ctime._decode(bl, off);
       ::_decode(fullmap, bl, off);
       ::_decode(crush, bl, off);
       ::_decode(new_max_osd, bl, off);
+      ::_decode(new_pg_num, bl, off);
+      ::_decode(new_pgp_num, bl, off);
+      ::_decode(new_lpg_num, bl, off);
+      ::_decode(new_lpgp_num, bl, off);
       ::_decode(new_up, bl, off);
       ::_decode(new_down, bl, off);
       ::_decode(new_offload, bl, off);
@@ -113,20 +128,41 @@ public:
       ::_decode(old_pg_swap_primary, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0), new_max_osd(-1) {
+    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), 
+			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
       fsid.major = fsid.minor = cpu_to_le64(0);
     }
   };
 
 private:
   ceph_fsid fsid;
-  epoch_t epoch;       // what epoch of the osd cluster descriptor is this
-  epoch_t mon_epoch;  // monitor epoch (election iteration)
-  utime_t ctime, mtime;       // epoch start time
-  int32_t pg_num;       // placement group count
-  int32_t pg_num_mask;  // bitmask for above
-  int32_t localized_pg_num;      // localized place group count
-  int32_t localized_pg_num_mask; // ditto
+  epoch_t epoch;        // what epoch of the osd cluster descriptor is this
+  utime_t ctime, mtime; // epoch start time
+
+  /*
+   * placement groups 
+   *
+   *  pg_num -- base number of pseudorandomly placed pgs
+   *
+   *  pgp_num -- effective number when calculating pg placement.  this
+   * is used for pg_num increases.  new pgs result in data being
+   * "split" into new pgs.  for this to proceed smoothly, new pgs are
+   * intiially colocated with their parents; that is, pgp_num doesn't
+   * increase until the new pgs have successfully split.  only _then_
+   * are the new pgs placed independently.
+   *      
+   *  lpg_num -- localized pg count (per device).  replicas are
+   * randomly selected.
+   *
+   *  lpgp_num -- as above.
+   */
+  int32_t pg_num, pg_num_mask;     // placement group count and bitmask
+  int32_t pgp_num, pgp_num_mask;   // pg placement num (for placing pg's.. <= pg_num)
+  int32_t lpg_num, lpg_num_mask;   // localized placement group count
+  int32_t lpgp_num, lpgp_num_mask; // as above
+
+  // new pgs
+  epoch_t last_pg_change;  // most recent epoch initiating possible pg creation
 
   int32_t max_osd;
   vector<uint8_t>  osd_state;
@@ -140,9 +176,9 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mon_epoch(0), 
-	     pg_num(1<<5),
-	     localized_pg_num(1<<3),
+  OSDMap() : epoch(0), 
+	     pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
+	     last_pg_change(0),
 	     max_osd(0) { 
     fsid.major = fsid.minor = cpu_to_le64(0);
     calc_pg_masks();
@@ -154,23 +190,33 @@ private:
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
+  void set_epoch(epoch_t e) { epoch = e; }
 
   /* pg num / masks */
   void calc_pg_masks() {
     pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
-    localized_pg_num_mask = (1 << calc_bits_of(localized_pg_num-1)) - 1;
+    pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+    lpg_num_mask = (1 << calc_bits_of(lpg_num-1)) - 1;
+    lpgp_num_mask = (1 << calc_bits_of(lpgp_num-1)) - 1;
   }
 
   int get_pg_num() const { return pg_num; }
-  void set_pg_num(int m) { pg_num = m; calc_pg_masks(); }
-  int get_localized_pg_num() const { return localized_pg_num; }
+  int get_pgp_num() const { return pgp_num; }
+  int get_lpg_num() const { return lpg_num; }
+  int get_lpgp_num() const { return lpgp_num; }
+
+  int get_pg_num_mask() const { return pg_num_mask; }
+  int get_pgp_num_mask() const { return pgp_num_mask; }
+  int get_lpg_num_mask() const { return lpg_num_mask; }
+  int get_lpgp_num_mask() const { return lpgp_num_mask; }
 
   /* stamps etc */
   const utime_t& get_ctime() const { return ctime; }
   const utime_t& get_mtime() const { return mtime; }
 
-  bool is_mkfs() const { return epoch == 2; }
-  bool post_mkfs() const { return epoch > 2; }
+  epoch_t get_last_pg_change() const {
+    return last_pg_change;
+  }
 
   /***** cluster state *****/
   /* osds */
@@ -273,20 +319,41 @@ private:
     assert(ceph_fsid_equal(&inc.fsid, &fsid) || inc.epoch == 1);
     assert(inc.epoch == epoch+1);
     epoch++;
-    mon_epoch = inc.mon_epoch;
     ctime = inc.ctime;
 
     // full map?
-    if (inc.fullmap.length()) {
+    if (inc.fullmap.length()) 
       decode(inc.fullmap);
+    
+    if (inc.is_pg_change())
+      last_pg_change = epoch;
+    
+    if (inc.fullmap.length())
       return;
-    }
+
     if (inc.crush.length()) {
       bufferlist::iterator blp = inc.crush.begin();
       crush._decode(blp);
     }
 
     // nope, incremental.
+    if (inc.new_pg_num) {
+      assert(inc.new_pg_num >= pg_num);
+      pg_num = inc.new_pg_num;
+    }
+    if (inc.new_lpg_num) {
+      assert(inc.new_lpg_num >= lpg_num);
+      lpg_num = inc.new_lpg_num;
+    }
+    if (inc.new_pgp_num) {
+      assert(inc.new_pgp_num >= pgp_num);
+      pgp_num = inc.new_pgp_num;
+    }
+    if (inc.new_lpgp_num) {
+      assert(inc.new_lpgp_num >= lpgp_num);
+      lpgp_num = inc.new_lpgp_num;
+    }
+
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
 
@@ -325,11 +392,13 @@ private:
   void encode(bufferlist& blist) {
     ::_encode(fsid, blist);
     ::_encode(epoch, blist);
-    ::_encode(mon_epoch, blist);
     ::_encode(ctime, blist);
     ::_encode(mtime, blist);
     ::_encode(pg_num, blist);
-    ::_encode(localized_pg_num, blist);
+    ::_encode(pgp_num, blist);
+    ::_encode(lpg_num, blist);
+    ::_encode(lpgp_num, blist);
+    ::_encode(last_pg_change, blist);
     
     ::_encode(max_osd, blist);
     ::_encode(osd_state, blist);
@@ -345,12 +414,14 @@ private:
     int off = 0;
     ::_decode(fsid, blist, off);
     ::_decode(epoch, blist, off);
-    ::_decode(mon_epoch, blist, off);
     ::_decode(ctime, blist, off);
     ::_decode(mtime, blist, off);
     ::_decode(pg_num, blist, off);
-    ::_decode(localized_pg_num, blist, off);
+    ::_decode(pgp_num, blist, off);
+    ::_decode(lpg_num, blist, off);
+    ::_decode(lpgp_num, blist, off);
     calc_pg_masks();
+    ::_decode(last_pg_change, blist, off);
 
     ::_decode(max_osd, blist, off);
     ::_decode(osd_state, blist, off);
@@ -361,8 +432,6 @@ private:
     ::_decode(cbl, blist, off);
     bufferlist::iterator cblp = cbl.begin();
     crush._decode(cblp);
-
-    //crush.update_offload_map(out_osds, overload_osds);
   }
  
 
@@ -371,13 +440,16 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, FileLayout& layout) {
-    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, layout.fl_pg_preferred, layout.fl_object_stripe_unit);
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
+    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, 
+			      layout.fl_pg_pool,
+			      layout.fl_pg_preferred, 
+			      layout.fl_object_stripe_unit);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int preferred=-1, int object_stripe_unit = 0) {
-    int num = preferred >= 0 ? localized_pg_num:pg_num;
-    int num_mask = preferred >= 0 ? localized_pg_num_mask:pg_num_mask;
+  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
+    int num = preferred >= 0 ? lpg_num:pg_num;
+    int num_mask = preferred >= 0 ? lpg_num_mask:pg_num_mask;
 
     // calculate ps (placement seed)
     ps_t ps;
@@ -405,7 +477,7 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    pg_t pgid = pg_t(pg_type, pg_size, ps, preferred);
+    pg_t pgid = pg_t(pg_type, pg_size, ps, pg_pool, preferred);
     ceph_object_layout layout;
     layout.ol_pgid = pgid.u;
     layout.ol_stripe_unit = object_stripe_unit;
@@ -416,29 +488,31 @@ private:
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
+
+    ps_t pps;  // placement ps
+    if (pg.preferred() >= 0)
+      pps = ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
+    else
+      pps = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
-	int rule;
-	if (pg.is_rep()) rule = CRUSH_REP_RULE(pg.size());
-	else if (pg.is_raid4()) rule = CRUSH_RAID_RULE(pg.size());
-	else assert(0);
-	crush.do_rule(rule,
-		      pg.ps(),
-		      osds, pg.size(),
-		      pg.preferred());
+	int ruleno = crush.find_rule(pg.pool(), pg.type(), pg.size());
+	if (ruleno >= 0)
+	  crush.do_rule(ruleno, pps, osds, pg.size(), pg.preferred());
       }
       break;
       
     case CEPH_PG_LAYOUT_LINEAR:
       for (int i=0; i<pg.size(); i++) 
-	osds.push_back( (i + pg.ps()*pg.size()) % g_conf.num_osd );
+	osds.push_back( (i + pps*pg.size()) % g_conf.num_osd );
       break;
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
-	int h = crush_hash32(pg.ps());
+	int h = crush_hash32(pps);
 	for (int i=0; i<pg.size(); i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
@@ -450,7 +524,7 @@ private:
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = crush_hash32_3(i, pg.ps(), t) % g_conf.num_osd;
+	    osd = crush_hash32_3(i, pps, t) % g_conf.num_osd;
 	    int j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;
@@ -582,7 +656,12 @@ private:
   }
 
 
-
+  /*
+   * handy helpers to build simple maps...
+   */
+  void build_simple(epoch_t e, ceph_fsid &fsid,
+		    int num_osd, int pg_bits, int mds_local_osd);
+  static void build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,double>& weights);
 
 };
 

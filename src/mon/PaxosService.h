@@ -22,10 +22,11 @@ class Monitor;
 class Paxos;
 
 class PaxosService : public Dispatcher {
-protected:
+public:
   Monitor *mon;
   Paxos *paxos;
   
+protected:
   class C_RetryMessage : public Context {
     PaxosService *svc;
     Message *m;
@@ -75,6 +76,8 @@ public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
 					proposal_timer(0),
 					have_pending(false) { }
+
+  const char *get_machine_name();
   
   // i implement and you ignore
   void dispatch(Message *m);
@@ -89,9 +92,9 @@ public:
   void propose_pending();     // propose current pending as new paxos state
 
   // you implement
+  virtual void create_initial() = 0;
   virtual bool update_from_paxos() = 0;    // assimilate latest state from paxos
   virtual void create_pending() = 0;       // [leader] create new pending structures
-  virtual void create_initial() = 0;       // [leader] populate pending with initial state (1)
   virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state
   virtual void discard_pending() { }       // [leader] discard pending
 

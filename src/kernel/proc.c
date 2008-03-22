@@ -47,12 +47,9 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 
 	level_str[count] = 0;
 
-	new_dl = simple_strtoul(level_str, NULL, 0);
+	new_dl = simple_strtol(level_str, NULL, 0);
 
-	if (new_dl >= 0)
-		ceph_debug = new_dl;
-	else
-		return -EINVAL;
+	ceph_debug = new_dl;
 
 	return count;
 }

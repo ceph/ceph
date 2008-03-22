@@ -18,125 +18,378 @@
 #include <errno.h>
 
 #include <sys/stat.h>
-#include <iostream>
-#include <string>
-using namespace std;
 
 #include "config.h"
 
-#include "mon/MonMap.h"
+#include "crush/CrushWrapper.h"
+#include "crush/grammar.h"
 
+#include <iostream>
+#include <fstream>
+#include <stack>
+#include <functional>
+#include <string>
+#include <cassert>
+#include <map>
+using namespace std;
+
+/*typedef char const*         iterator_t;
+typedef tree_match<iterator_t> parse_tree_match_t;
+typedef parse_tree_match_t::tree_iterator iter_t;
+*/
+
+//
 /*
+long evaluate(parse_tree_match_t hit);
+long eval_expression(iter_t const& i);
 
-./monmaptool -f .ceph_monmap
-./monmaptool -f .ceph_monmap --create --clobber --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --rm 1.2.3.4:12345
-
-
- */
-
-void usage(const char *me)
+long evaluate(tree_parse_info<> info)
 {
-  cout << me << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567]" << std::endl;
-  exit(1);
+  return eval_expression(info.trees.begin());
 }
 
-void printmap(const char *me, MonMap *m)
+long eval_expression(iter_t const& i)
 {
-  cout << me << ": monmap: epoch " << m->epoch << std::endl
-       << me << ": monmap: fsid " << m->fsid << std::endl;
-  for (unsigned i=0; i<m->mon_inst.size(); i++)
-    cout << me << ": monmap:  " //<< "mon" << i << " " 
-	 << m->mon_inst[i] << std::endl;
+  cout << "In eval_expression. i->value = "
+       << string(i->value.begin(), i->value.end())
+       << " i->children.size() = " << i->children.size() << std::endl;
+  
+  if (i->value.id() == crush_grammar::integerID)
+    {
+      assert(i->children.size() == 0);
+      
+      // extract integer (not always delimited by '\0')
+      string integer(i->value.begin(), i->value.end());
+      
+      return strtol(integer.c_str(), 0, 10);
+    }
+  else if (i->value.id() == crush_grammar::factorID)
+    {
+      // factor can only be unary minus
+      assert(*i->value.begin() == '-');
+      return - eval_expression(i->children.begin());
+    }
+  else if (i->value.id() == crush_grammar::termID)
+    {
+      if (*i->value.begin() == '*')
+        {
+	  assert(i->children.size() == 2);
+	  return eval_expression(i->children.begin()) *
+	    eval_expression(i->children.begin()+1);
+        }
+      else if (*i->value.begin() == '/')
+        {
+	  assert(i->children.size() == 2);
+	  return eval_expression(i->children.begin()) /
+	    eval_expression(i->children.begin()+1);
+        }
+      else
+	assert(0);
+    }
+  else if (i->value.id() == crush_grammar::expressionID)
+    {
+      if (*i->value.begin() == '+')
+        {
+	  assert(i->children.size() == 2);
+	  return eval_expression(i->children.begin()) +
+	    eval_expression(i->children.begin()+1);
+        }
+      else if (*i->value.begin() == '-')
+        {
+	  assert(i->children.size() == 2);
+	  return eval_expression(i->children.begin()) -
+	    eval_expression(i->children.begin()+1);
+        }
+      else
+	assert(0);
+    }
+  else
+    {
+      assert(0); // error
+    }
+  
+  return 0;
+}
+*/
+
+
+////////////////////////////////////////////////////////////////////////////
+
+int compile_crush_file(const char *infn, CrushWrapper &crush)
+{ 
+  // read the file
+  ifstream in(infn);
+  string big;
+  string str;
+  int line = 1;
+  while (getline(in, str)) {
+    // fixme: strip out comments
+    int l = str.length();
+    if (l && str[l] == '\n')
+      str.erase(l-1, 1);
+    int n = str.find("#");
+    if (n >= 0)
+      str.erase(n, str.length()-n);
+    cout << line++ << ": " << str << std::endl;
+    if (big.length()) big += " ";
+    big += str;
+  }
+
+  cout << "whole file is: \"" << big << "\"" << std::endl;
+
+  crush_grammar crushg;
+  //bool parsed = parse(big.c_str(), crushg, space_p).full;
+  tree_parse_info<> info = ast_parse(big.c_str(), crushg, space_p);
+  bool parsed = info.full;
+
+  if (parsed) {
+    // dump parse tree as XML
+    std::map<parser_id, std::string> rule_names;
+    rule_names[crush_grammar::_int] = "int";
+    rule_names[crush_grammar::_posint] = "posint";
+    rule_names[crush_grammar::_name] = "name";
+    rule_names[crush_grammar::_device] = "device";
+    rule_names[crush_grammar::_bucket_type] = "bucket_type";
+    rule_names[crush_grammar::_bucket_id] = "bucket_id";
+    rule_names[crush_grammar::_bucket_alg] = "bucket_alg";
+    rule_names[crush_grammar::_bucket_item] = "bucket_item";
+    rule_names[crush_grammar::_bucket] = "bucket";
+    rule_names[crush_grammar::_step_take] = "step_take";
+    rule_names[crush_grammar::_step_choose_indep] = "step_choose_indep";
+    rule_names[crush_grammar::_step_choose_firstn] = "step_choose_firstn";
+    rule_names[crush_grammar::_step_emit] = "step_emit";
+    rule_names[crush_grammar::_crushrule] = "rule";
+    rule_names[crush_grammar::_crushmap] = "map";
+    tree_to_xml(cout, info.trees, big.c_str(), rule_names);
+
+    // print the result
+    cout << "parsing succeeded\n";
+    //cout << "result = " << evaluate(info) << "\n\n";
+  } else {
+    cout << "did not parse" << std::endl;
+  }
+
+  return 0;
+}
+
+void print_type_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_type_name(t);
+  if (name)
+    out << name;
+  else if (t == 0)
+    out << "device";
+  else
+    out << "type" << t;
+}
+
+void print_item_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_item_name(t);
+  if (name)
+    out << name;
+  else if (t >= 0)
+    out << "device" << t;
+  else
+    out << "bucket" << (-1-t);
+}
+
+void print_rule_name(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *name = crush.get_rule_name(t);
+  if (name)
+    out << name;
+  else
+    out << "rule" << t;
+}
+
+void print_fixedpoint(ostream& out, int i)
+{
+  out << (i / 0x10000);
+}
+
+int decompile_crush(CrushWrapper &crush, ostream &out)
+{
+  out << "# begin crush map\n\n";
+
+  out << "# devices\n";
+  for (int i=0; i<crush.get_max_devices(); i++) {
+    out << "device " << i << " ";
+    print_item_name(out, i, crush);
+    if (crush.get_device_offload(i)) {
+      out << " offload ";
+      print_fixedpoint(out, crush.get_device_offload(i));
+    }
+    out << "\n";
+  }
+  
+  out << "\n# types\n";
+  int n = crush.get_num_type_names();
+  for (int i=0; n; i++) {
+    const char *name = crush.get_type_name(i);
+    if (!name) {
+      if (i == 0) out << "type 0 device\n";
+      continue;
+    }
+    n--;
+    out << "type " << i << " " << name << "\n";
+  }
+
+  out << "\n# buckets\n";
+  for (int i=-1; i > -1-crush.get_max_buckets(); i--) {
+    if (!crush.bucket_exists(i)) continue;
+    int type = crush.get_bucket_type(i);
+    print_type_name(out, type, crush);
+    out << " ";
+    print_item_name(out, i, crush);
+    out << " {\n";
+    out << "\tid " << i << "\n";
+    out << "\talg " << crush.get_bucket_alg(i) << "\n";
+    int n = crush.get_bucket_size(i);
+    bool dopos = false;
+    for (int j=0; j<n; j++) {
+      int item = crush.get_bucket_item(i, j);
+      int w = crush.get_bucket_item_weight(i, j);
+      if (!w) {
+	dopos = true;
+	continue;
+      }
+      out << "\titem ";
+      print_item_name(out, item, crush);
+      out << " weight ";
+      print_fixedpoint(out, w);
+      if (dopos)
+	out << " pos " << j;
+      out << "\n";
+    }
+    out << "}\n";
+  }
+
+  out << "\n# rules\n";
+  for (int i=0; i<crush.get_max_rules(); i++) {
+    if (!crush.rule_exists(i)) continue;
+    out << "rule ";
+    print_rule_name(out, i, crush);
+    out << " {\n";
+    out << "\tpool " << crush.get_rule_mask_pool(i) << "\n";
+    switch (crush.get_rule_mask_type(i)) {
+    case CEPH_PG_TYPE_REP: out << "\ttype replicated\n"; break;
+    case CEPH_PG_TYPE_RAID4: out << "\ttype raid4\n"; break;
+    default: out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
+    }
+    out << "\tmin_size " << crush.get_rule_mask_min_size(i) << "\n";
+    out << "\tmax_size " << crush.get_rule_mask_max_size(i) << "\n";
+    for (int j=0; j<crush.get_rule_len(i); j++) {
+      switch (crush.get_rule_op(i, j)) {
+      case CRUSH_RULE_NOOP:
+	out << "\tstep noop\n";
+	break;
+      case CRUSH_RULE_TAKE:
+	out << "\tstep take ";
+	print_item_name(out, crush.get_rule_arg1(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_EMIT:
+	out << "\tstep emit\n";
+	break;
+      case CRUSH_RULE_CHOOSE_FIRSTN:
+	out << "\tstep choose firstn "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_CHOOSE_INDEP:
+	out << "\tstep choose indep "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      }
+    }
+    out << "}\n";
+  }
+  out << "\n# end crush map" << std::endl;
+  return 0;
+}
+
+
+int usage(const char *me)
+{
+  cout << me << ": usage: crushtool [-i infile] [-c infile.txt] [-o outfile] [-x outfile.txt]" << std::endl;
+  exit(1);
 }
 
 int main(int argc, const char **argv)
 {
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  parse_config_options(args);
 
   const char *me = argv[0];
 
-  const char *fn = ".ceph_monmap";
+  const char *infn = 0;
+  const char *outfn = 0;
+  const char *cinfn = 0;
+  const char *doutfn = 0;
   bool print = false;
-  bool create = false;
+  bool createsimple = false;
+  int size = 0;
   bool clobber = false;
-  bool modified = false;
   list<entity_addr_t> add, rm;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--fn") == 0) 
-      fn = args[++i];
-    else if (strcmp(args[i], "--print") == 0)
+    if (strcmp(args[i], "--print") == 0)
       print = true;
-    else if (strcmp(args[i], "--create") == 0) 
-      create = true;
-    else if (strcmp(args[i], "--clobber") == 0) 
+    else if (strcmp(args[i], "--createsimple") == 0) {
+      createsimple = true;
+      size = atoi(args[++i]);
+    } else if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
-    else if (strcmp(args[i], "--add") == 0 ||
-	     strcmp(args[i], "--rm") == 0) {
-      if (++i >= args.size()) usage(me);
-      entity_addr_t addr;
-      if (!parse_ip_port(args[i], addr)) {
-	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
-	return -1;
-      }
-      //inst.name = entity_name_t::MON(monmap.size());
-      if (strcmp(args[i-1], "--add") == 0)
-	add.push_back(addr);
-      else 
-	rm.push_back(addr);
-      modified = true;
-    } else
+    else if (strcmp(args[i], "-i") == 0)
+      infn = args[++i];
+    else if (strcmp(args[i], "-o") == 0)
+      outfn = args[++i];
+    else if (strcmp(args[i], "-c") == 0)
+      cinfn = args[++i];
+    else if (strcmp(args[i], "-x") == 0)
+      doutfn = args[++i];
+    else 
       usage(me);
   }
+
+  CrushWrapper crush;
   
-  MonMap monmap;
-
-  cout << me << ": monmap file " << fn << std::endl;
-
-  int r = 0;
-  if (!(create && clobber))
-    r = monmap.read(fn);
-
-  if (!create && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror(errno) << std::endl;
-    return -1;
-  }    
-  else if (create && !clobber && r == 0) {
-    cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
-    return -1;
+  if (infn) {
+    bufferlist bl;
+    int r = bl.read_file(infn);
+    if (r < 0) {
+      cerr << me << ": error reading '" << infn << "': " << strerror(-r) << std::endl;
+      exit(1);
+    }
+    bufferlist::iterator p = bl.begin();
+    crush._decode(p);
   }
 
-  for (list<entity_addr_t>::iterator p = add.begin(); p != add.end(); p++)
-    monmap.add(*p);
-  for (list<entity_addr_t>::iterator p = rm.begin(); p != rm.end(); p++) {
-    cout << me << ": removing " << *p << std::endl;
-    if (!monmap.remove(*p)) {
-      cerr << me << ": map does not contain " << *p << std::endl;
-      usage(me);
+  if (cinfn) {
+    compile_crush_file(cinfn, crush);
+
+    if (outfn) {
+      bufferlist bl;
+      crush._encode(bl);
+      int r = bl.write_file(outfn);
+      if (r < 0) {
+	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;
+	exit(1);
+      }
     }
   }
 
-  if (!print && !modified)
-    usage(me);
-
-  if (print) 
-    printmap(me, &monmap);
-
-  if (modified) {
-    monmap.epoch++;
-
-    // write it out
-    cout << me << ": writing epoch " << monmap.epoch
-	 << " to " << fn
-	 << " (" << monmap.size() << " monitors)" 
-	 << std::endl;
-    int r = monmap.write(fn);
-    assert(r >= 0);
+  if (doutfn) {
+    decompile_crush(crush, cout);
   }
-  
 
   return 0;
 }

@@ -9,7 +9,6 @@ fakefuse
 fakesyn
 mkmonmap
 monmaptool
-crushtool
 newsyn
 dev
 mondata
@@ -21,3 +20,8 @@ tags
 out
 acconfig.h.in
 acconfig.h
+
+*.so
+crush/*.fpicco
+CrushWrapper.pm
+crush/CrushWrapper_wrap.cxx

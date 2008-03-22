@@ -21,6 +21,7 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
+#include "messages/MMonCommand.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -66,6 +67,37 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
   }
 }
 
+ostream& operator<<(ostream& out, MDSMonitor& mm)
+{
+  std::stringstream ss;
+  set<int> all;
+  MDSMap &m = mm.mdsmap;
+  m.get_mds_set(all);
+  int standby_spec = 0;
+  map<int,int> by_state;
+  for (set<int>::iterator p = all.begin();
+       p != all.end();
+       ++p) {
+    by_state[m.get_state(*p)]++;
+    standby_spec += m.get_num_standby_for(*p);
+  }
+
+  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
+    if (p != by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << MDSMap::get_state_name(p->first);
+  }
+  if (m.get_num_standby_any())
+    ss << ", " << m.get_num_standby_any() << " standby (any)";
+  if (standby_spec)
+    ss << ", " << standby_spec << " standby (specific)";
+
+  string states = ss.str();  
+  return out << "e" << m.get_epoch() << ": "
+	     << all.size() << " nodes: " 
+	     << states;
+}
+
 
 
 // service methods
@@ -73,7 +105,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
-  pending_mdsmap.max_mds = g_conf.num_mds;
+  pending_mdsmap.max_mds = 1;
   pending_mdsmap.created = g_clock.now();
   print_map(pending_mdsmap);
 }
@@ -154,6 +186,9 @@ bool MDSMonitor::preprocess_query(Message *m)
   case CEPH_MSG_MDS_GETMAP:
     handle_mds_getmap((MMDSGetMap*)m);
     return true;
+
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
 
   default:
     assert(0);
@@ -251,7 +286,10 @@ bool MDSMonitor::prepare_update(Message *m)
     
   case MSG_MDS_BEACON:
     return handle_beacon((MMDSBeacon*)m);
-    
+
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+  
   default:
     assert(0);
     delete m;
@@ -465,38 +503,72 @@ void MDSMonitor::take_over(entity_addr_t addr, int mds)
 }
 
 
+bool MDSMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
 
-int MDSMonitor::do_command(vector<string>& cmd, bufferlist& data, 
-			   bufferlist& rdata, string &rs)
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    } 
+    else if (m->cmd[1] == "getmap") {
+      mdsmap.encode(rdata);
+      ss << "got mdsmap epoch " << mdsmap.get_epoch();
+      r = 0;
+    }
+  }
+
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata);
+    return true;
+  } else
+    return false;
+}
+
+bool MDSMonitor::prepare_command(MMonCommand *m)
 {
   int r = -EINVAL;
   stringstream ss;
+  bufferlist rdata;
 
-  if (cmd.size() > 1) {
-    if (cmd[1] == "stop" && cmd.size() > 2) {
-      int who = atoi(cmd[2].c_str());
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
+      int who = atoi(m->cmd[2].c_str());
       if (mdsmap.is_active(who)) {
 	r = 0;
 	ss << "telling mds" << who << " to stop";
 	pending_mdsmap.mds_state[who] = MDSMap::STATE_STOPPING;
       } else {
 	r = -EEXIST;
-	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
+	ss << "mds" << who << " not active (" 
+	   << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
       }
     }
-    else if (cmd[1] == "set_max_mds" && cmd.size() > 2) {
-      pending_mdsmap.max_mds = atoi(cmd[2].c_str());
+    else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {
+      pending_mdsmap.max_mds = atoi(m->cmd[2].c_str());
       r = 0;
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
   }
-  if (r == -EINVAL) {
+  if (r == -EINVAL) 
     ss << "unrecognized command";
-  } 
-  
-  // reply
+  string rs;
   getline(ss, rs);
-  return r;
+
+  if (r >= 0) {
+    // success.. delay reply
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs));
+    return true;
+  } else {
+    // reply immediately
+    mon->reply_command(m, r, rs, rdata);
+    return false;
+  }
 }
 
 
@@ -555,6 +627,8 @@ void MDSMonitor::tick()
   // ...if i am an active leader
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
+
+  dout(10) << *this << dendl;
 
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.mds_beacon_grace;

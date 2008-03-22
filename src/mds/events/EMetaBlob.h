@@ -306,9 +306,11 @@ private:
 					 dirty));
   }
 
-  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino=0) {
-    add_remote_dentry(add_dir(dn->get_dir(), false),
-		      dn, dirty, rino);
+  void add_remote_dentry(CDentry *dn, bool dirty) {
+    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, 0, 0);
+  }
+  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino, int rdt) {
+    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, rino, rdt);
   }
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			 inodeno_t rino=0, unsigned char rdt=0) {

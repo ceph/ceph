@@ -506,7 +506,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 	   << ") " << *req << dendl;
 
   // note result code in session map?
-  if (!req->is_idempotent())
+  if (!req->is_idempotent() && mdr->session)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   /*
@@ -1789,9 +1789,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
-  // it's a file.
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
+  if ((newi->inode.mode & S_IFMT) == 0)
+    newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
@@ -1829,7 +1830,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
-  newi->inode.layout = g_OSD_MDDirLayout;
+  newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
 
   // ...and that new dir is empty.
@@ -2045,7 +2046,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
+				 MODE_TO_DT(targeti->inode.mode));  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
@@ -2127,7 +2129,8 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
+				 MODE_TO_DT(targeti->inode.mode));  // new remote
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -2488,7 +2491,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    ipv = straydn->pre_dirty(dn->inode->inode.version);
+    dn->inode->projected_parent = straydn;    
+    ipv = dn->inode->pre_dirty();
     le->metablob.add_dir_context(straydn->dir);
     ji = le->metablob.add_primary_dentry(straydn, true, dn->inode);
   } else {
@@ -2504,7 +2508,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->ctime = mdr->now;
   pi->version = ipv;
   *ji = *pi;  // copy into journal
-  
+
   // the unlinked dentry
   dn->pre_dirty();
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);
@@ -2771,7 +2775,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   // src+dest _must_ share commont root for locking to prevent orphans
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
-  if (destpath.get_ino() != srcpath.get_ino()) {
+  if (destpath.get_ino() != srcpath.get_ino() &&
+      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
     // error out for now; eventually, we should find the deepest common root
     derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
     assert(0);
@@ -3130,6 +3135,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdn->is_auth())
       ipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
     ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
+    destdn->inode->projected_parent = destdn;
     
     // do src dentry
     metablob->add_dir_context(srcdn->dir);
@@ -3148,6 +3154,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (straydn->is_auth())
 	ipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
       ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
+      destdn->inode->projected_parent = straydn;
     } 
     else if (destdn->is_remote()) {
       // remote.
@@ -3197,13 +3204,15 @@ void Server::_rename_prepare(MDRequest *mdr,
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
       }
       metablob->add_primary_dentry(destdn, true, srcdn->inode); 
+      srcdn->inode->projected_parent = destdn;
 
     } else {
       assert(srcdn->is_remote());
       dout(10) << "src is a remote dentry" << dendl;
       if (destdn->is_auth())
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
-      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
+      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
+				  srcdn->get_remote_d_type()); 
     }
     
     // remove src dentry
@@ -3263,10 +3272,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       dout(10) << "merging remote onto primary link" << dendl;
 
       // nlink-- in place
-      destdn->inode->inode.nlink--;
-      destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
       // unlink srcdn
       srcdn->dir->unlink_inode(srcdn);
@@ -3282,10 +3289,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->dir->link_primary_inode(destdn, oldin);
       
       // nlink--
-      destdn->inode->inode.nlink--;
-      destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
       
       // mark src dirty
       if (srcdn->is_auth())
@@ -3306,15 +3311,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       //assert(straypv == ipv);
 
       // nlink-- in stray dir.
-      oldin->inode.nlink--;
-      oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
     else if (oldin) {
       // nlink-- remote.  destdn was remote.
-      oldin->inode.nlink--;
-      oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
@@ -3719,12 +3720,6 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // apply to cache
-    in->inode.size = size;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
-    in->mark_dirty(pv, mdr->ls);
-
     // reply
     mds->server->reply_request(mdr, 0);
   }
@@ -3744,6 +3739,15 @@ public:
     size(sz), ctime(ct) { }
   void finish(int r) {
     assert(r == 0);
+
+    // apply to cache
+    in->inode.size = size;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->pop_and_dirty_projected_inode(mdr->ls);
+
+    // notify any clients
+    mds->locker->issue_truncate(in);
 
     // purge
     mds->mdcache->purge_inode(in, size, in->inode.size, mdr->ls);
@@ -3786,13 +3790,13 @@ void Server::handle_client_truncate(MDRequest *mdr)
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
-  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = req->head.args.truncate.length;
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-
   mdlog->submit_entry(le, fin);
 }
 
@@ -3823,7 +3827,8 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || flags != O_DIRECTORY)) {
+  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || (flags | O_DIRECTORY) == 0)) {
+    dout(10) << "bad open flags " << flags << " cmode " << cmode << " on dir " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
@@ -3911,12 +3916,6 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // apply to cache
-    in->inode.size = 0;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
-    in->mark_dirty(pv, mdr->ls);
-    
     // do the open
     mds->server->_do_open(mdr, in);
   }
@@ -3936,6 +3935,12 @@ public:
   void finish(int r) {
     assert(r == 0);
 
+    // apply to cache
+    in->inode.size = 0;
+    in->inode.ctime = ctime;
+    in->inode.mtime = ctime;
+    in->pop_and_dirty_projected_inode(mdr->ls);
+    
     // hit pop
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -3964,11 +3969,12 @@ void Server::handle_client_opent(MDRequest *mdr)
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), 0, cur->inode.size);
-  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
+  inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
 }

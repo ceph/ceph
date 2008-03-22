@@ -45,9 +45,11 @@
 
 Rank rank;
 
-
+#ifdef DARWIN
+sig_t old_sigint_handler = 0;
+#else
 sighandler_t old_sigint_handler = 0;
-
+#endif
 
 /********************************************
  * Accepter
@@ -66,7 +68,7 @@ void Rank::sigint()
   derr(0) << "got control-c, exiting" << dendl;
   
   // force close listener socket
-  if (accepter.listen_sd > 0) 
+  if (accepter.listen_sd >= 0) 
     ::close(accepter.listen_sd);
 
   // force close all pipe sockets, too
@@ -85,7 +87,7 @@ void noop_signal_handler(int s)
   //dout(0) << "blah_handler got " << s << dendl;
 }
 
-int Rank::Accepter::bind()
+int Rank::Accepter::bind(int64_t force_nonce)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
@@ -125,16 +127,22 @@ int Rank::Accepter::bind()
 
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
-  assert(listen_sd > 0);
+  if (listen_sd < 0) {
+    derr(0) << "accepter.bind unable to create socket: "
+	    << strerror(errno) << dendl;
+    return -errno;
+  }
 
   int on = 1;
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
   
   /* bind to port */
   int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
-  if (rc < 0) 
-    derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr << dendl;
-  assert(rc >= 0);
+  if (rc < 0) {
+    derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
+	    << ": " << strerror(errno) << dendl;
+    return -errno;
+  }
 
   // what port did we get?
   socklen_t llen = sizeof(listen_addr);
@@ -144,7 +152,11 @@ int Rank::Accepter::bind()
 
   // listen!
   rc = ::listen(listen_sd, 128);
-  assert(rc >= 0);
+  if (rc < 0) {
+    derr(0) << "accepter.bind unable to listen on " << g_my_addr.ipaddr 
+	    << ": " << strerror(errno) << dendl;
+    return -errno;
+  }
   
   // figure out my_addr
   if (g_my_addr != entity_addr_t()) {
@@ -154,10 +166,10 @@ int Rank::Accepter::bind()
     // my IP is... HELP!
     struct hostent *myhostname = gethostbyname(hostname); 
     if (!myhostname) {
-      derr(0) << "unable to resolve hostname '" << hostname 
+      derr(0) << "accepter.bind unable to resolve hostname '" << hostname 
 	      << "', please specify your ip with --bind x.x.x.x" 
 	      << dendl;
-      exit(0);
+      return -1;
     }
     
     // look up my hostname.
@@ -172,7 +184,10 @@ int Rank::Accepter::bind()
     entity_addr_t tmp;
     tmp.ipaddr = listen_addr;
     rank.rank_addr.set_port(tmp.get_port());
-    rank.rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+    if (force_nonce >= 0)
+      rank.rank_addr.nonce = force_nonce;
+    else
+      rank.rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
   rank.rank_addr.erank = 0;
 
@@ -219,7 +234,7 @@ void *Rank::Accepter::entry()
     struct sockaddr_in addr;
     socklen_t slen = sizeof(addr);
     int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
-    if (sd > 0) {
+    if (sd >= 0) {
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
       // disable Nagle algorithm?
@@ -239,12 +254,16 @@ void *Rank::Accepter::entry()
       }
       rank.lock.Unlock();
     } else {
-      dout(10) << "no incoming connection?" << dendl;
+      dout(10) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
     }
   }
 
   dout(20) << "accepter closing" << dendl;
-  if (listen_sd > 0) ::close(listen_sd);
+  // don't close socket, in case we start up again?  blech.
+  if (listen_sd >= 0) {
+    ::close(listen_sd);
+    listen_sd = -1;
+  }
   dout(10) << "accepter stopping" << dendl;
   return 0;
 }
@@ -255,6 +274,7 @@ void Rank::Accepter::stop()
   dout(10) << "stop sending SIGUSR1" << dendl;
   this->kill(SIGUSR1);
   join();
+  done = false;
 }
 
 
@@ -288,19 +308,19 @@ void Rank::reaper()
 }
 
 
-int Rank::bind()
+int Rank::bind(int64_t force_nonce)
 {
   lock.Lock();
   if (started) {
     dout(10) << "rank.bind already started" << dendl;
     lock.Unlock();
-    return 0;
+    return -1;
   }
   dout(10) << "rank.bind" << dendl;
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind();
+  return accepter.bind(force_nonce);
 }
 
 
@@ -321,7 +341,7 @@ class C_Debug : public Context {
   }
 };
 
-int Rank::start()
+int Rank::start(bool nodaemon)
 {
   lock.Lock();
   if (started) {
@@ -335,7 +355,7 @@ int Rank::start()
   lock.Unlock();
 
   // daemonize?
-  if (g_conf.daemonize) {
+  if (g_conf.daemonize && !nodaemon) {
     if (Thread::get_num_threads() > 0) {
       derr(0) << "rank.start BUG: there are " << Thread::get_num_threads()
 	      << " already started that will now die!  call rank.start() sooner." 
@@ -538,6 +558,7 @@ void Rank::wait()
 
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
+  started = false;
 }
 
 
@@ -708,12 +729,12 @@ void Rank::mark_down(entity_addr_t addr)
   lock.Lock();
   if (rank_pipe.count(addr)) {
     Pipe *p = rank_pipe[addr];
-    dout(0) << "mark_down " << addr << " -- " << p << dendl;
+    dout(2) << "mark_down " << addr << " -- " << p << dendl;
     p->lock.Lock();
     p->stop();
     p->lock.Unlock();
   } else {
-    dout(0) << "mark_down " << addr << " -- pipe dne" << dendl;
+    dout(2) << "mark_down " << addr << " -- pipe dne" << dendl;
   }
   lock.Unlock();
 }
@@ -877,9 +898,9 @@ int Rank::Pipe::connect()
   dout(10) << "connect " << connect_seq << dendl;
   assert(lock.is_locked());
 
-  if (sd > 0) {
+  if (sd >= 0) {
     ::close(sd);
-    sd = 0;
+    sd = -1;
   }
   __u32 cseq = connect_seq;
   __u32 rseq;
@@ -1018,7 +1039,7 @@ int Rank::Pipe::connect()
  fail:
   lock.Lock();
  fail_locked:
-  if (newsd > 0) ::close(newsd);
+  if (newsd >= 0) ::close(newsd);
   fault(tag == CEPH_MSGR_TAG_REJECT); // quiet if reject (not socket error)
   return -1;
 }
@@ -1063,7 +1084,7 @@ void Rank::Pipe::fault(bool onconnect)
       state = STATE_STANDBY;
     }
     ::close(sd);
-    sd = 0;
+    sd = -1;
     return;
   } 
 
@@ -1142,7 +1163,7 @@ void Rank::Pipe::stop()
   cond.Signal();
   state = STATE_CLOSED;
   ::close(sd);
-  sd = 0;
+  sd = -1;
 
   // deactivate myself
   lock.Unlock();
@@ -1295,7 +1316,7 @@ void Rank::Pipe::reader()
 
   if (reap) {
     dout(10) << "reader queueing for reap" << dendl;
-    if (sd > 0) ::close(sd);
+    if (sd >= 0) ::close(sd);
     rank.lock.Lock();
     {
       rank.pipe_reap_queue.push_back(this);
@@ -1368,16 +1389,28 @@ void Rank::Pipe::writer()
 	Message *m = q.front();
 	q.pop_front();
 	m->set_seq(++out_seq);
-	sent.push_back(m); // move to sent list
 	lock.Unlock();
-        dout(20) << "writer sending " << m->get_seq() << " " << m << " " << *m << dendl;
+
+        dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
+
+	// encode and copy out of *m
         if (m->empty_payload()) 
 	  m->encode_payload();
-	int rc = write_message(m);
+	bufferlist payload, data;
+	payload.claim(m->get_payload());
+	data.claim(m->get_data());
+	ceph_msg_header hdr = m->get_env();
+
+	lock.Lock();
+	sent.push_back(m); // move to sent list
+	lock.Unlock();
+
+        dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
+	int rc = write_message(m, &hdr, payload, data);
 	lock.Lock();
 	
 	if (rc < 0) {
-          derr(1) << "writer error sending " << *m << " to " << m->get_dest() << ", "
+          derr(1) << "writer error sending " << m << " to " << hdr.dst << ", "
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
@@ -1401,7 +1434,7 @@ void Rank::Pipe::writer()
   
   if (reap) {
     dout(10) << "writer queueing for reap" << dendl;
-    if (sd > 0) ::close(sd);
+    if (sd >= 0) ::close(sd);
     rank.lock.Lock();
     {
       rank.pipe_reap_queue.push_back(this);
@@ -1563,18 +1596,18 @@ int Rank::Pipe::write_ack(unsigned seq)
 }
 
 
-int Rank::Pipe::write_message(Message *m)
+int Rank::Pipe::write_message(Message *m, ceph_msg_header *env, 
+			      bufferlist &payload, bufferlist &data)
 {
   // get envelope, buffers
-  ceph_msg_header *env = &m->get_env();
-  env->front_len = cpu_to_le32(m->get_payload().length());
-  env->data_len = cpu_to_le32(m->get_data().length());
+  env->front_len = cpu_to_le32(payload.length());
+  env->data_len = cpu_to_le32(data.length());
 
   bufferlist blist;
-  blist.claim( m->get_payload() );
-  blist.append( m->get_data() );
+  blist.claim(payload);
+  blist.append(data);
   
-  dout(20)  << "write_message " << m << " " << *m << " to " << m->get_dest() << dendl;
+  dout(20)  << "write_message " << m << " to " << env->dst << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;

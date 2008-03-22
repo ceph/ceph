@@ -41,9 +41,11 @@ using namespace std;
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
-#include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGCreate.h"
 
 #include "messages/MMonMap.h"
+#include "messages/MMonGetMap.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
@@ -154,6 +156,9 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   case CEPH_MSG_MON_MAP:
     m = new MMonMap;
     break;
+  case CEPH_MSG_MON_GET_MAP:
+    m = new MMonGetMap;
+    break;
 
   case MSG_OSD_BOOT:
     m = new MOSDBoot();
@@ -184,26 +189,29 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     break;
 
   case CEPH_MSG_OSD_MAP:
-    m = new MOSDMap();
+    m = new MOSDMap;
     break;
   case CEPH_MSG_OSD_GETMAP:
-    m = new MOSDGetMap();
+    m = new MOSDGetMap;
     break;
 
   case MSG_OSD_PG_NOTIFY:
-    m = new MOSDPGNotify();
+    m = new MOSDPGNotify;
     break;
   case MSG_OSD_PG_QUERY:
-    m = new MOSDPGQuery();
+    m = new MOSDPGQuery;
     break;
   case MSG_OSD_PG_LOG:
-    m = new MOSDPGLog();
+    m = new MOSDPGLog;
     break;
   case MSG_OSD_PG_REMOVE:
-    m = new MOSDPGRemove();
+    m = new MOSDPGRemove;
     break;
-  case MSG_OSD_PG_ACTIVATE_SET:
-    m = new MOSDPGActivateSet();
+  case MSG_OSD_PG_INFO:
+    m = new MOSDPGInfo;
+    break;
+  case MSG_OSD_PG_CREATE:
+    m = new MOSDPGCreate;
     break;
 
 
@@ -239,22 +247,22 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     break;
 
   case CEPH_MSG_MDS_GETMAP:
-	m = new MMDSGetMap();
-	break;
+    m = new MMDSGetMap;
+    break;
   case CEPH_MSG_MDS_MAP:
-	m = new MMDSMap();
-	break;
+    m = new MMDSMap;
+    break;
   case MSG_MDS_BEACON:
-	m = new MMDSBeacon;
-	break;
+    m = new MMDSBeacon;
+    break;
   case MSG_MDS_RESOLVE:
-	m = new MMDSResolve;
-	break;
+    m = new MMDSResolve;
+    break;
   case MSG_MDS_RESOLVEACK:
-	m = new MMDSResolveAck;
-	break;
+    m = new MMDSResolveAck;
+    break;
   case MSG_MDS_CACHEREJOIN:
-	m = new MMDSCacheRejoin;
+    m = new MMDSCacheRejoin;
 	break;
 	/*
   case MSG_MDS_CACHEREJOINACK:

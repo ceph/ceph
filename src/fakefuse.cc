@@ -22,7 +22,7 @@ using namespace std;
 #include "config.h"
 
 #include "mon/Monitor.h"
-
+#include "mon/MonitorStore.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
 #include "client/Client.h"
@@ -32,6 +32,7 @@ using namespace std;
 #include "common/Timer.h"
 
 #include "msg/FakeMessenger.h"
+#include "messages/MMonCommand.h"
 
 
 
@@ -96,7 +97,11 @@ int main(int argc, const char **argv) {
 
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-    mon[i] = new Monitor(i, new FakeMessenger(entity_name_t::MON(i)), monmap);
+    char fn[100];
+    sprintf(fn, "mondata/mon%d", i);
+    MonitorStore *store = new MonitorStore(fn);
+    mon[i] = new Monitor(i, store, new FakeMessenger(entity_name_t::MON(i)), monmap);
+    mon[i]->mkfs();
   }
 
   // create osd
@@ -112,13 +117,28 @@ int main(int argc, const char **argv) {
   }
  
   // init
-  for (int i=0; i<g_conf.num_mon; i++) 
+  for (int i=0; i<g_conf.num_mon; i++)
     mon[i]->init();
-  for (int i=0; i<NUMMDS; i++) 
-    mds[i]->init();  
+
+  // build initial osd map
+  {
+    OSDMap map;
+    map.build_simple(0, monmap->fsid, g_conf.num_osd, g_conf.osd_pg_bits, 0);
+    bufferlist bl;
+    map.encode(bl);
+    Messenger *messenger = new FakeMessenger(entity_name_t::ADMIN(-1));
+    MMonCommand *m = new MMonCommand(messenger->get_myinst());
+    m->set_data(bl);
+    m->cmd.push_back("osd");
+    m->cmd.push_back("setmap");
+    messenger->send_message(m, monmap->get_inst(0));
+    messenger->shutdown();
+  }
+
   for (int i=0; i<NUMOSD; i++) 
     osd[i]->init();
-
+  for (int i=0; i<NUMMDS; i++) 
+    mds[i]->init();  
 
   // create client
   Client *client[NUMCLIENT];

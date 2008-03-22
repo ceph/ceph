@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 #include "client/Client.h"
 #include "config.h"
-#include "client/fuse.h"
 #include "msg/SimpleMessenger.h"
 #include "common/Timer.h"
 

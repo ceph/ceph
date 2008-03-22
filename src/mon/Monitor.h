@@ -39,6 +39,8 @@ class MDSMonitor;
 class ClientMonitor;
 class PGMonitor;
 
+class MMonGetMap;
+
 class Monitor : public Dispatcher {
 public:
   // me
@@ -115,20 +117,33 @@ public:
 
 
   // messages
+  void handle_mon_get_map(MMonGetMap *m);
   void handle_shutdown(Message *m);
   void handle_ping_ack(class MPingAck *m);
   void handle_command(class MMonCommand *m);
 
-  int do_command(vector<string>& cmd, bufferlist& data, 
-		 bufferlist& rdata, string &rs);
+  void reply_command(MMonCommand *m, int rc, const string &rs);
+  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
+public:
+  struct C_Command : public Context {
+    Monitor *mon;
+    MMonCommand *m;
+    int rc;
+    string rs;
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s) :
+      mon(_mm), m(_m), rc(r), rs(s) {}
+    void finish(int r) {
+      mon->reply_command(m, rc, rs);
+    }
+  };
 
  public:
-  Monitor(int w, Messenger *m, MonMap *mm) : 
+  Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) : 
     whoami(w), 
     messenger(m),
-    monmap(mm),
+    monmap(map),
     timer(lock), tick_timer(0),
-    store(0),
+    store(s),
 
     state(STATE_STARTING), stopping(false),
 
@@ -148,12 +163,15 @@ public:
     delete messenger;
   }
 
+  void preinit();
   void init();
   void shutdown();
   void dispatch(Message *m);
   void tick();
 
   void do_stop();
+
+  int mkfs();
 
 };
 

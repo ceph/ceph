@@ -66,14 +66,13 @@ private:
   class Accepter : public Thread {
   public:
     bool done;
-
-    int       listen_sd;
+    int listen_sd;
     
-    Accepter() : done(false) {}
+    Accepter() : done(false), listen_sd(-1) {}
     
     void *entry();
     void stop();
-    int bind();
+    int bind(int64_t force_nonce);
     int start();
   } accepter;
 
@@ -125,7 +124,8 @@ private:
     void writer();
 
     Message *read_message();
-    int write_message(Message *m);
+    int write_message(Message *m, ceph_msg_header *env, 
+		      bufferlist &payload, bufferlist &data);
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
 
@@ -153,7 +153,7 @@ private:
     
   public:
     Pipe(int st) : 
-      sd(0),
+      sd(-1),
       state(st), 
       reader_running(false), kick_reader_on_join(false), writer_running(false),
       connect_seq(0),
@@ -200,7 +200,7 @@ private:
     }
 
     void force_close() {
-      if (sd > 0) ::close(sd);
+      if (sd >= 0) ::close(sd);
     }
   };
 
@@ -343,8 +343,8 @@ public:
 
   //void set_listen_addr(tcpaddr_t& a);
 
-  int bind();
-  int start();
+  int bind(int64_t force_nonce = -1);
+  int start(bool nodaemon = false);
   void wait();
 
   EntityMessenger *register_entity(entity_name_t addr);

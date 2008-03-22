@@ -40,7 +40,7 @@ class MOSDOp;
 class MOSDOpReply;
 class MOSDSubOp;
 class MOSDSubOpReply;
-class MOSDPGActivateSet;
+class MOSDPGInfo;
 
 /** PG - Replica Placement Group
  *
@@ -66,6 +66,7 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
+    epoch_t epoch_created;       // epoch in which it was created
     epoch_t last_epoch_started;  // last epoch started.
     epoch_t last_epoch_finished; // last epoch finished.
 
@@ -78,9 +79,11 @@ public:
     
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
+		     epoch_created(0),
                      last_epoch_started(0), last_epoch_finished(0) {}
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
+    bool dne() const { return epoch_created == 0; }
   };
   
   
@@ -372,32 +375,6 @@ public:
 
 
   /*** PG ****/
-public:
-  // any
-  static const int STATE_ACTIVE = 1; // i am active.  (primary: replicas too)
-  
-  // primary
-  static const int STATE_CLEAN =  2;  // peers are complete, clean of stray replicas.
-  static const int STATE_CRASHED = 4; // all replicas went down.
-  static const int STATE_REPLAY = 8;  // crashed, waiting for replay
- 
-  // non-primary
-  static const int STATE_STRAY =  16; // i must notify the primary i exist.
-
-  static std::string get_state_string(int state) {
-    std::string st;
-    if (state & STATE_ACTIVE) st += "active+";
-    if (state & STATE_CLEAN) st += "clean+";
-    if (state & STATE_CRASHED) st += "crashed+";
-    if (state & STATE_REPLAY) st += "replay+";
-    if (state & STATE_STRAY) st += "stray+";
-    if (!st.length()) 
-      st = "inactive";
-    else 
-      st.resize(st.length()-1);
-    return st;
-  }
-
 protected:
   OSD *osd;
 
@@ -546,9 +523,9 @@ public:
 
   void peer(ObjectStore::Transaction& t, 
 	    map< int, map<pg_t,Query> >& query_map,
-	    map<int, MOSDPGActivateSet*> *activator_map=0);
+	    map<int, MOSDPGInfo*> *activator_map=0);
   void activate(ObjectStore::Transaction& t, 
-		map<int, MOSDPGActivateSet*> *activator_map=0);
+		map<int, MOSDPGInfo*> *activator_map=0);
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
@@ -611,12 +588,12 @@ public:
 
   bool is_complete() const { return info.last_complete == info.last_update; }
 
-  bool       is_active() const { return state_test(STATE_ACTIVE); }
-  bool       is_crashed() const { return state_test(STATE_CRASHED); }
-  bool       is_replay() const { return state_test(STATE_REPLAY); }
-  //bool       is_complete()    { return state_test(STATE_COMPLETE); }
-  bool       is_clean() const { return state_test(STATE_CLEAN); }
-  bool       is_stray() const { return state_test(STATE_STRAY); }
+  bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
+  bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
+  //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
+  bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool       is_stray() const { return state_test(PG_STATE_STRAY); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
@@ -672,6 +649,8 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
   out << pgi.pgid << "(";
+  if (pgi.dne())
+    out << " DNE";
   if (pgi.is_empty())
     out << " empty";
   else

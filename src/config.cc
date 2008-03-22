@@ -15,25 +15,50 @@
 
 #include "config.h"
 #include "include/types.h"
+
 #include <fstream>
 #include <stdlib.h>
-
-//#define MDS_CACHE_SIZE        4*10000   -> <20mb
-//#define MDS_CACHE_SIZE        80000         62mb
-
-#define AVG_PER_INODE_SIZE    450
-#define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
-
-//#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
-//#define MDS_CACHE_SIZE 1500000
-#define MDS_CACHE_SIZE 150000
-
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
 atomic_t buffer_total_alloc;
 
 #include "osd/osd_types.h"
+
+int buffer::list::read_file(const char *fn)
+{
+  struct stat st;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
+    return -errno;
+  }
+  ::fstat(fd, &st);
+  int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
+  bufferptr bp = buffer::create_page_aligned(s);
+  append(bp);
+  ::read(fd, (void*)c_str(), length());
+  ::close(fd);
+  return 0;
+}
+
+int buffer::list::write_file(const char *fn)
+{
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0) {
+    cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
+    return -errno;
+  }
+  ::write(fd, (void*)c_str(), length());
+  ::close(fd);
+  return 0;
+}
+
+
 
 // debug output
 Mutex _dout_lock;
@@ -59,44 +84,52 @@ unsigned _page_shift = _get_bits_of(_page_size);
 int _num_threads = 0;
 
 // file layouts
-struct ceph_file_layout g_OSD_FileLayout = {
+struct ceph_file_layout g_default_file_layout = {
  fl_stripe_unit: 1<<22,
  fl_stripe_count: 1,
  fl_object_size: 1<<22,
+ fl_cas_hash: 0,
  fl_object_stripe_unit: 0,
  fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2
+ fl_pg_size: 2,
+ fl_pg_pool: 0
 };
 
-struct ceph_file_layout g_OSD_MDDirLayout = {
+struct ceph_file_layout g_default_mds_dir_layout = {
  fl_stripe_unit: 1<<22,
  fl_stripe_count: 1,
  fl_object_size: 1<<22,
+ fl_cas_hash: 0,
  fl_object_stripe_unit: 0,
  fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2
+ fl_pg_size: 2,
+ fl_pg_pool: 0
 };
 
-struct ceph_file_layout g_OSD_MDLogLayout = {
+struct ceph_file_layout g_default_mds_log_layout = {
  fl_stripe_unit: 1<<20,
  fl_stripe_count: 1,
  fl_object_size: 1<<20,
+ fl_cas_hash: 0,
  fl_object_stripe_unit: 0,
  fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2
+ fl_pg_size: 2,
+ fl_pg_pool: 0
 };
 
-struct ceph_file_layout g_OSD_MDAnchorTableLayout = {
+struct ceph_file_layout g_default_mds_anchortable_layout = {
  fl_stripe_unit: 1<<20,
  fl_stripe_count: 1,
  fl_object_size: 1<<20,
+ fl_cas_hash: 0,
  fl_object_stripe_unit: 0,
  fl_pg_preferred: -1,
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2
+ fl_pg_size: 2,
+ fl_pg_pool: 0
 };
 
 #include <msg/msg_types.h>
@@ -118,6 +151,7 @@ md_config_t g_conf = {
 
   mkfs: false,
 
+  mon_host: 0,
   daemonize: false,
 
   // profiling and debugging
@@ -161,6 +195,8 @@ md_config_t g_conf = {
   debug_client: 0,
   debug_osd: 0,
   debug_ebofs: 1,
+  debug_fakestore: 1,
+  debug_journal: 1,
   debug_bdev: 1,         // block device
   debug_ns: 0,
   debug_ms: 0,
@@ -199,6 +235,7 @@ md_config_t g_conf = {
   mon_stop_on_last_unmount: false,
   mon_stop_with_last_mds: false,
   mon_allow_mds_bully: false,   // allow a booting mds to (forcibly) claim an mds # .. FIXME
+  mon_pg_create_interval: 30.0, // no more than every 30s
 
   paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
 
@@ -237,7 +274,7 @@ md_config_t g_conf = {
   journaler_batch_max: 16384,        // max bytes we'll delay flushing
 
   // --- mds ---
-  mds_cache_size: 300000,  //MDS_CACHE_SIZE,
+  mds_cache_size: 300000,
   mds_cache_mid: .7,
 
   mds_decay_halflife: 5,
@@ -251,8 +288,8 @@ md_config_t g_conf = {
   mds_tick_interval: 5,
 
   mds_log: true,
-  mds_log_max_events: -1, //MDS_CACHE_SIZE / 3,
-  mds_log_max_segments: 100,
+  mds_log_max_events: -1,
+  mds_log_max_segments: 100,  // segment size defined by FileLayout, above
   mds_log_max_expiring: 20,
   mds_log_pad_entry: 128,//256,//64,
   mds_log_eopen_size: 100,   // # open inodes per log entry
@@ -333,14 +370,9 @@ md_config_t g_conf = {
 
   osd_auto_weight: false,
 
-  osd_hack_fast_startup: false,  // this breaks localized pgs.
-
   
   // --- fakestore ---
-  fakestore_fake_sync: .2,    // seconds
-  fakestore_fsync: false,//true,
-  fakestore_writesync: false,
-  fakestore_syncthreads: 4,
+  fakestore_sync_interval: 2,    // seconds
   fakestore_fake_attrs: false,
   fakestore_fake_collections: false,   
   fakestore_dev: 0,
@@ -357,9 +389,11 @@ md_config_t g_conf = {
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: false,    // hrm, this can cause bad fragmentation, don't use!
   ebofs_verify_csum_on_read: true,
-  ebofs_journal_dio: false,
-  ebofs_journal_max_write_bytes: 0,
-  ebofs_journal_max_write_entries: 10,
+
+  // journal
+  journal_dio: false,
+  journal_max_write_bytes: 0,
+  journal_max_write_entries: 10,
 
   // --- block device ---
   bdev_lock: true,
@@ -494,6 +528,9 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--numosd") == 0) 
       g_conf.num_osd = atoi(args[++i]);
     
+    else if (strcmp(args[i], "--mon_host") == 0 ||
+	     strcmp(args[i], "-m") == 0)
+      g_conf.mon_host = args[++i];    
     else if (strcmp(args[i], "--daemonize") == 0 ||
 	     strcmp(args[i], "-d") == 0)
       g_conf.daemonize = true;	     
@@ -561,9 +598,9 @@ void parse_config_options(std::vector<const char*>& args)
 
     
     
-    else if (strcmp(args[i], "--doutdir") == 0) {
+    else if (strcmp(args[i], "-o") == 0 ||
+	     strcmp(args[i], "--doutdir") == 0) 
       g_conf.dout_dir = args[++i];
-    }
 
     else if (strcmp(args[i], "--debug") == 0) 
       if (!g_conf.debug_after) 
@@ -640,6 +677,16 @@ void parse_config_options(std::vector<const char*>& args)
         g_conf.debug_ebofs = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_ebofs = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_fakestore") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_fakestore = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_fakestore = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_journal") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_journal = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_journal = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_bdev") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_bdev = atoi(args[++i]);
@@ -819,22 +866,21 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
       g_conf.ebofs_realloc = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_journal_dio") == 0)
-      g_conf.ebofs_journal_dio = atoi(args[++i]);      
-    else if (strcmp(args[i], "--ebofs_journal_max_write_entries") == 0)
-      g_conf.ebofs_journal_max_write_entries = atoi(args[++i]);      
-    else if (strcmp(args[i], "--ebofs_journal_max_write_bytes") == 0)
-      g_conf.ebofs_journal_max_write_bytes = atoi(args[++i]);      
+\
+    else if (strcmp(args[i], "--journal_dio") == 0)
+      g_conf.journal_dio = atoi(args[++i]);      
+    else if (strcmp(args[i], "--journal_max_write_entries") == 0)
+      g_conf.journal_max_write_entries = atoi(args[++i]);      
+    else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
+      g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
     else if (strcmp(args[i], "--fakestore") == 0) {
       g_conf.ebofs = 0;
       //g_conf.osd_pg_bits = 5;
       //g_conf.osd_maxthreads = 1;   // fucking hell
     }
-    else if (strcmp(args[i], "--fakestore_fsync") == 0) 
-      g_conf.fakestore_fsync = atoi(args[++i]);
-    else if (strcmp(args[i], "--fakestore_writesync") == 0) 
-      g_conf.fakestore_writesync = atoi(args[++i]);
+    else if (strcmp(args[i], "--fakestore_sync_interval") == 0)
+      g_conf.fakestore_sync_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
       g_conf.fakestore_dev = args[++i];
     else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 
@@ -899,9 +945,6 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--osd_auto_weight") == 0) 
       g_conf.osd_auto_weight = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_hack_fast_startup") == 0) 
-      g_conf.osd_hack_fast_startup = atoi(args[++i]);
-
     else if (strcmp(args[i], "--bdev_lock") == 0) 
       g_conf.bdev_lock = atoi(args[++i]);
     else if (strcmp(args[i], "--bdev_el_bidir") == 0) 
@@ -938,38 +981,38 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.tick = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_unit") == 0) 
-      g_OSD_FileLayout.fl_stripe_unit = atoi(args[++i]);
+      g_default_file_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_count") == 0) 
-      g_OSD_FileLayout.fl_stripe_count = atoi(args[++i]);
+      g_default_file_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_osize") == 0) 
-      g_OSD_FileLayout.fl_object_size = atoi(args[++i]);
+      g_default_file_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_type") == 0) 
-      g_OSD_FileLayout.fl_pg_type = atoi(args[++i]);
+      g_default_file_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_size") == 0) 
-      g_OSD_FileLayout.fl_pg_size = atoi(args[++i]);
+      g_default_file_layout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_dir_layout_unit") == 0) 
-      g_OSD_MDDirLayout.fl_stripe_unit = atoi(args[++i]);
+      g_default_mds_dir_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
-      g_OSD_MDDirLayout.fl_stripe_count = atoi(args[++i]);
+      g_default_mds_dir_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
-      g_OSD_MDDirLayout.fl_object_size = atoi(args[++i]);
+      g_default_mds_dir_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0) 
-      g_OSD_MDDirLayout.fl_pg_type = atoi(args[++i]);
+      g_default_mds_dir_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0) 
-      g_OSD_MDDirLayout.fl_pg_size = atoi(args[++i]);
+      g_default_mds_dir_layout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_log_layout_unit") == 0) 
-      g_OSD_MDLogLayout.fl_stripe_unit = atoi(args[++i]);
+      g_default_mds_log_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
-      g_OSD_MDLogLayout.fl_stripe_count = atoi(args[++i]);
+      g_default_mds_log_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
-      g_OSD_MDLogLayout.fl_object_size = atoi(args[++i]);
+      g_default_mds_log_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0) 
-      g_OSD_MDLogLayout.fl_pg_type = atoi(args[++i]);
+      g_default_mds_log_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0) {
-      g_OSD_MDLogLayout.fl_pg_size = atoi(args[++i]);
-      if (!g_OSD_MDLogLayout.fl_pg_size)
+      g_default_mds_log_layout.fl_pg_size = atoi(args[++i]);
+      if (!g_default_mds_log_layout.fl_pg_size)
         g_conf.mds_log = false;
     }
 

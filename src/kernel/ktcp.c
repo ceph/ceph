@@ -152,7 +152,11 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "sock_create_kern error: %d\n", ret);
 		return ret;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+#else
+	ret = sock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+#endif
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
 		derr(0, "Failed to set SO_REUSEADDR: %d\n", ret);
@@ -175,9 +179,13 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "failed to getsockname: %d\n", ret);
 		goto err;
 	}
-	dout(0, "ceph_tcp_listen on port %d\n", ntohs(myaddr->sin_port));
+	dout(10, "listen on port %d\n", ntohs(myaddr->sin_port));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
+#else
+	ret = sock_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
+#endif
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
 		derr(0, "Failed to set SO_KEEPALIVE: %d\n", ret);

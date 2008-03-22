@@ -6,10 +6,12 @@
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
 #include <linux/ceph_fs.h>
+#include <linux/version.h>
 
 struct ceph_msg;
 
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
+typedef void (*ceph_msgr_peer_reset_t) (void *c);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
@@ -27,6 +29,7 @@ static __inline__ const char *ceph_name_type_str(int t) {
 struct ceph_messenger {
 	void *parent;
 	ceph_msgr_dispatch_t dispatch;
+	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
 	struct socket *listen_sock; 	 /* listening socket */
@@ -109,7 +112,11 @@ struct ceph_connection {
 	struct ceph_msg_pos in_msg_pos;
 
 	struct work_struct rwork;		/* receive work */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work swork;		/* send work */
+#else
+	struct work_struct	swork;		/* send work */
+#endif
         unsigned long           delay;          /* delay interval */
         unsigned int            retries;        /* temp track of retries */
 };
@@ -129,98 +136,5 @@ static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 extern void ceph_msg_put(struct ceph_msg *msg);
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, 
 			 unsigned long timeout);
-
-
-/* encoding/decoding helpers */
-static __inline__ int ceph_decode_64(void **p, void *end, __u64 *v) {
-	if (unlikely(*p + sizeof(*v) > end))
-		return -EINVAL;
-	*v = le64_to_cpu(*(__u64*)*p);
-	*p += sizeof(*v);
-	return 0;
-}
-static __inline__ int ceph_decode_32(void **p, void *end, __u32 *v) {
-	if (unlikely(*p + sizeof(*v) > end))
-		return -EINVAL;
-	*v = le32_to_cpu(*(__u32*)*p);
-	*p += sizeof(*v);
-	return 0;
-}
-static __inline__ int ceph_decode_16(void **p, void *end, __u16 *v) {
-	if (unlikely(*p + sizeof(*v) > end))
-		return -EINVAL;
-	*v = le16_to_cpu(*(__u16*)*p);
-	*p += sizeof(*v);
-	return 0;
-}
-static __inline__ int ceph_decode_copy(void **p, void *end, void *v, int len) {
-	if (unlikely(*p + len > end)) 
-		return -EINVAL;
-	memcpy(v, *p, len);
-	*p += len;
-	return 0;
-}
-
-static __inline__ int ceph_encode_64(void **p, void *end, __u64 v) {
-	BUG_ON(*p + sizeof(v) > end);
-	*(__u64*)*p = cpu_to_le64(v);
-	*p += sizeof(v);
-	return 0;
-}
-
-static __inline__ int ceph_encode_32(void **p, void *end, __u32 v) {
-	BUG_ON(*p + sizeof(v) > end);
-	*(__u32*)*p = cpu_to_le32(v);
-	*p += sizeof(v);
-	return 0;
-}
-
-static __inline__ int ceph_encode_16(void **p, void *end, __u16 v) {
-	BUG_ON(*p + sizeof(v) > end);
-	*(__u16*)*p = cpu_to_le16(v);
-	*p += sizeof(v);
-	return 0;
-}
-
-static __inline__ int ceph_encode_8(void **p, void *end, __u8 v) {
-	BUG_ON(*p >= end);
-	*(__u8*)*p = v;
-	(*p)++;
-	return 0;
-}
-
-static __inline__ int ceph_encode_filepath(void **p, void *end, ceph_ino_t ino, const char *path)
-{
-	__u32 len = path ? strlen(path):0;
-	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
-	ceph_encode_64(p, end, ino);
-	ceph_encode_32(p, end, len);
-	if (len) memcpy(*p, path, len);
-	*p += len;
-	return 0;
-}
-
-static __inline__ int ceph_encode_string(void **p, void *end, const char *s, __u32 len)
-{
-	BUG_ON(*p + sizeof(len) + len > end);
-	ceph_encode_32(p, end, len);
-	if (len) memcpy(*p, s, len);
-	*p += len;
-	return 0;
-}
-
-static __inline__ void ceph_decode_timespec(struct timespec *ts, struct ceph_timeval *tv)
-{
-	ts->tv_sec = le32_to_cpu(tv->tv_sec);
-	ts->tv_nsec = 1000*le32_to_cpu(tv->tv_usec);
-}
-static __inline__ int ceph_encode_timespec(struct ceph_timeval *tv, struct timespec *ts)
-{
-	int usec = ts->tv_nsec;
-	do_div(usec, 1000);
-	tv->tv_sec = cpu_to_le32(ts->tv_sec);
-	tv->tv_usec = cpu_to_le32(usec);
-	return 0;
-}
 
 #endif

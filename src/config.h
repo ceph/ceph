@@ -12,13 +12,13 @@
  * 
  */
 
-#ifndef __CONFIG_H
-#define __CONFIG_H
+#ifndef __CEPH_CONFIG_H
+#define __CEPH_CONFIG_H
 
-extern struct ceph_file_layout g_OSD_FileLayout;
-extern struct ceph_file_layout g_OSD_MDDirLayout;
-extern struct ceph_file_layout g_OSD_MDLogLayout;
-extern struct ceph_file_layout g_OSD_MDAnchorTableLayout;
+extern struct ceph_file_layout g_default_file_layout;
+extern struct ceph_file_layout g_default_mds_dir_layout;
+extern struct ceph_file_layout g_default_mds_log_layout;
+extern struct ceph_file_layout g_default_mds_anchortable_layout;
 
 #include <vector>
 #include <map>
@@ -44,7 +44,8 @@ struct md_config_t {
   int  num_client;
 
   bool mkfs;
-
+  
+  const char *mon_host;
   bool daemonize;
 
   // profiling
@@ -88,6 +89,8 @@ struct md_config_t {
   int debug_client;
   int debug_osd;
   int debug_ebofs;
+  int debug_fakestore;
+  int debug_journal;
   int debug_bdev;
   int debug_ns;
   int debug_ms;
@@ -135,6 +138,7 @@ struct md_config_t {
   bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
   bool mon_allow_mds_bully;
+  float mon_pg_create_interval;
 
   double paxos_propose_interval;
 
@@ -267,12 +271,8 @@ struct md_config_t {
 
   bool osd_auto_weight;
 
-  bool osd_hack_fast_startup;
-
-  double   fakestore_fake_sync;
-  bool  fakestore_fsync;
-  bool  fakestore_writesync;
-  int   fakestore_syncthreads;   // such crap
+  // fakestore
+  double   fakestore_sync_interval;
   bool  fakestore_fake_attrs;
   bool  fakestore_fake_collections;
   const char  *fakestore_dev;
@@ -289,10 +289,12 @@ struct md_config_t {
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
-  bool ebofs_journal_dio;
-  bool ebofs_journal_max_write_bytes;
-  bool ebofs_journal_max_write_entries;
   
+  // journal
+  bool journal_dio;
+  bool journal_max_write_bytes;
+  bool journal_max_write_entries;
+
   // block device
   bool  bdev_lock;
   int   bdev_iothreads;

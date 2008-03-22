@@ -23,6 +23,10 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxosservice(" << get_paxos_name(paxos->machine_id) << ") "
 
 
+const char *PaxosService::get_machine_name()
+{
+  return paxos->get_machine_name();
+}
 
 
 void PaxosService::dispatch(Message *m)
@@ -110,6 +114,7 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
+  assert(mon->is_leader());
 
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
@@ -159,12 +164,6 @@ void PaxosService::_active()
     if (!have_pending) {
       create_pending();
       have_pending = true;
-    }
-
-    if (g_conf.mkfs &&
-	paxos->get_version() == 0) {
-      create_initial();
-      propose_pending();
     }
   }
 }

@@ -40,7 +40,7 @@ public:
       pthread_mutex_init(&_m,NULL);
     }
   }
-  virtual ~Mutex() {
+  ~Mutex() {
     assert(nlock == 0);
     pthread_mutex_destroy(&_m); 
   }

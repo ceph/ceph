@@ -30,6 +30,7 @@ using namespace std;
 
 #include "common/Timer.h"
 
+#include "mon/MonClient.h"
 
 int main(int argc, const char **argv) 
 {
@@ -39,6 +40,7 @@ int main(int argc, const char **argv)
   parse_config_options(args);
 
   // mds specific args
+  const char *monhost = 0;
   int whoami = -1;
   bool standby = false;  // by default, i'll start active.
   for (unsigned i=0; i<args.size(); i++) {
@@ -46,6 +48,8 @@ int main(int argc, const char **argv)
       standby = true;
     else if (strcmp(args[i], "--mds") == 0) 
       whoami = atoi(args[++i]);
+    else if (monhost == 0) 
+      monhost = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       return -1;
@@ -54,20 +58,14 @@ int main(int argc, const char **argv)
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  // load monmap
+  // get monmap
   MonMap monmap;
-  const char *monmap_fn = ".ceph_monmap";
-  int r = monmap.read(monmap_fn);
-  if (r < 0) {
-    cerr << "couldn't read monmap from " << monmap_fn
-	 << ": " << strerror(errno) << std::endl;
+  MonClient mc;
+  if (mc.get_monmap(&monmap) < 0)
     return -1;
-  }
 
-  // start up network
   rank.bind();
   cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
-
   rank.start();
 
   // start mds

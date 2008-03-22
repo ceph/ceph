@@ -24,7 +24,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
-#include "messages/MOSDPGActivateSet.h"
+#include "messages/MOSDPGInfo.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
@@ -579,7 +579,7 @@ void PG::clear_primary_state()
 
 void PG::peer(ObjectStore::Transaction& t, 
               map< int, map<pg_t,Query> >& query_map,
-	      map<int, MOSDPGActivateSet*> *activator_map)
+	      map<int, MOSDPGInfo*> *activator_map)
 {
   dout(10) << "peer.  acting is " << acting 
            << ", prior_set is " << prior_set << dendl;
@@ -656,14 +656,14 @@ void PG::peer(ObjectStore::Transaction& t,
 	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
       } else {
 	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-	state_set(STATE_CRASHED);
+	state_set(PG_STATE_CRASHED);
       }
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
-  } else if (osd->osdmap->post_mkfs()) {
+  } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-    state_set(STATE_CRASHED);
+    state_set(PG_STATE_CRASHED);
   }    
 
   dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
@@ -820,7 +820,7 @@ void PG::peer(ObjectStore::Transaction& t,
   // -- crash recovery?
   if (is_crashed()) {
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << dendl;
-    state_set(STATE_REPLAY);
+    state_set(PG_STATE_REPLAY);
     osd->timer.add_event_after(g_conf.osd_replay_window,
 			       new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
   } 
@@ -832,17 +832,17 @@ void PG::peer(ObjectStore::Transaction& t,
 
 
 void PG::activate(ObjectStore::Transaction& t,
-		  map<int, MOSDPGActivateSet*> *activator_map)
+		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
 
   // twiddle pg state
-  state_set(STATE_ACTIVE);
-  state_clear(STATE_STRAY);
+  state_set(PG_STATE_ACTIVE);
+  state_clear(PG_STATE_STRAY);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
-    state_clear(STATE_CRASHED);
-    state_clear(STATE_REPLAY);
+    state_clear(PG_STATE_CRASHED);
+    state_clear(PG_STATE_REPLAY);
   }
   last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
   
@@ -888,8 +888,7 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // if primary..
-  if (role == 0 &&
-      (!g_conf.osd_hack_fast_startup || osd->osdmap->post_mkfs())) {
+  if (role == 0) {
     // who is clean?
     uptodate_set.clear();
     if (info.is_uptodate()) 
@@ -907,7 +906,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	if (activator_map) {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
-	    (*activator_map)[peer] = new MOSDPGActivateSet(osd->osdmap->get_epoch());
+	    (*activator_map)[peer] = new MOSDPGInfo(osd->osdmap->get_epoch());
 	  (*activator_map)[peer]->pg_info.push_back(info);
 	} else {
 	  dout(10) << "activate - peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;
@@ -1007,8 +1006,7 @@ void PG::activate(ObjectStore::Transaction& t,
 void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
-
-  state_set(PG::STATE_CLEAN);
+  state_set(PG_STATE_CLEAN);
   purge_strays();
   update_stats();
 }
@@ -1062,8 +1060,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove( info.pgid.to_object() );
-  t.write( info.pgid.to_object() , 0, bl.length(), bl);
+  t.remove( info.pgid.to_pobject() );
+  t.write( info.pgid.to_pobject() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1101,7 +1099,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid.to_object(), 0, ondisklog.bottom);
+  t.zero(info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1117,7 +1115,7 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
     bufferptr bp(4096 - sizeof(logentry));
     bl.push_back(bp);
   }
-  t.write( info.pgid.to_object(), ondisklog.top, bl.length(), bl );
+  t.write( info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1155,7 +1153,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid.to_object(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);
@@ -1197,7 +1195,8 @@ void PG::read_log(ObjectStore *store)
     if (i->is_delete()) continue;
 
     eversion_t v;
-    int r = osd->store->getattr(i->oid, "version", &v, sizeof(v));
+    pobject_t poid(info.pgid.pool(), 0, i->oid);
+    int r = osd->store->getattr(poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
       missing.add(i->oid, i->version);
   }
@@ -1215,16 +1214,16 @@ void PG::read_log(ObjectStore *store)
 // 
 bool PG::block_if_wrlocked(MOSDOp* op)
 {
-  object_t oid = op->get_oid();
+  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   entity_name_t source;
-  int len = osd->store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
+  int len = osd->store->getattr(poid, "wrlock", &source, sizeof(entity_name_t));
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
       source != op->get_client()) {
     //the object is locked for writing by someone else -- add the op to the waiting queue      
-    waiting_for_wr_unlock[oid].push_back(op);
+    waiting_for_wr_unlock[poid.oid].push_back(op);
     return true;
   }
   
@@ -1271,7 +1270,7 @@ bool PG::pick_missing_object_rev(object_t& oid)
 
 bool PG::pick_object_rev(object_t& oid)
 {
-  pobject_t t = oid;
+  pobject_t t(info.pgid.pool(), 0, oid);
 
   if (!osd->store->pick_object_revision_lt(t))
     return false; // we have no revisions of this object!

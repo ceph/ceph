@@ -68,9 +68,9 @@ typedef uint64_t coll_t;        // collection id
 // pg stuff
 
 typedef uint16_t ps_t;
-typedef uint8_t pruleset_t;
 
-
+#define OSD_METADATA_PG_POOL 0xff
+#define OSD_SUPERBLOCK_POBJECT pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0,0))
 
 // placement group id
 struct pg_t {
@@ -84,12 +84,13 @@ public:
 public:
   pg_t() { u.pg64 = 0; }
   pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
-  pg_t(int type, int size, ps_t seed, int pref) {//, pruleset_t r=0) {
+  pg_t(int type, int size, ps_t seed, int pool, int pref) {
+    u.pg64 = 0;
     u.pg.type = type;
     u.pg.size = size;
     u.pg.ps = seed;
+    u.pg.pool = pool;
     u.pg.preferred = pref;   // hack: avoid negative.
-    //u.pg.ruleset = r;
     assert(sizeof(u.pg) == sizeof(u.pg64));
   }
   pg_t(uint64_t v) { u.pg64 = v; }
@@ -103,7 +104,7 @@ public:
 
   int size() { return u.pg.size; }
   ps_t ps() { return u.pg.ps; }
-  //pruleset_t ruleset() { return u.pg.ruleset; }
+  int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
   
   /*
@@ -115,12 +116,12 @@ public:
   */
   operator uint64_t() const { return u.pg64; }
 
-  pobject_t to_object() const { 
-    return pobject_t(1,  // volume 1 == osd metadata, for now
+  pobject_t to_pobject() const { 
+    return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
 		     0,
 		     object_t(u.pg64, 0));
   }
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
@@ -131,11 +132,10 @@ inline ostream& operator<<(ostream& out, pg_t pg)
   else 
     out << pg.size() << '?';
   
-  //if (pg.ruleset())
-  //out << (int)pg.ruleset() << 's';
-  
   out << hex << pg.ps() << dec;
 
+  if (pg.pool() > 0)
+    out << 'v' << pg.pool();
   if (pg.preferred() >= 0)
     out << 'p' << pg.preferred();
 
@@ -171,21 +171,21 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 // compound rados version type
 class eversion_t {
 public:
-  epoch_t epoch;
   version_t version;
-  eversion_t() : epoch(0), version(0) {}
-  eversion_t(epoch_t e, version_t v) : epoch(e), version(v) {}
+  epoch_t epoch;
+  eversion_t() : version(0), epoch(0) {}
+  eversion_t(epoch_t e, version_t v) : version(v), epoch(e) {}
 
   eversion_t(const ceph_eversion& ce) : 
-    epoch(le32_to_cpu(ce.epoch)), 
-    version(le64_to_cpu(ce.version)) {}    
+    version(le64_to_cpu(ce.version)),
+    epoch(le32_to_cpu(ce.epoch)) {}
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = cpu_to_le32(epoch);
     c.version = cpu_to_le64(version);
     return c;
   }
-};
+} __attribute__ ((packed));
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
@@ -223,19 +223,49 @@ struct osd_stat_t {
 };
 
 
+
+/*
+ * pg states
+ */
+#define PG_STATE_CREATING   1  // creating
+#define PG_STATE_ACTIVE     2  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN      4  // peers are complete, clean of stray replicas.
+#define PG_STATE_CRASHED    8  // all replicas went down. 
+#define PG_STATE_REPLAY    16  // crashed, waiting for replay
+#define PG_STATE_STRAY     32  // i must notify the primary i exist.
+#define PG_STATE_SPLITTING 64  // i am splitting
+
+static inline std::string pg_state_string(int state) {
+  std::string st;
+  if (state & PG_STATE_CREATING) st += "creating+";
+  if (state & PG_STATE_ACTIVE) st += "active+";
+  if (state & PG_STATE_CLEAN) st += "clean+";
+  if (state & PG_STATE_CRASHED) st += "crashed+";
+  if (state & PG_STATE_REPLAY) st += "replay+";
+  if (state & PG_STATE_STRAY) st += "stray+";
+  if (state & PG_STATE_SPLITTING) st += "splitting+";
+  if (!st.length()) 
+    st = "inactive";
+  else 
+    st.resize(st.length()-1);
+  return st;
+}
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
   eversion_t reported;
-  
+  epoch_t created;
+  pg_t    parent;
+  int32_t parent_split_bits;
   int32_t state;
   int64_t num_bytes;    // in bytes
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
-  pg_stat_t() : state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
-};
+  pg_stat_t() : parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
+} __attribute__ ((packed));
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 

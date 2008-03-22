@@ -906,6 +906,9 @@ public:
       out.unsetf(std::ios::right);
     }
 
+    int read_file(const char *fn);
+    int write_file(const char *fn);
+
   };
 };
 

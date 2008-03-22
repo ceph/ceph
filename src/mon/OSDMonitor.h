@@ -31,6 +31,7 @@ using namespace std;
 
 class Monitor;
 class MOSDBoot;
+class MMonCommand;
 
 class OSDMonitor : public PaxosService {
 public:
@@ -45,11 +46,10 @@ private:
 
   map<int,double> osd_weight;
 
-  void build_crush_map(CrushWrapper& crush,
-		       map<int,double>& weights);
-
   // svc
+public:  
   void create_initial();
+private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
@@ -121,8 +121,8 @@ private:
 
   void tick();  // check state, take actions
 
-  int do_command(vector<string>& cmd, bufferlist& data, 
-		 bufferlist& rdata, string &rs);
+  bool preprocess_command(MMonCommand *m);
+  bool prepare_command(MMonCommand *m);
 
   void mark_all_down();
 

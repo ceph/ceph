@@ -25,7 +25,7 @@ using namespace std;
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "include/Context.h"
-
+#include "include/types.h"
 
 
 class MDS;

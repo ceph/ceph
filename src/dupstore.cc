@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
   if (args.size() != 4) 
     usage();
 
-  ObjectStore *src, *dst;
+  ObjectStore *src = 0, *dst = 0;
 
   if (strcmp(args[0], "ebofs") == 0) 
     src = new Ebofs(args[1]);

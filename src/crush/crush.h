@@ -28,23 +28,40 @@ enum {
 #define CRUSH_MAX_DEPTH 10
 #define CRUSH_MAX_SET   10
 
+/*
+ * for specifying choose numrep relative to the max
+ * parameter passed to do_rule
+ */
+#define CRUSH_CHOOSE_N            0
+#define CRUSH_CHOOSE_N_MINUS(x)   (-(x))
+
 struct crush_rule_step {
 	__u32 op;
 	__s32 arg1;
 	__s32 arg2;
 };
 
+struct crush_rule_mask {
+	__u8 pool;
+	__u8 type;
+	__u8 min_size;
+	__u8 max_size;
+};
+
 struct crush_rule {
 	__u32 len;
+	struct crush_rule_mask mask;
 	struct crush_rule_step steps[0];
 };
 
-#define crush_rule_size(len) (sizeof(struct crush_rule) + (len)*sizeof(struct crush_rule_step))
+#define crush_rule_size(len) (sizeof(struct crush_rule) + \
+			      (len)*sizeof(struct crush_rule_step))
 
 
 
 /*** BUCKETS ***/
 
+/* bucket algorithms */
 enum {
 	CRUSH_BUCKET_UNIFORM = 1,
 	CRUSH_BUCKET_LIST = 2,
@@ -54,8 +71,8 @@ enum {
 
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
-	__u16 type;
-	__u16 alg;
+	__u16 type;      /* non-zero; 0 is reserved for devices */
+	__u16 alg;       /* one of CRUSH_BUCKET_* */
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;
@@ -80,6 +97,7 @@ struct crush_bucket_tree {
 
 struct crush_bucket_straw {
 	struct crush_bucket h;
+	__u32 *item_weights;
 	__u32 *straws;  /* 16-bit fixed point */
 };
 
@@ -108,7 +126,8 @@ struct crush_map {
 };
 
 
-/* common destructors */
+/* common */
+extern int crush_get_bucket_item_weight(struct crush_bucket *b, int pos);
 extern void crush_calc_parents(struct crush_map *m);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *);

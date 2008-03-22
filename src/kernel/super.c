@@ -6,11 +6,11 @@
 #include <linux/string.h>
 #include <linux/version.h>
 
-int ceph_super_debug = 50;
+int ceph_debug_super = 50;
 
 int ceph_lookup_cache = 1;
 
-#define DOUT_VAR ceph_super_debug
+#define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
 #include "super.h"
 #include "ktcp.h"
@@ -114,14 +114,16 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_frag_map_nr = 0;
 	ci->i_frag_map = ci->i_frag_map_static;
 
-	ci->i_nr_caps = 0;
-	ci->i_max_caps = STATIC_CAPS;
-	ci->i_caps = ci->i_caps_static;
-	atomic_set(&ci->i_cap_count, 0);
-
+	INIT_LIST_HEAD(&ci->i_caps);
+	for (i = 0; i < STATIC_CAPS; i++)
+		ci->i_static_caps[i].mds = -1;
 	for (i = 0; i < 4; i++)
 		ci->i_nr_by_mode[i] = 0;
 	ci->i_cap_wanted = 0;
+	init_waitqueue_head(&ci->i_cap_wq);
+
+	ci->i_rd_ref = ci->i_rdcache_ref = 0;
+	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
 
 	ci->i_wr_size = 0;
 	ci->i_wr_mtime.tv_sec = 0;
@@ -139,8 +141,6 @@ static void ceph_destroy_inode(struct inode *inode)
 	dout(30, "destroy_inode %p ino %lu=%llx\n", inode,
 	     inode->i_ino, ceph_ino(inode));
 
-	if (ci->i_caps != ci->i_caps_static)
-		kfree(ci->i_caps);
 	kfree(ci->i_symlink);
 
 	kmem_cache_free(ceph_inode_cachep, ci);
@@ -159,11 +159,20 @@ static void init_once(struct kmem_cache *cachep, void *foo)
 
 static int init_inodecache(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 23)
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
 					      init_once);
+#else
+	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
+					      sizeof(struct ceph_inode_info),
+					      0, (SLAB_RECLAIM_ACCOUNT|
+						  SLAB_MEM_SPREAD),
+					      init_once,
+						  NULL);
+#endif
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -247,7 +256,8 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 		goto bad;
 
 	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n", ip >> 24, (ip >> 16) & 0xff,
+	dout(15, "parse_ip got %u.%u.%u.%u\n", 
+	     ip >> 24, (ip >> 16) & 0xff,
 	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
 
@@ -438,12 +448,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
-	struct dentry *droot;
 
 	dout(25, "ceph_get_sb\n");
 
 	mount_args = kmalloc(sizeof(struct ceph_mount_args), GFP_KERNEL);
-
 	err = parse_mount_args(flags, data, dev_name, mount_args);
 	if (err < 0)
 		goto out;
@@ -459,16 +467,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	}
 	client = ceph_sb_to_client(sb);
 
-	err = ceph_mount(client, mount_args, &droot);
+	err = ceph_mount(client, mount_args, mnt);
 	if (err < 0)
 		goto out_splat;
-
-	dout(30, "ceph_get_sb %p finishing\n", sb);
-	mnt->mnt_sb = sb;
-	mnt->mnt_root = droot;
-
-	dout(22, "droot ino %llx\n", ceph_ino(droot->d_inode));
-
+	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:

@@ -25,6 +25,8 @@
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
+#include "messages/MMonMap.h"
+#include "messages/MMonGetMap.h"
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
@@ -45,6 +47,13 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
+void Monitor::preinit()
+{
+  osdmon = new OSDMonitor(this, &paxos_osdmap);
+  mdsmon = new MDSMonitor(this, &paxos_mdsmap);
+  clientmon = new ClientMonitor(this, &paxos_clientmap);
+  pgmon = new PGMonitor(this, &paxos_pgmap);
+}
 
 void Monitor::init()
 {
@@ -52,21 +61,7 @@ void Monitor::init()
   
   dout(1) << "init" << dendl;
   
-  // store
-  char s[80];
-  sprintf(s, "mondata/mon%d", whoami);
-  store = new MonitorStore(s);
-  
-  if (g_conf.mkfs) 
-    store->mkfs();
-  
-  store->mount();
-  
-  // create 
-  osdmon = new OSDMonitor(this, &paxos_osdmap);
-  mdsmon = new MDSMonitor(this, &paxos_mdsmap);
-  clientmon = new ClientMonitor(this, &paxos_clientmap);
-  pgmon = new PGMonitor(this, &paxos_pgmap);
+  preinit();
   
   // init paxos
   paxos_osdmap.init();
@@ -170,10 +165,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   paxos_pgmap.leader_init();
   
   // init
+  pgmon->election_finished();  // hack: before osdmon, for osd->pg kick works ok
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
-  pgmon->election_finished();
 } 
 
 void Monitor::lose_election(epoch_t epoch, int l) 
@@ -196,45 +191,47 @@ void Monitor::lose_election(epoch_t epoch, int l)
   pgmon->election_finished();
 }
 
-
-int Monitor::do_command(vector<string>& cmd, bufferlist& data, 
-			bufferlist& rdata, string &rs)
-{
-  if (cmd.empty()) {
-    rs = "no command";
-    return -EINVAL;
-  }
-
-  if (cmd[0] == "stop") {
-    rs = "stopping";
-    do_stop();
-    return 0;
-  }
-  if (cmd[0] == "mds") 
-    return mdsmon->do_command(cmd, data, rdata, rs);
-
-  if (cmd[0] == "osd") 
-    return osdmon->do_command(cmd, data, rdata, rs);
-
-  // huh.
-  rs = "unrecognized subsystem '" + cmd[0] + "'";
-  return -EINVAL;
-}
-
 void Monitor::handle_command(MMonCommand *m)
 {
   dout(0) << "handle_command " << *m << dendl;
-  
-  string rs;         // return string
-  bufferlist rdata;  // return data
-  int rc = do_command(m->cmd, m->get_data(), rdata, rs);
+  string rs;
+  if (!m->cmd.empty()) {
+    if (m->cmd[0] == "mds") {
+      mdsmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "osd") {
+      osdmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "pg") {
+      pgmon->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "stop") {
+      do_stop();
+      return;
+    }
+    rs = "unrecognized subsystem";
+  } else 
+    rs = "no command";
 
-  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
-  reply->set_data(rdata);
-  messenger->send_message(reply, m->get_source_inst());
-  delete m;
+  reply_command(m, -EINVAL, rs);
 }
 
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
+{
+  bufferlist rdata;
+  reply_command(m, rc, rs, rdata);
+}
+
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata)
+{
+  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
+  reply->set_data(rdata);
+  messenger->send_message(reply, m->inst);
+  delete m;
+}
 
 void Monitor::do_stop()
 {
@@ -251,6 +248,10 @@ void Monitor::dispatch(Message *m)
     switch (m->get_type()) {
       
       // misc
+    case CEPH_MSG_MON_GET_MAP:
+      handle_mon_get_map((MMonGetMap*)m);
+      break;
+
     case CEPH_MSG_PING_ACK:
       handle_ping_ack((MPingAck*)m);
       break;
@@ -340,6 +341,15 @@ void Monitor::dispatch(Message *m)
   lock.Unlock();
 }
 
+void Monitor::handle_mon_get_map(MMonGetMap *m)
+{
+  dout(10) << "handle_mon_get_map" << dendl;
+  bufferlist bl;
+  monmap->encode(bl);
+  messenger->send_message(new MMonMap(bl), m->get_source_inst());
+  delete m;
+}
+
 
 void Monitor::handle_shutdown(Message *m)
 {
@@ -396,6 +406,7 @@ void Monitor::tick()
   
   osdmon->tick();
   mdsmon->tick();
+  pgmon->tick();
   
   // next tick!
   reset_tick();
@@ -405,5 +416,49 @@ void Monitor::tick()
 
 
 
+/*
+ * this is the closest thing to a traditional 'mkfs' for ceph.
+ * initialize the monitor state machines to their initial values.
+ */
+int Monitor::mkfs()
+{
+  preinit();
+
+  // create it
+  int err = store->mkfs();
+  if (err < 0) {
+    cerr << "error " << err << " " << strerror(err) << std::endl;
+    exit(1);
+  }
+  
+  store->put_int(whoami, "whoami", 0);
+
+  bufferlist monmapbl;
+  monmap->encode(monmapbl);
+  store->put_bl_ss(monmapbl, "monmap", 0);
+
+  list<PaxosService*> services;
+  services.push_back(osdmon);
+  services.push_back(mdsmon);
+  services.push_back(clientmon);
+  services.push_back(pgmon);
+  for (list<PaxosService*>::iterator p = services.begin(); 
+       p != services.end();
+       p++) {
+    PaxosService *svc = *p;
+    dout(10) << "initializing " << svc->get_machine_name() << dendl;
+    svc->paxos->init();
+    svc->create_pending();
+    svc->create_initial();
+
+    // commit to paxos
+    bufferlist bl;
+    svc->encode_pending(bl);
+    store->put_bl_sn(bl, svc->get_machine_name(), 1);
+    store->put_int(1, svc->get_machine_name(), "last_committed");
+  }
+
+  return 0;
+}
 
 
