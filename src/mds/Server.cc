@@ -506,7 +506,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
 	   << ") " << *req << dendl;
 
   // note result code in session map?
-  if (!req->is_idempotent())
+  if (!req->is_idempotent() && mdr->session)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   /*
@@ -2046,7 +2046,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
+				 MODE_TO_DT(targeti->inode.mode));  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
@@ -2128,7 +2129,8 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_client_req(mdr->reqid);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
   le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_remote_dentry(dn, true, targeti->ino());  // new remote
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
+				 MODE_TO_DT(targeti->inode.mode));  // new remote
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -2773,7 +2775,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   // src+dest _must_ share commont root for locking to prevent orphans
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
-  if (destpath.get_ino() != srcpath.get_ino()) {
+  if (destpath.get_ino() != srcpath.get_ino() &&
+      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
     // error out for now; eventually, we should find the deepest common root
     derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
     assert(0);
@@ -3208,7 +3211,8 @@ void Server::_rename_prepare(MDRequest *mdr,
       dout(10) << "src is a remote dentry" << dendl;
       if (destdn->is_auth())
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
-      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino()); 
+      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
+				  srcdn->get_remote_d_type()); 
     }
     
     // remove src dentry
@@ -3268,10 +3272,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       dout(10) << "merging remote onto primary link" << dendl;
 
       // nlink-- in place
-      destdn->inode->inode.nlink--;
-      destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
       // unlink srcdn
       srcdn->dir->unlink_inode(srcdn);
@@ -3287,10 +3289,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->dir->link_primary_inode(destdn, oldin);
       
       // nlink--
-      destdn->inode->inode.nlink--;
-      destdn->inode->inode.ctime = mdr->now;
       if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
       
       // mark src dirty
       if (srcdn->is_auth())
@@ -3311,15 +3311,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       //assert(straypv == ipv);
 
       // nlink-- in stray dir.
-      oldin->inode.nlink--;
-      oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
     else if (oldin) {
       // nlink-- remote.  destdn was remote.
-      oldin->inode.nlink--;
-      oldin->inode.ctime = mdr->now;
       if (oldin->is_auth())
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
