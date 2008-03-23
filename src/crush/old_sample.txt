@@ -1,37 +1,82 @@
 
-# types
-type osd 0
-type cab 2
-type row 3
-type pool 10
-
-# devices
-device osd001 {
-       id 1;
-       weight 500;  # optional
-}
-device cosd002 { id 2; weight 300; }
-device cosd003 { id 3; }
-device cosd004 { id 4; }
-device cosd005 { id 5; }
+# first define our types
+<types>
+	<type osd>
+	   type_id = 0
+	</type>
+	<type cab>
+	   type_id = 2
+	</type>
+	<type row>
+	   type_id = 3
+	</type>
+	<type pool>
+	   type_id = 10
+	</type>
+</types>
 
 # hierarchy
-bucket cab-d2 type cab {
-       id -1;   # optional
-       alg straw;
-       item osd001;
-       item osd002 weight 600;
-       item osd003 weight 600;
-       item osd004 weight 600;
-       item osd005 weight 600;
-}
+<devices>
+	<osd osd001>
+		id 1
+		weight 500
+	</osd>
+	<osd osd002>
+		id 2
+		weight 500
+	</osd>
+	<osd osd003>
+		id 3
+		weight 500
+	</osd>
+	<osd osd004>
+		id 4
+		weight 500
+	</osd>
+	<osd osd005>
+		id 5
+		weight 500
+	</osd>
+</devices>
 
-rule normal {
-     pool 0;
-     type replicated;
-     min_size 1;
-     max_size 4;
-     step take(root);
-     step choose_indep(0, osd);
-     step emit;
-}
+<buckets>
+	<cab cab-d2>
+		alg straw
+		id   -12
+		<item osd001/>
+		<item osd002/>
+		<item osd003/>
+		<item osd004>
+		      weight 600
+		</item>
+	</cab>
+	
+#	<pool newlayout>
+#		<item satapool>
+#			weight 1.0
+#		</item>
+#		<item fcpool>
+#			weight 3.0
+#		</item>
+#	</pool>
+</buckets>
+
+<devices>
+	<osd osd006>
+		id 5
+		weight 500
+	</osd>
+</devices>
+
+# rules
+<rules>
+	<rule normal>
+		pool 0
+		type replicated
+		min_size 1
+		mix_size 4
+		step take root
+		step choose_indep 0 osd
+		step emit
+	</rule>
+</rules>

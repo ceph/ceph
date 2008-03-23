@@ -59,8 +59,9 @@ sub decompile_crush {
 
     $wrap->create();
 
-    print "reading...\n";
+    print "reading from $infn...\n";
     my $r = $wrap->read_from_file($infn);
+    print "read, r = $r.\n";
 
     die "can't read file $infn ($r)\n" if ($r != 0);
 
@@ -80,11 +81,13 @@ sub decompile_crush {
     
     # devices
     my $max_devices = $wrap->get_max_devices();
+    print "max $max_devices\n";
     my %device_weight;
     my %name_map;
     for (my $id=0; $id < $max_devices; $id++) {
 	my $name = $wrap->get_item_name($id);
-	next if $name eq '';
+	$name ||= "device$id";
+	#next if $name eq '';
 	$name_map{$id} = $name;
 	print "device $id '$name'\n";
 	$arr->{'devices'}->{$type_map{0}}->{$name}->{'id'} = $id;
@@ -144,7 +147,7 @@ sub compile_crush {
     print Dumper $arr;
 
     my $lowest = get_lowest($arr);
-    #print "lowest is $lowest\n";
+    print "lowest is $lowest\n";
     
     my %weights;  # item id -> weight
     
