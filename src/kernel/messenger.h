@@ -67,7 +67,7 @@ struct ceph_msg_pos {
 #define READABLE	5  /* set when socket gets new data */
 #define READING		6  /* provides mutual exclusion, protecting in_* */
 #define WAIT		7  /* wait for peer to connect */
-#define CLOSED		8
+#define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */
 #define STANDBY		10 /* standby, when socket state close, no message queued */
 
@@ -84,12 +84,12 @@ struct ceph_connection {
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	__u32 connect_seq;     
+	__le32 in_connect_seq, out_connect_seq;     
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
 	/* connect state */
 	struct ceph_entity_addr actual_peer_addr;
-	__u32 peer_connect_seq;
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
